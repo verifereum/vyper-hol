@@ -2301,14 +2301,21 @@ Proof
   >> strip_tac
   >> `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality]
   >> fs[]
-  (* Chain: bb ← orig → trans → bb'.
-     All three are non-OK, so case-split on result constructors *)
-  >> Cases_on `run_insts fuel ctx non_terms s`
-  >> Cases_on `exec_block fuel ctx bb s`
-  >> Cases_on `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
-  >> Cases_on `exec_block fuel ctx bb' s`
-  >> fs[lift_result_def]
-  >> metis_tac[execution_equiv_sym, execution_equiv_trans]
+  (* Chain: bb ← orig → trans → bb'. *)
+  >> irule (REWRITE_RULE [AND_IMP_INTRO] lift_result_trans)
+  >> rpt conj_tac
+  >- metis_tac[state_equiv_trans]
+  >- metis_tac[execution_equiv_trans]
+  >> qexists_tac `run_insts fuel ctx non_terms s`
+  >> conj_tac
+  >- (irule lift_result_sym >> simp[state_equiv_sym, execution_equiv_sym] >>
+      first_assum ACCEPT_TAC)
+  >> irule (REWRITE_RULE [AND_IMP_INTRO] lift_result_trans)
+  >> rpt conj_tac
+  >- metis_tac[state_equiv_trans]
+  >- metis_tac[execution_equiv_trans]
+  >> qexists_tac `run_insts fuel ctx (FLAT (MAP f non_terms)) s`
+  >> simp[]
 QED
 
 Theorem flat_map_same_start_block_bridge:
@@ -3173,7 +3180,7 @@ QED
 Resume mode_inst_ok_only_ok_or_error[nop_load]:
   fs[] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
   fs[step_inst_non_invoke, inst_wf_def] >>
-  simp[step_inst_base_def, exec_read1_def] >>
+  stepInstBaseLib.with_opcode_clause (fn ths => simp (ths @ [exec_read1_def])) >>
   BasicProvers.every_case_tac
 QED
 

@@ -12,6 +12,8 @@
  *   NOP clearing:
  *     clear_nops_block_correct    — removing NOPs preserves execution (result_equiv)
  *     clear_nops_function_correct — removing NOPs preserves execution (result_equiv)
+ *     clear_nops_function_correct_blocks_wf — the same, assuming only that
+ *                                   every block is well formed
  *
  *   Operand substitution:
  *     subst_operand_eval           — single substitution preserves eval_operand
@@ -52,11 +54,12 @@
 
 Theory passSharedProps
 Ancestors
+  passSimulationProps analysisSimDefs venomFnInstsProofs
   passSharedDefs venomExecSemantics venomExecProofs venomEffects stateEquiv venomInstProofs
   venomInstProps
   passSharedField passSharedTransfer passSharedVarFrame passSharedFrame
   passSharedSubst instIdxIndep venomState venomInst venomWf
-  copyFwdEquiv pred_set list rich_list
+  copyFwdEquiv pred_set list rich_list stateEquivProps passSimulationProofs
 
 
 
@@ -157,22 +160,6 @@ QED
 
 (* Combined helpers: NOP-skip and non-NOP index correspondence.
    Pre-specialized to avoid beta-redex issues with irule/metis_tac. *)
-Triviality nop_skip_facts:
-  !bb s fuel ctx.
-    s.vs_inst_idx < LENGTH bb.bb_instructions /\
-    (EL s.vs_inst_idx bb.bb_instructions).inst_opcode = NOP ==>
-    (LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                    (TAKE (SUC s.vs_inst_idx) bb.bb_instructions)) =
-     LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                    (TAKE s.vs_inst_idx bb.bb_instructions))) /\
-    exec_block fuel ctx bb s =
-    exec_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx)
-Proof
-  rpt strip_tac
-  >- (irule filter_take_nop >> simp[])
-  >- (CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-      simp[get_instruction_def, step_nop_identity] >> EVAL_TAC)
-QED
 
 Triviality non_nop_idx_facts:
   !bb s.
@@ -205,43 +192,6 @@ Proof
   rw[] >> AP_TERM_TAC >> irule filter_take_all >> simp[]
 QED
 
-(* Past-end case: both sides get NONE from get_instruction *)
-Triviality clear_nops_past_end:
-  !fuel ctx bb s.
-    ~(s.vs_inst_idx < LENGTH bb.bb_instructions) ==>
-    exec_block fuel ctx (clear_nops_block bb)
-      (s with vs_inst_idx :=
-        LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                       (TAKE s.vs_inst_idx bb.bb_instructions))) =
-    exec_block fuel ctx bb s
-Proof
-  rpt strip_tac >>
-  `LENGTH bb.bb_instructions <= s.vs_inst_idx` by DECIDE_TAC >>
-  imp_res_tac filter_take_all_nop >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  gvs[get_instruction_def, clear_nops_block_def]
-QED
-
-(* NOP case: skip in original, filtered index unchanged, apply IH *)
-Triviality clear_nops_nop_step:
-  !fuel ctx bb s.
-    s.vs_inst_idx < LENGTH bb.bb_instructions /\
-    (EL s.vs_inst_idx bb.bb_instructions).inst_opcode = NOP /\
-    exec_block fuel ctx (clear_nops_block bb)
-      ((s with vs_inst_idx := SUC s.vs_inst_idx) with vs_inst_idx :=
-        LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                       (TAKE (SUC s.vs_inst_idx) bb.bb_instructions))) =
-    exec_block fuel ctx bb (s with vs_inst_idx := SUC s.vs_inst_idx) ==>
-    exec_block fuel ctx (clear_nops_block bb)
-      (s with vs_inst_idx :=
-        LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
-                       (TAKE s.vs_inst_idx bb.bb_instructions))) =
-    exec_block fuel ctx bb s
-Proof
-  rpt strip_tac >>
-  imp_res_tac nop_skip_facts >> gvs[]
-QED
-
 (* NOP removal preserves execution up to vs_inst_idx.
    Why true: step_inst on NOP returns OK s (identity). exec_block increments
    vs_inst_idx after each non-terminator, so skipping a NOP just skips an
@@ -260,36 +210,6 @@ QED
 (* Non-terminator step_inst at different idx: OK results agree modulo idx.
    Covers both INVOKE and non-INVOKE non-terminator instructions.
    Why: step_inst never reads vs_inst_idx; it only reads/writes other fields. *)
-Triviality foldl_update_var_idx:
-  !ps st j.
-    FOLDL (\s' (out,val). update_var out val s') (st with vs_inst_idx := j) ps =
-    FOLDL (\s' (out,val). update_var out val s') st ps with vs_inst_idx := j
-Proof
-  Induct >> simp[pairTheory.FORALL_PROD] >> rpt gen_tac >>
-  `update_var p_1 p_2 (st with vs_inst_idx := j) =
-   update_var p_1 p_2 st with vs_inst_idx := j` by
-    simp[update_var_def] >>
-  simp[]
-QED
-
-Triviality bind_outputs_idx:
-  !outs vals st j.
-    bind_outputs outs vals (st with vs_inst_idx := j) =
-    OPTION_MAP (\s'. s' with vs_inst_idx := j) (bind_outputs outs vals st)
-Proof
-  rw[bind_outputs_def, foldl_update_var_idx]
-QED
-
-
-Triviality adopt_return_fmp_idx:
-  !ir st j.
-    adopt_return_fmp ir (st with vs_inst_idx := j) =
-    adopt_return_fmp ir st with vs_inst_idx := j
-Proof
-  rpt gen_tac >>
-  Cases_on `ir.iret_adopt_fmp` >>
-  simp[adopt_return_fmp_def]
-QED
 (* Non-terminator step_inst at different idx:
    - OK results: state shifted by idx
    - Non-OK results: execution_equiv {} (ignores idx)
@@ -483,38 +403,6 @@ Proof
   rw[] >> fs[lookup_block_def, clear_nops_block_def]
 QED
 
-Triviality exec_block_ok_inst_idx_0:
-  !fuel ctx bb s v.
-    exec_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  ho_match_mp_tac (cj 2 run_defs_ind) >>
-  qexists_tac `\fuel ctx inst s. T` >>
-  qexists_tac `\fuel ctx fn s. T` >> rw[] >>
-  pop_assum mp_tac >> simp[Once exec_block_def] >>
-  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
-  rename1 `SOME inst` >>
-  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
-  Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
-  rw[] >>
-  `inst.inst_opcode <> INVOKE` by
-    (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  fs[step_inst_non_invoke] >>
-  imp_res_tac terminator_OK_inst_idx_0
-QED
-
-Triviality state_equiv_empty_eq:
-  !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
-Proof
-  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
-QED
-
-Triviality result_equiv_empty_ok:
-  !s1 s2.
-    result_equiv {} (OK s1) (OK s2) ==> s1 = s2
-Proof
-  simp[result_equiv_def, stateEquivPropsTheory.state_equiv_empty_eq]
-QED
-
 (* If no element in the list is PHI, phi_prefix_length = 0 *)
 Triviality no_phi_prefix_length_0:
   !l. EVERY (\inst. inst.inst_opcode <> PHI) l ==> phi_prefix_length l = 0
@@ -557,13 +445,6 @@ Proof
     >- (
       (* h is neither PHI nor NOP: both sides are 0 *)
       simp[phi_prefix_length_def]))
-QED
-
-Triviality phi_prefix_length_el_phi:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
 QED
 
 (* In the PHI prefix, all instructions are PHI, hence not NOP *)
@@ -902,9 +783,9 @@ Proof
   rpt strip_tac >> Cases_on `P h` >> fs[] >> metis_tac[]
 QED
 
-Theorem clear_nops_function_correct:
+Theorem clear_nops_function_correct_blocks_wf:
   !fuel ctx fn s.
-    wf_function fn /\ s.vs_inst_idx = 0 ==>
+    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\ s.vs_inst_idx = 0 ==>
     result_equiv {}
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (clear_nops_function fn) s)
@@ -918,51 +799,121 @@ Proof
     simp[result_equiv_def] >>
   rename1 `SOME bb` >>
   `bb_well_formed bb` by (
-    fs[wf_function_def, lookup_block_def] >>
-    drule find_some_mem >> metis_tac[]) >>
+    fs[lookup_block_def] >> drule find_some_mem >> metis_tac[]) >>
   `result_equiv {} (run_block fuel ctx bb s)
      (run_block fuel ctx (clear_nops_block bb) s)` by
     simp[clear_nops_run_block_equiv] >>
-  (* Now we need: result_equiv on both sides of the case-match on run_block *)
   Cases_on `run_block fuel ctx bb s`
   >- (
-    (* OK case *)
     Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
     gvs[result_equiv_def] >>
     TRY (imp_res_tac state_equiv_empty_eq >> gvs[result_equiv_def]) >>
-    (* Only OK-OK survives *)
     imp_res_tac state_equiv_empty_eq >> gvs[] >>
     imp_res_tac run_block_OK_inst_idx_0 >>
     Cases_on `v.vs_halted` >> gvs[result_equiv_def]
     >- simp[result_equiv_def, execution_equiv_def] >>
     once_rewrite_tac[GSYM clear_nops_function_def] >>
     first_x_assum irule >> simp[] >>
-    irule clear_nops_function_preserves_wf >> simp[])
-  >- (
-    (* Halt case *)
-    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-    gvs[result_equiv_def])
-  >- (
-    (* Abort case *)
-    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-    gvs[result_equiv_def])
-  >- (
-    (* IntRet case *)
-    Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
-    gvs[result_equiv_def])
-  >>
-  (* Error case *)
+    rpt strip_tac >>
+    gvs[clear_nops_function_def, MEM_MAP] >>
+    irule clear_nops_block_preserves_wf >> metis_tac[])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def])
+  >- (Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
+      gvs[result_equiv_def]) >>
   Cases_on `run_block fuel ctx (clear_nops_block bb) s` >>
   gvs[result_equiv_def]
 QED
 
-
-(* fn_insts_blocks is FLAT (MAP bb_instructions) *)
-Theorem fn_insts_blocks_flat[local]:
-  !l. fn_insts_blocks l = FLAT (MAP (\bb. bb.bb_instructions) l)
+Theorem clear_nops_function_correct:
+  !fuel ctx fn s.
+    wf_function fn /\ s.vs_inst_idx = 0 ==>
+    result_equiv {}
+      (run_blocks fuel ctx fn s)
+      (run_blocks fuel ctx (clear_nops_function fn) s)
 Proof
-  Induct >> simp[fn_insts_blocks_def]
+  rpt strip_tac >> irule clear_nops_function_correct_blocks_wf >>
+  fs[wf_function_def]
 QED
+
+Theorem clear_nops_preserves_entry_label:
+  !fn. fn_entry_label (clear_nops_function fn) = fn_entry_label fn
+Proof
+  rw[fn_entry_label_def, entry_block_def, clear_nops_function_def] >>
+  Cases_on `fn.fn_blocks` >> simp[clear_nops_block_def]
+QED
+
+(* A pass that simulates fn at run_blocks level, and then clears NOPs,
+   simulates fn at run_function level. *)
+Theorem clear_nops_run_function_sim:
+  !fuel ctx fn fn' s.
+    wf_function fn' /\ s.vs_inst_idx = 0 /\
+    fn_entry_label fn = SOME s.vs_current_bb /\
+    fn_entry_label fn' = fn_entry_label fn /\
+    ((?e. run_blocks fuel ctx fn s = Error e) \/
+     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+       (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn' s)) ==>
+    (?e. run_function fuel ctx fn s = Error e) \/
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+      (run_function fuel ctx fn s)
+      (run_function fuel ctx (clear_nops_function fn') s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!f. fn_entry_label f = SOME s.vs_current_bb ==>
+       run_function fuel ctx f s = run_blocks fuel ctx f s` by
+    metis_tac[run_function_is_run_blocks] >>
+  `fn_entry_label (clear_nops_function fn') = SOME s.vs_current_bb` by
+    simp[clear_nops_preserves_entry_label] >>
+  simp[] >> DISJ2_TAC >> irule lift_result_trans >>
+  conj_tac >- metis_tac[state_equiv_trans] >>
+  conj_tac >- metis_tac[execution_equiv_trans] >>
+  goal_assum drule >>
+  simp_tac std_ss [GSYM result_equiv_is_lift_result] >>
+  irule clear_nops_function_correct >> simp[]
+QED
+
+(* A 1:1 structural transform that keeps each instruction or replaces it
+   with a NOP preserves well-formedness and SSA form. *)
+Theorem nop_transform_preserves_wf_ssa:
+  !g bottom result fn.
+    inst_transform_structural_1 g /\
+    (!v inst. g v inst = inst \/ g v inst = mk_nop_inst inst) ==>
+    (wf_function fn ==>
+     wf_function (analysis_function_transform_widen bottom result
+                    (\v inst. [g v inst]) fn)) /\
+    (wf_function fn /\ ssa_form fn ==>
+     ssa_form (analysis_function_transform_widen bottom result
+                 (\v inst. [g v inst]) fn))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v inst. (g v inst).inst_id = inst.inst_id /\
+     ((g v inst).inst_outputs = inst.inst_outputs \/
+      (g v inst).inst_outputs = []) /\
+     (is_terminator inst.inst_opcode ==> g v inst = inst) /\
+     (~is_terminator inst.inst_opcode ==>
+      ~is_terminator (g v inst).inst_opcode) /\
+     (inst.inst_opcode = PHI ==> (g v inst).inst_opcode = PHI) /\
+     (inst.inst_opcode <> PHI ==> (g v inst).inst_opcode <> PHI)` by
+    (rpt gen_tac >>
+     drule_then (qspecl_then [`v`, `inst`] assume_tac)
+       inst_transform_structural_1_terminator >>
+     qpat_assum `inst_transform_structural_1 g`
+       (strip_assume_tac o REWRITE_RULE [inst_transform_structural_1_def]) >>
+     qpat_x_assum `!v inst. g v inst = inst \/ _`
+       (qspecl_then [`v`, `inst`] strip_assume_tac) >>
+     gvs[mk_nop_inst_def, is_terminator_def] >>
+     strip_tac >> res_tac >> gvs[instruction_component_equality]) >>
+  REWRITE_TAC [aftw_singleton_eq_fmt_mapi] >> conj_tac >> strip_tac
+  >- (mp_tac (Q.SPECL
+        [`\bb idx inst. g (df_widen_at bottom result bb.bb_label idx) inst`,
+         `fn`] mapi_transform_preserves_wf_bb) >> simp[]) >>
+  mp_tac (Q.SPECL
+    [`\bb idx inst. g (df_widen_at bottom result bb.bb_label idx) inst`,
+     `fn`] mapi_transform_preserves_ssa_bb) >> simp[]
+QED
+
 
 (* clear_nops_function only removes instructions *)
 Theorem clear_nops_fn_insts_subset:
@@ -993,7 +944,7 @@ Theorem clear_nops_function_preserves_ssa:
   !fn. ssa_form fn ==> ssa_form (clear_nops_function fn)
 Proof
   rpt strip_tac >>
-  irule passSimulationProofsTheory.ssa_form_sublist_proof >>
+  irule passSimulationProofsTheory.ssa_form_sublist >>
   qexists_tac `fn` >> simp[fn_insts_def, clear_nops_function_def] >>
   simp[clear_nops_fn_insts_sublist]
 QED

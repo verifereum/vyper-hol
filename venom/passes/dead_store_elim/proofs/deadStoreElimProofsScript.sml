@@ -330,7 +330,9 @@ QED
 (* A dead store confined to one space is not an oracle call. *)
 Theorem effects_in_space_not_oracle_call:
   effects_in_space space inst ==>
-  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> DELEGATECALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2
 Proof
   Cases_on `space` >>
   simp[Once effects_in_space_def, Once is_memory_def_opcode_def, space_effect_def] >>
@@ -437,21 +439,6 @@ QED
 
 
 (* --- Entry label preservation --- *)
-
-Triviality fmt_preserves_entry_label:
-  !bt fn. (!bb. (bt bb).bb_label = bb.bb_label) ==>
-    fn_entry_label (function_map_transform bt fn) = fn_entry_label fn
-Proof
-  rw[fn_entry_label_def, entry_block_def, function_map_transform_def] >>
-  Cases_on `fn.fn_blocks` >> simp[]
-QED
-
-Triviality clear_nops_preserves_entry_label:
-  !fn. fn_entry_label (clear_nops_function fn) = fn_entry_label fn
-Proof
-  rw[fn_entry_label_def, entry_block_def, clear_nops_function_def] >>
-  Cases_on `fn.fn_blocks` >> simp[clear_nops_block_def]
-QED
 
 Triviality dse_single_pass_preserves_entry_label:
   !dead_ids space fn.

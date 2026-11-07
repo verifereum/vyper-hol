@@ -887,7 +887,7 @@ Proof
 QED
 
 (* Main result: rename_blocks preserves succs *)
-Theorem rename_blocks_succs_preserved[local]:
+Theorem rename_blocks_succs_preserved:
   (!dtree bbs rs succ_map.
     succs_preserved bbs (SND (rename_blocks rs bbs succ_map dtree))) /\
   (!children bbs ctrs stacks succ_map.
@@ -904,25 +904,9 @@ QED
    Part 8: Main structural theorem — compose phi_extends + opcodes_preserved
    ========================================================================== *)
 
-(* Promote rename_blocks_succs_preserved for use by makeSsaProofScript *)
-Theorem rename_blocks_succs_preserved_export:
-  (!dtree bbs rs succ_map.
-    succs_preserved bbs (SND (rename_blocks rs bbs succ_map dtree))) /\
-  (!children bbs ctrs stacks succ_map.
-    succs_preserved bbs (SND (rename_children ctrs stacks bbs succ_map children)))
-Proof
-  metis_tac[rename_blocks_succs_preserved]
-QED
-
 Triviality bb_succs_nonempty:
   !lbl h t. bb_succs <|bb_label := lbl; bb_instructions := h::t|> =
     nub (REVERSE (get_successors (LAST (h::t))))
-Proof
-  simp[bb_succs_def]
-QED
-
-Triviality bb_succs_empty:
-  !lbl. bb_succs <|bb_label := lbl; bb_instructions := []|> = []
 Proof
   simp[bb_succs_def]
 QED
@@ -1007,7 +991,7 @@ Proof
   conj_tac
   >- (irule phi_extends_succs_preserved >>
       metis_tac[add_phi_nodes_phi_extends])
-  >> metis_tac[rename_blocks_succs_preserved_export, SND]
+  >> metis_tac[rename_blocks_succs_preserved, SND]
 QED
 
 Theorem pipeline_block_structure:

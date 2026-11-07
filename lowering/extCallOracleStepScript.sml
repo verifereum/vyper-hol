@@ -121,7 +121,7 @@ Proof
    outcome'.co_logs = outcome.co_logs /\
    outcome'.co_toDelete = outcome.co_toDelete` by
     (qpat_x_assum `_ = outcome'` (SUBST1_TAC o SYM) >> simp[]) >>
-  `rq'.cr_static = rq.cr_static /\
+  `rq'.cr_static = rq.cr_static /\ rq'.cr_kind = rq.cr_kind /\
    (computed_precompile rq' <=> computed_precompile rq)` by
     (fs[request_agree_def] >> qpat_x_assum `_ = rq'` (SUBST1_TAC o SYM) >>
      simp[computed_precompile_def]) >>
@@ -139,14 +139,14 @@ Proof
      gvs[state_rel_def, adopt_call_outcome_equation, accounts_rel_def]) >>
   drule accounts_rel_storage_transient >> simp[] >> strip_tac >>
   gvs[state_rel_def, adopt_call_outcome_equation, adopt_outcome_def,
-      adopt_outcome_deletions_def,
-      logs_rel_eq, record_request_def] >>
-  Cases_on `outcome.co_success /\ ~rq.cr_static` >>
+      adopt_outcome_deletions_def, logs_rel_eq, record_request_def] >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  Cases_on `rq.cr_kind = MessageCall` >>
   gvs[storage_rel_def, transient_rel_def, accounts_rel_def,
       call_ctx_rel_def, contract_storage_def, contract_transient_def] >>
   gvs[immutables_rel_def] >>
-  (conj_tac >- first_assum ACCEPT_TAC >>
-   Cases_on `computed_precompile rq` >> simp[LIST_REL_APPEND])
+  Cases_on `computed_precompile rq` >> simp[LIST_REL_APPEND] >>
+  first_assum ACCEPT_TAC
 
 QED
 

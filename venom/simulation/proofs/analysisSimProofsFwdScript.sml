@@ -2,7 +2,7 @@
  * Analysis-Driven Simulation — Proofs (Part 5: Forward Analysis)
  *
  * Main theorems:
- *   analysis_function_transform_compare_proof
+ *   analysis_function_transform_compare
  *   successor_in_cfg_dfs_pre
  *   fwd_df_at_entry_eq_joined, fwd_df_at_exit_not_none
  *   fwd_joined_sound_from_pred, fwd_successor_entry_sound
@@ -16,8 +16,8 @@ Ancestors
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
-  venomState venomWf cfgAnalysisProps execEquivProofs
-  list finite_map pred_set string
+  venomState venomWf cfgAnalysisProps cfgHelpers execEquivProofs
+  list finite_map pred_set string cfgCorrectnessProof
 
 (* Forward-specialized dataflow theorems for fwd proofs *)
 val inter_fwd = SIMP_RULE (srw_ss()) []
@@ -35,22 +35,10 @@ Proof
   simp[analysis_function_transform_def, function_map_transform_def]
 QED
 
-(* Boundary lemma: abt bb is in aft fn whenever bb is in fn.fn_blocks *)
-Triviality abt_mem_aft_fn_blocks:
-  !bottom result f fn bb.
-    MEM bb fn.fn_blocks ==>
-    MEM (analysis_block_transform bottom result f bb)
-        (analysis_function_transform bottom result f fn).fn_blocks
-Proof
-  rpt strip_tac >>
-  simp[aft_fn_blocks, MEM_MAP] >>
-  qexists_tac `bb` >> simp[]
-QED
-
 (* Compare two analysis_function_transforms of the same function.
    Useful when a pass decomposes into substitution + elimination phases
    that use different transform functions on the same analysis result. *)
-Theorem analysis_function_transform_compare_proof:
+Theorem analysis_function_transform_compare:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) (result : 'a df_state)
@@ -161,7 +149,7 @@ Proof
     metis_tac[venomExecProofsTheory.exec_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgHelpersTheory.bb_succs_in_cfg_succs] >>
-  imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
+  imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
 QED
 
 (* ===== General forward analysis successor entry soundness =====
@@ -193,7 +181,7 @@ Proof
       impl_tac >- first_assum ACCEPT_TAC >>
       strip_tac >> gvs[EXTENSION, IN_DEF]) >>
     `MEM lbl (fn_labels fn)` by
-      metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels] >>
+      metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels] >>
     gvs[venomInstTheory.fn_labels_def, MEM_MAP] >>
     rename [`MEM blk fn.fn_blocks`] >>
     qexists_tac `blk` >>
@@ -491,7 +479,7 @@ Proof
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgHelpersTheory.bb_succs_in_cfg_succs] >>
   conj_tac
-  >- (imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM])
+  >- (imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM])
   >- suspend "succ_sound"
 QED
 
@@ -499,7 +487,7 @@ Resume fwd_successor_entry_sound[succ_sound]:
   imp_res_tac (GSYM cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond) >>
   (* Step 7: df_at = joined at successor entry *)
   `MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
-    (imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]) >>
+    (imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]) >>
   drule_all (SIMP_RULE std_ss [LET_THM] fwd_df_at_entry_eq_joined) >>
   disch_then (fn th => REWRITE_TAC [th]) >>
   (* Step 8: Use H7 (joined_sound_from_pred) *)
@@ -741,7 +729,7 @@ Proof
         impl_tac >- first_assum ACCEPT_TAC >> simp[EXTENSION] >> metis_tac[]) >>
       gvs[EXTENSION, IN_DEF]) >>
     `MEM lbl' (fn_labels fn)` by
-      metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels,
+      metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels,
                 Abbr `cfg`] >>
     gvs[venomInstTheory.fn_labels_def, MEM_MAP] >>
     rename [`MEM bb fn.fn_blocks`] >>

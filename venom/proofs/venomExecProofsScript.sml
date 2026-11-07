@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map stateEquiv passSimulationDefs
+  venomFnInstsProofs venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map stateEquiv passSimulationDefs
 
 (* ==========================================================================
    bool_to_word Properties
@@ -30,13 +30,13 @@ Proof
   simp[bool_to_word_def]
 QED
 
-Theorem bool_to_word_eq_0w[local]:
+Theorem bool_to_word_eq_0w:
   (bool_to_word b = 0w) <=> ~b
 Proof
   Cases_on `b` >> simp[bool_to_word_def]
 QED
 
-Theorem bool_to_word_neq_0w[local]:
+Theorem bool_to_word_neq_0w:
   (bool_to_word b <> 0w) <=> b
 Proof
   Cases_on `b` >> simp[bool_to_word_def]
@@ -137,6 +137,66 @@ Theorem step_jnz_behavior:
 Proof
   rpt strip_tac >>
   asm_simp_tac behavior_ss [step_inst_base_for ``JNZ``]
+QED
+
+(* A successful pure step names its operands, output and result. *)
+Theorem exec_pure2_output:
+  !f inst s r.
+    exec_pure2 f inst s = OK r ==>
+    ?v1 v2 op1 op2 out.
+      inst.inst_operands = [op1; op2] /\
+      inst.inst_outputs = [out] /\
+      eval_operand op1 s = SOME v1 /\
+      eval_operand op2 s = SOME v2 /\
+      FLOOKUP r.vs_vars out = SOME (f v1 v2) /\
+      (!x. x <> out ==> FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[exec_pure2_def] >>
+  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
+  simp[update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem exec_pure1_output:
+  !f inst s r.
+    exec_pure1 f inst s = OK r ==>
+    ?v1 op1 out.
+      inst.inst_operands = [op1] /\
+      inst.inst_outputs = [out] /\
+      eval_operand op1 s = SOME v1 /\
+      FLOOKUP r.vs_vars out = SOME (f v1) /\
+      (!x. x <> out ==> FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[exec_pure1_def] >>
+  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
+  simp[update_var_def, FLOOKUP_UPDATE]
+QED
+
+(* ASSERT with one operand: reverts if operand = 0w, continues unchanged otherwise *)
+Theorem step_inst_assert:
+  !fuel ctx inst s.
+    inst.inst_opcode = ASSERT ==>
+    step_inst fuel ctx inst s =
+      case inst.inst_operands of
+        [op] =>
+          (case eval_operand op s of
+             NONE => Error "undefined operand"
+           | SOME cond =>
+               if cond = 0w
+               then Abort Revert_abort (revert_state (set_returndata [] s))
+               else OK s)
+      | _ => Error "assert requires 1 operand"
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[step_inst_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+  simp[is_terminator_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[]
 QED
 
 (* ==========================================================================
@@ -1466,13 +1526,6 @@ QED
    Every non-terminator opcode without outputs preserves vs_vars.
    ========================================================================== *)
 
-(* Helper: update_var adds output to FDOM and preserves existing *)
-Triviality update_var_fdom[local]:
-  !x v s. FDOM (update_var x v s).vs_vars = x INSERT FDOM s.vs_vars
-Proof
-  simp[update_var_def, finite_mapTheory.FDOM_FUPDATE]
-QED
-
 (* Helper: FOLDL update_var adds all outputs *)
 Triviality foldl_update_var_fdom[local]:
   !kvs s.
@@ -1792,6 +1845,8 @@ Proof
   metis_tac[ALL_DISTINCT_EL_IMP]
 QED
 
+(* ===== Function structure ===== *)
+
 (* ===== CFG path / dominance helpers ===== *)
 
 Theorem is_fn_path_rtc:
@@ -1911,6 +1966,13 @@ Proof
 QED
 
 (* ===== FDOM monotonicity helpers ===== *)
+
+(* Metis-friendly FDOM/FLOOKUP bridge *)
+Theorem FDOM_FLOOKUP:
+  !f x. x IN FDOM f <=> ?y. FLOOKUP f x = SOME y
+Proof
+  rw[FLOOKUP_DEF] >> eq_tac >> rw[]
+QED
 
 Theorem lookup_var_fdom:
   !x s s'.
@@ -2073,16 +2135,6 @@ Proof
   metis_tac[]
 QED
 
-Triviality update_var_execution_equiv[local]:
-  !vars x v s1 s2.
-    execution_equiv vars s1 s2 ==>
-    execution_equiv vars (update_var x v s1) (update_var x v s2)
-Proof
-  rw[execution_equiv_def, update_var_def] >>
-  rw[lookup_var_def, FLOOKUP_UPDATE] >>
-  fs[lookup_var_def]
-QED
-
 Triviality update_var_state_equiv[local]:
   !vars x v s1 s2.
     state_equiv vars s1 s2 ==>
@@ -2141,6 +2193,30 @@ Proof
   >- simp[phi_prefix_length_def] >>
   simp[phi_prefix_length_def] >>
   Cases_on `h.inst_opcode = PHI` >> decide_tac
+QED
+
+Theorem phi_prefix_length_el_phi:
+  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
+Proof
+  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
+  Cases_on `i` >> simp[phi_prefix_length_def]
+QED
+
+Theorem phi_prefix_length_lt_wf:
+  !bb. bb_well_formed bb ==>
+       phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
+Proof
+  rpt strip_tac >> fs[bb_well_formed_def] >>
+  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+    metis_tac[phi_prefix_length_le] >>
+  CCONTR_TAC >>
+  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[]) >>
+  `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
+  gvs[is_terminator_def]
 QED
 
 Theorem no_phis_phi_prefix_length_zero:
@@ -2353,6 +2429,48 @@ Proof
   gvs[AllCaseEqs()]
 QED
 
+Theorem eval_phis_flookup_idx:
+  !s insts x.
+    (!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs) ==>
+    !s'. eval_phis s insts = OK s' ==> FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
+Proof
+  Induct_on `insts` >> simp[eval_phis_def] >>
+  rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, AllCaseEqs()] >>
+  `!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs` by (
+    rpt strip_tac >>
+    first_x_assum (qspec_then `SUC i` mp_tac) >>
+    simp[phi_prefix_length_def]) >>
+  `FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x` by
+    (first_x_assum drule >> simp[]) >>
+  `~MEM x h.inst_outputs` by
+    (last_x_assum (qspec_then `0` mp_tac) >> simp[phi_prefix_length_def]) >>
+  `MEM out h.inst_outputs` by
+    (drule eval_one_phi_output_mem >> simp[]) >>
+  `out <> x` by (CCONTR_TAC >> fs[]) >>
+  gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem phi_prefix_length_eq_by_el_phi:
+  !l1 l2.
+    LENGTH l1 = LENGTH l2 /\
+    (!i. i < LENGTH l1 ==>
+      ((EL i l1).inst_opcode = PHI <=> (EL i l2).inst_opcode = PHI)) ==>
+    phi_prefix_length l1 = phi_prefix_length l2
+Proof
+  Induct >> rpt strip_tac >> Cases_on `l2` >> gvs[phi_prefix_length_def] >>
+  `h.inst_opcode = PHI <=> h'.inst_opcode = PHI` by (
+    qpat_x_assum `!i. i < SUC (LENGTH t) ==> _` (qspec_then `0` mp_tac) >>
+    simp[]) >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
+  qpat_x_assum `!l2. _` (qspec_then `t` mp_tac) >> simp[] >>
+  impl_tac >- (
+    rpt strip_tac >>
+    qpat_x_assum `!i. i < SUC (LENGTH t) ==> _` (qspec_then `SUC i` mp_tac) >>
+    simp[]) >>
+  simp[]
+QED
+
 (* Boundary lemma: eval_phis only modifies vs_vars.
    ALL other venom_state fields are preserved.
    This subsumes eval_phis_preserves_alloca_fields, eval_phis_preserves_inst_idx,
@@ -2382,23 +2500,104 @@ Theorem eval_phis_flookup_not_phi_output:
     (!inst. MEM inst insts ==> inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) ==>
     FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
 Proof
-  Induct_on `insts`
-  >- (rpt strip_tac >> fs[eval_phis_def])
-  >> rpt strip_tac >> fs[eval_phis_def]
-  >> Cases_on `h.inst_opcode = PHI` >> fs[] >> rfs[]
-  >> Cases_on `eval_one_phi s h` >> fs[]
-  >> PairCases_on `x'` >> fs[]
-  >> Cases_on `eval_phis s insts` >> fs[update_var_def, FLOOKUP_UPDATE]
-  >> `FLOOKUP v.vs_vars x = FLOOKUP s.vs_vars x`
-     by (qsuff_tac `∀s''. eval_phis s insts = OK s'' ⇒
-           FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x`
-         >- metis_tac[] >> metis_tac[])
-  >> `x'0 ≠ x` by (
-       CCONTR_TAC >> fs[] >>
-       first_x_assum (qspec_then `h` mp_tac) >> simp[] >>
-       metis_tac[eval_one_phi_output_mem])
-  >> `s' = v with vs_vars := v.vs_vars⟨x'0 ↦ x'1⟩` by metis_tac[eval_phis_only_updates_vs_vars]
-  >> fs[FLOOKUP_UPDATE]
+  rpt strip_tac >> irule eval_phis_flookup_idx >> qexists_tac `insts` >>
+  rw[] >>
+  `phi_prefix_length insts <= LENGTH insts` by simp[phi_prefix_length_le] >>
+  `i < LENGTH insts` by decide_tac >>
+  metis_tac[EL_MEM, phi_prefix_length_el_phi]
+QED
+
+(* Variables no instruction of bb writes keep their values. *)
+Theorem run_block_non_output_flookup:
+  !fuel ctx bb s r v.
+    run_block fuel ctx bb s = OK r /\
+    (!inst. MEM inst bb.bb_instructions ==> ~MEM v inst.inst_outputs) ==>
+    FLOOKUP r.vs_vars v = FLOOKUP s.vs_vars v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once run_block_def] >> rename1 `eval_phis _ _ = OK s_phi` >>
+  strip_tac >>
+  `FLOOKUP s_phi.vs_vars v = FLOOKUP s.vs_vars v` by
+    (irule eval_phis_flookup_not_phi_output >> metis_tac[]) >>
+  drule exec_block_preserves_non_output_vars >>
+  disch_then (qspec_then `v` mp_tac) >>
+  simp[MEM_FLAT, MEM_MAP, lookup_var_def] >>
+  impl_tac >- metis_tac[] >> simp[]
+QED
+
+(* After a block ending in JNZ [Var var; Label t; Label f] runs, var holds
+   the branch condition, with the polarity of the branch taken. *)
+Theorem exec_block_jnz_condition:
+  !n fuel ctx bb s v var true_lbl false_lbl.
+    n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
+    exec_block fuel ctx bb s = OK v /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    (LAST bb.bb_instructions).inst_opcode = JNZ /\
+    (LAST bb.bb_instructions).inst_operands =
+      [Var var; Label true_lbl; Label false_lbl] /\
+    true_lbl <> false_lbl ==>
+    ?w. FLOOKUP v.vs_vars var = SOME w /\
+        (v.vs_current_bb = true_lbl ==> w <> 0w) /\
+        (v.vs_current_bb = false_lbl ==> w = 0w)
+Proof
+  completeInduct_on `n` >> rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  Cases_on `s.vs_inst_idx < LENGTH bb.bb_instructions` >> simp[] >>
+  Cases_on `step_inst fuel ctx (EL s.vs_inst_idx bb.bb_instructions) s` >>
+  simp[] >>
+  rename1 `step_inst _ _ _ _ = OK s1` >>
+  reverse (Cases_on
+    `is_terminator (EL s.vs_inst_idx bb.bb_instructions).inst_opcode`) >>
+  simp[]
+  >- (strip_tac >>
+      qpat_x_assum `!m. m < n ==> _` (qspec_then
+        `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`fuel`, `ctx`, `bb`,
+        `s1 with vs_inst_idx := SUC s.vs_inst_idx`, `v`, `var`,
+        `true_lbl`, `false_lbl`] mp_tac) >>
+      simp[]) >>
+  rw[] >>
+  `~(s.vs_inst_idx < LENGTH bb.bb_instructions - 1)` by metis_tac[] >>
+  `EL s.vs_inst_idx bb.bb_instructions = LAST bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[LAST_EL] >>
+     AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  asm_rewrite_tac[] >>
+  rw[step_inst_def, step_inst_base_def] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[jump_to_def, eval_operand_def, lookup_var_def]
+QED
+
+Theorem run_block_jnz_condition:
+  !fuel ctx bb s v var true_lbl false_lbl.
+    run_block fuel ctx bb s = OK v /\
+    (!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    (LAST bb.bb_instructions).inst_opcode = JNZ /\
+    (LAST bb.bb_instructions).inst_operands =
+      [Var var; Label true_lbl; Label false_lbl] /\
+    true_lbl <> false_lbl ==>
+    ?w. FLOOKUP v.vs_vars var = SOME w /\
+        (v.vs_current_bb = true_lbl ==> w <> 0w) /\
+        (v.vs_current_bb = false_lbl ==> w = 0w)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >>
+  qpat_x_assum `run_block _ _ _ _ = OK _` mp_tac >>
+  simp[Once run_block_def] >> rename1 `eval_phis _ _ = OK s_phi` >>
+  strip_tac >>
+  qspecl_then [`LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
+    `fuel`, `ctx`, `bb`,
+    `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `v`, `var`, `true_lbl`, `false_lbl`] mp_tac exec_block_jnz_condition >>
+  simp[]
 QED
 
 (* eval_phis preserves FDOM for variables that are not PHI outputs *)
@@ -2643,3 +2842,94 @@ Proof
   >- (first_x_assum (qx_choose_then `e'` strip_assume_tac) >>
       simp[] >> disj1_tac >> metis_tac[])
 QED
+
+(* Two different instructions in the same block have disjoint outputs, given
+   only that each variable has a unique defining instruction (no ssa_form:
+   an instruction may list an output twice). See ssa_no_output_overlap_inst
+   for the ssa_form version. *)
+Theorem block_ssa_disjoint_outputs:
+  !bb fn k1 k2 v.
+    wf_function fn /\ MEM bb fn.fn_blocks /\
+    k1 < LENGTH bb.bb_instructions /\ k2 < LENGTH bb.bb_instructions /\
+    k1 <> k2 /\
+    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
+       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) /\
+    MEM v (EL k1 bb.bb_instructions).inst_outputs ==>
+    ~MEM v (EL k2 bb.bb_instructions).inst_outputs
+Proof
+  rpt strip_tac >>
+  `EL k1 bb.bb_instructions <> EL k2 bb.bb_instructions` by
+    (fs[wf_function_def] >> metis_tac[inst_ids_el_eq]) >>
+  `MEM (EL k1 bb.bb_instructions) (fn_insts fn)` by
+    metis_tac[MEM_fn_insts, MEM_EL] >>
+  `MEM (EL k2 bb.bb_instructions) (fn_insts fn)` by
+    metis_tac[MEM_fn_insts, MEM_EL] >>
+  metis_tac[]
+QED
+
+(* The key step lemma: executing a non-terminator instruction preserves
+   FLOOKUP for variables that are outputs of OTHER instructions in the block. *)
+Theorem step_preserves_other_output:
+  !fn bb idx k v fuel ctx s s'.
+    wf_function fn /\ MEM bb fn.fn_blocks /\
+    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
+       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) /\
+    idx < LENGTH bb.bb_instructions /\
+    k < LENGTH bb.bb_instructions /\ k <> idx /\
+    MEM v (EL k bb.bb_instructions).inst_outputs /\
+    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
+    step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
+    FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v
+Proof
+  rpt strip_tac >>
+  `~MEM v (EL idx bb.bb_instructions).inst_outputs` by
+    metis_tac[block_ssa_disjoint_outputs] >>
+  `lookup_var v s' = lookup_var v s` by
+    metis_tac[step_preserves_non_output_vars] >>
+  fs[lookup_var_def]
+QED
+
+(* Changing vs_inst_idx commutes with output binding. *)
+Theorem foldl_update_var_idx:
+  !ps st j.
+    FOLDL (\s' (out,val). update_var out val s') (st with vs_inst_idx := j) ps =
+    FOLDL (\s' (out,val). update_var out val s') st ps with vs_inst_idx := j
+Proof
+  Induct >> simp[pairTheory.FORALL_PROD] >> rpt gen_tac >>
+  `update_var p_1 p_2 (st with vs_inst_idx := j) =
+   update_var p_1 p_2 st with vs_inst_idx := j` by
+    simp[update_var_def] >>
+  simp[]
+QED
+
+
+Theorem bind_outputs_idx:
+  !outs vals st j.
+    bind_outputs outs vals (st with vs_inst_idx := j) =
+    OPTION_MAP (\s'. s' with vs_inst_idx := j) (bind_outputs outs vals st)
+Proof
+  rw[bind_outputs_def, foldl_update_var_idx]
+QED
+
+
+Theorem adopt_return_fmp_idx:
+  !ir st j.
+    adopt_return_fmp ir (st with vs_inst_idx := j) =
+    adopt_return_fmp ir st with vs_inst_idx := j
+Proof
+  rpt gen_tac >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def]
+QED
+
+
+(* run_function from the entry block at index 0 is run_blocks. *)
+Theorem run_function_is_run_blocks:
+  !fuel ctx fn s.
+    fn_entry_label fn = SOME s.vs_current_bb /\ s.vs_inst_idx = 0 ==>
+    run_function fuel ctx fn s = run_blocks fuel ctx fn s
+Proof
+  rpt strip_tac >> simp[run_function_def] >>
+  Cases_on `s` >> gvs[venom_state_fn_updates]
+QED
+

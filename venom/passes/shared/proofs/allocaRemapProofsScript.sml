@@ -52,8 +52,11 @@ val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
 Theorem remap_step_oracle:
   alloca_remap_rel fn roots remap s1 s2 /\
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+  inst.inst_opcode <> DELEGATECALL /\
   step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
-  v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests
+  v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests /\
+  v1.vs_pending_deletions = v2.vs_pending_deletions
 Proof
   rw[alloca_remap_rel_def] >>
   imp_res_tac step_inst_base_oracle >> gvs[]
@@ -1208,10 +1211,10 @@ Theorem step_inst_base_allocas[local]:
     v.vs_allocas = s.vs_allocas
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def] >>
+  fs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  with_opcode_clause simp >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
        exec_read0_def, exec_read1_def, exec_write2_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
@@ -1327,13 +1330,13 @@ Proof
      arity for step_inst_base=OK, giving mem_write_ops<>NONE. *)
   >- (`Eff_MEMORY NOTIN write_effects inst.inst_opcode` by
         (spose_not_then strip_assume_tac >>
-         qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-         qpat_x_assum `mem_write_ops _ = _` mp_tac >>
-         simp[step_inst_base_def, mem_write_ops_def] >>
          Cases_on `inst.inst_opcode` >>
-         gvs[is_effect_free_op_def, is_alloca_op_def,
-             is_terminator_def, is_ext_call_op_def,
-             write_effects_def, all_effects_def, empty_effects_def] >>
+         fs[is_effect_free_op_def, is_alloca_op_def,
+            is_terminator_def, is_ext_call_op_def,
+            write_effects_def, all_effects_def, empty_effects_def] >>
+         qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+         with_opcode_clause simp >>
+         fs[mem_write_ops_def] >>
          simp[exec_write2_def, AllCaseEqs()] >>
          rpt strip_tac >> gvs[]) >>
       first_x_assum (qspecl_then [`0`, `ARB`] assume_tac) >>
@@ -1367,7 +1370,10 @@ Proof
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
        exec_read0_def, exec_read1_def, exec_write2_def,
        AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
+  (* The operand shapes contradict.  Drop the result-state equations
+     first: their memory terms are slow to simplify. *)
+  rpt strip_tac >>
+  rpt (qpat_x_assum `_ = (_:venom_state)` kall_tac) >> gvs[]
 QED
 
 
@@ -1547,7 +1553,9 @@ Proof
   disch_then (qspecl_then [`inst`, `s1`, `s2`, `v1`, `v2`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
   (* Step 8: Reconstruct alloca_remap_rel *)
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+   inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >>
@@ -2658,7 +2666,7 @@ QED
 (* --- MSTORE: write 32 bytes at pv address --- *)
 Resume remap_preserved_mem_ops[mstore]:
   (* Invert s1 step *)
-  fs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [exec_write2_def, AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   (* Non-address operand agrees *)
@@ -2684,7 +2692,7 @@ QED
 
 (* --- MSTORE8: write 1 byte at pv address --- *)
 Resume remap_preserved_mem_ops[mstore8]:
-  fs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  fs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   (* Non-address operand agrees *)
@@ -2739,7 +2747,7 @@ QED
 
 (* --- CALLDATACOPY --- *)
 Resume remap_preserved_mem_ops[calldatacopy]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v6 <> Var v` by pv_uniqueness_contra >>
@@ -2772,7 +2780,7 @@ QED
 
 (* --- CODECOPY: 3-op write, src = vs_code --- *)
 Resume remap_preserved_mem_ops[codecopy]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v6 <> Var v` by pv_uniqueness_contra >>
@@ -2798,7 +2806,7 @@ QED
 
 (* --- DLOADBYTES: 3-op write, src = vs_data_section --- *)
 Resume remap_preserved_mem_ops[dloadbytes]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v6 <> Var v` by pv_uniqueness_contra >>
@@ -2827,7 +2835,7 @@ QED
 (* --- EXTCODECOPY: 4-op write, dst is 2nd operand --- *)
 (* inst.inst_operands = [v2; Var v; v10; sz] — pv addr is 2nd *)
 Resume remap_preserved_mem_ops[extcodecopy]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v2 <> Var v` by pv_uniqueness_contra >>
@@ -2859,7 +2867,7 @@ QED
 (* --- RETURNDATACOPY: 3-op write with OOB check --- *)
 (* Note: OOB branch dismissed by AllCaseEqs — OK branch has no REPLICATE padding *)
 Resume remap_preserved_mem_ops[returndatacopy]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   `v6 <> Var v` by pv_uniqueness_contra >>
@@ -2886,7 +2894,7 @@ QED
 
 (* --- SHA3: read from memory, hash, update non-pv output --- *)
 Resume remap_preserved_mem_ops[sha3]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   mem_op_preamble >>
   (* Size operand agrees *)
@@ -2956,7 +2964,7 @@ QED
 
 (* --- LOG: read from memory, append to logs, no memory write --- *)
 Resume remap_preserved_mem_ops[log]:
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   Cases_on `REVERSE rest` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   rename1 `REVERSE rest = Var v::sz::topic_ops` >>
@@ -3074,7 +3082,7 @@ QED
 
 Resume mcopy_preserves_remap[wr]:
   (* Case 1: Var v is the dst (write) address — operands = [Var v; v6; sz] *)
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  fs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
   fs[eval_operand_def, lookup_var_def] >>
   extract_clause2b >>
   first_x_assum (qspec_then `v` mp_tac) >>
@@ -3153,7 +3161,7 @@ QED
 
 Resume mcopy_preserves_remap[rd]:
   (* Case 2: Var v is the src (read) address — operands = [v2; Var v; sz] *)
-  fs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   fs[eval_operand_def, lookup_var_def] >>
   (* Extract clause 2b for src var v *)
   extract_clause2b >>
@@ -3329,8 +3337,8 @@ Proof
   ntac 2 (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac) >>
   Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
   simp[step_inst_base_opcode_eqs, exec_read1_def] >>
-  rpt (CASE_TAC >> fs[]) >>
-  rpt strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE,
                        istore_def, mstore_def, mload_def,
                        write_memory_with_expansion_def, write_memory_def]
 QED
@@ -3363,7 +3371,7 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[is_immutable_op_def] >>
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
   simp[step_inst_base_opcode_eqs, exec_read1_def] >>
-  rpt (CASE_TAC >> simp[]) >> strip_tac >>
+  strip_tac >> gvs[AllCaseEqs()] >>
   gvs[update_var_def, istore_def, mstore_def,
       write_memory_with_expansion_def, write_memory_def]
 QED
@@ -3463,7 +3471,9 @@ Proof
     immutable_op_output_vars_agree) >>
   impl_tac >- simp[] >> strip_tac >>
   (* 10. Reconstruct alloca_remap_rel *)
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+   inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac
@@ -3979,7 +3989,16 @@ Resume step_inst_base_error_transfer[CALLDATACOPY]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[CODECOPY]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::c::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  gvs[AllCaseEqs()] >>
+  first_assum drule >> simp[] >>
+  rpt case_eval_in_goal >> simp[]
 QED
 Resume step_inst_base_error_transfer[DALLOCA]:
   error_inline_tac
@@ -3988,7 +4007,18 @@ Resume step_inst_base_error_transfer[DLOADBYTES]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[EXTCODECOPY]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::c::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::c::d::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  gvs[AllCaseEqs()] >>
+  first_assum drule >> simp[] >>
+  rpt case_eval_in_goal >> simp[]
 QED
 Resume step_inst_base_error_transfer[FMP_PARAM]:
   error_inline_tac
@@ -4017,13 +4047,34 @@ Resume step_inst_base_error_transfer[RETPC_PARAM]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[RETURNDATACOPY]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::c::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  gvs[AllCaseEqs()] >>
+  first_assum drule >> simp[] >>
+  rpt case_eval_in_goal >> simp[]
 QED
 Resume step_inst_base_error_transfer[SETFMP]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[SHA3]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >> gvs[]
+  >- (rpt case_eval_in_goal >> simp[]) >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  Cases_on `outs` >> gvs[]
+  >- (gvs[AllCaseEqs()] >>
+      first_assum drule >> simp[] >>
+      rpt case_eval_in_goal >> simp[]) >>
+  rpt case_eval_in_goal >> simp[]
 QED
 Finalise step_inst_base_error_transfer
 
@@ -4792,7 +4843,7 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_pointer_preserving_op_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -4952,9 +5003,9 @@ Resume step_preserves_ptrs_in_alloca_bounds[alloca_case]:
                 s.vs_alloca_next + w2n alloc_size < dimword (:256)` by
     simp[] >>
   `u = HD inst.inst_outputs` by (gvs[] >> Cases_on `inst.inst_outputs` >> gvs[]) >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_alloca_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
   strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -5027,12 +5078,11 @@ Proof
     (* Memory-writing instruction: result uses mstore/mstore8/mcopy/wmwe.
        All of these preserve or grow memory (wmwe_mem_length_mono). *)
     qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-    simp[step_inst_base_def] >>
     Cases_on `inst.inst_opcode` >>
     gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
         mem_write_ops_def] >>
     (* Only memory-writing opcodes remain after gvs *)
-    simp[exec_write2_def] >>
+    simp[step_inst_base_opcode_eqs, exec_write2_def] >>
     rpt strip_tac >> gvs[AllCaseEqs()] >>
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
     gvs[update_var_def] >>
@@ -5106,8 +5156,8 @@ Proof
     simp[step_inst_base_def] >>
     Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
     simp[exec_alloca_def] >>
-    rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-    strip_tac >> gvs[update_var_def, FDOM_FUPDATE])
+    strip_tac >>
+    gvs[AllCaseEqs(), update_var_def, FDOM_FUPDATE])
   >- (
     (* Non-ALLOCA: v.vs_allocas = s1.vs_allocas *)
     `v.vs_allocas = s1.vs_allocas` by metis_tac[step_inst_base_allocas] >>

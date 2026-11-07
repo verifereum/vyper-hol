@@ -1131,9 +1131,12 @@ Definition transient_rel_def:
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* Accounts and transient storage agree up to dead bytes.  Both sides
-   accumulate pending deletions; state_rel equates their lists, and the
-   external success relation compares accounts after finalization. *)
+(* The accounts and the transient storage of every address agree.
+   Other addresses' accounts and
+   transient storage change during a body only through the call oracle,
+   whose outcome both sides adopt the same way (adopt_outcome), which makes
+   them equal again. Pending deletion queues are related separately by
+   state_rel and finalized at the external transaction boundary. *)
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
     accounts_agree cx vs.accounts ss.vs_accounts ∧
@@ -1365,7 +1368,8 @@ End
    - transient_rel, transient_vars_rel: transient storage up to dead bytes,
      and the slots of transient variables.
    - accounts_rel: the accounts and transient storage of every address (the
-     running contract's storage up to dead bytes).
+     running contract's storage up to dead bytes); storage_rel and
+     transient_rel are its case for the running contract.
    - immutables_rel: immutables (staged memory in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.

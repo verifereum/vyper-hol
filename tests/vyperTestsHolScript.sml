@@ -1,8 +1,10 @@
-(* Generated replay theories and the coverage report have separate CI jobs. *)
+(* Hand-written tests of the Vyper semantics, frontend and test runner, as one
+   build root. Generated replay theories and the coverage report have
+   separate CI jobs. *)
 Theory vyperTestsHol
 Ancestors
   e2eSourceBoundaryCVTest
-  jsonConstEvalWitness
+  vyperConstEvalWitness
   livenessProofIntegrity
   vyperAccountCodehashTest
   vyperAssignmentOrderAudit
@@ -45,6 +47,8 @@ Ancestors
   vyperStoragePopTest
   vyperStringScopeTest
   vyperSystemHaltTest
+  vyperTestEmit
+  vyperTestEmitSmoke
   vyperTestLibTest
   vyperTestRunner
   vyperTupleSubscriptTest
@@ -52,3 +56,13 @@ Ancestors
   vyperUnreachableTest
   vyperUnsafeDivTest
   vyperASTSyntaxTest
+  (* creation builtins and constructors *)
+  vyperCreateOracleTest createOracleResultTest createSourceSizeBoundaryTest
+  vyperCreateTypingTest vyperCtorStorageAliasTest createSemanticAudit
+  (* external entries: initial oracle state, defaults, headers, behavior *)
+  vyperOracleInitialStateTest vyperExternalDefaultsTest vyperExternalHeadersTest
+  vyperExternalEntryBehavior vyperExternalEntrySourceBehavior
+  (* places *)
+  vyperPlaceProbesTest vyperPlaceSanityTest
+  (* events declared in imported modules *)
+  vyperImportedEventRegression

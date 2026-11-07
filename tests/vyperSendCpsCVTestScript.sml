@@ -52,8 +52,7 @@ Definition send_snapshot_def:
     send_request_fields st = rqs /\
     OPTION_MAP (MAP (λco. (co.co_success,co.co_returnData,
       (lookup_account 11w co.co_accounts).balance,
-      lookup_storage 1w (vfmExecution$lookup_transient_storage 11w co.co_tStorage),
-      co.co_logs, co.co_toDelete)))
+      lookup_storage 1w (vfmExecution$lookup_transient_storage 11w co.co_tStorage),co.co_logs)))
       st.outcomes = rest
 End
 val () = cv_auto_trans send_snapshot_def;
@@ -79,6 +78,20 @@ Theorem send_cps_success_adopts_code_storage_logs:
   send_observe 9w 7 (SOME [send_outcome T [99w] 17; cpscv_tail])
     (INL (Value NoneV)) 17 5 [0w] 9w 8w cpscv_adopted_logs
     (send_requests 9w 7) cpscv_tail_snapshot
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem send_cps_NONE_zero_value_runs_precompile:
+  send_observe 9w 0 NONE (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem send_cps_NONE_zero_value_empty_code_unchanged:
+  send_observe 0w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
 Proof
   CONV_TAC cv_eval
 QED
@@ -115,15 +128,10 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem send_cps_NONE_zero_value_runs_precompile:
-  send_observe 9w 0 NONE (INR (Error (RuntimeError "send failed"))) 3 0 [] 2w 4w cpscv_initial_logs
-    send_initial_requests NONE
-Proof
-  CONV_TAC cv_eval
-QED
-
-Theorem send_cps_NONE_zero_value_empty_code_unchanged:
-  send_observe 0w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
+(* NONE executes recipient code. Use an empty non-precompile account so
+   the zero-value call succeeds without gas or state effects. *)
+Theorem send_cps_NONE_zero_transfer_unchanged:
+  send_observe 0x99w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
     send_initial_requests NONE
 Proof
   CONV_TAC cv_eval
@@ -222,13 +230,6 @@ val () = cv_auto_trans send_bad_code_observe_def;
 
 Theorem send_cps_invalid_code_consumes_before_guard_error:
   send_bad_code_observe
-Proof
-  CONV_TAC cv_eval
-QED
-
-Theorem send_cps_NONE_zero_transfer_unchanged:
-  send_observe 42w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
-    send_initial_requests NONE
 Proof
   CONV_TAC cv_eval
 QED

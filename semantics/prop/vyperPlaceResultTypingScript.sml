@@ -1466,11 +1466,6 @@ Proof
   ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
-(* Original eval_raw_revert_scope_effect proof:
-  strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  ho_match_mp_tac scope_pop_effect_bind >> simp[]
-*)
 Theorem eval_raw_revert_scope_effect[local]:
   scope_pop_effect (eval_exprs cx es) ==>
   scope_pop_effect (eval_expr cx (Call ty RawRevert es drv))
@@ -1483,15 +1478,6 @@ Proof
   simp[bind_def, lift_option_type_def, raise_def, return_def]
 QED
 
-(* Original eval_selfdestruct_scope_effect proof:
-  strip_tac >> rewrite_tac[Once evaluate_def] >>
-  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
-  irule scope_pop_effect_identity >>
-  rw[ignore_bind_def, bind_def, type_check_def, assert_def,
-     lift_option_type_def, get_accounts_def, update_accounts_def,
-     update_pending_deletions_def, return_def, raise_def,
-     COND_RATOR, AllCaseEqs()]
-*)
 Theorem eval_selfdestruct_scope_effect[local]:
   scope_pop_effect (eval_exprs cx es) ==>
   scope_pop_effect (eval_expr cx (Call ty SelfDestructTarget es drv))
@@ -1542,7 +1528,8 @@ Proof
   >- (irule scope_pop_effect_frame >> irule state_rel_frame_locals_take >> simp[]) >>
   irule scope_pop_effect_identity >>
   simp[vyperCallOutcomeTheory.adopt_call_outcome_equation, return_def] >>
-  gen_tac >> IF_CASES_TAC >> simp[]
+  gen_tac >> IF_CASES_TAC >>
+  Cases_on `co.co_success` >> Cases_on `rq.cr_kind = MessageCall` >> simp[]
 QED
 
 Theorem scope_pop_effect_call_helpers[simp]:
@@ -1681,7 +1668,7 @@ Proof
   rpt gen_tac >> rpt strip_tac >~
   [`scope_pop_effect (eval_expr _ (Call _ (ExtCall _ _ _ _) _ _))`] >-
     suspend "ExtCall" >~
-  [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof) _ _))`] >-
+  [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof kw_order) _ _))`] >-
     suspend "Create" >~
   [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
     suspend "IntCall" >~
@@ -1742,7 +1729,6 @@ Resume eval_mutual_scope_pop_effect_results[IntCall]:
   imp_res_tac finally_set_scopes >>
   imp_res_tac read_results_state >>
   imp_res_tac lift_option_type_scopes >>
-  (* Original: imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >> *)
   imp_res_tac finally_unless_halt_conditional_lock_scopes >>
   gvs[] >>
   gvs[push_function_def, return_def, AllCaseEqs()] >>

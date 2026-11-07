@@ -2,7 +2,7 @@
  * Analysis-Driven Simulation — Proofs (Part 4: Prepend Correctness)
  *
  * Main theorem:
- *   df_analysis_pass_correct_prepend_proof
+ *   df_analysis_pass_correct_prepend
  *)
 
 Theory analysisSimProofsPrepend
@@ -66,38 +66,6 @@ Proof
   `i < LENGTH (TAKE (phi_prefix_length l) l)` by
     simp[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le] >>
   simp[listTheory.EL_APPEND_EQN, EL_TAKE]
-QED
-
-(* EL for the "prepend" region: phi_prefix_length l <= i < phi_prefix_length l + LENGTH p *)
-Triviality EL_take_drop_insert_mid[local]:
-  !l p i. EVERY (\i:instruction. i.inst_opcode <> PHI) p ==>
-    phi_prefix_length l <= i /\ i < phi_prefix_length l + LENGTH p ==>
-    EL i (TAKE (phi_prefix_length l) l ++ p ++ DROP (phi_prefix_length l) l) = EL (i - phi_prefix_length l) p
-Proof
-  rpt strip_tac >>
-  `LENGTH (TAKE (phi_prefix_length l) l) = phi_prefix_length l` by
-    simp[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le] >>
-  `i - phi_prefix_length l < LENGTH p` by decide_tac >>
-  simp[listTheory.EL_APPEND_EQN] >>
-  simp[EL_TAKE]
-QED
-
-(* EL for the "suffix" region: i >= phi_prefix_length l + LENGTH p *)
-Triviality EL_take_drop_insert_suffix[local]:
-  !l p i. EVERY (\i:instruction. i.inst_opcode <> PHI) p ==>
-    phi_prefix_length l + LENGTH p <= i /\ i < LENGTH l + LENGTH p ==>
-    EL i (TAKE (phi_prefix_length l) l ++ p ++ DROP (phi_prefix_length l) l) =
-    EL (i - phi_prefix_length l - LENGTH p) (DROP (phi_prefix_length l) l)
-Proof
-  rpt strip_tac >>
-  `LENGTH (TAKE (phi_prefix_length l) l) = phi_prefix_length l` by
-    simp[LENGTH_TAKE_EQ, venomExecProofsTheory.phi_prefix_length_le] >>
-  `LENGTH (TAKE (phi_prefix_length l) l ++ p) = phi_prefix_length l + LENGTH p` by simp[] >>
-  `i - (phi_prefix_length l + LENGTH p) < LENGTH (DROP (phi_prefix_length l) l)` by (
-    simp[LENGTH_DROP, venomExecProofsTheory.phi_prefix_length_le] >>
-    decide_tac) >>
-  simp[listTheory.EL_APPEND_EQN] >>
-  simp[EL_TAKE, EL_DROP]
 QED
 
 (* Boundary: EL in the prepend region of analysis_block_transform_prepend.
@@ -488,9 +456,9 @@ Proof
 QED
 
 (* Prepend-aware pass correctness.
-   Extends df_analysis_pass_correct_sound_proof for transforms that
+   Extends df_analysis_pass_correct_sound for transforms that
    add new instructions before each block. *)
-Theorem df_analysis_pass_correct_prepend_proof:
+Theorem df_analysis_pass_correct_prepend:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool)
    (bottom : 'a) join transfer edge_transfer ctx

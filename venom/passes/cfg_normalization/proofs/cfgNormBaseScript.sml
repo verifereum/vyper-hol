@@ -25,6 +25,8 @@ Ancestors
   stateEquivProps venomExecSemantics execEquivProofs venomWf venomExecProps
   venomInstProps venomInst venomState venomExecProofs prevBbIndep
   finite_map
+Libs
+  stepInstBaseLib
 
 (* ================================================================
    Section 1: Counterexample -- block label collision
@@ -1551,14 +1553,6 @@ Proof
   Cases_on `inst.inst_opcode = PHI` >> simp[update_phis_for_split_def]
 QED
 
-Theorem phi_prefix_length_all_phi[local]:
-  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `i` >> simp[]
-QED
-
 Theorem phi_prefix_length_at_nonphi[local]:
   !insts. phi_prefix_length insts < LENGTH insts ==>
     (EL (phi_prefix_length insts) insts).inst_opcode <> PHI
@@ -1566,34 +1560,6 @@ Proof
   Induct_on `insts` >> simp[phi_prefix_length_def] >>
   rpt gen_tac >>
   Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
-QED
-
-(* bb_well_formed implies phi_prefix_length < LENGTH: the last instruction
-   is always a terminator (not PHI), so PHI prefix must be shorter. *)
-Theorem bb_well_formed_phi_prefix_length_lt[local]:
-  !bb. bb_well_formed bb ==>
-    phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
-Proof
-  rpt strip_tac >>
-  CCONTR_TAC >>
-  `LENGTH bb.bb_instructions <= phi_prefix_length bb.bb_instructions`
-    by simp[arithmeticTheory.NOT_LT] >>
-  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions`
-    by simp[phi_prefix_length_le] >>
-  `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions`
-    by decide_tac >>
-  fs[bb_well_formed_def] >>
-  `~is_terminator PHI` by simp[is_terminator_def] >>
-  `is_terminator
-    (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode`
-    by metis_tac[listTheory.LAST_EL] >>
-  `LENGTH bb.bb_instructions <> 0` by
-    (Cases_on `bb.bb_instructions` >> simp[]) >>
-  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions`
-    by simp[] >>
-  `bb.bb_instructions❲PRE (LENGTH bb.bb_instructions)❳.inst_opcode = PHI`
-    by metis_tac[phi_prefix_length_all_phi] >>
-  metis_tac[]
 QED
 
 (* Boundary lemma: run_block on update_phis_for_split bb = run_block on original bb
@@ -2041,6 +2007,27 @@ Proof
   simp[adopt_return_fmp_def, venom_state_component_equality]
 QED
 
+Theorem eval_operands_prev_bb[local]:
+  !ops s p. eval_operands ops (s with vs_prev_bb := p) = eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def] >>
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem setup_callee_prev_bb[local]:
+  !fn args s p. setup_callee fn args (s with vs_prev_bb := p) =
+                setup_callee fn args s
+Proof
+  simp[setup_callee_def, venom_state_component_equality]
+QED
+
+Theorem merge_callee_state_prev_bb[local]:
+  !s cs p. merge_callee_state (s with vs_prev_bb := p) cs =
+           (merge_callee_state s cs) with vs_prev_bb := p
+Proof
+  simp[merge_callee_state_def, venom_state_component_equality]
+QED
+
 (* INVOKE OK: changing caller's prev_bb changes only result's prev_bb *)
 Theorem step_inst_invoke_OK_prev_bb[local]:
   !fuel ctx inst s p r.
@@ -2052,53 +2039,21 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst _ _ _ s = _` mp_tac >>
   simp[Once step_inst_def] >>
+  simp[Once step_inst_def, eval_operands_prev_bb, setup_callee_prev_bb] >>
   Cases_on `decode_invoke inst` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `lookup_function x0 ctx.ctx_functions` >> simp[] >>
-  Cases_on `eval_operands x1 s` >> simp[] >>
-  simp[setup_callee_def] >>
-  Cases_on `NULL x.fn_blocks` >> simp[] >>
-  qabbrev_tac `callee_s = s with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
-    vs_current_bb := (HD x.fn_blocks).bb_label;
-    vs_inst_idx := 0; vs_halted := F; vs_params := x';
-    vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-    vs_return_pc_token := if NULL x' then 0w else LAST x';
-    vs_allocas := FEMPTY|>` >>
-  Cases_on `run_blocks fuel ctx x callee_s` >> simp[] >>
-  simp[merge_callee_state_def, bind_outputs_def] >>
-  Cases_on `LENGTH inst.inst_outputs = LENGTH i.iret_values` >> simp[] >>
-  strip_tac >>
-  simp[Once step_inst_def] >>
-  `!ops. eval_operands ops (s with vs_prev_bb := p) = eval_operands ops s` by
-    (Induct >> simp[eval_operands_def] >>
-     Cases >> simp[eval_operand_def, lookup_var_def] >>
-     BasicProvers.every_case_tac >> simp[]) >>
-  simp[setup_callee_def] >>
-  `(s with vs_prev_bb := p) with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
-    vs_current_bb := (HD x.fn_blocks).bb_label;
-    vs_inst_idx := 0; vs_halted := F; vs_params := x';
-    vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-    vs_return_pc_token := if NULL x' then 0w else LAST x';
-    vs_allocas := FEMPTY|> = callee_s` by
-    (qunabbrev_tac `callee_s` >> simp[]) >>
-  simp[merge_callee_state_def, bind_outputs_def] >>
-  gvs[] >>
-  `s with
-     <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
-       vs_prev_bb := p; vs_returndata := v.vs_returndata;
-       vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
-       vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
-       vs_pending_deletions := v.vs_pending_deletions;
-       vs_immutables := v.vs_immutables|> =
-   (s with
-     <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
-       vs_returndata := v.vs_returndata; vs_accounts := v.vs_accounts;
-       vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
-       vs_requests := v.vs_requests;
-       vs_pending_deletions := v.vs_pending_deletions;
-       vs_immutables := v.vs_immutables|>) with vs_prev_bb := p` by simp[] >>
-  pop_assum (fn th => REWRITE_TAC[th]) >>
-  simp[adopt_return_fmp_prev_bb, foldl_update_var_prev_bb]
+  rename1 `SOME decoded` >> PairCases_on `decoded` >> simp[] >>
+  Cases_on `lookup_function decoded0 ctx.ctx_functions` >> simp[] >>
+  rename1 `SOME callee_fn` >>
+  Cases_on `eval_operands decoded1 s` >> simp[] >>
+  rename1 `SOME args` >>
+  Cases_on `setup_callee callee_fn args s` >> simp[] >>
+  rename1 `SOME callee_s` >>
+  Cases_on `run_blocks fuel ctx callee_fn callee_s` >> simp[] >>
+  simp[merge_callee_state_prev_bb, adopt_return_fmp_prev_bb,
+       bind_outputs_def, foldl_update_var_prev_bb] >>
+  rename1 `ret.iret_values` >>
+  Cases_on `LENGTH inst.inst_outputs = LENGTH ret.iret_values` >> simp[] >>
+  strip_tac >> gvs[]
 QED
 
 (* INVOKE case of step_inst execution equivalence, extracted for clean
@@ -2354,7 +2309,7 @@ Theorem exec_block_update_phis_from_ppl[local]:
 Proof
   rpt strip_tac >>
   `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions`
-    by metis_tac[bb_well_formed_phi_prefix_length_lt] >>
+    by metis_tac[phi_prefix_length_lt_wf] >>
   `(EL (phi_prefix_length bb.bb_instructions) bb.bb_instructions).inst_opcode <> PHI`
     by metis_tac[phi_prefix_length_at_nonphi] >>
   irule run_block_update_phis_non_phi_suffix >>
@@ -2695,13 +2650,6 @@ Proof
 QED
 
 (* eval_operands doesn't read vs_prev_bb *)
-Theorem eval_operands_prev_bb[local]:
-  !ops s p. eval_operands ops (s with vs_prev_bb := p) = eval_operands ops s
-Proof
-  Induct >> simp[eval_operands_def] >>
-  Cases >> simp[eval_operand_def, lookup_var_def]
-QED
-
 (* INVOKE step_inst: full prev_bb characterization.
    For ALL result types, step_inst on (s with vs_prev_bb := p) either
    equals step_inst on s (non-OK) or maps vs_prev_bb (OK). *)
@@ -2719,37 +2667,20 @@ Theorem step_inst_invoke_prev_bb[local]:
      | Error e => step_inst fuel ctx inst (s with vs_prev_bb := p) = Error e)
 Proof
   rpt strip_tac >>
-  simp[step_inst_def, eval_operands_prev_bb] >>
+  simp[step_inst_def, eval_operands_prev_bb, setup_callee_prev_bb] >>
   Cases_on `decode_invoke inst` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `lookup_function x0 ctx.ctx_functions` >> simp[] >>
-  Cases_on `eval_operands x1 s` >> simp[] >>
-  simp[setup_callee_def] >>
-  Cases_on `NULL x.fn_blocks` >> simp[] >>
-  Cases_on `run_blocks fuel ctx x
-    (s with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
-      vs_current_bb := (HD x.fn_blocks).bb_label;
-      vs_inst_idx := 0; vs_halted := F; vs_params := x';
-      vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-      vs_return_pc_token := if NULL x' then 0w else LAST x';
-      vs_allocas := FEMPTY|>)` >>
-  simp[merge_callee_state_def, bind_outputs_def] >>
-  Cases_on `LENGTH inst.inst_outputs = LENGTH i.iret_values` >> simp[] >>
-  (`s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
-     vs_prev_bb := p; vs_returndata := v.vs_returndata;
-     vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
-     vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
-     vs_pending_deletions := v.vs_pending_deletions;
-     vs_immutables := v.vs_immutables|> =
-   (s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
-     vs_returndata := v.vs_returndata; vs_accounts := v.vs_accounts;
-     vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
-     vs_requests := v.vs_requests;
-     vs_pending_deletions := v.vs_pending_deletions;
-     vs_immutables := v.vs_immutables|>) with vs_prev_bb := p`
-    by simp[venomStateTheory.venom_state_component_equality]) >>
-  pop_assum (fn eq => REWRITE_TAC[eq]) >>
-  simp[adopt_return_fmp_prev_bb, foldl_update_var_prev_bb]
+  rename1 `SOME decoded` >> PairCases_on `decoded` >> simp[] >>
+  Cases_on `lookup_function decoded0 ctx.ctx_functions` >> simp[] >>
+  rename1 `SOME callee_fn` >>
+  Cases_on `eval_operands decoded1 s` >> simp[] >>
+  rename1 `SOME args` >>
+  Cases_on `setup_callee callee_fn args s` >> simp[] >>
+  rename1 `SOME callee_s` >>
+  Cases_on `run_blocks fuel ctx callee_fn callee_s` >> simp[] >>
+  simp[merge_callee_state_prev_bb, adopt_return_fmp_prev_bb,
+       bind_outputs_def, foldl_update_var_prev_bb] >>
+  rename1 `ret.iret_values` >>
+  Cases_on `LENGTH inst.inst_outputs = LENGTH ret.iret_values` >> simp[]
 QED
 
 (* eval_operand doesn't read vs_prev_bb (single operand version) *)
@@ -3287,9 +3218,9 @@ Proof
 QED
 
 val subst_label_nonjump_tac =
-  gvs[step_inst_base_def, subst_label_inst_def,
-      eval_operands_subst_label, eval_operand_subst_label,
-      parse_dret_shape_subst_label] >>
+  stepInstBaseLib.with_opcode_clause (fn c => gvs (c @
+    [subst_label_inst_def, eval_operands_subst_label,
+     eval_operand_subst_label, parse_dret_shape_subst_label])) >>
   BasicProvers.every_case_tac >>
   gvs[eval_operand_subst_label, parse_dret_shape_subst_label];
 
@@ -5441,7 +5372,7 @@ Theorem phi_prefix_length_non_phi_suffix[local]:
         k < LENGTH bb.bb_instructions ==>
         (EL k bb.bb_instructions).inst_opcode <> PHI
 Proof
-  metis_tac[bb_non_phi_suffix, bb_well_formed_phi_prefix_length_lt,
+  metis_tac[bb_non_phi_suffix, phi_prefix_length_lt_wf,
             phi_prefix_length_at_nonphi]
 QED
 

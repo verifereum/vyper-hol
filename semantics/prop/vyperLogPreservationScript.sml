@@ -1609,7 +1609,6 @@ Theorem log_monad_primitives[local]:
   log_monad (lift_sum_runtime rs) /\ log_monad get_accounts /\
   log_monad get_transient_storage /\ log_monad (update_accounts upd) /\
   log_monad (update_transient upd_t) /\ log_monad (append_logs logs) /\
-  log_monad (update_pending_deletions deletions_upd) /\
   log_monad (adopt_call_outcome rq co)
 Proof
   simp[log_monad_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -1618,12 +1617,19 @@ Proof
        vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_runtime_def,
        vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
-       append_logs_def, update_pending_deletions_def, adopt_call_outcome_equation] >>
-  rpt strip_tac >> rpt CASE_TAC >>
-  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+       append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(), COND_RAND,
       vyperStateTheory.return_def, vyperStateTheory.raise_def,
-      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      log_extends_def, rich_listTheory.IS_PREFIX_APPEND3,
       rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem log_monad_update_pending_deletions[local]:
+  log_monad (update_pending_deletions deletions_upd)
+Proof
+  rw[log_monad_def, update_pending_deletions_def, vyperStateTheory.return_def,
+     log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 
 Theorem log_monad_take[local]:
@@ -1644,7 +1650,8 @@ val EXTCALL_LOG_MONAD_LEAF_TAC =
        MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
     val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
-      (log_monad_take :: CONJUNCTS log_monad_primitives)
+      (log_monad_take :: log_monad_update_pending_deletions ::
+       CONJUNCTS log_monad_primitives)
   in
     fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
   end;
@@ -2204,7 +2211,6 @@ Proof
           PRED_ASSUM is_guarded_eval_exprs_ih kall_tac >>
           simp[push_function_def, return_def] >>
           BasicProvers.TOP_CASE_TAC >>
-          (* Original: qmatch_asmsub_rename_tac `finally _ _ _ = (body_res,after_body)` >> *)
           qmatch_asmsub_rename_tac `finally_unless_halt _ _ _ = (body_res,after_body)` >>
           `log_extends (after_lock with scopes := [x'⁴']) after_body` by
             (drule intcall_body_finally_exact_log_extends >>
@@ -2222,7 +2228,7 @@ Proof
           rpt (qpat_x_assum `!x. _` kall_tac) >>
           metis_tac[log_extends_trans]) >~
        [`_ ==> !st res st'.
-           eval_expr _ (Call _ (CreateTarget _ _ _) _ _) st = (res,st') ==>
+           eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
          suspend "CreateTarget" >~
        [`_ ==> !st res st'.
@@ -2596,3 +2602,54 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("Log preservation oracle debt: " ^ name)
   end) (DB.thms "vyperLogPreservation");
+
+Theorem log_extends_outcome_rules[local]:
+  (!s. log_extends s s) /\
+  (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
+  (!s os rqs. log_extends s (s with <|outcomes := os; requests := rqs|>)) /\
+  (!s accounts transient logs pending. log_extends s
+     (s with <|accounts := accounts; tStorage := transient;
+               logs := s.logs ++ logs; pending_deletions := pending|>))
+Proof
+  rpt conj_tac
+  >- simp[log_extends_refl]
+  >- metis_tac[log_extends_trans]
+  >- simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem log_extends_final_frame:
+  log_extends st mid /\ isPREFIX mid.logs st'.logs ==>
+  log_extends st st'
+Proof
+  simp[log_extends_def] >> metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
+Theorem Send_outcome_log_extends:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED
+
+Theorem ExtCall_outcome_log_extends:
+  (!bs s res t. k bs s = (res,t) ==> log_extends s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  rpt strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (ExtCall_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED

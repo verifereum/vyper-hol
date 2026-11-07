@@ -1,0 +1,27 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
+  "python_version": "3.11.11",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "ctor_alias.vy": "fbf886af90e3459c379d1e7d6fd451ff5b5ed97d90fe49ac2c07c53fd821017e"
+  },
+  "outputs": {
+    "ctor_alias.hex": "84848443d541f0dd4d9495dac557f74476037d83f33c67bae08ff573749bd7c1",
+    "ctor_alias.json": "5b583f30d416c596acb418d712b566fbfdf63b9b5427dcb88a90cf455bc98749"
+  }
+}

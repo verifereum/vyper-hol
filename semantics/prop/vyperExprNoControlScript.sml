@@ -1042,14 +1042,6 @@ Resume canonical_eval_no_control_with_results[RawLog]:
   imp_res_tac push_log_no_control >> res_tac
 QED
 
-(* Original RawRevert proof:
-Resume canonical_eval_no_control_with_results[RawRevert]:
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-    raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_def] >>
-  metis_tac[type_check_no_control, no_control_exc_def]
-QED
-*)
 Resume canonical_eval_no_control_with_results[RawRevert]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
@@ -1058,17 +1050,6 @@ Resume canonical_eval_no_control_with_results[RawRevert]:
   metis_tac[type_check_no_control, no_control_exc_def]
 QED
 
-(* Original SelfDestruct proof:
-Resume canonical_eval_no_control_with_results[SelfDestruct]:
-  rpt strip_tac >> pop_assum mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-    get_accounts_def, update_accounts_def, update_pending_deletions_def,
-    raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[no_control_exc_def] >>
-  imp_res_tac type_check_no_control >>
-  imp_res_tac lift_option_type_no_control >>
-  res_tac
-QED
-*)
 Resume canonical_eval_no_control_with_results[SelfDestruct]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
@@ -1211,3 +1192,16 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("No-control oracle debt: " ^ name)
   end) (DB.thms "vyperExprNoControl");
+
+Theorem Send_outcome_runtime_error:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (INR exc,st') ==>
+  ?msg. exc = Error (RuntimeError msg)
+Proof
+  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+QED

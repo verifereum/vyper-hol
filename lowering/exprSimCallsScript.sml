@@ -13,12 +13,8 @@
  *     compile_raw_revert_sim, compile_selfdestruct_sim
  *   5 the creates: compile_create_sim
  *
- * Unprovable as the definitions stand (for compile_raw_call_sim,
- * compile_raw_call_calldata_sim and compile_create_sim, once
+ * Unprovable as the definitions stand (for raw_call and the creates, once
  * expr_sim_pre's exclusion of them, below, is lifted):
- *   - compile_create_sim: compile_call lowers CreateTarget to INVALID
- *     (builtinCreate's compile_create_* are not called yet), where the
- *     source can succeed.
  *   - compile_selfdestruct_sim: Venom's SELFDESTRUCT predates EIP-6780.
  *     It never adds a pending deletion, zeroes the balance even when the
  *     beneficiary is the executing account, and keeps the return data,
@@ -37,26 +33,19 @@
  *     account code with neither, so a delegate call to a precompile
  *     returns the precompile's output in the source and empty success in
  *     Venom.
- *   - compile_raw_call_calldata_sim, and the create lowerings once they are
- *     wired in: they allocate with DALLOCA, at vs_fmp, which
+ *   - compile_raw_call_calldata_sim, and the create lowerings: they allocate with DALLOCA, at vs_fmp, which
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
- *   - compile_create_sim, once the create lowerings are wired in, for a
- *     second reason: a create adds its run's pending deletions to the
- *     source queue (eval_create), which state_rel requires equal to
- *     Venom's, while Venom's create result (extract_venom_result) drops
- *     them.
  *
- * RawLog, RawRevert, SelfDestructTarget and both raw_call forms are wired
- * into compile_call.
+ * RawLog, RawRevert, SelfDestructTarget, both raw_call forms and the
+ * creates are wired into compile_call.
  * Their case lemmas remain admitted.  For SelfDestructTarget, expr_exit
  * now covers HaltException by Halt with empty returndata only; full
  * terminal effects correctness is the separate loweringHalt/e2e bridge's
  * responsibility.
  *
- * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e),
- * since the source runs them on the EVM even with the outcome oracle, so
+ * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e), so
  * compile_raw_call_sim, compile_raw_call_calldata_sim and
  * compile_create_sim hold vacuously for now; they stay cheated until that
  * exclusion is lifted.
@@ -126,9 +115,9 @@ Proof
 QED
 
 Theorem compile_create_sim:
-  !cenv ann kind has_salt rof args dflt.
-    expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof) args dflt)
+  !cenv ann kind has_salt rof order args dflt.
+    expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof order) args dflt)) ==>
+    expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof order) args dflt)
 Proof
   cheat
 QED

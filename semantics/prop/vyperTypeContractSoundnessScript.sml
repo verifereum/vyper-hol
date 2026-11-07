@@ -2658,9 +2658,6 @@ Theorem load_contract_deployed_exports:
 Proof
   strip_tac >>
   drule load_contract_success_cases >> strip_tac >>
-  (* Previous INL-only boundary missed committed Halt:
-  drule_at (Pos (el 2)) call_external_function_deploy_success_preserves_exports >>
-  simp[] *)
   drule call_external_function_preserves_exports >> simp[]
 QED
 

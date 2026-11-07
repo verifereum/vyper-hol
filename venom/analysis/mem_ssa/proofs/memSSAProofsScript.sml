@@ -2,16 +2,16 @@
  * Memory SSA Analysis — Proofs
  *
  * Proves safety properties of the memory SSA construction.
- * Consumed by memSSAPropsScript.sml via ACCEPT_TAC.
+ * Consumers import it through memSSAAnalysisScript.sml.
  *)
 
 Theory memSSAProofs
 Ancestors
   memSSADefs
-  dominatorAnalysisProps
+  dominatorProofs
   cfgAnalysisProps
   cfgHelpers
-  memAliasProps
+  memAliasProps cfgCorrectnessProof
 Libs
   listTheory rich_listTheory finite_mapTheory pairTheory pred_setTheory
   memSSAProofsLib
@@ -289,39 +289,6 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
-(* Non-redundant phis survive Phase 4 *)
-Triviality remove_redundant_phis_non_redundant_preserved:
-  ∀pairs ms lbl phi_id.
-    FLOOKUP ms.ms_block_phis lbl = SOME phi_id ∧
-    (∀pid ops. MEM (lbl, pid) pairs ∧
-              FLOOKUP ms.ms_phi_ops pid = SOME ops ⇒
-              ¬mem_ssa_phi_redundant ops) ⇒
-    FLOOKUP (mem_ssa_remove_redundant_phis ms pairs).ms_block_phis lbl =
-      SOME phi_id
-Proof
-  Induct >> simp[mem_ssa_remove_redundant_phis_def] >>
-  Cases >> rpt gen_tac >> strip_tac >>
-  rename [`(lbl', pid')::rest`] >>
-  simp[mem_ssa_remove_redundant_phis_def] >>
-  Cases_on `FLOOKUP ms.ms_phi_ops pid'` >> simp[]
-  >- ((* NONE: state unchanged *)
-    first_x_assum irule >> simp[] >> metis_tac[])
-  >- ((* SOME ops' *)
-    rename [`FLOOKUP ms.ms_phi_ops pid' = SOME ops'`] >>
-    Cases_on `mem_ssa_phi_redundant ops'` >> simp[]
-    >- ((* redundant: lbl' removed from block_phis *)
-      (* lbl' ≠ lbl because our precondition says lbl's phi is non-redundant *)
-      `lbl' <> lbl` by (
-        CCONTR_TAC >> gvs[] >>
-        `phi_id = pid'` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-        gvs[] >> metis_tac[MEM]) >>
-      first_x_assum irule >>
-      simp[finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
-      metis_tac[])
-    >- ((* non-redundant: state unchanged *)
-      first_x_assum irule >> simp[] >> metis_tac[]))
-QED
-
 (* ==========================================================================
    Composite preservation: wf_mssa through phases 3+4
    ========================================================================== *)
@@ -437,73 +404,6 @@ Proof
 QED
 
 (* General: adding a matching pair to index+nodes preserves inst_maps *)
-(* General helper: FLOOKUP_UPDATE-based map extension preserves consistency.
-   Pattern: new index entry (iid↦nid) + new node entry (nid↦MnXxx iid ...).
-   Old entries preserved because nid is fresh (not in FDOM ms.ms_nodes). *)
-Triviality inst_maps_extend_def:
-  ∀ms iid nid blk loc.
-    mem_ssa_inst_maps_consistent ms ∧ nid ∉ FDOM ms.ms_nodes ⇒
-    mem_ssa_inst_maps_consistent
-      (ms with <| ms_inst_def := ms.ms_inst_def |+ (iid, nid);
-                  ms_nodes := ms.ms_nodes |+ (nid, MnDef iid blk loc) |>)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `FLOOKUP ms.ms_nodes nid = NONE` by
-    metis_tac[finite_mapTheory.FLOOKUP_DEF] >>
-  fs[mem_ssa_inst_maps_consistent_def] >>
-  simp[mem_ssa_inst_maps_consistent_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >>
-  rpt (COND_CASES_TAC >> gvs[]) >>
-  TRY (res_tac >> gvs[] >> NO_TAC) >>
-  qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
-  COND_CASES_TAC >> gvs[] >>
-  strip_tac >> res_tac >> gvs[]
-QED
-
-Triviality inst_maps_extend_use:
-  ∀ms iid nid blk loc.
-    mem_ssa_inst_maps_consistent ms ∧ nid ∉ FDOM ms.ms_nodes ⇒
-    mem_ssa_inst_maps_consistent
-      (ms with <| ms_inst_use := ms.ms_inst_use |+ (iid, nid);
-                  ms_nodes := ms.ms_nodes |+ (nid, MnUse iid blk loc) |>)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `FLOOKUP ms.ms_nodes nid = NONE` by
-    metis_tac[finite_mapTheory.FLOOKUP_DEF] >>
-  fs[mem_ssa_inst_maps_consistent_def] >>
-  simp[mem_ssa_inst_maps_consistent_def,
-       finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >>
-  rpt (COND_CASES_TAC >> gvs[]) >>
-  TRY (res_tac >> gvs[] >> NO_TAC) >>
-  qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
-  COND_CASES_TAC >> gvs[] >>
-  strip_tac >> res_tac >> gvs[]
-QED
-
-(* Updating fields that inst_maps doesn't mention is invisible *)
-Triviality inst_maps_irrelevant_fields:
-  ∀ms bd bu bp pp nid r.
-    mem_ssa_inst_maps_consistent ms ⇒
-    mem_ssa_inst_maps_consistent
-      (ms with <| ms_block_defs := bd; ms_block_uses := bu;
-                  ms_block_phis := bp; ms_phi_ops := pp;
-                  ms_next_id := nid; ms_reaching := r |>)
-Proof
-  rw[mem_ssa_inst_maps_consistent_def] >> res_tac >> gvs[]
-QED
-
-(* inst_maps_consistent only depends on inst_def, inst_use, nodes *)
-Triviality inst_maps_cong:
-  ∀ms1 ms2.
-    ms1.ms_inst_def = ms2.ms_inst_def ∧
-    ms1.ms_inst_use = ms2.ms_inst_use ∧
-    ms1.ms_nodes = ms2.ms_nodes ⇒
-    (mem_ssa_inst_maps_consistent ms1 ⇔ mem_ssa_inst_maps_consistent ms2)
-Proof
-  rw[mem_ssa_inst_maps_consistent_def]
-QED
 
 (* process_inst preserves + extends inst_maps_consistent *)
 Triviality process_inst_preserves_inst_maps:
@@ -566,74 +466,6 @@ QED
    Holds because process_inst adds iid to FDOM inst_def when creating MnDef,
    and |+ never removes keys from FDOM.
    ========================================================================== *)
-
-Triviality process_inst_MnDef_in_inst_def:
-  !bp addr_sp lbl ms inst aid iid blk loc.
-    (!a i b l. FLOOKUP ms.ms_nodes a = SOME (MnDef i b l) ==>
-      i IN FDOM ms.ms_inst_def) /\
-    nodes_fresh ms /\
-    FLOOKUP (mem_ssa_process_inst bp addr_sp lbl ms inst).ms_nodes aid =
-      SOME (MnDef iid blk loc) ==>
-    iid IN FDOM (mem_ssa_process_inst bp addr_sp lbl ms inst).ms_inst_def
-Proof
-  rpt gen_tac >>
-  simp[mem_ssa_process_inst_def, LET_THM] >>
-  rpt COND_CASES_TAC >> simp[FLOOKUP_UPDATE, FDOM_FUPDATE] >>
-  rpt strip_tac >>
-  TRY (qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
-       rpt IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[] >>
-       res_tac >> simp[] >> NO_TAC) >>
-  res_tac
-QED
-
-Triviality process_block_MnDef_in_inst_def:
-  !insts bp addr_sp lbl ms aid iid blk loc.
-    (!a i b l. FLOOKUP ms.ms_nodes a = SOME (MnDef i b l) ==>
-      i IN FDOM ms.ms_inst_def) /\
-    nodes_fresh ms /\
-    FLOOKUP (mem_ssa_process_block bp addr_sp lbl ms insts).ms_nodes aid =
-      SOME (MnDef iid blk loc) ==>
-    iid IN FDOM (mem_ssa_process_block bp addr_sp lbl ms insts).ms_inst_def
-Proof
-  Induct >> simp[mem_ssa_process_block_def]
-  >- metis_tac[]
-  >> rpt gen_tac >> strip_tac >>
-  first_x_assum (qspecl_then [`bp`, `addr_sp`, `lbl`,
-    `mem_ssa_process_inst bp addr_sp lbl ms h`, `aid`, `iid`, `blk`, `loc`]
-    mp_tac) >>
-  simp[] >> disch_then match_mp_tac >>
-  conj_tac
-  >- (rpt strip_tac >>
-      match_mp_tac (GEN_ALL process_inst_MnDef_in_inst_def) >>
-      metis_tac[])
-  >- metis_tac[process_inst_preserves_fresh]
-QED
-
-Triviality process_blocks_MnDef_in_inst_def:
-  !lbls bp addr_sp fn ms aid iid blk loc.
-    (!a i b l. FLOOKUP ms.ms_nodes a = SOME (MnDef i b l) ==>
-      i IN FDOM ms.ms_inst_def) /\
-    nodes_fresh ms /\
-    FLOOKUP (mem_ssa_process_blocks bp addr_sp fn ms lbls).ms_nodes aid =
-      SOME (MnDef iid blk loc) ==>
-    iid IN FDOM (mem_ssa_process_blocks bp addr_sp fn ms lbls).ms_inst_def
-Proof
-  Induct >> simp[mem_ssa_process_blocks_def]
-  >- metis_tac[]
-  >> rpt gen_tac >> Cases_on `lookup_block h fn.fn_blocks` >>
-  simp[mem_ssa_process_blocks_def]
-  >- metis_tac[]
-  >> strip_tac >>
-  first_x_assum (qspecl_then [`bp`, `addr_sp`, `fn`,
-    `mem_ssa_process_block bp addr_sp h ms x.bb_instructions`,
-    `aid`, `iid`, `blk`, `loc`] mp_tac) >>
-  simp[] >> disch_then match_mp_tac >>
-  conj_tac
-  >- (rpt strip_tac >>
-      match_mp_tac (GEN_ALL process_block_MnDef_in_inst_def) >>
-      metis_tac[])
-  >- metis_tac[process_block_preserves_fresh]
-QED
 
 (* --------------------------------------------------------------------------
    Full reverse inst_def: nodes aid = MnDef iid ... ==> inst_def iid = SOME aid
@@ -957,19 +789,6 @@ Proof
   metis_tac[]
 QED
 
-Triviality process_frontiers_next_id_mono:
-  ∀fronts ms cfg dom fuel ms' wl.
-    mem_ssa_process_frontiers ms cfg dom fuel fronts = (ms', wl) ⇒
-    ms.ms_next_id ≤ ms'.ms_next_id
-Proof
-  Induct >> simp[mem_ssa_process_frontiers_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  strip_tac >> gvs[] >>
-  `ms.ms_next_id ≤ ms1.ms_next_id` by metis_tac[insert_phi_at_next_id_mono] >>
-  `ms1.ms_next_id ≤ ms'.ms_next_id` by metis_tac[] >>
-  DECIDE_TAC
-QED
-
 Triviality process_frontiers_preserves_fresh:
   ∀fronts ms cfg dom fuel ms' wl.
     nodes_fresh ms ∧
@@ -980,19 +799,6 @@ Proof
   rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   strip_tac >> gvs[] >>
   metis_tac[insert_phi_at_preserves_fresh]
-QED
-
-Triviality insert_phis_preserves_fresh:
-  ∀ms cfg dom ef fuel wl.
-    nodes_fresh ms ⇒
-    nodes_fresh (mem_ssa_insert_phis ms cfg dom ef fuel wl)
-Proof
-  recInduct (fetch "memSSADefs" "mem_ssa_insert_phis_ind") >>
-  simp[mem_ssa_insert_phis_def] >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  first_x_assum irule >>
-  metis_tac[process_frontiers_preserves_fresh]
 QED
 
 Triviality process_frontiers_preserves_zero_not_in_nodes:
@@ -1007,23 +813,6 @@ Proof
   strip_tac >> gvs[] >>
   metis_tac[insert_phi_at_preserves_fresh,
             insert_phi_at_preserves_zero_not_in_nodes]
-QED
-
-Triviality insert_phis_preserves_zero_not_in_nodes:
-  !ms cfg dom ef fuel wl.
-    nodes_fresh ms /\
-    0 NOTIN FDOM ms.ms_nodes /\ ms.ms_next_id > 0 ==>
-    0 NOTIN FDOM (mem_ssa_insert_phis ms cfg dom ef fuel wl).ms_nodes /\
-    (mem_ssa_insert_phis ms cfg dom ef fuel wl).ms_next_id > 0
-Proof
-  recInduct (fetch "memSSADefs" "mem_ssa_insert_phis_ind") >>
-  simp[mem_ssa_insert_phis_def] >> rpt conj_tac >>
-  TRY (rpt gen_tac >> strip_tac >> simp[] >> NO_TAC) >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >>
-  pairarg_tac >> simp[] >> strip_tac >>
-  first_x_assum irule >>
-  metis_tac[process_frontiers_preserves_fresh,
-            process_frontiers_preserves_zero_not_in_nodes]
 QED
 
 Triviality insert_phis_nodes_mono:
@@ -1977,32 +1766,6 @@ Proof
   gvs[]
 QED
 
-(* Phase 1+2: MnDef node ⇒ iid ∈ FDOM inst_def *)
-Triviality phase12_MnDef_in_inst_def:
-  !bp addr_sp fn order cfg dom ef fuel wl aid iid blk loc.
-    FLOOKUP (mem_ssa_insert_phis
-      (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init order)
-      cfg dom ef fuel wl).ms_nodes aid = SOME (MnDef iid blk loc) ==>
-    iid IN FDOM (mem_ssa_insert_phis
-      (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init order)
-      cfg dom ef fuel wl).ms_inst_def
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[insert_phis_fields] >>
-  `nodes_fresh (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init order)`
-    by simp[process_blocks_preserves_fresh, mem_ssa_init_def,
-            nodes_fresh_def, FDOM_FEMPTY] >>
-  Cases_on `FLOOKUP (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init
-      order).ms_nodes aid`
-  >- (drule_all insert_phis_only_adds_phi >> strip_tac >> gvs[]) >>
-  drule_all insert_phis_nodes_mono >>
-  disch_then (qspecl_then [`cfg`,`dom`,`ef`,`fuel`,`wl`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[] >>
-  match_mp_tac (GEN_ALL process_blocks_MnDef_in_inst_def) >>
-  qexistsl_tac [`aid`, `blk`, `loc`] >>
-  simp[mem_ssa_init_def, nodes_fresh_def, FDOM_FEMPTY, FLOOKUP_DEF]
-QED
-
 (* Strong reverse: MnDef in phase12 output => inst_def maps iid to aid *)
 Triviality phase12_inst_def_reverse:
   !bp addr_sp fn order cfg dom ef fuel wl aid iid blk loc.
@@ -2367,24 +2130,6 @@ Proof
   gvs[insert_phis_fields]
 QED
 
-Triviality phase12_MnDef_block_defs_nonempty:
-  !bp addr_sp fn order cfg dom ef fuel wl aid iid blk loc.
-    FLOOKUP (mem_ssa_insert_phis
-      (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init order)
-      cfg dom ef fuel wl).ms_nodes aid = SOME (MnDef iid blk loc) ==>
-    fmap_lookup_list
-      (mem_ssa_insert_phis
-        (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init order)
-        cfg dom ef fuel wl).ms_block_defs blk <> []
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule phase12_MnDef_in_block_defs >> strip_tac >>
-  Cases_on `fmap_lookup_list
-    (mem_ssa_insert_phis
-      (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init order)
-      cfg dom ef fuel wl).ms_block_defs blk` >> gvs[]
-QED
-
 Triviality build_MnDef_in_block_defs:
   !cfg dom bp fn addr_sp aid iid blk loc.
     FLOOKUP (mem_ssa_build cfg dom bp fn addr_sp).ms_nodes aid =
@@ -2568,48 +2313,6 @@ Proof
   simp[mem_ssa_init_def, cfgDefsTheory.fmap_lookup_list_def, FLOOKUP_DEF]
 QED
 
-(* block_defs entries are always non-empty (SNOC creates non-empty lists) *)
-Triviality process_inst_block_defs_nonempty:
-  ∀bp addr_sp lbl ms inst b v.
-    (∀k v. FLOOKUP ms.ms_block_defs k = SOME v ⇒ v <> []) ⇒
-    FLOOKUP (mem_ssa_process_inst bp addr_sp lbl ms inst).ms_block_defs b = SOME v ⇒
-    v <> []
-Proof
-  rpt strip_tac >>
-  fs[mem_ssa_process_inst_def, LET_THM] >>
-  Cases_on `bp_get_read_location bp inst addr_sp = ml_empty` >>
-  Cases_on `bp_get_write_location bp inst addr_sp = ml_empty` >>
-  gvs[FLOOKUP_UPDATE] >>
-  Cases_on `lbl = b` >> gvs[SNOC_APPEND] >>
-  res_tac
-QED
-
-Triviality process_block_block_defs_nonempty:
-  ∀insts bp addr_sp lbl ms b v.
-    (∀k v. FLOOKUP ms.ms_block_defs k = SOME v ⇒ v <> []) ⇒
-    FLOOKUP (mem_ssa_process_block bp addr_sp lbl ms insts).ms_block_defs b = SOME v ⇒
-    v <> []
-Proof
-  Induct >> simp[mem_ssa_process_block_def] >>
-  rpt gen_tac >> strip_tac >> strip_tac >>
-  `∀k v'. FLOOKUP (mem_ssa_process_inst bp addr_sp lbl ms h).ms_block_defs k =
-          SOME v' ⇒ v' <> []` by metis_tac[process_inst_block_defs_nonempty] >>
-  metis_tac[]
-QED
-
-Triviality process_blocks_block_defs_nonempty:
-  ∀lbls bp addr_sp fn ms b v.
-    (∀k v. FLOOKUP ms.ms_block_defs k = SOME v ⇒ v <> []) ⇒
-    FLOOKUP (mem_ssa_process_blocks bp addr_sp fn ms lbls).ms_block_defs b = SOME v ⇒
-    v <> []
-Proof
-  Induct >> simp[mem_ssa_process_blocks_def] >>
-  rpt gen_tac >> strip_tac >> CASE_TAC >> strip_tac >> first_x_assum match_mp_tac >>
-  TRY (first_x_assum ACCEPT_TAC) >>
-  rpt strip_tac >>
-  metis_tac[process_block_block_defs_nonempty]
-QED
-
 (* block_defs monotonicity: process_inst only adds to block_defs[lbl] via SNOC *)
 Triviality process_inst_block_defs_mono:
   ∀bp addr_sp lbl ms inst did.
@@ -2657,22 +2360,6 @@ Proof
        ALL_DISTINCT_SNOC, MEM_SNOC, FDOM_FUPDATE] >>
   rpt conj_tac >> rpt strip_tac >> gvs[] >>
   TRY (fs[nodes_fresh_def] >> res_tac >> res_tac >> DECIDE_TAC)
-QED
-
-Triviality process_block_block_defs_all_distinct:
-  !insts bp addr_sp lbl ms.
-    nodes_fresh ms /\
-    ALL_DISTINCT (fmap_lookup_list ms.ms_block_defs lbl) /\
-    (!aid. MEM aid (fmap_lookup_list ms.ms_block_defs lbl) ==>
-       aid IN FDOM ms.ms_nodes) ==>
-    ALL_DISTINCT (fmap_lookup_list
-      (mem_ssa_process_block bp addr_sp lbl ms insts).ms_block_defs lbl)
-Proof
-  Induct >> simp[mem_ssa_process_block_def] >>
-  rpt gen_tac >> strip_tac >>
-  first_x_assum match_mp_tac >>
-  metis_tac[process_inst_block_defs_all_distinct,
-            process_inst_preserves_fresh]
 QED
 
 (* Strengthened version: ALL_DISTINCT + FDOM membership for all labels *)
@@ -3575,17 +3262,17 @@ Proof
   >- (
     `strict_dominates (dom_analyze (cfg_analyze fn) fn) x lbl` by (
       mp_tac (Q.SPECL [`fn`, `lbl`, `x`]
-        (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate)) >> simp[]) >>
+        (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate)) >> simp[]) >>
     fs[dominatorDefsTheory.strict_dominates_def] >>
-    match_mp_tac (SIMP_RULE (srw_ss()) [] dominates_reachable) >>
+    match_mp_tac (SIMP_RULE (srw_ss()) [] dominatorProofsTheory.dominates_reachable) >>
     qexists_tac `lbl` >> simp[])
   >> mp_tac (Q.SPECL [`fn`, `lbl`, `x`]
-       (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate)) >>
+       (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate)) >>
   simp[dominatorDefsTheory.strict_dominates_def]
 QED
 
-(* Simplified dominates_trans: chain two dominance facts *)
-Triviality dominates_chain:
+(* Simplified dominatorProofsTheory.dominates_trans: chain two dominance facts *)
+Triviality dominates_chain_trans:
   ∀fn a b c.
     wf_function fn ∧
     cfg_reachable_of (cfg_analyze fn) c ∧
@@ -3595,7 +3282,7 @@ Triviality dominates_chain:
 Proof
   rpt strip_tac >>
   mp_tac (SIMP_RULE (srw_ss()) [LET_THM, AND_IMP_INTRO,
-    GSYM CONJ_ASSOC] dominates_trans) >>
+    GSYM CONJ_ASSOC] dominatorProofsTheory.dominates_trans) >>
   disch_then (qspecl_then [`fn`, `a`, `b`, `c`] mp_tac) >> simp[]
 QED
 
@@ -3643,7 +3330,7 @@ Triviality block_defs_dom_self:
               (mn_block (THE (FLOOKUP ms.ms_nodes d))) lbl
 Proof
   rpt strip_tac >> fs[block_maps_correct_def] >> res_tac >> gvs[] >>
-  fs[flookup_thm] >> match_mp_tac dom_self >> simp[]
+  fs[flookup_thm] >> match_mp_tac dominatorProofsTheory.dom_self >> simp[]
 QED
 
 Triviality block_phis_dom_self:
@@ -3659,7 +3346,7 @@ Proof
     fs[block_maps_correct_def] >> res_tac >> fs[]) >>
   simp[memSSADefsTheory.mn_block_def] >>
   conj_tac >- fs[flookup_thm] >>
-  match_mp_tac dom_self >> simp[]
+  match_mp_tac dominatorProofsTheory.dom_self >> simp[]
 QED
 
 (* Dom set at idom is a proper subset of dom set at lbl *)
@@ -3677,7 +3364,7 @@ Proof
   `MEM lbl (fn_labels fn)` by
     metis_tac[cfg_analyze_reachable_in_labels] >>
   imp_res_tac idom_dominates >>
-  mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] idom_is_immediate) >>
+  mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] dominatorProofsTheory.idom_is_immediate) >>
   simp[LET_THM] >> strip_tac >>
   simp[PSUBSET_DEF] >> conj_tac
   >- (
@@ -3686,13 +3373,13 @@ Proof
     `dominates dom x d` by fs[dominatorDefsTheory.dominates_def] >>
     `dominates dom d lbl` by
       fs[dominatorDefsTheory.strict_dominates_def] >>
-    mp_tac dominates_trans >>
+    mp_tac dominatorProofsTheory.dominates_trans >>
     disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `x`, `d`, `lbl`] mp_tac) >>
     simp[LET_THM])
   >- (
     SPOSE_NOT_THEN ASSUME_TAC >>
     `dominates dom lbl lbl` by
-      (simp[Abbr `dom`] >> match_mp_tac dom_self >> simp[]) >>
+      (simp[Abbr `dom`] >> match_mp_tac dominatorProofsTheory.dom_self >> simp[]) >>
     `MEM lbl (fmap_lookup_list dom.da_dominators lbl)` by
       fs[dominatorDefsTheory.dominates_def] >>
     `MEM lbl (fmap_lookup_list dom.da_dominators d)` by
@@ -3700,7 +3387,7 @@ Proof
     `dominates dom lbl d` by fs[dominatorDefsTheory.dominates_def] >>
     `dominates dom d lbl` by fs[dominatorDefsTheory.strict_dominates_def] >>
     `lbl = d` by (
-      mp_tac dominates_antisym >>
+      mp_tac dominatorProofsTheory.dominates_antisym >>
       disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `lbl`, `d`] mp_tac) >>
       gvs[LET_THM]) >>
     fs[dominatorDefsTheory.strict_dominates_def])
@@ -3719,7 +3406,7 @@ Proof
   `set (fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators lbl) ⊆
    set (fn_labels fn)` by (
     rw[SUBSET_DEF] >>
-    mp_tac dom_labels_bounded >>
+    mp_tac dominatorProofsTheory.dom_labels_bounded >>
     disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `lbl`, `x`] mp_tac) >>
     simp[LET_THM]) >>
   `CARD (set (fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators lbl)) ≤
@@ -3729,55 +3416,6 @@ Proof
   `CARD (set (fn_labels fn)) = LENGTH (fn_labels fn)` by
     simp[ALL_DISTINCT_CARD_LIST_TO_SET] >>
   DECIDE_TAC
-QED
-
-(* If d strictly dominates lbl, then d dominates every predecessor of lbl. *)
-Triviality sdom_dominates_preds:
-  ∀fn cfg d lbl p.
-    wf_function fn ∧ cfg = cfg_analyze fn ∧
-    cfg_reachable_of cfg lbl ∧
-    strict_dominates (dom_analyze cfg fn) d lbl ∧
-    MEM p (cfg_preds_of cfg lbl) ⇒
-    dominates (dom_analyze cfg fn) d p
-Proof
-  rpt gen_tac >> strip_tac >>
-  `d <> lbl` by fs[dominatorDefsTheory.strict_dominates_def] >>
-  `dominates (dom_analyze cfg fn) d lbl` by
-    fs[dominatorDefsTheory.strict_dominates_def] >>
-  `MEM d (fmap_lookup_list (dom_analyze cfg fn).da_dominators lbl)` by
-    fs[dominatorDefsTheory.dominates_def] >>
-  `?bb. entry_block fn = SOME bb` by (
-    simp[venomInstTheory.entry_block_def] >>
-    fs[venomWfTheory.wf_function_def, venomWfTheory.fn_has_entry_def] >>
-    Cases_on `fn.fn_blocks` >> gvs[]) >>
-  `lbl <> bb.bb_label` by (
-    CCONTR_TAC >> gvs[] >>
-    mp_tac dom_entry_self >>
-    disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `bb`] mp_tac) >>
-    simp[] >> strip_tac >>
-    fs[dominatorDefsTheory.dominates_def] >>
-    `d IN set (fmap_lookup_list
-       (dom_analyze (cfg_analyze fn) fn).da_dominators bb.bb_label)` by
-      fs[] >>
-    gvs[]) >>
-  `cfg_preds_of (cfg_analyze fn) lbl <> []` by (
-    CCONTR_TAC >> gvs[] >>
-    `MEM p []` by metis_tac[] >> gvs[]) >>
-  mp_tac dom_fixpoint_equation >>
-  disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `bb`, `lbl`] mp_tac) >>
-  simp[LET_THM] >> (impl_tac >- gvs[]) >> strip_tac >>
-  `d IN set (fmap_lookup_list (dom_analyze (cfg_analyze fn) fn).da_dominators lbl)` by
-    gvs[] >>
-  `d IN BIGINTER (IMAGE (\p'. set (fmap_lookup_list
-      (dom_analyze (cfg_analyze fn) fn).da_dominators p'))
-      (set (cfg_preds_of (cfg_analyze fn) lbl)))` by (
-    qpat_x_assum `set _ = _` (fn eq => fs[eq]) >>
-    fs[]) >>
-  fs[IN_BIGINTER, IN_IMAGE] >>
-  first_x_assum (qspec_then `set (fmap_lookup_list
-    (dom_analyze (cfg_analyze fn) fn).da_dominators p)` mp_tac) >>
-  impl_tac >- (qexists_tac `p` >> gvs[]) >>
-  simp[dominatorDefsTheory.dominates_def]
 QED
 
 (* Helper: get_exit_def ≠ 0 with CARD-based fuel bound.
@@ -3800,7 +3438,7 @@ Proof
   `MEM lbl (fn_labels fn)` by metis_tac[cfg_analyze_reachable_in_labels] >>
   qabbrev_tac `dom = dom_analyze (cfg_analyze fn) fn` >>
   `dominates dom lbl lbl` by
-    (simp[Abbr `dom`] >> match_mp_tac dom_self >> simp[]) >>
+    (simp[Abbr `dom`] >> match_mp_tac dominatorProofsTheory.dom_self >> simp[]) >>
   `MEM lbl (fmap_lookup_list dom.da_dominators lbl)` by
     fs[dominatorDefsTheory.dominates_def] >>
   `0 < n` by
@@ -3830,14 +3468,14 @@ Proof
       Cases_on `fn.fn_blocks` >> gvs[]) >>
     `lbl <> bb.bb_label` by (
       CCONTR_TAC >> gvs[] >>
-      mp_tac dom_entry_self >>
+      mp_tac dominatorProofsTheory.dom_entry_self >>
       disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `bb`] mp_tac) >>
       simp[] >> strip_tac >>
       fs[dominatorDefsTheory.dominates_def] >>
       `c ∈ set (fmap_lookup_list dom.da_dominators bb.bb_label)` by fs[] >>
       gvs[]) >>
     `?d. idom_of dom lbl = SOME d` by
-      (simp[Abbr `dom`] >> irule idom_exists >> simp[]) >>
+      (simp[Abbr `dom`] >> irule dominatorProofsTheory.idom_exists >> simp[]) >>
     simp[] >>
     `cfg_reachable_of (cfg_analyze fn) d ∧ dominates dom d lbl` by (
       mp_tac idom_dominates >>
@@ -3847,9 +3485,9 @@ Proof
       fs[dominatorDefsTheory.strict_dominates_def] >>
     `dominates dom c d` by (
       Cases_on `c = d`
-      >- (simp[Abbr `dom`] >> match_mp_tac dom_self >>
+      >- (simp[Abbr `dom`] >> match_mp_tac dominatorProofsTheory.dom_self >>
           simp[] >> metis_tac[cfg_analyze_reachable_in_labels])
-      >> mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] idom_is_immediate) >>
+      >> mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `lbl`] dominatorProofsTheory.idom_is_immediate) >>
       simp[Abbr `dom`, LET_THM] >> strip_tac >>
       first_x_assum match_mp_tac >>
       fs[dominatorDefsTheory.strict_dominates_def]) >>
@@ -3994,7 +3632,7 @@ Proof
     drule_all idom_dominates >> strip_tac >>
     last_x_assum (qspecl_then [`ms`, `fn`, `x`] mp_tac) >>
     simp[] >> strip_tac >>
-    match_mp_tac dominates_chain >> qexists_tac `x` >> simp[])
+    match_mp_tac dominates_chain_trans >> qexists_tac `x` >> simp[])
   >> gvs[] >> metis_tac[block_phis_dom_self]
 QED
 
@@ -4009,12 +3647,12 @@ Triviality sdom_dom_idom:
     dominates (dom_analyze (cfg_analyze fn) fn) c d
 Proof
   rpt strip_tac >>
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate) >>
+  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate) >>
   disch_then (qspecl_then [`fn`, `lbl`] mp_tac) >> simp[] >> strip_tac >>
   Cases_on `c = d`
-  >- metis_tac[SIMP_RULE (srw_ss()) [] dom_self,
+  >- metis_tac[SIMP_RULE (srw_ss()) [] dominatorProofsTheory.dom_self,
                cfg_analyze_reachable_in_labels,
-               SIMP_RULE (srw_ss()) [] dominates_reachable,
+               SIMP_RULE (srw_ss()) [] dominatorProofsTheory.dominates_reachable,
                dominatorDefsTheory.strict_dominates_def]
   >> first_x_assum match_mp_tac >>
   fs[dominatorDefsTheory.strict_dominates_def]
@@ -4104,7 +3742,7 @@ Proof
         UNABBREV_ALL_TAC >>
         match_mp_tac (SIMP_RULE (srw_ss()) [] get_exit_def_dominates) >> simp[]) >>
       conj_tac >- simp[] >>
-      match_mp_tac dominates_chain >> qexists_tac `x'` >> simp[])
+      match_mp_tac dominates_chain_trans >> qexists_tac `x'` >> simp[])
     >> (* block_phis = SOME x': use block_phis_dom_self *)
     metis_tac[block_phis_dom_self])
   >> (* SOME x': find_prev_def found a def *)
@@ -4394,204 +4032,9 @@ QED
    Property 4: Phi placement at dominance frontiers
    ========================================================================== *)
 
-(* block_phis FDOM monotonicity at each level *)
-Triviality insert_phi_at_block_phis_mono:
-  ∀ms cfg dom fuel lbl ms' inserted l.
-    mem_ssa_insert_phi_at ms cfg dom fuel lbl = (ms', inserted) ∧
-    l ∈ FDOM ms.ms_block_phis ⇒
-    l ∈ FDOM ms'.ms_block_phis
-Proof
-  rpt gen_tac >> simp[mem_ssa_insert_phi_at_def] >>
-  CASE_TAC >> simp[] >> strip_tac >> gvs[]
-QED
-
-Triviality process_frontiers_block_phis_mono:
-  ∀fronts ms cfg dom fuel ms' wl l.
-    mem_ssa_process_frontiers ms cfg dom fuel fronts = (ms', wl) ∧
-    l ∈ FDOM ms.ms_block_phis ⇒
-    l ∈ FDOM ms'.ms_block_phis
-Proof
-  Induct >> simp[mem_ssa_process_frontiers_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  strip_tac >> gvs[] >>
-  first_x_assum match_mp_tac >>
-  qexistsl_tac [`ms1`, `cfg`, `dom`, `fuel`, `rest`] >> simp[] >>
-  metis_tac[insert_phi_at_block_phis_mono]
-QED
-
-Triviality insert_phis_block_phis_mono:
-  ∀ms cfg dom ef fuel wl l.
-    l ∈ FDOM ms.ms_block_phis ⇒
-    l ∈ FDOM (mem_ssa_insert_phis ms cfg dom ef fuel wl).ms_block_phis
-Proof
-  recInduct (fetch "memSSADefs" "mem_ssa_insert_phis_ind") >>
-  rpt strip_tac >>
-  fs[Once mem_ssa_insert_phis_def] >>
-  pairarg_tac >> gvs[] >>
-  qpat_x_assum `_ = (_,_)` (assume_tac o GSYM) >>
-  first_x_assum match_mp_tac >>
-  metis_tac[process_frontiers_block_phis_mono]
-QED
-
-(* insert_phi_at: new block_phis entries are at the specified label *)
-Triviality insert_phi_at_block_phis_new:
-  ∀ms cfg dom fuel lbl ms' inserted l.
-    mem_ssa_insert_phi_at ms cfg dom fuel lbl = (ms', inserted) ∧
-    l ∈ FDOM ms'.ms_block_phis ∧
-    l ∉ FDOM ms.ms_block_phis ⇒
-    l = lbl
-Proof
-  rpt gen_tac >> simp[mem_ssa_insert_phi_at_def] >>
-  CASE_TAC >> simp[] >> strip_tac >> gvs[] >>
-  fs[FDOM_FUPDATE]
-QED
-
-(* process_frontiers: new block_phis entries are in fronts *)
-Triviality process_frontiers_block_phis_new:
-  ∀fronts ms cfg dom fuel ms' wl l.
-    mem_ssa_process_frontiers ms cfg dom fuel fronts = (ms', wl) ∧
-    l ∈ FDOM ms'.ms_block_phis ∧
-    l ∉ FDOM ms.ms_block_phis ⇒
-    MEM l fronts
-Proof
-  Induct >> simp[mem_ssa_process_frontiers_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  strip_tac >> gvs[] >>
-  Cases_on `l ∈ FDOM ms1.ms_block_phis`
-  >- (
-    DISJ1_TAC >>
-    metis_tac[insert_phi_at_block_phis_new])
-  >> DISJ2_TAC >>
-  first_x_assum match_mp_tac >>
-  qexistsl_tac [`ms1`, `cfg`, `dom`, `fuel`] >> simp[]
-QED
-
-(* process_frontiers: worklist contains exactly the newly inserted labels *)
-Triviality insert_phi_at_inserted_in_fdom:
-  ∀ms cfg dom fuel lbl ms'.
-    mem_ssa_insert_phi_at ms cfg dom fuel lbl = (ms', T) ⇒
-    lbl ∈ FDOM ms'.ms_block_phis
-Proof
-  rpt strip_tac >>
-  fs[mem_ssa_insert_phi_at_def] >>
-  Cases_on `FLOOKUP ms.ms_block_phis lbl` >> gvs[FDOM_FUPDATE]
-QED
-
-Triviality process_frontiers_wl_subset:
-  ∀fronts ms cfg dom fuel ms' wl b.
-    mem_ssa_process_frontiers ms cfg dom fuel fronts = (ms', wl) ∧
-    MEM b wl ⇒
-    b ∈ FDOM ms'.ms_block_phis
-Proof
-  Induct >> simp[mem_ssa_process_frontiers_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  strip_tac >> gvs[] >>
-  Cases_on `inserted` >> gvs[MEM]
-  >- (
-    drule insert_phi_at_inserted_in_fdom >> strip_tac >>
-    metis_tac[process_frontiers_block_phis_mono])
-  >- metis_tac[]
-  >> metis_tac[]
-QED
-
-(* Helper: dom_fixpoint_equation contrapositive — if c doesn't dominate lbl,
-   there exists a predecessor of lbl that c also doesn't dominate *)
-Triviality not_dom_pred_exists:
-  ∀fn cfg dom lbl c.
-    wf_function fn ∧ cfg = cfg_analyze fn ∧ dom = dom_analyze cfg fn ∧
-    cfg_reachable_of cfg lbl ∧
-    cfg_preds_of cfg lbl <> [] ∧
-    fn_entry_label fn <> SOME lbl ∧
-    lbl <> c ∧
-    ¬dominates dom c lbl ⇒
-    ∃q. MEM q (cfg_preds_of cfg lbl) ∧ ¬dominates dom c q
-Proof
-  rpt strip_tac >>
-  `MEM lbl (fn_labels fn)` by metis_tac[cfg_analyze_reachable_in_labels] >>
-  (* Get entry_block *)
-  `fn_has_entry fn` by fs[venomWfTheory.wf_function_def] >>
-  `fn.fn_blocks <> []` by fs[venomWfTheory.fn_has_entry_def] >>
-  `∃bb. entry_block fn = SOME bb` by
-    (simp[venomInstTheory.entry_block_def] >>
-     Cases_on `fn.fn_blocks` >> fs[]) >>
-  `lbl <> bb.bb_label` by (
-    fs[venomInstTheory.entry_block_def, venomInstTheory.fn_entry_label_def] >>
-    Cases_on `fn.fn_blocks` >> fs[]) >>
-  qpat_x_assum `dom = _` SUBST_ALL_TAC >>
-  qpat_x_assum `cfg = _` SUBST_ALL_TAC >>
-  (* Apply dom_fixpoint_equation *)
-  mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `bb`, `lbl`]
-    dom_fixpoint_equation) >>
-  simp[] >> strip_tac >>
-  (* ¬dom c lbl ∧ c ≠ lbl ⇒ c ∉ BIGINTER ⇒ ∃ pred q with ¬dom c q *)
-  CCONTR_TAC >> fs[] >>
-  (* After negation: ∀q. MEM q preds ⇒ dominates dom c q
-     Derive contradiction: MEM c (domlist lbl) contradicts ¬dominates *)
-  qpat_x_assum `¬dominates _ c lbl` mp_tac >>
-  simp[dominatorDefsTheory.dominates_def] >>
-  (* Goal: MEM c (domlist lbl) *)
-  (* fixpoint: set(domlist lbl) = {lbl} ∪ BIGINTER ..., so MEM c list ⟺ c ∈ {lbl} ∪ ... *)
-  qpat_x_assum `set _ = _` (mp_tac o
-    REWRITE_RULE [pred_setTheory.EXTENSION]) >>
-  simp[pred_setTheory.IN_BIGINTER, pred_setTheory.IN_IMAGE] >>
-  disch_then (fn th => REWRITE_TAC [GSYM th]) >>
-  rpt strip_tac >> gvs[] >>
-  first_x_assum (qspec_then `p` mp_tac) >>
-  simp[dominatorDefsTheory.dominates_def]
-QED
-
-(* Main invariant: insert_phis maintains phi-at-frontier property *)
-Triviality insert_phis_phi_at_frontier:
-  ∀ms cfg dom ef fuel wl.
-    nodes_fresh ms ∧
-    (∀l. l ∈ FDOM ms.ms_block_phis ⇒
-       ∃src. (fmap_lookup_list ms.ms_block_defs src <> [] ∨
-              src ∈ FDOM ms.ms_block_phis) ∧ MEM l (frontier_of dom src)) ∧
-    (∀b. MEM b wl ⇒
-       fmap_lookup_list ms.ms_block_defs b <> [] ∨
-       b ∈ FDOM ms.ms_block_phis) ⇒
-    ∀l. l ∈ FDOM (mem_ssa_insert_phis ms cfg dom ef fuel wl).ms_block_phis ⇒
-      ∃src. (fmap_lookup_list ms.ms_block_defs src <> [] ∨
-             src ∈ FDOM (mem_ssa_insert_phis ms cfg dom ef fuel wl).ms_block_phis) ∧
-            MEM l (frontier_of dom src)
-Proof
-  recInduct (fetch "memSSADefs" "mem_ssa_insert_phis_ind") >>
-  rpt strip_tac >>
-  fs[Once mem_ssa_insert_phis_def] >>
-  TRY (res_tac >> NO_TAC) >>
-  pairarg_tac >> gvs[] >>
-  (* Establish IH preconditions for ms' *)
-  `nodes_fresh ms'` by metis_tac[process_frontiers_preserves_fresh] >>
-  `ms'.ms_block_defs = ms.ms_block_defs` by
-    (drule process_frontiers_fields >> simp[]) >>
-  (* Rewrite to use ms' block_defs everywhere *)
-  qpat_x_assum `ms'.ms_block_defs = ms.ms_block_defs`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >>
-              REWRITE_TAC [GSYM th]) >>
-  (* Apply IH: discharge preconditions, then specialize *)
-  qpat_x_assum `nodes_fresh ms' ∧ _ ⇒ _` mp_tac >>
-  impl_tac
-  >- (rpt conj_tac
-    >- first_x_assum ACCEPT_TAC
-    >- (
-      (* phi witness condition for ms' *)
-      rpt strip_tac >>
-      Cases_on `l' ∈ FDOM ms.ms_block_phis`
-      >- (
-        res_tac >> qexists_tac `src` >> simp[] >>
-        metis_tac[process_frontiers_block_phis_mono])
-      >> qexists_tac `b` >> conj_tac
-      >- metis_tac[process_frontiers_block_phis_mono]
-      >> metis_tac[process_frontiers_block_phis_new])
-    >> (* worklist condition — LIFO: new_wl ++ wl *)
-    rpt strip_tac >> fs[MEM_APPEND]
-    >- metis_tac[process_frontiers_wl_subset]
-    >> metis_tac[process_frontiers_block_phis_mono])
-  >> disch_then (qspec_then `l` mp_tac) >> simp[]
-QED
-
 (* mem_ssa_phi_at_frontier: DROPPED — FALSE as stated (Phase 4 removes
-   redundant src phi). See memSSACexScript.sml. No consumer needs it. *)
+   redundant src phi). No consumer needs it. See
+   docs/deleted-counterexamples.md. *)
 
 (* ==========================================================================
    Property 6: Reaching-def chain is acyclic
@@ -5150,7 +4593,7 @@ Proof
   (* IH: b ∈ FDOM ∧ dom(b, mid) *)
   first_x_assum (qspecl_then [`mid`, `b`, `bp`, `fn`, `addr_sp`] mp_tac) >>
   simp[] >> strip_tac >>
-  match_mp_tac dominates_chain >>
+  match_mp_tac dominates_chain_trans >>
   qexists_tac `mn_block (THE (FLOOKUP
     (mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
      bp fn addr_sp).ms_nodes mid))` >>
@@ -5199,14 +4642,14 @@ Proof
         `fuel`, `x`, `d`, `cfg_analyze fn`] get_exit_def_dominates) >>
       simp[] >> strip_tac >>
       mp_tac (Q.SPECL [`fn`, `cfg_analyze fn`, `x`, `blk_lbl`]
-        dominates_antisym) >>
+        dominatorProofsTheory.dominates_antisym) >>
       simp[LET_THM] >> strip_tac >>
       (* x = blk_lbl; substitute *)
       pop_assum SUBST_ALL_TAC >>
       (* idom_of ... blk_lbl = SOME blk_lbl → strict_dominates blk_lbl blk_lbl *)
       mp_tac (SIMP_RULE (srw_ss()) [LET_THM]
         (Q.SPECL [`fn`, `cfg_analyze fn`, `blk_lbl`, `blk_lbl`]
-          idom_is_immediate)) >>
+          dominatorProofsTheory.idom_is_immediate)) >>
       simp[dominatorDefsTheory.strict_dominates_def])
     (* phi case → x ≠ d because d is not MnPhi but x is *)
     >> CCONTR_TAC >> fs[] >>
@@ -5999,7 +5442,7 @@ Proof
          (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes mid))`,
       `mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
          (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes b))`]
-      dominates_antisym) >>
+      dominatorProofsTheory.dominates_antisym) >>
     simp[LET_THM])
   (* mn_block mid = mn_block a follows from mid=b and a=b *)
   \\ `mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
@@ -6053,13 +5496,13 @@ QED
    Property 7: Clobber walk soundness
    ========================================================================== *)
 
-(* access_id must not be MnPhi — see memSSACexScript.sml for counterexample. *)
+(* access_id must not be MnPhi. *)
 (* Clobber soundness: if the walk returns LiveOnEntry (SOME 0), no
    strictly-dominating MnDef completely_contains the access location.
    Uses strict_dominates (not dominates) because same-block defs AFTER
    the access are not on the reaching chain — walk_clobber follows
    ms_reaching backward and find_prev_def only finds defs BEFORE
-   the access. See memSSACexScript.sml for the same-block counterexample. *)
+   the access. *)
 (* Visited monotonicity for collect_phi_clobbers, given walker monotonicity *)
 Triviality collect_phi_visited_mono:
   ∀ops walker visited clobbers visited'.
@@ -7047,71 +6490,6 @@ Proof
       simp[] >> gvs[])
 QED
 
-(* collect_phi_visits: if the walker visits def_id on at least one branch
-   (when def_id not yet in visited), then collect_phi_clobbers puts
-   def_id in the final visited. *)
-Triviality collect_phi_visits:
-  !ops (walker : num list -> num -> num option # num list)
-   visited visited' def_id.
-    mem_ssa_collect_phi_clobbers walker visited ops = ([], visited') /\
-    (!v rd r v'. walker v rd = (r, v') ==> !x. MEM x v ==> MEM x v') /\
-    (?rd0 pred0. MEM (rd0, pred0) ops /\
-       !vis vis'. ~MEM def_id vis /\ walker vis rd0 = (NONE, vis') ==>
-         MEM def_id vis') /\
-    ~MEM def_id visited ==>
-    MEM def_id visited'
-Proof
-  Induct >- rw[mem_ssa_collect_phi_clobbers_def] >>
-  rpt gen_tac >>
-  Cases_on `h` >>
-  rename1 `(op_rd, op_pred)` >>
-  simp[mem_ssa_collect_phi_clobbers_def, LET_THM] >>
-  Cases_on `walker visited op_rd` >>
-  rename1 `walker visited op_rd = (wr_res, wr_vis)` >>
-  Cases_on `mem_ssa_collect_phi_clobbers walker wr_vis ops` >>
-  rename1 `_ = (cr_res, cr_vis)` >>
-  simp[] >> disch_tac >>
-  (* Split the conjunction before simplifying its individual facts. *)
-  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _ /\ _`
-    strip_assume_tac >>
-  `wr_res = NONE /\ cr_res = [] /\ cr_vis = visited'` by (
-    Cases_on `wr_res`
-    >- (qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _`
-          mp_tac >> simp[])
-    >- (qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _`
-          mp_tac >> simp[]))
-  (* strip_assume_tac has already split MEM on the head and tail. *)
-  (* Head case: rd0 = op_rd *)
-  >- (
-    qpat_x_assum `!w v1 v2 v3. mem_ssa_collect_phi_clobbers _ _ _ = _ /\ _ ==> _` kall_tac >>
-    `MEM def_id wr_vis` by (
-      qpat_x_assum `!v rd r v'. walker v rd = _ ==> _` kall_tac >>
-      res_tac >> gvs[]) >>
-    gvs[] >>
-    qpat_x_assum `mem_ssa_collect_phi_clobbers _ _ _ = _`
-      (mp_tac o MATCH_MP (collect_phi_visited_mono
-        |> REWRITE_RULE [GSYM AND_IMP_INTRO])) >>
-    disch_then drule >> disch_then (qspec_then `def_id` mp_tac) >> simp[])
-  (* Tail case: MEM (rd0, pred0) ops *)
-  >> (
-    qpat_x_assum `wr_res = NONE` SUBST_ALL_TAC >>
-    qpat_x_assum `cr_res = []` SUBST_ALL_TAC >>
-    qpat_x_assum `cr_vis = visited'` SUBST_ALL_TAC >>
-    Cases_on `MEM def_id wr_vis`
-    >- (
-      qpat_x_assum `mem_ssa_collect_phi_clobbers _ _ _ = _`
-        (mp_tac o MATCH_MP (collect_phi_visited_mono
-          |> REWRITE_RULE [GSYM AND_IMP_INTRO])) >>
-      disch_then drule >> disch_then (qspec_then `def_id` mp_tac) >> simp[])
-    >> (
-      first_x_assum (qspecl_then [`walker`, `wr_vis`, `visited'`, `def_id`] mp_tac) >>
-      simp[] >> disch_then irule >>
-      conj_tac >| [
-        first_assum ACCEPT_TAC,
-        qexistsl_tac [`rd0`, `pred0`] >> simp[] >>
-        first_assum ACCEPT_TAC]))
-QED
-
 (* find_prev_def returns a value from ms_inst_def *)
 Triviality find_prev_def_in_inst_def:
   !ms insts target x.
@@ -7174,14 +6552,14 @@ Proof
     qpat_x_assum `Abbrev (cfg = _)`
       (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
     `cfg_reachable_of (cfg_analyze fn) def_blk` by
-      metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_reachable] >>
+      metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_reachable] >>
     `dominates (dom_analyze (cfg_analyze fn) fn) bb.bb_label def_blk` by (
-      irule (SIMP_RULE (srw_ss()) [LET_THM] dom_entry_dominates_all) >>
+      irule (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dom_entry_dominates_all) >>
       simp[]) >>
-    metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_antisym]) >>
+    metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_antisym]) >>
   (* idom exists for access_blk *)
   `?idom_lbl. idom_of dom access_blk = SOME idom_lbl` by (
-    mp_tac idom_exists >>
+    mp_tac dominatorProofsTheory.idom_exists >>
     disch_then (qspecl_then [`fn`, `cfg`, `bb`, `access_blk`] mp_tac) >>
     simp[Abbr `dom`, LET_THM, Abbr `cfg`]) >>
   (* Unpack build: rd = reaching_in_block ms2 ... *)
@@ -7219,23 +6597,23 @@ Proof
         simp[mem_ssa_build_def, LET_THM, remove_redundant_phis_fields,
              connect_all_fields, Abbr `cfg`, Abbr `dom`]) >>
       `dominates dom def_blk idom_lbl` by (
-        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate) >>
+        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate) >>
         disch_then (qspecl_then [`fn`, `access_blk`, `idom_lbl`] mp_tac) >>
         impl_tac >- simp[Abbr `cfg`] >>
         simp[Abbr `dom`, Abbr `cfg`] >> strip_tac >>
         Cases_on `def_blk = idom_lbl` >> gvs[]
-        >- (irule (SIMP_RULE (srw_ss()) [LET_THM] dom_self) >> simp[] >>
+        >- (irule (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dom_self) >> simp[] >>
             fs[dominatorDefsTheory.strict_dominates_def] >>
-            metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_reachable,
+            metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_reachable,
                       cfg_analyze_reachable_in_labels])
         >> first_x_assum (qspec_then `def_blk` mp_tac) >> simp[]) >>
       `cfg_reachable_of cfg idom_lbl` by (
-        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] idom_is_immediate) >>
+        mp_tac (SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.idom_is_immediate) >>
         disch_then (qspecl_then [`fn`, `access_blk`, `idom_lbl`] mp_tac) >>
         impl_tac >- simp[Abbr `cfg`] >>
         simp[Abbr `dom`, Abbr `cfg`] >> strip_tac >>
         gvs[dominatorDefsTheory.strict_dominates_def] >>
-        metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominates_reachable]) >>
+        metis_tac[SIMP_RULE (srw_ss()) [LET_THM] dominatorProofsTheory.dominates_reachable]) >>
       `fmap_lookup_list ms2.ms_block_defs def_blk <> []` by (
         qpat_assum `FLOOKUP (mem_ssa_build _ _ _ _ _).ms_nodes def_id = _`
           (mp_tac o MATCH_MP build_MnDef_block_defs_nonempty) >>
@@ -7278,85 +6656,6 @@ Proof
     res_tac >> metis_tac[flookup_thm])
 QED
 
-(* Reachable non-entry block has a reachable predecessor *)
-Triviality reachable_has_reachable_pred:
-  !fn lbl.
-    wf_function fn /\
-    cfg_reachable_of (cfg_analyze fn) lbl /\
-    fn_entry_label fn <> SOME lbl ==>
-    ?p. MEM p (cfg_preds_of (cfg_analyze fn) lbl) /\
-        cfg_reachable_of (cfg_analyze fn) p
-Proof
-  rpt strip_tac
-  \\ `fn.fn_blocks <> []` by
-       fs[venomWfTheory.wf_function_def, venomWfTheory.fn_has_entry_def]
-  \\ `entry_block fn = SOME (HD fn.fn_blocks)` by
-       simp[venomInstTheory.entry_block_def, NULL_EQ]
-  \\ `cfg_path (cfg_analyze fn) (HD fn.fn_blocks).bb_label lbl` by
-       metis_tac[cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability,
-                 cfgDefsTheory.cfg_path_def]
-  \\ `(HD fn.fn_blocks).bb_label <> lbl` by (
-       strip_tac \\ fs[venomInstTheory.fn_entry_label_def])
-  \\ qpat_x_assum `cfg_path _ _ lbl`
-       (strip_assume_tac o ONCE_REWRITE_RULE [relationTheory.RTC_CASES2]
-                         o REWRITE_RULE [cfgDefsTheory.cfg_path_def])
-  \\ gvs[]
-  \\ qexists_tac `u`
-  \\ conj_tac
-  >- metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond]
-  \\ metis_tac[cfgAnalysisPropsTheory.cfg_analyze_semantic_reachability,
-               cfgDefsTheory.cfg_path_def]
-QED
-
-(* Helper: phi operand from a block strictly dominated by def_blk,
-   where def_blk has defs and pred is reachable, has dom def_blk blk(rd). *)
-Triviality build_phi_ops_dom_by_ancestor:
-  !bp fn addr_sp phi_id ops rd pred def_blk def_id def_iid def_loc.
-    let ms = mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-               bp fn addr_sp in
-    wf_function fn /\
-    FLOOKUP ms.ms_phi_ops phi_id = SOME ops /\ MEM (rd, pred) ops /\
-    FLOOKUP ms.ms_nodes def_id = SOME (MnDef def_iid def_blk def_loc) /\
-    strict_dominates (dom_analyze (cfg_analyze fn) fn) def_blk
-      (mn_block (THE (FLOOKUP ms.ms_nodes phi_id))) /\
-    rd <> 0 /\
-    cfg_reachable_of (cfg_analyze fn) pred ==>
-    dominates (dom_analyze (cfg_analyze fn) fn) def_blk
-      (mn_block (THE (FLOOKUP ms.ms_nodes rd)))
-Proof
-  rpt gen_tac >> simp[LET_THM] >> strip_tac >>
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] build_phi_ops_structure) >>
-  disch_then (qspecl_then [`bp`, `fn`, `addr_sp`] mp_tac) >>
-  simp[] >> simp[phi_ops_structure_ok_def] >>
-  disch_then (qspecl_then [`phi_id`, `ops`, `rd`, `pred`] mp_tac) >>
-  simp[] >> strip_tac >>
-  (* Simplify mn_block (THE (FLOOKUP ... phi_id)) = blk *)
-  `mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-        (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes
-        phi_id)) = blk` by simp[mn_block_def] >>
-  (* Get reachable blk *)
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] build_phi_block_reachable) >>
-  disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `phi_id`, `blk`]
-       mp_tac) >>
-  simp[] >> strip_tac >>
-  (* dom def_blk pred via sdom_dominates_preds *)
-  `dominates (dom_analyze (cfg_analyze fn) fn) def_blk pred` by (
-    match_mp_tac (SIMP_RULE (srw_ss()) [] sdom_dominates_preds) >>
-    qexists_tac `blk` >> fs[]) >>
-  (* block_defs def_blk <> [] *)
-  `fmap_lookup_list (mem_ssa_build (cfg_analyze fn)
-    (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_block_defs
-    def_blk <> []` by (
-    mp_tac (SIMP_RULE (srw_ss()) [LET_THM] build_MnDef_block_defs_nonempty) >>
-    disch_then (qspecl_then [`cfg_analyze fn`,
-         `dom_analyze (cfg_analyze fn) fn`,
-         `bp`, `fn`, `addr_sp`, `def_id`,
-         `def_iid`, `def_blk`, `def_loc`] mp_tac) >>
-    simp[]) >>
-  (* Apply 4th clause *)
-  qpat_x_assum `!c. _ ==> _` (qspec_then `def_blk` mp_tac) >> simp[]
-QED
-
 (* Extend a reaching chain by one step at the end *)
 Triviality reaching_chain_extend:
   !ms n v current x.
@@ -7379,46 +6678,9 @@ Proof
   simp[]
 QED
 
-(* Reaching chain + one more step back to v creates a cycle, contradicting
-   mem_ssa_reaching_acyclic. Caller provides v ∈ FDOM and v ≠ 0. *)
-Triviality reaching_chain_no_revisit:
-  !ms fn bp addr_sp n v current.
-    wf_function fn /\
-    ms = mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-                       bp fn addr_sp /\
-    reaching_chain ms n v current /\ n > 0 /\
-    FLOOKUP ms.ms_reaching current = SOME v /\
-    v IN FDOM ms.ms_nodes /\ v <> 0 ==> F
-Proof
-  rpt strip_tac >>
-  `reaching_chain ms (SUC n) v v` by (
-    irule reaching_chain_extend >> qexists_tac `current` >> simp[]) >>
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] mem_ssa_reaching_acyclic) >>
-  disch_then (qspecl_then [`fn`, `bp`, `addr_sp`, `v`] mp_tac) >>
-  simp[] >> gvs[] >> qexists_tac `SUC n` >> simp[]
-QED
-
 (* Helper: one step of the reaching chain preserves all invariants needed
    for the walk induction. Covers both MnDef and MnUse cases.
    Uses strict_dominates to avoid the same-block boundary issue. *)
-(* Helper: ms_reaching current = SOME x implies x <> current (acyclicity) *)
-Triviality build_reaching_not_self:
-  !fn bp addr_sp current x.
-    let ms = mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-               bp fn addr_sp in
-    wf_function fn /\
-    FLOOKUP ms.ms_reaching current = SOME x /\
-    current IN FDOM ms.ms_nodes /\ current <> 0 ==>
-    x <> current
-Proof
-  rpt gen_tac >> PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >>
-  strip_tac >> strip_tac >> pop_assum SUBST_ALL_TAC >>
-  mp_tac (SIMP_RULE (srw_ss()) [LET_THM] mem_ssa_reaching_acyclic) >>
-  disch_then (qspecl_then [`fn`, `bp`, `addr_sp`, `current`] mp_tac) >>
-  impl_tac >- simp[] >>
-  disch_then (qspec_then `1` mp_tac) >>
-  PURE_REWRITE_TAC[arithmeticTheory.ONE] >> simp[reaching_chain_def]
-QED
 
 Triviality fuel_positive_lemma:
   !A (x:num) fuel. FINITE A /\ x IN A /\ fuel >= CARD A ==> fuel >= 1
@@ -7442,121 +6704,6 @@ Proof
   imp_res_tac CARD_PSUBSET >> DECIDE_TAC
 QED
 
-Triviality walk_reaching_step_invariants:
-  !fn bp addr_sp current visited x def_id def_iid def_blk def_loc fuel.
-    let ms = mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-               bp fn addr_sp in
-    wf_function fn /\
-    FLOOKUP ms.ms_reaching current = SOME x /\
-    current IN FDOM ms.ms_nodes /\ current <> 0 /\ ~MEM current visited /\
-    (!blk. THE (FLOOKUP ms.ms_nodes current) <> MnPhi blk) /\
-    FLOOKUP ms.ms_nodes def_id = SOME (MnDef def_iid def_blk def_loc) /\
-    ~MEM def_id visited /\ def_id <> current /\
-    strict_dominates (dom_analyze (cfg_analyze fn) fn) def_blk
-      (mn_block (THE (FLOOKUP ms.ms_nodes current))) /\
-    SUC fuel >= CARD (FDOM ms.ms_nodes DIFF set visited) /\
-    (!v. MEM v visited ==> ?n. n > 0 /\ reaching_chain ms n v current) ==>
-    x <> 0 /\ ~MEM x (current::visited) /\ x IN FDOM ms.ms_nodes /\
-    (strict_dominates (dom_analyze (cfg_analyze fn) fn) def_blk
-       (mn_block (THE (FLOOKUP ms.ms_nodes x))) \/
-     mn_block (THE (FLOOKUP ms.ms_nodes x)) = def_blk) /\
-    fuel >= CARD (FDOM ms.ms_nodes DIFF set (current::visited)) /\
-    (!v. MEM v (current::visited) ==>
-         ?n. n > 0 /\ reaching_chain ms n v x)
-Proof
-  rpt gen_tac >> PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac
-  \\ `x <> 0` by (
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-      build_sdom_reaching_nonzero)) >>
-    disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `current`, `x`,
-      `def_id`, `def_iid`, `def_blk`, `def_loc`] mp_tac) >>
-    impl_tac >- simp[] >> simp[])
-  \\ `x IN FDOM (mem_ssa_build (cfg_analyze fn)
-        (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes` by (
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-      build_reaching_step_in_fdom)) >>
-    disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `current`, `x`] mp_tac) >>
-    impl_tac >- simp[] >> simp[])
-  \\ `x <> current` by (
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-      build_reaching_not_self)) >>
-    disch_then (qspecl_then [`fn`, `bp`, `addr_sp`, `current`, `x`] mp_tac) >>
-    impl_tac >- simp[] >> simp[])
-  \\ `~MEM x visited` by (
-    strip_tac >> res_tac >>
-    metis_tac[reaching_chain_no_revisit])
-  \\ `dominates (dom_analyze (cfg_analyze fn) fn)
-        (mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-           (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes x)))
-        (mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-           (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes
-             current)))` by (
-    mp_tac (SIMP_RULE (srw_ss()) [] mem_ssa_reaching_def_dominates) >>
-    disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `current`, `x`] mp_tac) >>
-    DISCH_TAC >>
-    `wf_function fn /\
-     FLOOKUP (mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-       bp fn addr_sp).ms_reaching current = SOME x /\ x <> 0 /\
-     current IN FDOM (mem_ssa_build (cfg_analyze fn)
-       (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes` by simp[] >>
-    res_tac >> simp[])
-  (* Step A: block_defs nonempty *)
-  >> `fmap_lookup_list (mem_ssa_build (cfg_analyze fn)
-        (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_block_defs
-        def_blk <> []` by (
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-      build_MnDef_block_defs_nonempty)) >>
-    disch_then (qspecl_then [`cfg_analyze fn`,
-      `dom_analyze (cfg_analyze fn) fn`,
-      `bp`, `fn`, `addr_sp`, `def_id`, `def_iid`,
-      `def_blk`, `def_loc`] mp_tac) >>
-    simp[])
-  (* Step B: dom def_blk blk(x) *)
-  >> `dominates (dom_analyze (cfg_analyze fn) fn) def_blk
-        (mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-           (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes x)))` by (
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-      build_reaching_dominated_by_ancestor)) >>
-    disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `current`, `x`,
-      `def_blk`] mp_tac) >>
-    impl_tac >- simp[] >> simp[])
-  (* Step C: fuel >= CARD(FDOM DIFF set(current::visited)) *)
-  >> `fuel >= CARD (FDOM (mem_ssa_build (cfg_analyze fn)
-        (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes
-        DIFF set (current::visited))` by (
-    irule fuel_step_lemma >> simp[])
-  (* Step D: reaching_chain *)
-  >> `!v. MEM v (current::visited) ==>
-       ?n. n > 0 /\ reaching_chain
-         (mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-            bp fn addr_sp) n v x` by (
-    rpt strip_tac >> Cases_on `v = current`
-    >- (qexists_tac `1` >> PURE_REWRITE_TAC [arithmeticTheory.ONE] >>
-        simp[reaching_chain_def])
-    >> `MEM v visited` by gvs[] >>
-       res_tac >>
-       drule_all reaching_chain_extend >> strip_tac >>
-       qexists_tac `SUC n` >> simp[])
-  (* Step E: sdom/eq split *)
-  >> Cases_on `mn_block (THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-       (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes x)) = def_blk`
-  >- simp[]
-  >> simp[dominatorDefsTheory.strict_dominates_def]
-QED
-
-
-(* Shared tactic for MnDef/MnUse within-block step in walk_same_block_visits_def.
-   Expects: assumptions simplified by gvs[mn_block_def, mn_inst_id_def] after
-   Cases_on cur_node, with FLOOKUP...x = SOME (MnDef/MnUse n s m),
-   FLOOKUP...ms_reaching x = SOME rd, and walk equation as goal implication.
-   Establishes rd properties, acyclicity, fuel step, reaching_chain, INDEX_OF,
-   then case-splits on def_id = rd (monotonicity vs IH). *)
-(* walk_same_block_step_tac: shared tactic for MnDef/MnUse within-block step.
-   After SUBST_ALL_TAC on ms and Cases_on cur_node >> gvs[mn_block_def, mn_inst_id_def],
-   the build term is fully expanded. Variables: n (inst_id), def_blk (block), m (loc).
-   Assumes: wf_function fn, FLOOKUP...reaching x = SOME rd, walk equation as goal imp.
-   Approach: SUBST_ALL_TAC pattern — all ms references are the expanded build term. *)
-
 (* Helper: non-phi node's inst_id is MEM in given block's instructions.
    Avoids the existential in build_node_inst_id_in_block by taking bb directly. *)
 Triviality build_node_mem_in_block:
@@ -7572,189 +6719,6 @@ Proof
   mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] build_node_inst_id_in_block)) >>
   disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `aid`, `node`] mp_tac) >>
   simp[]
-QED
-
-(* Helper: pre-specialize reaching_chain lemmas to eliminate ms=build(...) *)
-fun rcnr_for_fn () =
-  reaching_chain_no_revisit
-  |> Q.SPECL [`mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp`,
-              `fn`, `bp`, `addr_sp`]
-  |> REWRITE_RULE [];
-
-fun rce_for_fn () =
-  reaching_chain_extend
-  |> Q.SPEC `mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp`;
-
-(* walk_same_block_step_tac: shared tactic for both MnDef and MnUse cases.
-   IH pattern: match on '!a b c d. _' to avoid matching single-∀ assumptions
-   like '!blk. rd_node <> MnPhi blk' or '!v. MEM v visited ==> _'. *)
-fun walk_same_block_step_tac () =
-  (* Step 1: rd properties (same block, nonzero, in FDOM, non-phi) *)
-  mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] build_reaching_same_block)) >>
-  disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `x`, `rd`, `def_id`,
-    `def_iid`, `def_blk`, `def_loc`, `bb`, `idx_x`, `idx_d`] mp_tac) >>
-  (impl_tac >- simp[mn_block_def, mn_inst_id_def]) >> strip_tac >>
-  (* Step 2: rd <> x *)
-  `rd <> x` by (
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] build_reaching_not_self)) >>
-    disch_then (qspecl_then [`fn`, `bp`, `addr_sp`, `x`, `rd`] mp_tac) >>
-    simp[]) >>
-  (* Step 3: ~MEM rd visited — acyclicity via reaching_chain *)
-  `~MEM rd visited` by (
-    strip_tac >>
-    qpat_x_assum `!v. MEM v visited ==> _`
-      (qspec_then `rd` mp_tac) >> simp[] >> strip_tac >>
-    qpat_x_assum `!a b c d. _` kall_tac >>
-    metis_tac[rcnr_for_fn ()]) >>
-  (* Step 4: fuel step *)
-  `fuel >= CARD (FDOM (mem_ssa_build (cfg_analyze fn)
-     (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes
-     DIFF set (x::visited))` by (
-    irule fuel_step_lemma >> simp[CARD_DIFF_EQN]) >>
-  (* Step 5: reaching_chain for x::visited w.r.t. rd *)
-  `!v. MEM v (x::visited) ==> ?nn. nn > 0 /\
-     reaching_chain (mem_ssa_build (cfg_analyze fn)
-       (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp) nn v rd` by (
-    rpt strip_tac >> Cases_on `v = x`
-    >- (qexists_tac `1` >> PURE_REWRITE_TAC [arithmeticTheory.ONE] >>
-        simp[reaching_chain_def])
-    >> (qpat_x_assum `!a b c d. _` kall_tac >>
-       `MEM v visited` by fs[] >>
-       qpat_x_assum `!v. MEM v visited ==> _`
-         (qspec_then `v` mp_tac) >> simp[] >>
-       disch_then (qx_choose_then `kk` strip_assume_tac) >>
-       drule_all (rce_for_fn ()) >> strip_tac >>
-       qexists_tac `SUC kk` >> simp[])) >>
-  (* Step 6: rd node existence *)
-  `?rd_node. FLOOKUP (mem_ssa_build (cfg_analyze fn)
-     (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes rd
-     = SOME rd_node /\ (!blk. rd_node <> MnPhi blk)` by
-    (qpat_x_assum `!a b c d. _` kall_tac >>
-     qexists_tac `THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-       (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes rd)` >>
-     conj_tac
-     >- (Cases_on `FLOOKUP (mem_ssa_build (cfg_analyze fn)
-           (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes rd`
-         >> gvs[flookup_thm])
-     >> simp[]) >>
-  (* CRITICAL: substitute THE(FLOOKUP...rd) = rd_node globally *)
-  `THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-     (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes rd)
-     = rd_node` by simp[] >>
-  pop_assum SUBST_ALL_TAC >>
-  (* Step 6b: INDEX_OF for rd_node in bb *)
-  `?idx_rd. INDEX_OF (mn_inst_id rd_node)
-     (MAP (\i. i.inst_id) bb.bb_instructions) = SOME idx_rd` by (
-    qpat_x_assum `!a b c d. _` kall_tac >>
-    mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] build_node_mem_in_block)) >>
-    disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `rd`, `rd_node`, `bb`] mp_tac) >>
-    (impl_tac >- simp[]) >> strip_tac >>
-    Cases_on `INDEX_OF (mn_inst_id rd_node)
-      (MAP (\i. i.inst_id) bb.bb_instructions)`
-    >- gvs[INDEX_OF_eq_NONE]
-    >> simp[]) >>
-  (* Step 7: Case split on def_id = rd *)
-  Cases_on `def_id = rd`
-  >- (
-    qpat_x_assum `!a b c d. _` kall_tac >>
-    `fuel >= 1` by (
-      irule fuel_positive_lemma >>
-      qexistsl_tac [`FDOM (mem_ssa_build (cfg_analyze fn)
-        (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes
-        DIFF set (x::visited)`, `rd`] >>
-      simp[]) >>
-    `?k. fuel = SUC k` by (Cases_on `fuel` >> gvs[]) >>
-    gvs[] >>
-    drule walk_clobber_visits_current >>
-    simp[])
-  >> (
-    `idx_d < idx_rd` by (
-      mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-        build_same_block_reaching_closest)) >>
-      disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `x`, `rd`,
-        `def_id`, `def_iid`, `def_blk`, `def_loc`] mp_tac) >>
-      (impl_tac >- simp[mn_block_def, mn_inst_id_def]) >>
-      disch_then (qspecl_then [`bb`, `idx_x`, `idx_rd`, `idx_d`] mp_tac) >>
-      simp[mn_inst_id_def]) >>
-    first_x_assum (qspecl_then [
-      `mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-         bp fn addr_sp`,
-      `fn`, `bp`, `addr_sp`,
-      `x::visited`, `rd`, `qloc`, `visited'`, `def_id`, `def_iid`,
-      `def_blk`, `def_loc`, `bb`, `idx_rd`, `idx_d`] mp_tac) >>
-    simp[mn_block_def, mn_inst_id_def, CARD_DIFF_EQN]);
-
-(* Within-block walk: if walk starts at node x in def_blk and
-   def_id is an MnDef in def_blk with a lower instruction index,
-   the walk visits def_id. The INDEX_OF precondition ensures x is
-   "above" def_id in instruction order. *)
-Triviality walk_same_block_visits_def:
-  !fuel ms fn bp addr_sp visited x qloc visited'
-   def_id def_iid def_blk def_loc bb idx_x idx_d.
-    wf_function fn /\
-    ms = mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-                       bp fn addr_sp /\
-    mem_ssa_walk_clobber ms fuel visited x qloc = (NONE, visited') /\
-    FLOOKUP ms.ms_nodes def_id = SOME (MnDef def_iid def_blk def_loc) /\
-    ~MEM def_id visited /\ def_id <> x /\
-    x <> 0 /\ ~MEM x visited /\ x IN FDOM ms.ms_nodes /\
-    (!blk. THE (FLOOKUP ms.ms_nodes x) <> MnPhi blk) /\
-    mn_block (THE (FLOOKUP ms.ms_nodes x)) = def_blk /\
-    fuel >= CARD (FDOM ms.ms_nodes DIFF set visited) /\
-    (!v. MEM v visited ==> ?n. n > 0 /\ reaching_chain ms n v x) /\
-    lookup_block def_blk fn.fn_blocks = SOME bb /\
-    INDEX_OF (mn_inst_id (THE (FLOOKUP ms.ms_nodes x)))
-             (MAP (\i. i.inst_id) bb.bb_instructions) = SOME idx_x /\
-    INDEX_OF (mn_inst_id (THE (FLOOKUP ms.ms_nodes def_id)))
-             (MAP (\i. i.inst_id) bb.bb_instructions) = SOME idx_d /\
-    idx_d < idx_x ==>
-    MEM def_id visited'
-Proof
-  Induct_on `fuel`
-  (* Base: fuel = 0, x ∈ FDOM DIFF set visited → CARD > 0 contradicts 0 >= *)
-  >- (rpt gen_tac >> strip_tac >>
-      `x IN (FDOM ms.ms_nodes DIFF set visited)` by simp[] >>
-      `FINITE (FDOM ms.ms_nodes DIFF set visited)` by simp[] >>
-      `FDOM ms.ms_nodes DIFF set visited <> {}` by
-        metis_tac[MEMBER_NOT_EMPTY] >>
-      `CARD (FDOM ms.ms_nodes DIFF set visited) <> 0` by
-        metis_tac[CARD_EQ_0] >>
-      decide_tac)
-  \\ rpt gen_tac \\ strip_tac
-  (* Substitute ms, unfold walk *)
-  \\ qpat_x_assum `ms = _` SUBST_ALL_TAC
-  \\ qpat_x_assum `mem_ssa_walk_clobber _ _ _ _ _ = _`
-       (mp_tac o PURE_ONCE_REWRITE_RULE [mem_ssa_walk_clobber_def])
-  \\ PURE_REWRITE_TAC [LET_THM] \\ BETA_TAC \\ simp[]
-  (* Establish cur_node *)
-  \\ `?cur_node. FLOOKUP (mem_ssa_build (cfg_analyze fn)
-       (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes x
-       = SOME cur_node` by fs[flookup_thm]
-  \\ `THE (FLOOKUP (mem_ssa_build (cfg_analyze fn)
-       (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_nodes x)
-       = cur_node` by simp[]
-  \\ pop_assum SUBST_ALL_TAC
-  \\ pop_assum (fn th => REWRITE_TAC [th] >> assume_tac th) \\ simp[]
-  (* Establish ms_reaching x = SOME rd *)
-  \\ `?rd. FLOOKUP (mem_ssa_build (cfg_analyze fn)
-       (dom_analyze (cfg_analyze fn) fn) bp fn addr_sp).ms_reaching x
-       = SOME rd` by (
-      qpat_x_assum `!a b c d. _` kall_tac >>
-      `wf_mssa (mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-         bp fn addr_sp)` by simp[mem_ssa_build_wf] >>
-      fs[wf_mem_ssa_def, mem_ssa_reaching_complete_def] >>
-      first_x_assum (qspecl_then [`x`, `cur_node`] mp_tac) >> simp[])
-  (* Rewrite reaching in goal to eliminate NONE branches *)
-  \\ pop_assum (fn th => REWRITE_TAC [th] >> assume_tac th)
-  (* Save and remove IH before gvs to avoid expensive rewriting *)
-  \\ qpat_x_assum `!a b c d. _` (fn ih =>
-       Cases_on `cur_node` >> gvs[mn_block_def, mn_inst_id_def] >>
-       assume_tac ih)
-  (* MnDef case: handle completely_contains T (contradicts NONE), then step *)
-  >- (Cases_on `completely_contains m qloc` >> simp[] >>
-      strip_tac >> walk_same_block_step_tac ())
-  (* MnUse case: same step tactic *)
-  \\ strip_tac \\ walk_same_block_step_tac ()
 QED
 
 (* ===================================================================
@@ -7853,24 +6817,6 @@ Proof
   irule connect_all_reaching_subset >>
   simp[insert_phis_fields, process_blocks_fields,
        mem_ssa_init_def, FDOM_FEMPTY, EMPTY_SUBSET]
-QED
-
-(* Specialized to build *)
-Triviality walk_reachable_from_zero:
-  !fn bp addr_sp z.
-    let ms = mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-               bp fn addr_sp in
-    walk_reachable ms 0 z ==> z = 0
-Proof
-  rpt gen_tac >> simp[LET_THM] >> strip_tac >>
-  irule walk_reachable_from_zero_gen >>
-  qexists_tac `mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-                 bp fn addr_sp` >>
-  simp[build_reaching_subset_nodes] >>
-  mp_tac build_zero_not_in_nodes >>
-  disch_then (qspecl_then [`cfg_analyze fn`,
-    `dom_analyze (cfg_analyze fn) fn`, `bp`, `fn`, `addr_sp`] mp_tac) >>
-  simp[]
 QED
 
 (* Per-node successor property: node y's successors are in visited *)
@@ -8262,38 +7208,6 @@ Proof
   >> first_x_assum irule >> metis_tac[walk_succ_closed_def]
 QED
 
-(* Sub-lemma 1: reaching_chain implies walk_reachable for build-produced ms.
-   Each step in the chain has a non-phi source (by build_reaching_src_non_phi),
-   so the walk_reachable reaching rule applies. *)
-Triviality walk_reachable_from_reaching_chain:
-  !n fn bp addr_sp a b.
-    let ms = mem_ssa_build (cfg_analyze fn) (dom_analyze (cfg_analyze fn) fn)
-               bp fn addr_sp in
-    wf_function fn /\
-    reaching_chain ms n a b ==>
-    walk_reachable ms a b
-Proof
-  Induct >> rpt gen_tac >> simp[]
-  >- (simp[reaching_chain_def] >> metis_tac[walk_reachable_refl])
-  >> simp[Once reaching_chain_def] >> strip_tac
-  (* Both cases: apply build_reaching_src_non_phi to get non-phi *)
-  >> (
-    qpat_assum `FLOOKUP _ a = SOME _`
-      (fn th => mp_tac (MATCH_MP
-        (BETA_RULE (PURE_REWRITE_RULE [LET_THM]
-           build_reaching_src_non_phi)) th)) >>
-    strip_tac)
-  (* Case mid = b: single step a -> b *)
-  >- (
-    gvs[] >> match_mp_tac walk_reachable_reaching >>
-    qexists_tac `b` >> gvs[walk_reachable_refl])
-  (* Case reaching_chain n mid b: IH gives walk_reachable mid b *)
-  >> match_mp_tac walk_reachable_reaching >>
-  qexists_tac `mid` >> gvs[] >>
-  first_x_assum (qspecl_then [`fn`, `bp`, `addr_sp`, `mid`, `b`] mp_tac) >>
-  simp[]
-QED
-
 (* NRC of the reaching relation gives a reaching_chain (reversed) *)
 Triviality nrc_reaching_to_chain:
   !n ms a b.
@@ -8531,31 +7445,6 @@ Proof
   (* Resolve THE(FLOOKUP) *)
   sg `THE (FLOOKUP ms.ms_nodes y) = yn` >- simp[] >>
   qexistsl_tac [`y`, `yn`] >> gvs[]
-QED
-
-(* Phi case helper for walk_reachable_block_exit: when reaching predecessor y
-   is a phi at phi_blk with def_blk <> phi_blk, pick z = y.
-   Takes def_blk <> phi_blk as precondition (caller establishes via
-   build_reaching_phi_location at a nesting level where simp[Abbr] works). *)
-Triviality walk_reachable_block_exit_phi_case:
-  !x y phi_blk def_id def_blk ms dom.
-    y IN FDOM ms.ms_nodes /\ y <> 0 /\
-    FLOOKUP ms.ms_nodes y = SOME (MnPhi phi_blk) /\
-    dominates dom def_blk phi_blk /\
-    def_blk <> phi_blk /\
-    walk_reachable ms x y ==>
-    ?z. walk_reachable ms x z /\ z <> 0 /\ z IN FDOM ms.ms_nodes /\
-        (z = def_id \/
-         (strict_dominates dom def_blk (mn_block (THE (FLOOKUP ms.ms_nodes z))) /\
-          mn_block (THE (FLOOKUP ms.ms_nodes z)) <>
-          mn_block (THE (FLOOKUP ms.ms_nodes x))) \/
-         (?b. THE (FLOOKUP ms.ms_nodes z) = MnPhi b /\
-              strict_dominates dom def_blk b))
-Proof
-  rpt strip_tac >>
-  qexists_tac `y` >> simp[] >>
-  disj2_tac >> disj2_tac >>
-  fs[dominatorDefsTheory.strict_dominates_def]
 QED
 
 (* Inductive step for walk_reachable_block_exit, extracted as standalone
@@ -8953,7 +7842,7 @@ Proof
   simp[cfgHelpersTheory.cfg_analyze_preds,
        cfgHelpersTheory.mem_build_preds] >>
   sg `MEM p (fn_labels fn)`
-  >- metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels] >>
+  >- metis_tac[cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels] >>
   fs[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
   qexists_tac `bb` >> gvs[] >>
   gvs[GSYM cfgDefsTheory.cfg_succs_of_def,
@@ -9090,14 +7979,6 @@ Proof
   simp[]
 QED
 
-(* INDEX_OF x l = SOME i ==> MEM x l.
-   INDEX_OF_SOME_MEM is local to cfgHelpers, so we provide our own. *)
-Triviality index_of_some_mem:
-  !x l i. INDEX_OF x l = SOME i ==> MEM x l
-Proof
-  CCONTR_TAC >> gvs[GSYM INDEX_OF_eq_NONE]
-QED
-
 (* A strictly dominated label cannot be the entry block. *)
 Triviality sdom_not_entry:
   !fn ebb d lbl.
@@ -9108,10 +7989,10 @@ Triviality sdom_not_entry:
     ==> lbl <> ebb.bb_label
 Proof
   rpt strip_tac >> gvs[] >>
-  mp_tac dominatorAnalysisPropsTheory.dom_entry_dominates_all >>
+  mp_tac dominatorProofsTheory.dom_entry_dominates_all >>
   disch_then (qspecl_then [`fn`, `cfg_analyze fn`, `ebb`, `d`] mp_tac) >>
   simp[] >> strip_tac >>
-  metis_tac[dominatorProofsTheory.dominates_antisym_proof,
+  metis_tac[dominatorProofsTheory.dominates_antisym,
             dominatorDefsTheory.strict_dominates_def]
 QED
 
@@ -9152,7 +8033,7 @@ Proof
   qpat_x_assum `dfs_pre = cfg.cfg_dfs_pre`
     (ASSUME_TAC o ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
   (* P1: MEM qb dfs_pre *)
-  sg `MEM qb dfs_pre` >- (imp_res_tac index_of_some_mem) >>
+  sg `MEM qb dfs_pre` >- (imp_res_tac INDEX_OF_SOME_MEM) >>
   (* P2: cfg_reachable_of cfg qb *)
   sg `cfg_reachable_of cfg qb` >- res_tac >>
   (* P3: cfg_reachable_of cfg def_blk *)
@@ -9178,7 +8059,7 @@ Proof
   simp[GSYM cfgDefsTheory.cfg_succs_of_def] >>
   strip_tac >>
   (* P6: MEM p dfs_pre *)
-  sg `MEM p dfs_pre` >- (imp_res_tac index_of_some_mem) >>
+  sg `MEM p dfs_pre` >- (imp_res_tac INDEX_OF_SOME_MEM) >>
   (* P7: cfg_reachable_of cfg p *)
   sg `cfg_reachable_of cfg p` >- res_tac >>
   (* P8: MEM p (cfg_preds_of cfg qb) *)
@@ -9220,16 +8101,8 @@ Proof
   simp[]
 QED
 
-(* Bidirectional: reachable ↔ MEM in dfs_pre. Avoids expanding cfg_analyze_def. *)
-Triviality reachable_mem_dfs_pre:
-  !fn x. wf_function fn /\ cfg_reachable_of (cfg_analyze fn) x ==>
-         MEM x (cfg_analyze fn).cfg_dfs_pre
-Proof
-  rpt strip_tac >>
-  imp_res_tac cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
-  gvs[EXTENSION, SPECIFICATION]
-QED
-
+(* MEM in dfs_pre implies reachable (the converse is reachable_in_dfs_pre).
+   Avoids expanding cfg_analyze_def. *)
 Triviality mem_dfs_pre_reachable:
   !fn x. wf_function fn /\ MEM x (cfg_analyze fn).cfg_dfs_pre ==>
          cfg_reachable_of (cfg_analyze fn) x
@@ -9254,14 +8127,14 @@ Proof
   rpt strip_tac >>
   gvs[dominatorDefsTheory.strict_dominates_def] >>
   (* MEM x dfs_pre from reachable *)
-  imp_res_tac reachable_mem_dfs_pre >>
+  imp_res_tac reachable_in_dfs_pre >>
   sg `?i. INDEX_OF x (cfg_analyze fn).cfg_dfs_pre = SOME i`
   >- (Cases_on `INDEX_OF x (cfg_analyze fn).cfg_dfs_pre` >>
       gvs[INDEX_OF_eq_NONE]) >>
   qexists_tac `i` >> simp[] >>
   (* cfg_reachable y from INDEX_OF *)
   sg `cfg_reachable_of (cfg_analyze fn) y`
-  >- (imp_res_tac index_of_some_mem >> imp_res_tac mem_dfs_pre_reachable) >>
+  >- (imp_res_tac INDEX_OF_SOME_MEM >> imp_res_tac mem_dfs_pre_reachable) >>
   mp_tac dominates_index_le >>
   disch_then (qspecl_then [`fn`, `ebb`, `x`, `y`, `i`, `j`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -9375,7 +8248,7 @@ Proof
   irule walk_reachable_trans >> qexists_tac `z` >> simp[] >>
   (* INDEX_OF b dfs_pre from reachable *)
   sg `?qi. INDEX_OF b dfs_pre = SOME qi`
-  >- (imp_res_tac reachable_mem_dfs_pre >>
+  >- (imp_res_tac reachable_in_dfs_pre >>
       Cases_on `INDEX_OF b dfs_pre` >> gvs[Abbr `dfs_pre`, INDEX_OF_eq_NONE]) >>
   (* qi <= idx via dominates_index_le *)
   sg `qi <= idx`
@@ -9508,7 +8381,7 @@ Proof
   rpt strip_tac >>
   wrap_build_abbrevs >>
   sg `cfg_reachable_of cfg (mn_block (THE (FLOOKUP ms.ms_nodes rd)))`
-  >- (imp_res_tac index_of_some_mem >> gvs[]) >>
+  >- (imp_res_tac INDEX_OF_SOME_MEM >> gvs[]) >>
   sg `cfg_reachable_of cfg b`
   >- (gvs[dominatorDefsTheory.strict_dominates_def] >>
       metis_tac[dominatorProofsTheory.dominates_reachable]) >>
@@ -9802,7 +8675,7 @@ Proof
   mp_tac (BETA_RULE (PURE_REWRITE_RULE [LET_THM] build_node_block_reachable)) >>
   disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `rd`, `rd_node`] mp_tac) >>
   simp[] >> strip_tac >>
-  imp_res_tac reachable_mem_dfs_pre >>
+  imp_res_tac reachable_in_dfs_pre >>
   `?idx. INDEX_OF (mn_block rd_node) (cfg_analyze fn).cfg_dfs_pre = SOME idx`
     by metis_tac[INDEX_OF_eq_NONE, optionTheory.NOT_SOME_NONE,
                  optionTheory.option_nchotomy] >>

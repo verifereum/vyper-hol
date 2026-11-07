@@ -487,7 +487,7 @@ QED
 (* ===== add_barrier_deps preserves eda_wf ===== *)
 
 (* Helper: membership in FOLDL that adds list elements *)
-Triviality foldl_add_mem:
+Theorem foldl_add_mem:
   !prev init x.
     MEM x (FOLDL (\ds (p:instruction). if MEM p ds then ds else p :: ds)
              init prev) ==>
@@ -876,15 +876,6 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_flippable_def, is_commutative_def, is_comparator_def,
       flip_comparison_opcode_def, is_raw_fmp_opcode_def]
-QED
-
-Theorem from_block_no_raw[local]:
-  from_block block_insts i /\
-  EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) block_insts ==>
-  ~is_raw_fmp_opcode i.inst_opcode
-Proof
-  simp[from_block_def, listTheory.EVERY_MEM] >>
-  metis_tac[dft_flip_no_raw]
 QED
 
 Theorem dft_block_no_raw[local]:

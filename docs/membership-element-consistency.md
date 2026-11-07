@@ -101,6 +101,6 @@ above retains its original acceptance domain and is not rerun by that check.
 
 The full `vyperTypeSoundnessTheory` and `vyperTypeBuiltinsTheory` rebuild
 without proof changes: their existing proofs discard the strengthened premise.
-`membershipCheckerIntegrityTheory` audits saved theorems in the type system,
-builtin and expression soundness, soundness facade and membership tests,
-rejecting assumptions, axioms and any oracle other than DISK_THM.
+`holbuild check` audits the saved theorems of the type system, builtin and
+expression soundness and membership tests, rejecting axioms and any oracle
+other than DISK_THM; `membership-comparison-validation.md` lists the commands.

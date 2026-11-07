@@ -1058,9 +1058,10 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   qexists_tac `ss'` >> asm_rewrite_tac[] >>
   qpat_x_assum `run_inst_seq _ _ = OK ss'` mp_tac >>
-  asm_rewrite_tac[run_inst_seq_def, step_inst_base_def, mk_inst_def,
-                  exec_alloca_def] >>
-  simp[] >> disch_then (SUBST_ALL_TAC o SYM) >>
+  asm_rewrite_tac[run_inst_seq_def] >>
+  simp[mk_inst_def] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_alloca_def] >> disch_then (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `eval_operand v _ = _` mp_tac >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]

@@ -197,12 +197,6 @@ Proof
   rw[vyper_decode_valid_enc_def]
 QED
 
-Theorem drop_32_readable_in_bounds[local]:
-  !bs n. 32 ≤ LENGTH (DROP n bs) ⇒ 32 + n ≤ LENGTH bs
-Proof
-  Induct_on `n` >> gvs[Once listTheory.DROP_LENGTH_TOO_LONG, LENGTH_TL]
-QED
-
 (* A dynamic member is reached at head offset j, and its own length word must
    be readable in DROP j bs.  Bounded nums then also rule out the 256-bit wrap
    that Vyper's `assert actual_ptr >= parent` guards against. *)

@@ -9,8 +9,9 @@
  *
  * TOP-LEVEL:
  *   expr_shape_root            — the source forms whose lowering breaks the
- *                                shape (msg.gas, raw_call, selfdestruct)
- *                                and builtins with too few arguments
+ *                                shape (msg.gas, raw_call, selfdestruct,
+ *                                create calls) and builtins with too few
+ *                                arguments
  *   cenv_shape_ok, cenv_static_ok, value_shape_ok, loop_ctx_shape_ok
  *   external_fn_shape_ok, fallback_shape_ok, internal_fn_shape_ok
  *   internal_segment_ok        — one internal function's blocks
@@ -64,7 +65,7 @@ End
 (* msg.gas returns a GAS output as an ordinary value; raw_call lowers to
    DELEGATECALL with is_delegate_call, and raw_call(t, msg.data) to DALLOCA;
    selfdestruct emits SELFDESTRUCT, excluded by the current instruction shape
-   policy;
+   policy; create calls emit CREATE/CREATE2, outside inst_shape_ok;
    a builtin with too few arguments compiles HD []. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
@@ -72,6 +73,8 @@ Definition expr_shape_root_def:
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
     (?ty es d. e = Call ty SelfDestructTarget es d) \/
+    (?ty kind salted rof order es d.
+       e = Call ty (CreateTarget kind salted rof order) es d) \/
     (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
     (?ty tb target es. e = TypeBuiltin ty tb target es /\
                        LENGTH es < type_builtin_arity tb)
@@ -8100,8 +8103,8 @@ Resume compile_expr_body_shape[call]:
   >- (irule compile_call_raw_log_shape >> simp[])
   >~ [`compile_call _ _ _ _ RawRevert _ _`]
   >- (irule compile_call_raw_revert_shape >> simp[])
-  >~ [`compile_call _ _ _ _ (CreateTarget _ _ _) _ _`]
-  >- shape_send_invalid_tac >>
+  >~ [`compile_call _ _ _ _ (CreateTarget kind salted rof order)`]
+  >- gvs[] >>
   gvs[] >> shape_send_invalid_tac
 QED
 
@@ -12785,8 +12788,8 @@ QED
 
 (* supported_pure_expr rejects all Calls; supported_effect_expr accepts
    only IntCall, ExtCall, Send and Pop, so SelfDestructTarget is unsupported.
-   supported_expr also rejects Env MsgGas and every raw_call form, and
-   accepts builtins only at the arity their dispatcher reads. *)
+   supported_expr also rejects Env MsgGas, every raw_call form and create
+   calls, and accepts builtins only at the arity their dispatcher reads. *)
 Theorem supported_builtin_form_shape_root[local]:
   supported_builtin_form tops ty bi es ==>
   ~expr_shape_root (Builtin ty bi es)

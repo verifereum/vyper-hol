@@ -96,7 +96,7 @@ End
 Definition expr_evm_run_root_def:
   expr_evm_run_root (Call ty (RawCallTarget flags) es default) = T /\
   expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) = T /\
-  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof) es default) = T /\
+  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
   expr_evm_run_root _ = F
 End
 

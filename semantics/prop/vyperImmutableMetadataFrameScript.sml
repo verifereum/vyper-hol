@@ -87,12 +87,20 @@ Proof
   rpt gen_tac >> Cases_on `p`
   >- (strip_tac >> irule immutable_metadata_frame_eq >>
       metis_tac[vyperScopePreservationTheory.append_storage_place_scopes_immutables]) >>
-  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
-  rpt strip_tac >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_metadata_frame, immutable_metadata_frame_refl]
+  pure_rewrite_tac [append_place_def, bind_def] >>
+  qmatch_goalsub_abbrev_tac `place_type_value cx pl st` >>
+  Cases_on `place_type_value cx pl st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  rename1 `place_type_value cx pl s0 = (tvres,s0)` >>
+  Cases_on `tvres` >> simp[bind_def, raise_def] >>
+  Cases_on `read_place cx pl s0` >>
+  drule read_place_state >> strip_tac >> gvs[] >>
+  rename1 `read_place cx pl s1 = (oldres,s1)` >>
+  Cases_on `oldres` >> simp[bind_def, raise_def] >>
+  qmatch_goalsub_abbrev_tac `append_element tv old v` >>
+  Cases_on `append_element tv old v` >>
+  simp[lift_sum_def, return_def, raise_def] >>
+  metis_tac[write_place_metadata_frame]
 QED
 
 Theorem pop_place_metadata_frame:
@@ -420,13 +428,32 @@ Proof
   simp[state_rel_frame_result]
 QED
 
+(* METADATA_FRAME_STEP normalises only the exposed head via
+   metadata_head_conv.  Do not beta-normalise entire continuation trees here:
+   structural frame rules expose their bodies as separate, smaller goals. *)
 val METADATA_EVAL_STEP = FIRST [
   MATCH_ACCEPT_TAC metadata_frame_create,
   FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS metadata_frame_call_helpers)),
   MATCH_ACCEPT_TAC metadata_frame_raw_call,
   CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-  CHANGED_TAC (CONV_TAC (RAND_CONV (DEPTH_CONV BETA_CONV))),
   METADATA_FRAME_STEP];
+
+(* Keep constructor processing behind separate proof-step boundaries. *)
+val METADATA_CONSTRUCTOR_TAC =
+  rpt strip_tac >>
+  qpat_assum `_ = (res,st')` (fn th =>
+    let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
+      irule (INST_TYPE [alpha |-> type_of result] metadata_frame_at) >>
+      exists_tac (rator (lhs (concl th))) >> exists_tac result
+    end) >> asm_simp_tac bool_ss [] >>
+  simp_tac bool_ss [Once evaluate_def, lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  TRY (rename1 `CreateTarget kind has_salt rof kw_order` >>
+       Cases_on `kind` >> Cases_on `has_salt` >>
+       simp_tac bool_ss [COND_CLAUSES] >>
+       RULE_ASSUM_TAC (SIMP_RULE bool_ss
+         [create_kind_11, create_kind_distinct, COND_CLAUSES])) >>
+  rpt METADATA_EVAL_STEP;
 
 Theorem eval_metadata_frame_with_results:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> immutable_metadata_frame st st') /\
@@ -441,20 +468,193 @@ Theorem eval_metadata_frame_with_results:
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> immutable_metadata_frame st st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac >>
-  qpat_assum `_ = (res,st')` (fn th =>
-    let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
-      irule (INST_TYPE [alpha |-> type_of result] metadata_frame_at) >>
-      exists_tac (rator (lhs (concl th))) >> exists_tac result
-    end) >> asm_simp_tac bool_ss [] >>
-  simp_tac bool_ss [Once evaluate_def, lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
-  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
-  TRY (rename1 `CreateTarget kind has_salt rof` >>
-       Cases_on `kind` >> Cases_on `has_salt` >>
-       simp_tac bool_ss [COND_CLAUSES] >>
-       RULE_ASSUM_TAC (SIMP_RULE bool_ss
-         [create_kind_11, create_kind_distinct, COND_CLAUSES])) >>
-  rpt METADATA_EVAL_STEP >> suspend "IntCallFrames"
+  ho_match_mp_tac evaluate_ind >>
+  map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
+    (List.tabulate (60, fn n => n + 1)) >> suspend "c61"
+QED
+
+Resume eval_metadata_frame_with_results[c1]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c2]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c3]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c4]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c5]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c6]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c7]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c8]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c9]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c10]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c11]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c12]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c13]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c14]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c15]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c16]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c17]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c18]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c19]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c20]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c21]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c22]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c23]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c24]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c25]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c26]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c27]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c28]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c29]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c30]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c31]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c32]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c33]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c34]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c35]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c36]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c37]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c38]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c39]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c40]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c41]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c42]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c43]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c44]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c45]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c46]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c47]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c48]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c49]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c50]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c51]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c52]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c53]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c54]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c55]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c56]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c57]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c58]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c59]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c60]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
+QED
+Resume eval_metadata_frame_with_results[c61]:
+  METADATA_CONSTRUCTOR_TAC >> suspend "IntCallFrames"
 QED
 
 Resume eval_metadata_frame_with_results[IntCallFrames]:

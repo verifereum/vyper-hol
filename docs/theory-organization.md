@@ -80,8 +80,10 @@ interface.  Prefer one of:
 
 ## Imports and qualifications
 
-A theory that uses public facts should list the corresponding `*Props` theory in
-`Ancestors`.  During refactors, qualified references such as
+A theory lists in `Ancestors` the theory that owns the facts it uses: the
+`*Props` theory where one owns them, otherwise the `*Proofs` theory that proves
+them.  Where a `*Props` facade only re-exported `*Proofs` results and has been
+removed, its users import the `*Proofs` theory.  During refactors, qualified references such as
 `cfgTransformPropsTheory.foo` may be useful to make dependency migration
 explicit.  Once imports are settled, unqualified use is acceptable when it is
 clear and unambiguous.

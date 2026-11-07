@@ -28,8 +28,7 @@ returns its Keccak. Storage contents do not participate in `account_empty`.
 - [Venom EXTCODEHASH](../../venom/defs/venomExecSemanticsScript.sml): uses
   empty-account check before hashing code.
 - Affected [account_items source](../../lowering/defs/bytecode/python-o1-no-asm-opt-sources/account_items.vy),
-  [HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetBuiltinsScript.sml),
-  [byte endpoint](../../lowering/defs/bytecode/eval/evalCompilerBytecodeBuiltinsAccountHashScript.sml).
+  [HOL fixture](../../lowering/defs/bytecode/eval/evalCompilerSubsetBuiltinsScript.sml).
 
 Pinned reference `vyper/codegen/expr.py:250–254`, `Expr.parse_Attribute`,
 codehash branch emits `extcodehash` with bytes32 type (subject to the EVM-version

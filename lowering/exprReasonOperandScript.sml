@@ -312,10 +312,11 @@ Theorem reason_builtin_bop[local]:
 Proof
   strip_tac >>
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
+  Cases_on `bop` >>
   gvs[compile_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  drule_all reason_stack_result >> simp[]
+  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  metis_tac[reason_stack_result]
 QED
 
 Theorem reason_ensure_memory_operand[local]:
@@ -746,6 +747,8 @@ Proof
   >~ [`compile_selfdestruct _ _`] >-
     (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
      rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
+    >- suspend "create"
   >> suspend "send"
 QED
 
@@ -762,6 +765,15 @@ Resume reason_compile_call[external]:
   rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_external_call_operand]
+QED
+
+Resume reason_compile_call[create]:
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val rt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[reason_result_shape_def] >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_create_call_safe_operand,
+            safe_operand_def]
 QED
 
 Resume reason_compile_call[send]:

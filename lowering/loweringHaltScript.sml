@@ -1656,10 +1656,10 @@ QED
 
 (* ===== The effects compared on success ===== *)
 
-(* With state_rel at the return, a Halt that leaves the effects as they
-   were, except for the optional unlock's TSTORE, gives the effects
-   external_call_result_rel compares on success, from the state es' after
-   the source releases the lock at the same key. *)
+(* With state_rel at the return, a Halt preserves the raw accounts and
+   pending deletions, except for the optional unlock's TSTORE.  Finalize
+   the accounts only at the success boundary, just as the source does
+   after releasing the lock at the same key. *)
 Theorem external_halt_success_unlock_helper[local]:
   !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts.
     state_rel func cenv cx es s /\
@@ -1704,15 +1704,15 @@ Proof
   `transient_agree cx es'.tStorage ss.vs_transient` by
     (Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
      irule transient_agree_update >> simp[storage_dead_update_zero]) >>
+  `accounts_agree cx
+     (process_deletions es.pending_deletions es.accounts)
+     (process_deletions es.pending_deletions s.vs_accounts)` by
+    (irule accounts_agree_process_deletions >> simp[]) >>
   `log_entry_equiv cenv cx.txn.target = $= /\
    log_entry_corresponds (compiled_event_info tops) (type_env tops)
      tx.target = $=` by
     simp[FUN_EQ_THM, log_entry_equiv_def,
          log_entry_corresponds_concrete_event] >>
-  `accounts_agree cx
-     (process_deletions es.pending_deletions es.accounts)
-     (process_deletions es.pending_deletions s.vs_accounts)` by
-    (irule accounts_agree_process_deletions >> first_assum ACCEPT_TAC) >>
   gvs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
       finalize_pending_deletions_def, abstract_machine_from_state_def]
 QED

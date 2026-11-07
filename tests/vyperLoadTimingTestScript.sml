@@ -3,7 +3,7 @@ Theory vyperLoadTimingTest
 Ancestors
   vyperSmallStep vyperState vyperMisc jsonToVyper finite_map While pair
 Libs
-  jsonASTLib cv_transLib finite_mapLib wordsLib
+  jsonASTLib vyperConstEvalLib cv_transLib finite_mapLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["fixtures/load_timing"]

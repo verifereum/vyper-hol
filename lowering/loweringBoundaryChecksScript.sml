@@ -194,8 +194,8 @@ QED
 Theorem lowering_none_return_witness:
   external_call_result_rel tops NoneT tx (INL v, am, rqs)
     (Halt (ss with <| vs_accounts := am.accounts; vs_pending_deletions := [];
-       vs_transient := am.tStorage; vs_logs := am.logs; vs_returndata := [];
-       vs_requests := rqs |>))
+       vs_transient := am.tStorage;
+       vs_logs := am.logs; vs_returndata := []; vs_requests := rqs |>))
 Proof
   simp[lowering_success_boundary, return_bytes_def, logs_correspond_def,
        vfmExecutionTheory.process_deletions_def] >>

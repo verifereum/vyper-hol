@@ -1,6 +1,6 @@
 Theory jsonToVyperExpr
 Ancestors
-  ASCIInumbers integer alist jsonAST vyperAST jsonToVyperType
+  ASCIInumbers integer alist jsonAST vyperAST jsonToVyperType vyperConstEval
 Libs
   intLib
 
@@ -90,13 +90,13 @@ End
 
 
 Definition decimal_string_to_int_def:
-  decimal_string_to_int s =
-    let (base, exp) = split_at_e s in
+  decimal_string_to_int s : int =
+    let (obj, exp) = split_at_e s in
     let (neg_exp, exp_rest) = strip_sign exp in
     let exp_digits = FILTER isDigit exp_rest in
     let exp_num = num_from_dec_string exp_digits in
-    let exp_int = if neg_exp then &0 - &exp_num else &exp_num in
-    let (bd, ad) = split_at_dot base in
+    let exp_int : int = if neg_exp then &0 - &exp_num else &exp_num in
+    let (bd, ad) = split_at_dot obj in
     let ad = FILTER isDigit ad in
     let target = &10 + exp_int in
     let pad_len =
@@ -203,20 +203,20 @@ End
 
 (* ===== Keyword Argument Helpers ===== *)
 
-(* Extract boolean kwarg: ALOOKUP on (name, expr) list, pattern match BoolL *)
+(* Compile-time keyword values (flags, max_outsize, method_id) are evaluated
+   from their translated source expressions. *)
 Definition kwarg_bool_def:
   kwarg_bool key (kwargs : (identifier # expr) list) default =
-    case ALOOKUP kwargs key of
-      SOME (Literal _ (BoolL b)) => b
+    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+      SOME (BoolV b) => b
     | _ => default
 End
 
 
-(* Extract numeric kwarg: pattern match IntL *)
 Definition kwarg_num_def:
   kwarg_num key (kwargs : (identifier # expr) list) (default : num) =
-    case ALOOKUP kwargs key of
-      SOME (Literal _ (IntL n)) => if n >= 0 then Num n else default
+    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+      SOME (IntV n) => if n >= 0 then Num n else default
     | _ => default
 End
 
@@ -231,13 +231,29 @@ End
 
 
 
-(* Extract a compiler-validated four-byte method_id literal. *)
 Definition kwarg_method_id_def:
   kwarg_method_id key (kwargs : (identifier # expr) list) =
-    case ALOOKUP kwargs key of
-      SOME (Literal _ (BytesL bs)) =>
-        if LENGTH bs = 4 then SOME bs else NONE
+    case OPTION_BIND (ALOOKUP kwargs key) eval_constant of
+      SOME (BytesV bs) => if LENGTH bs = 4 then SOME bs else NONE
     | _ => NONE
+End
+
+(* Rejection marker for the total translator: the type checker rejects
+   CalldataSlice 0 regardless of operands. *)
+Definition rejected_expr_def:
+  rejected_expr = Builtin (BaseT (BytesT (Dynamic 0))) (CalldataSlice 0) []
+End
+
+(* A call whose compile-time keyword does not evaluate is rejected rather
+   than translated with the keyword's default. *)
+Definition kwargs_checked_def:
+  kwargs_checked (kwargs : (identifier # expr) list) e =
+    if EVERY (λ(k,v). MEM k ["max_outsize"; "is_delegate_call";
+                             "is_static_call"; "revert_on_failure";
+                             "raw_args"; "unwrap_tuple"; "ensure_tuple";
+                             "method_id"; "skip_contract_check"] ⇒
+                      IS_SOME (eval_constant v)) kwargs
+    then e else rejected_expr
 End
 
 
@@ -259,6 +275,46 @@ Definition raw_call_flags_of_kwargs_def:
        rcf_is_static := kwarg_bool "is_static_call" kwargs F;
        rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T;
        rcf_kws := MAP FST (ext_call_kwargs kwargs) |>
+End
+
+(* Runtime operands remain in code-generation order.  Only supplied runtime
+   keywords contribute indices, visited in their JSON/source order. *)
+Definition create_keyword_order_def:
+  create_keyword_order kind has_salt nargs (kwargs : (identifier # expr) list) =
+    FLAT (MAP (\(key,e).
+      if key = "value" then [1n]
+      else if key = "salt" /\ has_salt then
+        [if kind = RawCreate then nargs + 1 else 2]
+      else if key = "code_offset" then
+        (case kind of CreateFromBlueprint _ =>
+           [if has_salt then 3 else 2] | _ => [])
+      else []) kwargs)
+End
+
+Theorem create_keyword_order_examples:
+  create_keyword_order CreateMinimalProxy T 1
+    [("salt",s); ("revert_on_failure",r); ("value",v)] = [2;1] /\
+  create_keyword_order CreateCopyOf F 1 [] = [] /\
+  create_keyword_order (CreateFromBlueprint F) T 3
+    [("code_offset",off); ("salt",s); ("value",v)] = [3;2;1] /\
+  create_keyword_order (CreateFromBlueprint T) F 2
+    [("raw_args",r); ("code_offset",off)] = [2] /\
+  create_keyword_order RawCreate T 3
+    [("salt",s); ("value",v)] = [4;1]
+Proof
+  simp[create_keyword_order_def]
+QED
+
+(* Replace a compile-time expression by the literal of its value. *)
+Definition fold_constant_def:
+  fold_constant e =
+    case OPTION_BIND (eval_constant e) constant_literal of
+    | SOME l => Literal (expr_type e) l
+    | NONE => e
+End
+
+Definition exponent_operand_def:
+  exponent_operand op e = if op = JBop_Pow then fold_constant e else e
 End
 
 Definition make_builtin_call_def:
@@ -307,27 +363,30 @@ Definition make_builtin_call_def:
                 is_delegate_call=F, is_static_call=F, revert_on_failure=T)
        Convention: args in Call = [to_addr; data_bytes] ++ the value=/gas=
        operands in source order *)
-    else if name = "raw_call" then
+    else if name = "raw_call" then kwargs_checked kwargs (
       Call ty (RawCallTarget (raw_call_flags_of_kwargs kwargs))
-        (args ++ MAP SND (ext_call_kwargs kwargs)) NONE
+        (args ++ MAP SND (ext_call_kwargs kwargs)) NONE)
     else if name = "raw_log" then Call ty RawLog args NONE
     else if name = "raw_revert" then Call ty RawRevert args NONE
     else if name = "selfdestruct" then Call ty SelfDestructTarget args NONE
     else if name = "create_minimal_proxy_to" ∨ name = "create_forwarder_to" then
+      kwargs_checked kwargs (
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       let salt_opt = ALOOKUP kwargs "salt" in
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
-      Call ty (CreateTarget CreateMinimalProxy (IS_SOME salt_opt) rof)
-        (TAKE 1 args ++ [value_e] ++ salt_es) NONE
-    else if name = "create_copy_of" then
+      Call ty (CreateTarget CreateMinimalProxy (IS_SOME salt_opt) rof
+        (create_keyword_order CreateMinimalProxy (IS_SOME salt_opt) (LENGTH args) kwargs))
+        (TAKE 1 args ++ [value_e] ++ salt_es) NONE)
+    else if name = "create_copy_of" then kwargs_checked kwargs (
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       let salt_opt = ALOOKUP kwargs "salt" in
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
-      Call ty (CreateTarget CreateCopyOf (IS_SOME salt_opt) rof)
-        (TAKE 1 args ++ [value_e] ++ salt_es) NONE
-    else if name = "create_from_blueprint" then
+      Call ty (CreateTarget CreateCopyOf (IS_SOME salt_opt) rof
+        (create_keyword_order CreateCopyOf (IS_SOME salt_opt) (LENGTH args) kwargs))
+        (TAKE 1 args ++ [value_e] ++ salt_es) NONE)
+    else if name = "create_from_blueprint" then kwargs_checked kwargs (
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let raw_args_flag = kwarg_bool "raw_args" kwargs F in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
@@ -335,15 +394,18 @@ Definition make_builtin_call_def:
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
       let code_offset_e = kwarg_expr "code_offset" kwargs
         (Literal (BaseT (UintT 256)) (IntL 3)) in
-      Call ty (CreateTarget (CreateFromBlueprint raw_args_flag) (IS_SOME salt_opt) rof)
-        (TAKE 1 args ++ [value_e] ++ salt_es ++ [code_offset_e] ++ DROP 1 args) NONE
-    else if name = "raw_create" then
+      Call ty (CreateTarget (CreateFromBlueprint raw_args_flag) (IS_SOME salt_opt) rof
+        (create_keyword_order (CreateFromBlueprint raw_args_flag)
+          (IS_SOME salt_opt) (LENGTH args) kwargs))
+        (TAKE 1 args ++ [value_e] ++ salt_es ++ [code_offset_e] ++ DROP 1 args) NONE)
+    else if name = "raw_create" then kwargs_checked kwargs (
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       let salt_opt = ALOOKUP kwargs "salt" in
       let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
-      Call ty (CreateTarget RawCreate (IS_SOME salt_opt) rof)
-        (TAKE 1 args ++ [value_e] ++ DROP 1 args ++ salt_es) NONE
+      Call ty (CreateTarget RawCreate (IS_SOME salt_opt) rof
+        (create_keyword_order RawCreate (IS_SOME salt_opt) (LENGTH args) kwargs))
+        (TAKE 1 args ++ [value_e] ++ DROP 1 args ++ salt_es) NONE)
     else if name = "abs" then Builtin ty Abs args
     else if name = "as_wei_value" then
       (case args of
@@ -357,18 +419,20 @@ Definition make_builtin_call_def:
       (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
                     | _ => Builtin ty (Uint2Str 0) args)
     else if name = "abi_decode" ∨ name = "_abi_decode" then
+      kwargs_checked kwargs (
       let unwrap = kwarg_bool "unwrap_tuple" kwargs T in
       (case args of (arg::_) => TypeBuiltin ty (AbiDecode unwrap) ty [arg]
-                  | _ => TypeBuiltin ty (AbiDecode unwrap) ty [])
+                  | _ => TypeBuiltin ty (AbiDecode unwrap) ty []))
     else if name = "abi_encode" ∨ name = "_abi_encode" then
+      kwargs_checked kwargs (
       let ensure = kwarg_bool "ensure_tuple" kwargs T in
       let method_id = kwarg_method_id "method_id" kwargs in
       let arg_types = TupleT (MAP expr_type args) in
-      TypeBuiltin ty (AbiEncode ensure method_id) arg_types args
+      TypeBuiltin ty (AbiEncode ensure method_id) arg_types args)
     else if name = "extract32" then
       TypeBuiltin ty Extract32 ty args
     else if name = "method_id" then
-      Builtin ty MethodId args
+      fold_constant (Builtin ty MethodId args)
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
           | JT_Struct _ sname =>
@@ -462,11 +526,32 @@ Definition is_module_expr_def:
 End
 
 
+(* Resolve a module expression (possibly nested) to a source_id.
+   e.g. lib1 -> SOME src_id_of_lib1
+        lib2.lib1 -> SOME src_id_of_lib1 (via lib2's import_map)
+   all_import_maps: source_id -> import_map for each module
+   import_map: current module's alias -> source_id map *)
+Definition resolve_module_expr_def:
+  (resolve_module_expr all_import_maps import_map (JE_Name alias _ _ _) =
+     ALOOKUP import_map alias) ∧
+  (resolve_module_expr all_import_maps import_map (JE_Attribute inner alias _ _ _ _ _) =
+     case resolve_module_expr all_import_maps import_map inner of
+     | NONE => NONE
+     | SOME parent_src_id =>
+         case ALOOKUP all_import_maps parent_src_id of
+         | NONE => NONE
+         | SOME parent_import_map => ALOOKUP parent_import_map alias) ∧
+  (resolve_module_expr _ _ _ = NONE)
+Termination
+  WF_REL_TAC `measure (λ(_,_,e). json_expr_size e)` >> simp[]
+End
+
 (* ===== Expression translation context and name helpers ===== *)
 
 (* Expression translation carries the root source ID, current module
    namespace, current module import map, constants/immutables, local and
-   top-level types, and the compile-time abstract override map. *)
+   top-level types, the compile-time abstract override map, the literal
+   values of the constants evaluated so far, and every module's import map. *)
 Definition expr_main_src_id_def:
   expr_main_src_id ctx = FST ctx
 End
@@ -492,7 +577,15 @@ Definition expr_toplevel_types_def:
 End
 
 Definition expr_override_map_def:
-  expr_override_map ctx = SND (SND (SND (SND (SND (SND ctx)))))
+  expr_override_map ctx = FST (SND (SND (SND (SND (SND (SND ctx))))))
+End
+
+Definition expr_constants_def:
+  expr_constants ctx = FST (SND (SND (SND (SND (SND (SND (SND ctx)))))))
+End
+
+Definition expr_all_import_maps_def:
+  expr_all_import_maps ctx = SND (SND (SND (SND (SND (SND (SND (SND ctx)))))))
 End
 
 Definition expr_with_local_types_def:
@@ -501,7 +594,19 @@ Definition expr_with_local_types_def:
      (expr_current_nsid ctx,
       (expr_import_map ctx,
        (expr_const_names ctx,
-        (local_types, (expr_toplevel_types ctx, expr_override_map ctx))))))
+        (local_types, (expr_toplevel_types ctx,
+          (expr_override_map ctx,
+           (expr_constants ctx, expr_all_import_maps ctx))))))))
+End
+
+Definition expr_with_constants_def:
+  expr_with_constants ctx constants =
+    (expr_main_src_id ctx,
+     (expr_current_nsid ctx,
+      (expr_import_map ctx,
+       (expr_const_names ctx,
+        (expr_local_types ctx, (expr_toplevel_types ctx,
+          (expr_override_map ctx, (constants, expr_all_import_maps ctx))))))))
 End
 
 Definition lookup_local_type_def:
@@ -569,13 +674,23 @@ Definition signature_type_ctx_def:
     (expr_main_src_id ctx, resolve_source_ref ctx func_src, expr_import_map ctx)
 End
 
+(* A reference to an evaluated constant is its value at the reference's type,
+   the type its position expects: with B: constant(Bytes[5]), the reference B
+   in A: constant(Bytes[10]) = B is a Bytes[10]. Other top-level names stay
+   references. *)
+Definition top_level_ref_def:
+  top_level_ref ctx ty nsid =
+    case ALOOKUP (expr_constants ctx) nsid of
+    | SOME l => Literal ty l
+    | NONE => TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
+End
+
 (* Bare references to constants and immutables are translated as
    module-qualified top-level names; ordinary names remain local/scoped. *)
 Definition make_name_def:
   make_name ctx ty id =
     if MEM id (expr_const_names ctx)
-    then let nsid = (expr_current_nsid ctx, id) in
-         TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
+    then top_level_ref ctx ty (expr_current_nsid ctx, id)
     else Name (lookup_local_type ctx id ty) id
 End
 
@@ -587,12 +702,16 @@ Definition make_name_target_def:
 End
 
 (* Python lowers I(addr) to a stack value (_lower_interface_constructor), so
-   the address is loaded where the constructor appears. *)
+   the address is loaded where the constructor appears. Vyper rejects a
+   constructor without an address; its translation keeps the empty operand
+   list, which fails Acc's arity check. *)
 Definition interface_constructor_result_def:
   interface_constructor_result ty [Literal _ (BytesL bs)] =
     Literal ty (BytesL bs) /\
-  interface_constructor_result _ args =
-    Builtin (BaseT AddressT) (Acc Address) [HD args]
+  interface_constructor_result _ [] =
+    Builtin (BaseT AddressT) (Acc Address) [] /\
+  interface_constructor_result _ (addr::_) =
+    Builtin (BaseT AddressT) (Acc Address) [addr]
 End
 
 (* Cross-module flag result metadata may omit its declaration source. Recover
@@ -665,10 +784,11 @@ Definition translate_attribute_def:
     else if obj = "self" then
       let nsid = (resolve_source_ref ctx attr_src_id_opt, attr) in
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
-    (* Module variable access (lib1.x): use its canonical declaration type. *)
-    else if tc = SOME "module" then
-      let nsid = (resolve_module_alias ctx obj src_id_opt, attr) in
-      TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
+    (* Module variable access (lib1.x): use its canonical declaration type.
+       Annotation nodes carry no typeclass, so an imported alias also counts. *)
+    else if tc = SOME "module" ∨
+            (tc = NONE ∧ IS_SOME (ALOOKUP (expr_import_map ctx) obj)) then
+      top_level_ref ctx ty (resolve_module_alias ctx obj src_id_opt, attr)
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_typeclass = SOME "interface" then
@@ -691,8 +811,14 @@ Definition translate_attribute_def:
       | NONE => Attribute ty translated_base attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
-      let nsid = (resolve_source_ref ctx attr_src_id_opt, attr) in
-      TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
+      top_level_ref ctx ty (resolve_source_ref ctx attr_src_id_opt, attr)
+    (* Annotation nodes carry no typeclass: resolve an alias path instead. *)
+    else if base_typeclass = NONE ∧
+            IS_SOME (resolve_module_expr (expr_all_import_maps ctx)
+                       (expr_import_map ctx) e) then
+      top_level_ref ctx ty
+        (resolve_module_expr (expr_all_import_maps ctx) (expr_import_map ctx) e,
+         attr)
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translated_base]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
     else if attr = "address" /\ base_typeclass = SOME "interface" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
@@ -737,10 +863,10 @@ End
 Definition expr_base_target_def:
   expr_base_target (Name _ id) = SOME (NameTarget id) /\
   expr_base_target (TopLevelName _ nsid) = SOME (TopLevelNameTarget nsid) /\
-  expr_base_target (Subscript _ base idx) =
-    OPTION_MAP (\tgt. SubscriptTarget tgt idx) (expr_base_target base) /\
-  expr_base_target (Attribute _ base attr) =
-    OPTION_MAP (\tgt. AttributeTarget tgt attr) (expr_base_target base) /\
+  expr_base_target (Subscript _ obj idx) =
+    OPTION_MAP (\tgt. SubscriptTarget tgt idx) (expr_base_target obj) /\
+  expr_base_target (Attribute _ obj attr) =
+    OPTION_MAP (\tgt. AttributeTarget tgt attr) (expr_base_target obj) /\
   expr_base_target _ = NONE
 End
 
@@ -760,8 +886,8 @@ Definition translate_module_call_def:
                       SOME sid => source_id_to_nsid (expr_main_src_id ctx) sid
                     | NONE =>
                       case func of
-                        JE_Attribute base _ _ _ _ _ _ =>
-                          (case extract_innermost_module_src base of
+                        JE_Attribute obj _ _ _ _ _ _ =>
+                          (case extract_innermost_module_src obj of
                              SOME src => resolve_source_ref ctx src
                            | NONE => nsid)
                       | _ => nsid in
@@ -781,7 +907,7 @@ Definition translate_call_def:
     | JE_Name name tc _ _ =>
         if tc = SOME "interface" then interface_constructor_result rty args'
         else make_builtin_call rty name args' kwargs' ret_ty
-    | JE_Attribute base fname _ _ _ _ _ =>
+    | JE_Attribute obj fname _ _ _ _ _ =>
         (* Interface shortcuts take priority over pop and self calls. *)
         if fname = "__at__" \/ fname = "__interface__" then
           interface_constructor_result rty args'
@@ -790,7 +916,7 @@ Definition translate_call_def:
            | SOME tgt => Pop rty tgt
            | NONE => Call rty (IntCall (NONE, "pop")) args' NONE)
         else
-          (case base of
+          (case obj of
            | JE_Name id _ _ _ =>
                if id = "self" then
                  Call rty
@@ -801,34 +927,28 @@ Definition translate_call_def:
     | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
 End
 
-Definition json_keyword_bool_def:
-  json_keyword_bool name kws default =
-    case find_keyword name kws of
-      SOME (JE_Bool b) => b
-    | _ => default
-End
-
 (* Recognize the source shape before translating msg.data: it is not an
    ordinary bounded bytes value in the internal AST. *)
 Definition is_calldata_len_call_def:
   is_calldata_len_call (JE_Name name _ _ _)
-    [JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _] [] =
-      (name = "len" /\ base = "msg" /\ attr = "data") /\
+    [JE_Attribute (JE_Name obj _ _ _) attr _ _ _ _ _] [] =
+      (name = "len" /\ obj = "msg" /\ attr = "data") /\
   is_calldata_len_call _ _ _ = F
 End
 
-(* A compiler-folded integer is a compile-time length, not a runtime index. *)
+(* The length is a compile-time value, not a runtime operand. *)
 Definition calldata_slice_length_def:
-  calldata_slice_length (JE_Int i _) =
-    (if 0 < i /\ i < &(2 ** 256) then SOME (Num i) else NONE) /\
-  calldata_slice_length (JE_Folded _ folded) = calldata_slice_length folded /\
-  calldata_slice_length _ = NONE
+  calldata_slice_length e =
+    case eval_constant e of
+    | SOME (IntV i) =>
+        if 0 < i /\ i < &(2 ** 256) then SOME (Num i) else NONE
+    | _ => NONE
 End
 
 Definition is_calldata_slice_call_def:
   is_calldata_slice_call (JE_Name name _ _ _)
-    (JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _ :: _) =
-      (name = "slice" /\ base = "msg" /\ attr = "data") /\
+    (JE_Attribute (JE_Name obj _ _ _) attr _ _ _ _ _ :: _) =
+      (name = "slice" /\ obj = "msg" /\ attr = "data") /\
   is_calldata_slice_call _ _ = F
 End
 
@@ -837,12 +957,18 @@ Definition calldata_slice_bound_def:
   calldata_slice_bound _ _ = NONE
 End
 
+Theorem calldata_slice_bound_length:
+  calldata_slice_bound args kwargs = SOME n ==> LENGTH args = 3
+Proof
+  strip_tac >> gvs[oneline calldata_slice_bound_def, AllCaseEqs()]
+QED
+
 (* Match only the dedicated source operand; compiler type/source metadata
    does not turn msg.data into an ordinary bounded bytes expression. *)
 Definition is_raw_call_calldata_call_def:
   is_raw_call_calldata_call (JE_Name name _ _ _)
-    [target; JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _] =
-      (name = "raw_call" /\ base = "msg" /\ attr = "data") /\
+    [target; JE_Attribute (JE_Name obj _ _ _) attr _ _ _ _ _] =
+      (name = "raw_call" /\ obj = "msg" /\ attr = "data") /\
   is_raw_call_calldata_call _ _ = F
 End
 
@@ -910,8 +1036,6 @@ Definition translate_expr_def:
 
   (translate_expr ctx JE_Ellipsis = Literal (BaseT BoolT) (BoolL T)) /\
 
-  (translate_expr ctx (JE_Folded original folded) = translate_expr ctx folded) /\
-
   (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
     let ty = translate_type (expr_type_ctx ctx) ret_ty in
     if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\
@@ -927,16 +1051,23 @@ Definition translate_expr_def:
       base_type_name base_typeclass attr_src_id_opt ret_ty) /\
 
   (* Subscript *)
+  (* A tuple index is a compile-time value. *)
   (translate_expr ctx (JE_Subscript arr idx ret_ty) =
-    Subscript (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr ctx arr) (translate_expr ctx idx)) /\
+    let arr' = translate_expr ctx arr in
+    let idx' = translate_expr ctx idx in
+    Subscript (translate_type (expr_type_ctx ctx) ret_ty) arr'
+      (case expr_type arr' of TupleT _ => fold_constant idx' | _ => idx')) /\
 
   (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
   (translate_expr ctx (JE_NamedExpr target value) =
     Literal (BaseT BoolT) (BoolL T)) /\
 
   (* BinOp *)
+  (* The checker needs a literal exponent unless the base is one, so a
+     compile-time exponent is folded. *)
   (translate_expr ctx (JE_BinOp l op r ret_ty) =
-    Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
+    Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op))
+      [translate_expr ctx l; exponent_operand op (translate_expr ctx r)]) /\
 
   (translate_expr ctx (JE_Compare l op r) =
     Builtin (BaseT BoolT) (Bop (translate_binop op))
@@ -970,23 +1101,23 @@ Definition translate_expr_def:
     if is_calldata_len_call func args kwargs then
       Builtin (BaseT (UintT 256)) CalldataLen []
     else if is_calldata_slice_call func args then
-      (case calldata_slice_bound args kwargs of
+      (let args' = translate_expr_list ctx args in
+       case calldata_slice_bound args' kwargs of
        | SOME n => Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n)
-                     [EL 1 (translate_expr_list ctx args)]
-       (* Rejection marker for the total translator; never a zero-length slice.
-          The type checker rejects CalldataSlice 0 regardless of operands. *)
-       | NONE => Builtin (BaseT (BytesT (Dynamic 0))) (CalldataSlice 0) [])
+                     [EL 1 args']
+       | NONE => rejected_expr)
     else if is_raw_call_calldata_call func args then
       let kwargs' = translate_kwargs ctx kwargs in
+      kwargs_checked kwargs' (
       Call (translate_type (expr_type_ctx ctx) ret_ty)
         (RawCallCalldataTarget (raw_call_flags_of_kwargs kwargs'))
-        (translate_expr ctx (HD args) :: MAP SND (ext_call_kwargs kwargs')) NONE
+        (translate_expr ctx (HD args) :: MAP SND (ext_call_kwargs kwargs')) NONE)
     else let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
     let translated_pop_target =
       case func of
-      | JE_Attribute base fname _ _ _ _ _ =>
-          if fname = "pop" then expr_base_target (translate_expr ctx base)
+      | JE_Attribute obj fname _ _ _ _ _ =>
+          if fname = "pop" then expr_base_target (translate_expr ctx obj)
           else NONE
       | _ => NONE in
     translate_call ctx func args' kwargs' ret_ty src_id_opt
@@ -997,36 +1128,38 @@ Definition translate_expr_def:
   (translate_expr ctx
       (JE_ExtCall func_name func_src arg_types ret_ty target args keywords) =
     let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
-    let skip_check = json_keyword_bool "skip_contract_check" keywords F in
+    let skip_check = kwarg_bool "skip_contract_check" (translate_kwargs ctx keywords) F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
     let args' = translate_expr_list ctx args in
     (* Vyper records the full declared parameter list in argument_types, even
        when trailing defaulted parameters are omitted.  ExtCall carries the
        effective ABI signature selected at this call site. *)
+    kwargs_checked (translate_kwargs ctx keywords) (
     Call ret_ty'
       (ExtCall F skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
          ret_ty') (MAP FST kws))
-      (translate_expr ctx target :: args' ++ MAP SND kws) NONE) /\
+      (translate_expr ctx target :: args' ++ MAP SND kws) NONE)) /\
 
   (* StaticCall - read-only external call (is_static = T); same operand
      layout as ExtCall, and Vyper rejects value= here. *)
   (translate_expr ctx
       (JE_StaticCall func_name func_src arg_types ret_ty target args keywords) =
     let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
-    let skip_check = json_keyword_bool "skip_contract_check" keywords F in
+    let skip_check = kwarg_bool "skip_contract_check" (translate_kwargs ctx keywords) F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
     let args' = translate_expr_list ctx args in
     (* See ExtCall above: retain only the effective ABI argument types. *)
+    kwargs_checked (translate_kwargs ctx keywords) (
     Call ret_ty'
       (ExtCall T skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
          ret_ty') (MAP FST kws))
-      (translate_expr ctx target :: args' ++ MAP SND kws) NONE) /\
+      (translate_expr ctx target :: args' ++ MAP SND kws) NONE)) /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list ctx [] = []) /\
@@ -1086,75 +1219,162 @@ End
 
 (* ===== Iterator Translation ===== *)
 
-Definition json_expr_int_opt_def:
-  (json_expr_int_opt (JE_Int v _) = SOME v) /\
-  (json_expr_int_opt (JE_UnaryOp JUop_USub e _) =
-     case json_expr_int_opt e of
-       SOME n => SOME (0 - n)
-     | NONE => NONE) /\
-  (json_expr_int_opt (JE_BinOp l JBop_Add r _) =
-     case (json_expr_int_opt l, json_expr_int_opt r) of
-       (SOME n1, SOME n2) => SOME (n1 + n2)
-     | _ => NONE) /\
-  (json_expr_int_opt (JE_BinOp l JBop_Sub r _) =
-     case (json_expr_int_opt l, json_expr_int_opt r) of
-       (SOME n1, SOME n2) => SOME (n1 - n2)
-     | _ => NONE) /\
-  (json_expr_int_opt _ = NONE)
+(* The bound comes from bound= when given, otherwise from compile-time range
+   arguments; array iteration takes it from the array type. *)
+Definition constant_count_def:
+  constant_count e =
+    case eval_constant e of
+    | SOME (IntV i) => if 0 <= i then SOME (Num i) else NONE
+    | _ => NONE
 End
 
-
-Definition range_bound_of_args_def:
-  (range_bound_of_args [] = NONE) /\
-  (range_bound_of_args [e] =
-     case json_expr_int_opt e of
-       SOME n => if 0 <= n then SOME (Num n) else SOME 0
-     | NONE => NONE) /\
-  (range_bound_of_args (s::e::_) =
-     case (json_expr_int_opt s, json_expr_int_opt e) of
-       (SOME s', SOME e') =>
-         if s' <= e' then SOME (Num (e' - s')) else SOME 0
-     | _ => NONE)
+Definition range_count_def:
+  range_count (s : expr) e =
+    case (eval_constant s, eval_constant e) of
+    | (SOME (IntV i), SOME (IntV j)) => if i <= j then Num (j - i) else 0
+    | _ => 0
 End
-
-
-Definition folded_bound_of_args_def:
-  (folded_bound_of_args [] = NONE) /\
-  (folded_bound_of_args [fv] =
-     case fv of
-       SOME n => if 0 <= n then SOME (Num n) else SOME 0
-     | NONE => NONE) /\
-  (folded_bound_of_args (fs::fe::_) =
-     case (fs, fe) of
-       (SOME s, SOME e) =>
-         if s <= e then SOME (Num (e - s)) else SOME 0
-     | _ => NONE)
-End
-
 
 Definition get_iter_bound_def:
-  (get_iter_bound (JIter_Range args _ (SOME n)) = n) /\
-  (get_iter_bound (JIter_Range args fvs NONE) =
-     case range_bound_of_args args of
-       SOME n => n
-     | NONE => case folded_bound_of_args fvs of SOME n => n | NONE => 0) /\
-  (get_iter_bound (JIter_Array _ (JT_StaticArray _ len)) = len) /\
-  (get_iter_bound (JIter_Array _ (JT_DynArray _ len)) = len) /\
-  (get_iter_bound (JIter_Array _ _) = 0)
+  (get_iter_bound ctx (JIter_Range args (SOME b)) =
+     case constant_count (translate_expr ctx b) of SOME n => n | NONE => 0) /\
+  (get_iter_bound ctx (JIter_Range [e] NONE) =
+     range_count (Literal (BaseT (UintT 256)) (IntL 0)) (translate_expr ctx e)) /\
+  (get_iter_bound ctx (JIter_Range (s::e::_) NONE) =
+     range_count (translate_expr ctx s) (translate_expr ctx e)) /\
+  (get_iter_bound ctx (JIter_Range [] NONE) = 0) /\
+  (get_iter_bound ctx (JIter_Array _ (JT_StaticArray _ len)) = len) /\
+  (get_iter_bound ctx (JIter_Array _ (JT_DynArray _ len)) = len) /\
+  (get_iter_bound ctx (JIter_Array _ _) = 0)
+End
+
+
+(* Declaration validation rejects a range whose bound does not evaluate. *)
+Definition iter_bound_resolved_def:
+  (iter_bound_resolved ctx (JIter_Range args b) =
+     EVERY (λe. IS_SOME (eval_constant (translate_expr ctx e)))
+       (case b of SOME b => [b] | NONE => args)) /\
+  (iter_bound_resolved ctx (JIter_Array _ _) = T)
 End
 
 
 Definition translate_iter_def:
-  (translate_iter ctx var_ty (JIter_Range [] _ _) =
+  (translate_iter ctx var_ty (JIter_Range [] _) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
           (Literal var_ty (IntL (integer$int_of_num 0)))) /\
-  (translate_iter ctx var_ty (JIter_Range [e] _ _) =
+  (translate_iter ctx var_ty (JIter_Range [e] _) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
           (translate_expr ctx e)) /\
-  (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
+  (translate_iter ctx var_ty (JIter_Range (s::e::_) _) =
     Range (translate_expr ctx s) (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Array e _) =
     Array (translate_expr ctx e))
+End
+
+
+(* ===== Declaration Types ===== *)
+
+(* Annotation bounds are compile-time values of their source expressions.
+   annotation_resolved rejects a bound that does not evaluate. *)
+Definition annotation_bound_def:
+  annotation_bound ctx e =
+    case constant_count (translate_expr ctx e) of SOME n => n | NONE => 0
+End
+
+Definition bound_resolved_def:
+  bound_resolved ctx e = IS_SOME (constant_count (translate_expr ctx e))
+End
+
+Definition annotation_resolved_def:
+  (annotation_resolved nominal_index all_import_maps ctx (JTA_Named name) =
+    if name = "bool" ∨ name = "address" ∨ name = "self" ∨
+       name = "decimal" ∨ name = "(void)"
+    then T
+    else IS_SOME (resolve_annotation_name nominal_index (expr_type_ctx ctx) name)) ∧
+  (annotation_resolved nominal_index all_import_maps ctx (JTA_String n) =
+    bound_resolved ctx n) ∧
+  (annotation_resolved nominal_index all_import_maps ctx (JTA_Bytes n) =
+    bound_resolved ctx n) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_StaticArray ty n) =
+    (bound_resolved ctx n ∧
+     annotation_resolved nominal_index all_import_maps ctx ty)) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_DynArray ty n) =
+    (bound_resolved ctx n ∧
+     annotation_resolved nominal_index all_import_maps ctx ty)) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_Tuple tys) =
+    EVERY (annotation_resolved nominal_index all_import_maps ctx) tys) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_Qualified path name) =
+    if name = "__interface__"
+    then IS_SOME (resolve_qualified_type_path all_import_maps
+                    (expr_type_ctx ctx) path)
+    else IS_SOME (resolve_qualified_annotation nominal_index all_import_maps
+                    (expr_type_ctx ctx) path name)) ∧
+  (annotation_resolved nominal_index all_import_maps ctx _ = T)
+Termination
+  WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
+End
+
+(* Elaborate declaration annotations from syntax and the declaration index.
+   This function is used only after annotation_resolved has succeeded. *)
+Definition elaborate_annotation_def:
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Integer bits T) = BaseT (IntT bits)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Integer bits F) = BaseT (UintT bits)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_BytesM m) = BaseT (BytesT (Fixed m))) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_String n) = BaseT (StringT (annotation_bound ctx n))) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Bytes n) =
+    BaseT (BytesT (Dynamic (annotation_bound ctx n)))) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_StaticArray ty n) =
+    ArrayT (elaborate_annotation nominal_index all_import_maps ctx ty)
+      (Fixed (annotation_bound ctx n))) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_DynArray ty n) =
+    ArrayT (elaborate_annotation nominal_index all_import_maps ctx ty)
+      (Dynamic (annotation_bound ctx n))) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Tuple tys) =
+    TupleT (MAP (elaborate_annotation nominal_index all_import_maps ctx) tys)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Named name) =
+    if name = "bool" then BaseT BoolT
+    else if name = "address" ∨ name = "self" then BaseT AddressT
+    else if name = "decimal" then BaseT DecimalT
+    else if name = "(void)" then NoneT
+    else case resolve_annotation_name nominal_index (expr_type_ctx ctx) name of
+         | SOME (kind, nsid) => nominal_type kind nsid
+         | NONE => NoneT) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Qualified path name) =
+    if name = "__interface__" then BaseT AddressT
+    else case resolve_qualified_annotation nominal_index all_import_maps
+                (expr_type_ctx ctx) path name of
+         | SOME (kind, nsid) => nominal_type kind nsid
+         | NONE => NoneT) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx JTA_None = NoneT)
+Termination
+  WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
+End
+
+Definition declaration_type_valid_def:
+  declaration_type_valid nominal_index all_import_maps ctx inferred ann =
+    (annotation_resolved nominal_index all_import_maps ctx ann ∧
+     (ann = JTA_None ∨ inferred_type_consistent (expr_type_ctx ctx)
+       (elaborate_annotation nominal_index all_import_maps ctx ann) inferred))
+End
+
+Definition canonical_decl_type_def:
+  canonical_decl_type nominal_index all_import_maps ctx inferred ann =
+    if ann = JTA_None then translate_type (expr_type_ctx ctx) inferred
+    else elaborate_annotation nominal_index all_import_maps ctx ann
 End
 
 
@@ -1164,10 +1384,10 @@ Definition custom_error_target_def:
   custom_error_target ctx (JE_Name name (SOME "error") src ty) =
     SOME (resolve_source_ref ctx src, name) ∧
   custom_error_target ctx
-      (JE_Attribute base name (SOME "error") base_name base_tc src ty) =
+      (JE_Attribute obj name (SOME "error") base_name base_tc src ty) =
     SOME
       (resolve_func_module_ref ctx
-        (JE_Attribute base name (SOME "error") base_name base_tc src ty) src,
+        (JE_Attribute obj name (SOME "error") base_name base_tc src ty) src,
        name) /\
   custom_error_target ctx _ = NONE
 End
@@ -1231,23 +1451,22 @@ Definition translate_stmt_def:
        (translate_stmts nominal_index all_import_maps ctx body)
        (translate_stmts nominal_index all_import_maps ctx orelse)) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_For var ty ann iter body) =
-    let var_ty = canonical_decl_type nominal_index all_import_maps
-      (expr_type_ctx ctx) ty ann in
+    let var_ty = canonical_decl_type nominal_index all_import_maps ctx ty ann in
     let body_ctx = expr_with_local_types ctx
       ((var, var_ty) :: expr_local_types ctx) in
     For var var_ty (translate_iter ctx var_ty iter)
-        (get_iter_bound iter)
+        (get_iter_bound ctx iter)
         (translate_stmts nominal_index all_import_maps body_ctx body)) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_AnnAssign var ty ann val) =
     AnnAssign var
-      (canonical_decl_type nominal_index all_import_maps
-        (expr_type_ctx ctx) ty ann)
+      (canonical_decl_type nominal_index all_import_maps ctx ty ann)
       (translate_expr ctx val)) /\
   (translate_stmt nominal_index all_import_maps ctx (JS_AugAssign tgt op val) =
-    AugAssign (expr_type (translate_expr ctx val))
-      (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
+    let val' = exponent_operand op (translate_expr ctx val) in
+    AugAssign (expr_type val') (translate_base_target ctx tgt)
+      (translate_binop op) val') /\
   (translate_stmt nominal_index all_import_maps ctx (JS_Append tgt val) =
     Append (translate_base_target ctx tgt) (translate_expr ctx val)) /\
   (translate_stmts nominal_index all_import_maps ctx [] = []) /\
@@ -1256,8 +1475,8 @@ Definition translate_stmt_def:
       case stmt of
         JS_AnnAssign var ty ann _ =>
           expr_with_local_types ctx
-            ((var, canonical_decl_type nominal_index all_import_maps
-              (expr_type_ctx ctx) ty ann) :: expr_local_types ctx)
+            ((var, canonical_decl_type nominal_index all_import_maps ctx ty ann)
+             :: expr_local_types ctx)
       | _ => ctx
     in
       translate_stmt nominal_index all_import_maps ctx stmt ::

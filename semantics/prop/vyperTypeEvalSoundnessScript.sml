@@ -100,8 +100,9 @@ QED
 Theorem lift_option_type_INL_eq[local]:
   lift_option_type opt msg st = (INL v,st') <=> opt = SOME v /\ st' = st
 Proof
-  Cases_on `opt` >> simp[lift_option_type_def, return_def, raise_def] >>
-  metis_tac[]
+  Cases_on `opt`
+  >- simp[lift_option_type_def, return_def, raise_def] >>
+  simp[lift_option_type_def, return_def, raise_def] >> metis_tac[]
 
 QED
 Theorem well_typed_exprs_EVERY[local]:
@@ -298,7 +299,7 @@ QED
 
 Theorem create_call_evaluation_safe_args[local]:
   call_evaluation_safe cx
-    (int_calls_expr (Call loc (CreateTarget kind has_salt rof) es extra)) ==>
+    (int_calls_expr (Call loc (CreateTarget kind has_salt rof kw_order) es extra)) ==>
   call_evaluation_safe cx (int_calls_exprs es)
 Proof
   simp[int_calls_expr_def]
@@ -904,14 +905,6 @@ Proof
     else all_tac g) >>
   gvs[evaluate_def, bind_def, return_def, raise_def,
       pairTheory.UNCURRY, COND_RATOR, AllCaseEqs()]
-  (* Previous integration tail:
-  Cases_on `c` >> simp[] >>
-  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
-  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
-  BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
-  simp[bind_def, raise_def, lift_option_def, return_def,
-       pairTheory.UNCURRY, AllCaseEqs()]
-  *)
   >- metis_tac[expr_no_fallthrough_no_success] >>
   Cases_on `c` >> simp[] >>
   BasicProvers.TOP_CASE_TAC >- simp[raise_def] >>
@@ -4135,16 +4128,6 @@ Resume eval_scc_type_sound_results_mutual[Iterator_Range]:
       strip_tac >> gvs[return_def, no_type_error_result_def] >> metis_tac[]) >>
     qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
     strip_tac >> gvs[no_type_error_result_def]) >>
-  (* Previous tail used iterator_range_expr_error_eq after evaluate_def
-     had already expanded the iterator equation:
-  strip_tac >>
-  drule_all iterator_range_expr_error_eq >> strip_tac >>
-  qpat_x_assum `res = INR y` SUBST_ALL_TAC >>
-  qpat_x_assum `st' = st1` SUBST_ALL_TAC >>
-  qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
-  qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
-  simp[no_type_error_result_def]
-  *)
   qpat_x_assum `!s'' tv1 t s''' s t'. _` kall_tac >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
   qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ _ | INR _ => T` kall_tac >>
@@ -4397,8 +4380,6 @@ Resume eval_scc_type_sound_results_mutual[Expr_IfExp]:
   >- (asm_x "true_branch" kall_tac >> asm_x "false_branch" kall_tac >>
       qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def] >> strip_tac >> gvs[]) >>
-  (* Previously: rename1 `eval_expr cx e st = (INL cp,st1)`;
-     cp is a constant in the integrated grammar. *)
   rename1 `eval_expr cx e st = (INL cond_pv,st1)` >>
   qpat_x_assum `!env st res st'. _ ==> case res of INL pv => live_memory_result _ pv | INR _ => T`
     (qspecl_then [`env`,`st`,`INL cond_pv`,`st1`] mp_tac) >>
@@ -7474,7 +7455,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
   >- (
     strip_tac >>
     drule create_call_evaluation_safe_args >> strip_tac >>
-    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _) _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _ kw_order) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     Cases_on `kind`
     >~ [`CreateFromBlueprint raw_args`] >- (
@@ -7541,6 +7522,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
               simp[runtime_consistent_def] >>
             strip_tac >>
             drule_all create_tail_result_sound_simp >>
+            disch_then (mp_tac o SPEC_ALL) >>
             simp[no_type_error_result_def] >>
             strip_tac >> Cases_on `res` >>
             gvs[expr_result_typed_def, expr_runtime_typed_def,
@@ -7614,6 +7596,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
                          simp[DROP_DROP]) >>
                       `runtime_consistent env cx salt_st` by simp[runtime_consistent_def] >>
                       drule_all create_tail_result_sound_simp >>
+                      disch_then (mp_tac o SPEC_ALL) >>
                       simp[no_type_error_result_def] >> strip_tac >> Cases_on `res` >>
                       gvs[expr_result_typed_def, expr_runtime_typed_def,
                           value_result_typed_def, eval_result_typed_def, expr_type_def]) >>
@@ -7639,6 +7622,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
       strip_tac >>
       drule_all create_tail_result_sound_simp >>
+      disch_then (mp_tac o SPEC_ALL) >>
       simp[no_type_error_result_def] >>
       strip_tac >> Cases_on `res` >>
       gvs[expr_result_typed_def, expr_runtime_typed_def,
@@ -8239,7 +8223,6 @@ Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_CreateTarget]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Call_CreateTarget"
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Call_SelfDestructTarget]:
-  (* Previously: RESUME_TAC >> trace_result_tac "Trace_Expr_Call_SelfDestructTarget" *)
   RESUME_TAC >> trace_value_start_tac >>
   drule selfdestruct_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
@@ -8402,14 +8385,12 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
   rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
   imp_res_tac read_results_state >>
   imp_res_tac finally_set_scopes >>
-  (* Previously the old finalizer equation matched the lock frame directly. *)
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM DE_MORGAN_THM]) >>
   imp_res_tac finally_unless_halt_pop_release_cases >>
   imp_res_tac finally_conditional_lock_scopes >>
   qpat_assum `typed_scope_transition _ _`
     (mp_then Any irule typed_scope_transition_trans) >>
   irule typed_scope_transition_scopes >>
-  (* Previously: asm_rewrite_tac[] (loops on reflexive state equations). *)
   simp[] >>
   gvs[push_function_def, return_def, AllCaseEqs()] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
@@ -9282,6 +9263,12 @@ Proof
   simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
   Cases_on `build_create_code (get_tenv cx) kind x st.accounts x' blueprint_size` >>
   simp[bind_apply, ignore_bind_apply, return_def, raise_def] >>
+  Cases_on `IS_SOME st.outcomes`
+  >- (rpt (IF_CASES_TAC >>
+        simp[bind_apply, ignore_bind_apply, check_def, assert_def,
+             return_def, raise_def]) >>
+      rpt strip_tac >> drule vyperCreateTheory.create_oracle_result_address >>
+      metis_tac[]) >>
   rpt (IF_CASES_TAC >>
     simp[bind_apply, ignore_bind_apply, get_transient_storage_def,
          get_pending_deletions_def, update_accounts_def,
@@ -9406,7 +9393,6 @@ Proof
        update_accounts_def, update_transient_def, append_logs_def] >>
   rpt (IF_CASES_TAC >>
     simp[bind_apply, ignore_bind_apply, return_def, raise_def]) >>
-  (* Previously: rpt strip_tac >> gvs[]; pending deletions now also update. *)
   rpt strip_tac >> gvs[update_pending_deletions_def, bind_apply, return_def]
 QED
 
@@ -9981,5 +9967,7 @@ val _ = List.app (fn (name,th) =>
       print (name ^ " is closed\n")
     else raise Fail (name ^ " is not closed")
   end)
-  [("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
+  [("stmt_no_control_escape_eval_no_loop_control",stmt_no_control_escape_eval_no_loop_control),
+   ("eval_scc_type_sound_results_mutual",eval_scc_type_sound_results_mutual),
+   ("eval_scc_type_sound_mutual",eval_scc_type_sound_mutual),
    ("eval_expr_read_type_sound",eval_expr_read_type_sound)];

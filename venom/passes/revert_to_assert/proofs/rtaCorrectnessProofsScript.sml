@@ -90,39 +90,6 @@ Proof
   metis_tac[fresh_vars_are_iszero_vars]
 QED
 
-(* Operand agreement: fresh vars not in original operands *)
-Triviality rta_operand_agreement:
-  !fn bb inst x.
-    fresh_vars_not_in_function fn /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    MEM (Var x) inst.inst_operands
-  ==>
-    !s1 s2. state_equiv (fresh_vars_in_function fn) s1 s2 ==>
-      lookup_var x s1 = lookup_var x s2
-Proof
-  rw[state_equiv_def, execution_equiv_def] >>
-  first_x_assum irule >>
-  CCONTR_TAC >> fs[] >>
-  imp_res_tac fresh_vars_are_iszero_vars >>
-  fs[fresh_vars_not_in_function_def, fresh_vars_not_in_block_def] >>
-  metis_tac[]
-QED
-
-(* Identity block sim: when transform doesn't change the block *)
-Triviality identity_block_sim:
-  !R_ok R_term bbs1 bbs2 fuel ctx bb s.
-    (!s. R_ok s s) /\ (!s. R_term s s) /\
-    transform_block fn bb = bb
-  ==>
-    resolving_block_sim R_ok R_term bbs1 bbs2
-      (exec_block fuel ctx bb s) (exec_block fuel ctx bb s)
-Proof
-  rw[resolving_block_sim_def] >>
-  qexists_tac `0` >>
-  rw[resolves_to_def] >>
-  metis_tac[lift_result_refl_proof]
-QED
-
 (* ===== Per-block resolving_block_sim ===== *)
 
 (* transform_jnz always produces non-empty lists *)
@@ -282,30 +249,6 @@ Proof
   qexists_tac `bb` >> simp[] >>
   rw[fresh_vars_in_block_def, PULL_EXISTS] >>
   metis_tac[]
-QED
-
-(* Helper: execution_equiv holds when states differ only at a fresh var *)
-Triviality execution_equiv_update_fresh:
-  !fresh x v s1 s2.
-    x IN fresh /\ execution_equiv fresh s1 s2
-  ==>
-    execution_equiv fresh (update_var x v s1) s2
-Proof
-  rw[execution_equiv_def, update_var_def, lookup_var_def] >>
-  rpt strip_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> metis_tac[]
-QED
-
-(* Helper: state_equiv holds when states differ only at a fresh var *)
-Triviality state_equiv_update_fresh:
-  !fresh x v s1 s2.
-    x IN fresh /\ state_equiv fresh s1 s2
-  ==>
-    state_equiv fresh (update_var x v s1) s2
-Proof
-  rw[state_equiv_def, update_var_def, execution_equiv_def, lookup_var_def] >>
-  rpt strip_tac >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> metis_tac[]
 QED
 
 (* When transform_jnz fires at index idx, the transformed list is at least
@@ -874,32 +817,7 @@ Proof
   )
 QED
 
-(* Main per-block sim: specialization to vs_inst_idx = 0 *)
-Triviality rta_per_block_sim:
-  !fn fresh.
-    fresh_vars_in_function fn SUBSET fresh /\
-    fresh_vars_not_in_function fn /\
-    no_invoke_in_function fn
-  ==>
-    !bb fuel ctx s.
-      MEM bb fn.fn_blocks /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-      resolving_block_sim (state_equiv fresh) (execution_equiv fresh)
-        fn.fn_blocks (MAP (transform_block fn) fn.fn_blocks)
-        (exec_block fuel ctx bb s)
-        (exec_block fuel ctx (transform_block fn bb) s)
-Proof
-  rpt strip_tac >>
-  irule rta_per_block_sim_gen >> simp[]
-QED
-
 (* ===== PHI prefix preservation by transform_block_insts ===== *)
-
-(* transform_jnz returns NONE for non-JNZ instructions *)
-Triviality transform_jnz_not_jnz:
-  !fn inst. inst.inst_opcode <> JNZ ==> transform_jnz fn inst = NONE
-Proof
-  rw[transform_jnz_def]
-QED
 
 (* PHI instructions are untouched by transform_jnz *)
 Triviality transform_jnz_phi:
@@ -984,17 +902,6 @@ Proof
   simp[transform_block_insts_phi_prefix_length] >>
   rpt strip_tac >>
   irule transform_block_insts_phi_prefix_el >> simp[]
-QED
-
-(* transform_block_insts preserves no_phis *)
-Triviality transform_block_insts_no_phis:
-  !fn insts.
-    EVERY (\i. i.inst_opcode <> PHI) insts ==>
-    EVERY (\i. i.inst_opcode <> PHI) (transform_block_insts fn insts)
-Proof
-  Induct_on `insts` >> rw[transform_block_insts_def] >>
-  Cases_on `transform_jnz fn h` >> gvs[] >>
-  drule transform_jnz_output_no_phis >> simp[]
 QED
 
 (* transform_jnz = NONE for all instructions before phi_prefix_length point *)
@@ -1149,7 +1056,7 @@ Proof
     qspecl_then [`state_equiv (fresh_vars_in_context ctx)`,
                  `execution_equiv (fresh_vars_in_context ctx)`,
                  `fn`, `transform_block fn`]
-      mp_tac resolving_block_sim_function_v2 >>
+      mp_tac resolving_block_sim_function >>
     simp[LET_THM] >>
     impl_tac >- (
       rpt conj_tac

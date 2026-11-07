@@ -21,7 +21,7 @@ Libs
 (* If an invariant P holds on the initial state and is preserved by
    each block, and each block transforms identically when P holds,
    then run_function on the transformed function is identical. *)
-Triviality run_blocks_map_inv_eq:
+Theorem run_blocks_map_inv_eq:
   !P bt fn fuel ctx s.
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s. MEM bb fn.fn_blocks /\ P s ==>
@@ -154,26 +154,7 @@ QED
 
 (* ===== Transform Shape Preservation ===== *)
 
-Theorem af_rewrite_inst_preserves[local]:
-  !dfg vi inst result.
-    af_rewrite_inst dfg vi inst = SOME result ==>
-    result.inst_outputs = inst.inst_outputs /\
-    result.inst_id = inst.inst_id
-Proof
-  rw[af_rewrite_inst_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem af_rewrite_inst_opcode[local]:
-  !dfg vi inst result.
-    af_rewrite_inst dfg vi inst = SOME result ==>
-    (result.inst_opcode = ASSIGN \/ result.inst_opcode = ADD)
-Proof
-  rw[af_rewrite_inst_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem af_transform_block_label[local]:
+Theorem af_transform_block_label:
   !dfg vi bb. (af_transform_block dfg vi bb).bb_label = bb.bb_label
 Proof
   rw[af_transform_block_def]
@@ -255,78 +236,6 @@ Theorem vi_sound_identity[local]:
 Proof
   rw[vi_sound_def, eval_operand_def, lookup_var_def] >>
   Cases_on `FLOOKUP s.vs_vars v` >> simp[wordsTheory.WORD_ADD_0]
-QED
-
-(* transfer_add result satisfies transfer_result_vi_sound preconditions *)
-Theorem transfer_add_vi_sound[local]:
-  !vi op1 op2 out_var s v1 v2.
-    vi_alist_sound vi s /\
-    eval_operand op1 s = SOME v1 /\
-    eval_operand op2 s = SOME v2 /\
-    (case vi_base (transfer_add (vi_lookup vi op1) (vi_lookup vi op2)
-                     (Var out_var)) of
-       SOME (Var v) => v <> out_var | _ => T) ==>
-    vi_sound (transfer_add (vi_lookup vi op1) (vi_lookup vi op2) (Var out_var))
-      out_var (s with vs_vars := s.vs_vars |+ (out_var, v1 + v2))
-Proof
-  rpt strip_tac >>
-  Cases_on `vi_lookup vi op1` >> Cases_on `vi_lookup vi op2` >>
-  rename1 `transfer_add (VarInfo b1 o1) (VarInfo b2 o2) _` >>
-  Cases_on `b1` >> Cases_on `b2` >>
-  gvs[transfer_add_def, vi_base_def] >>
-  imp_res_tac vi_lookup_eval >> gvs[] >>
-  TRY (irule transfer_result_vi_sound >> simp[] >>
-       Cases_on `x` >> gvs[] >>
-       metis_tac[wordsTheory.WORD_ADD_ASSOC, wordsTheory.WORD_ADD_COMM] >>
-       NO_TAC) >>
-  simp[vi_sound_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  metis_tac[wordsTheory.WORD_ADD_COMM]
-QED
-
-(* transfer_sub result satisfies vi_sound *)
-Theorem transfer_sub_vi_sound[local]:
-  !vi op1 op2 out_var s v1 v2.
-    vi_alist_sound vi s /\
-    eval_operand op1 s = SOME v1 /\
-    eval_operand op2 s = SOME v2 /\
-    (case vi_base (transfer_sub (vi_lookup vi op1) (vi_lookup vi op2)
-                     (Var out_var)) of
-       SOME (Var v) => v <> out_var | _ => T) ==>
-    vi_sound (transfer_sub (vi_lookup vi op1) (vi_lookup vi op2) (Var out_var))
-      out_var (s with vs_vars := s.vs_vars |+ (out_var, v1 - v2))
-Proof
-  rpt strip_tac >>
-  Cases_on `vi_lookup vi op1` >> Cases_on `vi_lookup vi op2` >>
-  rename1 `transfer_sub (VarInfo b1 o1) (VarInfo b2 o2) _` >>
-  Cases_on `b2` >> gvs[transfer_sub_def, vi_base_def] >>
-  imp_res_tac vi_lookup_eval >> gvs[] >>
-  TRY (simp[vi_sound_identity] >> NO_TAC) >>
-  Cases_on `b1` >> gvs[] >>
-  TRY (irule transfer_result_vi_sound >> simp[] >>
-       Cases_on `x` >> gvs[] >>
-       metis_tac[wordsTheory.WORD_ADD_SUB_ASSOC, wordsTheory.WORD_ADD_COMM] >>
-       NO_TAC) >>
-  simp[vi_sound_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  metis_tac[wordsTheory.WORD_ADD_SUB_ASSOC, wordsTheory.WORD_ADD_COMM]
-QED
-
-(* transfer_assign result satisfies vi_sound *)
-Theorem transfer_assign_vi_sound[local]:
-  !vi op1 out_var s v1.
-    vi_alist_sound vi s /\
-    eval_operand op1 s = SOME v1 /\
-    (case vi_base (transfer_assign (vi_lookup vi op1)) of
-       SOME (Var v) => v <> out_var | _ => T) ==>
-    vi_sound (transfer_assign (vi_lookup vi op1))
-      out_var (s with vs_vars := s.vs_vars |+ (out_var, v1))
-Proof
-  rpt strip_tac >>
-  Cases_on `vi_lookup vi op1` >> gvs[transfer_assign_def, vi_base_def] >>
-  imp_res_tac vi_lookup_eval >> gvs[] >>
-  Cases_on `o'` >> gvs[] >>
-  TRY (irule transfer_result_vi_sound >> simp[] >>
-       Cases_on `x` >> gvs[] >> metis_tac[] >> NO_TAC) >>
-  simp[vi_sound_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* Value-level soundness for af_rewrite_inst_step_eq *)
@@ -687,12 +596,6 @@ QED
 
 (* ===== Lattice Soundness Maintenance ===== *)
 
-Theorem vi_alist_sound_nil[local]:
-  !s. vi_alist_sound [] s
-Proof
-  rw[vi_alist_sound_def]
-QED
-
 (* ===== Block-Level Equality ===== *)
 
 Theorem get_instruction_map[local]:
@@ -888,7 +791,7 @@ Proof
   drule af_rewrite_inst_cases >> strip_tac >> gvs[]
 QED
 
-Theorem af_transform_inst_not_phi[local]:
+Theorem af_transform_inst_not_phi:
   !dfg vi inst.
     inst.inst_opcode <> PHI ==>
     (af_transform_inst dfg vi inst).inst_opcode <> PHI
@@ -918,22 +821,6 @@ Proof
   rpt gen_tac >>
   Cases_on `h.inst_opcode = PHI` >>
   simp[af_transform_inst_phi_identity, af_transform_inst_not_phi]
-QED
-
-(* vi_sound is preserved when the variable's value and base operand
-   value are unchanged. *)
-Theorem vi_sound_preserved_by_eq[local]:
-  !entry v s s'.
-    vi_sound entry v s /\
-    FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v /\
-    (case vi_base entry of
-       NONE => T
-     | SOME bop => eval_operand bop s' = eval_operand bop s) ==>
-    vi_sound entry v s'
-Proof
-  Cases_on `entry` >> rw[vi_sound_def, vi_base_def] >>
-  Cases_on `FLOOKUP s.vs_vars v` >> gvs[] >>
-  Cases_on `o'` >> gvs[]
 QED
 
 
@@ -1352,7 +1239,7 @@ Proof
 QED
 
 (* Helper: transformed block equals original block under vi_alist_sound *)
-Triviality af_block_eq_helper:
+Theorem af_block_eq_helper:
   !fn bb fuel ctx s.
     (!inst. MEM inst (fn_insts fn) ==>
        vi_entry_consistent (af_compute_fn_var_info fn) inst) /\
@@ -1405,7 +1292,7 @@ Proof
 QED
 
 (* Helper: vi_alist_sound is preserved through block execution *)
-Triviality af_P_preserved_helper:
+Theorem af_P_preserved_helper:
   !fn bb fuel ctx s s'.
     fn_inst_wf fn /\
     (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
@@ -1443,63 +1330,3 @@ Proof
   drule_all vi_alist_sound_fn_step >> simp[Abbr `vi`]
 QED
 
-Theorem af_transform_function_correct_proof:
-  !fuel ctx fn s.
-    (* SSA uniqueness: each variable defined at most once *)
-    (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-    (* Structural well-formedness *)
-    fn_inst_wf fn /\
-    (* Lattice soundness for initial state *)
-    vi_alist_sound (af_compute_fn_var_info fn) s /\
-    (* Per-instruction lattice consistency (from FOLDL + SSA) *)
-    (!inst. MEM inst (fn_insts fn) ==>
-       vi_entry_consistent (af_compute_fn_var_info fn) inst) /\
-    (* SSA: output variable not in operands *)
-    (!inst out_var. MEM inst (fn_insts fn) /\
-       inst.inst_outputs = [out_var] ==>
-       ~MEM (Var out_var) inst.inst_operands) /\
-    (* SSA: no cross-variable base references to output *)
-    (!inst out_var v entry. MEM inst (fn_insts fn) /\
-       inst.inst_outputs = [out_var] /\
-       ALOOKUP (af_compute_fn_var_info fn) v = SOME entry /\
-       v <> out_var /\ vi_base entry = SOME (Var out_var) ==> F) /\
-    (* No INVOKE instructions (affine folding is intra-procedural) *)
-    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> INVOKE) /\
-    (* Each instruction has 0 or 1 outputs *)
-    (!inst. MEM inst (fn_insts fn) ==>
-       inst.inst_outputs = [] \/
-       ?out_var. inst.inst_outputs = [out_var]) /\
-    (* Bidirectional operand reachability: original operands defined iff transform operands defined.
-       This ensures step equality holds even when operands are undefined (both sides error). *)
-    (!inst st. MEM inst (fn_insts fn) ==>
-       ((!v. MEM (Var v) inst.inst_operands ==> FLOOKUP st.vs_vars v <> NONE) <=>
-        (!v. MEM (Var v) (af_transform_inst (dfg_build_function fn)
-               (af_compute_fn_var_info fn) inst).inst_operands ==>
-             FLOOKUP st.vs_vars v <> NONE))) ==>
-    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (run_blocks fuel ctx fn s)
-      (run_blocks fuel ctx (af_transform_function fn) s)
-Proof
-  rpt strip_tac >>
-  `run_blocks fuel ctx (af_transform_function fn) s =
-   run_blocks fuel ctx fn s` suffices_by
-    (disch_then (fn th => REWRITE_TAC[th]) >>
-     irule lift_result_refl >> rw[state_equiv_refl, execution_equiv_refl]) >>
-  `af_transform_function fn =
-   function_map_transform
-     (af_transform_block (dfg_build_function fn)
-        (af_compute_fn_var_info fn)) fn` by
-    simp[af_transform_function_def, function_map_transform_def] >>
-  pop_assum (fn th => REWRITE_TAC[th]) >>
-  qspecl_then
-    [`vi_alist_sound (af_compute_fn_var_info fn)`,
-     `af_transform_block (dfg_build_function fn) (af_compute_fn_var_info fn)`,
-     `fn`, `fuel`, `ctx`, `s`]
-    mp_tac run_blocks_map_inv_eq >>
-  disch_then match_mp_tac >>
-  simp[af_transform_block_label] >>
-  conj_tac
-  >- (rpt strip_tac >> irule af_block_eq_helper >> simp[] >> metis_tac[])
-  >> rpt strip_tac >> irule af_P_preserved_helper >> simp[] >> metis_tac[]
-QED
