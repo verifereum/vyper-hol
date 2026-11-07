@@ -81,7 +81,10 @@ Theorem compile_alloc_buffer_raw_resources:
     stmt_state_rel ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-                 FLOOKUP u.vs_allocas aid = SOME entry)
+                 FLOOKUP u.vs_allocas aid = SOME entry) /\
+    MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
+    (!d. eval_operand (Var out) u = SOME d ==>
+      FLOOKUP u.vs_allocas sb.cs_next_id = SOME (w2n d,n))
 Proof
   rpt strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
