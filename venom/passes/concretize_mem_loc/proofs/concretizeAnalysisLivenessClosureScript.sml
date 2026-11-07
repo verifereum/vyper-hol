@@ -1,5 +1,5 @@
 Theory concretizeAnalysisLivenessClosure
-Ancestors concretizeAnalysisLivenessTransfer singleWriterScan cfgWf
+Ancestors concretizeAnalysisLivenessTransfer singleWriterScan cfgWf venomWf
   concretizeMemLocDefs concretizePtrOrdering venomExecProofs enumeral list pred_set finite_map
 
 (* The boundary transfer is Boolean affine: a constant generator or the
@@ -244,13 +244,33 @@ Proof
   strip_tac >> gvs[] >> AP_THM_TAC >> AP_TERM_TAC >> metis_tac[]
 QED
 
+Theorem ml_liveat_block_other_address:
+  ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
+  (!j. j < LENGTH bb.bb_instructions ==> addr <> (bb.bb_label,j)) ==>
+  ml_lookup la' addr = ml_lookup la addr
+Proof
+  simp[ml_liveat_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  irule ml_liveat_insts_other_address >> goal_assum (drule_at Any) >>
+  simp[indexedListsTheory.MEM_MAPi] >> metis_tac[]
+QED
+
+Theorem ml_used_block_other_address:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (changed,us') /\
+  (!j. j < LENGTH bb.bb_instructions ==> addr <> (bb.bb_label,j)) ==>
+  ml_lookup us' addr = ml_lookup us addr
+Proof
+  simp[ml_used_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  irule ml_used_insts_other_address >> goal_assum (drule_at Any) >>
+  simp[indexedListsTheory.MEM_MAPi] >> metis_tac[]
+QED
+
 Theorem ml_liveat_block_other_label:
   ml_liveat_block bpr mems sizes cfg la bb = (changed,la') /\
   lbl <> bb.bb_label ==>
   ml_lookup la' (lbl,i) = ml_lookup la (lbl,i)
 Proof
-  simp[ml_liveat_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  irule ml_liveat_insts_other_address >> goal_assum (drule_at Any) >> simp[]
+  strip_tac >> irule ml_liveat_block_other_address >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem ml_used_block_other_label:
@@ -258,8 +278,8 @@ Theorem ml_used_block_other_label:
   lbl <> bb.bb_label ==>
   ml_lookup us' (lbl,i) = ml_lookup us (lbl,i)
 Proof
-  simp[ml_used_block_def] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  irule ml_used_insts_other_address >> goal_assum (drule_at Any) >> simp[]
+  strip_tac >> irule ml_used_block_other_address >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem ml_liveat_block_sw_update:
@@ -599,4 +619,453 @@ Proof
   strip_tac >> simp[] >> conj_tac >> gen_tac >> simp[sw_rounds_def] >>
   AP_TERM_TAC >> AP_THM_TAC >>
   irule ml_boundary_rounds_stable >> simp[ml_boundary_desc_out]
+QED
+
+(* A block's recorded bits factor through its boundary inputs. *)
+Theorem ml_liveat_block_record_cong:
+  ml_liveat_block bpr mems sizes cfg la bb = (c,la') /\
+  ml_liveat_block bpr mems sizes cfg lb bb = (d,lb') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\ ptr_ml_ordered lb /\
+  (!lbl. MEM a (ml_lookup la (lbl,0)) <=> MEM a (ml_lookup lb (lbl,0))) /\
+  i < LENGTH bb.bb_instructions ==>
+  (MEM a (ml_lookup la' (bb.bb_label,i)) <=>
+   MEM a (ml_lookup lb' (bb.bb_label,i)))
+Proof
+  strip_tac >>
+  drule_all ml_liveat_block_record_exact >> strip_tac >>
+  rev_drule_all ml_liveat_block_record_exact >> simp[]
+QED
+
+Theorem ml_used_block_record_cong:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (c,us') /\
+  ml_used_block bpr mems pallocas cfg ut bb blocks = (d,ut') /\
+  (!lbl. MEM a (ml_used_boundary_lookup blocks us lbl) <=>
+         MEM a (ml_used_boundary_lookup blocks ut lbl)) /\
+  i < LENGTH bb.bb_instructions ==>
+  (MEM a (ml_lookup us' (bb.bb_label,i)) <=>
+   MEM a (ml_lookup ut' (bb.bb_label,i)))
+Proof
+  strip_tac >>
+  drule ml_used_block_record_exact >>
+  disch_then (qspecl_then [`i`, `a`] mp_tac) >> simp[] >> strip_tac >>
+  rev_drule ml_used_block_record_exact >>
+  disch_then (qspecl_then [`i`, `a`] mp_tac) >> simp[] >> strip_tac >>
+  fs[ml_used_boundary_lookup_def]
+QED
+
+Theorem ml_liveat_block_boundary_cong:
+  ml_liveat_block bpr mems sizes cfg la bb = (c,la') /\
+  ml_liveat_block bpr mems sizes cfg lb bb = (d,lb') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\ ptr_ml_ordered lb /\
+  bb.bb_instructions <> [] /\
+  (!lbl. MEM a (ml_lookup la (lbl,0)) <=> MEM a (ml_lookup lb (lbl,0))) ==>
+  !lbl. MEM a (ml_lookup la' (lbl,0)) <=> MEM a (ml_lookup lb' (lbl,0))
+Proof
+  strip_tac >> gen_tac >> Cases_on `lbl = bb.bb_label` >> gvs[]
+  >- (`0 < LENGTH bb.bb_instructions` by
+        (Cases_on `bb.bb_instructions` >> gvs[]) >>
+      metis_tac[ml_liveat_block_record_cong]) >>
+  drule_all ml_liveat_block_other_label >> strip_tac >>
+  rev_drule_all ml_liveat_block_other_label >> simp[]
+QED
+
+Theorem ml_used_block_boundary_cong:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (c,us') /\
+  ml_used_block bpr mems pallocas cfg ut bb blocks = (d,ut') /\
+  bb.bb_instructions <> [] /\
+  FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb /\
+  (!lbl. MEM a (ml_used_boundary_lookup blocks us lbl) <=>
+         MEM a (ml_used_boundary_lookup blocks ut lbl)) ==>
+  !lbl. MEM a (ml_used_boundary_lookup blocks us' lbl) <=>
+        MEM a (ml_used_boundary_lookup blocks ut' lbl)
+Proof
+  strip_tac >> gen_tac >> Cases_on `lbl = bb.bb_label` >> gvs[]
+  >- (simp[ml_used_boundary_lookup_def] >>
+      `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+        (Cases_on `bb.bb_instructions` >> gvs[]) >>
+      metis_tac[ml_used_block_record_cong]) >>
+  simp[ml_used_boundary_lookup_def] >>
+  Cases_on `FIND (\b. b.bb_label = lbl) blocks` >> simp[]
+  >- (drule_all ml_used_block_other_label >> strip_tac >>
+      rev_drule_all ml_used_block_other_label >> strip_tac >>
+      qpat_x_assum `!lbl. MEM a (ml_used_boundary_lookup _ _ _) <=> _`
+        (qspec_then `lbl` mp_tac) >>
+      simp[ml_used_boundary_lookup_def]) >>
+  rename1 `FIND _ blocks = SOME pred` >>
+  `pred.bb_label = lbl` by (drule venomExecProofsTheory.FIND_P >> simp[]) >>
+  drule_all ml_used_block_other_label >> strip_tac >>
+  rev_drule_all ml_used_block_other_label >> strip_tac >>
+  qpat_x_assum `!lbl. MEM a (ml_used_boundary_lookup _ _ _) <=> _`
+    (qspec_then `lbl` mp_tac) >>
+  simp[ml_used_boundary_lookup_def]
+QED
+
+Theorem ml_liveat_pass_record_cong:
+  !la lb c la' d lb'.
+  ml_one_pass_liveat bpr mems sizes cfg blocks lbls la = (c,la') /\
+  ml_one_pass_liveat bpr mems sizes cfg blocks lbls lb = (d,lb') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\ ptr_ml_ordered lb /\
+  EVERY (\bb. bb.bb_instructions <> []) blocks /\
+  (!l. MEM a (ml_lookup la (l,0)) <=> MEM a (ml_lookup lb (l,0))) /\
+  FIND (\b. b.bb_label = lbl) blocks = SOME target /\
+  i < LENGTH target.bb_instructions /\
+  (MEM lbl lbls \/ (MEM a (ml_lookup la (lbl,i)) <=> MEM a (ml_lookup lb (lbl,i)))) ==>
+  (MEM a (ml_lookup la' (lbl,i)) <=> MEM a (ml_lookup lb' (lbl,i)))
+Proof
+  Induct_on `lbls` >- simp[ml_one_pass_liveat_def] >>
+  pop_assum (mk_asm "ih") >>
+  rpt gen_tac >> pure_once_rewrite_tac[ml_one_pass_liveat_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[]
+  >- (strip_tac >> gvs[] >> asm "ih" irule >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rename1 `FIND _ blocks = SOME bb` >>
+  ntac 4 (pairarg_tac >> simp[]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gnvs[] >>
+  rename1 `ml_liveat_block bpr mems sizes cfg la bb = (c1,mid1)` >>
+  rename1 `ml_liveat_block bpr mems sizes cfg lb bb = (d1,mid2)` >>
+  `MEM bb blocks` by metis_tac[venomExecProofsTheory.FIND_MEM] >>
+  `bb.bb_label = h` by
+    (qpat_x_assum `FIND _ blocks = SOME bb` mp_tac >>
+     disch_then (mp_tac o MATCH_MP venomExecProofsTheory.FIND_P) >> simp[]) >>
+  `bb.bb_instructions <> []` by fs[EVERY_MEM] >>
+  `ptr_ml_ordered mid1 /\ ptr_ml_ordered mid2` by
+    metis_tac[ptr_liveat_block_ordered, pairTheory.SND] >>
+  `!l. MEM a (ml_lookup mid1 (l,0)) <=> MEM a (ml_lookup mid2 (l,0))` by
+    (drule_all ml_liveat_block_boundary_cong >> simp[]) >>
+  `MEM lbl lbls \/
+   (MEM a (ml_lookup mid1 (lbl,i)) <=> MEM a (ml_lookup mid2 (lbl,i)))` by
+    (Cases_on `MEM lbl lbls` >> simp[] >>
+     Cases_on `lbl = h` >> gvs[]
+     >- metis_tac[ml_liveat_block_record_cong] >>
+     drule_all ml_liveat_block_other_label >> strip_tac >>
+     rev_drule_all ml_liveat_block_other_label >> simp[]) >>
+  asm "ih" irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_used_pass_record_cong:
+  !us ut c us' d ut'.
+  ml_one_pass_used bpr mems pallocas cfg blocks lbls us = (c,us') /\
+  ml_one_pass_used bpr mems pallocas cfg blocks lbls ut = (d,ut') /\
+  EVERY (\bb. bb.bb_instructions <> []) blocks /\
+  (!l. MEM a (ml_used_boundary_lookup blocks us l) <=>
+       MEM a (ml_used_boundary_lookup blocks ut l)) /\
+  FIND (\b. b.bb_label = lbl) blocks = SOME target /\
+  i < LENGTH target.bb_instructions /\
+  (MEM lbl lbls \/ (MEM a (ml_lookup us (lbl,i)) <=> MEM a (ml_lookup ut (lbl,i)))) ==>
+  (MEM a (ml_lookup us' (lbl,i)) <=> MEM a (ml_lookup ut' (lbl,i)))
+Proof
+  Induct_on `lbls` >- simp[ml_one_pass_used_def] >>
+  pop_assum (mk_asm "ih") >>
+  rpt gen_tac >> pure_once_rewrite_tac[ml_one_pass_used_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[]
+  >- (strip_tac >> gvs[] >> asm "ih" irule >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rename1 `FIND _ blocks = SOME bb` >>
+  ntac 4 (pairarg_tac >> simp[]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gnvs[] >>
+  rename1 `ml_used_block bpr mems pallocas cfg us bb blocks = (c1,mid1)` >>
+  rename1 `ml_used_block bpr mems pallocas cfg ut bb blocks = (d1,mid2)` >>
+  `MEM bb blocks` by metis_tac[venomExecProofsTheory.FIND_MEM] >>
+  `bb.bb_label = h` by
+    (qpat_x_assum `FIND _ blocks = SOME bb` mp_tac >>
+     disch_then (mp_tac o MATCH_MP venomExecProofsTheory.FIND_P) >> simp[]) >>
+  `bb.bb_instructions <> []` by fs[EVERY_MEM] >>
+  `FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb` by simp[] >>
+  `!l. MEM a (ml_used_boundary_lookup blocks mid1 l) <=>
+       MEM a (ml_used_boundary_lookup blocks mid2 l)` by
+    (drule_all ml_used_block_boundary_cong >> simp[]) >>
+  `MEM lbl lbls \/
+   (MEM a (ml_lookup mid1 (lbl,i)) <=> MEM a (ml_lookup mid2 (lbl,i)))` by
+    (Cases_on `MEM lbl lbls` >> simp[] >>
+     Cases_on `lbl = h` >> gvs[]
+     >- metis_tac[ml_used_block_record_cong] >>
+     drule_all ml_used_block_other_label >> strip_tac >>
+     rev_drule_all ml_used_block_other_label >> simp[]) >>
+  asm "ih" irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_one_pass_record_cong:
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (c,la',us') /\
+  ml_one_pass bpr mems sizes pallocas cfg fn lb ut = (d,lb',ut') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\ ptr_ml_ordered lb /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  (!l. MEM a (ml_lookup la (l,0)) <=> MEM a (ml_lookup lb (l,0))) /\
+  (!l. MEM a (ml_used_boundary_lookup fn.fn_blocks us l) <=>
+       MEM a (ml_used_boundary_lookup fn.fn_blocks ut l)) /\
+  FIND (\b. b.bb_label = lbl) fn.fn_blocks = SOME target /\
+  i < LENGTH target.bb_instructions /\
+  MEM lbl cfg.cfg_dfs_post /\ MEM lbl cfg.cfg_dfs_pre ==>
+  (MEM a (ml_lookup la' (lbl,i)) <=> MEM a (ml_lookup lb' (lbl,i))) /\
+  (MEM a (ml_lookup us' (lbl,i)) <=> MEM a (ml_lookup ut' (lbl,i)))
+Proof
+  simp[ml_one_pass_def] >>
+  ntac 4 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >> conj_tac
+  >- (irule ml_liveat_pass_record_cong >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  irule ml_used_pass_record_cong >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_full_rounds_record_stable:
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  LENGTH fn.fn_blocks <= n /\
+  FIND (\b. b.bb_label = lbl) fn.fn_blocks = SOME target /\
+  i < LENGTH target.bb_instructions /\
+  MEM lbl cfg.cfg_dfs_post /\ MEM lbl cfg.cfg_dfs_pre ==>
+  (MEM a (ml_lookup
+      (FST (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC (SUC n)))) (lbl,i)) <=>
+   MEM a (ml_lookup
+      (FST (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n))) (lbl,i))) /\
+  (MEM a (ml_lookup
+      (SND (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC (SUC n)))) (lbl,i)) <=>
+   MEM a (ml_lookup
+      (SND (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n))) (lbl,i)))
+Proof
+  strip_tac >>
+  drule_all ml_full_rounds_boundary_stable >>
+  disch_then (qspecl_then [`sizes`, `cfg`, `bpr`, `a`] strip_assume_tac) >>
+  `ptr_ml_ordered (FST (ml_full_rounds bpr mems sizes pallocas cfg fn n)) /\
+   ptr_ml_ordered (FST (ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n)))` by
+    (drule_all ml_full_rounds_ordered >> simp[]) >>
+  Cases_on `ml_full_rounds bpr mems sizes pallocas cfg fn n` >>
+  rename1 `ml_full_rounds bpr mems sizes pallocas cfg fn n = (la,us)` >>
+  Cases_on `ml_one_pass bpr mems sizes pallocas cfg fn la us` >>
+  rename1 `ml_one_pass bpr mems sizes pallocas cfg fn la us = (c,result)` >>
+  PairCases_on `result` >>
+  `ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n) = (result0,result1)` by
+    simp[ml_full_rounds_def] >>
+  Cases_on `ml_one_pass bpr mems sizes pallocas cfg fn result0 result1` >>
+  rename1 `ml_one_pass bpr mems sizes pallocas cfg fn result0 result1 = (d,result)` >>
+  PairCases_on `result` >>
+  simp[ml_full_rounds_def] >>
+  irule ml_one_pass_record_cong >>
+  goal_assum (drule_at Any) >> gvs[] >> metis_tac[]
+QED
+
+Theorem ml_full_rounds_step:
+  ml_one_pass bpr mems sizes pallocas cfg fn
+    (FST (ml_full_rounds bpr mems sizes pallocas cfg fn n))
+    (SND (ml_full_rounds bpr mems sizes pallocas cfg fn n)) = (changed,la,us) ==>
+  ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n) = (la,us)
+Proof
+  Cases_on `ml_full_rounds bpr mems sizes pallocas cfg fn n` >>
+  simp[ml_full_rounds_def]
+QED
+
+(* The executable iterator either consumes all its fuel, or returns the output
+   of a false-flag full scan.  This identity needs no convergence hypothesis. *)
+Theorem ml_iterate_fuel_full_rounds_cases:
+  !fuel n la us.
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn
+    (FST (ml_full_rounds bpr mems sizes pallocas cfg fn n))
+    (SND (ml_full_rounds bpr mems sizes pallocas cfg fn n)) = (la,us) ==>
+  (la,us) = ml_full_rounds bpr mems sizes pallocas cfg fn (n+fuel) \/
+  ?k. k < fuel /\
+    (la,us) = ml_full_rounds bpr mems sizes pallocas cfg fn (SUC (n+k)) /\
+    FST (ml_one_pass bpr mems sizes pallocas cfg fn
+      (FST (ml_full_rounds bpr mems sizes pallocas cfg fn (n+k)))
+      (SND (ml_full_rounds bpr mems sizes pallocas cfg fn (n+k)))) = F
+Proof
+  Induct >- simp[ml_iterate_fuel_def] >>
+  rpt gen_tac >> pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp[] >>
+  rename1 `ml_one_pass _ _ _ _ _ _ _ _ = (changed,nextla,nextus)` >>
+  `ml_full_rounds bpr mems sizes pallocas cfg fn (SUC n) = (nextla,nextus)` by
+    (irule ml_full_rounds_step >> goal_assum (drule_at Any)) >>
+  Cases_on `changed` >> simp[]
+  >- (strip_tac >> first_x_assum (qspec_then `SUC n` mp_tac) >>
+      simp[] >> strip_tac
+      >- (disj1_tac >> gvs[arithmeticTheory.ADD_CLAUSES]) >>
+      disj2_tac >> qexists `SUC k` >> gvs[arithmeticTheory.ADD_CLAUSES]) >>
+  strip_tac >> gvs[] >> disj2_tac >> qexists `0` >> simp[]
+QED
+
+Theorem ml_one_pass_false_record_fixed:
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (F,la',us') /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la' us' = (d,la'',us'') /\
+  (!nm. OL alloc_to (mems nm)) /\ ptr_ml_ordered la /\ ptr_ml_ordered la' /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  FIND (\b. b.bb_label = lbl) fn.fn_blocks = SOME target /\
+  i < LENGTH target.bb_instructions /\
+  MEM lbl cfg.cfg_dfs_post /\ MEM lbl cfg.cfg_dfs_pre ==>
+  (MEM a (ml_lookup la'' (lbl,i)) <=> MEM a (ml_lookup la' (lbl,i))) /\
+  (MEM a (ml_lookup us'' (lbl,i)) <=> MEM a (ml_lookup us' (lbl,i)))
+Proof
+  strip_tac >> drule ml_one_pass_false_boundary >> strip_tac >>
+  irule ml_one_pass_record_cong >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_full_rounds_record_fixed:
+  ml_full_rounds bpr mems sizes pallocas cfg fn n = (la,us) /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  LENGTH fn.fn_blocks < n /\
+  FIND (\b. b.bb_label = lbl) fn.fn_blocks = SOME target /\
+  i < LENGTH target.bb_instructions /\
+  MEM lbl cfg.cfg_dfs_post /\ MEM lbl cfg.cfg_dfs_pre ==>
+  (MEM a (ml_lookup la' (lbl,i)) <=> MEM a (ml_lookup la (lbl,i))) /\
+  (MEM a (ml_lookup us' (lbl,i)) <=> MEM a (ml_lookup us (lbl,i)))
+Proof
+  Cases_on `n` >- simp[] >> strip_tac >>
+  `ml_full_rounds bpr mems sizes pallocas cfg fn (SUC (SUC n')) = (la',us')` by
+    (irule ml_full_rounds_step >> simp[]) >>
+  `LENGTH fn.fn_blocks <= n'` by decide_tac >>
+  drule_all ml_full_rounds_record_stable >>
+  disch_then (qspecl_then [`sizes`, `bpr`, `a`] mp_tac) >> simp[]
+QED
+
+Theorem ml_iterate_fuel_record_fixed:
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY = (la,us) /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  LENGTH fn.fn_blocks < fuel /\
+  FIND (\b. b.bb_label = lbl) fn.fn_blocks = SOME target /\
+  i < LENGTH target.bb_instructions /\
+  MEM lbl cfg.cfg_dfs_post /\ MEM lbl cfg.cfg_dfs_pre ==>
+  (MEM a (ml_lookup la' (lbl,i)) <=> MEM a (ml_lookup la (lbl,i))) /\
+  (MEM a (ml_lookup us' (lbl,i)) <=> MEM a (ml_lookup us (lbl,i)))
+Proof
+  strip_tac >>
+  qspec_then `fuel` (qspec_then `0` mp_tac) ml_iterate_fuel_full_rounds_cases >>
+  simp[ml_full_rounds_def] >> strip_tac
+  >- (irule ml_full_rounds_record_fixed >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  Cases_on `ml_full_rounds bpr mems sizes pallocas cfg fn k` >>
+  rename1 `ml_full_rounds bpr mems sizes pallocas cfg fn k = (lb,ut)` >>
+  Cases_on `ml_one_pass bpr mems sizes pallocas cfg fn lb ut` >>
+  rename1 `ml_one_pass bpr mems sizes pallocas cfg fn lb ut = (c,result)` >>
+  PairCases_on `result` >> gvs[] >>
+  `ml_full_rounds bpr mems sizes pallocas cfg fn (SUC k) = (la,result1)` by
+    (irule ml_full_rounds_step >> simp[]) >>
+  `ptr_ml_ordered lb /\ ptr_ml_ordered la` by
+    (drule_all ml_full_rounds_ordered >>
+     disch_then (qspecl_then [`sizes`, `fn`, `cfg`, `bpr`] mp_tac) >>
+     disch_then (fn th => mp_tac (Q.SPEC `k` th) >> mp_tac (Q.SPEC `SUC k` th)) >> simp[]) >>
+  gvs[] >> irule ml_one_pass_false_record_fixed >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_liveat_pass_other_address:
+  !la changed la'.
+  ml_one_pass_liveat bpr mems sizes cfg blocks lbls la = (changed,la') /\
+  (!bb j. MEM bb blocks /\ j < LENGTH bb.bb_instructions ==>
+     addr <> (bb.bb_label,j)) ==>
+  ml_lookup la' addr = ml_lookup la addr
+Proof
+  Induct_on `lbls` >- simp[ml_one_pass_liveat_def] >>
+  rpt gen_tac >> simp[ml_one_pass_liveat_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[] >>
+  rename1 `FIND _ blocks = SOME bb` >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `MEM bb blocks` by metis_tac[venomExecProofsTheory.FIND_MEM] >>
+  `!j. j < LENGTH bb.bb_instructions ==> addr <> (bb.bb_label,j)` by metis_tac[] >>
+  drule_all ml_liveat_block_other_address >> strip_tac >>
+  first_x_assum drule >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_used_pass_other_address:
+  !us changed us'.
+  ml_one_pass_used bpr mems pallocas cfg blocks lbls us = (changed,us') /\
+  (!bb j. MEM bb blocks /\ j < LENGTH bb.bb_instructions ==>
+     addr <> (bb.bb_label,j)) ==>
+  ml_lookup us' addr = ml_lookup us addr
+Proof
+  Induct_on `lbls` >- simp[ml_one_pass_used_def] >>
+  rpt gen_tac >> simp[ml_one_pass_used_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[] >>
+  rename1 `FIND _ blocks = SOME bb` >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `MEM bb blocks` by metis_tac[venomExecProofsTheory.FIND_MEM] >>
+  `!j. j < LENGTH bb.bb_instructions ==> addr <> (bb.bb_label,j)` by metis_tac[] >>
+  drule_all ml_used_block_other_address >> strip_tac >>
+  first_x_assum drule >> simp[] >> metis_tac[]
+QED
+
+Theorem ml_one_pass_other_address:
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  (!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions ==>
+     addr <> (bb.bb_label,j)) ==>
+  ml_lookup la' addr = ml_lookup la addr /\
+  ml_lookup us' addr = ml_lookup us addr
+Proof
+  simp[ml_one_pass_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >> conj_tac
+  >- (drule_all ml_liveat_pass_other_address >> simp[]) >>
+  drule_all ml_used_pass_other_address >> simp[]
+QED
+
+Theorem ml_iterate_fuel_other_address:
+  !fuel la us la' us'.
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn la us = (la',us') /\
+  (!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions ==>
+     addr <> (bb.bb_label,j)) ==>
+  ml_lookup la' addr = ml_lookup la addr /\
+  ml_lookup us' addr = ml_lookup us addr
+Proof
+  Induct >- simp[ml_iterate_fuel_def] >>
+  rpt gen_tac >> pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp[] >>
+  Cases_on `changed` >> simp[] >> strip_tac >> gvs[] >>
+  drule_all ml_one_pass_other_address >> strip_tac
+  >- (first_x_assum drule >> simp[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem ml_iterate_fuel_fixed:
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY = (la,us) /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  EVERY (\bb. bb.bb_instructions <> []) fn.fn_blocks /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  (!bb. MEM bb fn.fn_blocks ==>
+    MEM bb.bb_label cfg.cfg_dfs_post /\ MEM bb.bb_label cfg.cfg_dfs_pre) /\
+  LENGTH fn.fn_blocks < fuel ==>
+  (!addr. MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la addr)) /\
+  (!addr. MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us addr))
+Proof
+  strip_tac >>
+  `!addr. (MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la addr)) /\
+          (MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us addr))` suffices_by metis_tac[] >>
+  gen_tac >> PairCases_on `addr` >>
+  Cases_on `?bb. MEM bb fn.fn_blocks /\ addr0 = bb.bb_label /\
+    addr1 < LENGTH bb.bb_instructions`
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      `FIND (\b. b.bb_label = bb.bb_label) fn.fn_blocks = SOME bb` by
+        (simp[GSYM venomInstTheory.lookup_block_def] >> irule MEM_lookup_block >> simp[]) >>
+      `MEM bb.bb_label cfg.cfg_dfs_post /\ MEM bb.bb_label cfg.cfg_dfs_pre` by metis_tac[] >>
+      drule_all ml_iterate_fuel_record_fixed >> simp[]) >>
+  `!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions ==>
+     (addr0,addr1) <> (bb.bb_label,j)` by (simp[] >> metis_tac[]) >>
+  drule_all ml_one_pass_other_address >> simp[]
+QED
+
+Theorem ml_iterate_fuel_off_domain:
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY = (la,us) /\
+  (!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions ==>
+     addr <> (bb.bb_label,j)) ==>
+  ml_lookup la addr = [] /\ ml_lookup us addr = []
+Proof
+  strip_tac >> drule_all ml_iterate_fuel_other_address >> simp[ml_lookup_def]
+QED
+
+(* Consumer boundary: the stronger block-count-plus-one bound implies the
+   planned 2*block-count+2 budget, independently of the allocation universe. *)
+Theorem ml_iterate_fuel_saturated:
+  wf_function fn /\
+  (!bb. MEM bb fn.fn_blocks ==>
+    MEM bb.bb_label cfg.cfg_dfs_post /\ MEM bb.bb_label cfg.cfg_dfs_pre) /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  LENGTH fn.fn_blocks < fuel /\
+  ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY = (la,us) /\
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (changed,la',us') ==>
+  (!addr. MEM a (ml_lookup la' addr) <=> MEM a (ml_lookup la addr)) /\
+  (!addr. MEM a (ml_lookup us' addr) <=> MEM a (ml_lookup us addr))
+Proof
+  strip_tac >> irule ml_iterate_fuel_fixed >>
+  goal_assum (drule_at Any) >> simp[] >>
+  fs[wf_function_def, venomInstTheory.fn_labels_def, EVERY_MEM, bb_well_formed_def] >>
+  qexists `fuel` >> simp[]
 QED
