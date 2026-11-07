@@ -6,7 +6,8 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipSteps
   bodyPtrStructLitLoopShapeEmit bodyPtrStructLitOwnershipControlFrame
   bodyPtrStructLitOwnershipFrame bodyPtrStructLitOwnershipInterfaces
   context exprLowering loweringShapeProps bodyPtrStructLitLoopShapeDynBody
-  bodyPtrStructLitOwnershipMemory
+  bodyPtrStructLitOwnershipMemory bodyPtrStructLitOwnershipReservation
+  bodyPtrStructLitOwnershipEnvironment stackPlanTypes venomInst unitShapeDefs
 
 Theorem alloc_run_emit_jmp_if_not_terminated:
   alloc_run (\s. T) (emit_jmp_if_not_terminated lbl) (\u s. T)
@@ -240,4 +241,105 @@ Proof
       metis_tac[shape_base_fresh_outputs, shape_state_def]) >>
   gen_tac >> simp[] >> irule alloc_run_conseq >>
   irule_at Any (SRULE [comp_ignore_bind_def] alloc_run_stmt_loop_increment) >> simp[]
+QED
+
+(* Public shape boundary for the reserved local commit.  Ownership must be
+   measured from before declare_local, not from this instruction alone. *)
+Theorem structlit_emit_local_alloca_shape:
+  shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+    (emit_local_alloca ce id) (\u s. cenv_shape_ok s ce)
+Proof
+  simp[emit_local_alloca_def] >>
+  Cases_on `FLOOKUP ce.ce_vars id` >> simp[]
+  >- (irule shape_step_return >> simp[]) >>
+  rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+  TRY (irule shape_step_return >> simp[] >> NO_TAC) >>
+  rename1 `PtrVar op sz` >> Cases_on `op` >> simp[] >>
+  TRY (irule shape_step_return >> simp[] >> NO_TAC) >>
+  irule shape_step_conseq >> irule_at Any shape_step_emit_inst >>
+  qexists `\s. cenv_shape_ok s ce` >>
+  simp[cenv_shape_ok_stable, label_or_plain_def, plain_operand_def,
+    is_label_operand_def, lowered_inst_ok_def, mk_inst_def,
+    raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
+    is_terminator_def, is_read0_opcode_def, label_positions_ok_def,
+    operand_case_not_label, is_param_opcode_def] >>
+  qexists `compiler_label` >> simp[] >>
+  rw[cenv_shape_ok_def] >>
+  first_x_assum (drule_at Any) >> simp[loc_shape_ok_def, plain_operand_def]
+QED
+
+Theorem alloc_run_declare_local_commit:
+  ce.ce_alloca_locals /\ shape_stable R ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce /\ R s)
+    (do env <- declare_local ce id ty;
+        emit_local_alloca env id; return env od)
+    (\env s. shape_state s /\ cenv_shape_ok s env /\
+      env.ce_return_pc = ce.ce_return_pc /\ env.ce_alloca_locals /\ R s)
+Proof
+  strip_tac >> simp[alloc_run_def, comp_ignore_bind_def, comp_bind_def,
+    comp_return_def] >> rpt gen_tac >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  `shape_base_state s` by gvs[shape_state_def] >>
+  drule_all declare_local_alloca_fresh_commit >> strip_tac >>
+  drule declare_local_alloca_mode >> strip_tac >> simp[] >>
+  `shape_state cs' /\ cenv_shape_ok cs' env /\
+    shape_extends F compiler_label s cs' /\
+    env.ce_return_pc = ce.ce_return_pc` by
+    (mp_tac (Q.SPEC `F` declare_local_shape) >>
+     simp[shape_step_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`internal` |-> `F`, `ce` |-> `env`]
+    structlit_emit_local_alloca_shape) >>
+  simp[shape_step_def] >> metis_tac[shape_stable_def]
+QED
+
+Theorem alloc_run_stmt_range_inputs:
+  ce.ce_alloca_locals /\
+  shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+    (compile_expr ce fty start_e) (\v s. value_shape_ok s v) /\
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_expr ce fty start_e) (\v s. T) /\
+  shape_step internal compiler_label (\s. cenv_shape_ok s ce)
+    (compile_expr ce fty end_e) (\v s. value_shape_ok s v) /\
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_expr ce fty end_e) (\v s. T) ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (do start_op <- lower_value compile_expr ce fty start_e;
+        end_op <- lower_value compile_expr ce fty end_e;
+        env <- declare_local ce id fty;
+        emit_local_alloca env id; return (start_op,end_op,env) od)
+    (\(start_op,end_op,env) s.
+      shape_state s /\ cenv_shape_ok s env /\ env.ce_alloca_locals /\
+      env.ce_return_pc = ce.ce_return_pc /\
+      plain_operand s start_op /\ plain_operand s end_op)
+Proof
+  strip_tac >> simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\op s. shape_state s /\ cenv_shape_ok s ce /\ plain_operand s op` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_lower_value_frame >>
+      qexistsl [`internal`, `\s. T`] >> simp[shape_stable_def]) >>
+  qx_gen_tac `start_op` >> simp[] >> irule alloc_run_bind >>
+  qexists `\op s. shape_state s /\ cenv_shape_ok s ce /\
+    plain_operand s start_op /\ plain_operand s op` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_lower_value_frame >>
+      qexistsl [`internal`, `\s. plain_operand s start_op`] >>
+      simp[SRULE [] (Q.SPEC `[start_op]` shape_stable_plain_operands)]) >>
+  qx_gen_tac `end_op` >> simp[] >>
+  `alloc_run (\s. shape_state s /\ cenv_shape_ok s ce /\
+      (plain_operand s start_op /\ plain_operand s end_op))
+    (do env <- declare_local ce id fty;
+        emit_local_alloca env id; return env od)
+    (\env s. shape_state s /\ cenv_shape_ok s env /\
+      env.ce_return_pc = ce.ce_return_pc /\ env.ce_alloca_locals /\
+      (plain_operand s start_op /\ plain_operand s end_op))` by
+    (ho_match_mp_tac alloc_run_declare_local_commit >>
+     simp[shape_stable_conj,
+       SRULE [] (Q.SPEC `[start_op;end_op]` shape_stable_plain_operands)]) >>
+  simp[alloc_run_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `declare_local ce id fty s` >> gvs[] >>
+  rename1 `declare_local ce id fty s = (env0,st0)` >>
+  Cases_on `emit_local_alloca env0 id st0` >> gvs[] >>
+  qpat_x_assum `alloc_run _ _ _` mp_tac >>
+  simp[alloc_run_def, comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  disch_then drule >> simp[]
 QED
