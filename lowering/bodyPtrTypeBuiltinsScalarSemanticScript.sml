@@ -525,3 +525,84 @@ Proof
   strip_tac >> irule scalar_fixed_int_typed_actual >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem scalar_fixed_decimal_raw_semantic:
+  LENGTH bs = m /\ 0 < m /\ m <= 32 /\
+  compile_type_convert x (mk_convert_op (BaseT (BytesT (Fixed m))) (BaseT DecimalT)) sa = (r,sb) /\
+  eval_operand x ss = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs)) /\
+  fresh_vars_wrt sa ss ==>
+  case convert_result cx (BaseT (BytesT (Fixed m))) (BaseT DecimalT) (BytesV bs) of
+    INL out => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME (typed_val_to_w256 (BaseTV DecimalT) out)
+  | INR ex => (?msg. ex = Error (RuntimeError msg)) /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  strip_tac >> `bs <> []` by (Cases_on `bs` >> gvs[]) >>
+  fs[mk_convert_op_def, is_bytestring_type_def, type_bounds_def,
+     type_bits_def, is_signed_type_def, w2i_i2w] >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def,
+       bounded_decimal_op_def] >>
+  IF_CASES_TAC >> simp[typed_val_to_w256_def, val_to_w256_def]
+  >- (`?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+          eval_operand r sf = SOME (i2w (w2i
+            ((word_of_bytes_be (PAD_RIGHT 0w 32 bs):bytes32) >> (8*(32-m)))):bytes32)`
+        suffices_by simp[i2w_w2i] >>
+      irule scalar_bytes_decimal_run_ok >>
+      simp[] >> qexistsl_tac [`bs`,`10000000000`,`x`] >>
+      fs[typed_val_to_w256_def, decimal_bits_def]) >>
+  irule scalar_bytes_decimal_run_abort >>
+  simp[] >> qexistsl_tac [`bs`,`10000000000`,`r`,`x`] >>
+  fs[typed_val_to_w256_def]
+QED
+
+Theorem scalar_fixed_decimal_all_typed_actual:
+  evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
+  evaluate_type (get_tenv cx) (BaseT DecimalT) = SOME tout /\ value_has_type tv v /\
+  compile_type_convert x (mk_convert_op (BaseT (BytesT (Fixed m))) (BaseT DecimalT)) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x ss = SOME (typed_val_to_w256 tv v) ==>
+  case convert_result cx (BaseT (BytesT (Fixed m))) (BaseT DecimalT) v of
+    INL out => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME (typed_val_to_w256 tout out) /\
+      (sf with vs_vars := ss.vs_vars) = ss /\
+      (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+  | INR ex => (?msg. ex = Error (RuntimeError msg)) /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  simp[vyperValueTheory.evaluate_type_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `m = 0`
+  >- (gvs[] >> drule scalar_fixed_zero_value >> strip_tac >> gvs[] >>
+      simp[scalar_fixed_zero_signed_result, typed_val_to_w256_def, val_to_w256_def, i2w_def] >>
+      irule scalar_fixed_zero_decimal_actual >> goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `v` >> fs[value_has_type_def] >>
+  `eval_operand x (drop_fresh sa ss) =
+    SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV l))` by
+    simp[eval_operand_drop_fresh] >>
+  `fresh_vars_wrt sa (drop_fresh sa ss)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `0 < m` by decide_tac >>
+  drule_all scalar_fixed_decimal_raw_semantic >>
+  disch_then (qspec_then `cx` mp_tac) >>
+  `compile_type_convert x (ConvBytesToInt m T 168) sa = (r,sb)` by
+    (fs[mk_convert_op_def, is_bytestring_type_def, type_bounds_def,
+        type_bits_def, is_signed_type_def, w2i_i2w,
+        SRULE [] scalar_bytes_decimal_eq]) >>
+  Cases_on `convert_result cx (BaseT (BytesT (Fixed m))) (BaseT DecimalT) (BytesV l)` >>
+  simp[] >> strip_tac >>
+  drule scalar_fixed_int_replay >> disch_then (qspec_then `ss` mp_tac) >>
+  simp[vars_ext_result_def] >> strip_tac >> gvs[]
+  >- (rename1 `run_inst_seq (emitted_insts sa sb) ss = OK actual` >> conj_tac
+      >- (fs[vars_ext_def] >>
+          qpat_x_assum `actual = _ with vs_vars := _` SUBST1_TAC >>
+          simp[eval_operand_vars_ext]) >>
+      irule convert_bytes_int_runtime_frame >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any)) >> simp[]
+QED
+
+Theorem scalar_fixed_decimal_compile_eq:
+  compile_type_convert x (mk_convert_op (BaseT (BytesT (Fixed m))) (BaseT DecimalT)) =
+  compile_type_convert x (ConvBytesToInt m T 168)
+Proof
+  simp[mk_convert_op_def, is_bytestring_type_def, type_bounds_def,
+       type_bits_def, is_signed_type_def, w2i_i2w,
+       SRULE [] scalar_bytes_decimal_eq]
+QED
