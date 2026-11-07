@@ -91,10 +91,11 @@ Theorem rest_word_init_path:
           vs_inst_idx := s.vs_inst_idx + 2))
 Proof
   strip_tac >>
-  qspec_then `[mk_inst a ASSIGN [Lit 0w] [idx];
-               mk_inst b ASSIGN [Lit 0w] [result]]` mp_tac
-    (Q.GEN `code` rest_word_sequence_marked) >>
-  disch_then (mp_tac o Q.INST [`t` |-> `update_var result 0w (update_var idx 0w s)`]) >>
+  mp_tac (Q.INST
+    [`code` |-> `[mk_inst a ASSIGN [Lit 0w] [idx];
+                  mk_inst b ASSIGN [Lit 0w] [result]]`,
+     `t` |-> `update_var result 0w (update_var idx 0w s)`]
+    rest_word_sequence_marked) >>
   simp[rest_word_init_sequence, mk_inst_def, is_terminator_def,
        fragExecMemTheory.run_inst_seq_mem_ok_def] >>
   impl_tac >- (rpt strip_tac >>
