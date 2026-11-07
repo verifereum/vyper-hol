@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpStorageInvariant bodyPtrIfExpStorageBodyPost
   bodyPtrIfExpMaterializeFrame bodyPtrIfExpStorageFrame slotCopyExecution copyExecution
   bodyPtrDefs compileEnv venomState ptrDiscipline finite_map words
-  valueEncoding vyperValue venomInst emitHelper
+  valueEncoding vyperValue venomInst emitHelper bodyPtrIfExpStorageOrdinary
 
 Theorem ifexp_copy_interior_live_bounds:
   slot_copy_inv cs load sBase p (d:bytes32) n [] i s /\ i<n /\
@@ -95,6 +95,7 @@ Proof
   conj_tac >- (irule ifexp_copy_body_destination_coverage >> metis_tac[]) >>
   conj_tac >- (metis_tac[ifexp_copy_body_external_ghost]) >>
   conj_tac >- (gvs[slot_copy_external_def] >> metis_tac[]) >>
+  reverse conj_tac >- suspend "ordinary" >>
   `!j k. j < SUC i /\ k < 32 /\ w2n d+32*j+k IN tn'.t_mem ==> (j,k) IN X`
     suffices_by simp[arithmeticTheory.ADD1] >>
   ho_match_mp_tac (INST_TYPE [alpha |-> ``:256``] ifexp_copy_body_taint_prefix) >>
@@ -127,6 +128,21 @@ Resume ifexp_copy_ptr_body[frames]:
       strip_tac >> decide_tac) >>
   rpt strip_tac >> qpat_x_assum `!name pos len. _` drule_all >>
   strip_tac >> decide_tac
+QED
+
+Resume ifexp_copy_ptr_body[ordinary]:
+  `w2n d+32*n < 2**256` by fs[slot_copy_inv_def] >>
+  drule_all ifexp_slot_body_memory_frame >>
+  disch_then (qspecl_then [`s`, `p`, `load`, `cs`] strip_assume_tac) >>
+  simp[ifexp_slot_body_ordinary] >>
+  conj_tac
+  >- (qpat_x_assum `LENGTH s.vs_memory <= LENGTH (slot_copy_body_result _ _ _ _ _ _).vs_memory`
+        mp_tac >> simp[ifexp_slot_body_ordinary] >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!b len. _ ==> mem_bytes_at _ _ (slot_copy_body_result _ _ _ _ _ _).vs_memory = _`
+    (qspecl_then [`b'`, `len`] mp_tac) >>
+  qpat_x_assum `!b len. _ ==> mem_bytes_at _ _ s.vs_memory = _`
+    (qspecl_then [`b'`, `len`] mp_tac) >> simp[ifexp_slot_body_ordinary]
 QED
 
 Finalise ifexp_copy_ptr_body

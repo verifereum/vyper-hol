@@ -3,6 +3,7 @@ Ancestors
   bodyPtrIfExpStorageFrame bodyPtrIfExpStorageInit bodyPtrIfExpStorageControl
   slotCopyExecution copyExecution createSourceCallback bodyPtrDefs appendStorageGhostPtr
   ptrDiscipline compileEnv venomState finite_map pred_set words
+  bodyPtrIfExpStorageOrdinary
 
 (* Packages the recurrent pointer induction hypothesis alongside the existing
    runtime invariant; this is not a replacement copy semantics. Original-frame
@@ -22,8 +23,23 @@ Definition ifexp_copy_ptr_inv_def:
   tn.t_imm = tnBase.t_imm /\
   ghost_inv rty ce cx ee G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\
-  (!j k. j < i /\ k < 32 /\ w2n d + 32*j + k IN tn.t_mem ==> (j,k) IN X)
+  (!j k. j < i /\ k < 32 /\ w2n d + 32*j + k IN tn.t_mem ==> (j,k) IN X) /\
+  s.vs_allocas = sBase.vs_allocas /\ s.vs_data_section = sBase.vs_data_section /\
+  LENGTH sBase.vs_memory <= LENGTH s.vs_memory /\
+  (!b len. b+len <= w2n d \/ w2n d+32*n <= b ==>
+    mem_bytes_at b len s.vs_memory = mem_bytes_at b len sBase.vs_memory)
 End
+
+Theorem ifexp_copy_ptr_ordinary_frame:
+  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+    cs load src dst sBase GBase tnBase p d n X i s G tn ==>
+  s.vs_allocas = sBase.vs_allocas /\ s.vs_data_section = sBase.vs_data_section /\
+  LENGTH sBase.vs_memory <= LENGTH s.vs_memory /\
+  (!b len. b+len <= w2n d \/ w2n d+32*n <= b ==>
+    mem_bytes_at b len s.vs_memory = mem_bytes_at b len sBase.vs_memory)
+Proof
+  simp[ifexp_copy_ptr_inv_def] >> strip_tac >> simp[]
+QED
 
 (* A scratch-only step leaves every pointer field at the interface level.
    Runtime correctness is supplied independently by slotCopyExecution. *)
@@ -40,6 +56,7 @@ Theorem ifexp_copy_ptr_no_write:
     slot_copy_external cs (Var x)) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> slot_copy_external cs (Var x)) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> slot_copy_external cs (Var x)) /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_data_section = s.vs_data_section /\
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -147,7 +164,8 @@ Proof
   `ghost_kept ce es sa G0 tn0 s0 G' tn'` by
     (irule ghost_kept_suffix_compose >> qexistsl_tac [`G`, `cs`, `tn`] >>
      simp[] >> metis_tac[ifexp_copy_not_fresh_external]) >>
-  qexistsl_tac [`G'`, `tn'`] >> simp[ifexp_copy_ptr_inv_def] >>
+  qexistsl_tac [`G'`, `tn'`] >>
+  simp[ifexp_copy_ptr_inv_def, ifexp_slot_initial_ordinary] >>
   conj_tac
   >- (irule slot_copy_initial_invariant >>
       simp[create_memory_snapshot_def]) >>
