@@ -386,6 +386,9 @@ Proof
      metis_tac[exprSimCalldataSliceTheory.bytes_buffer_write_encoding, n2w_w2n]) >>
   qpat_x_assum `t.vs_memory = _` kall_tac >>
   qpat_x_assum `wb_frame _ _ _ _ _` (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     simp[compileEnvTheory.is_bytestring_type_def]) >>
   qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >> gen_tac >>
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
        loweringPostsTheory.vv_at_def, mk_ptr_def,
