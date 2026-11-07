@@ -911,7 +911,35 @@ Proof
   >- (Cases_on `es` >>
       gvs[type_check_def, assert_def, raise_def,
           vyperContextTheory.builtin_args_length_ok_def,
-          supported_exprs_exists_every]) >>
+          supported_exprs_exists_every])
+  (* the Builtin operands, split on code_slice_source *)
+  >- (Cases_on `code_slice_source bt es` >> simp[]
+      >- metis_tac[] >>
+      rename1 `code_slice_source bt es = SOME csa` >> PairCases_on `csa` >>
+      `~supported_exprs_exists constructor_call_root (TL es) /\
+       ~supported_expr_exists constructor_call_root csa1` by
+        (qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+         qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         rw[code_slice_source_SOME] >>
+         gvs[supported_expr_exists_def, constructor_call_root_def]) >>
+      `!s oc. eval_exprs cx (TL es) (s with outcomes := oc) =
+         (FST (eval_exprs cx (TL es) s),
+          SND (eval_exprs cx (TL es) s) with outcomes := oc)` by metis_tac[] >>
+      `!s0 v t. eval_exprs cx (TL es) s0 = (INL v,t) ==>
+         !s oc. eval_exprs cx [csa1] (s with outcomes := oc) =
+           (FST (eval_exprs cx [csa1] s),
+            SND (eval_exprs cx [csa1] s) with outcomes := oc)` by metis_tac[] >>
+      map_every qid_spec_tac [`oc`, `s`] >> simp_tac (srw_ss()) [] >>
+      irule outcomes_replace_bind_guarded >> conj_tac >> simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!s0 v t. eval_exprs cx (TL es) s0 = _ ==> _` drule >>
+      strip_tac >>
+      irule outcomes_replace_bind >> simp[] >> rpt gen_tac >>
+      irule outcomes_replace_bind >> simp[outcomes_replace_basic] >>
+      rpt gen_tac >>
+      irule outcomes_replace_bind >>
+      simp[outcomes_replace_lifts, outcomes_replace_basic, return_def]) >>
   Cases_on `v` >> simp[raise_def] >>
   Cases_on `a` >> gvs[raise_def]
 QED
