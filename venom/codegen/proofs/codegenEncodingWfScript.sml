@@ -26,7 +26,7 @@ Proof
   simp[Once encode_num_bytes_def]
 QED
 
-Theorem compute_label_offsets_snoc[local]:
+Theorem compute_label_offsets_snoc:
   compute_label_offsets (SNOC inst prog) =
     (FST (compute_label_offsets prog) + asm_inst_size inst,
      case inst of
