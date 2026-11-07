@@ -210,3 +210,29 @@ Proof
   simp[ptr_vv_ok_def, mk_ptr_def] >>
   fs[ptr_vv_ok_def]
 QED
+
+Theorem uint2str_body_expr_ptr_ok:
+  !cx ann n args.
+    (builtin_args_length_ok (Uint2Str n) (LENGTH args) ==>
+      body_exprs_ptr_ok cx args) ==>
+    body_expr_ptr_ok cx (Builtin ann (Uint2Str n) args)
+Proof
+  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all uint2str_body_operand_ptr >>
+  disch_then (qspecl_then [`func`, `d`, `ty`, `PG`] strip_assume_tac) >> gvs[] >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx ty
+      (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es` suffices_by
+    metis_tac[expr_sim_ptr_of_vv] >>
+  irule compile_unary_builtin_eval_vv_sim_ptr >>
+  simp[vyperInterpreterTheory.precompile_builtin_def, builtin_args_length_ok_def] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`\x sm. as_ptr_val (BaseT (StringT n)) LocMemory
+      (compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm)`, `ty`] >>
+  simp[uint2str_code_appends] >>
+  reverse conj_tac >- metis_tac[uint2str_compile_cut] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `expr_type e = _` (fn th => rewrite_tac[GSYM th]) >>
+  irule uint2str_eval_continuation >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
