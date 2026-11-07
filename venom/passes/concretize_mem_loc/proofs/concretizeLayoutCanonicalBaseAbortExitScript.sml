@@ -1,7 +1,9 @@
 Theory concretizeLayoutCanonicalBaseAbortExit
 Ancestors concretizeLayoutCanonicalBase concretizeLayoutCanonicalDriver
   concretizeLayoutSelectedBaseInterface concretizeLayoutCompletedJump
-  ptrDiscipline venomExecSemantics venomInst list
+  ptrDiscipline venomExecSemantics venomInst list opcodeClass
+  concretizeLayoutPhaseAbort concretizeLayoutExternalAbort
+  concretizeStepStructure passSharedFrame
 
 (* Leaf of the exhaustive base certificate: a non-terminator that halts or
    aborts (failed assertions, external aborts, static-context writes). *)
@@ -34,5 +36,35 @@ Theorem layout_canonical_abort_exit:
   ?r'. step_inst_base j t = r' /\
     layout_canonical_result D lo vs0 C C' q0 es qs ass qend q n r r'
 Proof
-  cheat
+  strip_tac >> Cases_on `r` >> gvs[]
+  >- (drule step_inst_base_halt_opcodes >> strip_tac >>
+      gvs[is_terminator_def])
+  >- (drule_all layout_canonical_ordinary_environment >> strip_tac >>
+      drule step_inst_base_abort_opcode >> simp[] >> strip_tac >>
+      gvs[concretize_positions_unchanged] >>
+      (Cases_on `i.inst_opcode = RETURNDATACOPY`
+      >- (gvs[] >>
+          `?opd ops opn dst src sz.
+             i.inst_operands = [opd;ops;opn] /\
+             eval_operand opd s = SOME dst /\
+             eval_operand ops s = SOME src /\
+             eval_operand opn s = SOME sz` by
+            (qpat_x_assum `step_inst_base i s = Abort a v` mp_tac >>
+             simp[Once step_inst_base_def] >>
+             simp[AllCaseEqs()] >> metis_tac[]) >>
+          drule_all layout_returncopy_abort_step >>
+          disch_then (qspecl_then [`ARB`, `ARB`] strip_assume_tac) >>
+          simp[layout_canonical_result_def]) >> gvs[] >>
+      `?tpost. step_inst_base i t = Abort a tpost /\
+         dead_result_rel D (Abort a v) (Abort a tpost)` by
+        (FIRST
+          [`MEM i.inst_opcode [ASSERT; ASSERT_UNREACHABLE; SELFDESTRUCT]` by simp[] >>
+             drule_all layout_guard_abort_step,
+           `MEM i.inst_opcode [CALL; CREATE; CREATE2]` by simp[] >>
+             drule_all layout_external_abort_step,
+           `MEM i.inst_opcode [INVALID; REVERT; SSTORE; TSTORE; LOG]` by simp[] >>
+             drule_all layout_simple_abort_step] >> metis_tac[]) >>
+      simp[layout_canonical_result_def])) >>
+  drule step_inst_base_intret_opcodes >> strip_tac >>
+  gvs[is_terminator_def]
 QED
