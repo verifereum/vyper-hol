@@ -115,7 +115,7 @@ Resume compile_alloc_buffer_expr_resources_separated[resources]:
   qpat_x_assum `!aid off sz. _` kall_tac >>
   qpat_x_assum `!aid b. _` kall_tac >>
   qpat_x_assum `!x w. _` kall_tac >>
-  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _` kall_tac >>
   rpt conj_tac
   >- suspend "operand"
   >- (drule_all alloca_step_ptr_covers >> simp[])

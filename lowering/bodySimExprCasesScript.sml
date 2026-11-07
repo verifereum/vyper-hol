@@ -147,18 +147,21 @@ Proof
   rpt strip_tac >> simp[Once body_expr_ok_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
       reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
-      >- metis_tac[body_subscript_widened_call_base] >>
+      >- (rw[expr_sim_case_def, expr_vv_case_def] >>
+          metis_tac[body_subscript_widened_call_base]) >>
       `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
         (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
          >- metis_tac[body_expr_ok_case]
          >- metis_tac[body_expr_ok_map_case] >>
          rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
-      drule expr_sim_case_of_vv >>
+      `expr_sim_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+        (irule expr_sim_case_of_vv >> simp[]) >>
       fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `expr_map_case F ctx func cenv cx (Subscript v8 e1 e2)` by
-    (irule compile_subscript_map_map_case >> rpt conj_tac >> rpt strip_tac >>
-     metis_tac[body_expr_ok_case, body_expr_ok_map_case]) >>
+    (irule compile_subscript_map_map_case >> conj_tac
+     >~ [`expr_sim_case`] >- (rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
+     metis_tac[body_expr_ok_map_case]) >>
   fs[expr_map_case_def] >> metis_tac[]
 QED
 

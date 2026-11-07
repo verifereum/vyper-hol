@@ -324,7 +324,7 @@ QED
 Theorem expr_post_none_intro:
   post_value_type cenv e = expr_type e /\
   expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
-  wb_frame cenv es sa s0 s ==>
+  wb_frame cenv es es' sa s0 s ==>
   expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
 Proof
   strip_tac >>
@@ -401,7 +401,7 @@ Theorem send_tail_frag:
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -438,7 +438,7 @@ Proof
   gvs[run_inst_seq_def, SRULE [mk_inst_def] send_assert_ok,
       SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  reverse conj_tac
+  conj_tac
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -458,9 +458,17 @@ Proof
         vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
         vs_pending_deletions := _|>`
         (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `wb_frame cenv es es' sa s0 t` by
+    (`es'.scopes = es1.scopes` by
+       (drule eval_send_read >> strip_tac >>
+        drule eval_send_preserves_non_accounts >> simp[]) >>
+     qpat_x_assum `wb_frame cenv es es1 sa s0 t` mp_tac >>
+     pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+     qpat_x_assum `es'.scopes = es1.scopes` (fn th => pure_rewrite_tac[th]) >>
+     disch_then ACCEPT_TAC) >>
   irule wb_frame_readonly_tail >>
   qexists_tac `sm` >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es es' sa s0 t` (irule_at Any) >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
@@ -581,7 +589,7 @@ Theorem send_tail_path[local]:
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\
@@ -626,7 +634,7 @@ Proof
   gvs[run_inst_seq_def, SRULE [mk_inst_def] send_assert_ok,
       SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  reverse conj_tac
+  conj_tac
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -646,9 +654,17 @@ Proof
         vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
         vs_pending_deletions := _|>`
         (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `wb_frame cenv es es' sa s0 t` by
+    (`es'.scopes = es1.scopes` by
+       (drule eval_send_read >> strip_tac >>
+        drule eval_send_preserves_non_accounts >> simp[]) >>
+     qpat_x_assum `wb_frame cenv es es1 sa s0 t` mp_tac >>
+     pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+     qpat_x_assum `es'.scopes = es1.scopes` (fn th => pure_rewrite_tac[th]) >>
+     disch_then ACCEPT_TAC) >>
   irule wb_frame_readonly_tail >>
   qexists_tac `sm` >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame cenv es es' sa s0 t` (irule_at Any) >>
   simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
@@ -659,7 +675,7 @@ Theorem send_tail_summary[local]:
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sa s0 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ es1.gas_obs = [] /\
   outcomes_accounts_typed es1.outcomes /\

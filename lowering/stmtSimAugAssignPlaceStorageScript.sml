@@ -2256,7 +2256,7 @@ Proof
     metis_tac[aug_place_supported_stmt_target_info] >>
   `target_post ctx func cenv cx start sa sp s0 mid pv (Type ty) ptrout t` by
     (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[Abbr `start`, target_post_def, locals_kept_def] >>
+     simp[Abbr `start`, target_post_def, locals_kept_def, popped_kept_def] >>
      strip_tac >> metis_tac[]) >>
   drule_all aug_place_storage_target_ready >> strip_tac >>
   qpat_x_assum `pv = _` SUBST_ALL_TAC >>

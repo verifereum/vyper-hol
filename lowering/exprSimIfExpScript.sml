@@ -838,7 +838,7 @@ Theorem ifexp_rebased_store_run[local]:
       FLOOKUP q.vs_allocas aid = SOME b) /\
     (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
-    locals_kept ce es' r q
+    locals_kept ce es' es' r q
 Proof
   strip_tac >>
   `eval_operand (Var x) s = SOME d` by
@@ -864,7 +864,7 @@ Proof
   `q.vs_allocas = s.vs_allocas` by
     (qpat_assum `q with <|vs_vars := _; vs_memory := _|> = s`
       (mp_tac o AP_TERM ``\z. z.vs_allocas``) >> simp[]) >>
-  `locals_kept ce es' r q` by
+  `locals_kept ce es' es' r q` by
     (irule locals_kept_regions_tail >> qexists_tac `s` >>
      reverse conj_tac >- gvs[expr_post_def] >>
      rpt strip_tac >> metis_tac[]) >>
@@ -982,7 +982,7 @@ Proof
      gvs[is_bytestring_type_def, is_word_type_def]) >>
   `expr_val_rel cx (expr_type e) v (Var x) q` by
     simp[expr_val_rel_def] >>
-  `locals_kept ce es s0 q` by
+  `locals_kept ce es es' s0 q` by
     (irule locals_kept_trans >> qexistsl_tac [`es'`, `origin`, `r`] >>
      fs[vv_post_def]) >>
   qexists_tac `q` >> simp[expr_post_def] >>
@@ -1324,7 +1324,7 @@ Proof
          simp[]) >>
       fs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   (* the locals' memory: kept by c, then by e *)
-  `locals_kept cenv es s0 ss` by
+  `locals_kept cenv es es' s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `u` >>
      conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
      irule locals_kept_trans >>
@@ -1333,7 +1333,7 @@ Proof
      >~ [`lookup_var _ (jump_to _ _)`] >- metis_tac[] >>
      irule locals_kept_mem_tail >> qexists_tac `tt` >>
      simp[jump_to_def] >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `locals_kept cenv es s0 ss` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `locals_kept cenv es es' s0 ss` (fn th => rewrite_tac[th]) >>
   rpt strip_tac >>
   qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
     (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>

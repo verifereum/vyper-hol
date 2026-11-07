@@ -134,7 +134,7 @@ QED
 Resume tuple_suffix_post[path]:
   qpat_x_assum `!aid off sz. _` kall_tac >>
   qpat_x_assum `!aid b. FLOOKUP _ _ = _ ==> _` kall_tac >>
-  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_assum `fn_has_code s1 s2 func` (mp_tac o REWRITE_RULE [fn_has_code_def]) >>
   strip_tac >>

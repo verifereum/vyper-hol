@@ -149,6 +149,13 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED
 
+Theorem stmt_state_rel_call_ctx[local]:
+  stmt_state_rel ctx func cenv cx es s ==>
+  call_ctx_rel cx.txn s.vs_call_ctx s.vs_tx_ctx s.vs_block_ctx
+Proof
+  simp[stmt_state_rel_def, state_rel_def]
+QED
+
 Theorem body_env_counted[local]:
   item <> PrevHash /\ item <> MsgGas /\
   compile_env_var item sa = (op,sb) /\
@@ -170,10 +177,10 @@ Proof
   irule body_env_read_counted >> simp[] >> HINT_EXISTS_TAC >>
   simp[is_terminator_def] >> rpt strip_tac >>
   simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
-  FIRST_PROVE [
-    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
-        val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def] >>
-    irule below_frontier_no_ranges >> simp[]]
+  imp_res_tac stmt_state_rel_call_ctx >>
+  gvs[call_ctx_rel_def, val_to_w256_address, val_to_w256_def,
+      integer_wordTheory.i2w_def] >>
+  irule below_frontier_no_ranges >> simp[]
 QED
 
 Theorem body_env_source[local]:

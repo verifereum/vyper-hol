@@ -22,8 +22,8 @@ Theorem gas_value_prefix_start_gas_obs:
 Proof
   PairCases_on `out` >>
   simp[gas_value_prefix_def, gas_marked_exec_def, expr_post_def,
-       locals_kept_def, stmt_state_rel_start_gas_obs] >>
-  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
+       locals_kept_def, popped_kept_def, stmt_state_rel_start_gas_obs] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem gas_marked_exec_start_gas_obs[local]:

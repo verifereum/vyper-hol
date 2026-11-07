@@ -394,11 +394,11 @@ Theorem raw_log_post_rebase[local]:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
-  wb_frame cenv es sa s0 t ==>
+  wb_frame cenv es es1 sa s0 t ==>
   expr_post ctx func cenv cx e es sa sb s0 es2 v op u
 Proof
   strip_tac >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es2 sa s0 u` by
     (irule wb_frame_trans >> goal_assum (drule_at Any) >>
      metis_tac[expr_post_frame]) >>
   gvs[expr_post_def, wb_frame_def] >>
@@ -475,7 +475,7 @@ Theorem raw_log_dynamic_tail_summary[local]:
       t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
   strip_tac >> drule_all raw_log_dynamic_data_view >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es sa s0 s` by
+  `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es es2 sa s0 s` by
     metis_tac[expr_post_state, expr_post_frame] >>
   `EVERY (\op. !p. op = Var p ==> not_fresh_at sd p) ops` by
     gvs[EVERY_CONJ] >>
@@ -484,7 +484,7 @@ Proof
   `?t'. step_inst_base (mk_inst sm.cs_next_id LOG logops []) t = OK t' /\
     stmt_state_rel ctx func cenv cx
       (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) t' /\
-    wb_frame cenv es sa s0 t'` by
+    wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0 t'` by
     (irule raw_log_core_frame >> simp[mk_inst_def, Abbr `logops`] >>
      qexistsl_tac [`ops`, `len_op`, `data_op`,
                   `n2w (b + 32)`, `n2w (LENGTH bs)`] >>
@@ -509,15 +509,17 @@ Proof
     `OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[dest_BytesV_def, lift_option_type_def, lift_option_def, type_check_def,
        assert_def, push_log_def, bind_def, ignore_bind_def, return_def] >>
+  `!n. wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0
+     (t' with vs_inst_idx := n)` by
+    (gen_tac >> irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t'`] >>
+     simp[lookup_var_def]) >>
   irule expr_post_none_intro >>
-  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
-  gvs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >- metis_tac[] >>
+  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, wb_frame_gas_obs] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) t'` mp_tac >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx ee t'` >>
   `es2 with <|logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs];
               gas_obs := []|> = ee with gas_obs := []` by simp[Abbr `ee`] >>
-  asm_rewrite_tac[] >> simp[]
+  asm_rewrite_tac[] >> simp[wb_frame_gas_obs, Abbr `ee`]
 QED
 
 Theorem raw_log_fixed_tail_summary[local]:
@@ -550,7 +552,7 @@ Theorem raw_log_fixed_tail_summary[local]:
       t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
 Proof
   strip_tac >> drule hash_fixed_post_view >> simp[] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es sa s0 s` by
+  `stmt_state_rel ctx func cenv cx es2 s /\ wb_frame cenv es es2 sa s0 s` by
     metis_tac[expr_post_state, expr_post_frame] >>
   `b + 32 < dimword (:256)` by
     (irule hash_live_footprint_bound >>
@@ -570,7 +572,7 @@ Proof
   `run_inst_seq (emitted_insts sd sm) s = OK (mstore (w2n (n2w b : bytes32)) w s) /\
    TAKE 32 (DROP (w2n (n2w b : bytes32)) (mstore (w2n (n2w b : bytes32)) w s).vs_memory ++ REPLICATE 32 0w) = bs /\
    stmt_state_rel ctx func cenv cx es2 (mstore (w2n (n2w b : bytes32)) w s) /\
-   wb_frame cenv es sa s0 (mstore (w2n (n2w b : bytes32)) w s)` by
+   wb_frame cenv es es2 sa s0 (mstore (w2n (n2w b : bytes32)) w s)` by
     (irule raw_log_fixed_store_frame >> simp[] >>
      metis_tac[]) >>
   `eval_operand ptr_op (mstore b w s) = SOME (n2w b) /\
@@ -585,7 +587,7 @@ Proof
   `?t. step_inst_base (mk_inst sm.cs_next_id LOG logops []) (mstore b w s) = OK t /\
     stmt_state_rel ctx func cenv cx
       (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) t /\
-    wb_frame cenv es sa s0 t` by
+    wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0 t` by
     (irule raw_log_core_frame >> simp[mk_inst_def, Abbr `logops`] >>
      simp[eval_operand_def, wordsTheory.dimword_def] >> metis_tac[]) >>
   `sb.cs_current_bb = sd.cs_current_bb /\
@@ -610,16 +612,19 @@ Proof
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[dest_BytesV_def, lift_option_type_def, lift_option_def, type_check_def,
        assert_def, push_log_def, bind_def, ignore_bind_def, return_def] >>
+  `!n. wb_frame cenv es (es2 with logs := es2.logs ++ [encode_raw_event_values cx.txn.target vs bs]) sa s0
+     (t with vs_inst_idx := n)` by
+    (gen_tac >> irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
+     simp[lookup_var_def]) >>
   irule expr_post_none_intro >>
-  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs] >>
-  gvs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >- metis_tac[] >>
+  simp[stmt_state_rel_inst_idx, stmt_state_rel_gas_obs, wb_frame_gas_obs] >>
+  gvs[lookup_var_def] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) t` mp_tac >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx ee t` >>
   `es2 with <|logs := es2.logs ++
      [encode_raw_event_values cx.txn.target vs (TAKE 32 (word_to_bytes_be w))];
               gas_obs := []|> = ee with gas_obs := []` by simp[Abbr `ee`] >>
-  asm_rewrite_tac[] >> simp[]
+  asm_rewrite_tac[] >> simp[wb_frame_gas_obs, Abbr `ee`]
 QED
 
 Theorem raw_log_alloc_path[local]:
@@ -912,7 +917,7 @@ Resume raw_log_fixed_sim[tail]:
     (drule emitted_insts_emit_op_local >> simp[]) >>
   `local_ptrs_reserved cenv st2` by
     metis_tac[local_ptrs_reserved_next_var] >>
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es (mid with gas_obs := []) sa s0 t'` by
     (irule wb_frame_allocating_tail >> simp[] >>
      qexistsl [`t`, `mid.scopes`, `st1`] >>
      gvs[typed_args_post_def]) >>

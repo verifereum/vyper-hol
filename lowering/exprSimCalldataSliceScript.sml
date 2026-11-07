@@ -618,7 +618,7 @@ Theorem slice_calldata_run[local]:
        FLOOKUP t.vs_allocas aid = SOME entry) /\
     (!aid b len. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
-    locals_kept cenv es s t /\
+    locals_kept cenv es es s t /\
     (!nm lb len. local_region cenv es.scopes t nm lb len ==>
        regions_disjoint (w2n w) (32 + 32 * word_size n) lb len)
 Proof
@@ -821,7 +821,7 @@ Theorem slice_calldata_vv_post[local]:
     mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
   (!nm lb len. local_region cenv es.scopes t nm lb len ==>
      regions_disjoint (w2n w) (32 + 32 * word_size n) lb len) /\
-  locals_kept cenv es s t ==>
+  locals_kept cenv es es s t ==>
   !k. vv_post ctx func cenv cx e es sa sb s es
     (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
     (LocatedValue (expr_type e) p) (t with vs_inst_idx := k)
@@ -977,14 +977,16 @@ Theorem vv_post_prefix_frame:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  wb_frame cenv es sa s0 t /\
+  wb_frame cenv es es1 sa s0 t /\
   vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u ==>
   vv_post ctx func cenv cx e es sa sb s0 es2 tv vv u
 Proof
   simp[vv_post_def, GSYM wb_frame_def] >> rpt strip_tac
   >- metis_tac[vv_at_start_mono]
   >- metis_tac[vv_own_start_mono] >>
-  metis_tac[wb_frame_trans]
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`, `sm`,
+               `t`, `u`, `ctx`] mp_tac wb_frame_trans >>
+  simp[]
 QED
 
 Theorem slice_expr_exit_INR_cast[local]:
@@ -1145,7 +1147,7 @@ Proof
     (drule expr_post_word_operand >>
      simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
           integer_wordTheory.i2w_pos]) >>
-  `wb_frame cenv es sa s0 s` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es' sa s0 s` by metis_tac[expr_post_frame] >>
   `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
     (qpat_x_assum `bind _ _ (es with gas_obs := gs) = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
