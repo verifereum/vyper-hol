@@ -209,11 +209,10 @@ Proof
       simp[] >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
   irule vv_store_bound_frame_mem_src >> goal_assum (drule_at Any) >>
   simp[] >> gvs[] >>
-  irule literal_operand_frame >>
-  reverse conj_tac >- simp[update_var_def] >>
-  qexists_tac `sm` >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+  qpat_x_assum `!z. vv_operand vv = Var z ==> not_fresh_at sm z`
+    (qspec_then `STRING #"%" (toString sm.cs_next_var)` mp_tac) >>
+  simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  disch_tac >> simp[]
 QED
 
 Theorem vv_post_add_read_mem_src[local]:
