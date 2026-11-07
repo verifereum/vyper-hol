@@ -526,6 +526,32 @@ Resume copy_struct_select[tail]:
 QED
 Finalise copy_struct_select
 
+Theorem copy_sparse_write_owner[local]:
+  !sparse tv offset writes n x.
+    sparse_has_type tv n sparse /\
+    encode_static_array tv offset sparse = SOME writes /\
+    MEM x (MAP FST writes) ==>
+    ?i r v child. MEM (i,v) sparse /\ MEM i (MAP FST sparse) /\
+      encode_value tv v = SOME child /\ MEM r (MAP FST child) /\
+      r < type_slot_size tv /\ x = offset+i*type_slot_size tv+r
+Proof
+  Induct >> simp[Once encode_value_def] >> Cases >> rename1 `(i0,hv)::sparse` >>
+  rpt gen_tac >> simp[value_has_type_def] >> rpt strip_tac >>
+  qpat_x_assum `encode_static_array _ _ _ = _` mp_tac >>
+  simp[Once encode_value_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `encode_value tv hv = SOME hdws` >>
+  rename1 `encode_static_array tv offset sparse = SOME tailws` >>
+  gvs[MAP_APPEND, MEM_APPEND, MEM_MAP, pairTheory.EXISTS_PROD]
+  >- (rename1 `MEM (r,w) hdws` >>
+      `MEM r (MAP FST hdws)` by (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+      drule_all (cj 1 encode_writes_bounded) >> strip_tac >>
+      qexistsl_tac [`i0`, `r`, `hv`, `hdws`] >> simp[] >> metis_tac[]) >>
+  first_x_assum drule >> disch_then drule >>
+  disch_then (qspec_then `x` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  qexistsl_tac [`i`, `r`, `v`, `child`] >> simp[] >> metis_tac[]
+QED
+
 (* Every sparse write lies in the interval of a key actually present. *)
 Theorem copy_sparse_write_key[local]:
   !sparse tv offset writes n x.
@@ -535,22 +561,7 @@ Theorem copy_sparse_write_key[local]:
     ?i r. MEM i (MAP FST sparse) /\ r < type_slot_size tv /\
           x = offset+i*type_slot_size tv+r
 Proof
-  Induct >> simp[Once encode_value_def] >> Cases >> rename1 `(i0,hv)::sparse` >>
-  rpt gen_tac >>
-  simp[value_has_type_def] >> rpt strip_tac >>
-  qpat_x_assum `encode_static_array _ _ _ = _` mp_tac >>
-  simp[Once encode_value_def, AllCaseEqs()] >> strip_tac >>
-  rename1 `encode_value tv hv = SOME hdws` >>
-  rename1 `encode_static_array tv offset sparse = SOME tailws` >>
-  gvs[MAP_APPEND, MEM_APPEND, MEM_MAP, pairTheory.EXISTS_PROD]
-  >- (rename1 `MEM (r,w) hdws` >>
-      `MEM r (MAP FST hdws)` by (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
-      drule_all (cj 1 encode_writes_bounded) >> strip_tac >>
-      qexistsl_tac [`i0`, `r`] >> simp[]) >>
-  first_x_assum drule >> disch_then drule >>
-  disch_then (qspec_then `x` mp_tac) >>
-  (impl_tac >- metis_tac[]) >> strip_tac >>
-  qexistsl_tac [`i`, `r`] >> simp[] >> metis_tac[]
+  rpt strip_tac >> drule_all copy_sparse_write_owner >> metis_tac[]
 QED
 
 Theorem copy_sparse_select[local]:
@@ -696,6 +707,166 @@ Proof
   IF_CASES_TAC >> simp[MEM_MAP, pairTheory.EXISTS_PROD] >>
   strip_tac >> metis_tac[ADD_COMM]
 QED
+
+Theorem copy_default_block_select[local]:
+  !tv defaults sparse n i.
+    (!r. MEM r (MAP FST defaults) ==> r < type_slot_size tv) /\
+    i < n /\ ~MEM i (MAP FST sparse) ==>
+    ?pre post.
+      FLAT (GENLIST (\h. if MEM h (MAP FST sparse) then []
+        else MAP (\(r,w). (r+h*type_slot_size tv,w)) defaults) n) =
+        pre ++ MAP (\(r,w). (r+i*type_slot_size tv,w)) defaults ++ post /\
+      (!x. MEM x (MAP FST pre) ==> x < i*type_slot_size tv) /\
+      (!x. MEM x (MAP FST post) ==>
+        (i+1)*type_slot_size tv <= x /\ x < n*type_slot_size tv)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `f = \h. if MEM h (MAP FST sparse) then []
+        else MAP (\(r,w). (r+h*type_slot_size tv,w)) defaults` >>
+  qexistsl_tac [`FLAT (TAKE i (GENLIST f n))`,
+                `FLAT (DROP (SUC i) (GENLIST f n))`] >>
+  conj_tac
+  >- (qspec_then `GENLIST f n` mp_tac (Q.SPEC `i` rich_listTheory.TAKE_DROP_SUC) >>
+      simp[] >> strip_tac >>
+      `f i = MAP (\(r,w). (r+i*type_slot_size tv,w)) defaults` by simp[Abbr `f`] >>
+      qpat_x_assum `_ = GENLIST f n`
+        (fn th => simp[Once (GSYM th), SimpLHS, FLAT_APPEND]) >>
+      simp[]) >>
+  conj_tac
+  >- suspend "prefix"
+  >> suspend "suffix"
+QED
+Resume copy_default_block_select[prefix]:
+  simp[TAKE_GENLIST, MIN_DEF] >> rpt strip_tac >>
+  gvs[MEM_MAP, pairTheory.EXISTS_PROD, MEM_FLAT, MEM_GENLIST] >>
+  qpat_x_assum `MEM _ (f _)` mp_tac >>
+  simp[Abbr `f`] >> IF_CASES_TAC >>
+  simp[MEM_MAP, pairTheory.EXISTS_PROD] >> strip_tac >>
+  `p_1 < type_slot_size tv` by metis_tac[] >>
+  `(m+1)*type_slot_size tv <= i*type_slot_size tv` by simp[LE_MULT_RCANCEL] >>
+  qpat_x_assum `(m+1)*_ <= _` mp_tac >>
+  pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac
+QED
+Resume copy_default_block_select[suffix]:
+  simp[DROP_GENLIST] >> gen_tac >> disch_tac >>
+  gvs[MEM_MAP, pairTheory.EXISTS_PROD, MEM_FLAT, MEM_GENLIST] >>
+  qpat_x_assum `MEM _ (f _)` mp_tac >>
+  simp[Abbr `f`] >> IF_CASES_TAC >>
+  simp[MEM_MAP, pairTheory.EXISTS_PROD] >> strip_tac >>
+  `p_1 < type_slot_size tv` by metis_tac[] >>
+  `type_slot_size tv*(i+1) <= type_slot_size tv*(m+SUC i)` by simp[LE_MULT_LCANCEL] >>
+  `type_slot_size tv*(m+SUC i+1) <= type_slot_size tv*n` by simp[LE_MULT_LCANCEL] >>
+  rule_assum_tac (PURE_REWRITE_RULE [LEFT_ADD_DISTRIB, MULT_CLAUSES]) >>
+  pure_rewrite_tac[LEFT_ADD_DISTRIB, MULT_CLAUSES] >>
+  once_rewrite_tac[MULT_COMM] >>
+  rule_assum_tac (ONCE_REWRITE_RULE [MULT_COMM]) >> decide_tac
+QED
+Finalise copy_default_block_select
+
+Theorem copy_default_block_member[local]:
+  !tv defaults sparse n i r.
+    (!q. MEM q (MAP FST defaults) ==> q < type_slot_size tv) /\
+    i < n /\ r < type_slot_size tv /\
+    MEM (i*type_slot_size tv+r)
+      (MAP FST (FLAT (GENLIST (\h. if MEM h (MAP FST sparse) then []
+        else MAP (\(q,w). (q+h*type_slot_size tv,w)) defaults) n))) ==>
+    ~MEM i (MAP FST sparse) /\ MEM r (MAP FST defaults)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all (SRULE [ADD_CLAUSES] (Q.SPECL [`n`, `0`] copy_default_block_key)) >>
+  strip_tac >>
+  `(i*type_slot_size tv+r) DIV type_slot_size tv = i` by
+    (irule DIV_UNIQUE >> qexists_tac `r` >> simp[]) >>
+  `(i*type_slot_size tv+r) DIV type_slot_size tv = h` by
+    (irule DIV_UNIQUE >> qexists_tac `r''` >> simp[]) >>
+  gvs[]
+QED
+
+Theorem copy_fixed_written_select[local]:
+  !tv defaults sparse n off mem explicit writes i r.
+    well_formed_type_value tv /\ sparse_has_type tv n sparse /\
+    SORTED $< (MAP FST sparse) /\ kvs_in_memory sparse off tv mem /\
+    (!h. h<n /\ ALOOKUP sparse h=NONE ==>
+      val_in_memory tv (default_value tv) (off+h*type_memory_size tv) mem) /\
+    encode_value tv (default_value tv)=SOME defaults /\
+    encode_static_array tv 0 sparse=SOME explicit /\
+    writes=FLAT (GENLIST (\h. if MEM h (MAP FST sparse) then []
+        else MAP (\(q,w). (q+h*type_slot_size tv,w)) defaults) n) ++ explicit /\
+    i<n /\ r<type_slot_size tv /\ MEM (i*type_slot_size tv+r) (MAP FST writes) ==>
+    ?v child pre post.
+      value_has_type tv v /\
+      val_in_memory tv v (off+32*(i*type_slot_size tv)) mem /\
+      encode_value tv v=SOME child /\ MEM r (MAP FST child) /\
+      writes=pre++MAP (\(q,w). (q+i*type_slot_size tv,w)) child++post /\
+      (!q. MEM q (MAP FST post) ==> q<n*type_slot_size tv /\
+        (q<i*type_slot_size tv \/ (i+1)*type_slot_size tv<=q))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!q. MEM q (MAP FST defaults) ==> q < type_slot_size tv` by
+    (qspec_then `tv` assume_tac default_value_well_typed >>
+     drule (cj 1 encode_writes_bounded) >> asm_rewrite_tac[]) >>
+  Cases_on `ALOOKUP sparse i`
+  >- suspend "absent"
+  >> suspend "present"
+QED
+Resume copy_fixed_written_select[absent]:
+  `~MEM i (MAP FST sparse)` by gvs[alistTheory.ALOOKUP_NONE] >>
+  drule_all copy_default_block_select >> strip_tac >>
+  qexistsl_tac [`default_value tv`, `defaults`, `pre`, `post++explicit`] >>
+  simp[default_value_well_typed, APPEND_ASSOC] >>
+  conj_tac
+  >- (`off+32*(i*type_slot_size tv) = off+i*type_memory_size tv` by
+        simp_tac std_ss [type_memory_size_slots, MULT_ASSOC, MULT_COMM] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `MEM _ (MAP FST writes)` mp_tac >>
+      qpat_x_assum `writes = _` (fn th => pure_rewrite_tac[th, MAP_APPEND, MEM_APPEND]) >>
+      strip_tac
+      >- (drule_all copy_default_block_member >> simp[]) >>
+      drule_all copy_sparse_write_key >> strip_tac >>
+      rename1 `MEM h (MAP FST sparse)` >>
+      rename1 `i*type_slot_size tv+r = 0+h*type_slot_size tv+rr` >>
+      `(i*type_slot_size tv+r) DIV type_slot_size tv = i` by
+        (irule DIV_UNIQUE >> qexists_tac `r` >> simp[]) >>
+      `(i*type_slot_size tv+r) DIV type_slot_size tv = h` by
+        (irule DIV_UNIQUE >> qexists_tac `rr` >> simp[]) >> gvs[]) >>
+  rpt gen_tac >> strip_tac
+  >- (first_x_assum drule >> simp[MULT_COMM]) >>
+  drule_all copy_sparse_write_key >> strip_tac >>
+  conj_tac
+  >- (drule_all (cj 3 encode_writes_bounded) >> simp[]) >>
+  `i' <> i` by metis_tac[] >>
+  Cases_on `i' < i`
+  >- (disj1_tac >>
+      `(i'+1)*type_slot_size tv <= i*type_slot_size tv` by simp[LE_MULT_RCANCEL] >>
+      qpat_x_assum `(i'+1)*_ <= _` mp_tac >>
+      pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  disj2_tac >>
+  `type_slot_size tv*(i+1) <= type_slot_size tv*i'` by simp[LE_MULT_LCANCEL] >>
+  pop_assum mp_tac >> once_rewrite_tac[MULT_COMM] >> decide_tac
+QED
+Resume copy_fixed_written_select[present]:
+  `MEM i (MAP FST sparse)` by
+    (drule alistTheory.ALOOKUP_MEM >> simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  `MEM (i*type_slot_size tv+r) (MAP FST explicit)` by
+    (qpat_x_assum `MEM _ (MAP FST writes)` mp_tac >>
+     qpat_x_assum `writes = _` (fn th => pure_rewrite_tac[th, MAP_APPEND, MEM_APPEND]) >>
+     strip_tac >> simp[] >> drule_all copy_default_block_member >> simp[]) >>
+  drule_all copy_sparse_write_owner >> strip_tac >>
+  rename1 `MEM (h,v) sparse` >>
+  rename1 `i*type_slot_size tv+r = 0+h*type_slot_size tv+rr` >>
+  `(i*type_slot_size tv+r) DIV type_slot_size tv = i` by
+    (irule DIV_UNIQUE >> qexists_tac `r` >> simp[]) >>
+  `(i*type_slot_size tv+r) DIV type_slot_size tv = h` by
+    (irule DIV_UNIQUE >> qexists_tac `rr` >> simp[]) >>
+  `h=i` by decide_tac >>
+  qpat_x_assum `MEM _ (MAP FST writes)` kall_tac >> gvs[] >>
+  drule_all copy_sparse_select >> strip_tac >>
+  `child'=child` by metis_tac[optionTheory.SOME_11] >>
+  qmatch_goalsub_abbrev_tac `defs ++ explicit` >>
+  qexistsl_tac [`v`, `child`, `defs++pre`, `post`] >>
+  simp[APPEND_ASSOC] >> rpt strip_tac >> first_x_assum drule >> simp[MULT_COMM]
+QED
+Finalise copy_fixed_written_select
 
 Theorem copy_sparse_absent_storage[local]:
   !sparse tv n writes i k st x.
