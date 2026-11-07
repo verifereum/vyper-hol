@@ -190,7 +190,7 @@ Resume ld_normal_payload_copy_backward[target_operands]:
   qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
   simp[Once step_inst_non_invoke, SimpLHS] >>
   asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
-  simp[AllCaseEqs()] >> strip_tac >> gvs[] >> metis_tac[]
+  simp[AllCaseEqs()] >> strip_tac >> metis_tac[]
 QED
 
 Resume ld_normal_payload_copy_backward[geometry]:

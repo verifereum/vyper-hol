@@ -238,7 +238,10 @@ Proof
   strip_tac >>
   `retpc_var fn out` by
     (simp[retpc_var_def] >> irule copy_phi_var_seed >> metis_tac[MEM]) >>
-  gvs[step_inst_non_invoke, step_inst_base_def] >>
+  qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  simp[step_inst_non_invoke, step_inst_base_def] >>
   reverse conj_tac >- metis_tac[ld_lookup_defined_update] >>
   simp[ld_step_prov_def, ld_out_prov_def] >>
   irule ld_owned_vars_update_supported >>

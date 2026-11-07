@@ -73,6 +73,13 @@ Proof
        metis_tac[ld_frame_embedding_source, ld_erase_lookup,
                  optionTheory.OPTION_MAP_EQ_NONE] >>
      drule_all ld_alloca_step_effects >> strip_tac >>
+     qpat_x_assum `i.inst_outputs = [out]` mp_tac >>
+     qpat_x_assum `exec_alloca i s _ = OK s'` mp_tac >>
+     qpat_x_assum `FLOOKUP s'.vs_allocas i.inst_id = SOME (bs,sz)` mp_tac >>
+     qpat_x_assum `FLOOKUP s.vs_allocas i.inst_id = NONE` mp_tac >>
+     qpat_x_assum `eval_operand op s = SOME n'` mp_tac >>
+     qpat_x_assum `eval_operand op s = SOME n` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE]) >>
   `((if FLOOKUP L i.inst_id = NONE then E |+ ((0,k),(bs,bt,w2n n)) else E)) = E'` by
     (Cases_on `FLOOKUP L i.inst_id = NONE` >> gvs[]) >>
@@ -149,10 +156,21 @@ QED
 Resume ld_alloca_normal_data_backward_fresh_bounds[live_representation]:
   map_every qx_gen_tac [`owner`,`b0`,`c0`,`n0`] >> strip_tac >>
   Cases_on `FLOOKUP L i.inst_id = NONE /\ owner = (0,k)`
-  >- (gvs[ld_site_entry_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+  >- (`b0 = bs /\ c0 = bt /\ n0 = sz` by
+        (qpat_x_assum `ld_site_entry E' owner b0 c0 n0` mp_tac >>
+         qpat_x_assum `E' = _` mp_tac >>
+         qpat_x_assum `FLOOKUP L i.inst_id = NONE /\ owner = (0,k)` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[ld_site_entry_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
+      disj2_tac >> qexists_tac `i.inst_id` >> metis_tac[]) >>
   `owner IN live /\ ld_site_entry E owner b0 c0 n0` by
-    (Cases_on `FLOOKUP L i.inst_id = NONE` >>
-     gvs[ld_site_entry_def, FLOOKUP_UPDATE, AllCaseEqs()]) >>
+    (qpat_x_assum `ld_site_entry E' owner b0 c0 n0` mp_tac >>
+     qpat_x_assum `owner IN (if _ then _ else _)` mp_tac >>
+     qpat_x_assum `E' = _` mp_tac >>
+     qpat_x_assum `~(FLOOKUP L i.inst_id = NONE /\ owner = (0,k))` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `FLOOKUP L i.inst_id = NONE` >>
+     simp[ld_site_entry_def, FLOOKUP_UPDATE] >> metis_tac[]) >>
   `c0+n0 <= f \/ ?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME(c0,n0)` by
     metis_tac[] >>
   metis_tac[ld_alloca_preserves_entry]

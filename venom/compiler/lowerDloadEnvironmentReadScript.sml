@@ -49,7 +49,12 @@ Proof
   drule_all ld_environment_read_backward >>
   disch_then (qspecl_then [`fuelS`,`CS`] strip_assume_tac) >> gvs[] >>
   `!st ta. out_taint ta i st = {}` by
-    (rpt gen_tac >> simp[out_taint_def] >> rpt CASE_TAC >> simp[]) >>
+    (rpt gen_tac >> simp[out_taint_def] >>
+     Cases_on `i.inst_operands` >- simp[] >>
+     rename1 `h::ops` >> Cases_on `ops`
+     >- (simp[] >> CASE_TAC >> simp[]) >>
+     rename1 `h::h2::rest` >> Cases_on `rest` >> simp[] >>
+     CASE_TAC >> simp[]) >>
   `ld_owned_value E NONE NONE {} {} w w` by
     simp[ld_owned_value_def, ld_mask_word_def] >>
   drule_all ld_owned_vars_update >>
