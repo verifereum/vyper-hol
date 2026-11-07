@@ -8,7 +8,7 @@ Ancestors concretizeLayoutCallEntryAnnotations concretizeLayoutCallSetupMemory
   frameJointTransition frameJointTrace concretizeStepStructure venomWf venomInstProofs1
   frameRelocationLocal concretizeLayoutSupplement concretizeLayoutParameterSegments
   venomExecProofs o1PassContract contextCodegenRel venomInst finite_map list arithmetic
-  frameControlAgreement concretizeLayoutCanonicalDriver
+  frameControlAgreement concretizeLayoutCanonicalDriver venomExecSemantics
 
 Theorem layout_selected_call_scoped_run:
   !D lo vs0 C C' q0 es qs q g a n stk PG G tn callerfn callinst caller
@@ -29,7 +29,7 @@ Theorem layout_selected_call_scoped_run:
   o1_fn_shape C callerfn /\ fn_ptr_ok P callerfn /\
   MEM callinst (fn_insts callerfn) /\ taint_ok callerfn tn callinst caller /\
   EVERY bb_well_formed callee.fn_blocks /\
-  target = concretize_function_with_positions positions callee /\
+  target.fn_blocks = (concretize_function_with_positions positions callee).fn_blocks /\
   ~NULL target.fn_blocks /\ caller.vs_labels = caller'.vs_labels /\
   vs0.vs_allocas = FEMPTY ==>
   ?args' ct h. eval_operands ops caller' = SOME args' /\
@@ -105,6 +105,7 @@ Proof
       (HD (concretize_function_with_positions positions callee).fn_blocks).bb_label` by
        (Cases_on `callee.fn_blocks` >>
         gvs[concretize_positions_blocks, concretize_positions_block_label]) >>
+     ` (HD callee.fn_blocks).bb_label = (HD target.fn_blocks).bb_label` by metis_tac[] >>
      drule_all paired_setup_control >> simp[parameter_control_def]) >>
   `?bb. lookup_block cs.vs_current_bb callee.fn_blocks = SOME bb` by
     (fs[enters_block_def] >> metis_tac[]) >>
@@ -114,6 +115,7 @@ Proof
     (simp[EVERY_MEM, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
   drule_all concretize_enters_block_transport >>
   disch_then (qspec_then `positions` strip_assume_tac) >>
+  `enters_block target tc tpost` by gvs[enters_block_def] >>
   drule_all layout_setup_enters_block_identity >> strip_tac >> gvs[] >>
   qpat_x_assum `joint_transition C _ NONE _` mp_tac >>
   simp[joint_transition_call_iff] >> strip_tac >> gvs[] >>
@@ -133,12 +135,15 @@ Proof
       EL (SUC a.lop_cursor) ass ==>
     layout_canonical_run D lo vs0 C C' q0 es qs ass q
       (EL (SUC a.lop_cursor) (q0::qs)) (SUC a.lop_cursor) callee cs
-      (concretize_function_with_positions positions callee) tc` by
+      target tc` by
     (rpt strip_tac >> irule layout_canonical_run_intro >>
      qexistsl [`h`, `cs`, `tc`] >>
      simp[Abbr `h`, layout_driver_indexed_def, layout_phase_canonical_def,
        control_agree_def]) >>
-  qexists `h` >> simp[Abbr `h`, layout_phase_canonical_def, control_agree_def] >>
+  `setup_callee target args' caller' = SOME tc` by
+    gvs[setup_callee_def] >>
+  qexistsl [`tc`, `h`] >>
+  simp[Abbr `h`, layout_phase_canonical_def, control_agree_def] >>
   conj_tac
   >- (irule layout_scoped_run_intro >> goal_assum (drule_at Any) >> simp[]) >>
   qpat_x_assum `!ass. _ ==> layout_canonical_run _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
