@@ -1630,3 +1630,92 @@ Proof
       simp[phi_origin_count_zero, listTheory.EVERY_MEM] >> metis_tac[]) >>
   simp[phi_cell_value_def]
 QED
+
+(* Demand support: a retained write changes only the newly duplicated top. *)
+Theorem phi_origin_write_keep_member:
+  !cells x d ret. MEM x cells ==>
+    MEM x (phi_origin_write T d ret cells)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?j. j < LENGTH cells /\ EL j cells = x` by metis_tac[listTheory.MEM_EL] >>
+  simp[phi_origin_write_def, stack_poke_def, stack_dup_def,
+       listTheory.MEM_LUPDATE] >>
+  disj2_tac >> qexists_tac `j` >> simp[listTheory.EL_SNOC]
+QED
+
+Theorem phi_origin_write_live_member:
+  !inst next p q cells d keep v.
+    d < LENGTH cells /\ phi_origin_selected next p q cells d keep /\
+    MEM v next /\
+    (MEM (Var v) (MAP (phi_cell_value T) cells) \/ v = HD inst.inst_outputs) ==>
+    MEM (Var v) (MAP (phi_cell_value T)
+      (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells))
+Proof
+  rpt gen_tac >> strip_tac
+  >- (gvs[listTheory.MEM_MAP] >> rename1 `MEM x cells` >>
+      `MEM x (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells)` by
+        (Cases_on `keep` >- metis_tac[phi_origin_write_keep_member] >>
+         irule phi_origin_write_preserves_other_member >> simp[] >>
+         strip_tac >> gvs[phi_origin_selected_def, stack_peek_suffix_map,
+                           stackPlanTypesTheory.operand_to_string_def] >>
+         metis_tac[stackPlanTypesTheory.operand_to_string_def]) >>
+      metis_tac[listTheory.MEM_MAP]) >>
+  gvs[] >>
+  `MEM (PhiCommon (Var (HD inst.inst_outputs)))
+    (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells)` suffices_by
+      metis_tac[listTheory.MEM_MAP, phi_cell_value_def] >>
+  Cases_on `keep` >>
+  simp[phi_origin_write_def, stack_poke_def, stack_dup_def, listTheory.MEM_LUPDATE] >>
+  decide_tac
+QED
+
+Theorem phi_origin_stage_live_member:
+  !inst next halting p q cells cells' v.
+    phi_origin_stage inst next halting p q cells cells' /\
+    MEM v next /\
+    (MEM (Var v) (MAP (phi_cell_value T) cells) \/ v = HD inst.inst_outputs) ==>
+    MEM (Var v) (MAP (phi_cell_value T) cells')
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `phi_origin_stage _ _ _ _ _ _ _` mp_tac >>
+  simp[phi_origin_stage_def] >> strip_tac >>
+  `d < LENGTH cells` by fs[phi_origin_incoming_def] >>
+  `MEM (Var v) (MAP (phi_cell_value T)
+     (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells))` by
+    metis_tac[phi_origin_write_live_member] >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next` >> gvs[] >>
+  gvs[listTheory.MEM_MAP] >> rename1 `MEM x (phi_origin_write _ _ _ _)` >>
+  `Var v <> Var (HD inst.inst_outputs)` by (strip_tac >> gvs[]) >>
+  `phi_cell_value T (stack_peek e
+    (phi_origin_write keep d (Var (HD inst.inst_outputs)) cells)) =
+    Var (HD inst.inst_outputs)` by
+    metis_tac[stack_get_depth_props, stack_peek_suffix_map] >>
+  qexists_tac `x` >> simp[] >>
+  irule phi_origin_pop_preserves_other_member >> simp[] >> metis_tac[]
+QED
+
+(* One demanded name is tracked only while it is live; a defining PHI
+   supplies its representative even when it had none at entry. *)
+Theorem phi_origin_schedule_live_member:
+  !steps live p q cells cells_end v.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    (MEM v (live 0) ==> MEM (Var v) (MAP (phi_cell_value T) cells)) /\
+    (!i inst next halting. i < LENGTH steps /\ EL i steps = (inst,next,halting) ==>
+      next = live (SUC i) /\
+      (MEM v next ==> MEM v (live i) \/ v = HD inst.inst_outputs)) ==>
+    MEM v (live (LENGTH steps)) ==>
+    MEM (Var v) (MAP (phi_cell_value T) cells_end)
+Proof
+  Induct >- simp[phi_origin_schedule_ready_def] >>
+  Cases_on `h` >> Cases_on `r` >> rename1 `(inst,next,halting)::steps` >>
+  rpt gen_tac >> strip_tac >>
+  `next = live 1 /\ (MEM v next ==> MEM v (live 0) \/ v = HD inst.inst_outputs)` by
+    (qpat_x_assum `!i inst next halting. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  qpat_x_assum `phi_origin_schedule_ready _ _ _ _ _` mp_tac >>
+  simp[phi_origin_schedule_ready_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`\i. live (SUC i)`, `p`, `q`, `cells1`, `cells_end`, `v`] mp_tac) >>
+  simp[] >> impl_tac
+  >- (strip_tac >> irule phi_origin_stage_live_member >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  simp[]
+QED
