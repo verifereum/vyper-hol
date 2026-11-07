@@ -467,9 +467,21 @@ QED
 Theorem evaluate_membership_success_bool:
   evaluate_membership tv neg v1 v2 = INL v ==> ?b. v = BoolV b
 Proof
-  Cases_on `v2` >> rw[evaluate_membership_def] >>
-  Cases_on `v1` >> fs[evaluate_binop_def, binop_negate_def] >>
-  metis_tac[]
+  let
+    (* Reduce the operator case before substituting concrete operands into
+       the large defining equation.  These rewrites stay proof-local. *)
+    fun membership_eq op_tm =
+      CONV_RULE
+        (STRIP_QUANT_CONV (RHS_CONV (SIMP_CONV (srw_ss()) [])))
+        (Q.SPECL [`v2`, `v1`, `u`, `tv`, op_tm] evaluate_binop_def)
+    val in_eq = membership_eq `In`
+    val notin_eq = membership_eq `NotIn`
+  in
+    Cases_on `v2` >> simp[evaluate_membership_def] >>
+    Cases_on `neg` >> simp[notin_eq, in_eq] >>
+    Cases_on `v1` >> simp[binop_negate_def] >>
+    rpt strip_tac >> gvs[]
+  end
 QED
 
 Theorem evaluate_membership_sparse_defaults:
