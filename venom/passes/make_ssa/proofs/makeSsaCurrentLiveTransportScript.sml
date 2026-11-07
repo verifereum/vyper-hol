@@ -1,5 +1,6 @@
 Theory makeSsaCurrentLiveTransport
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentSelectedLive makeSsaCurrentDefs makeSsaCurrentDemandDominance
   livenessDefs livenessAnalysisProps livenessLocalProofs dfAnalyzeDefs venomInst venomWf
   venomExecProps list alist makeSsaCurrentAnalysis cfgAnalysisProps cfgWf relation

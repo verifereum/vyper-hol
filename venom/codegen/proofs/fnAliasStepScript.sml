@@ -66,7 +66,11 @@ Proof
   drule do_restore_inventory_count >> strip_tac >>
   first_x_assum drule >> strip_tac >>
   rpt conj_tac
-  >- metis_tac[]
+  >- (gen_tac >>
+      qpat_x_assum `!x. LIST_ELEM_COUNT x ps1.ps_stack + _ = _`
+        (qspec_then `x` (SUBST1_TAC o SYM)) >>
+      qpat_x_assum `!x. LIST_ELEM_COUNT x ps'.ps_stack + _ = _`
+        (qspec_then `x` ACCEPT_TAC))
   >- (rpt strip_tac >> gvs[SUBSET_DEF] >> metis_tac[])
   >> metis_tac[SUBSET_TRANS]
 QED

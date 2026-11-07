@@ -1777,7 +1777,7 @@ Proof
   simp[PERM_APPEND_IFF, PERM_REVERSE]
 QED
 
-Theorem stack_swap_append_ends[local]:
+Theorem stack_swap_append_ends:
   !base mid a b.
     stack_swap (LENGTH mid + 1) (base ++ [a] ++ mid ++ [b]) =
     base ++ [b] ++ mid ++ [a]

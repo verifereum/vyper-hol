@@ -3935,8 +3935,12 @@ Resume rf_strict_suffix_abort[assign]:
      qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
      simp[Once exec_block_def, is_terminator_def] >>
      Cases_on `eval_operand rhs s` >>
-     simp[step_inst_non_invoke] >> simp[Once step_inst_base_def] >>
-     simp[Once step_inst_base_def]) >>
+     `step_inst fuel ctx inst s = step_inst_base inst s` by
+       simp[step_inst_non_invoke] >>
+     pop_assum SUBST1_TAC >> once_rewrite_tac[step_inst_base_def] >>
+     qpat_assum `inst.inst_opcode = ASSIGN` SUBST1_TAC >>
+     qpat_assum `inst.inst_operands = [rhs]` SUBST1_TAC >>
+     qpat_assum `inst.inst_outputs = [out]` SUBST1_TAC >> simp[]) >>
   `!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
     ti.inst_opcode <> PHI` by
     (rpt strip_tac >>

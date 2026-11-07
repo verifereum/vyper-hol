@@ -3738,7 +3738,7 @@ Proof
   rpt strip_tac >> gvs[] >> fs[FLOOKUP_DEF]
 QED
 
-Theorem stack_swap_mem_subset[local]:
+Theorem stack_swap_mem_subset:
   !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
 Proof
   rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
