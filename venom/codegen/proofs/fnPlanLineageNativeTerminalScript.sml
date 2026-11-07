@@ -125,6 +125,61 @@ Proof
   qexists_tac `j` >> simp[]
 QED
 
+Theorem native_terminal_jmp_live_boundary:
+  !fn bb dfg ps ops qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
+    native_live_boundary fn bb (PRE (LENGTH bb.bb_instructions)) ps /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) ==>
+    native_live_boundary fn bb (LENGTH bb.bb_instructions) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions /\
+    PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    metis_tac[LAST_EL] >>
+  `inst_wf (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[LAST_MEM]) >>
+  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ] /\
+    (LAST bb.bb_instructions).inst_outputs = []` by gvs[inst_wf_def] >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (PRE (LENGTH bb.bb_instructions)))` by
+    (rpt strip_tac >> irule analyzed_computed_operand_demand >> simp[]) >>
+  Cases_on `join_target_ops (liveness_analyze fn) fn bb.bb_label (LAST bb.bb_instructions)`
+  >- (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`) jmp_no_target_state >>
+      simp[] >> strip_tac >> gvs[] >>
+      simp_tac bool_ss [native_live_boundary_def] >> conj_tac
+      >- (gvs[native_live_boundary_def, release_dead_spills_stack,
+              release_dead_spills_domain, MEM_MAP] >> metis_tac[]) >>
+      rpt strip_tac >> irule arithmeticTheory.LESS_EQ_TRANS >>
+      irule_at Any release_dead_spills_resource_nonincrease >>
+      gvs[native_live_boundary_def] >> metis_tac[]) >>
+  rename1 `join_target_ops _ _ _ _ = SOME targets` >>
+  `set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions))) = set targets` by
+    (drule_at (Pat `join_target_ops _ _ _ _ = _`) native_terminal_jmp_target_set >> simp[]) >>
+  `!v. LIST_ELEM_COUNT (Var v) targets <= 1` by
+    (gen_tac >> Cases_on `lookup_block succ fn.fn_blocks`
+     >- gvs[join_target_ops_def] >>
+     drule_at (Pat `join_target_ops _ _ _ _ = _`) ready_join_target_count_le_one >> simp[]) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)) ==>
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1` by
+    (gvs[native_live_boundary_def] >> metis_tac[]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    generate_inst_plan_jmp_live_terminal >> simp[] >> strip_tac >>
+  simp_tac bool_ss [native_live_boundary_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM (Var v) targets` by
+        (gvs[pred_setTheory.EXTENSION, MEM_MAP] >> metis_tac[]) >>
+      metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]) >>
+  simp[]
+QED
+
 Theorem native_terminal_jmp_boundary_step:
   !fn bb dfg ps ops qs.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
@@ -137,45 +192,15 @@ Theorem native_terminal_jmp_boundary_step:
     entry_boundary_resources fn bb (LENGTH bb.bb_instructions) qs
 Proof
   rpt gen_tac >> strip_tac >>
-  `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions /\
-    PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> gvs[]) >>
-  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
-    metis_tac[LAST_EL] >>
-  `inst_wf (LAST bb.bb_instructions)` by
-    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[LAST_MEM]) >>
-  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ] /\
-    (LAST bb.bb_instructions).inst_outputs = []` by gvs[inst_wf_def] >>
-  Cases_on `join_target_ops (liveness_analyze fn) fn bb.bb_label (LAST bb.bb_instructions)`
-  >- (drule_at (Pat `entry_boundary_resources _ _ _ _`)
-        (INST_TYPE [alpha |-> ``:cfg_analysis``] entry_jmp_no_target_boundary_step) >>
-      simp[] >> disch_then drule >> simp[]) >>
-  rename1 `join_target_ops _ _ _ _ = SOME targets` >>
-  `set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label
-    (LENGTH bb.bb_instructions))) = set targets` by
-    (drule_at (Pat `join_target_ops _ _ _ _ = _`) native_terminal_jmp_target_set >> simp[]) >>
-  `!v. LIST_ELEM_COUNT (Var v) targets <= 1` by
-    (gen_tac >> Cases_on `lookup_block succ fn.fn_blocks`
-     >- gvs[join_target_ops_def] >>
-     drule_at (Pat `join_target_ops _ _ _ _ = _`) ready_join_target_count_le_one >> simp[]) >>
-  drule_at (Pat `entry_boundary_resources _ _ _ _`)
-    (INST_TYPE [alpha |-> ``:cfg_analysis``] entry_jmp_live_terminal) >>
-  simp[] >> disch_then drule >> simp[] >> strip_tac >>
   `native_live_boundary fn bb (PRE (LENGTH bb.bb_instructions)) ps` by
     gvs[entry_boundary_resources_def, native_live_boundary_def] >>
+  drule_all native_terminal_jmp_live_boundary >> disch_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
     native_terminal_jmp_variable_origins >> simp[] >> disch_tac >>
   simp_tac bool_ss [entry_boundary_resources_def] >> conj_tac
   >- (gvs[entry_boundary_resources_def, prefix_inventory_origins_def] >>
       rpt strip_tac >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      `MEM (Var v) targets` by
-        (gvs[pred_setTheory.EXTENSION, MEM_MAP] >> metis_tac[]) >>
-      `0 < LIST_ELEM_COUNT (Var v) qs.ps_stack` by
-        metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF] >>
-      metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]) >>
-  simp[]
+  gvs[native_live_boundary_def]
 QED
 
 Theorem initialized_entry_exit_resources:

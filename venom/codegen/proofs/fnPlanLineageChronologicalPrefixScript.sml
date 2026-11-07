@@ -1,8 +1,8 @@
 Theory fnPlanLineageChronologicalPrefix
 Ancestors
-  fnPlanLineageNativeResources fnPlanLineageNativeOrigins
+  fnPlanLineageNativeResources fnPlanLineageNativeOrigins fnPlanLineageNativeTerminal
   fnPlanLineageEntryProduction fnPlanLineagePath stackPlanGen venomWf venomInst
-  list rich_list finite_map
+  list rich_list finite_map callLayoutDefs
 
 Theorem native_chronological_step:
   !fn visited bb i ps dfg cfg halting term ops qs.
@@ -284,4 +284,190 @@ Proof
     native_phi_live_boundary_step >>
   disch_then (qspecl_then [`out`, `dist`] mp_tac) >>
   simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+(* Exact copies from fnFrameCleanStackTheory: importing the frame theory here
+   would pull the frame simulation back into planner-only resource leaves. *)
+Theorem mark_dead_stack_mem:
+  !retained stk op.
+    MEM op (mark_dead_stack retained stk) ==>
+    op = dead_stack_marker \/ MEM op stk
+Proof
+  simp[mark_dead_stack_def, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem clean_stack_plan_inventory:
+  !ps liveness cfg fn bb ops ps'.
+    clean_stack_plan liveness cfg fn bb ps = (ops, ps') ==>
+    !op. MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled ==>
+      op = dead_stack_marker \/ MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> simp[clean_stack_plan_def] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
+  Cases_on `t` >> simp[]
+  >- (IF_CASES_TAC
+      >- (simp[] >> rpt strip_tac >> gvs[]) >>
+      Cases_on `lookup_block h fn.fn_blocks`
+      >- (simp[] >> rpt strip_tac >> gvs[]) >> simp[] >>
+      qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+      IF_CASES_TAC
+      >- (strip_tac >> gvs[MEM_MAP] >> metis_tac[]) >>
+      IF_CASES_TAC
+      >- (pairarg_tac >> strip_tac >> gvs[] >>
+          metis_tac[mark_dead_stack_mem,
+            fnPlanLineageInventoryTheory.popmany_plan_inventory_subset]) >>
+      metis_tac[fnPlanLineageInventoryTheory.popmany_plan_inventory_subset]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem clean_stack_plan_chronological_support:
+  !fn visited ps lv cfg bb ops qs.
+    chronological_support fn visited ps /\
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    chronological_support fn visited qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule clean_stack_plan_inventory >> strip_tac >>
+  gvs[chronological_support_def] >> rpt strip_tac >>
+  `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+    (first_x_assum (qspec_then `Var v` mp_tac) >>
+     simp[dead_stack_marker_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+(* Exact copy of fnBlockStepHelpersTheory.nonentry_block_no_params;
+   planner leaves must not import frame-step helper theories. *)
+Theorem nonentry_block_no_params:
+  !fn lbl bb.
+    canonical_param_prefix fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks ==>
+    get_params bb.bb_instructions = [] /\
+    non_param_insts bb = bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
+  `no_param_insts bb.bb_instructions` by
+    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
+  gvs[no_param_insts_def] >>
+  conj_tac >- (Cases_on `bb.bb_instructions` >> gvs[get_params_def]) >>
+  simp[non_param_insts_def, FILTER_EQ_ID, EVERY_MEM]
+QED
+
+Theorem ready_unique_nonentry_worker_shape:
+  !fn lbl bb.
+    codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\ LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 ==>
+    get_params bb.bb_instructions = [] /\
+    non_param_insts bb = bb.bb_instructions /\
+    bb.bb_instructions <> [] /\
+    (!i. i < LENGTH bb.bb_instructions ==>
+      (EL i bb.bb_instructions).inst_opcode <> PHI /\
+      ~is_param_opcode (EL i bb.bb_instructions).inst_opcode) /\
+    (!i. i < PRE (LENGTH bb.bb_instructions) ==>
+      (EL i bb.bb_instructions).inst_opcode <> JMP)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `canonical_param_prefix fn /\ bb_well_formed bb` by
+    (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  drule_all nonentry_block_no_params >> strip_tac >> simp[] >>
+  `collect_phis bb.bb_instructions = []` by
+    (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+     first_x_assum (qspec_then `bb` mp_tac) >>
+     `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >> simp[NULL_EQ]) >>
+  `no_param_insts bb.bb_instructions` by
+    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
+  conj_tac >- gvs[bb_well_formed_def] >> conj_tac
+  >- (rpt strip_tac
+      >- metis_tac[well_formed_no_collected_phi] >>
+      gvs[no_param_insts_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  rpt strip_tac >> CCONTR_TAC >> gvs[bb_well_formed_def] >>
+  qpat_x_assum `!i. _ /\ is_terminator _ ==> _` (qspec_then `i` mp_tac) >>
+  simp[is_terminator_def] >> decide_tac
+QED
+
+Theorem unique_nonentry_cleaned_prefix:
+  !fn pred pred_bb lbl bb visited after incoming clean_ops cleaned dfg k qs.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    fn_reachable fn bb.bb_label /\ lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\ bb <> HD fn.fn_blocks /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 /\ ~MEM bb.bb_label visited /\
+    chronological_support fn visited after /\
+    native_live_boundary fn pred_bb (LENGTH pred_bb.bb_instructions) after /\
+    incoming.ps_stack = after.ps_stack /\ incoming.ps_spilled = after.ps_spilled /\
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming = (clean_ops,cleaned) /\
+    k <= PRE (LENGTH bb.bb_instructions) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) cleaned k qs ==>
+    (!v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE k bb.bb_instructions) /\ MEM v di.inst_outputs)) /\
+    native_live_boundary fn bb k qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ready_unique_nonentry_worker_shape >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `chronological_support fn visited incoming` by
+    metis_tac[chronological_support_physical_cong] >>
+  `chronological_support fn visited cleaned` by
+    metis_tac[clean_stack_plan_chronological_support] >>
+  `native_live_boundary fn bb 0 cleaned` by
+    (drule_all analyzed_single_pred_physical_clean_live_boundary >> simp[]) >>
+  `!j. 0 <= j /\ j < k ==>
+    (EL j bb.bb_instructions).inst_opcode <> JMP /\
+    (EL j bb.bb_instructions).inst_opcode <> PHI /\
+    ~is_param_opcode (EL j bb.bb_instructions).inst_opcode` by
+    (rpt strip_tac >> `j < PRE (LENGTH bb.bb_instructions) /\
+      j < LENGTH bb.bb_instructions` by decide_tac >> metis_tac[]) >>
+  gvs[chronological_support_def] >>
+  qspec_then `k` mp_tac
+    (INST_TYPE [alpha |-> ``:cfg_analysis``] native_chronological_prefix) >>
+  disch_then (qspecl_then [`fn`, `visited`, `bb`, `0`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem native_chronological_terminal_step:
+  !fn visited bb dfg ps ops qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~MEM bb.bb_label visited /\ bb.bb_instructions <> [] /\
+    (LAST bb.bb_instructions).inst_opcode <> PHI /\
+    ~is_param_opcode (LAST bb.bb_instructions).inst_opcode /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions) /\
+        MEM v di.inst_outputs)) /\
+    native_live_boundary fn bb (PRE (LENGTH bb.bb_instructions)) ps /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) ==>
+    chronological_support fn (bb.bb_label::visited) qs /\
+    native_live_boundary fn bb (LENGTH bb.bb_instructions) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions /\
+   PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    metis_tac[LAST_EL] >>
+  Cases_on `(LAST bb.bb_instructions).inst_opcode = JMP`
+  >- (drule_all native_terminal_jmp_live_boundary >> disch_tac >>
+      drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        native_terminal_jmp_variable_origins >> simp[] >> disch_tac >>
+      simp[chronological_support_def] >> rpt strip_tac >>
+      `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by metis_tac[] >>
+      gvs[] >> metis_tac[rich_listTheory.MEM_TAKE]) >>
+  qspecl_then [`fn`, `visited`, `bb`, `PRE (LENGTH bb.bb_instructions)`] mp_tac
+    (INST_TYPE [alpha |-> ``:cfg_analysis``] native_chronological_step) >>
+  simp[] >>
+  disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  simp[chronological_support_def] >> rpt strip_tac >>
+  metis_tac[]
 QED
