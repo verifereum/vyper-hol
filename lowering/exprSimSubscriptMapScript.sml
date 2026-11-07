@@ -869,10 +869,12 @@ Proof
     (drule compile_mapping_index_success_tail >>
      disch_then irule >> simp[] >> qexists `vv_operand bvv` >> simp[]) >>
   `wb_frame cenv es (fin with gas_obs := []) sa s0 out` by
-    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac
-     >- (qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>
-     goal_assum (drule_at Any)) >>
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     qpat_assum `wb_frame cenv es (mid with gas_obs := []) sa s0 t`
+       (irule_at Any) >>
+     qpat_assum `wb_frame cenv (mid with gas_obs := []) _ sm t out`
+       (irule_at Any) >>
+     qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >> simp[]) >>
   `storage_mapping_region cx tr base_slot (HashMapT kt vt)` by
     (qpat_x_assum `storage_mapping_region _ _ _ _` mp_tac >> simp[]) >>
   qexistsl_tac [`INL selected`, `fin with gas_obs := []`, `OK out`] >>
