@@ -252,9 +252,9 @@ Resume calldata_scratch_array_body_ptr[compose]:
      qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ prepared actual`
        (fn th => irule_at Any th) >> simp[]) >>
   `op_taint u' (FST ops) = {} /\ op_prov H' (FST ops) = NONE` by
-    (Cases_on `FST ops` >>
-     gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-         not_fresh_at_def, op_taint_def, op_prov_def]) >>
+    (Cases_on `FST ops` >> simp[op_taint_def, op_prov_def] >>
+     fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+        not_fresh_at_def, op_taint_def, op_prov_def]) >>
   qexistsl_tac [`actual`,`H'`,`u'`] >>
   asm_simp_tac bool_ss [] >>
   metis_tac[]
