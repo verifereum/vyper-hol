@@ -92,3 +92,68 @@ Proof
   rpt strip_tac >> gvs[comp_return_def]
 QED
 
+
+Theorem pop_array_value_continuation_boundary[local]:
+  (!s v t. pop_comp_boundary s /\ cfn cenv ty idx_e s = (v,t) ==>
+    pop_comp_boundary t) /\ pop_comp_boundary sa /\
+  (do idx <- lower_value cfn cenv ty idx_e;
+      ptr <- compile_array_subscript base_op idx dynamic static_count ws esz signed
+        (compile_ptr_load ctor imm loc);
+      return (LocatedValue rt (mk_ptr ptr loc)) od) sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  rpt strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_at (Pat `lower_value _ _ _ _ _ = _`)
+        pop_lower_value_boundary >> disch_then irule >> simp[] >>
+      first_assum MATCH_ACCEPT_TAC) >>
+  rpt strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_at (Pat `compile_array_subscript _ _ _ _ _ _ _ _ _ = _`)
+        pop_compile_array_subscript_boundary >> disch_then irule >> simp[] >>
+      rpt strip_tac >> drule_all pop_ptr_load_boundary >> simp[]) >>
+  rpt strip_tac >> gvs[comp_return_def]
+QED
+
+Theorem pop_compile_subscript_boundary:
+  (!e aty s v t. (e = base_e \/ e = idx_e) /\ pop_comp_boundary s /\
+    cfn cenv aty e s = (v,t) ==> pop_comp_boundary t) /\
+  pop_comp_boundary sa /\
+  compile_subscript cfn cenv rt ty base_e idx_e sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  simp[compile_subscript_def] >> rpt strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> qpat_x_assum `!e aty s v t. _`
+        (qspec_then `base_e` mp_tac) >> simp[] >> disch_then drule_all >> simp[]) >>
+  rpt strip_tac >> Cases_on `place_type cenv base_e` >> gvs[]
+  >- (dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+      disch_then irule >> simp[] >> conj_tac
+      >- (rpt strip_tac >> drule_at (Pat `lower_value _ _ _ _ _ = _`)
+            pop_lower_value_boundary >> disch_then irule >> simp[] >>
+          rpt strip_tac >> qpat_x_assum `!e aty s v t. _`
+            (qspec_then `idx_e` mp_tac) >> simp[] >> disch_then drule_all >> simp[]) >>
+      rpt strip_tac >>
+      dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+      disch_then irule >> simp[] >> conj_tac
+      >- (Cases_on `is_bytestring_type t'` >> simp[comp_return_def] >>
+          rpt strip_tac >> gvs[] >>
+          drule_all pop_compile_keccak256_key_boundary >> simp[]) >>
+      rpt strip_tac >>
+      dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+      disch_then irule >> simp[] >> conj_tac
+      >- (rpt strip_tac >> drule_all pop_compile_mapping_subscript_boundary >> simp[]) >>
+      rpt strip_tac >> gvs[comp_return_def]) >>
+  Cases_on `t'` >> gvs[] >> FIRST_PROVE
+  [(drule_at (Pat `comp_bind _ _ _ = _`) pop_array_value_continuation_boundary >>
+    disch_then irule >> simp[] >> rpt strip_tac >>
+    qpat_x_assum `!e aty s v t. _` (qspec_then `idx_e` mp_tac) >>
+    simp[] >> disch_then drule_all >> simp[]),
+   (dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+    disch_then irule >> simp[] >> conj_tac
+    >- (rpt strip_tac >> drule_all pop_compile_tuple_subscript_boundary >> simp[]) >>
+    rpt strip_tac >> gvs[comp_return_def])]
+QED
