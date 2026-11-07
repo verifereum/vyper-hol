@@ -1,7 +1,7 @@
 (* Memory-enabled endpoints for the RawLog data continuation. *)
 Theory bodyMemRawLogCompose
 Ancestors
-  bodyMemRawLogExecution bodyMemRawLogStages bodySimRawLogTails
+  bodyMemRawLogExecution bodyMemRawLogStages bodyMemRawLogAllocation bodySimRawLogTails
   bodyMemBiKeccakBounds stmtSimLogSuffix exprSimHash exprSimRawLog
   exprSimProps exprSimHyps exprSimMemDefs gasSummary fragGasMode gasOutcome
   vyperTyping vyperValue vyperState valueEncoding venomState e2eDefs list
@@ -61,7 +61,7 @@ Proof
   fs[mload_def, mem_word_at_def, mem_bytes_at_def]
 QED
 
-Theorem raw_log_tail_summary_mem:
+Theorem raw_log_tail_summary_mem[local]:
   dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
   gas_path_mem ctx func s 0 (OK t) /\
   Q (INL NoneV)
@@ -117,6 +117,68 @@ Theorem raw_log_dynamic_continuation_mem:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all raw_log_dynamic_tail_mem_counted >> strip_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  irule raw_log_tail_summary_mem >> simp[dest_BytesV_def] >>
+  qexists_tac `t` >> simp[] >>
+  drule raw_log_post_gas_obs >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[]
+QED
+
+Theorem raw_log_fixed_data_view_mem:
+  expr_body_pre cenv cx env data es /\
+  expr_type data = BaseT (BytesT (Fixed 32)) /\
+  gas_marked_exec T (ctx,func)
+    (bind (eval_expr cx data) (read_result cx)) (es,t) marks (INL v) ee r /\
+  expr_post ctx func cenv cx data es1 sm sn t (ee with gas_obs := []) v data_op u ==>
+  ?bs w. v = BytesV bs /\ LENGTH bs = 32 /\
+    eval_operand data_op u = SOME w /\ TAKE 32 (word_to_bytes_be w) = bs
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env data
+     (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
+  `bind (eval_expr cx data) (read_result cx)
+     (es with gas_obs := gas_explicit marks t.vs_gas_readings) =
+     (INL v, ee with gas_obs := [])` by
+    (fs[gas_marked_exec_def] >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule_all (SRULE [SF ETA_ss] expr_body_pre_base_result) >> strip_tac >>
+  `?bs. v = BytesV bs` by
+    (qpat_x_assum `!v'. INL v = _ ==> _` mp_tac >>
+     simp[] >> Cases_on `v` >> simp[value_has_type_def]) >>
+  gvs[] >> drule hash_fixed_post_view >> simp[] >> metis_tac[]
+QED
+
+Theorem raw_log_fixed_continuation_mem:
+  emit_void MSTORE [ptr_op; data_op] sm = (u,s1) /\
+  emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [] s1 = (u',sb) /\
+  eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
+  eval_operands ops s = SOME (MAP event_value_to_word vals) /\ LENGTH ops <= 4 /\
+  LENGTH vals <= 4 /\ LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  local_ptrs_reserved cenv sa /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,32) /\
+  (!aid b sz. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+     regions_disjoint (w2n p) 32 b sz) /\
+  (!n b sz. local_region cenv es.scopes s n b sz ==>
+     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ alloca_history func s /\
+  w2n p + 32 <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  gas_outcome T tops (ctx,func)
+    (do bs' <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
+        type_check (LENGTH vals <= 4) "raw_log too many topics";
+        push_log (encode_raw_event_values cx.txn.target vals bs');
+        return NoneV od) (es,s)
+    (\res ee t. res = INL NoneV /\
+       expr_post ctx func cenv cx e es0 sa sb s0 ee NoneV (Lit 0w) t /\
+       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all raw_log_fixed_tail_mem_counted >> strip_tac >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   irule raw_log_tail_summary_mem >> simp[dest_BytesV_def] >>
   qexists_tac `t` >> simp[] >>

@@ -297,7 +297,7 @@ Proof
   qexists_tac `t''` >> gvs[]
 QED
 
-Theorem raw_log_alloc_args_post[local]:
+Theorem raw_log_alloc_args_post:
   wb_args_post ctx func cenv cx es0 sa s0 es ops vals t /\
   stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 sa s0 u /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
