@@ -2407,16 +2407,16 @@ Proof
   drule_all hash_method_id_output_alloca_code >> simp[]
 QED
 
-(* A straight-line suffix protects every older allocation, a stronger frame
-   than the expression judgment needs. *)
 (* A frame reads its end env only through its scopes. *)
-Theorem wb_frame_outcomes[local]:
+Theorem wb_frame_outcomes:
   wb_frame cenv es (es' with outcomes := oc) sa s0 s <=>
   wb_frame cenv es es' sa s0 s
 Proof
   simp[wb_frame_def, locals_kept_def, popped_kept_def]
 QED
 
+(* A straight-line suffix protects every older allocation, a stronger frame
+   than the expression judgment needs. *)
 Theorem wb_frame_allocating_tail:
   wb_frame cenv es es' sa s0 s /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\

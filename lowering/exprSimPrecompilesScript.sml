@@ -2012,7 +2012,7 @@ Proof
 QED
 
 Theorem wb_frame_readonly_input:
-  wb_frame cenv es es sa t u /\
+  wb_frame cenv es ee sa t u /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
      lookup_var x t = SOME w) /\
   t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
@@ -2020,7 +2020,7 @@ Theorem wb_frame_readonly_input:
      local_region cenv es.scopes s name b sz) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      local_region cenv es.scopes t name b sz) ==>
-  wb_frame cenv es es sa s u
+  wb_frame cenv es ee sa s u
 Proof
   strip_tac >>
   `!name b sz. local_region cenv es.scopes t name b sz <=>
@@ -2145,7 +2145,7 @@ Proof
      first_assum ACCEPT_TAC) >>
   conj_tac >- gvs[] >>
   `?u. exec_ext_call ci sg (g:bytes32)
-      target 0w wi insz wo outsz T = OK u /\ wb_frame cenv es (es with outcomes := SOME (DROP 1 sg.vs_outcomes)) sf sg u` by
+      target 0w wi insz wo outsz T = OK u /\ wb_frame cenv es es sf sg u` by
     (irule computed_static_exec_wb_frame >>
      simp[Abbr `ci`, mk_inst_def, not_fresh_at_def] >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -2155,7 +2155,8 @@ Proof
      `regions_disjoint (w2n wo) (w2n outsz) b sz` by metis_tac[] >>
      gvs[compileEnvTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
      decide_tac) >>
-  `wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf sg t` by gvs[] >>
+  `wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf sg t` by
+    gvs[exprSimHashTheory.wb_frame_outcomes] >>
   irule wb_frame_readonly_input >> qexists_tac `sg` >>
   simp[Abbr `sg`, Abbr `s0`, update_var_def] >>
   conj_tac
