@@ -3,7 +3,7 @@
 Theory whitelistForIterImmCopy
 Ancestors
   stmtLowering context compileEnv exprSimTopLevelImmutable exprSimCopy
-  immutableCopyExecution
+  immutableCopyExecution vyperValue valueEncodingProps
 Libs
   monadsyntax
 
@@ -98,4 +98,15 @@ Proof
   >- (drule_all immutable_iter_small_run >> simp[]) >>
   `32 < bytes` by decide_tac >>
   drule_all immutable_iter_large_run >> simp[]
+QED
+
+(* A well-evaluated array rules out the zero-sized element case, even though
+   assignable_type by itself is not a positive-size predicate. *)
+Theorem immutable_array_element_size_positive:
+  evaluate_type tenv (ArrayT ty bd) = SOME (ArrayTV tv bd) ==>
+  0 < type_memory_size tv
+Proof
+  simp[Once evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  simp[valueEncodingPropsTheory.type_memory_size_slots]
 QED
