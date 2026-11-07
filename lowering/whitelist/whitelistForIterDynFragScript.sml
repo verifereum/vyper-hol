@@ -505,7 +505,7 @@ Proof
 QED
 
 (* Load the length, allocate the loop variable, run the entry block. *)
-Theorem dynarray_loop_initialize:
+Theorem dynarray_loop_initialize_explicit:
   ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
   MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
   ainst.inst_operands = [Lit (n2w sz)] /\ sz < dimword (:256) /\
@@ -533,7 +533,10 @@ Theorem dynarray_loop_initialize:
   not_local_ptr cenv es.scopes vld /\
   (!x. saved_base = Var x ==> ~MEM x [lv; p; idx; g; vld]) /\
   (!x. not_fresh_at st x ==> ~MEM x [lv; p; idx; g; vld]) ==>
-  ?dst cc.
+  ?dst cc s1.
+    exec_alloca ainst (update_var lv (n2w (LENGTH vs)) s0) (n2w sz : bytes32) = OK s1 /\
+    cc = jump_to cond (update_var vld 1w (update_var g 0w
+      (update_var idx 0w (jump_to entry s1)))) /\
     array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es cc /\
     lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
@@ -618,7 +621,12 @@ Proof
   `ret_pc_ok cenv st cc` by
     simp[Abbr `cc`, ret_pc_ok_jump_to, Abbr `e4s`, array_ret_pc_update,
          Abbr `e0`] >>
-  qexistsl_tac [`dst`, `cc`] >>
+  qexistsl_tac [`dst`, `s1`] >>
+  conj_tac >- (qunabbrev_tac `sl` >> first_assum ACCEPT_TAC) >>
+  `jump_to cond (update_var vld 1w (update_var g 0w
+     (update_var idx 0w (jump_to entry s1)))) = cc` by
+    simp[Abbr `cc`, Abbr `e4s`, Abbr `e0`] >>
+  pop_assum SUBST1_TAC >>
   rpt conj_tac
   >- simp[array_loop_inv_def]
   >- metis_tac[]
@@ -631,6 +639,44 @@ Proof
         simp[Abbr `sl`, update_var_def] >>
       metis_tac[]) >>
   drule_all gas_marked_path_then >> simp[]
+QED
+
+Theorem dynarray_loop_initialize:
+  ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
+  MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
+  ainst.inst_operands = [Lit (n2w sz)] /\ sz < dimword (:256) /\
+  lookup_block s0.vs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      pre ++ [mk_inst mi MLOAD [saved_base] [lv]; ainst;
+              mk_inst j JMP [Label entry] []]|> /\
+  lookup_block entry func.fn_blocks =
+    SOME <|bb_label := entry; bb_instructions :=
+      [mk_inst e1 ASSIGN [Lit 0w] [idx];
+       mk_inst e2 GT [Var lv; Lit (n2w c)] [g];
+       mk_inst e3 ISZERO [Var g] [vld];
+       mk_inst e4 ASSERT [Var vld] [];
+       mk_inst e5 JMP [Label cond] []]|> /\
+  s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s0 /\ P es /\
+  lookup_scopes id es.scopes = NONE /\
+  eval_operand saved_base s0 = SOME array_base /\
+  mload (w2n array_base) s0 = n2w (LENGTH vs) /\
+  LENGTH vs <= c /\ c < dimword (:256) /\
+  ret_pc_ok cenv st s0 /\
+  ALL_DISTINCT [lv; p; idx; g; vld] /\
+  not_local_ptr cenv es.scopes lv /\ not_local_ptr cenv es.scopes p /\
+  not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes g /\
+  not_local_ptr cenv es.scopes vld /\
+  (!x. saved_base = Var x ==> ~MEM x [lv; p; idx; g; vld]) /\
+  (!x. not_fresh_at st x ==> ~MEM x [lv; p; idx; g; vld]) ==>
+  ?dst cc.
+    array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
+      ainst cond st 0 es cc /\
+    lookup_var lv cc = SOME (n2w (LENGTH vs)) /\
+    array_caller_frame st s0 cc /\
+    gas_marked_path F ctx func s0 0 (OK cc)
+Proof
+  strip_tac >> drule_all dynarray_loop_initialize_explicit >> metis_tac[]
 QED
 
 (* The source loads the iterable and checks its length before the loop. *)
