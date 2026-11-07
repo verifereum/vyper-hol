@@ -674,8 +674,7 @@ val () = List.app (fn th =>
   in if null axs andalso null (Thm.hyp th) andalso
         List.all (fn s => s = "DISK_THM") ors
      then print "FOR_FORCE_AUDIT OK\n"
-     else (fn (_:string) => print "closure gate skipped
-") "range consumer inherited admission"
+     else raise Fail "range consumer inherited admission"
   end) [compile_for_range_parts, compile_for_range_lit_parts,
         compile_for_range_frag, compile_for_range_lit_frag,
         compile_for_range_lit_frag_simple];
