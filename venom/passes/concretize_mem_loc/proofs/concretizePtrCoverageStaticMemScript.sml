@@ -5,7 +5,9 @@
 Theory concretizePtrCoverageStaticMem
 Ancestors
   concretizePtrStagePairedBridge concretizePtrHistoryCoverage
-  concretizePtrStorageReadProducer unitMemInv
+  concretizePtrStorageReadProducer unitMemInv o1PassLift
+  concretizePtrCoverageStaticMemReachability concretizePtrCurrentObservation
+  o1PassContract concretizePtrPairedFields concretizePtrChronologicalHistory list pair
 
 Theorem ptr_paired_coverage_static_mem:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -36,6 +38,26 @@ Theorem ptr_paired_coverage_static_mem:
         at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst) ==>
   mem_inv (static_mem_ok eom) C' vs
 Proof
-  cheat
+  strip_tac >>
+  `C'.ctx_entry = C.ctx_entry` by fs[ctx_pass_stage_def] >>
+  `?name fn lbl. C.ctx_entry = SOME name /\
+    lookup_function name C.ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl` by
+    metis_tac[mem_inv_raw_reachable] >>
+  rewrite_tac[mem_inv_raw_reachable] >> conj_tac
+  >- (drule_all list_rel_lookup_function >>
+      disch_then (qspec_then `name` mp_tac) >> simp[] >>
+      Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
+      strip_tac >> fs[ptr_paired_code_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  drule ptr_reachable_has_chrono_history >> strip_tac >>
+  qpat_x_assum `!ht at. _` drule >> strip_tac >>
+  drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    ptr_paired_current_static_bound >>
+  simp[] >>
+  disch_then (qspec_then `rpolicy` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  gvs[static_mem_ok_def, inst_mem_ranges_def, EVERY_MEM, FORALL_PROD,
+      ptr_observe_def] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
