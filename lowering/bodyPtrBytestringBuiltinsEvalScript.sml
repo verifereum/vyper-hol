@@ -1,17 +1,18 @@
 Theory bodyPtrBytestringBuiltinsEval
 Ancestors
-  bodyPtrBytestringBuiltinsUnary bodyPtrBytestringBuiltinsPrefix fragGasPathPtr
+  bodyPtrBytestringBuiltinsUnary bodyPtrBytestringBuiltinsPrefix fragGasPathPtr fragGasSeqPtr
 
 Theorem gas_outcome_ptr_eval_evidence:
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0) P E ==>
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
-    (\res ee G tn t. P res ee G tn t /\
+    (\res ee G tn t. P res ee G tn t /\ ~t.vs_halted /\
       ?marks ee0. ee = ee0 with gas_obs := [] /\
         !tail. source
           (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
           (res,ee0 with gas_obs := tail)) E
 Proof
-  rw[gas_outcome_ptr_def, gas_summary_ptr_at_def] >> metis_tac[]
+  rw[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
+  metis_tac[gas_path_ptr_ok_not_halted]
 QED
 
 Theorem expr_sim_ptr_eval_suffix:
@@ -32,7 +33,7 @@ Theorem expr_sim_ptr_eval_suffix:
   (!v ee G tn t.
     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
     ghost_inv d cenv cx ee G tn t /\
     ptr_val_ok cx (expr_type e) v op G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
@@ -78,11 +79,13 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
     ~cenv.ce_is_ctor /\
+    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     stmt_state_rel ctx func cenv cx es s0 /\
     ghost_inv d cenv cx es G0 tn0 s0 /\
     expr_post ctx func cenv cx e es sa sm s0 ee v x t /\
     t.vs_current_bb = sm.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
     ghost_inv d cenv cx ee G tn t /\
     ptr_val_ok cx (expr_type e) v x G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G t) /\
