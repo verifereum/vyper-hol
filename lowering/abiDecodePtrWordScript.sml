@@ -425,3 +425,114 @@ Resume abi_decode_word_abort_ptr[join]:
 QED
 
 Finalise abi_decode_word_abort_ptr
+
+(* Operand availability suffices for a raw outcome; no source validity is used. *)
+Theorem abi_decode_word_outcome:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecPrimWord clamp) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa dst /\ abi_decode_ptr_window G tn s src b h /\
+  lookup_var dst s = SOME d /\
+  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
+  p+32 <= h /\ w2n b+h < dimword(:256) ==>
+  ?u. run_inst_seq (emitted_insts sa sb) s = OK u \/
+      run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort u
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decode_word_phases >>
+  disch_then (qx_choose_then `addr` (qx_choose_then `value`
+    (qx_choose_then `c1` (qx_choose_then `c2` (qx_choose_then `c3`
+      (qx_choose_then `B` strip_assume_tac)))))) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all abi_decode_ptr_relative_load >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `value = Var out` >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa c2) s =
+    OK (t with vs_inst_idx := _)` >>
+  `abi_decoder_operand_live c2.cs_next_var value` by
+    metis_tac[abi_decoder_operand_live_emit] >>
+  `eval_operand value t = SOME (mload (w2n b+p) s)` by
+    simp[eval_operand_def] >>
+  drule_all calldata_clamp_repeat >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c2 c3) t =
+    if abi_clamp_ok clamp _ then OK v else Abort Revert_abort v` >>
+  `lookup_var dst t = SOME d` by metis_tac[] >>
+  `abi_decoder_operand_live c2.cs_next_var (Var dst)` by
+    (`not_fresh_at c2 dst` by metis_tac[not_fresh_at_mono] >>
+     fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `eval_operand (Var dst) v = SOME d /\
+   eval_operand value v = SOME (mload (w2n b+p) s)` by
+    (conj_tac >- metis_tac[eval_operand_def] >> metis_tac[]) >>
+  suspend "outcomes"
+QED
+
+Resume abi_decode_word_outcome[outcomes]:
+  Cases_on `abi_clamp_ok clamp (mload (w2n b+p) s)`
+  >- suspend "ok"
+  >> suspend "abort"
+QED
+
+Resume abi_decode_word_outcome[ok]:
+  `run_inst_seq (emitted_insts c3 sb) v =
+    OK (mstore (w2n d) (mload (w2n b+p) s) v)` by
+    (irule calldata_mstore_repeat >> qexistsl_tac [`Var dst`, `value`] >> simp[]) >>
+  `run_inst_seq (emitted_insts c2 c3 ++ emitted_insts c3 sb) t =
+    OK (mstore (w2n d) (mload (w2n b+p) s) v)` by
+    (`run_inst_seq (emitted_insts c2 c3) t = OK v` by simp[] >>
+     qpat_assum `run_inst_seq (emitted_insts c2 c3) t = OK v`
+       (mp_then Any (qspec_then `emitted_insts c3 sb` mp_tac) run_inst_seq_append) >>
+     simp[]) >>
+  qpat_assum `run_inst_seq (emitted_insts sa c2) s = _`
+    (mp_then Any (qspec_then `emitted_insts c2 c3 ++ emitted_insts c3 sb` mp_tac)
+      run_inst_seq_append) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >> metis_tac[]
+QED
+
+Resume abi_decode_word_outcome[abort]:
+  `run_inst_seq (emitted_insts c2 c3) t = Abort Revert_abort v` by simp[] >>
+  `run_inst_seq (emitted_insts c2 c3 ++ emitted_insts c3 sb) t =
+     Abort Revert_abort v` by
+    (simp[run_inst_seq_append_err]) >>
+  qpat_assum `run_inst_seq (emitted_insts sa c2) s = _`
+    (mp_then Any (qspec_then `emitted_insts c2 c3 ++ emitted_insts c3 sb` mp_tac)
+      run_inst_seq_append) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def] >> metis_tac[]
+QED
+
+Finalise abi_decode_word_outcome
+
+Theorem abi_decode_word_total_ptr:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi
+    (DecPrimWord clamp) sa = ((),sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  abi_decode_ptr_window G tn s src b h /\
+  lookup_var dst s = SOME d /\ ptr_covers G tn dst s 32 /\
+  eval_operand pos s = SOME (n2w p) /\ op_taint tn pos = {} /\
+  p+32 <= h /\ w2n b+h < dimword(:256) /\
+  (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) ==>
+  ?u G' tn'.
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    ((run_inst_seq (emitted_insts sa sb) s = OK u /\
+      abi_decode_ptr_window G' tn' u dst d 32 /\
+      abi_decode_ptr_window G' tn' u src b h /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)) \/
+     (run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort u /\
+      tn'.t_mem = tn.t_mem))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_decode_word_outcome >> strip_tac
+  >- (drule_all abi_decode_word_success_ptr >>
+      disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+      qexistsl_tac [`u`, `G'`, `tn'`] >> simp[]) >>
+  drule_all abi_decode_word_abort_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`u`, `G'`, `tn'`] >> simp[]
+QED
