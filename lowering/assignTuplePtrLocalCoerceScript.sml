@@ -56,7 +56,8 @@ Proof
   `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory entry.type v (w2n sw) m` by
     metis_tac[bytestring_robust_representation_compat_ptr] >>
-  `val_wf entry.type v` by metis_tac[value_has_type_memory_wf] >>
+  `val_wf entry.type v` by
+    (irule value_has_type_memory_wf >> first_assum ACCEPT_TAC) >>
   `val_in_memory entry.type v (w2n sw) s.vs_memory` by
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
   `ptr_covers G tn src s (32 + 32 * ((len+31) DIV 32))` by
