@@ -1,4 +1,4 @@
-Theory exprSimAbiDecodeShapeProbe
+Theory exprSimAbiDecodeTraceSafe
 Ancestors
   exprSimAbiDecodeShape exprSimAbiDecodeTrace compileEnv emitHelper venomInst emitHelperProps list arithmetic
 
