@@ -5,6 +5,7 @@ Ancestors
   abiBuiltinAllocation abiEmptyAllocate abiDecoderIndexInit stmtSimLogDataRun
   emitHelperProps exprLoweringProps contextCodegenRelProps loweringSlice
   compileEnv context list arithmetic rich_list fragExec loweringHalt
+  stmtLowering stmtSimLogTopics stmtSimLogTrace
 
 Theorem log_tuple_encoder_interval:
   EVERY supported_scalar_type tys /\
@@ -159,4 +160,95 @@ Proof
   `emitted_insts s2 sb = emitted_insts s2 s4 ++ emitted_insts s4 sb` by
     (irule emitted_insts_append >> fs[inst_extends_def]) >>
   asm_simp_tac bool_ss [APPEND_ASSOC] >> decide_tac
+QED
+
+Theorem log_topic_compiler_interval[local]:
+  compile_encode_log_topic op flag sa = (out,sb) ==>
+  same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  Cases_on `flag`
+  >- (simp[compile_encode_log_topic_def, comp_return_def, comp_bind_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+      imp_res_tac emit_op_same_blocks >>
+      imp_res_tac emitted_insts_emit_op >>
+      conj_tac >- metis_tac[same_blocks_trans] >> decide_tac) >>
+  simp[compile_encode_log_topic_def, comp_return_def, same_blocks_def]
+QED
+
+Theorem log_topics_compiler_interval:
+  !raw sm ops st. compile_log_topic_ops raw sm = (ops,st) ==>
+  inst_extends sm st /\ same_blocks sm st /\ sm.cs_next_var <= st.cs_next_var
+Proof
+  Induct >> simp[compile_log_topic_ops_def, comp_return_def, comp_bind_def]
+  >- simp[inst_extends_refl, same_blocks_def] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule log_topic_compiler_interval >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  conj_tac >- metis_tac[log_topic_inst_extends, inst_extends_trans] >>
+  conj_tac >- metis_tac[same_blocks_trans] >> decide_tac
+QED
+
+Theorem log_post_topics_compiler_interval:
+  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+  compile_log_eval_all ce args sa = (xs,sm) /\
+  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
+  compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
+  data_ops = SND (split_log_ops xs flags) /\
+  EVERY supported_scalar_type (MAP SND data_ops) /\
+  SUM (MAP (type_memory_bytes ce) (MAP SND data_ops)) < dimword(:256) ==>
+  inst_extends st sb /\ same_blocks st sb /\ st.cs_next_var <= sb.cs_next_var
+Proof
+  strip_tac >> Cases_on `data_ops = []`
+  >- (`SND (split_log_ops xs flags) = []` by metis_tac[] >>
+      drule_all compile_log_empty_trace >> disch_tac >>
+      `emit_inst LOG (Lit (n2w (LENGTH (Lit (n2w h)::ops))) ::
+        REVERSE (Lit (n2w h)::ops) ++ [Lit 0w; Lit 0w]) [] st = ((),sb)` by
+        metis_tac[] >>
+      drule emit_inst_extends >> strip_tac >>
+      simp[same_blocks_def] >> metis_tac[inst_extends_emit_inst]) >>
+  `SND (split_log_ops xs flags) <> []` by metis_tac[] >>
+  `SND (split_log_ops xs flags) = data_ops` by metis_tac[] >>
+  drule_all compile_log_data_trace >> disch_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `!ty sb lctx. compile_stmt _ _ _ _ _ = _ <=> _`
+    (fn th => once_rewrite_tac[th]) >> strip_tac >>
+  qpat_x_assum `SND (split_log_ops xs flags) = data_ops` kall_tac >>
+  drule_all log_data_trace_intervals >> strip_tac >>
+  `inst_extends s3 sb /\ same_blocks s3 sb /\ s3.cs_next_var <= sb.cs_next_var` by
+    (conj_tac >- metis_tac[inst_extends_trans] >>
+     conj_tac >- metis_tac[same_blocks_trans] >> decide_tac) >>
+  `inst_extends s2 sb /\ same_blocks s2 sb /\ s2.cs_next_var <= sb.cs_next_var` by
+    (conj_tac >- metis_tac[inst_extends_trans] >>
+     conj_tac >- metis_tac[same_blocks_trans] >> decide_tac) >>
+  `inst_extends s1 sb /\ same_blocks s1 sb /\ s1.cs_next_var <= sb.cs_next_var` by
+    (conj_tac >- metis_tac[inst_extends_trans] >>
+     conj_tac >- metis_tac[same_blocks_trans] >> decide_tac) >>
+  conj_tac >- metis_tac[inst_extends_trans] >>
+  conj_tac >- metis_tac[same_blocks_trans] >> decide_tac
+QED
+
+Theorem log_success_suffix_intervals:
+  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+  compile_log_eval_all ce args sa = (xs,sm) /\
+  compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
+  compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
+  data_ops = SND (split_log_ops xs flags) /\
+  EVERY supported_scalar_type (MAP SND data_ops) /\
+  SUM (MAP (type_memory_bytes ce) (MAP SND data_ops)) < dimword(:256) /\
+  fn_has_code sm sb func /\ isPREFIX (emitted_insts sm sb) (DROP j code) ==>
+  inst_extends sm st /\ inst_extends st sb /\ inst_extends sm sb /\
+  same_blocks sm st /\ same_blocks st sb /\
+  sm.cs_next_var <= st.cs_next_var /\ st.cs_next_var <= sb.cs_next_var /\
+  fn_has_code sm st func /\ fn_has_code st sb func /\
+  emitted_insts sm sb = emitted_insts sm st ++ emitted_insts st sb /\
+  isPREFIX (emitted_insts sm st) (DROP j code) /\
+  isPREFIX (emitted_insts st sb) (DROP (j + LENGTH (emitted_insts sm st)) code)
+Proof
+  strip_tac >> drule_all log_post_topics_compiler_interval >> strip_tac >>
+  drule log_topics_compiler_interval >> strip_tac >>
+  drule_all emitted_interval_split >> strip_tac >>
+  `inst_extends sm sb` by metis_tac[inst_extends_trans] >>
+  `emitted_insts sm sb = emitted_insts sm st ++ emitted_insts st sb` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  asm_rewrite_tac[]
 QED

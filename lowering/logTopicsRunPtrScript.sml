@@ -4,7 +4,7 @@ Ancestors
   logTopicScalarPtr logTopicFramePtr logInstSeqPtr logValueFramePtr stmtSimLogTopics
   bodyPtrDefs stmtLowering context compileEnv contextCodegenRel contextCodegenRelProps
   emitHelper emitHelperProps exprLoweringProps venomInst venomState venomExecSemantics
-  ptrDiscipline finite_map words list rich_list arithmetic valueEncoding
+  ptrDiscipline finite_map words list rich_list arithmetic valueEncoding stmtSimLogTopicFresh
   stmtSimLogArgs loweringPosts ghostPcTransportPtr codegenRel fragGasSeqPtr vyperEvent exprSimHash stmtFragPtr
 
 Theorem log_topic_opcode_shape:
@@ -283,7 +283,9 @@ Theorem compile_split_log_topics_path_ptr:
     (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
     (!p. not_fresh_at sm p ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!limit_st. sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+      fresh_vars_wrt limit_st t)
 Proof
   strip_tac >> drule_all compile_split_log_topics_seq_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -304,6 +306,8 @@ Resume compile_split_log_topics_path_ptr[path]:
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb) = []` by
     (simp[FILTER_EQ_NIL, EVERY_MEM] >> gvs[EVERY_MEM]) >>
   drule_all run_inst_seq_gas_path_ptr >> strip_tac >>
+  `!limit_st. sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st t` by metis_tac[log_topics_fresh] >>
   rpt (qpat_x_assum `LIST_REL _ xs vs` kall_tac) >>
   qpat_x_assum `encode_indexed_event_topics _ _ _ = _` kall_tac >>
   qexistsl_tac [`t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)`,
@@ -329,6 +333,7 @@ Resume compile_split_log_topics_path_ptr[endpoint]:
   >- (`t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|> =
        (t with vs_vars := s.vs_vars) with vs_inst_idx := s.vs_inst_idx` by simp[] >>
       pop_assum SUBST1_TAC >> asm_rewrite_tac[] >> simp[]) >>
-  gvs[lookup_var_def]
+  gvs[lookup_var_def] >>
+  simp[fresh_vars_wrt_def] >> metis_tac[fresh_vars_wrt_def]
 QED
 Finalise compile_split_log_topics_path_ptr
