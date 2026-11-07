@@ -317,7 +317,7 @@ Proof
       vv_location_def, mk_ptr_def, base_ptr_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >>
-  gvs[AllCaseEqs(), vv_location_def, mk_ptr_def, base_ptr_def]
+  FIRST [gvs[AllCaseEqs(), vv_location_def, mk_ptr_def, base_ptr_def]]
   >~ [`compile_literal_vv _ _ _ = _`] >-
     (Cases_on `rt` >> gvs[compile_literal_vv_def, comp_return_def, vv_location_def]
      >- (rename1 `BaseT bt` >> Cases_on `bt` >>
@@ -421,8 +421,8 @@ Proof
     drule compile_attribute_safe_operand >>
     simp[exprSafeOperandTheory.safe_operand_def, vv_operand_def])
   >>~- ([`well_typed_expr env (Builtin _ bi args)`],
-    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def,
-         AllCaseEqs()]
+    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    gvs[AllCaseEqs()]
      >>~- ([`compile_builtin_dispatch _ _ _ _ _ _ = _`],
        qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
        pure_once_rewrite_tac[cj 2 compile_expr_raw_def] >> strip_tac >>

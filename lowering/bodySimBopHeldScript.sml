@@ -2,11 +2,7 @@
 
 Theory bodySimBopHeld
 Ancestors
-  exprSimSource
-  exprSimHypsDefs
-  list bodySim  exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
-  vyperInterpreter vyperState vyperContext vyperTypeCallGraph vyperTypeSystem compileEnv
+  bodySim exprSimHypsDefs vyperTypeSystem compileEnv
 
 Theorem body_bop_in_literal_nonword_case:
   !cx ty bop e1 a t n elems.
