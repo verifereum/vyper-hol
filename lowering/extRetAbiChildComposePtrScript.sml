@@ -261,6 +261,5 @@ Proof
     qspecl_then [`sm`, `b+h`, `n2w k`] mp_tac mstore_memory_frame >>
      qspecl_then [`mstore (b+h) (n2w k) sm`, `cursor`, `n2w (k+n)`]
        mp_tac mstore_memory_frame >>
-     gvs[mem_agree_outside_def] >> rpt strip_tac >> simp[]) >>
-  FAIL_TAC "remaining frames"
+     gvs[mem_agree_outside_def] >> rpt strip_tac >> simp[])
 QED
