@@ -420,6 +420,24 @@ QED
    agree unconditionally. This combines step_inst_preserves_all (fields
    not written are preserved) with output_determined (fields written are
    determined by inputs). Proved by the same opcode case split. *)
+(* Simplify one selected opcode at a time, rather than one timed batch
+   spanning all constructor goals. *)
+val scalar_agree_simp_tac =
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
+      read_effects_def, write_effects_def, all_effects_def, empty_effects_def];
+val scalar_agree_finish_tac =
+  scalar_agree_simp_tac >> transfer_determined_finish_tac;
+val scalar_agree_special_tac =
+  scalar_agree_simp_tac >>
+  qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+  qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def] >>
+  ntac 2 strip_tac >> gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >> transfer_close_tac;
+
 Theorem step_inst_base_scalar_agree:
   !inst s1 s2 v1 v2.
     step_inst_base inst s1 = OK v1 /\
@@ -477,113 +495,108 @@ Theorem step_inst_base_scalar_agree:
     v1.vs_prev_hashes = v2.vs_prev_hashes
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
-      read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def]
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- (qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-      qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
-      ntac 2 strip_tac >>
-      gvs[AllCaseEqs()] >>
-      rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-      transfer_close_tac)
-  >- (qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-      qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
-      ntac 2 strip_tac >>
-      gvs[AllCaseEqs()] >>
-      rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-      transfer_close_tac)
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- (qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-      qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
-      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-           exec_read0_def, exec_read1_def, exec_write2_def] >>
-      ntac 2 strip_tac >>
-      gvs[AllCaseEqs()] >>
-      rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-      transfer_close_tac)
-  >> transfer_determined_finish_tac
+  Cases_on `inst.inst_opcode`
+  >- scalar_agree_finish_tac (* ADD *)
+  >- scalar_agree_finish_tac (* SUB *)
+  >- scalar_agree_finish_tac (* MUL *)
+  >- scalar_agree_finish_tac (* Div *)
+  >- scalar_agree_finish_tac (* SDIV *)
+  >- scalar_agree_finish_tac (* Mod *)
+  >- scalar_agree_finish_tac (* SMOD *)
+  >- scalar_agree_finish_tac (* Exp *)
+  >- scalar_agree_special_tac (* ADDMOD *)
+  >- scalar_agree_special_tac (* MULMOD *)
+  >- scalar_agree_finish_tac (* EQ *)
+  >- scalar_agree_finish_tac (* LT *)
+  >- scalar_agree_finish_tac (* GT *)
+  >- scalar_agree_finish_tac (* SLT *)
+  >- scalar_agree_finish_tac (* SGT *)
+  >- scalar_agree_finish_tac (* ISZERO *)
+  >- scalar_agree_finish_tac (* AND *)
+  >- scalar_agree_finish_tac (* OR *)
+  >- scalar_agree_finish_tac (* XOR *)
+  >- scalar_agree_finish_tac (* NOT *)
+  >- scalar_agree_finish_tac (* SHL *)
+  >- scalar_agree_finish_tac (* SHR *)
+  >- scalar_agree_finish_tac (* SAR *)
+  >- scalar_agree_finish_tac (* SIGNEXTEND *)
+  >- scalar_agree_finish_tac (* BYTE *)
+  >- scalar_agree_finish_tac (* MLOAD *)
+  >- scalar_agree_finish_tac (* MSTORE *)
+  >- scalar_agree_finish_tac (* MSTORE8 *)
+  >- scalar_agree_finish_tac (* MCOPY *)
+  >- scalar_agree_finish_tac (* MEMTOP *)
+  >- scalar_agree_finish_tac (* SLOAD *)
+  >- scalar_agree_finish_tac (* SSTORE *)
+  >- scalar_agree_finish_tac (* TLOAD *)
+  >- scalar_agree_finish_tac (* TSTORE *)
+  >- scalar_agree_finish_tac (* ILOAD *)
+  >- scalar_agree_finish_tac (* ISTORE *)
+  >- scalar_agree_finish_tac (* JMP *)
+  >- scalar_agree_finish_tac (* JNZ *)
+  >- scalar_agree_finish_tac (* DJMP *)
+  >- scalar_agree_finish_tac (* RET *)
+  >- scalar_agree_finish_tac (* RETURN *)
+  >- scalar_agree_finish_tac (* REVERT *)
+  >- scalar_agree_finish_tac (* STOP *)
+  >- scalar_agree_finish_tac (* SINK *)
+  >- scalar_agree_finish_tac (* PHI *)
+  >- scalar_agree_finish_tac (* PARAM *)
+  >- scalar_agree_finish_tac (* ASSIGN *)
+  >- scalar_agree_finish_tac (* NOP *)
+  >- scalar_agree_finish_tac (* ALLOCA *)
+  >- scalar_agree_finish_tac (* DALLOCA *)
+  >- scalar_agree_finish_tac (* DRET *)
+  >- scalar_agree_finish_tac (* GETFMP *)
+  >- scalar_agree_finish_tac (* SETFMP *)
+  >- scalar_agree_finish_tac (* RETFMP *)
+  >- scalar_agree_finish_tac (* INITIAL_FMP *)
+  >- scalar_agree_finish_tac (* BUMP *)
+  >- scalar_agree_finish_tac (* INVOKE *)
+  >- scalar_agree_finish_tac (* FMP_PARAM *)
+  >- scalar_agree_finish_tac (* RETPC_PARAM *)
+  >- scalar_agree_finish_tac (* CALLER *)
+  >- scalar_agree_finish_tac (* CALLVALUE *)
+  >- scalar_agree_finish_tac (* CALLDATALOAD *)
+  >- scalar_agree_finish_tac (* CALLDATASIZE *)
+  >- scalar_agree_finish_tac (* CALLDATACOPY *)
+  >- scalar_agree_finish_tac (* ADDRESS *)
+  >- scalar_agree_finish_tac (* ORIGIN *)
+  >- scalar_agree_finish_tac (* GASPRICE *)
+  >- scalar_agree_finish_tac (* GAS *)
+  >- scalar_agree_finish_tac (* GASLIMIT *)
+  >- scalar_agree_finish_tac (* COINBASE *)
+  >- scalar_agree_finish_tac (* TIMESTAMP *)
+  >- scalar_agree_finish_tac (* NUMBER *)
+  >- scalar_agree_finish_tac (* PREVRANDAO *)
+  >- scalar_agree_finish_tac (* CHAINID *)
+  >- scalar_agree_finish_tac (* SELFBALANCE *)
+  >- scalar_agree_finish_tac (* BALANCE *)
+  >- scalar_agree_finish_tac (* BLOCKHASH *)
+  >- scalar_agree_finish_tac (* BASEFEE *)
+  >- scalar_agree_finish_tac (* CODESIZE *)
+  >- scalar_agree_finish_tac (* CODECOPY *)
+  >- scalar_agree_finish_tac (* EXTCODESIZE *)
+  >- scalar_agree_finish_tac (* EXTCODEHASH *)
+  >- scalar_agree_finish_tac (* EXTCODECOPY *)
+  >- scalar_agree_finish_tac (* RETURNDATASIZE *)
+  >- scalar_agree_finish_tac (* RETURNDATACOPY *)
+  >- scalar_agree_finish_tac (* BLOBHASH *)
+  >- scalar_agree_finish_tac (* BLOBBASEFEE *)
+  >- scalar_agree_finish_tac (* SHA3 *)
+  >- scalar_agree_finish_tac (* CALL *)
+  >- scalar_agree_finish_tac (* STATICCALL *)
+  >- scalar_agree_finish_tac (* DELEGATECALL *)
+  >- scalar_agree_finish_tac (* CREATE *)
+  >- scalar_agree_finish_tac (* CREATE2 *)
+  >- scalar_agree_finish_tac (* LOG *)
+  >- scalar_agree_finish_tac (* SELFDESTRUCT *)
+  >- scalar_agree_finish_tac (* INVALID *)
+  >- scalar_agree_finish_tac (* ASSERT *)
+  >- scalar_agree_finish_tac (* ASSERT_UNREACHABLE *)
+  >- scalar_agree_finish_tac (* DLOAD *)
+  >- scalar_agree_special_tac (* DLOADBYTES *)
+  >> scalar_agree_finish_tac (* OFFSET *)
 QED
 
 
