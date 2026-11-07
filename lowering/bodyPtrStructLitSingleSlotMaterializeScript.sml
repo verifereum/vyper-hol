@@ -119,7 +119,8 @@ Proof
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
   qpat_x_assum `u = _` SUBST_ALL_TAC >>
   conj_tac
-  >- (Cases_on `tr` >> gvs[step_inst_base_def, mk_inst_def, exec_read1_def]) >>
+  >- (Cases_on `tr` >> gvs[] >>
+      simp[Once step_inst_base_def, mk_inst_def, exec_read1_def]) >>
   `MEM opc [SLOAD; TLOAD; DLOAD]` by (Cases_on `tr` >> simp[]) >>
   `op_taint (step_taint (mk_inst id opc [src] [tmp]) s
      (update_var tmp w s) tn) (Var tmp) = {}` by
