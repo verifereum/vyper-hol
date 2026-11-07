@@ -94,15 +94,26 @@ Proof
   drule (cj 1 dead_bytes_range) >> simp[]
 QED
 
+Theorem nonmemory_load_output_provenance:
+  MEM opc [SLOAD; TLOAD; CALLDATALOAD; DLOAD] ==>
+  op_prov (step_prov PG G (mk_inst id opc [src] [out]) u) (Var out) = NONE
+Proof
+  simp[MEM] >> strip_tac >> gvs[] >>
+  irule step_prov_out_none >> simp[mk_inst_def] >>
+  irule out_prov_other_none >> simp[mk_inst_def]
+QED
+
 Theorem nonmemory_word_load_ptr_val_ok:
   MEM opc [SLOAD; TLOAD; CALLDATALOAD; DLOAD] /\
   eval_operand src s = SOME a /\
   (opc = SLOAD ==> key_taint tn.t_stor a = {}) /\
   (opc = TLOAD ==> key_taint tn.t_trans a = {}) /\
   is_word_type t ==>
-  ptr_val_ok cx t v (Var out) G'
+  ptr_val_ok cx t v (Var out)
+    (step_prov PG G (mk_inst id opc [src] [out]) u)
     (step_taint (mk_inst id opc [src] [out]) s u tn) s'
 Proof
-  strip_tac >> simp[ptr_val_ok_def] >>
-  irule nonmemory_word_load_clean >> simp[] >> metis_tac[]
+  strip_tac >> simp[ptr_val_ok_def] >> conj_tac
+  >- (irule nonmemory_word_load_clean >> simp[] >> metis_tac[]) >>
+  irule nonmemory_load_output_provenance >> simp[]
 QED

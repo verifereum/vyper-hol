@@ -272,7 +272,8 @@ Proof
     metis_tac[read_result_gas_obs]) >>
   conj_tac >- (qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
     irule nonmemory_word_load_source_post >> simp[] >> metis_tac[]) >>
-  conj_tac >- (qpat_x_assum `tn1 = _` SUBST_ALL_TAC >>
+  conj_tac >- (qpat_x_assum `G1 = _` SUBST_ALL_TAC >>
+    qpat_x_assum `tn1 = _` SUBST_ALL_TAC >>
     irule nonmemory_word_load_ptr_val_ok >> simp[] >> metis_tac[]) >>
   `ghost_inv d cenv cx ee G1 tn1 s1 /\
    ghost_kept cenv es sf G0 tn0 initial G1 tn1 /\

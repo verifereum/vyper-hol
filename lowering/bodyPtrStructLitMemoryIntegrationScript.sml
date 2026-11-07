@@ -1,6 +1,7 @@
 (* Actual compiler interval and frames for the post-ADD memory word unwrap. *)
 Theory bodyPtrStructLitMemoryIntegration
-Ancestors bodyPtrStructLitAddContinuation bodyPtrStructLitMemoryCaller
+Ancestors bodyPtrStructLitUnwrapFrame
+  bodyPtrStructLitAddContinuation bodyPtrStructLitMemoryCaller
   bodyPtrStructLitMemoryUnwrap bodyPtrStructLitRawChild
   exprLoweringProps exprLowering exprSimAggregateLayout emitHelperProps
   freshWrites context compileEnv fragExec
@@ -60,29 +61,6 @@ Proof
   metis_tac[fn_has_code_split]
 QED
 
-Theorem raw_child_memory_unwrap_compiler_frame:
-  compile_expr ce (expr_type e) e sb = (vv,sc) /\
-  emit_op ADD [left; Lit off] sc = (dst,sm) /\
-  local_ptrs_reserved ce sb /\
-  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x) /\
-  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x) /\
-  unwrap_value ce (LocatedValue ty q) sm = (Var out,su) /\
-  is_word_type ty /\ q.ptr_location = LocMemory ==>
-  sb.cs_next_var <= sm.cs_next_var /\
-  ~not_fresh_at sb out /\
-  (!x. not_fresh_at sb x ==> x <> out) /\
-  (!scopes. not_local_ptr ce scopes out) /\
-  (!name x sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var x) sz) ==> x <> out) /\
-  (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> out) /\
-  (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> out)
-Proof
-  strip_tac >> drule_all memory_word_unwrap_code >> strip_tac >>
-  drule (cj 1 compile_expr_grows) >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  gvs[not_fresh_at_def, local_ptrs_reserved_def, not_local_ptr_def] >>
-  rpt conj_tac >> rpt strip_tac >> res_tac >> gvs[] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]
-QED
 
 Theorem structlit_first_memory_word_continuation:
   compile_expr ce ty (StructLit ann nsid ((fname,e)::rest)) sa = (out,sd) /\
@@ -121,7 +99,8 @@ Theorem structlit_first_memory_word_continuation:
 Proof
   strip_tac >> drule_all structlit_alloc_buffer_reserved >> strip_tac >>
   `fn_has_code sm su fn` by (irule structlit_first_unwrap_code >> metis_tac[]) >>
-  drule_all raw_child_memory_unwrap_compiler_frame >> strip_tac >>
+  drule_all memory_word_unwrap_code >> strip_tac >>
+  drule_all raw_child_unwrap_compiler_frame >> strip_tac >>
   `cty = expr_type e` by
     (drule_all bodyPtrStructLitMemoryReadTheory.vv_post_memory_word_read >> simp[]) >>
   `ptr_vv_ok cx cty tv (LocatedValue cty q) ee G tn s` by metis_tac[] >>
