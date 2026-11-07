@@ -22,7 +22,7 @@ Ancestors
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
   fnFrameBoundaryEntryParams joinSpillWitness frameViewFacts instSimHelpers
   livenessConvergenceProofs livenessBlockProofs codegenReadyCompute fnPlanPrefix
-  simplifyCfgFixupStatic
+  simplifyCfgFixupStatic genBlockSim
 
 (* Actual planner cuts.  The historical label is deliberately independent of
    any semantic predecessor.  Instruction indices count non-PARAM instructions,
@@ -6765,6 +6765,14 @@ Theorem alias_spill_probe_entry_fields:
   ~MEM (Var "x18") (SND (THE alias_spill_probe_entry_result)).ps_stack /\
   Var "x18" IN FDOM (SND (THE alias_spill_probe_entry_result)).ps_spilled
 Proof
+  rpt conj_tac >>
+  rewrite_tac[alias_spill_probe_entry_result_def] >>
+  CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
+    if same_const (fst (strip_comb tm)) ``dfg_build_function`` then EVAL tm else NO_CONV tm)) >>
+  CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
+    if same_const (fst (strip_comb tm)) ``cfg_analyze`` then EVAL tm else NO_CONV tm)) >>
+  CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
+    if same_const tm ``alias_spill_probe_live`` then EVAL tm else NO_CONV tm)) >>
   EVAL_TAC
 QED
 
@@ -9326,6 +9334,47 @@ Theorem alias_prepare_params_initialized_fresh:
 Proof
   strip_tac >> irule alias_prepare_params_entry_fresh >>
   simp[init_cleanup_plan_state_def, init_plan_state_def] >>
+  metis_tac[]
+QED
+
+Theorem alias_ready_inst_arity:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI ==>
+  LENGTH (compute_operands inst) <= 16
+Proof
+  simp[codegen_ready_fn_def, EVERY_MEM, codegen_ready_inst_def] >>
+  metis_tac[]
+QED
+
+Theorem alias_non_param_cut_member:
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  DROP i (non_param_insts bb) = inst::rest ==>
+  MEM inst (fn_insts fn)
+Proof
+  strip_tac >>
+  `MEM inst (non_param_insts bb)` by metis_tac[rich_listTheory.MEM_DROP_IMP, MEM] >>
+  simp[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+  qexists_tac `bb` >>
+  gvs[non_param_insts_def, MEM_FILTER] >> metis_tac[lookup_block_MEM]
+QED
+
+Theorem alias_ready_cut_arity:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  DROP i (non_param_insts bb) = inst::rest /\ inst.inst_opcode <> PHI ==>
+  LENGTH (compute_operands inst) <= 16
+Proof
+  strip_tac >> irule alias_ready_inst_arity >>
+  `MEM inst (non_param_insts bb)` by metis_tac[rich_listTheory.MEM_DROP_IMP, MEM] >>
+  gvs[non_param_insts_def, MEM_FILTER] >> metis_tac[lookup_block_MEM]
+QED
+
+Theorem alias_ready_cut_outputs_distinct:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  DROP i (non_param_insts bb) = inst::rest ==>
+  ALL_DISTINCT inst.inst_outputs
+Proof
+  strip_tac >> irule genBlockSimTheory.codegen_ready_inst_outputs_distinct >>
+  goal_assum (drule_at Any) >> irule alias_non_param_cut_member >>
   metis_tac[]
 QED
 
