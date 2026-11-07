@@ -1,6 +1,6 @@
 Theory fnPlanLineageEntryProduction
 Ancestors
-  fnPlanLineageNativeResources fnPlanLineageNativeOrigins
+  fnPlanLineageJoinEntry fnPlanLineageNativeResources fnPlanLineageNativeOrigins
   fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath fnPlanLineageSuffix
   stackPlanGen venomWf venomInst passSharedDefs removeUnusedProofs removeUnusedSsaProofs list rich_list finite_map bag
 
@@ -1192,4 +1192,76 @@ Proof
   rpt strip_tac >> drule_all ready_native_phi_prefix_candidate >> strip_tac >>
   irule fnPlanLineagePhiInventoryTheory.phi_selection_from_present_operand >>
   qexists_tac `v` >> simp[]
+QED
+
+Theorem non_param_insts_phi_prefix:
+  !bb. ?tail. non_param_insts bb = collect_phis bb.bb_instructions ++ tail
+Proof
+  gen_tac >>
+  qspec_then `bb.bb_instructions` (qx_choose_then `rest` assume_tac)
+    fnPlanLineageLivenessTheory.collect_phis_prefix >>
+  `FILTER (\inst. ~is_param_opcode inst.inst_opcode)
+      (collect_phis bb.bb_instructions) = collect_phis bb.bb_instructions` by
+    (rewrite_tac[listTheory.FILTER_EQ_ID, listTheory.EVERY_MEM] >>
+     metis_tac[livenessTransferProofsTheory.collect_phis_mem, is_param_opcode_def]) >>
+  qexists_tac `FILTER (\inst. ~is_param_opcode inst.inst_opcode) rest` >>
+  pure_rewrite_tac[non_param_insts_def] >>
+  metis_tac[listTheory.FILTER_APPEND_DISTRIB]
+QED
+
+Theorem generate_join_block_worker:
+  bb <> HD fn.fn_blocks /\ 1 < LENGTH (cfg_preds_of cfg bb.bb_label) /\
+  generate_block_plan lv dfg cfg fn bb ps = SOME (ops,qs) ==>
+  ?inst_ops.
+    generate_block_insts_plan lv dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps = SOME (inst_ops,qs) /\
+    ops = SOLabel bb.bb_label :: inst_ops
+Proof
+  strip_tac >>
+  gvs[generate_block_plan_def, AllCaseEqs()]
+QED
+
+Theorem incoming_join_native_phi_prefix_selection:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 =
+    SOME (ops,ps) /\
+  (!v. MEM (Var v) ps.ps_stack ==>
+    ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+            MEM v di.inst_outputs /\ MEM db.bb_label visited) /\
+  ~MEM bb.bb_label visited /\
+  native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (non_param_insts bb) ps k qs /\
+  k <= j /\ j < LENGTH (collect_phis bb.bb_instructions) ==>
+  ?d w.
+    stack_get_phi_depth
+      (FILTER is_var_operand (EL j (collect_phis bb.bb_instructions)).inst_operands)
+      qs.ps_stack = SOME d /\
+    stack_peek d qs.ps_stack = Var w /\
+    MEM (Var w) (EL j (collect_phis bb.bb_instructions)).inst_operands
+Proof
+  strip_tac >>
+  `?v db di.
+    MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands /\
+    MEM (Var v) ps.ps_stack /\ MEM db fn.fn_blocks /\
+    MEM di db.bb_instructions /\ MEM v di.inst_outputs /\
+    MEM db.bb_label visited` by
+    (irule successful_join_edge_phi_candidate_origin >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `ssa_form fn /\ EVERY inst_wf bb.bb_instructions` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `phi_block_ready (liveness_analyze fn) bb` by
+    (`~NULL (collect_phis bb.bb_instructions)` by (Cases_on `collect_phis bb.bb_instructions` >> gvs[]) >>
+     gvs[codegen_ready_fn_def, phi_operands_ready_def, listTheory.EVERY_MEM] >>
+     metis_tac[]) >>
+  `?tail. non_param_insts bb = collect_phis bb.bb_instructions ++ tail` by
+    metis_tac[non_param_insts_phi_prefix] >>
+  drule_all ready_native_phi_prefix_selection >> simp[]
 QED
