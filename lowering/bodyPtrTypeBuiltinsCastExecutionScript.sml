@@ -1,7 +1,8 @@
 Theory bodyPtrTypeBuiltinsCastExecution
 Ancestors bodyPtrTypeBuiltinsCast exprLowering exprLoweringProps
   emitHelperProps compileEnv venomExecSemantics venomState venomInst
-  words list finite_map arithmetic
+  words list finite_map arithmetic exprSimConvert vyperValueOperation
+  vyperValue vyperTyping valueEncoding compileEnv
 
 Theorem cast_sequence_actual:
   eval_operand x s = SOME w /\ mload (w2n w) s = n2w len /\
@@ -51,4 +52,44 @@ Proof
       Cases_on `len <= n` >> simp[] >> strip_tac >>
       goal_assum (drule_at Any) >> metis_tac[]) >>
   `len <= n` by decide_tac >> simp[emitted_insts_refl, run_inst_seq_def]
+QED
+
+Theorem cast_typed_header_outcome:
+  (tsrc = BaseT (BytesT (Dynamic i)) \/ tsrc = BaseT (StringT i)) /\
+  (tdst = BaseT (BytesT (Dynamic n)) \/ tdst = BaseT (StringT n)) /\
+  evaluate_type (get_tenv cx) tsrc = SOME tv /\ value_has_type tv v /\
+  val_in_memory tv v off s.vs_memory ==>
+  ?len. len <= i /\ mload off s = n2w len /\
+    (if len <= n then ?v'. convert_result cx tsrc tdst v = INL v'
+     else ?msg. convert_result cx tsrc tdst v = INR (Error (RuntimeError msg)))
+Proof
+  strip_tac >> gvs[evaluate_type_def] >> Cases_on `v` >>
+  gvs[value_has_type_def, val_in_memory_def, mload_def,
+      convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
+  rename1 `LENGTH payload <= i` >> qexists_tac `LENGTH payload` >>
+  fs[GSYM mem_word_at_def] >> Cases_on `LENGTH payload <= n` >> simp[]
+QED
+
+Theorem cast_compile_typed_outcome:
+  compile_type_convert (Var src) (ConvBytestringCast n i) sa = (out,sb) /\
+  (tsrc = BaseT (BytesT (Dynamic i)) \/ tsrc = BaseT (StringT i)) /\
+  (tdst = BaseT (BytesT (Dynamic n)) \/ tdst = BaseT (StringT n)) /\
+  evaluate_type (get_tenv cx) tsrc = SOME tv /\ value_has_type tv v /\
+  val_in_memory tv v (w2n w) s.vs_memory /\ lookup_var src s = SOME w /\
+  not_fresh_at sa src /\ i < dimword(:256) /\ n < dimword(:256) ==>
+  out = Var src /\
+  case convert_result cx tsrc tdst v of
+    INL v' => ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      (t with vs_vars := s.vs_vars) = s /\
+      (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s)
+  | INR ex => ?msg t. ex = Error (RuntimeError msg) /\
+      run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  qpat_assum `val_in_memory _ _ _ _`
+    (mp_then Any mp_tac cast_typed_header_outcome) >>
+  disch_then (qspecl_then [`tsrc`,`tdst`,`n`,`i`,`cx`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all cast_compile_actual >>
+  Cases_on `len <= n` >> gvs[] >> metis_tac[]
 QED
