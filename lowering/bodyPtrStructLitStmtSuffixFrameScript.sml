@@ -3,6 +3,7 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipFrame
   bodyPtrStructLitOwnershipSteps loweringShapeProps loweringShapeRules
   loweringShapeDefs context compileEnv stmtLowering venomInst
   bodyPtrStructLitOwnershipMemory bodyPtrStructLitOwnershipFreshness unitShapeDefs
+  bodyPtrStructLitLoopShapeDyn bodyPtrStructLitOwnershipStructFrame
 
 Theorem alloc_run_compile_store_at_loc_frame:
   shape_stable R ==>
@@ -36,4 +37,19 @@ Proof
      mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
      is_param_opcode_def, shape_stable_def, is_read0_opcode_def,
      label_positions_ok_def, is_terminator_def])
+QED
+
+Theorem alloc_run_compile_dynarray_to_storage_frame:
+  shape_stable R ==>
+  alloc_run (\s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
+    plain_operand s src /\ plain_operand s dst)
+    (compile_dynarray_to_storage src dst ew ems transient)
+    (\u s. shape_state s /\ R s /\ cenv_shape_ok s ce)
+Proof
+  strip_tac >> irule alloc_run_conseq >>
+  irule_at Any (Q.INST [`internal` |-> `F`] alloc_run_fresh_shape_frame) >>
+  qexistsl [`\s. R s /\ cenv_shape_ok s ce`, `\u s. T`,
+    `\s. plain_operand s src /\ plain_operand s dst`] >>
+  simp[shape_stable_conj, cenv_shape_ok_stable,
+    loop_shape_dynarray_to_storage, alloc_run_compile_dynarray_to_storage]
 QED
