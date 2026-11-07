@@ -253,7 +253,7 @@ Proof
   `w2n (i2w i : bytes32) = Num i` by
     (`i = &Num i` by intLib.ARITH_TAC >>
      qpat_x_assum `i = &Num i` SUBST_ALL_TAC >>
-     simp[i2w_pos, w2n_n2w] >> intLib.ARITH_TAC) >>
+     fs[i2w_pos, w2n_n2w, dimword_def]) >>
   drule_all scalar_flag_semantic_packet >> disch_then SUBST1_TAC >>
   drule_all scalar_flag_actual_exact >>
   Cases_on `Num i < 2 ** n` >> simp[] >> strip_tac >>
@@ -417,4 +417,72 @@ Proof
       simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   irule (SRULE [] (Q.INST [`sg` |-> `F`] scalar_fixed_int_actual_semantic)) >>
   simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem scalar_fixed_zero_value:
+  value_has_type (BaseTV (BytesT (Fixed 0))) v ==>
+  v = BytesV [] /\ typed_val_to_w256 (BaseTV (BytesT (Fixed 0))) v = 0w
+Proof
+  Cases_on `v` >> simp[value_has_type_def] >> strip_tac >> gvs[] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem scalar_fixed_zero_signed_result:
+  convert_result cx (BaseT (BytesT (Fixed 0))) (BaseT (IntT b)) (BytesV []) = INL (IntV 0) /\
+  convert_result cx (BaseT (BytesT (Fixed 0))) (BaseT DecimalT) (BytesV []) = INL (DecimalV 0)
+Proof
+  `word_of_bytes_be (PAD_RIGHT (0w:word8) 32 []):bytes32 = 0w` by
+    (EVAL_TAC >> simp[]) >>
+  `((0w:bytes32) >> 256) = 0w` by wordsLib.WORD_DECIDE_TAC >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def,
+       within_int_bound_def, bounded_decimal_op_def, w2i_def,
+       word_msb_def, word_0] >> Cases_on `0 < b` >> simp[]
+QED
+
+Theorem scalar_fixed_zero_int_raw:
+  compile_type_convert x (ConvBytesToInt 0 T b) sa = (r,sb) /\
+  eval_operand x ss = SOME 0w /\ fresh_vars_wrt sa ss /\ b <= 256 ==>
+  ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\ eval_operand r sf = SOME 0w
+Proof
+  strip_tac >>
+  `((0w:bytes32) >> w2n (n2w ((32-0)*8):bytes32)) = 0w` by
+    (simp[] >> wordsLib.WORD_DECIDE_TAC) >>
+  drule scalar_bytes_int_word_ok >>
+  disch_then (qspecl_then [`ss`,`0w:bytes32`] mp_tac) >>
+  simp[arithmeticPropsTheory.in_type_range_def, type_bits_def, is_signed_type_def, w2i_def,
+       word_msb_def, word_0]
+QED
+
+Theorem scalar_fixed_zero_int_actual:
+  compile_type_convert x (ConvBytesToInt 0 T b) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\ eval_operand x ss = SOME 0w /\ b <= 256 ==>
+  ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\ eval_operand r sf = SOME 0w /\
+    (sf with vs_vars := ss.vs_vars) = ss /\
+    (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+Proof
+  strip_tac >>
+  `eval_operand x (drop_fresh sa ss) = SOME 0w` by simp[eval_operand_drop_fresh] >>
+  `fresh_vars_wrt sa (drop_fresh sa ss)` by simp[fresh_vars_wrt_drop_fresh] >>
+  drule_all scalar_fixed_zero_int_raw >> strip_tac >>
+  drule scalar_fixed_int_replay >> disch_then (qspec_then `ss` mp_tac) >>
+  simp[vars_ext_result_def] >> strip_tac >> gvs[] >>
+  rename1 `run_inst_seq (emitted_insts sa sb) ss = OK actual` >> conj_tac
+  >- (fs[vars_ext_def] >>
+      qpat_x_assum `actual = _ with vs_vars := _` SUBST1_TAC >>
+      simp[eval_operand_vars_ext]) >>
+  irule convert_bytes_int_runtime_frame >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem scalar_fixed_zero_decimal_actual:
+  compile_type_convert x (mk_convert_op (BaseT (BytesT (Fixed 0))) (BaseT DecimalT)) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\ eval_operand x ss = SOME 0w ==>
+  ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\ eval_operand r sf = SOME 0w /\
+    (sf with vs_vars := ss.vs_vars) = ss /\
+    (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+Proof
+  simp[mk_convert_op_def, is_bytestring_type_def, type_bounds_def,
+       type_bits_def, is_signed_type_def, w2i_i2w] >>
+  rewrite_tac[SRULE [] scalar_bytes_decimal_eq] >> strip_tac >>
+  irule scalar_fixed_zero_int_actual >> simp[] >> qexistsl_tac [`168`,`x`] >> simp[]
 QED
