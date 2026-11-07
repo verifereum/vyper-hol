@@ -69,9 +69,14 @@ Proof
   drule_all hash_run_path >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `t' with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   conj_tac >- metis_tac[listTheory.LENGTH] >> simp[] >>
-  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  fs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  `!n. wb_frame cenv es0 (es with logs := es.logs ++
+     [encode_raw_event_values cx.txn.target vals bs]) sa s0
+     (t' with vs_inst_idx := n)` by
+    (gen_tac >> qpat_x_assum `wb_frame cenv es0 (es with logs := _) sa s0 t'` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
+     disch_then strip_assume_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx]
 QED
 
 Theorem raw_log_fixed_tail_counted:
@@ -149,7 +154,7 @@ Proof
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   qpat_x_assum `wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` mp_tac >>
   rpt (pop_assum kall_tac) >>
-  simp[wb_frame_def, locals_kept_def, lookup_var_def] >>
+  simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
   metis_tac[]
 QED
 
@@ -287,7 +292,7 @@ Proof
   conj_tac
   >- (qpat_x_assum `wb_frame cenv es0 es sa s0 t` mp_tac >>
       rpt (pop_assum kall_tac) >>
-      simp[wb_frame_def, locals_kept_def, lookup_var_def] >> metis_tac[]) >>
+      simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >> metis_tac[]) >>
   qpat_x_assum `sn.cs_current_insts = _` kall_tac >>
   fs[lookup_var_def, local_region_def] >>
   conj_tac >> first_assum ACCEPT_TAC
@@ -297,6 +302,9 @@ Theorem raw_log_post_gas_obs:
   expr_post ctx func cenv cx e es0 sa sb s0 ee v op t ==>
   expr_post ctx func cenv cx e es0 sa sb s0 (ee with gas_obs := gs) v op t
 Proof
+  `locals_kept cenv es0 (ee with gas_obs := gs) s0 t <=>
+   locals_kept cenv es0 ee s0 t` by
+    simp[NoAsms, locals_kept_def, popped_kept_def] >>
   simp[expr_post_def, expr_val_at_def, expr_val_own_def] >> strip_tac >> simp[] >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) t` by
     (drule msg_gas_state_frame >>
