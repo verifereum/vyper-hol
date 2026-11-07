@@ -155,3 +155,48 @@ Theorem nested_reach_typing:
 Proof
   EVAL_TAC >> simp[subscript_vtype_def] >> EVAL_TAC
 QED
+
+(* Subtraction makes a zero padding read observably different: source 7-1
+   succeeds, whereas a target read of zero would underflow. No padding value
+   is asserted by this diagnostic. *)
+Theorem nested_reach_subtraction_syntax_typing:
+  supported_stmt nested_reach_tops []
+    (AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+      (Literal (BaseT (UintT 256)) (IntL 1))) /\
+  type_stmt nested_reach_env NoneT
+    (AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+      (Literal (BaseT (UintT 256)) (IntL 1))) = SOME nested_reach_env
+Proof
+  EVAL_TAC >> simp[subscript_vtype_def] >> EVAL_TAC
+QED
+
+Theorem nested_reach_subtraction_outcomes:
+  evaluate_binop (Unsigned 256) (BaseTV (UintT 256)) Sub (IntV 7) (IntV 1) =
+    INL (IntV 6) /\
+  evaluate_binop (Unsigned 256) (BaseTV (UintT 256)) Sub (IntV 0) (IntV 1) =
+    INR (RuntimeError "bounded_int_op bound")
+Proof
+  `7 - 1 = (6:int)` by intLib.COOPER_TAC >>
+  `0 - 1 = (-1:int)` by intLib.COOPER_TAC >>
+  simp[evaluate_binop_def, bounded_int_op_def] >> EVAL_TAC
+QED
+
+Theorem nested_reach_source_subtraction:
+  ?post.
+    eval_stmt nested_reach_cx
+      (AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+        (Literal (BaseT (UintT 256)) (IntL 1))) nested_reach_es =
+      (INL (),post) /\
+    lookup_storage 2w (get_storage nested_reach_cx post F) = 6w /\
+    lookup_storage 1w (get_storage nested_reach_cx post F) = 0w
+Proof
+  EVAL_TAC >>
+  simp[SF wordsLib.SIZES_ss, vyperValueTheory.type_slot_size_def] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >>
+  simp[return_def, get_place_def, combinTheory.APPLY_UPDATE_THM] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* stmt_exit_loop_ctl already excludes all exits for this successful source
+   result. No duplicate exit lemma is needed here. gas_outcome's independent
+   gas_exempt_cert alternative still requires separate examination. *)
