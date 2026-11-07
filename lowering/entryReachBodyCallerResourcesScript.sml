@@ -54,3 +54,15 @@ Proof
   drule_all fn_has_code_split >> strip_tac >>
   metis_tac[fn_has_code_split]
 QED
+
+(* The strict numerical bound comes from the lowering acceptance gate,
+   not from finiteness of the scratch-site set. *)
+Theorem caller_runtime_allocation_budget:
+  lower_vyper_runtime_unit tops policy = SOME unit ==>
+  unit_alloca_budget unit.cu_context < dimword (:256)
+Proof
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rw[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
+  drule vyperCompilerTheory.run_lowering_alloca_budget >> simp[]
+QED
+
