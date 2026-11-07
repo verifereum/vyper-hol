@@ -7,7 +7,7 @@ Ancestors
   loweringPosts valueEncoding words finite_map list exprLoweringProps exprSimSource
   allocLimits localPtrsProps vyperValue exprSimHypsDefs
   vyperEvalExprPreservesScopesDom vyperCallOutcome vyperTypeSystem venomState
-  vyperAST vyperTypeExtCallSoundness
+  vyperAST vyperTypeExtCallSoundness bodyMemBopRestWordPath
 Libs
   monadsyntax
 
@@ -59,7 +59,8 @@ Theorem raw_call_tail_outcome_mem:
       vv_store_bound cx (raw_call_return_type flags) (raw_call_return_type flags) ee tv
         (if flags.rcf_max_outsize = 0 then StackValue ann result
          else LocatedValue (raw_call_return_type flags) (mk_ptr result LocMemory)) u) /\
-      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts)
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next)
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >> drule_all raw_call_prefix_source_ready >> strip_tac >>
@@ -182,6 +183,10 @@ Resume raw_call_tail_outcome_mem[outcome]:
   gvs[expr_exit_def, fragExecTheory.exit_result_def] >>
   `es2 with gas_obs := [] = es2` by
     (qpat_x_assum `es2.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `t.vs_alloca_next <= u.vs_alloca_next` by
+    (drule fragGasPathMemTheory.gas_path_mem_exec >>
+     disch_then (mp_tac o CONJUNCT1) >>
+     disch_then (mp_then Any mp_tac rest_word_path_frontier) >> simp[]) >>
   simp[] >> metis_tac[]
 QED
 

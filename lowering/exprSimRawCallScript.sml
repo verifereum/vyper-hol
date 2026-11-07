@@ -688,7 +688,7 @@ Proof
   simp[bind_assoc, bind_return]
 QED
 
-Theorem raw_call_eval_action[local]:
+Theorem raw_call_eval_action:
   eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt) =
     bind (bind (eval_expr cx a) (read_result cx)) (\av.
     bind (bind (eval_expr cx d) (read_result cx)) (\dv.
@@ -5672,7 +5672,7 @@ QED
 
 Finalise raw_call_tail_outcome
 
-Theorem compile_expr_raw_call[local]:
+Theorem compile_expr_raw_call:
   compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) dflt) sa =
     (vv,sb) ==>
   ?addr data len dp vo go ignored gas ov op result s1 s2 s3 s4 s5 s6 s7.
