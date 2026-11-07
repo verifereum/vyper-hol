@@ -3,7 +3,7 @@ Theory bodyMemRawCallFinish
 Ancestors
   bodyMemRawCallBounds rawCallResultFrame rawCallCountedRun rawCallRevertPathMemory exprSimRawCall builtinSimple emitHelper context
   exprLoweringProps fragExecMem fragExec fragGasSeqMem instMemFrontier memSafeRun compileEnv
-  venomState venomExecSemantics venomInst finite_map rich_list list
+  venomState venomExecSemantics venomInst finite_map rich_list list allocaHistoryFragment
 Libs
   monadsyntax
 
@@ -92,9 +92,10 @@ Theorem raw_call_success_counted_mem:
   w2n addr + 32 <= s.vs_alloca_next /\
   cap < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_path_mem ctx func s 0 (OK t) /\
+  ?t. gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     result = ov /\ eval_operand result t = SOME addr /\
@@ -119,6 +120,13 @@ Proof
     isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
+  `alloca_history func
+     (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))` by
+    (irule alloca_history_run_inst_seq >>
+     goal_assum (drule_at (Pat `run_inst_seq _ _ = OK _`)) >>
+     fs[IS_PREFIX_APPEND] >> conj_tac
+     >- (qexists_tac `l` >> metis_tac[]) >>
+     fs[EVERY_MEM]) >>
   drule_all run_inst_seq_gas_path_mem >> strip_tac >>
   `t.vs_current_bb = s.vs_current_bb` by
     (drule_all exec_block_run_inst_seq >>

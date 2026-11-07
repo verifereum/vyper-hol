@@ -175,9 +175,10 @@ Theorem raw_call_success_suffix_counted_mem[local]:
     w2n addr + 32 <= s.vs_alloca_next) /\
   n < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_path_mem ctx func s 0 (OK t) /\
+  ?t. gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
        eval_operand a s = SOME w ==> eval_operand a t = SOME w) /\
@@ -207,10 +208,11 @@ Theorem raw_call_revert_finish_path_mem:
     (!x. ov = Var x ==> not_fresh_at sc x) /\
     w2n addr + 32 <= s.vs_alloca_next) /\
   fn_has_code sc sb func /\ ~s.vs_halted /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
   s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
   ?r. gas_path_mem ctx func s 0 r /\
-    ((?u. r = OK u /\ u.vs_current_bb = sb.cs_current_bb /\
+    ((?u. r = OK u /\ alloca_history func u /\ u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts /\ success /\
        (!a w. (!x. a = Var x ==> not_fresh_at sc x) /\
           eval_operand a s = SOME w ==> eval_operand a u = SOME w) /\
@@ -277,8 +279,16 @@ QED
 Resume raw_call_revert_finish_path_mem[success]:
   `sc.cs_next_var <= s10.cs_next_var` by
     (fs[ci_mono_def] >> decide_tac) >>
+  `alloca_history func (jump_to kl s)` by
+    (irule allocaHistoryTheory.alloca_history_jump >>
+     simp[jump_to_def] >> qexists_tac `s` >> simp[]) >>
+  `alloca_inv (jump_to kl s)` by
+    (fs[venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.allocas_non_overlapping_def,
+        venomMemDefsTheory.alloca_next_valid_def, jump_to_def] >>
+     metis_tac[]) >>
   `?t. gas_path_mem ctx func (jump_to kl s) 0 (OK t) /\
-     t.vs_current_bb = sb.cs_current_bb /\
+     alloca_history func t /\ t.vs_current_bb = sb.cs_current_bb /\
      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
      (!a w. (!x. a = Var x ==> not_fresh_at s10 x) /\
         eval_operand a (jump_to kl s) = SOME w ==> eval_operand a t = SOME w) /\
