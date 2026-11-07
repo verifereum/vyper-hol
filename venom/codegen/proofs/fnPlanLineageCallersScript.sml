@@ -1,7 +1,7 @@
 Theory fnPlanLineageCallers
 Ancestors
   fnPlanLineageSetup fnPlanLineageDemand fnPlanLineagePath fnPlanLineageDemandSupport
-  fnPlanLineageLiveness
+  fnPlanLineageLiveness fnPlanLineageStages
   livenessProofs cfgAnalysisProps venomWf stackPlanGen asmIR codegenReadyCompute
   passSharedDefs venomInst callLayoutDefs list rich_list
 
@@ -253,6 +253,61 @@ Proof
   >- (irule demand_available_mono >> qexists_tac `i` >> simp[] >>
       first_x_assum irule >> metis_tac[]) >>
   irule current_output_demand_available_suc >> simp[]
+QED
+
+(* OFFSET retains its output even when dead: upper support is availability,
+   not exact next-live inventory. *)
+Theorem offset_position_invariant:
+  !fn bb i ps m core base ops qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = OFFSET /\
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      demand_available fn bb i v) /\
+    generate_offset_plan (EL i bb.bb_instructions) ps = (ops,qs)
+    ==>
+    (?rest. lineage_core m rest qs /\
+      residual_budget_wf base [] (qs with ps_stack := rest)) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+      MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) /\
+    (!v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      demand_available fn bb (SUC i) v)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn /\ wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >>
+     metis_tac[EL_MEM]) >>
+  drule_all inst_wf_offset_shape >> strip_tac >>
+  drule_all definition_support_output_fresh >> strip_tac >>
+  `qs = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+      ps [out]` by
+    (drule_all generate_offset_plan_frame >>
+     disch_then (qspec_then `ps` mp_tac) >>
+     gvs[stackModelTheory.stack_push_def, SNOC_APPEND]) >>
+  `EVERY (\v. ~MEM (Var v) core /\ Var v NOTIN FDOM ps.ps_spilled) [out]` by
+    (gvs[EVERY_MEM, MEM_APPEND] >> metis_tac[]) >>
+  `ALL_DISTINCT [out]` by simp[] >>
+  drule_all output_push_marker_core >> simp[] >> strip_tac >>
+  conj_tac
+  >- (qexists_tac `core ++ [Var out]` >>
+      simp[fnPlanLineageInventoryTheory.lineage_core_def]) >>
+  conj_tac
+  >- (qx_gen_tac `w` >> strip_tac >> Cases_on `w = out` >- simp[MEM_APPEND] >>
+      `MEM w (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
+        (irule analyzed_computed_operand_demand >> simp[]) >>
+      gvs[MEM_APPEND] >> metis_tac[]) >>
+  qx_gen_tac `w` >> disch_tac >>
+  Cases_on `w = out`
+  >- (gvs[] >> irule current_output_demand_available_suc >> simp[]) >>
+  irule demand_available_mono >> qexists_tac `i` >> simp[] >>
+  qpat_x_assum `!v. MEM (Var v) ps.ps_stack \/ _ ==> _`
+    (qspec_then `w` irule) >>
+  gvs[MEM_APPEND] >> metis_tac[]
 QED
 
 Theorem param_insts_from_filter[local]:
