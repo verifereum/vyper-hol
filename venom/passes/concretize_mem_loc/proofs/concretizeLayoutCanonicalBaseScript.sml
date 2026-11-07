@@ -428,7 +428,12 @@ QED
 
 (* Growing dispatch: validate the shared phase join before expanding families. *)
 Theorem layout_canonical_ordinary_nonterm_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -441,7 +446,7 @@ Theorem layout_canonical_ordinary_nonterm_success:
     q n i s j t (INL g) /\
   layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
   (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
-      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE] \/ context_read0_opcode i.inst_opcode \/
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT] \/ context_read0_opcode i.inst_opcode \/
     (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])) /\
   step_inst_base i s = OK post ==>
   ?tpost. step_inst_base j t = OK tpost /\
@@ -578,6 +583,17 @@ Proof
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
          simp[] >> metis_tac[]) >>
+     Cases_on `MEM i.inst_opcode [EQ; LT; GT]`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_compare_trace_step >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >>
+         disch_then (qspecl_then [`rv`, `rpolicy`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
      `clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT]` by
        (fs[MEM, indexed_context_read_opcode_def] >> metis_tac[]) >>
      drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
