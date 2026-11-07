@@ -148,7 +148,10 @@ Theorem spilled_join_stack_probe[local]:
     (SND (probe_join (probe_targets n)
       (probe_spilled_state (probe_targets n) []))).ps_stack) [16; 17; 18]
 Proof
-  simp [EVERY_DEF] >> rpt conj_tac >>
+  simp [EVERY_DEF, probe_join_def] >> rpt conj_tac >>
+  (* Certify target construction and restoration before evaluating reorder. *)
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``reorder_plan``])) >>
+  CONV_TAC (RAND_CONV (computeLib.RESTR_EVAL_CONV [``reorder_plan``])) >>
   CONV_TAC (LAND_CONV EVAL) >> CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
 QED
 
@@ -6279,4 +6282,105 @@ Proof
   `1 <= LENGTH ps.ps_stack` by (Cases_on `ps.ps_stack` >> gvs[]) >>
   drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
   irule do_spill_at_shadow_iff >> metis_tac[]
+QED
+
+Theorem FIND_interval_first[local]:
+  !n a P d.
+    FIND P (GENLIST (\i. a + i) n) = SOME d <=>
+    a <= d /\ d < a + n /\ P d /\
+    (!j. a <= j /\ j < d ==> ~P j)
+Proof
+  Induct
+  >- (simp[GENLIST, FIND_thm] >> rpt gen_tac >>
+      spose_not_then strip_assume_tac >> gvs[]) >>
+  rpt gen_tac >> simp[GENLIST_CONS, FIND_thm] >>
+  Cases_on `P a`
+  >- (simp[] >> eq_tac
+      >- (strip_tac >> gvs[]) >>
+      strip_tac >> Cases_on `a = d` >> simp[] >>
+      first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  simp[] >>
+  `GENLIST (\i. a + SUC i) n = GENLIST (\i. SUC a + i) n` by
+    simp[arithmeticTheory.ADD_CLAUSES] >>
+  pop_assum SUBST1_TAC >> first_x_assum (qspecl_then [`SUC a`, `P`, `d`] mp_tac) >>
+  simp[combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES,
+       arithmeticTheory.ADD_COMM] >>
+  disch_then SUBST1_TAC >> eq_tac >> rpt strip_tac >>
+  gvs[] >>
+  `!x y. SUC x <= y <=> x < y` by decide_tac >>
+  metis_tac[arithmeticTheory.LESS_OR_EQ]
+
+QED
+
+Theorem select_spill_candidate_first_iff:
+  !stk forbidden target_dist target_len d.
+    select_spill_candidate stk forbidden target_dist target_len = SOME d <=>
+    d <= MIN 16 (MIN (target_dist - 1) (LENGTH stk - 1)) /\
+    target_len <= d /\
+    ~MEM (stack_peek d stk) forbidden /\ is_var_operand (stack_peek d stk) /\
+    (!j. target_len <= j /\ j < d ==>
+      MEM (stack_peek j stk) forbidden \/ ~is_var_operand (stack_peek j stk))
+Proof
+  rpt gen_tac >> simp[select_spill_candidate_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `FIND P (GENLIST I k)` >>
+  `I = (\i:num. i)` by simp[FUN_EQ_THM] >>
+  pop_assum SUBST1_TAC >>
+  `!x y:num. x < y + 1 <=> x <= y` by decide_tac >>
+  qspecl_then [`k`, `0`, `P`, `d`] mp_tac FIND_interval_first >>
+  simp[Abbr `k`, Abbr `P`] >> metis_tac[]
+QED
+
+Theorem do_spill_at_survivor_geometry:
+  !d ps ops qs.
+    do_spill_at d ps = (ops,qs) /\ d <= 16 /\ d < LENGTH ps.ps_stack ==>
+    qs.ps_stack =
+    if d = 0 then TAKE (LENGTH ps.ps_stack - 1) ps.ps_stack
+    else TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
+         [LAST ps.ps_stack] ++
+         TAKE (d - 1) (DROP (LENGTH ps.ps_stack - d) ps.ps_stack)
+Proof
+  rpt gen_tac >> Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  Cases_on `d = 0` >>
+  simp[do_spill_at_def, do_spill_tos_def, LET_THM] >>
+  strip_tac >> gvs[stack_pop_def] >>
+  simp[stack_swap_def, LET_THM, LIST_EQ_REWRITE, LENGTH_TAKE,
+       EL_TAKE, EL_LUPDATE, EL_APPEND_EQN, EL_DROP] >>
+  rpt strip_tac >>
+  Cases_on `x = LENGTH ps.ps_stack - (d + 1)`
+  >- (`x < LENGTH ps.ps_stack - d /\
+       d + (x + 1) - LENGTH ps.ps_stack = 0` by decide_tac >>
+      simp[] >>
+      `ps.ps_stack <> []` by (strip_tac >> gvs[]) >>
+      `LENGTH ps.ps_stack - 1 = PRE (LENGTH ps.ps_stack)` by decide_tac >>
+      simp[LAST_EL]) >>
+  Cases_on `x < LENGTH ps.ps_stack - d` >> simp[] >>
+  `x < LENGTH ps.ps_stack - (d + 1)` by decide_tac >> simp[]
+QED
+
+(* Operation-level boundary only: LAST is moved into the selected vacancy.
+   This does not assert a temporal liveness-rank invariant. *)
+Theorem reduce_depth_step_selection_geometry:
+  !op f n ps dist targets d ops qs.
+    stack_get_unfixed_depth op f n ps.ps_stack = SOME dist /\
+    16 < dist /\
+    select_spill_candidate ps.ps_stack targets dist n = SOME d /\
+    do_spill_at d ps = (ops,qs) ==>
+    d <= MIN 16 (MIN (dist - 1) (LENGTH ps.ps_stack - 1)) /\
+    n <= d /\
+    ~MEM (stack_peek d ps.ps_stack) targets /\
+    is_var_operand (stack_peek d ps.ps_stack) /\
+    (!j. n <= j /\ j < d ==>
+      MEM (stack_peek j ps.ps_stack) targets \/
+      ~is_var_operand (stack_peek j ps.ps_stack)) /\
+    qs.ps_stack =
+    if d = 0 then TAKE (LENGTH ps.ps_stack - 1) ps.ps_stack
+    else TAKE (LENGTH ps.ps_stack - (d + 1)) ps.ps_stack ++
+         [LAST ps.ps_stack] ++
+         TAKE (d - 1) (DROP (LENGTH ps.ps_stack - d) ps.ps_stack)
+Proof
+  rpt strip_tac >>
+  drule stack_get_unfixed_depth_bound >> strip_tac >>
+  drule (iffLR select_spill_candidate_first_iff) >> strip_tac >>
+  simp[] >> irule do_spill_at_survivor_geometry >>
+  gvs[]
 QED
