@@ -16,16 +16,26 @@ Definition ptr_paired_sample_def:
     ptr_core_shared a.po_state at.po_state
 End
 
-Definition ptr_paired_samples_def:
-  ptr_paired_samples positions h ht done H <=>
+Definition ptr_sample_list_def:
+  ptr_sample_list P h ht done H <=>
     LENGTH H = LENGTH h /\ 0 < LENGTH h /\
     LENGTH ht = SUC (LENGTH done) /\
     EVERY (\n. n < LENGTH h) done /\
     (!j. j < LENGTH ht ==>
-      ptr_paired_sample positions
-        (EL (EL j (done ++ [LENGTH h - 1])) h) (EL j ht)
+      P (EL (EL j (done ++ [LENGTH h - 1])) h) (EL j ht)
         (EL (EL j (done ++ [LENGTH h - 1])) H))
 End
+
+Definition ptr_paired_samples_def:
+  ptr_paired_samples positions h ht done H <=>
+    ptr_sample_list (ptr_paired_sample positions) h ht done H
+End
+
+Theorem ptr_sample_list_root:
+  P a at snapshot ==> ptr_sample_list P [a] [at] [] [snapshot]
+Proof
+  simp[ptr_sample_list_def]
+QED
 
 Theorem ptr_paired_samples_mixed:
   ptr_paired_samples positions h ht done H /\ j < LENGTH ht /\
@@ -36,7 +46,7 @@ Theorem ptr_paired_samples_mixed:
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_fn (EL j ht).po_fn
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_state (EL j ht).po_state
 Proof
-  simp[ptr_paired_samples_def] >> rpt strip_tac >>
+  simp[ptr_paired_samples_def, ptr_sample_list_def] >> rpt strip_tac >>
   first_x_assum drule >> simp[ptr_paired_sample_def]
 QED
 
@@ -45,7 +55,7 @@ Theorem ptr_paired_samples_core:
   ptr_core_shared
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_state (EL j ht).po_state
 Proof
-  simp[ptr_paired_samples_def] >> rpt strip_tac >>
+  simp[ptr_paired_samples_def, ptr_sample_list_def] >> rpt strip_tac >>
   first_x_assum drule >>
   qmatch_goalsub_abbrev_tac `ptr_paired_sample positions a at snapshot` >>
   PairCases_on `snapshot` >> simp[ptr_paired_sample_def]
@@ -59,7 +69,7 @@ Theorem ptr_paired_samples_post_returndata:
     (EL (SUC q) ht).po_state.vs_returndata
 Proof
   strip_tac >>
-  `SUC q < LENGTH ht` by fs[ptr_paired_samples_def] >>
+  `SUC q < LENGTH ht` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
   drule_all ptr_paired_samples_core >>
   simp[ptr_core_shared_def, ptr_shared_fields_def] >> strip_tac >>
   drule ptr_structural_trace_gap_returndata >>
@@ -91,12 +101,12 @@ QED
 
 (* Departed samples do not move. The final sample does: it must be
    supplied by the eventual NOP-preservation proof, not by list algebra. *)
-Theorem ptr_paired_samples_gap:
-  ptr_paired_samples positions h ht done H /\
-  ptr_paired_sample positions b (EL (LENGTH done) ht) snapshot ==>
-  ptr_paired_samples positions (h ++ [b]) ht done (H ++ [snapshot])
+Theorem ptr_sample_list_gap:
+  ptr_sample_list P h ht done H /\
+  P b (EL (LENGTH done) ht) snapshot ==>
+  ptr_sample_list P (h ++ [b]) ht done (H ++ [snapshot])
 Proof
-  rewrite_tac[ptr_paired_samples_def] >> strip_tac >>
+  rewrite_tac[ptr_sample_list_def] >> strip_tac >>
   `EVERY (\n. n < LENGTH (h ++ [b])) done` by
     (gvs[EVERY_EL] >> rpt strip_tac >>
      first_x_assum drule >> simp[]) >>
@@ -111,13 +121,13 @@ QED
 
 (* A paired event freezes the former final sample and adds one new one.
    New-event semantic facts are inputs only to this structural probe. *)
-Theorem ptr_paired_samples_pair:
-  ptr_paired_samples positions h ht done H /\
-  ptr_paired_sample positions b bt snapshot ==>
-  ptr_paired_samples positions (h ++ [b]) (ht ++ [bt])
+Theorem ptr_sample_list_pair:
+  ptr_sample_list P h ht done H /\
+  P b bt snapshot ==>
+  ptr_sample_list P (h ++ [b]) (ht ++ [bt])
     (done ++ [LENGTH h - 1]) (H ++ [snapshot])
 Proof
-  rewrite_tac[ptr_paired_samples_def] >> strip_tac >>
+  rewrite_tac[ptr_sample_list_def] >> strip_tac >>
   `EVERY (\n. n < LENGTH (h ++ [b])) (done ++ [LENGTH h - 1])` by
     (simp[EVERY_APPEND, EVERY_EL] >> rpt strip_tac >>
      gvs[EVERY_EL] >> first_x_assum drule >> simp[]) >>
@@ -134,6 +144,23 @@ Proof
           simp[EL_APPEND_EQN]) >>
       `j = LENGTH done` by decide_tac >> simp[EL_APPEND_EQN]) >>
   `j = LENGTH ht` by gvs[] >> simp[EL_APPEND_EQN, ADD1]
+QED
+
+Theorem ptr_paired_samples_gap:
+  ptr_paired_samples positions h ht done H /\
+  ptr_paired_sample positions b (EL (LENGTH done) ht) snapshot ==>
+  ptr_paired_samples positions (h ++ [b]) ht done (H ++ [snapshot])
+Proof
+  rewrite_tac[ptr_paired_samples_def] >> strip_tac >> irule ptr_sample_list_gap >> simp[]
+QED
+
+Theorem ptr_paired_samples_pair:
+  ptr_paired_samples positions h ht done H /\
+  ptr_paired_sample positions b bt snapshot ==>
+  ptr_paired_samples positions (h ++ [b]) (ht ++ [bt])
+    (done ++ [LENGTH h - 1]) (H ++ [snapshot])
+Proof
+  rewrite_tac[ptr_paired_samples_def] >> strip_tac >> irule ptr_sample_list_pair >> simp[]
 QED
 
 Definition ptr_paired_alignment_def:
@@ -157,7 +184,7 @@ Theorem ptr_paired_alignment_pair:
   ptr_paired_alignment R lp positions (h ++ [b]) (ht ++ [bt])
     (done ++ [LENGTH h - 1]) (H ++ [snapshot])
 Proof
-  rewrite_tac[ptr_paired_samples_def, ptr_paired_alignment_def] >>
+  rewrite_tac[ptr_paired_samples_def, ptr_sample_list_def, ptr_paired_alignment_def] >>
   strip_tac >> gen_tac >> strip_tac >> Cases_on `j < LENGTH ht`
   >- (`EL j (done ++ [LENGTH h - 1]) < LENGTH h` by
         (Cases_on `j < LENGTH done`
@@ -270,7 +297,7 @@ Theorem ptr_paired_alignment_gap:
   ptr_paired_params positions b (EL (LENGTH done) ht) snapshot ==>
   ptr_paired_alignment R local_positions positions (h ++ [b]) ht done (H ++ [snapshot])
 Proof
-  rewrite_tac[ptr_paired_samples_def, ptr_paired_alignment_def] >>
+  rewrite_tac[ptr_paired_samples_def, ptr_sample_list_def, ptr_paired_alignment_def] >>
   strip_tac >> gen_tac >> strip_tac >> Cases_on `j < LENGTH done`
   >- (`EL j done < LENGTH h /\ EL j done < LENGTH H` by gvs[EVERY_EL] >>
       first_x_assum (qspec_then `j` mp_tac) >> simp[EL_APPEND_EQN]) >>
@@ -309,7 +336,7 @@ Proof
   drule ptr_structural_trace_target >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   `EL (LENGTH done) ht = at` by
-    (gvs[ptr_paired_samples_def] >>
+    (gvs[ptr_paired_samples_def, ptr_sample_list_def] >>
      `PRE (LENGTH ht) = LENGTH done` by decide_tac >> gvs[LAST_EL]) >>
   `EVERY (\n. SUC n < LENGTH h) done` by
     (drule ptr_structural_trace_embedding >>
@@ -324,8 +351,8 @@ Proof
   conj_tac
   >- (irule (SRULE [] (Q.INST [`ts` |-> `[]`, `ds` |-> `[]`]
         ptr_paired_callers_retained)) >>
-      gvs[ptr_paired_samples_def] >> qexistsl_tac [`a`,`LAST ht`] >> simp[]) >>
-  irule ptr_paired_writes_gap >> gvs[ptr_paired_samples_def]
+      gvs[ptr_paired_samples_def, ptr_sample_list_def] >> qexistsl_tac [`a`,`LAST ht`] >> simp[]) >>
+  irule ptr_paired_writes_gap >> gvs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
 
 Theorem ptr_paired_prefix_endpoint:
@@ -344,7 +371,7 @@ Proof
   imp_res_tac ptr_chrono_history_end >>
   `H <> []` by (Cases_on `H` >> gvs[]) >>
   qpat_x_assum `ptr_paired_samples _ _ _ _ _` mp_tac >>
-  simp[ptr_paired_samples_def] >> strip_tac >>
+  simp[ptr_paired_samples_def, ptr_sample_list_def] >> strip_tac >>
   `EL (LENGTH done) ht = at /\ EL (LENGTH h - 1) h = a /\
     EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
     (qpat_x_assum `LAST ht = at` mp_tac >>

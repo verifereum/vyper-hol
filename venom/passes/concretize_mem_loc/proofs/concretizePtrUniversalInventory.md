@@ -2408,3 +2408,40 @@ computed outcomes needed explicit analysis. The stronger observational
 relations really do inspect snapshots and cannot use this quotient.
 Global migration and CREATE/DELEGATECALL remain separate strategist gates;
 no universal source-prefix coverage or TASK completion is claimed here.
+
+## Canonical sample migration interface probe (C1.design, 2026-11-07)
+
+Checked builds: concretizePtrRequestHistoryTheory, concretizePtrPairedPrefixTheory,
+concretizePtrPairedPrefixProbeTheory. The canonical `ptr_paired_sample` still
+requires exact `ptr_core_shared`; it has NOT been weakened in this checkpoint.
+
+`ptr_sample_list P` is the single implementation of the old sample indexing
+invariant. `ptr_paired_samples positions` wraps it at the existing exact sample.
+Generic root/gap/pair algebra owns the list arithmetic; existing specialized
+gap/pair lemmas are thin applications. Local checked root/gap/pair probes in
+PairedPrefixProbe instantiate P with mixed-vars and source-current-taint
+history-content. Endpoint conjunctions are explicit premises, not operational
+initialization or NOP-preservation proofs. No second sample hierarchy exists.
+
+RequestHistory now exports history-content projections for labels, call_ctx,
+returndata, tx_ctx, block_ctx, data_section, code, prev_hashes and request
+lengths. The account/storage boundary remains ptr_taint_content_account and
+masked reads, not full account equality. Further execution migration may need
+additional projections (e.g. outcomes or gas readings); none is assumed proved.
+
+Exact `ptr_paired_samples_core` consumer map for C1.migration:
+
+| Consumer | Needed replacement |
+| --- | --- |
+| PairedPrefix `ptr_paired_samples_post_returndata` | New sample history-content extractor followed by ptr_history_content_returndata; retain structural-trace gap-returndata lemma. |
+| PairedPrefix `ptr_paired_samples_eval_operands` | Same extractor followed by ptr_history_content_labels; existing mixed-vars extractor and ptr_mixed_vars_eval_operands are sufficient. |
+| HistoricalWriteExclusion `ptr_paired_historical_event` (extractor call near 150) | Its returned exact-core fact is consumed only for labels in ptr_paired_historical_owned_write_exclusion (near 392). Replace exported conclusion in place by history-content (or labels if appropriate), then use ptr_history_content_labels. Keep actual writer, taint and ownership facts unchanged. |
+| ReturnProduction `ptr_paired_ret_successor[restored_fields]` | Cannot substitute a control projection for the existing exact-core merge. It combines current callee and saved caller exact core; replacement needs same-contract merge with callee current content/history and saved caller variable ghosts only (C1.frames). Saved snapshot taint is not the current callee taint. |
+| OpaqueRetpc comment near 70 | Documentation only; update when canonical sample changes. |
+
+Wrapper fallout to address when the later producer cone is rebuilt: proofs
+outside PairedPrefix that explicitly unfold ptr_paired_samples_def must now
+also unfold ptr_sample_list_def. This is proof-only syntactic adaptation, not
+a change to the sample indexing invariant. PairedPrefix itself is adapted;
+PairedPrefixProbe and its current dependencies build unchanged apart from the
+new local probes/import. No broad producer-cone rebuild is claimed here.
