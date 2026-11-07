@@ -440,11 +440,11 @@ Proof
 QED
 
 Theorem scalar_fixed_zero_int_raw:
-  compile_type_convert x (ConvBytesToInt 0 T b) sa = (r,sb) /\
+  compile_type_convert x (ConvBytesToInt 0 sg b) sa = (r,sb) /\
   eval_operand x ss = SOME 0w /\ fresh_vars_wrt sa ss /\ b <= 256 ==>
   ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\ eval_operand r sf = SOME 0w
 Proof
-  strip_tac >>
+  Cases_on `sg` >> strip_tac >>
   `((0w:bytes32) >> w2n (n2w ((32-0)*8):bytes32)) = 0w` by
     (simp[] >> wordsLib.WORD_DECIDE_TAC) >>
   drule scalar_bytes_int_word_ok >>
@@ -454,7 +454,7 @@ Proof
 QED
 
 Theorem scalar_fixed_zero_int_actual:
-  compile_type_convert x (ConvBytesToInt 0 T b) sa = (r,sb) /\
+  compile_type_convert x (ConvBytesToInt 0 sg b) sa = (r,sb) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\ eval_operand x ss = SOME 0w /\ b <= 256 ==>
   ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\ eval_operand r sf = SOME 0w /\
     (sf with vs_vars := ss.vs_vars) = ss /\
@@ -484,5 +484,44 @@ Proof
   simp[mk_convert_op_def, is_bytestring_type_def, type_bounds_def,
        type_bits_def, is_signed_type_def, w2i_i2w] >>
   rewrite_tac[SRULE [] scalar_bytes_decimal_eq] >> strip_tac >>
-  irule scalar_fixed_zero_int_actual >> simp[] >> qexistsl_tac [`168`,`x`] >> simp[]
+  irule scalar_fixed_zero_int_actual >> simp[] >> qexistsl_tac [`168`,`T`,`x`] >> simp[]
+QED
+
+Theorem scalar_fixed_zero_unsigned_result:
+  convert_result cx (BaseT (BytesT (Fixed 0))) (BaseT (UintT b)) (BytesV []) = INL (IntV 0)
+Proof
+  `word_of_bytes_be (PAD_LEFT (0w:word8) 32 []):bytes32 = 0w` by
+    (EVAL_TAC >> simp[]) >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def,
+       within_int_bound_def, word_0]
+QED
+
+Theorem scalar_fixed_int_all_typed_actual:
+  evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
+  evaluate_type (get_tenv cx) (BaseT (if sg then IntT b else UintT b)) = SOME tout /\
+  value_has_type tv v /\
+  compile_type_convert x (mk_convert_op (BaseT (BytesT (Fixed m)))
+    (BaseT (if sg then IntT b else UintT b))) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x ss = SOME (typed_val_to_w256 tv v) ==>
+  case convert_result cx (BaseT (BytesT (Fixed m)))
+    (BaseT (if sg then IntT b else UintT b)) v of
+    INL out => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME (typed_val_to_w256 tout out) /\
+      (sf with vs_vars := ss.vs_vars) = ss /\
+      (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+  | INR ex => (?msg. ex = Error (RuntimeError msg)) /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  Cases_on `m = 0`
+  >- (gvs[] >> Cases_on `sg` >> simp[vyperValueTheory.evaluate_type_def] >>
+      strip_tac >> gvs[AllCaseEqs()] >>
+      drule scalar_fixed_zero_value >> strip_tac >> gvs[] >>
+      simp[scalar_fixed_zero_signed_result, scalar_fixed_zero_unsigned_result,
+           typed_val_to_w256_def, val_to_w256_def, i2w_def] >>
+      irule scalar_fixed_zero_int_actual >>
+      fs[mk_convert_op_def, is_bytestring_type_def, type_bits_def,
+         type_bounds_def, is_signed_type_def] >> metis_tac[]) >>
+  strip_tac >> irule scalar_fixed_int_typed_actual >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
 QED
