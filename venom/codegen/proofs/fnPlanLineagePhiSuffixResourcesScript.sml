@@ -112,3 +112,91 @@ Proof
     (simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >> metis_tac[]) >>
   simp[rich_listTheory.LIST_ELEM_COUNT_DEF, listTheory.FILTER_EQ_NIL]
 QED
+
+Theorem ready_phi_write_names_distinct:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
+  ALL_DISTINCT (MAP (\inst. HD inst.inst_outputs)
+    (collect_phis bb.bb_instructions))
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `ALL_DISTINCT (FLAT (MAP (\b. FLAT (MAP (\i. i.inst_outputs) b.bb_instructions))
+    fn.fn_blocks))` by
+    (gvs[stackPlanGenTheory.codegen_ready_fn_def, venomWfTheory.ssa_form_def,
+      venomInstTheory.fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+      listTheory.MAP_FLAT, rich_listTheory.FLAT_FLAT, listTheory.MAP_MAP_o,
+      combinTheory.o_DEF]) >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
+    (irule removeUnusedSsaProofsTheory.all_distinct_flat_map_member >>
+     qexists_tac `MAP (\b. MAP (\i. i.inst_outputs) b.bb_instructions) fn.fn_blocks` >>
+     simp[listTheory.MAP_MAP_o, combinTheory.o_DEF, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `?rest. bb.bb_instructions = collect_phis bb.bb_instructions ++ rest` by
+    metis_tac[fnPlanLineageLivenessTheory.collect_phis_prefix] >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (collect_phis bb.bb_instructions)))` by
+    (qpat_assum `bb.bb_instructions = _` (fn th =>
+       qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ bb.bb_instructions))`
+         (mp_tac o ONCE_REWRITE_RULE [th])) >>
+     simp[listTheory.MAP_APPEND, listTheory.FLAT_APPEND, listTheory.ALL_DISTINCT_APPEND]) >>
+  `EVERY (\i. i.inst_outputs = [HD i.inst_outputs]) (collect_phis bb.bb_instructions)` by
+    (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     `venomWf$inst_wf i /\ i.inst_opcode = PHI` by
+       (gvs[stackPlanGenTheory.codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
+            listTheory.EVERY_MEM] >>
+        metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+     `LENGTH i.inst_outputs = 1` by gvs[venomWfTheory.inst_wf_def] >>
+     Cases_on `i.inst_outputs` >> gvs[]) >>
+  `MAP (\i. i.inst_outputs) (collect_phis bb.bb_instructions) =
+   MAP (\i. [HD i.inst_outputs]) (collect_phis bb.bb_instructions)` by
+    (irule listTheory.MAP_CONG >> gvs[listTheory.EVERY_MEM]) >>
+  `!xs. FLAT (MAP (\i. [HD i.inst_outputs]) xs) =
+        MAP (\i. HD i.inst_outputs) xs` by (Induct >> simp[]) >>
+  qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ (collect_phis _)))` mp_tac >> simp[]
+QED
+
+Theorem ready_phi_initial_write_count_budget:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb ==>
+  LIST_ELEM_COUNT (Var v) (MAP Var (input_vars_from p bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))) +
+  LIST_ELEM_COUNT v (MAP (\inst. HD inst.inst_outputs)
+    (collect_phis bb.bb_instructions)) <= 1
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `ALL_DISTINCT (MAP (\inst. HD inst.inst_outputs)
+    (collect_phis bb.bb_instructions))` by
+    metis_tac[ready_phi_write_names_distinct] >>
+  `LIST_ELEM_COUNT v (MAP (\inst. HD inst.inst_outputs)
+    (collect_phis bb.bb_instructions)) <= 1` by
+    metis_tac[fnPlanLineageInventoryTheory.all_distinct_elem_count_le_one] >>
+  Cases_on `MEM v (MAP (\inst. HD inst.inst_outputs)
+    (collect_phis bb.bb_instructions))`
+  >- (`?phi. MEM phi (collect_phis bb.bb_instructions) /\
+          v = HD phi.inst_outputs` by (gvs[listTheory.MEM_MAP] >> metis_tac[]) >>
+      `MEM v phi.inst_outputs` by
+        (`venomWf$inst_wf phi /\ phi.inst_opcode = PHI` by
+          (gvs[stackPlanGenTheory.codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
+            listTheory.EVERY_MEM] >>
+           metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+         `LENGTH phi.inst_outputs = 1` by gvs[venomWfTheory.inst_wf_def] >>
+         Cases_on `phi.inst_outputs` >> gvs[]) >>
+      drule_all ready_phi_output_initial_target_count >>
+      disch_then (qspec_then `p` mp_tac) >> gvs[]) >>
+  `LIST_ELEM_COUNT v (MAP (\inst. HD inst.inst_outputs)
+    (collect_phis bb.bb_instructions)) = 0` by
+    (simp[rich_listTheory.LIST_ELEM_COUNT_DEF, listTheory.FILTER_EQ_NIL,
+          listTheory.EVERY_MEM] >> metis_tac[]) >> simp[] >>
+  `phi_uses_disjoint (collect_phis bb.bb_instructions)` by
+    (irule fnPlanLineagePhiClassesTheory.ready_block_phi_uses_disjoint >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  `ALL_DISTINCT (input_vars_from p bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))` by
+    (irule fnPlanLineagePhiMapsTheory.input_vars_from_distinct >>
+     simp[fnPlanLineageDistinctTheory.ready_live_vars_at_distinct]) >>
+  `ALL_DISTINCT (MAP Var (input_vars_from p bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0)))` by
+    (irule listTheory.ALL_DISTINCT_MAP_INJ >> simp[]) >>
+  metis_tac[fnPlanLineageInventoryTheory.all_distinct_elem_count_le_one]
+QED
