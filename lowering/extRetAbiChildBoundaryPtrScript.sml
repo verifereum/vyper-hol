@@ -23,6 +23,7 @@ Theorem abi_child_prefix_ambient_counted_ptr:
     lookup_var head sf = SOME (n2w (b+h)) /\ ptr_covers Gf tnf head sf 32 /\
     lookup_var off sf = SOME (n2w k) /\ op_taint tnf (Var off) = {} /\
     lookup_var child sf = SOME (n2w (b+k)) /\ ptr_covers Gf tnf child sf (cap-k) /\
+    sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
     sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
     tnf.t_imm = tn.t_imm /\ sf.vs_accounts = s.vs_accounts /\
     sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
