@@ -68,3 +68,69 @@ Proof
   simp[vars_ext_result_def] >> metis_tac[]
 QED
 
+
+Theorem scalar_integer_address_result_word:
+  within_int_bound (Unsigned 160) i ==>
+  typed_val_to_w256 (BaseTV AddressT) (AddressV (i2w i)) = i2w i
+Proof
+  strip_tac >>
+  `0 <= i /\ i < &(2**160)` by fs[within_int_bound_ineq] >>
+  `i = &Num i` by intLib.ARITH_TAC >>
+  `Num i < 2**160` by (fs[] >> intLib.ARITH_TAC) >>
+  `Num i < dimword(:256)` by (fs[dimword_def] >> decide_tac) >>
+  `w2n (i2w i:bytes32) = Num i` by
+    (qpat_x_assum `i = &Num i` SUBST1_TAC >> simp[i2w_pos, w2n_n2w]) >>
+  mp_tac (Q.INST [`x` |-> `i2w i:bytes32`]
+    bodyPtrTypeBuiltinsAddressContinueTheory.bytes_address_encoding) >> fs[] >>
+  `i2w i : 160 word = n2w (Num i)` by
+    (`i = &Num i` by intLib.ARITH_TAC >>
+     pop_assum SUBST1_TAC >> simp[i2w_pos]) >> simp[]
+QED
+
+Theorem scalar_integer_address_typed_actual:
+  evaluate_type (get_tenv cx) (BaseT (if si then IntT bi else UintT bi)) = SOME tv /\
+  evaluate_type (get_tenv cx) (BaseT AddressT) = SOME tout /\
+  value_has_type tv v /\
+  compile_type_convert x (mk_convert_op (BaseT (if si then IntT bi else UintT bi))
+    (BaseT AddressT)) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x ss = SOME (typed_val_to_w256 tv v) ==>
+  case convert_result cx (BaseT (if si then IntT bi else UintT bi)) (BaseT AddressT) v of
+    INL out => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME (typed_val_to_w256 tout out) /\
+      (sf with vs_vars := ss.vs_vars) = ss /\
+      (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+  | INR ex => (?msg. ex = Error (RuntimeError msg)) /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  Cases_on `si` >> simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def, AllCaseEqs(), mk_convert_op_def,
+    is_bytestring_type_def, type_bits_def, type_bounds_def, is_signed_type_def,
+    typed_val_to_w256_def, val_to_w256_def]
+  >- suspend "signed"
+  >> suspend "unsigned"
+QED
+
+Resume scalar_integer_address_typed_actual[signed]:
+  `within_int_bound (Signed 256) i` by
+    (irule (SRULE [] (Q.SPECL [`T`,`bi`,`256:num`,`i`] scalar_int_bound_mono)) >>
+     qexists_tac `bi` >> simp[]) >>
+  `-&(2**255) <= i /\ i < &(2**256)` by
+    (fs[within_int_bound_ineq] >> intLib.ARITH_TAC) >>
+  drule_all scalar_integer_address_actual_run >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def] >>
+  Cases_on `within_int_bound (Unsigned 160) i` >>
+  simp[scalar_integer_address_result_word]
+QED
+
+Resume scalar_integer_address_typed_actual[unsigned]:
+  `0 < bi` by decide_tac >>
+  `within_int_bound (Unsigned bi) i` by fs[within_int_bound_def] >>
+  drule scalar_integer_actual_run >> simp[] >>
+  disch_then (qspecl_then [`ss`,`i`] mp_tac) >> simp[] >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes, evaluate_convert_def] >>
+  Cases_on `within_int_bound (Unsigned 160) i` >>
+  simp[scalar_integer_address_result_word]
+QED
+
+Finalise scalar_integer_address_typed_actual

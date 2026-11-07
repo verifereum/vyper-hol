@@ -116,9 +116,10 @@ QED
    ConvToBool: BoolContinue.convert_bool_run_actual is an actual word run;
      Bool has counted pointer certificates. Scalar source encoding/convert_result
      adapter and full scalar continuation remain (bytestring continuation is not it).
-   ConvToAddress: Outputs.scalar_int_address_run_ok/abort supply fresh-state
-     semantics; ScalarChecks supplies clamp counted/frame/filter boundaries.
-     Actual replay, typed adapter and full scalar continuation remain.
+   Integer-to-Address: IntegerAddressContinue supplies direct-clamp actual replay
+     and typed success/revert semantics for both integer signs. Signed sources
+     use ConvToAddress; unsigned sources use ConvIntToInt F bi F 160.
+     Full pointer continuation remains. Do not import Outputs (broken aggregate).
    ConvBytesToAddress: BytesRun.scalar_bytes_address_run_ok/abort supply fresh
      semantics; ScalarArithmetic.convert_bytes_address_eq reduces pointer code
      to unsigned160. Actual semantic packet and summary remain.
