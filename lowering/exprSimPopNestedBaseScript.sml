@@ -18,6 +18,8 @@ Ancestors
   vyperPlaceFrames vyperStatePreservation
   exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame stmtSimProps
   gasOutcome gasExemptCert gasSummaryCompose fragGasMode fragGasPath
+  exprOracleStoragePreservation bodyStoragePreservation vyperTypeStoragePreservation
+  vyperTypeExprSoundness supportedExprTraverse supportedProgram
 
 
 (* The target's fragment, typed ty, evaluates to a place at the pointer
@@ -1162,3 +1164,42 @@ QED
 Finalise pop_nested_storage_pure_sim
 
 
+
+Theorem nested_pop_target_storage_preserved:
+  !cenv cx env ann bt es obs res st'.
+    expr_body_pre cenv cx env (Pop ann bt) es /\
+    eval_target_place cx bt (es with gas_obs := obs) = (res,st') ==>
+    contract_storage_well_formed cx st'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?n. type_place_target env bt = SOME (Type (ArrayT ann (Dynamic n)))` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  `contract_storage_well_formed cx (es with gas_obs := obs)` by
+    (irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
+     qexists `es` >>
+     gvs[expr_body_pre_def, expr_sim_inv_def] >> Cases >>
+     simp[vyperStorageBackendTheory.get_storage_def]) >>
+  `runtime_storage_consistent env cx (es with gas_obs := obs)` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        runtime_storage_consistent_def, runtime_consistent_def] >>
+  Cases_on `int_calls_target bt = []`
+  >- (irule (cj 8 eval_expr_oracle_storage_mutual) >>
+      conj_tac >- gvs[expr_body_pre_def, expr_sim_inv_def] >>
+      goal_assum (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
+      simp[] >>
+      gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_target_def,
+          int_calls_expr_def, supported_expr_exists_def, expr_has_evm_run_def,
+          oracle_storage_ok_payload] >> metis_tac[]) >>
+  `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    (Cases_on `int_calls_target bt` >>
+     gvs[expr_body_pre_def, int_calls_expr_def] >> metis_tac[]) >>
+  irule (cj 8 body_oracle_storage_mutual) >>
+  rpt (goal_assum (drule_at Any)) >>
+  gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_target_def,
+      int_calls_expr_def, supported_expr_exists_def, expr_has_evm_run_def,
+      listTheory.EVERY_CONJ] >>
+  goal_assum (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
+  qexists `env` >>
+  gvs[oracle_storage_ok_payload, well_typed_target_def] >>
+  qexists `ArrayT ann (Dynamic n)` >> simp[]
+QED
