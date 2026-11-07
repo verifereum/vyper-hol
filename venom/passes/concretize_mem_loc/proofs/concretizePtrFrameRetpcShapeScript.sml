@@ -7,7 +7,38 @@
 Theory concretizePtrFrameRetpcShape
 Ancestors
   o1PassContract ptrDiscipline unitMemInv stackPlanGen concretizeMemLocDefs
-  venomPassDispatcher cfgWf unitShapeDefs frameRel
+  venomPassDispatcher cfgWf unitShapeDefs frameRel venomWf venomInst list
+
+(* The full-function writer condition controls PHIs even when the
+   reachable-code view removes some of their incoming operands. *)
+Theorem full_retpc_shape_to_frame[local]:
+  fn_inst_wf fn /\ all_reachable fn /\
+  unitShapeDefs$retpc_shape_ok fn ==>
+  frameRel$retpc_shape_ok fn
+Proof
+  strip_tac >>
+  fs[frameRelTheory.retpc_shape_ok_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM inst (fn_insts (reachable_fn fn))` by
+        (fs[fn_insts_def, MEM_fn_insts_blocks_iff,
+            all_reachable_def, MEM_reachable_fn_insts] >>
+         `inst.inst_opcode <> PHI` by simp[] >>
+         metis_tac[reachable_inst_fields]) >>
+      fs[unitShapeDefsTheory.retpc_shape_ok_def] >>
+      metis_tac[reachable_retpc_var]) >>
+  rpt strip_tac >>
+  `inst_wf inst` by
+    (fs[fn_inst_wf_def, fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     metis_tac[]) >>
+  `LENGTH inst.inst_outputs = 1` by gvs[inst_wf_def] >>
+  `?z. MEM z inst.inst_outputs` by
+    (Cases_on `inst.inst_outputs` >> fs[]) >>
+  `retpc_var fn z` by
+    (fs[retpc_var_def] >> metis_tac[copy_phi_var_rules]) >>
+  fs[unitShapeDefsTheory.retpc_shape_ok_def] >>
+  qpat_x_assum `!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs /\ _ ==> _`
+    (qspecl_then [`inst`, `z`] mp_tac) >> simp[]
+QED
 
 Theorem ptr_stage_frame_retpc_shape:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -23,5 +54,8 @@ Theorem ptr_stage_frame_retpc_shape:
   max_live_eom C' = SOME eom ==>
   EVERY frameRel$retpc_shape_ok C.ctx_functions
 Proof
-  cheat
+  strip_tac >>
+  fs[o1_ctx_shape_def, EVERY_MEM] >> rpt strip_tac >>
+  irule full_retpc_shape_to_frame >>
+  fs[o1_fn_shape_def, fn_shape_ok_def] >> metis_tac[]
 QED
