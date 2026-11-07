@@ -3,7 +3,7 @@ Ancestors bodyPtrTypeBuiltinsMemoryInterface bodyPtrTypeBuiltinsWidenSemantic
   bodyPtrTypeBuiltinsCastExecution bodyPtrTypeBuiltinsWidenExecution
   bodyPtrTypeBuiltinsSourceTyping exprSimConvert vyperValueOperation
   vyperTyping vyperValue valueEncoding compileEnv arithmetic loweringPosts bodyPtrDefs
-  ptrDiscipline
+  ptrDiscipline bodyPtrTypeBuiltinsSourceFrame bodyPtrTypeBuiltinsCastSemantic
 Libs intLib
 
 Theorem memory_widen_length_bound:
@@ -211,4 +211,232 @@ Proof
      qexistsl_tac [`e`,`tv`,`v`] >> simp[]) >>
   qexists_tac `t` >> simp[] >> irule memory_expr_post_compose >>
   simp[SF SFY_ss]
+QED
+
+Theorem memory_cast_destination_post:
+  expr_post ctx fn cenv cx e es sa sm s0 es1 v (Var src) s /\
+  stmt_state_rel ctx fn cenv cx es1 t /\ local_ptrs_reserved cenv sm /\
+  lookup_var src s = SOME w /\ not_fresh_at sm src /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+  (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) /\
+  sm.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var /\
+  is_bytestring_type (expr_type e) /\ is_bytestring_type dst /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tv2 /\ value_has_type tv v /\
+  convert_result cx (expr_type e) dst v = INL v' ==>
+  expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e])
+    es sa sb s0 es1 v' (Var src) t
+Proof
+  strip_tac >>
+  `expr_post ctx fn cenv cx e es sa sb s0 es1 v (Var src) t` by
+    (irule memory_readonly_expr_post >>
+     goal_assum (drule_at Any) >>
+     simp[venomStateTheory.eval_operand_def] >>
+     qexistsl_tac [`s`,`sm`,`Var src`] >>
+     simp[venomStateTheory.eval_operand_def]) >>
+  irule memory_conversion_expr_post >> simp[vyperASTTheory.expr_type_def] >>
+  qexistsl_tac [`e`,`tv`,`v`] >> simp[]
+QED
+
+Theorem memory_cast_actual_destination_post:
+  compile_type_convert (Var src) (ConvBytestringCast n i) sm = (out,sb) /\
+  (expr_type e = BaseT (BytesT (Dynamic i)) \/ expr_type e = BaseT (StringT i)) /\
+  (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n)) /\
+  expr_post ctx fn cenv cx e es sa sm s0 es1 v (Var src) s /\
+  local_ptrs_reserved cenv sm /\ lookup_var src s = SOME w /\
+  not_fresh_at sm src /\ i < dimword(:256) /\ n < dimword(:256) /\
+  sm.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tv2 /\ value_has_type tv v /\
+  val_in_memory tv v (w2n w) s.vs_memory ==>
+  out = Var src /\
+  case convert_result cx (expr_type e) dst v of
+    INL v' => ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
+      (t with vs_vars := s.vs_vars) = s /\
+      (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) /\
+      expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e])
+        es sa sb s0 es1 v' out t
+  | INR ex => ?msg t. ex = Error (RuntimeError msg) /\
+      run_inst_seq (emitted_insts sm sb) s = Abort Revert_abort t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all cast_compile_typed_outcome >>
+  Cases_on `convert_result cx (expr_type e) dst v` >> simp[] >> strip_tac >>
+  simp[] >>
+  `stmt_state_rel ctx fn cenv cx es1 s` by gvs[expr_post_def] >>
+  `t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|>` by
+    (qpat_x_assum `(t with vs_vars := _) = s` mp_tac >>
+     simp[venomStateTheory.venom_state_component_equality]) >>
+  `stmt_state_rel ctx fn cenv cx es1 t` by
+    (irule stmt_state_rel_readonly_vars_pc >>
+     qexistsl_tac [`s`,`sm`] >> simp[]) >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory` by
+    (qpat_x_assum `(t with vs_vars := _) = s` mp_tac >>
+     simp[venomStateTheory.venom_state_component_equality]) >>
+  irule memory_cast_destination_post >>
+  simp[SF SFY_ss] >>
+  fs[is_bytestring_type_def] >>
+  qexistsl_tac [`s`,`sm`,`v`,`w`] >> gvs[]
+QED
+
+Theorem memory_destination_pointer_post:
+  is_bytestring_type dst /\ evaluate_type (get_tenv cx) dst = SOME tv /\
+  val_wf tv v /\ lookup_var src s = SOME w /\
+  ptr_covers G tn src s (type_memory_bytes cenv dst) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) ==>
+  ptr_val_ok cx dst v (Var src) G tn s /\
+  ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) (Var src) G s
+Proof
+  strip_tac >> conj_tac
+  >- (irule memory_covered_ptr_val >>
+      `~is_word_type dst` by
+        metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+      `type_memory_bytes cenv dst = type_memory_size tv` by
+        (qspecl_then [`dst`,`dst`] mp_tac memory_convert_shapes >>
+         simp[] >> strip_tac >>
+         gvs[evaluate_type_def, type_memory_bytes_def, type_memory_size_def,
+             vfmConstantsTheory.word_size_def, AllCaseEqs()]) >>
+      simp[] >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[exprSimPropsTheory.val_store_size_le]) >>
+  irule memory_outer_buffer_covered >> simp[SF SFY_ss]
+QED
+
+Theorem memory_widen_counted_destination_post:
+  compile_bytestring_widen_copy (type_memory_bytes cenv dst) (Var src) k sm = (op,sb) /\
+  fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\
+  0 < k /\ k <= type_memory_bytes cenv dst /\
+  type_memory_bytes cenv dst < dimword(:256) /\ ~ctx_has_dalloca ctx /\
+  not_fresh_at sm src /\ local_ptrs_reserved cenv sm /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  expr_post ctx fn cenv cx e es sa sm s0 es1 v (Var src) s /\
+  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  is_bytestring_type (expr_type e) /\ is_bytestring_type dst /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tv2 /\ value_has_type tv v /\
+  val_wf tv v /\ val_footprint tv v <= k /\ lookup_var src s = SOME a /\
+  ptr_covers G tn src s k /\ ghost_inv d cenv cx es1 G tn s /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  convert_result cx (expr_type e) dst v = INL v' ==>
+  ?t H th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
+    expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es sa sb s0 es1 v' op
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ghost_inv d cenv cx es1 H th
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ptr_val_ok cx dst v' op H th
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) op H
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ghost_kept cenv es1 sm G tn s H th
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx fn cenv cx es1 s /\
+   expr_val_at cenv cx (expr_type e) sa sm es1 v (Var src) s` by gvs[expr_post_def] >>
+  `~is_word_type (expr_type e)` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  `val_in_memory tv v (w2n a) s.vs_memory` by
+    (qpat_x_assum `!m. mem_agree_outside _ _ m ==> _` irule >>
+     simp[mem_agree_outside_def]) >>
+  `eval_operand (Var src) s = SOME a` by simp[venomStateTheory.eval_operand_def] >>
+  `!z. Var src = Var z ==> not_fresh_at sm z` by simp[] >>
+  drule_all memory_widen_destination_post >> strip_tac >>
+  drule_all widen_copy_converted_counted_certificate >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  drule_all memory_conversion_layout >> strip_tac >>
+  `ptr_val_ok cx dst v' op G' th
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+   ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) op G'
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))` by
+    (gvs[] >> irule memory_destination_pointer_post >>
+     simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  qexistsl_tac [`t`,`G'`,`th`] >> gvs[memory_post_inst_idx]
+QED
+
+Theorem memory_cast_counted_destination_post:
+  compile_type_convert (Var src) (ConvBytestringCast n i) sm = (out,sb) /\
+  (expr_type e = BaseT (BytesT (Dynamic i)) \/ expr_type e = BaseT (StringT i)) /\
+  (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n)) /\
+  expr_post ctx fn cenv cx e es sa sm s0 es1 v (Var src) s /\
+  local_ptrs_reserved cenv sm /\ lookup_var src s = SOME w /\
+  not_fresh_at sm src /\ i < dimword(:256) /\ n < dimword(:256) /\
+  sm.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sm.cs_next_var /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tv2 /\ value_has_type tv v /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  ptr_covers G tn src s sz /\ 32 <= sz /\ type_memory_bytes cenv dst <= sz /\
+  (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
+  ghost_inv d cenv cx es1 G tn s /\
+  (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sm p) /\
+  (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sm p) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) /\
+  convert_result cx (expr_type e) dst v = INL v' ==>
+  ?t H th. out = Var src /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
+    expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es sa sb s0 es1 v' out
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ghost_inv d cenv cx es1 H th
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ptr_val_ok cx dst v' out H th
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out H
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb)) /\
+    ghost_kept cenv es1 sm G tn s H th
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `val_in_memory tv v (w2n w) s.vs_memory` by
+    (qpat_assum `!m. mem_agree_outside _ _ m ==> _` irule >>
+     simp[mem_agree_outside_def]) >>
+  drule_all memory_cast_actual_destination_post >> simp[] >> strip_tac >>
+  `is_bytestring_type (expr_type e) /\ is_bytestring_type dst` by
+    (fs[is_bytestring_type_def] >> simp[is_bytestring_type_def]) >>
+  drule_all convert_cast_converted_counted_certificate >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  drule_all memory_conversion_layout >> strip_tac >>
+  `lookup_var src t = SOME w` by metis_tac[] >>
+  `ptr_covers H th src t (type_memory_bytes cenv dst)` by
+    (gvs[ptr_covers_def] >> goal_assum (drule_at Any) >> decide_tac) >>
+  drule_all memory_destination_pointer_post >>
+  disch_then (qspec_then `e` strip_assume_tac) >>
+  qexistsl_tac [`t`,`H`,`th`] >>
+  gvs[memory_post_inst_idx, ptr_val_ok_def, ptr_mem_ok_def, ptr_buf_ok_def,
+      venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+      SRULE [] (Q.INST [`es` |-> `es1`, `gs` |-> `es1.gas_obs`]
+        (SPEC_ALL exprSimPtrLiteralBufferTheory.literal_ptr_ghost_inv_normalize))]
+QED
+
+Theorem memory_cast_counted_exit:
+  compile_type_convert (Var src) (ConvBytestringCast n i) sm = (out,sb) /\
+  (tsrc = BaseT (BytesT (Dynamic i)) \/ tsrc = BaseT (StringT i)) /\
+  (dst = BaseT (BytesT (Dynamic n)) \/ dst = BaseT (StringT n)) /\
+  evaluate_type (get_tenv cx) tsrc = SOME tv /\ value_has_type tv v /\
+  val_in_memory tv v (w2n w) s.vs_memory /\ lookup_var src s = SOME w /\
+  not_fresh_at sm src /\ i < dimword(:256) /\ n < dimword(:256) /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  ptr_covers G tn src s sz /\ 32 <= sz /\
+  (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
+  (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sm p) /\
+  (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sm p) /\
+  convert_result cx tsrc dst v = INR ex ==>
+  ?r H th count.
+    gas_path_ptr D 0 ctx fn PG G tn s count H th r /\
+    expr_exit (INR ex : value + exception) r /\ ghost_kept cenv es sm G tn s H th
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all cast_compile_typed_outcome >> simp[] >> strip_tac >>
+  drule_all bodyPtrTypeBuiltinsCastTheory.convert_cast_abort_path >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[exprSimDefsTheory.expr_exit_def]
 QED
