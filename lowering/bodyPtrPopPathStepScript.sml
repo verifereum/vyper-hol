@@ -1,5 +1,5 @@
 Theory bodyPtrPopPathStep
-Ancestors typedCopyLayoutPtr exprSimProps loweringPosts valueEncoding
+Ancestors bodyPtrDefs robustCopyTransportPtr normalizationPrefixPtr pred_set typedCopyLayoutPtr exprSimProps loweringPosts valueEncoding
   valueEncodingProofs exprSimAggregateEncoding vyperState vyperTyping
   vyperValueOperation tupleMemoryLayout vyperPlaceStatePreservation
 
@@ -107,4 +107,71 @@ Theorem pop_path_robust_memory_extract:
     val_in_memory ct child (base+k) m
 Proof
   metis_tac[pop_path_memory_extract]
+QED
+
+Theorem pop_stride_intervals_apart:
+  !i j stride. i <> j ==>
+    i * stride + stride <= j * stride \/
+    j * stride + stride <= i * stride
+Proof
+  rpt strip_tac >> Cases_on `i < j`
+  >- (disj1_tac >>
+      `SUC i <= j` by decide_tac >>
+      drule arithmeticTheory.LESS_MONO_MULT >> disch_then (qspec_then `stride` mp_tac) >>
+      pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  disj2_tac >> `SUC j <= i` by decide_tac >>
+  drule arithmeticTheory.LESS_MONO_MULT >> disch_then (qspec_then `stride` mp_tac) >>
+  pure_rewrite_tac[arithmeticTheory.MULT_CLAUSES] >> decide_tac
+QED
+
+Theorem pop_array_sibling_robust_frame:
+  !i j tv v base dirty mem mem' writes.
+  i <> j /\ val_wf tv v /\
+  (!x. x IN writes ==>
+    base+j*type_memory_size tv <= x /\
+    x < base+j*type_memory_size tv+type_memory_size tv) /\
+  mem_agree_outside writes mem' mem /\
+  (!m. mem_agree_outside dirty mem m ==>
+    val_in_memory tv v (base+i*type_memory_size tv) m) ==>
+  !m. mem_agree_outside dirty mem' m ==>
+    val_in_memory tv v (base+i*type_memory_size tv) m
+Proof
+  rpt gen_tac >> strip_tac >>
+  `val_footprint tv v <= type_memory_size tv` by
+    metis_tac[val_footprint_le] >>
+  `i*type_memory_size tv+type_memory_size tv <= j*type_memory_size tv \/
+   j*type_memory_size tv+type_memory_size tv <= i*type_memory_size tv` by
+    (irule pop_stride_intervals_apart >> simp[]) >>
+  rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
+  simp[] >> qexistsl_tac [`mem`, `mem'`, `dirty`, `dirty`, `writes`] >>
+  simp[mem_agree_outside_def] >> rpt strip_tac >>
+  fs[mem_agree_outside_def] >>
+  qpat_x_assum `!x. x IN writes ==> _` drule >> decide_tac
+QED
+
+Theorem pop_elems_robust_replace:
+  !vs tv j new off dirty mem mem' writes.
+  elems_val_wf vs tv /\ j < LENGTH vs /\
+  (!x. x IN writes ==>
+    off+j*type_memory_size tv <= x /\
+    x < off+j*type_memory_size tv+type_memory_size tv) /\
+  mem_agree_outside writes mem' mem /\
+  (!m. mem_agree_outside dirty mem m ==> elems_in_memory vs off tv m) /\
+  (!m. mem_agree_outside dirty mem' m ==>
+    val_in_memory tv new (off+j*type_memory_size tv) m) ==>
+  !m. mem_agree_outside dirty mem' m ==>
+    elems_in_memory (LUPDATE new j vs) off tv m
+Proof
+  rpt strip_tac >> irule elems_in_memory_intro >>
+  simp[] >> rpt strip_tac >> rename1 `i < LENGTH vs` >>
+  Cases_on `i = j` >- gvs[listTheory.EL_LUPDATE] >>
+  simp[listTheory.EL_LUPDATE] >>
+  `val_wf tv (EL i vs)` by
+    (irule exprSimPopTheory.elems_val_wf_EL >> goal_assum (drule_at Any) >> simp[]) >>
+  `!m. mem_agree_outside dirty mem m ==>
+    val_in_memory tv (EL i vs) (off+i*type_memory_size tv) m` by
+    (rpt strip_tac >> qpat_x_assum `!m. _ ==> elems_in_memory _ _ _ _` drule >>
+     strip_tac >> irule elems_in_memory_EL >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  drule_all pop_array_sibling_robust_frame >> simp[]
 QED
