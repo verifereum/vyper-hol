@@ -287,3 +287,37 @@ Proof
       simp[dead_stack_marker_def]) >>
   strip_tac >> gvs[]
 QED
+
+(* Exact copy from genBlockSim, avoiding a frame-simulation import here. *)
+Theorem stack_find_el[local]:
+  !P l d. stack_find P l = SOME d ==> P (EL d l)
+Proof
+  Induct_on `l` >> simp[stack_find_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> gvs[arithmeticTheory.ADD1, EL_CONS]
+QED
+
+Theorem phi_selection_from_present_operand:
+  !inst ps.
+    (?v. MEM (Var v) inst.inst_operands /\ MEM (Var v) ps.ps_stack) ==>
+    ?d v.
+      stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+      stack_peek d ps.ps_stack = Var v /\ MEM (Var v) inst.inst_operands
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- (gvs[stack_get_phi_depth_def, stack_find_NONE_EVERY, EVERY_MEM] >>
+      first_x_assum (qspec_then `Var v` mp_tac) >>
+      simp[MEM_FILTER, stackPlanTypesTheory.is_var_operand_def]) >>
+  rename1 `stack_get_phi_depth _ _ = SOME d` >>
+  `d < LENGTH ps.ps_stack /\
+   MEM (stack_peek d ps.ps_stack) inst.inst_operands /\
+   is_var_operand (stack_peek d ps.ps_stack)` by
+    (gvs[stack_get_phi_depth_def] >>
+     drule stack_find_bound >> simp[] >> strip_tac >>
+     drule stack_find_el >>
+     simp[MEM_FILTER, stack_peek_def, EL_REVERSE] >>
+     `PRE (LENGTH ps.ps_stack - d) = LENGTH ps.ps_stack - (d+1)` by decide_tac >>
+     simp[]) >>
+  Cases_on `stack_peek d ps.ps_stack` >>
+  gvs[stackPlanTypesTheory.is_var_operand_def] >> metis_tac[]
+QED

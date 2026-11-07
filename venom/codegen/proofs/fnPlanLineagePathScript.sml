@@ -1,8 +1,9 @@
 Theory fnPlanLineagePath
 Ancestors
-  fnPlanLineagePhiActivation fnPlanLineageLiveness fnPlanLineageDemandSupport stackPlanGen livenessDefs
+  fnPlanLineagePhiActivation fnPlanLineageLiveness fnPlanLineageDemandSupport
+  fnPlanLineageInventory stackPlanGen livenessDefs
   livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
-  removeUnusedSsaProofs codegenReadyCompute
+  removeUnusedSsaProofs codegenReadyCompute list pred_set
 
 Theorem analyzed_ready_live_through_edge:
   !fn lbl bb pred pred_bb v.
@@ -458,4 +459,26 @@ Proof
   `j < i /\ j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = di` by
     (gvs[listTheory.LENGTH_TAKE, listTheory.EL_TAKE] >> decide_tac) >>
   `j = i` by metis_tac[ssa_form_position] >> decide_tac
+QED
+
+Theorem chronological_origin_inventory_output_fresh:
+  !fn visited bb i ps S.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\ ~MEM bb.bb_label visited /\
+    i < LENGTH bb.bb_instructions /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE i bb.bb_instructions) /\ MEM v di.inst_outputs)) /\
+    lineage_inventory S ps /\ (EL i bb.bb_instructions).inst_outputs <> [] ==>
+    Var (HD (EL i bb.bb_instructions).inst_outputs) NOTIN S
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all chronological_origin_output_fresh >>
+  simp[EVERY_MEM] >>
+  disch_then (qspec_then `HD (EL i bb.bb_instructions).inst_outputs` mp_tac) >>
+  `MEM (HD (EL i bb.bb_instructions).inst_outputs)
+    (EL i bb.bb_instructions).inst_outputs` by
+    (Cases_on `(EL i bb.bb_instructions).inst_outputs` >> gvs[]) >>
+  simp[] >> strip_tac >>
+  fs[lineage_inventory_def, lineage_core_def] >> metis_tac[IN_UNION, MEM_APPEND]
 QED
