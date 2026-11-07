@@ -3935,7 +3935,7 @@ Resume rf_strict_suffix_abort[assign]:
      qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
      simp[Once exec_block_def, is_terminator_def] >>
      Cases_on `eval_operand rhs s` >>
-     simp[step_inst_def, step_inst_base_def]) >>
+     simp[step_inst_def, step_inst_base_opcode_eqs]) >>
   `!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
     ti.inst_opcode <> PHI` by
     (rpt strip_tac >>
