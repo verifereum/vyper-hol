@@ -6,6 +6,7 @@ Ancestors bodyPtrTypeBuiltinsScalarDispatch bodyPtrTypeBuiltinsMemoryContinue
   bodyPtrTypeBuiltinsConvertEntry bodyPtrTypeBuiltinsOperands
   gasSummaryComposePtr fragGasPathPtr exprLowering exprLoweringProps
   bodyPtrDefs exprSimDefs exprSimHypsDefs compileEnv vyperAST vyperTypeSystem
+  vyperInterpreter vyperState exprSimConvert
 
 Theorem scalar_convert_dispatch:
   ~is_bytestring_type (expr_type e) /\
@@ -186,3 +187,14 @@ Resume convert_normal_continuation[fixed]:
 QED
 
 Finalise convert_normal_continuation
+
+Theorem eval_expr_convert_action:
+  (\es. (do r <- eval_expr cx (TypeBuiltin ann Convert typ [e]); read_result cx r od) es) =
+  (\es. (do v <- (do r <- eval_expr cx e; read_result cx r od);
+            (\st. (convert_result cx (expr_type e) typ v,st)) od) es)
+Proof
+  pure_rewrite_tac[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `(do r <- eval_expr cx (TypeBuiltin ann Convert typ [e]); read_result cx r od) x` >>
+  drule exprSimConvertTheory.eval_expr_convert_cases >>
+  strip_tac >> gvs[vyperStateTheory.bind_def]
+QED
