@@ -2096,5 +2096,147 @@ Theorem selective_pressure_outputs_dead:
       (EL i (EL 1 (selective_fn 17 F F).fn_blocks).bb_instructions).inst_outputs = [])
     (GENLIST (\i. i + 2) 16)
 Proof
-  CONV_TAC (eval_def_occurrences selective_lv_def) >> EVAL_TAC
+  CONV_TAC (eval_def_occurrences selective_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
+QED
+
+(* One targeted adaptation: keep the first pressure output live by an
+   immediate consumer.  The backedge is retained, so actual analysis, not
+   a fabricated next-live list, decides whether the deep input is dead. *)
+Definition shadow_fn_def:
+  shadow_fn = selective_fn 17 F F with fn_blocks :=
+    LUPDATE ((EL 1 (selective_fn 17 F F).fn_blocks) with bb_instructions :=
+      TAKE 2 (EL 1 (selective_fn 17 F F).fn_blocks).bb_instructions ++
+      [mk_inst 199 ADD [Var "v15"; Lit 1w] ["shadow_live"];
+       mk_inst 200 ADD [Var "shadow_live"; Lit 2w] ["shadow_dead"]] ++
+      TAKE 15 (DROP 2 (EL 1 (selective_fn 17 F F).fn_blocks).bb_instructions) ++
+      DROP 18 (EL 1 (selective_fn 17 F F).fn_blocks).bb_instructions)
+      1 (selective_fn 17 F F).fn_blocks
+End
+Definition shadow_lv_def:
+  shadow_lv = liveness_analyze shadow_fn
+End
+
+Theorem shadow_deep_input_still_live:
+  MEM "v15" (live_vars_at shadow_lv "H" 3) /\
+  MEM "shadow_live" (live_vars_at shadow_lv "H" 3)
+Proof
+  CONV_TAC (eval_def_occurrences shadow_lv_def) >> EVAL_TAC
+QED
+
+Definition shadow_dg_def:
+  shadow_dg = dfg_build_function shadow_fn
+End
+Definition shadow_cg_def:
+  shadow_cg = cfg_analyze shadow_fn
+End
+Definition shadow_entry_def:
+  shadow_entry = SND (THE (generate_block_plan shadow_lv shadow_dg shadow_cg
+    shadow_fn (EL 0 shadow_fn.fn_blocks) entry_probe_start))
+End
+Definition shadow_phase_def:
+  shadow_phase 0 = shadow_entry /\
+  shadow_phase (SUC i) = SND (THE (generate_inst_plan shadow_lv shadow_dg
+    shadow_cg shadow_fn (EL i (EL 1 shadow_fn.fn_blocks).bb_instructions)
+    (live_vars_at shadow_lv "H" (SUC i)) F F "H" (shadow_phase i)))
+End
+
+Theorem shadow_ready:
+  codegen_ready_fn shadow_fn
+Proof
+  rewrite_tac[codegen_ready_fn_def] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem shadow_entry_cache:
+  shadow_entry = entry_probe_start with
+    <|ps_stack := REVERSE (MAP Var (TAKE 15 (selective_names 17))) ++
+        [Var "v15"; Var "v16"; Var "a"];
+      ps_alloc := <|sa_free_slots :=
+        [0;32;64;96;128;160;192;224;256;288;320;352;384;416;448;480;512;544];
+        sa_next_offset := 576; sa_spill_base := 0|> |>
+Proof
+  rewrite_tac[shadow_entry_def, selective_entry_cache] >>
+  CONV_TAC (eval_def_occurrences shadow_lv_def) >>
+  CONV_TAC (eval_def_occurrences shadow_dg_def) >>
+  CONV_TAC (eval_def_occurrences shadow_cg_def) >>
+  CONV_TAC (LAND_CONV EVAL) >> EVAL_TAC
+QED
+
+Theorem shadow_phase_two_cache:
+  (shadow_phase 2).ps_stack =
+    REVERSE (MAP Var (TAKE 15 (selective_names 17))) ++
+      [Var "v15"; Var "v16"; Var "hold"] /\
+  (shadow_phase 2).ps_spilled = FEMPTY
+Proof
+  `2 = SUC (SUC 0)` by decide_tac >> pop_assum SUBST1_TAC >>
+  rewrite_tac[shadow_phase_def, shadow_entry_cache] >>
+  CONV_TAC (eval_def_occurrences shadow_lv_def) >>
+  CONV_TAC (eval_def_occurrences shadow_dg_def) >>
+  CONV_TAC (eval_def_occurrences shadow_cg_def) >> EVAL_TAC
+QED
+
+(* Actual analyzed first-use order changes the join suffix before this
+   instruction can run.  The proposed deep input is shallow AND live-through;
+   neither a dead deep reorder nor an optimistic query for v00 is reached. *)
+Theorem shadow_site_obstruction:
+  stack_get_depth (Var "v15") (shadow_phase 2).ps_stack = SOME 2 /\
+  MEM "v15" (live_vars_at shadow_lv "H" 3) /\
+  LAST (live_vars_at shadow_lv "H" 3) = "shadow_live" /\
+  (EL 2 (EL 1 shadow_fn.fn_blocks).bb_instructions).inst_outputs = ["shadow_live"]
+Proof
+  rewrite_tac[shadow_phase_two_cache] >>
+  CONV_TAC (eval_def_occurrences shadow_lv_def) >> EVAL_TAC
+QED
+
+Theorem shadow_site_emit:
+  emit_one_input ADD (live_vars_at shadow_lv "H" 3) (Var "v15")
+    (shadow_phase 2) = do_dup 2 (shadow_phase 2)
+Proof
+  mp_tac shadow_site_obstruction >> strip_tac >>
+  simp[emit_one_input_def, shadow_phase_two_cache] >>
+  Cases_on `do_dup 2 (shadow_phase 2)` >> simp[]
+QED
+
+Theorem shadow_site_optimistic_skips:
+  !ps. optimistic_swap_plan shadow_dg
+    (EL 2 (EL 1 shadow_fn.fn_blocks).bb_instructions)
+    (live_vars_at shadow_lv "H" 3) F ps = ([], ps)
+Proof
+  gen_tac >> rewrite_tac[optimistic_swap_plan_def] >>
+  CONV_TAC (eval_def_occurrences shadow_lv_def) >>
+  CONV_TAC (eval_def_occurrences shadow_dg_def) >> EVAL_TAC
+QED
+
+Theorem shadow_entry_success:
+  IS_SOME (generate_block_plan shadow_lv shadow_dg shadow_cg shadow_fn
+    (EL 0 shadow_fn.fn_blocks) entry_probe_start)
+Proof
+  CONV_TAC (eval_def_occurrences shadow_lv_def) >>
+  CONV_TAC (eval_def_occurrences shadow_dg_def) >>
+  CONV_TAC (eval_def_occurrences shadow_cg_def) >> EVAL_TAC
+QED
+
+Theorem shadow_prefix_dispatch_success:
+  EVERY (\i.
+    IS_SOME (generate_inst_plan shadow_lv shadow_dg shadow_cg shadow_fn
+      (EL i (EL 1 shadow_fn.fn_blocks).bb_instructions)
+      (live_vars_at shadow_lv "H" (SUC i)) F F "H" (shadow_phase i)) /\
+    ~is_terminator
+      (EL (SUC i) (EL 1 shadow_fn.fn_blocks).bb_instructions).inst_opcode)
+    [0;1]
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``generate_regular_inst_plan``, ``generate_phi_plan``,
+     ``shadow_phase``, ``shadow_lv``, ``shadow_dg``, ``shadow_cg``])
 QED
