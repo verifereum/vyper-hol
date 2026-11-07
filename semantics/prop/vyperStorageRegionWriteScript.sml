@@ -234,6 +234,72 @@ Proof
   asm_simp_tac bool_ss [MAP_APPEND, MAP, SND, type_slot_size_list_sum, MAP_MAP_o]
 QED
 
+Theorem storage_subregion_slots_in_range:
+  !root path delta leaf. storage_subregion root path delta leaf ==>
+    !raw off. slots_in_range raw off root ==>
+      slots_in_range raw (off + delta) leaf
+Proof
+  ho_match_mp_tac storage_subregion_ind >> rpt conj_tac >>
+  rpt gen_tac >> rpt strip_tac >>
+  qpat_x_assum `storage_subregion _ _ _ _` mp_tac >>
+  simp_tac (srw_ss()) [Once storage_subregion_def] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  asm_rewrite_tac [] >>
+  FIRST [rename1 `slots_in_range _ _ (ArrayTV _ (Fixed _))` >> suspend "Fixed",
+         rename1 `slots_in_range _ _ (ArrayTV _ (Dynamic _))` >> suspend "Dynamic",
+         rename1 `slots_in_range _ _ (StructTV _)` >> suspend "Struct",
+         rename1 `slots_in_range _ _ (TupleTV _)` >> suspend "Tuple"]
+QED
+
+Resume storage_subregion_slots_in_range[Fixed]:
+  RESUME_TAC >>
+  fs[fixed_storage_region, array_slots_in_range_indexed] >>
+  qpat_x_assum `!relative. storage_subregion _ _ relative _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + Num i * type_slot_size root` mp_tac) >>
+  asm_simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]
+QED
+
+Resume storage_subregion_slots_in_range[Dynamic]:
+  RESUME_TAC >>
+  fs[dynamic_storage_region, array_slots_in_range_indexed] >>
+  qpat_x_assum `!relative. storage_subregion _ _ relative _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + 1 + Num i * type_slot_size root` mp_tac) >>
+  asm_simp_tac bool_ss [AC ADD_ASSOC ADD_COMM] >>
+  disch_then irule >>
+  qpat_x_assum `!k. k < n ==> _` (qspec_then `Num i` mp_tac) >>
+  asm_simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]
+QED
+
+Resume storage_subregion_slots_in_range[Struct]:
+  RESUME_TAC >>
+  drule struct_component_region_split >> strip_tac >>
+  full_simp_tac bool_ss [slots_in_range_struct] >>
+  drule tuple_component_storage_region >> strip_tac >>
+  qpat_x_assum `!root delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + type_slot_size_list pre` mp_tac) >>
+  asm_simp_tac bool_ss [ADD_ASSOC]
+QED
+
+Resume storage_subregion_slots_in_range[Tuple]:
+  RESUME_TAC >>
+  drule tuple_component_region_split >> strip_tac >>
+  full_simp_tac bool_ss [] >>
+  drule tuple_component_storage_region >> strip_tac >>
+  qpat_x_assum `!root delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + type_slot_size_list pre` mp_tac) >>
+  asm_simp_tac bool_ss [ADD_ASSOC]
+QED
+
+Finalise storage_subregion_slots_in_range
+
 Theorem storage_subregion_typed_write_preserves_root:
   !tv path relative leaf.
     storage_subregion tv path relative leaf ==>

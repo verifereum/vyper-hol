@@ -748,22 +748,6 @@ Proof
   simp[vyperValueTheory.type_slot_size_def]
 QED
 
-Theorem dead_bytes_list_el[local]:
-  !tvs k st base j b.
-    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
-    base + tuple_prefix_slot_size k tvs <= j /\
-    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
-    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
-  simp[Once dead_bytes_def] >> strip_tac >>
-  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
-  imp_res_tac (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
-  imp_res_tac (cj 2 accountsRelPropsTheory.dead_bytes_range) >> gvs[] >>
-  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
-  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
-QED
 
 (* A tuple element of a value whose slots agree has its slots agree. *)
 Theorem storage_range_agree_tuple_elem[local]:
