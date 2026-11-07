@@ -8,7 +8,7 @@
 
 Theory bodySimConvertWidened
 Ancestors
-  exprSimSource
+  exprSimSource bodySimConvertWidenedFacts bodySimConvertWidenedBytes
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
