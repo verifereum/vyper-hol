@@ -942,14 +942,6 @@ Definition atarget_accepts_def:
     well_typed_atarget env (TupleTarget tgts) t
 End
 
-Definition well_typed_iterator_def:
-  well_typed_iterator env typ (Array e) =
-    (well_typed_expr env e /\ ?bd. expr_type e = ArrayT typ bd) /\
-  well_typed_iterator env typ (Range e1 e2) =
-    (well_typed_expr env e1 /\ well_typed_expr env e2 /\
-     is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
-End
-
 Definition well_typed_custom_error_def:
   well_typed_custom_error env err =
     well_typed_exprs env (custom_error_exprs err)
@@ -981,16 +973,20 @@ Definition place_contains_def:
     isPREFIX (SND (place_access w [])) (SND (place_access p []))
 End
 
-(* _get_variable_access on an iterator: NONE for anything but a variable
-   seen through attributes and subscripts. *)
-Definition expr_place_def:
-  expr_place (Name _ id) = SOME (NameTarget id) /\
-  expr_place (TopLevelName _ n) = SOME (TopLevelNameTarget n) /\
-  expr_place (Subscript _ e i) =
-    OPTION_MAP (\tgt. SubscriptTarget tgt i) (expr_place e) /\
-  expr_place (Attribute _ e a) =
-    OPTION_MAP (\tgt. AttributeTarget tgt a) (expr_place e) /\
-  expr_place _ = NONE
+(* _get_variable_access on an iterator, also through a ternary's arms:
+   the places it may read in place.  The compiled ternary uses an arm's
+   memory directly when its layout is the result's (compile_ifexp_arm, like
+   lower_IfExp in Python), also under a subscript or attribute.  Stricter
+   than Vyper, whose _get_variable_access doesn't look into a ternary. *)
+Definition expr_places_def:
+  expr_places (Name _ id) = [NameTarget id] /\
+  expr_places (TopLevelName _ n) = [TopLevelNameTarget n] /\
+  expr_places (Subscript _ e i) =
+    MAP (\tgt. SubscriptTarget tgt i) (expr_places e) /\
+  expr_places (Attribute _ e a) =
+    MAP (\tgt. AttributeTarget tgt a) (expr_places e) /\
+  expr_places (IfExp _ _ e1 e2) = expr_places e1 ++ expr_places e2 /\
+  expr_places _ = []
 End
 
 (* ok holds of every place written by pop() in an expression.  The
@@ -1078,12 +1074,90 @@ Termination
   simp[]
 End
 
+(* The expression's source is a function call (a vy_ast.Call), whose
+   result Vyper doesn't iterate over (IteratorException "Cannot iterate over
+   the result of a function call" in visit_For,
+   vyper/semantics/analysis/local.py).  extcall and staticcall have their
+   own AST nodes there, and a list literal is a MakeArray builtin here.  The
+   remaining builtins are calls or, like msg.sender, never arrays. *)
+Definition call_result_expr_def:
+  call_result_expr (Pop _ _) = T /\
+  call_result_expr (TypeBuiltin _ _ _ _) = T /\
+  call_result_expr (Builtin _ (MakeArray _ _) _) = F /\
+  call_result_expr (Builtin _ _ _) = T /\
+  call_result_expr (Call _ (ExtCall _ _ _ _) _ _) = F /\
+  call_result_expr (Call _ _ _ _) = T /\
+  call_result_expr _ = F
+End
+
+(* A call Vyper doesn't count as state-modifying: a staticcall or a raw_call
+   with is_static_call=True.  An extcall's function is nonpayable or payable
+   (visit_Call), a non-static raw_call and the create builtins modify state,
+   and send, raw_log, raw_revert and selfdestruct are statements.  Internal
+   calls count as static here only because fn_sig carries no mutability. *)
+Definition call_target_static_def:
+  call_target_static (IntCall _) = T /\
+  call_target_static (ExtCall static _ _ _) = static /\
+  call_target_static (RawCallTarget flags) = flags.rcf_is_static /\
+  call_target_static (RawCallCalldataTarget flags) = flags.rcf_is_static /\
+  call_target_static _ = F
+End
+
+(* Every call anywhere in the expression is static (call_target_static). *)
+Definition expr_static_calls_def:
+  expr_static_calls (Name _ _) = T /\
+  expr_static_calls (TopLevelName _ _) = T /\
+  expr_static_calls (FlagMember _ _ _) = T /\
+  expr_static_calls (IfExp _ c x y) =
+    (expr_static_calls c /\ expr_static_calls x /\ expr_static_calls y) /\
+  expr_static_calls (Literal _ _) = T /\
+  expr_static_calls (StructLit _ _ kes) = EVERY expr_static_calls (MAP SND kes) /\
+  expr_static_calls (Subscript _ x y) =
+    (expr_static_calls x /\ expr_static_calls y) /\
+  expr_static_calls (Attribute _ x _) = expr_static_calls x /\
+  expr_static_calls (Builtin _ _ es) = EVERY expr_static_calls es /\
+  expr_static_calls (TypeBuiltin _ _ _ es) = EVERY expr_static_calls es /\
+  expr_static_calls (Pop _ tgt) = target_static_calls tgt /\
+  expr_static_calls (Call _ ct es drv) =
+    (call_target_static ct /\ EVERY expr_static_calls es /\
+     case drv of NONE => T | SOME d => expr_static_calls d) /\
+  target_static_calls (NameTarget _) = T /\
+  target_static_calls (TopLevelNameTarget _) = T /\
+  target_static_calls (SubscriptTarget tgt e) =
+    (target_static_calls tgt /\ expr_static_calls e) /\
+  target_static_calls (AttributeTarget tgt _) = target_static_calls tgt
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL e => expr_size e
+    | INR tgt => base_assignment_target_size tgt)` >>
+  rw[] >>
+  TRY (Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >>
+       res_tac >> simp[] >> NO_TAC) >>
+  TRY (Induct_on `es` >> rw[] >> res_tac >> simp[] >> NO_TAC) >>
+  Cases_on `drv` >> fs[]
+End
+
+(* Vyper also rejects a state-modifying call anywhere in an iterator
+   (StateAccessViolation "May not call state modifying function within a
+   range expression or for loop iterator", and in codegen "Cannot make
+   modifying calls from a range expression"): here, a pop(), which
+   expr_writes_ok (\_. F) excludes, or a non-static call (expr_static_calls).
+   Nonpayable internal calls stay accepted: fn_sig carries no mutability. *)
+Definition well_typed_iterator_def:
+  well_typed_iterator env typ (Array e) =
+    (well_typed_expr env e /\ (?bd. expr_type e = ArrayT typ bd) /\
+     ~call_result_expr e /\ expr_writes_ok (\_. F) e /\ expr_static_calls e) /\
+  well_typed_iterator env typ (Range e1 e2) =
+    (well_typed_expr env e1 /\ well_typed_expr env e2 /\
+     is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ /\
+     expr_writes_ok (\_. F) e1 /\ expr_writes_ok (\_. F) e2 /\
+     expr_static_calls e1 /\ expr_static_calls e2)
+End
+
 Definition iterator_unmodified_def:
   iterator_unmodified (Range _ _) body = T /\
   iterator_unmodified (Array e) body =
-    case expr_place e of
-    | NONE => T
-    | SOME p => stmts_writes_ok (\w. ~place_contains w p) body
+    EVERY (\p. stmts_writes_ok (\w. ~place_contains w p) body) (expr_places e)
 End
 
 (* ===== Executable statement typing ===== *)
