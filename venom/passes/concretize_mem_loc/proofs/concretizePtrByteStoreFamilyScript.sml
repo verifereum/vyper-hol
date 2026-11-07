@@ -17,7 +17,8 @@ Ancestors
   concretizeMemLocDefs concretizePtrActivationChronology
   concretizePtrHistoricalWriteClassification concretizePtrTaggedSupport
   concretizePtrEventEmbedding concretizePtrBytes concretizePtrComparisonTransport
-  concretizePtrOrdinaryNext
+  concretizePtrOrdinaryNext concretizePtrPairedPrefixProbe
+  concretizePtrOperationalOpcodes
 
 Theorem ptr_byte_store_mstore8_operands_untainted:
   taint_ok fn tn inst s /\ inst.inst_opcode = MSTORE8 ==>
@@ -917,6 +918,24 @@ Theorem ptr_paired_byte_store_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_paired_prefix_byte_store >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG,saved,entries)] ++ snapshots`, `calls`,
+    `ws ++ [(LENGTH h - 1,LENGTH done,reloc)]`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
 QED
 
