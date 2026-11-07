@@ -343,7 +343,7 @@ Proof
   decide_tac
 QED
 
-Theorem raw_call_nonrevert_positive_run[local]:
+Theorem raw_call_nonrevert_positive_run:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
