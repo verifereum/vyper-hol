@@ -1,7 +1,7 @@
 (* Local probes: emitted allocation size versus tuple-field copy access.
    These are not counterexamples to a source-program theorem. *)
 Theory normalizationOverflowPtr
-Ancestors normalizationTupleBytesPtr supportedTypes
+Ancestors normalizationTupleBytesPtr supportedTypes sourceEntryCode
 
 Theorem tuple_bytes_normalization_overflow_layout:
   !cenv.
@@ -143,4 +143,29 @@ Proof
     venomStateTheory.eval_operand_def, memLocDefsTheory.mem_write_ops_def,
     venomInstTheory.mk_inst_def, wordsTheory.dimword_def,
     codegenRelTheory.sized_source_write_range_def]
+QED
+
+(* The runtime lowering's mathematical allocation limit excludes this
+   declared return type, even though its word-sized ALLOCA would wrap. *)
+Theorem overflow_tuple_runtime_lookup_excluded:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ name <> "__default__" ==>
+  vyperInterpreter$lookup_function NONE name External tops <>
+    SOME (mut,nr,args,dflts,
+      TupleT [BaseT (BytesT (Dynamic (dimword(:256)-32)))],fbody)
+Proof
+  strip_tac >> disch_tac >>
+  drule_all sourceEntryCodeTheory.supported_external_lookup_member >> strip_tac >>
+  `?exts ints fb ctor. classify_functions tops = (exts,ints,fb,ctor)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  `fn_allocs_ok tops (mut,nr,rr,name,args,dflts,
+      TupleT [BaseT (BytesT (Dynamic (dimword(:256)-32)))],fbody)` by
+    (irule compileVyperTheory.lower_vyper_runtime_unit_allocs_ok >>
+     gvs[] >> metis_tac[]) >>
+  qpat_x_assum `fn_allocs_ok _ _` mp_tac >>
+  simp[compileVyperTheory.fn_allocs_ok_def] >>
+  mp_tac (Q.SPEC `build_compile_env tops Internal mut (name:string) args
+    (TupleT [BaseT (BytesT (Dynamic (dimword(:256)-32)))]) fbody F`
+    tuple_bytes_normalization_overflow_layout) >>
+  strip_tac >> gvs[wordsTheory.dimword_def]
 QED
