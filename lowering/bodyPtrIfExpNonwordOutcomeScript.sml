@@ -8,8 +8,8 @@ Theorem ifexp_selected_nonword_outcome_ptr:
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
   ~is_word_type ty /\ ~ce.ce_is_ctor /\
-  expr_vv_sim_ptr d ctx PG fn ce cx (expr_type arm) arm es /\
-  compile_expr ce (expr_type arm) arm sa = (vv,sm) /\
+  expr_vv_sim_ptr d ctx PG fn ce cx rty arm es /\
+  compile_expr ce rty arm sa = (vv,sm) /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\
   fn_has_code sa sm fn /\ fn_has_code sm sd fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ ~ctx_has_dalloca ctx /\

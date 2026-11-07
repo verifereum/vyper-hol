@@ -10,7 +10,7 @@ Theorem ifexp_residual_allocating_arm_ptr:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty cond a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
-  compile_expr ce (expr_type arm) arm sa = (vv,sb) /\
+  compile_expr ce rty arm sa = (vv,sb) /\
   eval_expr cx arm es = (INL raw,ee) /\ read_result cx raw ee = (INL v,er) /\
   ~is_word_type ty /\ ~same_memory_layout ce (lowered_value_type ce arm) ty /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sb = (op,sd) /\

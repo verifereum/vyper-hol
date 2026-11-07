@@ -4,7 +4,7 @@ Ancestors
   vyperEvalExprPreservesScopesDom vyperState vyperValue finite_map exprSimUnwrap
 
 Theorem ifexp_selected_arm_allocation_premises:
-  compile_expr cenv (expr_type e) e sa = (vv,sb) /\
+  compile_expr cenv rty e sa = (vv,sb) /\
   local_ptrs_reserved cenv sa /\ eval_expr cx e es = (INL raw,es') /\
   ~is_word_type res_ty /\ ~same_memory_layout cenv arm_ty res_ty /\
   compile_ifexp_arm cenv res_ty arm_ty vv sb = (op,sd) /\
@@ -23,7 +23,7 @@ Proof
     metis_tac[cj 1 compiler_compile_var] >>
   `ci_mono sa sb` by
     (qspec_then `cenv` mp_tac (cj 1 compile_expr_ci_mono) >>
-     disch_then (qspecl_then [`expr_type e`, `e`, `sa`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`rty`, `e`, `sa`] mp_tac) >> simp[]) >>
   `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
   `sa.cs_next_id <= sb.cs_next_id` by

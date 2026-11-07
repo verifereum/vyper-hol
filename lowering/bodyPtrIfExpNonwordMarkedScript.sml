@@ -10,7 +10,7 @@ Theorem ifexp_raw_marked_nonword_suffix:
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
   ~is_word_type ty /\ ~ce.ce_is_ctor /\
-  compile_expr ce (expr_type arm) arm sa = (vv,sm) /\
+  compile_expr ce rty arm sa = (vv,sm) /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\
   gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx arm) (es,s0,G0,tn0)
     marks (INL raw) ee G tn (OK s) /\
@@ -65,7 +65,7 @@ Theorem ifexp_selected_nonword_marked:
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
   ~is_word_type ty /\ ~ce.ce_is_ctor /\
-  compile_expr ce (expr_type arm) arm sa = (vv,sm) /\
+  compile_expr ce rty arm sa = (vv,sm) /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\
   gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx arm) (es,s0,G0,tn0)
     marks (INL raw) ee G tn (OK s) /\
