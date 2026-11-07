@@ -75,7 +75,7 @@ Theorem emit_add_zero_path_ptr:
 Proof
   strip_tac >> irule emit_inst_zero_path_ptr >> simp[is_terminator_def] >>
   conj_tac
-  >- simp[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  >- (irule emitHelperPropsTheory.step_ADD >> simp[]) >>
   irule ptr_inst_ok_copy_len_binop >> simp[]
 QED
 
