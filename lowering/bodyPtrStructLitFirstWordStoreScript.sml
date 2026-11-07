@@ -146,3 +146,60 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   metis_tac[]
 QED
+
+(* Common consumer of the normal memory/nonmemory unwrap results. The universal
+   frame below is exported by both first-word wrappers, not an access premise. *)
+Theorem structlit_first_word_store_continuation:
+  expr_body_pre ce cx env (StructLit ann nsid ((fname,e)::rest)) es /\
+  is_word_type (expr_type e) /\ is_word_type fty /\
+  compile_expr ce ty (StructLit ann nsid ((fname,e)::rest)) sa = (out,sd) /\
+  compile_alloc_buffer
+    (SUM (MAP (SND o SND)
+      (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)))) sa = (buf,sb) /\
+  buf.buf_operand = Var root /\
+  compile_expr ce (expr_type e) e sb = (vv,sc) /\
+  emit_op ADD [buf.buf_operand; Lit (n2w 0)] sc = (Var dst,sm) /\
+  unwrap_value ce vv sm = (Var load,su) /\
+  ALOOKUP (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)) fname =
+    SOME (fty,sz) /\
+  compile_store_memory ce (Var load) (Var dst) fty (lowered_value_type ce e)
+    su = ((),sv) /\ fn_has_code sa sd fn /\
+  ptr_covers G tn root s
+    (SUM (MAP (SND o SND)
+      (get_struct_fields ce.ce_struct_fields (nsid_to_string nsid)))) /\
+  lookup_var root s = SOME a /\ root <> dst /\ dst <> load /\
+  u = (update_var dst (a+0w) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+  Ga = step_prov PG G (mk_inst sc.cs_next_id ADD [Var root; Lit 0w] [dst])
+    (update_var dst (a+0w) s) /\
+  tna = step_taint (mk_inst sc.cs_next_id ADD [Var root; Lit 0w] [dst]) s
+    (update_var dst (a+0w) s) tn /\
+  gas_marked_exec_ptr D (ctx,fn) PG (read_result cx tv)
+    (ee,u,Ga,tna) [] (INL v) ee G1 tn1 (OK s1) /\
+  expr_post ctx fn ce cx e es sb su t ee v (Var load) s1 /\
+  ptr_val_ok cx (expr_type e) v (Var load) G1 tn1 s1 /\
+  ghost_kept ce es sb G0 tn0 t G1 tn1 /\
+  (!r n. r <> load /\ ptr_covers Ga tna r u n ==>
+    ptr_covers G1 tn1 r s1 n) /\
+  s1.vs_current_bb = su.cs_current_bb /\
+  s1.vs_inst_idx = LENGTH su.cs_current_insts /\ ~ctx_has_dalloca ctx ==>
+  ?b w. lookup_var dst s1 = SOME b /\ eval_operand (Var load) s1 = SOME w /\
+    gas_path_ptr D 0 ctx fn PG G1 tn1 s1 0 G1
+      (step_taint (mk_inst su.cs_next_id MSTORE [Var dst;Var load] []) s1
+        (mstore (w2n b) w s1) tn1)
+      (OK (mstore (w2n b) w s1 with vs_inst_idx := SUC s1.vs_inst_idx)) /\
+    ghost_kept ce es sb G0 tn0 t G1
+      (step_taint (mk_inst su.cs_next_id MSTORE [Var dst;Var load] []) s1
+        (mstore (w2n b) w s1) tn1) /\
+    (mstore (w2n b) w s1).vs_current_bb = sv.cs_current_bb /\
+    SUC s1.vs_inst_idx = LENGTH sv.cs_current_insts
+Proof
+  strip_tac >>
+  `fn_has_code su sv fn` by (irule structlit_first_store_code >> metis_tac[]) >>
+  `ptr_covers G1 tn1 dst s1 32` by
+    (gvs[] >> drule structlit_first_word_destination_coverage >> simp[] >>
+     disch_then drule >> simp[] >> disch_then drule >> simp[] >>
+     disch_then drule >> simp[] >> disch_then drule >> simp[]) >>
+  qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SRULE[gas_marked_exec_ptr_def]) >>
+  irule word_store_normal_continuation >> simp[] >> metis_tac[]
+QED
