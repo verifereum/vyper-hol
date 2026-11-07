@@ -4,7 +4,11 @@ Theory bodySimCallIntcall
 Ancestors
   bodyIntCallSeams bodyIntCallSource bodySimExprCases exprSimHypsDefs exprSimDefs
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
-  vyperContext vyperTypeCallGraph exprSimSend intCallStep exprLowering context
+  vyperContext vyperTypeCallGraph exprSimSend exprLowering context
+  exprSimUnwrap exprSimMemoryRead
+  exprSimMemorySource exprSimProps exprLoweringProps gasOutcome gasSummary
+  gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
+  vyperState venomState compileEnv exprSimUnwrapProps
 
 (* The IHs at a supported callee (body_intcall_source_selection): not
    nonreentrant, no defaults, as many arguments as parameters. *)
@@ -99,9 +103,68 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
 
-(* Held with intcall_return_widened: a widened internal call's value is
-   laid out at the callee's return type (post_value_type), and
-   expr_sim_case_of_vv covers only post_value_type e = expr_type e. *)
+Theorem expr_sim_of_vv_sim_stack_memory[local]:
+  !ctx func cenv cx ty e es.
+    expr_vv_sim ctx func cenv cx ty e es /\
+    (!sa vv sm. compile_expr cenv ty e sa = (vv,sm) ==>
+      ((?t op. vv = StackValue t op) \/
+       (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory))) ==>
+    expr_sim ctx func cenv cx ty e es
+Proof
+  rw[expr_sim_def] >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[lower_value_def, comp_bind_def] >>
+  Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv,sm)` >>
+  simp[] >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  drule unwrap_value_extends >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    metis_tac[forced_expr_admissible_raw] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `s0`] mp_tac) >> simp[] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_summary_at_def]
+      >- (`~t.vs_halted` by
+            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          qpat_x_assum `!sa vv sm. compile_expr _ _ _ _ = _ ==> _` drule >>
+          strip_tac >> gvs[]
+          >- (gvs[unwrap_value_def, comp_return_def] >>
+              `?v. read_result cx tv (es_end with gas_obs := []) =
+                   (INL v,es_end with gas_obs := [])` by
+                gvs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
+              `vv_post ctx func cenv cx e es sa sb s0
+                (es_end with gas_obs := []) (Value v) (StackValue t' op) t` by
+                metis_tac[vv_post_read_result] >>
+              qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t`] >>
+              simp[] >> conj_tac
+              >- (drule read_result_gas_obs >> strip_tac >>
+                  gvs[gas_marked_exec_def, vyperStateTheory.bind_def]) >>
+              metis_tac[expr_post_of_vv_post_stack]) >>
+          drule_all unwrap_memory_marked_read >> simp[] >> strip_tac >>
+          qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u`] >>
+          simp[] >>
+          `marks = marks ++ []` by simp[] >>
+          pop_assum SUBST1_TAC >> irule gas_marked_exec_bind_normal >>
+          goal_assum drule >> simp[]) >>
+      Cases_on `res`
+      >- (Cases_on `r` >> gvs[expr_exit_def]) >>
+      rename1 `expr_exit (INR exc) r` >>
+      `expr_res_ok (INR exc : value + exception)` by
+        (Cases_on `exc` >> Cases_on `r` >>
+         gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
+         Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >>
+      simp[GSYM expr_exit_exception_transport] >>
+      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+  disj2_tac >> metis_tac[force_exempt_cert]
+QED
+
+(* A widened internal call is laid out at the callee's return type.
+   Its stack/memory result needs no post-value/annotation equality to force. *)
 Theorem intcall_sim_case_widened:
   !ctx func cenv cx ann src name es dflt.
     post_value_type cenv (Call ann (IntCall (src,name)) es dflt) <>
@@ -109,7 +172,10 @@ Theorem intcall_sim_case_widened:
     expr_vv_case F ctx func cenv cx (Call ann (IntCall (src,name)) es dflt) ==>
     expr_sim_case F ctx func cenv cx (Call ann (IntCall (src,name)) es dflt)
 Proof
-  cheat
+  pure_rewrite_tac[expr_sim_case_def, expr_vv_case_def] >>
+  rpt strip_tac >> irule expr_sim_of_vv_sim_stack_memory >>
+  conj_tac >- metis_tac[compile_expr_intcall_location] >>
+  metis_tac[]
 QED
 
 (* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
