@@ -4,7 +4,7 @@ Theory localMemoryStorePath
 Ancestors
   stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts
   list rich_list finite_map pred_set fragExec localPtrsProps loweringSlice
-  stmtSimDeclStore stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
+  stmtSimDeclStore stmtSimDecl stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
@@ -103,6 +103,9 @@ Theorem local_memory_store_path:
         (!a len. a + len <= w2n dw \/
            w2n dw + MIN (type_memory_size stv) (type_memory_size tyv) <= a ==>
            mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+        alloca_frame cenv es sa s cenv
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -156,12 +159,23 @@ Proof
   `gas_path ctx func s 0
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all tuple_run_inst_seq_gas_path >> simp[]) >>
+  `MAP FDOM es1.scopes = MAP FDOM es.scopes` by
+    (drule find_containing_scope_structure >> strip_tac >>
+     simp[Abbr `es1`, FDOM_FUPDATE] >>
+     gvs[FLOOKUP_DEF, pred_setTheory.ABSORPTION_RWT]) >>
+  `alloca_frame cenv es sa s cenv es1 t` by
+    (irule alloca_frame_local_store >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qexistsl_tac [`w2n w`, `es`, `id`, `type_memory_size entry.type`, `s`, `sz`] >>
+     simp[alloca_frame_def] >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   qexistsl_tac [`w`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   simp[stmt_state_rel_inst_idx, lookup_var_def, gas_marked_path_def] >>
   qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
   simp[venom_state_component_equality] >>
   strip_tac >> gvs[same_blocks_def, lookup_var_def] >>
-  first_assum ACCEPT_TAC
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem alloc_copy_memory_framed_path:
@@ -178,8 +192,11 @@ Theorem alloc_copy_memory_framed_path:
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?s2 w. lookup_var p s2 = SOME w /\
+      FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
       stmt_state_rel ctx func cenv cx es s2 /\
       val_in_memory tv v (w2n w) s2.vs_memory /\
+      (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+         mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
       (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s2.vs_allocas aid = SOME entry) /\
@@ -211,7 +228,33 @@ Proof
   `gas_marked_path F ctx func s0 0
      (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
     (drule_all gas_marked_path_then >> simp[]) >>
+  `!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+     mem_bytes_at ad len (mcopy (w2n w) (w2n sw) sz s1).vs_memory =
+     mem_bytes_at ad len s0.vs_memory` by
+    (rpt strip_tac >> simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint]) >>
   qexistsl_tac [`mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx`, `w`] >>
   simp[stmt_state_rel_inst_idx] >>
-  fs[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  gvs[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem alloca_frame_owned_copy:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+         lookup_var x t = SOME w) /\
+  venomMemDefs$allocas_non_overlapping t /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+               FLOOKUP t.vs_allocas aid = SOME entry) /\
+  FLOOKUP t.vs_allocas bid = SOME (b,z) /\ sa.cs_next_id <= bid /\
+  (!ad len. ad + len <= b \/ b + z <= ad ==>
+     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory) ==>
+  alloca_frame cenv es sa s cenv es t
+Proof
+  strip_tac >> irule alloca_frame_of_mem_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  first_x_assum irule >>
+  `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+  `aid <> bid` by decide_tac >>
+  fs[venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[]
 QED
