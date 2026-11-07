@@ -7,7 +7,7 @@ Ancestors
   exprSimSource exprSimDefs exprSimWordArgs exprLoweringProps exprSimOperators
   gasSummaryComposePtr gasContext stmtFragPtr fragGasPathPtr
   vyperInterpreter vyperState loweringPosts compileEnv fragExec venomState
-  list vyperAST fragGasSeqPtr
+  list vyperAST fragGasSeqPtr exprPtrUnwrap context
 
 Theorem ifexp_selected_body_nonword_outcome_ptr:
   (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx a) /\
@@ -128,4 +128,77 @@ Proof
   `sa.cs_next_var <= se.cs_next_var /\ sa.cs_next_id <= se.cs_next_id` by decide_tac >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
   conj_tac >- metis_tac[not_fresh_at_mono] >> metis_tac[not_fresh_at_mono]
+QED
+
+Theorem ifexp_nonword_framed_vv_ptr:
+  ~is_word_type t /\
+  (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx a) /\
+  (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx b) /\
+  body_expr_ptr_ok cx c /\ body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env (IfExp t c a b) es ==>
+  expr_vv_sim_ptr d ctx PG fn cenv cx ty (IfExp t c a b) es
+Proof
+  strip_tac >> rewrite_tac[expr_vv_sim_ptr_def] >> rpt strip_tac >>
+  `!e sa sb op. (e = a \/ e = b) /\ lower_value compile_expr cenv ty e sa = (op,sb) ==>
+     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op,sb) ==>
+     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `expr_type c = BaseT BoolT /\ expr_body_pre cenv cx env c es` by
+    (drule expr_body_pre_ifexp >> simp[] >> metis_tac[]) >>
+  `expr_sim_ptr d ctx PG fn cenv cx (BaseT BoolT) c es` by
+    metis_tac[body_expr_ptr_ok_def] >>
+  `?cop sc. lower_value compile_expr cenv (BaseT BoolT) c sa = (cop,sc) /\
+     fn_has_code sa sc fn` by
+    (drule_all ifexp_nonword_code_layout >>
+     disch_then (qspec_then `T` mp_tac) >> metis_tac[]) >>
+  `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
+    (irule expr_body_pre_gas_admissible >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
+  disch_then drule_all >>
+  disch_then (strip_assume_tac o REWRITE_RULE
+    [gas_outcome_ptr_def, gas_summary_ptr_at_marked])
+  >- (gvs[] >> suspend "normal")
+  >- (irule ifexp_condition_exit_ptr >> metis_tac[]) >>
+  irule ifexp_condition_exempt_ptr >> metis_tac[]
+QED
+
+Resume ifexp_nonword_framed_vv_ptr[normal]:
+  `bind (eval_expr cx c) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL v,es_end with gas_obs := [])` by
+    (fs[gas_marked_exec_ptr_def] >> metis_tac[APPEND_NIL]) >>
+  `?sel. v = BoolV sel` by
+    (irule ifexp_condition_bool >> goal_assum (drule_at Any) >> metis_tac[]) >> gvs[] >>
+  drule_all ifexp_nonword_code_layout >>
+  disch_then (qspec_then `sel` strip_assume_tac) >> gvs[] >>
+  `~t'.vs_halted` by
+    (fs[gas_marked_exec_ptr_def] >> metis_tac[gas_path_ptr_ok_not_halted]) >>
+  irule gas_outcome_ptr_conseq >>
+  irule_at Any ifexp_nonword_normal_continuation_ptr >>
+  goal_assum (drule_at (Pat `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >> simp[] >>
+  qexistsl_tac [`tops`,`env`,`d`] >> simp[expr_type_def, mk_ptr_def] >> metis_tac[]
+QED
+
+Finalise ifexp_nonword_framed_vv_ptr
+
+Theorem ifexp_nonword_expr_ptr_ok:
+  !cx t c a b.
+    ~is_word_type t /\
+    (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx a) /\
+    (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx b) /\
+    body_expr_ptr_ok cx c ==>
+    body_expr_ptr_ok cx (IfExp t c a b)
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[body_expr_ptr_ok_def] >> rpt strip_tac >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx ty (IfExp t c a b) es` by
+    (irule ifexp_nonword_framed_vv_ptr >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  simp[] >> irule expr_sim_ptr_of_vv >> goal_assum (drule_at Any) >> metis_tac[]
 QED
