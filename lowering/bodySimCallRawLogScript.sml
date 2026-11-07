@@ -126,7 +126,7 @@ Proof
   gvs[]
 QED
 
-Theorem expr_body_pre_make_array_arg[local]:
+Theorem expr_body_pre_make_array_arg:
   expr_body_pre cenv cx env (Builtin ann (MakeArray t b) args) es /\
   MEM e args /\ expr_sim_inv cenv cx env es' ==>
   expr_body_pre cenv cx env e es'
