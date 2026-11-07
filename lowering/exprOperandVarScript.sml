@@ -716,6 +716,7 @@ val compiler_literal_call_result_tac =
   rpt (IF_CASES_TAC >> simp[]) >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def];
+
 Theorem compiler_create_call_var[local]:
   as_stack_val rt (compile_create_call cfn cenv ck salted rof args sa) = (vv,sb) ==>
   !x. vv_operand vv = Var x ==> not_fresh_at sb x
@@ -1737,6 +1738,8 @@ Proof
     (rpt gen_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
   (namedCases_on `args` ["", "arg_e rest"] >- simp[compile_call_def] >>
    Cases_on `rest` >> simp[compile_call_def, LET_THM])
+QED
+
 Theorem compiler_create_salt_reserved_cong[local]:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\

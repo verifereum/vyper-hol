@@ -3722,6 +3722,8 @@ Proof
       (conj_tac >- simp[])) ORELSE
     (irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_alloc_buffer))) >>
   irule ci_mono_compile_multi_exprs >> simp[]
+QED
+
 (* Monadic creation stages preserve instruction indices just like the other
    builtin emitters. Keep the callback premise separate from generated code. *)
 val ci_mono_create_tac = fn thms => rpt (FIRST [

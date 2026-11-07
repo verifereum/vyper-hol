@@ -2490,6 +2490,8 @@ End
 Definition raw_log_topic_exprs_def:
   raw_log_topic_exprs (Builtin ann (MakeArray elem_ty bnd) es) = es /\
   raw_log_topic_exprs _ = []
+End
+
 (* ===== Interleaved creation operands ===== *)
 
 Definition compile_create_salt_def:

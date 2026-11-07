@@ -602,6 +602,8 @@ Resume compile_call_word_result_ok[selfdestruct]:
   Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE rest _ _` >>
   Cases_on `rest` >> gvs[word_result_ok_def] >>
   rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
 Resume compile_call_word_result_ok[create]:
   irule as_stack_val_word_result_ok >>
   metis_tac[compile_create_call_safe_operand]
