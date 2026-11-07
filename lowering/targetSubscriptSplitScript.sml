@@ -1217,6 +1217,50 @@ Proof
   qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
 QED
 
+(* target_subscript_base_continuation for a local root whose indices may
+   pop.  The index runs after the base, so a pop in it can shrink the local
+   the base's place is in.  Where the base's place is still live in the
+   local's value after the index (x[y.pop()] = v, or a pop that leaves the
+   base's element in place), the local's memory still holds it
+   (locals_kept, local_ptrs_rel) and the base's pointer reads what the
+   source reads.  Where the index pops the base's own place out of the
+   local's value, the target overlaps its own index, which upstream rejects
+   ("risky overlap"). *)
+Theorem target_subscript_local_pop_continuation:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
+  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e) /\
+  target_root bt = NameTarget id /\
+  type_place_target env bt = SOME bvt /\
+  subscript_vtype bvt (expr_type e) = SOME vt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key)))
+    (mid with gas_obs := [],t)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  cheat
+QED
+
 (* An element of an array or a mapping, when no index can shrink an array
    the place is already in: the base's fragment, the index's (lower_value),
    then, by the base's place type, the slot of the key
@@ -1334,5 +1378,39 @@ Theorem target_subscript_local_pop_case:
     supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e) ==>
     target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[target_case_def, target_sim_def] >> rpt strip_tac >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    metis_tac[target_subscript_base_admissible] >>
+  `?bvt. type_place_target env bt = SOME bvt /\
+          subscript_vtype bvt (expr_type e) = SOME vt` by
+    fs[type_place_target_SubscriptTarget] >>
+  drule target_subscript_compile_decompose >> strip_tac >>
+  drule_all target_subscript_compile_intervals >> strip_tac >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\
+   fn_has_code sn sb func` by
+    (irule target_subscript_interval_code >> simp[]) >>
+  `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
+    (\res ee t. ?pv. res = INL pv /\
+      target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+      t.vs_current_bb = sm.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sm.cs_current_insts)
+    (\res ee r. expr_exit res r)` by
+    (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
+     simp[target_case_def, target_sim_def] >>
+     disch_then (qspecl_then [`env`, `es`] mp_tac) >>
+     impl_tac >- fs[int_calls_expr_def] >>
+     disch_then irule >> simp[]) >>
+  irule target_subscript_bind_outcome >>
+  qexists `\pv ee t. target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+  reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[BETA_THM] >>
+  irule target_subscript_local_pop_continuation >> simp[] >>
+  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
