@@ -742,16 +742,17 @@ QED
 
 Theorem emit_reorder_output_live_coverage:
   !ps operands selected opc nl outputs dfg iops ps1 rops ps4.
+    reorder_plan dfg selected ps1 = (rops,ps4) ==>
+    emit_input_plan opc operands nl ps = (iops,ps1) ==>
     LENGTH operands <= 16 /\
     (!v. MEM (Var v) operands \/ (MEM v nl /\ ~MEM v outputs) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
-    PERM operands selected /\ emit_input_plan opc operands nl ps = (iops,ps1) /\
-    reorder_plan dfg selected ps1 = (rops,ps4) ==>
+    PERM operands selected ==>
     !v. MEM v nl ==>
       MEM (Var v) ((stack_pop (LENGTH operands) ps4.ps_stack) ++ MAP Var outputs) \/
       Var v IN FDOM ps4.ps_spilled
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> ntac 2 disch_tac >> strip_tac >>
   qabbrev_tac `keep = FILTER (\v. ~MEM v outputs) nl` >>
   `set keep SUBSET set nl` by (simp[Abbr `keep`, SUBSET_DEF, MEM_FILTER]) >>
   `!v. MEM (Var v) operands \/ MEM v keep ==>
@@ -1389,6 +1390,64 @@ Definition lineage_regular_prepare_def:
     let (eops,ps7) = generate_emit_ops inst topic ps6 in
     (iops ++ rops ++ eops,ps7)
 End
+
+Theorem lineage_regular_prepare_live_coverage:
+  !dfg inst nl ps ops qs.
+    LENGTH (compute_operands inst) <= 16 /\
+    (!v. MEM (Var v) (compute_operands inst) \/
+      (MEM v nl /\ ~MEM v inst.inst_outputs) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    lineage_regular_prepare dfg inst nl ps = (ops,qs) ==>
+    !v. MEM v nl ==> MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `lineage_regular_prepare _ _ _ _ = _` mp_tac >>
+  simp[lineage_regular_prepare_def, LET_THM, parameter_push_fold] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >> simp[] >> strip_tac >>
+  qpat_x_assum `generate_emit_ops _ _ _ = _` kall_tac >>
+  reverse (Cases_on `is_commutative inst.inst_opcode /\ LENGTH (compute_operands inst) >= 2`)
+  >- (gvs[] >>
+      qpat_assum `reorder_plan dfg (compute_operands inst) ps1 = _`
+        (mp_then Any mp_tac emit_reorder_output_live_coverage) >>
+      disch_then drule >> simp[] >>
+      disch_then (qspec_then `inst.inst_outputs` mp_tac) >> metis_tac[]) >>
+  gvs[] >>
+  Cases_on `reorder_cost oa < reorder_cost ob`
+  >- (gvs[] >>
+      qpat_assum `reorder_plan dfg (compute_operands inst) ps1 = _`
+        (mp_then Any mp_tac emit_reorder_output_live_coverage) >>
+      disch_then drule >> simp[] >>
+      disch_then (qspec_then `inst.inst_outputs` mp_tac) >> metis_tac[]) >>
+  gvs[] >>
+  `PERM (compute_operands inst)
+    (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+      [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+       EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)])` by
+    (irule genericInputReadyTheory.last_two_reorder_perm >> gvs[]) >>
+  qpat_assum `reorder_plan dfg (_ ++ _) ps1 = _`
+    (mp_then Any mp_tac emit_reorder_output_live_coverage) >>
+  disch_then drule >> simp[] >>
+  disch_then (qspec_then `inst.inst_outputs` mp_tac) >> metis_tac[]
+QED
+
+Theorem lineage_regular_preoptimistic_live_coverage:
+  !dfg inst nl ps ops qs halting ps8.
+    LENGTH (compute_operands inst) <= 16 /\
+    (!v. MEM (Var v) (compute_operands inst) \/
+      (MEM v nl /\ ~MEM v inst.inst_outputs) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    lineage_regular_prepare dfg inst nl ps = (ops,qs) /\
+    ps8 = (if inst.inst_outputs <> [] /\ (~halting \/ LENGTH inst.inst_outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) qs)
+      else qs) ==>
+    !v. MEM v nl ==> MEM (Var v) ps8.ps_stack \/ Var v IN FDOM ps8.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v nl ==> MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled` by
+    metis_tac[lineage_regular_prepare_live_coverage] >>
+  metis_tac[dead_output_pop_live_coverage]
+QED
 
 Theorem lineage_regular_prepare_decompose:
   !liveness dfg cfg fn inst nl halting term lbl ps.
