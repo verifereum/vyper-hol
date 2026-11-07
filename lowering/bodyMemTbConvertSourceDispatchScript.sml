@@ -2,7 +2,7 @@
 Theory bodyMemTbConvertSourceDispatch
 Ancestors
   bodyMemTbConvertSourceMemory bodyMemTbConvertDynamicScalar
-  bodyMemTbConvertCastCounted
+  bodyMemTbConvertDynamicCast bodyMemTbConvertWidenCounted
   bodyMemTbConvertScalarDispatch exprSimHyps exprSimHypsDefs
   compileEnv vyperTypeSystem vyperValue valueEncoding valueCopyBytes exprSimMemDefs
 
