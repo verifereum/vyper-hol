@@ -6,6 +6,8 @@ Ancestors
   compileEnv venomState list finite_map loweringPosts emitHelperProps words
   bodyPtrBytestringBuiltinsExternalSlice venomExecSemantics venomInst
   exprSimProps varsExt exprSimAlloc fragExec loweringHalt
+  bodyPtrBytestringBuiltinsCalldataReserved freshWrites emitHelper
+  bodyPtrBytestringBuiltinsBounds context
 
 (* Allocation changes only variables and the allocation book-keeping. *)
 Theorem alloca_storage_projections:
@@ -167,42 +169,52 @@ QED
 Theorem calldata_size_bounds_semantic:
   emit_op CALLDATASIZE [] sa = (limit,sm) /\
   compile_assert_slice_bounds start (Lit (n2w n)) limit sm = ((),sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fresh_vars_wrt sa s /\
+  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
   eval_operand start s = SOME (n2w a) /\
   a < dimword (:256) /\ n < dimword (:256) /\
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata ==>
   ?v q. run_inst_seq (emitted_insts sa sm) s = OK v /\
     run_inst_seq (emitted_insts sm sb) v = OK q /\
-    q = s with vs_vars := q.vs_vars /\ vars_ext s q /\
+    q = s with vs_vars := q.vs_vars /\
     stmt_state_rel ctx fn cenv cx es q /\
-    (!op w. eval_operand op s = SOME w ==> eval_operand op q = SOME w)
+    (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
 Proof
-  strip_tac >> drule_all calldata_size_runtime >> strip_tac >>
-  `eval_operand start u = SOME (n2w a)` by
-    (qpat_assum `!op w. _` (qspec_then `start` mp_tac) >> simp[]) >>
+  strip_tac >>
+  `sm.cs_next_var = SUC sa.cs_next_var /\
+   limit = Var (STRING #"%" (toString sa.cs_next_var))` by
+    (qpat_assum `emit_op _ _ _ = _` mp_tac >> POP_ASSUM_LIST (K all_tac) >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >> strip_tac >> gvs[]) >>
+  drule_all calldata_size_reserved_runtime >>
+  disch_then (qspec_then `s` strip_assume_tac) >>
+  `eval_operand start u = SOME (n2w a)` by simp[] >>
   `eval_operand (Lit (n2w n)) u = SOME (n2w n)` by simp[eval_operand_def] >>
-  drule_all slice_bounds_natural_runtime >> strip_tac >>
+  `!op z. MEM op [start;Lit (n2w n);limit] /\ op = Var z ==>
+    not_fresh_at sm z` by
+    (simp[] >> rpt strip_tac
+     >- (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     simp[not_fresh_at_def]) >>
+  `LENGTH u.vs_call_ctx.cc_calldata = LENGTH s.vs_call_ctx.cc_calldata` by
+    simp[update_var_def] >>
+  drule_all slice_bounds_reserved_natural_runtime >> strip_tac >>
   `run_inst_seq (emitted_insts sm sb) u = OK p` by fs[] >>
   `p = s with vs_vars := p.vs_vars` by
     (qpat_x_assum `p = u with vs_vars := _` mp_tac >> simp[update_var_def]) >>
-  `!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w` by
-    (rpt strip_tac >>
-     qpat_x_assum `!op w. eval_operand op u = SOME w ==> _` irule >>
-     qpat_x_assum `!op w. eval_operand op s = SOME w ==> _` irule >> simp[]) >>
   suspend "frame"
 QED
 
 Resume calldata_size_bounds_semantic[frame]:
-  `vars_ext s p` by
-    (simp[vars_ext_def] >> simp[SUBMAP_FLOOKUP_EQN] >>
-     rpt strip_tac >>
-     qpat_x_assum `!op w. eval_operand op s = SOME w ==> eval_operand op p = SOME w`
-       (qspecl_then [`Var x`,`y`] mp_tac) >>
-     simp_tac std_ss [eval_operand_def, lookup_var_def] >>
-     disch_then irule >> first_assum ACCEPT_TAC) >>
+  `!x. not_fresh_at sa x ==> lookup_var x p = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at sm x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     qpat_assum `!x. not_fresh_at sm x ==> _` (qspec_then `x` mp_tac) >>
+     qpat_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
   `stmt_state_rel ctx fn cenv cx es p` by
-    (irule stmt_state_rel_vars_ext >> qexists_tac `s` >> simp[]) >>
+    (irule stmt_state_rel_reserved_vars_update >>
+     qexistsl_tac [`s`,`sa`] >> simp[]) >>
   qexistsl_tac [`u`,`p`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 Finalise calldata_size_bounds_semantic
@@ -214,7 +226,8 @@ Theorem compile_slice_calldata_semantic:
   32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
-  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  eval_operand start s = SOME (n2w a) /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -229,7 +242,8 @@ Theorem compile_slice_calldata_semantic:
     ptr_covers G2 tn2 r t N /\ ptr_covers G2 tn2 p t (N - 32) /\
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t.vs_halted /\
-    fresh_vars_wrt s1 t /\ q = t with vs_vars := q.vs_vars /\
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt s1 t) /\
+    q = t with vs_vars := q.vs_vars /\
     compile_slice_out_buf N sa = ((out,data),s1) /\
     emit_op CALLDATASIZE [] s1 = (limit,s2) /\
     compile_assert_slice_bounds start (Lit (n2w n)) limit s2 = ((),s3) /\
@@ -268,24 +282,31 @@ Proof
   drule_all compile_slice_calldata_runtime >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts s2 s3) v = OK q` by fs[] >>
-  `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z` by
+  `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var` by
+    (qpat_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     qpat_assum `emit_op ADD _ _ = _` mp_tac >>
+     qpat_assum `emit_op CALLDATASIZE [] _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> rpt strip_tac >> gvs[]) >>
+  `!x. not_fresh_at s1 x ==> lookup_var x q = lookup_var x t` by
     (rpt strip_tac >>
-     qpat_x_assum `!op z. eval_operand op v = SOME z ==> _` irule >>
-     qpat_x_assum `!op z. eval_operand op t = SOME z ==> _` irule >> simp[]) >>
+     `not_fresh_at s2 x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `s1` >> simp[]) >>
+     qpat_assum `!x. not_fresh_at s2 x ==> _` (qspec_then `x` mp_tac) >>
+     qpat_assum `!x. not_fresh_at s1 x ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
   `q = t with vs_vars := q.vs_vars` by
     (qpat_x_assum `q = v with vs_vars := _` mp_tac >> simp[update_var_def]) >>
   suspend "pure_frame"
 QED
 
 Resume compile_slice_calldata_semantic[pure_frame]:
-  `vars_ext t q` by
-    (simp[vars_ext_def, SUBMAP_FLOOKUP_EQN] >> rpt strip_tac >>
-     qpat_x_assum `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z`
-       (qspecl_then [`Var x`,`y`] mp_tac) >>
-     simp_tac std_ss [eval_operand_def, lookup_var_def] >>
-     disch_then irule >> simp[update_var_def]) >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   `stmt_state_rel ctx fn cenv cx es q` by
-    (irule stmt_state_rel_vars_ext >> qexists_tac `t` >> simp[]) >>
+    (irule stmt_state_rel_reserved_vars_update >>
+     qexistsl_tac [`t`,`s1`] >> simp[]) >>
   `!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>
     lookup_var x q = SOME val` by
     (rpt strip_tac >>
@@ -293,10 +314,10 @@ Resume compile_slice_calldata_semantic[pure_frame]:
        (qpat_assum `!op. _ ==> eval_operand op t = eval_operand op s /\ _`
           (qspec_then `Var x` mp_tac) >>
         simp[eval_operand_def]) >>
-     qpat_assum `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z`
-       (qspecl_then [`Var x`,`val`] mp_tac) >>
-     simp_tac std_ss [eval_operand_def] >>
-     disch_then irule >> fs[eval_operand_def]) >>
+     `not_fresh_at s1 x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     qpat_assum `!x. not_fresh_at s1 x ==> lookup_var x q = _`
+       (qspec_then `x` mp_tac) >> fs[eval_operand_def]) >>
   suspend "local_frame"
 QED
 
@@ -318,10 +339,7 @@ Resume compile_slice_calldata_semantic[local_frame]:
     (qpat_assum `q = t with vs_vars := _` SUBST1_TAC >> simp[update_var_def]) >>
   `FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n w,N)` by simp[] >>
   `eval_operand (Var r) q = SOME w /\
-   eval_operand (Var p) q = SOME (w + 32w)` by
-    (conj_tac >>
-     qpat_assum `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z`
-       irule >> simp[eval_operand_def]) >>
+   eval_operand (Var p) q = SOME (w + 32w)` by metis_tac[] >>
   `w2n (w + 32w) = w2n w + 32` by
     (`w2n w + 32 < dimword (:256)` by decide_tac >>
      simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w]) >>
@@ -329,8 +347,7 @@ Resume compile_slice_calldata_semantic[local_frame]:
 QED
 
 Resume compile_slice_calldata_semantic[copy]:
-  `eval_operand start q = SOME (n2w a)` by
-    (qpat_assum `!op z. eval_operand op v = SOME z ==> _` irule >> simp[]) >>
+  `eval_operand start q = SOME (n2w a)` by simp[] >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]) (fn_insts fn)` by
     (drule_all buffer_alloc_code >> strip_tac >>
      drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
