@@ -4551,14 +4551,14 @@ Theorem calldata_typed_args_post_gas_obs[local]:
   typed_args_post ctx func cenv cx (es with gas_obs := g) sa s0 es' args xs vs s <=>
   typed_args_post ctx func cenv cx es sa s0 es' args xs vs s
 Proof
-  simp[typed_args_post_def, wb_frame_def, locals_kept_def]
+  simp[typed_args_post_def, wb_frame_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem calldata_vv_post_gas_obs[local]:
   vv_post ctx func cenv cx e (es with gas_obs := g) sa sb s0 es' tv vv s <=>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
-  simp[vv_post_def, locals_kept_def]
+  simp[vv_post_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem calldata_gas_explicit_false[local]:
