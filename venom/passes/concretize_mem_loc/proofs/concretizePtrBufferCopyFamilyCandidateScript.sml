@@ -297,7 +297,10 @@ Proof
       step_writes_def, range_bytes_def, source_memory_write_ranges_def,
       sized_source_write_range_def] >>
   gvs[step_inst_non_invoke] >>
-  gvs[step_inst_base_def, eval_operand_def, AllCaseEqs()] >>
+  qpat_x_assum `step_inst_base _ _ = OK _`
+    (mp_tac o CONV_RULE (computeLib.RESTR_EVAL_CONV
+      [``write_memory_with_expansion``, ``halt_state``, ``set_returndata``])) >>
+  strip_tac >> gvs[eval_operand_def, AllCaseEqs()] >>
   gvs[active_inst_def, mk_raw_function_def,
       write_memory_with_expansion_def, write_memory_def, step_writes_def,
       range_bytes_def, source_memory_write_ranges_def, sized_source_write_range_def] >>
@@ -380,4 +383,279 @@ Proof
   EVAL_TAC >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
   gvs[fn_insts_blocks_def, fcgDefsTheory.get_invoke_targets_def] >>
   rpt conj_tac >> strip_tac >> gvs[]
+QED
+
+Theorem ptr_buffer_candidate_main_stage:
+  f = mk_raw_function "main"
+    [<|bb_label := "main"; bb_instructions :=
+      [mk_inst 0 RETURNDATACOPY [Lit 0w; Lit 0w; Lit 1w] [];
+       mk_inst 1 REVERT [Lit 0w; Lit 1w] []]|>] /\
+  C = mk_venom_context [f] (SOME "main") /\
+  Ct = mk_venom_context [f with fn_eom := SOME 0] (SOME "main") ==>
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct
+Proof
+  strip_tac >> simp[ctx_pass_stage_def, mk_venom_context_def] >>
+  qexistsl_tac [`ARB with cu_context := C`,
+    `irSupply$init_ir_supply (ARB with cu_context := C)`,
+    `<|fpo_function := f with fn_eom := SOME 0; fpo_label_map := [];
+       fpo_supply := irSupply$init_ir_supply (ARB with cu_context := C)|>`] >>
+  simp[fn_pass_step_def, o1_walk_view_def, walk_view_def,
+       venomPassDispatcherTheory.execute_configured_fn_pass_def] >>
+  gvs[] >> EVAL_TAC >> simp[EVERY_MEM]
+QED
+
+Theorem ptr_buffer_candidate_initial_state:
+  vs = (ARB : venom_state) with
+    <|vs_vars := FEMPTY; vs_allocas := FEMPTY; vs_halted := F;
+      vs_memory := []; vs_alloca_next := 0; vs_fmp := 0w;
+      vs_initial_fmp := 0w; vs_code := []; vs_data_section := [];
+      vs_labels := FEMPTY |+ ("code_end",0w);
+      vs_call_ctx := (ARB with cc_static := F); vs_returndata := [7w]|> ==>
+  o1_run_state_ok vs /\ vs.vs_alloca_next < dimword (:256) /\
+  vs.vs_vars = FEMPTY /\ vs.vs_allocas = FEMPTY /\ vs.vs_returndata = [7w]
+Proof
+  strip_tac >> gvs[o1_run_state_ok_def, o1_initial_state_ok_def,
+    lowerDloadDefsTheory.code_layout_valid_def] >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_buffer_candidate_shared_witness:
+  ?rpolicy C Ct vs a at zt.
+  EVERY frameRel$retpc_shape_ok C.ctx_functions /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved 0 C /\ ptr_discipline 0 C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first ["main"] C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom Ct = SOME 0 /\
+  LIST_REL (ptr_paired_code (\f g. g.fn_name = f.fn_name) (\f. FEMPTY)
+    (FEMPTY : (allocation,num # num) fmap)) C.ctx_functions Ct.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (FEMPTY : (allocation,num) fmap) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) Ct.ctx_functions /\
+  (!f g. ptr_paired_code (\f g. g.fn_name = f.fn_name) (\f. FEMPTY)
+    (FEMPTY : (allocation,num # num) fmap) f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix (\f g. g.fn_name = f.fn_name) (\f. FEMPTY) FEMPTY
+    0 vs C Ct [a] a [at] at [] [0] (FEMPTY |+ (0,a.po_fn)) FEMPTY
+    [] FEMPTY [] (FEMPTY |+ (0,0))
+    [([0],FEMPTY |+ (0,a.po_fn),FEMPTY,[],FEMPTY,[],FEMPTY |+ (0,0))] [] [] /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions FEMPTY a.po_inst /\
+  ptr_chrono_step Ct at zt /\
+  MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
+  ~(?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix (\f g. g.fn_name = f.fn_name) (\f. FEMPTY) FEMPTY
+      0 vs C Ct ([a] ++ delta) z ([at] ++ [zt]) zt ([] ++ [LENGTH [a] - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      ([([0],FEMPTY |+ (0,a.po_fn),FEMPTY,[],FEMPTY,[],FEMPTY |+ (0,0))] ++ snapshots)
+      calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions FEMPTY z.po_inst)
+Proof
+  qabbrev_tac `f = mk_raw_function "main"
+    [<|bb_label := "main"; bb_instructions :=
+      [mk_inst 0 RETURNDATACOPY [Lit 0w; Lit 0w; Lit 1w] [];
+       mk_inst 1 REVERT [Lit 0w; Lit 1w] []]|>]` >>
+  qabbrev_tac `C = mk_venom_context [f] (SOME "main")` >>
+  qabbrev_tac `Ct = mk_venom_context [f with fn_eom := SOME 0] (SOME "main")` >>
+  qabbrev_tac `vs = (ARB : venom_state) with
+    <|vs_vars := FEMPTY; vs_allocas := FEMPTY; vs_halted := F;
+      vs_memory := []; vs_alloca_next := 0; vs_fmp := 0w;
+      vs_initial_fmp := 0w; vs_code := []; vs_data_section := [];
+      vs_labels := FEMPTY |+ ("code_end",0w);
+      vs_call_ctx := (ARB with cc_static := F); vs_returndata := [7w]|>` >>
+  qabbrev_tac `t = vs with <|vs_prev_bb := NONE; vs_current_bb := "main"; vs_inst_idx := 0|>` >>
+  qabbrev_tac `at = ptr_observe [] [] FEMPTY entry_taint (f with fn_eom := SOME 0)
+    (mk_inst 0 RETURNDATACOPY [Lit 0w; Lit 0w; Lit 1w] []) t` >>
+  `o1_run_state_ok vs /\ vs.vs_alloca_next < dimword (:256) /\
+   vs.vs_vars = FEMPTY /\ vs.vs_allocas = FEMPTY /\ vs.vs_returndata = [7w]` by
+    (irule ptr_buffer_candidate_initial_state >> simp[Abbr `vs`]) >>
+  `?a. a = ptr_observe [] [] FEMPTY entry_taint f
+    (mk_inst 0 RETURNDATACOPY [Lit 0w; Lit 0w; Lit 1w] []) t /\
+    ptr_paired_prefix (\f g. g.fn_name = f.fn_name) (\f. FEMPTY) FEMPTY
+      0 vs C Ct [a] a [at] at [] [0] (FEMPTY |+ (0,f)) FEMPTY
+      [] FEMPTY [] (FEMPTY |+ (0,0))
+      [([0],FEMPTY |+ (0,f),FEMPTY,[],FEMPTY,[],FEMPTY |+ (0,0))] [] []` by
+    (irule ptr_buffer_candidate_main_paired_root >> simp[Abbr `f`, Abbr `C`, Abbr `Ct`, Abbr `t`, Abbr `at`]) >>
+  `?zt. ptr_chrono_step Ct at zt` by
+    (irule ptr_buffer_candidate_main_target_step >>
+     simp[Abbr `f`, Abbr `at`, Abbr `t`] >>
+     qexists_tac `vs with <|vs_prev_bb := NONE; vs_current_bb := "main"; vs_inst_idx := 0|>` >> simp[]) >>
+  `EVERY frameRel$retpc_shape_ok C.ctx_functions` by
+    (simp[Abbr `C`, Abbr `f`, mk_venom_context_def,
+      frameRelTheory.retpc_shape_ok_def] >> EVAL_TAC >>
+     rpt strip_tac >> gvs[]) >>
+  qexistsl_tac [`ARB`, `C`, `Ct`, `vs`, `a`, `at`, `zt`] >>
+  `ctx_pass_stage ARB (CFP_Simple VP_ConcretizeMemLoc) (o1_walk_view ARB 2) C Ct` by
+    (irule ptr_buffer_candidate_main_stage >> simp[Abbr `f`, Abbr `C`, Abbr `Ct`]) >>
+  `mem_inv raw_mem_ok C vs` by
+    (irule ptr_buffer_candidate_main_raw_memory >> simp[Abbr `f`, Abbr `C`]) >>
+  `fixed_region_reserved 0 C /\ ptr_discipline 0 C vs` by
+    (irule ptr_buffer_candidate_main_discipline >> simp[Abbr `f`, Abbr `C`]) >>
+  mp_tac ptr_buffer_candidate_main_static >>
+  (impl_tac >- simp[Abbr `f`, Abbr `C`, Abbr `Ct`]) >> strip_tac >>
+  `a.po_fn = f` by simp[ptr_observe_def] >>
+  fs[] >>
+  conj_tac >- (simp[Abbr `C`, Abbr `Ct`, ptr_paired_code_def] >>
+    simp[Abbr `f`] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- simp[ptr_paired_code_def] >>
+  simp[ptr_observe_def, mk_inst_def, Abbr `at`, concretize_inst_with_positions_def] >>
+  conj_tac >- gvs[ptr_observe_def, mk_inst_def] >>
+  rpt gen_tac >> rpt disch_tac >>
+  Cases_on `delta = []` >- simp[] >> simp[] >> disj1_tac >>
+  irule ptr_buffer_candidate_main_no_extension >>
+  simp[Abbr `f`, Abbr `t`, ptr_observe_def, mk_inst_def]
+QED
+
+Theorem ptr_buffer_candidate_counterexample:
+  ?rpolicy C Ct vs a at zt.
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C Ct /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved 0 C /\ ptr_discipline 0 C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first ["main"] C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom Ct = SOME 0 /\
+  LIST_REL (ptr_paired_code (\f g. g.fn_name = f.fn_name) (\f. FEMPTY)
+    (FEMPTY : (allocation,num # num) fmap)) C.ctx_functions Ct.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (FEMPTY : (allocation,num) fmap) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) Ct.ctx_functions /\
+  (!f g. ptr_paired_code (\f g. g.fn_name = f.fn_name) (\f. FEMPTY)
+    (FEMPTY : (allocation,num # num) fmap) f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix (\f g. g.fn_name = f.fn_name) (\f. FEMPTY) FEMPTY
+    0 vs C Ct [a] a [at] at [] [0] (FEMPTY |+ (0,a.po_fn)) FEMPTY
+    [] FEMPTY [] (FEMPTY |+ (0,0))
+    [([0],FEMPTY |+ (0,a.po_fn),FEMPTY,[],FEMPTY,[],FEMPTY |+ (0,0))] [] [] /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions FEMPTY a.po_inst /\
+  ptr_chrono_step Ct at zt /\
+  MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
+  ~(?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix (\f g. g.fn_name = f.fn_name) (\f. FEMPTY) FEMPTY
+      0 vs C Ct ([a] ++ delta) z ([at] ++ [zt]) zt ([] ++ [LENGTH [a] - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      ([([0],FEMPTY |+ (0,a.po_fn),FEMPTY,[],FEMPTY,[],FEMPTY |+ (0,0))] ++ snapshots)
+      calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions FEMPTY z.po_inst)
+Proof
+  mp_tac ptr_buffer_candidate_shared_witness >>
+  strip_tac >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `rpolicy` >> simp[]
+QED
+
+Theorem ptr_buffer_copy_frozen_obligation_false:
+  ~(!rpolicy C C' vs lo names eom R lp positions h a ht at done tokens
+      registry births PT TG saved entries H calls ws zt.
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst)
+Proof
+  strip_tac >>
+  qpat_x_assum `!rpolicy C C' vs lo names eom R lp positions h a ht at done tokens registry births PT TG saved entries H calls ws zt. _`
+    (mp_tac o BETA_RULE o GEN_ALL o
+      Q.INST [`R` |-> `\f g. g.fn_name = f.fn_name`,
+              `lp` |-> `\f. (FEMPTY : (allocation,num) fmap)`] o SPEC_ALL) >>
+  disch_tac >>
+  mp_tac ptr_buffer_candidate_counterexample >> strip_tac >>
+  qpat_x_assum `!zt ws vs tokens saved rpolicy registry positions names lo ht h eom entries done calls births at a TG PT H C' C. _`
+    (drule_all o SPEC_ALL) >> metis_tac[]
+QED
+
+(* This is the frameRel-qualified contract as parsed in the family theory. *)
+Theorem ptr_buffer_copy_exact_frozen_obligation_false:
+  ~(!rpolicy C C' vs lo names eom R lp positions h a ht at done tokens
+      registry births PT TG saved entries H calls ws zt.
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  LIST_REL (ptr_paired_code R lp positions) C.ctx_functions C'.ctx_functions /\
+  EVERY (\f. fn_inst_wf f /\ frameRel$retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (lp f) (Allocation i.inst_id)))) C.ctx_functions /\
+  EVERY (\g. ALL_DISTINCT (fn_labels g)) C'.ctx_functions /\
+  (!f g. ptr_paired_code R lp positions f g ==> g.fn_name = f.fn_name) /\
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt /\ MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] ==>
+  ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
+    delta <> [] /\ LENGTH snapshots = LENGTH delta /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ delta) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens' registry' births' PT' TG' saved' entries'
+      (H ++ snapshots) calls' ws' /\
+    z.po_inst.inst_opcode <> NOP /\
+    zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst)
+Proof
+  strip_tac >>
+  qpat_x_assum `!rpolicy C C' vs lo names eom R lp positions h a ht at done tokens registry births PT TG saved entries H calls ws zt. _`
+    (mp_tac o BETA_RULE o GEN_ALL o
+      Q.INST [`R` |-> `\f g. g.fn_name = f.fn_name`,
+              `lp` |-> `\f. (FEMPTY : (allocation,num) fmap)`] o SPEC_ALL) >>
+  disch_tac >>
+  mp_tac ptr_buffer_candidate_shared_witness >> strip_tac >>
+  `EVERY (\f. fn_inst_wf f /\ frameRel$retpc_shape_ok f /\ opaque_use_ok f /\
+    first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
+    ALL_DISTINCT (fn_labels f) /\
+    (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
+      IS_SOME (FLOOKUP (FEMPTY : (allocation,num) fmap) (Allocation i.inst_id)))) C.ctx_functions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_x_assum `!zt ws vs tokens saved rpolicy registry positions names lo ht h eom entries done calls births at a TG PT H C' C. _`
+    (drule_all o SPEC_ALL) >> metis_tac[]
 QED
