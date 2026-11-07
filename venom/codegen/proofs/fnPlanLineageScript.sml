@@ -145,6 +145,63 @@ Proof
   >> qexists_tac `ps_succ` >> simp[]
 QED
 
+Theorem dfs_calls_lineage_origin[local]:
+  !lv dfg cfg fn ps0.
+  (!wl visited ps. dfs_aux_call lv dfg cfg fn ps0 wl visited ps ==>
+    dfs_aux_call lv dfg cfg fn ps0 wl visited ps /\
+    (wl = [] \/ ?lbl. wl = [lbl] /\
+      (~MEM lbl visited ==> lineage_state lv dfg cfg fn ps0 lbl ps))) /\
+  (!stack spilled wl visited ps.
+    dfs_succs_call lv dfg cfg fn ps0 stack spilled wl visited ps ==>
+    dfs_succs_call lv dfg cfg fn ps0 stack spilled wl visited ps /\
+    ?pred pb before ops after.
+      lineage_state lv dfg cfg fn ps0 pred before /\
+      dfs_block_state lv dfg cfg fn ps0 pred before /\
+      lookup_block pred fn.fn_blocks = SOME pb /\
+      generate_block_plan lv dfg cfg fn pb before = SOME (ops,after) /\
+      EVERY (\succ. MEM succ (cfg_succs_of cfg pred)) wl /\
+      stack = after.ps_stack /\ spilled = after.ps_spilled)
+Proof
+  rpt gen_tac >> ho_match_mp_tac dfs_aux_call_ind >>
+  rpt strip_tac >> gvs[] >>
+  simp[dfs_aux_call_entry, lineage_state_entry]
+  >- (irule dfs_aux_call_visited >> goal_assum (drule_at Any) >> simp[])
+  >- (irule dfs_aux_call_missing >> goal_assum (drule_at Any) >> simp[])
+  >- (irule dfs_aux_call_succs >> goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >> qexists_tac `[]` >> simp[])
+  >- (qexistsl_tac [`lbl`, `bb`, `ps`, `block_ops`, `ps'`] >>
+      simp[listTheory.EVERY_MEM, dfs_block_state_def] >>
+      qexistsl_tac [`[]`, `visited`] >> simp[])
+  >- (irule dfs_aux_call_rest >> goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[])
+  >- (irule dfs_aux_call_branch >> goal_assum (drule_at Any))
+  >- (strip_tac >>
+      `dfs_block_state lv dfg cfg fn ps0 succ
+        (ps with <|ps_stack := after.ps_stack; ps_spilled := after.ps_spilled|>)` by
+        (simp[dfs_block_state_def] >> qexistsl_tac [`[]`, `visited`] >>
+         simp[] >> irule dfs_aux_call_branch >> goal_assum (drule_at Any)) >>
+      qmatch_goalsub_abbrev_tac `lineage_state _ _ _ _ _ _ target` >>
+      `target = target with <|ps_stack := after.ps_stack;
+                              ps_spilled := after.ps_spilled|>` by simp[Abbr `target`] >>
+      pop_assum SUBST1_TAC >>
+      irule lineage_state_step >>
+      conj_tac >- simp[Abbr `target`] >>
+      qexistsl_tac [`pb`, `ops`, `before.ps_cleanup_height`, `pred`,
+        `before.ps_cleanup_promised`, `before`, `before`, `after`] >> simp[])
+  >- (irule dfs_aux_call_sibling >> goal_assum (drule_at Any) >> simp[]) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem dfs_block_state_lineage_state:
+  !lv dfg cfg fn ps0 lbl ps.
+    dfs_block_state lv dfg cfg fn ps0 lbl ps ==>
+    lineage_state lv dfg cfg fn ps0 lbl ps
+Proof
+  rpt strip_tac >> gvs[dfs_block_state_def] >>
+  drule (cj 1 dfs_calls_lineage_origin) >> simp[]
+QED
+
 Theorem dfs_calls_trace_embedding[local]:
   !lv dfg cfg fn ps0.
   (!wl visited ps. dfs_aux_call lv dfg cfg fn ps0 wl visited ps ==>
