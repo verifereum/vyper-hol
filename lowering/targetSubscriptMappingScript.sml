@@ -493,7 +493,7 @@ Proof
   strip_tac >> drule_all target_mapping_run >> strip_tac >>
   drule_all target_mapping_run_path >> strip_tac >>
   `es'' = es'` by metis_tac[target_mapping_extend_place] >> gvs[] >>
-  `wb_frame cenv es es sa s0 t` by
+  `wb_frame cenv es es' sa s0 t` by
     (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
      qexistsl_tac [`s`, `es'.scopes`, `sm`] >> simp[] >>
      metis_tac[]) >>
@@ -571,7 +571,7 @@ Proof
          ``\z:venom_state. z.vs_labels``]) >> simp[]) >>
   `eval_operand bop u = SOME slot` by
     (Cases_on `bop` >> gvs[eval_operand_def]) >>
-  `wb_frame cenv es es sa s0 u` by
+  `wb_frame cenv es es' sa s0 u` by
     (irule wb_frame_allocating_tail >> conj_tac >- simp[] >>
      qexistsl_tac [`s`, `es'.scopes`, `sc`] >> simp[] >> metis_tac[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
