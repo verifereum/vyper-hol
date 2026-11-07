@@ -797,6 +797,7 @@ Theorem for_range_checked_parts:
       sb0.cs_current_insts =
         [mk_inst (st.cs_next_id + 14) MSTORE [Var p; Var cv] []] /\
       sb0.cs_next_var = st.cs_next_var + 9 /\ cs_extends st sb0 /\
+      st.cs_next_id <= sb0.cs_next_id /\
       compile_stmts bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = ((), sb1) /\
       fn_has_code sb0 sb1 func /\
       lookup_block st.cs_current_bb func.fn_blocks =
@@ -909,6 +910,7 @@ Proof
   >- simp[Abbr `sb0`]
   >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
+  >- simp[Abbr `sb0`]
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- (qpat_assum `!l b. MEM b _ /\ _ ==> _` irule >>
@@ -1414,12 +1416,27 @@ QED
 
 Resume for_range_checked_tail_outcome[loop_frames]:
   conj_tac >- simp[block_is_terminated_def] >>
-  rpt strip_tac >>
-  qpat_x_assum `!a b. FLOOKUP t0.vs_allocas a = SOME b ==> _`
-    (drule_then assume_tac) >>
-  qpat_x_assum `!a b. FLOOKUP _ a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b`
-    irule >>
-  simp[jump_to_def]
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a b. FLOOKUP t0.vs_allocas a = SOME b ==> _`
+        (drule_then assume_tac) >>
+      qpat_x_assum `!a b. FLOOKUP _ a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b`
+        irule >>
+      simp[Abbr `cc`, jump_to_def]) >>
+  `alloca_frame cenv es st t0 cenv es cc` by
+    (irule alloca_frame_of_mem_frame >>
+     simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     `sA.vs_memory = t0.vs_memory` by
+       metis_tac[stmtSimDeclPathTheory.exec_alloca_memory] >>
+     simp[Abbr `cc`, jump_to_def]) >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `es`, `cc`, `st`] >>
+  simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> simp[Abbr `cc`, jump_to_def] >> metis_tac[]) >>
+  qpat_x_assum `!frame_start. _` (qspec_then `st` mp_tac) >>
+  simp[alloca_frame_def]
 QED
 
 Resume for_range_checked_tail_outcome[bad_bound]:
