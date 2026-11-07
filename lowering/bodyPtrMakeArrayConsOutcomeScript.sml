@@ -5,7 +5,7 @@ Ancestors
   bodyPtrMakeArrayConsSource bodyPtrMakeArrayConsLayout bodyPtrMakeArrayConsBind
   bodyPtrMakeArrayConsInvariant bodyPtrMakeArrayChildUnwrap bodyPtrMakeArrayZeroWidth
   bodyPtrMakeArrayPositiveFrame bodyPtrMakeArrayPositiveBytes bodyPtrMakeArrayPositiveWord
-  exprLoweringProps exprOperandVar fragExec emitHelperProps compileEnv
+  exprLoweringProps exprOperandVar fragExec emitHelperProps compileEnv loweringPosts fragGasPathPtr
 
 Theorem literal_cons_compiler_stages:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
@@ -56,3 +56,138 @@ QED
    hypothesis; it is not inferred backwards from literal_loop_frame.
    The marked child's source input may instead have gas_obs replaced;
    ConsSource supplies that input without changing the fixed snapshot. *)
+
+(* Zero-width operational branch: the child has already run, but ADD and
+   unwrap still run on that very endpoint before the prefix is extended. *)
+Theorem literal_cons_zero_endpoint:
+  literal_loop_frame ctx func ce cx d root aid addr capacity
+    ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
+  unwrap_value ce vv sn = (op,su) /\
+  compile_store_memory ce op (Var dst) (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
+  fn_has_code si sb func /\ local_ptrs_reserved ce si /\ local_ptrs_reserved ce fr /\
+  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
+  eval_expr cx e esi = (INL raw,es') /\ read_result cx raw es' = (INL v,es') /\
+  expr_body_pre ce cx env e esi /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  val_wf tv v /\ type_memory_bytes ce (expr_type e) = 0 /\
+  lowered_value_type ce e = expr_type e /\
+  ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  ~s.vs_halted /\ lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
+  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
+  (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
+  (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok ce e p.ptr_operand G s) /\
+  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
+  ?z H tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+    literal_loop_frame ctx func ce cx d root aid addr capacity
+      ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,0)]) off /\
+    literal_prefix_ok (cells ++ [(tv,v,addr+off,0)]) tm z
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all literal_cons_compiler_stages >> strip_tac >>
+  `stmt_state_rel ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
+  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_var <= sb.cs_next_var /\
+   si.cs_next_id <= sb.cs_next_id` by gvs[ci_mono_def] >>
+  drule_all literal_zero_child_materialize >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `val_footprint tv v = 0` by
+    (drule_all literal_annotation_slot >> strip_tac >>
+     `val_footprint tv v <= 0` by metis_tac[] >> decide_tac) >>
+  `?a mem. val_in_memory tv v a mem` by
+    (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  qexistsl [`z`, `H`, `tm`] >> simp[] >>
+  drule_all literal_zero_frame_extend >> simp[]
+QED
+
+Theorem literal_cons_zero_outcome_ptr:
+  expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e es /\
+  literal_loop_frame ctx func ce cx d root aid addr capacity
+    ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
+  unwrap_value ce vv sn = (op,su) /\
+  compile_store_memory ce op (Var dst) (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
+  fn_has_code si sb func /\ local_ptrs_reserved ce si /\ local_ptrs_reserved ce fr /\
+  fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
+  (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
+  (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+  expr_body_pre ce cx env e es /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  type_memory_bytes ce (expr_type e) = 0 /\ lowered_value_type ce e = expr_type e /\
+  ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+    (\res ee H tm z. ?v. res = INL v /\ value_has_type tv v /\
+      literal_loop_frame ctx func ce cx d root aid addr capacity
+        ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,0)]) off /\
+      literal_prefix_ok (cells ++ [(tv,v,addr+off,0)]) tm z)
+    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all literal_cons_compiler_stages >> strip_tac >>
+  drule literal_loop_frame_runtime >> strip_tac >>
+  qpat_x_assum `expr_vv_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[bodyPtrDefsTheory.expr_vv_sim_ptr_def] >>
+  disch_then drule_all >> strip_tac >>
+  irule literal_result_bind_outcome_ptr >>
+  qexists `\raw ee H tm z.
+    vv_post ctx func ce cx e es si sm s0 ee raw vv z /\
+    z.vs_current_bb = sm.cs_current_bb /\ z.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    ghost_inv d ce cx ee H tm z /\ ptr_vv_ok cx (expr_type e) raw vv ee H tm z /\
+    (!t arg. vv = StackValue t arg /\ ~is_word_type (expr_type e) ==>
+      ptr_buf_ok ce e arg H z) /\
+    (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+      ptr_buf_ok ce e p.ptr_operand H z) /\
+    ghost_kept ce es si G0 tn0 s0 H tm` >>
+  conj_tac >- suspend "normal" >> suspend "child"
+QED
+
+Resume literal_cons_zero_outcome_ptr[child]:
+  drule gasSummaryComposePtrTheory.gas_outcome_ptr_conseq >> disch_then irule >>
+  simp[] >> rpt strip_tac >>
+  Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def] >>
+  metis_tac[]
+QED
+
+Resume literal_cons_zero_outcome_ptr[normal]:
+  rpt gen_tac >> strip_tac >> fs[] >>
+  `ee with gas_obs := [] = ee` by
+    (simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  drule literal_marked_child_materialises >> simp[] >>
+  disch_then drule_all >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `eval_expr cx e marked = _` >>
+  `literal_loop_frame ctx func ce cx d root aid addr capacity
+     ees fr sf Gf tnf marked si G0 tn0 s0 cells off` by
+    (gvs[Abbr `marked`, literal_loop_frame_def, bodyPtrDefsTheory.ghost_inv_def,
+        bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
+  `ghost_kept ce marked si G0 tn0 s0 G tn` by
+    (gvs[Abbr `marked`, bodyPtrDefsTheory.ghost_kept_def] >> metis_tac[]) >>
+  `expr_body_pre ce cx env e marked` by simp[Abbr `marked`] >>
+  `lookup_var root t = SOME (n2w addr)` by
+    (gvs[literal_loop_frame_def, vv_post_def] >> metis_tac[]) >>
+  `op_taint tn (Var root) = {}` by
+    (gvs[literal_loop_frame_def, bodyPtrDefsTheory.ghost_kept_def,
+         bodyPtrDefsTheory.ptr_covers_def, ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  `~t.vs_halted` by
+    (qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gasSummaryComposePtrTheory.gas_marked_exec_ptr_def] >>
+     metis_tac[gas_path_ptr_erase, fragGasPathTheory.gas_path_normal]) >>
+  `!ty arg. vv = StackValue ty arg ==> ptr_buf_ok ce e arg G t` by metis_tac[] >>
+  drule_at (Pat `eval_expr _ _ _ = _`) literal_cons_zero_endpoint >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  simp[] >> disch_then drule_all >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  simp[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
+  qexists `[]` >> disj1_tac >>
+  qexistsl [`INL v'`, `ee`, `H`, `tm`, `OK z`] >> simp[]
+
+QED
+Finalise literal_cons_zero_outcome_ptr
