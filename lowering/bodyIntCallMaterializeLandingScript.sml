@@ -65,12 +65,59 @@ Proof
   metis_tac[]
 QED
 
+Theorem immutable_materialization_snapshot:
+  compile_imm_copy_to_memory ctor imm src dst n off sa = ((),sb) /\
+  (ctor ==> imm = SOME region /\ eval_operand region s = SOME 0w /\
+    regions_disjoint (a+off) (32*n) (b+off) (32*n)) /\
+  eval_operand src s = SOME (n2w a) /\
+  eval_operand dst s = SOME (n2w b) /\ fresh_vars_wrt sa s /\
+  0 < n /\ a+off+32*n < dimword (:256) /\
+  b+off+32*n < dimword (:256) ==>
+  ?t. immutable_execution_frame sa s sb t /\
+    t.vs_memory = (write_memory_with_expansion (b+off)
+      (mem_bytes_at (a+off) (32*n)
+        (if ctor then s.vs_memory else s.vs_data_section)) s).vs_memory /\
+    t.vs_immutables = s.vs_immutables
+Proof
+  strip_tac >> Cases_on `ctor` >> gvs[]
+  >- (drule compile_imm_copy_to_memory_execution >>
+      disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+      ` (immutable_transfers F T (n2w a) (n2w b) n off s).vs_memory =
+          (mcopy (b+off) (a+off) (32*n) s).vs_memory` by
+        (irule immutable_memory_transfers_snapshot >> fs[regions_disjoint_def]) >>
+      qexists_tac `s'` >> fs[mcopy_def, read_memory_def, GSYM mem_bytes_at_def]) >>
+  drule immutable_compile_runtime_snapshot >>
+  disch_then (qspecl_then [`a`, `s`, `b`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexists_tac `s'` >> fs[GSYM mem_bytes_at_def]
+QED
+
+(* Project resource facts onto a supplied operational run, not a second
+   normal-path endpoint (whose instruction index convention may differ). *)
+Theorem immutable_materialization_run_frame:
+  compile_imm_copy_to_memory ctor imm src dst n off sa = ((),sb) /\
+  copy_old_operand sa src /\ copy_old_operand sa dst /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
+  (!region. ctor /\ imm = SOME region ==>
+    eval_operand region s = SOME 0w /\ copy_old_operand sa region) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  copy_static t = copy_static s /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> Cases_on `ctor` >> gvs[]
+  >- (drule copy_ctor_run >> disch_then (qspec_then `s` mp_tac) >>
+      simp[] >> strip_tac >> gvs[copy_runtime_frame_def]) >>
+  drule_all copy_runtime_run >> strip_tac >> gvs[copy_runtime_frame_def]
+QED
+
 (* The copy snapshot, value, allocation slot and frame belong to the same run.
    Protected slices need not already be backed by the concrete memory list. *)
 Theorem immutable_materialization_copy_landing:
   compile_imm_copy_to_memory ctor imm src dst n off sa = ((),sb) /\
   (ctor ==> imm = SOME region /\ eval_operand region s = SOME 0w /\
     regions_disjoint (a+off) (32*n) (b+off) (32*n)) /\
+  copy_old_operand sa src /\ copy_old_operand sa dst /\
+  (ctor ==> copy_old_operand sa region) /\
   eval_operand src s = SOME (n2w a) /\
   eval_operand dst s = SOME (n2w b) /\ fresh_vars_wrt sa s /\
   0 < n /\ a + off + 32*n < dimword (:256) /\
@@ -92,27 +139,16 @@ Theorem immutable_materialization_copy_landing:
     allocas_above lo u /\
     (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
     (!q w. eval_operand q s = SOME w ==> eval_operand q u = SOME w) /\
+    (!q. copy_old_operand sa q ==> eval_operand q u = eval_operand q s) /\
+    copy_static u = copy_static s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
     u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `?t. immutable_execution_frame sa s sb t /\
-    t.vs_memory = (write_memory_with_expansion (b+off)
-      (mem_bytes_at (a+off) (32*n)
-        (if ctor then s.vs_memory else s.vs_data_section)) s).vs_memory /\
-    t.vs_immutables = s.vs_immutables` by
-    (Cases_on `ctor` >> gvs[]
-     >- (drule compile_imm_copy_to_memory_execution >>
-         disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
-         ` (immutable_transfers F T (n2w a) (n2w b) n off s).vs_memory =
-             (mcopy (b+off) (a+off) (32*n) s).vs_memory` by
-           (irule immutable_memory_transfers_snapshot >> fs[regions_disjoint_def]) >>
-         qexists_tac `s'` >> fs[mcopy_def, read_memory_def, GSYM mem_bytes_at_def]) >>
-     drule immutable_compile_runtime_snapshot >>
-     disch_then (qspecl_then [`a`, `s`, `b`] mp_tac) >>
-     (impl_tac >- simp[]) >> strip_tac >>
-     qexists_tac `s'` >> fs[GSYM mem_bytes_at_def]) >>
+  drule_all immutable_materialization_snapshot >> strip_tac >>
   `same_blocks sa sb /\ ?is. sb.cs_current_insts = sa.cs_current_insts ++ is /\
      EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) is` by
     (Cases_on `ctor` >> gvs[]
@@ -128,6 +164,12 @@ Proof
     (fs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
      gvs[is_terminator_def, is_alloca_op_def]) >>
   fs[immutable_execution_frame_def, immutable_operand_frame_def] >>
+  `!reg. ctor /\ imm = SOME reg ==>
+     eval_operand reg s = SOME 0w /\ copy_old_operand sa reg` by
+    (rpt strip_tac >> gvs[]) >>
+  `run_inst_seq (emitted_insts sa sb) s = OK t` by simp[] >>
+  drule_all immutable_materialization_run_frame >> strip_tac >>
+  drule exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
   drule_all abi_decoder_guard_sequence_fields >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is` by
     (fs[EVERY_MEM] >> metis_tac[]) >>
@@ -144,6 +186,14 @@ Proof
   conj_tac
   >- (asm_rewrite_tac[GSYM mem_bytes_at_def] >>
       irule immutable_copy_memory_value >> simp[]) >>
-  rpt strip_tac >> asm_rewrite_tac[GSYM mem_bytes_at_def] >>
-  irule mem_bytes_at_write_disjoint >> fs[regions_disjoint_def, mem_bytes_at_def]
+  conj_tac
+  >- (rpt strip_tac >> asm_rewrite_tac[GSYM mem_bytes_at_def] >>
+      irule mem_bytes_at_write_disjoint >> fs[regions_disjoint_def, mem_bytes_at_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `q` >>
+      gvs[copy_old_operand_def, eval_operand_def, lookup_var_def,
+          exprSimStorageCopyTheory.copy_static_def]) >>
+  fs[exprSimStorageCopyTheory.copy_static_def, lookup_var_def,
+     immutableMemoryFrameTheory.immutable_write_memory_capacity]
 QED
+
