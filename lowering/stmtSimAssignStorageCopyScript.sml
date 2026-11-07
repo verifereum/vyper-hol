@@ -1739,5 +1739,11 @@ Proof
   qexistsl_tac [`INL ()`, `ee'`, `OK t'`] >>
   conj_tac >- fs[write_storage_slot_gas_obs] >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-  disj1_tac >> irule assign_storage_copy_suffix_open >> metis_tac[]
+  disj1_tac >> conj_tac
+  >- (irule assign_storage_copy_suffix_open >> metis_tac[]) >>
+  irule alloca_frame_of_mem_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  simp[] >>
+  drule eval_read_preserves_scopes_dom >>
+  simp[Abbr `ee'`, set_storage_def] >> metis_tac[]
 QED
