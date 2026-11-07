@@ -175,6 +175,7 @@ Proof
 QED
 
 Theorem layout_canonical_run_intro:
+  MEM fn C.ctx_functions /\ layout_driver_row C' fn fn' positions /\
   enters_block fn s p /\ enters_block fn' t p' /\
   ~a.lop_pending /\ a.lop_config = q /\ a.lop_cursor = n /\
   layout_driver_indexed es ass a /\
@@ -189,14 +190,17 @@ Theorem layout_canonical_run_initial:
   enters_block fn s p /\ EVERY bb_well_formed fn.fn_blocks /\
   joint_trace vs0 C q0 es qs qend /\
   q0 = JointConfig [] [] FEMPTY entry_taint fn inst p [] FEMPTY hs h /\
-  p.vs_allocas = FEMPTY /\ EL 0 ass = [([],FEMPTY)] ==>
-  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q0 0 fn s
-    (concretize_function_with_positions positions fn) s
+  p.vs_allocas = FEMPTY /\ EL 0 ass = [([],FEMPTY)] /\
+  MEM fn C.ctx_functions /\ layout_driver_row C' fn fn' positions /\
+  fn'.fn_blocks = (concretize_function_with_positions positions fn).fn_blocks ==>
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q0 0 fn s fn' s
 Proof
   strip_tac >> drule_all layout_canonical_initial_enters_entry >>
   disch_then (qspecl_then [`positions`, `lo`] mp_tac) >>
   disch_then (qspecl_then [`ARB`, `D`, `C'`] strip_assume_tac) >>
+  `enters_block fn' s p` by fs[contextCodegenRelTheory.enters_block_def] >>
   simp[layout_canonical_run_def, layout_canonical_ready_def] >>
+  conj_tac >- metis_tac[] >>
   qexistsl [`b`, `p`, `p`] >>
   gvs[layout_ordinary_entry_def, layout_scoped_phi_link_def,
       layout_phase_pending_def, control_agree_def, layout_driver_indexed_def]
