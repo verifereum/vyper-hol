@@ -7,6 +7,7 @@ Ancestors
   finite_map list rich_list words intCallFrame emitHelper entrySinkExtraction
   immutableCopyExecution immutableConstructorRelation exprSimCopy
   abiDecoderArrayInitExec stmtReasonMemory valueCopy valueEncodingProps valueEncoding
+  venomExecSemantics
 
 Theorem materialization_alloc_landing:
   compile_alloc_buffer sz sa = (buf,sm) /\
@@ -66,13 +67,16 @@ QED
 
 (* The copy snapshot, value, allocation slot and frame belong to the same run.
    Protected slices need not already be backed by the concrete memory list. *)
-Theorem runtime_materialization_copy_landing:
-  compile_imm_copy_to_memory F imm src dst n off sa = ((),sb) /\
+Theorem immutable_materialization_copy_landing:
+  compile_imm_copy_to_memory ctor imm src dst n off sa = ((),sb) /\
+  (ctor ==> imm = SOME region /\ eval_operand region s = SOME 0w /\
+    regions_disjoint (a+off) (32*n) (b+off) (32*n)) /\
   eval_operand src s = SOME (n2w a) /\
   eval_operand dst s = SOME (n2w b) /\ fresh_vars_wrt sa s /\
   0 < n /\ a + off + 32*n < dimword (:256) /\
   b + off + 32*n < dimword (:256) /\
-  val_in_memory tv v (a+off) s.vs_data_section /\ val_wf tv v /\
+  val_in_memory tv v (a+off)
+    (if ctor then s.vs_memory else s.vs_data_section) /\ val_wf tv v /\
   type_memory_size tv = 32*n /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   off + 32*n <= sz /\ b+sz < dimword (:256) /\ lo <= b /\
@@ -92,9 +96,30 @@ Theorem runtime_materialization_copy_landing:
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  strip_tac >> drule_all immutable_compile_runtime_snapshot >> strip_tac >>
-  rename1 `immutable_execution_frame sa s sb t` >>
-  drule code_copy_insts >> strip_tac >>
+  strip_tac >>
+  `?t. immutable_execution_frame sa s sb t /\
+    t.vs_memory = (write_memory_with_expansion (b+off)
+      (mem_bytes_at (a+off) (32*n)
+        (if ctor then s.vs_memory else s.vs_data_section)) s).vs_memory /\
+    t.vs_immutables = s.vs_immutables` by
+    (Cases_on `ctor` >> gvs[]
+     >- (drule compile_imm_copy_to_memory_execution >>
+         disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+         ` (immutable_transfers F T (n2w a) (n2w b) n off s).vs_memory =
+             (mcopy (b+off) (a+off) (32*n) s).vs_memory` by
+           (irule immutable_memory_transfers_snapshot >> fs[regions_disjoint_def]) >>
+         qexists_tac `s'` >> fs[mcopy_def, read_memory_def, GSYM mem_bytes_at_def]) >>
+     drule immutable_compile_runtime_snapshot >>
+     disch_then (qspecl_then [`a`, `s`, `b`] mp_tac) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     qexists_tac `s'` >> fs[GSYM mem_bytes_at_def]) >>
+  `same_blocks sa sb /\ ?is. sb.cs_current_insts = sa.cs_current_insts ++ is /\
+     EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) is` by
+    (Cases_on `ctor` >> gvs[]
+     >- (drule code_ctor_copy_insts >> strip_tac >> simp[] >>
+         fs[EVERY_MEM] >> metis_tac[]) >>
+     drule code_copy_insts >> strip_tac >> simp[] >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
   `emitted_insts sa sb = is` by
     simp[emitted_insts_def, DROP_APPEND] >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
