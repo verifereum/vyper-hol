@@ -2548,7 +2548,10 @@ Proof
   >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with outcomes := _) tf` mp_tac >> simp[]) >>
   irule wb_frame_trans >>
   conj_tac >- simp[] >>
-  reverse conj_tac >- (qexistsl_tac [`es`, `sf`, `t`] >> simp[]) >>
+  reverse conj_tac
+  >- (qexistsl_tac [`es`, `sf`, `t`] >> simp[] >>
+      qpat_x_assum `wb_frame _ _ (_ with outcomes := _) _ t tf` mp_tac >>
+      simp[exprSimHashTheory.wb_frame_outcomes]) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
 
