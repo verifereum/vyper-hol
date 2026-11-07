@@ -22,6 +22,7 @@ Ancestors
   supportedStmtTraverse supportedExprTraverse vyperTypeSystem
   stmtSimDefs stmtSimProps stmtLowering compileEnv emitHelper emitHelperProps
   stmtAbortPtr stmtAssertPtr exprLoweringProps gasContext
+  bodyAssertReasonPtr assertReasonTypedPtr exprSimSource vyperTypeCallStackSoundness
 
 val _ = Parse.hide "body";
 
@@ -120,5 +121,33 @@ Theorem body_assert_reason_case_ptr:
     body_expr_ptr_ok cx e ==>
     body_stmt_ptr_ok cx (Assert e (AssertReason se))
 Proof
-  cheat
+  rw[body_stmt_ptr_ok_def] >>
+  `supported_expr tops e /\ supported_string_reason tops se` by
+    gvs[supported_stmt_def, supported_assert_reason_def,
+        supportedExprsTheory.supported_expr_def] >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  drule_then strip_assume_tac supported_string_reason_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assert_exists_def, int_calls_stmt_def,
+         int_calls_assert_reason_def, body_inv_def] >>
+     qexists `int_calls_expr se` >> simp[]) >>
+  `expr_body_pre cenv cx env se es` by
+    (irule stmt_expr_body_pre >>
+     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assert_exists_def, int_calls_stmt_def,
+         int_calls_assert_reason_def, body_inv_def] >>
+     qexists `[]` >> simp[] >> metis_tac[call_evaluation_safe_append_right]) >>
+  irule compile_assert_typed_reason_frag_ptr >>
+  reverse conj_tac
+  >- (conj_tac >- gvs[type_stmt_def] >>
+      fs[body_expr_ptr_ok_def] >> metis_tac[]) >>
+  qexists `env` >> rpt gen_tac >> strip_tac >>
+  irule assert_reason_body_endpoint_ptr >> conj_tac
+  >- (qexists `tops` >> simp[]) >>
+  qexistsl [`e`,`es`,`gs`] >> simp[] >> metis_tac[]
 QED
