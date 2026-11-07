@@ -154,13 +154,14 @@ Proof
          >- metis_tac[body_expr_ok_case]
          >- metis_tac[body_expr_ok_map_case] >>
          rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
-      drule expr_sim_case_of_vv >>
+      `expr_sim_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+        (irule expr_sim_case_of_vv >> simp[]) >>
       fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `expr_map_case F ctx func cenv cx (Subscript v8 e1 e2)` by
     (irule compile_subscript_map_map_case >> conj_tac
-     >- metis_tac[body_expr_ok_map_case] >>
-     rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
+     >~ [`expr_sim_case`] >- (rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
+     metis_tac[body_expr_ok_map_case]) >>
   fs[expr_map_case_def] >> metis_tac[]
 QED
 
