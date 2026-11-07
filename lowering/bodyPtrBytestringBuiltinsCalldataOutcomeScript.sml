@@ -7,7 +7,7 @@ Ancestors
   ptrDiscipline venomState finite_map exprLoweringProps venomMemDefs
   bodyPtrBytestringBuiltinsCalldataFrame bodyPtrBytestringBuiltinsBounds
   bodyPtrBytestringBuiltinsExternalSlice instIdxIndep fragExec
-  exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer
+  exprSimAlloc loweringHalt bodyPtrBytestringBuiltinsBuffer emitHelperProps
   bodyPtrBytestringBuiltinsWindowGhost bodyPtrDefs
   bodyPtrBytestringBuiltinsCalldataRuntime
   exprSimMemoryTransport valueEncodingProofs valueEncodingProps vyperState
@@ -236,7 +236,11 @@ Theorem compile_slice_calldata_shared_success:
       mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
     (!i. w2n w <= i /\ i < w2n w + 32 + n ==> i NOTIN tm.t_mem)
 Proof
-  strip_tac >> drule_all compile_slice_calldata_semantic >>
+  strip_tac >>
+  `!x. start = Var x ==> not_fresh_at sa x` by
+    (rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
+  drule_all compile_slice_calldata_semantic >>
   disch_then (qspecl_then [`tn`,`bound`,`PG`,`G`,`D`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts s2 s3) (v with vs_inst_idx := SUC t.vs_inst_idx) =
     OK (q with vs_inst_idx := SUC t.vs_inst_idx)` by
@@ -256,6 +260,9 @@ Resume compile_slice_calldata_shared_success[counted]:
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) t) with
       vs_inst_idx := SUC t.vs_inst_idx) = OK (q with vs_inst_idx := SUC t.vs_inst_idx)` by
     metis_tac[] >>
+  `!op z. MEM op [start;Lit (n2w n)] /\ op = Var z ==> not_fresh_at sa z` by
+    (rpt strip_tac >> gvs[MEM] >> rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
   drule_all compile_slice_calldata_counted_ok >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `w2n (w + 32w) = w2n w + 32` by
@@ -422,7 +429,11 @@ Theorem compile_slice_calldata_revert:
       op_taint tm (Var x) = op_taint tn (Var x)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
-  strip_tac >> drule_all compile_slice_calldata_runtime >>
+  strip_tac >>
+  `!x. start = Var x ==> not_fresh_at sa x` by
+    (rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
+  drule_all compile_slice_calldata_runtime >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   qpat_x_assum `out = Var r` SUBST_ALL_TAC >>
   qpat_x_assum `data = Var p` SUBST_ALL_TAC >>
@@ -441,6 +452,9 @@ Proof
      strip_tac >> gvs[] >> simp[op_prov_def, op_taint_def]) >>
   `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  `!op z. MEM op [start;Lit (n2w n)] /\ op = Var z ==> not_fresh_at sa z` by
+    (rpt strip_tac >> gvs[MEM] >> rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
   drule_all compile_slice_calldata_bounds_abort >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Abort _ _)`
