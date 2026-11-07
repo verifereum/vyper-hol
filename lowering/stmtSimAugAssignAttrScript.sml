@@ -984,7 +984,7 @@ Proof
   strip_tac >> gvs[gas_marked_exec_def, bind_def, lift_sum_def, raise_def]
 QED
 
-Theorem augassign_attr_pre_store_frame[local]:
+Theorem augassign_attr_pre_store_frame:
   stmt_state_rel ctx func cenv cx es s0 /\
   stmt_state_rel ctx func cenv cx es t /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\

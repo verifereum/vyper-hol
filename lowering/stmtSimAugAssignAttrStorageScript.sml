@@ -750,16 +750,8 @@ Resume compile_augassign_attr_storage_case[store]:
     simp[typed_val_to_w256_word_value] >>
   `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
     (drule eval_read_preserves_scopes_dom >> simp[]) >>
-  `alloca_frame cenv es sa s0 cenv es t` by
-    (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
-  `alloca_frame cenv es s1 t cenv es_end t'` by
-    (drule expr_post_alloca_frame >>
-     simp[]) >>
   `local_ptrs_reserved cenv s2` by
     metis_tac[local_ptrs_reserved_next_var] >>
-  `alloca_frame cenv es_end s2 t' cenv es_end u` by
-    (irule alloca_frame_of_mem_frame >>
-     fs[expr_post_def] >> metis_tac[]) >>
   `sa.cs_next_id <= s1.cs_next_id /\
    s1.cs_next_id <= s2.cs_next_id` by
     (conj_tac
@@ -767,12 +759,10 @@ Resume compile_augassign_attr_storage_case[store]:
               comp_ignore_bind_def, comp_return_def, emit_def] >> simp[]) >>
      metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, ci_mono_def,
                pairTheory.SND]) >>
-  `alloca_frame cenv es s1 t cenv es_end u` by
-    (irule alloca_frame_trans >> qexistsl_tac [`cenv`, `es_end`, `t'`, `s2`] >>
-     fs[expr_post_def] >> metis_tac[]) >>
   `alloca_frame cenv es sa s0 cenv es_end u` by
-    (irule alloca_frame_trans >> qexistsl_tac [`cenv`, `es`, `t`, `s1`] >>
-     simp[]) >>
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       augassign_attr_pre_store_frame >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
   qspecl_then [`ctx`, `func`, `cx`, `lctx`, `cenv`, `tr`, `dst`, `res_op`,
     `s3`, `sb`, `u`, `es_end with gas_obs := []`, `n2w slot + n2w off`,
     `ftv`, `result`, `sa`, `s0`]
