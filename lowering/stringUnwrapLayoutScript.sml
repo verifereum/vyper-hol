@@ -88,7 +88,8 @@ QED
 
 Theorem string_located_representation:
   vv_holds cenv cx (BaseT (StringT max)) tv (LocatedValue ty p) es s ==>
-  ty = BaseT (StringT max) /\
+  (ty = BaseT (StringT max) \/
+   p.ptr_location = LocMemory /\ is_bytestring_type ty) /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocStorage \/
    p.ptr_location = LocTransient \/ p.ptr_location = LocCode)
 Proof
