@@ -141,7 +141,7 @@ Theorem compile_slice_calldata_runtime:
     compile_assert_slice_bounds start (Lit (n2w n)) limit s2 = ((),s3) /\
     emit_void CALLDATACOPY [data;start;Lit (n2w n)] s3 = ((),s4) /\
     emit_void MSTORE [out;Lit (n2w n)] s4 = ((),sb) /\
-    compile_alloc_buffer N sa = (buf,sm) /\
+    compile_alloc_buffer N sa = (buf,sm) /\ fn_has_code sa sm fn /\
     out = Var r /\ buf.buf_operand = Var r /\ data = Var p /\
     emit_op ADD [Var r;Lit 32w] sm = (Var p,s1) /\
     step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]) s = OK u /\
@@ -163,6 +163,8 @@ Theorem compile_slice_calldata_runtime:
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t.vs_halted /\
     fresh_vars_wrt s1 t /\
+    lookup_var r t = SOME w /\ lookup_var p t = SOME (w + 32w) /\
+    t.vs_call_ctx = s.vs_call_ctx /\
     (!op. (!x. op = Var x ==> not_fresh_at sa x) ==>
       eval_operand op t = eval_operand op s /\
       op_prov G2 op = op_prov G op /\ op_taint tn2 op = op_taint tn op) /\

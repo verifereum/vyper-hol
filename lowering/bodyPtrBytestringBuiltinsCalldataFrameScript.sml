@@ -5,7 +5,7 @@ Ancestors
   exprSimLiteralBuffer exprLoweringProps loweringSlice immutableMemoryFrame
   compileEnv venomState list finite_map loweringPosts emitHelperProps words
   bodyPtrBytestringBuiltinsExternalSlice venomExecSemantics venomInst
-  exprSimProps varsExt
+  exprSimProps varsExt exprSimAlloc fragExec loweringHalt
 
 Theorem allocated_bytes_write_state_rel:
   stmt_state_rel ctx fn cenv cx es s /\
@@ -179,3 +179,174 @@ Resume calldata_size_bounds_semantic[frame]:
   qexistsl_tac [`u`,`p`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 Finalise calldata_size_bounds_semantic
+
+Theorem compile_slice_calldata_semantic:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
+  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
+  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s1 s2 s3 s4 data limit t v q z w G2 tn2 r p.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK t) /\
+    out = Var r /\ data = Var p /\
+    ptr_covers G2 tn2 r t N /\ ptr_covers G2 tn2 p t (N - 32) /\
+    t.vs_current_bb = s1.cs_current_bb /\
+    t.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t.vs_halted /\
+    fresh_vars_wrt s1 t /\ q = t with vs_vars := q.vs_vars /\
+    compile_slice_out_buf N sa = ((out,data),s1) /\
+    emit_op CALLDATASIZE [] s1 = (limit,s2) /\
+    compile_assert_slice_bounds start (Lit (n2w n)) limit s2 = ((),s3) /\
+    emit_void CALLDATACOPY [data;start;Lit (n2w n)] s3 = ((),s4) /\
+    emit_void MSTORE [out;Lit (n2w n)] s4 = ((),sb) /\
+    run_inst_seq (emitted_insts s1 s2) t = OK v /\
+    run_inst_seq (emitted_insts s2 s3) v = OK q /\
+    run_inst_seq (emitted_insts s3 sb) q = OK z /\
+    z = mstore (w2n w) (n2w n) (write_memory_with_expansion (w2n w + 32)
+      (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) q) /\
+    stmt_state_rel ctx fn cenv cx es z /\
+    val_in_memory (BaseTV (BytesT (Dynamic bound)))
+      (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) (w2n w) z.vs_memory /\
+    eval_operand out z = SOME w /\
+    FLOOKUP z.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
+    (!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>
+      lookup_var x z = SOME val) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP z.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+      mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    locals_kept cenv es s z /\
+    (!name b len. local_region cenv es.scopes z name b len ==>
+      regions_disjoint (w2n w) N b len)
+Proof
+  strip_tac >>
+  `32 <= N` by decide_tac >>
+  drule_all compile_slice_calldata_runtime >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+  `run_inst_seq (emitted_insts s2 s3) v = OK q` by fs[] >>
+  `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op z. eval_operand op v = SOME z ==> _` irule >>
+     qpat_x_assum `!op z. eval_operand op t = SOME z ==> _` irule >> simp[]) >>
+  `q = t with vs_vars := q.vs_vars` by
+    (qpat_x_assum `q = v with vs_vars := _` mp_tac >> simp[update_var_def]) >>
+  suspend "pure_frame"
+QED
+
+Resume compile_slice_calldata_semantic[pure_frame]:
+  `vars_ext t q` by
+    (simp[vars_ext_def, SUBMAP_FLOOKUP_EQN] >> rpt strip_tac >>
+     qpat_x_assum `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z`
+       (qspecl_then [`Var x`,`y`] mp_tac) >>
+     simp_tac std_ss [eval_operand_def, lookup_var_def] >>
+     disch_then irule >> simp[update_var_def]) >>
+  `stmt_state_rel ctx fn cenv cx es q` by
+    (irule stmt_state_rel_vars_ext >> qexists_tac `t` >> simp[]) >>
+  `!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>
+    lookup_var x q = SOME val` by
+    (rpt strip_tac >>
+     `eval_operand (Var x) t = SOME val` by
+       (qpat_assum `!op. _ ==> eval_operand op t = eval_operand op s /\ _`
+          (qspec_then `Var x` mp_tac) >>
+        simp[eval_operand_def]) >>
+     qpat_assum `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z`
+       (qspecl_then [`Var x`,`val`] mp_tac) >>
+     simp_tac std_ss [eval_operand_def] >>
+     disch_then irule >> fs[eval_operand_def]) >>
+  suspend "local_frame"
+QED
+
+Resume compile_slice_calldata_semantic[local_frame]:
+  `!name b len. local_region cenv es.scopes q name b len ==>
+    local_region cenv es.scopes s name b len` by
+    (rpt strip_tac >> irule local_region_frame >>
+     conj_tac
+     >- (qexists_tac `fn` >> fs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl_tac [`sa`,`es.scopes`,`q`] >> simp[]) >>
+  `!name b len. local_region cenv es.scopes s name b len ==>
+    local_region cenv es.scopes u name b len` by
+    (rpt strip_tac >> irule local_region_frame_fwd >>
+     qexistsl_tac [`s`,`sa`,`es.scopes`] >> simp[]) >>
+  `!name b len. local_region cenv es.scopes q name b len ==>
+    regions_disjoint (w2n w) N b len` by metis_tac[] >>
+  `q.vs_allocas = u.vs_allocas /\ q.vs_memory = s.vs_memory /\
+   q.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `q = t with vs_vars := _` SUBST1_TAC >> simp[update_var_def]) >>
+  `FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n w,N)` by simp[] >>
+  `eval_operand (Var r) q = SOME w /\
+   eval_operand (Var p) q = SOME (w + 32w)` by
+    (conj_tac >>
+     qpat_assum `!op z. eval_operand op t = SOME z ==> eval_operand op q = SOME z`
+       irule >> simp[eval_operand_def]) >>
+  `w2n (w + 32w) = w2n w + 32` by
+    (`w2n w + 32 < dimword (:256)` by decide_tac >>
+     simp[wordsTheory.w2n_add_2, wordsTheory.w2n_n2w]) >>
+  suspend "copy"
+QED
+
+Resume compile_slice_calldata_semantic[copy]:
+  `eval_operand start q = SOME (n2w a)` by
+    (qpat_assum `!op z. eval_operand op v = SOME z ==> _` irule >> simp[]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]) (fn_insts fn)` by
+    (drule_all buffer_alloc_code >> strip_tac >>
+     drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>
+  `eval_operand data q = SOME (w + 32w) /\ eval_operand out q = SOME w /\
+   eval_operand (Lit (n2w n)) q = SOME (n2w n)` by simp[eval_operand_def] >>
+  `(mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]).inst_opcode = ALLOCA /\
+   FLOOKUP q.vs_allocas (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [r]).inst_id =
+     SOME (w2n w,N)` by simp[mk_inst_def] >>
+  `a + n <= LENGTH q.vs_call_ctx.cc_calldata` by simp[] >>
+  `w2n w = w2n w` by simp[] >>
+  drule_all calldata_copy_store_semantic >>
+  disch_then (qspec_then `bound` strip_assume_tac) >>
+  suspend "old_frame"
+QED
+
+Resume compile_slice_calldata_semantic[old_frame]:
+  rename1 `run_inst_seq (emitted_insts s3 sb) q = OK z` >>
+  `!name b len. local_region cenv es.scopes z name b len ==>
+    local_region cenv es.scopes q name b len` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `!name b len. local_region cenv es.scopes s name b len ==>
+    local_region cenv es.scopes q name b len` by
+    (rpt strip_tac >> irule local_region_frame_fwd >>
+     qexistsl_tac [`s`,`sa`,`es.scopes`] >> simp[]) >>
+  `LENGTH (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) = n` by
+    (simp[LENGTH_TAKE_EQ] >> decide_tac) >>
+  `locals_kept cenv es s z` by
+    (irule locals_kept_regions >>
+     map_every qx_gen_tac [`name`,`bb`,`sz`] >> strip_tac >>
+     `regions_disjoint (w2n w) N bb sz` by
+       (qpat_assum `!name b len. local_region cenv es.scopes u name b len ==> _` irule >>
+        qexists_tac `name` >>
+        qpat_assum `!name b len. local_region cenv es.scopes s name b len ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     qpat_assum `z = _` SUBST1_TAC >>
+     qspecl_then [`w2n w`,`TAKE n (DROP a q.vs_call_ctx.cc_calldata)`,`q`]
+       mp_tac bytes_buffer_write_frame >>
+     simp[] >> disch_then irule >> fs[regions_disjoint_def] >> decide_tac) >>
+  suspend "finish"
+QED
+
+Resume compile_slice_calldata_semantic[finish]:
+  `!aid b len. aid < sa.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+    mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory` by
+    (rpt strip_tac >>
+     `regions_disjoint (w2n w) N b len` by
+       (qpat_assum `!aid b len. _ ==> regions_disjoint _ _ _ _` drule_all >> simp[]) >>
+     qpat_assum `z = _` SUBST1_TAC >>
+     qspecl_then [`w2n w`,`TAKE n (DROP a q.vs_call_ctx.cc_calldata)`,`q`]
+       mp_tac bytes_buffer_write_frame >>
+     simp[] >> disch_then irule >> fs[regions_disjoint_def] >> decide_tac) >>
+  qexistsl_tac [`s1`,`s2`,`s3`,`s4`,`data`,`limit`,`t`,`v`,`q`,`z`,`w`,`G2`,`tn2`,`r`,`p`] >>
+  simp[eval_operand_def] >>
+  rpt conj_tac >> rpt strip_tac >>
+  metis_tac[eval_operand_def]
+QED
+Finalise compile_slice_calldata_semantic
