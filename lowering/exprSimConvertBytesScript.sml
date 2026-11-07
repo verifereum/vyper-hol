@@ -205,7 +205,7 @@ Proof
   gvs[venomInstTheory.mk_inst_def, not_fresh_at_def]
 QED
 
-Theorem convert_widen_copy_opcodes[local]:
+Theorem convert_widen_copy_opcodes:
   !d x k sm op sb.
     compile_bytestring_widen_copy d x k sm = (op,sb) /\ 0 < k ==>
     same_blocks sm sb /\ isPREFIX sm.cs_current_insts sb.cs_current_insts /\
@@ -255,7 +255,7 @@ Proof
   simp[] >> disch_then irule >> fs[EVERY_MEM]
 QED
 
-Theorem bytestring_type_cases[local]:
+Theorem bytestring_type_cases:
   !t. is_bytestring_type t <=>
     (?n. t = BaseT (BytesT (Dynamic n))) \/ (?n. t = BaseT (StringT n))
 Proof
@@ -746,7 +746,7 @@ Proof
       exprLoweringPropsTheory.run_inst_seq_def, exprLoweringPropsTheory.same_blocks_def]
 QED
 
-Theorem convert_cast_run_frame[local]:
+Theorem convert_cast_run_frame:
   !x n i sa op sb s p L.
     compile_type_convert x (ConvBytestringCast n i) sa = (op,sb) /\
     eval_operand x s = SOME p /\ mload (w2n p) s = n2w L /\
@@ -1143,7 +1143,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem convert_widen_copy_run[local]:
+Theorem convert_widen_copy_run:
   !ctx func cenv cx es sm sb s x op p d k e v tv.
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ k <= d /\ d < dimword (:256) /\
@@ -1373,7 +1373,7 @@ Proof
   gvs[expr_post_def] >> first_assum ACCEPT_TAC
 QED
 
-Theorem convert_cast_grows[local]:
+Theorem convert_cast_grows:
   !x n i sa op sb.
     compile_type_convert x (ConvBytestringCast n i) sa = (op,sb) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -1454,7 +1454,7 @@ Proof
   drule bop_value_scopes_dom >> simp[]
 QED
 
-Theorem convert_dynamic_view[local]:
+Theorem convert_dynamic_view:
   !cx src dst tv1 tv2 v x s i n.
     ((src = BaseT (BytesT (Dynamic i))) \/ src = BaseT (StringT i)) /\
     ((dst = BaseT (BytesT (Dynamic n))) \/ dst = BaseT (StringT n)) /\

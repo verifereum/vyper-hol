@@ -24,9 +24,15 @@ Proof
   `!n z. sa.cs_next_var <= n ==>
      eval_operand v (update_var (STRING #"%" (toString n)) z s) = SOME w` by
     metis_tac[eval_operand_update_not_fresh] >>
-  simp[Once run_inst_seq_mem_ok_cons, inst_dload_in_section_def,
-       step_inst_base_def, exec_pure2_def, eval_operands_def, eval_operand_def] >>
+  once_rewrite_tac[run_inst_seq_mem_ok_cons] >>
   (conj_tac >- (irule below_frontier_no_ranges >> simp[])) >>
+  simp[inst_dload_in_section_def] >>
+  qmatch_goalsub_abbrev_tac `run_inst_seq_mem_ok tail` >>
+  pure_rewrite_tac[step_inst_base_def] >>
+  simp_tac (srw_ss()) [] >>
+  pure_rewrite_tac[exec_pure2_def, eval_operands_def] >>
+  simp[] >>
+  unabbrev_all_tac >>
   simp[Once run_inst_seq_mem_ok_cons, GSYM mk_inst_def,
        below_frontier_MLOAD, eval_operand_def] >>
   (conj_tac >-
