@@ -378,137 +378,12 @@ Proof
   irule copy_dyn_live >> simp[] >> qexists_tac `max` >> simp[] >> decide_tac
 QED
 
-(* Default values have zero words wherever a byte remains live. *)
-Theorem copy_default_zero_word[local]:
-  (!tv off mem base st j b.
-    val_in_memory tv (default_value tv) off mem /\
-    (!i. i < type_slot_size tv ==> lookup_storage (n2w (base+i)) st = 0w) /\
-    j < type_slot_size tv /\ b < 32 /\
-    ~dead_bytes st base tv (base+j) b ==>
-    mem_word_at (off+32*j) mem = 0w) /\
-  (!tvs off mem base st j b.
-    tuple_in_memory (MAP default_value tvs) tvs off mem /\
-    (!i. i < type_slot_size_list tvs ==> lookup_storage (n2w (base+i)) st = 0w) /\
-    j < type_slot_size_list tvs /\ b < 32 /\
-    ~dead_bytes_list st base tvs (base+j) b ==>
-    mem_word_at (off+32*j) mem = 0w) /\
-  (!fields off mem base st j b.
-    fields_in_memory (MAP (\(id,t). (id,default_value t)) fields) fields off mem /\
-    (!i. i < type_slot_size_fields fields ==> lookup_storage (n2w (base+i)) st = 0w) /\
-    j < type_slot_size_fields fields /\ b < 32 /\
-    ~dead_bytes_fields st base fields (base+j) b ==>
-    mem_word_at (off+32*j) mem = 0w)
-Proof
-  ho_match_mp_tac type_slot_size_ind >>
-  simp[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
-       type_slot_size_def, val_in_memory_def, dead_bytes_def,
-       val_to_w256_def, typed_val_to_w256_def, integer_wordTheory.i2w_def,
-       word_of_bytes_be_pad_right, byteTheory.word_of_bytes_be_def,
-       word_of_bytes_replicate_zero] >>
-  rpt conj_tac
-  >- (rpt strip_tac >>
-      first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-      gvs[dyn_bytes_dead_def] >> `j = 0` by decide_tac >> gvs[])
-  >- (rpt strip_tac >>
-      first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-      gvs[dyn_bytes_dead_def] >> `j = 0` by decide_tac >> gvs[])
-  >- suspend "address"
-  >- suspend "fixed"
-  >- suspend "dynamic"
-  >- suspend "tuple"
-  >> suspend "fields"
-QED
-
-Resume copy_default_zero_word[address]:
-  rewrite_tac[GSYM word_to_bytes_w2w_address] >>
-  simp[word_to_bytes_word_of_bytes_256, w2w_0]
-QED
-Resume copy_default_zero_word[fixed]:
-  rpt strip_tac >>
-  `0 < type_slot_size tv` by (Cases_on `type_slot_size tv` >> gvs[]) >>
-  qabbrev_tac `sz = type_slot_size tv` >>
-  rename1 `!i. i < n * sz ==> lookup_storage (n2w (a+i)) st = 0w` >>
-  `j DIV sz < n` by simp[DIV_LT_X, Abbr `sz`] >>
-  `j MOD sz < sz` by simp[] >>
-  `j = j DIV sz * sz + j MOD sz` by metis_tac[DIVISION] >>
-  `mem_word_at (32*(j MOD sz) + (off + (j DIV sz)*type_memory_size tv)) mem = 0w`
-    suffices_by (pure_rewrite_tac[type_memory_size_slots] >>
-      `32 * (j MOD sz) + (off + j DIV sz * (32 * type_slot_size tv)) =
-       32*j + off` by (simp[Abbr `sz`] >> decide_tac) >>
-      pop_assum SUBST1_TAC >> simp[]) >>
-  qpat_x_assum `!off mem base st j b. _`
-    (qspecl_then [`off + (j DIV sz)*type_memory_size tv`, `mem`,
-                  `a + (j DIV sz)*sz`] mp_tac) >>
-  disch_then irule >> simp[] >> qexistsl_tac [`b`, `st`] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      `sz * (j DIV sz + 1) <= sz * n` by simp[LE_MULT_LCANCEL] >>
-      pop_assum (mp_tac o PURE_REWRITE_RULE [LEFT_ADD_DISTRIB, MULT_CLAUSES]) >>
-      `sz * n = n * sz` by simp[MULT_COMM] >> decide_tac) >>
-  `sz * (j DIV sz) + j MOD sz = j` by decide_tac >>
-  pop_assum SUBST1_TAC >>
-  qpat_x_assum `!i. ~(i < n) \/ _` (qspec_then `j DIV sz` mp_tac) >>
-  simp[MULT_COMM]
-QED
-Resume copy_default_zero_word[dynamic]:
-  rpt gen_tac >> disch_then kall_tac >> rpt strip_tac >>
-  Cases_on `j = 0` >- gvs[] >>
-  rename1 `!i. i < n * type_slot_size tv + 1 ==>
-    lookup_storage (n2w (a+i)) st = 0w` >>
-  qpat_x_assum `!i. i < n * type_slot_size tv + 1 ==> _`
-    (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-  gvs[] >>
-  `0 < type_slot_size tv` by (Cases_on `type_slot_size tv` >> gvs[]) >>
-  qabbrev_tac `sz = type_slot_size tv` >>
-  `0 < n` by (Cases_on `n` >> gvs[]) >>
-  `(j-1) DIV sz < n` by (simp[DIV_LT_X] >> decide_tac) >>
-  `(j-1) MOD sz < sz` by simp[] >>
-  `j-1 = (j-1) DIV sz * sz + (j-1) MOD sz` by metis_tac[DIVISION] >>
-  qpat_x_assum `!i. ~(i < n) \/ _` (qspec_then `(j-1) DIV sz` mp_tac) >>
-  simp[LEFT_ADD_DISTRIB, MULT_COMM] >> decide_tac
-QED
-Resume copy_default_zero_word[tuple]:
-  rpt strip_tac >>
-  rename1 `!i. i < type_slot_size tv + type_slot_size_list tvs ==>
-    lookup_storage (n2w (a+i)) st = 0w` >>
-  Cases_on `j < type_slot_size tv`
-  >- (qpat_x_assum `!off mem base st j b. val_in_memory _ _ _ _ /\ _ ==> _`
-        (qspecl_then [`off`, `mem`, `a`] mp_tac) >>
-      disch_then irule >> simp[] >> qexistsl_tac [`b`, `st`] >> simp[] >>
-      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  `32*j+off = 32*(j-type_slot_size tv)+(off+type_memory_size tv)` by
-    (simp[type_memory_size_slots] >> decide_tac) >>
-  pop_assum SUBST1_TAC >>
-  qpat_x_assum `!off mem base st j b. tuple_in_memory _ _ _ _ /\ _ ==> _`
-    (qspecl_then [`off+type_memory_size tv`, `mem`, `a+type_slot_size tv`] mp_tac) >>
-  disch_then irule >> simp[] >> qexistsl_tac [`b`, `st`] >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
-QED
-Resume copy_default_zero_word[fields]:
-  rpt strip_tac >>
-  rename1 `!i. i < type_slot_size tv + type_slot_size_fields fields ==>
-    lookup_storage (n2w (a+i)) st = 0w` >>
-  Cases_on `j < type_slot_size tv`
-  >- (qpat_x_assum `!off mem base st j b. val_in_memory _ _ _ _ /\ _ ==> _`
-        (qspecl_then [`off`, `mem`, `a`] mp_tac) >>
-      disch_then irule >> simp[] >> qexistsl_tac [`b`, `st`] >> simp[] >>
-      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  `32*j+off = 32*(j-type_slot_size tv)+(off+type_memory_size tv)` by
-    (simp[type_memory_size_slots] >> decide_tac) >>
-  pop_assum SUBST1_TAC >>
-  qpat_x_assum `!off mem base st j b. fields_in_memory _ _ _ _ /\ _ ==> _`
-    (qspecl_then [`off+type_memory_size tv`, `mem`, `a+type_slot_size tv`] mp_tac) >>
-  disch_then irule >> simp[] >> qexistsl_tac [`b`, `st`] >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
-QED
-Finalise copy_default_zero_word
-
 (* Select a nonempty child interval, retaining the surrounding writes. *)
 Theorem copy_tuple_select[local]:
   !tvs vs offset off mem base st writes j b.
     values_have_types tvs vs /\ tuple_in_memory vs tvs off mem /\
     encode_tuple offset tvs vs = SOME writes /\
-    j < type_slot_size_list tvs /\
+    j < type_slot_size_list tvs /\ MEM (offset+j) (MAP FST writes) /\
     ~dead_bytes_list st (base+offset) tvs (base+offset+j) b ==>
     ?tv v d child pre post.
       MEM tv tvs /\ value_has_type tv v /\
@@ -518,7 +393,8 @@ Theorem copy_tuple_select[local]:
       writes = pre ++ MAP (\(i,w). (i+(offset+d),w)) child ++ post /\
       (!i. MEM i (MAP FST post) ==>
         offset+d+type_slot_size tv <= i /\ i < offset+type_slot_size_list tvs) /\
-      ~dead_bytes st (base+offset+d) tv (base+offset+j) b
+      ~dead_bytes st (base+offset+d) tv (base+offset+j) b /\
+      MEM (j-d) (MAP FST child)
 Proof
   Induct >> simp[type_slot_size_def] >>
   rpt gen_tac >> Cases_on `vs` >>
@@ -529,18 +405,34 @@ Proof
   rename1 `encode_value hd vhd = SOME hdws` >>
   rename1 `encode_tuple (offset+type_slot_size hd) tvs tail = SOME tailws` >>
   rename1 `~dead_bytes_list st (a+offset) (hd::tvs) _ b` >>
-  gvs[Once dead_bytes_def] >>
+  gnvs[Once dead_bytes_def] >>
   Cases_on `j < type_slot_size hd`
   >- suspend "head"
   >> suspend "tail"
 QED
 
 Resume copy_tuple_select[head]:
+  `MEM j (MAP FST hdws)` by
+    (gvs[MEM_MAP, pairTheory.EXISTS_PROD] 
+     >- metis_tac[ADD_COMM, EQ_ADD_RCANCEL] >>
+     drule (cj 2 encode_writes_bounded) >> asm_rewrite_tac[] >>
+     disch_then (qspec_then `j+offset` mp_tac) >>
+     (impl_tac >- (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[])) >>
+     strip_tac >> `F` by decide_tac) >>
   qexistsl_tac [`hd`, `vhd`, `0`, `hdws`, `[]`, `tailws`] >> simp[] >>
   drule (cj 2 encode_writes_bounded) >> asm_rewrite_tac[] >>
   pure_rewrite_tac[ADD_ASSOC] >> simp_tac bool_ss []
 QED
 Resume copy_tuple_select[tail]:
+  `MEM (j+offset) (MAP FST tailws)` by
+    (qpat_x_assum `_ \/ MEM _ _` strip_assume_tac >- (
+       `MEM j (MAP FST hdws)` by
+         (gvs[MEM_MAP, pairTheory.EXISTS_PROD] >>
+          metis_tac[ADD_COMM, EQ_ADD_RCANCEL]) >>
+       drule (cj 1 encode_writes_bounded) >> asm_rewrite_tac[] >>
+       disch_then (qspec_then `j` mp_tac) >> simp[]) >> simp[]) >>
+  `MEM (j-type_slot_size hd+(offset+type_slot_size hd)) (MAP FST tailws)` by
+    (`j-type_slot_size hd+(offset+type_slot_size hd) = j+offset` by decide_tac >> simp[]) >>
   `j-type_slot_size hd < type_slot_size_list tvs` by decide_tac >>
   `~dead_bytes_list st (a+(offset+type_slot_size hd)) tvs
      (a+((j-type_slot_size hd)+(offset+type_slot_size hd))) b` by
@@ -564,7 +456,7 @@ Theorem copy_struct_select[local]:
   !ftypes vs offset off mem base st writes j b.
     struct_has_type ftypes vs /\ fields_in_memory vs ftypes off mem /\
     encode_struct offset ftypes vs = SOME writes /\
-    j < type_slot_size_fields ftypes /\
+    j < type_slot_size_fields ftypes /\ MEM (offset+j) (MAP FST writes) /\
     ~dead_bytes_fields st (base+offset) ftypes (base+offset+j) b ==>
     ?tv v d child pre post.
       MEM tv (MAP SND ftypes) /\ value_has_type tv v /\
@@ -574,7 +466,8 @@ Theorem copy_struct_select[local]:
       writes = pre ++ MAP (\(i,w). (i+(offset+d),w)) child ++ post /\
       (!i. MEM i (MAP FST post) ==>
         offset+d+type_slot_size tv <= i /\ i < offset+type_slot_size_fields ftypes) /\
-      ~dead_bytes st (base+offset+d) tv (base+offset+j) b
+      ~dead_bytes st (base+offset+d) tv (base+offset+j) b /\
+      MEM (j-d) (MAP FST child)
 Proof
   Induct >> simp[type_slot_size_def] >> rpt gen_tac >> PairCases_on `h` >>
   Cases_on `vs` >>
@@ -586,18 +479,34 @@ Proof
   rename1 `encode_value hd vhd = SOME hdws` >>
   rename1 `encode_struct (offset+type_slot_size hd) ftypes tail = SOME tailws` >>
   rename1 `~dead_bytes_fields st (a+offset) ((_ ,hd)::ftypes) _ b` >>
-  gvs[Once dead_bytes_def, type_slot_size_def] >>
+  gnvs[Once dead_bytes_def, type_slot_size_def] >>
   Cases_on `j < type_slot_size hd`
   >- suspend "head"
   >> suspend "tail"
 QED
 
 Resume copy_struct_select[head]:
+  `MEM j (MAP FST hdws)` by
+    (gvs[MEM_MAP, pairTheory.EXISTS_PROD]
+     >- metis_tac[ADD_COMM, EQ_ADD_RCANCEL] >>
+     drule (cj 5 encode_writes_bounded) >> asm_rewrite_tac[] >>
+     disch_then (qspec_then `j+offset` mp_tac) >>
+     (impl_tac >- (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[])) >>
+     strip_tac >> `F` by decide_tac) >>
   qexistsl_tac [`hd`, `vhd`, `0`, `hdws`, `[]`, `tailws`] >> simp[] >>
   drule (cj 5 encode_writes_bounded) >> asm_rewrite_tac[] >>
   pure_rewrite_tac[ADD_ASSOC] >> simp_tac bool_ss []
 QED
 Resume copy_struct_select[tail]:
+  `MEM (j+offset) (MAP FST tailws)` by
+    (qpat_x_assum `_ \/ MEM _ _` strip_assume_tac >- (
+       `MEM j (MAP FST hdws)` by
+         (gvs[MEM_MAP, pairTheory.EXISTS_PROD] >>
+          metis_tac[ADD_COMM, EQ_ADD_RCANCEL]) >>
+       drule (cj 1 encode_writes_bounded) >> asm_rewrite_tac[] >>
+       disch_then (qspec_then `j` mp_tac) >> simp[]) >> simp[]) >>
+  `MEM (j-type_slot_size hd+(offset+type_slot_size hd)) (MAP FST tailws)` by
+    (`j-type_slot_size hd+(offset+type_slot_size hd) = j+offset` by decide_tac >> simp[]) >>
   `j-type_slot_size hd < type_slot_size_fields ftypes` by decide_tac >>
   `~dead_bytes_fields st (a+(offset+type_slot_size hd)) ftypes
      (a+((j-type_slot_size hd)+(offset+type_slot_size hd))) b` by
@@ -691,11 +600,28 @@ Resume copy_sparse_select[tail]:
 QED
 Finalise copy_sparse_select
 
+(* A payload hit supplies activity independently of the dead-byte mask. *)
+Theorem copy_dyn_written_index[local]:
+  !tv vs offset writes i r.
+    all_have_type tv vs /\ encode_dyn_array tv offset vs = SOME writes /\
+    MEM (offset+i*type_slot_size tv+r) (MAP FST writes) ==>
+    i < LENGTH vs
+Proof
+  rpt strip_tac >>
+  drule (cj 4 encode_writes_bounded) >> asm_rewrite_tac[] >>
+  disch_then (qspec_then `offset+i*type_slot_size tv+r` mp_tac) >>
+  simp[] >> strip_tac >>
+  `i*type_slot_size tv < LENGTH vs*type_slot_size tv` by decide_tac >>
+  fs[LT_MULT_RCANCEL]
+QED
+
 (* Dynamic payload selection retains the suffix's lower bound. *)
 Theorem copy_dyn_select[local]:
-  !vs tv offset off mem writes i.
+  !vs tv offset off mem writes i r.
     all_have_type tv vs /\ elems_in_memory vs off tv mem /\
-    encode_dyn_array tv offset vs = SOME writes /\ i < LENGTH vs ==>
+    encode_dyn_array tv offset vs = SOME writes /\ i < LENGTH vs /\
+    r < type_slot_size tv /\
+    MEM (offset+i*type_slot_size tv+r) (MAP FST writes) ==>
     ?v child pre post.
       value_has_type tv v /\
       val_in_memory tv v (off+32*(i*type_slot_size tv)) mem /\
@@ -703,7 +629,8 @@ Theorem copy_dyn_select[local]:
       writes = pre ++ MAP (\(j,w). (j+(offset+i*type_slot_size tv),w)) child ++ post /\
       (!j. MEM j (MAP FST post) ==>
         offset+(i+1)*type_slot_size tv <= j /\
-        j < offset+LENGTH vs*type_slot_size tv)
+        j < offset+LENGTH vs*type_slot_size tv) /\
+      MEM r (MAP FST child)
 Proof
   Induct >> simp[] >> rpt gen_tac >>
   simp[value_has_type_def, val_in_memory_def] >> rpt strip_tac >>
@@ -712,12 +639,27 @@ Proof
   rename1 `encode_value tv h = SOME hdws` >>
   rename1 `encode_dyn_array tv (offset+type_slot_size tv) vs = SOME tailws` >>
   Cases_on `i`
-  >- (qexistsl_tac [`h`, `hdws`, `[]`, `tailws`] >> simp[] >>
+  >- (`MEM r (MAP FST hdws)` by
+        (gvs[MEM_MAP, pairTheory.EXISTS_PROD]
+         >- metis_tac[ADD_COMM, EQ_ADD_RCANCEL] >>
+         drule (cj 4 encode_writes_bounded) >> asm_rewrite_tac[] >>
+         disch_then (qspec_then `offset+r` mp_tac) >>
+         (impl_tac >- (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[])) >>
+         strip_tac >> `F` by decide_tac) >>
+      qexistsl_tac [`h`, `hdws`, `[]`, `tailws`] >> simp[] >>
       drule (cj 4 encode_writes_bounded) >> asm_rewrite_tac[] >>
       rpt strip_tac >> first_x_assum drule >> strip_tac >>
       simp[MULT_CLAUSES] >> decide_tac) >>
   rename1 `SUC ix < SUC (LENGTH vs)` >>
   `ix < LENGTH vs` by decide_tac >>
+  `MEM (offset+type_slot_size tv+ix*type_slot_size tv+r) (MAP FST tailws)` by
+    (gvs[MEM_MAP, pairTheory.EXISTS_PROD]
+     >- (`MEM (r+SUC ix*type_slot_size tv) (MAP FST hdws)` by
+           (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+         drule (cj 1 encode_writes_bounded) >> asm_rewrite_tac[] >>
+         disch_then (qspec_then `r+SUC ix*type_slot_size tv` mp_tac) >>
+         simp[MULT_CLAUSES] >> strip_tac >> `F` by decide_tac) >>
+     fs[MULT_CLAUSES] >> metis_tac[]) >>
   first_x_assum drule_all >> strip_tac >>
   qexistsl_tac [`v`, `child`, `MAP (\(j,w). (j+offset,w)) hdws ++ pre`, `post`] >>
   simp[APPEND_ASSOC, MULT_CLAUSES] >> conj_tac
@@ -799,7 +741,7 @@ Theorem copy_dyn_live_index[local]:
   !st base tv n j b.
     0 < j /\ j < 1+n*type_slot_size tv /\ b < 32 /\
     ~dead_bytes st base (ArrayTV tv (Dynamic n)) (base+j) b ==>
-    ?i r. i < n /\ i < w2n (lookup_storage (n2w base) st) /\
+    ?i r. i < n /\
       r < type_slot_size tv /\ j = 1+i*type_slot_size tv+r /\
       ~dead_bytes st (base+1+i*type_slot_size tv) tv (base+j) b
 Proof
