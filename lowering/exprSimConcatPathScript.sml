@@ -48,7 +48,7 @@ Proof
   simp[emitted_insts_def, DROP_LENGTH_APPEND]
 QED
 
-Theorem concat_code_prefix[local]:
+Theorem concat_code_prefix:
   fn_has_code sa sb func /\
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
