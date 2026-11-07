@@ -5,7 +5,8 @@ Ancestors
   loweringPosts stmtLowering stmtSimProps context emitHelper compileEnv exprLoweringProps
   localPtrsProps emitHelperProps fragExec venomInst list finite_map arithmetic
   allocationPtr stmtSimForArrayLoop stmtSimDeclCompose words fragGasMode
-  stmtLoweringMono vyperAST
+  stmtLoweringMono vyperAST stmtSimDefs gasSummary vyperInterpreter
+  vyperState vyperValue gasContext
 Libs
   monadsyntax
 
@@ -668,4 +669,89 @@ Proof
      qpat_assum `!x. not_fresh_at st x ==> not_fresh_at st1 x` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[array_caller_frame_def] >> metis_tac[])]
+QED
+
+Theorem compile_for_immutable_final_insts[local]:
+  FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+  compile_stmt cenv lctx ty
+    (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts) st = ((),st') /\
+  cenv.ce_alloca_locals /\ fn_has_code st st' func /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) ==>
+  st'.cs_current_insts = []
+Proof
+  strip_tac >> drule_all compile_for_immutable_entry_code_normalized >>
+  strip_tac >> asm_rewrite_tac[]
+QED
+
+Theorem compile_for_immutable_frag_zero:
+  !ctx func cx cenv lctx RetQ ty id et bd n src name off stmts tv vs es P.
+  FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
+  cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  elem_size_in_location cenv LocCode et = type_memory_size tv /\
+  type_memory_bytes cenv et = type_memory_size tv /\
+  0 < type_memory_size tv /\ type_memory_bytes cenv et + 64 < dimword (:256) /\
+  LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
+  (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T) /\
+  (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) /\
+  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s ==>
+    (case bd of Fixed cap => T | Dynamic cap =>
+       ?av. immutable_holds cenv cx (ArrayT et (Dynamic cap))
+               (Value (ArrayV av)) (n2w off) ei s /\
+            value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
+            LENGTH vs = array_length (ArrayTV tv (Dynamic cap)) av) /\
+    (!k. k < LENGTH vs ==> immutable_holds cenv cx et (Value (EL k vs))
+      (n2w off + n2w ((case bd of Fixed cap => 0 | Dynamic cap => 32) +
+                      k * type_memory_size tv)) ei s)) /\
+  (!st0 bc sd ex inc ei k.
+    declare_local cenv id et st0 = (bc,sd) /\ P ei /\
+    lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs ==>
+    stmt_frag ctx func cx (InLoop ex inc) RetQ bc
+      (stmts_env bc (InLoop ex inc) ty stmts) (eval_stmts cx stmts)
+      (ei with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)) /\
+  (!ei k gs r es2. P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs /\
+    eval_stmts cx stmts (ei with <|scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes;
+      gas_obs := gs|>) = (r,es2) ==>
+    (!ex inc. stmt_res_ok (InLoop ex inc) r) /\
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
+  bound_length bd <= n /\ lookup_scopes id es.scopes = NONE /\
+  P (es with gas_obs := []) /\
+  (!gs. eval_iterator cx (Array (TopLevelName (ArrayT et bd) (src,name)))
+    (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) ==>
+  stmt_frag ctx func cx lctx RetQ cenv
+    (stmt_env cenv lctx ty
+      (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts))
+    (eval_stmt cx
+      (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts)) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >>
+  map_every qx_gen_tac [`st`, `st'`, `s0`, `cenv'`] >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
+     strip_tac >> asm_rewrite_tac[]) >>
+  `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
+  `LENGTH vs <= n` by decide_tac >>
+  `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx)
+     (es with gas_obs := [])` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
+       lift_option_def, bind_return, bind_def, compatible_bound_def,
+       check_def, vyperStateTheory.assert_def, ignore_bind_def, return_def]) >>
+  mp_tac (Q.INST [`es` |-> `es with gas_obs := []`, `st'` |-> `cs'`,
+                  `s` |-> `s0`] (SPEC_ALL immutable_compiled_loop_outcome)) >>
+  impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  drule_all for_source_prefix_bounded >> strip_tac >>
+  drule_all compile_for_immutable_final_insts >> strip_tac >>
+  gvs[] >> irule array_outcome_stmt_post >> simp[] >> first_assum ACCEPT_TAC
 QED
