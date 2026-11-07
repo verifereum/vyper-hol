@@ -375,8 +375,10 @@ Definition sym_step_def:
 End
 
 (* As asm_steps, which the codegen simulation uses: running off the end of
-   the program is an error, and the stack is unbounded (the EVM's stack
-   limit is handled outside the asm semantics). *)
+   the program is an error, and the stack is unbounded. A bound here would
+   make the forward bridge (asmSymBridge) false, since a concrete asm_steps
+   run may pass the EVM's 1024 items; that limit is left to the EVM-level
+   run of the assembled bytecode. *)
 Definition sym_run_def:
   sym_run p env (fuel:num) ss =
     if fuel = 0 then SymError "out of fuel"

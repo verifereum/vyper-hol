@@ -4,7 +4,7 @@
 Theory vyperTestsHol
 Ancestors
   e2eSourceBoundaryCVTest
-  jsonConstEvalWitness
+  vyperConstEvalWitness
   livenessProofIntegrity
   vyperAccountCodehashTest
   vyperAssignmentOrderAudit
@@ -32,6 +32,7 @@ Ancestors
   vyperExtCallCpsEquivalenceTest
   vyperExtCallModesTest
   vyperFixedBytesConvertTest
+  vyperForStorageReadsTest
   vyperInStaticArrayTest
   vyperInvertTest
   vyperLoadTimingTest

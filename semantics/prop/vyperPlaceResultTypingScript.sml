@@ -1625,7 +1625,7 @@ Theorem eval_mutual_scope_pop_effect_results[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. scope_pop_effect (eval_expr cx e)) /\
   (!cx es. scope_pop_effect (eval_exprs cx es)) /\
   (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\
@@ -1720,7 +1720,7 @@ Theorem eval_mutual_scope_pop_effect:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. scope_pop_effect (eval_expr cx e)) /\
   (!cx es. scope_pop_effect (eval_exprs cx es)) /\
   (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\

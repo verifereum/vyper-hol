@@ -30,6 +30,8 @@ signature jsonImportTerm = sig
   val fromMLstring : string -> term
   val natural : IntInf.int -> term
   val integer : IntInf.int -> term
+  (* dest_integer (integer n) = n. *)
+  val dest_integer : term -> IntInf.int
   (* Inspection is structural, not evaluation. For a constructor constant c,
      strip_comb (list_mk_comb (c, args)) must recover c and args in order,
      including when the backend uses specialized list/pair/option nodes.
@@ -45,4 +47,7 @@ signature jsonImportTerm = sig
      words, booleans, and nullary AST constructors are not covered by this guard. *)
   val is_string_or_natural : term -> bool
   val mk_record : hol_type * (string * term) list -> term
+  (* replace_subterm (from, to) tm replaces every subterm of tm that is aconv
+     to from with to. *)
+  val replace_subterm : term * term -> term -> term
 end

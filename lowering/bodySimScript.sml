@@ -225,11 +225,13 @@ Definition body_iterator_ok_def:
       body_expr_ok cx e2))
 End
 
-(* A loop over vs runs its body if vs is not empty. *)
+(* A loop over vs runs its body if vs is not empty and its first element
+   can be read. *)
 Definition body_for_ok_def:
-  body_for_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
+  body_for_ok cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
   <=>
-    vs <> [] ==> body_stmts_ok cx body
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_ok cx body
 End
 
 (* A target's keys, each if the place before it can evaluate.  It stands

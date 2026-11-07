@@ -4,6 +4,7 @@ Ancestors
   compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerEntryFixtureLib
+  evalCompilerBoundedLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../external-entries"]
@@ -41,21 +42,37 @@ Proof
   entry_stage "unit_wf" >> entry_stage "raw_static_inputs_wf" >>
   simp_tac pure_ss [NOT_CLAUSES, COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >>
   simp[venomPassScheduleTheory.o1_pipeline_spec_def] >>
-  entry_begin_mapped_stage >> entry_pass_emit >> entry_pass_check >> entry_install_function >>
-  entry_begin_mapped_stage >> entry_pass_emit >> entry_pass_check >> entry_install_function >>
+  entry_begin_mapped_stage >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_install_function >>
+  entry_begin_mapped_stage >> entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >> entry_install_function >>
   entry_stage "run_pipeline_stages" >> entry_admin >> entry_stage "fcg_analyze" >> simp[] >>
   entry_stage "prune_unit_fcg_unreachable" >> entry_stage "reachable_fcg_acyclic" >> simp[] >> entry_stage "fcg_postorder" >>
   entry_open_schedule >> entry_stage "ir_supply_covers_unit" >>
-  entry_stage "lookup_unique_function" >> simp[venomPassScheduleTheory.o1_fn_passes_def] >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
-  entry_pass_emit >> entry_pass_check >> entry_pass_emit >> entry_pass_check >>
+  entry_stage "lookup_unique_function" >> simp[venomPassScheduleTheory.o1_fn_passes_def] >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
+  entry_dft_start >> entry_dft_cfg >> entry_dft_live >> simp_tac pure_ss [LET_THM] >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >> entry_dft_tick >>
+  entry_dft_finish >> entry_admin >> entry_pass_check >>
+  entry_pass_begin >> entry_stage "execute_configured_fn_pass" >> entry_admin >> entry_pass_check >>
   entry_stage "run_configured_fn_pass_fold" >> entry_admin >> entry_stage "replace_unique_function" >> entry_admin >>
   entry_stage "apply_unit_label_map" >> entry_admin >> entry_guard "unit_labels_wf" >> entry_guard "list_subset" >>
   entry_guard "ir_supply_covers_unit" >> entry_guard "unit_global_inst_ids_distinct" >> entry_admin >>
   entry_stage "run_pipeline_stages" >> entry_admin >> entry_guard "unit_wf" >> entry_guard "unit_labels_wf" >>
    entry_guard "context_target_safe" >> entry_guard "concretized_static_layouts_wf" >> entry_guard "fmp_lowered_context_wf" >>
-   entry_stage "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >> entry_guard "codegen_ready" >> entry_admin >>
+   entry_stage "fcg_analyze" >> entry_guard "reachable_fcg_acyclic" >>
+   entry_open_codegen_ready >> entry_guard "canonical_param_prefix" >>
+   entry_guard "wf_function" >> entry_guard "fn_inst_wf" >>
+   entry_guard "ssa_form" >> entry_guard "def_dominates_uses" >>
+   entry_guard "single_use_form" >> entry_guard "cfg_is_normalized" >>
+   entry_guard "EVERY" >> entry_admin >>
    entry_open_codegen >> entry_guard "target_capabilities_wf" >>
    entry_guard "context_target_safe" >> entry_admin >>
    simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def,
@@ -70,5 +87,7 @@ Proof
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >> entry_plan_finish >>
+  entry_guard "spill_plan_in_region" >> entry_plan_spine_admin >>
+  entry_stage "OPTION_MAP" >> entry_admin >>
   CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED

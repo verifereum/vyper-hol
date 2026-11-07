@@ -54,9 +54,8 @@ val () = app (fn expected =>
   if not (null (find_terms (aconv expected) (#modules fixture))) then ()
   else raise Fail "pinned raw_call calldata operands/flags were not preserved") expected_calls;
 
-(* Decoder folding is confined to compile-time flags on this exact form.
-   Even expressions carrying folded metadata remain runtime operands for
-   target, value and gas, and for the entire ordinary bytes-input call. *)
+(* The decoder ignores folded_value: compile-time flags are computed from the
+   source expressions, and every operand stays as written. *)
 val runtime_json = "{\"ast_type\":\"BinOp\",\"left\":{\"ast_type\":\"Int\",\"value\":2},\"op\":{\"ast_type\":\"Add\"},\"right\":{\"ast_type\":\"Int\",\"value\":2},\"folded_value\":{\"ast_type\":\"Int\",\"value\":4}}";
 val data_json = "{\"ast_type\":\"Attribute\",\"value\":{\"ast_type\":\"Name\",\"id\":\"msg\"},\"attr\":\"data\"}";
 val bool_json = "{\"ast_type\":\"NameConstant\",\"value\":true,\"folded_value\":{\"ast_type\":\"NameConstant\",\"value\":false}}";
@@ -96,29 +95,26 @@ val source_data_e = ``JE_Attribute (JE_Name "msg" NONE JMissingSource JT_None)
 val plain_kwargs = ``[JKeyword "max_outsize" ^runtime_e;
   JKeyword "value" ^runtime_e; JKeyword "gas" ^runtime_e;
   JKeyword "revert_on_failure" (JE_Bool T)]``;
-val folded_kwargs = ``[JKeyword "max_outsize" (JE_Folded ^runtime_e (JE_Int 4 JT_None));
-  JKeyword "value" ^runtime_e; JKeyword "gas" ^runtime_e;
-  JKeyword "revert_on_failure" (JE_Folded (JE_Bool T) (JE_Bool F))]``;
 fun expected_decoded args kwargs = ``JE_Call
   (JE_Name "raw_call" NONE JMissingSource JT_None) ^args ^kwargs JT_None JMissingSource``;
 val () = app (fn (actual, expected) =>
   if aconv actual expected then ()
-  else raise Fail "raw_call decoder changed runtime operands/ordinary path or lost folded flags")
-  [(decode_raw_call data_json "", expected_decoded ``[^runtime_e; ^source_data_e]`` folded_kwargs),
+  else raise Fail "raw_call decoder changed operands or read folded_value")
+  [(decode_raw_call data_json "", expected_decoded ``[^runtime_e; ^source_data_e]`` plain_kwargs),
    (decode_raw_call runtime_json "", expected_decoded ``[^runtime_e; ^runtime_e]`` plain_kwargs),
    (decode_raw_call data_json ("," ^ runtime_json),
     expected_decoded ``[^runtime_e; ^source_data_e; ^runtime_e]`` plain_kwargs)];
 
-(* A method_id kwarg is a compiler-folded constant. Losing that folded value
-   silently drops the selector from _abi_encode and turns valid calls into
-   failed calls. This is the focused frontend boundary from
-   test_checkable_raw_call. *)
+(* A method_id kwarg is computed from its source call. Losing it silently
+   drops the selector from _abi_encode and turns valid calls into failed
+   calls. The folded_value here is deliberately wrong and must be ignored.
+   This is the focused frontend boundary from test_checkable_raw_call. *)
 val method_id_json =
   "{\"ast_type\":\"Call\",\"func\":{\"ast_type\":\"Name\",\"id\":\"method_id\"}," ^
   "\"args\":[{\"ast_type\":\"Str\",\"value\":\"fail1(bool)\"," ^
   "\"type\":{\"generic\":\"string\"}}],\"keywords\":[]," ^
   "\"type\":{\"name\":\"Bytes\",\"typeclass\":\"bytes\",\"length\":4}," ^
-  "\"folded_value\":{\"ast_type\":\"Bytes\",\"value\":\"0x282b554a\"," ^
+  "\"folded_value\":{\"ast_type\":\"Bytes\",\"value\":\"0x00000000\"," ^
   "\"type\":{\"name\":\"Bytes\",\"typeclass\":\"bytes\",\"length\":4}}}";
 val abi_encode_json =
   "{\"ast_type\":\"Call\",\"func\":{\"ast_type\":\"Name\",\"id\":\"_abi_encode\"}," ^
@@ -129,14 +125,14 @@ val abi_encode_json =
 val decoded_abi_encode =
   decode_named_call "_abi_encode" abi_encode_json;
 val translated_abi_encode = rhs (concl (EVAL
-  ``translate_expr (0,NONE,[],[],[],[],[]) ^decoded_abi_encode``));
+  ``translate_expr (0,NONE,[],[],[],[],[],[],[]) ^decoded_abi_encode``));
 val expected_abi_encode =
   ``TypeBuiltin (BaseT (BytesT (Dynamic 36)))
       (AbiEncode T (SOME [40w; 43w; 85w; 74w]))
       (TupleT [BaseT BoolT]) [Name (BaseT BoolT) "should_raise"]``;
 val () =
   if aconv translated_abi_encode expected_abi_encode then ()
-  else raise Fail "_abi_encode lost the compiler-folded method_id";
+  else raise Fail "_abi_encode lost the method_id selector";
 
 Theorem checkable_raw_call_false_calldata:
   evaluate_type_builtin empty_evaluation_context

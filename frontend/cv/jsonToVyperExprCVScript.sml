@@ -129,6 +129,58 @@ val () = cv_auto_trans translate_target_compute;
 
 val () = cv_auto_trans translate_iter_def;
 
+(* Annotation bounds are evaluated source expressions, so the annotation
+   traversals follow the expression translation. *)
+Definition annotations_resolved_cv_def:
+  annotations_resolved_cv nominal_index all_import_maps ctx anns =
+    EVERY (λann. annotation_resolved nominal_index all_import_maps ctx ann) anns
+End
+
+Theorem annotations_resolved_cv_compute:
+  (annotations_resolved_cv nominal_index all_import_maps ctx [] = T) /\
+  (annotations_resolved_cv nominal_index all_import_maps ctx (ann::anns) =
+    (annotation_resolved nominal_index all_import_maps ctx ann /\
+     annotations_resolved_cv nominal_index all_import_maps ctx anns))
+Proof
+  simp[annotations_resolved_cv_def]
+QED
+
+val annotation_resolved_compute = save_thm ("annotation_resolved_compute",
+  CONJ (PURE_REWRITE_RULE [GSYM annotations_resolved_cv_def] annotation_resolved_def)
+       annotations_resolved_cv_compute);
+val annotation_resolved_compute_ind = save_thm ("annotation_resolved_compute_ind",
+  jsonToVyperCVLib.register_first_order_induction "annotation_resolved_first_order"
+    annotation_resolved_compute
+    (WF_REL_TAC `measure (λx. case x of
+       INL (ni,im,ctx,ann) => json_type_annotation_size ann
+     | INR (ni,im,ctx,anns) => list_size json_type_annotation_size anns)` >> simp[]));
+val () = cv_auto_trans annotation_resolved_compute;
+
+Definition elaborate_annotations_cv_def:
+  elaborate_annotations_cv nominal_index all_import_maps ctx anns =
+    MAP (λann. elaborate_annotation nominal_index all_import_maps ctx ann) anns
+End
+
+Theorem elaborate_annotations_cv_compute:
+  (elaborate_annotations_cv nominal_index all_import_maps ctx [] = []) /\
+  (elaborate_annotations_cv nominal_index all_import_maps ctx (ann::anns) =
+    elaborate_annotation nominal_index all_import_maps ctx ann ::
+    elaborate_annotations_cv nominal_index all_import_maps ctx anns)
+Proof
+  simp[elaborate_annotations_cv_def]
+QED
+
+val elaborate_annotation_compute = save_thm ("elaborate_annotation_compute",
+  CONJ (PURE_REWRITE_RULE [GSYM elaborate_annotations_cv_def] elaborate_annotation_def)
+       elaborate_annotations_cv_compute);
+val elaborate_annotation_compute_ind = save_thm ("elaborate_annotation_compute_ind",
+  jsonToVyperCVLib.register_first_order_induction "elaborate_annotation_first_order"
+    elaborate_annotation_compute
+    (WF_REL_TAC `measure (λx. case x of
+       INL (ni,im,ctx,ann) => json_type_annotation_size ann
+     | INR (ni,im,ctx,anns) => list_size json_type_annotation_size anns)` >> simp[]));
+val () = cv_auto_trans elaborate_annotation_compute;
+
 (* Put the typeclass string test in the body: CV's pattern compiler cannot
    turn the literal-pattern presentation into a single case expression. *)
 Theorem custom_error_target_compute:
@@ -137,10 +189,10 @@ Theorem custom_error_target_compute:
       JE_Name name tc src ty =>
         if tc = SOME "error" then SOME (resolve_source_ref ctx src, name)
         else NONE
-    | JE_Attribute base name tc base_name base_tc src ty =>
+    | JE_Attribute obj name tc base_name base_tc src ty =>
         if tc = SOME "error" then
           SOME (resolve_func_module_ref ctx
-            (JE_Attribute base name tc base_name base_tc src ty) src, name)
+            (JE_Attribute obj name tc base_name base_tc src ty) src, name)
         else NONE
     | _ => NONE
 Proof
