@@ -29,8 +29,7 @@ Theory exprSimPopImmutableTarget
 Ancestors
   exprSimPopNestedLocalMemory vyperTargetPlaceWrite
   compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr
-  abiEncoderMemory immutableValue immutableEncoding ctorDeployLoweringNoCtor
-  ctorDeployDeadSectionRel
+  abiEncoderMemory immutableValue immutableEncoding immutableEncodingProofs
   exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode
   exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
   exprOperandVar exprSimWordArgs exprBopSimProps
@@ -2512,7 +2511,7 @@ Theorem immutable_default_zero_bytes:
     (REPLICATE (type_memory_size tv) (0w:word8))
 Proof
   gen_tac >>
-  once_rewrite_tac[GSYM (cj 1 ctorDeployLoweringNoCtorTheory.no_ctor_default_encoding)] >>
+  once_rewrite_tac[GSYM (cj 1 immutableEncodingProofsTheory.no_ctor_default_encoding)] >>
   simp[]
 QED
 
@@ -2606,7 +2605,7 @@ Proof
   qspecl_then [`immutable_value_mask tv v`, `immutable_tuple_mask tvs vs`,
                `encode_immutable_value tv v`, `encode_immutable_tuple tvs vs`]
     mp_tac immutable_masked_memory_append >>
-  simp[ctorDeployDeadSectionRelTheory.section_tuple_mask_length,
+  simp[immutableEncodingProofsTheory.section_tuple_mask_length,
        immutableEncodingProofsTheory.immutable_tuple_length] >>
   disch_then (qspec_then `off` (qspec_then `mem` assume_tac)) >>
   simp[Once immutable_value_mask_def, Once encode_immutable_value_def,
@@ -2630,7 +2629,7 @@ Proof
                 encode_immutable_value_def, valueEncodingTheory.mem_bytes_at_def] >>
   rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
-  drule ctorDeployDeadSectionRelTheory.section_tuple_cons_valid >>
+  drule immutableEncodingProofsTheory.section_tuple_cons_valid >>
   strip_tac >> gvs[valueEncodingTheory.val_in_memory_def] >>
   irule immutable_tuple_cons_memory_bytes >> conj_tac
   >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
@@ -2653,7 +2652,7 @@ Proof
   qspecl_then [`immutable_value_mask tv v`, `immutable_fields_mask fields vs`,
                `encode_immutable_value tv v`, `encode_immutable_fields fields vs`]
     mp_tac immutable_masked_memory_append >>
-  simp[ctorDeployDeadSectionRelTheory.section_fields_mask_length,
+  simp[immutableEncodingProofsTheory.section_fields_mask_length,
        immutableEncodingProofsTheory.immutable_fields_length] >>
   disch_then (qspec_then `off` (qspec_then `mem` assume_tac)) >>
   simp[Once immutable_value_mask_def, Once encode_immutable_value_def,
@@ -2678,7 +2677,7 @@ Proof
                 encode_immutable_value_def, valueEncodingTheory.mem_bytes_at_def] >>
   qx_gen_tac `entry` >> PairCases_on `entry` >> rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
-  drule ctorDeployDeadSectionRelTheory.section_fields_cons_valid >>
+  drule immutableEncodingProofsTheory.section_fields_cons_valid >>
   strip_tac >> gvs[valueEncodingTheory.val_in_memory_def] >>
   irule immutable_fields_cons_memory_bytes >> conj_tac
   >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
@@ -2880,7 +2879,7 @@ Proof
       simp[immutable_value_bytes_rel_def, Once immutable_value_mask_def,
            Once encode_immutable_value_def, valueEncodingTheory.type_memory_size_def] >>
       irule immutable_masked_memory_fit >>
-      simp[ctorDeployDeadSectionRelTheory.section_tuple_mask_length,
+      simp[immutableEncodingProofsTheory.section_tuple_mask_length,
         immutableEncodingProofsTheory.immutable_tuple_length] >>
       irule immutable_tuple_memory_bytes >> conj_tac
       >- (rpt strip_tac >> first_x_assum irule >> simp[] >>
@@ -2917,7 +2916,7 @@ Proof
       simp[immutable_value_bytes_rel_def, Once immutable_value_mask_def,
            Once encode_immutable_value_def, valueEncodingTheory.type_memory_size_def] >>
       irule immutable_masked_memory_fit >>
-      simp[ctorDeployDeadSectionRelTheory.section_fields_mask_length,
+      simp[immutableEncodingProofsTheory.section_fields_mask_length,
         immutableEncodingProofsTheory.immutable_fields_length] >>
       irule immutable_fields_memory_bytes >> conj_tac
       >- (rpt strip_tac >> first_x_assum irule >> simp[] >>

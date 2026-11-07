@@ -1,6 +1,6 @@
 Theory immutableEncodingProofs
 Ancestors
-  immutableEncoding valueEncoding vyperValue
+  immutableValue immutableEncoding valueEncoding vyperValue
 
 Theorem immutable_fit_exact:
   LENGTH bs = n ==> immutable_fit n bs = bs
@@ -467,3 +467,122 @@ val _ = List.app (fn (name, th) => let
        print ("IMMUTABLE_DECODING_KERNEL_CLOSED " ^ name ^ "\n")
      else raise Fail ("Unclosed immutable decoding theorem: " ^ name)
   end) (DB.thms "immutableEncodingProofs");
+
+(* Zero default encodings and admissible-section shape facts, shared by the
+   deploy section proofs and the immutable pop simulation. *)
+
+Theorem no_ctor_zero_word_bytes:
+  word_to_bytes (0w:bytes32) T = REPLICATE 32 (0w:word8)
+Proof
+  simp[byteTheory.word_to_bytes_def,
+       fcpLib.INDEX_CONV ``dimindex(:256)``] >> EVAL_TAC >>
+  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
+QED
+
+Theorem no_ctor_zero_address_bytes:
+  word_to_bytes (0w:160 word) T = REPLICATE 20 (0w:word8)
+Proof
+  simp[byteTheory.word_to_bytes_def,
+       fcpLib.INDEX_CONV ``dimindex(:160)``] >> EVAL_TAC >>
+  simp[wordsTheory.ZERO_SHIFT, wordsTheory.w2w_0]
+QED
+
+Theorem no_ctor_fit_zero:
+  immutable_fit n (REPLICATE m (0w:word8)) = REPLICATE n 0w
+Proof
+  simp[immutable_fit_def, rich_listTheory.REPLICATE_APPEND,
+       rich_listTheory.REPLICATE_GENLIST, listTheory.TAKE_GENLIST,
+       arithmeticTheory.MIN_DEF]
+QED
+
+Theorem no_ctor_flat_zero_slots:
+  !n sz. FLAT (GENLIST (\i. REPLICATE sz (0w:word8)) n) =
+    REPLICATE (n * sz) 0w
+Proof
+  Induct >> simp[listTheory.GENLIST_CONS, combinTheory.o_DEF,
+    rich_listTheory.REPLICATE_APPEND, arithmeticTheory.MULT]
+QED
+
+Theorem no_ctor_padded_zero_word:
+  (word_of_bytes_be (PAD_RIGHT 0w 32 (REPLICATE n 0w)):bytes32) = 0w /\
+  (word_of_bytes_be (PAD_LEFT 0w 32 (REPLICATE n 0w)):bytes32) = 0w
+Proof
+  simp[listTheory.PAD_RIGHT, listTheory.PAD_LEFT,
+       GSYM rich_listTheory.REPLICATE_GENLIST,
+       rich_listTheory.REPLICATE_APPEND, byteTheory.word_of_bytes_be_def,
+       immutable_word_of_zero_bytes]
+QED
+
+Theorem no_ctor_default_encoding:
+  (!tv. encode_immutable_value tv (default_value tv) =
+    REPLICATE (type_memory_size tv) 0w) /\
+  (!tvs. encode_immutable_tuple tvs (MAP default_value tvs) =
+    REPLICATE (type_memory_size_list tvs) 0w) /\
+  (!fts. encode_immutable_fields fts
+    (MAP (\(id,t). (id, default_value t)) fts) =
+    REPLICATE (type_memory_size_fields fts) 0w)
+Proof
+  ho_match_mp_tac type_memory_size_ind >>
+  rw[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
+     encode_immutable_value_def, type_memory_size_def,
+     immutable_word_bytes_def, typed_val_to_w256_def, val_to_w256_def,
+     integer_wordTheory.i2w_0, no_ctor_padded_zero_word,
+     no_ctor_zero_word_bytes, no_ctor_zero_address_bytes,
+     no_ctor_flat_zero_slots, no_ctor_fit_zero,
+     rich_listTheory.REPLICATE_APPEND]
+QED
+
+Theorem section_tuple_cons_valid:
+  immutable_tuple_admissible (tv::tvs) vs \/ vs = MAP default_value (tv::tvs) ==>
+  ?v rest. vs = v::rest /\
+    (immutable_value_admissible tv v \/ v = default_value tv) /\
+    (immutable_tuple_admissible tvs rest \/ rest = MAP default_value tvs)
+Proof
+  Cases_on `vs` >> simp[immutable_value_admissible_def] >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem section_fields_cons_valid:
+  immutable_fields_admissible ((name,tv)::fields) vs \/
+  vs = MAP (\(id,t). (id,default_value t)) ((name,tv)::fields) ==>
+  ?v rest. vs = (name,v)::rest /\
+    (immutable_value_admissible tv v \/ v = default_value tv) /\
+    (immutable_fields_admissible fields rest \/
+     rest = MAP (\(id,t). (id,default_value t)) fields)
+Proof
+  namedCases_on `vs` ["", "entry rest"] >> simp[immutable_value_admissible_def] >>
+  Cases_on `entry` >>
+  simp[immutable_value_admissible_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem section_tuple_mask_length_cons[local]:
+  (!vs. LENGTH (immutable_tuple_mask tvs vs) = type_memory_size_list tvs) ==>
+  !tv vs. LENGTH (immutable_tuple_mask (tv::tvs) vs) = type_memory_size_list (tv::tvs)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `vs` >>
+  simp[Once immutable_value_mask_def, type_memory_size_def]
+QED
+
+Theorem section_tuple_mask_length:
+  !tvs vs. LENGTH (immutable_tuple_mask tvs vs) = type_memory_size_list tvs
+Proof
+  Induct >- simp[Once immutable_value_mask_def, type_memory_size_def] >>
+  drule section_tuple_mask_length_cons >> simp[]
+QED
+
+Theorem section_fields_mask_length_cons[local]:
+  (!vs. LENGTH (immutable_fields_mask fields vs) = type_memory_size_fields fields) ==>
+  !field vs. LENGTH (immutable_fields_mask (field::fields) vs) =
+    type_memory_size_fields (field::fields)
+Proof
+  strip_tac >> qx_gen_tac `entry` >> PairCases_on `entry` >> gen_tac >> Cases_on `vs`
+  >- simp[Once immutable_value_mask_def, type_memory_size_def] >>
+  PairCases_on `h` >> simp[Once immutable_value_mask_def, type_memory_size_def]
+QED
+
+Theorem section_fields_mask_length:
+  !fields vs. LENGTH (immutable_fields_mask fields vs) = type_memory_size_fields fields
+Proof
+  Induct >- simp[Once immutable_value_mask_def, type_memory_size_def] >>
+  drule section_fields_mask_length_cons >> simp[]
+QED
