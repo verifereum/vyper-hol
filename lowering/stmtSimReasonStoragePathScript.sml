@@ -143,8 +143,11 @@ Theorem storage_reason_branch_path[local]:
 Proof
   strip_tac >> irule storage_reason_jump_path >> simp[] >>
   simp[mk_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp_tac (srw_ss()) [] >>
+  asm_rewrite_tac[] >>
   Cases_on `test` >>
-  gvs[step_inst_base_def, eval_operand_def, bool_to_word_def]
+  simp[eval_operand_def, bool_to_word_def]
 QED
 
 (* One cycle includes the test and, unless finished, the copy and back-edge. *)
