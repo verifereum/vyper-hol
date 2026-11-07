@@ -4,7 +4,7 @@ Ancestors
   compileEnv exprLoweringProps emitHelper list exprSimSource exprSimHypsDefs exprSimDefs
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom gasSummary gasContext
   exprSimAggregateChildren emitHelperProps exprSimVVFrame fragGasMode
-  exprSimProps loweringPosts stmtSimDefs
+  exprSimProps loweringPosts stmtSimDefs valueEncodingProofs
   venomExecSemantics venomInstProofs venomInst venomState
 Libs
   monadsyntax
@@ -149,4 +149,121 @@ Proof
   fs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
   conj_tac >- (qexists_tac `func` >> simp[]) >>
   qexistsl_tac [`sa`, `es1.scopes`, `s1`] >> simp[]
+QED
+
+(* An old nonlocal allocation is preserved as a whole by child evaluation;
+   every slice inherits that frame, independently of the child's layout. *)
+Theorem aggregate_body_child_slice_frame:
+  vv_post ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
+  FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sa.cs_next_id /\
+  (!name lo len. local_region ce es.scopes s0 name lo len ==>
+    b+sz <= lo \/ lo+len <= b) /\
+  b <= p /\ p+n <= b+sz ==>
+  mem_bytes_at p n s1.vs_memory = mem_bytes_at p n s0.vs_memory
+Proof
+  strip_tac >>
+  `mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+    (fs[vv_post_def] >> first_x_assum irule >>
+     conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+     qexists_tac `aid` >> simp[]) >>
+  drule mem_bytes_at_agree_window >> simp[]
+QED
+
+(* The aggregate's destination allocation is nonlocal at every source state
+   in the loop.  Derive both the whole-allocation and current-slot frames
+   at the actual post-child state, not at an intermediate compiler age. *)
+Theorem aggregate_body_destination_separation:
+  stmt_state_rel ctx func ce cx es r /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
+  not_local_ptr ce es.scopes x /\
+  FLOOKUP r.vs_allocas inst.inst_id = SOME (b,asz) /\ off+n <= asz ==>
+  (!name lo sz. local_region ce es.scopes r name lo sz ==>
+    lo+sz <= b \/ b+asz <= lo) /\
+  (!name lo sz. local_region ce es.scopes r name lo sz ==>
+    lo+sz <= b+off \/ b+off+n <= lo)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      mp_tac (Q.INST [`off` |-> `0`, `n` |-> `asz`]
+        aggregate_alloca_slice_excludes_local) >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all aggregate_alloca_slice_excludes_local >> simp[]
+QED
+
+(* Compose the child's whole-allocation frame with a store's slice frame.
+   The age bound is sa, even though the store starts after child and ADD. *)
+Theorem aggregate_body_child_store_frames:
+  vv_post ctx func ce cx e es sa sm s0 es1 tv vv r /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  FLOOKUP s0.vs_allocas did = SOME (b,asz) /\ did < sa.cs_next_id /\
+  (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+    b+asz <= lo \/ lo+sz <= b) /\
+  off+len <= asz /\
+  (!aid a k p n.
+    FLOOKUP r.vs_allocas aid = SOME (a,k) /\ aid < sa.cs_next_id /\
+    (!name lo sz. local_region ce es1.scopes r name lo sz ==>
+      a+k <= lo \/ lo+sz <= a) /\
+    a <= p /\ p+n <= a+k /\
+    (p+n <= b+off \/ b+off+len <= p) ==>
+    mem_bytes_at p n q.vs_memory = mem_bytes_at p n r.vs_memory) ==>
+  (!p n. b <= p /\ p+n <= b+asz /\
+    (p+n <= b+off \/ b+off+len <= p) ==>
+    mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
+  (!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+    aid < sa.cs_next_id /\ (p+n <= b \/ b+asz <= p) /\
+    (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
+      p+n <= lo \/ lo+sz <= p) ==>
+    mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory)
+Proof
+  strip_tac >>
+  `!name lo sz. local_region ce es1.scopes r name lo sz ==>
+     local_region ce es.scopes s0 name lo sz` by
+    (rpt strip_tac >> irule aggregate_body_tuple_local_region_backward >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
+    FLOOKUP r.vs_allocas aid = SOME a` by fs[vv_post_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` by
+        (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+           aggregate_body_child_slice_frame >> disch_then irule >>
+         qexistsl_tac [`did`, `b`, `asz`] >> simp[] >>
+         metis_tac[arithmeticTheory.ADD_COMM]) >>
+      `mem_bytes_at p n q.vs_memory = mem_bytes_at p n r.vs_memory` by
+        (first_x_assum irule >> reverse conj_tac >- simp[] >>
+         qexistsl_tac [`b`, `did`, `asz`] >> simp[] >>
+         metis_tac[arithmeticTheory.ADD_COMM]) >> simp[]) >>
+  rpt strip_tac >>
+  `mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` by
+    (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       aggregate_body_child_slice_frame >> disch_then irule >>
+     qexistsl_tac [`aid`, `p`, `n`] >> simp[] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `mem_bytes_at p n q.vs_memory = mem_bytes_at p n r.vs_memory` by
+    (first_x_assum irule >> reverse conj_tac >- decide_tac >>
+     qexistsl_tac [`p`, `aid`, `n`] >> simp[] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >> simp[]
+QED
+
+(* Metadata replay preserves the whole remaining footprint.  A head slot
+   can then be selected without replaying the metadata argument again. *)
+Theorem aggregate_body_immutable_slice:
+  (ce.ce_is_ctor ==> !name itv iv io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name =
+        SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) b n) /\
+  b <= p /\ p+len <= b+n ==>
+  (ce.ce_is_ctor ==> !name itv iv io.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name =
+        SOME (itv,iv) ==>
+    regions_disjoint io (type_memory_size itv) p len)
+Proof
+  strip_tac >> rpt strip_tac >>
+  first_x_assum drule >> disch_then drule >>
+  simp[regions_disjoint_def] >> decide_tac
 QED
