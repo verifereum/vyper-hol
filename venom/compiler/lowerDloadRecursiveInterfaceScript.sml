@@ -5609,3 +5609,25 @@ Proof
             metis_tac[]]) >> simp[]) >>
   strip_tac >> drule_all ld_revert_interval_requests >> strip_tac >> gvs[]
 QED
+
+Theorem ld_recursive_combined_exceptional_next[local]:
+  alloca_inv t /\ (!f i st tv. MEM (f,i,st,tv) stk ==> alloca_inv st) /\
+  revert_forward_pair bb copypos endpos /\
+  copypos <= t.vs_inst_idx /\ t.vs_inst_idx <= endpos /\
+  get_instruction bb t.vs_inst_idx = SOME j /\
+  lookup_block t.vs_current_bb gn.fn_blocks = SOME bb /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) gn.fn_blocks) /\
+  step_inst fuel CT j t = OK z /\
+  active_inst gn j' (z with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  (^ld_recursive_combined_candidate) vs0 CT stk (step_taint j t z un) gn j'
+    (z with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `alloca_inv (z with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule ld_step_next_alloca_inv >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any)) >>
+  qspec_then `\s. F` mp_tac ld_recursive_exceptional_next_anchor >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  BETA_TAC >> simp_tac (srw_ss()) [] >> disch_tac >>
+  BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
