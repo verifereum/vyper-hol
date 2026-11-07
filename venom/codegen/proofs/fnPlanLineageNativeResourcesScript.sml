@@ -1,7 +1,7 @@
 Theory fnPlanLineageNativeResources
 Ancestors
   fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath
-  fnPlanLineageNativeOrigins stackPlanGen venomWf
+  fnPlanLineageNativeOrigins fnPlanLineagePhiLiveBudget stackPlanGen venomWf
   venomInst passSharedDefs removeUnusedSsaProofs list rich_list finite_map bag
 
 (* Live resource accounting is independent of chronological origin support. *)
@@ -145,4 +145,55 @@ Proof
   irule native_regular_live_boundary_step >> goal_assum (drule_at Any) >>
   gvs[generate_inst_plan_def, AllCaseEqs()] >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+(* PHI demand is next-live minus the freshly defined output, not the union
+   of incoming alternatives. Physical selection remains an explicit input. *)
+Theorem native_phi_live_demand_step:
+  !fn bb i ps dfg cfg halt term ops qs out dist.
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL i bb.bb_instructions).inst_outputs = [out] /\
+    stack_get_phi_depth
+      (FILTER is_var_operand (EL i bb.bb_instructions).inst_operands) ps.ps_stack = SOME dist /\
+    ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) /\ v <> out ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) /\ v <> out ==>
+      LIST_ELEM_COUNT (Var v) ps.ps_stack +
+        (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halt term bb.bb_label ps =
+      SOME (ops,qs) ==>
+    native_live_boundary fn bb (SUC i) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def] >>
+  drule_at (Pat `generate_phi_plan _ _ _ _ = _`) generate_phi_plan_live_budget >>
+  disch_then (qspecl_then [`out`, `dist`] mp_tac) >> simp[] >>
+  simp[native_live_boundary_def]
+QED
+
+Theorem native_phi_live_boundary_step:
+  !fn bb i ps dfg cfg halt term ops qs out dist.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL i bb.bb_instructions).inst_outputs = [out] /\
+    stack_get_phi_depth
+      (FILTER is_var_operand (EL i bb.bb_instructions).inst_operands) ps.ps_stack = SOME dist /\
+    ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled /\
+    native_live_boundary fn bb i ps /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halt term bb.bb_label ps =
+      SOME (ops,qs) ==>
+    native_live_boundary fn bb (SUC i) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) /\ v <> out ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i)` by
+    (rpt strip_tac >> irule analyzed_computed_operand_demand >> simp[]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    native_phi_live_demand_step >>
+  disch_then (qspecl_then [`out`, `dist`] mp_tac) >>
+  gvs[native_live_boundary_def] >> metis_tac[]
 QED
