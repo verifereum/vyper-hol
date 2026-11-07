@@ -209,7 +209,7 @@ Proof
   qexists_tac `t3` >> simp[] >> metis_tac[]
 QED
 
-Theorem dynamic_load_word_raw_exact[local]:
+Theorem dynamic_load_word_raw_exact:
   load_bytestring_as_word v opc sa = ((r,k),sb) /\
   (opc = SHR \/ opc = SAR) /\ eval_operand v ss = SOME a /\
   mload (w2n a) ss = n /\ mload (w2n (a + 32w)) ss = d /\
