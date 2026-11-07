@@ -4281,7 +4281,7 @@ QED
 
 Finalise raw_call_allocated_tail_frag_aged
 
-Theorem raw_call_none_post[local]:
+Theorem raw_call_none_post:
   expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
   wb_frame cenv es sa s0 s ==>
   vv_post ctx func cenv cx e es sa sb s0 es' (Value NoneV)
@@ -4294,7 +4294,7 @@ Proof
     val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def]
 QED
 
-Theorem raw_call_bool_post[local]:
+Theorem raw_call_bool_post:
   expr_type e = BaseT BoolT /\
   stmt_state_rel ctx func cenv cx es' s /\
   expr_val_rel cx (expr_type e) (BoolV success) result s /\
@@ -4382,7 +4382,7 @@ Proof
   qexists_tac `ti` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem raw_call_bytes_post[local]:
+Theorem raw_call_bytes_post:
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
   cap <= rounded /\
