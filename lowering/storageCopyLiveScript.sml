@@ -384,7 +384,7 @@ QED
 
 Resume copy_tuple_select[head]:
   `MEM j (MAP FST hdws)` by
-    (gvs[MEM_MAP, pairTheory.EXISTS_PROD] 
+    (gvs[MEM_MAP, pairTheory.EXISTS_PROD]
      >- metis_tac[ADD_COMM, EQ_ADD_RCANCEL] >>
      drule (cj 2 encode_writes_bounded) >> asm_rewrite_tac[] >>
      disch_then (qspec_then `j+offset` mp_tac) >>
@@ -523,17 +523,7 @@ Proof
   qexistsl_tac [`i`, `r`, `v`, `child`] >> simp[] >> metis_tac[]
 QED
 
-(* Every sparse write lies in the interval of a key actually present. *)
-Theorem copy_sparse_write_key[local]:
-  !sparse tv offset writes n x.
-    sparse_has_type tv n sparse /\
-    encode_static_array tv offset sparse = SOME writes /\
-    MEM x (MAP FST writes) ==>
-    ?i r. MEM i (MAP FST sparse) /\ r < type_slot_size tv /\
-          x = offset+i*type_slot_size tv+r
-Proof
-  rpt strip_tac >> drule_all copy_sparse_write_owner >> metis_tac[]
-QED
+
 
 Theorem copy_sparse_select[local]:
   !sparse tv n offset off mem writes i v.
@@ -568,8 +558,8 @@ Resume copy_sparse_select[head]:
   >> (drule_all (cj 3 encode_writes_bounded) >> simp[])
 QED
 Resume copy_sparse_select[head_lower]:
-  drule_all copy_sparse_write_key >>
-  disch_then (qx_choosel_then [`i2`, `r2`] strip_assume_tac) >>
+  drule_all copy_sparse_write_owner >>
+  disch_then (qx_choosel_then [`i2`, `r2`, `v2`, `child2`] strip_assume_tac) >>
   `i < i2` by gvs[sortingTheory.SORTED_EQ] >>
   `(i+1)*type_slot_size tv <= i2*type_slot_size tv` by simp[LE_MULT_RCANCEL] >>
   decide_tac
@@ -793,7 +783,7 @@ Resume copy_fixed_written_select[absent]:
       qpat_x_assum `writes = _` (fn th => pure_rewrite_tac[th, MAP_APPEND, MEM_APPEND]) >>
       strip_tac
       >- (drule_all copy_default_block_member >> simp[]) >>
-      drule_all copy_sparse_write_key >> strip_tac >>
+      drule_all copy_sparse_write_owner >> strip_tac >>
       rename1 `MEM h (MAP FST sparse)` >>
       rename1 `i*type_slot_size tv+r = 0+h*type_slot_size tv+rr` >>
       `(i*type_slot_size tv+r) DIV type_slot_size tv = i` by
@@ -802,7 +792,7 @@ Resume copy_fixed_written_select[absent]:
         (irule DIV_UNIQUE >> qexists_tac `rr` >> simp[]) >> gvs[]) >>
   rpt gen_tac >> strip_tac
   >- (first_x_assum drule >> simp[MULT_COMM]) >>
-  drule_all copy_sparse_write_key >> strip_tac >>
+  drule_all copy_sparse_write_owner >> strip_tac >>
   conj_tac
   >- (drule_all (cj 3 encode_writes_bounded) >> simp[]) >>
   `i' <> i` by metis_tac[] >>
@@ -930,24 +920,7 @@ Proof
   disch_then (qspecl_then [`w2n k+j`, `b`] mp_tac) >> simp[]
 QED
 
-Theorem copy_selected_storage[local]:
-  !writes pre child post k st d tv total j b.
-    writes = pre ++ MAP (\(i,w). (i+d,w)) child ++ post /\
-    d <= j /\ j < d+type_slot_size tv /\
-    d+type_slot_size tv <= total /\ w2n k+total <= dimword (:256) /\
-    (!i. MEM i (MAP FST post) ==> d+type_slot_size tv <= i /\ i < total) /\
-    ~dead_bytes (apply_writes k writes st) (w2n k+d) tv (w2n k+j) b ==>
-    ?st0.
-      (!x. w2n k+d <= x /\ x < w2n k+d+type_slot_size tv ==>
-        lookup_storage (n2w x) (apply_writes k writes st) =
-        lookup_storage (n2w x) (apply_writes (n2w (w2n k+d)) child st0)) /\
-      ~dead_bytes (apply_writes (n2w (w2n k+d)) child st0)
-        (w2n k+d) tv (w2n k+j) b
-Proof
-  rpt strip_tac >> rename1 `w2n k+cap <= dimword (:256)` >>
-  irule copy_selected_storage_outside >>
-  simp[] >> qexistsl_tac [`post`, `pre`, `cap`] >> simp[]
-QED
+
 
 Theorem copy_tuple_member[local]:
   !tvs tv.
@@ -1047,7 +1020,9 @@ Resume encode_value_memory_live[tuple]:
   drule_all copy_tuple_member >> strip_tac >>
   `w2n k + type_slot_size_list l <= dimword (:256)` by
     fs[type_slot_size_def] >>
-  drule_all copy_selected_storage >> strip_tac >>
+  `!h. MEM h (MAP FST post) ==>
+    h < type_slot_size_list l /\ (h < d \/ d+type_slot_size tv <= h)` by metis_tac[] >>
+  drule_all copy_selected_storage_outside >> strip_tac >>
   qpat_x_assum `!y. _` drule >>
   disch_then (qspecl_then [`v`, `off+32*d`, `mem`, `n2w (w2n k+d)`,
                          `child`, `st0`, `j-d`, `b`] mp_tac) >>
@@ -1079,7 +1054,9 @@ Resume encode_value_memory_live[struct]:
   drule_all copy_struct_member >> strip_tac >>
   `w2n k + type_slot_size_fields l <= dimword (:256)` by
     fs[type_slot_size_def] >>
-  drule_all copy_selected_storage >> strip_tac >>
+  `!h. MEM h (MAP FST post) ==>
+    h < type_slot_size_fields l /\ (h < d \/ d+type_slot_size tv <= h)` by metis_tac[] >>
+  drule_all copy_selected_storage_outside >> strip_tac >>
   qpat_x_assum `!y. _` drule >>
   disch_then (qspecl_then [`v`, `off+32*d`, `mem`, `n2w (w2n k+d)`,
                          `child`, `st0`, `j-d`, `b`] mp_tac) >>
@@ -1196,7 +1173,9 @@ Resume encode_value_memory_live[dynamic_child]:
   `~dead_bytes (apply_writes k writes st) (w2n k+d) t (w2n k+j) b` by
     (qpat_x_assum `~dead_bytes _ (_+1+_) _ _ _` mp_tac >>
      simp_tac bool_ss [Abbr `d`, ADD_ASSOC]) >>
-  drule_all copy_selected_storage >> strip_tac >>
+  `!h. MEM h (MAP FST post) ==>
+    h < 1+LENGTH l*type_slot_size t /\ (h < d \/ d+type_slot_size t <= h)` by metis_tac[] >>
+  drule_all copy_selected_storage_outside >> strip_tac >>
   `well_formed_type_value t` by fs[well_formed_type_value_def] >>
   `type_value_size t < type_value_size (ArrayTV t (Dynamic n))` by simp[] >>
   qpat_x_assum `!y. type_value_size y < _ ==> _` drule >>
