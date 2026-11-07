@@ -61,18 +61,6 @@ Proof
   metis_tac[fn_cfg_edge_cfg_analyze]
 QED
 
-Theorem ready_small_preds_no_phis[local]:
-  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
-  LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1 ==>
-  collect_phis bb.bb_instructions = []
-Proof
-  strip_tac >>
-  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
-    metis_tac[lookup_block_MEM, lookup_block_label] >>
-  gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
-  metis_tac[NULL_EQ]
-QED
-
 Theorem ready_entry_no_phis[local]:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME lbl /\
   lookup_block lbl fn.fn_blocks = SOME bb ==>
