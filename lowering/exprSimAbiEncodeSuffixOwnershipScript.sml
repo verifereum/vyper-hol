@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeSuffixOwnership
 Ancestors
   abiEncoderRegisteredEffect abiEncoderWindowContract abiBuiltinEncodeSetup
+  abiDecoderContract
   finite_map pred_set list arithmetic
 
 (* Absorb explicit output writes only when each output lies in a final
@@ -55,4 +56,15 @@ Proof
   irule abi_encode_registered_effect_absorb_outputs >>
   goal_assum (drule_at Any) >>
   simp[] >> qexistsl [`site`, `p`, `outsz`] >> simp[]
+QED
+
+(* The setup ALLOCA changes metadata, not bytes.  Its only memory write is
+   the optional full-width selector store, not the four-byte prefix. *)
+Theorem abi_encode_setup_memory_effect:
+  abi_builtin_encode_setup_frame next site outsz p write_size initial prepared /\
+  (b+n <= p+32 \/ p+32+write_size <= b) ==>
+  mem_bytes_at b n prepared.vs_memory = mem_bytes_at b n initial.vs_memory
+Proof
+  simp_tac bool_ss [abi_builtin_encode_setup_frame_def, abi_decode_frame_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
 QED
