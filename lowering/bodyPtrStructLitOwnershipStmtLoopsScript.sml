@@ -8,6 +8,7 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipSteps
   context exprLowering loweringShapeProps bodyPtrStructLitLoopShapeDynBody
   bodyPtrStructLitOwnershipMemory bodyPtrStructLitOwnershipReservation
   bodyPtrStructLitOwnershipEnvironment stackPlanTypes venomInst unitShapeDefs
+  bodyPtrStructLitOwnershipStructFrame
 
 Theorem alloc_run_emit_jmp_if_not_terminated:
   alloc_run (\s. T) (emit_jmp_if_not_terminated lbl) (\u s. T)
@@ -343,3 +344,241 @@ Proof
   simp[alloc_run_def, comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
   disch_then drule >> simp[]
 QED
+
+Theorem structlit_range_bound_checks_shape:
+  shape_step F compiler_label
+    (\s. plain_operand s start_op /\ plain_operand s end_op /\ plain_operand s rounds)
+    (compile_range_bound_checks start_op end_op rounds bound signed) (\u s. T)
+Proof
+  simp[compile_range_bound_checks_def, comp_ignore_bind_def] >>
+  irule shape_step_bind >>
+  qexists `\v s. plain_operand s v /\ plain_operand s rounds` >> reverse conj_tac
+  >- (Cases_on `signed` >> simp[] >> irule shape_step_conseq >>
+      irule_at Any loop_shape_op >>
+      qexists `\s. plain_operand s start_op /\ plain_operand s end_op /\ plain_operand s rounds` >>
+      simp[shape_stable_conj,
+        SRULE [] (Q.SPEC `[start_op;end_op;rounds]` shape_stable_plain_operands),
+        lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+        inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+        label_positions_ok_def, is_terminator_def] >>
+      gvs[plain_operand_def, is_label_operand_def, operand_case_not_label]) >>
+  qx_gen_tac `bad_order` >> BETA_TAC >> irule shape_step_bind >>
+  qexists `\v s. plain_operand s v /\ plain_operand s rounds` >> reverse conj_tac
+  >- (irule shape_step_conseq >> irule_at Any loop_shape_op >>
+      qexists `\s. plain_operand s bad_order /\ plain_operand s rounds` >>
+      simp[SRULE [] (Q.SPEC `[bad_order;rounds]` shape_stable_plain_operands)] >>
+      rpt strip_tac >> irule (cj 2 loop_extra_data_inst_ok) >>
+      simp[] >> qexists `s` >> simp[]) >>
+  qx_gen_tac `good_order` >> BETA_TAC >> irule shape_step_bind >>
+  qexists `\u s. plain_operand s rounds` >> reverse conj_tac
+  >- suspend "assert_order" >>
+  gen_tac >> BETA_TAC >> suspend "rounds"
+QED
+
+Resume structlit_range_bound_checks_shape[assert_order]:
+  irule shape_step_conseq >> irule_at Any loop_shape_void >>
+  qexists `\s. plain_operand s good_order /\ plain_operand s rounds` >>
+  simp[SRULE [] (Q.SPEC `[good_order;rounds]` shape_stable_plain_operands),
+    lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+    inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+    label_positions_ok_def, is_terminator_def] >>
+  gvs[plain_operand_def, is_label_operand_def, operand_case_not_label]
+QED
+
+Resume structlit_range_bound_checks_shape[rounds]:
+  irule shape_step_bind >> qexists `\v s. plain_operand s v` >> reverse conj_tac
+  >- (irule shape_step_conseq >> irule_at Any loop_shape_op >>
+      qexists `\s. plain_operand s rounds` >>
+      simp[SRULE [] (Q.SPEC `[rounds]` shape_stable_plain_operands), plain_operand_def,
+        lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+        inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+        label_positions_ok_def, is_terminator_def, is_label_operand_def, operand_case_not_label]) >>
+  qx_gen_tac `bad_rounds` >> BETA_TAC >> irule shape_step_bind >>
+  qexists `\v s. plain_operand s v` >> reverse conj_tac
+  >- (irule shape_step_conseq >> irule_at Any loop_shape_op >>
+      qexists `\s. plain_operand s bad_rounds` >>
+      simp[SRULE [] (Q.SPEC `[bad_rounds]` shape_stable_plain_operands)] >>
+      rpt strip_tac >> irule (cj 2 loop_extra_data_inst_ok) >>
+      simp[] >> qexists `s` >> simp[]) >>
+  qx_gen_tac `good_rounds` >> BETA_TAC >>
+  irule shape_step_conseq >> irule_at Any loop_shape_void >>
+  qexists `\s. plain_operand s good_rounds` >>
+  simp[SRULE [] (Q.SPEC `[good_rounds]` shape_stable_plain_operands),
+    lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+    inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+    label_positions_ok_def, is_terminator_def] >>
+  gvs[plain_operand_def, is_label_operand_def, operand_case_not_label]
+QED
+Finalise structlit_range_bound_checks_shape
+
+Theorem structlit_range_rounds_shape:
+  shape_step F compiler_label
+    (\s. plain_operand s end_op /\ plain_operand s start_op)
+    (case (e1,e2) of
+       (Literal _ (IntL n1),Literal _ (IntL n2)) =>
+         comp_return (Lit (i2w n2 - i2w n1))
+     | _ => emit_op SUB [end_op;start_op]) (\r s. plain_operand s r)
+Proof
+  `shape_step F compiler_label
+    (\s. plain_operand s end_op /\ plain_operand s start_op)
+    (emit_op SUB [end_op;start_op]) (\r s. plain_operand s r)` by
+    (irule shape_step_conseq >> irule_at Any loop_shape_op >>
+     qexists `\s. plain_operand s end_op /\ plain_operand s start_op` >>
+     simp[SRULE [] (Q.SPEC `[end_op;start_op]` shape_stable_plain_operands),
+       plain_operand_def, lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def,
+       inst_shape_ok_def, inst_jump_labels_ok_def, is_param_opcode_def,
+       is_read0_opcode_def, label_positions_ok_def, is_terminator_def,
+       is_label_operand_def, operand_case_not_label]) >>
+  `!w. shape_step F compiler_label
+    (\s. plain_operand s end_op /\ plain_operand s start_op)
+    (comp_return (Lit w)) (\r s. plain_operand s r)` by
+    (gen_tac >> irule shape_step_return >>
+     simp[plain_operand_def, is_label_operand_def]) >>
+  Cases_on `e1` >> Cases_on `e2` >> simp[] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+Theorem alloc_run_stmt_range_rounds:
+  alloc_run fresh_outputs
+    (case (e1,e2) of
+       (Literal _ (IntL n1),Literal _ (IntL n2)) =>
+         comp_return (Lit (i2w n2 - i2w n1))
+     | _ => emit_op SUB [end_op;start_op]) (\r s. fresh_outputs s)
+Proof
+  `!w. alloc_run fresh_outputs (comp_return (Lit w)) (\r s. fresh_outputs s)` by
+    simp[alloc_run_def, comp_return_def, alloc_frame_refl] >>
+  gvs[SF ETA_ss] >> Cases_on `e1` >> Cases_on `e2` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
+  rpt BasicProvers.TOP_CASE_TAC >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
+QED
+
+Theorem structlit_range_checks_shape:
+  shape_step F compiler_label
+    (\s. plain_operand s start_op /\ plain_operand s end_op /\ plain_operand s rounds)
+    (case (e1,e2) of
+       (Literal _ (IntL _),Literal _ (IntL _)) => comp_return ()
+     | _ => compile_range_bound_checks start_op end_op rounds bound signed)
+    (\u s. T)
+Proof
+  `shape_step F compiler_label
+    (\s. plain_operand s start_op /\ plain_operand s end_op /\ plain_operand s rounds)
+    (comp_return ()) (\u s. T)` by (irule shape_step_return >> simp[]) >>
+  Cases_on `e1` >> Cases_on `e2` >> simp[structlit_range_bound_checks_shape] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[structlit_range_bound_checks_shape]
+QED
+
+Theorem alloc_run_stmt_range_checks:
+  alloc_run fresh_outputs
+    (case (e1,e2) of
+       (Literal _ (IntL _),Literal _ (IntL _)) => comp_return ()
+     | _ => compile_range_bound_checks start_op end_op rounds bound signed)
+    (\u s. fresh_outputs s)
+Proof
+  `alloc_run fresh_outputs (comp_return ()) (\u s. fresh_outputs s)` by
+    simp[alloc_run_def, comp_return_def, alloc_frame_refl] >>
+  gvs[SF ETA_ss] >> Cases_on `e1` >> Cases_on `e2` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_range_bound_checks] >>
+  rpt BasicProvers.TOP_CASE_TAC >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_range_bound_checks]
+QED
+
+Theorem alloc_run_stmt_range_trip_count:
+  shape_stable R ==>
+  alloc_run (\s. shape_state s /\ R s /\
+      plain_operand s start_op /\ plain_operand s end_op)
+    (do rounds <-
+          (case (e1,e2) of
+             (Literal _ (IntL n1),Literal _ (IntL n2)) =>
+               comp_return (Lit (i2w n2 - i2w n1))
+           | _ => emit_op SUB [end_op;start_op]);
+        (case (e1,e2) of
+           (Literal _ (IntL _),Literal _ (IntL _)) => comp_return ()
+         | _ => compile_range_bound_checks start_op end_op rounds bound signed);
+        emit_op ADD [start_op;rounds] od)
+    (\v s. shape_state s /\ R s /\ plain_operand s v)
+Proof
+  strip_tac >> simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\r s. shape_state s /\
+    (R s /\ plain_operand s start_op /\ plain_operand s end_op) /\ plain_operand s r` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_shape_frame >>
+      irule_at Any (SRULE [] structlit_range_rounds_shape) >>
+      qexists `\s. R s /\ plain_operand s start_op /\ plain_operand s end_op` >>
+      simp[shape_stable_conj,
+        SRULE [] (Q.SPEC `[start_op;end_op]` shape_stable_plain_operands),
+        SF ETA_ss, SRULE [SF ETA_ss] alloc_run_stmt_range_rounds]) >>
+  qx_gen_tac `rounds` >> simp[] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\ R s /\ plain_operand s start_op /\ plain_operand s rounds` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_shape_frame >>
+      irule_at Any (SRULE [] structlit_range_checks_shape) >>
+      qexists `\s. R s /\ plain_operand s start_op /\ plain_operand s rounds` >>
+      simp[shape_stable_conj,
+        SRULE [] (Q.SPEC `[start_op;rounds]` shape_stable_plain_operands),
+        SF ETA_ss, SRULE [SF ETA_ss] alloc_run_stmt_range_checks]) >>
+  gen_tac >> simp[] >>
+  irule alloc_run_conseq >> irule_at Any alloc_run_fresh_shape_frame >>
+  irule_at Any loop_shape_op >> qexists `R` >>
+  qexists `\s. plain_operand s start_op /\ plain_operand s rounds` >>
+  simp[shape_stable_conj,
+    SRULE [] (Q.SPEC `[start_op;rounds]` shape_stable_plain_operands),
+    alloc_run_emit_op_fresh, plain_operand_def,
+    lowered_inst_ok_def, mk_inst_def, raw_opcode_ok_def, inst_shape_ok_def,
+    inst_jump_labels_ok_def, is_param_opcode_def, is_read0_opcode_def,
+    label_positions_ok_def, is_terminator_def, is_label_operand_def, operand_case_not_label]
+QED
+
+Theorem alloc_run_stmt_loop_counter:
+  shape_stable R /\ compiler_label entry ==>
+  alloc_run (\s. shape_state s /\ R s /\ plain_operand s init)
+    (do emit_inst JMP [Label entry] []; new_block entry;
+        ctr <- fresh_var; emit_inst ASSIGN [init] [ctr]; return ctr od)
+    (\ctr s. shape_state s /\ R s /\ plain_operand s (Var ctr) /\
+      not_fresh_at s ctr /\ ~alloc_owned s ctr)
+Proof
+  strip_tac >> Cases_on `is_label_operand init`
+  >- simp[alloc_run_def, plain_operand_def] >>
+  simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\ (R s /\ plain_operand s init)` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_shape_frame >>
+      irule_at Any loop_shape_jmp >>
+      qexistsl [`\s. R s /\ plain_operand s init`, `\s. T`] >>
+      simp[shape_stable_conj, shape_stable_def,
+        SRULE [] (Q.SPEC `[init]` shape_stable_plain_operands),
+        SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\ (R s /\ plain_operand s init)` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_new_block_frame >>
+      qexists `\s. R s /\ plain_operand s init` >>
+      simp[shape_stable_conj,
+        SRULE [] (Q.SPEC `[init]` shape_stable_plain_operands)]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\ctr s. shape_state s /\ (R s /\ plain_operand s init) /\
+    plain_operand s (Var ctr) /\ not_fresh_at s ctr /\ ~alloc_owned s ctr` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_fresh_var_frame >>
+      qexists `\s. R s /\ plain_operand s init` >>
+      simp[shape_stable_conj,
+        SRULE [] (Q.SPEC `[init]` shape_stable_plain_operands)]) >>
+  qx_gen_tac `ctr` >> simp[] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\ R s /\ plain_operand s (Var ctr) /\
+    not_fresh_at s ctr /\ ~alloc_owned s ctr` >> reverse conj_tac
+  >- suspend "assign" >>
+  simp[alloc_run_def, comp_return_def, alloc_frame_refl]
+QED
+
+Resume alloc_run_stmt_loop_counter[assign]:
+  irule alloc_run_conseq >> irule_at Any alloc_run_frame_reserved >>
+  irule_at Any alloc_run_emit_inst_frame >>
+  qexistsl [`ctr`, `F`, `\s. R s /\ plain_operand s (Var ctr)`] >>
+  simp[shape_stable_conj,
+    SRULE [] (Q.SPEC `[Var ctr]` shape_stable_plain_operands),
+    label_or_plain_def, plain_operand_def, lowered_inst_ok_def, mk_inst_def,
+    raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
+    is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def,
+    is_terminator_def, is_label_operand_def, operand_case_not_label]
+QED
+Finalise alloc_run_stmt_loop_counter
