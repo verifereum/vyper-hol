@@ -4,8 +4,40 @@ Ancestors
   targetSubscriptMemory loweringPosts targetPlaceLive accountsRelProps exprSimArrayIndex
   vyperState vyperInterpreter vyperValue vyperStorageBackend
   venomState compileEnv context exprLowering exprLoweringProps exprBopSimProps freshWrites exprSimUnopProps fragExec
-  vyperLookupStorage vyperStorage integer_word
+  vyperLookupStorage vyperStorage integer_word vyperPlaceStoragePreservation
+  vyperStoragePlaceProvenance
   words arithmetic list rich_list finite_map emitHelper emitHelperProps fragGasMode venomInst venomExecSemantics
+
+(* A captured declared-capacity region remains usable after arbitrary index
+   effects. Only well-formedness of the new storage is needed, not a frame
+   equation with the storage at the time the pointer was captured. *)
+Theorem eval_base_place_storage_ready:
+  storage_layout_safe cx /\ contract_storage_well_formed cx fin /\
+  eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),mid) ==>
+  storage_read_live cx tr (get_storage cx fin tr) slot tv /\
+  w2n slot + type_slot_size tv <= dimword(:256) /\
+  (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+    w2n (lookup_storage slot (get_storage cx fin tr)) <= cnt)
+Proof
+  strip_tac >>
+  drule eval_base_place_region >> simp[storage_result_region_def] >> strip_tac >>
+  Cases_on `type_slot_size tv = 0`
+  >- (conj_tac
+      >- (mp_tac (Q.ISPEC `slot:bytes32` wordsTheory.w2n_lt) >>
+          simp[storage_read_live_def]) >>
+      conj_tac >- (mp_tac (Q.ISPEC `slot:bytes32` wordsTheory.w2n_lt) >> simp[]) >>
+      rpt strip_tac >> gvs[type_slot_size_def]) >>
+  `0 < type_slot_size tv` by decide_tac >>
+  drule_all storage_place_region_numeric >> strip_tac >>
+  drule_all storage_place_region_read_live >>
+  disch_then (qspec_then `get_storage cx fin tr` assume_tac) >>
+  drule_all storage_place_region_slots_in_range >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `w2n slot = _` kall_tac >>
+  qpat_x_assum `slots_in_range _ _ _` mp_tac >>
+  simp[slots_in_range_def, read_slot_def,
+    vyperStorageBackendTheory.get_storage_backend_eq]
+QED
 
 Theorem extend_place_storage_array_index:
   !cx tr slot et bd i es.
