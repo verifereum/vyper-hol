@@ -6,6 +6,7 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipSteps
   bodyPtrStructLitLoopShapeEmit bodyPtrStructLitOwnershipControlFrame
   bodyPtrStructLitOwnershipFrame bodyPtrStructLitOwnershipInterfaces
   context exprLowering loweringShapeProps bodyPtrStructLitLoopShapeDynBody
+  bodyPtrStructLitOwnershipMemory
 
 Theorem alloc_run_emit_jmp_if_not_terminated:
   alloc_run (\s. T) (emit_jmp_if_not_terminated lbl) (\u s. T)
@@ -173,3 +174,70 @@ Resume alloc_run_compile_stmt_if[branches]:
   simp[cenv_shape_ok_stable] >> qexists `internal` >> simp[]
 QED
 Finalise alloc_run_compile_stmt_if
+
+(* Shared by range and array iteration: explicit counter writes are legal
+   only while the reserved register remains allocation-free. *)
+Theorem alloc_run_stmt_loop_increment:
+  alloc_run (\s. fresh_outputs s /\ not_fresh_at s ctr /\ ~alloc_owned s ctr)
+    (do new_block incr;
+        next <- emit_op ADD [Var ctr; Lit 1w];
+        emit_inst ASSIGN [next] [ctr];
+        emit_inst JMP [Label cond] [];
+        new_block exit; return () od)
+    (\u s. fresh_outputs s /\ not_fresh_at s ctr /\ ~alloc_owned s ctr)
+Proof
+  simp[comp_ignore_bind_def] >>
+  ntac 2 (irule alloc_run_bind >>
+    qexists `\v s. fresh_outputs s /\ not_fresh_at s ctr /\ ~alloc_owned s ctr` >>
+    reverse conj_tac
+    >- (ho_match_mp_tac alloc_run_frame_reserved >>
+        simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_new_block_fresh,
+          SRULE [SF ETA_ss] alloc_run_emit_op_fresh]) >>
+    gen_tac >> simp[]) >>
+  irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s /\ not_fresh_at s ctr /\ ~alloc_owned s ctr` >>
+  reverse conj_tac >- simp[alloc_run_assign_reserved] >> gen_tac >> simp[] >>
+  ntac 2 (irule alloc_run_bind >>
+    qexists `\v s. fresh_outputs s /\ not_fresh_at s ctr /\ ~alloc_owned s ctr` >>
+    reverse conj_tac
+    >- (ho_match_mp_tac alloc_run_frame_reserved >>
+        simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_new_block_fresh,
+          SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]) >>
+    gen_tac >> simp[]) >>
+  simp[alloc_run_def, comp_return_def, alloc_frame_refl]
+QED
+
+Theorem alloc_run_stmt_loop_body_tail:
+  shape_step internal compiler_label (\s. cenv_shape_ok s ce) bfn (\u s. T) /\
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce) bfn (\u s. T) ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce /\ compiler_label incr /\
+      not_fresh_at s ctr /\ ~alloc_owned s ctr)
+    (do bfn; emit_jmp_if_not_terminated incr;
+        new_block incr;
+        next <- emit_op ADD [Var ctr; Lit 1w];
+        emit_inst ASSIGN [next] [ctr];
+        emit_inst JMP [Label cond] [];
+        new_block exit; return () od)
+    (\u s. T)
+Proof
+  strip_tac >> reverse (Cases_on `compiler_label incr`)
+  >- simp[alloc_run_def] >>
+  simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\u s. (shape_state s /\ cenv_shape_ok s ce /\ compiler_label incr) /\
+    not_fresh_at s ctr /\ ~alloc_owned s ctr` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_frame_reserved >>
+      irule_at Any alloc_run_shape_frame >>
+      qexistsl [`ctr`, `internal`, `\s. cenv_shape_ok s ce /\ compiler_label incr`, `\u s. T`,
+        `\s. cenv_shape_ok s ce`, `compiler_label`, `\u s. T`] >>
+      simp[shape_stable_conj, cenv_shape_ok_stable, shape_stable_def]) >>
+  gen_tac >> simp[] >> irule alloc_run_bind >>
+  qexists `\u s. fresh_outputs s /\ not_fresh_at s ctr /\ ~alloc_owned s ctr` >>
+  reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_frame_reserved >>
+      irule_at Any alloc_run_emit_jmp_if_not_terminated_frame >>
+      qexistsl [`ctr`, `\s. cenv_shape_ok s ce /\ compiler_label incr`] >>
+      simp[shape_stable_conj, cenv_shape_ok_stable, shape_stable_def] >>
+      metis_tac[shape_base_fresh_outputs, shape_state_def]) >>
+  gen_tac >> simp[] >> irule alloc_run_conseq >>
+  irule_at Any (SRULE [comp_ignore_bind_def] alloc_run_stmt_loop_increment) >> simp[]
+QED
