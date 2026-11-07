@@ -22,8 +22,18 @@ Definition layout_canonical_ready_def:
     layout_ordinary_trace vs0 C q0 es qs qend a p
 End
 
+(* A row is retained at the structural boundary.  It is NOT a hypothesis of
+   target execution; stage_row_produce supplies it from the actual pass. *)
+Definition layout_driver_row_def:
+  layout_driver_row C' fn fn' positions <=>
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    ?ctx reserved layout. layout_stage_row ctx reserved fn fn' layout /\
+      positions = layout.cl_positions
+End
+
 Definition layout_canonical_run_def:
   layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t <=>
+    MEM fn C.ctx_functions /\ (?positions. layout_driver_row C' fn fn' positions) /\
     ?a p p'. enters_block fn s p /\ enters_block fn' t p' /\
       layout_canonical_ready vs0 C q0 es qs ass qend q n a p /\
       layout_ordinary_state D lo C' q0 es qs a p p' /\ control_agree p p'
@@ -54,15 +64,6 @@ Definition layout_canonical_result_def:
     | (IntRet ret s,IntRet ret' t) =>
         layout_canonical_ret D lo vs0 C C' q0 es qs ass qend qe m ret s ret' t
     | _ => F
-End
-
-(* A row is retained at the structural boundary.  It is NOT a hypothesis of
-   target execution; stage_row_produce supplies it from the actual pass. *)
-Definition layout_driver_row_def:
-  layout_driver_row C' fn fn' positions <=>
-    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
-    ?ctx reserved layout. layout_stage_row ctx reserved fn fn' layout /\
-      positions = layout.cl_positions
 End
 
 Definition layout_canonical_block_witness_def:
