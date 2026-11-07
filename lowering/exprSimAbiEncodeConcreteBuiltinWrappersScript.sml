@@ -45,6 +45,7 @@ Theorem abi_encode_window_finish_concrete:
     mem_bytes_at (p+32) (mid_size+len) actual.vs_memory = bytes /\
     fresh_vars_wrt limit_st actual /\
     abi_decode_frame p 32 encoded actual /\
+    abi_encoder_registered_effect {} [(p,32)] encoded actual /\
     actual.vs_allocas = encoded.vs_allocas /\
     actual.vs_alloca_next = encoded.vs_alloca_next /\
     window_alloca_growth initial actual /\

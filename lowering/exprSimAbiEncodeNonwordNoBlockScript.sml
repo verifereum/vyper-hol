@@ -12,6 +12,8 @@ Ancestors
   exprSimAbiEncodeEmptySource abiEncoderLeaves abiEncoderWindowLeaves
   abiEncoderPrimitiveEffect abiEncoderExtendSim abiEncoderRegisteredEffect
   abiEncoderWindowLookup abiEncoderWindow valueEncodingProofs venomExecSemantics
+  exprSimAbiEncodeNoBlockFrame exprSimAbiEncodeFramedBuiltin exprSimAbiEncodeExecFrame
+  emitHelper venomInst rich_list context exprSimAbiEncodeStateTransport exprSimAbiEncodeObserverEntry
 
 (* Raw sequence composition deliberately retains the index-normalized endpoint. *)
 Theorem abi_encode_concrete_three_sequences:
@@ -143,6 +145,19 @@ Proof
   pure_asm_rewrite_tac[] >> metis_tac[]
 QED
 
+Theorem abi_encode_setup_raw_opcodes[local]:
+  abi_builtin_encode_setup mid maxlen st = (ops,ready) ==>
+  EVERY (\i. MEM i.inst_opcode [ALLOCA;ADD;MSTORE]) (emitted_insts st ready)
+Proof
+  Cases_on `mid` >>
+  simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+    compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def]
+QED
+
 Theorem abi_encode_window_concrete_phases:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
   compile_abi_encode_to_buf (SND ops) src ei ready = (len,body_end) /\
@@ -189,7 +204,22 @@ Theorem abi_encode_window_concrete_phases:
     (case method_id of NONE => T | SOME mid =>
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH final.cs_current_insts
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_exec_frame func initial actual /\
+    ?prepared body_state.
+      abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p w initial prepared /\
+      window_strong_result ctx func ready body_end len at av d prepared body_state /\
+      abi_encoder_registered_effect {} [(p,32)] body_state actual /\
+      actual.vs_allocas = body_state.vs_allocas /\
+      actual.vs_alloca_next = body_state.vs_alloca_next /\
+      (!op v. abi_decoder_operand_live body_end.cs_next_var op /\
+        eval_operand op body_state = SOME v ==> eval_operand op actual = SOME v) /\
+      prepared.vs_accounts = initial.vs_accounts /\
+      prepared.vs_transient = initial.vs_transient /\
+      prepared.vs_logs = initial.vs_logs /\
+      prepared.vs_requests = initial.vs_requests /\
+      prepared.vs_pending_deletions = initial.vs_pending_deletions /\
+      actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_encoder_window_input ei at av (if cap = 0 then 0 else sb) cap initial.vs_memory` by
@@ -217,6 +247,10 @@ Proof
   simp_tac bool_ss [LET_THM] >>
   disch_then (qx_choose_then `setup_raw` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qmatch_asmsub_abbrev_tac `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` >>
+  `abi_encode_exec_frame func initial prepared` by
+    (drule abi_encode_setup_raw_opcodes >> strip_tac >>
+     drule_all abi_encode_setup_sequence_frame >>
+     simp_tac bool_ss [Abbr `prepared`, abi_encode_exec_frame_inst_idx]) >>
   `ready.cs_blocks = body_end.cs_blocks` by
     (drule abi_builtin_encode_setup_shape >> strip_tac >>
      drule abi_builtin_encode_finish_shape >> strip_tac >> metis_tac[]) >>
@@ -226,6 +260,9 @@ Proof
     (strip_assume_tac o PURE_REWRITE_RULE [abi_encode_concrete_result_def]) >>
   rename1 `run_inst_seq (emitted_insts ready body_end) prepared = OK body_raw` >>
   qmatch_asmsub_abbrev_tac `window_strong_result ctx func ready body_end len at av d prepared body_state` >>
+  `abi_encode_exec_frame func prepared body_state` by
+    (simp_tac bool_ss [Abbr `body_state`, abi_encode_exec_frame_inst_idx] >>
+     drule_all abi_encode_no_block_body_frame >> simp[]) >>
   `eval_operand (FST ops) body_state = SOME (n2w p)` by
     (irule abi_encode_setup_buffer_eval >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
@@ -294,6 +331,16 @@ Resume abi_encode_window_concrete_phases[finish]:
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts body_end final) body_state = OK finish_raw` >>
   qmatch_asmsub_abbrev_tac `abi_decode_frame p 32 body_state actual` >>
+  `abi_encode_exec_frame func body_state actual` by
+    (`finish_raw.vs_allocas = body_state.vs_allocas /\
+      finish_raw.vs_alloca_next = body_state.vs_alloca_next` by
+       (qpat_x_assum `actual.vs_allocas = _` mp_tac >>
+        qpat_x_assum `actual.vs_alloca_next = _` mp_tac >>
+        simp_tac (srw_ss()) [Abbr `actual`]) >>
+     drule_all abi_encode_framed_finish_sequence >>
+     simp_tac bool_ss [Abbr `actual`, abi_encode_exec_frame_inst_idx]) >>
+  `abi_encode_exec_frame func initial actual` by
+    metis_tac[abi_encode_exec_frame_trans] >>
   suspend "result"
 QED
 
@@ -350,7 +397,8 @@ Resume abi_encode_window_concrete_phases[compose]:
      simp_tac (srw_ss()) [Abbr `body_state`, Abbr `prepared`] >>
      asm_rewrite_tac[]) >>
   qexists_tac `raw` >> simp_tac bool_ss [LET_THM] >> asm_rewrite_tac[] >>
-  metis_tac[]
+  conj_tac >- metis_tac[] >>
+  qexistsl [`prepared`, `body_state`] >> asm_rewrite_tac[] >> metis_tac[]
 QED
 Finalise abi_encode_window_concrete_phases
 
@@ -431,7 +479,9 @@ Theorem abi_encode_nonword_no_block_phases:
       (case mid of NONE => T | SOME selector =>
         mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
       ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
-      actual.vs_inst_idx = LENGTH final.cs_current_insts
+      actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+      abi_encode_exec_frame func s actual /\
+      stmt_state_rel ctx func ce cx es' actual
 Proof
   strip_tac >>
   `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\
@@ -464,7 +514,29 @@ Resume abi_encode_nonword_no_block_phases[apply]:
   impl_tac >-
     (rewrite_tac[wordsTheory.n2w_w2n] >>
      asm_rewrite_tac[] >> metis_tac[arithmeticTheory.NOT_LESS, arithmeticTheory.LESS_EQ_0]) >>
-  simp_tac bool_ss [LET_THM]
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `abi_encode_exec_frame func s actual` >>
+  suspend "caller"
+QED
+
+Resume abi_encode_nonword_no_block_phases[caller]:
+  drule_all abi_encode_nonword_observer_geometry >>
+  simp_tac bool_ss [LET_THM] >> disch_then (qspec_then `p` strip_assume_tac) >>
+  `stmt_state_rel ctx func ce cx es' s` by
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [loweringPostsTheory.expr_post_def] >> metis_tac[]) >>
+  qpat_x_assum `enc ct rv = _` (SUBST_ALL_TAC o SYM) >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_encoder_counters >> strip_tac >>
+  `sa.cs_next_var <= ready.cs_next_var /\ sa.cs_next_var <= body_end.cs_next_var` by decide_tac >>
+  `stmt_state_rel ctx func ce cx es' actual` by
+    (drule_all (SIMP_RULE bool_ss [] (Q.INST
+       [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
+       (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
+  qexists `raw` >>
+  qpat_x_assum `Abbrev (actual = _)`
+    (fn th => rewrite_tac[GSYM (PURE_REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+  asm_rewrite_tac[]
 QED
 Finalise abi_encode_nonword_no_block_phases
 
@@ -496,7 +568,9 @@ Theorem abi_encode_nonword_no_block_run:
     (case mid of NONE => T | SOME selector =>
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH sb.cs_current_insts
+    actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    abi_encode_exec_frame func s actual /\
+    stmt_state_rel ctx func ce cx es' actual
 Proof
   strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
@@ -546,7 +620,9 @@ Theorem abi_encode_nonword_no_block_observer:
     (case mid of NONE => T | SOME selector =>
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH sb.cs_current_insts
+    actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    abi_encode_exec_frame func s actual /\
+    stmt_state_rel ctx func ce cx es' actual
 Proof
   strip_tac >> drule_all abi_encode_nonword_no_block_run >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>

@@ -7,7 +7,8 @@ Ancestors
   abiDecoderContract abiDecoderReentry exprLoweringProps compileEnv
   venomState venomInst words list
   exprSimAbiEncodeRelabelBoundary exprSimAbiGasBridge abiEncoderSourceInvoke
-  abiBuiltinEncodeWord
+  abiBuiltinEncodeWord exprSimAbiEncodeFramedSuffix exprSimAbiEncodeEmptyFramed
+  exprSimAbiEncodeObserverEntry exprSimAbiEncodeStateTransport exprSimAbiEncodeExecFrame
 
 Theorem abi_encode_finish_entry_action[local]:
   entry_action (abi_builtin_encode_finish buf len m)
@@ -41,12 +42,14 @@ Proof
   disch_then drule_all >> simp[]
 QED
 
-  val bytes_phases = abi_encode_bridge_bytes_phases_open |> SPEC_ALL
+  val bytes_phases = abi_encode_framed_phases_open |> SPEC_ALL
+    |> Q.INST [`ctx` |-> `ctx with ctx_functions := [obs]`, `func` |-> `obs`]
     |> Q.INST [`d` |-> `p+32+m`, `outsz` |-> `32+32*word_size(maxlen+m)`]
     |> Q.INST [`m` |-> `(case method_id of NONE => 0 | SOME mid => 4)`,
                `w` |-> `(case method_id of NONE => 0 | SOME mid => 32)`]
     |> PURE_REWRITE_RULE [REFL_CLAUSE, IMP_CLAUSES, AND_CLAUSES];
-  val empty_phases = abi_encode_empty_phases_open |> SPEC_ALL
+  val empty_phases = abi_encode_empty_framed_phases_open |> SPEC_ALL
+    |> Q.INST [`ctx` |-> `ctx with ctx_functions := [obs]`, `func` |-> `obs`]
     |> Q.INST [`d` |-> `p+32+m`, `outsz` |-> `32+32*word_size(maxlen+m)`]
     |> Q.INST [`m` |-> `(case method_id of NONE => 0 | SOME mid => 4)`,
                `w` |-> `(case method_id of NONE => 0 | SOME mid => 32)`]
@@ -85,9 +88,18 @@ Theorem abi_encode_nonword_relabel_observer:
       mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    abi_decode_sim ctx obs (s with vs_current_bb := L) actual
+    abi_decode_sim ctx obs (s with vs_current_bb := L) actual /\
+    stmt_state_rel ctx func ce cx es' actual /\
+    abi_encode_exec_frame obs (s with vs_current_bb := L) actual /\
+    LENGTH s.vs_memory <= LENGTH actual.vs_memory
 Proof
-  strip_tac >> drule_all abi_encode_lower_phase_code >>
+  strip_tac >>
+  drule_all abi_encode_nonword_observer_entry >>
+  disch_then (qspecl_then [`ids`, `L`] strip_assume_tac) >>
+  drule_all abi_encode_nonword_observer_geometry >>
+  simp_tac bool_ss [LET_THM] >>
+  disch_then assume_tac >>
+  drule_all abi_encode_lower_phase_code >>
   disch_then (qx_choose_then `ops` (qx_choose_then `ready`
     (qx_choose_then `len` (qx_choose_then `body_end`
       (MAP_EVERY assume_tac o CONJUNCTS))))) >>
@@ -179,19 +191,14 @@ Resume abi_encode_nonword_relabel_observer[positive]:
   drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`) bytes_phases >>
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `alloca_room ctx func _`)) >>
+  disch_then (drule_at (Pat `alloca_room (ctx with ctx_functions := [obs]) obs _`)) >>
   disch_then (drule_at (Pat `fn_has_code re rf _`)) >>
   disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
-  disch_then (drule_at (Pat `enc _ _ = _`)) >>
   disch_then (qspec_then `p` mp_tac) >>
+  qpat_assum `enc ct rv = _` (fn eq => rewrite_tac[eq]) >>
   impl_tac
   >- (rewrite_tac[wordsTheory.n2w_w2n] >> asm_rewrite_tac[] >> simp_tac std_ss []) >>
-  strip_tac >> qexistsl_tac [`p`, `actual`] >>
-  simp_tac bool_ss [LET_THM] >>
-  qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  asm_rewrite_tac[] >> irule abi_decode_sim_ctx_no_invoke >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `ctx with ctx_functions := [obs]` >> first_assum ACCEPT_TAC
+  strip_tac >> suspend "transport_positive"
 QED
 
 Resume abi_encode_nonword_relabel_observer[empty]:
@@ -219,11 +226,38 @@ Resume abi_encode_nonword_relabel_observer[empty]:
           impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
           simp_tac bool_ss [] >> metis_tac[]) >>
       asm_rewrite_tac[] >> simp_tac std_ss []) >>
-  strip_tac >> qexistsl_tac [`p`, `actual`] >>
-  simp_tac bool_ss [LET_THM] >>
+  strip_tac >> suspend "transport"
+QED
+Resume abi_encode_nonword_relabel_observer[transport]:
+  qpat_x_assum `enc ct rv = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `!p. 32 + _ <= _ /\ _` (qspec_then `p` strip_assume_tac) >>
+  `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by
+    (simp_tac (srw_ss()) [Abbr `rst`, Abbr `rr`, Abbr `re`,
+      start_relabel_def, abi_encode_start_swap_resource_fields] >> decide_tac) >>
+  `stmt_state_rel ctx func ce cx es' actual` by
+    (drule_all (SIMP_RULE bool_ss [] (Q.INST
+       [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
+       (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
+  `abi_decode_sim ctx obs rs actual` by
+    (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
+  qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
   qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  asm_rewrite_tac[] >> irule abi_decode_sim_ctx_no_invoke >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `ctx with ctx_functions := [obs]` >> first_assum ACCEPT_TAC
+  asm_rewrite_tac[] >> drule abi_encode_exec_frame_memory_length >> simp_tac (srw_ss()) []
+QED
+Resume abi_encode_nonword_relabel_observer[transport_positive]:
+  qpat_x_assum `enc ct rv = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `!p. 32 + _ <= _ /\ _` (qspec_then `p` strip_assume_tac) >>
+  `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by
+    (simp_tac (srw_ss()) [Abbr `rst`, Abbr `rr`, Abbr `re`,
+      start_relabel_def, abi_encode_start_swap_resource_fields] >> decide_tac) >>
+  `stmt_state_rel ctx func ce cx es' actual` by
+    (drule_all (SIMP_RULE bool_ss [] (Q.INST
+       [`outsz` |-> `32+32*word_size (maxlen+(case mid of NONE => 0 | SOME x => 4))`]
+       (SPEC_ALL abi_encode_phases_caller_state))) >> simp[]) >>
+  `abi_decode_sim ctx obs rs actual` by
+    (drule_all abi_decode_sim_ctx_no_invoke >> disch_then (qspec_then `ctx` ACCEPT_TAC)) >>
+  qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
+  qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  asm_rewrite_tac[] >> drule abi_encode_exec_frame_memory_length >> simp_tac (srw_ss()) []
 QED
 Finalise abi_encode_nonword_relabel_observer
