@@ -2,7 +2,7 @@
 Theory normalizationAllocExecPtr
 Ancestors normalizationAllocPtr typedCopyPtr fragExecPtr instIdxIndep
 
-Theorem alloca_step_old_register_frame[local]:
+Theorem alloca_step_old_register_frame:
   step_inst_base (mk_inst id ALLOCA [Lit n] [out]) s = OK s1 ==>
   s1.vs_current_bb = s.vs_current_bb /\ s1.vs_halted = s.vs_halted /\
   (!q. q <> out ==>
@@ -32,7 +32,7 @@ Proof
         finite_mapTheory.FLOOKUP_UPDATE, venomStateTheory.eval_operand_def]
 QED
 
-Theorem compile_alloc_buffer_step_frag_ptr[local]:
+Theorem compile_alloc_buffer_step_frag_ptr:
   compile_alloc_buffer n sb = (buf,sc) /\
   buf.buf_operand = Var out /\
   step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
