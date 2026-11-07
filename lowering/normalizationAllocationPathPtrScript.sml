@@ -37,7 +37,7 @@ Theorem normalization_alloc_buffer_path_ptr:
       ptr_covers G1 tn1 old u k) /\
     not_fresh_at cd root /\
     (!old. not_fresh_at cc old ==> not_fresh_at cd old) /\
-    u.vs_memory = s.vs_memory
+    u.vs_memory = s.vs_memory /\ u.vs_labels = s.vs_labels
 Proof
   strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   drule_all normalization_alloc_buffer_ownership >>
@@ -65,7 +65,8 @@ Proof
   >- gvs[eval_operand_def, lookup_var_def]
   >- suspend "local_separation"
   >- suspend "old_metadata"
-  >> suspend "old_coverage"
+  >- suspend "old_coverage"
+  >> suspend "labels"
 QED
 
 Resume normalization_alloc_buffer_path_ptr[control]:
@@ -98,5 +99,12 @@ Resume normalization_alloc_buffer_path_ptr[old_coverage]:
   `old <> p` by metis_tac[] >>
   qpat_x_assum `p = _` SUBST_ALL_TAC >>
   qpat_x_assum `!old n'. old <> _ /\ _ ==> _` irule >> asm_rewrite_tac[]
+QED
+Resume normalization_alloc_buffer_path_ptr[labels]:
+  simp[] >> irule hash_alloc_buffer_labels >>
+  goal_assum (drule_at Any) >>
+  drule compile_alloc_buffer_insts >> strip_tac >>
+  gvs[run_inst_seq_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+      AllCaseEqs()]
 QED
 Finalise normalization_alloc_buffer_path_ptr
