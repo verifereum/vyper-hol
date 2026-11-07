@@ -19,6 +19,8 @@ Theorem convert_identity_source_window[local]:
   ((?t. vv = StackValue t op) \/
    (?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory /\
           p.ptr_operand = op)) ==>
+  (!w. eval_operand op s = SOME w ==>
+    w2n w + type_memory_bytes ce (lowered_value_type ce e) <= s.vs_alloca_next) /\
   (lowered_value_type ce e <> BaseT (BytesT (Dynamic 0)) /\
    lowered_value_type ce e <> BaseT (StringT 0) ==>
    !w. eval_operand op s = SOME w ==> w2n w + 64 <= s.vs_alloca_next)
@@ -45,12 +47,15 @@ Proof
     (irule memory_rhs_lowered_runtime_layout >> simp[] >> metis_tac[]) >>
   `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
   `is_bytestring_type (lowered_value_type ce e)` by metis_tac[] >>
-  strip_tac >>
+  `0 < type_memory_bytes ce (lowered_value_type ce e)` by
+    gvs[exprSimConvertBytesTheory.bytestring_type_cases, type_memory_bytes_def] >>
+  `!w. eval_operand op s = SOME w ==>
+    w2n w + type_memory_bytes ce (lowered_value_type ce e) <= s.vs_alloca_next` by
+    (gvs[vv_store_bound_def, read_result_def, return_def] >> metis_tac[]) >>
+  simp[] >> strip_tac >>
   `64 <= type_memory_bytes ce (lowered_value_type ce e)` by
     (irule convert_nonzero_bytestring_memory_size >> simp[]) >>
-  gvs[vv_store_bound_def, read_result_def, return_def] >>
-  rpt strip_tac >>
-  first_x_assum (drule_at (Pat `eval_operand _ _ = _`)) >> decide_tac
+  rpt strip_tac >> first_x_assum drule >> decide_tac
 QED
 
 Theorem convert_unwrap_value_path_mem_window:
@@ -75,6 +80,8 @@ Theorem convert_unwrap_value_path_mem_window:
     ?u. gas_path_mem ctx func s 0 (OK u) /\
         expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx (expr_type e) v op u /\
+        (!sw. eval_operand op u = SOME sw ==>
+          w2n sw + type_memory_bytes cenv (lowered_value_type cenv e) <= u.vs_alloca_next) /\
         (lowered_value_type cenv e <> BaseT (BytesT (Dynamic 0)) /\
          lowered_value_type cenv e <> BaseT (StringT 0) ==>
          !sw. eval_operand op u = SOME sw ==> w2n sw + 64 <= u.vs_alloca_next) /\
@@ -110,6 +117,16 @@ Proof
   conj_tac
   >- (irule expr_store_bound_capacity >> simp[] >>
       conj_tac >- (rpt strip_tac >> gvs[arithmeticTheory.ADD_COMM]) >> metis_tac[]) >>
+  `type_memory_bytes cenv (lowered_value_type cenv e) <=
+   type_memory_bytes cenv (expr_type e)` by
+    (drule expr_body_pre_var_types_well_formed >> strip_tac >>
+     `well_typed_expr env e /\
+      sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
+       gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+           env_context_consistent_def] >>
+     drule_all convert_plain_lowered_type_compatible >> strip_tac >>
+     metis_tac[arg_type_fits_bytestring_memory_bytes, arithmeticTheory.LESS_EQ_REFL]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> decide_tac) >>
   strip_tac >>
   `64 <= type_memory_bytes cenv (expr_type e)` by
     (irule convert_plain_nonzero_source_size >> metis_tac[]) >>
@@ -123,7 +140,10 @@ Resume convert_unwrap_value_path_mem_window[stack]:
   conj_tac
   >- (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
       simp[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def]) >>
-  rpt strip_tac >> irule convert_identity_source_window >> simp[] >> metis_tac[]
+  drule_at (Pat `vv_store_bound _ _ _ _ _ _ _`) convert_identity_source_window >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (qspec_then `o'` mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 
 Resume convert_unwrap_value_path_mem_window[memory]:
@@ -133,7 +153,10 @@ Resume convert_unwrap_value_path_mem_window[memory]:
   conj_tac
   >- (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
       simp[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def]) >>
-  rpt strip_tac >> irule convert_identity_source_window >> simp[] >> metis_tac[]
+  drule_at (Pat `vv_store_bound _ _ _ _ _ _ _`) convert_identity_source_window >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (qspec_then `p.ptr_operand` mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 
 Finalise convert_unwrap_value_path_mem_window
@@ -161,6 +184,8 @@ Theorem convert_unwrap_value_marked_read_mem_window:
             [] (INL v) ee (OK u) /\
       expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
       expr_store_bound cx (expr_type e) v op u /\
+      (!sw. eval_operand op u = SOME sw ==>
+        w2n sw + type_memory_bytes cenv (lowered_value_type cenv e) <= u.vs_alloca_next) /\
       (lowered_value_type cenv e <> BaseT (BytesT (Dynamic 0)) /\
        lowered_value_type cenv e <> BaseT (StringT 0) ==>
        !sw. eval_operand op u = SOME sw ==> w2n sw + 64 <= u.vs_alloca_next) /\
