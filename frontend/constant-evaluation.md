@@ -70,7 +70,8 @@ what the interpreter would run.
    `B: constant(Bytes[5]) = b"abc"`, the reference `B` in
    `A: constant(Bytes[10]) = B` is a `Bytes[10]`.
 3. Each compile-time position evaluates its translated expression: annotation
-   bounds (`annotation_bound`), `range` counts (`get_iter_bound`), keyword
+   bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
+   endpoints of a `range` without `bound=` (`translate_iter`), keyword
    flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
    tuple indices, exponents and `method_id` (`fold_constant`).
 4. A position whose value must be known at compile time but does not
