@@ -104,8 +104,9 @@ Theorem copy_generated_source_execution:
        (update_var (slot_copy_var cs 2) (a+k) s))
 Proof
   strip_tac >> gvs[] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+  simp[Once run_inst_seq_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_pure2_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
        slot_copy_word_def, eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE, sload_def, tload_def,
        contract_storage_def, contract_transient_def]
