@@ -187,6 +187,7 @@ QED
 Theorem ptr_vv_ok_nonmemory:
   !cx ty tv lowty p es G tn s ftv.
     p.ptr_location <> LocMemory /\ op_taint tn p.ptr_operand = {} /\
+    (p.ptr_location = LocCode ==> op_prov G p.ptr_operand = NONE) /\
     evaluate_type (get_tenv cx) ty = SOME ftv /\
     (!w k b. eval_operand p.ptr_operand s = SOME w /\
       w2n w <= w2n k /\ w2n k < w2n w + type_slot_size ftv /\ b < 32 ==>

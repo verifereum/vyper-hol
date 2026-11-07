@@ -252,7 +252,8 @@ Proof
   qabbrev_tac `cx = deploy_evaluation_context tops am tx` >>
   qabbrev_tac `D = deploy_dead tops runtime_bc am tx` >>
   `dead_lo_ok D (imm_len tops) cenv cx` by
-    simp[dead_lo_ok_def, Abbr `D`, Abbr `cx`, dead_sub_cx_dead_deploy_dead] >>
+    (simp[dead_lo_ok_def, Abbr `D`, Abbr `cx`, dead_sub_cx_dead_deploy_dead] >>
+     simp[deploy_dead_def]) >>
   `frame_ret_ok_ptr_at D (imm_len tops) NONE dunit.cu_context [] func cx
      (\v es gt r. T) cenv NoneT` by
     (qspecl_then [`dunit.cu_context`, `func`, `cenv`, `cx`, `tops`,
