@@ -15,7 +15,7 @@ Ancestors
   o1ScheduleDecomp venomWf cfgWf ptrDiscipline unitMemInv
   contextCodegenRel codegenRel memLocDefs venomExecSemantics venomState venomInst
   concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrBytes
-  concretizePtrComparisonTransport finite_map list arithmetic
+  concretizePtrComparisonTransport concretizePtrRequestHistory finite_map list arithmetic
 
 Theorem ptr_mstore_transcript_successor:
   ptr_paired_prefix R lp positions lo vs C C'
@@ -83,7 +83,7 @@ Resume ptr_mstore_transcript_successor[successor]:
     AllCaseEqs()] >> strip_tac >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
-    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
   drule_all ptr_mixed_vars_eval_presence >>
   disch_then (fn th => map_every (mp_tac o C Q.SPEC th) [`op1`,`op2`]) >>
   simp[] >> rpt strip_tac >>
@@ -233,7 +233,7 @@ Resume ptr_mstore_write_producer[certificate]:
     (conj_tac >>
      (irule ptr_mixed_vars_eval >>
       conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+      >- (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
       qexistsl_tac [`a.po_fn`,`at.po_fn`] >> fs[ptr_paired_sample_def])) >>
   suspend "classified"
 QED
@@ -455,7 +455,7 @@ Proof
   drule ptr_structural_trace_embedding >> strip_tac >>
   `LAST h = a /\ LAST ht = at /\ 0 < LENGTH h /\ LENGTH ht = SUC (LENGTH done)` by
     (imp_res_tac ptr_chrono_history_end >>
-     fs[ptr_paired_prefix_def, ptr_paired_samples_def]) >>
+     fs[ptr_paired_prefix_def, ptr_paired_samples_def, ptr_sample_list_def]) >>
   `EL (LENGTH h - 1) h = a /\ EL (LENGTH done) ht = at` by
     (`h <> [] /\ ht <> []` by
        (conj_tac >> strip_tac >> gvs[]) >>
@@ -547,8 +547,13 @@ Resume ptr_paired_prefix_mstore[sample_target]:
   >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
       simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
       strip_tac >>
-      gvs[ptr_paired_sample_def, ptr_mixed_vars_def, ptr_opaque_env_def,
-          ptr_core_shared_def, ptr_shared_fields_def, step_taint_def,
+      fs[ptr_paired_sample_def] >>
+      simp[ptr_paired_sample_def] >> reverse conj_tac
+      >- (gvs[mstore_def] >> irule ptr_history_content_masks >>
+          qexists_tac `(LAST h).po_taint` >>
+          simp[step_taint_def, set_var_taint_def, adopt_reset_def,
+               store_taint_def, imm_taint_def]) >>
+      gvs[ptr_mixed_vars_def, ptr_opaque_env_def, step_taint_def,
           op_taint_def, lookup_var_def, mstore_def, set_var_taint_def,
           DRESTRICT_UNIV] >> metis_tac[]) >>
   qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
@@ -649,7 +654,7 @@ Resume ptr_paired_prefix_mstore[callers]:
      rpt strip_tac >>
      gvs[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()]) >>
   irule ptr_paired_callers_retained >> simp[] >>
-  conj_tac >- fs[ptr_paired_samples_def] >>
+  conj_tac >- fs[ptr_paired_samples_def, ptr_sample_list_def] >>
   fs[ptr_event_embedding_def, EVERY_EL] >>
   qexistsl_tac [`a`,`at`] >> simp[]
 QED
@@ -664,6 +669,6 @@ Resume ptr_paired_prefix_mstore[writes]:
      qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
      simp[EL_APPEND_EQN] >> decide_tac) >>
   irule ptr_paired_writes_pair >>
-  gvs[ptr_paired_samples_def] >> metis_tac[]
+  gvs[ptr_paired_samples_def, ptr_sample_list_def] >> metis_tac[]
 QED
 Finalise ptr_paired_prefix_mstore

@@ -296,3 +296,12 @@ Proof
   irule ptr_history_content_bind_outputs >>
   rpt (goal_assum (drule_at Any))
 QED
+
+Theorem ptr_history_content_memory[simp]:
+  ptr_history_content tn (s with vs_memory := ms) (t with vs_memory := mt) <=>
+  ptr_history_content tn s t
+Proof
+  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def, contract_storage_def,
+       contract_transient_def]
+QED
