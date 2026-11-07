@@ -195,6 +195,10 @@ Theorem layout_paired_alloca_step:
   layout_block_pair positions bb bb' (SUC s.vs_inst_idx) (SUC t.vs_inst_idx) /\
   ?k tpost. step_inst_base (concretize_inst_with_positions positions inst) t = OK tpost /\
     k.lop_pending /\ k.lop_cursor = SUC n /\
+    k.lop_origin = a.lop_origin /\ k.lop_ids = a.lop_ids /\
+    k.lop_config = EL (SUC n) (q0::qs) /\
+    resolved_annotation_update a.lop_config (EL n es)
+      a.lop_ids a.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs qe
       (INL a) (INL k) (OK post) (OK tpost)
 Proof
