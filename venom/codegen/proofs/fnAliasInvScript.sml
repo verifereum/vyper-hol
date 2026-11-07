@@ -13165,6 +13165,117 @@ Proof
        alias_occ_spill_at_pre_residents]
 QED
 
+Definition alias_occ_restore_many_def:
+  (alias_occ_restore_many [] shadow = shadow) /\
+  (alias_occ_restore_many (key::keys) shadow =
+    alias_occ_restore_many keys (alias_occ_from_spill key shadow))
+End
+
+Theorem alias_occ_restore_many_align:
+  !keys shadow ps. alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_restore_many keys shadow)
+    (SND (restore_spilled_plan keys ps))
+Proof
+  Induct >> simp[alias_occ_restore_many_def, restore_spilled_plan_def] >>
+  rpt strip_tac >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`alias_occ_from_spill h shadow`,`ps1`] mp_tac) >>
+  drule alias_occ_from_spill_align >>
+  disch_then (qspec_then `h` mp_tac) >> simp[]
+QED
+
+Theorem alias_occ_restore_many_wf:
+  !keys shadow. alias_occ_wf shadow ==>
+  alias_occ_wf (alias_occ_restore_many keys shadow)
+Proof
+  Induct >> simp[alias_occ_restore_many_def, alias_occ_from_spill_wf]
+QED
+
+Theorem alias_occ_restore_many_next:
+  !keys shadow. (alias_occ_restore_many keys shadow).alias_next = shadow.alias_next
+Proof
+  Induct >> simp[alias_occ_restore_many_def, alias_occ_from_spill_next]
+QED
+
+Theorem alias_occ_restore_many_residents:
+  !keys shadow. alias_occ_residents (alias_occ_restore_many keys shadow) =
+                alias_occ_residents shadow
+Proof
+  Induct >> simp[alias_occ_restore_many_def, alias_occ_from_spill_residents]
+QED
+
+Theorem alias_occ_restore_many_deleted:
+  alias_occ_deleted shadow (alias_occ_restore_many keys shadow) = EMPTY
+Proof
+  simp[alias_occ_deleted_def, alias_occ_restore_many_residents]
+QED
+
+Definition alias_occ_remove_many_def:
+  (alias_occ_remove_many [] shadow = shadow) /\
+  (alias_occ_remove_many (key::keys) shadow =
+    alias_occ_remove_many keys
+      (shadow with alias_spill_ids := shadow.alias_spill_ids \\ key))
+End
+
+Theorem alias_occ_remove_many_fields:
+  !keys shadow.
+    (alias_occ_remove_many keys shadow).alias_occs = shadow.alias_occs /\
+    (alias_occ_remove_many keys shadow).alias_next = shadow.alias_next /\
+    (!at. FLOOKUP (alias_occ_remove_many keys shadow).alias_spill_ids at =
+      if MEM at keys then NONE else FLOOKUP shadow.alias_spill_ids at)
+Proof
+  Induct >> simp[alias_occ_remove_many_def, finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  rpt gen_tac >> Cases_on `MEM at keys` >> Cases_on `at = h` >> simp[]
+QED
+
+Theorem alias_occ_remove_many_wf:
+  !keys shadow. alias_occ_wf shadow ==>
+    alias_occ_wf (alias_occ_remove_many keys shadow)
+Proof
+  Induct >> simp[alias_occ_remove_many_def, alias_occ_remove_spill_wf]
+QED
+
+Definition alias_occ_release_def:
+  alias_occ_release live shadow =
+    alias_occ_remove_many
+      (MAP FST (FILTER (\(at,id).
+        case at of Var v => ~MEM v live | _ => T)
+        (fmap_to_alist shadow.alias_spill_ids))) shadow
+End
+
+Theorem alias_occ_release_lookup:
+  FLOOKUP (alias_occ_release live shadow).alias_spill_ids at =
+    if (?v. at = Var v /\ MEM v live) then
+      FLOOKUP shadow.alias_spill_ids at else NONE
+Proof
+  simp[alias_occ_release_def, alias_occ_remove_many_fields] >>
+  Cases_on `FLOOKUP shadow.alias_spill_ids at` >> Cases_on `at` >>
+  simp[MEM_MAP, MEM_FILTER, pairTheory.EXISTS_PROD,
+       alistTheory.MEM_pair_fmap_to_alist_FLOOKUP] >> metis_tac[]
+QED
+
+Theorem alias_occ_release_wf:
+  alias_occ_wf shadow ==> alias_occ_wf (alias_occ_release live shadow)
+Proof
+  simp[alias_occ_release_def, alias_occ_remove_many_wf]
+QED
+
+Theorem alias_occ_release_fields:
+  (alias_occ_release live shadow).alias_occs = shadow.alias_occs /\
+  (alias_occ_release live shadow).alias_next = shadow.alias_next
+Proof
+  simp[alias_occ_release_def, alias_occ_remove_many_fields]
+QED
+
+Theorem alias_occ_release_residents:
+  (at,id) IN alias_occ_residents (alias_occ_release live shadow) <=>
+    MEM (at,id) shadow.alias_occs \/
+    (FLOOKUP shadow.alias_spill_ids at = SOME id /\
+     ?v. at = Var v /\ MEM v live)
+Proof
+  simp[alias_occ_residents_member, alias_occ_release_fields,
+       alias_occ_release_lookup] >> metis_tac[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
