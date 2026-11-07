@@ -3,7 +3,8 @@ Ancestors
   exprSimAbiEncodeFramedStructuralMembers exprSimAbiEncodeFramedPhases
   exprSimAbiEncodeExecFrame abiEncoderWindowComplex abiEncoderWindowMembers
   abiEncoderWindowPhase abiEncoderWindowContract abiEncoderWindow
-  abiEncoderRegisteredEffect abiEncoderInput abiEncoderProps valueEncodingProps
+  abiEncoderRegisteredEffect abiEncoderInput abiEncoderProps valueEncoding valueEncodingProps
+  contractABI abiEncoderMembersDefs abiEncoderWindowChild abiCanonicalWindows abiDecodeRanges
   exprLoweringProps abiEncoderWindowStructuralMembers
   compileEnv emitHelper fragExec venomState venomMemDefs
   list rich_list arithmetic words finite_map pred_set
@@ -219,3 +220,165 @@ Proof
   drule window_registered_sizes_transport >>
   disch_then (qspec_then `R` mp_tac) >> asm_rewrite_tac[]
 QED
+
+Theorem abi_encode_framed_complex_contract:
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> abi_encode_framed_contract ei) ==>
+  abi_encode_framed_contract (AbiComplex infos)
+Proof
+  strip_tac >> simp_tac bool_ss [abi_encode_framed_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  `abi_encoder_window_input (AbiComplex infos) at av sb cap s.vs_memory` by
+    fs[abi_encoder_window_pre_def] >>
+  `?ats avs. av = ListV avs /\ abi_encoder_tuple_type at ats` by
+    (qpat_assum `abi_encoder_window_input _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_encoder_window_complex_iff] >> metis_tac[]) >>
+  gvs[] >> Cases_on `infos`
+  >- suspend "empty" >>
+  rename1 `h::rest` >>
+  qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [Once abiEncoderTheory.compile_abi_encode_child_def, LET_THM] >>
+  Cases_on `EXISTS (\(_,_,_,dyn). dyn) (h::rest)`
+  >- suspend "dynamic" >>
+  suspend "static"
+QED
+
+Resume abi_encode_framed_complex_contract[empty]:
+  gvs[Once abiEncoderTheory.compile_abi_encode_child_def, comp_return_def] >>
+  `enc at (ListV avs) = []` by
+    (qpat_assum `abi_encoder_window_input _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_encoder_window_complex_iff] >> strip_tac >>
+     gvs[abi_encoder_tuple_type_def, contractABITheory.enc_def, LET_THM, REV_DEF]) >>
+  qexists_tac `s` >> simp[] >> irule window_complex_phase_result >>
+  asm_rewrite_tac[] >> simp_tac (srw_ss()) [NoAsms, LENGTH, mem_bytes_at_def, eval_operand_def] >>
+  metis_tac[window_pre_sites, window_phase_refl, abi_encoder_window_pre_def]
+QED
+
+Resume abi_encode_framed_complex_contract[static]:
+  asm_rewrite_tac[] >>
+  qmatch_asmsub_abbrev_tac `AbiComplex infos` >>
+  simp_tac bool_ss [comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  Cases_on `compile_abi_encode_complex_elems dst src infos 0 0 (Lit 0w) st` >>
+  rename1 `compile_abi_encode_complex_elems _ _ _ _ _ _ _ = (ignored,en)` >>
+  asm_rewrite_tac[GSYM window_member_head_size_def] >> strip_tac >> gvs[] >>
+  `~EXISTS (\(_,_,_,dyn). dyn) infos` by
+    (qpat_assum `EVERY _ infos` mp_tac >>
+     simp_tac (srw_ss()) [EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `window_member_cursor infos (Lit 0w) 0 0 sb cap d
+      (LENGTH (enc at (ListV avs))) st s` by simp[window_member_cursor_def] >>
+  `EXISTS (\(_,_,_,dyn). dyn) infos ==>
+      mem_word_at 0 s.vs_memory = n2w (window_member_head_size infos)` by simp[] >>
+  drule_all abi_encode_framed_complex_initialized_run_sizes >> strip_tac >>
+  `!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+      FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (`!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32` by metis_tac[window_pre_sites] >>
+     qpat_x_assum `!R. (!i b sz. _) ==> _`
+       (qspec_then `window_alloca_sites func (frag_ids st en)` mp_tac) >>
+     asm_rewrite_tac[]) >>
+  qpat_x_assum `!R. (!i b sz. _) ==> _` kall_tac >>
+  drule_all window_complex_head_layout >> strip_tac >>
+  drule_all window_complex_dynamic_layout >> strip_tac >>
+  `LIST_REL abi_encoder_layout_valid ats avs` by
+    metis_tac[window_complex_structural_members, abiEncoderOpenInputTheory.abi_encoder_structural_list_layout] >>
+  `SUM (MAP2 abi_member_tail_size ats avs) = 0` by
+    (`!ts vs. ~any_dynamic ts /\ LENGTH ts = LENGTH vs ==>
+       SUM (MAP2 abi_member_tail_size ts vs) = 0` suffices_by metis_tac[] >>
+     Induct >> Cases_on `vs` >> simp[is_dynamic_def, abi_member_tail_size_def]) >>
+  `LENGTH (enc at (ListV avs)) = window_member_head_size infos` by
+    (`enc at (ListV avs) = enc (Tuple ats) (ListV avs)` by
+       (fs[abi_encoder_tuple_type_def] >> gvs[Once contractABITheory.enc_def, LET_THM]) >>
+     drule abiEncoderOpenInputTheory.abi_encoder_open_tuple_length >>
+     asm_rewrite_tac[] >> simp_tac bool_ss [head_lengths_acc] >> decide_tac) >>
+  `~any_dynamic ats` by metis_tac[] >>
+  qexists_tac `t` >> reverse conj_tac >- asm_rewrite_tac[] >>
+  irule window_complex_phase_result >> asm_rewrite_tac[] >>
+  simp[eval_operand_def] >>
+  qpat_x_assum `window_phase _ _ _ _ _ _ _ _` mp_tac >>
+  pure_asm_rewrite_tac[] >> simp_tac (srw_ss()) [UNION_EMPTY]
+QED
+
+Resume abi_encode_framed_complex_contract[dynamic]:
+  asm_rewrite_tac[] >>
+  qmatch_asmsub_abbrev_tac `AbiComplex infos` >>
+  simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def] >>
+  Cases_on `compile_alloc_buffer 32 st` >>
+  rename1 `compile_alloc_buffer 32 st = (buf,allocated)` >>
+  Cases_on `emit_void MSTORE [buf.buf_operand; Lit (n2w (window_member_head_size infos))] allocated` >>
+  rename1 `emit_void MSTORE _ allocated = (unit,ready)` >> Cases_on `unit` >>
+  Cases_on `compile_abi_encode_complex_elems dst src infos 0 0 buf.buf_operand ready` >>
+  rename1 `compile_abi_encode_complex_elems _ _ _ _ _ _ _ = (ignored,load)` >>
+  asm_rewrite_tac[GSYM window_member_head_size_def] >> strip_tac >>
+  fs[LET_THM] >> gvs[pairTheory.UNCURRY_DEF] >>
+  `ci_mono ready load /\ ci_mono load st'` by
+    metis_tac[cj 3 ci_mono_compile_abi_encode, ci_mono_emit_op, pairTheory.SND] >>
+  `ci_mono ready st'` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  drule_all abi_encode_framed_complex_initialize_phase_sizes >> strip_tac >>
+  `abi_encoder_window_pre ctx func ready load dst src (AbiComplex infos) at
+     (ListV avs) sb cap d u` by
+    (qpat_assum `abi_encoder_window_pre _ _ ready st' _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_encoder_window_pre_def] >> strip_tac >>
+     asm_rewrite_tac[] >>
+     `cs_extends ready load /\ cs_extends load st' /\ load.cs_next_id <= st'.cs_next_id` by
+       (qpat_assum `ci_mono ready load` mp_tac >>
+        qpat_assum `ci_mono load st'` mp_tac >>
+        simp_tac bool_ss [ci_mono_def] >> metis_tac[]) >>
+     (conj_tac >- metis_tac[fragExecTheory.fn_has_code_split]) >>
+     rpt gen_tac >> strip_tac >>
+     `inst.inst_id IN frag_ids ready st'` by
+       (qpat_x_assum `inst.inst_id IN frag_ids ready load` mp_tac >>
+        simp_tac (srw_ss()) [NoAsms, abiEncoderPropsTheory.frag_ids_def] >> decide_tac) >>
+     qpat_x_assum `!inst b sz. _` drule_all >> simp_tac bool_ss []) >>
+  `EXISTS (\(_,_,_,dyn). dyn) infos ==>
+     mem_word_at slot u.vs_memory = n2w (window_member_head_size infos)` by asm_rewrite_tac[] >>
+  drule_all abi_encode_framed_complex_initialized_run_sizes >> strip_tac >>
+  `!i b sz. i IN window_alloca_sites func (frag_ids st st') /\
+      FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (`!i b sz. i IN window_alloca_sites func (frag_ids st st') /\
+        FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32` by metis_tac[window_pre_sites] >>
+     qpat_x_assum `!R. _ ==> !i b sz. _ /\ FLOOKUP u.vs_allocas i = _ ==> _`
+       (qspec_then `window_alloca_sites func (frag_ids st st')` mp_tac) >>
+     asm_rewrite_tac[] >> disch_tac >>
+     qpat_x_assum `!R. _` (qspec_then `window_alloca_sites func (frag_ids st st')` mp_tac) >>
+     asm_rewrite_tac[]) >>
+  rpt (qpat_x_assum `!R. (!i b sz. _) ==> _` kall_tac) >>
+  `ready.cs_next_var <= load.cs_next_var /\ ready.cs_next_id <= load.cs_next_id` by
+    (qpat_assum `ci_mono ready load` mp_tac >> simp_tac bool_ss [ci_mono_def] >> metis_tac[]) >>
+  `window_member_cursor infos buf.buf_operand st.cs_next_id slot sb cap d
+     (LENGTH (enc at (ListV avs))) load t` by
+    (irule window_member_cursor_phase >> goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
+     goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
+  `eval_operand buf.buf_operand t = SOME (n2w slot) /\ slot < dimword (:256)` by
+    (qpat_assum `window_member_cursor _ _ _ _ _ _ _ _ load t` mp_tac >>
+     simp_tac bool_ss [window_member_cursor_def] >> asm_rewrite_tac[] >> metis_tac[]) >>
+  `ci_mono st allocated /\ ci_mono allocated ready` by
+    metis_tac[ci_mono_compile_alloc_buffer, ci_mono_emit_void, pairTheory.SND] >>
+  `st.cs_next_var <= ready.cs_next_var /\ st.cs_next_id <= ready.cs_next_id /\
+   load.cs_next_id <= st'.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
+  `window_alloca_sites func (frag_ids ready load) SUBSET
+   window_alloca_sites func (frag_ids st st')` by
+    (simp_tac (srw_ss()) [NoAsms, window_alloca_sites_def, SUBSET_DEF,
+       abiEncoderPropsTheory.frag_ids_def] >> rpt strip_tac >> decide_tac) >>
+  qpat_x_assum `window_phase _ _ ready load _ _ _ _` mp_tac >>
+  asm_rewrite_tac[] >> disch_tac >>
+  `window_phase ctx func st load (window_alloca_sites func (frag_ids st st'))
+    [(d,LENGTH (enc at (ListV avs)))] s t` by
+    (irule window_phase_chain >>
+     qexistsl_tac [`{st.cs_next_id}`, `[]`, `ready`,
+       `window_alloca_sites func (frag_ids ready load) UNION {st.cs_next_id}`,
+       `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
+     asm_rewrite_tac[] >> simp[EVERY_DEF, UNION_SUBSET, INSERT_SUBSET]) >>
+  `abi_encode_exec_frame func s t` by
+    (irule abi_encode_exec_frame_trans >> qexists_tac `u` >> asm_rewrite_tac[]) >>
+  irule abi_encode_framed_complex_finish_load >>
+  goal_assum (drule_at Any) >> asm_rewrite_tac[SUBSET_REFL] >>
+  `fn_has_code load st' func` by
+    (qpat_assum `ci_mono ready load` mp_tac >>
+     qpat_assum `ci_mono load st'` mp_tac >>
+     simp_tac bool_ss [ci_mono_def] >> rpt strip_tac >>
+     `fn_has_code ready st' func` by metis_tac[abi_encoder_window_pre_def] >>
+     metis_tac[fragExecTheory.fn_has_code_split]) >>
+  qexistsl_tac [`buf.buf_operand`, `window_alloca_sites func (frag_ids st st')`, `load`, `slot`] >>
+  asm_rewrite_tac[SUBSET_REFL] >> conj_tac >- decide_tac >> metis_tac[]
+QED
+Finalise abi_encode_framed_complex_contract
