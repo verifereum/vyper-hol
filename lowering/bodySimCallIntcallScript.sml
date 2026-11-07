@@ -86,6 +86,19 @@ Proof
   simp[return_def]
 QED
 
+(* Held with intcall_return_widened: a widened internal call's value is
+   laid out at the callee's return type (post_value_type), and
+   expr_sim_case_of_vv covers only post_value_type e = expr_type e. *)
+Theorem intcall_sim_case_widened:
+  !ctx func cenv cx ann src name es dflt.
+    post_value_type cenv (Call ann (IntCall (src,name)) es dflt) <>
+      expr_type (Call ann (IntCall (src,name)) es dflt) /\
+    expr_vv_case F ctx func cenv cx (Call ann (IntCall (src,name)) es dflt) ==>
+    expr_sim_case F ctx func cenv cx (Call ann (IntCall (src,name)) es dflt)
+Proof
+  cheat
+QED
+
 (* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
    give the arguments' judgments (body_results_ok), the defaults' at the
    callee's stack (body_exprs_ok), and the callee body's (body_stmts_ok
@@ -188,9 +201,16 @@ Theorem intcall_body_expr_ok:
        body_results_ok cx es) ==>
     body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> irule body_expr_ok_of_case >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >>
   `expr_vv_case F ctx func cenv cx (Call v16 (IntCall (src_id_opt,fn)) es v17)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by
+      (strip_tac >> conj_tac >- (
+         Cases_on `post_value_type cenv (Call v16 (IntCall (src_id_opt,fn)) es v17) =
+                   expr_type (Call v16 (IntCall (src_id_opt,fn)) es v17)`
+         >- (irule expr_sim_case_of_vv >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         irule intcall_sim_case_widened >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+       first_assum ACCEPT_TAC) >>
   simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
   rename1 `expr_body_pre cenv cx tenv _ es0` >>
   drule_all body_intcall_source_selection >> strip_tac >>
