@@ -37,6 +37,7 @@ Ancestors
   vyperLoweringCorrect
   configuredE2ECorrectness
   finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
+  asmOptPeephole
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
