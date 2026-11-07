@@ -42,7 +42,7 @@ of h/H appends to match HistoryCoverage's extension conclusion.
 | N10 CALLDATACOPY/CODECOPY/DLOADBYTES/RETURNDATACOPY | Local content facts only; complete family prefix supplier missing, including returndata OOB success guard |
 | N11 EXTCODECOPY | Complete prefix supplier missing; account-code payload and shared fields needed |
 | N12 SLOAD/SSTORE/TLOAD/TSTORE | Complete prefix supplier missing; storage/transient observation, taint and static-frame guard needed |
-| N13 environment reads | ptr_paired_prefix_environment_read and ptr_paired_environment_read_prefix_normalize cover exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE. Remaining SELFBALANCE/BALANCE/BLOCKHASH/GAS/EXTCODESIZE/EXTCODEHASH/BLOBHASH/CALLDATALOAD/DLOAD lack a complete supplier |
+| N13 environment reads | ptr_paired_prefix_environment_read and ptr_paired_environment_read_prefix_normalize cover exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE. ptr_paired_prefix_unary_environment_read and ptr_paired_unary_environment_read_prefix_normalize additionally cover exactly BLOCKHASH, BLOBHASH, BALANCE, EXTCODESIZE, EXTCODEHASH, CALLDATALOAD. Remaining SELFBALANCE/GAS/DLOAD lack a complete supplier |
 | N14 SHA3/LOG | Complete supplier missing; read payload/hash/topics/static guard required |
 | N15 CALL/STATICCALL | Content boundaries only; no complete prefix supplier; full request bytes and shared-state equality not free consequences of masked equality |
 | N16 DELEGATECALL/CREATE/CREATE2 | Complete prefix supplier missing; cannot rename CALL content facts |
@@ -2147,3 +2147,21 @@ This is conditional endpoint safety, not universal prefix coverage. All-opcode
 observation transport, source-to-target revert-forward slice/index transport,
 normalized history extension and raw-observation packaging remain unresolved.
 No successful terminal departure is needed or claimed.
+
+## Unary environment-read production (current coverage)
+
+`concretizePtrUnaryEnvironmentReadProducerTheory` exports
+`ptr_paired_prefix_unary_environment_read` and
+`ptr_paired_unary_environment_read_prefix_normalize` for exactly BLOCKHASH,
+BLOBHASH, BALANCE, EXTCODESIZE, EXTCODEHASH and CALLDATALOAD. Source discipline
+and tagged support force scalar, untainted inputs; mixed-variable transport
+then supplies equal evaluated operands. Shared external environment fields
+supply equal results of exec_read1, including out-of-range blob indices and
+empty accounts. Actual source success is constructed, not assumed. The second
+export attaches the immediate step and crosses deleted source NOPs, producing
+the full nonempty delta/snapshots interface used by HistoryCoverage.
+
+Together with the enlarged sixteen-opcode zero-input environment supplier,
+this leaves GAS, SELFBALANCE and DLOAD in N13 without complete production.
+Other dispatch families and universal HistoryCoverage remain unresolved;
+this milestone does not establish the frozen static-memory theorem.
