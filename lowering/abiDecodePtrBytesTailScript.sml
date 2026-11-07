@@ -1,7 +1,7 @@
 (* Pointer certificates for the exact runtime bytes tail. *)
 Theory abiDecodePtrBytesTail
 Ancestors
-  abiDecoderBytesRuntime abiDecoderRange abiDecodeStaticProps abiDecodePtrRead abiDecodePtrNormalized
+  abiDecoderBytesRuntime abiDecoderBytesPhases abiDecoderRange abiDecodeStaticProps abiDecodePtrRead abiDecodePtrNormalized
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq bodyPtrBopScalarOutcome
   abiDecodePtrMemberFrame assignTuplePtrCopyLen fragGasSeqPtr
   assignTuplePtrLocalBytesCopy assignTuplePtrBytesCopy
@@ -165,13 +165,12 @@ QED
 
 (* The output ADD exposes the exact ghosts needed by the following store. *)
 Theorem abi_decode_ptr_output_address:
-  emit_op ADD [Var dst;pos] sa = (addr,sb) /\
+  emit_op ADD [Var dst;pos] sa = (Var out,sb) /\
   ptr_covers G tn dst s cap /\ lookup_var dst s = SOME b /\
   eval_operand pos s = SOME (n2w q) /\
   op_taint tn (Var dst) = {} /\ op_taint tn pos = {} /\
   ~ctx_has_dalloca ctx /\ q+k <= cap /\ w2n b+cap < dimword(:256) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  !out. addr = Var out ==>
   let u = update_var out (b+n2w q) s;
       t = u with vs_inst_idx := LENGTH sb.cs_current_insts;
       H = step_prov PG G (mk_inst sa.cs_next_id ADD [Var dst;pos] [out]) u;
@@ -395,3 +394,219 @@ Resume abi_decode_bytes_store_copy_ptr[exterior]:
 QED
 
 Finalise abi_decode_bytes_store_copy_ptr
+
+Theorem abi_decode_bytes_runtime_tail_ptr:
+  abi_decode_bytes_runtime_tail (Var dst) (Var src) cnt sa = ((),sb) /\
+  lookup_var dst s = SOME (n2w d) /\ ptr_covers G tn dst s cap /\
+  abi_decode_ptr_window G tn s src (n2w a) (32+c) /\
+  eval_operand cnt s = SOME (n2w c) /\
+  op_prov G cnt = NONE /\ op_taint tn cnt = {} /\
+  not_fresh_at sa dst /\ not_fresh_at sa src /\
+  (!x. cnt = Var x ==> not_fresh_at sa x) /\
+  c+31 < dimword(:256) /\ 32+c < dimword(:256) /\
+  32+32*((c+31) DIV 32) <= cap /\ d+cap < dimword(:256) /\
+  a < dimword(:256) /\
+  (a+32+c <= d \/ d+cap <= a) /\
+  fresh_vars_wrt sa s /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s Gf tnf /\
+    t.vs_memory = (mcopy d a (32+c)
+      (mstore (d+32*((c+31) DIV 32)) 0w s)).vs_memory /\
+    (!i. d <= i /\ i < d+32+32*((c+31) DIV 32) ==> i NOTIN tnf.t_mem) /\
+    abi_decode_ptr_window Gf tnf t src (n2w a) (32+c) /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!i. ~(d <= i /\ i < d+32+32*((c+31) DIV 32)) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm
+Proof
+  all_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_decode_bytes_runtime_tail _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [abi_decode_bytes_runtime_tail_def, comp_bind_def,
+    comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  suspend "round"
+QED
+
+Resume abi_decode_bytes_runtime_tail_ptr[round]:
+  markerLib.RESUME_TAC >>
+  `c+31 < dimword(:256)` by decide_tac >>
+  drule_all (abi_decode_bytes_round_ptr
+    |> Q.INST [`R` |-> `{x | not_fresh_at sa x}`] |> SRULE []) >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  rename1 `inst_seq_ptr D 0 ctx func PG G tn _ s Gr tr` >>
+  rename1 `sr.vs_inst_idx = LENGTH cr.cs_current_insts` >>
+  suspend "address"
+QED
+
+Resume abi_decode_bytes_runtime_tail_ptr[address]:
+  markerLib.RESUME_TAC >>
+  `d+cap < dimword(:256) /\ d < dimword(:256) /\ a < dimword(:256)` by decide_tac >>
+  `lookup_var dst sr = SOME (n2w d) /\ ptr_covers Gr tr dst sr cap /\
+   op_taint tr (Var dst) = {}` by
+    (gvs[ptr_covers_def,op_taint_def]) >>
+  `?last. last_word = Var last` by
+    (qpat_assum `emit_op ADD [Var dst;data_sz] _ = _`
+       (mp_then Any strip_assume_tac emitted_insts_emit_op) >> simp[]) >>
+  qpat_x_assum `last_word = Var last` SUBST_ALL_TAC >>
+  `w2n (n2w d:bytes32)+cap < dimword(:256)` by simp[] >>
+  `32*((c+31) DIV 32)+32 <= cap` by decide_tac >>
+  drule_all (abi_decode_ptr_output_address |> Q.INST [`k` |-> `32`]) >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] mp_tac) >>
+  simp[] >> strip_tac >>
+  suspend "suffix"
+QED
+
+Resume abi_decode_bytes_runtime_tail_ptr[suffix]:
+  markerLib.RESUME_TAC >>
+  rename1 `emit_void MSTORE [Var last; Lit 0w] ca = ((),cb)` >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG Gr tr
+    (emitted_insts cr ca) sr Ga ta` >>
+  qmatch_asmsub_abbrev_tac `lookup_var last st = SOME _` >>
+  `!x. not_fresh_at sa x ==> not_fresh_at cr x` by
+    (map_every (fn pat => qpat_assum pat
+      (mp_then Any strip_assume_tac emitted_insts_emit_op))
+      [`emit_op ADD [cnt; Lit 31w] sa = _`,
+       `emit_op NOT [Lit 31w] _ = _`, `emit_op AND _ _ = _`] >>
+     gvs[not_fresh_at_def]) >>
+  `!x. not_fresh_at cr x ==> not_fresh_at ca x` by
+    (qpat_assum `emit_op ADD [Var dst; data_sz] cr = _`
+      (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     gvs[not_fresh_at_def]) >>
+  `lookup_var last st = SOME (n2w (d+32*((c+31) DIV 32))) /\
+   ptr_covers Ga ta last st 32` by
+    (simp[Abbr `st`, ghostPcTransportPtrTheory.ptr_covers_inst_idx, word_add_n2w]) >>
+  suspend "resources"
+QED
+
+Resume abi_decode_bytes_runtime_tail_ptr[resources]:
+  markerLib.RESUME_TAC >>
+  rename1 `emit_op ADD [Lit 32w; cnt] cb = (copy_sz,ccopy)` >>
+  `lookup_var dst st = SOME (n2w d) /\ ptr_covers Ga ta dst st (32+c) /\
+   abi_decode_ptr_window Ga ta st src (n2w a) (32+c)` by
+    (`32+c <= cap` by
+       (mp_tac (abi_decode_bytes_round_bounds |> Q.INST [`c` |-> `c`]) >> decide_tac) >>
+     gvs[abi_decode_ptr_window_def, ptr_covers_def, op_taint_def] >>
+     metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
+  `eval_operand cnt st = SOME (n2w c) /\ op_taint ta cnt = {}` by
+    (Cases_on `cnt`
+     >- gvs[eval_operand_def, op_taint_def]
+     >- (gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
+     gvs[eval_operand_def, op_taint_def] >>
+     simp[Abbr `st`, update_var_def] >>
+     qpat_x_assum `sr = _` (mp_tac o AP_TERM ``\v:venom_state. v.vs_labels``) >>
+     simp[] >> disch_then (fn th => rewrite_tac[th]) >> simp[]) >>
+  `not_fresh_at ca dst /\ not_fresh_at ca src /\
+   (!x. cnt = Var x ==> not_fresh_at ca x)` by metis_tac[] >>
+  `st.vs_inst_idx = LENGTH ca.cs_current_insts` by simp[Abbr `st`] >>
+  `d+32*((c+31) DIV 32) < dimword(:256) /\
+   (a+32+c <= d \/ d+32*((c+31) DIV 32)+32 <= a)` by decide_tac >>
+  mp_tac (abi_decode_bytes_store_copy_ptr |> Q.INST
+    [`sa` |-> `ca`, `sb` |-> `cb`, `sc` |-> `ccopy`, `sd` |-> `sb`,
+     `s` |-> `st`, `G` |-> `Ga`, `tn` |-> `ta`, `sz` |-> `copy_sz`,
+     `q` |-> `32*((c+31) DIV 32)`]) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  (
+  rename1 `emit_op ADD [cnt; Lit 31w] sa = (len_up,cup)` >>
+  rename1 `emit_op NOT [Lit 31w] cup = (mask,cmask)` >>
+  rename1 `emit_op ADD [Lit 32w; cnt] cb = (copy_sz,ccopy)` >>
+  map_every (fn pat => qpat_assum pat
+    (mp_then Any strip_assume_tac inst_extends_emit_op))
+    [`emit_op ADD [cnt; Lit 31w] sa = _`,
+     `emit_op NOT _ _ = _`, `emit_op AND _ _ = _`,
+     `emit_op ADD [Var dst; data_sz] cr = _`,
+     `emit_op ADD [Lit 32w; cnt] cb = _`] >>
+  map_every (fn pat => qpat_assum pat
+    (mp_then Any strip_assume_tac inst_extends_emit_void))
+    [`emit_void MSTORE _ ca = _`, `emit_void MCOPY _ _ = _`] >>
+  `inst_extends sa cr /\ inst_extends ca sb` by
+    metis_tac[inst_extends_trans] >>
+  `emitted_insts sa cr = emitted_insts sa cup ++
+      emitted_insts cup cmask ++ emitted_insts cmask cr /\
+   emitted_insts ca sb = emitted_insts ca cb ++
+      emitted_insts cb ccopy ++ emitted_insts ccopy sb` by
+    (metis_tac[emitted_insts_append, inst_extends_def, inst_extends_trans]) >>
+  (
+  map_every (fn pat => qpat_assum pat
+    (mp_then Any strip_assume_tac emitted_insts_emit_op))
+    [`emit_op ADD [cnt; Lit 31w] sa = _`,
+     `emit_op NOT _ _ = _`, `emit_op AND _ _ = _`,
+     `emit_op ADD [Var dst; data_sz] cr = _`,
+     `emit_op ADD [Lit 32w; cnt] cb = _`] >>
+  map_every (fn pat => qpat_assum pat
+    (mp_then Any strip_assume_tac emitted_insts_emit_void))
+    [`emit_void MSTORE _ ca = _`, `emit_void MCOPY _ _ = _`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa cr) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts cr ca) /\
+   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts ca sb)` by
+    simp[mk_inst_def, is_terminator_def] >>
+  `run_inst_seq (emitted_insts cr ca) sr =
+    OK (st with vs_inst_idx := sr.vs_inst_idx)` by simp[Abbr `st`] >>
+  `run_inst_seq (emitted_insts sa cr) s =
+    OK (sr with vs_inst_idx := s.vs_inst_idx) /\
+   run_inst_seq (emitted_insts ca sb) st =
+    OK (t with vs_inst_idx := st.vs_inst_idx)` by simp[] >>
+  qpat_x_assum `run_inst_seq (emitted_insts cr ca) sr =
+    OK (update_var _ _ _ with vs_inst_idx := _)` kall_tac >>
+  `cr.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cr /\
+   ca.cs_current_insts = cr.cs_current_insts ++ emitted_insts cr ca /\
+   sb.cs_current_insts = ca.cs_current_insts ++ emitted_insts ca sb` by
+    fs[inst_extends_def] >>
+  mp_tac (emitted_insts_join_normalized_ptr |> Q.INST
+    [`sb` |-> `cr`, `sc` |-> `ca`, `t` |-> `sr`, `u` |-> `st`,
+     `G1` |-> `Gr`, `tn1` |-> `tr`, `G2` |-> `Ga`, `tn2` |-> `ta`,
+     `fn` |-> `func`]) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  mp_tac (emitted_insts_join_normalized_ptr |> Q.INST
+    [`sb` |-> `ca`, `sc` |-> `sb`, `t` |-> `st`, `u` |-> `t`,
+     `G1` |-> `Ga`, `tn1` |-> `ta`, `G2` |-> `Gf`, `tn2` |-> `tnf`,
+     `fn` |-> `func`]) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  (
+  `eval_operand (Var dst) s = SOME (n2w d) /\
+   eval_operand (Var src) s = SOME (n2w a)` by
+    gvs[eval_operand_def, abi_decode_ptr_window_def] >>
+  qpat_assum `abi_decode_bytes_runtime_tail _ _ _ sa = _`
+    (mp_then Any mp_tac (abi_decode_bytes_runtime_tail_sequence
+      |> Q.INST [`s` |-> `s`, `d` |-> `d`, `a` |-> `a`, `c` |-> `c`])) >>
+  disch_then (qspecl_then [`s`, `d`, `c`, `a`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `fresh_vars_wrt sb rawt` >>
+  `t.vs_memory = (mcopy d a (32+c)
+      (mstore (d+32*((c+31) DIV 32)) 0w s)).vs_memory` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK (t with vs_inst_idx := _)` mp_tac >>
+     simp[] >> disch_then (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >> simp[]) >>
+  `sr.vs_memory = s.vs_memory` by
+    (qpat_x_assum `sr = s with <|vs_vars := _; vs_inst_idx := _|>` (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >> simp[]) >>
+  `st.vs_memory = s.vs_memory` by simp[Abbr `st`, update_var_def] >>
+  `!p. not_fresh_at sa p ==> op_taint tr (Var p) = op_taint tn (Var p)` by
+    (rpt strip_tac >> simp[op_taint_def]) >>
+  `abi_decode_ptr_window Gf tnf t src (n2w a) (c+32)` by
+    (`c+32 = 32+c` by decide_tac >> metis_tac[]) >>
+  qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK rawt` kall_tac >>
+  qexistsl_tac [`t`, `Gf`, `tnf`] >>
+  conj_tac >- simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (`c+32 = 32+c` by decide_tac >> asm_rewrite_tac[]) >>
+  conj_tac >- (gen_tac >> disch_tac >>
+    qpat_x_assum `!i. _ ==> i NOTIN tnf.t_mem` irule >> decide_tac) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at cr p /\ not_fresh_at ca p` by metis_tac[] >>
+      simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. _ ==> mem_bytes_at i 1 t.vs_memory = _ /\ _`
+        (qspec_then `i` mp_tac) >> simp[]) >>
+  simp[])))
+
+QED
+
+Finalise abi_decode_bytes_runtime_tail_ptr
