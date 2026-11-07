@@ -1,8 +1,8 @@
 (* Counted source boundary for body-aware aggregate child stores. *)
 Theory exprSimAggregateBodyCountedChildren
 Ancestors
-  exprSimAggregateChildren exprSimSource gasSummary vyperState exprSimHypsDefs
-  exprSimUnwrap exprSimHyps aggregateCountedStraightExec exprSimAbiGasBridge
+  exprSimAggregateChildren exprSimSource exprSimMemorySource gasSummary vyperState exprSimHypsDefs
+  exprSimUnwrap exprSimHyps exprSimProps aggregateCountedStraightExec exprSimAbiGasBridge
   context compileEnv emitHelper emitHelperProps exprLoweringProps
   loweringPosts venomInst list rich_list exprSimHash exprLowering fragExec venomState fragGasPath fragGasMode
   aggregateCountedTypedStore typedMemoryCopy vyperAST vyperTypeCallGraph
@@ -245,3 +245,105 @@ Resume aggregate_store_body_rebased_slice_marked[ordinary]:
 QED
 
 Finalise aggregate_store_body_rebased_slice_marked
+
+Theorem aggregate_body_child_store_slice_marked:
+  compile_expr ce ty e si = (vv,sj) /\
+  unwrap_value ce vv sm = (op,su) /\
+  compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e)
+    su = ((),sb) /\
+  expr_body_pre ce cx env e es /\
+  (do res <- eval_expr cx e; read_result cx res od) es = (INL v,es') /\
+  (int_calls_expr e <> [] /\ lowered_value_type ce e <> expr_type e ==>
+    acyclic_struct_metadata ce.ce_struct_fields) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
+  sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_var <= su.cs_next_var /\
+  (!z. op = Var z ==> not_fresh_at su z) /\
+  read_result cx tvv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  not_fresh_at sm x /\ lookup_var x r = SOME w /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\
+  fn_has_code sm su func /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+    ~is_word_type (post_value_type ce e) ==>
+    type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64) /\
+  stmt_state_rel ctx func ce cx es' r /\
+  FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
+  b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
+  w2n w + type_memory_size tv < dimword (:256) /\
+  (!name a len. local_region ce es'.scopes r name a len ==>
+    a+len <= w2n w \/ w2n w+type_memory_size tv <= a) /\
+  (ce.ce_is_ctor ==> !name itv iv off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
+    regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?q. gas_marked_path F ctx func r 0 (OK q) /\
+    (val_in_memory tv v (w2n w) q.vs_memory /\
+     stmt_state_rel ctx func ce cx es' q /\
+     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
+     (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
+     (!aid off sz a len.
+       FLOOKUP r.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
+       (!name b k. local_region ce es'.scopes r name b k ==>
+         off+sz <= b \/ b+k <= off) /\
+       off <= a /\ a+len <= off+sz /\
+       (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
+       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
+     locals_kept ce es' r q) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all aggregate_body_unwrap_marked >> strip_tac >>
+  drule_all aggregate_store_body_rebased_slice_marked >> strip_tac >>
+  qexists_tac `q` >> simp[] >>
+  conj_tac
+  >- (drule_all gas_marked_path_then >> simp[]) >>
+  fs[arithmeticTheory.ADD_COMM] >> first_assum MATCH_ACCEPT_TAC
+QED
+
+(* Replay supplies the semantic premise of the slice continuation without
+   identifying the original observation stream with the marked one. *)
+Theorem aggregate_body_child_replay:
+  expr_body_pre ce cx env e es /\
+  gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tv) mid (OK r) /\
+  read_result cx tv (mid with gas_obs := []) =
+    (INL v,mid with gas_obs := []) /\
+  vv_post ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tv vv r ==>
+  ?replay.
+    expr_body_pre ce cx env e replay /\
+    (do res <- eval_expr cx e; read_result cx res od) replay =
+      (INL v,mid with gas_obs := []) /\
+    vv_post ctx func ce cx e replay sa sm s0
+      (mid with gas_obs := []) tv vv r
+Proof
+  rpt strip_tac >>
+  drule_all aggregate_body_marked_read_source >> strip_tac >>
+  qexists_tac `es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
+  simp[aggregate_body_pre_gas_obs, vv_post_initial_gas]
+QED
+
+Theorem aggregate_body_marked_read_suffix:
+  gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tv) mid (OK r) /\
+  read_result cx tv (mid with gas_obs := []) =
+    (INL v,mid with gas_obs := []) /\
+  gas_marked_path F ctx func r 0 (OK q) ==>
+  gas_marked_exec F (ctx,func)
+    (do res <- eval_expr cx e; read_result cx res od) (es,s0)
+    marks (INL v) mid (OK q)
+Proof
+  rpt strip_tac >>
+  drule read_result_gas_obs >> simp[] >> strip_tac >>
+  fs[gas_marked_exec_def] >> conj_tac
+  >- (gen_tac >> simp[bind_def]) >>
+  drule_all gas_marked_path_then >> simp[]
+QED
