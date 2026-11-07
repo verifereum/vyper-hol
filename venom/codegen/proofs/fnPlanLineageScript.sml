@@ -646,7 +646,9 @@ Theorem lineage_dfs_join_phi_common_suffix:
     phi_schedule_run
       (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
         (collect_phis sb.bb_instructions)) rsD =
-      (ops, rsD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>)
+      (ops, rsD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix)
 Proof
   rpt gen_tac >> strip_tac >>
   `wf_function fn` by fs[codegen_ready_fn_def] >>
@@ -680,7 +682,9 @@ Theorem lineage_dfs_join_phi_common_suffix_actual:
     phi_schedule_run
       (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
         (collect_phis sb.bb_instructions)) psD =
-      (ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>)
+      (ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all lineage_state_actual_dfs_alloc >> strip_tac >>
