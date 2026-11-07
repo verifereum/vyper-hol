@@ -7,6 +7,7 @@ Ancestors
   concretizePtrTaintContent concretizePtrOpaqueRetpc concretizePtrSharedFields
   venomExecSemantics venomState finite_map concretizePtrStoreSteps
   venomMemProps regularCallEmitSim pointerConfinedDefs memLocDefs
+  concretizePtrValueTransport
 
 Theorem ptr_byte_store_mstore8_operands_untainted:
   taint_ok fn tn inst s /\ inst.inst_opcode = MSTORE8 ==>
@@ -107,6 +108,102 @@ Proof
   strip_tac >> irule ptr_history_content_masks >> qexists_tac `tn` >>
   simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
     ptr_byte_store_mstore8_history]
+QED
+
+Theorem ptr_byte_store_istore_mixed_execution:
+  fn_ptr_ok P f /\ MEM inst (fn_insts f) /\
+  inst.inst_opcode = ISTORE /\ inst.inst_operands = [a;v] /\
+  inst.inst_outputs = [] /\
+  (!x. x IN FDOM TG ==> x IN fn_pv P f) /\
+  taint_ok f tn inst s /\
+  ptr_mixed_vars births positions (TG : string |-> num # num) tn f g s t /\
+  ptr_history_content tn s t /\
+  ptr_nonopaque_operand f a /\ ptr_nonopaque_operand f v /\
+  exec_write2 (\a v s. istore (w2n a) v s) inst t = OK tt ==>
+  ?ss. exec_write2 (\a v s. istore (w2n a) v s) inst s = OK ss /\
+    ptr_mixed_vars births positions TG (step_taint inst s ss tn) f g ss tt /\
+    ptr_history_content (step_taint inst s ss tn) ss tt
+Proof
+  strip_tac >>
+  `op_prov TG a = NONE /\ op_prov TG v = NONE` by
+    (conj_tac >> irule ptr_byte_store_istore_operands_no_provenance >>
+     metis_tac[listTheory.MEM]) >>
+  `op_taint tn a = {}` by
+    (spose_not_then assume_tac >>
+     fs[taint_ok_def] >>
+     first_x_assum (qspec_then `a` mp_tac) >> simp[] >>
+     strip_tac >> gvs[]) >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ptr_history_content_labels] >>
+  `ptr_lookup_transport births positions NONE {} (eval_operand a s) (eval_operand a t) /\
+   ptr_lookup_transport births positions NONE (op_taint tn v)
+      (eval_operand v s) (eval_operand v t)` by
+    (metis_tac[ptr_mixed_vars_eval]) >>
+  gvs[exec_write2_def, AllCaseEqs(), ptr_lookup_transport_some_right,
+      ptr_value_transport_scalar_empty] >>
+  conj_tac
+  >- (irule ptr_mixed_vars_fields >>
+      qexistsl_tac [`s`,`t`,`tn`] >>
+      simp[istore_def, mstore_def, step_taint_def, store_taint_def,
+           imm_taint_def, adopt_reset_def, set_var_taint_def, DRESTRICT_UNIV]) >>
+  irule ptr_byte_store_istore_step_content >>
+  gvs[ptr_value_transport_def]
+QED
+
+Theorem ptr_byte_store_mstore8_mixed_execution:
+  fn_ptr_ok P f /\ MEM inst (fn_insts f) /\
+  inst.inst_opcode = MSTORE8 /\ inst.inst_operands = [a;v] /\
+  inst.inst_outputs = [] /\
+  (!x. x IN FDOM TG ==> x IN fn_pv P f) /\
+  taint_ok f tn inst s /\
+  ptr_mixed_vars births positions (TG : string |-> num # num) tn f g s t /\
+  ptr_history_content tn s t /\ ptr_nonopaque_operand f v /\
+  exec_write2 (\a v s. mstore8 (w2n a) v s) inst t = OK tt ==>
+  ?addr u. eval_operand a s = SOME addr /\ eval_operand v s = SOME u /\
+    eval_operand v t = SOME u /\
+    exec_write2 (\a v s. mstore8 (w2n a) v s) inst s =
+      OK (mstore8 (w2n addr) u s) /\
+    ptr_mixed_vars births positions TG
+      (step_taint inst s (mstore8 (w2n addr) u s) tn) f g
+      (mstore8 (w2n addr) u s) tt /\
+    ptr_history_content (step_taint inst s (mstore8 (w2n addr) u s) tn)
+      (mstore8 (w2n addr) u s) tt
+Proof
+  strip_tac >>
+  `op_prov TG v = NONE` by
+    (irule ptr_byte_store_mstore8_value_no_provenance >> metis_tac[]) >>
+  `op_taint tn v = {}` by
+    (metis_tac[ptr_byte_store_mstore8_operands_untainted, listTheory.MEM]) >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ptr_history_content_labels] >>
+  `ptr_lookup_transport births positions NONE {}
+      (eval_operand v s) (eval_operand v t)` by
+    metis_tac[ptr_mixed_vars_eval] >>
+  drule_all ptr_mixed_vars_eval_presence >> strip_tac >>
+  gvs[exec_write2_def, AllCaseEqs(), ptr_lookup_transport_some_right,
+      ptr_value_transport_scalar_empty] >>
+  Cases_on `eval_operand a s`
+  >- (first_x_assum (qspec_then `a` mp_tac) >> simp[]) >>
+  gvs[] >> conj_tac
+  >- (irule ptr_mixed_vars_fields >> qexistsl_tac [`s`,`t`,`tn`] >>
+      simp[mstore8_def, step_taint_def, store_taint_def, imm_taint_def,
+           adopt_reset_def, set_var_taint_def, DRESTRICT_UNIV]) >>
+  irule ptr_byte_store_mstore8_step_content >> simp[]
+QED
+
+Theorem ptr_byte_store_istore_masked_written_bytes:
+  inst.inst_opcode = ISTORE /\ inst.inst_operands = [a;v] /\
+  eval_operand a s = SOME addr /\
+  word_agree_except (op_taint tn v) u ut /\ k < 32 /\
+  w2n addr + k NOTIN
+    (step_taint inst s (istore (w2n addr) u s) tn).t_mem ==>
+  read_byte (w2n addr + k) (istore (w2n addr) u s).vs_memory =
+  read_byte (offt + k) (istore offt ut t).vs_memory
+Proof
+  strip_tac >> irule ptr_byte_store_istore_written_bytes >> simp[] >>
+  `k NOTIN op_taint tn v` by
+    (gvs[step_taint_def, mem_taint_def, written_taint_def,
+         store_taint_def, adopt_reset_def] >>
+     first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
+  metis_tac[word_agree_except_def]
 QED
 
 Theorem ptr_paired_byte_store_prefix_normalize:
