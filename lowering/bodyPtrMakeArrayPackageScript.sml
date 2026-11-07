@@ -238,3 +238,43 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
+
+Theorem literal_tuple_vv_sim_ptr:
+  expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st /\ expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+  (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
+  expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray NONE bnd) args) es
+Proof
+  strip_tac >> rw[expr_vv_sim_ptr_def] >>
+  drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
+  drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
+  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  `compatible_bound bnd (LENGTH args)` by
+    fs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  `type_memory_size_list tvs < dimword(:256)` by
+    (fs[expr_body_pre_def, alloc_limits_expr_def] >>
+     simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `?root. ba.buf_operand = Var root` by
+    metis_tac[bodyPtrMakeArrayAllocBufferTheory.alloc_buffer_emitted] >>
+  fs[] >> drule_all literal_allocated_tuple_outcome >> strip_tac >> gvs[] >>
+  simp[literal_tuple_action, combinTheory.o_DEF] >>
+  drule (gas_outcome_ptr_return_map
+    |> Q.GEN `f` |> Q.ISPEC `\(vs : value list). Value (ArrayV (TupleV vs))`
+    |> REWRITE_RULE [GSYM boolTheory.AND_IMP_INTRO]) >>
+  disch_then (match_mp_tac o BETA_RULE) >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      drule literal_loop_frame_runtime >> strip_tac >>
+      `addr < dimword(:256)` by decide_tac >>
+      `type_memory_bytes ce (lowered_value_type ce
+         (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)) <=
+         type_memory_size_list tvs` by
+        (simp[lowered_value_type_def, vyperASTTheory.expr_type_def, type_memory_bytes_def,
+          listTheory.MAP_MAP_o, combinTheory.o_DEF] >> fs[combinTheory.o_DEF]) >>
+      drule_at (Pat `type_memory_bytes _ _ <= _`) literal_tuple_endpoint_posts >>
+      simp[vyperASTTheory.expr_type_def] >>
+      disch_then drule >> simp[] >>
+      disch_then drule >> simp[contextTheory.mk_ptr_def]) >>
+  gen_tac >> Cases_on `rr` >> simp[]
+QED
