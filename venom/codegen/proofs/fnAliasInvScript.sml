@@ -14097,6 +14097,268 @@ Proof
   pairarg_tac >> simp[]
 QED
 
+Theorem alias_occ_popmany_projection:
+  SND (popmany_plan to_pop ps) =
+    if to_pop = [] then ps
+    else if EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) to_pop) /\
+            is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) to_pop))
+    then alias_occ_commands_real [AliasOccSwap (LENGTH to_pop); AliasOccPop (LENGTH to_pop)] ps
+    else SND (popmany_individual to_pop ps)
+Proof
+  Cases_on `to_pop` >- simp[popmany_plan_def] >>
+  rename1 `v::vs` >>
+  pure_rewrite_tac[popmany_plan_def, LET_THM] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) (v::vs))` >>
+  asm_rewrite_tac[] >>
+  Cases_on `is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) (v::vs)))` >>
+  asm_rewrite_tac[] >>
+  Cases_on `do_swap (LENGTH (v::vs)) ps` >>
+  simp[alias_occ_commands_real_def, alias_occ_command_real_def]
+QED
+
+Definition alias_occ_popmany_events_def:
+  alias_occ_popmany_events to_pop ps =
+    if to_pop = [] then []
+    else if EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) to_pop) /\
+            is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) to_pop))
+    then MAP AliasOccPrimitive [AliasOccSwap (LENGTH to_pop); AliasOccPop (LENGTH to_pop)]
+    else alias_occ_popmany_individual_events to_pop ps
+End
+
+Theorem alias_occ_popmany_align:
+  alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_events_shadow (alias_occ_popmany_events to_pop ps) s)
+    (SND (popmany_plan to_pop ps))
+Proof
+  rewrite_tac[alias_occ_popmany_events_def, alias_occ_popmany_projection] >>
+  Cases_on `to_pop = []` >> asm_rewrite_tac[]
+  >- simp[alias_occ_events_shadow_def] >>
+  Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) to_pop) /\
+            is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) to_pop))` >>
+  asm_rewrite_tac[] >>
+  simp[alias_occ_primitive_events, alias_occ_commands_align, alias_occ_popmany_individual_align]
+QED
+
+(* Final movement of reorder_one, after restore and depth reduction. *)
+Definition alias_occ_reorder_move_state_def:
+  alias_occ_reorder_move_state dfg target_ops idx op ps =
+    case stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack of
+      NONE => ps
+    | SOME dist =>
+      if dist = LENGTH target_ops - 1 - idx then ps
+      else if LENGTH target_ops - 1 - idx < LENGTH ps.ps_stack /\
+              operand_equiv dfg op (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack)
+      then ps with ps_stack := stack_poke (LENGTH target_ops - 1 - idx) op
+        (stack_poke dist (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack) ps.ps_stack)
+      else alias_occ_commands_real
+        [AliasOccSwap dist; AliasOccSwap (LENGTH target_ops - 1 - idx)] ps
+End
+
+Definition alias_occ_reorder_move_events_def:
+  alias_occ_reorder_move_events dfg target_ops idx op ps =
+    case stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack of
+      NONE => []
+    | SOME dist =>
+      if dist = LENGTH target_ops - 1 - idx then []
+      else if LENGTH target_ops - 1 - idx < LENGTH ps.ps_stack /\
+              operand_equiv dfg op (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack)
+      then [AliasOccEquivRelabel idx dist (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack);
+            AliasOccEquivRelabel idx (LENGTH target_ops - 1 - idx) op]
+      else MAP AliasOccPrimitive
+        [AliasOccSwap dist; AliasOccSwap (LENGTH target_ops - 1 - idx)]
+End
+
+Theorem alias_occ_reorder_move_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_reorder_move_events dfg target_ops idx op ps) s)
+    (alias_occ_reorder_move_state dfg target_ops idx op ps)
+Proof
+  rewrite_tac[alias_occ_reorder_move_events_def, alias_occ_reorder_move_state_def] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack`
+  >- simp[alias_occ_events_shadow_def] >>
+  rename1 `SOME dist` >>
+  Cases_on `dist = LENGTH target_ops - 1 - idx`
+  >- simp[alias_occ_events_shadow_def] >>
+  asm_rewrite_tac[] >>
+  Cases_on `LENGTH target_ops - 1 - idx < LENGTH ps.ps_stack /\
+    operand_equiv dfg op (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack)` >>
+  asm_rewrite_tac[]
+  >- (strip_tac >> simp[alias_occ_events_shadow_def, alias_occ_event_shadow_def] >>
+      `alias_occ_align (alias_occ_relabel dist
+        (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack) s)
+        (ps with ps_stack := stack_poke dist
+          (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack) ps.ps_stack)` by
+        simp[alias_occ_relabel_align] >>
+      drule alias_occ_relabel_align >> simp[]) >>
+  simp[alias_occ_events_shadow_def, alias_occ_event_shadow_def,
+       alias_occ_commands_real_def] >>
+  strip_tac >> irule alias_occ_command_align >>
+  simp[alias_occ_command_align]
+QED
+
+Definition alias_occ_reorder_restore_commands_def:
+  alias_occ_reorder_restore_commands target_ops idx op ps =
+    case stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack of
+      SOME _ => []
+    | NONE => case FLOOKUP ps.ps_spilled op of
+        SOME _ => [AliasOccRestore op] | NONE => []
+End
+
+Definition alias_occ_reorder_reduce_state_def:
+  alias_occ_reorder_reduce_state target_ops idx op ps =
+    case stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack of
+      NONE => ps
+    | SOME dist => if 16 < dist then
+        SND (reduce_depth_plan (LENGTH ps.ps_stack) target_ops op
+          (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps)
+      else ps
+End
+
+Definition alias_occ_reorder_reduce_events_def:
+  alias_occ_reorder_reduce_events target_ops idx op ps =
+    case stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack of
+      NONE => []
+    | SOME dist => if 16 < dist then
+        alias_occ_reduce_events (LENGTH ps.ps_stack) target_ops op
+          (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps
+      else []
+End
+
+Theorem alias_occ_reorder_reduce_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_reorder_reduce_events target_ops idx op ps) s)
+    (alias_occ_reorder_reduce_state target_ops idx op ps)
+Proof
+  rewrite_tac[alias_occ_reorder_reduce_events_def, alias_occ_reorder_reduce_state_def] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack` >>
+  simp[alias_occ_events_shadow_def] >> IF_CASES_TAC >>
+  simp[alias_occ_events_shadow_def, alias_occ_reduce_align]
+QED
+
+Theorem alias_occ_reorder_one_projection:
+  SND (reorder_one dfg target_ops idx op ps) =
+    alias_occ_reorder_move_state dfg target_ops idx op
+      (alias_occ_reorder_reduce_state target_ops idx op
+        (alias_occ_commands_real (alias_occ_reorder_restore_commands target_ops idx op ps) ps))
+Proof
+  pure_rewrite_tac[reorder_one_def, LET_THM] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  `alias_occ_commands_real (alias_occ_reorder_restore_commands target_ops idx op ps) ps = ps1` by
+    (Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack` >>
+     gvs[alias_occ_reorder_restore_commands_def, alias_occ_commands_real_def] >>
+     Cases_on `FLOOKUP ps.ps_spilled op` >>
+     gvs[alias_occ_commands_real_def, alias_occ_command_real_def]) >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps1.ps_stack`
+  >- gvs[alias_occ_reorder_reduce_state_def, alias_occ_reorder_move_state_def] >>
+  gvs[] >> pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  `alias_occ_reorder_reduce_state target_ops idx op ps1 = ps2` by
+    (gvs[alias_occ_reorder_reduce_state_def] >>
+     Cases_on `16 < x` >> gvs[]) >>
+  pop_assum SUBST1_TAC >>
+  rewrite_tac[alias_occ_reorder_move_state_def] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps2.ps_stack` >>
+  gvs[] >>
+  Cases_on `x' = LENGTH target_ops - 1 - idx` >> gvs[] >>
+  Cases_on `LENGTH target_ops - 1 - idx < LENGTH ps2.ps_stack` >> gvs[] >>
+  Cases_on `operand_equiv dfg op (stack_peek (LENGTH target_ops - 1 - idx) ps2.ps_stack)` >> gvs[] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  simp[alias_occ_commands_real_def, alias_occ_command_real_def]
+QED
+
+Definition alias_occ_reorder_one_events_def:
+  alias_occ_reorder_one_events dfg target_ops idx op ps =
+    MAP AliasOccPrimitive (alias_occ_reorder_restore_commands target_ops idx op ps) ++
+    alias_occ_reorder_reduce_events target_ops idx op
+      (alias_occ_commands_real (alias_occ_reorder_restore_commands target_ops idx op ps) ps) ++
+    alias_occ_reorder_move_events dfg target_ops idx op
+      (alias_occ_reorder_reduce_state target_ops idx op
+        (alias_occ_commands_real (alias_occ_reorder_restore_commands target_ops idx op ps) ps))
+End
+
+Theorem alias_occ_reorder_one_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_reorder_one_events dfg target_ops idx op ps) s)
+    (SND (reorder_one dfg target_ops idx op ps))
+Proof
+  rewrite_tac[alias_occ_reorder_one_events_def, alias_occ_reorder_one_projection,
+    alias_occ_events_append, alias_occ_primitive_events] >>
+  strip_tac >> irule alias_occ_reorder_move_align >>
+  irule alias_occ_reorder_reduce_align >> simp[alias_occ_commands_align]
+QED
+
+Definition alias_occ_reorder_events_def:
+  alias_occ_reorder_events dfg target_ops ps =
+    alias_occ_fold_events (\(idx,op) ps. reorder_one dfg target_ops idx op ps)
+      (\(idx,op) ps. alias_occ_reorder_one_events dfg target_ops idx op ps)
+      (MAPi (\idx op. (idx,op)) target_ops) ps
+End
+
+Theorem alias_occ_reorder_align:
+  alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_events_shadow (alias_occ_reorder_events dfg target_ops ps) s)
+    (SND (reorder_plan dfg target_ops ps))
+Proof
+  rewrite_tac[alias_occ_reorder_events_def, reorder_plan_def] >> strip_tac >>
+  irule alias_occ_fold_events_align >> simp[pairTheory.FORALL_PROD, alias_occ_reorder_one_align] >>
+  rpt gen_tac >> pairarg_tac >> simp[]
+QED
+
+Theorem alias_occ_reorder_move_relabel_certificate:
+  MEM (AliasOccEquivRelabel site depth at)
+    (alias_occ_reorder_move_events dfg target_ops idx op ps) ==>
+  ?dist.
+    site = idx /\
+    stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack = SOME dist /\
+    dist <> LENGTH target_ops - 1 - idx /\
+    LENGTH target_ops - 1 - idx < LENGTH ps.ps_stack /\
+    operand_equiv dfg op (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack) /\
+    alias_occ_reorder_move_events dfg target_ops idx op ps =
+      [AliasOccEquivRelabel idx dist (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack);
+       AliasOccEquivRelabel idx (LENGTH target_ops - 1 - idx) op]
+Proof
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack` >>
+  simp[alias_occ_reorder_move_events_def] >> rename1 `SOME dist` >>
+  Cases_on `dist = LENGTH target_ops - 1 - idx` >> gvs[] >>
+  Cases_on `LENGTH target_ops - 1 - idx < LENGTH ps.ps_stack /\
+    operand_equiv dfg op (stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack)` >> gvs[] >>
+  metis_tac[]
+QED
+
+(* Read records keep the exact source list and saturating index. They do
+   not assert that a selected location exists or allocate an occurrence. *)
+Definition alias_occ_reorder_move_reads_def:
+  alias_occ_reorder_move_reads target_ops idx op ps =
+    case stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack of
+      NONE => []
+    | SOME dist =>
+      if dist = LENGTH target_ops - 1 - idx then []
+      else if LENGTH target_ops - 1 - idx < LENGTH ps.ps_stack then
+        [(LENGTH ps.ps_stack - 1 - (LENGTH target_ops - 1 - idx),
+          ps.ps_stack, stack_peek (LENGTH target_ops - 1 - idx) ps.ps_stack)]
+      else []
+End
+
+Theorem alias_occ_reorder_move_reads_exact:
+  MEM (index,source,at) (alias_occ_reorder_move_reads target_ops idx op ps) ==>
+  source = ps.ps_stack /\
+  index = LENGTH ps.ps_stack - 1 - (LENGTH target_ops - 1 - idx) /\
+  at = EL index source
+Proof
+  Cases_on `stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) ps.ps_stack` >>
+  simp[alias_occ_reorder_move_reads_def] >> rename1 `SOME dist` >>
+  Cases_on `dist = LENGTH target_ops - 1 - idx` >> gvs[] >>
+  Cases_on `LENGTH target_ops - 1 - idx < LENGTH ps.ps_stack` >>
+  gvs[stack_peek_def]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
