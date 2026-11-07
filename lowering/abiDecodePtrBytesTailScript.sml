@@ -255,7 +255,12 @@ Theorem abi_decode_bytes_store_copy_ptr:
     abi_decode_ptr_window Gf tnf t src (n2w a) (32+c) /\
     (!p. not_fresh_at sa p ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
-      op_taint tnf (Var p) = op_taint tn (Var p))
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!i. ~(d <= i /\ i < d+32+q) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    tnf.t_imm = tn.t_imm
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `eval_operand (Lit 0w) s = SOME 0w /\ op_taint tn (Lit 0w) = {}` by
@@ -349,7 +354,8 @@ Resume abi_decode_bytes_store_copy_ptr[compose]:
   disch_then drule_all >> strip_tac >>
   qexistsl_tac [`G2`, `tn3`, `t3`] >> simp[] >>
   conj_tac >- suspend "initialized" >>
-  rpt strip_tac >> gvs[]
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  suspend "exterior"
 QED
 
 Resume abi_decode_bytes_store_copy_ptr[initialized]:
@@ -369,6 +375,23 @@ Resume abi_decode_bytes_store_copy_ptr[initialized]:
      simp[abi_decode_ptr_window_def] >> rpt strip_tac >>
      rpt conj_tac >> rpt strip_tac >> simp[])) >>
   simp[]
+QED
+
+Resume abi_decode_bytes_store_copy_ptr[exterior]:
+  qpat_assum `!i. ~(_ /\ _) ==> mem_bytes_at _ _ t3.vs_memory = _ /\ _` mp_tac >>
+  qpat_assum `!i. _ \/ _ ==> mem_bytes_at _ _ t1.vs_memory = _ /\ _` mp_tac >>
+  qpat_assum `t1 = _` mp_tac >>
+  qpat_assum `t2.vs_memory = t1.vs_memory` mp_tac >>
+  qpat_assum `tn2.t_mem = tn1.t_mem` mp_tac >>
+  qpat_assum `c <= q` mp_tac >>
+  qpat_assum `q = _` mp_tac >>
+  qpat_assum `w2n (n2w d:bytes32) = d` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+  `t1.vs_memory = (mstore (d+q) 0w s).vs_memory` by simp[] >>
+  `~(d <= i /\ i < d+32+c)` by decide_tac >>
+  `~(d+32*((c+31) DIV 32) <= i) \/
+   ~(i < d+(32*((c+31) DIV 32)+32))` by decide_tac >>
+  metis_tac[]
 QED
 
 Finalise abi_decode_bytes_store_copy_ptr
