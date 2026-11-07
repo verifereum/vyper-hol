@@ -121,7 +121,11 @@ Theorem tuple_local_store_head_path:
          w2n dw + (if is_word_type ty then 32
                    else MIN (type_memory_size tv) (type_memory_size entry.type)) <= a ==>
          mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-      gas_marked_path F ctx func s 0 (OK t)
+      gas_marked_path F ctx func s 0 (OK t) /\
+      (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+        alloca_frame c0 e0 sa0 s0 cenv
+          (es with scopes :=
+            pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `is_word_type ty`
@@ -144,7 +148,7 @@ Proof
       qexistsl [`dw`, `mstore (w2n dw) (typed_val_to_w256 tv v) s with
                       vs_inst_idx := SUC s.vs_inst_idx`] >>
       simp[stmt_state_rel_inst_idx, lookup_var_def, mstore_def, LET_THM] >>
-      fs[mstore_def, LET_THM]) >>
+      fs[mstore_def, LET_THM] >> suspend "word_frame") >>
   `m` by metis_tac[] >>
   gns[] >>
   qpat_x_assum `~is_word_type vt /\ _`
@@ -155,8 +159,40 @@ Proof
     |> Q.INST [`tyv` |-> `entry.type`] |> GEN_ALL
     |> PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]) >>
   strip_tac >>
-  qexistsl [`dw`, `t`] >> simp[] >> metis_tac[]
+  qexistsl [`dw`, `t`] >> simp[] >>
+  conj_tac >- metis_tac[] >> suspend "memory_frame"
 QED
+
+Resume tuple_local_store_head_path[word_frame]:
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  drule_all tuple_store_destination_region >> strip_tac >>
+  `32 <= dsz` by
+    (fs[stmtSimDeclStoreTheory.store_lays_out_def] >> decide_tac) >>
+  irule tuple_local_region_write_frame >>
+  goal_assum (drule_at Any) >>
+  simp[lookup_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  drule find_containing_scope_structure >> strip_tac >>
+  gvs[FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+Resume tuple_local_store_head_path[memory_frame]:
+  rpt gen_tac >> strip_tac >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  drule_all tuple_store_destination_region >> strip_tac >>
+  irule tuple_local_region_write_frame >> goal_assum (drule_at Any) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  drule find_containing_scope_structure >> strip_tac >>
+  gvs[FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+Finalise tuple_local_store_head_path
 
 (* The typing condition for later targets depends only on scope-entry types. *)
 Theorem tuple_store_layout_write_local:
@@ -337,7 +373,9 @@ Theorem tuple_store_mixed_locals_path:
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. (~m \/ not_fresh_at st x) ==> lookup_var x t = lookup_var x s) /\
         (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
-        gas_marked_path F ctx func s 0 (OK t)
+        gas_marked_path F ctx func s 0 (OK t) /\
+        (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+          alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -556,8 +594,12 @@ Resume tuple_store_mixed_locals_path[compose]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- suspend "compose_vars" >>
   conj_tac >- suspend "compose_allocas" >>
-  `gas_marked_path F ctx func s (0 + 0) (OK t)` by
-    (irule gas_marked_path_then >> qexists `s1` >> simp[]) >> fs[]
+  conj_tac
+  >- (`gas_marked_path F ctx func s (0 + 0) (OK t)` by
+        (irule gas_marked_path_then >> qexists `s1` >> simp[]) >> fs[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `es1 = _` SUBST_ALL_TAC >>
+  first_x_assum irule >> first_x_assum irule >> first_assum ACCEPT_TAC
 QED
 Resume tuple_store_mixed_locals_path[compose_vars]:
   rpt gen_tac >> disch_tac >>
