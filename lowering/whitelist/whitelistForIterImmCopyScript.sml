@@ -401,3 +401,148 @@ Proof
   qexistsl_tac [`ctx`, `func`, `inst`] >> simp[] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
+
+(* Straight-line compiler facts do not require semantic operand witnesses. *)
+Theorem immutable_iter_load_static:
+  compile_imm_load_word ctor imm src sa = (v,sb) ==>
+  same_blocks sa sb /\ cs_extends sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  ~block_is_terminated sb
+Proof
+  Cases_on `ctor` >> Cases_on `imm` >>
+  simp[compile_imm_load_word_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  simp[exprLoweringPropsTheory.same_blocks_def, cs_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def,
+       block_is_terminated_def, mk_inst_def, is_terminator_def,
+       rich_listTheory.DROP_LENGTH_APPEND] >>
+  Cases_on `sa.cs_current_insts` >>
+  simp[listTheory.LAST_CONS_cond, is_terminator_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem immutable_byte_offset_static[local]:
+  ~block_is_terminated sa /\
+  compile_lit_byte_offset src off sa = (v,sb) ==>
+  same_blocks sa sb /\ cs_extends sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  ~block_is_terminated sb
+Proof
+  Cases_on `off = 0` >> Cases_on `src` >>
+  simp[compile_lit_byte_offset_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  simp[exprLoweringPropsTheory.same_blocks_def, cs_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def,
+       block_is_terminated_def, mk_inst_def, is_terminator_def,
+       rich_listTheory.DROP_LENGTH_APPEND] >>
+  Cases_on `sa.cs_current_insts` >>
+  simp[listTheory.LAST_CONS_cond, is_terminator_def]
+QED
+
+Theorem immutable_store_static[local]:
+  emit_void MSTORE ops sa = ((),sb) ==>
+  same_blocks sa sb /\ cs_extends sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  ~block_is_terminated sb
+Proof
+  simp[emit_void_def, fresh_id_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  strip_tac >> gvs[] >>
+  simp[exprLoweringPropsTheory.same_blocks_def, cs_extends_def,
+       exprLoweringPropsTheory.emitted_insts_def,
+       block_is_terminated_def, mk_inst_def, is_terminator_def,
+       rich_listTheory.DROP_LENGTH_APPEND] >>
+  Cases_on `sa.cs_current_insts` >>
+  simp[listTheory.LAST_CONS_cond, is_terminator_def]
+QED
+
+Theorem immutable_static_trans[local]:
+  !sa sm sb.
+  (same_blocks sa sm /\ cs_extends sa sm /\
+   sa.cs_next_var <= sm.cs_next_var /\
+   sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm /\
+   ~block_is_terminated sm) /\
+  (same_blocks sm sb /\ cs_extends sm sb /\
+   sm.cs_next_var <= sb.cs_next_var /\
+   sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
+   ~block_is_terminated sb) ==>
+  same_blocks sa sb /\ cs_extends sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  ~block_is_terminated sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sb.cs_current_insts = sa.cs_current_insts ++
+      (emitted_insts sa sm ++ emitted_insts sm sb)` by simp[] >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (CONV_TAC (LHS_CONV (REWR_CONV exprLoweringPropsTheory.emitted_insts_def)) >>
+     qpat_x_assum `sb.cs_current_insts = sa.cs_current_insts ++ _`
+       (fn th => pure_once_rewrite_tac[th]) >>
+     pure_rewrite_tac[rich_listTheory.DROP_LENGTH_APPEND] >> REFL_TAC) >>
+  fs[exprLoweringPropsTheory.same_blocks_def] >>
+  metis_tac[compileEnvTheory.cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem immutable_words_static[local]:
+  !count sa sb off.
+  ~block_is_terminated sa /\
+  compile_imm_copy_to_memory ctor imm src dst count off sa = ((),sb) ==>
+  same_blocks sa sb /\ cs_extends sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  ~block_is_terminated sb
+Proof
+  Induct
+  >- simp[compile_imm_copy_to_memory_def, comp_return_def,
+          exprLoweringPropsTheory.same_blocks_def, cs_extends_def,
+          exprLoweringPropsTheory.emitted_insts_def] >>
+  rpt gen_tac >>
+  simp[Once compile_imm_copy_to_memory_def, comp_bind_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rename1 `compile_lit_byte_offset src off sa = (src_op,s1)` >>
+  rename1 `compile_imm_load_word ctor imm src_op s1 = (value,s2)` >>
+  rename1 `compile_lit_byte_offset dst off s2 = (dst_op,s3)` >>
+  rename1 `emit_void MSTORE [dst_op; value] s3 = ((),s4)` >>
+  drule_all immutable_byte_offset_static >> strip_tac >>
+  qpat_x_assum `compile_lit_byte_offset src off sa = _` kall_tac >>
+  drule immutable_iter_load_static >> strip_tac >>
+  drule_all immutable_byte_offset_static >> strip_tac >>
+  drule immutable_store_static >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  match_mp_tac immutable_static_trans >> qexists_tac `s1` >>
+  conj_tac >- simp[] >>
+  match_mp_tac immutable_static_trans >> qexists_tac `s2` >>
+  conj_tac >- simp[] >>
+  match_mp_tac immutable_static_trans >> qexists_tac `s3` >>
+  conj_tac >- simp[] >>
+  match_mp_tac immutable_static_trans >> qexists_tac `s4` >> simp[]
+QED
+
+Theorem immutable_iter_copy_static:
+  ~block_is_terminated sa /\
+  compile_iter_elem_copy cenv src dst stride LocCode F et et sa = ((),sb) ==>
+  same_blocks sa sb /\ cs_extends sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  ~block_is_terminated sb
+Proof
+  strip_tac >> Cases_on `stride <= 32`
+  >- (gvs[immutable_iter_small_copy, comp_bind_def] >>
+      pairarg_tac >> gvs[] >>
+      rename1 `compile_imm_load_word _ _ _ sa = (v,sm)` >>
+      drule immutable_iter_load_static >> strip_tac >>
+      drule immutable_store_static >> strip_tac >>
+      match_mp_tac immutable_static_trans >> qexists_tac `sm` >> simp[]) >>
+  `32 < stride` by decide_tac >>
+  gvs[immutable_iter_large_copy] >>
+  drule_all immutable_words_static >> simp[]
+QED
