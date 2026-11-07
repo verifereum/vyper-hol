@@ -312,6 +312,123 @@ Proof
   simp[]
 QED
 
+Theorem array_address_copy_keep[local]:
+  compile_iter_elem_copy cenv (Var ep) (Var p) stride LocMemory F et et sa = ((),sb0) /\
+  stride = type_memory_size tv /\ type_memory_bytes cenv et = stride /\
+  evaluate_type tenv et = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  val_in_memory tv v (w2n arr_base + k * stride) s.vs_memory /\
+  w2n arr_base + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
+  lookup_var idx s = SOME (n2w k) /\ eval_operand saved_base s = SOME arr_base /\
+  lookup_var p s = SOME dst /\ p <> ov /\ p <> ep /\
+  (!x. saved_base = Var x ==> x <> ov) /\
+  not_fresh_at sa ep /\ not_fresh_at sa p /\
+  keep_stable Q caller b z /\ Q s /\ alloca_inv s /\ aid <> dstid /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) /\
+  FLOOKUP s.vs_allocas dstid = SOME (w2n dst,sz) /\ stride <= sz /\
+  ~not_fresh_at caller ov /\ ~not_fresh_at caller ep /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sa x) ==>
+  ?t. run_inst_seq
+    ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
+      mk_inst j4 ADD [saved_base; Var ov] [ep]] ++ emitted_insts sa sb0) s = OK t /\
+    Q t /\ FLOOKUP t.vs_allocas aid = SOME (b,z) /\
+    (!x. not_fresh_at caller x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  qabbrev_tac `s1 = update_var ep (n2w (w2n arr_base + k * stride))
+      (update_var ov (n2w (k * stride)) s)` >>
+  `run_inst_seq [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
+     mk_inst j4 ADD [saved_base; Var ov] [ep]] s = OK s1` by
+    (qunabbrev_tac `s1` >> irule stmtSimForArrayLoopTheory.array_address_prefix_run >> simp[] >> metis_tac[]) >>
+  `Q s1` by (qunabbrev_tac `s1` >> metis_tac[for_keep_update]) >>
+  `!x. not_fresh_at caller x ==> lookup_var x s1 = lookup_var x s` by
+    (simp[Abbr `s1`, emitHelperPropsTheory.lookup_var_update_var] >> metis_tac[]) >>
+  `alloca_inv s1 /\ FLOOKUP s1.vs_allocas aid = SOME (b,z) /\
+   FLOOKUP s1.vs_allocas dstid = SOME (w2n dst,sz)` by
+    (conj_tac
+     >- (irule localPtrsPropsTheory.alloca_inv_fields >> qexists_tac `s` >>
+         simp[Abbr `s1`, update_var_def]) >> simp[Abbr `s1`, update_var_def]) >>
+  `eval_operand (Var ep) s1 = SOME (n2w (w2n arr_base + k * stride)) /\
+   eval_operand (Var p) s1 = SOME dst` by
+    simp[Abbr `s1`, eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
+  `val_in_memory tv v (w2n (n2w (w2n arr_base + k * stride) : bytes32)) s1.vs_memory` by
+    gvs[Abbr `s1`, update_var_def, w2n_n2w] >>
+  `!x. Var ep = Var x \/ Var p = Var x ==> not_fresh_at sa x` by (simp[] >> metis_tac[]) >>
+  `type_memory_bytes cenv et = type_memory_size tv /\
+   type_memory_size tv + 64 < dimword (:256) /\ type_memory_size tv <= sz` by metis_tac[] >>
+  drule_all for_iter_copy_keep >> strip_tac >> qexists_tac `t` >>
+  `run_inst_seq ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
+      mk_inst j4 ADD [saved_base; Var ov] [ep]] ++ emitted_insts sa sb0) s = OK t` by
+    (qpat_x_assum `run_inst_seq [_;_] s = OK s1`
+       (mp_then Any (qspec_then `emitted_insts sa sb0` mp_tac) run_inst_seq_append) >> simp[]) >>
+  simp[]
+QED
+
+Theorem dynarray_for_body_entry_keep[local]:
+  compile_iter_elem_copy cenv (Var ep) (Var p) stride LocMemory F et et sa = ((),sb0) /\
+  stride = type_memory_size tv /\ type_memory_bytes cenv et = stride /\
+  evaluate_type tenv et = SOME tv /\ value_has_type tv v /\ val_wf tv v /\
+  val_in_memory tv v (w2n arr_base + 32 + k * stride) s.vs_memory /\
+  w2n arr_base + 32 + k * stride < dimword (:256) /\ stride + 64 < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\
+  cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
+  lookup_scopes id es.scopes = NONE /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\
+  not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes tot /\
+  not_local_ptr cenv es.scopes ep /\
+  lookup_var idx s = SOME (n2w k) /\ eval_operand saved_base s = SOME arr_base /\
+  lookup_var p s = SOME dst /\ p <> ov /\ p <> tot /\ p <> ep /\ ov <> tot /\
+  (!x. saved_base = Var x ==> x <> ov /\ x <> tot) /\ not_fresh_at sa ep /\
+  MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+  ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
+  FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\ stride <= sz /\
+  lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  sb0.cs_current_insts =
+    [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov];
+     mk_inst j4 ADD [Lit 32w; Var ov] [tot];
+     mk_inst j5 ADD [saved_base; Var tot] [ep]] ++ emitted_insts sa sb0 /\
+  s.vs_current_bb = sb0.cs_current_bb /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  ret_pc_ok bc st s /\
+  (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  keep_stable Q caller b z /\ Q s /\
+  FLOOKUP s.vs_allocas aid = SOME (b,z) /\ aid <> ainst.inst_id /\
+  ~not_fresh_at caller ov /\ ~not_fresh_at caller tot /\ ~not_fresh_at caller ep /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sa x) ==>
+  ?s2. whitelistForIterDynLoop$dynarray_entry_ready ctx func bc cx es id tv v
+         sb0 sa ov tot ep st s s2 /\ Q s2 /\
+       FLOOKUP s2.vs_allocas aid = SOME (b,z)
+Proof
+  strip_tac >>
+  drule_all whitelistForIterDynLoopTheory.dynarray_for_body_entry_run >>
+  disch_then (qspecl_then [`j3`, `j4`, `j5`] strip_assume_tac) >>
+  `not_fresh_at sa p` by
+    metis_tac[stmtSimForArrayLoopTheory.array_copy_live_ptrs_reserved] >>
+  `alloca_inv s` by metis_tac[stmt_state_rel_def] >>
+  drule_all dynarray_address_copy_keep >>
+  disch_then (qspecl_then [`j5`, `j4`, `j3`] strip_assume_tac) >>
+  `run_inst_seq sb0.cs_current_insts s = OK t` by metis_tac[] >>
+  `t' = t` by metis_tac[venomExecSemanticsTheory.exec_result_11] >>
+  qpat_x_assum `t' = t` SUBST_ALL_TAC >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    sb0.cs_current_insts` by
+    simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb0)` by
+    (irule stmtSimForArrayLoopTheory.iter_memory_copy_no_gas >> goal_assum (drule_at Any)) >>
+  `EVERY (\i. i.inst_opcode <> GAS) sb0.cs_current_insts` by
+    simp[venomInstTheory.mk_inst_def] >>
+  `sb0.cs_current_insts = sb0.cs_current_insts` by simp[] >>
+  drule_all stmtSimForArrayLoopTheory.array_body_prefix_continuation >> strip_tac >>
+  `!x. lookup_var x s2 = lookup_var x t` by simp[lookup_var_def] >>
+  `Q s2` by
+    (qpat_x_assum `keep_stable _ _ _ _` mp_tac >>
+     simp[keep_stable_def] >> strip_tac >> first_x_assum irule >>
+     qexists_tac `t` >> simp[]) >>
+  qexists_tac `s2` >> simp[whitelistForIterDynLoopTheory.dynarray_entry_ready_def] >>
+  fs[ret_pc_ok_def] >> metis_tac[]
+QED
+
 (* The snapshot is well formed only in the successful array-type branch. *)
 Theorem mem_iter_snapshot_wf[local]:
   expr_type e = ArrayT et bd /\
