@@ -32,6 +32,8 @@ Theorem compile_abi_encode_args_case_gas_sim:
 
 Do not modify this statement. Prove it as-is, or produce a counterexample. `abi_args_post_def` (`lowering/abiEncodeArgsSimScript.sml`) is frozen with it.
 
+Owner note: `wb_frame` (and `locals_kept`) now take the final environment as well (`wb_frame cenv es es' sa s0 s`). `abi_args_post_def` has been updated to match: its last conjunct is now `wb_frame ce es es' sa s0 s`, where `es'` is its existing final-environment argument. It stays frozen in that form. The other `wb_frame`/`locals_kept` uses in the harvested `abi*` theories are yours to port. Several (for example in `abiEncodeArgsSim`) still use the old arity.
+
 ## Completion Criteria
 
 - The theorem is proved with no `cheat` in `lowering/exprSimAbiEncodeArgsScript.sml`, or in helper theories named `exprSimAbiEncodeArgs<Part>`.
