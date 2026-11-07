@@ -977,14 +977,16 @@ Theorem vv_post_prefix_frame:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  wb_frame cenv es es sa s0 t /\
+  wb_frame cenv es es1 sa s0 t /\
   vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u ==>
   vv_post ctx func cenv cx e es sa sb s0 es2 tv vv u
 Proof
   simp[vv_post_def, GSYM wb_frame_def] >> rpt strip_tac
   >- metis_tac[vv_at_start_mono]
   >- metis_tac[vv_own_start_mono] >>
-  metis_tac[wb_frame_trans]
+  qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `sa`, `es1`, `es2`, `sm`,
+               `t`, `u`, `ctx`] mp_tac wb_frame_trans >>
+  simp[]
 QED
 
 Theorem slice_expr_exit_INR_cast[local]:

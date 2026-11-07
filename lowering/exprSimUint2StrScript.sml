@@ -2874,7 +2874,7 @@ Theorem vv_post_prefix_frag:
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
-  wb_frame cenv es es sa s0 t /\
+  wb_frame cenv es es1 sa s0 t /\
   frag_exec ctx sm sb P
     (\u. vv_post ctx func cenv cx e es1 sm sb t es2 tv vv u) R ==>
   frag_exec ctx sm sb P
