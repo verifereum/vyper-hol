@@ -2,6 +2,9 @@ Theory concretizeLayoutCanonicalBaseExternal
 Ancestors concretizeLayoutCanonicalBase concretizeLayoutCanonicalDriver
   concretizeLayoutSelectedBaseInterface concretizeLayoutCompletedJump
   ptrDiscipline venomExecSemantics venomInst list
+  concretizeLayoutPhaseExternal concretizeStepStructure concretizeLayoutLocalReturn
+  frameRelocationBinding venomWf o1PassContract frameFiniteJointDecoration
+  concretizeLayoutPhaseOrigin
 
 (* Leaf of the exhaustive base certificate: successful external calls and
    creates, in the shape of layout_canonical_ordinary_nonterm_success. *)
@@ -34,5 +37,37 @@ Theorem layout_canonical_external_success:
   ?tpost. step_inst_base j t = OK tpost /\
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
 Proof
-  cheat
+  strip_tac >>
+  `~is_terminator i.inst_opcode /\ i.inst_opcode <> ALLOCA /\
+   i.inst_opcode <> NOP` by
+    (fs[MEM] >> simp[is_terminator_def]) >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `j = i` by (gvs[concretize_positions_unchanged] >> fs[MEM]) >>
+  qpat_x_assum `j = i` SUBST_ALL_TAC >>
+  qpat_x_assum `es = _` SUBST_ALL_TAC >>
+  qpat_x_assum `qs = _` SUBST_ALL_TAC >>
+  qpat_x_assum `q = JointConfig _ _ _ _ _ _ _ _ _ _ _` SUBST_ALL_TAC >>
+  qpat_x_assum `g.lop_cursor = n` (SUBST_ALL_TAC o SYM) >>
+  drule layout_canonical_ordinary_edge >>
+  disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`post`, `i`] mp_tac) >> simp[] >> strip_tac >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[o1_fn_shape_def, wf_function_def] >>
+  `active_inst fn i s` by fs[decoration_at_def] >>
+  `~in_revert_forward fn s` by
+    (irule active_inst_not_revert_forward >> simp[] >> qexists `i` >> fs[MEM]) >>
+  `~joint_read_exempt (EL g.lop_cursor (q0::MAP SND path))` by
+    fs[layout_ordinary_trace_def, joint_read_exempt_def] >>
+  drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+    layout_external_trace_step >>
+  disch_then (drule_at (Pat `_ .lop_config = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `callee_first _ _`)) >>
+  disch_then (drule_at (Pat `EVERY (fn_ptr_ok _) _`)) >>
+  disch_then (drule_at (Pat `_ .lop_ids = _ :: _`)) >>
+  disch_then (drule_at (Pat `_ .lop_anns = _ :: _`)) >>
+  disch_then (drule_at (Pat `EL _ _ = SOME (OriginOrdinary _ _)`)) >>
+  simp[] >> (impl_tac >- fs[MEM]) >> strip_tac >>
+  qexists `tpost` >> simp[] >>
+  irule layout_canonical_ordinary_success >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
