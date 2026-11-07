@@ -42,9 +42,13 @@ Run the `build` step first: the executable compiles `compilerNativeML.sml`,
 which the generator theory writes as an extra output rather than a declared
 source.
 
-`holbuild executable` builds the theories it loads with proof steps. After a
-`--skip-proof-steps` build it therefore rebuilds the compiler's theories with
-their proofs first (HOL-Theorem-Prover/holbuild#270).
+The `compiler` job in `.github/workflows/holbuild.yml` builds and runs this
+check after the witness dependencies. Any fixture failure fails the job.
+It runs the retained main corpus; the other suites' `parity-fixtures.txt`
+lists are inputs for separate checks, not this runner's compiled-in programs.
+
+`holbuild executable` reuses the theories built with `--skip-proof-steps`;
+it does not recheck their proof steps.
 
 The same sources also build with MLton (it needs the GMP headers), after the
 generator has run. From this directory:

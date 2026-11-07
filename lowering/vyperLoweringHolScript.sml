@@ -36,7 +36,8 @@ Ancestors
   allocaBudgetChecks
   vyperLoweringCorrect
   configuredE2ECorrectness
-  finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero asmOptMergeJumpdests
+  finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
+  asmOptPruneUnused asmOptMergeJumpdests
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
