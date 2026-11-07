@@ -415,9 +415,9 @@ Theorem selective_reentry_replay:
 Proof
   rewrite_tac[selective_reentry_def, selective_back_cache, selective_header_cache,
     selective_entry_cache, selective_run_def] >>
-  CONV_TAC (BINOP_CONV (funpow 5 RATOR_CONV (RAND_CONV EVAL))) >>
-  CONV_TAC (BINOP_CONV (funpow 4 RATOR_CONV (RAND_CONV EVAL))) >>
-  CONV_TAC (BINOP_CONV (funpow 3 RATOR_CONV (RAND_CONV EVAL))) >> EVAL_TAC
+  CONV_TAC (eval_def_occurrences selective_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_cg_def) >> EVAL_TAC
 QED
 
 Theorem selective_header_succs:
@@ -508,9 +508,9 @@ Proof
   `1 = SUC 0` by decide_tac >> pop_assum (fn th => pure_rewrite_tac[th]) >>
   rewrite_tac[selective_phase_def, selective_phi_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV selective_fn_def THENC EVAL)) >>
-  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
-    is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
-    is_raw_fmp_opcode_def]
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``selective_lv``, ``selective_dg``, ``selective_cg``,
+     ``selective_entry``, ``generate_phi_plan``])
 QED
 
 Theorem selective_first_add_spills:
@@ -875,49 +875,57 @@ Resume selective_cases_entry_some[a]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_entry_some[b]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_entry_some[c]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_entry_some[d]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_entry_some[e]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_entry_some[f]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_entry_some[g]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_entry_some[h]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Finalise selective_cases_entry_some
 
@@ -946,53 +954,102 @@ Proof
   Cases_on `u` >- suspend "g" >> suspend "h"
 QED
 Resume selective_cases_header_some[a]:
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_entry_def THENC EVAL)) >>
+  rewrite_tac[selective_case_entry_def] >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_DEPTH_CONV (REWR_CONV selective_case_run_def)))) >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >>
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_header_some[b]:
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_entry_def THENC EVAL)) >>
+  rewrite_tac[selective_case_entry_def] >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_DEPTH_CONV (REWR_CONV selective_case_run_def)))) >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >>
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_header_some[c]:
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_entry_def THENC EVAL)) >>
+  rewrite_tac[selective_case_entry_def] >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_DEPTH_CONV (REWR_CONV selective_case_run_def)))) >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >>
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_header_some[d]:
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_entry_def THENC EVAL)) >>
+  rewrite_tac[selective_case_entry_def] >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_DEPTH_CONV (REWR_CONV selective_case_run_def)))) >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >>
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_header_some[e]:
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_entry_def THENC EVAL)) >>
+  rewrite_tac[selective_case_entry_def] >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_DEPTH_CONV (REWR_CONV selective_case_run_def)))) >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >>
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_header_some[f]:
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_entry_def THENC EVAL)) >>
+  rewrite_tac[selective_case_entry_def] >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_DEPTH_CONV (REWR_CONV selective_case_run_def)))) >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >>
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_header_some[g]:
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_entry_def THENC EVAL)) >>
+  rewrite_tac[selective_case_entry_def] >>
+  CONV_TAC (RAND_CONV (RAND_CONV
+    (ONCE_DEPTH_CONV (REWR_CONV selective_case_run_def)))) >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >>
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Resume selective_cases_header_some[h]:
   rewrite_tac[selective_case_entry_def] >>
@@ -1005,7 +1062,8 @@ Resume selective_cases_header_some[h]:
   rewrite_tac[selective_case_run_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_lv_def THENC EVAL)) >>
   CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_dg_def THENC EVAL)) >>
-  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >> EVAL_TAC
+  CONV_TAC (ONCE_DEPTH_CONV (REWR_CONV selective_case_cg_def THENC EVAL)) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >> EVAL_TAC
 QED
 Finalise selective_cases_header_some
 
@@ -1170,3 +1228,735 @@ Resume selective_cases_exit_boundary[h]:
   CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
 QED
 Finalise selective_cases_exit_boundary
+
+Theorem selective_cases_exit_result:
+  (n = 17 \/ n = 18) ==>
+  ?ops. selective_case_run n r u 3 (selective_case_header n r u) =
+    SOME (ops, selective_case_exit n r u)
+Proof
+  disch_tac >>
+  `IS_SOME (selective_case_run n r u 3 (selective_case_header n r u))` by
+    metis_tac[selective_cases_exit_boundary] >> pop_assum mp_tac >>
+  Cases_on `selective_case_run n r u 3 (selective_case_header n r u)` >>
+  simp[selective_case_exit_def] >> PairCases_on `x` >> simp[]
+QED
+
+Theorem selective_cases_back_dfs:
+  (n = 17 \/ n = 18) ==>
+  dfs_block_state (selective_case_lv n r u) (selective_case_dg n r u)
+    (selective_case_cg n r u) (selective_fn n r u) entry_probe_start
+    "back" (selective_case_back_base n r u)
+Proof
+  disch_tac >>
+  drule selective_cases_entry_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  drule selective_cases_header_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  drule selective_cases_exit_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  rewrite_tac[selective_case_back_base_def] >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [selective_case_run_def]) >>
+  irule selective_shape_back_dfs >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  qexists_tac `EL 2 (selective_fn n r u).fn_blocks` >>
+  irule selective_cases_shape >> simp[]
+QED
+
+Theorem selective_cases_back_some:
+  (n = 17 \/ n = 18) ==>
+  IS_SOME (selective_case_run n r u 2 (selective_case_back_base n r u))
+Proof
+  disch_tac >> drule selective_cases_exit_boundary >>
+  disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  asm_rewrite_tac[] >> qpat_x_assum `selective_case_back_base _ _ _ = _` kall_tac >>
+  gvs[]
+  >- (Cases_on `r`
+      >- (Cases_on `u` >- suspend "a" >> suspend "b") >>
+      Cases_on `u` >- suspend "c" >> suspend "d") >>
+  Cases_on `r`
+  >- (Cases_on `u` >- suspend "e" >> suspend "f") >>
+  Cases_on `u` >- suspend "g" >> suspend "h"
+QED
+Resume selective_cases_back_some[a]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_back_some[b]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_back_some[c]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_back_some[d]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_back_some[e]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_back_some[f]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_back_some[g]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_back_some[h]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Finalise selective_cases_back_some
+
+Theorem selective_cases_back_result:
+  (n = 17 \/ n = 18) ==>
+  ?ops. selective_case_run n r u 2 (selective_case_back_base n r u) =
+    SOME (ops, selective_case_back n r u)
+Proof
+  disch_tac >> drule selective_cases_back_some >>
+  disch_then (qspecl_then [`u`, `r`] mp_tac) >>
+  Cases_on `selective_case_run n r u 2 (selective_case_back_base n r u)` >>
+  simp[selective_case_back_def] >> PairCases_on `x` >> simp[]
+QED
+
+Theorem selective_cases_root_traversal:
+  (n = 17 \/ n = 18) ==>
+  ?ops ps. generate_fn_plan_aux (selective_case_lv n r u)
+    (selective_case_dg n r u) (selective_case_cg n r u) (selective_fn n r u)
+    ["entry"] [] entry_probe_start = SOME (ops, ["back";"exit";"H";"entry"], ps)
+Proof
+  disch_tac >>
+  drule selective_cases_entry_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  drule selective_cases_header_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  drule selective_cases_exit_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  drule selective_cases_back_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  `selective_shape (selective_case_cg n r u) (selective_fn n r u)
+    (EL 0 (selective_fn n r u).fn_blocks) (EL 1 (selective_fn n r u).fn_blocks)
+    (EL 2 (selective_fn n r u).fn_blocks) (EL 3 (selective_fn n r u).fn_blocks)` by
+      (irule selective_cases_shape >> simp[]) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [selective_case_run_def]) >>
+  `selective_case_back_base n r u = selective_merge
+    (selective_case_header n r u) (selective_case_exit n r u)` by
+      simp[selective_case_back_base_def] >>
+  drule_all selective_shape_header_traversal >> strip_tac >>
+  drule_all selective_shape_root_traversal >> strip_tac >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem selective_cases_success:
+  (n = 17 \/ n = 18) ==>
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (selective_case_lv n r u) (selective_case_dg n r u) (selective_case_cg n r u)
+    NONE [] (selective_fn n r u) 0 0)
+Proof
+  disch_tac >>
+  `canonical_param_prefix (selective_fn n r u)` by
+    (gvs[] >> Cases_on `r` >> Cases_on `u` >> EVAL_TAC) >>
+  `fn_entry_label (selective_fn n r u) = SOME "entry"` by
+    (gvs[] >> Cases_on `r` >> Cases_on `u` >> EVAL_TAC) >>
+  drule selective_cases_root_traversal >>
+  disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  simp[generate_fn_plan_with_cleanup_analyzed_def, GSYM entry_probe_start_def]
+QED
+
+(* A native DFS block is a lineage source; choosing its own cleanup fields
+   makes the replay premise reflexive.  No physical transfer is assumed. *)
+Theorem selective_dfs_edge_lineage:
+  dfs_block_state lv dg cg fn ps0 lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan lv dg cg fn bb ps = SOME (ops, after) /\
+  MEM succ (cfg_succs_of cg lbl) /\
+  dfs_block_state lv dg cg fn ps0 succ ps_base ==>
+  lineage_state lv dg cg fn ps0 succ (selective_rebase ps_base after)
+Proof
+  rpt strip_tac >> rewrite_tac[selective_rebase_def] >>
+  irule lineage_state_step >> conj_tac >- simp[] >>
+  `ps with <|ps_cleanup_height := ps.ps_cleanup_height;
+    ps_cleanup_promised := ps.ps_cleanup_promised|> = ps` by simp[] >>
+  metis_tac[dfs_block_state_lineage_state]
+QED
+
+Definition selective_case_reentry_def:
+  selective_case_reentry n r u = selective_rebase
+    (selective_case_entry n r u) (selective_case_back n r u)
+End
+
+Theorem selective_cases_reentry_lineage:
+  (n = 17 \/ n = 18) ==>
+  lineage_state (selective_case_lv n r u) (selective_case_dg n r u)
+    (selective_case_cg n r u) (selective_fn n r u) entry_probe_start
+    "H" (selective_case_reentry n r u)
+Proof
+  disch_tac >>
+  `dfs_block_state (selective_case_lv n r u) (selective_case_dg n r u)
+    (selective_case_cg n r u) (selective_fn n r u) entry_probe_start
+    "back" (selective_case_back_base n r u)` by
+      (irule selective_cases_back_dfs >> simp[]) >>
+  drule selective_cases_back_result >> disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [selective_case_run_def]) >>
+  rewrite_tac[selective_case_reentry_def] >> irule selective_dfs_edge_lineage >>
+  reverse conj_tac >- (irule selective_cases_header_dfs >> simp[]) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  `selective_shape (selective_case_cg n r u) (selective_fn n r u)
+    (EL 0 (selective_fn n r u).fn_blocks) (EL 1 (selective_fn n r u).fn_blocks)
+    (EL 2 (selective_fn n r u).fn_blocks) (EL 3 (selective_fn n r u).fn_blocks)` by
+      (irule selective_cases_shape >> simp[]) >>
+  gvs[selective_shape_def] >> irule selective_cases_header_dfs >> simp[]
+QED
+
+Theorem selective_cases_reentry_replay:
+  (n = 17 \/ n = 18) ==>
+  selective_case_run n r u 1 (selective_case_reentry n r u) =
+  selective_case_run n r u 1 (selective_case_entry n r u)
+Proof
+  disch_tac >>
+  `selective_case_back_base n r u = selective_case_header n r u` by
+    metis_tac[selective_cases_exit_boundary] >>
+  rewrite_tac[selective_case_reentry_def, selective_case_back_def] >>
+  asm_rewrite_tac[] >> pop_assum kall_tac >> gvs[]
+  >- (Cases_on `r`
+      >- (Cases_on `u` >- suspend "a" >> suspend "b") >>
+      Cases_on `u` >- suspend "c" >> suspend "d") >>
+  Cases_on `r`
+  >- (Cases_on `u` >- suspend "e" >> suspend "f") >>
+  Cases_on `u` >- suspend "g" >> suspend "h"
+QED
+Resume selective_cases_reentry_replay[a]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_reentry_replay[b]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_reentry_replay[c]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_reentry_replay[d]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_reentry_replay[e]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_reentry_replay[f]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_reentry_replay[g]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (LAND_CONV (RAND_CONV EVAL)) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Resume selective_cases_reentry_replay[h]:
+  rewrite_tac[selective_case_header_def, selective_case_entry_def, selective_case_run_def] >>
+  CONV_TAC (eval_def_occurrences selective_case_lv_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_dg_def) >>
+  CONV_TAC (eval_def_occurrences selective_case_cg_def) >>
+  CONV_TAC (eval_def_occurrences selective_fn_def) >>
+  CONV_TAC (eval_def_occurrences entry_probe_start_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >>
+  CONV_TAC (fnPlanLineageProbeLib.eval_def_innermost generate_block_plan_def) >> EVAL_TAC
+QED
+Finalise selective_cases_reentry_replay
+
+Theorem selective_cases_circuit_fixed:
+  (n = 17 \/ n = 18) ==>
+  selective_rebase (selective_case_back_base n r u)
+    (SND (THE (selective_case_run n r u 1 (selective_case_reentry n r u)))) =
+    selective_case_back_base n r u /\
+  selective_rebase (selective_case_entry n r u)
+    (SND (THE (selective_case_run n r u 2 (selective_case_back_base n r u)))) =
+    selective_case_reentry n r u
+Proof
+  disch_tac >>
+  `selective_case_run n r u 1 (selective_case_reentry n r u) =
+    selective_case_run n r u 1 (selective_case_entry n r u)` by
+      (irule selective_cases_reentry_replay >> simp[]) >>
+  `selective_case_back_base n r u = selective_case_header n r u` by
+    metis_tac[selective_cases_exit_boundary] >>
+  simp[selective_case_header_def, selective_case_reentry_def,
+    selective_case_back_def, selective_rebase_def]
+QED
+
+Theorem selective_cases_second_reentry_replay:
+  (n = 17 \/ n = 18) ==>
+  selective_case_run n r u 1
+    (selective_rebase (selective_case_entry n r u)
+      (SND (THE (selective_case_run n r u 2
+        (selective_rebase (selective_case_back_base n r u)
+          (SND (THE (selective_case_run n r u 1 (selective_case_reentry n r u))))))))) =
+  selective_case_run n r u 1 (selective_case_entry n r u)
+Proof
+  disch_tac >>
+  drule selective_cases_circuit_fixed >>
+  disch_then (qspecl_then [`u`, `r`] strip_assume_tac) >>
+  asm_rewrite_tac[] >> irule selective_cases_reentry_replay >> simp[]
+QED
+
+(* Evaluate the original instruction context, never a truncated header.
+   The accumulator records each actual optional call and advances only on SOME.
+   EVERY IS_SOME on the resulting log certifies every phase of this trace. *)
+Definition selective_case_inst_def:
+  selective_case_inst n r u i ps = generate_inst_plan
+    (selective_case_lv n r u) (selective_case_dg n r u) (selective_case_cg n r u)
+    (selective_fn n r u)
+    (EL i (EL 1 (selective_fn n r u).fn_blocks).bb_instructions)
+    (live_vars_at (selective_case_lv n r u) "H" (SUC i)) F
+    (if SUC i < LENGTH (EL 1 (selective_fn n r u).fn_blocks).bb_instructions then
+      is_terminator (EL (SUC i)
+        (EL 1 (selective_fn n r u).fn_blocks).bb_instructions).inst_opcode else F)
+    "H" ps
+End
+Definition selective_case_trace_def:
+  selective_case_trace n r u ps = SND (FOLDL
+    (\(st, calls) i. case selective_case_inst n r u i st of
+       NONE => (st, calls ++ [NONE])
+     | SOME (ops, after) => (after, calls ++ [SOME (ops, after)]))
+    (ps, []) (COUNT_LIST (LENGTH (EL 1 (selective_fn n r u).fn_blocks).bb_instructions)))
+End
+Definition selective_case_spill_phases_def:
+  selective_case_spill_phases n r u ps =
+    MAP FST (FILTER (\(i, result). case result of NONE => F
+      | SOME (ops, after) => after.ps_spilled <> FEMPTY)
+      (MAPi (\i result. (i, result)) (selective_case_trace n r u ps)))
+End
+
+(* Inspect the first case's entire log, including the last consuming ADD. *)
+Theorem selective_case_trace_17_F_F:
+  EVERY IS_SOME (selective_case_trace 17 F F (selective_case_entry 17 F F)) /\
+  selective_case_spill_phases 17 F F (selective_case_entry 17 F F) = []
+Proof
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  EVAL_TAC
+QED
+
+Theorem selective_cases_trace_certificate:
+  (n = 17 \/ n = 18) ==>
+  ?phases. EVERY IS_SOME (selective_case_trace n r u (selective_case_entry n r u)) /\
+    selective_case_spill_phases n r u (selective_case_entry n r u) = phases
+Proof
+  disch_then DISJ_CASES_TAC >> qpat_x_assum `n = _` SUBST_ALL_TAC
+  >- (Cases_on `r`
+      >- (Cases_on `u` >- suspend "trace17FF" >> suspend "trace17FT") >>
+      Cases_on `u` >- suspend "trace17TF" >> suspend "trace17TT") >>
+  Cases_on `r`
+  >- (Cases_on `u` >- suspend "trace18FF" >> suspend "trace18FT") >>
+  Cases_on `u` >- suspend "trace18TF" >> suspend "trace18TT"
+QED
+Resume selective_cases_trace_certificate[trace17FF]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Resume selective_cases_trace_certificate[trace17FT]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("17FT post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Resume selective_cases_trace_certificate[trace17TF]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("17TF post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Resume selective_cases_trace_certificate[trace17TT]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("17TT post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Resume selective_cases_trace_certificate[trace18FF]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("18FF post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Resume selective_cases_trace_certificate[trace18FT]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("18FT post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Resume selective_cases_trace_certificate[trace18TF]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("18TF post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Resume selective_cases_trace_certificate[trace18TT]:
+  pure_rewrite_tac[selective_case_spill_phases_def] >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_lv_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_dg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_cg_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_fn_def) >>
+  CONV_TAC (cache_context selective_case_trace_def selective_case_entry_def) >>
+  pure_rewrite_tac[selective_case_trace_def] >> CONV_TAC trace_prepare >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (trace_step selective_case_inst_def) >>
+  CONV_TAC (QUANT_CONV (RAND_CONV (LAND_CONV
+    (fn tm => let val th = EVAL tm
+                  val _ = print ("18TT post-call spill phases: " ^ term_to_string (rhs (concl th)) ^ "\n")
+              in th end)))) >> EVAL_TAC >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >>
+  qexists `[]` >> REFL_TAC
+QED
+Finalise selective_cases_trace_certificate
