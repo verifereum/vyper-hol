@@ -84,6 +84,8 @@ Theorem literal_alloc_buffer_counted:
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
     u.vs_labels = s.vs_labels /\
+    contract_storage u = contract_storage s /\
+    contract_transient u = contract_transient s /\
     sa.cs_next_id < sm.cs_next_id /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -143,15 +145,18 @@ Proof
        [`0`, `OK (t with vs_inst_idx := SUC s.vs_inst_idx)`] mp_tac) >>
      simp[] >> disch_then irule >>
      irule (cj 1 gas_path_rules) >> simp[]) >>
-  `t.vs_labels = s.vs_labels` by
+  `t.vs_labels = s.vs_labels /\
+   contract_storage t = contract_storage s /\
+   contract_transient t = contract_transient s` by
     (qpat_x_assum `step_inst_base _ _ = OK t` mp_tac >>
      simp[venomExecSemanticsTheory.step_inst_base_def, mk_inst_def,
        eval_operand_def, venomExecSemanticsTheory.exec_alloca_def] >>
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >>
-     simp[AllCaseEqs(), update_var_def] >> rpt strip_tac >> gvs[]) >>
+     simp[AllCaseEqs(), update_var_def, contract_storage_def, contract_transient_def] >>
+     rpt strip_tac >> gvs[]) >>
   qexistsl_tac [`t with vs_inst_idx := SUC s.vs_inst_idx`, `w`] >>
   gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
-      local_region_def] >>
+      local_region_def, contract_storage_def, contract_transient_def] >>
   conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
