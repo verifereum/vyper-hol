@@ -1,13 +1,24 @@
 (* Fixed-array compiler boundary: dynamic length/check code is absent. *)
 Theory stmtSimForArrayParts
 Ancestors
-  loweringPosts stmtSimDefs stmtSimProps
+  loweringPosts stmtSimDefs stmtSimProps stmtSimDeclCompose
   stmtSimForArray stmtSimForParts stmtLowering exprLowering compileEnv
   emitHelper finite_map vyperAST fragExec venomExecSemantics
   venomExecProofs venomInst venomState context  loweringSlice
   exprLoweringProps emitHelperProps list rich_list
 Libs
   monadsyntax
+
+(* Address temporaries do not change the allocation frame of live locals. *)
+Theorem alloca_frame_update_var:
+  not_local_ptr cenv es.scopes x ==>
+  alloca_frame cenv es sa s cenv es (update_var x w s)
+Proof
+  rw[alloca_frame_def, update_var_def] >>
+  first_x_assum irule >>
+  fs[local_region_def, not_local_ptr_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
 
 Theorem compile_for_fixed_array:
   !cenv lctx ty id et n name stmts.
@@ -298,7 +309,7 @@ Theorem array_iter_copy_static:
   ~block_is_terminated sa /\
   compile_iter_elem_copy cenv src dst stride LocMemory F et et sa = ((),sb) ==>
   same_blocks sa sb /\ cs_extends sa sb /\
-  sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   ~block_is_terminated sb
 Proof
@@ -392,6 +403,7 @@ Theorem compile_for_array_parts:
          [Var idx; Lit (n2w (elem_size_in_location cenv LocMemory et))] [ov];
        mk_inst (st.cs_next_id + 7) ADD [arr_op; Var ov] [ep]] /\
     sa.cs_next_var = st.cs_next_var + 5 /\
+    sa.cs_next_id = st.cs_next_id + 8 /\ sa.cs_next_id <= sb0.cs_next_id /\
     compile_iter_elem_copy cenv (Var ep) (Var p)
       (elem_size_in_location cenv LocMemory et) LocMemory F et et sa = ((),sb0) /\
     sb0.cs_current_bb = bod /\ same_blocks sa sb0 /\
