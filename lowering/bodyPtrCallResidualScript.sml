@@ -4,9 +4,9 @@
  *
  * raw_revert is proved: compile_raw_revert evaluates the bytes operand and
  * REVERTs with its payload, and rawRevertPtr lifts the operand's pointer
- * simulation through that tail.  raw_log still waits on its proof: its
- * lowering (compile_raw_log) and S1 simulation are in, so it is proved like
- * raw_revert, with the topics' words and the data buffer's ranges.
+ * simulation through that tail.  raw_log is proved the same way: rawLogPtr
+ * lifts the topics' and data operand's pointer simulations through
+ * compile_raw_log's fixed and dynamic LOG tails.
  *
  * extcall is false here twice over.  The lowering sends the arguments'
  * bound-sized encoding (abi_size_bound) where the source sends the exact
@@ -25,21 +25,22 @@
 Theory bodyPtrCallResidual
 Ancestors
   bodyPtrPreds vyperAST vyperInterpreter list
-  rawRevertPtr exprSimRawRevertCore
+  rawLogPtr rawRevertPtr exprSimRawRevertCore
 
 val _ = Parse.hide "body";
 
-(* RESIDUAL: false while RawLog lowers to INVALID; waits on the lowering
-   port. *)
+(* Proved via rawLogPtr: the operands' pointer simulations lift through
+   compile_raw_log. *)
 Theorem raw_log_case_ptr_residual:
   !cx v20 es v21.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v20 RawLog es v21)
 Proof
-  cheat
+  rpt strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt strip_tac >> drule_all raw_log_body_sim_ptr >> simp[]
 QED
 
-(* RESIDUAL: false while RawRevert lowers to INVALID; waits on the
-   lowering port. *)
+(* Proved via rawRevertPtr: the operand's pointer simulation lifts through
+   compile_raw_revert. *)
 Theorem raw_revert_case_ptr_residual:
   !cx v22 es v23.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v22 RawRevert es v23)
