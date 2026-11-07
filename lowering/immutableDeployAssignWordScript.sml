@@ -2,7 +2,7 @@
 Theory immutableDeployAssignWord
 Ancestors
   immutableCopyExecution placeTypedCopyPath context compileEnv
-  venomState venomInst fragExec exprLoweringProps
+  venomState venomInst fragExec exprLoweringProps emitHelper
 
 Theorem immutable_assign_word_path:
   compile_imm_store_word (SOME region) dst value sa = ((),sb) /\
@@ -24,4 +24,38 @@ Proof
   drule compile_imm_store_word_result >> strip_tac >>
   simp[emitted_insts_def, listTheory.DROP_APPEND, mk_inst_def,
        is_terminator_def]
+QED
+
+(* The short-copy arm is the zero-offset instance of a word transfer. *)
+Theorem immutable_assign_short_path:
+  (do loaded <- emit_op MLOAD [src];
+      compile_imm_store_word (SOME region) dst loaded od) sa = ((),sb) /\
+  eval_operand region s = SOME 0w /\ eval_operand src s = SOME a /\
+  eval_operand dst s = SOME b /\ fresh_vars_wrt sa s /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. immutable_execution_frame sa s sb u /\
+    gas_marked_path F ctx func s 0
+      (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    u.vs_memory = (mstore (w2n b) (mload (w2n a) s) s).vs_memory /\
+    u.vs_immutables = s.vs_immutables |+ (w2n b,mload (w2n a) s)
+Proof
+  strip_tac >>
+  `immutable_transfer_one T T region src dst 0 sa = ((),sb)` by
+    fs[immutable_transfer_one_def, compile_lit_byte_offset_def,
+       comp_bind_def, comp_return_def] >>
+  drule immutable_transfer_one_execution >>
+  disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `s'` >>
+  gvs[immutable_word_transfer_fields, immutable_copy_read_def,
+      wordsTheory.WORD_ADD_0] >>
+  irule place_copy_seq_path >> simp[] >> qexists_tac `sa` >>
+  fs[immutable_execution_frame_def] >>
+  qpat_x_assum `(do loaded <- _; _ od) sa = _` mp_tac >>
+  simp[emit_op_def, compile_imm_store_word_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def, listTheory.DROP_APPEND, mk_inst_def,
+       GSYM arithmeticTheory.SUB_RIGHT_SUB, is_terminator_def]
 QED
