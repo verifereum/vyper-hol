@@ -95,3 +95,27 @@ Proof
   simp[compileEnvTheory.regions_disjoint_def, ADD_COMM]
 QED
 
+Theorem abi_encode_local_ptr_separation:
+  !func cenv scopes initial actual ids name entry ptr sz w.
+  local_ptrs_rel func cenv scopes initial /\
+  lookup_scopes name scopes = SOME entry /\
+  FLOOKUP cenv.ce_vars name = SOME(PtrVar (Var ptr) sz) /\
+  lookup_var ptr initial = SOME w /\ alloca_inv actual /\
+  (!i r. FLOOKUP initial.vs_allocas i = SOME r ==>
+    FLOOKUP actual.vs_allocas i = SOME r) /\
+  (!i q k. FLOOKUP actual.vs_allocas i = SOME(q,k) /\
+    FLOOKUP initial.vs_allocas i = NONE ==> initial.vs_alloca_next <= q) /\
+  (!inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_outputs = [ptr] ==> inst.inst_id NOTIN ids) ==>
+  !i q k. i IN ids /\ FLOOKUP actual.vs_allocas i = SOME(q,k) ==>
+    w2n w+sz <= q \/ q+k <= w2n w
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+  simp_tac bool_ss [local_ptrs_rel_def] >> strip_tac >>
+  qpat_x_assum `!name entry p sz. _` drule_all >> strip_tac >> gvs[] >>
+  drule (REWRITE_RULE [GSYM AND_IMP_INTRO] abi_encode_initial_local_separation) >>
+  simp[ADD_COMM] >> disch_then drule >> simp[ADD_COMM] >>
+  disch_then (qspec_then `ids` mp_tac) >>
+  simp[GSYM AND_IMP_INTRO] >> metis_tac[]
+QED
