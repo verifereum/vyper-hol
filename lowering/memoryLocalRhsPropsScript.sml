@@ -303,10 +303,6 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-           supported_builtin_form_def])
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `supported_expr _ _` mp_tac >>
-      simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
            supported_type_builtin_form_def] >> strip_tac >>
       Cases_on `args` >> gvs[] >>
       rename1 `supported_pure_exprs tops (a :: tail)` >> Cases_on `tail` >> gvs[] >>
@@ -325,7 +321,6 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       rename1 `expr_body_pre _ _ _ (Call ann (IntCall func_id) args drv) _` >>
       simp[lowered_value_type_def] >>
-      rename1 `Call ann (IntCall func_id) args drv` >>
       `expr_sim_inv cenv cx env es /\
        well_typed_expr env (Call ann (IntCall func_id) args drv)` by
         gvs[expr_body_pre_def] >>
