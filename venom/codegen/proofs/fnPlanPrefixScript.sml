@@ -654,3 +654,22 @@ Proof
   conj_tac >- (Cases_on `bb.bb_instructions` >> gvs[get_params_def]) >>
   irule non_param_insts_all_neq >> simp[]
 QED
+
+Theorem regional_entry_structure:
+  codegen_ready_fn fn ==>
+  fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+  fn_reachable fn (HD fn.fn_blocks).bb_label /\
+  collect_phis (HD fn.fn_blocks).bb_instructions = [] /\
+  bb_well_formed (HD fn.fn_blocks)
+Proof
+  strip_tac >>
+  `wf_function fn /\ block_entries_ready (cfg_analyze fn) fn` by
+    gvs[codegen_ready_fn_def] >>
+  `fn.fn_blocks <> []` by gvs[wf_function_def, fn_has_entry_def] >>
+  `bb_well_formed (HD fn.fn_blocks)` by
+    (Cases_on `fn.fn_blocks` >> gvs[wf_function_def]) >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def, lookup_block_def, FIND_thm,
+      block_entries_ready_def, NULL_EQ, fn_reachable_def, relationTheory.RTC_REFL]
+QED
