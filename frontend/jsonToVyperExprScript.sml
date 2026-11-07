@@ -702,12 +702,16 @@ Definition make_name_target_def:
 End
 
 (* Python lowers I(addr) to a stack value (_lower_interface_constructor), so
-   the address is loaded where the constructor appears. *)
+   the address is loaded where the constructor appears. Vyper rejects a
+   constructor without an address; its translation keeps the empty operand
+   list, which fails Acc's arity check. *)
 Definition interface_constructor_result_def:
   interface_constructor_result ty [Literal _ (BytesL bs)] =
     Literal ty (BytesL bs) /\
-  interface_constructor_result _ args =
-    Builtin (BaseT AddressT) (Acc Address) [HD args]
+  interface_constructor_result _ [] =
+    Builtin (BaseT AddressT) (Acc Address) [] /\
+  interface_constructor_result _ (addr::_) =
+    Builtin (BaseT AddressT) (Acc Address) [addr]
 End
 
 (* Cross-module flag result metadata may omit its declaration source. Recover
@@ -952,6 +956,12 @@ Definition calldata_slice_bound_def:
   calldata_slice_bound [data; start; len] [] = calldata_slice_length len /\
   calldata_slice_bound _ _ = NONE
 End
+
+Theorem calldata_slice_bound_length:
+  calldata_slice_bound args kwargs = SOME n ==> LENGTH args = 3
+Proof
+  strip_tac >> gvs[oneline calldata_slice_bound_def, AllCaseEqs()]
+QED
 
 (* Match only the dedicated source operand; compiler type/source metadata
    does not turn msg.data into an ordinary bounded bytes expression. *)

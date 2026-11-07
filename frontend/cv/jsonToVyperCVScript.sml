@@ -5,214 +5,46 @@ Ancestors
 Libs
   cv_transLib jsonToVyperCVLib
 
-(* Preserve the source frontend's defined-input conditions, rather than
-   choosing a value for its undefined empty interface-constructor case. *)
-val translate_var_mutability_pre_def = cv_auto_trans_pre
-  "translate_var_mutability_pre" translate_var_mutability_def;
-
-
-(* Constants are evaluated from their translated initializers, so they carry
-   translate_expr's precondition. *)
-val module_constants_pre_def = cv_auto_trans_pre
-  "module_constants_pre" module_constants_def;
-val imported_constants_pre_def = cv_auto_trans_pre
-  "imported_constants_pre" imported_constants_def;
-val evaluated_constants_pre_def = cv_auto_trans_pre
-  "evaluated_constants_pre" evaluated_constants_def;
-val annotated_constants_pre_def = cv_auto_trans_pre
-  "annotated_constants_pre" annotated_constants_def;
-
-(* Declaration types evaluate their source bounds with translate_expr, so they
-   carry its precondition.  Each MAP or EVERY over them gets a first-order list
-   helper whose definition is the original traversal. *)
-val translate_arg_pre_def = cv_auto_trans_pre
-  "translate_arg_pre" translate_arg_def;
-
-Definition translate_args_cv_def:
-  translate_args_cv ni im ctx args = MAP (translate_arg ni im ctx) args
-End
-
-Theorem translate_args_cv_compute:
-  (translate_args_cv ni im ctx [] = []) /\
-  (translate_args_cv ni im ctx (a::args) =
-    translate_arg ni im ctx a :: translate_args_cv ni im ctx args)
-Proof
-  simp[translate_args_cv_def]
-QED
-
-val translate_args_cv_pre_def = cv_auto_trans_pre
-  "translate_args_cv_pre" translate_args_cv_compute;
-
-(* Event fields pair each argument with its indexed flag; translate the
-   arguments through the list helper and zip the flags back on. *)
-Theorem translate_event_args_zip:
-  MAP (λ(a,idx). (translate_arg ni im ctx a, idx)) args =
-    ZIP (translate_args_cv ni im ctx (MAP FST args), MAP SND args)
-Proof
-  Induct_on `args` >> simp[translate_args_cv_def] >> Cases >> simp[]
-QED
-
-val translate_interface_func_compute = save_thm
-  ("translate_interface_func_compute",
-   PURE_REWRITE_RULE [GSYM translate_args_cv_def] translate_interface_func_def);
-val translate_interface_func_pre_def = cv_auto_trans_pre
-  "translate_interface_func_pre" translate_interface_func_compute;
-
-Definition translate_interface_funcs_cv_def:
-  translate_interface_funcs_cv ni im ctx funcs =
-    MAP (translate_interface_func ni im ctx) funcs
-End
-
-Theorem translate_interface_funcs_cv_compute:
-  (translate_interface_funcs_cv ni im ctx [] = []) /\
-  (translate_interface_funcs_cv ni im ctx (f::funcs) =
-    translate_interface_func ni im ctx f ::
-    translate_interface_funcs_cv ni im ctx funcs)
-Proof
-  simp[translate_interface_funcs_cv_def]
-QED
-
-val translate_interface_funcs_cv_pre_def = cv_auto_trans_pre
-  "translate_interface_funcs_cv_pre" translate_interface_funcs_cv_compute;
-
-val translate_args_with_types_compute = save_thm
-  ("translate_args_with_types_compute",
-   PURE_REWRITE_RULE [GSYM translate_args_cv_def]
-     translate_args_with_types_def);
-val translate_args_with_types_pre_def = cv_auto_trans_pre
-  "translate_args_with_types_pre" translate_args_with_types_compute;
-
-val collect_toplevel_types_pre_def = cv_auto_trans_pre
-  "collect_toplevel_types_pre" collect_toplevel_types_def;
-val collect_imported_toplevel_types_pre_def = cv_auto_trans_pre
-  "collect_imported_toplevel_types_pre" collect_imported_toplevel_types_def;
-val build_all_toplevel_types_pre_def = cv_auto_trans_pre
-  "build_all_toplevel_types_pre" build_all_toplevel_types_def;
-
-val arg_type_valid_pre_def = cv_auto_trans_pre
-  "arg_type_valid_pre" arg_type_valid_def;
-
-Definition args_types_valid_cv_def:
-  args_types_valid_cv ni im ctx args = EVERY (arg_type_valid ni im ctx) args
-End
-
-Theorem args_types_valid_cv_compute:
-  (args_types_valid_cv ni im ctx [] = T) /\
-  (args_types_valid_cv ni im ctx (a::args) =
-    (arg_type_valid ni im ctx a /\ args_types_valid_cv ni im ctx args))
-Proof
-  simp[args_types_valid_cv_def]
-QED
-
-val args_types_valid_cv_pre_def = cv_auto_trans_pre
-  "args_types_valid_cv_pre" args_types_valid_cv_compute;
-
-Theorem event_fields_valid_fst:
-  EVERY (λ(arg,_). arg_type_valid ni im ctx arg) fields =
-    args_types_valid_cv ni im ctx (MAP FST fields)
-Proof
-  Induct_on `fields` >> simp[args_types_valid_cv_def] >> Cases >> simp[]
-QED
-
-val interface_func_types_valid_compute = save_thm
-  ("interface_func_types_valid_compute",
-   PURE_REWRITE_RULE [GSYM args_types_valid_cv_def]
-     interface_func_types_valid_def);
-val interface_func_types_valid_pre_def = cv_auto_trans_pre
-  "interface_func_types_valid_pre" interface_func_types_valid_compute;
-
-Definition interface_funcs_valid_cv_def:
-  interface_funcs_valid_cv ni im ctx funcs =
-    EVERY (interface_func_types_valid ni im ctx) funcs
-End
-
-Theorem interface_funcs_valid_cv_compute:
-  (interface_funcs_valid_cv ni im ctx [] = T) /\
-  (interface_funcs_valid_cv ni im ctx (f::funcs) =
-    (interface_func_types_valid ni im ctx f /\
-     interface_funcs_valid_cv ni im ctx funcs))
-Proof
-  simp[interface_funcs_valid_cv_def]
-QED
-
-val interface_funcs_valid_cv_pre_def = cv_auto_trans_pre
-  "interface_funcs_valid_cv_pre" interface_funcs_valid_cv_compute;
-
-val stmt_decl_types_valid_pre_def = cv_auto_trans_pre
-  "stmt_decl_types_valid_pre" stmt_decl_types_valid_def;
-val function_arg_types_valid_pre_def = cv_auto_trans_pre
-  "function_arg_types_valid_pre" function_arg_types_valid_def;
-
-val toplevel_decl_types_valid_compute = save_thm
-  ("toplevel_decl_types_valid_compute",
-   PURE_REWRITE_RULE [GSYM args_types_valid_cv_def,
-                      event_fields_valid_fst,
-                      GSYM interface_funcs_valid_cv_def]
-     toplevel_decl_types_valid_def);
-val toplevel_decl_types_valid_pre_def = cv_auto_trans_pre
-  "toplevel_decl_types_valid_pre" toplevel_decl_types_valid_compute;
-
-Theorem module_decl_types_valid_compute:
-  (module_decl_types_valid ni im ctx [] = T) /\
-  (module_decl_types_valid ni im ctx (top::tops) =
-    (toplevel_decl_types_valid ni im ctx top /\
-     module_decl_types_valid ni im ctx tops))
-Proof
-  simp[module_decl_types_valid_def]
-QED
-
-val module_decl_types_valid_pre_def = cv_auto_trans_pre
-  "module_decl_types_valid_pre" module_decl_types_valid_compute;
-val imported_decl_types_valid_pre_def = cv_auto_trans_pre
-  "imported_decl_types_valid_pre" imported_decl_types_valid_def;
-val all_decl_types_valid_pre_def = cv_auto_trans_pre
-  "all_decl_types_valid_pre" all_decl_types_valid_def;
+val () = cv_auto_trans translate_var_mutability_def;
 
 val translate_toplevel_compute = save_thm ("translate_toplevel_compute",
-  PURE_REWRITE_RULE [GSYM translate_expr_list_map, GSYM translate_args_cv_def,
-                     translate_event_args_zip,
-                     GSYM translate_interface_funcs_cv_def]
-    translate_toplevel_def);
-val translate_toplevel_pre_def = cv_auto_trans_pre
-  "translate_toplevel_pre" translate_toplevel_compute;
+  PURE_REWRITE_RULE [GSYM translate_expr_list_map] translate_toplevel_def);
+val () = cv_auto_trans translate_toplevel_compute;
 
+(* The module traversals' MAP over toplevels, as first-order recursion. *)
 Definition translate_toplevels_def:
-  translate_toplevels ni im ec tc nr declaration_only tops =
-    MAP (λtop. if declaration_only ∧ is_function_toplevel top then NONE
-               else translate_toplevel ni im ec tc nr top) tops
-End
-
-Theorem translate_toplevels_compute:
   (translate_toplevels ni im ec tc nr declaration_only [] = []) /\
   (translate_toplevels ni im ec tc nr declaration_only (top::tops) =
     (if declaration_only ∧ is_function_toplevel top then NONE
      else translate_toplevel ni im ec tc nr top) ::
     translate_toplevels ni im ec tc nr declaration_only tops)
-Proof
-  simp[translate_toplevels_def]
-QED
+End
 
-val translate_toplevels_pre_def = cv_auto_trans_pre
-  "translate_toplevels_pre" translate_toplevels_compute;
+val () = cv_auto_trans translate_toplevels_def;
+
+Theorem translate_toplevels_map:
+  translate_toplevels ni im ec tc nr declaration_only tops =
+    MAP (λtop. if declaration_only ∧ is_function_toplevel top then NONE
+               else translate_toplevel ni im ec tc nr top) tops
+Proof
+  Induct_on `tops` >> simp[translate_toplevels_def]
+QED
 
 Theorem translate_toplevels_implementation:
   translate_toplevels ni im ec tc nr F tops =
     MAP (translate_toplevel ni im ec tc nr) tops
 Proof
-  simp[translate_toplevels_def] >>
+  simp[translate_toplevels_map] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC
 QED
 
 val translate_module_compute = save_thm ("translate_module_compute",
   PURE_REWRITE_RULE [GSYM translate_toplevels_implementation] translate_module_def);
-val translate_module_pre_def = cv_auto_trans_pre
-  "translate_module_pre" translate_module_compute;
+val () = cv_auto_trans translate_module_compute;
 val translate_imported_module_compute = save_thm ("translate_imported_module_compute",
-  PURE_REWRITE_RULE [GSYM translate_toplevels_def] translate_imported_module_def);
-val translate_imported_module_pre_def = cv_auto_trans_pre
-  "translate_imported_module_pre" translate_imported_module_compute;
-val translate_imported_modules_pre_def = cv_auto_trans_pre
-  "translate_imported_modules_pre" translate_imported_modules_def;
+  PURE_REWRITE_RULE [GSYM translate_toplevels_map] translate_imported_module_def);
+val () = cv_auto_trans translate_imported_module_compute;
+val () = cv_auto_trans translate_imported_modules_def;
 
 (* Expose the override-default traversal's nested MAP calls as first-order
    recursion, retaining equations about the original canonicalizer. *)
@@ -423,11 +255,25 @@ val initialized_module_paths_pre_def = cv_auto_trans_pre_rec
      INL (fuel,_,_,_,_,_) => (cv$c2n fuel,0)
    | INR (fuel,_,_,_,_,chains) => (cv$c2n fuel,cv_size chains + 1))` >>
    cv_termination_tac);
-val layout_import_map_pre_def = cv_auto_trans_pre
-  "layout_import_map_pre" layout_import_map_def;
 
-val translate_annotated_ast_canonical_pre_def = cv_auto_trans_pre
-  "translate_annotated_ast_canonical_pre" translate_annotated_ast_canonical_def;
+(* LAST is applied only to chains that resolve, which are nonempty. *)
+Theorem initialized_module_paths_pre[cv_pre]:
+  (∀fuel all_import_maps imports import_map body prefix.
+    initialized_module_paths_pre fuel all_import_maps imports import_map body
+      prefix) ∧
+  (∀fuel all_import_maps imports import_map prefix chains.
+    initialized_chain_paths_pre fuel all_import_maps imports import_map prefix
+      chains)
+Proof
+  ho_match_mp_tac initialized_module_paths_compute_ind >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [initialized_module_paths_pre_def] >> rw[] >>
+  imp_res_tac resolve_module_chain_nonempty >> gvs[]
+QED
+
+val () = cv_auto_trans layout_import_map_def;
+
+val () = cv_auto_trans translate_annotated_ast_canonical_def;
 
 (* Register each mutually recursive nominal-resolution family together. *)
 val () = cv_auto_trans resolve_json_type_def;
@@ -458,5 +304,4 @@ Proof
   ONCE_REWRITE_TAC [resolve_json_stmt_pre_def] >> rw[] >> gvs[]
 QED
 
-val translate_annotated_ast_pre_def = cv_auto_trans_pre
-  "translate_annotated_ast_pre" translate_annotated_ast_def;
+val () = cv_auto_trans translate_annotated_ast_def;

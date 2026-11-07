@@ -9,7 +9,7 @@ Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
   venomExecSemantics venomExecProofs venomExecProps venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
   dfAnalyzeWidenProofs cfgAnalysisProps
-  dfgAnalysisProps dfgCorrectnessProof cfgHelpers
+  dfgAnalysisProps dfgCorrectnessProof dfgSoundDefs cfgHelpers
 
 (* ===== rs_write helper ===== *)
 
@@ -39,26 +39,6 @@ Proof
 QED
 
 (* ===== Lattice ===== *)
-
-Theorem range_join_two_sound:
-  ∀s1 s2 env.
-    in_range_state s1 env ∧ in_range_state s2 env ⇒
-    in_range_state (range_join_two s1 s2) env
-Proof
-  rw[in_range_state_def, range_join_two_def] >>
-  rpt strip_tac >>
-  `FINITE (FDOM s1 ∩ FDOM s2)` by
-    simp[pred_setTheory.FINITE_INTER, finite_mapTheory.FDOM_FINITE] >>
-  fs[finite_mapTheory.FLOOKUP_FUN_FMAP] >>
-  Cases_on `v ∈ FDOM s1 ∩ FDOM s2` >> fs[] >>
-  fs[pred_setTheory.IN_INTER] >>
-  `∃r1. FLOOKUP s1 v = SOME r1` by
-    fs[finite_mapTheory.FLOOKUP_DEF] >>
-  `∃r2. FLOOKUP s2 v = SOME r2` by
-    fs[finite_mapTheory.FLOOKUP_DEF] >>
-  gvs[rs_lookup_def] >>
-  irule in_range_union_l >> res_tac
-QED
 
 Theorem range_widen_states_sound:
   ∀old_st new_st env.
@@ -667,48 +647,6 @@ Proof
   rpt (COND_CASES_TAC >> simp[])
 QED
 
-(* Edge symmetry holds unconditionally for cfg_analyze.
-   build_succs only maps block labels, build_preds inverts exactly. *)
-Triviality cfg_edge_symmetry_always:
-  ∀fn a b.
-    MEM b (cfg_succs_of (cfg_analyze fn) a) ⇔
-    MEM a (cfg_preds_of (cfg_analyze fn) b)
-Proof
-  rpt strip_tac >>
-  simp[cfgHelpersTheory.cfg_analyze_succs,
-       cfgHelpersTheory.cfg_analyze_preds,
-       cfgHelpersTheory.mem_build_preds] >>
-  eq_tac >> rpt strip_tac >> gvs[]
-  >- (`MEM a (MAP (λbb. bb.bb_label) fn.fn_blocks)` by
-        (CCONTR_TAC >>
-         imp_res_tac cfgHelpersTheory.cfg_succs_of_not_in_labels >> fs[]) >>
-      fs[listTheory.MEM_MAP] >> metis_tac[])
-QED
-
-Triviality cfg_succs_closure[local]:
-  ∀fn lbl.
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre ⇒
-    EVERY (λs. MEM s (cfg_analyze fn).cfg_dfs_pre)
-      (cfg_succs_of (cfg_analyze fn) lbl)
-Proof
-  rw[listTheory.EVERY_MEM, cfgHelpersTheory.cfg_analyze_dfs_pre,
-     cfgDefsTheory.cfg_succs_of_def] >>
-  Cases_on `entry_block fn` >> fs[] >> rpt strip_tac >>
-  `(cfg_analyze fn).cfg_succs = build_succs fn.fn_blocks` by
-    (simp[cfgDefsTheory.cfg_analyze_def] >>
-     Cases_on `entry_block fn` >> simp[] >>
-     pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
-  fs[] >>
-  `MEM s (FST (dfs_pre_walk (build_succs fn.fn_blocks) [] x.bb_label))` by
-    metis_tac[cfgHelpersTheory.dfs_pre_walk_closure |> CONJUNCT1] >>
-  mp_tac (Q.SPECL [`build_succs fn.fn_blocks`, `[] : string list`,
-                    `x.bb_label`]
-    (CONJUNCT1 (INST_TYPE [alpha |-> ``:string``]
-      cfgHelpersTheory.dfs_pre_walk_visited_eq))) >>
-  simp[pred_setTheory.UNION_EMPTY, pred_setTheory.EXTENSION] >>
-  metis_tac[]
-QED
-
 (* === Fixpoint infrastructure ===
    Named invariant P for the by_visits convergence proof.
    Extracted as a Definition to avoid lambda/beta issues in batch mode. *)
@@ -721,17 +659,6 @@ Definition range_fold_result_def:
          NONE => [] | SOME bb => bb.bb_instructions)
       (df_widen_entry NONE st lbl)
 End
-
-Triviality submap_funion_disjoint[local]:
-  ∀a b c. DISJOINT (FDOM a) (FDOM b) ∧ a ⊑ c ⇒ a ⊑ b ⊌ c
-Proof
-  rw[finite_mapTheory.SUBMAP_DEF, finite_mapTheory.FLOOKUP_FUNION,
-     finite_mapTheory.FDOM_FUNION] >>
-  rpt strip_tac >> res_tac >> fs[] >>
-  fs[pred_setTheory.IN_DISJOINT] >>
-  `x NOTIN FDOM b` by metis_tac[] >>
-  simp[finite_mapTheory.FUNION_DEF]
-QED
 
 Definition range_fixpoint_P_def:
   range_fixpoint_P fn st ⇔
@@ -924,8 +851,8 @@ Proof
   >- simp[range_join_opt_absorb]
   >- simp[range_widen_opt_absorb]
   >- simp[range_widen_opt_idem]
-  >- simp[cfg_edge_symmetry_always]
-  >- simp[cfg_succs_closure]
+  >- simp[cfg_edge_symmetry_uncond]
+  >- simp[cfgHelpersTheory.cfg_dfs_pre_succs_closed]
   (* K and P *)
   >> qexistsl_tac [`WIDEN_THRESHOLD + 1`, `range_fixpoint_P fn`] >>
   simp[range_fixpoint_P_preserved, range_fixpoint_P_stabilization] >>
@@ -1024,35 +951,6 @@ Triviality range_sound_flookup_preserve[local]:
 Proof
   Cases >> simp[range_sound_def, in_range_state_def] >>
   rpt strip_tac >> res_tac >> gvs[]
-QED
-
-Triviality eval_phis_flookup_idx[local]:
-  !s insts x.
-    (!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs) ==>
-    !s'. eval_phis s insts = OK s' ==> FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x
-Proof
-  Induct_on `insts` >> simp[eval_phis_def] >>
-  rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[eval_phis_def, AllCaseEqs()] >>
-  `!i. i < phi_prefix_length insts ==> ~MEM x (EL i insts).inst_outputs` by (
-    rpt strip_tac >>
-    first_x_assum (qspec_then `SUC i` mp_tac) >>
-    simp[phi_prefix_length_def]) >>
-  `FLOOKUP s''.vs_vars x = FLOOKUP s.vs_vars x` by
-    (first_x_assum drule >> simp[]) >>
-  `~MEM x h.inst_outputs` by
-    (last_x_assum (qspec_then `0` mp_tac) >> simp[phi_prefix_length_def]) >>
-  `MEM out h.inst_outputs` by
-    (drule venomExecProofsTheory.eval_one_phi_output_mem >> simp[]) >>
-  `out <> x` by (CCONTR_TAC >> fs[]) >>
-  gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Theorem phi_prefix_length_el_phi:
-  !l i. i < phi_prefix_length l ==> (EL i l).inst_opcode = PHI
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> rw[] >>
-  Cases_on `i` >> simp[phi_prefix_length_def]
 QED
 
 Theorem range_sound_phi_prefix_on_s:
@@ -1404,7 +1302,7 @@ Proof
 QED
 
 (* range_transfer_opt always returns SOME *)
-Triviality range_transfer_opt_some[local]:
+Theorem range_transfer_opt_some:
   ∀ctx inst acc. ∃rs. range_transfer_opt ctx inst acc = SOME rs
 Proof
   rpt gen_tac >> Cases_on `acc` >>
@@ -1641,7 +1539,7 @@ Resume range_analyze_invariant[wl_inv]:
    (* 4: deps closure *)
    simp[markerTheory.Abbrev_def, listTheory.EVERY_MEM] >>
    rpt strip_tac >>
-   mp_tac (Q.SPECL [`fn`, `lbl`] cfg_succs_closure) >>
+   mp_tac (Q.SPECL [`fn`, `lbl`] cfgHelpersTheory.cfg_dfs_pre_succs_closed) >>
    simp[listTheory.EVERY_MEM],
    (* 5: EVERY valid_lbl *)
    simp[listTheory.EVERY_MEM, markerTheory.Abbrev_def]
@@ -1684,42 +1582,8 @@ QED
 
 Finalise range_analyze_invariant
 
-(* Bridge: exec_pure2 success extracts operand values and output *)
-Triviality exec_pure2_output[local]:
-  ∀f inst s r.
-    exec_pure2 f inst s = OK r ⇒
-    ∃v1 v2 op1 op2 out.
-      inst.inst_operands = [op1; op2] ∧
-      inst.inst_outputs = [out] ∧
-      eval_operand op1 s = SOME v1 ∧
-      eval_operand op2 s = SOME v2 ∧
-      FLOOKUP r.vs_vars out = SOME (f v1 v2) ∧
-      (∀x. x ≠ out ⇒ FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure2_def] >>
-  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
-  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
-Triviality exec_pure1_output[local]:
-  ∀f inst s r.
-    exec_pure1 f inst s = OK r ⇒
-    ∃v1 op1 out.
-      inst.inst_operands = [op1] ∧
-      inst.inst_outputs = [out] ∧
-      eval_operand op1 s = SOME v1 ∧
-      FLOOKUP r.vs_vars out = SOME (f v1) ∧
-      (∀x. x ≠ out ⇒ FLOOKUP r.vs_vars x = FLOOKUP s.vs_vars x)
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure1_def] >>
-  BasicProvers.every_case_tac >> fs[] >> gvs[] >>
-  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
-QED
-
 (* operand_range is sound for any successfully-evaluated operand *)
-Triviality operand_range_sound[local]:
+Theorem operand_range_sound:
   ∀rs s op w.
     in_range_state rs s.vs_vars ∧
     eval_operand op s = SOME w ⇒
@@ -1730,6 +1594,15 @@ Proof
   >- (gvs[] >> simp[in_range_constant])
   >- (irule rs_lookup_in_range >> qexists_tac `s.vs_vars` >> fs[])
   >> simp[in_range_top]
+QED
+
+(* Equivalence between range_get_range and operand_range *)
+Theorem range_get_range_eq_v:
+  !ra lbl idx op.
+    range_get_range ra lbl idx op =
+    operand_range (range_at_inst ra lbl idx) op
+Proof
+  Cases_on `op` >> simp[range_get_range_def, operand_range_def]
 QED
 
 (* operand_lit is sound: if eval_operand gives SOME w and
@@ -2091,75 +1964,6 @@ Proof
   >> first_x_assum irule >> metis_tac[]
 QED
 
-(* ===== DFG Semantic Soundness — per-opcode predicates ===== *)
-
-(* Each predicate captures what the DFG tells us about variable values
-   in the runtime environment. These are small enough for fs[]/simp[].
-   The monolithic dfg_sound_def caused rewriter timeouts. *)
-
-Definition dfg_assign_sound_def:
-  dfg_assign_sound dfg env =
-    !v inst u. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var u] /\
-      v IN FDOM env ==>
-      FLOOKUP env v = FLOOKUP env u
-End
-
-Definition dfg_iszero_sound_def:
-  dfg_iszero_sound dfg env =
-    !v inst tv. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = ISZERO /\ inst.inst_operands = [Var tv] ==>
-      !w. FLOOKUP env v = SOME w ==>
-        (w <> 0w ==> FLOOKUP env tv = SOME 0w) /\
-        (w = 0w ==> !w'. FLOOKUP env tv = SOME w' ==> w' <> 0w)
-End
-
-Definition dfg_eq_sound_def:
-  dfg_eq_sound dfg env =
-    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
-      inst.inst_opcode = EQ /\ inst.inst_operands = [lhs; rhs] ==>
-      !w. FLOOKUP env v = SOME w ==> w <> 0w ==>
-        (!u. lhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
-        (!u. rhs = Var u ==> ?wu. FLOOKUP env u = SOME wu) /\
-        (!u wu wl. lhs = Var u /\ rhs = Lit wl /\
-                    FLOOKUP env u = SOME wu ==> wu = wl) /\
-        (!u wu wl. rhs = Var u /\ lhs = Lit wl /\
-                    FLOOKUP env u = SOME wu ==> wu = wl) /\
-        (!u1 u2 w1 w2. lhs = Var u1 /\ rhs = Var u2 /\
-           FLOOKUP env u1 = SOME w1 /\ FLOOKUP env u2 = SOME w2 ==>
-           w1 = w2)
-End
-
-Definition dfg_compare_sound_def:
-  dfg_compare_sound dfg env =
-    !v inst lhs rhs. dfg_get_def dfg v = SOME inst /\
-      (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
-       inst.inst_opcode = SLT \/ inst.inst_opcode = SGT) /\
-      inst.inst_operands = [lhs; rhs] ==>
-      !w. FLOOKUP env v = SOME w ==>
-        (!u wl wu. lhs = Var u /\ rhs = Lit wl /\
-          FLOOKUP env u = SOME wu ==>
-          ((w <> 0w) =
-            (if inst.inst_opcode = LT then w2n wu < w2n wl
-             else if inst.inst_opcode = GT then w2n wu > w2n wl
-             else if inst.inst_opcode = SLT then w2i wu < w2i wl
-             else w2i wu > w2i wl))) /\
-        (!u wl wu. rhs = Var u /\ lhs = Lit wl /\
-          FLOOKUP env u = SOME wu ==>
-          ((w <> 0w) =
-            (if inst.inst_opcode = LT then w2n wl < w2n wu
-             else if inst.inst_opcode = GT then w2n wl > w2n wu
-             else if inst.inst_opcode = SLT then w2i wl < w2i wu
-             else w2i wl > w2i wu)))
-End
-
-(* Combined predicate for convenience *)
-Definition dfg_sound_def:
-  dfg_sound dfg env =
-    (dfg_assign_sound dfg env /\ dfg_iszero_sound dfg env /\
-     dfg_eq_sound dfg env /\ dfg_compare_sound dfg env)
-End
-
 (* ===== range_apply_condition_sound ===== *)
 
 Triviality dfg_eq_literal_constraints[local]:
@@ -2192,15 +1996,14 @@ Proof
   \\ Cases_on `op` >> simp[range_apply_condition_def]
   \\ gvs[]
   \\ Cases_on `dfg_get_def dfg s` >> simp[]
+  \\ `dfg_entry_base_sound env s x` by metis_tac[dfg_sound_def, FDOM_FLOOKUP]
   \\ IF_CASES_TAC >> gvs[]
   (* ASSIGN *)
   >- (Cases_on `x.inst_operands` >> simp[] >>
       Cases_on `t` >> simp[] >>
       first_x_assum irule >> rpt conj_tac
       >- (rpt strip_tac >> Cases_on `h` >> gvs[] >>
-          fs[dfg_sound_def, dfg_assign_sound_def] >>
-          `s IN FDOM env` by fs[finite_mapTheory.FLOOKUP_DEF] >>
-          res_tac >> qexists_tac `w` >> gvs[])
+          gvs[dfg_entry_base_sound_def] >> qexists_tac `w` >> gvs[])
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC)
   \\ IF_CASES_TAC >> gvs[]
@@ -2210,9 +2013,9 @@ Proof
       Cases_on `h` >> simp[] >>
       irule range_apply_iszero_sound >> simp[] >>
       rpt strip_tac >>
-      gvs[dfg_sound_def, dfg_iszero_sound_def] >>
-      first_x_assum drule >> simp[] >>
-      disch_then drule >> simp[])
+      qpat_x_assum `dfg_entry_base_sound _ _ _` (mp_tac o el 2 o
+        CONJUNCTS o PURE_REWRITE_RULE [dfg_entry_base_sound_def]) >>
+      simp[] >> disch_then drule >> simp[])
   \\ IF_CASES_TAC >> gvs[]
   (* EQ *)
   >- (Cases_on `x.inst_operands` >> simp[] >>
@@ -2220,11 +2023,9 @@ Proof
       Cases_on `t'` >> simp[] >>
       irule range_apply_eq_sound >> simp[] >>
       strip_tac >>
-      `dfg_eq_sound dfg env` by fs[dfg_sound_def] >>
-      pop_assum mp_tac >> PURE_REWRITE_TAC[dfg_eq_sound_def] >>
-      disch_then (qspecl_then [`s`, `x`, `h`, `h'`] mp_tac) >>
-      impl_tac >- simp[] >>
-      disch_then (qspec_then `w` mp_tac) >> simp[] >> strip_tac >>
+      qpat_x_assum `dfg_entry_base_sound _ _ _` (mp_tac o el 3 o
+        CONJUNCTS o PURE_REWRITE_RULE [dfg_entry_base_sound_def]) >>
+      simp[] >> strip_tac >>
       rpt conj_tac
       >- (rpt strip_tac >> gvs[] >> res_tac >> gvs[])
       >- (qspecl_then [`env`, `h`, `h'`] mp_tac
@@ -2239,21 +2040,11 @@ Proof
       Cases_on `t'` >> simp[] >>
       irule range_apply_compare_sound >> simp[] >>
       (rpt conj_tac >> rpt strip_tac >>
-       `dfg_compare_sound dfg env` by fs[dfg_sound_def] >>
-       pop_assum mp_tac >> simp[dfg_compare_sound_def] >>
-       disch_then drule >> simp[] >>
-       disch_then drule >> simp[]))
+       qpat_x_assum `dfg_entry_base_sound _ _ _` (mp_tac o el 4 o
+         CONJUNCTS o PURE_REWRITE_RULE [dfg_entry_base_sound_def]) >>
+       simp[] >> disch_then drule >> simp[]))
   (* Default: identity *)
   \\ simp[]
-QED
-
-(* ===== DFG semantic soundness ===== *)
-
-Theorem dfg_sound_fempty:
-  !dfg. dfg_sound dfg FEMPTY
-Proof
-  simp[dfg_sound_def, dfg_assign_sound_def, dfg_iszero_sound_def,
-       dfg_eq_sound_def, dfg_compare_sound_def]
 QED
 
 (* range_branch_refine preserves in_range_state soundness when dfg_sound holds.

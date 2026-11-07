@@ -592,13 +592,6 @@ Proof
   IF_CASES_TAC >> simp[] >> metis_tac[]
 QED
 
-Triviality fn_insts_blocks_mem[local]:
-  !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
-QED
-
 (* Helper: boundary FDOM preserved after join update *)
 Triviality cf_boundary_fdom_preserved[local]:
   !ctx fn st lbl fv.
@@ -649,7 +642,7 @@ Proof
       | SOME bb => bb.bb_instructions)` by (
     simp[EVERY_MEM] >> rpt strip_tac >>
     Cases_on `lookup_block lbl fn.fn_blocks` >> fs[] >>
-    simp[fn_insts_def] >> irule fn_insts_blocks_mem >>
+    simp[fn_insts_def] >> irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
     fs[lookup_block_def] >> imp_res_tac find_mem >> metis_tac[]) >>
   drule_all cf_fold_fdom >> strip_tac >>
   simp[cf_state_inv_def] >> rpt conj_tac
@@ -751,7 +744,7 @@ Proof
       qunabbrev_tac `instrs` >>
       Cases_on `lookup_block lbl fn.fn_blocks` >> simp[EVERY_MEM] >>
       rpt strip_tac >> simp[fn_insts_def] >>
-      irule fn_insts_blocks_mem >>
+      irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
       fs[lookup_block_def] >> metis_tac[find_mem]) >>
     `cf_state_inv ctx.ce_bp fn st` by fs[cf_measure_inv_def] >>
     `case joined of NONE => T
@@ -838,6 +831,6 @@ Proof
       metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond])
   >- simp[EVERY_MEM]
   >- (rpt strip_tac >> fs[] >>
-      imp_res_tac analysisSimPropsTheory.cfg_dfs_pre_succs_closed >>
+      imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >>
       fs[EVERY_MEM])
 QED

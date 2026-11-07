@@ -30,7 +30,7 @@
 
 Theory sccpProofsBase
 Ancestors
-  sccpDefs sccpSound sccpConvergence
+  venomFnInstsProofs sccpDefs sccpSound sccpConvergence
   analysisSimDefs analysisSimProps analysisSimProofsBase
   passSimulationDefs passSimulationProps
   venomWf venomExecSemantics venomInst venomInstProps venomExecProps venomState
@@ -314,7 +314,7 @@ Proof
         metis_tac[sccpConvergenceTheory.sccp_measure_bounded])
     >- metis_tac[sccpConvergenceTheory.sccp_measure_inv_preserved]
     >- metis_tac[sccpConvergenceTheory.sccp_measure_monotone, MEM_APPEND]
-    >- metis_tac[analysisSimProofsTheory.cfg_dfs_pre_succs_closed]
+    >- metis_tac[cfgHelpersTheory.cfg_dfs_pre_succs_closed]
     >- simp[listTheory.EVERY_MEM]
     >- (mp_tac (Q.SPEC `fn` sccpConvergenceTheory.sccp_measure_inv_initial) >>
         Cases_on `fn_entry_label fn` >> simp[]))
@@ -394,73 +394,6 @@ Proof
 QED
 
 (* ===== Exit soundness from nophi at entry ===== *)
-
-(* ALL_DISTINCT on sublist of fn_insts_blocks *)
-Triviality ssa_block_outputs_distinct_aux[local]:
-  !bbs bb.
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))) ==>
-    MEM bb bbs ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
-Proof
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt gen_tac >> strip_tac >> strip_tac >> gvs[]
-  >- fs[ALL_DISTINCT_APPEND]
-  >> (first_x_assum irule >> gvs[] >> fs[ALL_DISTINCT_APPEND])
-QED
-
-Triviality ssa_block_outputs_distinct[local]:
-  !fn bb.
-    ssa_form fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
-Proof
-  rpt strip_tac >> irule ssa_block_outputs_distinct_aux >>
-  fs[ssa_form_def, fn_insts_def] >> metis_tac[]
-QED
-
-(* ALL_DISTINCT FLAT MAP: elements at different indices are disjoint *)
-Triviality all_distinct_flat_map_disjoint[local]:
-  !l (f:'a -> 'b list) k j y.
-    ALL_DISTINCT (FLAT (MAP f l)) /\
-    k < LENGTH l /\ j < LENGTH l /\ k <> j /\
-    MEM y (f (EL k l)) ==>
-    ~MEM y (f (EL j l))
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  fs[FLAT_APPEND, ALL_DISTINCT_APPEND] >>
-  Cases_on `k` >> Cases_on `j` >> gvs[]
-  >- (fs[MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL])
-  >- (fs[MEM_FLAT, MEM_MAP] >> metis_tac[MEM_EL])
-  >> (first_x_assum irule >> simp[] >> metis_tac[])
-QED
-
-(* SSA: outputs of different instructions in the same block are disjoint *)
-Triviality ssa_no_output_overlap[local]:
-  !fn bb k j y.
-    ssa_form fn /\ MEM bb fn.fn_blocks /\
-    k < LENGTH bb.bb_instructions /\ j < LENGTH bb.bb_instructions /\
-    k <> j /\
-    MEM y (EL k bb.bb_instructions).inst_outputs ==>
-    ~MEM y (EL j bb.bb_instructions).inst_outputs
-Proof
-  rpt strip_tac >>
-  drule_all ssa_block_outputs_distinct >>
-  strip_tac >>
-  metis_tac[all_distinct_flat_map_disjoint]
-QED
-
-(* In SSA form, different instructions in the same block produce disjoint
-   output variables *)
-Theorem ssa_no_output_overlap_inst:
-  !fn bb k idx y.
-    ssa_form fn /\ MEM bb fn.fn_blocks /\
-    k < LENGTH bb.bb_instructions /\ idx < LENGTH bb.bb_instructions /\
-    k <> idx /\
-    MEM y (EL k bb.bb_instructions).inst_outputs ==>
-    ~MEM y (EL idx bb.bb_instructions).inst_outputs
-Proof
-  rpt strip_tac >>
-  metis_tac[ssa_no_output_overlap]
-QED
 
 (* Terminator step_inst_base is independent of vs_inst_idx *)
 Triviality term_step_base_idx_0[local]:
@@ -2935,7 +2868,7 @@ Resume sccp_cross_block_inv[xb_dfs_pre]:
     metis_tac[venomExecPropsTheory.exec_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze f) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
-  imp_res_tac cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
+  imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >> fs[EVERY_MEM]
 QED
 
 (* --- xb_sound: nophi_sound at successor --- *)

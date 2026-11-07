@@ -12,15 +12,9 @@ Proof
   Cases_on `x` >> simp[]
 QED
 
-(* HD [] in interface_constructor_result is intentionally not assigned a
-   fabricated value. Keep its defined-input condition in the CV theorems;
-   the shared JSON importer rejects empty interface-constructor calls. *)
-val interface_constructor_result_pre_def = cv_auto_trans_pre
-  "interface_constructor_result_pre" interface_constructor_result_def;
-val translate_module_call_pre_def = cv_auto_trans_pre
-  "translate_module_call_pre" translate_module_call_def;
-val translate_call_pre_def = cv_auto_trans_pre
-  "translate_call_pre" translate_call_def;
+val () = cv_auto_trans interface_constructor_result_def;
+val () = cv_auto_trans translate_module_call_def;
+val () = cv_auto_trans translate_call_def;
 
 val translate_expr_compute = save_thm ("translate_expr_compute",
   PURE_REWRITE_RULE [OPTION_MAP_as_case] translate_expr_def);
@@ -88,11 +82,24 @@ Proof
   Induct_on `es` >> simp[translate_expr_def]
 QED
 
+(* The remaining HD and EL operands are guarded by the call-shape tests. *)
+Theorem translate_expr_pre[cv_pre]:
+  (∀ctx e. translate_expr_pre ctx e) ∧
+  (∀ctx es. translate_expr_list_pre ctx es) ∧
+  (∀ctx kws. translate_kwargs_pre ctx kws)
+Proof
+  ho_match_mp_tac translate_expr_compute_ind >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC [translate_expr_pre_def] >> rw[] >>
+  imp_res_tac calldata_slice_bound_length >>
+  imp_res_tac is_raw_call_calldata_call_nonempty >>
+  gvs[translate_expr_list_map]
+QED
+
 (* These list helpers expose the original nested MAP recursions as ordinary
    mutually recursive equations. Their definitions retain an explicit bridge
    to the original logical API. *)
-val translate_base_target_pre_def = cv_auto_trans_pre
-  "translate_base_target_pre" translate_base_target_def;
+val () = cv_auto_trans translate_base_target_def;
 
 Definition translate_target_list_def:
   translate_target_list ctx tgts = MAP (λtgt. translate_target ctx tgt) tgts
@@ -118,34 +125,12 @@ val translate_target_compute_ind =
        | INL (_, tgt) => json_target_size tgt
        | INR (_, tgts) => list_size json_target_size tgts)` >> simp[]);
 
-val translate_target_pre_def = cv_auto_trans_pre
-  "translate_target_pre translate_target_list_pre" translate_target_compute;
+val () = cv_auto_trans translate_target_compute;
 
-val translate_iter_pre_def = cv_auto_trans_pre
-  "translate_iter_pre" translate_iter_def;
-val get_iter_bound_pre_def = cv_auto_trans_pre
-  "get_iter_bound_pre" get_iter_bound_def;
-(* Evaluate the bound operands through the translated expression list, whose
-   precondition the CV theorem already carries. *)
-Theorem iter_bound_resolved_compute:
-  (iter_bound_resolved ctx (JIter_Range args b) =
-     EVERY (λv. IS_SOME (eval_constant v))
-       (translate_expr_list ctx (case b of SOME b => [b] | NONE => args))) /\
-  (iter_bound_resolved ctx (JIter_Array e t) = T)
-Proof
-  simp[iter_bound_resolved_def, translate_expr_list_map, listTheory.EVERY_MAP]
-QED
+val () = cv_auto_trans translate_iter_def;
 
-val iter_bound_resolved_pre_def = cv_auto_trans_pre
-  "iter_bound_resolved_pre" iter_bound_resolved_compute;
-
-(* Annotation bounds are evaluated source expressions, so these follow the
-   expression translation. *)
-val bound_resolved_pre_def = cv_auto_trans_pre
-  "bound_resolved_pre" bound_resolved_def;
-val annotation_bound_pre_def = cv_auto_trans_pre
-  "annotation_bound_pre" annotation_bound_def;
-
+(* Annotation bounds are evaluated source expressions, so the annotation
+   traversals follow the expression translation. *)
 Definition annotations_resolved_cv_def:
   annotations_resolved_cv nominal_index all_import_maps ctx anns =
     EVERY (λann. annotation_resolved nominal_index all_import_maps ctx ann) anns
@@ -169,8 +154,7 @@ val annotation_resolved_compute_ind = save_thm ("annotation_resolved_compute_ind
     (WF_REL_TAC `measure (λx. case x of
        INL (ni,im,ctx,ann) => json_type_annotation_size ann
      | INR (ni,im,ctx,anns) => list_size json_type_annotation_size anns)` >> simp[]));
-val annotation_resolved_pre_def = cv_auto_trans_pre
-  "annotation_resolved_pre annotations_resolved_cv_pre" annotation_resolved_compute;
+val () = cv_auto_trans annotation_resolved_compute;
 
 Definition elaborate_annotations_cv_def:
   elaborate_annotations_cv nominal_index all_import_maps ctx anns =
@@ -195,12 +179,7 @@ val elaborate_annotation_compute_ind = save_thm ("elaborate_annotation_compute_i
     (WF_REL_TAC `measure (λx. case x of
        INL (ni,im,ctx,ann) => json_type_annotation_size ann
      | INR (ni,im,ctx,anns) => list_size json_type_annotation_size anns)` >> simp[]));
-val elaborate_annotation_pre_def = cv_auto_trans_pre
-  "elaborate_annotation_pre elaborate_annotations_cv_pre" elaborate_annotation_compute;
-val declaration_type_valid_pre_def = cv_auto_trans_pre
-  "declaration_type_valid_pre" declaration_type_valid_def;
-val canonical_decl_type_pre_def = cv_auto_trans_pre
-  "canonical_decl_type_pre" canonical_decl_type_def;
+val () = cv_auto_trans elaborate_annotation_compute;
 
 (* Put the typeclass string test in the body: CV's pattern compiler cannot
    turn the literal-pattern presentation into a single case expression. *)
@@ -225,8 +204,7 @@ QED
 val () = cv_auto_trans custom_error_target_compute;
 val translate_custom_error_compute = save_thm ("translate_custom_error_compute",
   PURE_REWRITE_RULE [GSYM translate_expr_list_map] translate_custom_error_def);
-val translate_custom_error_pre_def = cv_auto_trans_pre
-  "translate_custom_error_pre" translate_custom_error_compute;
+val () = cv_auto_trans translate_custom_error_compute;
 
 (* The frontend's statement-list recursion threads lexical bindings itself.
    Retain that mutual recursion rather than translating each statement under
@@ -234,5 +212,4 @@ val translate_custom_error_pre_def = cv_auto_trans_pre
 val translate_stmt_compute = save_thm ("translate_stmt_compute",
   PURE_REWRITE_RULE [GSYM translate_expr_list_map] translate_stmt_def);
 
-val translate_stmt_pre_def = cv_auto_trans_pre
-  "translate_stmt_pre translate_stmts_pre" translate_stmt_compute;
+val () = cv_auto_trans translate_stmt_compute;
