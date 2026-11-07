@@ -36,10 +36,11 @@ Proof
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def, extract_venom_result_def] >>
+  fs[exec_pure1_def] >> fs[exec_pure2_def] >> fs[exec_pure3_def] >>
+  fs[exec_read0_def] >> fs[exec_read1_def] >> fs[exec_write2_def] >>
+  fs[exec_ext_call_def] >> fs[exec_delegatecall_def] >>
+  fs[exec_create_def] >> fs[exec_alloca_def] >>
+  fs[extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
