@@ -356,8 +356,13 @@ Theorem local_fixed_array_cut_selection:
            INR (RuntimeError "evaluate_subscripts array_index"))
 Proof
   strip_tac >> drule_all local_fixed_array_current_types >> strip_tac >>
+  `post_value_type cenv idx = expr_type idx` by
+    (irule post_value_type_word >>
+     qpat_x_assum `is_int_type (expr_type idx)` mp_tac >>
+     Cases_on `expr_type idx` >> simp[is_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_word_type_def]) >>
   `stmt_state_rel ctx func cenv cx ee s /\
-   expr_val_rel cx (expr_type idx) v op s` by fs[expr_post_def] >>
+   expr_val_rel cx (expr_type idx) v op s` by gvs[expr_post_def] >>
   drule_all typed_index_operand_bounds >> strip_tac >> gvs[] >>
   drule_all local_fixed_array_address >> strip_tac >>
   qexists_tac `b` >> simp[] >>
