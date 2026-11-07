@@ -110,11 +110,20 @@ QED
 
 (* The source read is explicit: this wrapper does not infer its value
    correspondence merely from pointer coverage. *)
+Theorem mload_output_provenance:
+  op_prov (step_prov PG G (mk_inst id MLOAD [src] [out]) s) (Var out) = NONE
+Proof
+  irule step_prov_out_none >> simp[mk_inst_def] >>
+  irule out_prov_other_none >> simp[mk_inst_def]
+QED
+
 Theorem word_load_marked_read:
   read_result cx tv ee = (INL v,ee) /\ is_word_type t /\
   eval_operand src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK s1) /\
+  G1 = step_prov PG G (mk_inst id MLOAD [src] [out])
+          (update_var out (mload (w2n a) s) s) /\
   tn1 = step_taint (mk_inst id MLOAD [src] [out]) s
           (update_var out (mload (w2n a) s) s) tn ==>
   gas_marked_exec_ptr D (ctx,fn) PG (read_result cx tv)
@@ -123,8 +132,8 @@ Theorem word_load_marked_read:
 Proof
   strip_tac >> conj_tac
   >- (simp[gas_marked_exec_ptr_def] >> metis_tac[read_result_gas_obs]) >>
-  simp[ptr_val_ok_def] >> irule (cj 1 mload_ghost_clean) >>
-  simp[] >> metis_tac[]
+  simp[ptr_val_ok_def, mload_output_provenance] >>
+  irule (cj 1 mload_ghost_clean) >> simp[] >> metis_tac[]
 QED
 
 Theorem word_load_ghost_kept:

@@ -123,7 +123,8 @@ Proof
     simp[eval_operand_def]) >>
   conj_tac >- (irule memory_word_load_source_post >> simp[] >>
     qexistsl [`p`, `sm`, `tv`, `expr_type e`] >> simp[eval_operand_def]) >>
-  conj_tac >- (simp[ptr_val_ok_def] >> irule (cj 1 mload_ghost_clean) >>
+  conj_tac >- (simp[ptr_val_ok_def, mload_output_provenance] >>
+    irule (cj 1 mload_ghost_clean) >>
     simp[eval_operand_def] >> metis_tac[]) >>
   conj_tac >- (irule ghost_inv_clean_mload_pc >>
     simp[eval_operand_def] >> metis_tac[]) >>
