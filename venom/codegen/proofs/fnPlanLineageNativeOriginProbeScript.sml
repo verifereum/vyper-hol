@@ -446,7 +446,11 @@ Proof
     `entry_probe_start`, `entry_probe_start`, `residual_pressure_entry`] >>
   gvs[native_pressure_dfs_states, native_pressure_entry_lineage, native_pressure_lv_def,
     native_pressure_dg_def, native_pressure_cg_def, listTheory.EL] >>
-  rpt conj_tac >> EVAL_TAC
+  conj_tac >- (CONV_TAC (BINOP_CONV EVAL) >> simp[]) >>
+  conj_tac
+  >- (`entry_probe_start with <|ps_cleanup_height := NONE; ps_cleanup_promised := F|> =
+       entry_probe_start` by EVAL_TAC >> simp[]) >>
+  EVAL_TAC
 QED
 
 Definition native_pressure_alt_join_def:
