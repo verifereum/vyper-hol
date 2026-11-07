@@ -1,7 +1,7 @@
 (* Return metadata is invariant under parameter registration and local declarations. *)
 Theory returnMetadataPtr
 Ancestors
-  entryStateRel bodySim retAbiPlanProps structFieldsProps compileVyper compileEnv
+  allocLimitsProps sourceEntryCode entryStateRel bodySim retAbiPlanProps structFieldsProps compileVyper compileEnv
   supportedPlaceAssignable supportedDecls supportedProgram e2eDefs
   vyperTypeContractStaticMaps vyperTypeContract
   vyperInterpreter vyperTypeSystem
@@ -288,4 +288,76 @@ Proof
   drule_all source_external_frame_ret_abi_plan >> strip_tac >>
   drule_all source_external_frame_return_size >> strip_tac >>
   gvs[] >> drule abi_copy_plan_size >> simp[]
+QED
+
+Theorem external_package_event_info:
+  set_external_package_target target
+    (package_external_fn tops use_trans keys
+      (mut,nr,rr,name,args,defaults,ret,body)) =
+    (lbl,cenv0,pos,cds,payable,nr',key,ut,view,body',rt) ==>
+  cenv0.ce_event_info = build_event_info (type_env tops) tops (K NONE)
+Proof
+  simp[package_external_fn_def, set_external_package_target_def] >>
+  Cases_on `ret = NoneT` >>
+  simp[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  strip_tac >> gvs[build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem external_frame_return_allocation_bound:
+  fn_allocs_ok tops (mut,nr,rr,name,args,defaults,ret,body) /\
+  set_external_package_target target
+    (package_external_fn tops use_trans keys
+      (mut,nr,rr,name,args,defaults,ret,body)) =
+    (lbl,cenv0,pos,cds,payable,nr',key,ut,view,body',rt) /\
+  compile_register_positional_args cenv0 pos off st = (cenv,sa) /\
+  same_frame cenv next ==>
+  type_memory_bytes next ret < 2 ** 64
+Proof
+  strip_tac >>
+  `next.ce_struct_fields = make_struct_fields_map tops` by
+    (drule_all external_frame_struct_fields >> simp[]) >>
+  `next.ce_event_info = build_event_info (type_env tops) tops (K NONE)` by
+    (drule external_package_event_info >> strip_tac >>
+     drule_all register_same_frame_metadata >>
+     simp[compile_env_component_equality]) >>
+  drule_all fn_allocs_ok_body >> simp[]
+QED
+
+Theorem selected_runtime_external_allocs_ok:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  valid_vyper_call tops tx calldata ret /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,defaults,ret,body) ==>
+  fn_allocs_ok tops
+    (mut,nr,lookup_raw_return_or_F (NONE:num option)
+      tx.function_name External tops,tx.function_name,args,defaults,ret,body)
+Proof
+  strip_tac >>
+  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
+  drule_all supported_external_lookup_member >> strip_tac >>
+  `?exts ints fb ctor. classify_functions tops = (exts,ints,fb,ctor)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  `fn_allocs_ok tops (mut,nr,rr,tx.function_name,args,defaults,ret,body)` by
+    (irule lower_vyper_runtime_unit_allocs_ok >> gvs[] >> metis_tac[]) >>
+  gvs[fn_allocs_ok_def]
+QED
+
+Theorem source_external_frame_return_allocation_bound:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ valid_vyper_call tops tx calldata ret /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,defaults,ret,body) /\
+  set_external_package_target target
+    (package_external_fn tops use_trans keys
+      (mut,nr,lookup_raw_return_or_F (NONE:num option)
+        tx.function_name External tops,tx.function_name,args,defaults,ret,body)) =
+    (lbl,cenv0,pos,cds,payable,nr',key,ut,view,body',rt) /\
+  compile_register_positional_args cenv0 pos off st = (cenv,sa) /\
+  same_frame cenv next ==>
+  type_memory_bytes next ret < 2 ** 64
+Proof
+  strip_tac >> drule_all selected_runtime_external_allocs_ok >> strip_tac >>
+  drule_all external_frame_return_allocation_bound >> simp[]
 QED
