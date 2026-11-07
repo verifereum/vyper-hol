@@ -32,12 +32,12 @@ Proof
      simp[ptr_event_embedding_def, EVERY_EL] >> strip_tac >>
      gen_tac >> strip_tac >>
      qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
-     simp[EL_APPEND_EQN] >> fs[ptr_paired_prefix_def, ptr_paired_samples_def] >> decide_tac) >>
+     simp[EL_APPEND_EQN] >> fs[ptr_paired_prefix_def, ptr_paired_samples_def, ptr_sample_list_def] >> decide_tac) >>
   fs[ptr_paired_prefix_def] >>
   conj_tac >- (irule ptr_paired_samples_pair >> simp[]) >>
   conj_tac >- (irule ptr_paired_alignment_pair >> simp[]) >>
   conj_tac >- (irule ptr_paired_callers_retained >> simp[] >>
-               fs[ptr_paired_samples_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
+               fs[ptr_paired_samples_def, ptr_sample_list_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM APPEND_NIL))) >>
-  irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def]
+  irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def, ptr_sample_list_def]
 QED

@@ -57,7 +57,7 @@ Proof
   `aa.po_inst.inst_opcode <> DRET` by
     (drule_all ptr_discipline_no_dret >> simp[]) >>
   `aa.po_state.vs_labels = (EL q ht).po_state.vs_labels` by
-    fs[ptr_core_shared_def, ptr_shared_fields_def] >>
+    (drule concretizePtrRequestHistoryTheory.ptr_history_content_labels >> simp[]) >>
   `(EL (SUC (EL q done)) h).po_state.vs_returndata =
       (EL (SUC q) ht).po_state.vs_returndata` by
     (drule ptr_paired_prefix_samples >> strip_tac >>
