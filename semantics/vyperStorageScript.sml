@@ -523,3 +523,63 @@ Definition encode_hashmap_key_def:
    encode_hashmap_key _ _ = (0w:bytes32)
 End
 val () = cv_auto_trans encode_hashmap_key_def;
+
+(* Coverage composition for successful encodings. *)
+Theorem MEM_shifted_write:
+  !ws (j:num) off. MEM j (MAP FST ws) ==>
+    MEM (j + off) (MAP FST (MAP (\(k,s). (off + k,s)) ws))
+Proof
+  Induct >> simp[] >> Cases_on `h` >> simp[]
+  >> rpt strip_tac >- simp[ADD_COMM]
+  >> disj2_tac >> gvs[]
+QED
+
+Theorem encode_tuple_coverage:
+  !tvs off vs writes i.
+    (!tv. MEM tv tvs ==> !v ws j.
+      encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_tuple off tvs vs = SOME writes /\
+    i < type_slot_size_list tvs ==>
+    MEM (off + i) (MAP FST writes)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[type_slot_size_def]
+  >> Cases_on `vs` >> simp[Once encode_value_def]
+  >> rpt strip_tac >> gvs[AllCaseEqs(), type_slot_size_def]
+  >> Cases_on `i < type_slot_size h`
+  >- (disj1_tac >> irule MEM_shifted_write >> metis_tac[])
+  >> disj2_tac
+  >> qpat_x_assum `!off vs writes i. _`
+       (qspecl_then [`off + type_slot_size h`, `t`, `rest`,
+                     `i - type_slot_size h`] mp_tac)
+  >> impl_tac >- (conj_tac >- metis_tac[] >> simp[] >> decide_tac)
+  >> `i - type_slot_size h + (off + type_slot_size h) = i + off` by decide_tac
+  >> simp[]
+QED
+
+Theorem encode_struct_coverage:
+  !ftypes off fields writes i.
+    (!nm tv. MEM (nm,tv) ftypes ==> !v ws j.
+      encode_value tv v = SOME ws /\ j < type_slot_size tv ==>
+      MEM j (MAP FST ws)) /\
+    encode_struct off ftypes fields = SOME writes /\
+    i < type_slot_size_fields ftypes ==>
+    MEM (off + i) (MAP FST writes)
+Proof
+  Induct >> rpt gen_tac
+  >- simp[type_slot_size_def]
+  >> PairCases_on `h` >> Cases_on `fields`
+  >- simp[Once encode_value_def]
+  >> PairCases_on `h` >> simp[Once encode_value_def]
+  >> rpt strip_tac >> gvs[AllCaseEqs(), type_slot_size_def]
+  >> Cases_on `i < type_slot_size h1`
+  >- (disj1_tac >> irule MEM_shifted_write >> metis_tac[])
+  >> disj2_tac
+  >> qpat_x_assum `!off fields writes i. _`
+       (qspecl_then [`off + type_slot_size h1`, `t`, `rest`,
+                     `i - type_slot_size h1`] mp_tac)
+  >> impl_tac >- (conj_tac >- metis_tac[] >> simp[] >> decide_tac)
+  >> `i - type_slot_size h1 + (off + type_slot_size h1) = i + off` by decide_tac
+  >> simp[]
+QED
