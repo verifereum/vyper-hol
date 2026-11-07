@@ -14,7 +14,7 @@ Theory bodyIntCallSeams
 Ancestors
   bodyIntCallSourceReturn bodyIntCallMetadata bodyIntCallReturnAdapters bodyIntCallCompilerBoundary bodyIntCallAssemblySource bodyIntCallAssemblyModes bodyIntCallAssembly bodyIntCallCompletedModes bodyIntCallCompletedFrame bodyIntCallCompletedFacts bodyIntCallCompletedSource bodyIntCallExemptReturn bodyIntCallStorePath bodyIntCallStoreRun bodyIntCallStorePost bodyIntCallEmitBoundary memoryLocalRhsProps supportedProgram supportedNames bodyIntCallReturnLayout bodyIntCallRestoreResults bodyIntCallRestoreFrame bodyIntCallCallerFrame bodyIntCallCountedPath bodyIntCallReturnBoundaryChecks bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
   intCallCallee intCallFrame fragGasFocus gasOutcome gasContext
-  bodyIntCallEntryAliasProbe bodyIntCallSourceSpans bodyIntCallStageOrigin bodyIntCallCopySharpRank bodyIntCallCopySharpDynamic bodyIntCallCopySharpFixed bodyIntCallCopySharpFast bodyIntCallCopySharpFields bodyIntCallCopySharpArray bodyIntCallCopySharpPrimitive bodyIntCallWidenCopy bodyIntCallDeclarationStore bodyIntCallDeclarationAlloc bodyIntCallDeclarationRegions bodyIntCallPrologueInit bodyIntCallLocalLanding bodyIntCallNameLanding bodyIntCallForceLanding bodyIntCallWordLanding bodyIntCallLiteralLanding bodyIntCallBodyTyping bodyIntCallSemanticEntry bodyIntCallHandler bodyIntCallResourceExit bodyIntCallPrologueResource bodyIntCallFrameProbe bodyIntCallReturnProbe bodyIntCallReturnCopy bodyIntCallProtectedLiteral bodyIntCallProtectedAlloc bodyIntCallProtectedBuffer bodyIntCallProtectedBytelike
+  bodyIntCallSourceSpans bodyIntCallStageOrigin bodyIntCallCopySharpRank bodyIntCallCopySharpDynamic bodyIntCallCopySharpFixed bodyIntCallCopySharpFast bodyIntCallCopySharpFields bodyIntCallCopySharpArray bodyIntCallCopySharpPrimitive bodyIntCallWidenCopy bodyIntCallDeclarationStore bodyIntCallDeclarationAlloc bodyIntCallDeclarationRegions bodyIntCallPrologueInit bodyIntCallLocalLanding bodyIntCallNameLanding bodyIntCallForceLanding bodyIntCallWordLanding bodyIntCallLiteralLanding bodyIntCallBodyTyping bodyIntCallSemanticEntry bodyIntCallHandler bodyIntCallResourceExit bodyIntCallPrologueResource bodyIntCallFrameProbe bodyIntCallReturnProbe bodyIntCallReturnCopy bodyIntCallProtectedLiteral bodyIntCallProtectedAlloc bodyIntCallProtectedBuffer bodyIntCallProtectedBytelike
   bodyIntCallWriteAuthorization bodyIntCallResourceEntry bodyIntCallResourceSpans bodyIntCallNormalResource bodyIntCallOutcomeFrame bodyIntCallFrameBoundary bodyIntCallReturnBoundary bodyIntCallReachableReturn bodyIntCallProducerOrder bodyIntCallProtectedReturn
   compileVyper exprLowering exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperAST venomState venomExecSemantics
@@ -185,6 +185,11 @@ Definition intcall_entry_def:
              off <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
              w2n (EL ((if has_rb then 1 else 0) + i) argv) + psz <=
                off + asz) /\
+        (has_rb ==> !i po psz.
+           i < LENGTH params /\ ~SND (EL i params) /\
+           FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
+           regions_disjoint (w2n (HD argv)) (type_memory_size rtv)
+             (w2n (EL (1 + i) argv)) psz) /\
         (ce.ce_is_ctor ==> !i po psz nm tv iv io.
           i < LENGTH params /\ ~SND (EL i params) /\
           FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
