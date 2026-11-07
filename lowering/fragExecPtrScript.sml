@@ -93,7 +93,8 @@ Proof
      Cases_on `op = Lit n` >> gvs[op_taint_def]) >>
   simp[step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def, step_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def, halt_state_def, set_returndata_def,
        ret_taint_def] >>
@@ -113,7 +114,8 @@ Proof
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, op_taint_def, step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -136,7 +138,8 @@ Proof
   conj_tac >- (rpt strip_tac >> gvs[]) >>
   simp[step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -240,7 +243,8 @@ Proof
        arithmeticTheory.ADD1, finite_mapTheory.DRESTRICT_UNIV] >>
   simp[Once ptr_safe_block_def, ptr_safe_step_def, step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def]
 QED
 
@@ -292,7 +296,8 @@ Proof
   simp[Once ptr_safe_block_def, ptr_safe_step_def,
        step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def]
 QED
 
@@ -465,7 +470,8 @@ Proof
        memory_range_of_operands_def, mk_inst_def, eval_operand_def] >>
   simp[step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def, step_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def, halt_state_def, set_returndata_def,
        ret_taint_def] >>
@@ -519,6 +525,7 @@ Proof
        arithmeticTheory.ADD1, finite_mapTheory.DRESTRICT_UNIV] >>
   simp[Once ptr_safe_block_def, ptr_safe_step_def, step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def]
 QED
