@@ -1,6 +1,6 @@
 Theory bodyPtrStructLitOwnershipGuarded
 Ancestors
-  bodyPtrStructLitOwnershipLock bodyPtrStructLitOwnershipBodyRun
+  bodyPtrStructLitOwnershipDispatch bodyPtrStructLitOwnershipLock bodyPtrStructLitOwnershipBodyRun
   bodyPtrStructLitOwnershipModuleRegistration bodyPtrStructLitOwnershipStmtHelpers
   bodyPtrStructLitOwnershipFrame bodyPtrStructLitOwnershipFreshness
   bodyPtrStructLitOwnershipSteps bodyPtrStructLitOwnershipLoops
@@ -75,17 +75,7 @@ Theorem alloc_run_payable_check:
   alloc_run fresh_outputs (compile_entry_checks 4 payable)
     (\u s. fresh_outputs s)
 Proof
-  Cases_on `payable`
-  >- simp[compile_entry_checks_def, comp_ignore_bind_def,
-          comp_return_def, comp_bind_def, alloc_run_def, alloc_frame_refl] >>
-  simp[compile_entry_checks_def, comp_ignore_bind_def] >>
-  irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >> conj_tac
-  >- (gen_tac >> simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
-  ntac 2 (irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
-    reverse conj_tac
-    >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh] >>
-    gen_tac >> simp[]) >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh]
+  irule alloc_run_compile_entry_checks_fresh
 QED
 
 Theorem payable_check_eq:
@@ -105,14 +95,7 @@ Theorem alloc_run_payable_check_frame:
   alloc_run (\s. shape_state s /\ R s) (compile_entry_checks 4 payable)
     (\u s. shape_state s /\ R s /\ fresh_outputs s)
 Proof
-  strip_tac >>
-  `alloc_run shape_state (compile_entry_checks 4 payable)
-     (\u s. fresh_outputs s)` by
-    (irule alloc_run_conseq >> irule_at Any alloc_run_payable_check >>
-     simp[shape_state_def, shape_base_fresh_outputs]) >>
-  irule alloc_run_conseq >> irule_at Any alloc_run_shape_frame >>
-  irule_at Any compile_entry_checks_shape >> simp[SF ETA_ss] >>
-  goal_assum (drule_at Any) >> qexists `R` >> simp[]
+  strip_tac >> irule alloc_run_compile_entry_checks_frame >> simp[]
 QED
 
 Theorem alloc_run_compile_fallback_body:
