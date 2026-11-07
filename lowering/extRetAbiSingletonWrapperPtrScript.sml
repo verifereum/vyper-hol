@@ -152,7 +152,16 @@ Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[child_resources]:
    op_taint tnf' (Var dst) = op_taint tnf (Var dst) /\
    lookup_var ip sf' = lookup_var ip sf /\ FLOOKUP Gf' ip = FLOOKUP Gf ip /\
    op_taint tnf' (Var ip) = op_taint tnf (Var ip)` by metis_tac[] >>
-  fs[ptr_covers_def, mload_def] >> gvs[]
+  ntac 2 (conj_tac >- metis_tac[]) >>
+  conj_tac >-
+    (qpat_x_assum `ptr_covers Gf tnf dst sf _` mp_tac >> simp[ptr_covers_def]) >>
+  conj_tac >-
+    (qpat_x_assum `ptr_covers Gf tnf ip sf 32` mp_tac >> simp[ptr_covers_def]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (qpat_x_assum `mload cursor sf = _` mp_tac >> simp[mload_def]) >>
+  conj_tac >- metis_tac[] >>
+  metis_tac[]
 QED
 
 Resume compile_abi_encode_singleton_bytes_ambient_counted_ptr[load_resources]:

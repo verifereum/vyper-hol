@@ -25,6 +25,7 @@ Ancestors
   extRetPointwiseSourcePtr extRetRobustSourceChildrenPtr extRetRecursiveContractAuditPtr
   extRetRawValuePtr extRetRawStmtPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
+  extRetAbiSourceComplexDispatchPtr
   extRetAbiArrayStaticBodyPtr extRetAbiArrayInitPtr extRetAbiArrayBackedgePtr
   extRetAbiArrayStaticLoopPtr extRetAbiArrayStaticCountedPtr extRetAbiArrayParentPtr extRetAbiSourceInputPtr
   extRetAbiWrappedSourcePtr extRetAbiSingletonCountedPtr extRetAbiSingletonWrapperPtr
@@ -98,7 +99,8 @@ Proof
       qexists_tac `env'` >> simp[] >> metis_tac[]) >>
   Cases_on `cenv'.ce_raw_return`
   >- (`lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by metis_tac[] >>
-      drule_all source_typing_raw_return_type >> strip_tac >> gvs[] >>
+      drule_all source_typing_raw_return_type >> strip_tac >>
+      qpat_x_assum `ret = BaseT _` SUBST_ALL_TAC >>
       irule external_return_raw_frame_stmt_frag_ptr >> simp[] >>
       reverse conj_tac >- (qexists_tac `env'` >> simp[]) >>
       drule typed_dynamic_bytes_return_source >> strip_tac >>
