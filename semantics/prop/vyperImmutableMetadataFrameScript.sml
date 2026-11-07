@@ -170,6 +170,7 @@ Theorem metadata_frame_reads[local]:
   state_rel_frame immutable_metadata_frame (lookup_flag_mem cx nsid mid) /\
   state_rel_frame immutable_metadata_frame (read_storage_slot cx b slot ty) /\
   state_rel_frame immutable_metadata_frame (result_array_length cx tv) /\
+  state_rel_frame immutable_metadata_frame (array_iterator_results cx arr_ty tv) /\
   state_rel_frame immutable_metadata_frame (lift_sum z) /\
   state_rel_frame immutable_metadata_frame (get_immutables cx src) /\
   state_rel_frame immutable_metadata_frame (get_place pv) /\
@@ -185,7 +186,8 @@ Proof
     drule_all conditional_result_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
     drule_all read_storage_slot_state,
-    drule_all result_array_length_state, drule_all lift_sum_state,
+    drule_all result_array_length_state, drule_all array_iterator_results_state,
+    drule_all lift_sum_state,
     drule_all get_immutables_state, drule_all get_place_state,
     drule_all read_place_state, drule_all place_type_value_state,
     drule_all extend_place_state,

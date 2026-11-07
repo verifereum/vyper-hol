@@ -50,7 +50,7 @@ Theorem eval_mutual_preserves_scopes_dom[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
   (!cx:evaluation_context. !it:iterator. T) /\
-  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:value list. T) /\
+  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
   (!cx e st res st'. eval_expr cx e st = (res,st') ==>
     MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx es st res st'. eval_exprs cx es st = (res,st') ==>

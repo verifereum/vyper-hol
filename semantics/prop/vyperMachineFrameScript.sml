@@ -177,6 +177,13 @@ Proof
   drule read_result_state >> simp[]
 QED
 
+Theorem machine_frame_array_iterator_results:
+  state_rel_frame machine_frame (array_iterator_results cx ty r)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  drule array_iterator_results_state >> simp[]
+QED
+
 Theorem machine_frame_read_results:
   state_rel_frame machine_frame (read_results cx rs)
 Proof
