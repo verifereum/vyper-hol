@@ -966,7 +966,12 @@ Proof
   >- (drule_all target_subscript_typed_normal >> strip_tac >>
       irule target_subscript_extend_summary_normal >>
       goal_assum (drule_at Any) >> simp[] >>
-      fs[target_post_def] >> first_assum MATCH_ACCEPT_TAC) >>
+      fs[target_post_def] >>
+      `locals_kept cenv es0 (es' with gas_obs := []) s0 u <=>
+       locals_kept cenv es0 es' s0 u` by
+        (rpt (pop_assum kall_tac) >> simp[locals_kept_def, popped_kept_def]) >>
+      pop_assum (fn th => rewrite_tac[th]) >>
+      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   drule_all target_subscript_typed_error >> strip_tac >>
   irule target_subscript_extend_summary_error >>
   goal_assum (drule_at Any) >> simp[] >>
