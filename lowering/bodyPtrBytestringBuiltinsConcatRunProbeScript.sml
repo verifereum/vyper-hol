@@ -34,6 +34,30 @@ Proof
        exprLoweringTheory.unwrap_value_def, compileEnvTheory.comp_return_def]
 QED
 
+Theorem concat_probe_compile_env_independent:
+  !ce. compile_expr ce (BaseT (BytesT (Dynamic 2)))
+    (Builtin (BaseT (BytesT (Dynamic 2))) (Concat 2)
+      [Literal (BaseT (BytesT (Fixed 1))) (BytesL [1w]);
+       Literal (BaseT (BytesT (Fixed 1))) (BytesL [2w])])
+    (initial_compile_state "entry") = concat_probe_compiled
+Proof
+  gen_tac >>
+  simp[concat_probe_compiled_def, exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.compile_expr_body_def,
+       exprLoweringTheory.compile_builtin_dispatch_component_eq,
+       exprLoweringTheory.compile_builtin_dispatch_body_def,
+       exprLoweringTheory.compile_concat_def,
+       exprLoweringTheory.lower_value_def,
+       exprLoweringTheory.compile_literal_vv_def,
+       exprLoweringTheory.unwrap_value_def] >>
+  simp[vyperASTTheory.expr_type_def, compileEnvTheory.is_bytestring_type_def,
+       exprLoweringTheory.compile_concat_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_ignore_bind_def] >>
+  simp[concat_probe_literal_callback, vyperASTTheory.expr_size_def,
+       wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:8)``] >>
+  EVAL_TAC
+QED
+
 Theorem concat_probe_compilation:
   (SND concat_probe_compiled).cs_current_insts =
     MAP (\(id,opc,ops,outs). mk_inst id opc ops outs)

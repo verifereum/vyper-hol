@@ -61,3 +61,28 @@ Proof
   simp[body_exprs_ptr_ok_def, literal_body_ptr]
 QED
 
+
+Theorem concat_admission_compilation:
+  compile_expr order_ptr_env (BaseT (BytesT (Dynamic 2)))
+    concat_admission_expr (initial_compile_state "entry") =
+  concat_probe_compiled
+Proof
+  rewrite_tac[concat_admission_expr_def,
+              concat_probe_compile_env_independent]
+QED
+
+(* The bare execution fixture is not yet a frame witness for this source. *)
+Theorem concat_admission_bare_start_not_ghost:
+  !d G tn. ~ghost_inv d order_ptr_env order_ptr_cx order_ptr_source G tn
+    ((init_venom_state "entry") with vs_alloca_next := 256)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[bodyPtrDefsTheory.ghost_inv_def] >>
+  qpat_x_assum `!name entry p sz. _` (qspec_then `"arr"` mp_tac) >>
+  simp[order_ptr_source_def,
+       bodyPtrBytestringBuiltinsPtrRunTheory.order_ptr_env_def,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_scopes_def,
+       vyperStateTheory.lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE,
+       bodyPtrDefsTheory.ptr_covers_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.init_venom_state_def]
+QED
