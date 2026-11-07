@@ -156,3 +156,11 @@ Theorem external_entry_reaches_checks:
 
 - Weakly frozen: any helper lemma you introduce may be restated freely; only the theorem above is frozen.
 - Other workers prove sibling admissions of S1 in other worktrees and their helpers get merged with yours later, so give your helper theories distinct, content-based names.
+
+## Upstream repair (owner note)
+
+The external prerequisite from the last run is repaired. `calldata_owned_header_step[ownership_frame]` in `lowering/calldataDynOwnedScript.sml:2587` hit the 2.5s tactic timeout. The fix is proof-only: three inline `SIMP_RULE` terms are hoisted to `[local]` theorems, and no statement changes. It is commit `327d048f3` on the s1-entry-return base (c1efb40ad's hunk for that file), and it is applied in this worktree.
+
+`holbuild -j2 build calldataDynOwnedTheory` at the default limit: `calldataDynOwnedTheory built` (exit 0).
+
+That file is a protected ancestor: don't edit or commit it. Continue from `C1.3.1.registration.inputs.source_constructor_config`: build `entryReachBodySourceArrayConstructorTheory`, then carry on toward the frozen theorem.
