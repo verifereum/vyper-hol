@@ -285,7 +285,7 @@ Proof
   gvs[comp_ignore_bind_def, comp_bind_def, arithmeticTheory.ADD_ASSOC]
 QED
 
-Theorem raw_call_nonrevert_suffix_code[local]:
+Theorem raw_call_nonrevert_suffix_code:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
