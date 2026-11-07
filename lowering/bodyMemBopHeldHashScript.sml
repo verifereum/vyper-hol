@@ -51,43 +51,6 @@ Proof
   simp[] >> decide_tac
 QED
 
-Theorem held_hash_shape:
-  compile_bytestring_hash x sa = (op,sb) ==>
-  same_blocks sa sb /\
-  sb.cs_current_bb = sa.cs_current_bb /\
-  LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
-    LENGTH (emitted_insts sa sb) /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sb) /\
-  FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
-Proof
-  simp[compile_bytestring_hash_def, comp_bind_def, comp_return_def,
-       comp_ignore_bind_def, emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
-    by decide_tac >>
-  simp[same_blocks_def, emitted_insts_def, DROP_APPEND, mk_inst_def,
-       is_terminator_def]
-QED
-
-Theorem held_hash_run_nofresh:
-  compile_bytestring_hash x sa = (op,sb) /\
-  (!z. x = Var z ==> not_fresh_at sa z) /\
-  eval_operand x s = SOME (n2w b) /\
-  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
-  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
-  b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) ==>
-  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    eval_operand op t = SOME (word_of_bytes_be (Keccak_256_w64 bs):bytes32) /\
-    (t with vs_vars := s.vs_vars) = s /\
-    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
-Proof
-  simp[compile_bytestring_hash_def, comp_bind_def] >>
-  pairarg_tac >> gvs[] >> pairarg_tac >> strip_tac >> gvs[] >>
-  irule (SRULE [GSYM byteTheory.word_of_bytes_be_def] emit_length_prefixed_hash_run) >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-
 Theorem held_hash_counted_nofresh:
   compile_bytestring_hash x sa = (op,sb) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
@@ -114,16 +77,18 @@ Theorem held_hash_counted_nofresh:
     t.vs_current_bb = sb.cs_current_bb /\ ~t.vs_halted
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all held_hash_run_nofresh >> strip_tac >>
+  drule_all compile_bytestring_hash_run_nofresh >> strip_tac >>
   drule_all held_hash_mem_ok >> strip_tac >>
-  drule_all held_hash_shape >> strip_tac >>
+  drule_all compile_bytestring_hash_shape >> strip_tac >>
+  `LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts +
+     LENGTH (emitted_insts sa sb)` by metis_tac[listTheory.LENGTH_APPEND] >>
   `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
       DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
     s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
     (conj_tac
      >- (fs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
          qpat_x_assum `LENGTH sb.cs_current_insts = _` kall_tac >>
-         simp[DROP_APPEND, emitted_insts_def] >> metis_tac[]) >>
+         metis_tac[DROP_APPEND, emitted_insts_def]) >>
      decide_tac) >>
   `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[IS_PREFIX_APPEND] >>

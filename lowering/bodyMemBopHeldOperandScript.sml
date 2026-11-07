@@ -41,17 +41,6 @@ Proof
   RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> gvs[]
 QED
 
-Theorem held_hash_compiler:
-  compile_bytestring_hash p sa = (h,sb) ==>
-  ci_mono sa sb /\ (!z. h = Var z ==> not_fresh_at sb z)
-Proof
-  simp[compile_bytestring_hash_def, comp_bind_def, comp_return_def,
-       comp_ignore_bind_def, emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
-  simp[ci_mono_def, cs_extends_def, not_fresh_at_def,
-       rich_listTheory.IS_PREFIX_APPEND, GSYM APPEND_ASSOC]
-QED
-
 Theorem held_digest_operand_compiler:
   (case bytestring_literal_hash e of
      SOME w => (Lit w,sa)
@@ -62,7 +51,7 @@ Theorem held_digest_operand_compiler:
 Proof
   Cases_on `bytestring_literal_hash e`
   >- (simp[] >> pairarg_tac >> strip_tac >> gvs[] >>
-      drule held_hash_compiler >> strip_tac >>
+      drule bytestringHashPropsTheory.compile_bytestring_hash_shape >> strip_tac >>
       `ci_mono sa (SND (lower_value compile_expr cenv (expr_type e) e sa))` by
         (irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
       gvs[] >>
@@ -99,7 +88,7 @@ Proof
   strip_tac >>
   `ci_mono sa (SND (lower_value compile_expr cenv (expr_type e) e sa))` by
     (irule ci_mono_lower_value_cfn >> simp[compile_expr_ci_mono]) >>
-  gvs[] >> drule held_hash_compiler >> strip_tac >>
+  gvs[] >> drule bytestringHashPropsTheory.compile_bytestring_hash_shape >> strip_tac >>
   `local_ptrs_reserved cenv sm` by metis_tac[compiler_ci_mono_reserved] >>
   `local_ptrs_reserved cenv sb` by metis_tac[compiler_ci_mono_reserved] >>
   fs[ci_mono_def] >> metis_tac[fn_has_code_mid, cs_extends_trans]
