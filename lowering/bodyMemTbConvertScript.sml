@@ -10,6 +10,7 @@ Ancestors
   bodyMemTbConvertScalarBranch bodyMemTbConvertSourceDispatch
   bodyMemTbConvertDestMemory bodyMemTbConvertDestPath
   bodyMemTbConvertCopyMemory bodyMemTbConvertCastMemory
+  bodyMemTbConvertLoweredSize
 
 Theorem body_type_builtin_convert_plain_mem_case:
   !cx v11 typ es.
