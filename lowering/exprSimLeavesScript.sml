@@ -475,12 +475,21 @@ Theorem eval_expr_toplevel_storage:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) ==>
-    es' = es /\ ?tv. res = INL tv /\ read_result cx tv es = (INL v, es)
+    es' = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt] /\
+    res = INL (PlaceR (StoragePlace tr (n2w slot) tvt)) /\
+    read_result cx (PlaceR (StoragePlace tr (n2w slot) tvt)) es = (INL v, es) /\
+    read_result cx (PlaceR (StoragePlace tr (n2w slot) tvt)) es' = (INL v, es')
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
-  rpt strip_tac >>
-  gvs[read_result_def, read_place_def, return_def, bind_def]
+  simp[ignore_bind_def, record_storage_event_def, bind_def, return_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[read_result_def, read_place_def, return_def, bind_def,
+      read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
+      vyperStorageBackendTheory.get_storage_storage_trace,
+      lift_option_def, raise_def] >>
+  Cases_on `decode_value (get_storage cx es tr) (slot MOD dimword (:256)) tvt` >>
+  gvs[return_def, raise_def]
 QED
 
 (* The compile environment holds a storage or transient variable at the
@@ -575,7 +584,8 @@ Proof
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def,
-       vyperASTTheory.expr_type_def]
+       vyperASTTheory.expr_type_def] >>
+  gvs[read_result_def, read_place_def, bind_def, return_def]
 QED
 
 (* A storage or transient variable's slot decodes wherever the declared

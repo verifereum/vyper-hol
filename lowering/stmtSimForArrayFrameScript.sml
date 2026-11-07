@@ -143,23 +143,25 @@ QED
 Resume supported_pure_scopes_mutual[subscript1]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  gvs[evaluation_state_component_equality] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[subscript2]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  gvs[evaluation_state_component_equality] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[attribute1]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >>
+  gvs[evaluation_state_component_equality] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[attribute2]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >>
+  gvs[evaluation_state_component_equality] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[builtin]:
@@ -209,7 +211,8 @@ Proof
   rpt strip_tac >>
   gvs[lookup_global_def, vyperMiscTheory.option_CASE_rator,
       vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
-      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()]
+      bind_def, ignore_bind_def, record_storage_event_def,
+      lift_option_type_def, return_def, raise_def, AllCaseEqs()]
 QED
 
 Theorem supported_effect_scopes_mutual:
@@ -226,10 +229,12 @@ Proof
   >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
     imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-    imp_res_tac supported_pure_scopes_mutual >> gvs[] >> metis_tac[])
+    imp_res_tac supported_pure_scopes_mutual >>
+    gvs[evaluation_state_component_equality] >> metis_tac[])
   >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-    imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+    imp_res_tac select_result_state >>
+  gvs[evaluation_state_component_equality] >> metis_tac[])
   >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`]
   >- suspend "external"
   >~ [`eval_expr _ (Call _ (Send F) _ _) _ = _`] >- suspend "send2"
@@ -470,6 +475,7 @@ Proof
   rename1 `supported_target_info tops bindings inner = SOME inner_pt` >>
   first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
   disch_then drule_all >> strip_tac >>
+  gvs[evaluation_state_component_equality] >>
   metis_tac[supported_expr_scopes]
 QED
 
@@ -528,7 +534,8 @@ Resume supported_simple_target_eval_scopes[subscript]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   imp_res_tac lookup_global_scopes >> imp_res_tac read_result_state >>
-  imp_res_tac extend_place_state >> gvs[] >> metis_tac[supported_expr_scopes]
+  imp_res_tac extend_place_state >>
+  gvs[evaluation_state_component_equality] >> metis_tac[supported_expr_scopes]
 QED
 
 Resume supported_simple_target_eval_scopes[attribute]:
@@ -538,7 +545,8 @@ Resume supported_simple_target_eval_scopes[attribute]:
   PairCases_on `nsid` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >> imp_res_tac extend_place_state >> gvs[]
+  imp_res_tac lookup_global_scopes >> imp_res_tac extend_place_state >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Finalise supported_simple_target_eval_scopes

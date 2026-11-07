@@ -190,7 +190,8 @@ Proof
                  value_opt es /\
           take_outcome rq s.vs_outcomes = (outcome, rest) /\
           es1 = es with <| outcomes := SOME rest;
-                           requests := record_request rq es.requests |>` by
+                           requests := record_request rq es.requests;
+                           storage_trace := es.storage_trace ++ [StorageOutcome rq outcome] |>` by
     (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
      simp[take_call_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
@@ -211,7 +212,18 @@ Proof
   >- simp[]
   >- simp[] >>
   strip_tac >> qpat_x_assum `es1 = _` SUBST1_TAC >>
-  irule state_rel_adopt_consume >> simp[]
+  `state_rel func cenv cx
+     (SND (adopt_call_outcome rq outcome
+       (es with <| outcomes := SOME rest;
+                   requests := record_request rq es.requests |>)))
+     (SND (consume_call_outcome rq' (w2n ro) (w2n rz) s))` by
+    (irule state_rel_adopt_consume >> simp[]) >>
+  qpat_x_assum `state_rel _ _ _ (SND _) _` mp_tac >>
+  Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
+  Cases_on `rq.cr_kind = MessageCall` >>
+  pure_rewrite_tac[adopt_call_outcome_equation] >>
+  once_rewrite_tac[GSYM state_rel_erase_storage_trace] >>
+  simp[erase_storage_trace_def]
 QED
 
 (* ===== send ===== *)

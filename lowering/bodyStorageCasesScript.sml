@@ -406,7 +406,8 @@ Proof
   strip_tac >>
   qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  imp_res_tac extend_place_state >> gvs[] >> metis_tac[]
+  imp_res_tac extend_place_state >> gvs[] >>
+  metis_tac[vyperTypeStoragePreservationTheory.contract_storage_well_formed_storage_trace]
 QED
 
 Theorem body_eval_subscript_target_storage:
@@ -446,7 +447,8 @@ Proof
           rename1 `read_result cx tv expr_st = (read_res,read_st)` >>
           imp_res_tac read_result_state >> gvs[] >>
           Cases_on `read_res` >> gvs[return_def, raise_def] >>
-          rpt strip_tac >> imp_res_tac extend_place_state >> gvs[]) >>
+          rpt strip_tac >> imp_res_tac extend_place_state >> gvs[] >>
+          metis_tac[vyperTypeStoragePreservationTheory.contract_storage_well_formed_storage_trace]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -463,7 +465,8 @@ Proof
   rename1 `eval_expr cx e st = (base_res,base_st)` >>
   `contract_storage_well_formed cx base_st` by metis_tac[] >>
   Cases_on `base_res` >> gvs[bind_def, return_def, raise_def] >>
-  rpt strip_tac >> imp_res_tac select_result_state >> gvs[]
+  rpt strip_tac >> imp_res_tac select_result_state >> gvs[] >>
+  metis_tac[vyperTypeStoragePreservationTheory.contract_storage_well_formed_storage_trace]
 QED
 
 Theorem body_eval_struct_storage:
@@ -546,7 +549,8 @@ Proof
           rename1 `read_result cx idx_tv idx_st = (read_res,read_st)` >>
           `read_st = idx_st` by metis_tac[read_result_state] >> gvs[] >>
           Cases_on `read_res` >> gvs[return_def, raise_def] >>
-          rpt strip_tac >> imp_res_tac select_result_state >> gvs[]) >>
+          rpt strip_tac >> imp_res_tac select_result_state >> gvs[] >>
+  metis_tac[vyperTypeStoragePreservationTheory.contract_storage_well_formed_storage_trace]) >>
       strip_tac >> gvs[]) >>
   strip_tac >> gvs[]
 QED

@@ -532,7 +532,8 @@ Resume body_oracle_storage_mutual[global_target]:
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac [evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  metis_tac[vyperTypeStoragePreservationTheory.contract_storage_well_formed_storage_trace]
 QED
 
 Resume body_oracle_storage_mutual[if_expr]:
@@ -573,7 +574,8 @@ Resume body_oracle_storage_mutual[global_expr]:
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  metis_tac[vyperTypeStoragePreservationTheory.contract_storage_well_formed_storage_trace]
 QED
 
 Resume body_oracle_storage_mutual[flag_expr]:

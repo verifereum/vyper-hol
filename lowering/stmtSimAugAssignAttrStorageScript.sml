@@ -55,7 +55,7 @@ Theorem eval_target_place_attr_toplevel_field:
     evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
     struct_field_slot fs fld = SOME (off, ftv) ==>
     eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-      es = (INL (StoragePlace tr (n2w slot + n2w off) ftv), es) /\
+      es = (INL (StoragePlace tr (n2w slot + n2w off) ftv), es with storage_trace := es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) /\
     place_type_value cx (StoragePlace tr (n2w slot + n2w off) ftv) es =
       (INL ftv, es)
 Proof
@@ -157,7 +157,8 @@ Theorem eval_augassign_attr_storage[local]:
     struct_field_slot fs fld = SOME (off, ftv) /\
     read_storage_slot cx tr (n2w slot + n2w off) ftv es = (INL cur, es) ==>
     ?r1 es1.
-      (do tv <- eval_expr cx e; read_result cx tv od) es = (r1, es1) /\
+      (do tv <- eval_expr cx e; read_result cx tv od)
+        (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) = (r1, es1) /\
       case r1 of
         INR ex => res = INR ex /\ es' = es1
       | INL v2 =>
@@ -214,12 +215,13 @@ Theorem augassign_attr_storage_source[local]:
         evaluate_type (get_tenv cx) (expr_type e) = SOME tv2 /\
         value_has_type tv2 v2 /\ word_value v2) /\
       (case r1 of
-         INR ex => res = INR ex /\ es' = es1
+         INR ex => res = INR ex /\ erase_storage_trace es' = erase_storage_trace es1
        | INL v2 =>
            case bop_result cx ty bop [ty; expr_type e] cur v2 es1 of
-             INR ex => res = INR ex /\ es' = es1
-           | INL v => write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
-                       (res, es')) /\
+             INR ex => res = INR ex /\ erase_storage_trace es' = erase_storage_trace es1
+           | INL v => ?write_es. write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
+                       (res, write_es) /\
+                       erase_storage_trace write_es = erase_storage_trace es') /\
       (!v2 v. r1 = INL v2 /\
         bop_result cx ty bop [ty; expr_type e] cur v2 es1 = INL v ==>
         encode_value ftv v = SOME [(0, val_to_w256 v)]) /\
@@ -495,9 +497,9 @@ Theorem augassign_attr_storage_place:
     IS_SOME (evaluate_type (get_tenv cx) (StructT sid)) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) ==>
-    ?p cur ptv.
+    ?p cur ptv observations.
       eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-        es = (INL p, es) /\
+        es = (INL p, es with storage_trace := observations) /\
       read_place cx p es = (INL cur, es) /\
       place_type_value cx p es = (INL ptv, es)
 Proof

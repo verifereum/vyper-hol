@@ -76,7 +76,8 @@ roots = ["tests/createSizeBoundaryTestScript.sml",
          "venom/codegen/proofs/genFrameSimScript.sml",
          "venom/compiler/o1PassLiftScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
-         "tests/vyperPlaceSanityTestScript.sml"]
+         "tests/vyperPlaceSanityTestScript.sml",
+         "tests/vyperStorageTraceTestScript.sml"]
 
 [[executable]]
 name = "bytecode_parity_native"

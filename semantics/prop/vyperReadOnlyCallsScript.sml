@@ -35,6 +35,7 @@ Proof
       `machine_frame st st1` by
         (irule take_call_outcome_transport >> conj_tac
          >- simp[machine_frame_def] >>
+         conj_tac >- simp[machine_frame_def] >>
          goal_assum (drule_at Any)) >>
       Cases_on `answer` >> simp[]
       >- (rename1 `take_call_outcome _ _ _ _ = (INL ro,_)` >>
@@ -81,7 +82,9 @@ Proof
   Cases_on `take_call_outcome target data NONE st` >>
   rename1 `take_call_outcome _ _ _ _ = (answer,st1)` >>
   `machine_frame st st1` by
-    (irule take_call_outcome_transport >> conj_tac >- simp[] >>
+    (irule take_call_outcome_transport >>
+     conj_tac >- simp[machine_frame_def] >>
+     conj_tac >- simp[machine_frame_def] >>
      goal_assum (drule_at Any)) >>
   Cases_on `answer` >-
     (rename1 `INL ro` >> PairCases_on `ro` >>
@@ -146,6 +149,9 @@ Theorem ext_call_effects_static_frame[local]:
   machine_frame st
     (SND (eval_ext_call_effects cx target data NONE gas st.accounts st))
 Proof
+  `!f:unit -> evaluation_state -> word8 list evaluation_result.
+     vyperState$bind (vyperState$return ()) f = f ()` by
+    simp[FUN_EQ_THM, bind_def, return_def] >>
   simp[Once eval_ext_call_effects_def, Once bind_def, return_def] >>
   Cases_on `st.outcomes` >> simp[]
   >- (qmatch_goalsub_abbrev_tac `SND (tail st)` >>

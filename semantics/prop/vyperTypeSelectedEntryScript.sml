@@ -60,9 +60,11 @@ Theorem call_external_selected_entry:
     | failure => failure
 Proof
   rw[selected_entry_def] >>
-  simp[Once call_external_def] >>
+  simp[call_external_def, call_external_trace_def, call_external_function_def] >>
   Cases_on `find_function_module am tx.target tx.function_name` >>
-  gvs[get_self_code_def, get_module_code_def, initial_evaluation_context_def]
+  gvs[get_self_code_def, get_module_code_def, initial_evaluation_context_def] >>
+  qpat_abbrev_tac `entry_result = call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _` >>
+  PairCases_on `entry_result` >> Cases_on `entry_result0` >> simp[]
 QED
 
 (* Outside the boundary call_external is a setup failure: a RuntimeError with
@@ -72,7 +74,7 @@ Theorem call_external_not_selected_entry:
   ?msg. call_external orc gobs am tx = (INR (Error (RuntimeError msg)), am, [])
 Proof
   rw[selected_entry_def] >>
-  simp[Once call_external_def] >>
+  simp[call_external_def, call_external_trace_def, call_external_function_def] >>
   Cases_on `ALOOKUP am.sources tx.target` >> gvs[] >>
   Cases_on `lookup_exported_function
               (initial_evaluation_context am.sources am.layouts tx

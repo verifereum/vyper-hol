@@ -500,8 +500,8 @@ QED
 
 Resume target_toplevel_case[storage]:
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, LET_THM] >>
+  simp[Once evaluate_def, lookup_global_def, bind_def, ignore_bind_def,
+       record_storage_event_def, lift_option_type_def, return_def, LET_THM] >>
   strip_tac >> gvs[] >>
   `cenv.ce_hashmap_info (src,id) = NONE /\
    cenv.ce_module_var_type (src,id) = SOME ty` by
@@ -517,9 +517,8 @@ Resume target_toplevel_case[storage]:
   simp[compile_get_target_ptr_def, comp_return_def, LET_THM] >>
   strip_tac >> gvs[] >>
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
-  irule target_post_refl >>
-  simp[eval_operand_def, place_ptr_rel_def, slot_loc_def,
-       value_type_place_def, place_readable_def]
+  simp[target_post_def, eval_operand_def, place_ptr_rel_def, slot_loc_def,
+       value_type_place_def, place_readable_def, locals_kept_def]
 QED
 
 Resume target_toplevel_case[mapping]:

@@ -199,7 +199,7 @@ Theorem lookup_global_no_control:
 Proof
   rpt gen_tac >> strip_tac
   >> pop_assum mp_tac
-  >> simp[lookup_global_def, bind_def, prod_CASE_rator, sum_CASE_rator,
+  >> simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, prod_CASE_rator, sum_CASE_rator,
           option_CASE_rator, eval_result_CASE_rator, var_decl_info_CASE_rator]
   >> strip_tac >> gvs[AllCaseEqs()]
   >> gvs[return_def, raise_def, no_control_exc_def]
@@ -221,7 +221,7 @@ Theorem acquire_nonreentrant_lock_no_control:
   ∀addr slot is_v s exc s'.
   acquire_nonreentrant_lock addr slot is_v s = (INR exc, s') ⇒ no_control_exc exc
 Proof
-  rpt gen_tac >> simp[acquire_nonreentrant_lock_def, bind_def,
+  rpt gen_tac >> simp[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def,
     get_transient_storage_def, return_def]
   >> rw[raise_def, no_control_exc_def, update_transient_def, return_def]
 QED
@@ -264,7 +264,7 @@ Theorem set_global_no_control:
   set_global cx src n v s = (INR exc, s') ⇒ no_control_exc exc
 Proof
   rpt gen_tac >> strip_tac >> pop_assum mp_tac
-  >> simp[set_global_def, bind_def, return_def, raise_def,
+  >> simp[set_global_def, ignore_bind_def, record_storage_event_def, bind_def, return_def, raise_def,
           prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
           COND_RATOR, LET_THM, var_decl_info_CASE_rator,
           no_control_exc_def]
@@ -433,7 +433,7 @@ Theorem extend_place_no_control:
 Proof
   map_every qid_spec_tac [`st'`, `exc`, `st`, `sb`, `pv`, `cx`] >>
   ho_match_mp_tac extend_place_ind >> rpt gen_tac >>
-  simp[extend_place_def, bind_def, ignore_bind_def, return_def,
+  simp[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def,
     prod_CASE_rator, sum_CASE_rator, value_type_CASE_rator] >>
   rpt strip_tac >> gvs[AllCaseEqs(), raise_def, no_control_exc_def] >>
   metis_tac[extend_storage_place_no_control, place_type_value_no_control,
@@ -606,7 +606,8 @@ Proof
        UNCURRY] >>
   strip_tac >>
   gvs[AllCaseEqs(), update_accounts_def, update_transient_def,
-      append_logs_def, adopt_call_outcome_equation, return_def,
+      append_logs_def, record_storage_backend_def, record_storage_event_def,
+      adopt_call_outcome_equation, return_def,
       raise_def, COND_RATOR, no_control_exc_def]
   >- (drule lift_option_no_control >> simp[no_control_exc_def])
   >> drule take_call_outcome_error >> strip_tac >> gvs[no_control_exc_def]
@@ -650,7 +651,8 @@ Proof
        update_transient_def, append_logs_def,
        take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def,
+                   record_storage_backend_def, record_storage_event_def, return_def]
 QED
 
 (* ===== Case 19: IntCall ===== *)
@@ -670,7 +672,7 @@ Proof
   rpt gen_tac
   >> simp[pop_function_def, set_scopes_def, ignore_bind_def, bind_def,
      return_def, prod_CASE_rator, sum_CASE_rator, COND_RATOR,
-     option_CASE_rator, release_nonreentrant_lock_def,
+     option_CASE_rator, release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
      get_transient_storage_def, update_transient_def]
   >> rpt (CASE_TAC >> gvs[])
 QED
@@ -786,7 +788,8 @@ Proof
        update_transient_def, append_logs_def,
        take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def,
+                   record_storage_backend_def, record_storage_event_def, return_def]
 QED
 
 (* ===== Case 20: RawCallTarget ===== *)

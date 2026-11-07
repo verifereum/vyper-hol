@@ -336,6 +336,16 @@ Definition expr_sim_inv_def:
                   off + type_memory_size tv < dimword (:256))
 End
 
+Theorem expr_sim_inv_storage_trace[simp]:
+  expr_sim_inv cenv cx env (es with storage_trace := observations) <=>
+  expr_sim_inv cenv cx env es
+Proof
+  `oracle_storage_ok cx (es with storage_trace := observations) =
+   oracle_storage_ok cx es` by
+    (irule oracle_storage_ok_outcomes >> simp[]) >>
+  simp[expr_sim_inv_def]
+QED
+
 (* The types whose values are word_values (loweringSlice): integers,
    decimals, booleans and flags.  address and bytesN values are BytesV. *)
 Definition word_value_type_def:

@@ -9,7 +9,7 @@ Ancestors
   vyperTypeBindArguments vyperContext vyperTyping vyperTypeSystem
   vyperTypeStmtResult vyperTypeEnvExtension
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
-  alist rich_list
+  alist rich_list vyperStorageTrace
 
 val _ = Parse.hide "body";
 
@@ -253,6 +253,36 @@ Proof
   rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >> metis_tac[]
 QED
 
+Theorem external_call_trace_result_success_cases:
+  (case body_res of
+     (INL (), st) =>
+       (case unlock st of
+          (INL (), st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st', st'.requests, st'.storage_trace)
+        | (INR e, st') => (INR e, am, st'.requests, st'.storage_trace))
+   | (INR (ReturnException v_ret), st) =>
+       (case unlock st of
+          (INL (), st') =>
+            (case evaluate_type tenv ret of
+               NONE => (INR (Error (TypeError "eval ret")), am, st'.requests, st'.storage_trace)
+             | SOME tv =>
+                 case safe_cast tv v_ret of
+                   NONE => (INR (Error (TypeError "ext cast ret")), am, st'.requests, st'.storage_trace)
+                 | SOME v_cast =>
+                     (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests, st'.storage_trace))
+        | (INR e, st') => (INR e, am, st'.requests, st'.storage_trace))
+   | (INR e, st) => (INR e, am, st.requests, st.storage_trace)) =
+     (INL v, am_out, rqs, observations) ==>
+  ?res st_body st_unlocked.
+    body_res = (res,st_body) /\
+    (res = INL () \/ ?v_ret. res = INR (ReturnException v_ret)) /\
+    unlock st_body = (INL (),st_unlocked) /\
+    am_out = abstract_machine_from_state srcs exps layouts st_unlocked /\
+    rqs = st_unlocked.requests
+Proof
+  PairCases_on `body_res` >> Cases_on `body_res0` >> gvs[] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >> metis_tac[]
+QED
+
 Theorem call_external_function_success_phases:
   call_external_function orc gobs am cx nr mut ts mods args dflts vals body ret =
     (INL v,am_out,rqs) ==>
@@ -283,15 +313,83 @@ Theorem call_external_function_success_phases:
     am_out = abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st_unlocked /\
     rqs = st_unlocked.requests
 Proof
-  simp[call_external_function_def] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `if cx.in_deploy then evaluate_all_constants cx am cx.txn.target mods else SOME am` >>
-  simp[] >> strip_tac >>
-  drule external_call_result_success_cases >> strip_tac >>
-  qpat_x_assum `(\(res,am_out,rqs). _) _ = _` kall_tac >>
+  simp_tac bool_ss [call_external_function_def, call_external_function_trace_def, LET_THM] >>
+  IF_CASES_TAC >- simp[] >>
+  pairarg_tac >>
+  Cases_on `constants` >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  dxrule external_call_trace_result_success_cases >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `ignore_bind (send_call_value mut cx) continuation start` >>
+  qmatch_asmsub_abbrev_tac `unlock st_body` >>
+  `storage_trace_frame (ignore_bind (send_call_value mut cx) continuation)` by
+    (simp_tac bool_ss [Abbr `continuation`, GSYM lock_if_nr_def,
+          GSYM is_view_mut_def, storage_trace_frame_external_entry]) >>
+  `storage_trace_frame unlock` by
+    (simp_tac bool_ss [Abbr `unlock`] >>
+     irule storage_trace_frame_cond >>
+     simp[storage_trace_frame_return] >>
+     Cases_on `cx.nonreentrant_slot` >>
+     simp[storage_trace_frame_return, storage_trace_frame_release_lock]) >>
+  qabbrev_tac `st_base = initial_state x [FEMPTY] with
+    <|outcomes := orc; requests := []; gas_obs := gobs|>` >>
+  `start = st_base with storage_trace := constant_trace ++ st_base.storage_trace` by
+    simp[Abbr `start`, Abbr `st_base`, initial_state_def] >>
+  qpat_x_assum `Abbrev (start = _)` kall_tac >> gvs[] >>
+  drule_all storage_trace_frame_unprefix_sequence >> strip_tac >>
+  gvs[abstract_machine_from_state_storage_trace] >>
+  qpat_x_assum `ignore_bind _ continuation st_base = _` mp_tac >>
+  simp_tac bool_ss [Abbr `continuation`] >> strip_tac >>
   drule external_entry_success_phases >> simp[] >> strip_tac >>
-  qexistsl [`s1`, `dflt_vs`, `s2`, `env`, `res`, `st_body`, `st_unlocked`] >>
-  simp[]
+  `(if cx.in_deploy then evaluate_all_constants cx am cx.txn.target mods
+    else SOME am) = SOME x` by
+    (Cases_on `cx.in_deploy` >>
+     gvs[evaluate_all_constants_def, evaluate_module_constants_def]) >>
+  qexists_tac `x` >>
+  qpat_x_assum `ignore_bind _ _ (st_base with storage_trace := _) = _` kall_tac >>
+  qpat_x_assum `ignore_bind _ _ st_base = _` kall_tac >>
+  qpat_x_assum `storage_trace_frame (ignore_bind _ _)` kall_tac >>
+  gvs[Abbr `st_base`] >> metis_tac[]
+QED
+
+Theorem call_external_function_view_success_iff:
+  call_external_function orc gobs am cx nr View ts mods args dflts vals body ret =
+    (INL v,am',rqs) <=>
+  LENGTH vals <= LENGTH args /\
+  LENGTH args - LENGTH vals <= LENGTH dflts /\
+  ?am_c constant_trace res t.
+    (if cx.in_deploy then
+       evaluate_module_constants_trace cx am cx.txn.target (constants_order mods)
+     else (SOME am,[])) = (SOME am_c,constant_trace) /\
+    (do send_call_value View cx;
+        dvs <- eval_external_defaults cx
+          (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts);
+        case bind_arguments (type_env_all_modules mods) args (vals ++ dvs) of
+          NONE => raise (Error (RuntimeError "call bind_arguments"))
+        | SOME env => do set_scopes [env]; lock_if_nr cx nr T;
+                         eval_stmts cx body od
+     od) (initial_state am_c [FEMPTY] with
+       <|outcomes := orc; requests := []; gas_obs := gobs;
+         storage_trace := constant_trace|>) = (res,t) /\
+    ((res = INL () /\ v = NoneV) \/
+     ?rv tv. res = INR (ReturnException rv) /\
+       evaluate_type (type_env_all_modules mods) ret = SOME tv /\
+       safe_cast tv rv = SOME v) /\
+    am' = abstract_machine_from_state am_c.sources am_c.exports am_c.layouts t /\
+    rqs = t.requests
+Proof
+  simp_tac bool_ss [call_external_function_def, call_external_function_trace_def,
+                    LET_THM, is_view_mut_def, unlock_if_nr_def] >>
+  IF_CASES_TAC >- (gvs[] >> decide_tac) >>
+  pairarg_tac >> Cases_on `constants` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `ignore_bind (send_call_value View cx) continuation start` >>
+  Cases_on `ignore_bind (send_call_value View cx) continuation start` >>
+  rename1 `entry_res, entry_state` >>
+  Cases_on `entry_res`
+  >- (simp[return_def] >> metis_tac[]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> simp[return_def] >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> simp[] >>
+  rename1 `safe_cast tv rv` >> Cases_on `safe_cast tv rv` >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem eval_external_defaults_preserves_tv:

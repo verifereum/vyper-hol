@@ -624,6 +624,7 @@ Definition eval_create_def:
         | SOME (code_opt, accounts', tStorage', logs', revertData, pending') => do
             update_accounts (K accounts');
             update_transient (K tStorage');
+            record_storage_backend;
             update_pending_deletions (K pending');
             case code_opt of
             | SOME _ => do

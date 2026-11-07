@@ -57,7 +57,7 @@ Theorem eval_target_place_toplevel:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt ==>
     eval_target_place cx (TopLevelNameTarget (src, id)) es =
-      (INL (StoragePlace tr (n2w slot) tvt), es) /\
+      (INL (StoragePlace tr (n2w slot) tvt), es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) /\
     place_type_value cx (StoragePlace tr (n2w slot) tvt) es = (INL tvt, es)
 Proof
   rpt strip_tac >>
@@ -80,7 +80,8 @@ Theorem eval_augassign_toplevel:
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) ==>
     ?r1 es1.
-      (do tv <- eval_expr cx e; read_result cx tv od) es = (r1, es1) /\
+      (do tv <- eval_expr cx e; read_result cx tv od)
+        (es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]) = (r1, es1) /\
       case r1 of
         INR ex => res = INR ex /\ es' = es1
       | INL v =>
@@ -138,10 +139,12 @@ Theorem eval_augassign_toplevel_assign:
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es) /\
     bop <> In /\ bop <> NotIn ==>
-    eval_stmt cx
-      (Assign (BaseTarget (TopLevelNameTarget (src, id)))
-         (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])) es =
-      (res, es')
+    ?assign_es.
+      eval_stmt cx
+        (Assign (BaseTarget (TopLevelNameTarget (src, id)))
+           (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])) es =
+        (res, assign_es) /\
+      erase_storage_trace assign_es = erase_storage_trace es'
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all eval_augassign_toplevel >> strip_tac >>

@@ -80,8 +80,30 @@ Proof
   `LENGTH dflts - (LENGTH args - LENGTH vals) =
    LENGTH dflts + LENGTH vals - LENGTH args` by decide_tac >>
   gvs[] >>
-  simp[call_external_function_def, call_external_body_def,
-       bind_def, ignore_bind_def]
+  `initial_state am [FEMPTY] with
+     <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|> =
+   initial_state am [FEMPTY] with
+     <|outcomes := orc; requests := []; gas_obs := gobs|>` by
+    simp[initial_state_def] >>
+  simp[call_external_function_def, call_external_function_trace_def,
+       call_external_body_def] >>
+  qmatch_goalsub_abbrev_tac `ignore_bind (set_scopes [env]) entry st2` >>
+  simp[Once ignore_bind_def, Once bind_def] >>
+  simp[Once bind_def] >>
+  Cases_on `ignore_bind (set_scopes [env]) entry st2` >>
+  rename1 `ignore_bind _ entry st2 = (body_res,body_st)` >>
+  Cases_on `body_res` >> simp[]
+  >- (qmatch_goalsub_abbrev_tac `unlock body_st` >>
+      Cases_on `unlock body_st` >> rename1 `unlock body_st = (ur,ust)` >>
+      Cases_on `ur` >> simp[]) >>
+  rename1 `ignore_bind _ entry st2 = (INR exc,body_st)` >>
+  Cases_on `exc` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `unlock body_st` >>
+  Cases_on `unlock body_st` >> rename1 `unlock body_st = (ur,ust)` >>
+  Cases_on `ur` >> simp[] >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> simp[] >>
+  rename1 `evaluate_type _ ret = SOME tv` >>
+  Cases_on `safe_cast tv v` >> simp[]
 QED
 
 Theorem call_external_selected_entry_body:

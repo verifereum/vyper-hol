@@ -1692,18 +1692,21 @@ Proof
   drule state_rel_accounts >> strip_tac >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     fs[state_rel_def, call_ctx_rel_def] >>
-  `es' = es with tStorage :=
+  `es' = (es with tStorage :=
      if nr /\ ~iv then
        (cx.txn.target =+
           update_storage (n2w nkey) 0w (es.tStorage cx.txn.target))
          es.tStorage
-     else es.tStorage` by
+     else es.tStorage) with storage_trace := es'.storage_trace` by
     (Cases_on `nr` >> Cases_on `iv` >>
-     gvs[release_nonreentrant_lock_def, vyperStateTheory.bind_def,
+     gvs[release_nonreentrant_lock_def, record_storage_event_def,
+         vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
          get_transient_storage_def, update_transient_def,
          vyperStateTheory.return_def, update_transient_storage_def,
          lookup_transient_storage_def,
          evaluation_state_component_equality]) >>
+  qpat_x_assum `es' = _`
+    (strip_assume_tac o SRULE [evaluation_state_component_equality]) >>
   `transient_agree cx es'.tStorage ss.vs_transient` by
     (Cases_on `nr /\ ~iv` >> gvs[tstore_def] >>
      irule transient_agree_update >> simp[storage_dead_update_zero]) >>

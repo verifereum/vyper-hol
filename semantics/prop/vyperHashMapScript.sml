@@ -242,7 +242,7 @@ Theorem is_leaf_hashmap_lookup:
       is_leaf_hashmap_ref cx href
 Proof
   rw[is_leaf_hashmap_def, lookup_toplevel_name_def]
-  \\ simp[Once lookup_global_def, bind_def, return_def,
+  \\ simp[Once lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, return_def,
           lift_option_type_def, LET_THM, raise_def, AllCaseEqs(),
           is_leaf_hashmap_ref_def]
 QED
@@ -253,7 +253,7 @@ Theorem is_leaf_hashmap_lookup_state_independent:
     lookup_toplevel_name cx st1 mid n = lookup_toplevel_name cx st2 mid n
 Proof
   rw[is_leaf_hashmap_def]
-  \\ simp[lookup_toplevel_name_def, lookup_global_def, bind_def, return_def,
+  \\ simp[lookup_toplevel_name_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, return_def,
           lift_option_type_def, LET_THM, raise_def, AllCaseEqs()]
 QED
 

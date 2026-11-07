@@ -2933,7 +2933,8 @@ QED
 Theorem update_toplevel_name_typed_write[local]:
   storage_var_info cx mid n = SOME (b,off,tv) /\
   value_has_type tv v ==>
-  write_storage_slot cx b (n2w off) tv v st =
+  write_storage_slot cx b (n2w off) tv v
+    (st with storage_trace := st.storage_trace ++ [StorageRoot b off tv]) =
     (INL (),update_toplevel_name cx st mid n v)
 Proof
   rpt strip_tac >>
@@ -2969,12 +2970,16 @@ Proof
      simp[storable_value_def, storage_type_of_def]) >>
   `declared_storage_region cx mid n [] = SOME (b1,n2w off1,tv1)` by
     (irule declared_storage_region_ordinary >> simp[]) >>
-  `write_storage_slot cx b1 (n2w off1) tv1 v st =
+  `write_storage_slot cx b1 (n2w off1) tv1 v
+     (st with storage_trace := st.storage_trace ++ [StorageRoot b1 off1 tv1]) =
      (INL (),update_toplevel_name cx st mid n v)` by
     (irule update_toplevel_name_typed_write >> simp[]) >>
-  `slots_in_range (get_storage cx st b) (w2n slot) tv` by
+  `slots_in_range (get_storage cx
+      (st with storage_trace := st.storage_trace ++ [StorageRoot b1 off1 tv1]) b)
+      (w2n slot) tv` by
     (qpat_x_assum `contract_storage_well_formed cx st` mp_tac >>
      simp[contract_storage_well_formed_def,
+          vyperStorageBackendTheory.get_storage_storage_trace,
           vyperStorageBackendTheory.get_storage_backend_eq] >>
      metis_tac[]) >>
   Cases_on `(mid,n,[]) = (mid',n',subs)`

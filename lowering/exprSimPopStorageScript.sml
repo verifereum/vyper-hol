@@ -17,14 +17,15 @@ Theorem eval_pop_storage:
   lookup_var_slot_from_layout cx tr src name = SOME slot /\
   evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) ==>
   eval_expr cx (Pop ann (TopLevelNameTarget (src,id))) es =
-    let len = w2n (lookup_storage (n2w slot) (get_storage cx es tr)) in
-    if len = 0 then
-      (INR (Error (RuntimeError "pop empty storage array")), es)
+    if (w2n (lookup_storage (n2w slot) (get_storage cx es tr))) = 0 then
+      (INR (Error (RuntimeError "pop empty storage array")),
+       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))])
     else
       (INL (PlaceR (StoragePlace tr
-        (n2w slot + n2w (1 + (len - 1) * type_slot_size tv)) tv)),
-       set_storage cx es tr
-         (apply_writes (n2w slot) [(0,n2w (len - 1))] (get_storage cx es tr)))
+        (n2w slot + n2w (1 + ((w2n (lookup_storage (n2w slot) (get_storage cx es tr))) - 1) * type_slot_size tv)) tv)),
+       (set_storage cx es tr
+         (apply_writes (n2w slot) [(0,n2w ((w2n (lookup_storage (n2w slot) (get_storage cx es tr))) - 1))] (get_storage cx es tr))) with storage_trace :=
+         es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))])
 Proof
   strip_tac >>
   simp[evaluate_def, lookup_global_def, bind_def, lift_option_type_def,

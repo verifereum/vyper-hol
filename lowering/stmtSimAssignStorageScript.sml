@@ -60,9 +60,10 @@ Theorem eval_assign_toplevel:
     evaluate_type (get_tenv cx) typ = SOME tvt ==>
     ?r es1.
       (do result <- eval_expr cx e; read_result cx result od) es = (r, es1) /\
-      (!ex. r = INR ex ==> res = INR ex /\ es' = es1 /\ no_control_exc ex) /\
+      (!ex. r = INR ex ==> res = INR ex /\ erase_storage_trace es' = erase_storage_trace es1 /\ no_control_exc ex) /\
       (!v. r = INL v ==>
-           write_storage_slot cx tr (n2w slot) tvt v es1 = (res, es'))
+           ?write_es. write_storage_slot cx tr (n2w slot) tvt v es1 = (res, write_es) /\
+             erase_storage_trace write_es = erase_storage_trace es')
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
@@ -71,11 +72,18 @@ Proof
   Cases_on `r1` >> simp[]
   >- (simp[Once evaluate_def, bind_def] >>
       simp[Once evaluate_def, lookup_global_def, bind_def,
-           lift_option_type_def, return_def, LET_THM, get_place_def] >>
+           lift_option_type_def, return_def, LET_THM, get_place_def,
+           ignore_bind_def, record_storage_event_def] >>
       Cases_on `read_result cx x es1` >>
       rename1 `read_result cx x es1 = (r2, es2)` >>
-      Cases_on `r2` >> simp[write_place_def] >> strip_tac >> gvs[] >>
-      drule read_result_no_control >> simp[]) >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      Cases_on `r2` >>
+      simp[vyperEvalPureExprTheory.read_result_storage_trace, write_place_def] >>
+      strip_tac >> gvs[]
+      >- (drule_at Any vyperStorageTraceTheory.storage_trace_frame_replace >>
+          simp[vyperStorageTraceTheory.storage_trace_frame_write_storage_slot,
+               erase_storage_trace_def] >> metis_tac[]) >>
+      drule read_result_no_control >> simp[erase_storage_trace_def]) >>
   strip_tac >> gvs[] >>
   imp_res_tac (cj 1 eval_expr_no_control) >> simp[]
 QED
@@ -301,7 +309,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all eval_assign_toplevel >> strip_tac >>
   Cases_on `r` >> gvs[] >>
-  rename1 `write_storage_slot cx tr (n2w slot) tvt v es1 = (INL (), es')` >>
+  rename1 `write_storage_slot cx tr (n2w slot) tvt v es1 = (INL (), write_es)` >>
   `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
     metis_tac[] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -320,7 +328,7 @@ Proof
   drule_all stmt_state_rel_write_storage_word >> strip_tac >>
   drule_all assign_storage_store_run >>
   strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
+  qexists_tac `t` >> simp[] >> metis_tac[stmt_state_rel_erasure]
 QED
 
 (* self.x = e for a storage or transient variable x the lowering holds in
@@ -369,13 +377,12 @@ Proof
       simp[is_terminator_def]) >>
   rename1 `eval_stmt _ _ _ = (INR y, _)` >>
   drule_all eval_assign_toplevel >> strip_tac >>
-  `r = INR y /\ es1 = es'` by
-    (Cases_on `r` >> gvs[] >> rename1 `write_storage_slot _ _ _ _ v` >>
+  `r = INR y /\ erase_storage_trace es1 = erase_storage_trace es'` by
+    (Cases_on `r` >> gvs[] >> rename1 `write_storage_slot _ _ _ _ v _ = _` >>
      `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
        metis_tac[] >>
      gvs[write_storage_slot_eq]) >>
   qpat_x_assum `r = INR y` SUBST_ALL_TAC >>
-  qpat_x_assum `es1 = es'` SUBST_ALL_TAC >>
   `expr_res_ok (INR y : value + exception)` by
     (qpat_x_assum `stmt_res_ok _ _` mp_tac >>
      qpat_x_assum `!ex. _` (qspec_then `y` mp_tac) >>

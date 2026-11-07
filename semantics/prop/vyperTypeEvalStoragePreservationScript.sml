@@ -77,31 +77,35 @@ Theorem acquire_nonreentrant_lock_eq:
   acquire_nonreentrant_lock addr slot is_view st =
     if lookup_storage (n2w slot)
          (lookup_transient_storage addr st.tStorage) = 1w then
-      (INR (Error (RuntimeError "nonreentrant lock")),st)
-    else if is_view then (INL (),st)
+      (INR (Error (RuntimeError "nonreentrant lock")),
+       st with storage_trace := st.storage_trace ++ [StorageLock slot])
+    else if is_view then
+      (INL (),st with storage_trace := st.storage_trace ++ [StorageLock slot])
     else
       (INL (),
-       st with tStorage updated_by
+       st with <|tStorage updated_by
          update_transient_storage addr
            (update_storage (n2w slot) 1w
-             (lookup_transient_storage addr st.tStorage)))
+             (lookup_transient_storage addr st.tStorage));
+         storage_trace := st.storage_trace ++ [StorageLock slot]|>)
 Proof
   Cases_on `lookup_storage (n2w slot)
     (lookup_transient_storage addr st.tStorage) = 1w` >>
   Cases_on `is_view` >>
-  simp[acquire_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+  simp[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, get_transient_storage_def,
        update_transient_def, return_def, raise_def]
 QED
 
 Theorem release_nonreentrant_lock_eq:
   release_nonreentrant_lock addr slot st =
     (INL (),
-     st with tStorage updated_by
+     st with <|tStorage updated_by
        update_transient_storage addr
          (update_storage (n2w slot) 0w
-           (lookup_transient_storage addr st.tStorage)))
+           (lookup_transient_storage addr st.tStorage));
+       storage_trace := st.storage_trace ++ [StorageLock slot]|>)
 Proof
-  simp[release_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+  simp[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, get_transient_storage_def,
        update_transient_def, return_def]
 QED
 
@@ -233,7 +237,14 @@ Proof
     (lookup_transient_storage cx.txn.target st.tStorage) = 1w` >>
   Cases_on `is_view` >>
   gvs[acquire_nonreentrant_lock_eq] >>
-  metis_tac[reserved_transient_write_preserves_contract_storage_well_formed]
+  irule contract_storage_well_formed_backends_frame >>
+  qexists `st with tStorage updated_by
+    update_transient_storage cx.txn.target
+      (update_storage (n2w lock) 1w
+        (lookup_transient_storage cx.txn.target st.tStorage))` >>
+  simp[] >>
+  irule reserved_transient_write_preserves_contract_storage_well_formed >>
+  simp[]
 QED
 
 Theorem release_nonreentrant_lock_preserves_contract_storage_well_formed:
@@ -245,7 +256,14 @@ Theorem release_nonreentrant_lock_preserves_contract_storage_well_formed:
 Proof
   rpt strip_tac >>
   gvs[release_nonreentrant_lock_eq] >>
-  metis_tac[reserved_transient_write_preserves_contract_storage_well_formed]
+  irule contract_storage_well_formed_backends_frame >>
+  qexists `st with tStorage updated_by
+    update_transient_storage cx.txn.target
+      (update_storage (n2w lock) 0w
+        (lookup_transient_storage cx.txn.target st.tStorage))` >>
+  simp[] >>
+  irule reserved_transient_write_preserves_contract_storage_well_formed >>
+  simp[]
 QED
 
 Theorem get_storage_stk_scopes[local]:
@@ -1286,7 +1304,8 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_TopLevelName]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  qpat_x_assum `st' = _` (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Resume eval_scc_storage_preservation_results_mutual[Stmts_cons]:
@@ -1488,7 +1507,8 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Attribute]:
   Cases_on `base_res` >> gvs[bind_def, return_def, raise_def] >>
   rpt strip_tac >>
   imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
-  gvs[Once well_typed_expr_def, AllCaseEqs()] >> metis_tac[]
+  gvs[Once well_typed_expr_def, AllCaseEqs()] >>
+  metis_tac[contract_storage_well_formed_storage_trace]
 QED
 
 Resume eval_scc_storage_preservation_results_mutual[Expr_TypeBuiltin]:
@@ -1630,7 +1650,8 @@ Proof
   simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, lift_option_def, get_accounts_def,
        get_transient_storage_def, update_accounts_def, update_transient_def,
-       append_logs_def, return_def, raise_def, COND_RATOR,
+       append_logs_def, record_storage_backend_def, record_storage_event_def,
+       return_def, raise_def, COND_RATOR,
        vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
        vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
@@ -2459,7 +2480,8 @@ Theorem adopt_call_outcome_INR_storage:
   (adopt_call_outcome rq co s = (INR e,s')) <=> F
 Proof
   rw[vyperCallOutcomeTheory.adopt_call_outcome_def] >> pairarg_tac >>
-  gvs[return_def]
+  gvs[return_def, record_storage_backend_def, record_storage_event_def] >>
+  IF_CASES_TAC >> simp[]
 QED
 
 Theorem run_ext_call_storage_frame[local]:
@@ -2487,7 +2509,8 @@ Proof
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        check_def, lift_option_type_def, lift_option_def, get_accounts_def,
        get_transient_storage_def, update_accounts_def, update_transient_def,
-       append_logs_def, return_def, raise_def,
+       append_logs_def, record_storage_backend_def, record_storage_event_def,
+       return_def, raise_def,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
@@ -2660,6 +2683,54 @@ Proof
        simp[evaluation_state_accfupds])]
 QED
 
+Theorem create_evm_logged_tail_contract_storage[local]:
+  protected_storage_creates_preserve cx /\
+  contract_storage_well_formed cx s /\
+  (case run_create_evm sender address initcode value s.accounts
+          s.tStorage s.pending_deletions txp of
+     NONE => do
+       x <- update_accounts (K (create_rollback_accounts sender s.accounts));
+       create_soft_failure rof "create failed"
+     od
+   | SOME (code_opt,accounts',tStorage',logs',revertData,pending') =>
+       do x <- update_accounts (K accounts');
+          x <- update_transient (K tStorage');
+          x <- record_storage_backend;
+          x <- update_pending_deletions (K pending');
+          case code_opt of
+            SOME v => do
+              x <- append_logs logs';
+              return (Value (AddressV new_addr))
+            od
+          | NONE => if rof then raise (Error (RevertData revertData))
+                    else return (Value (AddressV 0w))
+          od)
+     (s with accounts updated_by
+             (create_prelude_accounts sender address value)) = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >>
+  Cases_on `run_create_evm sender address initcode value s.accounts
+              s.tStorage s.pending_deletions txp`
+  >- (gs[] >> Cases_on `rof` >>
+      gvs[bind_apply, ignore_bind_apply, update_accounts_def,
+          create_soft_failure_def, return_def, raise_def,
+          evaluation_state_accfupds] >>
+      drule_all protected_storage_creates_preserve_run_create_evm_NONE >>
+      metis_tac[]) >>
+  PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
+  gvs[bind_apply, ignore_bind_apply, update_accounts_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def,
+      record_storage_backend_def, record_storage_event_def,
+      return_def, raise_def, AllCaseEqs(), evaluation_state_accfupds] >>
+  drule_all protected_storage_creates_preserve_run_create_evm >> strip_tac >>
+  rename1 `contract_storage_well_formed cx
+    (s with <|accounts := new_accounts; tStorage := new_tStorage|>)` >>
+  irule contract_storage_well_formed_accounts_transient_frame >>
+  qexists_tac `s with <|accounts := new_accounts; tStorage := new_tStorage|>` >>
+  simp[evaluation_state_accfupds]
+QED
+
 Theorem create_oracle_result_storage_suffix[local]:
   contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
   create_oracle_result salt value code rof st = (res,st') ==>
@@ -2714,7 +2785,7 @@ Proof
    (* address collision: only the sender nonce is bumped *)
    (drule_all create_collision_contract_storage >> metis_tac[]),
    (* the EVM-backed tail *)
-   (drule_all create_evm_tail_contract_storage >> metis_tac[])]) >>
+   (drule_all create_evm_logged_tail_contract_storage >> metis_tac[])]) >>
   gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
       get_accounts_def, check_def, assert_def, return_def, raise_def,
       vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
@@ -3225,7 +3296,8 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Subscript]:
           `st3 = st2` by metis_tac[read_result_state] >>
           gvs[] >>
           Cases_on `value_res` >> gvs[return_def, raise_def] >>
-          rpt strip_tac >> imp_res_tac select_result_state >> gvs[]) >>
+          rpt strip_tac >> imp_res_tac select_result_state >> gvs[] >>
+          metis_tac[contract_storage_well_formed_storage_trace]) >>
       (strip_tac >> gvs[]))) >>
   gen_tac >> strip_tac >>
   `well_typed_expr env e' /\ ?base_vt. type_place_expr env e = SOME base_vt` by (
@@ -3262,7 +3334,8 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Subscript]:
       `st3 = st2` by metis_tac[read_result_state] >>
       gvs[] >>
       Cases_on `value_res` >> gvs[return_def, raise_def] >>
-      rpt strip_tac >> imp_res_tac select_result_state >> gvs[]) >>
+      rpt strip_tac >> imp_res_tac select_result_state >> gvs[] >>
+          metis_tac[contract_storage_well_formed_storage_trace]) >>
   (strip_tac >> gvs[])
 QED
 
@@ -3275,7 +3348,8 @@ Theorem eval_ext_call_effects_storage_preserved[local]:
 Proof
   simp[eval_ext_call_effects_def, bind_def, ignore_bind_def,
        lift_option_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, append_logs_def, return_def, raise_def,
+       update_transient_def, append_logs_def, record_storage_backend_def,
+       record_storage_event_def, return_def, raise_def,
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
@@ -3981,7 +4055,8 @@ Resume eval_scc_storage_preservation_results_mutual[BasePlaceRoot_TopLevelNameTa
   rpt gen_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac [evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  qpat_x_assum `st' = _` (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Resume eval_scc_storage_preservation_results_mutual[BasePlaceRoot_AttributeTarget]:
@@ -3992,7 +4067,8 @@ Resume eval_scc_storage_preservation_results_mutual[BasePlaceRoot_AttributeTarge
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   imp_res_tac extend_place_state >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  first_x_assum drule_all >>
+  metis_tac[contract_storage_well_formed_storage_trace]
 QED
 
 Resume eval_scc_storage_preservation_results_mutual[BasePlaceRoot_SubscriptTarget]:
@@ -4034,7 +4110,8 @@ Resume eval_scc_storage_preservation_results_mutual[BasePlaceRoot_SubscriptTarge
       rename1 `read_result cx idx_value st2 = (value_res,value_st)` >>
       imp_res_tac read_result_state >> gvs[] >>
       Cases_on `value_res` >> gvs[return_def, raise_def] >>
-      rpt strip_tac >> imp_res_tac extend_place_state >> gvs[]) >>
+      rpt strip_tac >> imp_res_tac extend_place_state >> gvs[] >>
+      metis_tac[contract_storage_well_formed_storage_trace]) >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED

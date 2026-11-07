@@ -214,6 +214,27 @@ Definition stmt_frag_def:
                 stmt_exit RetQ es' res r)
 End
 
+(* Transport only non-return fragments: RetQ remains fully arbitrary. *)
+Theorem stmt_frag_storage_trace:
+  (!v. res <> INR (ReturnException v)) ==>
+  (stmt_frag ctx func cx lctx RetQ cenv m
+     (es with storage_trace := observations) res
+     (es' with storage_trace := observations') <=>
+   stmt_frag ctx func cx lctx RetQ cenv m es res es')
+Proof
+  strip_tac >> simp[stmt_frag_def, stmt_exit_def]
+QED
+
+Theorem stmt_frag_erasure:
+  erase_storage_trace es1 = erase_storage_trace es2 /\
+  erase_storage_trace es1' = erase_storage_trace es2' /\
+  (!v. res <> INR (ReturnException v)) ==>
+  (stmt_frag ctx func cx lctx RetQ cenv m es1 res es1' <=>
+   stmt_frag ctx func cx lctx RetQ cenv m es2 res es2')
+Proof
+  metis_tac[stmt_frag_storage_trace, erase_storage_trace_def]
+QED
+
 (* An entry-frame version of stmt_frag.  Frame is a premise on the actual
    target entry state, not an assertion that every related state has a
    suitable layout.  In particular stmt_state_rel alone does not reserve

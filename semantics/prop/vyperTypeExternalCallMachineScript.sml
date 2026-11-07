@@ -16,7 +16,7 @@ Ancestors
   vyperTypeEntryReadiness vyperTypeContract vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter
   vyperTypeContractSoundness vyperTypeExternalDefaults vyperExprNoControl
-  vyperStatePreservation vyperScopePreservation
+  vyperStatePreservation vyperScopePreservation vyperCall
 Libs
   wordsLib
 
@@ -32,7 +32,7 @@ Theorem release_nonreentrant_lock_machine_components:
 Proof
   rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def, return_def, raise_def,
-     assert_def, check_def] >>
+     assert_def, check_def, record_storage_event_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
@@ -287,17 +287,7 @@ Theorem call_external_function_nondeploy_failure_rolls_back:
     (INR exc,am',rqs) ==>
   am' = am
 Proof
-  strip_tac >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once call_external_function_def] >>
-  IF_CASES_TAC >- simp[] >>
-  simp_tac (srw_ss()) [] >>
-  qmatch_goalsub_abbrev_tac `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-  Cases_on `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-  Cases_on `q` >> simp_tac (srw_ss()) []
-  >- (rpt (BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) []) >> metis_tac[]) >>
-  Cases_on `y` >> simp_tac (srw_ss()) [] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) []) >> metis_tac[]
+  metis_tac[call_external_function_error_rollback]
 QED
 
 Theorem call_external_function_initial_failure_rolls_back:
@@ -315,8 +305,7 @@ QED
 Theorem call_external_failure_rolls_back:
   call_external orc gobs am tx = (INR exc,am',rqs) ==> am' = am
 Proof
-  rw[call_external_def] >> gvs[AllCaseEqs()] >>
-  metis_tac[call_external_function_initial_failure_rolls_back]
+  metis_tac[call_external_error_rollback]
 QED
 
 Theorem checked_call_external_failure_preserves_machine_well_typed:
@@ -356,13 +345,19 @@ Proof
      metis_tac[checked_contract_runtime_ready_def,
                immutables_ready_initial_evaluation_context_source]) >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac bool_ss [call_external_function_def, LET_THM] >>
+  simp_tac bool_ss [call_external_function_def, call_external_function_trace_def, LET_THM] >>
   `cx.in_deploy = F` by simp[initial_evaluation_context_def] >>
   qpat_assum `cx.in_deploy = F` (fn th => pure_rewrite_tac [th, COND_CLAUSES]) >>
   IF_CASES_TAC >- gvs[] >>
   simp_tac (srw_ss()) [] >>
+  `initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|> =
+   initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>`
+    by simp[initial_state_def] >>
+  pop_assum (fn th => pure_rewrite_tac [th]) >>
   qmatch_goalsub_abbrev_tac `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-  strip_tac >> drule external_call_result_success_cases >> strip_tac >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  drule external_call_trace_result_success_cases >> strip_tac >>
   `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
     (qpat_x_assum `entry _ = _` mp_tac >>
      simp_tac bool_ss [Abbr `entry`] >> strip_tac >>
@@ -483,7 +478,7 @@ Proof
           (find_function_module am tx.target tx.function_name) ts` by
     metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc gobs am tx = _` mp_tac >>
-  simp[Once call_external_def] >>
+  simp[Once call_external_def, Once call_external_trace_def] >>
   gvs[AllCaseEqs()] >> strip_tac >>
   gvs[checked_contract_runtime_ready_def, get_self_code_def] >>
   `checked_call_inputs_ready
@@ -501,6 +496,11 @@ Proof
       external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
         SOME (mut,nr,args,dflts,ret,body'))` by
     (irule lookup_exported_function_checked_cases_current >> simp[] >> metis_tac[]) >>
+  `call_external_function orc gobs am
+     (initial_evaluation_context am.sources am.layouts tx
+       (find_function_module am tx.target tx.function_name))
+     nr mut ts all_mods args dflts tx.args body' ret = (INL v,am'',rqs)` by
+    simp[call_external_function_def] >>
   irule finalize_pending_deletions_machine_well_typed >>
   `ALOOKUP all_mods (find_function_module am tx.target tx.function_name) = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>

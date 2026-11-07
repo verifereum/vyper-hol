@@ -148,7 +148,7 @@ Theorem call_external_transaction_pending_deletions:
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
   >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >>
+      simp[call_external_def, call_external_trace_def] >>
       Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
       qmatch_goalsub_abbrev_tac `get_self_code cx` >>
       Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
@@ -156,7 +156,7 @@ Proof
                  | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
       Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
       rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
-      Cases_on `call_external_function orc gobs (clear_machine_logs am) cx fn1 fn0 x'' x' fn2 fn3 tx.args fn5 fn4` >>
+      Cases_on `call_external_function_trace orc gobs (clear_machine_logs am) cx fn1 fn0 x'' x' fn2 fn3 tx.args fn5 fn4` >>
       rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
       rw[] >> simp[finalize_pending_deletions_metadata])
   >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
@@ -167,7 +167,15 @@ Theorem load_contract_pending_deletions:
     load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
     am'.pending_deletions = []
 Proof
-  rw[load_contract_def] >> gvs[AllCaseEqs()]
+  rw[load_contract_def, load_contract_trace_def] >>
+  qpat_x_assum `FST _ = _` mp_tac >>
+  Cases_on `initial_immutables (type_env_all_modules mods) mods` >> gvs[] >>
+  qpat_abbrev_tac `selected = lookup_function _ _ Deploy _` >>
+  Cases_on `selected` >> gvs[] >>
+  rename1 `SOME constructor` >> PairCases_on `constructor` >> gvs[] >>
+  qpat_abbrev_tac `called = call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _` >>
+  PairCases_on `called` >> Cases_on `called0` >>
+  gvs[] >> strip_tac >> gvs[finalize_pending_deletions_metadata]
 QED
 
 (* Exact PLAN lookup: the source lookup_function API, no invented additional

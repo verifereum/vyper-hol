@@ -169,7 +169,7 @@ Proof
       gvs[target_pre_def])
   >- (strip_tac >>
       imp_res_tac eval_base_place_TopLevelNameTarget_preserves_state >>
-      gvs[target_pre_def])
+      qpat_x_assum `es' = _` SUBST1_TAC >> gvs[target_pre_def])
   >- (strip_tac >> rpt gen_tac >> strip_tac >>
       imp_res_tac (cj 2 target_pre_sub) >>
       qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
@@ -187,14 +187,16 @@ Proof
       Cases_on `read_result cx tv es2` >> rename1 `(r3, es3)` >>
       imp_res_tac read_result_state >> gvs[] >>
       Cases_on `r3` >> simp[] >> strip_tac >> gvs[] >>
-      imp_res_tac extend_place_state >> gvs[]) >>
+      imp_res_tac extend_place_state >>
+      qpat_x_assum `es' = _` SUBST1_TAC >> simp[]) >>
   strip_tac >> rpt gen_tac >> strip_tac >>
   imp_res_tac (cj 1 target_pre_sub) >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_base_place cx bt es` >> rename1 `(r1, es1)` >>
   Cases_on `r1` >> simp[] >> strip_tac >> gvs[] >>
-  imp_res_tac extend_place_state >> gvs[] >> metis_tac[]
+  imp_res_tac extend_place_state >>
+  metis_tac[expr_sim_inv_storage_trace]
 QED
 
 (* ===== Fields ===== *)

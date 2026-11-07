@@ -78,11 +78,11 @@ Theorem eval_target_place_attr_toplevel:
     eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
       es = (r, es') /\
     (!m. r <> INR (Error (TypeError m))) ==>
-    es' = es /\
     ?fs off ftv.
       evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
       struct_field_slot fs fld = SOME (off, ftv) /\
-      r = INL (StoragePlace tr (n2w slot + n2w off) ftv)
+      r = INL (StoragePlace tr (n2w slot + n2w off) ftv) /\
+      es' = es with storage_trace := es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
@@ -113,13 +113,14 @@ Theorem eval_assign_attr_toplevel:
     (!m. res <> INR (Error (TypeError m))) ==>
     ?r es1.
       (do result <- eval_expr cx e; read_result cx result od) es = (r, es1) /\
-      (!ex. r = INR ex ==> res = INR ex /\ es' = es1) /\
+      (!ex. r = INR ex ==> res = INR ex /\ erase_storage_trace es' = erase_storage_trace es1) /\
       (!v. r = INL v ==>
            ?fs off ftv.
              evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
              struct_field_slot fs fld = SOME (off, ftv) /\
-             write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
-               (res, es'))
+             ?write_es. write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
+               (res, write_es) /\
+               erase_storage_trace write_es = erase_storage_trace es')
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
