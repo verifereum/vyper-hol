@@ -10,6 +10,7 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipRecursio
   bodyPtrStructLitOwnershipIfexpFrame context emitHelper unitShapeDefs
   venomInst stackPlanTypes bodyPtrStructLitOwnershipMemory
   bodyPtrStructLitOwnershipTyped bodyPtrStructLitOwnershipPrimitives
+  bodyPtrStructLitOwnershipAbiEncode
 
 Theorem alloc_run_stmt_nonannassign_route:
   (!id vt e. s <> AnnAssign id vt e) /\
@@ -263,4 +264,32 @@ Proof
   qexists `\v s. fresh_outputs s` >> reverse conj_tac
   >- simp[alloc_run_emit_op_fresh] >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_internal_return_from_env]
+QED
+
+Theorem alloc_run_stmt_log:
+  (!e. MEM e args ==> ~supported_expr_exists expr_shape_root e) ==>
+  alloc_run (\st. shape_state st /\ cenv_shape_ok st ce)
+    (compile_stmt ce lctx ty (Log event_id args)) (\u st. fresh_outputs st)
+Proof
+  strip_tac >> simp[Once compile_stmt_def] >>
+  Cases_on `ce.ce_event_info (nsid_to_string event_id)` >> simp[]
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_emit_empty_fresh >>
+      simp[shape_state_def, shape_base_fresh_outputs]) >>
+  PairCases_on `x` >> simp[] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_compile_log_eval_all >>
+      qexists `F` >> simp[cj 1 compile_expr_shape, alloc_run_compile_expr,
+        shape_state_def, shape_base_fresh_outputs]) >>
+  gen_tac >> simp[loop_comp_return_bind, comp_ignore_bind_def] >>
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_log_topic_ops] >>
+  gen_tac >> simp[loop_comp_return_bind] >> IF_CASES_TAC >> simp[]
+  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh] >>
+  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac
+    >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_alloc_buffer,
+        SRULE [SF ETA_ss] alloc_run_compile_log_store_data,
+        SRULE [SF ETA_ss] alloc_run_compile_abi_encode_to_buf] >> NO_TAC) >>
+    gen_tac >> simp[loop_comp_return_bind, comp_ignore_bind_def]) >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]
 QED
