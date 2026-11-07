@@ -5684,5 +5684,11 @@ Proof
   BETA_TAC >>
   CONV_TAC (LAND_CONV (RAND_CONV (RAND_CONV (LAND_CONV
     (ld_phase_exists_or_conv ld_combined_phase_binders))))) >>
-  pure_rewrite_tac [LEFT_AND_OVER_OR, DISJ_ASSOC] >> simp[]
+  CONV_TAC (LAND_CONV
+    (RAND_CONV (REWR_CONV LEFT_AND_OVER_OR) THENC
+     REWR_CONV LEFT_AND_OVER_OR THENC
+     LAND_CONV (RAND_CONV (REWR_CONV LEFT_AND_OVER_OR) THENC
+                REWR_CONV LEFT_AND_OVER_OR) THENC
+     REWR_CONV (GSYM DISJ_ASSOC))) >>
+  disch_then ACCEPT_TAC
 QED
