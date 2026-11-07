@@ -40,7 +40,7 @@ Proof
   strip_tac >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_stage_frame_retpc_shape) >>
   strip_tac >>
-  `EVERY (\f. fn_inst_wf f /\ frameRel$retpc_shape_ok f /\ opaque_use_ok f /\
+  `EVERY (\f. fn_inst_wf f /\ unitShapeDefs$retpc_shape_ok f /\ opaque_use_ok f /\
      first_block_no_phi f /\ EVERY bb_well_formed f.fn_blocks /\
      ALL_DISTINCT (fn_labels f) /\
      (!i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
