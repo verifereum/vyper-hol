@@ -6,7 +6,7 @@ Ancestors
   bodyMemTbConvertScalarDispatch exprSimHyps exprSimHypsDefs
   compileEnv vyperTypeSystem vyperValue valueEncoding valueCopyBytes exprSimMemDefs
 
-Theorem convert_nonzero_bytestring_memory_size[local]:
+Theorem convert_nonzero_bytestring_memory_size:
   is_bytestring_type t /\
   t <> BaseT (BytesT (Dynamic 0)) /\ t <> BaseT (StringT 0) ==>
   64 <= type_memory_bytes cenv t
