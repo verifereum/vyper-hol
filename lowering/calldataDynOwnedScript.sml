@@ -4401,6 +4401,11 @@ QED
 
 Finalise calldata_owned_after_initial_repeat
 
+(* calldata_owned_header_initial_repeat in irule form, made once here
+   rather than inside a proof step. *)
+val header_initial_repeat_rule =
+  IRULE_CANON (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat);
+
 Theorem calldata_nonbulk_owned_repeat:
   abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
@@ -4579,7 +4584,7 @@ Proof
   qexistsl_tac [`p`,`oid`,`header_st`,`cap`,`body_bb`,`base_addr`] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp_tac bool_ss []]
   >- (first_assum (ACCEPT_TAC o SIMP_RULE bool_ss [] o BETA_RULE)) >>
-  irule (SIMP_RULE bool_ss [] calldata_owned_header_initial_repeat) >>
+  MATCH_MP_TAC header_initial_repeat_rule >>
   qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`
     (irule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
   qpat_assum `abi_decode_loop_prefix _ _ _ _ = _`
