@@ -239,6 +239,131 @@ Proof
   strip_tac >> gvs[GSYM SNOC_APPEND, FOLDL_SNOC]
 QED
 
+Theorem type_place_expr_not_local[local]:
+  !e env vt p root xs.
+    type_place_expr env e = SOME vt /\ expr_place e = SOME p ==>
+    place_access p [] <> (NameTarget root,xs)
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  simp[Once well_typed_expr_def, expr_place_def, place_access_def,
+       AllCaseEqs()] >> rpt strip_tac >>
+  gvs[Once well_typed_expr_def, place_access_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem typed_expr_access_endpoint[local]:
+  !e env p root xs.
+    well_typed_expr env e /\ expr_place e = SOME p /\
+    place_access p [] = (NameTarget root,xs) ==>
+    ?t. FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type env.type_defs ty a))
+          (FLOOKUP env.var_types root) xs = SOME t /\
+        ((p = FOLDL (\t a. AttributeTarget t a) (NameTarget root) xs /\
+          t = expr_type e) \/ ((!a. attribute_type env.type_defs t a = NONE) /\
+          (!ys. place_access p ys = (NameTarget root,xs))))
+Proof
+  ho_match_mp_tac
+    (vyperASTTheory.expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+     SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[expr_place_def, AllCaseEqs()]
+  >- (rpt strip_tac >> gvs[Once well_typed_expr_def, place_access_def,
+                          vyperASTTheory.expr_type_def])
+  >- (rpt strip_tac >> gvs[place_access_def])
+  >- (rpt strip_tac >>
+      gvs[Once well_typed_expr_def, place_access_def]
+      >- (qpat_x_assum `!env'. well_typed_expr env' e ==> _`
+            (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
+          rename1 `FOLDL _ _ xs = SOME endpoint` >>
+          qexists_tac `endpoint` >> simp[] >>
+          Cases_on `expr_type e` >> gvs[subscript_type_ok_def, attribute_type_def]) >>
+      metis_tac[type_place_expr_not_local]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def, place_access_def] >>
+  Cases_on `place_access tgt []` >>
+  drule place_access_chain_or_reset >> strip_tac >>
+  gvs[]
+  >- (`~(!ys:string list. ys = [])` by
+        (strip_tac >> first_x_assum (qspec_then `[s]` mp_tac) >> simp[]) >>
+      qpat_x_assum `!env'. _` (qspec_then `env` mp_tac) >> simp[] >>
+      strip_tac >>
+      gvs[attribute_type_fold_append, attribute_type_ok_def,
+          GSYM SNOC_APPEND, FOLDL_SNOC, vyperASTTheory.expr_type_def]) >>
+  qpat_x_assum `!env'. _` (qspec_then `env` mp_tac) >> simp[] >>
+  strip_tac
+  >- (qpat_x_assum `!ys. place_access _ ys = _`
+        (qspec_then `[s]` mp_tac) >>
+      simp[place_access_attribute_chain] >>
+      disch_then (mp_tac o AP_TERM ``LENGTH : string list -> num``) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem typed_target_access_endpoint[local]:
+  !w env vt root xs.
+    type_place_target env w = SOME vt /\
+    place_access w [] = (NameTarget root,xs) ==>
+    ?t. FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type env.type_defs ty a))
+          (FLOOKUP env.var_types root) xs = SOME t /\
+        ((w = FOLDL (\t a. AttributeTarget t a) (NameTarget root) xs /\
+          vt = Type t) \/ (!ys. place_access w ys = (NameTarget root,xs)))
+Proof
+  ho_match_mp_tac targetPlaceSimCasesBaseTheory.base_assignment_target_induct >>
+  rpt conj_tac
+  >- (rpt strip_tac >> gvs[Once well_typed_expr_def, place_access_def,
+                           AllCaseEqs()])
+  >- (rpt strip_tac >> gvs[place_access_def])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[Once well_typed_expr_def, place_access_def, AllCaseEqs()] >>
+      rpt strip_tac >> first_x_assum drule >> simp[] >>
+      strip_tac >> metis_tac[place_access_def]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `place_access w []` >>
+  drule place_access_chain_or_reset >> strip_tac >>
+  gvs[place_access_def]
+  >- (qpat_x_assum `!ys. place_access _ ys = _`
+        (qspec_then `[s]` assume_tac) >> gvs[] >>
+      `~(!ys:string list. ys = [])` by
+        (strip_tac >> first_x_assum (qspec_then `[s]` mp_tac) >> simp[]) >>
+      qpat_x_assum `!env' vt'. _` drule >> simp[] >> strip_tac >>
+      gvs[attribute_type_fold_append, GSYM SNOC_APPEND, FOLDL_SNOC]) >>
+  qpat_x_assum `!env' vt'. _` drule >> simp[] >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem attribute_type_fold_separation[local]:
+  !D ot xs ws t u.
+    FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) ot xs = SOME t /\
+    (!a. attribute_type D t a = NONE) /\
+    FOLDL (\ot a. OPTION_BIND ot (\ty. attribute_type D ty a)) ot ws = SOME u /\
+    ~isPREFIX ws xs ==> ~isPREFIX xs ws
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  gvs[rich_listTheory.IS_PREFIX_APPEND] >>
+  drule_all attribute_type_fold_inert >> strip_tac >> gvs[]
+QED
+
+Theorem typed_place_write_separation[local]:
+  !env e et bd p root xs envw w vt ws.
+    well_typed_expr env e /\ expr_type e = ArrayT et bd /\
+    expr_place e = SOME p /\ place_access p [] = (NameTarget root,xs) /\
+    type_place_target envw w = SOME vt /\
+    envw.type_defs = env.type_defs /\
+    FLOOKUP envw.var_types root = FLOOKUP env.var_types root /\
+    ~place_contains w p /\ place_access w [] = (NameTarget root,ws) ==>
+    ~isPREFIX ws xs /\ ~isPREFIX xs ws
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~isPREFIX ws xs` by gvs[place_contains_def] >> simp[] >>
+  drule_all typed_expr_access_endpoint >>
+  disch_then (qx_choose_then `endpoint` strip_assume_tac) >>
+  `!a. attribute_type env.type_defs endpoint a = NONE` by
+    gvs[attribute_type_def] >>
+  drule_all typed_target_access_endpoint >> strip_tac >>
+  irule attribute_type_fold_separation >> simp[] >>
+  qexistsl_tac [`env.type_defs`, `FLOOKUP env.var_types root`, `endpoint`] >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem typed_stmts_place_frame:
   supported_stmts tops bindings stmts /\
   type_stmts env ret_ty stmts = SOME env' /\
