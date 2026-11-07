@@ -1,9 +1,11 @@
 Theory abiDecodePtrBytesMember
 Ancestors
   abiDecodePtrBytesTail abiDecodePtrRead abiDecodePtrPrims
-  abiDecoderBytesBound abiDecoderRange emitHelperProps exprLoweringProps
+  abiDecoderBytesBound abiDecoderRange abiDecoderGuard abiDecoderGuards abiDecoderContract
+  emitHelperProps exprLoweringProps
   abiEncoder compileEnv emitHelper venomExecSemantics venomInst venomState
-  words arithmetic arithmeticProps list rich_list
+  words arithmetic arithmeticProps list rich_list pred_set
+  bodyPtrBopScalarCompile bodyPtrBopScalarSeq freshWrites
 
 Theorem abi_decode_range_success_bounds:
   compile_abi_decode_range_check src e hi st = ((),st') /\
@@ -93,4 +95,140 @@ Proof
   simp[abi_decode_bytes_payload_guard_def, comp_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   drule_all abi_decode_add_range_success_bounds >> simp[]
+QED
+
+Theorem abi_decode_add_range_scalar:
+  emit_op ADD [src;len] sa = (e,sb) /\
+  compile_abi_decode_range_check src e hi sb = ((),sc) /\
+  src IN A /\ len IN A /\ hi IN A /\
+  (!x. x IN R ==> not_fresh_at sa x) ==>
+  ?B. bop_scalar_seq R A (emitted_insts sa sc) B /\ A SUBSET B /\ e IN B
+Proof
+  strip_tac >>
+  `bop_scalar_seq R A (emitted_insts sa sb) (e INSERT A)` by
+    (drule bop_scalar_seq_emit_op >> simp[]) >>
+  `!x. x IN R ==> not_fresh_at sb x` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     fs[not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `?B. bop_scalar_seq R (e INSERT A) (emitted_insts sb sc) B` by
+    (drule abi_decode_range_scalar >>
+     disch_then (qspecl_then [`R`, `e INSERT A`] mp_tac) >> simp[]) >>
+  `emitted_insts sa sc = emitted_insts sa sb ++ emitted_insts sb sc` by
+    (irule emitted_insts_append >>
+     imp_res_tac emit_op_extends >>
+     imp_res_tac compile_abi_decode_range_check_shape >>
+     gvs[inst_extends_def]) >>
+  `e INSERT A SUBSET B` by metis_tac[bop_scalar_seq_available] >>
+  qexists_tac `B` >> simp[] >>
+  conj_tac >- metis_tac[bop_scalar_seq_append] >>
+  fs[SUBSET_DEF]
+QED
+
+Theorem abi_decode_bytes_head_scalar:
+  abi_decode_bytes_head src hi sa = (head,sb) /\ hi <> Lit 0w /\
+  src IN A /\ hi IN A /\ Lit 32w IN A /\
+  (!x. x IN R ==> not_fresh_at sa x) ==>
+  ?B. bop_scalar_seq R A (emitted_insts sa sb) B /\ A SUBSET B /\ head IN B
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_bytes_head _ _ _ = _` mp_tac >>
+  simp[abi_decode_bytes_head_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  drule_all abi_decode_add_range_scalar >> simp[]
+QED
+
+Theorem abi_decode_bytes_payload_scalar:
+  abi_decode_bytes_payload_guard head len hi sa = ((),sb) /\ hi <> Lit 0w /\
+  head IN A /\ len IN A /\ hi IN A /\
+  (!x. x IN R ==> not_fresh_at sa x) ==>
+  ?B. bop_scalar_seq R A (emitted_insts sa sb) B /\ A SUBSET B
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_bytes_payload_guard _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_bytes_payload_guard_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule_all abi_decode_add_range_scalar >> metis_tac[]
+QED
+
+Theorem abi_decode_le_guard_success_bound:
+  abi_decode_le_guard a b sa = ((),sb) /\
+  fresh_vars_wrt sa s /\ eval_operand a s = SOME va /\
+  eval_operand b s = SOME vb /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  w2n va <= w2n vb
+Proof
+  simp[abi_decode_le_guard_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `emit_op GT [a;b] sa = (oob,c1)` >>
+  rename1 `emit_op ISZERO [oob] c1 = (ok,c2)` >>
+  drule_all emit_op_GT_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa c1) s = OK u` >>
+  drule_all emit_op_ISZERO_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c1 c2) u = OK v` >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  drule_all abi_decode_sequence_chain >> strip_tac >>
+  `run_inst_seq (emitted_insts c2 sb) v = OK t` by
+    metis_tac[run_inst_seq_emit_extend] >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  gvs[run_inst_seq_def, mk_inst_def, Once step_inst_base_def, AllCaseEqs()]
+QED
+
+Theorem abi_decode_count_guard_trace:
+  abi_decode_count_guard opc addr n sa = (cnt,sb) <=>
+  ?sc. emit_op opc [addr] sa = (cnt,sc) /\
+       abi_decode_le_guard cnt (Lit (n2w n)) sc = ((),sb)
+Proof
+  simp[abi_decode_count_guard_def, abi_decode_le_guard_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  eq_tac >> rpt strip_tac >> gvs[] >>
+  metis_tac[pairTheory.PAIR, pairTheory.pair_CASES, oneTheory.one]
+QED
+
+Theorem abi_decode_le_guard_scalar:
+  abi_decode_le_guard a b sa = ((),sb) /\ a IN A /\ b IN A /\
+  (!x. x IN R ==> not_fresh_at sa x) ==>
+  ?B. bop_scalar_seq R A (emitted_insts sa sb) B /\ A SUBSET B
+Proof
+  simp[abi_decode_le_guard_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `emit_op GT [a;b] sa = (oob,c1)` >>
+  rename1 `emit_op ISZERO [oob] c1 = (ok,c2)` >>
+  `bop_scalar_seq R A (emitted_insts sa c2) (ok INSERT oob INSERT A)` by
+    (qpat_assum `emit_op GT _ _ = _`
+       (mp_then Any mp_tac bop_scalar_seq_emit_iszero) >>
+     disch_then drule >> simp[]) >>
+  `bop_scalar_seq R (ok INSERT oob INSERT A) (emitted_insts c2 sb)
+     (ok INSERT oob INSERT A)` by
+    (drule bop_scalar_seq_emit_assert >> simp[]) >>
+  `emitted_insts sa sb = emitted_insts sa c2 ++ emitted_insts c2 sb` by
+    (imp_res_tac inst_extends_emit_op >>
+     imp_res_tac inst_extends_emit_void >>
+     `inst_extends sa c2` by metis_tac[inst_extends_trans] >>
+     irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  qexists_tac `ok INSERT oob INSERT A` >> simp[SUBSET_DEF] >>
+  irule bop_scalar_seq_append >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem abi_decode_count_guard_success_bound:
+  abi_decode_count_guard opc addr n sa = (cnt,sb) /\
+  abi_decode_source_opcode opc /\ eval_operand addr s = SOME p /\
+  fresh_vars_wrt sa s /\ n < dimword(:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  w2n (abi_decode_load opc p s) <= n /\
+  eval_operand cnt t = SOME (abi_decode_load opc p s)
+Proof
+  strip_tac >> fs[abi_decode_count_guard_trace] >>
+  drule_all abi_decode_read >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sc) s = OK u` >>
+  imp_res_tac inst_extends_emit_op >>
+  drule abi_decode_le_guard_shape >> strip_tac >>
+  `run_inst_seq (emitted_insts sc sb) u = OK t` by
+    metis_tac[run_inst_seq_emit_extend] >>
+  `eval_operand (Lit (n2w n)) u = SOME (n2w n)` by simp[eval_operand_def] >>
+  drule_all abi_decode_le_guard_success_bound >> strip_tac >>
+  `w2n (abi_decode_load opc p s) <= n` by gvs[w2n_n2w] >>
+  drule_all abi_decode_le_guard_sequence >> strip_tac >>
+  gvs[] >> metis_tac[]
 QED
