@@ -3,7 +3,11 @@
  *)
 Theory concretizePtrIloadFamily
 Ancestors
-  concretizePtrStorageReadProducer
+  concretizePtrStorageReadProducer concretizePtrIloadFamilyAttach
+  concretizePtrPairedPrefixProbe concretizePtrStructuralTranscript
+  concretizePtrStructuralTrace concretizePtrChronologicalHistory
+  concretizePtrSourceOwnership concretizePtrDeletedGapHistory
+  concretizePtrPairedPrefix concretizePtrOperationalOpcodes ptrDiscipline list
 
 Theorem ptr_paired_iload_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -38,6 +42,24 @@ Theorem ptr_paired_iload_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `a.po_inst.inst_opcode = ILOAD` by fs[] >>
+  drule_all ptr_paired_prefix_iload >> strip_tac >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
 QED
 
