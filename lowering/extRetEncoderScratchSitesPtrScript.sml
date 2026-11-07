@@ -2,7 +2,7 @@
 Theory extRetEncoderScratchSitesPtr
 Ancestors
   extRetScratchResourcePtr abiEncoderWindowContract abiEncoderProps
-  exprSimOperands venomMemDefs pred_set arithmetic
+  exprSimOperands venomMemDefs pred_set arithmetic abiDecoderCode abiEncoder context
 
 Theorem scratch_resource_restrict:
   scratch_resource ctx fn sites q len s /\ children SUBSET sites /\
@@ -17,4 +17,182 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   strip_tac >>
   fs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+(* Reuse the decoder's generic allocation-syntax certificate for encoders. *)
+val scratch_code_simps = [abi_decoder_code_emit_op, abi_decoder_code_emit_void,
+  abi_decoder_code_emit_inst, abi_decoder_code_return,
+  abi_decoder_code_fresh_label, abi_decoder_code_new_block,
+  abi_decoder_code_alloc_buffer];
+val scratch_db = fn t => rpt gen_tac >> ho_match_mp_tac abi_decoder_code_bind >>
+  conj_tac >- simp (t::scratch_code_simps) >> rpt strip_tac;
+val scratch_dib = fn t => ho_match_mp_tac abi_decoder_code_ignore_bind >>
+  conj_tac >- simp (t::scratch_code_simps) >> rpt strip_tac;
+
+Theorem encoder_static_alloc_code:
+  abi_decoder_code st (SND (compile_abi_encode_static dst src st))
+Proof
+  rewrite_tac[compile_abi_encode_static_def] >>
+  scratch_db abi_decoder_code_emit_op >>
+  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return]
+QED
+
+Theorem encoder_static_info_alloc_code:
+  !ei dst src st.
+    abi_decoder_code st (SND (compile_abi_encode_static_info dst src ei st))
+Proof
+  Cases >> simp[compile_abi_encode_static_info_def,
+    encoder_static_alloc_code, abi_decoder_code_return] >> rpt gen_tac >>
+  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return]
+QED
+
+Theorem encoder_static_loop_alloc_code:
+  abi_decoder_code st
+    (SND (compile_abi_encode_dyn_static_loop dst src ei asz msz len st))
+Proof
+  rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  scratch_db abi_decoder_code_alloc_buffer >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  scratch_dib abi_decoder_code_emit_void >>
+  ntac 3 (scratch_db abi_decoder_code_fresh_label) >>
+  scratch_dib abi_decoder_code_emit_inst >>
+  scratch_dib abi_decoder_code_new_block >>
+  ntac 3 (scratch_db abi_decoder_code_emit_op) >>
+  scratch_dib abi_decoder_code_emit_inst >>
+  scratch_dib abi_decoder_code_new_block >>
+  ntac 7 (scratch_db abi_decoder_code_emit_op) >>
+  scratch_dib encoder_static_info_alloc_code >>
+  scratch_db abi_decoder_code_emit_op >>
+  scratch_dib abi_decoder_code_emit_void >>
+  scratch_dib abi_decoder_code_emit_inst >>
+  scratch_dib abi_decoder_code_new_block >>
+  ntac 2 (scratch_db abi_decoder_code_emit_op) >>
+  simp[abi_decoder_code_emit_op]
+QED
+
+Theorem encoder_alloc_code_mutual:
+  (!dst cp ci dyn off dp st.
+    abi_decoder_code st (SND (compile_abi_encode_child dst cp ci dyn off dp st))) /\
+  (!dst src ei st.
+    abi_decoder_code st (SND (compile_abi_encode_to_buf dst src ei st))) /\
+  (!dst src elems so ho dp st.
+    abi_decoder_code st (SND (compile_abi_encode_complex_elems dst src elems so ho dp st))) /\
+  (!dst src ei asz msz len st.
+    abi_decoder_code st (SND (compile_abi_encode_dyn_loop dst src ei asz msz len st)))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
+  >- suspend "child"
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "copy"
+  >- suspend "array"
+  >- suspend "empty"
+  >- suspend "complex"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume encoder_alloc_code_mutual[child]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  scratch_db abi_decoder_code_emit_op >> IF_CASES_TAC >> fs[] >>
+  ntac 2 (scratch_db abi_decoder_code_emit_op) >>
+  ho_match_mp_tac abi_decoder_code_bind >> conj_tac
+  >- (rpt gen_tac >> first_x_assum irule) >>
+  rpt gen_tac >> scratch_dib abi_decoder_code_emit_void >>
+  scratch_db abi_decoder_code_emit_op >>
+  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return]
+QED
+Resume encoder_alloc_code_mutual[word]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  simp[encoder_static_alloc_code]
+QED
+Resume encoder_alloc_code_mutual[bytes]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  ntac 4 (scratch_db abi_decoder_code_emit_op) >>
+  scratch_dib abi_decoder_code_emit_void >>
+  scratch_db abi_decoder_code_emit_op >>
+  scratch_dib abi_decoder_code_emit_void >>
+  ntac 2 (scratch_db abi_decoder_code_emit_op) >>
+  simp[abi_decoder_code_emit_op]
+QED
+Resume encoder_alloc_code_mutual[copy]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return]
+QED
+Resume encoder_alloc_code_mutual[array]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  scratch_db abi_decoder_code_alloc_buffer >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  scratch_dib abi_decoder_code_emit_void >>
+  scratch_db abi_decoder_code_emit_op >>
+  scratch_dib abi_decoder_code_emit_void >>
+  ho_match_mp_tac abi_decoder_code_bind >> conj_tac
+  >- (rpt gen_tac >> IF_CASES_TAC
+      >- simp[encoder_static_loop_alloc_code] >> gvs[] >> first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> ntac 2 (scratch_db abi_decoder_code_emit_op) >>
+  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_emit_op]
+QED
+Resume encoder_alloc_code_mutual[empty]:
+  rewrite_tac[Once compile_abi_encode_child_def] >> simp[abi_decoder_code_return]
+QED
+Resume encoder_alloc_code_mutual[complex]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gnvs[]
+  >- (scratch_db abi_decoder_code_alloc_buffer >>
+      simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+      scratch_dib abi_decoder_code_emit_void >>
+      ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+      >- (rpt gen_tac >> first_x_assum irule) >>
+      simp[abi_decoder_code_emit_op]) >>
+  rpt gen_tac >> ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+  >- (rpt gen_tac >> first_x_assum irule) >> simp[abi_decoder_code_return]
+QED
+Resume encoder_alloc_code_mutual[nil]:
+  rewrite_tac[Once compile_abi_encode_child_def] >> simp[abi_decoder_code_return]
+QED
+Resume encoder_alloc_code_mutual[cons]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  scratch_db abi_decoder_code_emit_op >>
+  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+  >- (rpt gen_tac >> first_x_assum irule) >>
+  rpt gen_tac >> first_x_assum irule
+QED
+Resume encoder_alloc_code_mutual[loop]:
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  scratch_db abi_decoder_code_alloc_buffer >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  scratch_dib abi_decoder_code_emit_void >>
+  scratch_db abi_decoder_code_alloc_buffer >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  scratch_db abi_decoder_code_emit_op >>
+  scratch_dib abi_decoder_code_emit_void >>
+  ntac 3 (scratch_db abi_decoder_code_fresh_label) >>
+  scratch_dib abi_decoder_code_emit_inst >> scratch_dib abi_decoder_code_new_block >>
+  ntac 3 (scratch_db abi_decoder_code_emit_op) >>
+  scratch_dib abi_decoder_code_emit_inst >> scratch_dib abi_decoder_code_new_block >>
+  ntac 9 (scratch_db abi_decoder_code_emit_op) >>
+  ho_match_mp_tac abi_decoder_code_bind >> conj_tac
+  >- (rpt gen_tac >> first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> scratch_dib abi_decoder_code_emit_void >>
+  scratch_db abi_decoder_code_emit_op >> scratch_dib abi_decoder_code_emit_void >>
+  scratch_db abi_decoder_code_emit_op >> scratch_dib abi_decoder_code_emit_void >>
+  scratch_dib abi_decoder_code_emit_inst >> scratch_dib abi_decoder_code_new_block >>
+  scratch_dib abi_decoder_code_emit_op >> scratch_db abi_decoder_code_emit_op >>
+  simp[abi_decoder_code_emit_op]
+QED
+Finalise encoder_alloc_code_mutual
+
+Theorem encoder_new_alloca_shape:
+  compile_abi_encode_to_buf dst src ei st = (result,en) /\
+  abi_decoder_code_member inst en /\ ~abi_decoder_code_member inst st /\
+  inst.inst_opcode = ALLOCA ==>
+  st.cs_next_id <= inst.inst_id /\ inst.inst_id < en.cs_next_id /\
+  inst.inst_operands = [Lit 32w] /\ ?out. inst.inst_outputs = [out]
+Proof
+  strip_tac >>
+  `abi_decoder_code st en` by
+    metis_tac[encoder_alloc_code_mutual, pairTheory.SND] >>
+  drule_all abi_decoder_code_alloca >> simp[]
 QED
