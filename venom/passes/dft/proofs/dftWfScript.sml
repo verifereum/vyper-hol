@@ -1567,6 +1567,59 @@ Proof
       irule eda_deps_backward_plain >> metis_tac[])
 QED
 
+Triviality all_distinct_ids_mem_eq[local]:
+  !l x y. ALL_DISTINCT (MAP (\i. i.inst_id) l) /\ MEM x l /\ MEM y l /\
+          x.inst_id = y.inst_id ==> x = y
+Proof
+  Induct >> rw[] >> gvs[MEM_MAP] >> metis_tac[]
+QED
+
+(* An abort-run edge of dft_eda runs from an instruction to an earlier one. *)
+Theorem dft_eda_deps_backward:
+  !bi inst dep deps.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    MEM inst bi /\ ~is_pseudo inst.inst_opcode /\
+    FLOOKUP (dft_eda bi) inst.inst_id = SOME deps /\
+    MEM dep deps /\ ~is_pseudo dep.inst_opcode ==>
+    ?i j. i < j /\ j < LENGTH bi /\ i < LENGTH bi /\
+          EL i bi = dep /\ EL j bi = inst
+Proof
+  rpt strip_tac >> drule_all dft_eda_sources >> strip_tac
+  >- (irule eda_deps_backward_plain >> metis_tac[]) >>
+  qabbrev_tac `nps = FILTER (\i. ~is_pseudo i.inst_opcode) bi` >>
+  `MEM y nps` by simp[] >>
+  `MEM y bi` by gvs[Abbr `nps`, MEM_FILTER] >>
+  `y = inst` by metis_tac[all_distinct_ids_mem_eq] >>
+  gvs[] >>
+  `?i. i < LENGTH p /\ EL i p = dep` by metis_tac[MEM_EL] >>
+  qspecl_then [`\i. ~is_pseudo i.inst_opcode`, `bi`, `i`, `LENGTH p`]
+    mp_tac filter_el_mono >>
+  simp[EL_APPEND1, EL_APPEND2] >> strip_tac >>
+  qexistsl_tac [`i'`, `j'`] >> simp[]
+QED
+
+Theorem eda_topo_compatible_dft_eda:
+  !bi order.
+    bi <> [] /\
+    is_terminator (LAST bi).inst_opcode /\
+    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
+         k = PRE (LENGTH bi)) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    np_defs_before_uses bi ==>
+    eda_topo_compatible bi (dft_eda bi) order
+Proof
+  rpt strip_tac >>
+  `eda_topo_compatible bi (build_eda bi) order` by
+    (irule eda_topo_compatible_gen_weak_plain >> simp[]) >>
+  gvs[eda_topo_compatible_def, inst_all_deps_def, LET_THM] >>
+  rpt strip_tac >>
+  Cases_on `MEM dep (inst_data_deps bi order inst)`
+  >- (first_x_assum irule >> simp[]) >>
+  gvs[MEM_APPEND] >>
+  Cases_on `FLOOKUP (dft_eda bi) inst.inst_id` >> gvs[] >>
+  irule dft_eda_deps_backward >> metis_tac[]
+QED
+
 (* Combined: eda_topo_compatible for original block — corollary of gen *)
 Theorem eda_topo_compatible_original:
   !fn bb order.

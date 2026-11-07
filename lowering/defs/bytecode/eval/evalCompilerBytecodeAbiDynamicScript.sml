@@ -485,6 +485,10 @@ val abi_dynamic_ready_insts_step1 = TRY_CONV EVAL
       (^abi_dynamic_ready_fn).fn_blocks``
 val abi_dynamic_ready_insts_eval = TRANS abi_dynamic_ready_insts_step1
   (TRY_CONV EVAL (rhs (concl abi_dynamic_ready_insts_step1)))
+val abi_dynamic_ready_offsets_eval =
+  EVAL ``stackPlanGen$offset_outputs_used ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_phi_joins_eval =
+  EVAL ``stackPlanGen$phis_at_joins (cfg_analyze ^abi_dynamic_ready_fn) ^abi_dynamic_ready_fn``
 val abi_dynamic_ready_fn_rhs = LIST_CONJ
   [EQT_ELIM abi_dynamic_ready_canonical_eval,
    EQT_ELIM abi_dynamic_ready_wf_fn_eval,
@@ -495,7 +499,9 @@ val abi_dynamic_ready_fn_rhs = LIST_CONJ
    EQT_ELIM abi_dynamic_ready_cfg_norm_eval,
    EQT_ELIM abi_dynamic_ready_entries_eval,
    EQT_ELIM abi_dynamic_ready_phi_eval,
-   EQT_ELIM abi_dynamic_ready_insts_eval]
+   EQT_ELIM abi_dynamic_ready_insts_eval,
+   EQT_ELIM abi_dynamic_ready_offsets_eval,
+   EQT_ELIM abi_dynamic_ready_phi_joins_eval]
 val abi_dynamic_ready_fn_thm = prove
   (``codegen_ready_fn ^abi_dynamic_ready_fn``,
    PURE_REWRITE_TAC [stackPlanGenTheory.codegen_ready_fn_def] >>
@@ -727,6 +733,8 @@ val abi_dynamic_context_safe_eval = EVAL
 val abi_dynamic_assembly_safe_eval = EVAL
   ``assembly_target_safe (^abi_dynamic_rpolicy).rpol_target
       ^abi_dynamic_raw_asm``
+val abi_dynamic_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^abi_dynamic_raw_asm``
 val abi_dynamic_codegen_step0 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def, abi_dynamic_target_wf_eval,
    abi_dynamic_context_safe_eval, abi_dynamic_context_plan_eval,
@@ -736,7 +744,8 @@ val abi_dynamic_codegen_step0 = SIMP_CONV pure_ss
 val abi_dynamic_codegen_step1 = SIMP_CONV pure_ss
   [abi_dynamic_plan_ops_eval, abi_dynamic_initial_fmp_eval,
    abi_dynamic_execute_plan_eval, abi_dynamic_data_asm_eval,
-   abi_dynamic_raw_asm_eval, abi_dynamic_assembly_safe_eval]
+   abi_dynamic_raw_asm_eval, abi_dynamic_assembly_safe_eval,
+   abi_dynamic_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl abi_dynamic_codegen_step0))
 val abi_dynamic_codegen_eval = save_thm
   ("abi_dynamic_codegen_eval",

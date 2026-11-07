@@ -195,20 +195,34 @@ Proof
   simp[create_check_revert_bb_def, Once exec_block_def,
        get_instruction_def, mk_inst_def, step_inst_def, step_inst_base_def,
        exec_read0_def, is_terminator_def] >>
-  simp[Once exec_block_def, get_instruction_def, mk_inst_def,
-       update_var_def, eval_operand_def, lookup_var_def,
-       step_inst_def, step_inst_base_def, is_terminator_def,
+  simp[Once exec_block_def, get_instruction_def, mk_inst_def] >>
+  simp[step_inst_def, step_inst_base_def] >>
+  simp[update_var_def, eval_operand_def, lookup_var_def, is_terminator_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `FLOOKUP s.vs_allocas 2` >>
-  TRY (rename1 `FLOOKUP s.vs_allocas 2 = SOME allocation` >>
-       PairCases_on `allocation`) >>
+  (* one goal per step: the alloca's two cases run the tail apart *)
+  Cases_on `FLOOKUP s.vs_allocas 2`
+  >- (simp[exec_alloca_def] >>
+    simp[Once exec_block_def, get_instruction_def] >>
+    simp[step_inst_def, step_inst_base_def] >>
+    simp[eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def] >>
+    simp[Once exec_block_def, get_instruction_def, mk_inst_def] >>
+    simp[step_inst_def, step_inst_base_def] >>
+    simp[eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+    simp[create_revert_read_written, revert_state_def, set_returndata_def,
+         finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def]) >>
+  rename1 `FLOOKUP s.vs_allocas 2 = SOME allocation` >>
+  PairCases_on `allocation` >>
   simp[exec_alloca_def] >>
   simp[Once exec_block_def, get_instruction_def] >>
-  simp[step_inst_def, step_inst_base_def, eval_operand_def, lookup_var_def,
-       update_var_def, finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def] >>
+  simp[step_inst_def, step_inst_base_def] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def] >>
   simp[Once exec_block_def, get_instruction_def, mk_inst_def] >>
-  simp[step_inst_def, step_inst_base_def, eval_operand_def, lookup_var_def,
-       update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[step_inst_def, step_inst_base_def] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[create_revert_read_written, revert_state_def, set_returndata_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def]
 QED

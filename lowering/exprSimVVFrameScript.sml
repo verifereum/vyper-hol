@@ -22,8 +22,8 @@ Theorem vv_post_inst_idx[simp]:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
   Cases_on `vv` >>
-  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
+  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def, vv_own_def,
+       expr_val_rel_def, expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def,
        storage_holds_inst_idx, immutable_holds_def]
 QED
 
@@ -78,6 +78,26 @@ Proof
   >> metis_tac[]
 QED
 
+Theorem vv_own_vars_frame:
+  vv_own cenv cx ty sa sm es tv vv s /\
+  t.vs_allocas = s.vs_allocas /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes t n b sz ==>
+    local_region cenv es.scopes s n b sz) /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_own cenv cx ty sa sn es tv vv t
+Proof
+  Cases_on `vv` >>
+  simp[vv_own_def, vv_operand_def, expr_val_own_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        rpt strip_tac >>
+        `local_region cenv es.scopes s n lb lsz` by metis_tac[] >>
+        qpat_x_assum `!n lb lsz. local_region _ _ s _ _ _ ==> b + sz <= lb \/ _` drule >> simp[])
+  >> metis_tac[]
+QED
+
 Theorem vv_post_vars_frame:
   vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   (t with vs_vars := s.vs_vars) = s /\
@@ -98,9 +118,9 @@ Proof
      simp[contract_storage_def, contract_transient_def]) >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-  `vv_holds cenv cx (expr_type e) tv vv es' t` by
+  `vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by
     (drule_all vv_holds_vars_frame >> simp[]) >>
-  `vv_at cenv cx (expr_type e) sa sn es' tv vv t` by
+  `vv_at cenv cx (post_value_type cenv e) sa sn es' tv vv t` by
     (irule vv_at_vars_frame >> qexistsl_tac [`s`, `sm`] >>
      simp[] >> conj_tac
      >- (rpt strip_tac >> irule local_region_frame_fwd >>
@@ -108,8 +128,16 @@ Proof
      rpt strip_tac >> irule local_region_frame >> conj_tac
      >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sa`, `es'.scopes`, `t`] >> asm_rewrite_tac[]) >>
-  `locals_kept cenv es s0 t` by
+  `post_value_type cenv e <> expr_type e ==>
+   vv_own cenv cx (post_value_type cenv e) sa sn es' tv vv t` by
+    (strip_tac >> irule vv_own_vars_frame >> qexistsl_tac [`s`, `sm`] >>
+     simp[] >> rpt strip_tac >> irule local_region_frame >> conj_tac
+     >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl_tac [`sa`, `es'.scopes`, `t`] >> asm_rewrite_tac[]) >>
+  `locals_kept cenv es es' s0 t` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> asm_rewrite_tac[]) >>
+  `vv_storage_live cx vv es' s ==> vv_storage_live cx vv es' t` by
+    (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
   rpt strip_tac >> metis_tac[]
 QED

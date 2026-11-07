@@ -48,7 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  valueEncodingProps bodyAssignTupleOther
+  valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
@@ -218,7 +218,9 @@ Theorem lowered_value_type_not_call_word[local]:
            ~is_word_type (lowered_value_type cenv e)
 Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
-  rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def]
+  rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def] >>
+  simp[exprLoweringTheory.concat_buffer_type_def] >> rpt CASE_TAC >>
+  gvs[is_word_type_def]
 QED
 
 (* A supported reason is a string expression (supported_string_reason),
@@ -354,7 +356,7 @@ Theorem assert_reason_vv_sim[local]:
     ~supported_expr_exists
        (\e. ~is_extcode e /\
             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se /\
-    ~is_extcode se /\
+    ~is_extcode se /\ ~supported_expr_exists call_operands_effect_root se /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) se ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
     (do raw <- eval_expr cx e; read_result cx raw od) es =
@@ -368,7 +370,8 @@ Proof
   `body_expr_ok cx se` by metis_tac[] >>
   `expr_body_pre cenv cx env se es1` by
     (simp[expr_body_pre_def] >> gvs[expr_sim_pre_def] >>
-     CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
+     CCONTR_TAC >> gvs[] >>
+     qpat_x_assum `~supported_expr_exists (\e. ~is_extcode e /\ _) _` mp_tac >>
      simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
   metis_tac[body_expr_ok_def]
 QED
@@ -390,7 +393,8 @@ Proof
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
-  `~expr_has_evm_run se /\ ~is_extcode se` by
+  `~expr_has_evm_run se /\ ~is_extcode se /\
+   ~supported_expr_exists call_operands_effect_root se` by
     metis_tac[supported_string_reason_body_calls] >>
   `expr_body_pre cenv cx env e es` by
     (drule_then strip_assume_tac body_inv_cx_tops >>
@@ -431,7 +435,7 @@ Proof
   >~ [`reason_code_vv`]
   >- (rpt gen_tac >> strip_tac >> irule supported_reason_code >> simp[] >>
       metis_tac[])
-  >~ [`IS_SOME _`] >- (qexists_tac `env` >> gvs[]) >>
+  >~ [`IS_SOME (type_stmt _ _ _)`] >- (qexists_tac `env` >> gvs[]) >>
   metis_tac[]
 QED
 
@@ -1145,20 +1149,27 @@ Proof
   >- (simp[expr_type_def] >> metis_tac[storage_not_bytestring, is_bytestring_type_def])
   >- (rpt gen_tac >> strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+      simp[expr_body_pre_def, well_typed_expr_def, expr_type_def] >>
+      strip_tac >> gvs[expr_type_def] >>
+      drule storage_not_bytestring >>
+      gvs[well_typed_builtin_app_def, is_bytestring_type_def])
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
       gvs[expr_type_def] >>
       drule storage_not_bytestring >> simp[is_bytestring_type_def])
   >- (rpt gen_tac >> strip_tac >>
+      rename1 `Call ct (IntCall func_id) cargs cdflt` >>
       `supported_program tops /\
        cenv.ce_func_return_type = build_func_return_type tops /\
        get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-      `well_typed_expr env (Call v4 (IntCall func_id) v5 v6)` by
+      `well_typed_expr env (Call ct (IntCall func_id) cargs cdflt)` by
         gvs[expr_body_pre_def] >>
       qpat_x_assum `supported_expr _ _` mp_tac >>
       simp[supported_expr_def, supported_pure_expr_def,
            supported_effect_expr_def] >> strip_tac >>
-      Cases_on `v6` >> gvs[supported_effect_expr_def, optionTheory.IS_SOME_EXISTS] >>
+      Cases_on `cdflt` >> gvs[supported_effect_expr_def, optionTheory.IS_SOME_EXISTS] >>
       PairCases_on `x` >>
       `?sig. FLOOKUP env.fn_sigs func_id = SOME sig` by
         (Cases_on `func_id` >>
@@ -1171,7 +1182,7 @@ Proof
       simp[well_typed_expr_def, expr_type_def] >> strip_tac >>
       gvs[exprLoweringTheory.lowered_value_type_def, expr_type_def] >>
       gvs[supported_return_type_def, type_widens_to_def]
-      >- (Cases_on `v4` >> gvs[arg_type_fits_def]) >>
+      >- (Cases_on `ct` >> gvs[arg_type_fits_def]) >>
       metis_tac[storage_value_fit_equal]) >>
   simp[exprLoweringTheory.lowered_value_type_def]
 QED
@@ -1351,6 +1362,9 @@ Theorem body_assign_widened_aggregate_call:
    ty.
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+                (Assign (BaseTarget (NameTarget id)) e) ==>
+              occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
@@ -1366,7 +1380,40 @@ Theorem body_assign_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all body_assign_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields /\
+   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[body_inv_def, expr_sim_inv_def] >>
+  `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
+    (Cases_on `e` >>
+     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+  `expr_sim ctx func cenv cx (expr_type e) e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_assign_local_relayout_stmt_frag >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- fs[expr_sim_inv_def] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (irule memory_rhs_read_local_type >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_assum `FLOOKUP env.var_types id = SOME ty` (irule_at Any) >> simp[] >>
+      `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+      pop_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
+  irule annassign_relayout_read_layout >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem body_assign_case:
@@ -2192,6 +2239,8 @@ Proof
      gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def,
          int_calls_expr_def] >>
+     TRY (conj_tac >-
+          gvs[listTheory.EVERY_MEM, optionTheory.IS_SOME_EXISTS]) >>
      qexists_tac `[]` >> simp[]) >>
   `?v0. read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es)` by
     (irule exprSimTopLevelPropsTheory.toplevel_storage_read_decodes >>
@@ -2388,7 +2437,8 @@ Proof
   `!ty. expr_sim ctx func cenv cx ty e es /\
         expr_vv_sim ctx func cenv cx ty e es` by
     (gen_tac >>
-     qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
+     qpat_x_assum `body_expr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
      disch_then irule >> conj_tac
      >- (qexists_tac `tops` >> simp[]) >>
      qexists_tac `env` >> simp[]) >>
@@ -2431,7 +2481,8 @@ Proof
      irule stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
   `expr_sim ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim ctx func cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
+    (qpat_x_assum `body_expr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`,
                               `expr_type e`, `es`] mp_tac) >>
      simp[]) >>

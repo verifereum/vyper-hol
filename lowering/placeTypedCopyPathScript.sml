@@ -1,6 +1,6 @@
 Theory placeTypedCopyPath
 Ancestors
-  typedMemoryCopy fragGasSeq fragGasMode entryDecodeProps
+  typedMemoryCopy fragGasSeq fragGasMode entryDecodeProps exprSimProps
   exprLowering exprLoweringProps compileEnv loweringSlice emitHelper emitHelperProps
   valueEncoding valueEncodingProps context valueCopy venomExecSemantics fragGasPath
   venomState venomInst fragExec list rich_list arithmetic

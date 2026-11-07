@@ -40,7 +40,7 @@ Ancestors
   stateEquiv stateEquivProps
   execEquivParamBase execEquivParamProps
   finite_map worklistDefs worklistProps
-  list
+  list passSharedSubst
 Libs
   pairLib BasicProvers
 
@@ -596,7 +596,7 @@ Proof
   gvs[is_terminator_def, mk_nop_inst_def]
 QED
 
-Triviality sccp_inst_is_terminator[local]:
+Theorem sccp_inst_is_terminator:
   !st inst. is_terminator (sccp_inst st inst).inst_opcode =
             is_terminator inst.inst_opcode
 Proof
@@ -643,13 +643,6 @@ Proof
   rw[exec_read0_def]
 QED
 
-Triviality exec_gas_ops_irrel[local]:
-  !inst ops s.
-    exec_gas (inst with inst_operands := ops) s = exec_gas inst s
-Proof
-  rw[exec_gas_def]
-QED
-
 (* These opcodes never inspect operands. Cache just their proved dispatch
    equations; do not unfold the full semantics or use the global simpset. *)
 val ops_irrel_dispatch = let
@@ -657,7 +650,7 @@ val ops_irrel_dispatch = let
   fun key th = rhs (fst (dest_imp (concl (SPEC_ALL th))))
   val projection_ss = bool_ss ++ rewrites
     [instruction_accfupds, combinTheory.K_THM, exec_read0_ops_irrel,
-     exec_gas_ops_irrel]
+     exec_gas_inst_operands]
   fun selected opc =
     (opc, projection_ss ++ rewrites
       [valOf (List.find (fn th => aconv (key th) opc) rules)])
@@ -1312,28 +1305,6 @@ Proof
   \\ irule foldl_bottom_not_top \\ simp[FLOOKUP_UPDATE]
 QED
 
-Triviality sccp_terminator_opcode_cases[local]:
-  !op.
-    is_terminator op ==>
-    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
-    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
-    op = SELFDESTRUCT \/ op = INVALID \/ op = DRET \/ op = RETFMP
-Proof
-  Cases \\ gvs[is_terminator_def]
-QED
-
-(* Terminators don't modify sl_vals *)
-Triviality sccp_transfer_terminator_sl_vals[local]:
-  !fn inst lat.
-    is_terminator inst.inst_opcode ==>
-    (sccp_transfer_inst fn inst lat).sl_vals = lat.sl_vals
-Proof
-  rpt strip_tac
-  \\ drule sccp_terminator_opcode_cases \\ strip_tac
-  \\ gvs[sccp_transfer_inst_def]
-  \\ BasicProvers.EVERY_CASE_TAC \\ simp[]
-QED
-
 (* extract_labels ops = SOME labels means all ops are Labels, so
    FOLDR collecting Label destinations gives set labels *)
 Triviality extract_labels_el_in_foldr[local]:
@@ -1460,7 +1431,7 @@ Triviality sccp_fdom_terminator[local]:
     FLOOKUP (sccp_transfer_inst fn inst lat).sl_vals x <> SOME CL_Top
 Proof
   rpt gen_tac >> strip_tac >>
-  imp_res_tac sccp_transfer_terminator_sl_vals >>
+  imp_res_tac sccp_transfer_terminator_vals >>
   imp_res_tac step_terminator_preserves_vars >>
   `x IN FDOM s.vs_vars` by metis_tac[lookup_var_fdom_back] >>
   gvs[]
@@ -1962,7 +1933,7 @@ Proof
       `(sccp_transfer_inst f inst
           (df_at sccp_bottom result lbl idx)).sl_vals =
        (df_at sccp_bottom result lbl idx).sl_vals` by
-        metis_tac[sccp_transfer_terminator_sl_vals] >>
+        metis_tac[sccp_transfer_terminator_vals] >>
       `(df_at sccp_bottom result lbl (SUC ti)).sl_vals =
        (df_at sccp_bottom result lbl ti).sl_vals` by
         metis_tac[DECIDE ``SUC idx <= SUC idx``] >>
@@ -2678,7 +2649,7 @@ Proof
 QED
 
 (* PHI outputs get CL_Bottom in sccp_transfer_inst *)
-Triviality sccp_transfer_phi_bottom:
+Theorem sccp_transfer_phi_bottom:
   !f inst lat y.
     inst.inst_opcode = PHI /\ MEM y inst.inst_outputs ==>
     FLOOKUP (sccp_transfer_inst f inst lat).sl_vals y = SOME CL_Bottom

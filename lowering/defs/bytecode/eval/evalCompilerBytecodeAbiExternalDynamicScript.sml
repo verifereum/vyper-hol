@@ -179,6 +179,8 @@ val external_dynamic_context_safe_eval = EVAL
 val external_dynamic_assembly_safe_eval = EVAL
   ``assembly_target_safe (^external_dynamic_rpolicy).rpol_target
       ^external_dynamic_raw_asm``
+val external_dynamic_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^external_dynamic_raw_asm``
 val external_dynamic_codegen_step1 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def,
    external_dynamic_target_wf_eval,
@@ -190,9 +192,9 @@ val external_dynamic_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^external_dynamic_rpolicy ^external_dynamic_unit``
 val external_dynamic_codegen_step2 = SIMP_CONV pure_ss
   [external_dynamic_execute_context_eval,
-   external_dynamic_data_asm_eval,
    external_dynamic_raw_asm_eval,
-   external_dynamic_assembly_safe_eval]
+   external_dynamic_assembly_safe_eval,
+   external_dynamic_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl external_dynamic_codegen_step1))
 val external_dynamic_codegen_step3 =
   EVAL (rhs (concl external_dynamic_codegen_step2))

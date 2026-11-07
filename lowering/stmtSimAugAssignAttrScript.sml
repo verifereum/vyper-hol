@@ -62,7 +62,7 @@ Proof
   >- (disj1_tac >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       simp[gas_summary_at_def, gas_marked_exec_def,
-           expr_post_def, locals_kept_def]) >>
+           expr_post_def, locals_kept_def, popped_kept_def]) >>
   disj2_tac >> drule gas_exempt_cert_start_gas_obs >>
   disch_then (qspec_then `gs` mp_tac) >> simp[] >> metis_tac[]
 QED
@@ -734,6 +734,9 @@ Proof
     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >> strip_tac >>
   qpat_x_assum `!tv. INL v = INL tv ==> _` (qspec_then `v` mp_tac) >>
   simp[] >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     metis_tac[word_value_type_word]) >>
   irule expr_val_rel_word >> simp[] >>
   qexistsl_tac [`cx`, `expr_type e`] >>
   fs[expr_post_def, word_value_type_word]

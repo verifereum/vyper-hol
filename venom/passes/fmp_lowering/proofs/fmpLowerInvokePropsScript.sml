@@ -2,7 +2,7 @@ Theory fmpLowerInvokeProps
 Ancestors
   fmpLowerDefs
   fmpLowerProps
-  fcgBridge
+  fcgBridge venomInst
 
 Theorem fmp_lower_insts_invokes:
   fmp_lower_insts infos ctx runner s insts = SOME (out,s') /\
@@ -124,15 +124,6 @@ Proof
   >> metis_tac[]
 QED
 
-
-Theorem fmp_fn_insts_blocks_intro:
-  MEM bb blocks /\ MEM inst bb.bb_instructions ==>
-  MEM inst (fn_insts_blocks blocks)
-Proof
-  Induct_on `blocks`
-  >> simp[venomInstTheory.fn_insts_blocks_def]
-  >> metis_tac[]
-QED
 
 Theorem fmp_lower_function_invokes:
   fmp_lower_function ctx s fn = SOME (fn',s') /\
