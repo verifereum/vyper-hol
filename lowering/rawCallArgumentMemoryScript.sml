@@ -100,6 +100,7 @@ Theorem raw_call_kwargs_sim_mem:
   gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx es) (st,s0)
     (\rr ee s. ?xs vs. rr = INL vs /\
       typed_args_post ctx func cenv cx st sa s0 ee es xs vs s /\
+      lower_word_args cenv (K (BaseT (UintT 256))) es sa = (xs,sb) /\
       vo = ext_call_kwarg EKValue ks xs /\
       go = ext_call_kwarg EKGas ks xs /\ d = NONE /\
       s.vs_current_bb = sb.cs_current_bb /\
@@ -127,6 +128,7 @@ Theorem raw_call_kwargs_mem_bind:
   (!gs vs ee t xs.
     eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\ ee.gas_obs = [] /\
     typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
+    lower_word_args cenv (K (BaseT (UintT 256))) args sa = (xs,sb) /\
     vo = ext_call_kwarg EKValue ks xs /\ go = ext_call_kwarg EKGas ks xs /\ d = NONE /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\

@@ -2040,7 +2040,7 @@ Resume raw_call_prefix_sim[kwargs_run]:
 QED
 
 *)
-Theorem raw_call_kwarg_mem[local]:
+Theorem raw_call_kwarg_mem:
   !ks (ops : operand list) g.
     ext_call_kwarg key ks ops = SOME g ==> MEM g ops
 Proof
