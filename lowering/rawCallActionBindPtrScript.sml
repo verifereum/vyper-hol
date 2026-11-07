@@ -243,3 +243,180 @@ Resume raw_call_scalar_action_outcome[finish]:
 QED
 
 Finalise raw_call_scalar_action_outcome
+
+(* Capacity-independent adapter: consumers need no source observation witnesses. *)
+Theorem raw_call_prepared_prefix_sim_ptr:
+  body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  gas_admissible (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) expr_vv_res_ok es /\
+  gas_admissible (eval_exprs cx (a::d::kws))
+    (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es /\
+  raw_call_kws_ok flags kws /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len_op,sl) /\
+  emit_op ADD [data; Lit 32w] sl = (data_op,sm) /\
+  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws sm = ((vo,go,ig),s5) /\
+  (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas_op,s6) /\
+  fn_has_code sa s6 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  ghost_inv dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_exprs cx (a::d::kws)) (es,s0,G0,tn0)
+    (\rr ee G tn t. ?av bs kvs xs ea ed ta tb th b x base sz t5 gasw aw amount lim.
+      rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
+      expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
+      expr_post ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
+      typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
+      vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
+      go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
+      EVERY (\op. op_taint tn op = {}) xs /\
+      EVERY (\op. !l. op <> Label l) xs /\
+      EVERY (\op. !v. op = Var v ==> not_fresh_at s6 v) xs /\
+      stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
+      wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
+      ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+      t.vs_current_bb = s6.cs_current_bb /\
+      t.vs_inst_idx = LENGTH s6.cs_current_insts /\ ~t.vs_halted /\
+      expr_val_rel cx (BaseT AddressT) av addr t /\ op_taint tn addr = {} /\
+      eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
+      eval_operand data_op t = SOME (n2w (b+32)) /\
+      op_taint tn len_op = {} /\ op_taint tn data_op = {} /\
+      data = Var x /\ eval_operand data t = SOME (n2w b) /\
+      FLOOKUP G x = SOME (base,sz) /\ op_prov G data_op = SOME (base,sz) /\ base <= b /\
+      b + 32 + LENGTH bs <= base + sz /\ b < dimword (:256) /\
+      (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
+      mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+      (!v. addr = Var v \/ data = Var v \/ len_op = Var v \/ data_op = Var v ==>
+        not_fresh_at s6 v) /\
+      (!g. go = SOME g ==> eval_operand g t5 = SOME gasw) /\
+      eval_operand gas_op t = SOME (case go of SOME g => gasw
+        | NONE => case t5.vs_gas_readings of [] => 0w | r::rs => r) /\
+      op_taint tn gas_op = {} /\
+      t.vs_gas_readings = (case go of SOME g => t5.vs_gas_readings
+        | NONE => TL t5.vs_gas_readings) /\
+      expr_val_at cenv cx (expr_type d) s1 s6 ee (BytesV bs) data t /\
+      dest_AddressV av = SOME (w2w aw) /\ eval_operand addr t = SOME aw /\
+      raw_call_value flags.rcf_kws kvs = SOME amount /\ LENGTH kvs = LENGTH flags.rcf_kws /\
+      amount < dimword(:256) /\ (flags.rcf_is_static ==> amount = 0) /\
+      eval_operand (case vo of NONE => Lit 0w | SOME v => v) t = SOME (n2w amount) /\
+      gas_admissible (eval_raw_call cx flags (w2w aw) bs amount
+        (forwarded_gas default_evm_gas_limit (ext_call_kwarg EKGas flags.rcf_kws kvs))) expr_vv_res_ok ee /\
+      expr_type d = BaseT (BytesT (Dynamic lim)) /\
+      evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic lim))) = SOME (BaseTV (BytesT (Dynamic lim))) /\
+      b+32 < dimword(:256) /\ LENGTH bs < dimword(:256) /\
+      local_ptrs_reserved cenv s6 /\
+      (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s6 z) /\
+      (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s6 z) /\
+      EVERY (\arg. (!z. arg = Var z ==> not_fresh_at s6 z) /\
+        (!l. arg <> Label l) /\ op_taint tn arg = {})
+        (if flags.rcf_is_static then [gas_op;addr;data_op;len_op]
+         else [gas_op;addr;(case vo of NONE => Lit 0w | SOME v => v);data_op;len_op]))
+    (\rr ee gt r. wb_args_exit rr r)
+Proof
+  strip_tac >> drule_all rawCallPrefixPtrTheory.raw_call_prefix_sim_ptr >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  goal_assum (drule_at Any) >> simp[] >> suspend "normal"
+QED
+
+Resume raw_call_prepared_prefix_sim_ptr[normal]:
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  drule_all raw_call_prefix_address >> strip_tac >>
+  `eval_exprs cx (a::d::kws)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+      (INL (av::BytesV bs::kvs),mid with gas_obs := [])` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     qpat_x_assum `!tail. eval_exprs _ _ _ = _`
+       (qspec_then `[]` mp_tac) >> simp[]) >>
+  `expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_at (Pat `eval_exprs _ _ _ = _`) raw_call_prefix_amount >>
+  disch_then drule_all >> strip_tac >>
+  drule_all raw_call_marked_continuation_admissible >> disch_tac >>
+  suspend "ready"
+QED
+
+Resume raw_call_prepared_prefix_sim_ptr[ready]:
+  drule rawCallShapePtrTheory.raw_call_pre_operands >> simp[] >> strip_tac >>
+  drule_all raw_call_prefix_data_type >> disch_tac >>
+  `expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) s1 s6
+      (mid with gas_obs := []) (BytesV bs) (Var x) t` by metis_tac[] >>
+  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by simp[] >>
+  drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) raw_call_prefix_data_word_bounds >>
+  disch_then drule_all >> strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sl /\ ci_mono sl sm` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_cfn,
+      exprLoweringPropsTheory.compile_expr_ci_mono, pairTheory.SND,
+      exprLoweringPropsTheory.ci_mono_emit_op] >>
+  drule rawCallShapePtrTheory.raw_call_kwargs_types >> strip_tac >>
+  `LENGTH kws = LENGTH flags.rcf_kws` by
+    fs[vyperTypeSystemTheory.raw_call_kws_ok_def, listTheory.LENGTH_MAP] >>
+  drule_all rawCallShapePtrTheory.raw_call_kwargs_word_args >> strip_tac >>
+  `!e ee. MEM e kws /\ expr_sim_inv cenv cx env ee ==>
+      expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)` by
+    (rpt strip_tac
+     >- (irule rawCallShapePtrTheory.expr_body_pre_raw_call_arg >>
+         first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+     fs[listTheory.EVERY_MEM, compileEnvTheory.is_word_type_def]) >>
+  `wb_args_shape cenv (K (BaseT (UintT 256))) kws` by
+    (irule exprSimPrecompilesTheory.typed_stack_args_shape >> metis_tac[]) >>
+  drule_all exprSimWordArgsTheory.lower_word_args_shape_ready >> strip_tac >>
+  `ci_mono s5 s6` by
+    (Cases_on `ext_call_kwarg EKGas flags.rcf_kws xs` >> gvs[] >>
+     metis_tac[exprLoweringPropsTheory.ci_mono_emit_op, pairTheory.SND,
+       exprLoweringPropsTheory.ci_mono_refl]) >>
+  `sa.cs_next_var <= s6.cs_next_var` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `local_ptrs_reserved cenv s6` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s6 z) /\
+   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s6 z)` by
+    metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >> suspend "checks"
+QED
+
+Resume raw_call_prepared_prefix_sim_ptr[checks]:
+  `expr_sim_inv cenv cx env es` by fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  `expr_body_pre cenv cx env a es` by
+    (irule rawCallShapePtrTheory.expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+     simp[exprSimHypsDefsTheory.expr_body_pre_def]) >>
+  `is_word_type (expr_type a)` by simp[compileEnvTheory.is_word_type_def] >>
+  `!l. addr <> Label l` by
+    (drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >>
+     simp[compileEnvTheory.is_word_type_def]) >>
+  `(!l. len_op <> Label l) /\ (!l. data_op <> Label l)` by
+    (map_every (fn pat => qpat_x_assum pat mp_tac)
+       [`emit_op ADD _ _ = _`, `emit_op MLOAD _ _ = _`] >>
+     simp[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
+       compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
+       compileEnvTheory.comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  `EVERY (\op. (!z. op = Var z ==> not_fresh_at s6 z) /\
+      (!l. op <> Label l) /\ op_taint tn op = {}) xs` by
+    (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `(!z. (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME op => op) = Var z ==> not_fresh_at s6 z) /\
+   (!l. (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME op => op) <> Label l) /\
+   op_taint tn (case ext_call_kwarg EKValue flags.rcf_kws xs of
+      NONE => Lit 0w | SOME op => op) = {}` by
+    (irule raw_call_selected_operand_checks >> goal_assum (drule_at Any)) >>
+  drule raw_call_optional_gas_operand_checks >>
+  disch_then (qspecl_then [`xs'`, `flags.rcf_kws`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >> suspend "post"
+QED
+
+Resume raw_call_prepared_prefix_sim_ptr[post]:
+  qexistsl_tac [`xs`, `ea`, `ed`, `ta`, `tb`, `th`, `b`, `t5`, `gasw`, `n`] >>
+  gvs[] >> Cases_on `flags.rcf_is_static` >> gvs[] >> metis_tac[]
+QED
+
+Finalise raw_call_prepared_prefix_sim_ptr
