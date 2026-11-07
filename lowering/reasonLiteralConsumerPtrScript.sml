@@ -83,8 +83,8 @@ QED
 
 Theorem compile_literal_revert_path_ptr:
   compile_bytelike_literal bs mx sa = (buf,sm) /\ LENGTH bs <= mx /\
-  compile_revert_with_reason cenv (LocatedValue (BaseT (StringT mx)) (base_ptr buf))
-    mt ms sm = ((),sb) /\
+  compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
+    mt ms sm = ((),sb) /\ ~is_word_type msg_ty /\
   fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
   stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
@@ -104,7 +104,7 @@ Proof
   `?z Gh th. gas_path_ptr D 0 ctx fn PG Gf tnf u 0 Gh th (Abort Revert_abort z)` by
     (irule compile_revert_reason_memory_path_ptr >> simp[Abbr `u`] >>
      goal_assum (drule_at (Pat `compile_revert_with_reason _ _ _ _ _ = _`)) >>
-     qexistsl [`n2w b`,`LENGTH bs`,`cx`,`es`,`base_ptr buf`,`p`,`BaseT (StringT mx)`] >>
+     qexistsl [`n2w b`,`LENGTH bs`,`cx`,`es`,`base_ptr buf`,`p`,`msg_ty`] >>
      `b < dimword(:256)` by decide_tac >>
      simp[base_ptr_def, is_word_type_def, w2n_n2w, ADD_COMM,
           stmt_state_rel_inst_idx] >>
