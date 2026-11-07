@@ -156,7 +156,7 @@ Proof
   `expr_val_rel cx (expr_type src) (BytesV bs) src_op s2` by
     (irule log_argument_value_kept >>
      conj_tac >- simp[] >>
-     qexistsl [`cenv`,`es1`,`s1`,`sa`,`sm`] >> simp[] >>
+     qexistsl [`cenv`,`es2`,`es1`,`s1`,`sa`,`sm`] >> simp[] >>
      conj_tac >- (simp[] >> irule log_arg_clear_base >> metis_tac[]) >>
      conj_tac >- gvs[expr_post_def] >>
      conj_tac >- metis_tac[expr_post_frame] >>
