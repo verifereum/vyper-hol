@@ -1,6 +1,7 @@
 Theory concretizeLayoutPhaseTrace
 Ancestors concretizeLayoutPhaseOrigin frameJointTrace frameResolvedTrace
-  frameActivationLifetime frameJointTransition frameOriginCache frameOriginUpdates list
+  frameActivationLifetime frameJointTransition frameOriginCache frameOriginUpdates
+  frameResolvedCoherent list
 
 Theorem layout_ordinary_trace_advance:
   layout_ordinary_trace vs0 C q0 es qs q g s /\ ~g.lop_pending /\
@@ -105,6 +106,11 @@ Theorem layout_returncopy_trace_step:
   get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
   step_inst fuel C inst s = OK post /\ post.vs_inst_idx = s.vs_inst_idx ==>
   ?k tpost. step_inst_base inst t = OK tpost /\
+    k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q (INL g) (INL k)
       (OK post) (OK tpost)
 Proof
@@ -118,7 +124,11 @@ Proof
   `inst.inst_opcode <> DALLOCA` by simp[] >>
   drule_all layout_no_output_trace_advance >> strip_tac >>
   drule_all layout_returncopy_pending_adapter >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  qexistsl_tac [`k with lop_target_taint := step_taint inst t tpost g.lop_target_taint`,
+    `tpost`] >> simp[] >>
+  conj_tac >- gvs[layout_ordinary_trace_def] >>
+  simp[Once resolved_annotation_update_cases, origin_set_def,
+    finite_mapTheory.DRESTRICT_UNIV]
 QED
 
 val _ = export_theory();
