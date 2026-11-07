@@ -3,7 +3,86 @@
  *)
 Theory concretizePtrByteStoreFamily
 Ancestors
-  concretizePtrStorageReadProducer
+  concretizePtrStorageReadProducer ptrDiscipline concretizePtrRequestHistory
+  concretizePtrTaintContent concretizePtrOpaqueRetpc concretizePtrSharedFields
+  venomExecSemantics venomState finite_map concretizePtrStoreSteps
+  venomMemProps regularCallEmitSim pointerConfinedDefs memLocDefs
+
+Theorem ptr_byte_store_mstore8_operands_untainted:
+  taint_ok fn tn inst s /\ inst.inst_opcode = MSTORE8 ==>
+  !op. MEM op inst.inst_operands ==> op_taint tn op = {}
+Proof
+  strip_tac >> gvs[taint_ok_def] >> metis_tac[]
+QED
+
+Theorem ptr_byte_store_history_istore:
+  ptr_history_content tn s t /\ word_agree_except m u v ==>
+  ptr_history_content (tn with t_imm := key_update tn.t_imm k m)
+    (istore k u s) (istore k v t)
+Proof
+  simp[ptr_history_content_def, ptr_taint_content_def,
+    ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def,
+    istore_def, mstore_def, contract_storage_def, contract_transient_def] >>
+  rpt strip_tac >> gvs[FLOOKUP_UPDATE, key_update_def] >>
+  Cases_on `k = k'` >> gvs[]
+QED
+
+Theorem ptr_byte_store_istore_operands_no_provenance:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ISTORE /\
+  (!x. x IN FDOM TG ==> x IN fn_pv P fn) /\
+  MEM op inst.inst_operands ==> op_prov TG op = NONE
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) inst.inst_operands ==> v NOTIN fn_pv P fn` by
+    (gvs[fn_ptr_ok_def] >> metis_tac[]) >>
+  Cases_on `op` >> gvs[op_prov_def] >> metis_tac[flookup_thm]
+QED
+
+Theorem ptr_byte_store_mstore8_history:
+  ptr_history_content tn s t ==>
+  ptr_history_content tn (mstore8 off u s) (mstore8 offt v t)
+Proof
+  simp[ptr_history_content_def, ptr_taint_content_def,
+    ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def,
+    mstore8_def, contract_storage_def, contract_transient_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem ptr_byte_store_mstore8_written_byte:
+  (w2w u : word8) = w2w v ==>
+  read_byte off (mstore8 off u s).vs_memory =
+  read_byte offt (mstore8 offt v t).vs_memory
+Proof
+  simp[mstore8_eq_write_mem, read_byte_write_memory_with_expansion]
+QED
+
+Theorem ptr_byte_store_istore_written_bytes:
+  k < 32 /\ EL k (word_to_bytes u T) = EL k (word_to_bytes v T) ==>
+  read_byte (off + k) (istore off u s).vs_memory =
+  read_byte (offt + k) (istore offt v t).vs_memory
+Proof
+  strip_tac >> rewrite_tac[istore_memory] >>
+  irule ptr_mstore_written_bytes >> simp[]
+QED
+
+Theorem ptr_byte_store_mstore8_value_no_provenance:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = MSTORE8 /\ inst.inst_operands = [a;v] /\
+  (!x. x IN FDOM TG ==> x IN fn_pv P fn) ==>
+  op_prov TG v = NONE
+Proof
+  strip_tac >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (gvs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `!x. v = Var x ==> x NOTIN fn_pv P fn` by
+    (rpt strip_tac >>
+     gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
+       mem_write_ops_def, mem_read_ops_def] >>
+     first_x_assum (qspec_then `x` mp_tac) >> simp[] >>
+     strip_tac >> gvs[] >> strip_tac >> gvs[]) >>
+  Cases_on `v` >> gvs[op_prov_def] >> metis_tac[flookup_thm]
+QED
 
 Theorem ptr_paired_byte_store_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
