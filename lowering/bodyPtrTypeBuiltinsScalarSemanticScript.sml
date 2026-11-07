@@ -6,7 +6,7 @@ Ancestors exprSimConvert exprLowering exprLoweringProps exprSimDefs
   bodyPtrTypeBuiltinsUintClampSemantics venomState fragExec words arithmetic
   bodyPtrTypeBuiltinsScalarChecks varsExt emitHelper emitHelperProps rich_list
   venomInst list freshWrites exprSimHypsDefs finite_map convertScalarBytesRun
-  convertScalarEncoding byte
+  convertScalarEncoding byte bodyPtrTypeBuiltinsScalarArithmetic
 
 (* Unlike scalar_conversion_word_types this includes int_convert_pair and
    derives the non-bytestring destination from valid_conversion itself. *)
@@ -337,4 +337,84 @@ Proof
       fs[typed_val_to_w256_def]) >>
   irule (Q.SPEC `F` scalar_bytes_int_run_abort) >>
   simp[] >> qexistsl_tac [`b`,`bs`,`r`,`x`] >> fs[typed_val_to_w256_def]
+QED
+
+Theorem scalar_fixed_int_replay:
+  compile_type_convert x (ConvBytesToInt m sg b) sa = (r,sb) ==>
+  vars_ext_result
+    (run_inst_seq (emitted_insts sa sb) (drop_fresh sa ss))
+    (run_inst_seq (emitted_insts sa sb) ss)
+Proof
+  strip_tac >> irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+  Cases_on `sg` >> Cases_on `m*8 > b` >>
+  gvs[compile_type_convert_def, compile_int_clamp_def,
+      emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  simp[emitted_insts_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def, is_ext_call_op_def]
+QED
+
+Theorem scalar_fixed_int_actual_semantic:
+  LENGTH bs = m /\ 0 < m /\ m <= 32 /\
+  0 < b /\ (sg ==> 1 < b) /\ b <= 256 /\
+  compile_type_convert x (ConvBytesToInt m sg b) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x ss = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs)) ==>
+  case convert_result cx (BaseT (BytesT (Fixed m)))
+    (BaseT (if sg then IntT b else UintT b)) (BytesV bs) of
+    INL out => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME
+        (typed_val_to_w256 (BaseTV (if sg then IntT b else UintT b)) out) /\
+      (sf with vs_vars := ss.vs_vars) = ss /\
+      (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+  | INR ex => (?msg. ex = Error (RuntimeError msg)) /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  strip_tac >>
+  `fresh_vars_wrt sa (drop_fresh sa ss)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `eval_operand x (drop_fresh sa ss) =
+    SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))` by
+    simp[eval_operand_drop_fresh] >>
+  drule_all scalar_fixed_int_raw_semantic >>
+  disch_then (qspec_then `cx` mp_tac) >>
+  Cases_on `convert_result cx (BaseT (BytesT (Fixed m)))
+    (BaseT (if sg then IntT b else UintT b)) (BytesV bs)` >> simp[] >> strip_tac >>
+  drule scalar_fixed_int_replay >> disch_then (qspec_then `ss` mp_tac) >>
+  simp[vars_ext_result_def] >> strip_tac >> gvs[]
+  >- (rename1 `run_inst_seq (emitted_insts sa sb) ss = OK actual` >>
+      conj_tac
+      >- (fs[vars_ext_def] >>
+          qpat_x_assum `actual = _ with vs_vars := _` SUBST1_TAC >>
+          simp[eval_operand_vars_ext]) >>
+      irule convert_bytes_int_runtime_frame >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any)) >>
+  simp[]
+QED
+
+Theorem scalar_fixed_int_typed_actual:
+  0 < m /\ evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
+  evaluate_type (get_tenv cx) (BaseT (if sg then IntT b else UintT b)) = SOME tout /\
+  value_has_type tv v /\
+  compile_type_convert x (mk_convert_op (BaseT (BytesT (Fixed m)))
+    (BaseT (if sg then IntT b else UintT b))) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x ss = SOME (typed_val_to_w256 tv v) ==>
+  case convert_result cx (BaseT (BytesT (Fixed m)))
+    (BaseT (if sg then IntT b else UintT b)) v of
+    INL out => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME (typed_val_to_w256 tout out) /\
+      (sf with vs_vars := ss.vs_vars) = ss /\
+      (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+  | INR ex => (?msg. ex = Error (RuntimeError msg)) /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  Cases_on `sg` >>
+  simp[vyperValueTheory.evaluate_type_def] >> strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def, AllCaseEqs(), mk_convert_op_def,
+    is_bytestring_type_def, type_bits_def, type_bounds_def, is_signed_type_def]
+  >- (irule (SRULE [] (Q.INST [`sg` |-> `T`] scalar_fixed_int_actual_semantic)) >>
+      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  irule (SRULE [] (Q.INST [`sg` |-> `F`] scalar_fixed_int_actual_semantic)) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[]
 QED
