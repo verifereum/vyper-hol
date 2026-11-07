@@ -29,6 +29,7 @@ Theory exprSimPopImmutableTarget
 Ancestors
   compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr
   abiEncoderMemory immutableValue immutableEncoding ctorDeployLoweringNoCtor
+  ctorDeployDeadSectionRel
   exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode
   exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort
   exprOperandVar exprSimWordArgs exprBopSimProps
@@ -2523,6 +2524,195 @@ Proof
   simp[immutable_value_bytes_rel_def, immutable_value_mask_def,
        valueEncodingTheory.type_memory_size_def, encode_immutable_value_def,
        valueEncodingTheory.mem_bytes_at_def]
+QED
+
+Theorem immutable_base_default_memory_bytes[local]:
+  !bt base mem.
+    val_in_memory (BaseTV bt) (default_value (BaseTV bt)) base mem ==>
+    immutable_value_bytes_rel (BaseTV bt) (default_value (BaseTV bt))
+      (mem_bytes_at base (type_memory_size (BaseTV bt)) mem)
+Proof
+  rpt gen_tac >>
+  Cases_on `immutable_value_admissible (BaseTV bt) (default_value (BaseTV bt))`
+  >- metis_tac[immutable_base_memory_bytes] >>
+  Cases_on `bt` >>
+  gvs[immutable_value_admissible_def, vyperValueTheory.default_value_def,
+      valueEncodingTheory.val_in_memory_def,
+      immutable_value_bytes_rel_def, immutable_value_mask_def,
+      encode_immutable_value_def, immutable_word_bytes_def,
+      valueEncodingTheory.type_memory_size_def,
+      valueEncodingTheory.typed_val_to_w256_def,
+      abi_encoder_word_window, immutable_mask_fit_def, immutable_fit_def,
+      rich_listTheory.TAKE_APPEND, byteTheory.LENGTH_word_to_bytes,
+      listTheory.TAKE_LENGTH_TOO_LONG, immutable_mask_same_bytes] >>
+  Cases_on `b` >>
+  gvs[immutable_value_admissible_def, vyperValueTheory.default_value_def,
+      valueEncodingTheory.val_in_memory_def,
+      valueEncodingTheory.type_memory_size_def,
+      valueEncodingTheory.typed_val_to_w256_def,
+      abi_encoder_word_window, immutable_mask_fit_def, immutable_fit_def,
+      rich_listTheory.TAKE_APPEND, byteTheory.LENGTH_word_to_bytes,
+      listTheory.TAKE_LENGTH_TOO_LONG, immutable_mask_same_bytes]
+QED
+
+Theorem immutable_masked_append[local]:
+  !mask1 mask2 actual1 actual2 expected1 expected2.
+    LENGTH mask1 = LENGTH actual1 /\ LENGTH actual1 = LENGTH expected1 /\
+    LENGTH mask2 = LENGTH actual2 /\ LENGTH actual2 = LENGTH expected2 ==>
+    (EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (mask1 ++ mask2, ZIP (actual1 ++ actual2, expected1 ++ expected2))) <=>
+     EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (mask1, ZIP (actual1, expected1))) /\
+     EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (mask2, ZIP (actual2, expected2))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[GSYM rich_listTheory.ZIP_APPEND]
+QED
+
+Theorem immutable_masked_memory_append[local]:
+  !mask1 mask2 expected1 expected2 base mem.
+    LENGTH mask1 = LENGTH expected1 /\ LENGTH mask2 = LENGTH expected2 ==>
+    (EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (mask1 ++ mask2,
+            ZIP (mem_bytes_at base (LENGTH expected1 + LENGTH expected2) mem,
+                 expected1 ++ expected2))) <=>
+     EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (mask1, ZIP (mem_bytes_at base (LENGTH expected1) mem, expected1))) /\
+     EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (mask2, ZIP (mem_bytes_at (base + LENGTH expected1)
+                          (LENGTH expected2) mem, expected2))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[abi_encoder_mem_split] >>
+  irule immutable_masked_append >> simp[]
+QED
+
+Theorem immutable_tuple_cons_memory_bytes[local]:
+  !tv tvs v vs base mem.
+    immutable_value_bytes_rel tv v (mem_bytes_at base (type_memory_size tv) mem) /\
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_tuple_mask tvs vs,
+            ZIP (mem_bytes_at (base + type_memory_size tv) (type_memory_size_list tvs) mem,
+                 encode_immutable_tuple tvs vs))) ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_tuple_mask (tv::tvs) (v::vs),
+            ZIP (mem_bytes_at base (type_memory_size_list (tv::tvs)) mem,
+                 encode_immutable_tuple (tv::tvs) (v::vs))))
+Proof
+  map_every qx_gen_tac [`tv`, `tvs`, `v`, `vs`, `off`, `mem`] >>
+  qspecl_then [`immutable_value_mask tv v`, `immutable_tuple_mask tvs vs`,
+               `encode_immutable_value tv v`, `encode_immutable_tuple tvs vs`]
+    mp_tac immutable_masked_memory_append >>
+  simp[ctorDeployDeadSectionRelTheory.section_tuple_mask_length,
+       immutableEncodingProofsTheory.immutable_tuple_length] >>
+  disch_then (qspec_then `off` (qspec_then `mem` assume_tac)) >>
+  simp[Once immutable_value_mask_def, Once encode_immutable_value_def,
+       valueEncodingTheory.type_memory_size_def, immutable_value_bytes_rel_def]
+QED
+
+Theorem immutable_tuple_memory_bytes[local]:
+  !tvs vs off mem.
+    (!tv. MEM tv tvs ==> !v base memory.
+       (immutable_value_admissible tv v \/ v = default_value tv) /\
+       val_in_memory tv v base memory ==>
+       immutable_value_bytes_rel tv v (mem_bytes_at base (type_memory_size tv) memory)) /\
+    (immutable_tuple_admissible tvs vs \/ vs = MAP default_value tvs) /\
+    tuple_in_memory vs tvs off mem ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_tuple_mask tvs vs,
+            ZIP (mem_bytes_at off (type_memory_size_list tvs) mem,
+                 encode_immutable_tuple tvs vs)))
+Proof
+  Induct >- simp[immutable_value_mask_def, valueEncodingTheory.type_memory_size_def,
+                encode_immutable_value_def, valueEncodingTheory.mem_bytes_at_def] >>
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  drule ctorDeployDeadSectionRelTheory.section_tuple_cons_valid >>
+  strip_tac >> gvs[valueEncodingTheory.val_in_memory_def] >>
+  irule immutable_tuple_cons_memory_bytes >> conj_tac
+  >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem immutable_fields_cons_memory_bytes[local]:
+  !name tv fields v vs base mem.
+    immutable_value_bytes_rel tv v (mem_bytes_at base (type_memory_size tv) mem) /\
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_fields_mask fields vs,
+            ZIP (mem_bytes_at (base + type_memory_size tv) (type_memory_size_fields fields) mem,
+                 encode_immutable_fields fields vs))) ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_fields_mask ((name,tv)::fields) ((name,v)::vs),
+            ZIP (mem_bytes_at base (type_memory_size_fields ((name,tv)::fields)) mem,
+                 encode_immutable_fields ((name,tv)::fields) ((name,v)::vs))))
+Proof
+  map_every qx_gen_tac [`name`, `tv`, `fields`, `v`, `vs`, `off`, `mem`] >>
+  qspecl_then [`immutable_value_mask tv v`, `immutable_fields_mask fields vs`,
+               `encode_immutable_value tv v`, `encode_immutable_fields fields vs`]
+    mp_tac immutable_masked_memory_append >>
+  simp[ctorDeployDeadSectionRelTheory.section_fields_mask_length,
+       immutableEncodingProofsTheory.immutable_fields_length] >>
+  disch_then (qspec_then `off` (qspec_then `mem` assume_tac)) >>
+  simp[Once immutable_value_mask_def, Once encode_immutable_value_def,
+       valueEncodingTheory.type_memory_size_def, immutable_value_bytes_rel_def]
+QED
+
+Theorem immutable_fields_memory_bytes[local]:
+  !fields vs off mem.
+    (!tv. MEM tv (MAP SND fields) ==> !v base memory.
+       (immutable_value_admissible tv v \/ v = default_value tv) /\
+       val_in_memory tv v base memory ==>
+       immutable_value_bytes_rel tv v (mem_bytes_at base (type_memory_size tv) memory)) /\
+    (immutable_fields_admissible fields vs \/
+      vs = MAP (\(id,t). (id,default_value t)) fields) /\
+    fields_in_memory vs fields off mem ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (immutable_fields_mask fields vs,
+            ZIP (mem_bytes_at off (type_memory_size_fields fields) mem,
+                 encode_immutable_fields fields vs)))
+Proof
+  Induct >- simp[immutable_value_mask_def, valueEncodingTheory.type_memory_size_def,
+                encode_immutable_value_def, valueEncodingTheory.mem_bytes_at_def] >>
+  qx_gen_tac `entry` >> PairCases_on `entry` >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  drule ctorDeployDeadSectionRelTheory.section_fields_cons_valid >>
+  strip_tac >> gvs[valueEncodingTheory.val_in_memory_def] >>
+  irule immutable_fields_cons_memory_bytes >> conj_tac
+  >- (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem immutable_elems_mask_length[local]:
+  !vs tv. LENGTH (FLAT (MAP (immutable_value_mask tv) vs)) =
+    LENGTH vs * type_memory_size tv
+Proof
+  Induct >> simp[arithmeticTheory.MULT_CLAUSES]
+QED
+
+Theorem immutable_elems_memory_bytes[local]:
+  !vs tv off mem.
+    (!v. MEM v vs ==> !base memory.
+      val_in_memory tv v base memory ==>
+      immutable_value_bytes_rel tv v
+        (mem_bytes_at base (type_memory_size tv) memory)) /\
+    elems_in_memory vs off tv mem ==>
+    EVERY (\(used,(actual,expected)). used ==> actual = expected)
+      (ZIP (FLAT (MAP (immutable_value_mask tv) vs),
+            ZIP (mem_bytes_at off (LENGTH vs * type_memory_size tv) mem,
+                 FLAT (MAP (encode_immutable_value tv) vs))))
+Proof
+  Induct >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  map_every qx_gen_tac [`head`, `tv`, `off`, `mem`] >> strip_tac >>
+  qspecl_then [`immutable_value_mask tv head`, `FLAT (MAP (immutable_value_mask tv) vs)`,
+               `encode_immutable_value tv head`, `FLAT (MAP (encode_immutable_value tv) vs)`]
+    mp_tac immutable_masked_memory_append >>
+  simp[immutable_elems_mask_length, immutableEncodingProofsTheory.immutable_flat_map_length] >>
+  disch_then (qspec_then `off` (qspec_then `mem` assume_tac)) >>
+  gvs[valueEncodingTheory.val_in_memory_def] >>
+  simp[arithmeticTheory.MULT_CLAUSES, immutable_value_bytes_rel_def] >>
+  qpat_x_assum `!v. v = head \/ _ ==> _` (qspec_then `head` mp_tac) >>
+  simp[immutable_value_bytes_rel_def]
 QED
 
 (* RESIDUAL, FALSE as stated until ImmutablePlace reads get a popped
