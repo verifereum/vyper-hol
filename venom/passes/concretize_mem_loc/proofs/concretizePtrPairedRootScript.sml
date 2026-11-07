@@ -8,6 +8,7 @@ Ancestors
   concretizeMemLocDefs unitLabelMapIdentity passSharedDefs passSimulationProps
   passSimulationDefs venomWf venomInstProps concretizePtrLedgerAlignment
   concretizePtrOpaqueRetpc concretizePtrSharedFields concretizePtrValueTransport
+  concretizePtrRequestHistory
   unitShapeDefs ptrDiscipline venomState finite_map
   list rich_list arithmetic
 
@@ -180,7 +181,7 @@ Proof
      disch_then irule >> simp[]) >>
   `ptr_mixed_vars (ptr_birth_lift (0:num) a.po_state.vs_allocas) positions
      FEMPTY entry_taint f at.po_fn a.po_state at.po_state /\
-   ptr_core_shared a.po_state at.po_state` by
+   ptr_history_content entry_taint a.po_state at.po_state` by
     (`!x. retpc_var f x <=> retpc_var at.po_fn x` by
        metis_tac[ptr_paired_code_retpc] >>
      simp[ptr_mixed_vars_def, ptr_opaque_env_def, lookup_var_def,
@@ -189,7 +190,7 @@ Proof
   conj_tac
   >- (`R a.po_fn at.po_fn` by fs[ptr_paired_code_def] >>
       drule_all ptr_structural_transcript_root >> simp[]) >>
-  simp[ptr_paired_samples_def, ptr_paired_sample_def,
+  simp[ptr_paired_samples_def, ptr_sample_list_def, ptr_paired_sample_def,
        ptr_paired_alignment_def, ptr_paired_params_def,
        ptr_paired_callers_def, ptr_paired_writes_def] >> gvs[] >>
   metis_tac[]
