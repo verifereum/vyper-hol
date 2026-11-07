@@ -146,7 +146,9 @@ Theorem concat_suffix_post:
   mload (w2n ow) t = n2w (LENGTH bytes) /\
   mem_bytes_at (B+32) (LENGTH bytes) t.vs_memory = bytes /\
   32 + LENGTH bytes <= bsz /\ B < dimword (:256) /\
-  type_memory_size tv <= bsz /\ B+bsz <= t.vs_alloca_next /\
+  val_store_size tv v <= bsz /\
+  (!ltv. evaluate_type (get_tenv cx) lt = SOME ltv ==>
+         type_memory_size ltv <= bsz) /\ B+bsz <= t.vs_alloca_next /\
   lookup_var bv t = SOME (n2w B) /\ bv <> fresh /\
   wb_frame cenv es sa s0 t /\ stmt_state_rel ctx func cenv cx ee t /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
@@ -163,7 +165,7 @@ Theorem concat_suffix_post:
              (update_var fresh (mload (w2n ow) t) t)) with vs_inst_idx := k in
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue (expr_type e) (mk_ptr (Var bv) LocMemory)) u /\
-  vv_store_bound cx (expr_type e) (expr_type e) ee (Value v)
+  vv_store_bound cx (expr_type e) lt ee (Value v)
     (LocatedValue (expr_type e) (mk_ptr (Var bv) LocMemory)) u
 Proof
   strip_tac >> simp[LET_THM] >>
@@ -202,9 +204,12 @@ Proof
       qexistsl_tac [`inst.inst_id`, `B`, `bsz`] >>
       asm_rewrite_tac[] >> conj_tac >- decide_tac >>
       simp[Abbr `u`, mstore_def, update_var_def]) >>
-  irule vv_store_bound_capacity >> simp[mk_ptr_def, eval_operand_def] >>
-  reverse conj_tac
-  >- (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-      rpt (pop_assum kall_tac) >> metis_tac[mk_ptr_def]) >>
+  simp[vv_store_bound_def, mk_ptr_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.return_def, eval_operand_def] >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      simp[Abbr `u`, mstore_def, update_var_def] >> decide_tac) >>
+  rpt strip_tac >>
+  `type_memory_size tvt <= bsz` by metis_tac[] >>
   simp[Abbr `u`, mstore_def, update_var_def] >> decide_tac
 QED
