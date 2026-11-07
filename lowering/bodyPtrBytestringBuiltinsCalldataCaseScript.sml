@@ -8,7 +8,7 @@ Ancestors
   valueEncodingProps vfmConstants words vyperAST vyperTyping vyperValue
   immutableEncodingProofs vyperTypeInvariants vyperLoweringCorrect vyperTypeContractSoundness
   vyperInterpreter bodyPtrBytestringBuiltinsPrefix gasSummaryComposePtr
-  exprSimCalldataSlice wordArgsPtr stmtFragPtr
+  exprSimCalldataSlice exprSimUint2Str wordArgsPtr stmtFragPtr context
   vyperContext exprSimSource exprLowering exprBopLowering list
 
 (* Expose the actual lowered operand from the conditional body hypothesis.
@@ -173,4 +173,99 @@ Proof
   mp_tac (Q.INST [`N` |-> `type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))`,
     `a` |-> `a`, `bs` |-> `t.vs_call_ctx.cc_calldata`, `args` |-> `[e]`] calldata_slice_result_requirements) >>
   simp[expr_type_def, dimword_def] >> metis_tac[]
+QED
+
+Theorem calldata_slice_eval_continuation:
+  expr_body_pre cenv cx env
+    (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) es /\
+  expr_body_pre cenv cx env e es /\ expr_type e = BaseT (UintT 256) /\
+  0 < n /\ n < dimword (:256) /\
+  lower_value compile_expr cenv cty e sa = (op,sm) /\
+  as_ptr_val (BaseT (BytesT (Dynamic n))) LocMemory
+    (compile_slice_calldata op (Lit (n2w n))
+      (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm) = (vv,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
+  ghost_inv d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
+  ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  (?marks ee0. ee = ee0 with gas_obs := [] /\
+    !tail. vyperState$bind (eval_expr cx e) (read_result cx)
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (INL v,ee0 with gas_obs := tail)) ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (\vst. ((case builtin_result cx vst.accounts (BaseT (BytesT (Dynamic n)))
+      (CalldataSlice n) [expr_type e] [v] of
+      INL w => INL (Value w) | INR exc => INR exc), vst)) (ee,t,G,tn)
+    (\res ef H tm u. ?tv. res = INL tv /\
+      vv_post ctx func cenv cx
+        (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) es sa sb s0 ef tv vv u /\
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ghost_inv d cenv cx ef H tm u /\
+      ptr_vv_ok cx (expr_type (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]))
+        tv vv ef H tm u /\
+      (!t' x. vv = StackValue t' x /\
+        ~is_word_type (expr_type (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])) ==>
+        ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) x H u) /\
+      (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+        ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) p.ptr_operand H u) /\
+      ghost_kept cenv es sa G0 tn0 s0 H tm)
+    (\res ef gt r. expr_exit res r)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `compile_slice_calldata op (Lit (n2w n))
+    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm` >>
+  rename1 `compile_slice_calldata _ _ _ _ = (out,fin)` >>
+  qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >> simp[as_ptr_val_def] >>
+  disch_then (CONJUNCTS_THEN (SUBST_ALL_TAC o SYM)) >>
+  drule_all calldata_slice_operand_source_outcome >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] assume_tac) >>
+  drule_all operand_prefix_frame_inputs >> strip_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac gas_outcome_ptr_conseq) >>
+  qpat_assum `expr_type e = _` (fn th => pure_rewrite_tac[th]) >>
+  disch_then irule >>
+  reverse conj_tac >- simp[] >>
+  simp[expr_type_def, mk_ptr_def] >> rpt gen_tac >> strip_tac >>
+  qexists_tac `Value w` >> simp[] >>
+  conj_tac
+  >- (irule vv_post_prefix_frame >> simp[] >>
+      qexistsl_tac [`ee`, `sm`, `t`] >> simp[] >>
+      qpat_x_assum `vv_post _ _ _ _ _ ee sm _ _ _ _ _ _` mp_tac >>
+      once_rewrite_tac[vv_post_located_mk_ptr] >> simp[mk_ptr_def]) >>
+  conj_tac >- fs[ptr_vv_ok_def] >>
+  irule ghost_kept_wb_trans >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem calldata_slice_body_expr_ptr_ok:
+  !cx ann n args.
+    (builtin_args_length_ok (CalldataSlice n) (LENGTH args) ==>
+      body_exprs_ptr_ok cx args) ==>
+    body_expr_ptr_ok cx (Builtin ann (CalldataSlice n) args)
+Proof
+  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all calldata_slice_body_operand_ptr >>
+  disch_then (qspecl_then [`func`, `d`, `PG`] strip_assume_tac) >> gvs[] >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx ty
+      (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) es` suffices_by
+    metis_tac[expr_sim_ptr_of_vv] >>
+  irule compile_unary_builtin_eval_vv_sim_ptr >>
+  simp[precompile_builtin_def, builtin_args_length_ok_def] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`\x sm. as_ptr_val (BaseT (BytesT (Dynamic n))) LocMemory
+    (compile_slice_calldata x (Lit (n2w n))
+      (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) sm)`, `expr_type e`] >>
+  simp[calldata_slice_code_appends] >>
+  reverse conj_tac >- metis_tac[calldata_slice_compile_cut] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `expr_type e = _` (fn th => rewrite_tac[GSYM th]) >>
+  irule calldata_slice_eval_continuation >> goal_assum (drule_at Any) >>
+  simp[dimword_def] >> metis_tac[]
 QED
