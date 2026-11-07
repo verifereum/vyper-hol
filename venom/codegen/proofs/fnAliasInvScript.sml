@@ -1231,7 +1231,8 @@ Proof
   rename1 `_ = SOME j` >> Cases_on `MEM j placed` >> simp[]
   >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
   Cases_on `FLOOKUP matching j` >> simp[] >>
-  first_x_assum irule >> gvs[] >> metis_tac[optionTheory.SOME_11]
+  first_x_assum irule >> gvs[] >>
+  Cases_on `i = j` >- gvs[] >> simp[]
 QED
 
 Theorem alias_input_vars_trigger_intro:
@@ -5178,10 +5179,13 @@ Proof
   strip_tac >>
   `alias_var_mass x ps'' <= alias_var_mass x prepared` by
     metis_tac[alias_var_mass_popmany, pairTheory.SND] >>
-  gvs[Abbr `prepared`, alias_var_mass_def, elem_count_append,
-      LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_MAP, GSYM MAP_FILTER,
-      MAP_MAP_o, combinTheory.o_DEF] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  `alias_var_mass x prepared = alias_var_mass x ps +
+     LIST_ELEM_COUNT x (MAP (\inst. HD inst.inst_outputs)
+       (get_params (HD fn.fn_blocks).bb_instructions))` by
+    (simp[Abbr `prepared`, alias_var_mass_def, elem_count_append,
+          LIST_ELEM_COUNT_DEF, FILTER_APPEND, FILTER_MAP, GSYM MAP_FILTER,
+          MAP_MAP_o, combinTheory.o_DEF]) >>
+  decide_tac
 QED
 
 Theorem alias_prepare_params_parameter_provenance:
@@ -6765,7 +6769,6 @@ Theorem alias_spill_probe_entry_fields:
   ~MEM (Var "x18") (SND (THE alias_spill_probe_entry_result)).ps_stack /\
   Var "x18" IN FDOM (SND (THE alias_spill_probe_entry_result)).ps_spilled
 Proof
-  rpt conj_tac >>
   rewrite_tac[alias_spill_probe_entry_result_def] >>
   CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
     if same_const (fst (strip_comb tm)) ``dfg_build_function`` then EVAL tm else NO_CONV tm)) >>
@@ -6774,6 +6777,51 @@ Proof
   CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
     if same_const tm ``alias_spill_probe_live`` then EVAL tm else NO_CONV tm)) >>
   simp[finite_mapTheory.FUNION_FUPDATE_1, finite_mapTheory.FUPDATE_LIST_THM] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
+  once_rewrite_tac[generate_block_insts_plan_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``generate_block_insts_plan``]) >>
   EVAL_TAC
 QED
 
@@ -8791,7 +8839,8 @@ Theorem alias_search_h_state:
       (init_cleanup_plan_state NONE [] 0 0 with ps_stack :=
         [Var "r"; Var (if two then "keep2" else "keep1"); Var "c"])
 Proof
-  rewrite_tac[alias_search_h_def, alias_search_e_state] >> Cases >> EVAL_TAC
+  rewrite_tac[alias_search_h_def, alias_search_e_state] >> Cases >>
+  conj_tac >> EVAL_TAC
 QED
 
 Definition alias_search_r_def:
@@ -11031,7 +11080,7 @@ Theorem alias_root_phi_plans:
   (SND alias_root_phi_b).ps_cleanup_height = NONE /\
   (SND alias_root_phi_b).ps_cleanup_promised = F
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 
 Theorem alias_root_phi_edges:
@@ -12241,6 +12290,418 @@ Proof
       EVERY_APPEND, EVERY_SNOC, EVERY_MEM, MEM_SNOC] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `!id. _ ==> id < _` (qspec_then `id` mp_tac) >> simp[]
+QED
+
+Definition alias_occ_dup_inventory_def:
+  alias_occ_dup_inventory dist shadow =
+    alias_occ_insert
+      (FST (FST (alias_occ_read
+        (LENGTH shadow.alias_occs - 1 - dist)
+        shadow.alias_next shadow.alias_occs))) shadow
+End
+
+Definition alias_occ_dup_log_def:
+  alias_occ_dup_log dist shadow =
+    AliasOccReadLog dist (MAP FST shadow.alias_occs)
+      (SND (alias_occ_read (LENGTH shadow.alias_occs - 1 - dist)
+        shadow.alias_next shadow.alias_occs))
+End
+
+Theorem alias_occ_dup_inventory_stack:
+  (alias_occ_dup_inventory dist shadow).alias_occs =
+    FST (alias_occ_dup dist shadow.alias_next shadow.alias_occs)
+Proof
+  simp[alias_occ_dup_inventory_def, alias_occ_insert_def,
+       alias_occ_dup_def] >>
+  metis_tac[alias_occ_read_identity, pairTheory.PAIR]
+QED
+
+Theorem alias_occ_do_dup_spills:
+  (SND (do_dup dist ps)).ps_spilled = ps.ps_spilled
+Proof
+  Cases_on `dist <= 15` >> simp[do_dup_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem alias_occ_dup_inventory_align:
+  alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_dup_inventory dist shadow) (SND (do_dup dist ps))
+Proof
+  simp[alias_occ_align_def, alias_occ_dup_inventory_stack,
+       alias_occ_dup_inventory_def, alias_occ_insert_def,
+       alias_occ_do_dup_spills] >>
+  metis_tac[alias_occ_do_dup_erases]
+QED
+
+Theorem alias_occ_dup_inventory_wf:
+  alias_occ_wf shadow ==>
+  alias_occ_wf (alias_occ_dup_inventory dist shadow)
+Proof
+  simp[alias_occ_dup_inventory_def, alias_occ_insert_wf]
+QED
+
+Theorem alias_occ_dup_inventory_next:
+  (alias_occ_dup_inventory dist shadow).alias_next = SUC shadow.alias_next
+Proof
+  simp[alias_occ_dup_inventory_def, alias_occ_insert_def]
+QED
+
+Theorem alias_occ_dup_inventory_residents:
+  (at,id) IN alias_occ_residents (alias_occ_dup_inventory dist shadow) <=>
+  (at,id) IN alias_occ_residents shadow \/
+  (id = shadow.alias_next /\
+   at = EL (LENGTH shadow.alias_occs - 1 - dist) (MAP FST shadow.alias_occs))
+Proof
+  simp[alias_occ_dup_inventory_def, alias_occ_insert_residents,
+       alias_occ_read_erases] >> metis_tac[]
+QED
+
+Theorem alias_occ_dup_inventory_log:
+  alias_occ_read_log_ok (alias_occ_dup_log dist shadow)
+Proof
+  simp[alias_occ_dup_log_def, alias_occ_read_log_valid]
+QED
+
+Theorem alias_occ_dup_inventory_deleted:
+  alias_occ_deleted shadow (alias_occ_dup_inventory dist shadow) = EMPTY
+Proof
+  simp[alias_occ_deleted_def, pred_setTheory.EXTENSION,
+       pred_setTheory.IN_IMAGE, pairTheory.EXISTS_PROD,
+       alias_occ_dup_inventory_residents] >> metis_tac[]
+QED
+
+(* Selection for swap moves existing identities. Only an absent selected
+   location allocates, and its log uses that selected operand list. *)
+Definition alias_occ_select_def:
+  (alias_occ_select site [] fresh (items : (operand # num) list) =
+    ([],fresh,[] : alias_occ_read_log list)) /\
+  (alias_occ_select site (i::indices) fresh items =
+    if i < LENGTH items then
+      (EL i items :: FST (alias_occ_select site indices fresh items),
+       FST (SND (alias_occ_select site indices fresh items)),
+       SND (SND (alias_occ_select site indices fresh items)))
+    else
+      ((EL i (MAP FST items),fresh) ::
+         FST (alias_occ_select site indices (SUC fresh) items),
+       FST (SND (alias_occ_select site indices (SUC fresh) items)),
+       AliasOccReadLog site (MAP FST items)
+         (AliasOccTotalRead i fresh (EL i (MAP FST items))) ::
+         SND (SND (alias_occ_select site indices (SUC fresh) items))))
+End
+
+Theorem alias_occ_select_erases:
+  !indices fresh items.
+    MAP FST (FST (alias_occ_select site indices fresh items)) =
+    MAP (\i. EL i (MAP FST items)) indices
+Proof
+  Induct >> simp[alias_occ_select_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[EL_MAP]
+QED
+
+Theorem alias_occ_select_next:
+  !indices fresh items.
+    fresh <= FST (SND (alias_occ_select site indices fresh items))
+Proof
+  Induct >> simp[alias_occ_select_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >>
+  first_x_assum (qspecl_then [`SUC fresh`,`items`] mp_tac) >> simp[]
+QED
+
+Theorem alias_occ_select_logs:
+  !indices fresh items.
+    EVERY alias_occ_read_log_ok
+      (SND (SND (alias_occ_select site indices fresh items)))
+Proof
+  Induct >> simp[alias_occ_select_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[alias_occ_read_log_ok_def]
+QED
+
+Theorem alias_occ_select_origin:
+  !indices fresh items occ.
+    MEM occ (FST (alias_occ_select site indices fresh items)) ==>
+    (?i. MEM i indices /\ i < LENGTH items /\ occ = EL i items) \/
+    (fresh <= SND occ /\
+     SND occ < FST (SND (alias_occ_select site indices fresh items)) /\
+     ?i. MEM (AliasOccReadLog site (MAP FST items)
+                (AliasOccTotalRead i (SND occ) (FST occ)))
+          (SND (SND (alias_occ_select site indices fresh items))))
+Proof
+  Induct >> simp[alias_occ_select_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >> rpt strip_tac
+  >- (disj1_tac >> qexists_tac `h` >> simp[])
+  >- (first_x_assum drule >> strip_tac
+      >- (disj1_tac >> metis_tac[]) >>
+      disj2_tac >> simp[] >> metis_tac[])
+  >- (disj2_tac >> simp[] >>
+      qspec_then `SUC fresh` (qspec_then `items` mp_tac)
+        (Q.SPEC `indices` alias_occ_select_next) >> simp[] >> metis_tac[])
+  >- (first_x_assum drule >> strip_tac
+      >- (disj1_tac >> metis_tac[]) >>
+      disj2_tac >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+                                    arithmeticTheory.LESS_EQ_SUC_REFL])
+QED
+
+Theorem alias_occ_select_bounded:
+  !indices fresh items.
+    EVERY (\occ. SND occ < fresh) items ==>
+    EVERY (\occ. SND occ < FST (SND (alias_occ_select site indices fresh items)))
+      (FST (alias_occ_select site indices fresh items))
+Proof
+  rpt gen_tac >> strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  drule alias_occ_select_origin >> strip_tac >- (
+    `MEM (EL i items) items` by simp[EL_MEM] >>
+    `SND (EL i items) < fresh` by
+      (qpat_x_assum `EVERY _ items` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+       disch_then (qspec_then `EL i items` mp_tac) >> simp[]) >>
+    mp_tac (Q.SPECL [`indices`,`fresh`,`items`] alias_occ_select_next) >> simp[]) >>
+  simp[]
+QED
+
+Theorem alias_occ_select_distinct:
+  !indices fresh items.
+    ALL_DISTINCT indices /\ ALL_DISTINCT (MAP SND items) /\
+    EVERY (\occ. SND occ < fresh) items ==>
+    ALL_DISTINCT (MAP SND (FST (alias_occ_select site indices fresh items)))
+Proof
+  Induct >> simp[alias_occ_select_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `h < LENGTH items`
+  >- (
+    `ALL_DISTINCT (MAP SND (FST (alias_occ_select site indices fresh items)))` by
+      (first_x_assum irule >> simp[]) >>
+    simp[alias_occ_select_def] >> strip_tac >> fs[MEM_MAP] >>
+    drule alias_occ_select_origin >> strip_tac
+    >- (
+      `h = i` by
+        (qpat_assum `ALL_DISTINCT (MAP SND items)`
+           (mp_then Any mp_tac ALL_DISTINCT_EL_IMP) >>
+         disch_then (qspecl_then [`h`,`i`] mp_tac) >> simp[EL_MAP] >>
+         gvs[]) >>
+      gvs[]) >>
+    `SND (EL h items) < fresh` by
+      (qpat_x_assum `EVERY _ items` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+       disch_then (qspec_then `EL h items` mp_tac) >> simp[EL_MEM]) >>
+    gvs[]) >>
+  `EVERY (\occ. SND occ < SUC fresh) items` by
+    (gvs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  `ALL_DISTINCT (MAP SND (FST (alias_occ_select site indices (SUC fresh) items)))` by
+    (first_x_assum irule >> simp[]) >>
+  simp[alias_occ_select_def] >> strip_tac >> fs[MEM_MAP] >>
+  drule alias_occ_select_origin >> strip_tac
+  >- (
+    `SND (EL i items) < fresh` by
+      (qpat_x_assum `EVERY (\occ. SND occ < fresh) items`
+         (mp_tac o REWRITE_RULE [EVERY_MEM]) >> disch_then (qspec_then `EL i items` mp_tac) >>
+       simp[EL_MEM]) >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem alias_occ_select_frame_disjoint:
+  EVERY (\id. id < fresh) frame /\
+  (!occ. MEM occ items ==> ~MEM (SND occ) frame) ==>
+  !occ. MEM occ (FST (alias_occ_select site indices fresh items)) ==>
+    ~MEM (SND occ) frame
+Proof
+  rpt strip_tac >> drule alias_occ_select_origin >> strip_tac
+  >- (gvs[] >> qpat_x_assum `!occ. _` (qspec_then `EL i items` mp_tac) >>
+      simp[EL_MEM]) >>
+  qpat_x_assum `EVERY _ frame` (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  disch_then (qspec_then `SND occ` mp_tac) >> simp[]
+QED
+
+Theorem alias_occ_select_frame_wf:
+  ALL_DISTINCT indices /\ ALL_DISTINCT (frame ++ MAP SND items) /\
+  EVERY (\id. id < fresh) (frame ++ MAP SND items) ==>
+  ALL_DISTINCT (frame ++ MAP SND (FST (alias_occ_select site indices fresh items))) /\
+  EVERY (\id. id < FST (SND (alias_occ_select site indices fresh items)))
+    (frame ++ MAP SND (FST (alias_occ_select site indices fresh items)))
+Proof
+  strip_tac >>
+  `EVERY (\occ. SND occ < fresh) items` by
+    gvs[EVERY_APPEND, EVERY_MAP, combinTheory.o_DEF] >>
+  `ALL_DISTINCT (MAP SND (FST (alias_occ_select site indices fresh items)))` by
+    (irule alias_occ_select_distinct >> gvs[ALL_DISTINCT_APPEND]) >>
+  `EVERY (\occ. SND occ < FST (SND (alias_occ_select site indices fresh items)))
+     (FST (alias_occ_select site indices fresh items))` by
+    (irule alias_occ_select_bounded >> simp[]) >>
+  `!occ. MEM occ items ==> ~MEM (SND occ) frame` by
+    (gvs[ALL_DISTINCT_APPEND, MEM_MAP] >> metis_tac[]) >>
+  `!occ. MEM occ (FST (alias_occ_select site indices fresh items)) ==>
+     ~MEM (SND occ) frame` by
+    (gen_tac >> disch_tac >> irule alias_occ_select_frame_disjoint >>
+     gvs[EVERY_APPEND] >> metis_tac[]) >>
+  conj_tac
+  >- (gvs[ALL_DISTINCT_APPEND, MEM_MAP] >> metis_tac[]) >>
+  simp[EVERY_APPEND, EVERY_MAP, combinTheory.o_DEF] >>
+  gvs[EVERY_APPEND, EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!id. MEM id frame ==> _` (qspec_then `id` mp_tac) >>
+  mp_tac (Q.SPECL [`indices`,`fresh`,`items`] alias_occ_select_next) >> simp[]
+QED
+
+Definition alias_occ_swap_inventory_def:
+  alias_occ_swap_inventory dist shadow =
+    if dist = 0 then shadow
+    else if dist <= 16 then
+      shadow with alias_occs := stack_swap dist shadow.alias_occs
+    else
+      shadow with <|
+        alias_occs :=
+          TAKE (LENGTH shadow.alias_occs - (dist+1)) shadow.alias_occs ++
+          FST (alias_occ_select dist
+            ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]) shadow.alias_next
+            (top_n (dist+1) shadow.alias_occs));
+        alias_next := FST (SND (alias_occ_select dist
+            ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]) shadow.alias_next
+            (top_n (dist+1) shadow.alias_occs))) |>
+End
+
+Definition alias_occ_swap_logs_def:
+  alias_occ_swap_logs dist shadow =
+    if dist <= 16 then [] else
+      SND (SND (alias_occ_select dist
+        ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]) shadow.alias_next
+        (top_n (dist+1) shadow.alias_occs)))
+End
+
+Theorem alias_occ_swap_logs_valid:
+  EVERY alias_occ_read_log_ok (alias_occ_swap_logs dist shadow)
+Proof
+  simp[alias_occ_swap_logs_def, alias_occ_select_logs] >>
+  IF_CASES_TAC >> simp[alias_occ_select_logs]
+QED
+
+Theorem alias_occ_stack_swap_erases:
+  MAP f (stack_swap dist occs) = stack_swap dist (MAP f occs)
+Proof
+  Cases_on `occs = []` >- gvs[stack_swap_def, LUPDATE_def] >>
+  `LENGTH occs - 1 < LENGTH occs /\
+   LENGTH occs - 1 - dist < LENGTH occs` by
+    (Cases_on `occs` >> gvs[]) >>
+  simp[stack_swap_def, LUPDATE_MAP, EL_MAP]
+QED
+
+Theorem alias_occ_stack_swap_zero:
+  stack_swap 0 xs = xs
+Proof
+  Cases_on `xs = []` >- gvs[stack_swap_def, LUPDATE_def] >>
+  `LENGTH xs - 1 < LENGTH xs` by (Cases_on `xs` >> gvs[]) >>
+  simp[stack_swap_def, LUPDATE_SAME]
+QED
+
+Theorem alias_occ_stack_swap_clamp:
+  stack_swap dist xs = stack_swap (MIN dist (LENGTH xs - 1)) xs
+Proof
+  simp[stack_swap_def, arithmeticTheory.MIN_DEF] >> IF_CASES_TAC >> simp[] >>
+  `LENGTH xs - (dist+1) = 0` by decide_tac >> simp[]
+QED
+
+Theorem alias_occ_stack_swap_distinct:
+  ALL_DISTINCT xs ==>
+  ALL_DISTINCT (stack_swap dist xs) /\ set (stack_swap dist xs) = set xs
+Proof
+  strip_tac >>
+  Cases_on `xs = []` >- gvs[stack_swap_def, LUPDATE_def] >>
+  once_rewrite_tac[alias_occ_stack_swap_clamp] >>
+  Cases_on `MIN dist (LENGTH xs - 1) = 0`
+  >- simp[alias_occ_stack_swap_zero] >>
+  irule doSwapSimTheory.stack_swap_permutation >> simp[] >>
+  Cases_on `xs` >> gvs[arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem alias_occ_do_swap_spills:
+  (SND (do_swap dist ps)).ps_spilled = ps.ps_spilled
+Proof
+  Cases_on `dist = 0` >- simp[do_swap_def] >>
+  Cases_on `dist <= 16` >> simp[do_swap_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
+Theorem alias_occ_swap_inventory_align:
+  alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_swap_inventory dist shadow) (SND (do_swap dist ps))
+Proof
+  strip_tac >>
+  Cases_on `dist = 0` >- simp[alias_occ_swap_inventory_def, do_swap_def] >>
+  Cases_on `dist <= 16`
+  >- gvs[alias_occ_swap_inventory_def, do_swap_def, alias_occ_align_def,
+         alias_occ_stack_swap_erases] >>
+  simp[alias_occ_swap_inventory_def, alias_occ_align_def,
+       alias_occ_select_erases, alias_occ_do_swap_spills, MAP_TAKE,
+       top_n_def, MAP_REVERSE] >>
+  gvs[alias_occ_align_def] >>
+  `LENGTH shadow.alias_occs = LENGTH ps.ps_stack` by
+    metis_tac[LENGTH_MAP] >>
+  simp[do_swap_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[top_n_def]
+QED
+
+Theorem alias_occ_id_frame_exchange:
+  (ALL_DISTINCT (xs ++ ys ++ zs) /\ EVERY P (xs ++ ys ++ zs)) <=>
+  (ALL_DISTINCT (xs ++ zs ++ ys) /\ EVERY P (xs ++ zs ++ ys))
+Proof
+  simp[ALL_DISTINCT_APPEND, EVERY_APPEND, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem alias_occ_swap_desired_distinct:
+  1 < dist ==>
+  ALL_DISTINCT ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])
+Proof
+  strip_tac >> simp[ALL_DISTINCT_APPEND, MEM_GENLIST, ALL_DISTINCT_GENLIST] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem alias_occ_swap_inventory_next:
+  shadow.alias_next <= (alias_occ_swap_inventory dist shadow).alias_next
+Proof
+  Cases_on `dist = 0` >- simp[alias_occ_swap_inventory_def] >>
+  Cases_on `dist <= 16` >>
+  simp[alias_occ_swap_inventory_def, alias_occ_select_next]
+QED
+
+Theorem alias_occ_swap_inventory_wf:
+  alias_occ_wf shadow ==> alias_occ_wf (alias_occ_swap_inventory dist shadow)
+Proof
+  strip_tac >>
+  Cases_on `dist = 0` >- simp[alias_occ_swap_inventory_def] >>
+  Cases_on `dist <= 16`
+  >- (
+    gvs[alias_occ_wf_def, alias_occ_ids_def, ALL_DISTINCT_APPEND,
+        EVERY_APPEND] >>
+    qpat_assum `ALL_DISTINCT (MAP SND shadow.alias_occs)`
+      (mp_tac o MATCH_MP alias_occ_stack_swap_distinct) >> strip_tac >>
+    simp[alias_occ_swap_inventory_def, alias_occ_wf_def, alias_occ_ids_def,
+         alias_occ_stack_swap_erases, ALL_DISTINCT_APPEND, EVERY_APPEND] >>
+    fs[pred_setTheory.EXTENSION, EVERY_MEM] >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `alias_occ_wf result` >>
+  qabbrev_tac `pre = TAKE (LENGTH shadow.alias_occs - (dist+1)) shadow.alias_occs` >>
+  qabbrev_tac `items = top_n (dist+1) shadow.alias_occs` >>
+  `pre ++ items = shadow.alias_occs` by
+    simp[Abbr `pre`, Abbr `items`, top_n_stack_decomposition] >>
+  `ALL_DISTINCT
+     (MAP SND pre ++ MAP SND (fmap_to_alist shadow.alias_spill_ids) ++ MAP SND items) /\
+   EVERY (\id. id < shadow.alias_next)
+     (MAP SND pre ++ MAP SND (fmap_to_alist shadow.alias_spill_ids) ++ MAP SND items)` by
+    (pure_once_rewrite_tac[alias_occ_id_frame_exchange] >>
+     `MAP SND pre ++ MAP SND items = MAP SND shadow.alias_occs` by
+       metis_tac[MAP_APPEND] >>
+     pure_rewrite_tac[APPEND_ASSOC] >>
+     qpat_assum `MAP SND pre ++ MAP SND items = _`
+       (fn th => pure_rewrite_tac[th]) >>
+     qpat_x_assum `alias_occ_wf shadow` mp_tac >>
+     pure_rewrite_tac[alias_occ_wf_def, alias_occ_ids_def] >> simp[]) >>
+  qabbrev_tac `desired = [dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]` >>
+  qabbrev_tac `selected = alias_occ_select dist desired shadow.alias_next items` >>
+  `ALL_DISTINCT
+     ((MAP SND pre ++ MAP SND (fmap_to_alist shadow.alias_spill_ids)) ++
+      MAP SND (FST selected)) /\
+   EVERY (\id. id < FST (SND selected))
+     ((MAP SND pre ++ MAP SND (fmap_to_alist shadow.alias_spill_ids)) ++
+      MAP SND (FST selected))` by
+    (qunabbrev_tac `selected` >> irule alias_occ_select_frame_wf >>
+     simp[APPEND_ASSOC, Abbr `desired`, alias_occ_swap_desired_distinct]) >>
+  unabbrev_all_tac >>
+  simp[alias_occ_swap_inventory_def, alias_occ_wf_def,
+       alias_occ_ids_def, MAP_APPEND] >>
+  fs[APPEND_ASSOC, ALL_DISTINCT_APPEND, MEM_APPEND] >> metis_tac[]
 QED
 
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
