@@ -13646,6 +13646,309 @@ Proof
   simp[alias_occ_relabel_def]
 QED
 
+Definition alias_occ_replace_def:
+  alias_occ_replace dist at s =
+    if LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs then
+      s with <| alias_occs := LUPDATE (at,s.alias_next)
+                  (LENGTH s.alias_occs - 1 - dist) s.alias_occs;
+                alias_next := SUC s.alias_next |>
+    else s
+End
+
+Theorem alias_occ_replace_ids_fresh:
+  !xs n id. ALL_DISTINCT xs /\ ~MEM id xs ==>
+    ALL_DISTINCT (LUPDATE id n xs)
+Proof
+  Induct >> simp[LUPDATE_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `n` >> gvs[LUPDATE_def] >>
+  metis_tac[MEM_LUPDATE_E]
+QED
+
+Theorem alias_occ_replace_wf:
+  alias_occ_wf s ==> alias_occ_wf (alias_occ_replace dist at s)
+Proof
+  simp[alias_occ_replace_def] >> IF_CASES_TAC >> simp[] >> strip_tac >>
+  `~MEM s.alias_next (alias_occ_ids s)` by
+    (strip_tac >> gvs[alias_occ_wf_def, EVERY_MEM] >>
+     first_x_assum drule >> simp[]) >>
+  gvs[alias_occ_wf_def, alias_occ_ids_def, LUPDATE_MAP,
+      ALL_DISTINCT_APPEND, EVERY_APPEND, EVERY_MEM] >>
+  rpt conj_tac
+  >- metis_tac[alias_occ_replace_ids_fresh]
+  >- (rpt strip_tac >> drule MEM_LUPDATE_E >> simp[] >> metis_tac[])
+  >> metis_tac[MEM_LUPDATE_E, prim_recTheory.LESS_SUC,
+               prim_recTheory.LESS_SUC_REFL]
+QED
+
+Theorem alias_occ_replace_align:
+  alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_replace dist at s)
+    (ps with ps_stack := stack_poke dist at ps.ps_stack)
+Proof
+  simp[alias_occ_replace_def] >> IF_CASES_TAC >>
+  simp[alias_occ_align_def, stack_poke_def, LUPDATE_MAP] >>
+  strip_tac >> qpat_x_assum `MAP FST _ = _` (SUBST1_TAC o SYM) >>
+  Cases_on `s.alias_occs` >> gvs[LUPDATE_def]
+QED
+
+Theorem alias_occ_replace_next:
+  (alias_occ_replace dist at s).alias_next =
+    if LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs
+    then SUC s.alias_next else s.alias_next
+Proof
+  simp[alias_occ_replace_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem alias_occ_replace_origin:
+  (at,id) IN alias_occ_residents (alias_occ_replace dist key s) ==>
+  (at,id) IN alias_occ_residents s \/
+  (at = key /\ id = s.alias_next /\
+   LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs)
+Proof
+  simp[alias_occ_replace_def] >> IF_CASES_TAC >>
+  simp[alias_occ_residents_member] >> rpt strip_tac >>
+  metis_tac[MEM_LUPDATE_E, pairTheory.PAIR_EQ]
+QED
+
+Theorem alias_occ_insert_align:
+  alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_insert at s)
+    (ps with ps_stack := SNOC at ps.ps_stack)
+Proof
+  simp[alias_occ_align_def, alias_occ_insert_def, MAP_SNOC]
+QED
+
+Theorem alias_occ_insert_next:
+  (alias_occ_insert at s).alias_next = SUC s.alias_next
+Proof
+  simp[alias_occ_insert_def]
+QED
+
+Theorem alias_occ_replace_birth:
+  LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs ==>
+  (at,s.alias_next) IN alias_occ_residents (alias_occ_replace dist at s)
+Proof
+  simp[alias_occ_replace_def, alias_occ_residents_member, MEM_LUPDATE]
+QED
+
+Theorem alias_occ_replace_absent:
+  s.alias_occs = [] ==>
+  (alias_occ_replace dist at s).alias_occs = [] /\
+  (alias_occ_replace dist at s).alias_next = s.alias_next /\
+  alias_occ_residents (alias_occ_replace dist at s) = alias_occ_residents s
+Proof
+  simp[alias_occ_replace_def]
+QED
+
+Theorem alias_occ_relabel_origin:
+  (at,id) IN alias_occ_residents (alias_occ_relabel dist key s) ==>
+  (at,id) IN alias_occ_residents s \/
+  (at = key /\
+   LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs /\
+   id = SND (EL (LENGTH s.alias_occs - 1 - dist) s.alias_occs) /\
+   MEM (EL (LENGTH s.alias_occs - 1 - dist) s.alias_occs) s.alias_occs)
+Proof
+  simp[alias_occ_relabel_def, alias_occ_residents_member] >>
+  rpt strip_tac >> gvs[MEM_LUPDATE]
+  >- (disj2_tac >> irule EL_MEM >> simp[]) >>
+  metis_tac[EL_MEM]
+QED
+
+(* These are low-level events, not an existential block replay relation.
+   The branch interpreter supplies the actual context and operands. *)
+Datatype:
+  alias_occ_event =
+    AliasOccPrimitive alias_occ_command
+  | AliasOccEquivRelabel num num operand
+  | AliasOccDeadRelabel num num
+  | AliasOccLiteralBirth num operand
+  | AliasOccParameterBirth num operand
+  | AliasOccRegularBirth num operand
+  | AliasOccPhiBirth num num operand
+  | AliasOccOffsetBirth num operand
+End
+
+Definition alias_occ_event_shadow_def:
+  (alias_occ_event_shadow (AliasOccPrimitive cmd) s = alias_occ_command_shadow cmd s) /\
+  (alias_occ_event_shadow (AliasOccEquivRelabel site dist at) s = alias_occ_relabel dist at s) /\
+  (alias_occ_event_shadow (AliasOccDeadRelabel site dist) s = alias_occ_relabel dist dead_stack_marker s) /\
+  (alias_occ_event_shadow (AliasOccLiteralBirth site at) s = alias_occ_insert at s) /\
+  (alias_occ_event_shadow (AliasOccParameterBirth site at) s = alias_occ_insert at s) /\
+  (alias_occ_event_shadow (AliasOccRegularBirth site at) s = alias_occ_insert at s) /\
+  (alias_occ_event_shadow (AliasOccPhiBirth site dist at) s = alias_occ_replace dist at s) /\
+  (alias_occ_event_shadow (AliasOccOffsetBirth site at) s = alias_occ_insert at s)
+End
+
+Theorem alias_occ_event_wf:
+  alias_occ_wf s ==> alias_occ_wf (alias_occ_event_shadow ev s)
+Proof
+  Cases_on `ev` >> simp[alias_occ_event_shadow_def, alias_occ_command_wf,
+    alias_occ_relabel_wf, alias_occ_insert_wf, alias_occ_replace_wf]
+QED
+
+Theorem alias_occ_event_next_mono:
+  s.alias_next <= (alias_occ_event_shadow ev s).alias_next
+Proof
+  Cases_on `ev` >> simp[alias_occ_event_shadow_def, alias_occ_command_next,
+    alias_occ_relabel_next, alias_occ_insert_next, alias_occ_replace_next]
+QED
+
+Definition alias_occ_event_logs_def:
+  (alias_occ_event_logs (AliasOccPrimitive cmd) s = alias_occ_command_logs cmd s) /\
+  (alias_occ_event_logs (AliasOccEquivRelabel site dist at) s = []) /\
+  (alias_occ_event_logs (AliasOccDeadRelabel site dist) s = []) /\
+  (alias_occ_event_logs (AliasOccLiteralBirth site at) s = []) /\
+  (alias_occ_event_logs (AliasOccParameterBirth site at) s = []) /\
+  (alias_occ_event_logs (AliasOccRegularBirth site at) s = []) /\
+  (alias_occ_event_logs (AliasOccPhiBirth site dist at) s = []) /\
+  (alias_occ_event_logs (AliasOccOffsetBirth site at) s = [])
+End
+
+Theorem alias_occ_event_logs_valid:
+  alias_occ_wf s ==>
+  EVERY alias_occ_read_log_ok (alias_occ_event_logs ev s)
+Proof
+  Cases_on `ev` >> simp[alias_occ_event_logs_def, alias_occ_command_logs_valid]
+QED
+
+Definition alias_occ_events_shadow_def:
+  (alias_occ_events_shadow [] s = s) /\
+  (alias_occ_events_shadow (ev::evs) s =
+    alias_occ_events_shadow evs (alias_occ_event_shadow ev s))
+End
+
+Theorem alias_occ_events_append:
+  !evs s more. alias_occ_events_shadow (evs ++ more) s =
+    alias_occ_events_shadow more (alias_occ_events_shadow evs s)
+Proof
+  Induct >> simp[alias_occ_events_shadow_def]
+QED
+
+Theorem alias_occ_events_wf:
+  !evs s. alias_occ_wf s ==> alias_occ_wf (alias_occ_events_shadow evs s)
+Proof
+  Induct >> simp[alias_occ_events_shadow_def, alias_occ_event_wf]
+QED
+
+Theorem alias_occ_events_next_mono:
+  !evs s. s.alias_next <= (alias_occ_events_shadow evs s).alias_next
+Proof
+  Induct >> simp[alias_occ_events_shadow_def] >> rpt gen_tac >>
+  first_x_assum (qspec_then `alias_occ_event_shadow h s` mp_tac) >>
+  mp_tac (Q.SPECL [`s`,`h`] (GEN_ALL alias_occ_event_next_mono)) >> simp[]
+QED
+
+(* The two relabels exchange names but not identities; the later reorder
+   interpreter must additionally supply the operand_equiv certificate. *)
+Theorem alias_occ_relabel_pair_probe:
+  (alias_occ_relabel 1 b (alias_occ_relabel 0 a
+    (alias_occ_empty with alias_occs := [(a,0);(b,1)]))).alias_occs =
+    [(b,0);(a,1)]
+Proof
+  simp[alias_occ_relabel_def, alias_occ_empty_def, LUPDATE_DEF]
+QED
+
+Theorem alias_occ_relabel_absent_probe:
+  (alias_occ_relabel dist at alias_occ_empty).alias_occs = [] /\
+  alias_occ_ids (alias_occ_relabel dist at alias_occ_empty) = []
+Proof
+  simp[alias_occ_relabel_def, alias_occ_empty_def, alias_occ_ids_def,
+       LUPDATE_def, alistTheory.fmap_to_alist_FEMPTY]
+QED
+
+Theorem alias_occ_marker_probe:
+  (alias_occ_event_shadow (AliasOccDeadRelabel site 0)
+    (alias_occ_empty with alias_occs := [(at,7)])).alias_occs =
+    [(dead_stack_marker,7)]
+Proof
+  simp[alias_occ_event_shadow_def, alias_occ_relabel_def,
+       alias_occ_empty_def, LUPDATE_def]
+QED
+
+Theorem alias_occ_empty_output_probe:
+  (alias_occ_insert (HD ([] : operand list)) alias_occ_empty).alias_occs =
+    [(HD ([] : operand list),0)] /\
+  (alias_occ_replace 0 (HD ([] : operand list)) alias_occ_empty).alias_occs = [] /\
+  (alias_occ_replace 0 (HD ([] : operand list)) alias_occ_empty).alias_next = 0
+Proof
+  simp[alias_occ_insert_def, alias_occ_replace_def, alias_occ_empty_def]
+QED
+
+Definition alias_occ_event_birth_def:
+  (alias_occ_event_birth (AliasOccPrimitive cmd) s at id =
+    alias_occ_command_birth cmd s at id) /\
+  (alias_occ_event_birth (AliasOccEquivRelabel site dist key) s at id = F) /\
+  (alias_occ_event_birth (AliasOccDeadRelabel site dist) s at id = F) /\
+  (alias_occ_event_birth (AliasOccLiteralBirth site key) s at id =
+    (at = key /\ id = s.alias_next)) /\
+  (alias_occ_event_birth (AliasOccParameterBirth site key) s at id =
+    (at = key /\ id = s.alias_next)) /\
+  (alias_occ_event_birth (AliasOccRegularBirth site key) s at id =
+    (at = key /\ id = s.alias_next)) /\
+  (alias_occ_event_birth (AliasOccPhiBirth site dist key) s at id =
+    (at = key /\ id = s.alias_next /\
+     LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs)) /\
+  (alias_occ_event_birth (AliasOccOffsetBirth site key) s at id =
+    (at = key /\ id = s.alias_next))
+End
+
+Definition alias_occ_event_rename_def:
+  (alias_occ_event_rename (AliasOccPrimitive cmd) s at id = F) /\
+  (alias_occ_event_rename (AliasOccEquivRelabel site dist key) s at id =
+    (at = key /\ LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs /\
+     id = SND (EL (LENGTH s.alias_occs - 1 - dist) s.alias_occs))) /\
+  (alias_occ_event_rename (AliasOccDeadRelabel site dist) s at id =
+    (at = dead_stack_marker /\ LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs /\
+     id = SND (EL (LENGTH s.alias_occs - 1 - dist) s.alias_occs))) /\
+  (alias_occ_event_rename (AliasOccLiteralBirth site key) s at id = F) /\
+  (alias_occ_event_rename (AliasOccParameterBirth site key) s at id = F) /\
+  (alias_occ_event_rename (AliasOccRegularBirth site key) s at id = F) /\
+  (alias_occ_event_rename (AliasOccPhiBirth site dist key) s at id = F) /\
+  (alias_occ_event_rename (AliasOccOffsetBirth site key) s at id = F)
+End
+
+Theorem alias_occ_event_origin:
+  alias_occ_wf s /\ (at,id) IN alias_occ_residents (alias_occ_event_shadow ev s) ==>
+  (at,id) IN alias_occ_residents s \/
+  alias_occ_event_birth ev s at id \/ alias_occ_event_rename ev s at id
+Proof
+  Cases_on `ev` >>
+  simp[alias_occ_event_shadow_def, alias_occ_event_birth_def,
+       alias_occ_event_rename_def, alias_occ_insert_residents] >>
+  simp[GEN_ALL alias_occ_command_origin] >>
+  rpt strip_tac >>
+  gvs[alias_occ_replace_def, alias_occ_relabel_def, alias_occ_residents_member,
+      MEM_LUPDATE] >> imp_res_tac EL_MEM >> gvs[] >>
+  Cases_on `LENGTH s.alias_occs - 1 - n0 < LENGTH s.alias_occs` >>
+  gvs[MEM_LUPDATE] >> imp_res_tac EL_MEM >> gvs[]
+QED
+
+Theorem alias_occ_event_rename_parent:
+  alias_occ_event_rename ev s at id ==>
+  ?old. (old,id) IN alias_occ_residents s
+Proof
+  Cases_on `ev` >> simp[alias_occ_event_rename_def] >> rpt strip_tac >>
+  qexists `FST (EL (LENGTH s.alias_occs - 1 - n0) s.alias_occs)` >>
+  simp[alias_occ_residents_member, pairTheory.PAIR, EL_MEM]
+QED
+
+Theorem alias_occ_event_id_origin:
+  alias_occ_wf s /\ (at,id) IN alias_occ_residents (alias_occ_event_shadow ev s) ==>
+  (?old. (old,id) IN alias_occ_residents s) \/ alias_occ_event_birth ev s at id
+Proof
+  strip_tac >> drule_all alias_occ_event_origin >> strip_tac >>
+  metis_tac[GEN_ALL alias_occ_event_rename_parent]
+QED
+
+Theorem alias_occ_event_new_birth:
+  alias_occ_wf s /\ s.alias_next <= id /\
+  (at,id) IN alias_occ_residents (alias_occ_event_shadow ev s) ==>
+  alias_occ_event_birth ev s at id
+Proof
+  strip_tac >> drule_all alias_occ_event_id_origin >> strip_tac >>
+  drule_all alias_occ_resident_bound >> simp[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
