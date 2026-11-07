@@ -5,7 +5,7 @@ Ancestors
   abiDecodePtrMemberFrame assignTuplePtrLoadStep typedCopyPtr
   abiEncoder abiDecodeStaticProps bodyPtrDefs emitHelperProps exprLoweringProps ptrDiscipline venomState
   venomExecSemantics venomInst words arithmetic finite_map emitHelper compileEnv fragGasPathPtr
-  exprSimAccounts freshWrites fragExec stateFrame
+  exprSimAccounts freshWrites fragExec stateFrame fragGasSeqPtr
 
 Theorem abi_decode_ptr_relative_window:
   abi_decode_ptr_window G tn s src b h /\
@@ -42,6 +42,7 @@ Theorem abi_decode_ptr_address:
   p <= h /\ w2n b+h < dimword(:256) ==>
   ?out t G' tn'. addr = Var out /\ not_fresh_at sb out /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
     run_inst_seq (emitted_insts sa sb) s =
       OK (t with vs_inst_idx := s.vs_inst_idx) /\
     abi_decode_ptr_window G' tn' t out (b+n2w p) (h-p) /\
@@ -78,6 +79,7 @@ Proof
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   conj_tac >- gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  conj_tac >- (gvs[] >> simp[Abbr `H`, Abbr `tm`, inst_seq_ptr_def]) >>
   conj_tac >- suspend "address_raw" >>
   conj_tac >- (simp[Abbr `H`, Abbr `tm`, Abbr `t`] >>
               irule abi_decode_ptr_relative_window >> simp[]) >>
