@@ -139,3 +139,60 @@ Proof
   metis_tac[]) >>
   disj2_tac >> metis_tac[]
 QED
+
+(* Map a source constructor while exposing its concrete successful run. *)
+Theorem gas_outcome_map_source_run:
+  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
+  (!res ee t. Q res ee t /\
+     (?gs. source (es with gas_obs := gs) = (res,ee)) ==>
+     Q' (SUM_MAP f I res) ee t) /\
+  (!res ee r. R res ee r ==> R' (SUM_MAP f I res) ee r) ==>
+  gas_outcome memory tops (ctx,func) (bind source (return o f)) (es,s) Q' R'
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+      >- suspend "normal"
+      >> suspend "exit") >>
+  suspend "exempt"
+QED
+
+Resume gas_outcome_map_source_run[normal]:
+  `gas_marked_exec memory (ctx,func) (bind source (return o f))
+     (es,s) marks (SUM_MAP f I res) es_end (OK t)` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     simp[bind_def, return_def] >> gen_tac >>
+     Cases_on `res` >> simp[]) >>
+  `?gs. source (es with gas_obs := gs) = (res,es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ source _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> metis_tac[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`SUM_MAP f I res`, `es_end`, `OK t`] >> simp[] >>
+  metis_tac[]
+QED
+
+Resume gas_outcome_map_source_run[exit]:
+  `gas_marked_exec memory (ctx,func) (bind source (return o f))
+     (es,s) marks (SUM_MAP f I res) es_end r` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     simp[bind_def, return_def] >> gen_tac >>
+     Cases_on `res` >> simp[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >> simp[]
+QED
+
+Resume gas_outcome_map_source_run[exempt]:
+  rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
+  simp[bind_return] >>
+  simp[GSYM ignore_bind_def]
+QED
+Finalise gas_outcome_map_source_run
