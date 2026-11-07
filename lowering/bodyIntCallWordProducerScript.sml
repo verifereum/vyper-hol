@@ -3,8 +3,6 @@ Theory bodyIntCallWordProducer
 Ancestors
   bodyIntCallProducerInterface exprSimIfExp exprSimDefs vyperAST
 
-(* alan temporary HolyHammer probe - restored automatically *)
-val _ = QUse.use (OS.Path.concat ("/tmp/alan-closer-zqgwqilz", "probe.sml"));
 
 Theorem gas_outcome_word_provenance:
   is_word_type t /\ gas_outcome memory tops p source start Q R ==>
