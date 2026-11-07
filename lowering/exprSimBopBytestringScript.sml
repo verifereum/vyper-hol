@@ -232,9 +232,11 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
   simp[mk_inst_def] >>
-  ASM_SIMP_TAC std_ss [Once step_inst_base_def, exec_pure2_def] >>
+  ASM_SIMP_TAC std_ss [Once step_inst_base_def, instruction_accfupds,
+       instruction_accessors, exec_pure2_def] >>
   simp[Once run_inst_seq_def] >>
-  ASM_SIMP_TAC std_ss [Once step_inst_base_def, exec_pure1_def,
+  ASM_SIMP_TAC std_ss [Once step_inst_base_def, instruction_accfupds,
+       instruction_accessors, exec_pure1_def,
        eval_operand_def, lookup_var_update_var, toString_inj] >>
   simp[run_inst_seq_def, bool_to_word_def, update_var_def, lookup_var_def,
        eval_operand_def, finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -373,5 +375,81 @@ Proof
     (qpat_x_assum `bop = Eq \/ bop = NotEq` strip_assume_tac >> simp[]) >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   drule_all comparison_compile_cut >> strip_tac >>
-  cheat
+  drule_all comparison_digest_shape >> strip_tac >>
+  `cs_extends sa sh1 /\ cs_extends sh1 sh2` by
+    (conj_tac
+     >- (qpat_x_assum `case bytestring_literal_hash e1 of NONE => ?p sm. lower_value _ _ _ e1 sa = _ /\ _ | SOME h => _` mp_tac >>
+         Cases_on `bytestring_literal_hash e1` >> simp_tac (srw_ss()) [] >>
+         strip_tac >> imp_res_tac (cj 2 compile_expr_grows) >>
+         imp_res_tac comparison_hash_shape >>
+         metis_tac[cs_extends_trans, cs_extends_refl]) >>
+     qpat_x_assum `case bytestring_literal_hash e2 of NONE => ?p sm. lower_value _ _ _ e2 sh1 = _ /\ _ | SOME h => _` mp_tac >>
+     Cases_on `bytestring_literal_hash e2` >> simp_tac (srw_ss()) [] >>
+     strip_tac >> imp_res_tac (cj 2 compile_expr_grows) >>
+     imp_res_tac comparison_hash_shape >>
+     metis_tac[cs_extends_trans, cs_extends_refl]) >>
+  `fn_has_code sa sh1 func /\ fn_has_code sh1 sh2 func /\
+   fn_has_code sh2 sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_trans, cs_extends_refl] >>
+  `sa.cs_next_var <= sh1.cs_next_var /\ sh1.cs_next_var <= sh2.cs_next_var` by
+    (conj_tac >>
+     Cases_on `bytestring_literal_hash e1` >>
+     Cases_on `bytestring_literal_hash e2` >> gvs[] >>
+     imp_res_tac (cj 2 compile_expr_grows) >>
+     imp_res_tac comparison_hash_shape >> decide_tac) >>
+  `local_ptrs_reserved cenv sh1 /\ local_ptrs_reserved cenv sh2` by
+    metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
+  pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] exprBopSimPropsTheory.eval_expr_bop_bind] >>
+  Cases_on `bytestring_literal_hash e1`
+  >- (gvs[] >>
+      `fn_has_code sa sm func /\ fn_has_code sm sh1 func` by
+        (imp_res_tac (cj 2 compile_expr_grows) >>
+         imp_res_tac comparison_hash_shape >>
+         metis_tac[fn_has_code_mid, cs_extends_refl]) >>
+      irule expr_sim_suffix >>
+      qpat_assum `expr_sim _ _ _ _ _ e1 _` (irule_at Any) >>
+      qpat_assum `lower_value _ _ _ e1 _ = _` (irule_at Any) >>
+      simp[] >>
+      (conj_tac >- metis_tac[exprBopSimPropsTheory.bop_first_admissible]) >>
+      rpt gen_tac >> strip_tac >>
+      `expr_body_pre cenv cx env e1 (es with gas_obs := gs)` by
+        simp[expr_body_pre_gas_obs] >>
+      drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> strip_tac >>
+      `expr_sim_case nocalls ctx func cenv cx e2 /\
+       expr_vv_case nocalls ctx func cenv cx e2` by
+        (drule (REWRITE_RULE [ETA_AX] eval_expr_read_INL) >> strip_tac >>
+         qpat_x_assum `(?s tv t s1 v t1. _) ==> _` irule >>
+         metis_tac[]) >>
+      `expr_sim ctx func cenv cx (expr_type e1) e2 ee` by
+        (qpat_x_assum `expr_sim_case _ _ _ _ _ e2`
+           (mp_tac o REWRITE_RULE [expr_sim_case_def]) >>
+         disch_then irule >>
+         (conj_tac >- gvs[int_calls_expr_def]) >>
+         qexists_tac `env` >> simp[]) >>
+      `?tv. evaluate_type env.type_defs (expr_type e1) = SOME tv /\
+            value_has_type tv v` by
+        (qpat_x_assum `!v'. INL v = _ ==> _` (qspec_then `v` mp_tac) >>
+         simp[expr_result_typed_def, expr_runtime_typed_def,
+              value_result_typed_def]) >>
+      `!x. p = Var x ==> not_fresh_at sm x` by
+        (qpat_assum `lower_value _ _ _ e1 _ = _`
+           (mp_then Any mp_tac exprOperandVarTheory.compile_lower_value_var) >>
+         simp[]) >>
+      `local_ptrs_reserved cenv sm` by
+        (imp_res_tac (cj 2 compile_expr_grows) >>
+         metis_tac[local_ptrs_reserved_next_var]) >>
+      `?cap. expr_type e1 = BaseT (BytesT (Dynamic cap)) \/
+             expr_type e1 = BaseT (StringT cap)` by
+        (Cases_on `expr_type e1` >> gvs[is_bytestring_type_def] >>
+         rename1 `is_bytestring_type (BaseT bt)` >> Cases_on `bt` >>
+         gvs[is_bytestring_type_def] >> Cases_on `b` >>
+         gvs[is_bytestring_type_def])
+      >- (gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+          Cases_on `v` >> gvs[value_has_type_def] >>
+          `evaluate_type (get_tenv cx) (expr_type e1) =
+             SOME (BaseTV (BytesT (Dynamic cap)))` by simp[vyperValueTheory.evaluate_type_def] >>
+          drule_all comparison_hash_dynamic >> strip_tac >>
+          FAIL_TAC "dynamic hash probe") >>
+      FAIL_TAC "string hash probe") >>
+  FAIL_TAC "literal probe"
 QED
