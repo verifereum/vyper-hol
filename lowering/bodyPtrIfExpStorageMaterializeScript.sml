@@ -28,7 +28,19 @@ Theorem ifexp_ensure_memory_storage_loop:
     t.vs_current_bb = sd.cs_current_bb /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
     ptr_covers G' tn' out t (type_memory_bytes ce (expr_type e)) /\
-    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn'
+    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn' /\
+    (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
+      off+sz <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= off) /\
+    (!name pos len. local_region ce es.scopes s0 name pos len ==>
+      pos+len <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= pos) /\
+    (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!b len. b+len <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= b ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >>
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_storage_arm_source >>
@@ -58,7 +70,8 @@ Proof
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   qexists_tac `d` >> qexists_tac `t` >> simp[] >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >>
-  simp[copyExecutionTheory.slot_copy_final_def]
+  simp[copyExecutionTheory.slot_copy_final_def] >>
+  gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 (* Both compiler branches finish at the end of the current instruction list. *)
@@ -89,7 +102,19 @@ Theorem ifexp_ensure_memory_storage:
     t.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~t.vs_halted /\
     (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
     ptr_covers G' tn' out t (type_memory_bytes ce (expr_type e)) /\
-    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn'
+    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn' /\
+    (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
+      off+sz <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= off) /\
+    (!name pos len. local_region ce es.scopes s0 name pos len ==>
+      pos+len <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= pos) /\
+    (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!b len. b+len <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= b ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `n = 1`
@@ -98,5 +123,6 @@ Proof
   `LENGTH sd.cs_current_insts = 0` by
     (drule_all ifexp_ensure_memory_slot_loop_parts >> strip_tac >>
      simp[copyExecutionTheory.slot_copy_final_def]) >>
-  simp[] >> irule ifexp_ensure_memory_storage_loop >> simp[] >> metis_tac[]
+  drule_all ifexp_ensure_memory_storage_loop >>
+  disch_then (qspecl_then [`PG`, `D`] mp_tac) >> simp[]
 QED

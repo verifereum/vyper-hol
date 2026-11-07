@@ -1,7 +1,7 @@
 Theory bodyPtrIfExpStorageSingle
 Ancestors bodyPtrIfExpMaterializeSingle bodyPtrIfExpStorageSupplier
   bodyPtrIfExpStorageAllocation bodyPtrIfExpStorageSource pred_set
-  context compileEnv emitHelper fragExec loweringHalt
+  context compileEnv emitHelper fragExec loweringHalt bodyPtrIfExpStorageAllocationFrame
 
 (* One-slot representations need not be word types.  Use source decoding
    and translated taint, exactly as for the nonsingleton loop. *)
@@ -51,6 +51,15 @@ Proof
   qexistsl_tac [`buf`, `cs`] >> simp[]
 QED
 
+Theorem ifexp_storage_load_step:
+  (opc = SLOAD \/ opc = TLOAD) /\ eval_operand src s = SOME p ==>
+  step_inst_base (mk_inst id opc [src] [out]) s =
+    OK (update_var out (if opc = SLOAD then sload p s else tload p s) s)
+Proof
+  strip_tac >> gvs[venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]
+QED
+
 Theorem ifexp_ensure_memory_storage_single:
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\
@@ -78,7 +87,19 @@ Theorem ifexp_ensure_memory_storage_single:
     t.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~t.vs_halted /\
     (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
     ptr_covers G' tn' out t (type_memory_bytes ce (expr_type e)) /\
-    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn'
+    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn' /\
+    (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
+      off+sz <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= off) /\
+    (!name pos len. local_region ce es.scopes s0 name pos len ==>
+      pos+len <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= pos) /\
+    (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!b len. b+len <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= b ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_storage_arm_source >>
@@ -115,9 +136,11 @@ Resume ifexp_ensure_memory_storage_single[execute]:
   `step_inst_base (mk_inst cs.cs_next_id opc [pp.ptr_operand]
     [STRING #"%" (toString cs.cs_next_var)]) r =
     OK (update_var (STRING #"%" (toString cs.cs_next_var)) w r)` by
-    (Cases_on `pp.ptr_location = LocStorage` >>
-     simp[Abbr `r`, Abbr `opc`, Abbr `w`, venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def,
+    (`eval_operand pp.ptr_operand r = SOME p` by simp[Abbr `r`] >>
+     drule_at (Pat `eval_operand _ r = _`) ifexp_storage_load_step >>
+     disch_then (qspecl_then [`STRING #"%" (toString cs.cs_next_var)`, `opc`, `cs.cs_next_id`] mp_tac) >>
+     Cases_on `pp.ptr_location = LocStorage` >>
+     simp[Abbr `r`, Abbr `opc`, Abbr `w`,
        venomStateTheory.sload_def, venomStateTheory.tload_def,
        venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def]) >>
   ` (do loaded <- emit_op opc [pp.ptr_operand];
@@ -199,6 +222,23 @@ Resume ifexp_ensure_memory_storage_single[post]:
   `~u'.vs_halted` by
     simp[venomStateTheory.mstore_def, venomStateTheory.write_memory_with_expansion_def,
       venomStateTheory.update_var_def] >>
+  suspend "ordinary"
+QED
+
+Resume ifexp_ensure_memory_storage_single[ordinary]:
+  `local_ptrs_reserved ce sb` by metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `stmt_state_rel ctx fn ce cx ee s` by fs[loweringPostsTheory.vv_post_def] >>
+  `!x. not_fresh_at sb x ==> x <> out'` by
+    (drule compile_alloc_buffer_parts >> strip_tac >>
+     metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
+  `u' with vs_inst_idx := LENGTH sd.cs_current_insts =
+   (mstore (w2n d) w (update_var out' w (u with vs_inst_idx := LENGTH cs.cs_current_insts)))
+     with vs_inst_idx := LENGTH sd.cs_current_insts` by
+    (qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
+     simp[Abbr `r`, venomStateTheory.mstore_def, venomStateTheory.update_var_def]) >>
+  drule_at (Pat `t = (mstore _ _ _) with vs_inst_idx := _`)
+    ifexp_storage_single_allocation_frame >>
+  disch_then drule_all >> strip_tac >>
   qexistsl_tac [`d`, `u' with vs_inst_idx := LENGTH sd.cs_current_insts`, `G2`, `tn2`] >>
   simp[NoAsms] >>
   conj_tac >- (pure_rewrite_tac[venomStateTheory.eval_operand_def] >> first_assum ACCEPT_TAC) >>
@@ -208,7 +248,13 @@ Resume ifexp_ensure_memory_storage_single[post]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (qpat_x_assum `ptr_covers G2 tn2 out _ 32` mp_tac >> simp[NoAsms]) >>
   conj_tac >- (qpat_x_assum `ghost_inv rty ce cx ee G2 tn2 _` mp_tac >> simp[NoAsms]) >>
-  first_assum ACCEPT_TAC
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!name pos len. local_region _ _ _ _ _ _ ==> _` drule_all >> decide_tac) >>
+  rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise ifexp_ensure_memory_storage_single

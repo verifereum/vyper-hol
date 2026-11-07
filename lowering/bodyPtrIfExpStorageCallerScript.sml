@@ -2,6 +2,7 @@ Theory bodyPtrIfExpStorageCaller
 Ancestors bodyPtrIfExpStorageAllocation bodyPtrIfExpStorageCountedLoop
   bodyPtrIfExpAllocSource loweringHalt ptrDiscipline compileEnv venomState
   venomInst finite_map words arithmetic fragGasPathPtr decoderGhostFramePtr
+  bodyPtrIfExpStorageAllocationFrame loweringPosts exprLoweringProps
 
 Theorem ifexp_copy_allocated_execution:
   stmt_state_rel ctx fn ce cx es s0 /\
@@ -26,7 +27,20 @@ Theorem ifexp_copy_allocated_execution:
     t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     eval_operand (Var out) t = SOME d /\
     contract_storage u = contract_storage s /\ contract_transient u = contract_transient s /\
-    tnBase.t_stor = tn.t_stor /\ tnBase.t_trans = tn.t_trans
+    tnBase.t_stor = tn.t_stor /\ tnBase.t_trans = tn.t_trans /\
+    step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w (32*n))] [out]) s = OK u /\
+    (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
+      off+sz <= w2n d \/ w2n d+32*n <= off) /\
+    (!name pos len. local_region ce es.scopes s0 name pos len ==>
+      pos+len <= w2n d \/ w2n d+32*n <= pos) /\
+    (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!b len. b+len <= w2n d \/ w2n d+32*n <= b ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >> drule_all ifexp_copy_allocation_start >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -45,6 +59,18 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `eval_operand (Var out) t = SOME d` by
     (fs[bodyPtrIfExpStorageInvariantTheory.ifexp_copy_ptr_inv_def, slotCopyExecutionTheory.slot_copy_inv_def] >> metis_tac[]) >>
+  `local_ptrs_reserved ce sb` by metis_tac[local_ptrs_reserved_next_var] >>
+  `stmt_state_rel ctx fn ce cx ee s` by fs[vv_post_def] >>
+  drule_all ifexp_storage_allocation_frame >> strip_tac >>
   qexistsl_tac [`out`, `u`, `d`, `G1`, `tn1`, `t`, `G'`, `tn'`] >>
-  simp[] >> metis_tac[gas_path_ptr_then, ADD_CLAUSES]
+  simp[] >> conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!aid off sz. _` drule_all >> decide_tac) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!name pos len. local_region _ _ _ _ _ _ ==> _` drule_all >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!b len. _ ==> mem_bytes_at _ _ t.vs_memory = _`
+    (qspecl_then [`b`, `len`] mp_tac) >> simp[]
 QED
