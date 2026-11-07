@@ -99,7 +99,7 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_ptr[summary]:
 QED
 
 Resume compile_assign_tuple_locals_memory_stmt_frag_ptr[normal]:
-  gvs[] >> drule gas_marked_exec_ptr_exec >> strip_tac >>
+  gvs[post_value_type_lowered] >> drule gas_marked_exec_ptr_exec >> strip_tac >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> metis_tac[gas_marked_path_exec, gas_path_normal]) >>
