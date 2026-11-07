@@ -194,7 +194,8 @@ Theorem compile_slice_calldata_shared_success:
   32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
-  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  eval_operand start s = SOME (n2w a) /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -237,9 +238,6 @@ Theorem compile_slice_calldata_shared_success:
     (!i. w2n w <= i /\ i < w2n w + 32 + n ==> i NOTIN tm.t_mem)
 Proof
   strip_tac >>
-  `!x. start = Var x ==> not_fresh_at sa x` by
-    (rw[not_fresh_at_def] >>
-     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
   drule_all compile_slice_calldata_semantic >>
   disch_then (qspecl_then [`tn`,`bound`,`PG`,`G`,`D`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts s2 s3) (v with vs_inst_idx := SUC t.vs_inst_idx) =
@@ -261,8 +259,7 @@ Resume compile_slice_calldata_shared_success[counted]:
       vs_inst_idx := SUC t.vs_inst_idx) = OK (q with vs_inst_idx := SUC t.vs_inst_idx)` by
     metis_tac[] >>
   `!op z. MEM op [start;Lit (n2w n)] /\ op = Var z ==> not_fresh_at sa z` by
-    (rpt strip_tac >> gvs[MEM] >> rw[not_fresh_at_def] >>
-     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
+    (rpt strip_tac >> gvs[MEM] >> metis_tac[]) >>
   drule_all compile_slice_calldata_counted_ok >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `w2n (w + 32w) = w2n w + 32` by
@@ -357,7 +354,8 @@ Theorem compile_slice_calldata_success_posts:
   32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   a + n < dimword (:256) /\ a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
-  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  eval_operand start s = SOME (n2w a) /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -418,7 +416,8 @@ Theorem compile_slice_calldata_revert:
   32 <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
   (dimword (:256) <= a + n \/ LENGTH s.vs_call_ctx.cc_calldata < a + n) /\
-  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  eval_operand start s = SOME (n2w a) /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -430,9 +429,6 @@ Theorem compile_slice_calldata_revert:
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
   strip_tac >>
-  `!x. start = Var x ==> not_fresh_at sa x` by
-    (rw[not_fresh_at_def] >>
-     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
   drule_all compile_slice_calldata_runtime >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   qpat_x_assum `out = Var r` SUBST_ALL_TAC >>
@@ -453,8 +449,7 @@ Proof
   `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
   qpat_x_assum `v = _` SUBST_ALL_TAC >>
   `!op z. MEM op [start;Lit (n2w n)] /\ op = Var z ==> not_fresh_at sa z` by
-    (rpt strip_tac >> gvs[MEM] >> rw[not_fresh_at_def] >>
-     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
+    (rpt strip_tac >> gvs[MEM] >> metis_tac[]) >>
   drule_all compile_slice_calldata_bounds_abort >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Abort _ _)`
@@ -509,7 +504,8 @@ Theorem compile_slice_calldata_source_outcome:
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   0 < n /\ 32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
-  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  eval_operand start s = SOME (n2w a) /\
+  (!x. start = Var x ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
