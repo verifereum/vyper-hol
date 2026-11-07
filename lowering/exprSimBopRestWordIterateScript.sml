@@ -140,7 +140,7 @@ Theorem rest_word_search_rep_update:
   rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop needle lenop len (update_var x w s)
 Proof
-  simp[rest_word_search_rep_def] >> strip_tac >> conj_tac
+  PURE_REWRITE_TAC[rest_word_search_rep_def] >> strip_tac >> conj_tac
   >- (irule vv_post_update_var >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   Cases_on `needleop` >> Cases_on `lenop` >>
   gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
