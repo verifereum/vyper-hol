@@ -2168,7 +2168,7 @@ Proof
   qpat_x_assum `alias_path_available fn l i x` mp_tac >>
   rewrite_tac[alias_path_available_def] >>
   disch_then (qspec_then `path` mp_tac) >>
-  impl_tac >- metis_tac[] >> strip_tac
+  impl_tac >- simp[] >> strip_tac
   >- (`?j. j < LENGTH bb.bb_instructions /\
            EL j bb.bb_instructions = inst` by metis_tac[MEM_EL] >>
       `alias_path_available fn bb.bb_label j y` by
@@ -8287,6 +8287,93 @@ Definition alias_diamond_jr_def:
   alias_diamond_jr = THE (alias_diamond_plan 4 (SND alias_diamond_r))
 End
 
+Theorem alias_wl_iterate_empty:
+  wl_iterate c p d [] s = ([],s)
+Proof
+  rewrite_tac[worklistDefsTheory.wl_iterate_def] >>
+  once_rewrite_tac[WhileTheory.WHILE] >> simp[]
+QED
+
+Theorem alias_wl_iterate_step:
+  wl_step c p d (x::xs,s) = (ys,t) ==>
+  wl_iterate c p d (x::xs) s = wl_iterate c p d ys t
+Proof
+  strip_tac >> rewrite_tac[worklistDefsTheory.wl_iterate_def] >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [WhileTheory.WHILE])) >> simp[]
+QED
+
+Theorem alias_diamond_liveness_certificate:
+  liveness_analyze alias_diamond_fn =
+    <| ds_inst :=
+        (FEMPTY |++ [(("right",0),["c";"r"]); (("right",1),["v";"c"]);
+          (("right",2),["v2";"v"]); (("right",3),["v2";"v"])]) ⊌
+        (FEMPTY |++ [(("left",0),["c";"r"]); (("left",1),["u";"c"]);
+          (("left",2),["u2";"u"]); (("left",3),["u2";"u"])]) ⊌
+        (FEMPTY |++ [(("join",0),["u2";"v2";"u";"v"]);
+          (("join",1),["p";"u2";"v2"]); (("join",2),["q";"p"]);
+          (("join",3),["w"]); (("join",4),["z"]); (("join",5),["z"])]) ⊌
+        (FEMPTY |++ [(("backedge",0),["z"]); (("backedge",1),["z"])]) ⊌
+        (FEMPTY |++ [(("entry",0),[]); (("entry",1),["seed"]); (("entry",2),["seed"])]) ⊌
+        (FEMPTY |++ [(("header",0),["seed";"z"]); (("header",1),["t"]);
+          (("header",2),["r";"t"]); (("header",3),["c";"r"]);
+          (("header",4),["c";"r"])]) ⊌
+        (FEMPTY |++ [(("exit",0),[]); (("exit",1),[])]);
+       ds_boundary := FEMPTY |++ [("right",["c";"r"]); ("left",["c";"r"]);
+         ("join",["u2";"v2";"u";"v"]); ("backedge",["z"]);
+         ("entry",[]); ("header",["seed";"z"]); ("exit",[])] |>
+Proof
+  rewrite_tac[liveness_analyze_def, liveness_recompute_def, LET_THM,
+    worklistDefsTheory.wl_iterate_def] >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV WhileTheory.WHILE))) >>
+  CONV_TAC (LAND_CONV (computeLib.RESTR_EVAL_CONV [``While$WHILE``])) >>
+  simp[finite_mapTheory.FUNION_FUPDATE_1, finite_mapTheory.FUPDATE_LIST_THM,
+    dfAnalyzeDefsTheory.df_state_component_equality, finite_mapTheory.fmap_eq_flookup,
+    finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_FUNION] >>
+  conj_tac >> gen_tac >>
+  ntac 4 (IF_CASES_TAC >> gvs[]) >>
+  ntac 4 (IF_CASES_TAC >> gvs[]) >>
+  ntac 4 (IF_CASES_TAC >> gvs[]) >>
+  ntac 4 (IF_CASES_TAC >> gvs[]) >>
+  ntac 4 (IF_CASES_TAC >> gvs[]) >>
+  ntac 4 (IF_CASES_TAC >> gvs[]) >>
+  ntac 4 (IF_CASES_TAC >> gvs[])
+QED
+
 Theorem alias_diamond_joins:
   IS_SOME (alias_diamond_plan 4 (SND alias_diamond_l)) /\
   IS_SOME (alias_diamond_plan 4 (SND alias_diamond_r)) /\
@@ -8297,10 +8384,9 @@ Theorem alias_diamond_joins:
   (SND alias_diamond_jr).ps_spilled = FEMPTY
 Proof
   rewrite_tac[alias_diamond_jl_def, alias_diamond_jr_def, alias_diamond_branch_states] >>
-  rpt conj_tac >> simp[alias_diamond_plan_def] >>
-  CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
-    if same_const (fst (strip_comb tm)) ``liveness_analyze`` andalso is_comb tm
-    then CHANGED_CONV EVAL tm else NO_CONV tm)) >>
+  rpt conj_tac >>
+  simp[alias_diamond_plan_def, alias_diamond_liveness_certificate,
+    finite_mapTheory.FUPDATE_LIST_THM, finite_mapTheory.FUNION_FUPDATE_1] >>
   CONV_TAC (ONCE_DEPTH_CONV (fn tm =>
     if same_const (fst (strip_comb tm)) ``dfg_build_function`` andalso is_comb tm
     then CHANGED_CONV EVAL tm else NO_CONV tm)) >>
@@ -8507,7 +8593,12 @@ Proof
   qexistsl_tac [`EL 1 alias_diamond_fn.fn_blocks`, `FST alias_diamond_h`, `NONE`, `"header"`, `F`,
     `SND alias_diamond_e`, `SND alias_diamond_e`, `SND alias_diamond_h`] >>
   simp[GSYM alias_diamond_plan_def, alias_diamond_plans, alias_diamond_dfs_states,
-       alias_diamond_edges, alias_diamond_lineage_header] >> EVAL_TAC
+       alias_diamond_edges, alias_diamond_lineage_header] >>
+  `SND alias_diamond_e with
+    <|ps_cleanup_height := NONE; ps_cleanup_promised := F|> =
+    SND alias_diamond_e` by
+    simp[alias_diamond_e_state, init_cleanup_plan_state_def] >>
+  simp[alias_diamond_plans] >> EVAL_TAC
 QED
 
 Theorem alias_diamond_lineage_join:
@@ -8764,6 +8855,29 @@ Proof
   Cases >> EVAL_TAC
 QED
 
+Theorem alias_search_header_liveness:
+  !two.
+    live_vars_at (liveness_analyze (alias_search_fn T F two)) "header" 1 = ["t"] /\
+    live_vars_at (liveness_analyze (alias_search_fn T F two)) "header" 2 = ["r"; "t"]
+Proof
+  Cases >> conj_tac >> EVAL_TAC
+QED
+
+Theorem alias_search_header_prefix_plan:
+  !two. generate_block_insts_plan (liveness_analyze (alias_search_fn T F two))
+      (dfg_build_function (alias_search_fn T F two))
+      (cfg_analyze (alias_search_fn T F two)) (alias_search_fn T F two)
+      "header" F 0 2 0
+      (TAKE 2 (EL 1 (alias_search_fn T F two).fn_blocks).bb_instructions)
+      (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "z"]) =
+    SOME ([SOPoke 0 (Var "t"); SOEmit "CALLDATASIZE"; SOSwap 1],
+      init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "r"; Var "t"])
+Proof
+  Cases >>
+  simp[alias_search_fn_def, generate_block_insts_plan_def,
+       alias_search_header_liveness] >> EVAL_TAC
+QED
+
 Theorem alias_search_header_prefixes:
   !two.
     (SND (generate_phi_plan
@@ -8783,7 +8897,9 @@ Theorem alias_search_header_prefixes:
       (TAKE 2 (EL 1 (alias_search_fn T F two).fn_blocks).bb_instructions)
       (alias_search_loop two)))).ps_stack = [Var "r"; Var "t"]
 Proof
-  rewrite_tac[alias_search_loop_state] >> Cases >> rpt conj_tac >> EVAL_TAC
+  rewrite_tac[alias_search_loop_state, alias_search_header_prefix_plan] >>
+  simp[alias_search_header_liveness, init_cleanup_plan_state_def, init_plan_state_def] >>
+  Cases >> EVAL_TAC
 QED
 
 Theorem alias_search_no_retained_root_alias:
@@ -11402,6 +11518,27 @@ Proof
        alias_dead_phi_body_def, alias_dead_phi_backedge_def]
 QED
 
+Theorem alias_dead_phi_entry_state:
+  SND alias_dead_phi_entry =
+    init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "e"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_dead_phi_header_state:
+  SND alias_dead_phi_header =
+    init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "r"]
+Proof
+  rewrite_tac[alias_dead_phi_header_def, alias_dead_phi_entry_state] >> EVAL_TAC
+QED
+
+Theorem alias_dead_phi_body_state:
+  SND alias_dead_phi_body =
+    init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "b"]
+Proof
+  rewrite_tac[alias_dead_phi_body_def, alias_dead_phi_header_state] >> EVAL_TAC
+QED
+
 Theorem alias_dead_phi_dfs_header:
   dfs_aux_call (liveness_analyze alias_dead_phi_fn)
     (dfg_build_function alias_dead_phi_fn) (cfg_analyze alias_dead_phi_fn) alias_dead_phi_fn
@@ -11460,7 +11597,9 @@ Proof
   `SND alias_dead_phi_body = (SND alias_dead_phi_body) with
     <|ps_alloc := (init_cleanup_plan_state NONE [] 0 0).ps_alloc with
         sa_free_slots := (SND alias_dead_phi_body).ps_alloc.sa_free_slots;
-      ps_label_counter := (init_cleanup_plan_state NONE [] 0 0).ps_label_counter|>` by EVAL_TAC >>
+      ps_label_counter := (init_cleanup_plan_state NONE [] 0 0).ps_label_counter|>` by
+    simp[alias_dead_phi_body_state, init_cleanup_plan_state_def,
+         init_plan_state_def, init_spill_alloc_def] >>
   pop_assum SUBST1_TAC >> irule dfs_aux_call_sibling >>
   qexistsl_tac [`[SOLabel "exit"; SOPop 1; SOEmit "STOP"]`,
     `"exit"`, `["body"; "header"; "entry"]`] >>
