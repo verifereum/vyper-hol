@@ -1,35 +1,101 @@
 Theory bodyPtrPopAggregateBoundary
-Ancestors
-  bodyPtrPopDynAssignProbe supportedTypes supportedExprs
-  compileEnv vyperValue
+Ancestors bodyPtrPopMaterialization bodyPtrPopTypedCopyBoundary
+  bodyPtrPopAllocationBoundary
+  bodyPtrPopArithmeticBoundary bodyPtrPopCompilerBoundary
+  exprLowering compileEnv emitHelper list
 
-(* Boundary ledger for multiword replacement:
-   context.compile_dynarray_to_storage copies [dst+1, dst+1+len*ew)
-   and then writes dst. A saved region disjoint from these writes can use
-   pop_region_taint_frame, once operational storage/taint frames are supplied.
-   Inside that prefix, a saved descendant needs imported taint dead relative
-   to its OWN header, not relative to the source root. The branch's MLOAD /
-   word-copy loop supplies no recursive inner-length guard. supported_place_type
-   admits the triple-array layout; supported_copy_types admits equal types.
-   However supported_expr admits Pop only at TopLevelNameTarget. Hence these
-   type facts do not certify a supported caller containing the nested Pop.
-   Missing producer: source/compiler reachable-place hypotheses must either
-   exclude such captured descendants or imply their imported bytes are locally
-   dead under the replacement header. ptr_mem_ok at the root is insufficient.
-   The empty-outer run in DynAssignProbe does not exercise this boundary. *)
-
-Theorem pop_dyn_assign_supported_layout:
-  supported_place_type tops pop_dyn_assign_ty /\
-  supported_storage_type tops pop_dyn_assign_ty /\
-  supported_copy_types pop_dyn_assign_ty pop_dyn_assign_ty
+Theorem pop_compile_make_tuple_boundary:
+  !args buf off sa r sb.
+  (!a aty s v t. MEM a args /\ pop_comp_boundary s /\
+    cfn cenv aty a s = (v,t) ==> pop_comp_boundary t) /\
+  pop_comp_boundary sa /\ compile_make_tuple cfn cenv args buf off sa = (r,sb) ==>
+  pop_comp_boundary sb
 Proof
-  EVAL_TAC
+  Induct
+  >- (simp[compile_make_tuple_def] >> rpt strip_tac >>
+      drule_all pop_comp_boundary_return >> simp[]) >>
+  simp[compile_make_tuple_def, comp_ignore_bind_def] >> rpt strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a aty s v t. _` (qspec_then `h` mp_tac) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_at (Pat `emit_op _ _ _ = _`)
+      pop_emit_op_boundary >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all pop_unwrap_value_boundary >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all pop_compile_store_memory_boundary >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!buf off sa r sb. _ /\ _ /\ compile_make_tuple _ _ _ _ _ _ = _ ==> _` irule >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a aty s v t. _` (qspec_then `a` mp_tac) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem pop_dyn_assign_nested_pop_unsupported:
-  ~supported_expr tops
-    (Pop ann (SubscriptTarget (SubscriptTarget root ix) iy))
+Theorem pop_compile_make_array_elems_boundary:
+  !args et sz hl buf idx sa r sb.
+  (!a aty s v t. MEM a args /\ pop_comp_boundary s /\
+    cfn cenv aty a s = (v,t) ==> pop_comp_boundary t) /\
+  pop_comp_boundary sa /\
+  compile_make_array_elems cfn cenv args et sz hl buf idx sa = (r,sb) ==>
+  pop_comp_boundary sb
 Proof
-  Cases_on `root` >>
-  simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def]
+  Induct
+  >- (simp[compile_make_array_elems_def] >> rpt strip_tac >>
+      drule_all pop_comp_boundary_return >> simp[]) >>
+  simp[compile_make_array_elems_def, comp_ignore_bind_def] >> rpt strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a aty s v t. _` (qspec_then `h` mp_tac) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_at (Pat `emit_op _ _ _ = _`)
+      pop_emit_op_boundary >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all pop_unwrap_value_boundary >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all pop_compile_store_memory_boundary >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!et sz hl buf idx sa r sb. _ /\ _ /\ compile_make_array_elems _ _ _ _ _ _ _ _ _ = _ ==> _` irule >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a aty s v t. _` (qspec_then `a` mp_tac) >>
+      simp[] >> disch_then drule_all >> simp[]) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem pop_compile_make_array_boundary:
+  (!a aty s v t. MEM a args /\ pop_comp_boundary s /\
+    cfn cenv aty a s = (v,t) ==> pop_comp_boundary t) /\
+  pop_comp_boundary sa /\
+  compile_make_array cfn cenv args et sz hl buf sa = (r,sb) ==>
+  pop_comp_boundary sb
+Proof
+  simp[compile_make_array_def, comp_ignore_bind_def] >> rpt strip_tac >>
+  dxrule_at (Pat `comp_bind _ _ _ = _`) pop_comp_boundary_bind >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> Cases_on `hl` >> gvs[]
+      >- (drule_at (Pat `emit_void _ _ _ = _`) pop_emit_void_boundary >> simp[]) >>
+      drule_all pop_comp_boundary_return >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _`)
+    pop_compile_make_array_elems_boundary >> simp[] >>
+  disch_then irule >> first_assum ACCEPT_TAC
 QED
