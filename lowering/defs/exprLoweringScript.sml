@@ -2485,7 +2485,8 @@ End
    succeeds), but the formal proof needs: well_typed ⇒ safe_cast is identity.
    Also: default argument expansion not performed — frontend must inline defaults
    into the Call AST node before codegen (Python does this). *)
-(* Only literal topic lists are lowered; constant lists are folded by the frontend. *)
+(* Only a literal topic list is lowered; Vyper also requires one, after
+   folding constants. *)
 Definition raw_log_topic_exprs_def:
   raw_log_topic_exprs (Builtin ann (MakeArray elem_ty bnd) es) = es /\
   raw_log_topic_exprs _ = []
