@@ -1,7 +1,7 @@
 (* Memory case of the body induction for concat. *)
 Theory bodyMemBiConcat
 Ancestors
-  bodyMemoryPreds bodyMemBiConcatFragments bodyMemBiConcatPrefix bodyMemBiConcatBounds bodyMemBiConcatArms bodyMemBiConcatArgs
+  bodyMemoryPreds bodyMemBiConcatFragments bodyMemBiConcatPrefix bodyMemBiConcatBounds bodyMemBiConcatArms bodyMemBiConcatArgs bodyMemBiConcatResult
 
 Theorem body_builtin_concat_mem:
   !cx ty n es.
