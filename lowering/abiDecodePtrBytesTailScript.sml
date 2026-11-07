@@ -1,10 +1,11 @@
 (* Pointer certificates for the exact runtime bytes tail. *)
 Theory abiDecodePtrBytesTail
 Ancestors
-  abiDecoderBytesRuntime abiDecoderRange abiDecodePtrRead abiDecodePtrNormalized
-  bodyPtrBopScalarCompile abiDecodePtrMemberFrame assignTuplePtrCopyLen
+  abiDecoderBytesRuntime abiDecoderRange abiDecodeStaticProps abiDecodePtrRead abiDecodePtrNormalized
+  bodyPtrBopScalarCompile bodyPtrBopScalarSeq bodyPtrBopScalarOutcome
+  abiDecodePtrMemberFrame assignTuplePtrCopyLen
   emitHelperProps exprLoweringProps compileEnv emitHelper freshWrites
-  venomState venomExecSemantics venomInst ptrDiscipline
+  venomState venomExecSemantics venomInst ptrDiscipline typedCopyPtr bodyPtrDefs
   list pred_set finite_map words arithmetic
 
 (* Rounding is scalar even though the following address ADD is not. *)
@@ -82,3 +83,81 @@ Proof
   qexists_tac `t` >> simp[abi_decode_bytes_round_word] >> metis_tac[]
 QED
 
+
+Theorem abi_decode_bytes_round_ptr:
+  emit_op ADD [cnt;Lit 31w] sa = (up,c1) /\
+  emit_op NOT [Lit 31w] c1 = (mask,c2) /\
+  emit_op AND [up;mask] c2 = (rounded,sb) /\
+  eval_operand cnt s = SOME (n2w c) /\
+  c+31 < dimword(:256) /\ fresh_vars_wrt sa s /\
+  op_prov G cnt = NONE /\ op_taint tn cnt = {} /\ ~ctx_has_dalloca ctx /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!x. x IN R ==> not_fresh_at sa x) ==>
+  ?t G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    eval_operand rounded t = SOME (n2w (32*((c+31) DIV 32))) /\
+    op_prov G' rounded = NONE /\ op_taint tn' rounded = {} /\
+    fresh_vars_wrt sb t /\
+    t = s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|> /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!x. x IN R ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  strip_tac >> drule_all abi_decode_bytes_round_sequence >> strip_tac >>
+  `bop_scalar_seq R {cnt;Lit 31w} (emitted_insts sa sb)
+    (rounded INSERT mask INSERT up INSERT {cnt;Lit 31w})` by
+    (irule abi_decode_bytes_round_scalar >> simp[] >> metis_tac[]) >>
+  `!op. op IN {cnt;Lit 31w} ==> op_prov G op = NONE /\ op_taint tn op = {}` by
+    (simp[] >> rpt strip_tac >> gvs[op_prov_def,op_taint_def]) >>
+  drule_all bop_scalar_seq_run >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  drule_all bop_scalar_seq_runtime_frame >> strip_tac >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `G'`, `tn'`] >>
+  `t.vs_inst_idx = s.vs_inst_idx` by
+    (qpat_assum `t = s with vs_vars := _`
+       (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `fresh_vars_wrt sb (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (qpat_x_assum `fresh_vars_wrt sb t` mp_tac >>
+     simp[fresh_vars_wrt_def, lookup_var_def]) >>
+  `eval_operand rounded (t with vs_inst_idx := LENGTH sb.cs_current_insts) =
+     eval_operand rounded t` by
+    (Cases_on `rounded` >> simp[NoAsms,eval_operand_def,lookup_var_def]) >>
+  `op_prov G' rounded = NONE /\ op_taint tn' rounded = {}` by
+    (qpat_x_assum `!op. op IN rounded INSERT _ ==> _`
+       (qspec_then `rounded` mp_tac) >> simp[]) >>
+  `t with vs_inst_idx := LENGTH sb.cs_current_insts =
+     s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>` by
+    (qpat_assum `t = s with vs_vars := _`
+       (fn th => once_rewrite_tac[th]) >> simp[NoAsms]) >>
+  simp[] >> conj_tac
+  >- (qpat_assum `t = s with vs_vars := _`
+        (fn th => once_rewrite_tac[th]) >> simp[venom_state_component_equality]) >>
+  rpt strip_tac >> simp[lookup_var_def] >>
+  first_x_assum irule >> simp[]
+QED
+
+(* Address formation needs coverage, not initialization of the output buffer. *)
+Theorem abi_decode_ptr_output_address_covers:
+  ptr_covers G tn dst s cap /\ lookup_var dst s = SOME b /\
+  q+k <= cap /\ w2n b+cap < dimword(:256) ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id ADD [Var dst;pos] [out])
+      (update_var out (b+n2w q) s))
+    (step_taint (mk_inst id ADD [Var dst;pos] [out]) s
+      (update_var out (b+n2w q) s) tn)
+    out (update_var out (b+n2w q) s with vs_inst_idx := idx) k
+Proof
+  strip_tac >>
+  `w2n (b+n2w q) = w2n b+q` by
+    (irule w2n_add_n2w_lt >> decide_tac) >>
+  fs[ptr_covers_def] >>
+  simp[ptr_covers_def, copy_len_binop_ghost_frame,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def,
+       op_prov_def, mk_inst_def, FLOOKUP_UPDATE] >>
+  qexistsl_tac [`b'`, `sz'`] >> simp[] >> decide_tac
+QED
