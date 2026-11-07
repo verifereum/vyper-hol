@@ -37,6 +37,7 @@ Owner note: `wb_frame` (and `locals_kept`) now take the final environment as wel
 ## Completion Criteria
 
 - The theorem is proved with no `cheat` in `lowering/exprSimAbiEncodeArgsScript.sml`, or in helper theories named `exprSimAbiEncodeArgs<Part>`.
+- The same holds for the five harvested ancestors `abiArgsLabelBoundary`, `abiEncodeArgsWindows`, `abiEncodeMaterialize`, `abiEncodeArgsSim` and `abiEncodeArgsCase`. Their proofs no longer built after the `locals_kept`/`wb_frame` merge, so commit 1afcd65b0 admitted all of them (`cheat`) to let the ancestors build. Every one of those admissions is yours to prove. The original proofs are at commit 4cd0c6660 (`git show 4cd0c6660:lowering/<file>`); restore what still works and port the rest. Their statements may change where the new interfaces force it; `abi_args_post_def` and `compile_abi_encode_args` stay as they are.
 - The harvested theories this proof needs (below) may be ported in place: change their proofs and add lemmas freely, but do not change `abi_args_post_def` or `compile_abi_encode_args`.
 - No new axioms or admissions. Definitions only as proof-only helpers.
 - `holbuild -j4 build exprSimAbiEncodeArgsTheory` passes at the default step limit.
