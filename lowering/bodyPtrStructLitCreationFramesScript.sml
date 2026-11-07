@@ -1,5 +1,6 @@
 Theory bodyPtrStructLitCreationFrames
 Ancestors bodyPtrStructLitCreationShape bodyPtrStructLitEmitterFrame
+  bodyPtrStructLitCreationStoreFrames bodyPtrStructLitOwnershipCallFrames
   bodyPtrStructLitOwnershipInterfaces bodyPtrStructLitCreationCopyFrames
   bodyPtrStructLitOwnershipStructFrame bodyPtrStructLitOwnershipCallSuffix
   bodyPtrStructLitOwnershipIfexpFrame bodyPtrStructLitOwnershipSteps
@@ -111,3 +112,35 @@ Resume alloc_run_create_snapshot_frame[copy]:
 QED
 
 Finalise alloc_run_create_snapshot_frame
+
+Theorem alloc_run_create_ctor_tuple_frame:
+  shape_stable R /\
+  (!e. MEM e args ==>
+    shape_step F compiler_label (\s. cenv_shape_ok s ce)
+      (cfn ce (expr_type e) e) (\v s. value_shape_ok s v) /\
+    alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+      (cfn ce (expr_type e) e) (\v s. T)) ==>
+  alloc_run (\s. shape_state s /\ R s /\ cenv_shape_ok s ce)
+    (compile_create_ctor_tuple cfn ce args)
+    (\v s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ plain_operand s v)
+Proof
+  strip_tac >> simp[compile_create_ctor_tuple_def, comp_ignore_bind_def] >>
+  irule alloc_run_bind >>
+  qexists `\vs s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
+    EVERY (value_shape_ok s) vs /\ LENGTH vs = LENGTH args` >>
+  reverse conj_tac >- (irule alloc_run_compile_multi_vvs_frame >> simp[]) >>
+  qx_gen_tac `vs` >> simp[] >> irule alloc_run_bind >>
+  qexists `\b s. shape_state s /\
+    (R s /\ cenv_shape_ok s ce /\ EVERY (value_shape_ok s) vs /\
+     LENGTH vs = LENGTH args) /\ plain_operand s b.buf_operand` >>
+  reverse conj_tac
+  >- (ho_match_mp_tac alloc_run_alloc_buffer_frame >>
+      simp[shape_stable_conj, cenv_shape_ok_stable, shape_stable_value_shapes,
+        shape_stable_def]) >>
+  qx_gen_tac `b` >> simp[] >> irule alloc_run_bind >>
+  qexists `\u s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
+    plain_operand s b.buf_operand` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_extcall_store_values_frame >>
+      qexists `R` >> simp[MAP_ZIP]) >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED

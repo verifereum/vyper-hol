@@ -13,7 +13,8 @@ Theorem alloc_run_compile_multi_vvs_frame:
       (cfn ce (expr_type e) e) (\v s. T)) ==>
   alloc_run (\s. shape_state s /\ R s /\ cenv_shape_ok s ce)
     (compile_multi_vvs cfn ce es)
-    (\vs s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ EVERY (value_shape_ok s) vs)
+    (\vs s. shape_state s /\ R s /\ cenv_shape_ok s ce /\
+      EVERY (value_shape_ok s) vs /\ LENGTH vs = LENGTH es)
 Proof
   Induct
   >- simp[compile_multi_vvs_def, comp_return_def, alloc_run_def, alloc_frame_refl] >>
@@ -24,7 +25,7 @@ Proof
   >- (irule (Q.INST [`internal` |-> `F`] alloc_run_struct_child_frame) >> simp[]) >>
   qx_gen_tac `vv` >> simp[] >> irule alloc_run_bind >>
   qexists `\vs s. shape_state s /\ (R s /\ value_shape_ok s vv) /\
-    cenv_shape_ok s ce /\ EVERY (value_shape_ok s) vs` >>
+    cenv_shape_ok s ce /\ EVERY (value_shape_ok s) vs /\ LENGTH vs = LENGTH es` >>
   reverse conj_tac
   >- (irule alloc_run_conseq >>
       qpat_assum `!R. _` (irule_at Any) >>
