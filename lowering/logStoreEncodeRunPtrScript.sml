@@ -61,6 +61,8 @@ Theorem log_source_store_encode_path_ptr:
     mem_bytes_at db (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs)))
       (ListV avs))) v.vs_memory =
       enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs) /\
+    LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs)))
+      (ListV avs)) <= outcap /\
     eval_operand out v = SOME (n2w (LENGTH
       (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)))) /\
     op_taint tm out = {} /\ op_prov H out = NONE /\
