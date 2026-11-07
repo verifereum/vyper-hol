@@ -282,3 +282,36 @@ Proof
   gvs[GSYM nested_reach_outer_ty_def, GSYM nested_reach_inner_ty_def,
       GSYM nested_reach_fixed_ty_def, nested_initial_type_value] >> EVAL_TAC >> simp[]
 QED
+
+Theorem nested_initial_oracle_storage:
+  oracle_storage_ok nested_initial_cx nested_premise_es
+Proof
+  simp[vyperTypeStoragePreservationTheory.oracle_storage_ok_def,
+       nested_premise_es_def, nested_reach_es_def]
+QED
+
+Theorem nested_initial_module_storage:
+  get_module_code nested_initial_cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+  nested_premise_cenv.ce_hashmap_info (src,id) = NONE /\
+  nested_premise_cenv.ce_module_var_type (src,id) = SOME typ
+Proof
+  strip_tac >> drule_all nested_initial_decl >> strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem nested_initial_expr_inv:
+  expr_sim_inv nested_premise_cenv nested_initial_cx
+    nested_premise_env nested_premise_es
+Proof
+  rewrite_tac[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  simp[nested_initial_basic, nested_initial_functions,
+       nested_initial_storage_wf, nested_initial_layout_safe,
+       nested_initial_oracle_storage, nested_initial_module_storage] >>
+  `get_tenv nested_initial_cx = type_env nested_reach_tops` by EVAL_TAC >>
+  `!fname tys. nested_premise_cenv.ce_method_id fname tys =
+     w2n (calldata_method_id
+       (function_selector fname (vyper_to_abi_types (get_tenv nested_initial_cx) tys)))`
+    by (mp_tac nested_initial_body_inv >>
+        simp[body_inv_def, cenv_module_pins_def]) >>
+  simp[] >> rpt conj_tac >> EVAL_TAC >> simp[compileEnvTheory.nsid_to_string_def, vyperStateTheory.lookup_flag_def]
+QED
