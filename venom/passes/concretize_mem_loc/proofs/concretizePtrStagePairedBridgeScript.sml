@@ -115,11 +115,12 @@ Proof
      >- (mp_tac (Q.SPECL [`layout.cl_positions`,`EL n C.ctx_functions`]
            (GEN_ALL concretize_positions_entry_label)) >>
          simp[fn_entry_label_def, entry_block_def]) >> metis_tac[]) >>
-  drule ptr_list_coherent_choice >>
-  disch_then (mp_tac o Q.ISPECL [`C'.ctx_functions`,
+  mp_tac (Q.ISPECL [`C.ctx_functions`, `C'.ctx_functions`,
     `\f g p. ptr_paired_code R (\f. p) (positions:allocation |-> num # num) f g`,
     `\f p. !i. MEM i (fn_insts f) /\ i.inst_opcode = ALLOCA ==>
-      IS_SOME (FLOOKUP p (Allocation i.inst_id) : num option)`]) >>
+      IS_SOME (FLOOKUP p (Allocation i.inst_id) : num option)`]
+    ptr_list_coherent_choice) >>
+  impl_tac >- (BETA_TAC >> asm_rewrite_tac[]) >>
   simp[] >> strip_tac >>
   qexistsl [`R`,`pick`,`positions`] >> simp[] >>
   conj_tac
