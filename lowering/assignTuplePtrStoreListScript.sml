@@ -82,7 +82,7 @@ Resume tuple_store_targets_path_ptr[head]:
   qpat_assum `compile_tuple_store_all _ tys1 gs ops1 sm = _`
     (mp_then Any strip_assume_tac tuple_target_stores_growth) >>
   `fn_has_code st sm func /\ fn_has_code sm st' func` by
-    metis_tac[fn_has_code_split] >>
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `?src. op = Var src /\ not_fresh_at st src` by fs[] >> gvs[] >>
   qpat_assum `!i. i < _ ==> ptr_val_ok _ _ _ _ _ _ _ /\ _`
     (qspec_then `0` mp_tac) >> simp_tac (srw_ss()) [] >>
