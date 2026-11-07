@@ -1,7 +1,7 @@
 (* Pure metadata transport from a runtime package through any registration prefix. *)
 Theory entryReachBodyPackageAlignment
 Ancestors
-  returnMetadataPtr calldataRegistration entryReachBodySourceMemberEntry
+  returnMetadataPtr calldataRegistration entryReachBodySourceMemberEntry externalBodyFrame
   e2eDefs supportedProgram supportedDecls vyperABIRoundtrip
   vyperTypeContractContext vyperTypeContractStaticMaps vyperTypeContract
   entryReachBodySourceSupport entryReachBodyCallInputs ctorSourceInputs
@@ -196,4 +196,86 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!j. j < LENGTH tx.args ==> _` (qspec_then `i` mp_tac) >>
   simp[EL_MAP] >> metis_tac[]
+QED
+
+Theorem entry_selected_indexed_metadata:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  valid_vyper_call tops tx cd ret /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  set_external_package_target target
+    (package_external_fn tops F keys
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
+  compile_register_positional_args ce (TAKE i pos) off st = (next,last) /\
+  i < LENGTH args ==>
+  ?avs tv name prim dyn sz info.
+    vyper_to_abi_list (type_env tops) (MAP SND args) tx.args = SOME avs /\
+    LENGTH avs = LENGTH args /\ LENGTH tx.args = LENGTH args /\
+    EVERY (entry_abi_support (type_env tops)) (MAP SND args) /\
+    LIST_REL (\ty v. ?tv. evaluate_type (type_env tops) ty = SOME tv /\
+      value_has_type tv v) (MAP SND args) tx.args /\
+    EL i pos = (name,prim,dyn,sz,info) /\ name = FST (EL i args) /\
+    info = type_to_abi_dec_info next.ce_struct_fields next (SND (EL i args)) /\
+    (dyn /\ ~prim <=> is_dynamic (vyper_to_abi_type (type_env tops) (SND (EL i args)))) /\
+    sz = abi_member_head_size (vyper_to_abi_type (type_env tops) (SND (EL i args))) /\
+    evaluate_type (type_env tops) (SND (EL i args)) = SOME tv /\
+    abi_decoder_coherent next (type_env tops) next.ce_struct_fields (SND (EL i args)) tv /\
+    entry_source_metadata next (type_env tops) next.ce_struct_fields (SND (EL i args)) tv
+      info (EL i avs) (EL i tx.args) /\ next.ce_is_ctor = F
+Proof
+  strip_tac >> drule_all entry_selected_source_values >> strip_tac >>
+  drule_all entry_selected_parameter_types >> strip_tac >>
+  qpat_assum `!j. j < LENGTH args ==> _` (qspec_then `i` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `assignable_type (type_env tops) (SND (EL i args))` by
+    fs[EVERY_EL, EL_MAP] >>
+  `abi_decoder_coherent next (type_env tops) next.ce_struct_fields (SND (EL i args)) tv` by
+    (drule_all entry_runtime_prefix_coherent >> simp[]) >>
+  `entry_abi_support (type_env tops) (SND (EL i args))` by
+    fs[EVERY_EL, EL_MAP] >>
+  drule entry_runtime_package_layout >> strip_tac >>
+  `EL i pos = build_positional_arg ce (EL i args)` by
+    simp[build_positional_args_def, EL_MAP] >>
+  Cases_on `EL i args` >> rename1 `EL i args = (arg_name,arg_ty)` >>
+  qabbrev_tac `desc = build_positional_arg ce (arg_name,arg_ty)` >>
+  PairCases_on `desc` >> fs[markerTheory.Abbrev_def] >>
+  qpat_x_assum `(_,_,_,_,_) = build_positional_arg _ _` (assume_tac o SYM) >> fs[] >>
+  drule_all entry_prefix_descriptor >> strip_tac >>
+  drule entry_registration_prefix_layout >>
+  disch_then (qspec_then `[]` strip_assume_tac) >>
+  drule_all entry_prefix_source_metadata >> simp[]
+QED
+
+Theorem entry_selected_indexed_location:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) /\
+  set_external_package_target target
+    (package_external_fn tops F keys
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,ce,pos,cds,pay,F,key,ut,view,fbody,rt) /\
+  compile_register_positional_args ce (TAKE i pos) off st = (next,last) /\
+  i < LENGTH args /\
+  abi_decoder_coherent next (type_env tops) next.ce_struct_fields (SND (EL i args)) tv ==>
+  ?p. FLOOKUP next.ce_vars (FST (EL i args)) = SOME (MemLoc p (type_memory_size tv)) /\
+    var_location_memory_size (MemLoc p (type_memory_size tv)) = SOME (type_memory_size tv)
+Proof
+  strip_tac >> drule_all external_selected_args_distinct >> strip_tac >>
+  drule_all entry_runtime_package_memlocs >> strip_tac >>
+  drule entry_runtime_package_layout >> strip_tac >>
+  `~MEM (FST (EL i args)) (MAP FST (TAKE i pos))` by
+    (simp[MAP_TAKE, entryStateRelTheory.build_positional_args_names] >>
+     `FST (EL i args) = EL i (MAP FST args)` by simp[EL_MAP] >>
+     pop_assum SUBST1_TAC >>
+     simp[MEM_EL, LENGTH_TAKE] >> rpt strip_tac >>
+     `n < i /\ n < LENGTH args` by fs[] >>
+     fs[EL_TAKE] >>
+     drule ALL_DISTINCT_EL_IMP >>
+     disch_then (qspecl_then [`i`, `n`] mp_tac) >> simp[]) >>
+  `?p. FLOOKUP ce.ce_vars (FST (EL i args)) =
+     SOME (MemLoc p (type_memory_bytes ce (SND (EL i args))))` by
+    (fs[EVERY_EL] >> metis_tac[]) >>
+  drule_all entry_unprocessed_parameter_size >> metis_tac[]
 QED
