@@ -5,7 +5,8 @@ Ancestors concretizeLayoutCanonicalContract concretizeLayoutStageEntry
   concretizePtrParamShape unitTransformDefs o1PassContract ptrDiscipline
   venomExecSemantics passSimulationDefs frameFiniteExecution frameFiniteJointTrace
   frameJointTransition venomWf contextCodegenRel o1ContractSimplifyCfg
-  concretizeStepStructure
+  concretizeStepStructure concretizeLayoutCanonicalDriver
+  concretizeLayoutStagePairing concretizeMemLocDefs
 
 (* The generic selected driver is the only recursive simulation used here. *)
 Theorem layout_stage_selected_run:
@@ -154,8 +155,9 @@ Proof
       ass qe q0 0 qe (0 + LENGTH path) fn s fn' s r r'` by
     (irule layout_stage_selected_run >> metis_tac[]) >>
   `!ret t. r <> IntRet ret t` by
-    (simp[Abbr `r`, Abbr `s`] >>
-     metis_tac[o1_ctx_shape_no_intret, run_context_def, run_function_def]) >>
+    (drule o1_ctx_shape_no_intret >>
+     disch_then (qspecl_then [`fuel`, `vs`] mp_tac) >>
+     simp[run_context_def, run_function_def, Abbr `r`, Abbr `s`]) >>
   `dead_result_rel D r r'` by
     (fs[layout_canonical_OutR_def] >>
      Cases_on `r` >> Cases_on `r'` >> gvs[layout_canonical_result_def]) >>
@@ -163,7 +165,10 @@ Proof
   `fn_entry_label fn' = SOME lbl` by
     (fs[layout_driver_row_def, layout_stage_row_def,
         apply_context_concretize_layout_def, apply_concretize_layout_def,
-        concretize_positions_entry_label]) >>
+        venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
+     qspecl_then [`layout.cl_positions`, `fn`] mp_tac
+       (GEN_ALL concretize_positions_entry_label) >>
+     simp[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def]) >>
   simp[] >>
   drule (cj 3 finite_execution_realizable) >> strip_tac >>
   qexists_tac `n` >>
