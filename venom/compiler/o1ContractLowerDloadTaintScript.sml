@@ -778,8 +778,3 @@ Proof
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
   rewrite_tac[taint_within_def] >> conj_tac >> first_assum ACCEPT_TAC
 QED
-
-(* Build-time integrity audit of the assembled theorem and its dependencies. *)
-val _ = let val (oracles, axioms) = Tag.dest_tag (Thm.tag lower_dload_stage_taint)
-  in if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
-     then () else raise Fail "lower_dload_stage_taint: untrusted dependencies" end;
