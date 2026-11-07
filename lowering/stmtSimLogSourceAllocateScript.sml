@@ -11,6 +11,10 @@ Theorem log_allocation_wb_frame[local]:
   abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t ==>
   wb_frame ce es es st s t
 Proof
+  strip_tac >>
+  `popped_kept ce es es s t` by
+    (fs[abi_builtin_allocation_frame_def, popped_kept_def] >> metis_tac[]) >>
+  qpat_x_assum `abi_builtin_allocation_frame _ _ _ _ _` mp_tac >>
   simp[abi_builtin_allocation_frame_def, wb_frame_def, locals_kept_def] >>
   strip_tac >> conj_tac
   >- (rpt strip_tac >>
@@ -34,7 +38,7 @@ Theorem log_allocated_arg[local]:
 Proof
   strip_tac >> drule log_allocation_wb_frame >> strip_tac >>
   irule log_arg_rel_frame >> simp[] >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any)
+  qexistsl_tac [`ctx`, `es`, `func`] >> simp[]
 QED
 
 Theorem log_allocated_data_sources[local]:
