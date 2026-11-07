@@ -129,3 +129,130 @@ interfaces. No symbolic scenario here proves the frozen theorem false.
 Next strategy choice must address native spill-candidate/duplicate
 provenance or use a different compared-state representation with proved
 agreement; another stack-or-spill corollary cannot close this gap.
+
+## Ordered observation schedule audit (C3.observation_schedule)
+
+This section supersedes the *proposed continuous invariant*, not the checked
+facts above. E0405 gives the exact local spill-shadow criterion; E0408's one
+native adaptation failed to realize its bad case. Neither implies preservation.
+No new fixture, global invariant, event datatype, or theorem is introduced here.
+
+### Actual analyzer: exact within a block, set-only across edges
+
+The ordered interface already EXISTS; no copied/generalized list lemma is
+needed to establish its availability. Exact exported signature, written without
+its source's local `let` binders:
+
+```
+wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+lookup_block lbl fn.fn_blocks = SOME bb /\
+SUC i <= LENGTH bb.bb_instructions ==>
+live_vars_at (liveness_analyze fn) lbl i =
+  liveness_transfer fn.fn_blocks (EL i bb.bb_instructions)
+    (live_vars_at (liveness_analyze fn) lbl (SUC i))
+```
+
+This is `livenessAnalysisProps.live_vars_at_transfer` (52-65), transported
+from `livenessProofs.live_vars_at_transfer` (49-61), ultimately proved by
+`livenessLocalProofs.liveness_recompute_transfer` (47-69). Equality is literal
+list equality, not permutation, set equality, or equality to a separate order
+state. The well-formedness, reachable/preorder membership, lookup, and index
+bounds must be supplied by native callers; it is not an arbitrary-state rule.
+
+Why set-based convergence does NOT destroy this equation:
+
+* `dfAnalyzeDefs.df_fold_backward_def` (109-117) folds the entire instruction
+  list backwards, stores exit at length, and stores each transferred list at
+  its index. `df_fold_block_def` starts from FEMPTY at index zero.
+* `livenessDefs.liveness_block_def` (152-163) gathers successor inputs, does
+  that full fold, and replaces the block slice by `FUNION inst_map st.ds_inst`.
+* `livenessInvariantProofs.lv_coherent_def` (14-24) says every processed
+  block slice is exactly a full backward fold of ITS STORED EXIT. Its
+  `lv_coherent_transfer` (120-138) gives literal adjacent-list equality.
+* `livenessLocalProofs.liveness_recompute_coherent` (10-15) transports this
+  invariant; `liveness_recompute_processed` (18-37) ensures reachable seeded
+  blocks were processed. `liveness_recompute_transfer` uses both.
+* In contrast `livenessConvergenceProofs.liveness_recompute_convergence`
+  (85-94) gives only `same_vars stored_exit (liveness_out ... final_state)`.
+  `same_vars_set` identifies that with equality of sets. The driver has NO
+  final refold (`livenessDefs`:193). Therefore do NOT replace the stored exit
+  by the current successor gather as a LIST, nor transport LAST across an
+  edge using convergence. `liveness_recompute_edge_subset` is set inclusion.
+
+`liveness_transfer_def` is exactly `live_update inst_defs ordered_inst_uses`;
+`live_update_def` filters defined names from the old list, preserving survivor
+order, then folds uses left-to-right, appending a use only when unseen.
+`ordered_inst_uses_def` uses `python_stack_operands`, not raw inst_operands.
+The existing `MEM_FOLDL_append_unseen`, `live_update_ALL_DISTINCT`,
+`MEM_ordered_inst_uses` and `live_update_mem` are membership/distinctness
+interfaces, not LAST/rank theorems. A later barrier proof can use the literal
+adjacent equation above, but still needs a proved LAST classification and a
+link between relative liveness order and physical spill position. Neither is
+established by this audit. Generic LAST algebra alone would not supply that
+physical link, so no detached list-algebra helper is added.
+
+### Operation ledger: discharge is not automatic at every query
+
+* `emit_one_input_def` (Gen:23-48) checks FLOOKUP and calls do_restore for a
+  spilled variable BEFORE stack_get_depth, independently of its live/dead
+  status. `Inventory.do_restore_exact` (2009) appends the variable in the
+  common stack, removes its spill entry, and frees the shared slot. This
+  supplies a genuine local restoration barrier; subsequent consumption or
+  re-spilling must still be handled. `emit_one_repeated_var_restored` (2037)
+  is an existing exact instance, not a universal native scheduling proof.
+* `emit_input_plan_cons` threads all operand restorations before regular
+  reorder; pending-use liveness includes later operands. JMP separately
+  invokes `restore_spilled_plan` on all join targets before reorder.
+* `reorder_one_def` queries stack_get_unfixed_depth FIRST and restores only
+  if missing there. Thus it is NOT by itself restore-before-query: an old
+  prefix hit can suppress that restoration. For regular operands the earlier
+  emit phase is relevant, but restoration can be followed by another spill
+  during reorder. `reduce_depth_plan` queries the target, spills a forbidden-
+  target-excluded candidate, and repeats. Selection and do_spill_at themselves
+  inspect positions. Every such query needs its existing frame premises.
+* `optimistic_swap_plan_def` (Gen:108-123) directly queries Var(LAST nl),
+  with no spill lookup or restoration. The active guards additionally require
+  a nonterminator next instruction, outputs and nl nonempty, and output-last
+  not operand_equiv to nl-last. The dispatcher also requires some live
+  output, NOT that LAST nl is an output. `Setup.optimistic_swap_plan_suffix_hit_frame`
+  (1296) works with a suffix hit; `optimistic_swap_plan_missing_suffix_code`
+  (2048) exhibits the unresolved prefix-observation case.
+* Dead-output pop, release_dead_spills and output push lie between regular
+  reorder and the next instruction. Popmany queries output names; it must
+  not be treated as restoration. An output push can discharge the name's
+  common absence, but old-prefix/future-definition provenance is separate.
+  PHI uses stack_get_phi_depth/poke without the emit barrier. OFFSET and
+  PHI must retain their own validated phase boundaries. The existing native
+  PHI schedule is a root boundary, not a temporal preservation proof.
+
+### Precise candidate obligation and scope of this result
+
+Use the actual `native_inst_prefix` calls (EntryProduction:218-229), not a
+new abstract trace: its step supplies DROP k xs = inst::rest and the exact
+SOME dispatcher call with next-live at k+n+1 (or stored exit len), and the
+actual next-terminator flag. Split each such call using the existing regular
+preparation/preoptimistic decomposition. Start at the checked actual native
+post-PHI common suffix and shared spill-map/allocator boundary, retaining the
+actual residual prefixes and both successful native origins.
+
+Candidate temporal obligation, NOT proved: for x = Var(LAST nl) at any active
+unprotected optimistic call in this native run, if an earlier selective spill
+removed the last common x while x occurred in a retained residual prefix,
+then between the LAST such loss and this query there must be a shared
+restoration of x or a common production of x, surviving to this query. Equivalently,
+there can be no interval from an unmatched last-common-copy spill to the first
+unprotected query for x. The active-call guards above, actual analyzed nl,
+ready function, successful function plan, native DFS/lineage origins, and the
+post-PHI common boundary are essential contextual premises, not an assumed
+per-instruction shadow safety condition. Other unprotected query sites in the
+ledger must be discharged separately; this optimistic obligation alone does
+not establish full replay or cover region transitions.
+
+The exact intra-block ordered recurrence supports INVESTIGATING this route;
+set-only cross-edge convergence does not refute it, but does limit any rank
+transport across blocks. No existing fact here connects liveness rank to the
+first shallow candidate selected during native reorder. That physical/temporal
+producer, including inherited (not newly appended use) LAST entries and
+re-spills in the same instruction, is the remaining obligation for strategy
+review. Do not infer it from E0408, membership convergence, shared spills,
+or the local mandatory operand restoration equation.
