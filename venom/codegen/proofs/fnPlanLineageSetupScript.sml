@@ -693,6 +693,24 @@ Proof
   metis_tac[do_swap_stack_perm, sortingTheory.PERM_LIST_TO_SET]
 QED
 
+Theorem dead_output_pop_live_coverage:
+  !ps outputs nl halting qs.
+    (!v. MEM v nl ==> MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    qs = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs)) ps)
+      else ps) ==>
+    !v. MEM v nl ==> MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)`
+  >- (qpat_x_assum `qs = _` SUBST_ALL_TAC >>
+      simp[popmany_plan_spilled_unchanged] >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac
+      >- (disj1_tac >> irule popmany_plan_retains_other >>
+          simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >> simp[]) >>
+  gvs[]
+QED
+
 Theorem regular_post_emit_tail_live_coverage:
   !ps outputs live halting dfg inst term ps8 ps9 final.
     (!v. MEM v live ==> MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
@@ -706,13 +724,7 @@ Theorem regular_post_emit_tail_live_coverage:
 Proof
   rpt gen_tac >> strip_tac >>
   `!v. MEM v live ==> MEM (Var v) ps8.ps_stack \/ Var v IN FDOM ps8.ps_spilled` by
-    (Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)`
-     >- (qpat_x_assum `ps8 = _` SUBST_ALL_TAC >>
-         simp[popmany_plan_spilled_unchanged] >>
-         rpt strip_tac >> first_x_assum drule >> strip_tac
-         >- (disj1_tac >> irule popmany_plan_retains_other >>
-             simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >> simp[]) >>
-     gvs[]) >>
+    (metis_tac[dead_output_pop_live_coverage]) >>
   `!v. MEM v live ==> MEM (Var v) ps9.ps_stack \/ Var v IN FDOM ps9.ps_spilled` by
     (qspecl_then [`dfg`, `inst`, `live`, `term`, `ps8`] strip_assume_tac
        optimistic_swap_plan_slots >>
