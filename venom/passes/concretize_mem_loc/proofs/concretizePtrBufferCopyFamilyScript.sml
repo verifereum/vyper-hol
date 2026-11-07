@@ -8,6 +8,9 @@ Ancestors
   concretizePtrRequestHistory venomExecSemantics venomState venomInst words codegenRel
   concretizePtrWriteFootprint concretizePtrPrefixLedger concretizePtrBytes
   concretizePtrChronologicalHistory pred_set arithmetic
+  concretizePtrWriteOwnership concretizePtrOwnershipErasure
+  concretizePtrComparisonTransport concretizePtrPairedFields
+  concretizePtrSourceOwnership concretizePtrValueTransport
 
 Theorem ptr_buffer_copy_operand_discipline[local]:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
@@ -158,6 +161,104 @@ Proof
   `x - w2n d < w2n n` by decide_tac >>
   qpat_x_assum `!i. i < w2n n ==> _`
     (qspec_then `x - w2n d` mp_tac) >> simp[]
+QED
+
+Theorem ptr_buffer_copy_range_owner[local]:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  mem_write_ops a.po_inst = SOME ops /\
+  MEM (w2n d,len) (source_memory_write_ranges a.po_inst a.po_state) /\
+  ptr_value_transport births positions (op_prov TG ops.iao_ofst) {} d dt /\
+  (!aid pos sz. FLOOKUP positions (Allocation aid) = SOME (pos,sz) ==>
+    pos + sz < dimword(:256)) ==>
+  ptr_paired_write_owner lo positions (\x. w2n dt + (x-w2n d))
+    {x | w2n d <= x /\ x < w2n d + len}
+    (tokens,registry,births,PT,TG,saved,entries)
+Proof
+  strip_tac >>
+  simp[ptr_paired_write_owner_def] >> gen_tac >> strip_tac >>
+  `len <> 0` by decide_tac >>
+  `ptr_ledger_erases births TG a.po_prov` by
+    (irule ptr_source_ownership_prov_erases >> metis_tac[]) >>
+  drule_all ptr_source_write_owner_cases >> strip_tac
+  >- (`op_prov TG ops.iao_ofst = NONE` by
+        (drule ptr_owner_op_projection >>
+         disch_then (qspec_then `ops.iao_ofst` strip_assume_tac) >>
+         Cases_on `op_prov TG ops.iao_ofst` >>
+         gvs[ptr_owner_project_def] >>
+         fs[finite_mapTheory.FLOOKUP_DEF]) >>
+      gvs[ptr_value_transport_scalar_empty] >> disj1_tac >> decide_tac) >>
+  fs[] >>
+  `MEM token tokens` by (irule ptr_source_ownership_live_prov >> metis_tac[]) >>
+  `FLOOKUP births (token,aid) = SOME (b,sz)` by
+    (fs[ptr_ledger_erases_def] >>
+     qpat_x_assum `!v. FLOOKUP a.po_prov v = _`
+       (qspec_then `v` mp_tac) >> simp[]) >>
+  qpat_x_assum `ops' = ops` SUBST_ALL_TAC >>
+  qpat_x_assum `ptr_value_transport _ _ _ _ _ _` mp_tac >>
+  asm_simp_tac (srw_ss()) [op_prov_def, ptr_value_transport_def] >> strip_tac >>
+  `pos + sz < dimword(:256)` by metis_tac[] >>
+  `w2n dt = pos + (w2n d - b)` by
+    (irule ptr_closed_relocation_value >> simp[] >>
+     qexists_tac `sz` >> simp[] >> decide_tac) >>
+  disj2_tac >> qexistsl_tac [`token`,`aid`,`b`,`sz`,`pos`,`x-b`] >>
+  simp[] >> decide_tac
+QED
+
+Theorem ptr_buffer_copy_write_event[local]:
+  ptr_source_ownership vs C h a tokens registry births PT TG saved /\
+  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
+  ~in_revert_forward a.po_fn a.po_state /\
+  ptr_chrono_step C a z /\ ptr_chrono_step Ct at zt /\
+  MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
+  at.po_inst = a.po_inst /\ a.po_inst.inst_operands = [dop;sop;nop] /\
+  eval_operand dop a.po_state = SOME d /\ eval_operand dop at.po_state = SOME dt /\
+  eval_operand sop a.po_state = SOME r /\ eval_operand sop at.po_state = SOME r /\
+  eval_operand nop a.po_state = SOME n /\ eval_operand nop at.po_state = SOME n /\
+  (!i. i < w2n n ==> read_byte (w2n d+i) z.po_state.vs_memory =
+    read_byte (w2n dt+i) zt.po_state.vs_memory) /\
+  ptr_value_transport births positions (op_prov TG dop) {} d dt /\
+  (!aid pos sz. FLOOKUP positions (Allocation aid) = SOME (pos,sz) ==>
+    pos + sz < dimword(:256)) /\
+  LENGTH H = LENGTH h /\ 0 < LENGTH h /\ LAST h = a /\ LAST ht = at /\
+  LENGTH ht = SUC (LENGTH done) ==>
+  ?extra.
+    (extra = [] \/ extra = [(LENGTH h - 1,LENGTH done,\x. w2n dt + (x-w2n d))]) /\
+    EVERY (ptr_paired_write lo positions C Ct (h ++ [z]) (ht ++ [zt])
+      (done ++ [LENGTH h - 1])
+      (H ++ [(tokens,registry,births,PT,TG,saved,entries)])) extra /\
+    (range_bytes (step_writes a.po_inst a.po_state z.po_state) <> {} ==>
+      ?rho. MEM (LENGTH h - 1,LENGTH done,rho) extra)
+Proof
+  strip_tac >>
+  `range_bytes (step_writes a.po_inst a.po_state z.po_state) =
+    {x | w2n d <= x /\ x < w2n d + w2n n}` by
+    (simp[EXTENSION] >> gen_tac >> irule ptr_copy_footprint_interval >>
+     simp[] >> fs[MEM] >> metis_tac[]) >>
+  `ptr_ledger_write_pair C Ct (\x. w2n dt + (x-w2n d)) a z at zt` by
+    (irule ptr_buffer_copy_write_pair >> metis_tac[]) >>
+  `ptr_paired_write_owner lo positions (\x. w2n dt + (x-w2n d))
+    (range_bytes (step_writes a.po_inst a.po_state z.po_state))
+    (tokens,registry,births,PT,TG,saved,entries)` by
+    (asm_rewrite_tac[] >> irule ptr_buffer_copy_range_owner >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `ptr_source_ownership _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qexists_tac `<|iao_ofst := dop; iao_size := SOME nop;
+       iao_max_size := SOME nop|>` >>
+     simp[] >> fs[MEM] >>
+     simp[mem_write_ops_def, source_memory_write_ranges_def,
+       sized_source_write_range_def]) >>
+  Cases_on `range_bytes (step_writes a.po_inst a.po_state z.po_state) = {}`
+  >- (qexists_tac `[]` >> simp[]) >>
+  qexists_tac `[(LENGTH h - 1,LENGTH done,\x. w2n dt + (x-w2n d))]` >>
+  `SUC (LENGTH h - 1) = LENGTH h` by decide_tac >>
+  `h <> [] /\ ht <> []` by (conj_tac >> strip_tac >> fs[]) >>
+  `EL (LENGTH h - 1) h = a /\ EL (LENGTH done) ht = at` by
+    (fs[LAST_EL, PRE_SUB1]) >>
+  simp[ptr_paired_write_def, EL_APPEND_EQN] >> metis_tac[]
 QED
 
 Theorem ptr_paired_buffer_copy_prefix_normalize:
