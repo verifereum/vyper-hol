@@ -1,6 +1,6 @@
 Theory bodyPtrBytestringBuiltinsEval
 Ancestors
-  bodyPtrBytestringBuiltinsUnary fragGasPathPtr
+  bodyPtrBytestringBuiltinsUnary bodyPtrBytestringBuiltinsPrefix fragGasPathPtr
 
 Theorem gas_outcome_ptr_eval_evidence:
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0) P E ==>
@@ -37,6 +37,7 @@ Theorem expr_sim_ptr_eval_suffix:
     ptr_val_ok cx (expr_type e) v op G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     (?marks ee0. ee = ee0 with gas_obs := [] /\
       !tail. vyperState$bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
@@ -51,26 +52,28 @@ Proof
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [bodyPtrDefsTheory.expr_sim_ptr_def]) >>
   disch_then drule_all >> strip_tac >>
+  dxrule forced_operand_outcome_scopes >> strip_tac >>
   dxrule gas_outcome_ptr_eval_evidence >> strip_tac >>
   irule gas_outcome_ptr_value_bind >>
   first_assum (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
   conj_tac
   >- (rpt strip_tac >> Cases_on `res` >>
-      gvs[exprSimDefsTheory.expr_exit_INL] >> metis_tac[]) >>
+      gvs[exprSimDefsTheory.expr_exit_INL] >>
+      first_x_assum irule >> simp[] >> metis_tac[]) >>
   rpt strip_tac >> Cases_on `res` >>
   gvs[exprSimDefsTheory.expr_exit_INL] >> metis_tac[]
 QED
 
 Theorem compile_unary_builtin_eval_vv_sim_ptr:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
-  expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
+  expr_sim_ptr d ctx PG func cenv cx cty e es /\
   ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
-    ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    ?x sm. lower_value compile_expr cenv cty e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
   (!sa sm sb x vv s0 G0 tn0 v ee G tn t.
-    lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    lower_value compile_expr cenv cty e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
@@ -84,6 +87,7 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
     ptr_val_ok cx (expr_type e) v x G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     (?marks ee0. ee = ee0 with gas_obs := [] /\
       !tail. vyperState$bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
