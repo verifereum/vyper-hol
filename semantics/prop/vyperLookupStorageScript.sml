@@ -292,7 +292,7 @@ Proof
   gvs[storage_type_of_def]
 QED
 
-Theorem dyn_slots_in_range_prefix[local]:
+Theorem dyn_slots_in_range_prefix:
   ∀storage offset tv n m.
     dyn_slots_in_range storage offset tv n ∧ m ≤ n ⇒
     dyn_slots_in_range storage offset tv m

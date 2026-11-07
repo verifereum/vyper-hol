@@ -229,12 +229,7 @@ Proof
       pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
         arithmeticTheory.MULT_RIGHT_1] >> decide_tac) >>
   rpt strip_tac >> gvs[dead_bytes_def] >> rename1 `k < n` >>
-  Cases_on `k < w2n (lookup_storage (n2w bs) st)`
-  >- (gvs[] >> drule (cj 1 dead_bytes_range) >> strip_tac >>
-      `k = i` by
-        (irule slot_block_index >> qexistsl [`i'`, `type_slot_size tv`] >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >> gvs[]) >>
-  gvs[] >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
   `k = i` by
     (irule slot_block_index >> qexistsl [`i'`, `type_slot_size tv`] >>
      simp[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac) >> gvs[]
@@ -551,6 +546,8 @@ Proof
          qexists_tac `max` >> fs[read_slot_def]) >>
       `MIN (w2n (read_slot st bs)) max = w2n (read_slot st bs)` by
         (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+      `dyn_slots_in_range st (bs + 1) tv (w2n (read_slot st bs))` by
+        (irule dyn_slots_in_range_prefix >> qexists_tac `max` >> simp[]) >>
       gvs[] >> first_x_assum (drule_then strip_assume_tac) >>
       simp[val_in_memory_def] >> irule storage_live_memory_head >>
       goal_assum (drule_at Any) >> simp[type_slot_size_def])
