@@ -14,6 +14,29 @@ Proof
   simp[intcall_vv_provenance_def, read_result_outcomes_iff]
 QED
 
+(* Restatement of the [local] exprSimIfExp$ifexp_vv_at_alloc_frame
+   (lowering/exprSimIfExpScript.sml:270), which this branch can't export;
+   to be deduplicated at the trunk merge (moved next to vv_at_def). *)
+Theorem held_vv_at_alloc_frame[local]:
+  vv_at cenv cx ty sa sb es raw vv s /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+               FLOOKUP q.vs_allocas aid = SOME entry) /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  (!n b sz. local_region cenv es.scopes q n b sz <=>
+            local_region cenv es.scopes s n b sz) /\
+  sb.cs_next_id <= sm.cs_next_id ==>
+  vv_at cenv cx ty sa sm es raw vv q
+Proof
+  Cases_on `vv` >>
+  simp[vv_at_def, vv_operand_def, expr_val_at_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[])
+  >>~- ([`local_region cenv es.scopes s n b sz`],
+        disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[])
+QED
+
 Theorem intcall_vv_provenance_frame:
   intcall_vv_provenance ce cx ty sa sm es raw vv s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
