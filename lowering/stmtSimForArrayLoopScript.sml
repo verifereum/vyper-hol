@@ -1223,7 +1223,9 @@ Theorem array_body_counted_post:
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
       lookup_var x t = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-      FLOOKUP t.vs_allocas aid = SOME b)
+      FLOOKUP t.vs_allocas aid = SOME b) /\
+    alloca_frame bc ei sa s0 cenv
+      (ee with <|scopes := rest; gas_obs := []|>) t
 Proof
   strip_tac >>
   `eval_stmts cx stmts
@@ -1234,7 +1236,18 @@ Proof
        (qspec_then `[]` mp_tac) >> simp[]) >>
   first_x_assum drule >> strip_tac >>
   qexistsl_tac [`sc`, `rest`] >> gvs[stmt_post_def] >>
-  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac
+  >- (conj_tac >- metis_tac[] >>
+      drule eval_stmts_preserves_scopes_dom >> strip_tac >>
+      `cenv_top_ext cenv cenv'' ee.scopes` by
+        (irule cenv_top_ext_trans >> qexistsl_tac [`bc`, `ei.scopes`] >>
+         gvs[preserves_scopes_dom_def]) >>
+      simp[] >>
+      `alloca_frame bc ei sa s0 cenv ((ee with gas_obs := []) with scopes := rest) t`
+        suffices_by simp[] >>
+      irule alloca_frame_pop >>
+      conj_tac >- (qexists_tac `sc` >> simp[]) >>
+      qexists_tac `cenv''` >> gvs[]) >>
   `stmt_state_rel ctx func cenv cx
     ((ee with gas_obs := []) with scopes := rest) t` suffices_by
       simp[evaluation_state_component_equality] >>
@@ -1268,7 +1281,8 @@ Theorem array_body_continue_iteration_framed[local]:
     ainst cond_lbl st (k+1) es next /\
     (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x s) /\
     next.vs_allocas = s.vs_allocas /\
-    gas_marked_path F ctx func s 0 (OK next)
+    gas_marked_path F ctx func s 0 (OK next) /\
+    alloca_frame cenv es st s cenv es next
 Proof
   rpt gen_tac >> strip_tac >>
   `~s.vs_halted /\ stmt_state_rel ctx func cenv cx es s` by
@@ -1284,6 +1298,9 @@ Proof
   drule_all array_increment_boundary >> strip_tac >>
   `gas_marked_path F ctx func s 0 (OK next)` by
     (drule_all gas_marked_path_then >> simp[]) >>
+  `alloca_frame cenv es st s cenv es next` by
+    (qhdtm_x_assum `alloca_frame` mp_tac >>
+     simp[alloca_frame_def, local_region_def, lookup_var_def]) >>
   qexists_tac `next` >> simp[lookup_var_def] >> metis_tac[]
 QED
 
@@ -1502,7 +1519,9 @@ Proof
   `?next. array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
      ainst cond_lbl st (k+1) (ee with <|scopes := rest; gas_obs := []|>) next /\
      (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x t) /\
-     next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next)` by
+     next.vs_allocas = t.vs_allocas /\ gas_marked_path F ctx func t 0 (OK next) /\
+     alloca_frame cenv (ee with <|scopes := rest; gas_obs := []|>) st t cenv
+       (ee with <|scopes := rest; gas_obs := []|>) next` by
     (irule array_body_continue_iteration_framed >> simp[] >>
      goal_assum (drule_at (Pat `lookup_block _ _ = _`)) >>
      goal_assum (drule_at (Pat `stmt_lands _ _ _ _`)) >>
