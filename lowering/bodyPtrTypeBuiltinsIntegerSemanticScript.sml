@@ -133,9 +133,9 @@ QED
    ConvIntToDecimal: IntegerDecimalContinue supplies actual typed success/revert
      semantics and scalar_integer_decimal_continuation for both integer signs.
      It reuses DecimalRun and CheckedArithmetic directly, without Outputs.
-   ConvDecimalToInt: DecimalRun supplies fresh semantic success/abort;
-     CheckedArithmetic counted/abort/filter/frame boundaries exist.
-     Actual typed adapter and complete summary remain.
+   ConvDecimalToInt: DecimalIntegerContinue supplies typed actual success/revert
+     semantics and scalar_decimal_integer_continuation for all destination widths,
+     including the capped Uint256 compiler case. No aggregate imports needed.
    ConvBoolToDecimal: ScalarArithmetic has pointer facts, but valid_conversion
      forbids this pair; discharge by scalar source/destination typing partition.
    int_convert_pair is NOT just integer-to-integer: exprSimConvert defines it
