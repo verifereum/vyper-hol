@@ -485,7 +485,9 @@ Theorem abi_encode_nonword_no_block_phases:
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
-      FLOOKUP actual.vs_allocas aid = SOME row)
+      FLOOKUP actual.vs_allocas aid = SOME row) /\
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   strip_tac >>
   `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\
@@ -548,6 +550,17 @@ Resume abi_encode_nonword_no_block_phases[caller]:
       FLOOKUP actual.vs_allocas aid = SOME row)` by
     (drule_all abi_encode_caller_phase_allocations >>
      disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  `alloca_inv actual` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+     simp_tac bool_ss [stmt_state_rel_def] >> metis_tac[]) >>
+  `sa.cs_next_id <= ready.cs_next_id` by
+    (qpat_assum `ready.cs_next_id = _` mp_tac >>
+     Cases_on `mid` >> simp_tac (srw_ss()) []) >>
+  `(!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)` by
+    (drule abi_encode_caller_phase_old_rows >> disch_then drule >>
+     disch_then (qspec_then `actual` mp_tac) >>
+     asm_rewrite_tac[]) >>
   qexists `raw` >>
   qpat_x_assum `Abbrev (actual = _)`
     (fn th => rewrite_tac[GSYM (PURE_REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
@@ -589,7 +602,9 @@ Theorem abi_encode_nonword_no_block_run:
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
-      FLOOKUP actual.vs_allocas aid = SOME row)
+      FLOOKUP actual.vs_allocas aid = SOME row) /\
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   strip_tac >> drule lower_abi_encode_trace >> strip_tac >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
@@ -609,7 +624,7 @@ Proof
   drule_all abi_encode_nonword_no_block_phases >>
   disch_then (qx_choose_then `p` (qspec_then `sb` mp_tac)) >>
   impl_tac >- (asm_rewrite_tac[] >> simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL]) >>
-  strip_tac >> qexistsl_tac [`p`, `raw`] >> gvs[]
+  strip_tac >> qexistsl_tac [`p`, `raw`] >> gvs[] >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_encode_nonword_no_block_observer:
@@ -645,11 +660,14 @@ Theorem abi_encode_nonword_no_block_observer:
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
-      FLOOKUP actual.vs_allocas aid = SOME row)
+      FLOOKUP actual.vs_allocas aid = SOME row) /\
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   strip_tac >> drule_all abi_encode_nonword_no_block_run >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all lower_abi_encode_no_blocks_safe >> strip_tac >>
   drule_all lower_abi_encode_no_block_run_reach >> strip_tac >>
-  qexistsl_tac [`p`, `raw with vs_inst_idx := LENGTH sb.cs_current_insts`] >> gvs[LET_THM]
+  qexistsl_tac [`p`, `raw with vs_inst_idx := LENGTH sb.cs_current_insts`] >> gvs[LET_THM] >>
+  first_assum ACCEPT_TAC
 QED

@@ -282,6 +282,45 @@ Proof
   qpat_x_assum `!i b sz. _` ACCEPT_TAC
 QED
 
+Theorem abi_encode_caller_phase_old_rows:
+  abi_builtin_encode_setup_frame next site outsz p w initial prepared /\
+  window_strong_result ctx observer ready body_end len at av d prepared body_state /\
+  abi_encoder_registered_effect {} [(p,32)] body_state actual /\
+  actual.vs_allocas = body_state.vs_allocas /\
+  actual.vs_alloca_next = body_state.vs_alloca_next /\
+  ((FLOOKUP initial.vs_allocas site = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas site = SOME(p,outsz)) /\
+  alloca_inv actual /\ site <= ready.cs_next_id /\
+  32+w <= outsz /\ p <= d /\ d+LENGTH(enc at av) <= p+outsz ==>
+  !aid b sz. FLOOKUP initial.vs_allocas aid = SOME(b,sz) /\ aid < site ==>
+    mem_bytes_at b sz actual.vs_memory = mem_bytes_at b sz initial.vs_memory
+Proof
+  strip_tac >>
+  drule_all abi_encode_caller_phase_allocations >> strip_tac >>
+  qabbrev_tac `B = window_alloca_sites observer (frag_ids ready body_end)` >>
+  qabbrev_tac `sites = site INSERT B` >>
+  `FLOOKUP prepared.vs_allocas site = SOME(p,outsz)` by
+    (irule abi_builtin_encode_setup_frame_row >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `FLOOKUP actual.vs_allocas site = SOME(p,outsz)` by
+    (drule window_strong_result_effect >>
+     simp_tac bool_ss [abi_encoder_registered_effect_def] >> strip_tac >> metis_tac[]) >>
+  `abi_encoder_registered_effect sites [] prepared actual` by
+    (drule abi_encode_body_finish_registered >>
+     disch_then drule >>
+     disch_then (qspecl_then [`site`, `outsz`, `sites`, `B`] mp_tac) >>
+     simp[Abbr `sites`, Abbr `B`, SUBSET_DEF] >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  `aid NOTIN sites` by
+    (simp[Abbr `sites`, Abbr `B`, window_alloca_sites_def, frag_ids_def] >>
+     rpt strip_tac >> decide_tac) >>
+  `FLOOKUP actual.vs_allocas aid = SOME(b,sz)` by
+    (qpat_x_assum `!i r. FLOOKUP initial.vs_allocas i = SOME r ==> _` irule >> simp[]) >>
+  drule abi_encode_owned_interval_frame >>
+  disch_then drule >> disch_then drule >>
+  disch_then irule >> simp[Abbr `sites`] >>
+  qexistsl [`aid`, `b`, `sz`] >> gvs[]
+QED
+
 Theorem abi_encode_caller_phase_registers:
   abi_builtin_encode_setup_frame next site outsz p w initial prepared /\
   window_strong_result ctx observer ready body_end len at av d prepared body_state /\
@@ -358,7 +397,14 @@ Proof
   >- (`inst.inst_id IN frag_ids ready body_end` by
         fs[window_alloca_sites_def] >>
       `inst.inst_operands = [Lit 32w]` by metis_tac[] >>
-      `w2n (32w:256 word) = 32` by simp[NoAsms, dimword_def] >> gvs[] >> metis_tac[]) >>
+      `n = (32w:256 word)` by
+        (qpat_x_assum `inst.inst_operands = [Lit n]` mp_tac >>
+         qpat_x_assum `inst.inst_operands = [Lit 32w]` (fn th => rewrite_tac[th]) >>
+         simp_tac (srw_ss()) []) >>
+      `sz = 32` by
+        (qpat_x_assum `!i b sz. i IN window_alloca_sites _ _ /\ _ ==> _`
+          irule >> goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+      asm_rewrite_tac[] >> simp_tac (srw_ss()) [dimword_def]) >>
   `FLOOKUP actual.vs_allocas inst.inst_id = FLOOKUP initial.vs_allocas inst.inst_id`
     by metis_tac[] >> metis_tac[]
 QED

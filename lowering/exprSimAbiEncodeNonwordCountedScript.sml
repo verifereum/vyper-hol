@@ -60,7 +60,9 @@ Theorem abi_encode_nonword_counted_suffix:
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
-      FLOOKUP actual.vs_allocas aid = SOME row)
+      FLOOKUP actual.vs_allocas aid = SOME row) /\
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all lower_abi_encode_frag_facts >> strip_tac >>
@@ -74,6 +76,8 @@ Proof
       lookup_var x actual = SOME w) /\
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
       FLOOKUP actual.vs_allocas aid = SOME row) /\
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory) /\
     ?p. eval_operand out actual = SOME (n2w p) /\
     mload p actual = n2w (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) +
       (case mid of NONE => 0 | SOME _ => 4)) /\
@@ -86,7 +90,7 @@ Proof
    (!t prev. Q t ==> Q (t with vs_prev_bb := prev))` by
     (Cases_on `out` >> simp[Abbr `Q`, mload_def, eval_operand_def, lookup_var_def,
        hash_returndata_state_rel, abi_encode_stmt_rel_prev_bb,
-       abi_encode_semantic_obs_updates]) >>
+       abi_encode_semantic_obs_updates] >> metis_tac[]) >>
   Cases_on `sa.cs_blocks = sb.cs_blocks`
   >- suspend "no_blocks" >>
   suspend "blocks"
@@ -98,7 +102,8 @@ Resume abi_encode_nonword_counted_suffix[no_blocks]:
     suffices_by
     (strip_tac >> qpat_x_assum `Q t` mp_tac >>
      simp_tac bool_ss [Abbr `Q`] >> strip_tac >>
-     qexistsl_tac [`p`, `t`] >> gvs[LET_THM]) >>
+     qexistsl_tac [`p`, `t`] >> simp_tac bool_ss [LET_THM] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule abi_decode_sim_gas_path >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -109,7 +114,9 @@ Resume abi_encode_nonword_counted_suffix[no_blocks]:
       simp_tac bool_ss [LET_THM] >> strip_tac >>
       qexists `actual` >> conj_tac
       >- (fs[abi_encode_exec_frame_def] >>
-          simp[Abbr `Q`] >> qexists `p` >> gvs[]) >>
+          simp_tac bool_ss [Abbr `Q`] >>
+          ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
+          qexists `p` >> asm_rewrite_tac[]) >>
       gvs[]
 QED
 Resume abi_encode_nonword_counted_suffix[blocks]:
@@ -118,7 +125,8 @@ Resume abi_encode_nonword_counted_suffix[blocks]:
     suffices_by
     (strip_tac >> qpat_x_assum `Q t` mp_tac >>
      simp_tac bool_ss [Abbr `Q`] >> strip_tac >>
-     qexistsl_tac [`p`, `t`] >> gvs[LET_THM]) >>
+     qexistsl_tac [`p`, `t`] >> simp_tac bool_ss [LET_THM] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule abi_decode_sim_gas_path_relabel >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -130,7 +138,9 @@ Resume abi_encode_nonword_counted_suffix[blocks]:
       simp_tac bool_ss [LET_THM] >> strip_tac >>
       qexists `actual` >> conj_tac
       >- (fs[abi_encode_exec_frame_def] >>
-          simp[Abbr `Q`] >> qexists `p` >> gvs[]) >>
+          simp_tac bool_ss [Abbr `Q`] >>
+          ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
+          qexists `p` >> asm_rewrite_tac[]) >>
       gvs[]
 QED
 Finalise abi_encode_nonword_counted_suffix

@@ -95,7 +95,9 @@ Theorem abi_encode_nonword_relabel_observer:
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
     (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
-      FLOOKUP actual.vs_allocas aid = SOME row)
+      FLOOKUP actual.vs_allocas aid = SOME row) /\
+    (!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   strip_tac >>
   drule_all abi_encode_nonword_observer_entry >>
@@ -258,6 +260,18 @@ Resume abi_encode_nonword_relabel_observer[transport]:
     (drule_all abi_encode_caller_phase_allocations >>
      disch_then (mp_tac o CONJUNCT1) >>
      simp_tac (srw_ss()) [Abbr `rs`]) >>
+  `alloca_inv actual` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+     simp_tac bool_ss [stmt_state_rel_def] >> metis_tac[]) >>
+  `rst.cs_next_id <= rr.cs_next_id` by
+    (qpat_assum `rr.cs_next_id = _` mp_tac >>
+     Cases_on `mid` >> simp_tac (srw_ss()) []) >>
+  `(!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)` by
+    (drule abi_encode_caller_phase_old_rows >> disch_then drule >>
+     disch_then (qspec_then `actual` mp_tac) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def]) >>
   qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
   qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
   asm_rewrite_tac[] >> drule abi_encode_exec_frame_memory_length >> simp_tac (srw_ss()) []
@@ -288,6 +302,18 @@ Resume abi_encode_nonword_relabel_observer[transport_positive]:
     (drule_all abi_encode_caller_phase_allocations >>
      disch_then (mp_tac o CONJUNCT1) >>
      simp_tac (srw_ss()) [Abbr `rs`]) >>
+  `alloca_inv actual` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+     simp_tac bool_ss [stmt_state_rel_def] >> metis_tac[]) >>
+  `rst.cs_next_id <= rr.cs_next_id` by
+    (qpat_assum `rr.cs_next_id = _` mp_tac >>
+     Cases_on `mid` >> simp_tac (srw_ss()) []) >>
+  `(!aid off sz. FLOOKUP s.vs_allocas aid = SOME(off,sz) /\ aid < sa.cs_next_id ==>
+      mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz s.vs_memory)` by
+    (drule abi_encode_caller_phase_old_rows >> disch_then drule >>
+     disch_then (qspec_then `actual` mp_tac) >>
+     asm_rewrite_tac[] >>
+     simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def]) >>
   qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
   qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
   asm_rewrite_tac[] >> drule abi_encode_exec_frame_memory_length >> simp_tac (srw_ss()) []
