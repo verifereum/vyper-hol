@@ -1,6 +1,7 @@
 (* Counted memory-safe storage-copy suffix with the full semantic post. *)
 Theory bodyMemAssignTopCopySuffix
 Ancestors
+  stmtSimAssignStorageCopy
   bodyMemAssignTopCopyPaths bodyMemAssignTopCopySem bodyMemAssignTopCopyCompiler
   allocaHistory allocaHistoryFragment bodyDeclMemoryCore bodyDeclMemoryCounted
   bodyMemAssignTopCopyLoop gasOutcome fragGasMode fragExec instMemFrontier emitHelper emitHelperProps context venomInst
@@ -54,14 +55,14 @@ Proof
   rpt gen_tac >> strip_tac >>
   `~s.vs_call_ctx.cc_static` by
     (Cases_on `tr` >>
-     fs[stmt_state_rel_def, state_rel_def, topcopy_backend_fold]) >>
+     fs[stmt_state_rel_def, state_rel_def, storage_copy_backend_fold]) >>
   drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)
     topcopy_compile_loop_path >>
   disch_then (qspecl_then [`ctx`, `func`, `s`, `b`, `k`] mp_tac) >>
   (impl_tac >- (Cases_on `tr` >> simp[eval_operand_def])) >>
   strip_tac >>
   `stmt_state_rel ctx func cenv cx es' t` by
-    (irule topcopy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
+    (irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
      fs[store_copy_frame_def, store_copy_normalize_def, store_copy_prefix_def] >>
      Cases_on `tr` >> gvs[]) >>
   `t.vs_allocas = s.vs_allocas /\
@@ -142,7 +143,7 @@ Resume storage_copy_one_run_mem[post]:
     (irule body_store_memory_history >> simp[] >> qexistsl_tac [`s`, `sa`] >>
      simp[] >> Cases_on `tr` >> simp[mk_inst_def, is_terminator_def]) >>
   `stmt_state_rel ctx func cenv cx es' u` by
-    (irule topcopy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
+    (irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
      simp[GSYM store_copy_normalize_def] >> metis_tac[]) >>
   `store_copy_normalize s u =
      store_copy_prefix (if tr then LocTransient else LocStorage) b k s 1` by
@@ -182,7 +183,7 @@ Theorem storage_copy_suffix_run_mem:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  dep_rewrite.DEP_REWRITE_TAC[topcopy_suffix] >> simp[] >>
+  dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >> simp[] >>
   Cases_on `32*n <= 32`
   >- (`n = 1` by decide_tac >> gvs[] >>
       simp[comp_bind_def, AllCaseEqs()] >> strip_tac >>
@@ -207,6 +208,8 @@ Theorem storage_copy_success_run_mem:
     expr_store_bound cx (expr_type e) v op s1 /\ alloca_history func s1 /\
     ~s1.vs_halted /\ s1.vs_current_bb = sm.cs_current_bb /\
     s1.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
     value_has_type tv v /\ lowered_value_type cenv e = expr_type e /\
@@ -246,7 +249,7 @@ Proof
      Cases_on `e` >> gvs[post_value_type_def] >>
      rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
      gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
-  drule_all topcopy_post_region >> strip_tac >>
+  drule_all storage_copy_post_region >> strip_tac >>
   `0 < type_memory_size tv` by simp[type_memory_size_slots] >>
   `w2n w + type_memory_size tv <= s1.vs_alloca_next` by
     (drule_all topcopy_source_bound >> simp[]) >>
@@ -293,6 +296,6 @@ val () =
 val () = List.app (fn (name,th) =>
   let val (os,_) = Tag.dest_tag (Thm.tag th)
   in print (name ^ " dependency oracles: " ^ String.concatWith "," os ^ "\n") end)
-  [("post_region",topcopy_post_region), ("source_bound",topcopy_source_bound),
+  [("post_region",storage_copy_post_region), ("source_bound",topcopy_source_bound),
    ("lower_value_var",compile_lower_value_var), ("expr_grows",cj 2 compile_expr_grows),
    ("reserved_next",local_ptrs_reserved_next_var), ("fresh_mono",not_fresh_at_mono)];
