@@ -903,6 +903,254 @@ Proof
   gvs[IgnAsm `!s r t. _`]
 QED
 
+Theorem literal_attribute_frame_scopes[local]:
+  !cx ty lit es res es'.
+    eval_expr cx (Literal ty lit) es = (res,es') ==> es'.scopes = es.scopes
+Proof
+  simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem typed_attribute_frames_mutual[local]:
+  (!tops bindings stmt. supported_stmt tops bindings stmt ==>
+    !ref env ret_ty env' arr_e et bd p root xs cx es res es'.
+      well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
+      expr_place arr_e = SOME p /\ place_access p [] = (NameTarget root,xs) /\
+      env.type_defs = ref.type_defs /\
+      FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
+      root IN FDOM ref.var_types /\
+      type_stmt env ret_ty stmt = SOME env' /\
+      stmt_writes_ok (\w. ~place_contains w p) stmt /\
+      ~supported_stmt_expr_exists expr_internal_call_root stmt /\
+      es.scopes <> [] /\ eval_stmt cx stmt es = (res,es') ==>
+      MAP (\sc. OPTION_MAP
+        (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+        (FLOOKUP sc root)) es'.scopes =
+      MAP (\sc. OPTION_MAP
+        (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+        (FLOOKUP sc root)) es.scopes /\ LENGTH es'.scopes = LENGTH es.scopes) /\
+  (!tops bindings stmts. supported_stmts tops bindings stmts ==>
+    !ref env ret_ty env' arr_e et bd p root xs cx es res es'.
+      well_typed_expr ref arr_e /\ expr_type arr_e = ArrayT et bd /\
+      expr_place arr_e = SOME p /\ place_access p [] = (NameTarget root,xs) /\
+      env.type_defs = ref.type_defs /\
+      FLOOKUP env.var_types root = FLOOKUP ref.var_types root /\
+      root IN FDOM ref.var_types /\
+      type_stmts env ret_ty stmts = SOME env' /\
+      stmts_writes_ok (\w. ~place_contains w p) stmts /\
+      ~supported_stmts_expr_exists expr_internal_call_root stmts /\
+      es.scopes <> [] /\ eval_stmts cx stmts es = (res,es') ==>
+      MAP (\sc. OPTION_MAP
+        (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+        (FLOOKUP sc root)) es'.scopes =
+      MAP (\sc. OPTION_MAP
+        (\e. (e.type, evaluate_subscripts e.type e.value (MAP AttrSubscript xs)))
+        (FLOOKUP sc root)) es.scopes /\ LENGTH es'.scopes = LENGTH es.scopes)
+Proof
+  ho_match_mp_tac supported_stmt_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
+  >~ [`eval_stmt _ Pass _ = _`] >- gvs[Once evaluate_def, return_def]
+  >~ [`eval_stmt _ Break _ = _`] >- gvs[Once evaluate_def, raise_def]
+  >~ [`eval_stmt _ Continue _ = _`] >- gvs[Once evaluate_def, raise_def]
+  >~ [`eval_stmt _ (Return NONE) _ = _`] >- gvs[Once evaluate_def, raise_def]
+  >~ [`eval_stmts _ [] _ = _`] >- gvs[Once evaluate_def, return_def]
+  >~ [`eval_stmt _ (Expr _) _ = _`] >- suspend "expr"
+  >~ [`eval_stmt _ (Return (SOME _)) _ = _`] >- suspend "return"
+  >~ [`eval_stmt _ (AnnAssign _ _ _) _ = _`] >- suspend "annassign"
+  >~ [`eval_stmt _ (Assign _ _) _ = _`] >- suspend "assign"
+  >~ [`eval_stmt _ (AugAssign _ _ _ _) _ = _`] >- suspend "augassign"
+  >~ [`eval_stmt _ (Append _ _) _ = _`] >- suspend "append"
+  >~ [`eval_stmt _ (If _ _ _) _ = _`] >- suspend "if"
+  >~ [`eval_stmt _ (For _ _ _ _ _) _ = _`] >- suspend "for"
+  >~ [`eval_stmt _ (Assert _ _) _ = _`] >- suspend "assert"
+  >~ [`eval_stmt _ (Raise _) _ = _`] >- suspend "raise"
+  >~ [`eval_stmt _ (Log _ _) _ = _`] >- suspend "log"
+  >> suspend "cons"
+QED
+
+Resume typed_attribute_frames_mutual[expr]:
+  gvs[supported_stmt_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, type_check_def, assert_def,
+       ignore_bind_def, return_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac supported_expr_scopes >> gvs[]
+QED
+
+Resume typed_attribute_frames_mutual[return]:
+  gvs[supported_stmt_def, supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac supported_expr_scopes >> imp_res_tac read_result_state >> gvs[]
+QED
+
+Resume typed_attribute_frames_mutual[annassign]:
+  rename1 `eval_stmt cx (AnnAssign id typ rhs) es = (res,es')` >>
+  gvs[supported_stmt_def, type_stmt_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  `id <> root` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
+  drule_at (Pat `eval_stmt _ _ _ = _`) annassign_projection_frame >>
+  disch_then (qspec_then `root` mp_tac) >>
+  (impl_tac >- metis_tac[supported_expr_scopes]) >> strip_tac >> simp[] >>
+  irule scope_projection_observe >> simp[]
+QED
+
+Resume typed_attribute_frames_mutual[append]:
+  gvs[supported_stmt_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+  drule_at (Pat `eval_stmt _ _ _ = _`) append_projection_frame >>
+  disch_then (qspecl_then [`tops`,`root`] mp_tac) >>
+  (impl_tac >- metis_tac[cj 1 supported_pure_scopes_mutual]) >> strip_tac >> simp[] >>
+  irule scope_projection_observe >> simp[]
+QED
+
+Resume typed_attribute_frames_mutual[assign]:
+  gvs[supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  drule vyperTypeArgFitsTheory.atarget_accepts_well_typed_atarget >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `supported_expr tops e` by
+    (Cases_on `target` >> gvs[supported_assignment_def]) >>
+  irule assign_attribute_projection_frame >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[supported_expr_scopes]
+QED
+
+Resume typed_attribute_frames_mutual[augassign]:
+  gvs[supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  irule augassign_attribute_projection_frame >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at (Pat `expr_place _ = SOME _`)) >> simp[] >>
+  gvs[supported_aug_target_def, AllCaseEqs()] >>
+  Cases_on `supported_target_info tops bindings target` >> gvs[] >>
+  metis_tac[supported_expr_scopes]
+QED
+
+Resume typed_attribute_frames_mutual[if]:
+  rpt gen_tac >> strip_tac >>
+  gvs[IgnAsm `!ref env ret_ty env' arr_e et bd p root xs cx es res es'. _`,
+      supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  fs[IgnAsm `!ref env ret_ty env' arr_e et bd p root xs cx es res es'. _`,
+     optionTheory.IS_SOME_EXISTS] >>
+  irule if_observation_frame >> goal_assum (drule_at Any) >>
+  conj_tac >- metis_tac[cj 1 supported_pure_scopes_mutual] >>
+  conj_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+Resume typed_attribute_frames_mutual[for]:
+  rpt gen_tac >> strip_tac >>
+  rename1 `eval_stmt cx (For id typ it n stmts) es = _` >>
+  gvs[IgnAsm `!ref env ret_ty env' arr_e et bd p root xs cx es res es'. _`,
+      supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  `id <> root` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
+  irule for_observation_frame >> goal_assum (drule_at Any) >>
+  conj_tac >- metis_tac[supported_iterator_scopes] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `expr_place _ = SOME _`)) >>
+  fs[optionTheory.IS_SOME_EXISTS] >>
+  goal_assum (drule_at (Pat `type_stmts _ _ _ = SOME _`)) >>
+  simp[extend_local_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+Resume typed_attribute_frames_mutual[assert]:
+  rename1 `eval_stmt cx (Assert cond reason) es = _` >>
+  Cases_on `reason` >> gvs[supported_stmt_def, supported_assert_reason_def]
+  >~ [`eval_stmt _ (Assert _ AssertBare) _ = _`]
+  >- suspend "assert_bare"
+  >~ [`eval_stmt _ (Assert _ AssertUnreachable) _ = _`]
+  >- suspend "assert_unreachable"
+  >> suspend "assert_reason"
+QED
+
+Resume typed_attribute_frames_mutual[assert_bare]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac supported_pure_scopes_mutual >>
+  gvs[return_def, raise_def, AllCaseEqs()] >>
+  rename1 `(if v = BoolV T then _ else _) _ = _` >>
+  Cases_on `v = BoolV T` >> Cases_on `v = BoolV F` >> gvs[return_def, raise_def]
+QED
+
+Resume typed_attribute_frames_mutual[assert_unreachable]:
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> imp_res_tac supported_pure_scopes_mutual >>
+  gvs[return_def, raise_def, AllCaseEqs()] >>
+  rename1 `(if v = BoolV T then _ else _) _ = _` >>
+  Cases_on `v = BoolV T` >> Cases_on `v = BoolV F` >> gvs[return_def, raise_def]
+QED
+
+Resume typed_attribute_frames_mutual[assert_reason]:
+  rename1 `supported_string_reason tops rhs` >>
+  `!s r t. eval_expr cx rhs s = (r,t) ==> t.scopes = s.scopes` by
+    (Cases_on `rhs` >> gvs[supported_string_reason_def] >>
+     metis_tac[literal_attribute_frame_scopes,
+               cj 1 supported_pure_scopes_mutual]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+  strip_tac >> imp_res_tac read_result_state >>
+  imp_res_tac supported_pure_scopes_mutual >>
+  gvs[IgnAsm `!s r t. _`, return_def, raise_def, AllCaseEqs()] >>
+  rename1 `(if v = BoolV T then _ else _) _ = _` >>
+  Cases_on `v = BoolV T`
+  >- (qpat_x_assum `!s r t. _` kall_tac >> gvs[return_def]) >>
+  Cases_on `v = BoolV F`
+  >- (gvs[IgnAsm `!s r t. _`, bind_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
+      gvs[IgnAsm `!s r t. _`, raise_def] >>
+      first_x_assum drule >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!s r t. _` kall_tac >> gvs[raise_def]
+QED
+Resume typed_attribute_frames_mutual[raise]:
+  rename1 `eval_stmt cx (Raise reason) es = _` >>
+  Cases_on `reason` >> gvs[supported_stmt_def, supported_raise_reason_def]
+  >~ [`eval_stmt _ (Raise RaiseBare) _ = _`]
+  >- gvs[Once evaluate_def, raise_def]
+  >~ [`eval_stmt _ (Raise RaiseUnreachable) _ = _`]
+  >- gvs[Once evaluate_def, raise_def] >>
+  rename1 `supported_string_reason tops rhs` >>
+  `!s r t. eval_expr cx rhs s = (r,t) ==> t.scopes = s.scopes` by
+    (Cases_on `rhs` >> gvs[supported_string_reason_def] >>
+     metis_tac[literal_attribute_frame_scopes, cj 1 supported_pure_scopes_mutual]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, raise_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >>
+  imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
+  gvs[IgnAsm `!s r t. _`] >> first_x_assum drule >> strip_tac >> gvs[]
+QED
+Resume typed_attribute_frames_mutual[log]:
+  gvs[supported_stmt_def, supported_log_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  Cases_on `cx.txn.is_static` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac supported_pure_exprs_scopes >> imp_res_tac read_results_state >>
+  imp_res_tac vyperStatePreservationTheory.lift_option_state >>
+  imp_res_tac vyperScopePreservationTheory.push_log_scopes >> gvs[]
+QED
+Resume typed_attribute_frames_mutual[cons]:
+  rpt gen_tac >> strip_tac >> fs[supported_stmt_def] >>
+  gvs[IgnAsm `!ref env ret_ty env' arr_e et bd p root xs cx es res es'. _`,
+      stmt_writes_ok_def,
+      supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+      Once type_stmt_def, AllCaseEqs()] >>
+  drule_all type_stmt_reference_transport >> strip_tac >>
+  qpat_x_assum `eval_stmts _ (_::_) _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, ignore_bind_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac
+  >~ [`_ = INR _`]
+  >- (qpat_x_assum `!ref env ret_ty env' arr_e et bd p root xs cx es res es'. _` kall_tac >>
+      gvs[]) >>
+  rename1 `eval_stmts cx stmts mid = _` >>
+  `mid.scopes <> []` by (Cases_on `mid.scopes` >> gvs[]) >>
+  first_x_assum drule_all >> strip_tac >> gvs[]
+QED
+Finalise typed_attribute_frames_mutual
+
 Theorem typed_stmts_place_frame:
   supported_stmts tops bindings stmts /\
   type_stmts env ret_ty stmts = SOME env' /\
@@ -922,7 +1170,10 @@ Theorem typed_stmts_place_frame:
                            (MAP AttrSubscript attrs)))
           (FLOOKUP sc root)) es.scopes
 Proof
-  cheat
+  strip_tac >>
+  drule (cj 2 typed_attribute_frames_mutual) >>
+  disch_then (qspecl_then [`env`,`env`] mp_tac) >>
+  simp[] >> disch_then drule_all >> simp[]
 QED
 
 (* Hook for a temporary buffer: a body that keeps the bytes of the
