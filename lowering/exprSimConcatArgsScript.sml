@@ -471,7 +471,7 @@ Proof
   qexistsl_tac [`B`, `bsz`] >> asm_rewrite_tac[] >> decide_tac
 QED
 
-Theorem concat_fixed_value[local]:
+Theorem concat_fixed_value:
   !cx m v op s tv.
     expr_val_rel cx (BaseT (BytesT (Fixed m))) v op s /\
     evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
@@ -486,7 +486,7 @@ Proof
   gvs[expr_val_rel_def, is_word_type_def, typed_val_to_w256_def, evaluate_type_def]
 QED
 
-Theorem concat_bytes_value[local]:
+Theorem concat_bytes_value:
   !ctx func cenv cx ty v op s sa sb es tv.
     expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sb es v op s /\
     stmt_state_rel ctx func cenv cx es s /\ is_bytestring_type ty /\
@@ -552,7 +552,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem concat_fixed_step_mono[local]:
+Theorem concat_fixed_step_mono:
   !data_ptr off_ptr x m s1 s2.
     (do offset_op <- emit_op MLOAD [off_ptr];
         dst <- emit_op ADD [data_ptr; offset_op];
@@ -570,7 +570,7 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void]
 QED
 
-Theorem concat_bytes_step_mono[local]:
+Theorem concat_bytes_step_mono:
   !mem_ptr data_ptr off_ptr s1 s2.
     (do arg_len <- emit_op MLOAD [mem_ptr];
         arg_data <- emit_op ADD [mem_ptr; Lit 32w];
@@ -1027,7 +1027,10 @@ Resume concat_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[] >>
+  disj2_tac >>
+  qpat_x_assum `(\res ee r. expr_exit res r) _ _ _` mp_tac >>
+  qpat_x_assum `exit_result r` mp_tac >> simp[] >>
+  rpt strip_tac >>
   qpat_x_assum `expr_exit _ r` mp_tac >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
   TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
