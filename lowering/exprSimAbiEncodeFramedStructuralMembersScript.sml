@@ -1,7 +1,7 @@
 Theory exprSimAbiEncodeFramedStructuralMembers
 Ancestors
   exprSimAbiEncodeFramedMembers exprSimAbiEncodeFramedArrayBody
-  abiEncoderWindowStructuralMembers abiEncoderWindowMembers
+  abiEncoderWindowStructuralMembers abiEncoderWindowMembers contractABI
   exprSimAbiEncodeExecFrame abiEncoderWindowPhase abiEncoderWindowContract
   abiEncoderWindow abiEncoderProps abiEncoderInput
   compileEnv emitHelper fragExec venomState venomMemDefs
@@ -394,3 +394,136 @@ Resume abi_encode_framed_structural_members_cons_run_sizes[compose]:
 QED
 
 Finalise abi_encode_framed_structural_members_cons_run_sizes
+
+Theorem abi_encode_framed_structural_members_remaining_run_sizes:
+  !rest ctx func infos at ats avs k src dst dp site slot sb cap d st en s out.
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ DROP k infos = rest /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> abi_encode_framed_contract ei) /\
+  compile_abi_encode_complex_elems dst src rest
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (LENGTH infos) src dst dp site slot
+        sb cap d en en t /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      abi_encode_exec_frame func s t
+Proof
+  Induct_on `rest`
+  >- (rpt gen_tac >>
+      simp_tac bool_ss [Once abiEncoderTheory.compile_abi_encode_child_def,
+        comp_return_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      `k = LENGTH infos` by
+        (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp_tac bool_ss [window_structural_members_inv_def, window_member_prefix_def] >>
+         strip_tac >> fs[DROP_EQ_NIL] >> decide_tac) >>
+      gvs[] >> qexists_tac `s` >> asm_rewrite_tac[abi_encode_exec_frame_refl] >>
+      irule window_phase_refl >>
+      qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
+  `abi_encode_framed_contract h0` by metis_tac[MEM] >>
+  drule_all abi_encode_framed_structural_members_cons_run_sizes >> strip_tac >>
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> abi_encode_framed_contract ei` by metis_tac[MEM] >>
+  first_x_assum drule_all >> strip_tac >>
+  `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+       !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!R. _ ==> !i b sz. _ /\ FLOOKUP u.vs_allocas i = _ ==> _`
+       (qspec_then `R` mp_tac) >> asm_rewrite_tac[] >> disch_tac >>
+     qpat_x_assum `!R. _` (qspec_then `R` mp_tac) >> asm_rewrite_tac[]) >>
+  `abi_encode_exec_frame func s t` by
+    (irule abi_encode_exec_frame_trans >> qexists_tac `u` >> asm_rewrite_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  rpt (qpat_x_assum `!R. _` kall_tac) >>
+  irule window_phase_chain >>
+  qexistsl_tac [`window_alloca_sites func (frag_ids st en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `mid`,
+    `window_alloca_sites func (frag_ids mid en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `window_alloca_sites func (frag_ids mid en) SUBSET _` mp_tac >>
+  simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem abi_encode_framed_structural_members_initialized_run_sizes:
+  abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
+    (ListV avs) sb cap d s /\
+  abi_encoder_tuple_type at ats /\
+  LENGTH infos = LENGTH ats /\ LENGTH ats = LENGTH avs /\
+  window_member_head_size infos = head_lengths ats 0 /\
+  window_member_cursor infos dp site slot sb cap d
+    (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> abi_encode_framed_contract ei) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (LENGTH infos) src dst dp site slot
+        sb cap d en en t /\
+      mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      abi_encode_exec_frame func s t
+Proof
+  strip_tac >>
+  `window_structural_members_inv ctx func infos at ats avs 0 src dst dp site slot
+     sb cap d st en s` by metis_tac[window_structural_members_inv_entry] >>
+  drule abi_encode_framed_structural_members_remaining_run_sizes >>
+  disch_then (qspecl_then [`infos`, `out`] mp_tac) >>
+  simp[abi_encoder_member_span_def] >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  `mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs)` by
+    (irule window_structural_members_inv_complete >> metis_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Theorem abi_encode_framed_complex_initialized_run_sizes:
+  abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
+    (ListV avs) sb cap d s /\
+  window_member_cursor infos dp site slot sb cap d
+    (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> abi_encode_framed_contract ei) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
+      (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+        mem_word_at slot t.vs_memory = n2w (LENGTH (enc at (ListV avs)))) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      abi_encode_exec_frame func s t
+Proof
+  strip_tac >>
+  `abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb cap s.vs_memory` by
+    fs[abi_encoder_window_pre_def] >>
+  `?ats. abi_encoder_tuple_type at ats` by metis_tac[abi_encoder_window_complex_iff] >>
+  drule_all window_complex_head_layout >> strip_tac >>
+  drule_all abi_encode_framed_structural_members_initialized_run_sizes >> strip_tac >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  qpat_x_assum `!R. _` kall_tac >> strip_tac >>
+  `LIST_REL abi_encoder_structural_valid ats avs` by
+    metis_tac[window_complex_structural_members] >>
+  `enc at (ListV avs) = enc (Tuple ats) (ListV avs)` by
+    (fs[abi_encoder_tuple_type_def] >> gvs[Once enc_def, LET_THM]) >>
+  `window_member_tail infos ats avs (LENGTH infos) = LENGTH (enc at (ListV avs))` by
+    (`TAKE (LENGTH infos) ats = ats /\ TAKE (LENGTH infos) avs = avs` by
+       metis_tac[TAKE_LENGTH_ID] >>
+     drule window_structural_member_tuple_length >>
+     pure_asm_rewrite_tac[window_member_tail_def] >> metis_tac[]) >>
+  qpat_x_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]
+QED
