@@ -6,7 +6,35 @@ Ancestors
   bodyIntCallPrologueResource bodyIntCallSemanticEntry intCallFrame
   loweringPosts intCallCallee vyperTypeCallStackSoundness
   exprLoweringProps compileEnv venomState venomExecSemantics
-  list finite_map words
+  list rich_list finite_map words fragExec
+
+(* Administrative room invariants at the fixed instruction endpoint. *)
+Theorem internal_prologue_landing_rooms:
+  compile_internal_prologue ce params has_rb rt st0 = ((ce2,rpc),st1) /\
+  fn_has_code st0 st1 func /\
+  run_inst_seq (emitted_insts st0 st1) s0 = OK u /\
+  mat_frame st0 s0 u /\
+  alloca_room ctx func s0 /\ fmp_room ctx func s0 ==>
+  alloca_room ctx func u /\ fmp_room ctx func u
+Proof
+  strip_tac >> drule compile_internal_prologue_shape >> strip_tac >>
+  `EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE)
+    (emitted_insts st0 st1)` by
+    (fs[EVERY_MEM, emitted_insts_def, DROP_LENGTH_APPEND] >>
+     rpt strip_tac >>
+     qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+     simp[fn_has_code_def] >> strip_tac >>
+     irule lookup_block_fn_insts >>
+     goal_assum (drule_at Any) >>
+     fs[IS_PREFIX_APPEND] >> gvs[]) >>
+  conj_tac
+  >- (irule run_inst_seq_alloca_room >>
+      qexistsl_tac [`emitted_insts st0 st1`, `s0`] >> simp[]) >>
+  irule run_inst_seq_fmp_room >>
+  qexistsl_tac [`emitted_insts st0 st1`, `s0`] >>
+  fs[mat_frame_def] >>
+  qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]
+QED
 
 Theorem protected_internal_prologue_run:
   compile_internal_prologue ce params has_rb rt st0 = ((ce2,rpc),st1) /\
@@ -56,7 +84,12 @@ Theorem protected_internal_prologue_run:
     (has_rb ==> !off sz capacity.
       ce.ce_return_buf = SOME (MemLoc off sz) /\
       w2n (HD args) + capacity <= caller.vs_alloca_next ==>
-      return_buf_frame (SOME (HD args,capacity)) ce2 st1 u)
+      return_buf_frame (SOME (HD args,capacity)) ce2 st1 u) /\
+    (!ctx k. alloca_room ctx func s0 /\ fmp_room ctx func s0 /\
+      ce.ce_imm_alloca = NONE /\
+      (ce.ce_is_ctor ==> IS_SOME (FLOOKUP caller.vs_labels "runtime_begin")) ==>
+      stmt_state_rel ctx func (ce2 with ce_alloca_locals := T) cx
+        (vs with scopes := [env]) (u with vs_inst_idx := k))
 Proof
   strip_tac >> drule_all internal_prologue_run >> strip_tac >>
   drule_all internal_prologue_landing_resources >> strip_tac >>
@@ -68,12 +101,24 @@ Proof
   drule_all internal_prologue_protected_landing >> strip_tac >>
   qmatch_asmsub_rename_tac `run_inst_seq _ s0 = OK u` >>
   qexists_tac `u` >> simp[eval_operand_def] >>
-  fs[mat_inv_def, allocas_above_def] >>
-  conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> goal_assum drule) >>
-  conj_tac
+  rpt conj_tac
+  >~ [`stmt_state_rel _ _ _ _ _ _`]
+  >- (rpt strip_tac >> drule_all internal_prologue_landing_rooms >> strip_tac >>
+      drule compile_internal_prologue_fields >>
+      simp[compile_env_component_equality] >> strip_tac >>
+      `u.vs_labels = caller.vs_labels` by
+        (qpat_x_assum `mat_frame _ _ _` mp_tac >>
+         qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
+         simp[setup_callee_def, AllCaseEqs(), mat_frame_def] >>
+         rpt strip_tac >> gvs[venom_state_component_equality]) >>
+      simp[stmt_state_rel_inst_idx, stmt_state_rel_def, immutable_base_zero_def] >>
+      rpt strip_tac >> first_x_assum drule >> simp[])
+  >~ [`allocas_above _ _`]
+  >- (fs[mat_inv_def, allocas_above_def] >>
+      rpt strip_tac >> first_x_assum irule >> goal_assum drule)
+  >~ [`local_region _ _ _ _ _ _`]
   >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  rpt strip_tac >> fs[return_buf_frame_def] >>
+  rpt strip_tac >> fs[mat_inv_def, return_buf_frame_def] >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -116,3 +161,4 @@ Proof
   disj2_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
