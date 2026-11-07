@@ -185,6 +185,7 @@ Theorem vv_post_final_gas:
   vv_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) r vv s <=>
   vv_post ctx func cenv cx e es sa sb s0 ee r vv s
 Proof
-  simp[loweringPostsTheory.vv_post_def, stmt_state_rel_source_gas,
+  simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.locals_kept_def,
+       loweringPostsTheory.popped_kept_def, stmt_state_rel_source_gas,
        vv_holds_source_gas, vv_at_source_gas, vv_own_source_gas]
 QED
