@@ -1272,7 +1272,7 @@ Proof
       exprLoweringPropsTheory.run_inst_seq_def, DROP_LENGTH_APPEND] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac [instruction_accessors, opcode_case_def] >>
+  pure_rewrite_tac [instruction_accessors, combinTheory.K_THM, opcode_case_def] >>
   res_tac >> gvs[exec_write2_def, eval_operand_def, eval_operands_def]
 QED
 
