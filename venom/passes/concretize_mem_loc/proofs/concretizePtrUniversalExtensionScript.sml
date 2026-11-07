@@ -20,12 +20,6 @@ Ancestors
   concretizePtrEnvironmentReadProducer concretizePtrUnaryEnvironmentReadProducer
   concretizePtrAssertionProducer concretizePtrStructuralDispatch
 
-Theorem current_retpc_parse[local]:
-  retpc_shape_ok = frameRel$retpc_shape_ok
-Proof
-  simp[]
-QED
-
 Theorem ptr_paired_universal_jump_extension[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
