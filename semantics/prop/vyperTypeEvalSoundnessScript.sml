@@ -2335,7 +2335,8 @@ Proof
        ignore_bind_def, check_def, assert_def, return_def, raise_def,
        AllCaseEqs(), get_storage_backend_def, get_accounts_def,
        get_transient_storage_def] >>
-  rpt strip_tac >> gvs[no_type_error_result_def, well_formed_type_value_def] >>
+  rpt strip_tac >> gvs[] >>
+  fs[no_type_error_result_def, Once well_formed_type_value_def] >>
   Cases_on `etv` >>
   gvs[resolve_array_element_def, return_def, runtime_place_typed_storage,
       vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
