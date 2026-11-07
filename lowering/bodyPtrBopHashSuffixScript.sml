@@ -2,7 +2,7 @@ Theory bodyPtrBopHashSuffix
 Ancestors
   bodyPtrBopHashFrame bodyPtrBopHashCompile bodyPtrBopHashSequence
   bodyPtrHashBuiltinsGhostFrame bodyPtrBopCompareCompile bodyPtrBopCompare
-  exprPtrUnwrapCopyEdges
+  exprPtrUnwrapCopyEdges bodyPtrBopOperandContract exprSimWordArgs
   exprSimHash exprLoweringProps venomExecSemantics venomInst
   venomState finite_map exprLowering emitHelper compileEnv emitHelperProps
   rich_list fragExec codegenRel instIdxIndep fragGasPathPtr arithmetic ptrDiscipline
@@ -356,6 +356,7 @@ Theorem bop_compare_emit_endpoint:
     stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
     ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
     ghost_kept cenv es sc G tn s H un /\
+    wb_frame cenv es sc s (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
     op_prov H op = NONE /\ op_taint un op = {} /\
     un.t_imm = tn.t_imm /\ un.t_mem = tn.t_mem /\
     un.t_stor = tn.t_stor /\ un.t_trans = tn.t_trans /\
@@ -428,8 +429,38 @@ Resume bop_compare_emit_endpoint[finish]:
      qexistsl_tac [`H`, `t with vs_inst_idx := SUC s.vs_inst_idx`, `un`] >>
      simp[gas_path_ptr_rules]) >>
   `LENGTH sd.cs_current_insts = SUC s.vs_inst_idx` by decide_tac >>
+  `wb_frame cenv es sc s (t with vs_inst_idx := LENGTH sd.cs_current_insts)` by
+    (`t.vs_memory = s.vs_memory` by
+       (qpat_x_assum `(t with vs_vars := _) = s` mp_tac >>
+        simp[venom_state_component_equality] >> metis_tac[]) >>
+     irule wb_frame_readonly_tail >>
+     qexistsl_tac [`sc`, `s`] >> simp[wb_frame_refl, lookup_var_def] >>
+     metis_tac[lookup_var_def]) >>
   qexistsl_tac [`H`, `un`] >>
   asm_rewrite_tac[hash_ghost_inv_inst_idx, stmt_state_rel_inst_idx] >>
   metis_tac[]
 QED
 Finalise bop_compare_emit_endpoint
+
+(* Scalar packaging uses the accumulated parent frame, not adjacent child posts. *)
+Theorem bop_bool_parent_post:
+  expr_type e = BaseT BoolT /\
+  stmt_state_rel ctx func cenv cx ee t /\
+  ghost_inv d cenv cx ee H un t /\
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  eval_operand op t = SOME (bool_to_word b) /\
+  op_prov H op = NONE /\ op_taint un op = {} /\
+  wb_frame cenv es sa s0 t /\
+  ghost_kept cenv es sa G0 tn0 s0 H un ==>
+  bop_operand_post d ctx func cenv cx e es sa sb op s0 G0 tn0
+    (BoolV b) ee t H un
+Proof
+  strip_tac >>
+  `expr_post ctx func cenv cx e es sa sb s0 ee (BoolV b) op t` by
+    (irule expr_post_word_intro >> Cases_on `b` >>
+     simp[is_word_type_def, loweringSliceTheory.word_value_def,
+       valueEncodingTheory.val_to_w256_def, bool_to_word_def]) >>
+  simp[bop_operand_post_def, is_word_type_def] >>
+  irule bodyPtrDefsTheory.ptr_val_ok_word >> simp[is_word_type_def]
+QED
