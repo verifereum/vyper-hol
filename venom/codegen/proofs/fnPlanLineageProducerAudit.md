@@ -211,3 +211,56 @@ Validation: helper targets `fnPlanLineageChronologicalPrefixTheory`,
 `fnPlanLineageTheory` build successfully. The frozen final theorem's existing
 admission remains unresolved; this diagnostic does not claim zero admissions
 or task completion. Only this Markdown file is added by the audit.
+
+## PHI boundary probe result (C3.bridge.2.phi_boundary_probe)
+
+Checked in `fnPlanLineagePhiBoundaryProbeTheory`; this is a diagnostic
+correction to candidate N above, not a counterexample to the frozen theorem.
+
+1. Shared incoming uses across distinct PHIs: reuse TargetProbe's
+   `repeated_target_disjoint_obstruction` and `repeated_target_ready_flags`.
+   That fixture fails `phi_uses_disjoint`/`phi_operands_ready`; it is not an
+   admissible successful native execution. This rejection does not prove
+   general target-list distinctness.
+2. Selected input also used after the PHI region: EntryProbe's
+   `entry_live_input_rejected` checks `~phi_operands_ready entry_live_input_fn`
+   for PHI x=(L:a,R:b) followed by ADD x,a. This proposed fixture is rejected,
+   not evidence of a ready runtime mismatch. No general impossibility claim
+   about all live-through configurations is inferred from it.
+3. Dead PHI output: `phi_boundary_dead_ready` and `phi_boundary_dead_plan`
+   certify readiness and SOME analyzed function planning. Actual predecessor
+   calls and join calls succeed (`phi_boundary_dead_native_calls`). Cleaning
+   and parameter preparation emit [] and preserve each incoming state.
+   `phi_boundary_dead_frontiers` and `phi_boundary_dead_counts` measure:
+
+   | frontier | analyzed live | stack from L / R | spill maps | counts (a,b,x) |
+   |---|---|---|---|---|
+   | predecessor JMP result / join setup / PHI prefix 0 | [a;b] | [a] / [b] | empty / empty | (1,0,0) / (0,1,0) |
+   | PHI prefix 1 / ordinary start | [] | [] / [] | empty / empty | (0,0,0) / (0,0,0) |
+
+   There is one PHI, so these are all its schedule frontiers. In particular,
+   `native_live_boundary` is false at position 0 on both incoming paths and
+   true at position 1. Ordinary union live coverage at *every* PHI position
+   is therefore not a viable native certificate, even on a ready successful
+   plan with empty spills and no duplicate physical cells.
+
+### Boundary contract to design next (not a new HOL invariant)
+
+Initialization must select incoming demands using the actual predecessor and
+retain multiplicities of its actual JMP target list. At PHI prefix k, required
+coverage must distinguish remaining predecessor-selected incoming operands
+from already-written outputs still demanded by the suffix; it must not require
+other predecessors' inputs or outputs not yet written. Physical counts and
+origin support must be tracked separately from membership, with native output
+freshness justified by chronological support. At the end of the PHI schedule,
+the ordinary analyzed-live coverage/budget interface can resume; this fixture
+checks that endpoint but does not prove it universally.
+
+Existing consumers remain `generate_phi_plan_live_budget` (conditional native
+physical selection/freshness) and `native_chronological_prefix` (ordinary
+position interface). Existing paired schedule replay supplies runtime PHI
+alignment, not native initialization. Missing universal implications remain
+actual predecessor setup to selected frontier, PHI-prefix frontier transport,
+and the ordinary endpoint to successful-DFS T+N closure. Unique-edge U and
+runtime query shielding S are unchanged unresolved obligations. No global
+induction or further conditional PHI lemma family was attempted here.
