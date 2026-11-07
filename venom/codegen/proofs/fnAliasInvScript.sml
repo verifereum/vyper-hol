@@ -11947,6 +11947,102 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+(* Totalized reads in the occurrence replay layer.  A copy records an
+   existing parent; an absent location records the exact operand read by
+   the planner, without choosing a value for HOL's unspecified EL. *)
+Datatype:
+  alias_occ_read_event =
+      AliasOccCopy num num
+    | AliasOccTotalRead num num operand
+End
+
+Definition alias_occ_read_def:
+  alias_occ_read i fresh (occs : (operand # num) list) =
+    if i < LENGTH occs then
+      ((FST (EL i occs), fresh), AliasOccCopy (SND (EL i occs)) fresh)
+    else
+      ((EL i (MAP FST occs), fresh),
+       AliasOccTotalRead i fresh (EL i (MAP FST occs)))
+End
+
+Theorem alias_occ_read_erases:
+  FST (FST (alias_occ_read i fresh occs)) = EL i (MAP FST occs)
+Proof
+  Cases_on `i < LENGTH occs` >> simp[alias_occ_read_def, EL_MAP]
+QED
+
+Theorem alias_occ_read_identity:
+  SND (FST (alias_occ_read i fresh occs)) = fresh
+Proof
+  simp[alias_occ_read_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem alias_occ_read_copy_parent:
+  SND (alias_occ_read i fresh occs) = AliasOccCopy parent child ==>
+  i < LENGTH occs /\ child = fresh /\
+  MEM (EL i occs) occs /\ SND (EL i occs) = parent
+Proof
+  simp[alias_occ_read_def] >> IF_CASES_TAC >> simp[] >>
+  strip_tac >> irule EL_MEM >> simp[]
+QED
+
+Theorem alias_occ_read_total_location:
+  SND (alias_occ_read i fresh occs) = AliasOccTotalRead j child at ==>
+  LENGTH occs <= i /\ j = i /\ child = fresh /\
+  at = EL i (MAP FST occs)
+Proof
+  simp[alias_occ_read_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Definition alias_occ_dup_def:
+  alias_occ_dup dist fresh (occs : (operand # num) list) =
+    (SNOC (FST (alias_occ_read (LENGTH occs - 1 - dist) fresh occs)) occs,
+     SUC fresh, SND (alias_occ_read (LENGTH occs - 1 - dist) fresh occs))
+End
+
+Theorem alias_occ_dup_erases:
+  MAP FST (FST (alias_occ_dup dist fresh occs)) =
+  stack_dup dist (MAP FST occs)
+Proof
+  simp[alias_occ_dup_def, stack_dup_def, stack_peek_def,
+    MAP_SNOC, alias_occ_read_erases]
+QED
+
+Theorem alias_occ_dup_empty:
+  stack_dup dist [] = [EL 0 []] /\
+  alias_occ_dup dist fresh [] =
+    ([(EL 0 [], fresh)], SUC fresh, AliasOccTotalRead 0 fresh (EL 0 []))
+Proof
+  simp[stack_dup_def, stack_peek_def, alias_occ_dup_def, alias_occ_read_def]
+QED
+
+Theorem alias_occ_dup_no_spontaneous_old:
+  MEM occ (FST (alias_occ_dup dist fresh occs)) /\ SND occ < fresh ==>
+  MEM occ occs
+Proof
+  simp[alias_occ_dup_def, MEM_SNOC] >> rpt strip_tac >>
+  gvs[alias_occ_read_identity]
+QED
+
+Theorem alias_occ_dup_bounded:
+  EVERY (\occ. SND occ < fresh) occs ==>
+  EVERY (\occ. SND occ < SUC fresh) (FST (alias_occ_dup dist fresh occs))
+Proof
+  simp[alias_occ_dup_def, EVERY_SNOC, alias_occ_read_identity, EVERY_MEM] >>
+  rpt strip_tac >> gvs[alias_occ_read_identity] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem alias_occ_do_dup_erases:
+  ps.ps_stack = MAP FST occs ==>
+  (SND (do_dup dist ps)).ps_stack =
+  MAP FST (FST (alias_occ_dup dist fresh occs))
+Proof
+  strip_tac >> rewrite_tac[alias_occ_dup_erases] >>
+  Cases_on `dist <= 15` >> simp[do_dup_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
