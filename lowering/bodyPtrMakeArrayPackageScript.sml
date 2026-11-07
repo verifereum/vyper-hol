@@ -36,6 +36,7 @@ Theorem literal_allocated_loop_start:
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?a H tm addr.
     gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK a) /\
+    addr + capacity < dimword(:256) /\
     literal_loop_frame ctx func ce cx d root sa.cs_next_id addr capacity
       es sa s G tn es sm H tm a [] 0
 Proof
@@ -87,4 +88,28 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!name p k. local_region ce ee.scopes s name p k ==> _`
     (drule_then mp_tac) >> decide_tac
+QED
+
+Theorem literal_loop_pointer_posts:
+  literal_loop_frame ctx func ce cx d root aid addr capacity
+    es sa s0 G0 tn0 ee sb G tn s cells off /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  ~is_word_type (expr_type e) /\ val_wf tv v /\
+  type_memory_size tv <= capacity /\ addr < dimword(:256) /\
+  type_memory_bytes ce (lowered_value_type ce e) <= capacity /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v addr m) ==>
+  ptr_vv_ok cx (expr_type e) (Value v)
+    (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) ee G tn s /\
+  ptr_buf_ok ce e (Var root) G s
+Proof
+  strip_tac >>
+  `op_taint tn (Var root) = {}` by
+    fs[literal_loop_frame_def, ptr_covers_def] >>
+  `ptr_val_ok cx (expr_type e) v (Var root) G tn s /\
+   ptr_buf_ok ce e (Var root) G s` by
+    (irule literal_memory_ptr_posts >>
+     fs[literal_loop_frame_def] >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[ptr_vv_ok_def, contextTheory.mk_ptr_def,
+    vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  fs[ptr_val_ok_def]
 QED
