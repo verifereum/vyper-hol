@@ -48,7 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  valueEncodingProps
+  valueEncodingProps assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
@@ -1380,9 +1380,40 @@ Theorem body_assign_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
-  rpt strip_tac >>
-  irule body_assign_place_widened_aggregate_call >>
-  simp[body_base_target_ok_def] >> metis_tac[]
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all body_assign_local_rhs_pre >> strip_tac >>
+  drule_all expr_sim_inv_local >> strip_tac >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `evaluate_type (get_tenv cx) ty = SOME entry.type` by metis_tac[] >>
+  `type_memory_bytes cenv ty < 2 ** 64` by metis_tac[locals_alloc_ok_def] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  `supported_program tops /\
+   cenv.ce_func_return_type = build_func_return_type tops /\
+   get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields /\
+   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[body_inv_def, expr_sim_inv_def] >>
+  `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
+    (Cases_on `e` >>
+     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+  `expr_sim ctx func cenv cx (expr_type e) e es` by metis_tac[body_expr_ok_def] >>
+  irule compile_assign_local_relayout_stmt_frag >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- fs[expr_sim_inv_def] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (irule memory_rhs_read_local_type >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qpat_assum `FLOOKUP env.var_types id = SOME ty` (irule_at Any) >> simp[] >>
+      `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+      pop_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
+  irule annassign_relayout_read_layout >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem body_assign_case:

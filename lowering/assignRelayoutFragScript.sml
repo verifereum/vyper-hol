@@ -36,7 +36,7 @@ Theorem assign_relayout_normal_continuation:
   evaluate_type (get_tenv cx) sty = SOME stv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   type_memory_bytes cenv sty = type_memory_size stv /\
-  type_memory_bytes cenv sty < dimword (:256) /\ type_memory_size dtv <= cap /\
+  type_memory_bytes cenv sty < dimword (:256) /\
   compile_assign_value cenv (Var p) LocMemory op F loc dty sty info bytes sb = ((),sf) /\
   (loc = NONE \/ loc = SOME LocMemory) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sf /\
@@ -69,6 +69,9 @@ Proof
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   `?dw. lookup_var p s = SOME dw` by
+    (fs[expr_post_def, stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     metis_tac[]) >>
+  `type_memory_size dtv <= cap` by
     (fs[expr_post_def, stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      metis_tac[]) >>
   drule assign_relayout_store_post_path >>
@@ -197,14 +200,15 @@ Theorem compile_assign_local_relayout_stmt_frag:
     cenv.ce_var_type id = SOME typ /\
     ~is_word_type typ /\ ~is_bytestring_type typ /\
     ~(has_length_word (expr_type e) /\ is_empty_value_expr e) /\
-    expr_type e = typ /\
+    lowered_value_type cenv e <> expr_type e /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e) /\
     ~is_word_type (lowered_value_type cenv e) /\
+    ~is_bytestring_type (lowered_value_type cenv e) /\
     lowered_value_type cenv e <> typ /\
     type_widens_to (get_tenv cx) (lowered_value_type cenv e) typ /\
     post_value_type cenv e = lowered_value_type cenv e /\
     evaluate_type (get_tenv cx) typ = SOME dtv /\
     evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
-    type_memory_size dtv <= cap /\
     type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv /\
     type_memory_bytes cenv (lowered_value_type cenv e) < dimword (:256) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
