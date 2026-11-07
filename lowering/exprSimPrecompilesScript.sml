@@ -2548,7 +2548,7 @@ Proof
   >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with outcomes := _) tf` mp_tac >> simp[]) >>
   irule wb_frame_trans >>
   conj_tac >- simp[] >>
-  conj_tac >- (qexistsl_tac [`es`, `sf`, `t`] >> simp[]) >>
+  reverse conj_tac >- (qexistsl_tac [`es`, `sf`, `t`] >> simp[]) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
 QED
 
@@ -2784,7 +2784,7 @@ Proof
   goal_assum (drule_at Any) >>
   irule expr_post_typed_stack_intro >> simp[stmt_state_rel_inst_idx] >>
   irule wb_frame_trans >> conj_tac >- simp[] >>
-  conj_tac
+  reverse conj_tac
   >- (qexistsl_tac [`es'`, `sm`, `input`] >>
       gvs[wb_frame_def, lookup_var_def] >> metis_tac[]) >>
   qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
@@ -2950,7 +2950,7 @@ Proof
   simp[stmt_state_rel_inst_idx, expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def] >>
   irule wb_frame_trans >> conj_tac >- simp[] >>
-  conj_tac
+  reverse conj_tac
   >- (qexistsl_tac [`es'`, `sm`, `t`] >>
       gvs[wb_frame_def, lookup_var_def] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
