@@ -42,7 +42,7 @@ of h/H appends to match HistoryCoverage's extension conclusion.
 | N10 CALLDATACOPY/CODECOPY/DLOADBYTES/RETURNDATACOPY | Local content facts only; complete family prefix supplier missing, including returndata OOB success guard |
 | N11 EXTCODECOPY | Complete prefix supplier missing; account-code payload and shared fields needed |
 | N12 SLOAD/SSTORE/TLOAD/TSTORE | Complete prefix supplier missing; storage/transient observation, taint and static-frame guard needed |
-| N13 environment reads | ptr_paired_prefix_environment_read and ptr_paired_environment_read_prefix_normalize cover exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE. ptr_paired_prefix_unary_environment_read and ptr_paired_unary_environment_read_prefix_normalize additionally cover exactly BLOCKHASH, BLOBHASH, BALANCE, EXTCODESIZE, EXTCODEHASH, CALLDATALOAD. Remaining SELFBALANCE/GAS/DLOAD lack a complete supplier |
+| N13 environment reads | ptr_paired_prefix_environment_read and ptr_paired_environment_read_prefix_normalize cover exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE. ptr_paired_prefix_unary_environment_read and ptr_paired_unary_environment_read_prefix_normalize additionally cover exactly BLOCKHASH, BLOBHASH, BALANCE, EXTCODESIZE, EXTCODEHASH, CALLDATALOAD. The existing zero-input supplier now also includes SELFBALANCE, and the unary supplier now also includes DLOAD (shared data section, not memory). Remaining GAS lacks a complete supplier |
 | N14 SHA3/LOG | Complete supplier missing; read payload/hash/topics/static guard required |
 | N15 CALL/STATICCALL | Content boundaries only; no complete prefix supplier; full request bytes and shared-state equality not free consequences of masked equality |
 | N16 DELEGATECALL/CREATE/CREATE2 | Complete prefix supplier missing; cannot rename CALL content facts |
@@ -2165,3 +2165,14 @@ Together with the enlarged sixteen-opcode zero-input environment supplier,
 this leaves GAS, SELFBALANCE and DLOAD in N13 without complete production.
 Other dispatch families and universal HistoryCoverage remain unresolved;
 this milestone does not establish the frozen static-memory theorem.
+
+### Residual environment completion, partial checkpoint
+
+The zero-input supplier is widened in place to SELFBALANCE, and the unary
+supplier is widened in place to DLOAD. Both their immediate and normalized
+exports retain all earlier coverage and unchanged public schemas. DLOAD uses
+shared vs_data_section, not shared memory. Both theories build cleanly.
+This supersedes the preceding current-coverage residual list: only GAS now
+remains in N13. Its exec_gas consumes the shared vs_gas_readings list; its
+paired-prefix producer is not yet proved. The remainingEnvironment component
+is therefore still open, not closed by these two additions.

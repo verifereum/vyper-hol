@@ -16,7 +16,7 @@ Theorem ptr_environment_read_execution[local]:
   ptr_core_shared s t /\
   MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] /\
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE] /\
   inst.inst_outputs = [out] /\ step_inst fuel Ct inst t = OK t' ==>
   ?v. step_inst 0 C inst s = OK (update_var out v s) /\
       t' = update_var out v t
@@ -35,7 +35,7 @@ Theorem ptr_mixed_environment_read_execution[local]:
   ptr_mixed_vars births positions TG tn f g s t /\ ptr_core_shared s t /\
   MEM inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] /\
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE] /\
   inst.inst_outputs = [out] /\ ~retpc_var f out /\
   step_inst fuel Ct inst t = OK t' ==>
   ?v. step_inst 0 C inst s = OK (update_var out v s) /\
@@ -73,7 +73,7 @@ Theorem ptr_paired_prefix_environment_read:
   max_live_eom C' = SOME eom /\
   MEM a.po_inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] /\ ptr_chrono_step C' at zt ==>
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE] /\ ptr_chrono_step C' at zt ==>
   ?z TG'.
     TG' = step_prov PT TG a.po_inst z.po_state /\
     ptr_paired_prefix R lp positions lo vs C C'
@@ -134,7 +134,7 @@ Proof
     (fs[ptr_paired_sample_def] >>
      `MEM a.po_inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
        COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-       CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE]` by simp[] >>
+       CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE]` by simp[] >>
      drule_all ptr_mixed_environment_read_execution >>
      disch_then (qspecl_then [`PT`,`C`] mp_tac) >> simp[]) >>
   `?i. active_inst a.po_fn i
@@ -206,7 +206,7 @@ Theorem ptr_paired_environment_read_prefix_normalize:
   ptr_chrono_step C' at zt /\
   MEM a.po_inst.inst_opcode [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
-    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE] ==>
+    CALLDATASIZE; RETURNDATASIZE; BLOBBASEFEE; CODESIZE; SELFBALANCE] ==>
   ?delta z tokens' registry' births' PT' TG' saved' entries' snapshots calls' ws'.
     delta <> [] /\ LENGTH snapshots = LENGTH delta /\
     ptr_paired_prefix R lp positions lo vs C C'
