@@ -130,11 +130,11 @@ Proof
     xs (MAP (typed_val_to_w256 tv) vs)` by simp[LIST_REL_MAP2] >>
   drule_all literal_typed_encoding_MEM >> disch_tac >>
   Cases_on `bop = In` >> gvs[]
-  >- (drule_all bodyPtrBopInLiteralRunTheory.literal_in_run >> strip_tac >>
+  >- (drule_all exprSimBopInLiteralWordTheory.literal_in_run >> strip_tac >>
       drule_all literal_in_uniform >>
       disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
       qexistsl_tac [`tt`,`G'`,`tn'`] >> simp[]) >>
-  drule_all bodyPtrBopInLiteralRunTheory.literal_notin_run >> strip_tac >>
+  drule_all exprSimBopInLiteralWordTheory.literal_notin_run >> strip_tac >>
   drule_all literal_notin_uniform >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   qexistsl_tac [`tt`,`G'`,`tn'`] >> simp[]

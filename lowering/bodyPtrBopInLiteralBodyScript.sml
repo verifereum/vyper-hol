@@ -131,5 +131,5 @@ Proof
   reverse conj_tac >- metis_tac[eval_expr_builtin_value] >>
   drule_all literal_body_typing >> strip_tac >>
   `is_ArrayT a` by simp[is_ArrayT_def] >>
-  metis_tac[bodyPtrBopInLiteralCompilerTheory.literal_compile_stack]
+  metis_tac[exprSimBopInLiteralWordTheory.literal_compile_stack]
 QED
