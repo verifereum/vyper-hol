@@ -260,7 +260,10 @@ Proof
         qpat_x_assum `not_fresh_at st x` mp_tac >>
         POP_ASSUM_LIST (K ALL_TAC) >>
         simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
-          eval_operand_def, not_fresh_at_def]) >> metis_tac[]) >>
+          eval_operand_def, not_fresh_at_def]) >>
+     qpat_assum `!x w. not_fresh_at middle x /\ lookup_var x prepared = SOME w ==>
+       lookup_var x after_head = SOME w` irule >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `eval_operand src after_head = SOME (n2w sb) /\
    eval_operand dst after_head = SOME (n2w d) /\
    (!h. eval_operand hi initial = SOME (n2w h) ==> eval_operand hi after_head = SOME (n2w h))` by
