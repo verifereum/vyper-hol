@@ -1,6 +1,7 @@
 Theory extRetScratchResourcePtr
 Ancestors
   allocaSiteResource allocationPtr extRetSourceAllocationPtr exprLoweringProps
+  abiBuiltinAllocation
   localPtrsProps loweringPosts exprSimOperands compileEnv venomState venomInst
   venomExecSemantics venomMemDefs words finite_map pred_set arithmetic
 
@@ -76,4 +77,63 @@ Proof
      gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE,
          AllCaseEqs()]) >>
   metis_tac[]
+QED
+
+Theorem scratch_resource_reentry:
+  scratch_resource ctx fn sites q len s /\
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,32) ==>
+  exec_alloca inst s (32w:bytes32) = OK (update_var out (n2w b) s) /\
+  scratch_resource ctx fn sites q len (update_var out (n2w b) s)
+Proof
+  strip_tac >>
+  `alloca_room ctx fn s /\ alloca_inv s` by
+    fs[scratch_resource_def] >>
+  drule_all alloca_site32_reentry >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule scratch_resource_fields >> qexists_tac `s` >>
+  simp[update_var_def]
+QED
+
+Theorem scratch_source_frontier:
+  stmt_state_rel ctx fn cenv cx es s /\
+  expr_val_at cenv cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand op s = SOME w /\ val_footprint tv v <> 0 ==>
+  w2n w + val_footprint tv v <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  `w2n w <= w2n w + val_footprint tv v - 1 /\
+   w2n w + val_footprint tv v - 1 < w2n w + val_footprint tv v` by
+    decide_tac >>
+  drule_all expr_val_at_below_frontier >> decide_tac
+QED
+
+Theorem scratch_resource_from_expr:
+  stmt_state_rel ctx fn cenv cx es s /\
+  expr_val_at cenv cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand op s = SOME w /\ fn_inst_ids_distinct fn /\
+  (!id. id IN sites ==>
+    ?out. MEM (mk_inst id ALLOCA [Lit (n2w 32)] [out]) (fn_insts fn) /\
+      not_local_ptr cenv es.scopes out /\
+      (id < sa.cs_next_id \/ sb.cs_next_id <= id)) ==>
+  scratch_resource ctx fn sites (w2n w) (val_footprint tv v) s
+Proof
+  strip_tac >> rewrite_tac[scratch_resource_def] >>
+  conj_tac >- fs[stmt_state_rel_def] >>
+  conj_tac >- fs[stmt_state_rel_def] >>
+  conj_tac >- (strip_tac >> drule_all scratch_source_frontier >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!id. id IN sites ==> _` drule >> strip_tac >>
+  `32 < dimword (:256)` by
+    simp_tac (srw_ss()) [dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  drule_all stmt_state_rel_alloca_site_bound >> strip_tac >>
+  qpat_x_assum `sz = 32` SUBST_ALL_TAC >> simp_tac std_ss [] >>
+  strip_tac >>
+  `FLOOKUP (abi_builtin_allocate_state id 32 s).vs_allocas id = SOME (b,32)` by
+    (simp[abi_builtin_allocate_state_def]) >>
+  `0 < val_footprint tv v` by decide_tac >>
+  simp_tac std_ss [venomMemDefsTheory.regions_disjoint_def] >>
+  metis_tac[prospective_alloca_expr_interval_disjoint, DECIDE ``0 < (32:num)``]
 QED
