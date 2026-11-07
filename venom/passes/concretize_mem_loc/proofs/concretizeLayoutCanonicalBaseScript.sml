@@ -6,6 +6,8 @@ Ancestors concretizeLayoutCanonicalDriver concretizeLayoutCanonicalIndex frameRe
   frameAllocationOwnership frameJointTransition contextCodegenRel
   o1PassContract ptrDiscipline venomInst concretizeLayoutPhaseNop
   concretizeStepStructure concretizeLayoutSelectedBaseInterface list
+  concretizeLayoutPhaseAssign venomWf concretizeLayoutPhaseValues
+  frameRelocationCleanValueSteps frameRelocationScalarSteps
 
 Theorem layout_annotation_update_ordinary_unique:
   ev = SOME (OriginOrdinary fuel post) /\
@@ -136,6 +138,75 @@ Proof
   fs[ptr_discipline_def] >> metis_tac[]
 QED
 
+Theorem layout_canonical_ordinary_environment:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\ decoration_at fn i s q ==>
+  ~g.lop_pending /\ g.lop_config = q /\ g.lop_cursor = n /\
+  layout_driver_indexed es ass g /\
+  layout_aligned_entry D lo vs0 C C' q0 es qs qend g s t /\
+  layout_ordinary_entry D lo vs0 C C' q0 es qs qend g s t /\
+  layout_ordinary_trace vs0 C q0 es qs qend g s /\
+  get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME i /\
+  MEM fn C.ctx_functions /\ o1_fn_shape C fn /\ MEM i (fn_insts fn) /\
+  fn_ptr_ok P fn /\
+  ?stk PG G tn oms om hs h birth ids rp rv anns f f' positions.
+    q = JointConfig stk PG G tn fn i s oms om hs h /\
+    g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
+    frame_reachable vs0 C stk PG G tn fn i s /\
+    access_ok lo G fn i s /\ taint_ok fn tn i s /\
+    decoration_entry f s q /\ layout_driver_row C' f f' positions /\
+    layout_block_pair positions g.lop_origin.lbo_source g.lop_origin.lbo_target
+      s.vs_inst_idx t.vs_inst_idx /\
+    ((i.inst_opcode = NOP /\ j = i) \/
+     ((concretize_inst_with_positions positions i).inst_opcode <> NOP /\
+      j = concretize_inst_with_positions positions i))
+Proof
+  strip_tac >> drule layout_canonical_ordinary_step_witness >> strip_tac >>
+  `layout_ordinary_entry D lo vs0 C C' q0 es qs qend g s t /\
+   layout_ordinary_trace vs0 C q0 es qs qend g s` by
+    fs[layout_aligned_entry_def, layout_ordinary_entry_def] >>
+  Cases_on `q` >> gvs[decoration_at_def] >>
+  `decoration_at fn i s g.lop_config` by simp[decoration_at_def] >>
+  drule_all layout_ordinary_source_facts >> strip_tac >>
+  `fn_ptr_ok P fn` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `?birth ids rp rv anns. g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns` by
+    (qpat_x_assum `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[layout_ordinary_entry_def, layout_ordinary_state_def] >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem layout_canonical_ordinary_edge:
+  layout_driver_indexed (MAP FST path) ass g /\
+  layout_ordinary_trace vs0 C q0 (MAP FST path) (MAP SND path) qend g s /\
+  layout_base_lookahead C q0 path g.lop_config g.lop_cursor i s /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  step_inst_base i s = OK post /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] (MAP FST path))) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] (MAP FST path))) (EL (SUC k) ass)) ==>
+  g.lop_cursor < LENGTH (MAP FST path) /\
+  g.lop_anns = EL g.lop_cursor ass /\
+  ?fuel qn. EL g.lop_cursor (MAP FST path) = SOME (OriginOrdinary fuel post) /\
+    EL (SUC g.lop_cursor) (q0::MAP SND path) = qn /\
+    step_inst fuel C i s = OK post /\
+    resolved_annotation_edge C g.lop_cursor g.lop_config
+      (EL g.lop_cursor (MAP FST path)) qn g.lop_ids (EL g.lop_cursor ass)
+      (EL (SUC g.lop_cursor) (lifetime_annotations 0 [0] (MAP FST path)))
+      (EL (SUC g.lop_cursor) ass)
+Proof
+  strip_tac >> drule_all layout_base_lookahead_edge >> strip_tac >>
+  drule layout_driver_annotation_edge_at >>
+  disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  simp[] >> strip_tac >>
+  `step_inst fuel C i s = OK post` by simp[step_inst_non_invoke] >>
+  fs[layout_driver_indexed_def] >> metis_tac[]
+QED
+
 Theorem layout_canonical_nop_success:
   o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -153,40 +224,101 @@ Theorem layout_canonical_nop_success:
   step_inst_base j t = OK t /\
   layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post t
 Proof
-  strip_tac >> drule layout_canonical_ordinary_step_witness >> strip_tac >>
+  strip_tac >> drule_all layout_canonical_ordinary_environment >> strip_tac >>
   `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
-  Cases_on `g.lop_config` >> gvs[decoration_at_def] >>
-  rename1 `g.lop_config = JointConfig stk PG G tn fn i s oms om hs h` >>
-  `layout_ordinary_entry D lo vs0 C C' q0 (MAP FST path) (MAP SND path) qend g s t` by
-    fs[layout_aligned_entry_def] >>
-  `decoration_at fn i s g.lop_config` by simp[decoration_at_def] >>
-  `MEM fn C.ctx_functions /\ o1_fn_shape C fn /\ MEM i (fn_insts fn)` by
-    (drule_all layout_ordinary_source_facts >> simp[]) >>
-  `fn_ptr_ok P fn` by (fs[EVERY_MEM] >> metis_tac[]) >>
-  `?birth ids rp rv anns. g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns` by
-    (qpat_x_assum `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[layout_ordinary_entry_def, layout_ordinary_state_def] >>
-     asm_rewrite_tac[] >> metis_tac[]) >>
   `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
     simp[is_terminator_def] >>
-  drule_all layout_base_lookahead_edge >> strip_tac >>
-  `layout_ordinary_trace vs0 C q0 (MAP FST path) (MAP SND path) qend g s` by
-    fs[layout_ordinary_entry_def] >>
-  drule layout_driver_annotation_edge_at >>
+  drule layout_canonical_ordinary_edge >>
   disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`post`, `i`] mp_tac) >>
   simp[] >> strip_tac >>
   `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
   drule_all layout_nop_trace_step >> strip_tac >>
   conj_tac >- simp[] >>
-  `step_inst fuel C i s = OK post` by simp[step_inst_non_invoke] >>
-  `resolved_annotation_edge C g.lop_cursor g.lop_config
-     (EL g.lop_cursor (MAP FST path)) qn g.lop_ids
-     (EL g.lop_cursor ass)
-     (EL (SUC g.lop_cursor) (lifetime_annotations 0 [0] (MAP FST path)))
-     (EL (SUC g.lop_cursor) ass)` by
-       (fs[layout_driver_indexed_def] >> metis_tac[]) >>
   drule layout_canonical_ordinary_success >>
-  disch_then (qspecl_then [`t`, `qn`, `post`, `k`, `i`] mp_tac) >>
+  disch_then (qspecl_then [`t`, `EL g.lop_cursor (MAP SND path)`, `post`, `k`, `i`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem layout_canonical_assign_success:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  i.inst_opcode = ASSIGN /\ step_inst_base i s = OK post ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+Proof
+  strip_tac >> drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
+  `i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode` by
+    simp[is_terminator_def] >>
+  drule layout_canonical_ordinary_edge >>
+  disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`post`, `i`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+  `inst_wf i` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `?v. i.inst_outputs = [v]` by
+    (qpat_x_assum `inst_wf i` mp_tac >> simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  drule_all layout_assign_trace_step >> strip_tac >>
+  qexists `tpost` >> conj_tac >- simp[] >>
+  drule layout_canonical_ordinary_success >>
+  disch_then (qspecl_then [`tpost`, `EL g.lop_cursor (MAP SND path)`, `post`, `k`, `i`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem layout_canonical_clean_value_success:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL g) /\
+  layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
+  clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT] /\
+  step_inst_base i s = OK post ==>
+  ?tpost. step_inst_base j t = OK tpost /\
+    layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
+Proof
+  strip_tac >>
+  `i.inst_opcode <> ALLOCA /\ i.inst_opcode <> INVOKE /\
+   i.inst_opcode <> NOP /\ ~is_terminator i.inst_opcode` by
+    (qpat_x_assum `clean_value_shape i` mp_tac >>
+     simp[clean_value_shape_def, scalar_binary_opcode_def, MEM] >>
+     rpt strip_tac >> gvs[is_terminator_def]) >>
+  drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
+  drule layout_canonical_ordinary_edge >>
+  disch_then (drule_at (Pat `layout_ordinary_trace _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`post`, `i`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+  `inst_wf i` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `?v. i.inst_outputs = [v]` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     qpat_x_assum `clean_value_shape i` mp_tac >>
+     simp[clean_value_shape_def, scalar_binary_opcode_def, MEM] >>
+     rpt strip_tac >> qpat_x_assum `inst_wf i` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  `~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT]` by simp[] >>
+  drule_all layout_clean_value_trace_step >> strip_tac >>
+  qexists `tpost` >> conj_tac >- simp[] >>
+  drule layout_canonical_ordinary_success >>
+  disch_then (qspecl_then [`tpost`, `EL g.lop_cursor (MAP SND path)`, `post`, `k`, `i`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
 
