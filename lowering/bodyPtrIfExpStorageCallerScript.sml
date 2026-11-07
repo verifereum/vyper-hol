@@ -24,6 +24,7 @@ Theorem ifexp_copy_allocated_execution:
     ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee cs load src (Var out)
       (u with vs_inst_idx := SUC s.vs_inst_idx) GBase tnBase p d n X n t G' tn' /\
     t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+    eval_operand (Var out) t = SOME d /\
     contract_storage u = contract_storage s /\ contract_transient u = contract_transient s /\
     tnBase.t_stor = tn.t_stor /\ tnBase.t_trans = tn.t_trans
 Proof
@@ -42,6 +43,8 @@ Proof
 
   drule_all ifexp_copy_ptr_execution >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `eval_operand (Var out) t = SOME d` by
+    (fs[bodyPtrIfExpStorageInvariantTheory.ifexp_copy_ptr_inv_def, slotCopyExecutionTheory.slot_copy_inv_def] >> metis_tac[]) >>
   qexistsl_tac [`out`, `u`, `d`, `G1`, `tn1`, `t`, `G'`, `tn'`] >>
   simp[] >> metis_tac[gas_path_ptr_then, ADD_CLAUSES]
 QED
