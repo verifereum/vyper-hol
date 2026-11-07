@@ -3,6 +3,7 @@ Theory extRetEncoderScratchSitesPtr
 Ancestors
   extRetScratchResourcePtr extRetEncoderRegionPtr abiEncoderWindowContract abiEncoderProps
   exprSimOperands venomMemDefs pred_set arithmetic abiDecoderCode abiEncoder context venomInst
+  loweringHalt exprLoweringProps
 
 Theorem scratch_resource_restrict:
   scratch_resource ctx fn sites q len s /\ children SUBSET sites /\
@@ -222,4 +223,31 @@ Proof
       `inst = mk_inst id ALLOCA [Lit 32w] [out]` by
         (simp[venomInstTheory.instruction_component_equality, venomInstTheory.mk_inst_def]) >> simp[]) >>
   metis_tac[fresh_not_local_ptr]
+QED
+
+(* Entry cut after lowering the expression and allocating the return buffer.
+   Reservation is the statement fragment's initial compiler premise, not a
+   fresh hypothesis at the encoder frontier.  The semantic source interval
+   remains the expression interval even at this later runtime state. *)
+Theorem encoder_return_buffer_scratch_resource:
+  lower_value compile_expr cenv ret e sa = (op,sb) /\
+  compile_alloc_buffer cenv.ce_max_return_size sb = (buf,st) /\
+  compile_abi_encode_to_buf buf.buf_operand op ei st = (result,en) /\
+  fn_has_code st en fn /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx fn cenv cx es s /\
+  expr_val_at cenv cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand op s = SOME w ==>
+  scratch_resource ctx fn (window_alloca_sites fn (frag_ids st en))
+    (w2n w) (val_footprint tv v) s
+Proof
+  strip_tac >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  `local_ptrs_reserved cenv st` by
+    (irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]) >>
+  irule encoder_window_scratch_resource >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`cenv`, `cx`, `es`, `op`, `sa`, `sb`, `ty`] >> simp[]
 QED
