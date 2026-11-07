@@ -100,6 +100,32 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem ld_exec_delegatecall_backward_extract:
+  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n offS) (w2n sz) s =
+    read_memory (w2n offT) (w2n sz) t /\
+  exec_delegatecall i t gas addr offT sz roT rs = OK t' ==>
+  ?out w rS rT v (rr:((unit + exception option) # execution_state) option).
+    i.inst_outputs = [out] /\ t' = update_var out w rT /\
+    exec_delegatecall i s gas addr offS sz (roS:bytes32) rs = OK (update_var out w rS) /\
+    extract_venom_result s v (w2n roS) (w2n rs) rr = SOME (w,rS) /\
+    extract_venom_result t v (w2n roT) (w2n rs) rr = SOME (w,rT) /\
+    rS.vs_returndata = rT.vs_returndata /\
+    rS.vs_memory = (write_memory_with_expansion (w2n roS)
+      (TAKE (w2n rs) rT.vs_returndata) s).vs_memory /\
+    rT.vs_memory = (write_memory_with_expansion (w2n roT)
+      (TAKE (w2n rs) rT.vs_returndata) t).vs_memory
+Proof
+  strip_tac >> drule_all ld_delegatecall_run_shared >>
+  disch_then (qspecl_then [`w2w addr`, `w2n gas`] assume_tac) >>
+  gvs[exec_delegatecall_def, AllCaseEqs()] >>
+  drule ld_extract_result_backward >>
+  disch_then (qspecl_then [`s`, `w2n roS`] strip_assume_tac) >>
+  qexistsl [`output`, `rS`, `s''`] >> simp[] >>
+  qmatch_asmsub_abbrev_tac `extract_venom_result t 1w (w2n roT) (w2n rs) rr` >>
+  qexistsl_tac [`1w`,`rr`] >> simp[]
+QED
+
 Theorem ld_exec_delegatecall_backward:
   ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   read_memory (w2n offS) (w2n sz) s =
@@ -114,12 +140,9 @@ Theorem ld_exec_delegatecall_backward:
     rT.vs_memory = (write_memory_with_expansion (w2n roT)
       (TAKE (w2n rs) rT.vs_returndata) t).vs_memory
 Proof
-  strip_tac >> drule_all ld_delegatecall_run_shared >>
-  disch_then (qspecl_then [`w2w addr`, `w2n gas`] assume_tac) >>
-  gvs[exec_delegatecall_def, AllCaseEqs()] >>
-  drule ld_extract_result_backward >>
-  disch_then (qspecl_then [`s`, `w2n roS`] strip_assume_tac) >>
-  qexistsl [`output`, `rS`, `s''`] >> simp[]
+  strip_tac >> drule_all ld_exec_delegatecall_backward_extract >>
+  disch_then (qspec_then `roS` strip_assume_tac) >>
+  qexistsl [`out`, `w`, `rS`, `rT`] >> simp[]
 QED
 
 (* Matching operand interfaces permit input/output offsets to move. CALL's
@@ -194,6 +217,37 @@ Proof
   simp[Excl "consume_create_outcome_eq"]
 QED
 
+Theorem ld_delegatecall_step_backward_extract:
+  i.inst_opcode = DELEGATECALL /\
+  i.inst_operands = [gop;adop;offop;szop;rop;rsop] /\
+  eval_operand gop s = SOME gas /\ eval_operand gop t = SOME gas /\
+  eval_operand adop s = SOME addr /\ eval_operand adop t = SOME addr /\
+  eval_operand offop s = SOME offS /\ eval_operand offop t = SOME offT /\
+  eval_operand szop s = SOME sz /\ eval_operand szop t = SOME sz /\
+  eval_operand rop s = SOME roS /\ eval_operand rop t = SOME roT /\
+  eval_operand rsop s = SOME rs /\ eval_operand rsop t = SOME rs /\
+  ld_shared_state tn un s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
+  read_memory (w2n offS) (w2n sz) s = read_memory (w2n offT) (w2n sz) t /\
+  step_inst fuel CT i t = OK t' ==>
+  ?out w rS rT v (rr:((unit + exception option) # execution_state) option).
+    i.inst_outputs = [out] /\ t' = update_var out w rT /\
+    step_inst fuel CS i s = OK (update_var out w rS) /\
+    extract_venom_result s v (w2n roS) (w2n rs) rr = SOME (w,rS) /\
+    extract_venom_result t v (w2n roT) (w2n rs) rr = SOME (w,rT) /\
+    rS.vs_returndata = rT.vs_returndata /\
+    rS.vs_memory = (write_memory_with_expansion (w2n roS)
+      (TAKE (w2n rs) rT.vs_returndata) s).vs_memory /\
+    rT.vs_memory = (write_memory_with_expansion (w2n roT)
+      (TAKE (w2n rs) rT.vs_returndata) t).vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >> strip_tac >>
+  drule_all ld_exec_delegatecall_backward_extract >>
+  disch_then (qspec_then `roS` strip_assume_tac) >>
+  qexistsl [`out`, `w`, `rS`, `rT`,`v`,`rr`] >> simp[]
+QED
+
 Theorem ld_delegatecall_step_backward:
   i.inst_opcode = DELEGATECALL /\
   i.inst_operands = [gop;adop;offop;szop;rop;rsop] /\
@@ -215,10 +269,7 @@ Theorem ld_delegatecall_step_backward:
     rT.vs_memory = (write_memory_with_expansion (w2n roT)
       (TAKE (w2n rs) rT.vs_returndata) t).vs_memory
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >> strip_tac >>
-  drule_all ld_exec_delegatecall_backward >>
-  disch_then (qspec_then `roS` strip_assume_tac) >>
-  qexistsl [`out`, `w`, `rS`, `rT`] >> simp[]
+  strip_tac >> drule_all ld_delegatecall_step_backward_extract >>
+  disch_then (qspec_then `CS` strip_assume_tac) >>
+  qexistsl [`out`,`w`,`rS`,`rT`] >> simp[]
 QED
