@@ -902,6 +902,7 @@ Theorem encode_value_memory_live:
     encode_value tv v = SOME writes /\
     w2n k + type_slot_size tv <= dimword (:256) /\
     j < type_slot_size tv /\ b < 32 /\
+    MEM j (MAP FST writes) /\
     ~dead_bytes (apply_writes k writes st) (w2n k) tv (w2n k + j) b ==>
     EL b (word_to_bytes
             (lookup_storage (n2w (w2n k + j)) (apply_writes k writes st)) T) =
@@ -1258,6 +1259,9 @@ Theorem storage_agree_copy_region:
     well_formed_type_value tv /\ value_has_type tv v /\
     val_in_memory tv v off mem /\
     encode_value tv v = SOME writes /\
+    (!i b. i < type_slot_size tv /\ b < 32 /\
+       ~dead_bytes (apply_writes k writes st1) (w2n k) tv (w2n k + i) b ==>
+       MEM i (MAP FST writes)) /\
     (!i. i < type_slot_size tv /\
          (?b. b < 32 /\
               ~dead_bytes (apply_writes k writes st1) (w2n k) tv (w2n k + i) b) ==>
