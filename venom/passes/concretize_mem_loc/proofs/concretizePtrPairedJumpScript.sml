@@ -50,7 +50,7 @@ Theorem ptr_paired_block_prefix_normalize[local]:
   ptr_paired_cursor lp b bt /\
   ptr_mixed_vars births positions (entry_prov a.po_fn sj TG)
     b.po_taint a.po_fn at.po_fn se t_entry /\
-  ptr_core_shared se t_entry ==>
+  ptr_history_content b.po_taint se t_entry ==>
   ?s_jump b B TG' bb n delta snapshots.
     step_inst fuel C a.po_inst a.po_state = OK s_jump /\
     ptr_tagged_chrono_step C (HD tokens) a b PT TG saved PT TG' saved /\
@@ -162,7 +162,8 @@ Resume ptr_paired_block_prefix_normalize[prefix]:
   conj_tac >- suspend "samples" >>
   conj_tac >- suspend "alignment" >>
   conj_tac >- (irule ptr_paired_callers_retained >>
-    gvs[ptr_paired_samples_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
+    gvs[ptr_paired_samples_def, ptr_sample_list_def] >>
+    qexistsl_tac [`a`,`at`] >> simp[]) >>
   suspend "writes"
 QED
 Resume ptr_paired_block_prefix_normalize[transcript]:
@@ -197,7 +198,7 @@ Resume ptr_paired_block_prefix_normalize[writes]:
   drule ptr_structural_trace_source >> strip_tac >>
   drule ptr_chrono_history_end >> strip_tac >>
   irule (SRULE [] (Q.SPECL [`ws`,`[]`] ptr_paired_writes_pair)) >>
-  gvs[ptr_paired_samples_def, MEM, is_terminator_def]
+  gvs[ptr_paired_samples_def, ptr_sample_list_def, MEM, is_terminator_def]
 QED
 Finalise ptr_paired_block_prefix_normalize
 

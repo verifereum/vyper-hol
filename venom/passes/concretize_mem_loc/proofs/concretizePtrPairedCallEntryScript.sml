@@ -7,6 +7,7 @@ Ancestors
   concretizePtrStructuralTrace concretizePtrDeletedGapHistory
   concretizePtrChronologicalHistory concretizePtrSourceOwnership
   concretizePtrOpaqueRetpc concretizePtrSharedFields concretizePtrValueTransport
+  concretizePtrRequestHistory
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
   concretizeStepRetpc concretizeStageShape concretizeStepContract
   contextCodegenRel unitLabelMapIdentity venomInst o1PassContract
@@ -70,7 +71,7 @@ Proof
   simp[] >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   `a.po_state.vs_labels = at.po_state.vs_labels` by
-    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
     a.po_state at.po_state` by fs[ptr_paired_sample_def] >>
   drule_all ptr_mixed_vars_eval_operands >>
@@ -140,8 +141,8 @@ Proof
     (fs[ptr_paired_code_def, concretize_positions_blocks] >>
      Cases_on `f.fn_blocks` >> simp[concretize_positions_block_label]) >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
-  `ptr_core_shared a.po_state at.po_state` by fs[ptr_paired_sample_def] >>
-  drule_all ptr_core_shared_setup >>
+  `ptr_history_content a.po_taint a.po_state at.po_state` by fs[ptr_paired_sample_def] >>
+  drule_all ptr_history_content_setup >>
   disch_then (qspec_then `args` strip_assume_tac) >>
   `~NULL f.fn_blocks` by
     (fs[setup_callee_def, AllCaseEqs()]) >>

@@ -4,6 +4,7 @@ Ancestors
   concretizePtrPairedFields concretizePtrMixedPhi concretizePtrOpaqueRetpc
   concretizePtrSharedFields concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrChronologicalHistory
   concretizePtrTaggedSupport concretizePtrParamSupport concretizePtrRequestHistory
+  concretizePtrTaintContent
   concretizePtrDeletedGapHistory concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrActivationChronology frameCfgBoundary
   concretizeStepStructure concretizeStepShape concretizeStepCallChecks
@@ -173,17 +174,18 @@ Theorem ptr_paired_selected_jump_entry[local]:
     ptr_paired_cursor lp b bt /\
     ptr_mixed_vars births positions (entry_prov a.po_fn sj TG)
       b.po_taint a.po_fn at.po_fn s_entry t_entry /\
-    ptr_core_shared s_entry t_entry
+    ptr_history_content b.po_taint s_entry t_entry
 Proof
   strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn sj t_jump /\
-   ptr_core_shared sj t_jump /\
+   ptr_history_content a.po_taint sj t_jump /\
    sj.vs_current_bb = t_jump.vs_current_bb /\
    sj.vs_prev_bb = t_jump.vs_prev_bb /\ ~sj.vs_halted` by
     (fs[ptr_paired_sample_def, ptr_paired_cursor_def] >>
      gvs[jump_to_def, ptr_mixed_vars_def,
-         ptr_opaque_env_def, ptr_core_shared_def, ptr_shared_fields_def,
-         lookup_var_def] >> metis_tac[]) >>
+         ptr_opaque_env_def, ptr_history_content_def, ptr_taint_content_def,
+         ptr_taint_control_def, ptr_core_shared_def, ptr_shared_fields_def,
+         contract_storage_def, contract_transient_def, lookup_var_def] >> metis_tac[]) >>
   `?bb. lookup_block sj.vs_current_bb a.po_fn.fn_blocks = SOME bb` by
     (qpat_x_assum `enters_block _ _ _` mp_tac >>
      fs[ptr_paired_code_def] >>
@@ -196,7 +198,7 @@ Proof
   `at.po_fn.fn_blocks =
     (concretize_function_with_positions (lp a.po_fn) a.po_fn).fn_blocks` by
     fs[ptr_paired_code_def] >>
-  drule_all ptr_mixed_enters_production_block >> strip_tac >>
+  drule_all ptr_history_mixed_enters_block >> strip_tac >>
   qmatch_assum_rename_tac `enters_block a.po_fn sj se` >>
   qabbrev_tac `ae = ptr_observe a.po_stack a.po_params
     (entry_prov a.po_fn sj a.po_prov)
@@ -303,7 +305,7 @@ Proof
   `at.po_inst = a.po_inst` by
     simp[concretize_positions_terminator, is_terminator_def] >>
   `a.po_state.vs_labels = at.po_state.vs_labels` by
-    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
     a.po_state at.po_state` by fs[ptr_paired_sample_def] >>
   drule_all ptr_mixed_vars_eval >>
@@ -410,7 +412,7 @@ Proof
     (`MEM a.po_inst.inst_opcode [JNZ; DJMP] /\ MEM cond a.po_inst.inst_operands` by simp[] >>
      drule_all ptr_owned_jnz_scalar >> simp[]) >>
   `a.po_state.vs_labels = at.po_state.vs_labels` by
-    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
     a.po_state at.po_state` by fs[ptr_paired_sample_def] >>
   drule_all ptr_mixed_vars_eval >>
