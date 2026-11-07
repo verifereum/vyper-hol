@@ -6,6 +6,8 @@ Ancestors
   concretizePtrStorageReadProducer concretizePtrBufferCopyContent
   concretizePtrOpaqueRetpc ptrDiscipline memLocDefs list pointerConfinedDefs
   concretizePtrRequestHistory venomExecSemantics venomState venomInst words codegenRel
+  concretizePtrWriteFootprint concretizePtrPrefixLedger concretizePtrBytes
+  concretizePtrChronologicalHistory pred_set arithmetic
 
 Theorem ptr_buffer_copy_operand_discipline[local]:
   fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
@@ -127,6 +129,35 @@ Proof
   once_asm_rewrite_tac[] >> simp[] >>
   irule ptr_history_content_masks >> goal_assum (drule_at Any) >>
   fs[MEM] >> simp[step_taint_def, store_taint_def, imm_taint_def, adopt_reset_def]
+QED
+
+Theorem ptr_buffer_copy_write_pair[local]:
+  ptr_chrono_step C a z /\ ptr_chrono_step Ct at zt /\
+  MEM a.po_inst.inst_opcode [CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY] /\
+  at.po_inst = a.po_inst /\ a.po_inst.inst_operands = [dop;sop;nop] /\
+  eval_operand dop a.po_state = SOME d /\ eval_operand dop at.po_state = SOME dt /\
+  eval_operand sop a.po_state = SOME r /\ eval_operand sop at.po_state = SOME r /\
+  eval_operand nop a.po_state = SOME n /\ eval_operand nop at.po_state = SOME n /\
+  (!i. i < w2n n ==> read_byte (w2n d+i) z.po_state.vs_memory =
+    read_byte (w2n dt+i) zt.po_state.vs_memory) ==>
+  ptr_ledger_write_pair C Ct (\x. w2n dt + (x - w2n d)) a z at zt
+Proof
+  strip_tac >>
+  `!x. x IN range_bytes (step_writes a.po_inst a.po_state z.po_state) <=>
+    w2n d <= x /\ x < w2n d + w2n n` by
+    (gen_tac >> irule ptr_copy_footprint_interval >> simp[] >> fs[MEM] >>
+     metis_tac[]) >>
+  `!x. x IN range_bytes (step_writes at.po_inst at.po_state zt.po_state) <=>
+    w2n dt <= x /\ x < w2n dt + w2n n` by
+    (gen_tac >> irule ptr_copy_footprint_interval >> simp[] >> fs[MEM] >>
+     metis_tac[]) >>
+  simp[ptr_ledger_write_pair_def] >>
+  `~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE` by
+    (fs[MEM] >> simp[is_terminator_def]) >>
+  simp[ptr_bytes_agree_def] >> rpt strip_tac >>
+  `x - w2n d < w2n n` by decide_tac >>
+  qpat_x_assum `!i. i < w2n n ==> _`
+    (qspec_then `x - w2n d` mp_tac) >> simp[]
 QED
 
 Theorem ptr_paired_buffer_copy_prefix_normalize:
