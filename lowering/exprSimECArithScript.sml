@@ -39,6 +39,7 @@
  *)
 Theory exprSimECArith
 Ancestors
+  exprSimHashBoundary
   exprSimSource
   exprSimProps
   exprSimHypsDefs

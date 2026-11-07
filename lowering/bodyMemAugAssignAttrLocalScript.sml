@@ -252,7 +252,7 @@ Proof
   `?actual. evaluate_binop
      (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
      ftv bop fv v = INL actual` by
-    (irule bop_result_augassign_success >> goal_assum (drule_at Any) >> simp[]) >>
+    metis_tac[bop_result_augassign_success] >>
   Cases_on `write_place cx (MemoryPlace id [AttrSubscript fld]) actual ee` >>
   rename1 `_ = (actual_res, actual_fin)` >>
   `eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)

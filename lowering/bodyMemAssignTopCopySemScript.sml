@@ -1,6 +1,7 @@
 (* Storage assignment compiler and semantic boundaries for the memory proof. *)
 Theory bodyMemAssignTopCopySem
 Ancestors
+  exprSimHashBoundary
   bodyMemAssignTopCopyFacts stmtSimAssignStorageCopy stmtSimStoreCopy
   stmtSimDeclMem stmtSimAssignMem stmtSimAssignStorage stmtSimAssign exprLoweringProps
   stmtLowering exprLowering emitHelper emitHelperProps context compileEnv
