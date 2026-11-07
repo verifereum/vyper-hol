@@ -381,7 +381,8 @@ Proof
 QED
 
 Theorem raw_call_length_binop_step_ghost:
-  (opc = LT \/ opc = XOR \/ opc = MUL) ==>
+  (opc = LT \/ opc = XOR \/ opc = MUL) /\
+  (opc = MUL ==> op_taint tn left = {} /\ op_taint tn right = {}) ==>
   step_taint (mk_inst iid opc [left;right] [out]) s (update_var out w s) tn =
     tn with t_var := tn.t_var |+ (out,{}) /\
   step_prov PG G (mk_inst iid opc [left;right] [out]) (update_var out w s) =
@@ -577,6 +578,8 @@ Proof
     (irule raw_call_length_binop_step_base >>
      simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
        venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `op_taint (tn with t_var := tn.t_var |+ (d,{})) (Var d) = {}` by
+    simp[ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[] >> simp[raw_call_update_var_pc, raw_call_length_binop_step_ghost] >>
   simp[Once fragGasSeqPtrTheory.inst_seq_ptr_def] >> conj_tac
   >- (irule ptr_inst_ok_raw_call_length_binop >>
