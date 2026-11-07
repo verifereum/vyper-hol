@@ -8,7 +8,7 @@ Theorem unary_builtin_operand_sim_ptr:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   body_exprs_ptr_ok cx [e] /\
   expr_type e <> BaseT (BytesT (Dynamic 24576)) ==>
-  expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es
+  expr_sim_ptr d ctx PG func cenv cx cty e es
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env e es` by
@@ -84,14 +84,14 @@ QED
 
 Theorem compile_unary_builtin_rel_vv_sim_ptr:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
-  expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
+  expr_sim_ptr d ctx PG func cenv cx cty e es /\
   ~precompile_builtin bt /\ bt <> Len /\ builtin_args_length_ok bt 1 /\
   (!sa sb vv. compile_expr cenv ty (Builtin ann bt [e]) sa = (vv,sb) ==>
-    ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    ?x sm. lower_value compile_expr cenv cty e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
   (!sa sm sb x vv s0 G0 tn0 v ee G tn t.
-    lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+    lower_value compile_expr cenv cty e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
