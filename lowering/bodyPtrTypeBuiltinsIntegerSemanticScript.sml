@@ -130,10 +130,12 @@ QED
    ConvIntToBytesM: Outputs.scalar_int_bytes_run requires bits<=8*m (no clamp);
      CheckedArithmetic supplies full success/abort counted/filter/frame boundary.
      General typed actual success/abort semantics and full continuation remain.
-   ConvIntToDecimal and ConvDecimalToInt: DecimalRun supplies fresh semantic
-     success/abort; CheckedArithmetic.convert_decimal_pipeline and its
-     counted/abort/filter/frame boundaries exist. Actual typed adapters and
-     complete summaries remain.
+   ConvIntToDecimal: IntegerDecimalContinue supplies actual typed success/revert
+     semantics and scalar_integer_decimal_continuation for both integer signs.
+     It reuses DecimalRun and CheckedArithmetic directly, without Outputs.
+   ConvDecimalToInt: DecimalRun supplies fresh semantic success/abort;
+     CheckedArithmetic counted/abort/filter/frame boundaries exist.
+     Actual typed adapter and complete summary remain.
    ConvBoolToDecimal: ScalarArithmetic has pointer facts, but valid_conversion
      forbids this pair; discharge by scalar source/destination typing partition.
    int_convert_pair is NOT just integer-to-integer: exprSimConvert defines it
