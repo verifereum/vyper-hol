@@ -1,8 +1,7 @@
 Theory concretizePtrAssignProducer
 Ancestors concretizePtrOrdinaryNext concretizePtrPairedNextAttach concretizePtrOpaqueRetpc
-  concretizePtrMloadProducer concretizeStepStructure concretizeStepRetpc
-  concretizePtrMloadExecution concretizePtrMstoreProducer
-  concretizePtrMloadEndpoint concretizePtrPairedPrefix concretizePtrPairedFields
+  concretizeStepStructure concretizeStepRetpc concretizePtrRequestHistory
+  concretizePtrPairedPrefix concretizePtrPairedFields
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrSourceOwnership concretizePtrChronologicalHistory
   concretizePtrActivationChronology
@@ -112,7 +111,8 @@ Resume ptr_paired_prefix_assign[successor]:
      ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
        (step_taint a.po_inst a.po_state post a.po_taint)
        a.po_fn at.po_fn post s'` by
-    (fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >>
+     drule ptr_history_content_labels >> strip_tac >>
      drule ptr_mixed_assign_execution_back >>
      disch_then irule >> simp[] >>
      qpat_x_assum `step_inst fuel C' _ _ = OK _` mp_tac >>
@@ -157,6 +157,14 @@ Resume ptr_paired_prefix_assign[assembly]:
        range_bytes_def] >>
   qpat_x_assum `step_inst 0 C _ _ = OK post` mp_tac >>
   qpat_x_assum `step_inst fuel C' _ _ = OK s'` mp_tac >>
+  disch_tac >> disch_tac >>
+  `s'.vs_current_bb = at.po_state.vs_current_bb /\
+   s'.vs_prev_bb = at.po_state.vs_prev_bb` by
+    (qpat_x_assum `step_inst fuel C' _ _ = OK s'` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[update_var_def]) >> simp[] >>
+  qexistsl_tac [`0`, `post`] >> simp[] >>
+  qpat_x_assum `step_inst 0 C _ _ = OK post` mp_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def]
 QED
@@ -167,7 +175,11 @@ Resume ptr_paired_prefix_assign[sample]:
   rpt strip_tac >> gvs[] >>
   simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
   reverse conj_tac
-  >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+  >- (fs[ptr_paired_sample_def] >>
+      simp[step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def,
+           imm_taint_def, set_var_taint_def, GSYM update_var_def] >>
+      irule ptr_history_content_masks >>
+      qexists_tac `a.po_taint` >> simp[]) >>
   qpat_x_assum `ptr_mixed_vars _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `_.inst_opcode = ASSIGN` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> strip_tac >>

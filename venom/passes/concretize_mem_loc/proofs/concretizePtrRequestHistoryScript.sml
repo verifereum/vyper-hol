@@ -170,6 +170,14 @@ Proof
   simp[ptr_history_content_def, ptr_taint_content_def]
 QED
 
+Theorem ptr_history_content_masks:
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  tn'.t_imm = tn.t_imm /\ ptr_history_content tn s t ==>
+  ptr_history_content tn' s t
+Proof
+  simp[ptr_history_content_def, ptr_taint_content_def]
+QED
+
 Theorem ptr_history_content_setup:
   ptr_history_content tn s t /\
   (NULL f.fn_blocks <=> NULL g.fn_blocks) /\
@@ -245,6 +253,15 @@ Proof
   simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
        ptr_core_shared_def, ptr_shared_fields_def, contract_storage_def,
        contract_transient_def]
+QED
+
+Theorem ptr_history_content_update_var[simp]:
+  ptr_history_content tn (update_var x u s) (update_var y v t) <=>
+  ptr_history_content tn s t
+Proof
+  simp[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
+       ptr_core_shared_def, ptr_shared_fields_def, update_var_def,
+       contract_storage_def, contract_transient_def]
 QED
 
 (* This is the exact frame_reachable return mask: current nonvariable masks,
