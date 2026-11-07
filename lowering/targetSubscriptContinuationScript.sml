@@ -415,6 +415,10 @@ Theorem target_subscript_int_index_view:
   ?i. key = IntV i /\ eval_operand ix s = SOME (i2w i)
 Proof
   strip_tac >> drule_all int_type_value >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >>
+     Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_int_type_def, is_word_type_def]) >>
   `expr_val_rel cx (expr_type e) key ix s` by fs[expr_post_def] >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   gvs[] >> Cases_on `expr_type e` >> gvs[is_int_type_def] >>
@@ -429,15 +433,17 @@ Theorem target_subscript_scalar_key_view:
   expr_post ctx func cenv cx e ee sm sn t es key ix s ==>
   eval_operand ix s = SOME (encode_hashmap_key (expr_type e) key)
 Proof
-  strip_tac >> irule target_mapping_scalar_operand >>
+  strip_tac >>
+  `is_word_type (expr_type e)` by
+    (Cases_on `expr_type e` >> gvs[hashmap_key_type_def, is_word_type_def] >>
+     rename1 `expr_type e = BaseT bt` >> Cases_on `bt` >>
+     gvs[hashmap_key_type_def, is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[is_bytestring_type_def, is_word_type_def, evaluate_type_def,
+         AllCaseEqs()]) >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_word] >>
+  irule target_mapping_scalar_operand >>
   goal_assum (drule_at Any) >> simp[] >>
-  conj_tac
-  >- (Cases_on `expr_type e` >> gvs[hashmap_key_type_def, is_word_type_def] >>
-      rename1 `expr_type e = BaseT bt` >> Cases_on `bt` >>
-      gvs[hashmap_key_type_def, is_bytestring_type_def, is_word_type_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      gvs[is_bytestring_type_def, is_word_type_def, evaluate_type_def,
-          AllCaseEqs()]) >>
   qexistsl [`cx`, `tv`] >> fs[expr_post_def]
 QED
 
