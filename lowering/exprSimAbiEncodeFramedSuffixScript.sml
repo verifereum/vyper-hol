@@ -10,7 +10,8 @@ Ancestors
   abiEncoderWindowLookup abiEncoderWindowSequence list venomMemDefs
   exprSimAbiEncodeConcreteResources abiDecoderLoop
   abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderContract abiBuiltinEncodeCorrect
-  exprSimAbiEncodeExecFrame exprLoweringProps compileEnv words finite_map arithmetic
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeSemantic
+  exprLoweringProps compileEnv words finite_map arithmetic
 
 Theorem abi_encode_framed_setup_window:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
@@ -331,3 +332,15 @@ Resume abi_encode_framed_phases_open[observations]:
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise abi_encode_framed_phases_open
+
+(* Applies directly to the same actual endpoint exported by phases_open. *)
+Theorem abi_encode_framed_semantic_fields:
+  abi_encode_exec_frame func initial actual ==>
+  actual.vs_tx_ctx = initial.vs_tx_ctx /\
+  actual.vs_block_ctx = initial.vs_block_ctx /\
+  actual.vs_outcomes = initial.vs_outcomes /\
+  actual.vs_immutables = initial.vs_immutables
+Proof
+  strip_tac >> drule abi_encode_exec_frame_semantic >>
+  simp[abi_encode_semantic_obs_fields]
+QED

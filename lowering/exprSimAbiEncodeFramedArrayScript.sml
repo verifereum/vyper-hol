@@ -1,7 +1,8 @@
 Theory exprSimAbiEncodeFramedArray
 Ancestors
   exprSimAbiEncodeFramedArrayControl exprSimAbiEncodeFramedArrayBody
-  exprSimAbiEncodeExecFrame abiEncoderWindowArray abiEncoderWindowArrayExit
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeSemantic
+  abiEncoderWindowArray abiEncoderWindowArrayExit
   abiEncoderWindowArrayBody abiEncoderWindowArrayInvariant abiEncoderWindowArrayLayout
   abiEncoderWindowArrayRound abiEncoderArrayLoopCode abiEncoderWindowArrayFinish
   abiEncoderRegisteredEffect abiEncoderPrimitiveEffect venomMemDefs finite_map pred_set
@@ -20,7 +21,10 @@ Theorem abi_encode_framed_array_exit_opcodes:
    else abi_encode_array_static_exit src asz st) = (out,en) ==>
   EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
     ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) (emitted_insts st en)
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts st en)
 Proof
   Cases_on `active` >>
   simp[abi_encode_array_dynamic_exit_def, abi_encode_array_static_exit_def,
@@ -142,7 +146,10 @@ Theorem abi_encode_framed_array_finish_opcodes:
   abi_encode_array_finish pp size_op st = (out,en) ==>
   EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
     ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) (emitted_insts st en)
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts st en)
 Proof
   simp[abi_encode_array_finish_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
@@ -180,6 +187,7 @@ Proof
         qexists_tac `emitted_insts st en` >> asm_rewrite_tac[] >>
         rpt strip_tac >> irule step_inst_base_preserves_fmp_ordinary >>
         qexists_tac `i` >> simp[] >> fs[EVERY_MEM]) >>
+     drule_all abi_encode_semantic_ordinary_sequence >> strip_tac >>
      fs[window_pure_seq_def, abi_encode_exec_frame_def, pending_alloca_size_def,
         mstore_def, write_memory_with_expansion_def]) >>
   suspend "effect"
@@ -427,7 +435,10 @@ Proof
   strip_tac >> drule_all window_array_mul_pure_observed >> strip_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode /\
     ~is_ext_call_op i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA) (emitted_insts st en)` by
+    i.inst_opcode <> SETFMP /\ i.inst_opcode <> DALLOCA /\
+    i.inst_opcode <> ISTORE /\ i.inst_opcode <> CALL /\
+    i.inst_opcode <> STATICCALL /\ i.inst_opcode <> DELEGATECALL /\
+    i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (emitted_insts st en)` by
     (drule emitted_insts_emit_op >> simp[mk_inst_def, is_terminator_def,
        is_alloca_op_def, is_ext_call_op_def]) >>
   `abi_encode_exec_frame func s t` by
