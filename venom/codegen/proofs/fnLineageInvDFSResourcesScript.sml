@@ -153,3 +153,21 @@ Proof
   irule residual_budget_wf_alloc_extension >>
   qexists_tac `ps with <|ps_stack := core; ps_spilled := spills|>` >> simp[]
 QED
+
+Theorem dfs_block_state_resources:
+  !fn dfg ch growth base ctr lbl D.
+    codegen_ready_fn fn /\
+    dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth base ctr) lbl D ==>
+    plan_slots_bounded base D /\
+    spill_alloc_layout_wf D.ps_alloc D.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[dfs_block_state_def] >>
+  drule_all (cj 1 dfs_calls_inventory_resources) >> strip_tac >> gvs[] >>
+  gvs[residual_budget_wf_def, plan_slots_bounded_def,
+      stackPlanGenTheory.init_cleanup_plan_state_def,
+      stackPlanTypesTheory.init_plan_state_def,
+      alloc_slots_bounded_def, doSwapSimTheory.spill_alloc_layout_wf_def,
+      stackPlanTypesTheory.init_spill_alloc_def] >> metis_tac[]
+QED

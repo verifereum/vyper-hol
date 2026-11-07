@@ -1,5 +1,5 @@
 Theory fnLineageInvBoundary
-Ancestors fnPlanPrefix fnPlanLineageInventory list rich_list pred_set stackPlanTypes
+Ancestors fnPlanPrefix fnPlanLineageInventory list rich_list pred_set stackPlanTypes reorderSim
 
 Theorem lineage_inventory_live_membership:
   !vs ps. lineage_inventory (set (MAP Var vs)) ps ==>
@@ -42,4 +42,22 @@ Proof
     (simp[FILTER_EQ_ID, EVERY_MEM] >> metis_tac[]) >>
   gvs[generated_plan_state_wf_marked_def, FILTER_APPEND,
       DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]
+QED
+
+Theorem lineage_inventory_core_budget:
+  !S P base.
+    lineage_inventory S P /\ plan_slots_bounded base P /\
+    spill_alloc_layout_wf P.ps_alloc P.ps_spilled ==>
+    ?m core. lineage_core m core P /\ EVERY is_var_operand core /\
+      residual_budget_wf base [] (P with ps_stack := core)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lineage_inventory_def] >> qexistsl_tac [`m`, `core`] >>
+  simp[residual_budget_wf_def, planSpillBoundsTheory.plan_slots_bounded_def,
+       LIST_ELEM_COUNT_THM] >>
+  conj_tac >- metis_tac[all_distinct_elem_count_le_one] >>
+  gvs[DISJOINT_DEF, EXTENSION, LIST_ELEM_COUNT_MEM] >>
+  gen_tac >> strip_tac >>
+  `~MEM op core` by metis_tac[] >>
+  qspecl_then [`op`, `core`] mp_tac LIST_ELEM_COUNT_MEM >> simp[]
 QED
