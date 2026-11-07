@@ -168,7 +168,6 @@ Lesson: matching allocation sizes is not enough; runtime pointer values stored i
 The current memory-safety proof work should be checked in:
 
 - `lowering/defs/loweringMemSafetyDefsScript.sml`
-- `lowering/loweringMemSafetyPropsScript.sml`
 - `lowering/proofs/loweringMemSafetyProofsScript.sml`
 
 The counterexamples motivate hypotheses such as:

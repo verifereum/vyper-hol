@@ -80,18 +80,6 @@ Proof
 QED
 
 
-Theorem word_of_bytes_encode_num_bytes_256[local]:
-  !n. n < dimword (:256) ==>
-      word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes n)) = n2w n
-Proof
-  rpt strip_tac >>
-  mp_tac (INST_TYPE [alpha |-> ``:256``]
-            asmToBytecodeProofsTheory.word_of_bytes_encode_roundtrip) >>
-  simp[dimindex_256, dividesTheory.divides_def] >>
-  disch_then (qspec_then `(n2w n):bytes32` mp_tac) >>
-  simp[wordsTheory.w2n_n2w]
-QED
-
 Theorem bump_emit_ops_asm_trace:
   !initial_fmp lo o2pc prog as sz base_val rest.
     asm_block_at prog as.as_pc (execute_plan initial_fmp bump_emit_ops) /\

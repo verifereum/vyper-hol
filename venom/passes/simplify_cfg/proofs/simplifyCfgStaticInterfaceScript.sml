@@ -5,7 +5,7 @@ Ancestors
   simplifyCfgCleanup simplifyCfgRestriction simplifyCfgFixupClosure
   simplifyCfgFixupShape simplifyCfgFixupStatic
   simplifyCfgDefs simplifyCfgLabelProps venomWf unitShapeDefs cfgTransform list
-  simplifyCfgStruct simplifyCfgReachuses
+  simplifyCfgStruct
 
 Definition scfg_static_def:
   scfg_static fn <=>
@@ -110,7 +110,7 @@ Proof
       fs[scfg_static_def, wf_function_def, fn_has_entry_def,
         venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >> metis_tac[]) >>
   rpt strip_tac >> irule scfg_fix_all_phis_support >>
-  fs[scfg_static_def] >> metis_tac[remove_unreachable_blocks_wf, simplifyCfgReachusesTheory.remove_unreachable_blocks_fn_inst_wf]
+  fs[scfg_static_def] >> metis_tac[remove_unreachable_blocks_wf, simplifyCfgDefsTheory.remove_unreachable_blocks_fn_inst_wf]
 QED
 
 Theorem scfg_static_wf:

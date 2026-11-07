@@ -68,30 +68,6 @@ Proof
   fs[lookup_var_def]
 QED
 
-Theorem const_sound_foldl_bottom[local]:
-  !vars st s.
-    const_sound st s ==>
-    const_sound (FOLDL (\l v. l |+ (v, CL_Bottom)) st vars) s
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  first_x_assum irule >>
-  fs[const_sound_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `v = h` >> gvs[]
-QED
-
-(* const_sound is only about vs_vars, not other fields *)
-Theorem const_sound_update_var[local]:
-  !st s v c.
-    const_sound st s /\
-    (!v' c'. v' <> v /\ FLOOKUP st v' = SOME (CL_Const c') ==>
-             FLOOKUP s.vs_vars v' = SOME c') ==>
-    const_sound (st |+ (v, CL_Const c))
-      (s with vs_vars := s.vs_vars |+ (v, c))
-Proof
-  rw[const_sound_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> Cases_on `v' = v` >> gvs[]
-QED
-
 (* Bottom-marking output vars in FLOOKUP preserves constants for non-member vars *)
 Theorem foldl_bottom_preserves_const[local]:
   !outs st v c.
@@ -376,15 +352,6 @@ Proof
   fs[const_sound_def, lookup_var_def]
 QED
 
-(* Helper: const_sound preserved when only sl_targets changes *)
-Theorem const_sound_targets_update[local]:
-  !lat tgts s.
-    const_sound lat.sl_vals s ==>
-    const_sound (lat with sl_targets := tgts).sl_vals s
-Proof
-  simp[]
-QED
-
 (* Helper: terminators preserve const_sound *)
 Theorem const_sound_after_terminator[local]:
   !lat fuel ctx inst s s'.
@@ -532,7 +499,7 @@ Proof
   gvs[update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem sccp_transfer_terminator_vals[local]:
+Theorem sccp_transfer_terminator_vals:
   !fn inst lat. is_terminator inst.inst_opcode ==>
     (sccp_transfer_inst fn inst lat).sl_vals = lat.sl_vals
 Proof

@@ -1765,14 +1765,20 @@ QED
 Definition internal_immutable_regions_def:
   internal_immutable_regions cenv cx (vs:evaluation_state) frontier <=>
     cenv.ce_is_ctor ==>
-    !name tv v off.
+    (!name tv v off.
       FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of
                  NONE => FEMPTY
                | SOME imms => get_source_immutables cenv.ce_module imms) name =
         SOME (tv,v) ==>
-      val_wf tv v /\ off + type_memory_size tv <= frontier
+      val_wf tv v /\ off + type_memory_size tv <= frontier) /\
+    (!name ty tv off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
+        SOME (ImmutableLoc off) /\
+      cenv.ce_module_var_type (cenv.ce_module, name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
+      off + type_memory_size tv <= frontier)
 End
 
 Theorem internal_immutables_frame[local]:
@@ -1790,7 +1796,7 @@ Proof
   simp[internal_immutable_regions_def, immutables_rel_def] >>
   strip_tac >> rpt gen_tac >> strip_tac >>
   rename1 `FLOOKUP cenv.ce_module_vars _ = SOME (ImmutableLoc off)` >>
-  qpat_x_assum `!name tv v byte_offset. _ /\ _ ==> _ /\ _ /\ _ /\ _`
+  qpat_x_assum `!name tv v byte_offset. _ /\ _ ==> _ /\ _ /\ _`
     drule_all >> strip_tac >>
   qpat_x_assum `!name tv v off. _ /\ _ ==> val_wf _ _ /\ _`
     drule_all >> strip_tac >>
@@ -2138,6 +2144,15 @@ Theorem internal_prologue_run:
         SOME (tv,iv) ==>
       regions_disjoint io (type_memory_size tv)
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+    (cenv.ce_is_ctor ==> !i po psz name ty tv io.
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+        SOME (ImmutableLoc io) /\
+      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params
       < dimword (:256) ==>
     ?t.
@@ -2281,6 +2296,7 @@ Resume internal_prologue_run[separation]:
   drule materialize_nonptr_binding >> disch_then assume_tac >>
   `cenv2.ce_module = cenv.ce_module /\
    cenv2.ce_is_ctor = cenv.ce_is_ctor /\
+   cenv2.ce_module_var_type = cenv.ce_module_var_type /\
    (!name off. FLOOKUP cenv2.ce_module_vars name = SOME (ImmutableLoc off) ==>
       FLOOKUP cenv.ce_module_vars name = SOME (ImmutableLoc off))` by
     (asm "cenv_stage" mp_tac >> simp[]) >>
@@ -2301,7 +2317,10 @@ Resume internal_prologue_run[separation]:
      strip_tac >>
      qpat_x_assum `!n b sz. local_region cenv2 [env] u _ _ _ ==> _` drule >> simp[]) >>
   qpat_x_assum `internal_immutable_regions _ _ _ _` mp_tac >>
-  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name tv iv io. _` mp_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name tv iv io.
+     _ /\ _ /\ _ /\ _ /\ FLOOKUP _ _ = SOME (tv,iv) ==> _` mp_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name ty tv io.
+     _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` mp_tac >>
   qpat_x_assum `!n b sz. mr n = SOME (b,sz) <=> _` mp_tac >>
   qpat_x_assum `!n b sz. local_region cenv2 [env] t' _ _ _ ==> _` mp_tac >>
   qpat_x_assum `!aid b sz. FLOOKUP t'.vs_allocas aid = _ ==> _` mp_tac >>
@@ -2309,15 +2328,17 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `!name off. FLOOKUP cenv2.ce_module_vars name = _ ==> _` mp_tac >>
   qpat_x_assum `cenv2.ce_is_ctor = cenv.ce_is_ctor` mp_tac >>
   qpat_x_assum `cenv2.ce_module = cenv.ce_module` mp_tac >>
+  qpat_x_assum `cenv2.ce_module_var_type = cenv.ce_module_var_type` mp_tac >>
   qpat_x_assum `ce.ce_vars = cenv.ce_vars` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  simp[immutable_alloca_sep_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
+  conj_tac >> strip_tac >> (
+  rpt gen_tac >> strip_tac >>
   `FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
      SOME (ImmutableLoc off)` by
     (qpat_x_assum `!name off. _` drule >> simp[]) >>
   `off + type_memory_size tv <= caller.vs_alloca_next` by
-    (fs[internal_immutable_regions_def] >>
-     qpat_x_assum `!name tv v off. _ ==> _` drule_all >> simp[]) >>
+    (fs[internal_immutable_regions_def] >> res_tac >> simp[]) >>
   conj_tac >- decide_tac >>
   conj_tac
   >- (rpt strip_tac >>
@@ -2329,8 +2350,13 @@ Resume internal_prologue_run[separation]:
   strip_tac >- simp[compileEnvTheory.regions_disjoint_def] >>
   qpat_x_assum `!n b sz. mr n = _ <=> _` (drule o iffLR) >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `!i po psz name tv iv io. _` irule >>
-  simp[] >> qexistsl_tac [`v`, `name`] >> simp[]
+  FIRST [
+    qpat_x_assum `!i po psz name tv iv io.
+       _ /\ _ /\ _ /\ _ /\ FLOOKUP _ _ = SOME (tv,iv) ==> _` irule >>
+    simp[] >> qexistsl_tac [`v`, `name`] >> simp[] >> NO_TAC,
+    qpat_x_assum `!i po psz name ty tv io.
+       _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` irule >>
+    simp[] >> metis_tac[]])
 QED
 Finalise internal_prologue_run[local]
 
@@ -2396,6 +2422,15 @@ Theorem compile_internal_prologue_entry:
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name =
         SOME (tv,iv) ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+    (cenv.ce_is_ctor ==> !i po psz name ty tv io.
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+        SOME (ImmutableLoc io) /\
+      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
       regions_disjoint io (type_memory_size tv)
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params

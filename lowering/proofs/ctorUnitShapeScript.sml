@@ -11,7 +11,7 @@ Proof
   strip_tac >> drule compiler_label_prefix >> simp[]
 QED
 
-Theorem deploy_internal_label_separate[local]:
+Theorem deploy_internal_label_separate:
   !n entry.
     internal_label_ok n /\ entry <> [] /\
     (HD entry).bb_label = "__deploy" /\

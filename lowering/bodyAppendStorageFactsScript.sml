@@ -4,7 +4,7 @@ Ancestors
   bodySim supportedExprForms supportedTypes vyperValue vyperTypeSystem
   compileVyper compileEnv vyperAST words supportedDecls vyperInterpreter
   vyperState bodyStorageMetadata exprOpenCases vyperTypeEnv
-  exprSimHyps finite_map vyperTypeInvariants
+  exprSimHyps exprSimHypsDefs finite_map vyperTypeInvariants
 
 Theorem supported_append_storage_decl:
   supported_storage_dynamic_array tops nid ==>
