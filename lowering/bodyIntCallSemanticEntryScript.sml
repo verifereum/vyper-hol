@@ -254,3 +254,46 @@ Proof
   irule (iffRL placeTypingPropsTheory.place_map_tables_agree_on_defined_cong) >>
   qexistsl [`caller`, `env`] >> simp[]
 QED
+
+Theorem internal_prologue_locals_declared:
+  compile_internal_prologue ce params has_rb rt st0 = ((ce2,pc),st1) /\
+  ce_locals_declared ce env /\
+  (!n. MEM n (MAP FST params) ==> n IN FDOM env.var_types) ==>
+  ce_locals_declared (ce2 with ce_alloca_locals := T) env
+Proof
+  strip_tac >> drule internal_prologue_stages >> strip_tac >>
+  drule compile_internal_param_decls_shape >> strip_tac >>
+  drule intCallCalleeTheory.materialize_internal_params_shape >> strip_tac >>
+  gvs[] >>
+  `MAP FST caps = MAP FST params` by
+    (irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >> simp[]) >>
+  fs[ce_locals_declared_def] >> rpt strip_tac >>
+  Cases_on `MEM n (MAP FST params)` >- simp[] >>
+  qpat_x_assum `!n. ~MEM n (MAP FST params) ==> _` drule >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!n l. FLOOKUP ce.ce_vars n = SOME l ==> _` irule >>
+  qexists `l` >> simp[]
+QED
+
+Theorem packaged_internal_body_locals_declared:
+  set_internal_package_target target
+    (package_internal_fn tops use_trans nkeys is_ctor imm_size
+      (mut,nr,rr,name,args,dflts,ret,ss)) =
+    (lbl,ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len,ss',rt) /\
+  compile_internal_prologue ce params has_rb rt st0 = ((ce2,pc),st1) /\
+  (!n ty. MEM (n,ty) args ==> FLOOKUP env.var_types n = SOME ty) ==>
+  ce_locals_declared (ce2 with ce_alloca_locals := T) env
+Proof
+  strip_tac >> irule internal_prologue_locals_declared >>
+  goal_assum (drule_at Any) >>
+  gvs[package_internal_fn_def, set_internal_package_target_def,
+      update_cenv_nonreentrant_def] >>
+  simp[cj 1 MAP_ZIP, LENGTH_compute_pass_via_stack, LENGTH_MAP] >>
+  conj_tac >-
+    (rpt strip_tac >> gvs[MEM_MAP, FORALL_PROD] >>
+     rename1 `MEM binding args` >> PairCases_on `binding` >> first_x_assum drule >> simp[FLOOKUP_DEF]) >>
+  simp[ce_locals_declared_def] >> rpt strip_tac >>
+  drule build_compile_env_bound >> simp[MEM_MAP, FORALL_PROD] >>
+  strip_tac >> rename1 `MEM binding args` >> PairCases_on `binding` >> gvs[] >>
+  first_x_assum drule >> simp[FLOOKUP_DEF]
+QED
