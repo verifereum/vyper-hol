@@ -4366,7 +4366,7 @@ Theorem ld_supply_intret_anchor[local]:
   j.inst_opcode = RET /\ tend = t /\ ret.iret_adopt_fmp = NONE
 Proof
   strip_tac >>
-  drule o1ContractSimplifyCfgTheory.step_inst_intret_opcodes >> strip_tac >>
+  drule o1ContractSimplifyCfgSrcFrameTheory.step_inst_intret_opcodes >> strip_tac >>
   `j = i` by
     (drule o1ContractLowerDloadTheory.lower_dload_inst_supply_control >>
      disch_then irule >> fs[is_terminator_def]) >>
@@ -4402,7 +4402,7 @@ Theorem ld_recursive_combined_return_anchor:
   j.inst_opcode = RET /\ tend = t /\ ret.iret_adopt_fmp = NONE
 Proof
   reverse (BETA_TAC >> strip_tac >>
-    drule o1ContractSimplifyCfgTheory.step_inst_intret_opcodes >> strip_tac)
+    drule o1ContractSimplifyCfgSrcFrameTheory.step_inst_intret_opcodes >> strip_tac)
   >- (drule_all ld_revert_pair_interval_step >>
       disch_then (qspecl_then [`t`, `tend`, `ret`, `fuel`, `CT`] mp_tac) >>
       simp[]) >>
