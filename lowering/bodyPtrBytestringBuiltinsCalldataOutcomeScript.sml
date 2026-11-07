@@ -11,7 +11,7 @@ Ancestors
   bodyPtrBytestringBuiltinsWindowGhost bodyPtrDefs
   bodyPtrBytestringBuiltinsCalldataRuntime
   exprSimMemoryTransport valueEncodingProofs valueEncodingProps vyperState
-  venomMemProofs list loweringPosts context emitHelper exprSimHash
+  venomMemProofs list loweringPosts context emitHelper exprSimHash vyperContext vyperValueOperation fragGasPathPtr
 
 Theorem covered_clean_memory_result:
   evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv value /\
@@ -446,3 +446,112 @@ Proof
   qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (Abort _ _)`
     (irule_at Any) >> simp[]
 QED
+
+(* Source rejects zero length, even though the bounds-only suffix accepts it.
+   The typed builtin caller rules this case out. *)
+Theorem calldata_zero_length_source_probe:
+  evaluate_calldata_slice [] (IntV 0) 0 =
+    INR (RuntimeError "calldata slice overflow")
+Proof
+  EVAL_TAC
+QED
+
+Theorem calldata_slice_uint_source:
+  0 < n ==>
+  evaluate_calldata_slice bs (IntV &a) n =
+    if dimword (:256) <= a + n then
+      INR (RuntimeError "calldata slice overflow")
+    else if a + n <= LENGTH bs then
+      INL (BytesV (TAKE n (DROP a bs)))
+    else INR (RuntimeError "evaluate_slice range")
+Proof
+  simp[evaluate_calldata_slice_def, dest_NumV_def, evaluate_slice_def,
+    compatible_bound_def, dimword_def]
+QED
+
+Theorem memory_vv_post_end_gas_obs[local]:
+  vv_post ctx fn cenv cx e es sa sb s0 (ee with gas_obs := gs) (Value v)
+    (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>) s <=>
+  vv_post ctx fn cenv cx e es sa sb s0 ee (Value v)
+    (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>) s
+Proof
+  simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def,
+    vyperStateTheory.return_def]
+QED
+
+Theorem memory_ptr_vv_end_gas_obs[local]:
+  ptr_vv_ok cx ty (Value v)
+    (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>)
+    (es with gas_obs := gs) G tn s <=>
+  ptr_vv_ok cx ty (Value v)
+    (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>) es G tn s
+Proof
+  simp[ptr_vv_ok_def, read_result_def, vyperStateTheory.return_def]
+QED
+
+Theorem compile_slice_calldata_source_outcome:
+  compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
+  0 < n /\ 32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
+  a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  eval_operand start s = SOME (n2w a) /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  op_prov G start = NONE /\ op_taint tn start = {} /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
+  ~is_word_type (expr_type e) /\
+  val_wf (BaseTV (BytesT (Dynamic bound))) (BytesV (TAKE n (DROP a bs))) /\
+  type_memory_size (BaseTV (BytesT (Dynamic bound))) <= N /\
+  type_memory_bytes cenv (lowered_value_type cenv e) <= N /\
+  bs = s.vs_call_ctx.cc_calldata /\
+  (!tail. source (es with gas_obs := tail) =
+    ((case evaluate_calldata_slice bs (IntV &a) n of
+      INL v => INL (Value v) | INR err => INR (Error err)), es with gas_obs := tail)) ==>
+  gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
+    (\res ee H tm zf. ?v. res = INL (Value v) /\
+      vv_post ctx fn cenv cx e es sa sb s ee (Value v)
+        (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) zf /\
+      ptr_vv_ok cx (expr_type e) (Value v)
+        (LocatedValue (expr_type e) <|ptr_operand := out; ptr_location := LocMemory|>) ee H tm zf /\
+      ptr_buf_ok cenv e out H zf /\ ghost_inv d cenv cx ee H tm zf /\
+      ghost_kept cenv es sa G tn s H tm /\
+      zf.vs_current_bb = sb.cs_current_bb /\ zf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ~zf.vs_halted)
+    (\res ee gt r. expr_exit res r)
+Proof
+  strip_tac >> qpat_x_assum `bs = _` SUBST_ALL_TAC >>
+  Cases_on `dimword (:256) <= a+n \/ LENGTH s.vs_call_ctx.cc_calldata < a+n`
+  >- suspend "bad" >>
+  `a+n < dimword (:256) /\ a+n <= LENGTH s.vs_call_ctx.cc_calldata` by decide_tac >>
+  drule_all compile_slice_calldata_success_posts >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >> suspend "good"
+QED
+
+Resume compile_slice_calldata_source_outcome[bad]:
+  `32 <= N` by decide_tac >>
+  drule_all compile_slice_calldata_revert >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`case evaluate_calldata_slice s.vs_call_ctx.cc_calldata (IntV &a) n of
+    INL v => INL (Value v) | INR err => INR (Error err)`,`es`,`H`,`tm`,
+    `Abort Revert_abort zf`] >>
+  simp[] >> Cases_on `dimword (:256) <= a+n` >>
+  fs[calldata_slice_uint_source, expr_exit_def, exit_result_def]
+QED
+
+Resume compile_slice_calldata_source_outcome[good]:
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (Value (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))))`,
+    `es`,`H`,`tm`,`OK zf`] >>
+  simp[calldata_slice_uint_source, memory_vv_post_end_gas_obs,
+    memory_ptr_vv_end_gas_obs, ghost_inv_def] >> fs[ghost_inv_def] >>
+  first_assum ACCEPT_TAC
+QED
+Finalise compile_slice_calldata_source_outcome
