@@ -2253,6 +2253,64 @@ Proof
   simp[Abbr `cc`, Abbr `e0`, jump_to_def, update_var_def]
 QED
 
+(* Ownership of the expression and loop intervals is separated before
+   applying expression simulation; this boundary needs no runtime hook. *)
+Theorem compile_for_mem_suffix_extends[local]:
+  expr_type arr_e = ArrayT et bd /\ (bd = Fixed c \/ bd = Dynamic c) /\
+  compile_expr cenv (ArrayT et bd) arr_e se = (vv,sm) /\
+  vv_location vv = SOME LocMemory /\ cenv.ce_alloca_locals /\
+  compile_stmt cenv lctx ty (For id et (Array arr_e) n stmts) se = ((),sf) /\
+  (!bc lc sa sb. compile_stmts bc lc ty stmts sa = ((),sb) ==>
+    cs_extends sa sb) ==> cs_extends sm sf
+Proof
+  strip_tac >> gvs[]
+  >- (drule_all compile_for_mem_fixed_stages >> strip_tac >>
+      qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
+      drule_all stmtSimForArrayPartsTheory.compile_for_array_prefix >> strip_tac >>
+      dxrule stmtSimForArrayPartsTheory.compile_for_array_suffix >> strip_tac >>
+      `cs_extends sm sa` by
+        (irule stmtSimForArrayPartsTheory.array_prefix_extends >> simp[] >> metis_tac[]) >>
+      `~block_is_terminated sa` by
+        simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
+             venomInstTheory.is_terminator_def] >>
+      qpat_x_assum `_ sa = ((),sb0)` mp_tac >> simp[] >> strip_tac >>
+      drule_all stmtSimForArrayPartsTheory.array_iter_copy_static >> strip_tac >>
+      drule stmtSimForArrayPartsTheory.array_body_backedge >> strip_tac >>
+      `cs_extends sb0 sb1` by metis_tac[] >>
+      metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  drule_all compile_for_mem_dynamic_stages >> strip_tac >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
+  drule_all compile_for_dynarray_prefix >> strip_tac >>
+  dxrule stmtSimForArrayPartsTheory.compile_for_array_suffix >> strip_tac >>
+  `cs_extends sm sa` by
+    (irule stmtSimForArrayPartsTheory.array_prefix_extends >> simp[] >> metis_tac[]) >>
+  `~block_is_terminated sa` by
+    simp[block_is_terminated_def, venomInstTheory.mk_inst_def,
+         venomInstTheory.is_terminator_def] >>
+  qpat_x_assum `_ sa = ((),sb0)` mp_tac >> simp[] >> strip_tac >>
+  drule_all stmtSimForArrayPartsTheory.array_iter_copy_static >> strip_tac >>
+  drule stmtSimForArrayPartsTheory.array_body_backedge >> strip_tac >>
+  `cs_extends sb0 sb1` by metis_tac[] >>
+  metis_tac[compileEnvTheory.cs_extends_trans]
+QED
+
+Theorem compile_for_mem_code_intervals[local]:
+  expr_type arr_e = ArrayT et bd /\ (bd = Fixed c \/ bd = Dynamic c) /\
+  compile_expr cenv (ArrayT et bd) arr_e se = (vv,sm) /\
+  vv_location vv = SOME LocMemory /\ cenv.ce_alloca_locals /\
+  compile_stmt cenv lctx ty (For id et (Array arr_e) n stmts) se = ((),sf) /\
+  (!bc lc sa sb. compile_stmts bc lc ty stmts sa = ((),sb) ==>
+    cs_extends sa sb) /\ fn_has_code se sf func ==>
+  fn_has_code se sm func /\ fn_has_code sm sf func
+Proof
+  strip_tac >>
+  `cs_extends sm sf` by
+    (irule compile_for_mem_suffix_extends >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  drule (cj 1 exprLoweringPropsTheory.compile_expr_grows) >> strip_tac >>
+  irule fragExecTheory.fn_has_code_split >> goal_assum (drule_at Any) >> simp[]
+QED
+
 (* The snapshot is well formed only in the successful array-type branch. *)
 Theorem mem_iter_snapshot_wf[local]:
   expr_type e = ArrayT et bd /\
@@ -2298,6 +2356,89 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >>
   simp[val_wf_def, vyperValueOperationTheory.array_elements_def] >>
   Cases_on `bd` >> simp[] >> rpt strip_tac >> gvs[]
+QED
+
+(* Normalize only the source prefix, retaining expression effects. *)
+Theorem mem_for_source_bind[local]:
+  evaluate_type (get_tenv cx) et = SOME tv ==>
+  eval_stmt cx (For id et (Array e) n stmts) =
+  bind (eval_expr cx e) (\rv. do
+    v <- read_result cx rv;
+    at <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
+    vs <- lift_option_type (extract_elements at v) "For not ArrayV";
+    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
+    eval_for cx tv id stmts vs od)
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, lift_option_type_def, lift_option_def, bind_return] >>
+  simp[Once evaluate_def, bind_assoc, bind_return,
+       lift_option_type_def, lift_option_def]
+QED
+
+Theorem mem_for_expr_admissible[local]:
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  gas_admissible (eval_stmt cx (For id et (Array e) n stmts))
+    (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  strip_tac >>
+  drule mem_for_source_bind >> disch_then (fn th => fs[th]) >>
+  simp[gasContextTheory.gas_admissible_def] >>
+  map_every qx_gen_tac [`gs`, `res`, `ee`] >> strip_tac >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gasContextTheory.gas_admissible_def] >>
+  disch_then (qspec_then `gs` mp_tac) >>
+  Cases_on `res`
+  >- (rename1 `eval_expr cx e _ = (INL rv,ee)` >>
+      Cases_on `rv` >> simp[expr_vv_res_ok_def] >>
+      simp[bind_def, read_result_def, raise_def, stmt_res_ok_def]) >>
+  simp[bind_def] >> strip_tac >>
+  fs[stmt_res_ok_def, expr_vv_res_ok_def] >>
+  drule (cj 1 vyperExprNoControlTheory.eval_expr_no_control) >>
+  simp[vyperExprNoControlTheory.no_control_exc_def] >> gvs[]
+QED
+
+Theorem mem_for_continuation_admissible[local]:
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  gas_admissible (eval_stmt cx (For id et (Array e) n stmts)) ok es /\
+  (!tail. eval_expr cx e (es with gas_obs := xs ++ tail) =
+     (INL rv, mid with gas_obs := tail)) ==>
+  gas_admissible
+    (do v <- read_result cx rv;
+        at <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
+        vs <- lift_option_type (extract_elements at v) "For not ArrayV";
+        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
+        eval_for cx tv id stmts vs od) ok (mid with gas_obs := [])
+Proof
+  strip_tac >>
+  drule mem_for_source_bind >> disch_then (fn th => fs[th]) >>
+  drule stmtSimForRoundsTheory.gas_admissible_bind_tail >>
+  disch_then drule >> simp[]
+QED
+
+Theorem mem_for_continuation_outcome[local]:
+  read_result cx rv es = (INL v,es) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME at /\
+  extract_elements at v = SOME vs /\ LENGTH vs <= n /\ ~s.vs_halted /\
+  gas_outcome F tops (ctx,func) (eval_for cx tv id stmts vs)
+    (es with gas_obs := [],s) Q R ==>
+  gas_outcome F tops (ctx,func)
+    (do xs <- (do v <- read_result cx rv;
+                  at <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e))
+                          "For array type";
+                  vs <- lift_option_type (extract_elements at v) "For not ArrayV";
+                  return vs od);
+        check (compatible_bound (Dynamic n) (LENGTH xs)) "For too long";
+        eval_for cx tv id stmts xs od) (es,s) Q R
+Proof
+  strip_tac >>
+  `!msg. assert T msg = return ()` by
+    simp[FUN_EQ_THM, vyperStateTheory.assert_def, return_def] >>
+  irule stmtSimForArrayFragTheory.array_values_prefix_outcome >>
+  drule exprSimMemorySourceTheory.read_result_gas_obs >> strip_tac >>
+  simp[bind_def, lift_option_type_def, lift_option_def, return_def,
+       vyperValueTheory.compatible_bound_def, check_def, vyperStateTheory.assert_def] >>
+  simp[ignore_bind_def, bind_return]
 QED
 
 (* A successful iterable read cannot reach the array type error in an
