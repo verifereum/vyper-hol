@@ -164,3 +164,16 @@ The external prerequisite from the last run is repaired. `calldata_owned_header_
 `holbuild -j2 build calldataDynOwnedTheory` at the default limit: `calldataDynOwnedTheory built` (exit 0).
 
 That file is a protected ancestor: don't edit or commit it. Continue from `C1.3.1.registration.inputs.source_constructor_config`: build `entryReachBodySourceArrayConstructorTheory`, then carry on toward the frozen theorem.
+
+## Upstream repair (owner note): base merge with body_inv Pass 1
+
+The base changed. Commit `4bb625c1e` merges `c1efb40ad`, which is body_inv Pass 1 on trunk `49873528c`. That brings the trunk merge, the calldataDynOwned timeout fix above (now in the base itself), and Pass 1. The worktree carries no overlay any more. Every ancestor builds with its proofs, so nothing is admitted below the s1-entry-return piece leaves.
+
+What changed for this task:
+- The frozen statement text is unchanged. But `stmt_state_rel` now includes the widened `immutable_alloca_sep`, which requires `immutable_decl_sep cenv cx scopes vars allocas next` for every declared immutable (`lowering/exprLoweringPropsScript.sml:279`). That definition and the rest of `immutable_alloca_sep` are guarded by `cenv.ce_is_ctor ==> ...`. The runtime external package sets `ce_is_ctor := (vis = Deploy)` (`compileVyperScript.sml:663`), so at the body entry both should hold vacuously. Check this against the actual `cenv` the frozen statement produces.
+- Statements that helpers may use also changed: `stmt_state_rel_cenv_cong`, `immutable_alloca_sep_cenv_cong`, `internal_prologue_run`, `compile_internal_prologue_entry`, `body_expr_ok_intro`/`of_case`, `for_body_entry_alloca`/`_mem`. New definitions: `bare_globals_layout_def`, `cenv_module_pins_def`.
+- Trunk now lowers `RawLog`, which used to compile to INVALID.
+
+Build after the merge, without the overlay: `holbuild -j4 build <all 117 entryReachBody*/externalEntry* theories>` exited 1. 52 theories were built, and the build stopped at `entryReachBodyFirstEmissionExprSupportTheory`: `Failed to prove theorem "first_emission_invalid_call"`. Its case `MEM ct [RawLog; RawRevert; SelfDestructTarget]` assumes RawLog compiles to INVALID. Theories downstream of it were not attempted.
+
+Your first job is to repair the existing helper leaves that the merge breaks: this one, then whatever the next build shows. Do it in the leaves only, as above. Then carry on with `C1.3.1.registration.inputs.source_constructor_config` and the frozen theorem. While repairing that file, also remove the `TRY (... simp[])` wrappers at lines 1654 and 2635 (TASK rule: no TRY/ORELSE around search tactics).
