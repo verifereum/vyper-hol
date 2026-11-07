@@ -5,7 +5,8 @@ Ancestors exprSimConvert exprLowering exprLoweringProps exprSimDefs
   vyperTyping vyperValueOperation valueEncoding integer_word venomExecSemantics
   bodyPtrTypeBuiltinsUintClampSemantics venomState fragExec words arithmetic
   bodyPtrTypeBuiltinsScalarChecks varsExt emitHelper emitHelperProps rich_list
-  venomInst list freshWrites exprSimHypsDefs finite_map
+  venomInst list freshWrites exprSimHypsDefs finite_map convertScalarBytesRun
+  convertScalarEncoding byte
 
 (* Unlike scalar_conversion_word_types this includes int_convert_pair and
    derives the non-bytestring destination from valid_conversion itself. *)
@@ -296,4 +297,44 @@ Proof
   strip_tac >> gvs[] >>
   simp[emitted_insts_def, inst_extends_def] >>
   rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]
+QED
+
+Theorem scalar_fixed_int_raw_semantic:
+  LENGTH bs = m /\ 0 < m /\ m <= 32 /\
+  0 < b /\ (sg ==> 1 < b) /\ b <= 256 /\
+  compile_type_convert x (ConvBytesToInt m sg b) sa = (r,sb) /\
+  eval_operand x ss = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs)) /\
+  fresh_vars_wrt sa ss ==>
+  case convert_result cx (BaseT (BytesT (Fixed m)))
+    (BaseT (if sg then IntT b else UintT b)) (BytesV bs) of
+    INL out => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME
+        (typed_val_to_w256 (BaseTV (if sg then IntT b else UintT b)) out)
+  | INR ex => (?msg. ex = Error (RuntimeError msg)) /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  strip_tac >> `bs <> []` by (Cases_on `bs` >> gvs[]) >>
+  Cases_on `sg` >>
+  simp[convert_result_def, evaluate_convert_from_not_address_bytes,
+       evaluate_convert_def] >>
+  IF_CASES_TAC >> simp[typed_val_to_w256_def, val_to_w256_def]
+  >- (`?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+          eval_operand r sf = SOME (i2w (w2i
+            ((word_of_bytes_be (PAD_RIGHT 0w 32 bs):bytes32) >> (8*(32-m)))):bytes32)`
+        suffices_by simp[i2w_w2i] >>
+      irule (Q.SPEC `T` scalar_bytes_int_run_ok) >>
+      simp[] >> qexistsl_tac [`b`,`bs`,`x`] >>
+      fs[typed_val_to_w256_def])
+  >- (irule (Q.SPEC `T` scalar_bytes_int_run_abort) >>
+      simp[] >> qexistsl_tac [`b`,`bs`,`r`,`x`] >>
+      fs[typed_val_to_w256_def])
+  >- (`?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+          eval_operand r sf = SOME (i2w (&w2n
+            (word_of_bytes_be (PAD_LEFT 0w 32 bs):bytes32)):bytes32)`
+        suffices_by simp[i2w_pos, n2w_w2n] >>
+      irule (Q.SPEC `F` scalar_bytes_int_run_ok) >>
+      simp[] >> qexistsl_tac [`b`,`bs`,`x`] >>
+      fs[typed_val_to_w256_def]) >>
+  irule (Q.SPEC `F` scalar_bytes_int_run_abort) >>
+  simp[] >> qexistsl_tac [`b`,`bs`,`r`,`x`] >> fs[typed_val_to_w256_def]
 QED
