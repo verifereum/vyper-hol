@@ -215,6 +215,13 @@ Theorem abi_decode_word_success_ptr:
   (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
   run_inst_seq (emitted_insts sa sb) s = OK u ==>
   ?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+    ((u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
+     LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+     (!a n. a+n <= w2n d \/ w2n d+32 <= a ==>
+       mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory) /\
+     (!i. ~(w2n d <= i /\ i < w2n d+32) ==>
+       (i IN tn'.t_mem <=> i IN tn.t_mem))) /\
     abi_decode_ptr_window G' tn' u dst d 32 /\
     abi_decode_ptr_window G' tn' u src b h /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
@@ -316,6 +323,7 @@ Resume abi_decode_word_success_ptr[word_store]:
        (fn th => rewrite_tac[th]) >> simp[]) >>
   qexistsl_tac [`Gc`, `tz`] >> conj_tac >- first_assum ACCEPT_TAC >>
   qpat_x_assum `u = z with vs_inst_idx := _` SUBST1_TAC >>
+  conj_tac >- suspend "exterior" >>
   conj_tac
   >- (qpat_x_assum `abi_decode_ptr_window Gc tz z dst d 32` mp_tac >>
       simp[NoAsms, abi_decode_ptr_window_def, ptr_covers_def, lookup_var_def] >>
@@ -325,6 +333,30 @@ Resume abi_decode_word_success_ptr[word_store]:
       simp[NoAsms, abi_decode_ptr_window_def, ptr_covers_def, lookup_var_def] >>
       metis_tac[optionTheory.SOME_11]) >>
   simp_tac (srw_ss()) [lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+
+Resume abi_decode_word_success_ptr[exterior]:
+  qpat_x_assum `abi_decode_ptr_write_frame tk v tz z (w2n d) 32` mp_tac >>
+  rewrite_tac[abi_decode_ptr_write_frame_def] >> strip_tac >>
+  conj_tac >- suspend "state_frame" >>
+  `v.vs_memory = s.vs_memory` by
+    (qpat_assum `v = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `LENGTH v.vs_memory <= LENGTH z.vs_memory` mp_tac >>
+  qpat_x_assum `!a n. _ ==> mem_bytes_at a n z.vs_memory = _` mp_tac >>
+  qpat_x_assum `v.vs_memory = s.vs_memory` mp_tac >>
+  qpat_x_assum `tk.t_mem = tm.t_mem` mp_tac >>
+  qpat_x_assum `tm.t_mem = tn.t_mem` mp_tac >>
+  qpat_x_assum `!a. _ ==> (_ IN tz.t_mem <=> _)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]
+QED
+
+Resume abi_decode_word_success_ptr[state_frame]:
+  qpat_x_assum `state_frame t = _` mp_tac >>
+  qpat_x_assum `v = _` mp_tac >>
+  qpat_x_assum `(z with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = v` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[stateFrameTheory.state_frame_def] >>
+  rpt strip_tac >> gvs[venom_state_component_equality]
 QED
 
 Finalise abi_decode_word_success_ptr

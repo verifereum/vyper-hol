@@ -90,6 +90,37 @@ QED
 
 Finalise abi_decode_ptr_copy_windows
 
+(* A store's frame includes the entire exterior, not just covered windows. *)
+Definition abi_decode_ptr_write_frame_def:
+  abi_decode_ptr_write_frame tn s tn' t off k <=>
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_inst_idx := s.vs_inst_idx|>) = s /\
+    (!p. lookup_var p t = lookup_var p s) /\
+    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (!a n. a+n <= off \/ off+k <= a ==>
+      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
+    (!i. ~(off <= i /\ i < off+k) ==>
+      (i IN tn'.t_mem <=> i IN tn.t_mem))
+End
+
+Theorem abi_decode_ptr_mstore_frame:
+  lookup_var dst s = SOME b /\ eval_operand value s = SOME w /\
+  op_taint tn value = {} ==>
+  abi_decode_ptr_write_frame tn s
+    (step_taint (mk_inst id MSTORE [Var dst;value] []) s (mstore (w2n b) w s) tn)
+    (mstore (w2n b) w s with vs_inst_idx := idx) (w2n b) 32
+Proof
+  strip_tac >> drule_all mstore_ghost_frame >>
+  disch_then (qspecl_then [`PG`, `G`, `id`] strip_assume_tac) >>
+  simp[abi_decode_ptr_write_frame_def, step_taint_nonmemory_frame, mk_inst_def] >>
+  conj_tac >- simp[mstore_def, venom_state_component_equality] >>
+  conj_tac >- simp[mstore_def, lookup_var_def] >>
+  conj_tac >- simp[immutable_mstore_capacity, MAX_DEF] >>
+  rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
 Theorem abi_decode_ptr_store_windows:
   emit_void MSTORE [Var dst; value] sa = ((),sb) /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~ctx_has_dalloca ctx /\
@@ -105,6 +136,7 @@ Theorem abi_decode_ptr_store_windows:
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G tn' /\
     abi_decode_ptr_window G tn' t dst b 32 /\
     abi_decode_ptr_window G tn' t src a h /\
+    abi_decode_ptr_write_frame tn s tn' t (w2n b) 32 /\
     (!i. ~(w2n b <= i /\ i < w2n b+32) ==>
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
@@ -136,6 +168,7 @@ Proof
   conj_tac >- suspend "store_seq" >>
   conj_tac >- suspend "store_destination" >>
   conj_tac >- suspend "store_source" >>
+  conj_tac >- (irule abi_decode_ptr_mstore_frame >> simp[]) >>
   conj_tac >- (rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
   simp[step_taint_nonmemory_frame, mk_inst_def]
 QED
@@ -166,19 +199,6 @@ Finalise abi_decode_ptr_store_windows
 
 (* An uninitialized output allocation is allowed: the frame describes only
    the written interval.  Runtime and ghost fields outside memory are kept. *)
-Definition abi_decode_ptr_write_frame_def:
-  abi_decode_ptr_write_frame tn s tn' t off k <=>
-    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
-              vs_inst_idx := s.vs_inst_idx|>) = s /\
-    (!p. lookup_var p t = lookup_var p s) /\
-    tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
-    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    (!a n. a+n <= off \/ off+k <= a ==>
-      mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
-    (!i. ~(off <= i /\ i < off+k) ==>
-      (i IN tn'.t_mem <=> i IN tn.t_mem))
-End
 
 (* No robust observation is reconstructed from an ordinary value assertion:
    the exterior ghost theorem transports the original robust observation. *)
@@ -220,21 +240,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
-Theorem abi_decode_ptr_mstore_frame:
-  lookup_var dst s = SOME b /\ eval_operand value s = SOME w /\
-  op_taint tn value = {} ==>
-  abi_decode_ptr_write_frame tn s
-    (step_taint (mk_inst id MSTORE [Var dst;value] []) s (mstore (w2n b) w s) tn)
-    (mstore (w2n b) w s with vs_inst_idx := idx) (w2n b) 32
-Proof
-  strip_tac >> drule_all mstore_ghost_frame >>
-  disch_then (qspecl_then [`PG`, `G`, `id`] strip_assume_tac) >>
-  simp[abi_decode_ptr_write_frame_def, step_taint_nonmemory_frame, mk_inst_def] >>
-  conj_tac >- simp[mstore_def, venom_state_component_equality] >>
-  conj_tac >- simp[mstore_def, lookup_var_def] >>
-  conj_tac >- simp[immutable_mstore_capacity, MAX_DEF] >>
-  rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> decide_tac
-QED
 
 Theorem abi_decode_ptr_mcopy_frame:
   lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
