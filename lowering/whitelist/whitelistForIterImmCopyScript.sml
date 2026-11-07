@@ -217,7 +217,7 @@ Proof
   gvs[] >> metis_tac[listTheory.EVERY_APPEND, listTheory.APPEND_ASSOC]
 QED
 
-Theorem immutable_iter_copy_opcodes[local]:
+Theorem immutable_iter_copy_opcodes:
   compile_iter_elem_copy cenv src dst bytes LocCode F ty ty sa = ((),sb) ==>
   ?code. sb.cs_current_insts = sa.cs_current_insts ++ code /\
     EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE]) code

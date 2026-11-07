@@ -683,3 +683,126 @@ Proof
     (mp_then Any (qspec_then `emitted_insts sa sb0` mp_tac) run_inst_seq_append) >>
   fs[exprSimCopyTheory.copy_runtime_frame_def]
 QED
+
+(* This control boundary only advances an instruction prefix, not the source
+   memory view: immutable constructor copies may update memory. *)
+Theorem immutable_copy_prefix_path:
+  compile_iter_elem_copy cenv src dst bytes LocCode F et et sa = ((),sb) /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. MEM i.inst_opcode [MUL; ADD]) sa.cs_current_insts /\
+  run_inst_seq sb.cs_current_insts s = OK t /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX sb.cs_current_insts bb.bb_instructions /\
+  s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
+  gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `EVERY (\i. MEM i.inst_opcode [ADD; ILOAD; DLOAD; MSTORE])
+     (emitted_insts sa sb)` by
+    (drule immutable_iter_copy_opcodes >> strip_tac >>
+     gvs[emitted_insts_def, DROP_PREFIX]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     sb.cs_current_insts /\
+   EVERY (\i. i.inst_opcode <> GAS) sb.cs_current_insts` by
+    (qpat_x_assum `sb.cs_current_insts = _` SUBST1_TAC >>
+     simp[EVERY_APPEND] >>
+     rpt conj_tac >>
+     irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
+     simp[is_terminator_def] >> rpt strip_tac >> gvs[is_terminator_def]) >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) sb.cs_current_insts) = 0` by
+    (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+  `isPREFIX sb.cs_current_insts (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_assum `s.vs_inst_idx = 0` (fn th => pure_rewrite_tac[th, DROP_0]) >>
+     first_assum ACCEPT_TAC) >>
+  drule_all tuple_run_inst_seq_gas_path >>
+  simp[gas_marked_path_def]
+QED
+
+Theorem immutable_entry_seq_frames:
+  compile_iter_elem_copy cenv src dst bytes LocCode F et et sa = ((),sb) /\
+  copy_runtime_frame sa rhs sb t /\
+  rhs = update_var ep a
+    (if dyn then update_var tot b (update_var ov c s) else update_var ov c s) ==>
+  t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
+  t.vs_halted = s.vs_halted /\
+  (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
+       lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  drule_all immutable_iter_copy_state_frame >>
+  simp[venom_state_component_equality] >> strip_tac >>
+  fs[exprSimCopyTheory.copy_runtime_frame_def] >>
+  Cases_on `dyn` >>
+  fs[update_var_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem immutable_array_entry_run:
+  compile_iter_elem_copy cenv (Var ep) (Var p) stride LocCode F et et sa = ((),sb0) /\
+  stride = type_memory_size tv /\ 0 < stride /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  stmt_state_rel ctx func cenv cx es s /\
+  cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
+  lookup_scopes id es.scopes = NONE /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\
+  not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes tot /\
+  not_local_ptr cenv es.scopes ep /\
+  lookup_var idx s = SOME (n2w k) /\ lookup_var p s = SOME dst /\
+  p <> ov /\ p <> tot /\ p <> ep /\ ov <> tot /\ not_fresh_at sa ep /\
+  MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+  ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
+  FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\ stride <= sz /\
+  w2n dst + stride < dimword (:256) /\
+  immutable_holds cenv cx et (Value v)
+    (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) es s /\
+  sa.cs_current_insts =
+    [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+    (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+    [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]] /\
+  lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  s.vs_current_bb = sb0.cs_current_bb /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  not_fresh_at sa idx /\ idx <> ov /\ idx <> tot /\ idx <> ep /\
+  (!x z. bc.ce_return_pc = SOME (PtrVar (Var x) z) \/
+         cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) /\
+  ret_pc_ok bc sb0 s /\ ret_pc_ok cenv st s /\
+  (!x. not_fresh_at caller x ==>
+    not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep) ==>
+  ?s2. s2.vs_current_bb = sb0.cs_current_bb /\
+    s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s2.vs_halted /\
+    stmt_state_rel ctx func bc cx
+      (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) s2 /\
+    ret_pc_ok bc sb0 s2 /\ ret_pc_ok cenv st s2 /\
+    lookup_var idx s2 = SOME (n2w k) /\ lookup_var p s2 = SOME dst /\
+    FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+    array_caller_frame caller s s2 /\ gas_marked_path F ctx func s 0 (OK s2)
+Proof
+  strip_tac >> drule_all immutable_array_entry_seq >>
+  disch_then (qspecl_then [`j5`, `j4`, `j3`] strip_assume_tac) >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_current_bb = s.vs_current_bb /\
+   t.vs_halted = s.vs_halted /\
+   (!x. not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep ==>
+        lookup_var x t = lookup_var x s)` by
+    (drule_all immutable_entry_seq_frames >> simp[]) >>
+  `not_fresh_at sa p` by metis_tac[array_copy_live_ptrs_reserved] >>
+  `sb0.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb0` by
+    fs[exprSimCopyTheory.copy_runtime_frame_def] >>
+  `run_inst_seq sb0.cs_current_insts s = OK t` by gvs[] >>
+  `EVERY (\i. MEM i.inst_opcode [MUL; ADD]) sa.cs_current_insts` by
+    (Cases_on `dyn` >> simp[mk_inst_def]) >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  `gas_marked_path F ctx func s 0
+     (OK (t with vs_inst_idx := LENGTH sb0.cs_current_insts))` by
+    (drule_all immutable_copy_prefix_path >> simp[]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb0.cs_current_insts` >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `stmt_state_rel _ _ bc _ _ t`
+        (mp_then Any (qspecl_then [`t.vs_gas_readings`,
+          `LENGTH sb0.cs_current_insts`, `es.gas_obs`] mp_tac) msg_gas_state_frame) >>
+      simp[]) >>
+  fs[ret_pc_ok_def, array_caller_frame_def, lookup_var_def] >> metis_tac[]
+QED
