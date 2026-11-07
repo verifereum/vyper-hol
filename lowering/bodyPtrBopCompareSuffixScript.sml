@@ -169,3 +169,67 @@ Proof
   qexists_tac `u` >> simp[] >>
   drule_all bop_compile_compare_run_cursor >> simp[]
 QED
+
+Theorem bop_compile_compare_endpoint:
+  (bop = Eq \/ bop = NotEq) /\
+  compile_compare bop left right ty sc = (op,sd) /\
+  op_prov G left = NONE /\ op_prov G right = NONE /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sc /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
+  run_inst_seq (emitted_insts sc sd) s = OK t ==>
+  ?H un.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H un
+      (OK (t with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
+    ghost_inv d cenv cx es H un (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
+    stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
+    ~t.vs_halted /\ t.vs_current_bb = sd.cs_current_bb /\
+    ghost_kept cenv es sc G tn s H un /\
+    wb_frame cenv es sc s (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
+    op_prov H op = NONE /\ op_taint un op = {}
+Proof
+  strip_tac >> gvs[compile_compare_def, comp_bind_def, AllCaseEqs()]
+  >- (drule_all (SRULE [] (Q.INST [`opc` |-> `EQ`, `ops` |-> `[left;right]`]
+        bop_compare_emit_endpoint)) >>
+      disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> metis_tac[]) >>
+  pairarg_tac >> gvs[] >>
+  `~is_terminator ISZERO` by simp[is_terminator_def] >>
+  drule_all bop_compare_pair_run_split >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `EQ`, `ops` |-> `[left;right]`]
+    bop_compare_emit_endpoint)) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  imp_res_tac emitted_insts_emit_op >>
+  `local_ptrs_reserved cenv cs' /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at cs' x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cs' x)` by
+    (conj_tac >- (irule local_ptrs_reserved_next_var >>
+       qexists_tac `sc` >> simp[]) >>
+     conj_tac >> rpt strip_tac >>
+     irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sc` >> simp[]) >>
+  `~(u with vs_inst_idx := LENGTH cs'.cs_current_insts).vs_halted /\
+   (u with vs_inst_idx := LENGTH cs'.cs_current_insts).vs_current_bb = cs'.cs_current_bb /\
+   (u with vs_inst_idx := LENGTH cs'.cs_current_insts).vs_inst_idx = LENGTH cs'.cs_current_insts` by simp[] >>
+  drule_all (GEN_ALL (SRULE [] (Q.INST [`opc` |-> `ISZERO`, `ops` |-> `[eq_res]`,
+    `sc` |-> `cs'`, `left` |-> `eq_res`, `right` |-> `eq_res`,
+    `s` |-> `v with vs_inst_idx := LENGTH cs'.cs_current_insts`,
+    `t` |-> `w with vs_inst_idx := LENGTH cs'.cs_current_insts`]
+    bop_compare_emit_endpoint))) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `wb_frame cenv es sc s (t with vs_inst_idx := LENGTH sd.cs_current_insts)` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
+     (reverse conj_tac >- metis_tac[]) >>
+     qexistsl_tac [`es`, `cs'`, `u with vs_inst_idx := LENGTH cs'.cs_current_insts`] >>
+     gvs[]) >>
+  `ghost_kept cenv es sc G tn s H' un'` by
+    (qpat_assum `ghost_kept cenv es cs' _ _ _ _ _` mp_tac >>
+     disch_then (mp_then (Pos last) mp_tac wordArgsPtrTheory.ghost_kept_wb_trans) >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`H'`, `un'`] >> simp[] >>
+  irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
+    (SPEC_ALL gas_path_ptr_then))) >>
+  qexistsl_tac [`H`, `u with vs_inst_idx := LENGTH cs'.cs_current_insts`, `un`] >> gvs[]
+QED
