@@ -4,6 +4,8 @@ Ancestors exprSimConvert exprLowering exprLoweringProps exprSimDefs
   vyperTypeSystem vyperValue compileEnv vyperAST exprSimHyps
   vyperTyping vyperValueOperation valueEncoding integer_word venomExecSemantics
   bodyPtrTypeBuiltinsUintClampSemantics venomState fragExec words arithmetic
+  bodyPtrTypeBuiltinsScalarChecks varsExt emitHelper emitHelperProps rich_list
+  venomInst list freshWrites exprSimHypsDefs finite_map
 
 (* Unlike scalar_conversion_word_types this includes int_convert_pair and
    derives the non-bytestring destination from valid_conversion itself. *)
@@ -165,4 +167,133 @@ Proof
     (irule LESS_LESS_EQ_TRANS >> qexists_tac `dimword(:256)` >>
      simp[w2n_lt, dimword_def]) >>
   gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl, run_inst_seq_def]
+QED
+
+Theorem scalar_flag_replay:
+  compile_type_convert op (ConvToFlag n) sa = (r,sb) ==>
+  vars_ext_result
+    (run_inst_seq (emitted_insts sa sb) (drop_fresh sa ss))
+    (run_inst_seq (emitted_insts sa sb) ss)
+Proof
+  strip_tac >> irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+  Cases_on `n < 256` >>
+  gvs[compile_type_convert_def, compile_int_clamp_def,
+      emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  simp[emitted_insts_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def, is_ext_call_op_def]
+QED
+
+Theorem scalar_flag_actual_exact:
+  compile_type_convert op (ConvToFlag n) sa = (r,sb) /\
+  (!z. op = Var z ==> not_fresh_at sa z) /\ eval_operand op ss = SOME w ==>
+  if w2n w < 2 ** n then
+    ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+         eval_operand r sf = SOME w /\
+         (sf with vs_vars := ss.vs_vars) = ss /\
+         (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+  else ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  strip_tac >>
+  `fresh_vars_wrt sa (drop_fresh sa ss)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `eval_operand op (drop_fresh sa ss) = SOME w` by simp[eval_operand_drop_fresh] >>
+  drule_all scalar_flag_raw_exact >>
+  drule scalar_flag_replay >> disch_then (qspec_then `ss` mp_tac) >>
+  Cases_on `w2n w < 2 ** n` >> simp[] >> rpt strip_tac >>
+  gvs[vars_ext_result_def]
+  >- (rename1 `run_inst_seq (emitted_insts sa sb) ss = OK actual` >>
+      conj_tac
+      >- (fs[vars_ext_def] >>
+          qpat_x_assum `actual = _ with vs_vars := _` SUBST1_TAC >>
+          simp[eval_operand_vars_ext]) >>
+      irule convert_flag_runtime_frame >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any)) >>
+  metis_tac[]
+QED
+
+Theorem scalar_flag_source_partition:
+  valid_conversion src (FlagT name) ==> src = BaseT (UintT 256)
+Proof
+  Cases_on `src` >> simp[valid_conversion_def] >>
+  Cases_on `b` >> simp[valid_conversion_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem scalar_flag_semantic_packet:
+  FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) /\
+  within_int_bound (Unsigned 256) i ==>
+  convert_result cx (BaseT (UintT 256)) (FlagT name) (IntV i) =
+    if Num i < 2 ** n then INL (FlagV (Num i))
+    else INR (Error (RuntimeError "convert int flag bound"))
+Proof
+  strip_tac >> `0 <= i` by fs[within_int_bound_ineq] >>
+  Cases_on `Num i < 2 ** n` >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def]
+QED
+
+Theorem scalar_flag_semantic_actual:
+  FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) /\
+  within_int_bound (Unsigned 256) i /\
+  compile_type_convert x (ConvToFlag n) sa = (r,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\ eval_operand x ss = SOME (i2w i) ==>
+  case convert_result cx (BaseT (UintT 256)) (FlagT name) (IntV i) of
+    INL v => ?sf. run_inst_seq (emitted_insts sa sb) ss = OK sf /\
+      eval_operand r sf = SOME (typed_val_to_w256 (FlagTV n) v) /\
+      (sf with vs_vars := ss.vs_vars) = ss /\
+      (!z. not_fresh_at sa z ==> lookup_var z sf = lookup_var z ss)
+  | INR ex => ex = Error (RuntimeError "convert int flag bound") /\
+      ?sf. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort sf
+Proof
+  strip_tac >>
+  `0 <= i /\ i < &(dimword(:256))` by
+    fs[within_int_bound_ineq, integer_wordTheory.INT_MIN_def,
+       integer_wordTheory.UINT_MAX_def, dimword_def] >>
+  `w2n (i2w i : bytes32) = Num i` by
+    (`i = &Num i` by intLib.ARITH_TAC >>
+     qpat_x_assum `i = &Num i` SUBST_ALL_TAC >>
+     simp[i2w_pos, w2n_n2w] >> intLib.ARITH_TAC) >>
+  drule_all scalar_flag_semantic_packet >> disch_then SUBST1_TAC >>
+  drule_all scalar_flag_actual_exact >>
+  Cases_on `Num i < 2 ** n` >> simp[] >> strip_tac >>
+  simp[typed_val_to_w256_def, val_to_w256_def, i2w_pos] >>
+  `i = &Num i` by intLib.ARITH_TAC >>
+  qpat_x_assum `i = &Num i` SUBST1_TAC >> simp[i2w_pos]
+QED
+
+Theorem scalar_flag_body_packet:
+  expr_body_pre cenv cx env (TypeBuiltin ann Convert (FlagT name) [e]) es /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v1 ==>
+  ?n i. ann = FlagT name /\ expr_type e = BaseT (UintT 256) /\
+    FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) /\
+    cenv.ce_flag_n_members (nsid_to_string name) = n /\
+    evaluate_type (get_tenv cx) (FlagT name) = SOME (FlagTV n) /\
+    v1 = IntV i /\ within_int_bound (Unsigned 256) i /\
+    typed_val_to_w256 tv v1 = i2w i
+Proof
+  strip_tac >>
+  `IS_SOME (evaluate_type (get_tenv cx) (FlagT name))` by
+    (qpat_assum `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`
+       (mp_then Any mp_tac expr_body_pre_type_evaluates) >>
+     simp[expr_type_def] >> drule expr_body_pre_convert >> metis_tac[]) >>
+  drule expr_body_pre_convert >> strip_tac >>
+  drule_all scalar_flag_source_partition >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, optionTheory.IS_SOME_EXISTS, AllCaseEqs()] >>
+  Cases_on `v1` >> gvs[value_has_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  fs[expr_body_pre_def, expr_sim_inv_def] >>
+  simp[within_int_bound_def]
+QED
+
+Theorem scalar_flag_compile_frame:
+  compile_type_convert x (ConvToFlag n) sa = (r,sb) ==>
+  r = x /\ inst_extends sa sb /\ sb.cs_current_bb = sa.cs_current_bb /\
+  LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + LENGTH (emitted_insts sa sb)
+Proof
+  Cases_on `n < 256` >>
+  simp[compile_type_convert_def, compile_int_clamp_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, inst_extends_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]
 QED
