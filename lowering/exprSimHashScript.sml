@@ -3187,7 +3187,10 @@ Proof
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   irule wb_frame_allocating_tail >> simp[] >>
   qexistsl [`s`, `es'.scopes`, `sm`] >> simp[] >>
-  metis_tac[expr_post_frame]
+  `wb_frame cenv es (es' with outcomes := SOME rest) sa s0 s` by
+    (drule expr_post_frame >>
+     simp[wb_frame_def, locals_kept_def, popped_kept_def]) >>
+  metis_tac[]
 QED
 
 Theorem sha256_memory_post_run:
@@ -3221,7 +3224,10 @@ Proof
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   irule wb_frame_allocating_tail >> simp[] >>
   qexistsl [`s`, `es'.scopes`, `sm`] >> simp[] >>
-  metis_tac[expr_post_frame]
+  `wb_frame cenv es (es' with outcomes := SOME rest) sa s0 s` by
+    (drule expr_post_frame >>
+     simp[wb_frame_def, locals_kept_def, popped_kept_def]) >>
+  metis_tac[]
 QED
 
 Theorem sha256_typed_post_run:
