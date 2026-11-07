@@ -1,6 +1,6 @@
 (* Actual struct-field compiler frames for storage, transient and runtime code. *)
 Theory bodyPtrStructLitNonmemoryIntegration
-Ancestors bodyPtrStructLitUnwrapFrame bodyPtrStructLitMemoryIntegration
+Ancestors bodyPtrStructLitUnwrapSeparation bodyPtrStructLitUnwrapFrame bodyPtrStructLitMemoryIntegration
   bodyPtrStructLitNonmemoryRead bodyPtrStructLitRawChild
   bodyPtrStructLitAddContinuation loweringPosts
 
@@ -35,7 +35,10 @@ Theorem structlit_first_nonmemory_word_continuation:
     ghost_kept ce es sb G0 tn0 t G1 tn1 /\
     s1.vs_current_bb = su.cs_current_bb /\
     s1.vs_inst_idx = LENGTH su.cs_current_insts /\
-    ptr_covers G1 tn1 root s1 N
+    ptr_covers G1 tn1 root s1 N /\
+    (!r sz. r <> load /\ ptr_covers G tn r s sz ==>
+      ptr_covers G1 tn1 r s1 sz) /\
+    (?r. dst = Var r /\ r <> load)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all structlit_alloc_buffer_reserved >> strip_tac >>
@@ -43,6 +46,8 @@ Proof
   `~not_fresh_at sm load` by
     (irule (cj 3 nonmemory_word_unwrap_code) >> simp[] >>
      Cases_on `tr` >> gvs[slot_loc_def] >> metis_tac[]) >>
+  `?r. dst = Var r /\ r <> load` by
+    (irule emitted_operand_fresh_separation >> metis_tac[]) >>
   drule_all raw_child_unwrap_compiler_frame >> strip_tac >>
   `!name entry r sz. lookup_scopes name ee.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var r) sz) ==> r <> load` by

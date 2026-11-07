@@ -1,6 +1,6 @@
 (* Actual compiler interval and frames for the post-ADD memory word unwrap. *)
 Theory bodyPtrStructLitMemoryIntegration
-Ancestors bodyPtrStructLitUnwrapFrame
+Ancestors bodyPtrStructLitUnwrapSeparation bodyPtrStructLitUnwrapFrame
   bodyPtrStructLitAddContinuation bodyPtrStructLitMemoryCaller
   bodyPtrStructLitMemoryUnwrap bodyPtrStructLitRawChild
   exprLoweringProps exprLowering exprSimAggregateLayout emitHelperProps
@@ -95,11 +95,16 @@ Theorem structlit_first_memory_word_continuation:
     ghost_kept ce es sb G0 tn0 t G1 tn1 /\
     s1.vs_current_bb = su.cs_current_bb /\
     s1.vs_inst_idx = LENGTH su.cs_current_insts /\
-    ptr_covers G1 tn1 root s1 N
+    ptr_covers G1 tn1 root s1 N /\
+    (!r sz. r <> load /\ ptr_covers G tn r s sz ==>
+      ptr_covers G1 tn1 r s1 sz) /\
+    (?r. dst = Var r /\ r <> load)
 Proof
   strip_tac >> drule_all structlit_alloc_buffer_reserved >> strip_tac >>
   `fn_has_code sm su fn` by (irule structlit_first_unwrap_code >> metis_tac[]) >>
   drule_all memory_word_unwrap_code >> strip_tac >>
+  `?r. dst = Var r /\ r <> load` by
+    (irule emitted_operand_fresh_separation >> metis_tac[]) >>
   drule_all raw_child_unwrap_compiler_frame >> strip_tac >>
   `cty = expr_type e` by
     (drule_all bodyPtrStructLitMemoryReadTheory.vv_post_memory_word_read >> simp[]) >>
