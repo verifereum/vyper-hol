@@ -13276,6 +13276,40 @@ Proof
        alias_occ_release_lookup] >> metis_tac[]
 QED
 
+Theorem alias_occ_release_align:
+  alias_occ_align shadow ps ==>
+  alias_occ_align (alias_occ_release live shadow) (release_dead_spills live ps)
+Proof
+  simp[alias_occ_align_def] >> strip_tac >> conj_tac
+  >- simp[alias_occ_release_fields, release_dead_spills_def,
+          alias_release_fold_fields] >>
+  simp[pred_setTheory.EXTENSION, alias_release_dead_spills_domain] >> gen_tac >>
+  `!m : operand |-> num. x IN FDOM m <=> FLOOKUP m x <> NONE` by
+    metis_tac[finite_mapTheory.flookup_thm] >>
+  qpat_x_assum `FDOM _ = FDOM _` (assume_tac o GSYM) >>
+  simp[alias_occ_release_lookup] >>
+  Cases_on `?v. x = Var v /\ MEM v live` >> simp[] >> metis_tac[]
+QED
+
+Theorem alias_occ_release_origin:
+  (at,id) IN alias_occ_residents (alias_occ_release live shadow) ==>
+  (at,id) IN alias_occ_residents shadow
+Proof
+  simp[alias_occ_release_residents, alias_occ_residents_member] >> metis_tac[]
+QED
+
+Theorem alias_occ_release_deleted:
+  id IN alias_occ_deleted shadow (alias_occ_release live shadow) <=>
+    (?at. FLOOKUP shadow.alias_spill_ids at = SOME id) /\
+    ~MEM id (MAP SND shadow.alias_occs) /\
+    (!v. MEM v live ==> FLOOKUP shadow.alias_spill_ids (Var v) <> SOME id)
+Proof
+  simp[alias_occ_deleted_def, pred_setTheory.IN_IMAGE,
+       pairTheory.EXISTS_PROD, alias_occ_residents_member,
+       alias_occ_release_residents, MEM_MAP, pairTheory.FORALL_PROD] >>
+  metis_tac[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
