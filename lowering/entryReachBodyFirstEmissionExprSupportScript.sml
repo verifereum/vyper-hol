@@ -1,7 +1,7 @@
 Theory entryReachBodyFirstEmissionExprSupport
 Ancestors
   entryReachBodyFirstEmissionSupport compilerFirstEmission externalEntryShape
-  exprLowering compileEnv fragExec emitHelper venomInst finite_map list
+  exprLowering compileEnv fragExec emitHelper venomInst finite_map list builtinSystem
 
 Theorem first_emission_bytelike_literal[local]:
   !bs n a x b. compile_bytelike_literal bs n a = (x,b) ==>
@@ -518,17 +518,118 @@ Proof
        (CONJUNCT1 first_emission_emit_helpers) >> simp[]) >> simp[cs_extends_refl]
 QED
 
+Theorem first_emission_multi_exprs[local]:
+  !es ce.
+  (!ce ty e a x b. MEM e es /\ cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_multi_exprs cfn ce es a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct_on `es`
+  >- simp[compile_multi_exprs_def, comp_return_def, cs_extends_refl] >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[compile_multi_exprs_def] >>
+  simp_tac (srw_ss()) [LET_THM] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[MEM]) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (first_x_assum ho_match_mp_tac >> metis_tac[MEM]) >>
+  metis_tac[first_emission_return]
+QED
+
+Theorem first_emission_raw_effect_call[local]:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !ce rt ty ct es dr a x b.
+  (ct = RawLog \/ ct = RawRevert) /\
+  compile_call cfn ce rt ty ct es dr a = (x,b) ==>
+  cs_extends a b /\
+  ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+    a.cs_current_insts = b.cs_current_insts) \/
+   (!fn. fn_has_code a b fn ==> ?bb i.
+     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >> gvs[]
+  >- (simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
+      Cases_on `es` >> simp[] >- suspend "invalid" >>
+      Cases_on `t` >> simp[] >- suspend "invalid" >>
+      Cases_on `t'` >> simp[] >- suspend "log" >>
+      suspend "invalid") >>
+  simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
+  Cases_on `es` >> simp[] >- suspend "invalid" >>
+  Cases_on `t` >> simp[] >- suspend "revert" >>
+  suspend "invalid"
+QED
+
+Resume first_emission_raw_effect_call[invalid]:
+  markerLib.RESUME_TAC >> (
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (rpt strip_tac >> drule_at Any (cj 1 first_emission_emit_helpers) >> simp[]) >>
+  simp[cs_extends_refl])
+QED
+
+Resume first_emission_raw_effect_call[revert]:
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (rewrite_tac[compile_raw_revert_def] >>
+      rpt (ho_match_mp_tac first_emission_bind >> conj_tac
+        >- (rpt strip_tac >> imp_res_tac first_emission_emit_helpers >> simp[]) >>
+        gen_tac >> BETA_TAC) >>
+      rpt strip_tac >> imp_res_tac first_emission_emit_helpers >> simp[]) >>
+  simp[cs_extends_refl]
+QED
+
+Resume first_emission_raw_effect_call[log]:
+  map_every qid_spec_tac [`b`, `x`, `a`] >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_multi_exprs >> metis_tac[]) >>
+  gen_tac >> Cases_on `expr_type h' = BaseT (BytesT (Fixed 32))` >> simp[]
+  >- (ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- metis_tac[first_emission_alloc_buffer] >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> imp_res_tac first_emission_emit_helpers >> simp[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (rpt strip_tac >> imp_res_tac first_emission_emit_helpers >> simp[]) >>
+      simp[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_pair_let >> conj_tac
+  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >>
+  gen_tac >> ntac 3 (ho_match_mp_tac first_emission_pair_let >> conj_tac
+    >- (rpt strip_tac >> imp_res_tac first_emission_emit_helpers >> simp[]) >>
+    gen_tac) >> simp[cs_extends_refl]
+QED
+
+Finalise first_emission_raw_effect_call
+
 Theorem first_emission_invalid_call:
-  !ct cfn ce rt ty args dr a x b.
-  MEM ct [RawLog; RawRevert; SelfDestructTarget] /\
-  compile_call cfn ce rt ty ct args dr a = (x,b) ==>
+  !cfn ce rt ty args dr a x b.
+  compile_call cfn ce rt ty SelfDestructTarget args dr a = (x,b) ==>
   cs_extends a b /\
   (!fn. fn_has_code a b fn ==> ?bb i.
     lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
 Proof
-  rpt gen_tac >> simp_tac (srw_ss()) [MEM] >> strip_tac >> gvs[] >>
-  qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
+  rpt gen_tac >>
   simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
   Cases_on `emit_inst INVALID [] [] a` >> simp[] >> strip_tac >> gvs[] >>
   drule_at Any (CONJUNCT1 first_emission_emit_helpers) >> simp[]
@@ -1228,12 +1329,10 @@ Proof
   >- (drule first_emission_send >> disch_then MATCH_ACCEPT_TAC)
   >- (drule first_emission_raw_call >> disch_then MATCH_ACCEPT_TAC)
   >- (drule first_emission_raw_calldata >> disch_then MATCH_ACCEPT_TAC)
+  >- (drule first_emission_raw_effect_call >> metis_tac[])
+  >- (drule first_emission_raw_effect_call >> metis_tac[])
   >- (rpt gen_tac >> strip_tac >> drule_at Any first_emission_invalid_call >>
-      simp[MEM] >> strip_tac >> simp[])
-  >- (rpt gen_tac >> strip_tac >> drule_at Any first_emission_invalid_call >>
-      simp[MEM] >> strip_tac >> simp[])
-  >- (rpt gen_tac >> strip_tac >> drule_at Any first_emission_invalid_call >>
-      simp[MEM] >> strip_tac >> simp[]) >>
+      strip_tac >> simp[]) >>
   simp_tac (srw_ss()) [compile_call_def] >>
   ho_match_mp_tac first_emission_as_stack_val >>
   drule first_emission_create_call >> disch_then MATCH_ACCEPT_TAC
@@ -1647,20 +1746,24 @@ Theorem first_emission_builtin_hash:
      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  strip_tac >> rpt gen_tac >>
-  disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
-  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-  Cases_on `expr_type (HD args)` >> simp[] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
-       TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[])) >>
-  rpt IF_CASES_TAC >>
-  map_every qid_spec_tac [`b`, `x`, `a`] >>
-  ho_match_mp_tac first_emission_pair_let >>
-  (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
-  ho_match_mp_tac first_emission_as_stack_val >>
-  ho_match_mp_tac first_emission_strong >>
-  ho_match_mp_tac first_emission_hash >>
-  simp[SF ETA_ss] >> metis_tac[]
+  let
+    val finish = rpt IF_CASES_TAC >>
+      map_every qid_spec_tac [`b`, `x`, `a`] >>
+      ho_match_mp_tac first_emission_pair_let >>
+      (conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[]) >> gen_tac) >>
+      ho_match_mp_tac first_emission_as_stack_val >>
+      ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_hash >> simp[SF ETA_ss] >> metis_tac[]
+  in
+    strip_tac >> rpt gen_tac >>
+    disch_then (CONJUNCTS_THEN2 strip_assume_tac mp_tac) >>
+    gvs[compile_builtin_dispatch_body_def, LET_THM] >>
+    Cases_on `expr_type (HD args)` >> simp[] >>
+    (all_tac >>~- ([`expr_type (HD args) = BaseT bt`],
+      Cases_on `bt` >> simp[] >>
+      (all_tac >>~- ([`expr_type (HD args) = BaseT (BytesT bd)`],
+        Cases_on `bd` >> simp[] >> finish)) >> finish)) >> finish
+  end
 QED
 
 Theorem first_emission_ec[local]:
@@ -2441,7 +2544,7 @@ Proof
   simp[Abbr `m`] >> metis_tac[]
 QED
 
-Theorem first_emission_multi_exprs[local]:
+Theorem first_emission_abi_encode_args[local]:
   !es ce.
   (!ce ty e a x b. MEM e es /\ cfn ce ty e a = (x,b) ==>
     cs_extends a b /\
@@ -2450,7 +2553,7 @@ Theorem first_emission_multi_exprs[local]:
      (!fn. fn_has_code a b fn ==> ?bb i.
        lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
-  !a x b. compile_multi_exprs cfn ce es a = (x,b) ==>
+  !a x b. compile_abi_encode_args cfn ce es a = (x,b) ==>
   cs_extends a b /\
   ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
     a.cs_current_insts = b.cs_current_insts) \/
@@ -2459,11 +2562,12 @@ Theorem first_emission_multi_exprs[local]:
      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
   Induct_on `es`
-  >- simp[compile_multi_exprs_def, comp_return_def, cs_extends_refl] >>
-  rpt gen_tac >> strip_tac >> rewrite_tac[compile_multi_exprs_def] >>
-  simp_tac (srw_ss()) [LET_THM] >>
-  ho_match_mp_tac first_emission_bind >> conj_tac
-  >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[MEM]) >>
+  >- simp[compile_abi_encode_args_def, comp_return_def, cs_extends_refl] >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[compile_abi_encode_args_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac >- metis_tac[MEM] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (IF_CASES_TAC >> metis_tac[first_emission_materialize_vv,
+                              first_emission_strong, first_emission_unwrap_value]) >>
   gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
   >- (first_x_assum ho_match_mp_tac >> metis_tac[MEM]) >>
   metis_tac[first_emission_return]
@@ -2489,8 +2593,8 @@ Proof
   strip_tac >> rpt gen_tac >> simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt IF_CASES_TAC >> map_every qid_spec_tac [`b`, `x`, `a`] >>
   ho_match_mp_tac first_emission_pair_let
-  >~ [`compile_multi_exprs`]
-  >- ((conj_tac >- (ho_match_mp_tac first_emission_multi_exprs >> metis_tac[])) >>
+  >~ [`compile_abi_encode_args`]
+  >- ((conj_tac >- (ho_match_mp_tac first_emission_abi_encode_args >> metis_tac[])) >>
       gen_tac >> suspend "abi_stage")
   >~ [`lower_value`]
   >- ((conj_tac >- (ho_match_mp_tac first_emission_lower_value >> metis_tac[])) >>
@@ -2630,20 +2734,23 @@ Theorem first_emission_var_array_membership[local]:
        lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  ntac 5 gen_tac >> Cases_on `ty` >>
-  simp[compile_var_array_membership_def, LET_THM] >>
-  TRY (rename1 `case sz of Fixed _ => _ | Dynamic _ => _` >>
-       Cases_on `sz` >> simp[]) >>
-  (ho_match_mp_tac first_emission_bind >> conj_tac
-   >- metis_tac[first_emission_return, first_emission_ptr_load] >>
-   gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
-   >- (rpt (FIRST [ho_match_mp_tac first_emission_bind >> conj_tac,
-                   gen_tac] >> BETA_TAC) >>
-       rpt strip_tac >> imp_res_tac first_emission_emit_helpers >>
-       imp_res_tac first_emission_return >> gvs[]) >>
-   rpt gen_tac >> strip_tac >> irule first_emission_array_membership_loop >>
-   goal_assum (drule_at Any) >> rw[cs_appends_def] >>
-   metis_tac[first_emission_ptr_load])
+  let
+    val finish = ho_match_mp_tac first_emission_bind >> conj_tac
+      >- metis_tac[first_emission_return, first_emission_ptr_load] >>
+      gen_tac >> BETA_TAC >> ho_match_mp_tac first_emission_ignore_bind >> conj_tac
+      >- (rpt (FIRST [ho_match_mp_tac first_emission_bind >> conj_tac,
+                      gen_tac] >> BETA_TAC) >>
+          rpt strip_tac >> imp_res_tac first_emission_emit_helpers >>
+          imp_res_tac first_emission_return >> gvs[]) >>
+      rpt gen_tac >> strip_tac >> irule first_emission_array_membership_loop >>
+      goal_assum (drule_at Any) >> rw[cs_appends_def] >>
+      metis_tac[first_emission_ptr_load]
+  in
+    ntac 5 gen_tac >> Cases_on `ty` >>
+    simp[compile_var_array_membership_def, LET_THM] >>
+    (all_tac >>~- ([`case sz of Fixed _ => _ | Dynamic _ => _`],
+       Cases_on `sz` >> simp[] >> finish)) >> finish
+  end
 QED
 
 Theorem first_emission_binop_aux[local]:

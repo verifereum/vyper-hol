@@ -65,7 +65,9 @@ Proof
   `ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks se))` by
     (drule run_lowering_context_ok >>
      simp[lowering_context_ok_def, EVERY_MEM] >> strip_tac >>
-     first_x_assum drule >> simp[venomInstTheory.fn_labels_def]) >>
+     qpat_x_assum `!fn. MEM fn _ ==> ALL_DISTINCT _ /\ _`
+       (qspec_then `func` mp_tac) >>
+     simp[venomInstTheory.fn_labels_def]) >>
   `fn_has_code registered body_end func` by
     (`cs_extends registered registered` by simp[cs_extends_refl] >>
      drule_all external_decoder_fn_has_code >>
