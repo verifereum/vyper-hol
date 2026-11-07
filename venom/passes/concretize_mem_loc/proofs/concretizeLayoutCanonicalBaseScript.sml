@@ -13,6 +13,7 @@ Ancestors concretizeLayoutCanonicalDriver concretizeLayoutCanonicalIndex frameRe
   concretizeLayoutPhaseEnvironment concretizeLayoutPhaseContext
   concretizeLayoutReaderContext concretizeLayoutPhaseStorage
   concretizeLayoutPhaseIndexedContext concretizeLayoutLocalIndexedContextReaders
+  concretizeLayoutPhaseReturndataSize concretizeLayoutPhaseResidual
   frameRelocationCleanValueSteps frameRelocationScalarSteps concretizeLayoutPhaseAffine concretizeLayoutPhaseCompare
 
 Theorem layout_annotation_update_ordinary_unique:
@@ -446,7 +447,7 @@ Theorem layout_canonical_ordinary_nonterm_success:
     q n i s j t (INL g) /\
   layout_base_lookahead C q0 path q n i s /\ decoration_at fn i s q /\
   (MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
-      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT] \/ context_read0_opcode i.inst_opcode \/
+      CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE; TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE] \/ context_read0_opcode i.inst_opcode \/
     (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])) /\
   step_inst_base i s = OK post ==>
   ?tpost. step_inst_base j t = OK tpost /\
@@ -502,6 +503,19 @@ Proof
          `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
          drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
            layout_state_write_trace_step >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[MEM]) >>
+     Cases_on `MEM i.inst_opcode [ASSERT; ASSERT_UNREACHABLE]`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         `i.inst_outputs = []` by
+           (qpat_x_assum `inst_wf i` mp_tac >>
+            fs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_assert_trace_step >>
          disch_then (drule_at (Pat `g.lop_config = _`)) >>
          disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
          simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
@@ -594,6 +608,16 @@ Proof
          simp[] >>
          disch_then (qspecl_then [`rv`, `rpolicy`, `rp`, `anns`, `P`] mp_tac) >>
          simp[] >> metis_tac[MEM]) >>
+     Cases_on `i.inst_opcode = RETURNDATASIZE`
+     >- (gvs[] >>
+         `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+         `g.lop_anns = (rp,rv)::anns` by metis_tac[] >>
+         drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
+           layout_returndatasize_trace_step >>
+         disch_then (drule_at (Pat `g.lop_config = _`)) >>
+         disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+         simp[] >> disch_then (qspecl_then [`rv`, `rp`, `anns`, `P`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
      `clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT]` by
        (fs[MEM, indexed_context_read_opcode_def] >> metis_tac[]) >>
      drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
