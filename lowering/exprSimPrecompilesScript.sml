@@ -2022,7 +2022,7 @@ Theorem wb_frame_readonly_input:
      local_region cenv es.scopes t name b sz) ==>
   wb_frame cenv es es sa s u
 Proof
-  simp[wb_frame_def, locals_kept_def] >> rpt strip_tac >> gvs[] >>
+  simp[wb_frame_def, locals_kept_def, popped_kept_def] >> rpt strip_tac >> gvs[] >>
   metis_tac[]
 QED
 

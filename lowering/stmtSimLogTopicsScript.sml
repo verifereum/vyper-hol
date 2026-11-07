@@ -273,7 +273,7 @@ Proof
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `_ with vs_vars := _ = _`
       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
-  simp[wb_frame_def, locals_kept_def]
+  simp[wb_frame_def, exprSimPropsTheory.locals_kept_mem]
 QED
 
 Theorem log_readonly_arg:
