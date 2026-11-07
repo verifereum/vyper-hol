@@ -90,7 +90,7 @@ Proof
     (qpat_assum `!e st. MEM _ _ /\ _ ==> _` (qspecl_then [`e`, `es`] mp_tac) >> simp[]) >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_mem_ok _ _`
-      (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+      (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
      disch_then drule >> disch_then drule >> simp[]) >>
   qpat_assum `EVERY _ (e::args)`
     (CONJUNCTS_THEN assume_tac o BETA_RULE o REWRITE_RULE [listTheory.EVERY_DEF]) >>
