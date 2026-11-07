@@ -120,3 +120,22 @@ Resume aggregate_body_read_cons_outcome[exempt]:
   goal_assum (drule_at Any) >> simp[GSYM ignore_bind_def]
 QED
 Finalise aggregate_body_read_cons_outcome
+
+Theorem gas_outcome_source_invariant:
+  gas_outcome memory tops (ctx,func) source (es,s0) Q R /\
+  (!si res sf. source si = (res,sf) ==> Inv res) ==>
+  gas_outcome memory tops (ctx,func) source (es,s0)
+    (\res ee t. Q res ee t /\ Inv res) R
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def]) >>
+  simp[gas_outcome_def] >> qexists_tac `marks`
+  >- (disj1_tac >> fs[gas_summary_at_def] >>
+  `Inv res` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >> metis_tac[]) >>
+  metis_tac[]) >>
+  disj2_tac >> metis_tac[]
+QED
