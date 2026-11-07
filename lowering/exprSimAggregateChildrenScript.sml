@@ -819,6 +819,12 @@ Theorem buffer_loop_memory_vv_post:
 Proof
   strip_tac >>
   `b < dimword (:256)` by decide_tac >>
+  `locals_kept ce es es' s0 r` by
+    (qpat_x_assum `locals_kept ce es es' t r` mp_tac >>
+     rewrite_tac[locals_kept_def, popped_kept_def] >>
+     qpat_assum `!name a n. local_region _ _ t _ _ _ <=> _`
+       (fn th => rewrite_tac[th]) >>
+     qpat_assum `t.vs_memory = _` (fn th => rewrite_tac[th])) >>
   irule buffer_memory_vv_post_general >>
   simp[] >>
   conj_tac
@@ -838,8 +844,7 @@ Proof
         (qspecl_then [`aid`,`off`,`len`] mp_tac) >>
       simp[regions_disjoint_def] >> decide_tac) >>
   conj_tac >- (gvs[ci_mono_def] >> decide_tac) >>
-  conj_tac
-  >- (gvs[locals_kept_def] >> metis_tac[]) >>
+  rpt conj_tac >~ [`locals_kept _ _ _ _ _`] >- first_assum ACCEPT_TAC >>
   qexists `sz` >>
   simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> metis_tac[]
 QED
