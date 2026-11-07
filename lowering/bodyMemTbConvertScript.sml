@@ -27,7 +27,23 @@ Theorem body_type_builtin_convert_plain_mem_case:
       expr_sim_mem ctx func cenv cx ty (TypeBuiltin v11 Convert typ es) st /\
       expr_vv_sim_mem ctx func cenv cx ty (TypeBuiltin v11 Convert typ es) st
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all convert_mem_operand_access >> strip_tac >> gvs[] >>
+  `expr_sim_mem ctx func cenv cx (expr_type e1) e1 st /\
+   expr_vv_sim_mem ctx func cenv cx (expr_type e1) e1 st` by
+    metis_tac[body_expr_mem_ok_def] >>
+  Cases_on `is_bytestring_type typ`
+  >- (irule bytestring_convert_branch_mem >> metis_tac[]) >>
+  Cases_on `is_bytestring_type (expr_type e1)`
+  >- (`expr_sim_mem ctx func cenv cx ty (TypeBuiltin typ Convert typ [e1]) st` by
+        (irule dynamic_convert_branch_sim_mem >> metis_tac[]) >>
+      simp[] >>
+      drule exprSimConvertFromBytesTheory.dynamic_convert_typing_boundary >> strip_tac >>
+      drule_all exprSimConvertFromBytesTheory.dynamic_scalar_type >> strip_tac >>
+      irule exprSimMemoryStackTheory.body_expr_vv_sim_mem_stack_word >>
+      simp[vyperASTTheory.expr_type_def, exprSimConvertTheory.compile_convert_stack] >>
+      metis_tac[exprSimConvertTheory.eval_expr_type_builtin_value]) >>
+  irule scalar_convert_branch_mem >> metis_tac[]
 QED
 
 Theorem body_type_builtin_convert_mem_case:

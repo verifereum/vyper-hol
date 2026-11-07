@@ -71,10 +71,3 @@ Proof
   metis_tac[]
 QED
 
-(* The checker alone does not ensure a two-word source window. *)
-Theorem convert_zero_bytes_capacity_probe:
-  valid_conversion (BaseT (BytesT (Dynamic 0))) (BaseT BoolT) /\
-  type_memory_bytes cenv (BaseT (BytesT (Dynamic 0))) = 32
-Proof
-  EVAL_TAC
-QED
