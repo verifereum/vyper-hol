@@ -2,7 +2,7 @@
 Theory abiEncoderBytesPtr
 Ancestors
   abiEncoderBytesCode abiEncoderRounding typedCopyPtr decoderNavigationPtr
-  fragExecPtr ghostPcTransportPtr emitHelperProps exprLoweringProps ptrDiscipline venomState
+  bodyPtrDefs fragExecPtr ghostPcTransportPtr emitHelperProps exprLoweringProps ptrDiscipline venomState
   venomExecSemantics finite_map pred_set words arithmetic venomInst codegenRel context emitHelper compileEnv
 
 Theorem abi_encode_round_frag_ptr:
@@ -92,4 +92,230 @@ Proof
   gen_tac >> strip_tac >>
   `x <> v1 /\ x <> STRING #"%" (toString (sa.cs_next_var+1))` by metis_tac[] >>
   simp[copy_len_binop_ghost_frame]
+QED
+
+(* A zero store clears precisely its destination word, with no allocator or
+   ambient-variable effects. *)
+Theorem emit_zero_store_frag_ptr:
+  !sa sb dst s d G tn cx ctx PG R.
+    emit_void MSTORE [Var dst;Lit 0w] sa = ((),sb) /\
+    lookup_var dst s = SOME (n2w d) /\ d < dimword(:256) /\
+    ptr_covers G tn dst s 32 ==>
+    ?u.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g=G /\ z=tn /\ v=s)
+        (\g z v. g=G /\ z=u /\
+          v=(mstore d 0w s with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      u.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d+32} /\
+      u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+      (!x. op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MSTORE [Var dst;Lit 0w] []]` by
+    gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def] >>
+  qabbrev_tac `u = step_taint
+    (mk_inst sa.cs_next_id MSTORE [Var dst;Lit 0w] []) s (mstore d 0w s) tn` >>
+  `step_prov PG G (mk_inst sa.cs_next_id MSTORE [Var dst;Lit 0w] [])
+      (mstore d 0w s) = G /\ u.t_var = tn.t_var /\
+    u.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d+32} /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans` by
+    (mp_tac (Q.SPECL [`PG`,`G`,`tn`,`s`,`sa.cs_next_id`,`dst`,`Lit 0w`,
+       `n2w d`,`0w`] mstore_ghost_frame) >>
+     simp[eval_operand_def, op_taint_def, Abbr `u`, w2n_n2w, LESS_MOD]) >>
+  qexists_tac `u` >> conj_tac >-
+    (irule mstore_frag_ptr >> simp[] >>
+     qexistsl_tac [`dst`,`sa.cs_next_id`,`Lit 0w`] >>
+     simp[eval_operand_def, op_taint_def, w2n_n2w, LESS_MOD, Abbr `u`]) >>
+  simp[op_taint_def] >>
+  simp[Abbr `u`, step_taint_def, imm_taint_def, mk_inst_def,
+    step_writes_def, mstore_def]
+QED
+
+Theorem abi_encode_bytes_suffix_frag_ptr:
+  !sa sb len out s cnt G tn cx ctx PG R.
+    abi_encode_bytes_suffix len sa = (out,sb) /\
+    eval_operand len s = SOME (n2w cnt) /\ op_taint tn len = {} /\
+    cnt+31 < dimword(:256) ==>
+    ?H u t.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g=G /\ z=tn /\ v=s)
+        (\g z v. g=H /\ z=u /\ v=t) R /\
+      eval_operand out t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
+      op_taint u out = {} /\ op_prov H out = NONE /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+      u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_alloca_next = s.vs_alloca_next /\ t.vs_accounts = s.vs_accounts /\
+      t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx /\
+      t.vs_data_section = s.vs_data_section /\ t.vs_logs = s.vs_logs /\
+      t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `abi_encode_bytes_suffix _ _ = _` mp_tac >>
+  simp_tac bool_ss [abi_encode_bytes_suffix_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `abi_encode_round len sa = (rounded,sc)` >>
+  drule_all abi_encode_round_frag_ptr >>
+  disch_then (qspecl_then [`G`,`cx`,`ctx`,`PG`,`R`]
+    (qx_choose_then `g1` (qx_choose_then `t1` (qx_choose_then `s1` strip_assume_tac)))) >>
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  gvs[] >>
+  qabbrev_tac `q = STRING #"%" (toString sc.cs_next_var)` >>
+  qabbrev_tac `s2 = update_var q (n2w (32+contractABI$ceil32 cnt)) s1 with vs_inst_idx := SUC s1.vs_inst_idx` >>
+  qabbrev_tac `g2 = step_prov PG g1 (mk_inst sc.cs_next_id ADD [Lit 32w;rounded] [q]) s2` >>
+  qabbrev_tac `t2 = step_taint (mk_inst sc.cs_next_id ADD [Lit 32w;rounded] [q]) s1 s2 t1` >>
+  `cs_extends sa sc` by
+    (drule abi_encode_round_shape >> simp[inst_extends_def, cs_extends_def] >>
+     strip_tac >> qexists_tac `[]` >> simp[]) >>
+  `cs_extends sc sb /\ sb.cs_current_bb = sc.cs_current_bb` by
+    (drule emit_op_extends >> drule emit_op_same_blocks >>
+     simp[cs_extends_def, same_blocks_def] >> rpt strip_tac >> qexists_tac `[]` >> simp[]) >>
+  `frag_exec_ptr cx ctx PG sc sb
+    (\g z v. g=g1 /\ z=t1 /\ v=s1) (\g z v. g=g2 /\ z=t2 /\ v=s2) R` by
+    (irule copy_len_binop_frag_ptr >> simp[] >>
+     qexistsl_tac [`word_add`,`sc.cs_next_id`,`Lit 32w`,`ADD`,`rounded`,`q`] >>
+     simp[mk_inst_def, op_taint_def, eval_operand_def, Abbr `q`,
+       Abbr `g2`, Abbr `t2`, Abbr `s2`, word_add_n2w,
+       step_prov_def, step_taint_def, update_var_def]) >>
+  qexistsl_tac [`g2`,`t2`,`s2`] >> conj_tac >-
+    (irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ sa sc _ _ _` (irule_at Any) >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sc x /\ x <> q` by
+    (drule abi_encode_round_shape >> strip_tac >>
+     simp[not_fresh_at_def, Abbr `q`] >> rpt strip_tac >>
+     simp[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
+  simp[Abbr `s2`, Abbr `q`, eval_operand_def, lookup_var_def,
+    update_var_def, FLOOKUP_UPDATE] >>
+  simp[Abbr `t2`, Abbr `g2`, copy_len_binop_ghost_frame] >>
+  conj_tac >-
+    (Cases_on `rounded` >> gvs[op_prov_def] >>
+     simp[step_prov_def, set_prov_def, out_prov_def, first_prov_def,
+       op_prov_def, mk_inst_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]) >>
+  conj_tac >-
+    simp[step_taint_def, imm_taint_def, mk_inst_def, update_var_def, step_writes_def] >>
+  metis_tac[lookup_var_def]
+QED
+
+Theorem abi_encode_bytes_prefix_frag_ptr:
+  !sa sb src dst len last s p d cnt G tn cx ctx PG R.
+    abi_encode_bytes_prefix (Var dst) (Var src) sa = ((len,last),sb) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME (n2w p) /\ lookup_var dst s = SOME (n2w d) /\
+    mload p s = n2w cnt /\ ptr_covers G tn src s 32 /\
+    ptr_covers G tn dst s (32+contractABI$ceil32 cnt) /\
+    cnt+31 < dimword(:256) /\ p < dimword(:256) /\
+    d+32+contractABI$ceil32 cnt < dimword(:256) /\
+    (!i. p <= i /\ i < p+32 ==> i NOTIN tn.t_mem) ==>
+    ?H u t q.
+      last = Var q /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g z v. g=G /\ z=tn /\ v=s)
+        (\g z v. g=H /\ z=u /\ v=t) R /\
+      eval_operand len t = SOME (n2w cnt) /\ op_taint u len = {} /\
+      lookup_var q t = SOME (n2w (d+contractABI$ceil32 cnt)) /\
+      ptr_covers H u q t 32 /\
+      u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+      u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+      t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+      t.vs_alloca_next = s.vs_alloca_next /\ t.vs_accounts = s.vs_accounts /\
+      t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx /\
+      t.vs_data_section = s.vs_data_section /\ t.vs_logs = s.vs_logs /\
+      t.vs_requests = s.vs_requests /\
+      t.vs_pending_deletions = s.vs_pending_deletions /\
+      (!x. not_fresh_at sa x ==>
+        lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `abi_encode_bytes_prefix _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [abi_encode_bytes_prefix_def, comp_bind_def, comp_return_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >> ntac 2 (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op MLOAD [Var src] sa = (len,sc)` >>
+  rename1 `abi_encode_round len sc = (rounded,sd)` >>
+  qpat_assum `emit_op MLOAD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  gvs[] >>
+  qabbrev_tac `lv = STRING #"%" (toString sa.cs_next_var)` >>
+  qabbrev_tac `loaded = update_var lv (n2w cnt) s` >>
+  `run_inst_seq (emitted_insts sa sc) s = OK loaded` by
+    simp[Abbr `loaded`, run_inst_seq_def, step_inst_base_def, mk_inst_def,
+      exec_read1_def, eval_operand_def, w2n_n2w, LESS_MOD] >>
+  `!i. w2n (n2w p : 256 word) <= i /\
+    i < w2n (n2w p : 256 word)+32 ==> i NOTIN tn.t_mem` by
+    simp[w2n_n2w, LESS_MOD] >>
+  drule_all emit_mload_clean_endpoint_ptr_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`]
+    (qx_choose_then `g1` (qx_choose_then `t1` strip_assume_tac))) >>
+  qabbrev_tac `s1 = loaded with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `eval_operand (Var lv) s1 = SOME (n2w cnt)` by
+    simp[Abbr `s1`, Abbr `loaded`, eval_operand_def, lookup_var_def,
+      update_var_def, FLOOKUP_UPDATE] >>
+  drule_all abi_encode_round_frag_ptr >>
+  disch_then (qspecl_then [`g1`,`cx`,`ctx`,`PG`,`R`]
+    (qx_choose_then `g2` (qx_choose_then `t2` (qx_choose_then `s2` strip_assume_tac)))) >>
+  rename1 `emit_op ADD [Var dst;rounded] sd = (last,sb)` >>
+  `sc.cs_next_var <= sd.cs_next_var` by
+    (drule abi_encode_round_shape >> simp[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sc x /\ not_fresh_at sd x` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `not_fresh_at sc lv` by
+    simp[not_fresh_at_def, Abbr `lv`] >>
+  `lookup_var dst s2 = SOME (n2w d) /\
+   ptr_covers g2 t2 dst s2 (32+contractABI$ceil32 cnt)` by
+    (fs[ptr_covers_def] >>
+     `lookup_var dst s1 = lookup_var dst s` by
+       (simp[Abbr `s1`, lookup_var_def] >> metis_tac[lookup_var_def]) >>
+     metis_tac[]) >>
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  gvs[] >>
+  qabbrev_tac `q = STRING #"%" (toString sd.cs_next_var)` >>
+  qabbrev_tac `actual = update_var q (n2w (d+contractABI$ceil32 cnt)) s2` >>
+  `run_inst_seq (emitted_insts sd sb) s2 = OK actual` by
+    simp[Abbr `actual`, run_inst_seq_def, step_inst_base_def, mk_inst_def,
+      exec_pure2_def, eval_operand_def, word_add_n2w] >>
+  `contractABI$ceil32 cnt + 32 <= 32+contractABI$ceil32 cnt /\
+   w2n (n2w d : 256 word) + contractABI$ceil32 cnt < dimword(:256)` by
+    (`d < dimword(:256)` by decide_tac >> simp[w2n_n2w, LESS_MOD] >> decide_tac) >>
+  `lookup_var dst s2 = SOME (n2w d)` by metis_tac[] >>
+  `contractABI$ceil32 cnt + 32 <= contractABI$ceil32 cnt+32` by simp[] >>
+  drule_all emit_ptr_offset_endpoint_ptr_core >>
+  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  gvs[] >>
+  `cs_extends sa sc /\ cs_extends sd sb /\ cs_extends sc sd` by
+    (imp_res_tac emit_op_extends >> imp_res_tac emit_op_same_blocks >>
+     fs[same_blocks_def] >> drule abi_encode_round_shape >>
+     simp[inst_extends_def, cs_extends_def, same_blocks_def] >>
+     rpt strip_tac >> qexists_tac `[]` >> simp[]) >>
+  qexistsl_tac [`H`,`u`,`actual with vs_inst_idx := SUC s2.vs_inst_idx`] >>
+  conj_tac >-
+    (irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ sa sc _ _ _` (irule_at Any) >> simp[] >>
+     conj_tac >- metis_tac[cs_extends_trans] >>
+     irule frag_exec_ptr_seq >>
+     qpat_assum `frag_exec_ptr _ _ _ sc sd _ _ _` (irule_at Any) >> simp[]) >>
+  `not_fresh_at sd lv` by
+    (simp[not_fresh_at_def, Abbr `lv`] >> decide_tac) >>
+  `!x. not_fresh_at sa x ==>
+    lookup_var x s2 = lookup_var x s /\ FLOOKUP g2 x = FLOOKUP G x /\
+    op_taint t2 (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >>
+     `not_fresh_at sc x` by metis_tac[] >>
+     qpat_x_assum `!x. not_fresh_at sc x ==> _` (qspec_then `x` mp_tac) >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _ /\ FLOOKUP g1 x = _ /\ _` (qspec_then `x` mp_tac) >>
+     simp[Abbr `s1`, lookup_var_def]) >>
+  `lookup_var lv s2 = SOME (n2w cnt) /\ op_taint t2 (Var lv) = {}` by
+    (qpat_x_assum `!x. not_fresh_at sc x ==> _` (qspec_then `lv` mp_tac) >>
+     simp[Abbr `s1`, Abbr `loaded`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `lv <> q /\ (!x. not_fresh_at sa x ==> x <> q)` by
+    (fs[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
+  simp[eval_operand_def, lookup_var_def, Abbr `actual`, Abbr `s1`,
+    Abbr `loaded`, update_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> metis_tac[lookup_var_def]
+
 QED
