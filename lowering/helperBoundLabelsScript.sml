@@ -678,6 +678,18 @@ Proof
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
 
+val abi_decode_tac =
+  FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_emit_inst, bound_labels_abi_decode_static,
+    bound_labels_abi_clamp_basetype, bound_labels_getelemptr_abi,
+    bound_labels_abi_decode_dyn_elem_ptr, bound_labels_alloc_buffer,
+    bound_labels_new_block, comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
+    irule bound_labels_bind, irule bound_labels_ignore_bind,
+    conj_tac, IF_CASES_TAC];
+
+val abi_decode_step = FIRST [abi_decode_tac, ALL_TAC];
+
 Theorem bound_labels_abi_decode:
   (!dst src opc hi info s.
     (!l. compiler_label l ==> P l) /\
@@ -697,14 +709,17 @@ Theorem bound_labels_abi_decode:
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
   simp[Once compile_abi_decode_to_buf_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_emit_inst, bound_labels_abi_decode_static,
-    bound_labels_abi_clamp_basetype, bound_labels_getelemptr_abi,
-    bound_labels_abi_decode_dyn_elem_ptr, bound_labels_alloc_buffer,
-    bound_labels_new_block, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
-    irule bound_labels_bind, irule bound_labels_ignore_bind,
-    conj_tac, IF_CASES_TAC]) >> gvs[] >>
+  (* the loop below, one layer per script step: as a single rpt it runs
+     past the step timeout *)
+  abi_decode_step >> abi_decode_step >>
+  abi_decode_step >> abi_decode_step >>
+  abi_decode_step >> abi_decode_step >>
+  abi_decode_step >> abi_decode_step >>
+  abi_decode_step >> abi_decode_step >>
+  abi_decode_step >> abi_decode_step >>
+  abi_decode_step >> abi_decode_step >>
+  abi_decode_step >> abi_decode_step >>
+  rpt abi_decode_tac >> gvs[] >>
   Cases_on `opc` >> simp[bound_labels_emit_void]
 QED
 
