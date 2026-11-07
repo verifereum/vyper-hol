@@ -37,6 +37,7 @@ Theorem abi_dynamic_bytes_source_child_counted_ptr:
     mload cursor sf = n2w (k+n) /\
     (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tnf.t_mem) /\
     (!i. b+k <= i /\ i < b+k+n ==> i NOTIN tnf.t_mem) /\
+    (!i. b+h <= i /\ i < b+h+32 ==> i NOTIN tnf.t_mem) /\
     mem_agree_outside ({i | b+k <= i /\ i < b+k+n} UNION
       {i | b+h <= i /\ i < b+h+32} UNION {i | cursor <= i /\ i < cursor+32})
       sf.vs_memory s.vs_memory /\
@@ -60,6 +61,7 @@ Proof
     mload cursor sf = n2w (k+n) /\
     (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tnf.t_mem) /\
     (!i. b+k <= i /\ i < b+k+n ==> i NOTIN tnf.t_mem) /\
+    (!i. b+h <= i /\ i < b+h+32 ==> i NOTIN tnf.t_mem) /\
     mem_agree_outside ({i | b+k <= i /\ i < b+k+n} UNION
       {i | b+h <= i /\ i < b+h+32} UNION {i | cursor <= i /\ i < cursor+32})
       sf.vs_memory s.vs_memory /\
@@ -166,6 +168,7 @@ Theorem abi_dynamic_string_source_child_counted_ptr:
     mload cursor sf = n2w (k+n) /\
     (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tnf.t_mem) /\
     (!i. b+k <= i /\ i < b+k+n ==> i NOTIN tnf.t_mem) /\
+    (!i. b+h <= i /\ i < b+h+32 ==> i NOTIN tnf.t_mem) /\
     mem_agree_outside ({i | b+k <= i /\ i < b+k+n} UNION
       {i | b+h <= i /\ i < b+h+32} UNION {i | cursor <= i /\ i < cursor+32})
       sf.vs_memory s.vs_memory /\

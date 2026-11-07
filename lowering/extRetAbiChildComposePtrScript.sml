@@ -195,6 +195,7 @@ Theorem abi_dynamic_child_compose_counted_ptr:
     mload cursor sf = n2w (k+n) /\
     (!i. cursor <= i /\ i < cursor+32 ==> i NOTIN tnf.t_mem) /\
     (!i. b+k <= i /\ i < b+k+n ==> i NOTIN tnf.t_mem) /\
+    (!i. b+h <= i /\ i < b+h+32 ==> i NOTIN tnf.t_mem) /\
     mem_agree_outside (writes UNION {i | b+h <= i /\ i < b+h+32} UNION
       {i | cursor <= i /\ i < cursor+32}) sf.vs_memory s.vs_memory /\
     (!i. i NOTIN (writes UNION {i | b+h <= i /\ i < b+h+32} UNION
