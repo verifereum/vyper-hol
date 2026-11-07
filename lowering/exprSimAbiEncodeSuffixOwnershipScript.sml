@@ -1,7 +1,7 @@
 Theory exprSimAbiEncodeSuffixOwnership
 Ancestors
   abiEncoderRegisteredEffect abiEncoderWindowContract abiBuiltinEncodeSetup
-  abiDecoderContract
+  abiDecoderContract abiDecodeStaticProps exprSimAbiEncodeFrameTransfer venomMemDefs
   finite_map pred_set list arithmetic
 
 (* Absorb explicit output writes only when each output lies in a final
@@ -67,4 +67,41 @@ Theorem abi_encode_setup_memory_effect:
 Proof
   simp_tac bool_ss [abi_builtin_encode_setup_frame_def, abi_decode_frame_def] >>
   rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem abi_encode_registered_owned_interval:
+  abi_encoder_registered_effect ids [] prepared actual /\
+  alloca_inv actual /\ aid NOTIN ids /\
+  FLOOKUP actual.vs_allocas aid = SOME (b,sz) /\
+  b <= off /\ off+n <= b+sz ==>
+  mem_bytes_at off n actual.vs_memory = mem_bytes_at off n prepared.vs_memory
+Proof
+  strip_tac >> irule mem_bytes_at_bytewise >> rpt strip_tac >>
+  irule abi_encode_registered_protected_byte >>
+  qexistsl [`ids`, `b`, `sz`, `[]`] >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `alloca_inv actual` mp_tac >>
+  simp_tac bool_ss [alloca_inv_def, allocas_non_overlapping_def] >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem abi_encode_owned_interval_frame:
+  abi_builtin_encode_setup_frame next site outsz p w initial prepared /\
+  abi_encoder_registered_effect ids [] prepared actual /\
+  alloca_inv actual /\ site IN ids /\ aid NOTIN ids /\
+  FLOOKUP actual.vs_allocas site = SOME (p,outsz) /\
+  FLOOKUP actual.vs_allocas aid = SOME (b,sz) /\
+  32+w <= outsz /\ b <= off /\ off+n <= b+sz ==>
+  mem_bytes_at off n actual.vs_memory = mem_bytes_at off n initial.vs_memory
+Proof
+  strip_tac >>
+  `mem_bytes_at off n actual.vs_memory = mem_bytes_at off n prepared.vs_memory` by
+    (metis_tac[abi_encode_registered_owned_interval]) >>
+  `b+sz <= p \/ p+outsz <= b` by
+    (qpat_x_assum `alloca_inv actual` mp_tac >>
+     simp_tac bool_ss [alloca_inv_def, allocas_non_overlapping_def] >>
+     strip_tac >> metis_tac[]) >>
+  `mem_bytes_at off n prepared.vs_memory = mem_bytes_at off n initial.vs_memory` by
+    (irule abi_encode_setup_memory_effect >> goal_assum (drule_at Any) >> decide_tac) >>
+  simp[]
 QED
