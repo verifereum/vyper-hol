@@ -1,6 +1,6 @@
 Theory exprSimPopNestedLocalLayout
 Ancestors
-  exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncodingProofs
+  compileEnv exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncodingProofs
   loweringPosts vyperArray vyperTyping vyperTypeInvariants venomState arithmetic vyperValueOperation vyperState valueEncoding valueEncodingTyping abiStaticSparseProps alist vyperAssignPreservesType
 
 (* A word store inside slot i cannot alter a distinct slot j. *)
