@@ -40,7 +40,7 @@ Ancestors externalReturnTupleWindowPtr abiEncoderTupleWindowSource typedCopyTupl
   unitShapeDefs o1PassContract rawEntryCode entryChecksPtr sourceValueRejection entryCheckIntervals sourceEntrySelection entryDispatchPtr sourceEntryCode entryValueRevertPtr
   loweringShapeProps loweringShapeSource supportedNames supportedDecls
   entryDispatchProps o1PipelineCorrect selectedBodyCode calldataDecodePtr calldataTypedRobustPtr
-  externalReturnAllocPtr
+  externalReturnRegisteredRun
 
 val _ = Parse.hide "body";
 
