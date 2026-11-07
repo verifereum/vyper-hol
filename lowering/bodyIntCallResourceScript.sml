@@ -1,7 +1,8 @@
 (* Static allocation charges also bound the inherited dynamic frontier. *)
 Theory bodyIntCallResource
 Ancestors
-  exprLoweringProps venomInst venomState relation pred_set arithmetic list
+  exprLoweringProps intCallCallee moduleLowering compileEnv emitHelper
+  venomInst venomState relation pred_set arithmetic list finite_map words
 
 Theorem fmp_room_callee:
   alloca_room ctx caller s /\ fmp_room ctx caller s /\
@@ -56,4 +57,43 @@ Proof
    CARD {g | TC (fn_directly_calls ctx) func.fn_name g} * unit_alloca_frame ctx` by
     (simp[Once MULT_COMM, LE_MULT_CANCEL_LBARE]) >>
   decide_tac
+QED
+
+(* Materialization's static charge is exactly the stack-parameter slots.
+   The size bound is essential: ALLOCA's literal is a machine word. *)
+Theorem materialize_internal_params_charge:
+  !caps ce st ce' st'.
+    materialize_internal_params ce caps st = (ce',st') /\
+    ALL_DISTINCT (MAP FST caps) /\
+    (!nm off sz. MEM nm (MAP FST caps) /\
+       FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz) ==>
+       sz < dimword (:256)) ==>
+    SUM (MAP alloca_lit_size
+           (FILTER (\i. i.inst_opcode = ALLOCA) st'.cs_current_insts)) =
+      SUM (MAP alloca_lit_size
+           (FILTER (\i. i.inst_opcode = ALLOCA) st.cs_current_insts)) +
+      internal_stack_size ce (MAP (\c. (FST c,FST (SND c))) caps)
+Proof
+  Induct >- simp[materialize_internal_params_def, comp_return_def,
+                 internal_stack_size_def] >>
+  PairCases >> rpt gen_tac >>
+  simp[materialize_internal_params_def, internal_stack_size_def] >>
+  rename1 `if is_stack then _ else _` >>
+  rename1 `FLOOKUP ce.ce_vars nm` >>
+  Cases_on `is_stack` >> simp[]
+  >- (Cases_on `FLOOKUP ce.ce_vars nm` >> simp[]
+      >- (strip_tac >> first_x_assum drule >> simp[] >> metis_tac[]) >>
+      rename1 `SOME loc` >> Cases_on `loc` >> simp[] >>
+      simp[emit_op_def, emit_void_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def, fresh_id_def,
+           fresh_var_def, emit_def] >> strip_tac >>
+      first_x_assum drule >>
+      (impl_tac >- (simp[FLOOKUP_UPDATE] >> metis_tac[])) >>
+      simp[mat_tail_stack_size, FILTER_APPEND_DISTRIB, MAP_APPEND, SUM_APPEND,
+           alloca_lit_size_def, mk_inst_def] >>
+      rename1 `FLOOKUP ce.ce_vars nm = SOME (MemLoc off sz)` >>
+      `sz < dimword (:256)` by metis_tac[] >> simp[]) >>
+  strip_tac >> first_x_assum drule >>
+  (impl_tac >- (simp[FLOOKUP_UPDATE] >> metis_tac[])) >>
+  simp[mat_tail_stack_size]
 QED
