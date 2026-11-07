@@ -166,3 +166,36 @@ Proof
   `is_var_operand (stack_peek placed ps2.ps_stack)` by simp[is_var_operand_def] >>
   drule_all do_swap_lineage_inventory >> simp[]
 QED
+
+(* Placement, separately from exact inventory conservation. *)
+Theorem reorder_singleton_source_top:
+  !dfg a ps.
+    IS_SOME (stack_get_unfixed_depth (Var a) 0 1 ps.ps_stack) ==>
+    stack_peek 0 (SND (reorder_plan dfg [Var a] ps)).ps_stack = Var a
+Proof
+  rpt strip_tac >>
+  Cases_on `stack_get_unfixed_depth (Var a) 0 1 ps.ps_stack` >> gvs[] >>
+  simp[reorder_plan_def, indexedListsTheory.MAPi_def, reorder_one_def] >>
+  pairarg_tac >> simp[] >>
+  qpat_x_assum `_ = (step_ops,ps')` mp_tac >>
+  pairarg_tac >> simp[] >>
+  `IS_SOME (stack_get_unfixed_depth (Var a) 0 1 ps2.ps_stack)` by
+    (qpat_x_assum `_ = (_,ps2)` mp_tac >>
+     Cases_on `x > 16` >> simp[] >> strip_tac >> gvs[] >>
+     drule_at (Pat `reduce_depth_plan _ _ _ _ _ _ = _`)
+       reduce_depth_plan_unfixed_hit >> simp[]) >>
+  Cases_on `stack_get_unfixed_depth (Var a) 0 1 ps2.ps_stack` >> gvs[] >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME d` >>
+  `d < LENGTH ps2.ps_stack /\ stack_peek d ps2.ps_stack = Var a` by
+    metis_tac[stack_get_unfixed_depth_props] >>
+  Cases_on `d = 0` >- (strip_tac >> gvs[]) >>
+  `0 < LENGTH ps2.ps_stack` by decide_tac >> simp[] >>
+  Cases_on `operand_equiv dfg (Var a) (stack_peek 0 ps2.ps_stack)`
+  >- (strip_tac >> gvs[] >>
+      simp[stack_poke_def, stack_peek_def, EL_LUPDATE]) >>
+  simp[Q.SPEC `0` do_swap_def] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+  `ps'.ps_stack = stack_swap d ps2.ps_stack` by
+    metis_tac[doSwapSimTheory.do_swap_stack_result, pairTheory.SND] >>
+  gvs[stack_swap_def, stack_peek_def, EL_LUPDATE]
+QED

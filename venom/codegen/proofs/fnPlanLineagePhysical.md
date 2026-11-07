@@ -93,3 +93,27 @@ prove singleton target-reaching or the full dead-last-use ASSIGN transition.
 Consumption and native dead-output/release integration remain to be checked.
 No external theorem copies, allocator assumptions, or admissions were added.
 Evidence: TO_lineage_after_fix-20261106T221649Z_m12861_t001.
+
+## Full bounded native dead-last-use transition checked (2026-11-07)
+
+The earlier residual is now discharged:
+- `reorder_singleton_source_top` derives actual top placement from an unfixed
+  source hit, using `reduce_depth_plan_unfixed_hit` and actual swap results.
+- `physical_live_consume_dead_source` combines placement, exact singleton
+  conservation, length-floor, inverse variable-peek lookup and the existing
+  exact popmany boundary. It removes precisely the source from inventory.
+- `native_dead_assign_state` exposes the complete native dead-output ASSIGN:
+  its push/pop cancels exactly, leaving release of the consumed emitted state.
+- `physical_live_release_dead_spills` preserves exact live inventory.
+- `physical_live_native_dead_assign` proves the full actual transition from
+  `physical_live (a::nl) ps`, `~MEM a nl`, `~MEM y nl` to `physical_live nl`
+  for `assign_region_step ... a y nl term ps`. This is slightly stronger than
+  the requested probe: no `a<>y` premise is necessary when both names are dead.
+
+All persistent live spills are allowed, and allocator fields are unconstrained.
+No scratch admissions or external theorem copies were introduced. The proof
+uses the actual emission, reorder, consumption, dead-output and release states;
+it does not canonicalize intermediate stacks. This proves this bounded native
+transition only, not global reachability, ASSIGN-region shielding, join
+provenance, or the frozen theorem.
+Evidence: TO_lineage_after_fix-20261106T221649Z_m12922_t001.
