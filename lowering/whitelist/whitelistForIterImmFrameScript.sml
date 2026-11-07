@@ -4,6 +4,7 @@ Ancestors
   vyperBareGlobalName vyperPlaceFrames vyperState vyperTypeSystem
   stmtSimForArrayFrame vyperStatePreservation supportedExprs supportedExprForms supportedExprTraverse
   vyperTypeInvariants vyperInterpreter vyperAST list rich_list finite_map alist
+  supportedStmts supportedStmtTraverse
 
 Theorem lookup_immutable_set_other:
   (src',name') <> (src,name) /\
@@ -378,4 +379,267 @@ Proof
   Induct_on `exprs` >> simp[Once evaluate_def, return_def] >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac read_result_state >> gvs[] >> metis_tac[supported_expr_immutable]
+QED
+
+Theorem supported_target_eval_immutable:
+  !target tops bindings pt cx es res es' src name.
+  supported_target_info tops bindings target = SOME pt /\
+  ~supported_target_exists expr_internal_call_root target /\
+  target_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) target /\
+  eval_base_place cx target es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  measureInduct_on `base_assignment_target_size target` >>
+  Cases_on `target` >> rpt strip_tac
+  >~ [`eval_base_place _ (NameTarget _) _ = _`]
+  >- gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+         type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
+  >~ [`eval_base_place _ (TopLevelNameTarget _) _ = _`]
+  >- (rename1 `eval_base_place cx (TopLevelNameTarget nsid) es = _` >>
+      PairCases_on `nsid` >> gvs[Once evaluate_def] >>
+      drule lookup_global_state >> simp[]) >>
+  gvs[supportedTargetsTheory.supported_target_info_def, supported_expr_exists_def,
+      expr_writes_ok_def, AllCaseEqs()] >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  imp_res_tac extend_place_state >> imp_res_tac read_result_state >> gvs[] >>
+  rename1 `supported_target_info tops bindings inner = SOME inner_pt` >>
+  first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
+  disch_then drule_all >> strip_tac >>
+  metis_tac[supported_expr_immutable]
+QED
+
+Theorem supported_target_place_immutable:
+  supported_target_info tops bindings target = SOME pt /\
+  ~supported_target_exists expr_internal_call_root target /\
+  target_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) target /\
+  eval_target_place cx target es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  imp_res_tac supported_target_eval_immutable >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >> metis_tac[]
+QED
+
+Theorem supported_simple_target_eval_immutable:
+  !target tops bindings cx es res es' src name.
+  supported_target tops bindings target /\
+  ~supported_target_exists expr_internal_call_root target /\
+  target_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) target /\
+  eval_base_place cx target es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Cases_on `target` >>
+  simp[supportedStmtsTheory.supported_target_def, supported_expr_exists_def, expr_writes_ok_def] >> rpt strip_tac
+  >~ [`eval_base_place _ (NameTarget _) _ = _`]
+  >- gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+         type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
+  >>~- ([`eval_base_place _ (TopLevelNameTarget _) _ = _`],
+      rename1 `eval_base_place cx (TopLevelNameTarget nsid) es = _` >>
+      PairCases_on `nsid` >> gvs[Once evaluate_def] >>
+      drule lookup_global_state >> simp[])
+  >~ [`eval_base_place _ (SubscriptTarget _ _) _ = _`]
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume supported_simple_target_eval_immutable[subscript]:
+  rename1 `eval_base_place cx (SubscriptTarget inner key) es = _` >>
+  Cases_on `inner` >> gvs[expr_writes_ok_def] >>
+  rename1 `eval_base_place cx (SubscriptTarget (TopLevelNameTarget nsid) key) es = _` >>
+  PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  imp_res_tac lookup_global_state >> imp_res_tac read_result_state >>
+  imp_res_tac extend_place_state >> gvs[] >> metis_tac[supported_expr_immutable]
+QED
+
+Resume supported_simple_target_eval_immutable[attribute]:
+  rename1 `eval_base_place cx (AttributeTarget inner fname) es = _` >>
+  Cases_on `inner` >> gvs[expr_writes_ok_def] >>
+  rename1 `eval_base_place cx (AttributeTarget (TopLevelNameTarget nsid) fname) es = _` >>
+  PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  imp_res_tac lookup_global_state >> imp_res_tac extend_place_state >> gvs[]
+QED
+
+Finalise supported_simple_target_eval_immutable
+
+Theorem supported_any_target_place_immutable:
+  (supported_target tops bindings target \/
+   (?pt. supported_target_info tops bindings target = SOME pt)) /\
+  ~supported_target_exists expr_internal_call_root target /\
+  target_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) target /\
+  eval_target_place cx target es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  rpt strip_tac
+  >- (gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+      imp_res_tac supported_simple_target_eval_immutable >>
+      Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >> metis_tac[]) >>
+  metis_tac[supported_target_place_immutable]
+QED
+
+Theorem typed_guarded_target_write_immutable:
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  type_place_target env target = SOME vt /\
+  ~place_contains target (TopLevelNameTarget (src,name)) /\
+  (supported_target tops bindings target \/
+   (?pt. supported_target_info tops bindings target = SOME pt)) /\
+  ~supported_target_exists expr_internal_call_root target /\
+  target_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) target /\
+  (do p <- eval_target_place cx target; write_place cx p v od) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >> gvs[bind_def, AllCaseEqs(), raise_def] >>
+  imp_res_tac supported_any_target_place_immutable >>
+  metis_tac[typed_guarded_immutable_target_write]
+QED
+
+Theorem typed_guarded_base_assignment_immutable:
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  well_typed_atarget env (BaseTarget bt) ty /\
+  atarget_writes_ok (\t. ~place_contains t (TopLevelNameTarget (src,name))) (BaseTarget bt) /\
+  (supported_target tops bindings bt \/
+   (?pt. supported_target_info tops bindings bt = SOME pt)) /\
+  ~supported_target_exists expr_internal_call_root bt /\
+  assign_tuple_targets cx (BaseTarget bt) v es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >>
+  gvs[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def] >>
+  qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >> strip_tac >>
+  irule typed_guarded_target_write_immutable >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem typed_guarded_flat_targets_immutable:
+  !targets tys env src name elem bound tops bindings cx vs es res es'.
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  LIST_REL (\tgt ty. well_typed_atarget env tgt ty) targets tys /\
+  EVERY (\g. case g of BaseTarget bt => supported_target tops bindings bt
+                       | TupleTarget _ => F) targets /\
+  EVERY (atarget_writes_ok (\t. ~place_contains t (TopLevelNameTarget (src,name)))) targets /\
+  ~supported_assignments_exists expr_internal_call_root targets /\
+  assign_tuple_target_list cx targets vs es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Induct_on `targets` >> Cases_on `vs` >>
+  simp[Once evaluate_def, return_def, raise_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `tys` >> gvs[] >>
+  rename1 `well_typed_atarget env head head_ty` >>
+  Cases_on `head` >> gvs[supportedStmtTraverseTheory.supported_assignment_exists_def] >>
+  gvs[ignore_bind_def, bind_def, AllCaseEqs(), raise_def] >>
+  drule_at (Pat `assign_tuple_targets _ _ _ _ = _`)
+    typed_guarded_base_assignment_immutable >>
+  simp[] >> strip_tac >> metis_tac[]
+QED
+
+Theorem typed_guarded_assignment_immutable:
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  well_typed_atarget env target ty /\
+  atarget_writes_ok (\t. ~place_contains t (TopLevelNameTarget (src,name))) target /\
+  supported_assignment tops bindings target rhs /\
+  ~supported_assignment_exists expr_internal_call_root target /\
+  assign_tuple_targets cx target v es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Cases_on `target` >> rpt strip_tac
+  >>~- ([`assign_tuple_targets _ (BaseTarget _) _ _ = _`],
+      rename1 `assign_tuple_targets cx (BaseTarget bt) v es = _` >>
+      gvs[supported_assignment_def, AllCaseEqs(), supported_assignment_exists_def] >>
+      irule typed_guarded_base_assignment_immutable >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexistsl_tac [`bindings`,`tops`] >> simp[] >>
+      Cases_on `supported_target_info tops bindings bt` >> gvs[]) >>
+  gvs[well_typed_atarget_def, supported_assignment_def, atarget_writes_ok_def,
+      supported_assignment_exists_def] >>
+  Cases_on `v` >>
+  gvs[Once evaluate_def, raise_def, vyperValueTheory.array_value_CASE_rator,
+      AllCaseEqs()] >>
+  irule typed_guarded_flat_targets_immutable >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem assign_immutable_frame:
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  well_typed_atarget env target ty /\
+  atarget_writes_ok (\t. ~place_contains t (TopLevelNameTarget (src,name))) target /\
+  supported_assignment tops bindings target rhs /\
+  ~supported_assignment_exists expr_internal_call_root target /\
+  (!s r t. eval_expr cx rhs s = (r,t) ==>
+    lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+  eval_stmt cx (Assign target rhs) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Cases_on `target` >> disch_tac
+  >>~- ([`eval_stmt _ (Assign (BaseTarget _) _) _ = _`], suspend "base")
+  >> suspend "tuple"
+QED
+
+Resume assign_immutable_frame[tuple]:
+  pop_assum strip_assume_tac >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[IgnAsm `!s r t. _`] >>
+  first_x_assum drule >> strip_tac >>
+  drule_at (Pat `assign_tuple_targets _ _ _ _ = _`) typed_guarded_assignment_immutable >>
+  simp[] >> metis_tac[]
+QED
+
+Resume assign_immutable_frame[base]:
+  pop_assum strip_assume_tac >>
+  rename1 `eval_stmt cx (Assign (BaseTarget bt) rhs) es = _` >>
+  gvs[well_typed_atarget_def, well_typed_target_def, atarget_writes_ok_def,
+      supported_assignment_def, supported_assignment_exists_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[IgnAsm `!s r t. _`] >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `supported_target_info tops bindings bt` >> gvs[] >>
+  imp_res_tac supported_any_target_place_immutable >>
+  metis_tac[typed_guarded_immutable_target_write]
+QED
+
+Finalise assign_immutable_frame
+
+Theorem augassign_immutable_frame:
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  well_typed_target env bt ty /\ ~place_contains bt (TopLevelNameTarget (src,name)) /\
+  (supported_target tops bindings bt \/
+   (?pt. supported_target_info tops bindings bt = SOME pt)) /\
+  ~supported_target_exists expr_internal_call_root bt /\
+  target_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) bt /\
+  (!s r t. eval_expr cx rhs s = (r,t) ==>
+    lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+  eval_stmt cx (AugAssign ty bt bop rhs) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >> gvs[well_typed_target_def] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
+  imp_res_tac read_result_state >> imp_res_tac lift_sum_state >>
+  imp_res_tac supported_any_target_place_immutable >>
+  gvs[IgnAsm `!s r t. _`] >> first_x_assum drule >> strip_tac >>
+  all_tac
+  >>~- ([`write_place _ _ _ _ = _`],
+    qmatch_asmsub_rename_tac `write_place cx p result write_state` >>
+    `lookup_immutable cx es' src name = lookup_immutable cx write_state src name`
+      suffices_by metis_tac[] >>
+    irule lookup_immutable_write_other >>
+    goal_assum (drule_at Any) >> rpt strip_tac >> gvs[] >>
+    drule eval_target_place_immutable_root >> strip_tac >>
+    drule_at (Pat `type_place_target env bt`) typed_guarded_array_root >>
+    simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
