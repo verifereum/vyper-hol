@@ -180,3 +180,58 @@ Proof
   qexistsl [`vs`, `initial`] >>
   gvs[abi_encode_exec_frame_def]
 QED
+
+Theorem abi_encode_caller_resource_room:
+  alloca_room ctx func initial /\ fmp_room ctx func initial /\
+  abi_encode_exec_frame observer initial actual /\
+  fn_inst_ids_distinct func /\ fn_inst_ids_distinct observer /\
+  (!i. MEM i (fn_insts observer) /\ i.inst_opcode = ALLOCA ==>
+    MEM i (fn_insts func)) /\
+  (!i. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+    ~MEM i (fn_insts observer) ==>
+    FLOOKUP actual.vs_allocas i.inst_id = FLOOKUP initial.vs_allocas i.inst_id) ==>
+  alloca_room ctx func actual /\ fmp_room ctx func actual
+Proof
+  strip_tac >>
+  `actual.vs_alloca_next + pending_alloca_size func actual <=
+    initial.vs_alloca_next + pending_alloca_size func initial` by
+    (irule abi_encode_charge_difference_lift >>
+     conj_tac >- first_assum ACCEPT_TAC >> qexists `observer` >>
+     fs[abi_encode_exec_frame_def]) >>
+  fs[alloca_room_def, fmp_room_def, abi_encode_exec_frame_def] >>
+  disch_tac >> qpat_x_assum `_ ==> _ /\ _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> decide_tac
+QED
+
+Theorem abi_encode_caller_immutable_separation:
+  immutable_alloca_sep func cenv cx vs initial /\
+  initial.vs_alloca_next <= actual.vs_alloca_next /\
+  (!i r. FLOOKUP initial.vs_allocas i = SOME r ==>
+    FLOOKUP actual.vs_allocas i = SOME r) /\
+  (!i q k. FLOOKUP actual.vs_allocas i = SOME(q,k) /\
+    FLOOKUP initial.vs_allocas i = NONE ==> initial.vs_alloca_next <= q) /\
+  (!name entry ptr sz.
+    lookup_scopes name vs.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME(PtrVar (Var ptr) sz) ==>
+    lookup_var ptr actual = lookup_var ptr initial) ==>
+  immutable_alloca_sep func cenv cx vs actual
+Proof
+  strip_tac >>
+  `!name b n. local_region cenv vs.scopes actual name b n ==>
+    local_region cenv vs.scopes initial name b n` by
+    (simp_tac bool_ss [local_region_def] >> rpt strip_tac >>
+     qpat_x_assum `!name entry ptr sz. _` drule_all >>
+     strip_tac >> qexistsl [`entry`, `p`, `w`] >> gvs[]) >>
+  fs[immutable_alloca_sep_def] >> disch_tac >> fs[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!name tv v off. _` drule_all >> strip_tac >>
+  conj_tac >- decide_tac >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `FLOOKUP initial.vs_allocas inst.inst_id`
+  >- (qpat_x_assum `!i q k. _` drule_all >>
+      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  PairCases_on `x` >>
+  `FLOOKUP actual.vs_allocas inst.inst_id = SOME(x0,x1)` by metis_tac[] >>
+  gvs[] >> metis_tac[]
+QED
