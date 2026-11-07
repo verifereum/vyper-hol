@@ -146,7 +146,7 @@ QED
 Resume ptr_paired_mcopy_endpoint_inputs[transport]:
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
-    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >> metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
   `!op. MEM op [dop;sop;nop] ==>
      ptr_lookup_transport births positions (op_prov TG op)
        (ptrDiscipline$op_taint a.po_taint op)

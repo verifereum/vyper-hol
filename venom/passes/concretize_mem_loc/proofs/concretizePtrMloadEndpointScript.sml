@@ -124,7 +124,7 @@ QED
 Resume ptr_paired_mload_endpoint_inputs[transport]:
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
      a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
-    fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >> metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
   drule_all ptr_mixed_vars_eval_presence >>
   disch_then (qspec_then `op` mp_tac) >> simp[] >> strip_tac >>
   Cases_on `eval_operand op a.po_state` >> gvs[] >>

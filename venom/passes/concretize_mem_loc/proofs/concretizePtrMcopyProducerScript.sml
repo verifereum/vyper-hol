@@ -6,7 +6,7 @@ Ancestors concretizePtrMcopyContent concretizePtrMcopyEndpoint concretizePtrOrdi
   concretizePtrActivationChronology concretizePtrDeletedGapHistory
   concretizePtrTaggedSupport concretizePtrLedgerProbe concretizePtrPrefixLedger
   concretizePtrStagePlacements concretizePtrSharedFields concretizePtrOpaqueRetpc
-  concretizePtrAllocationSize concretizePtrPairedNextAttach
+  concretizePtrAllocationSize concretizePtrPairedNextAttach concretizePtrRequestHistory
   concretizePtrValueTransport concretizePtrBytes concretizePtrComparisonTransport
   concretizeMemLocDefs stackPlanGen stackPlanTypes ptrDiscipline o1PassContract
   unitShapeDefs unitLabelMapIdentity venomWf cfgWf o1ScheduleDecomp unitMemInv contextCodegenRel codegenRel memLocDefs
@@ -219,7 +219,7 @@ Resume ptr_mcopy_write_producer[classify]:
     ( `ptr_lookup_transport births positions (op_prov TG dop) (op_taint a.po_taint dop)
         (eval_operand dop a.po_state) (eval_operand dop at.po_state)` suffices_by simp[] >>
       irule ptr_mixed_vars_eval >> conj_tac
-      >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def] >>
+      >- (fs[ptr_paired_sample_def] >> metis_tac[ptr_history_content_labels]) >>
       qexistsl_tac [`a.po_fn`,`at.po_fn`] >> fs[ptr_paired_sample_def]) >>
   `0 < LENGTH h` by
     (drule ptr_gap_ownership_history >> strip_tac >>
@@ -400,8 +400,13 @@ Resume ptr_paired_prefix_mcopy[sample]:
     (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, fn_inst_wf_def,
         EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
   `a.po_inst.inst_outputs = []` by gvs[inst_wf_def] >>
-  gvs[ptr_paired_sample_def, ptr_mixed_vars_def, ptr_opaque_env_def,
-      ptr_core_shared_def, ptr_shared_fields_def, step_taint_def,
+  fs[ptr_paired_sample_def] >>
+  simp[ptr_paired_sample_def] >> reverse conj_tac
+  >- (gvs[mcopy_def, write_memory_with_expansion_def] >>
+      irule ptr_history_content_masks >> qexists_tac `a.po_taint` >>
+      simp[step_taint_def, set_var_taint_def, adopt_reset_def,
+           store_taint_def, imm_taint_def]) >>
+  gvs[ptr_mixed_vars_def, ptr_opaque_env_def, step_taint_def,
       mcopy_def, write_memory_with_expansion_def, set_var_taint_def,
       lookup_var_def, op_taint_def, DRESTRICT_UNIV] >> metis_tac[]
 QED
@@ -435,7 +440,7 @@ Resume ptr_paired_prefix_mcopy[retention]:
   drule ptr_structural_trace_embedding >> strip_tac >>
   `LAST h = a /\ 0 < LENGTH h /\ LENGTH ht = SUC (LENGTH done)` by
     (drule ptr_chrono_history_end >> strip_tac >>
-     fs[ptr_paired_prefix_def, ptr_paired_samples_def]) >>
+     fs[ptr_paired_prefix_def, ptr_paired_samples_def, ptr_sample_list_def]) >>
   `LENGTH ht - 1 = LENGTH done` by decide_tac >>
   `EVERY (\n. SUC n < LENGTH h) done` by
     (qpat_assum `ptr_event_embedding h ht (done ++ _)` mp_tac >>
@@ -448,8 +453,8 @@ Resume ptr_paired_prefix_mcopy[retention]:
   conj_tac >- (irule ptr_paired_samples_pair >> simp[]) >>
   conj_tac >- (irule ptr_paired_alignment_pair >> simp[]) >>
   conj_tac >- (irule ptr_paired_callers_retained >> simp[] >>
-               fs[ptr_paired_samples_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
-  irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def]
+               fs[ptr_paired_samples_def, ptr_sample_list_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
+  irule ptr_paired_writes_pair >> simp[] >> fs[ptr_paired_samples_def, ptr_sample_list_def]
 QED
 
 Finalise ptr_paired_prefix_mcopy

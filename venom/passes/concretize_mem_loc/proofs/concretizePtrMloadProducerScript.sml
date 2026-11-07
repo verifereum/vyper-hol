@@ -136,7 +136,11 @@ Resume ptr_paired_prefix_mload[sample]:
   rpt strip_tac >> gvs[] >>
   simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
   reverse conj_tac
-  >- fs[ptr_paired_sample_def, ptr_core_shared_def, ptr_shared_fields_def, update_var_def] >>
+  >- (fs[ptr_paired_sample_def] >>
+      irule concretizePtrRequestHistoryTheory.ptr_history_content_masks >>
+      qexists_tac `a.po_taint` >>
+      simp[step_taint_def, set_var_taint_def, store_taint_def,
+           adopt_reset_def, imm_taint_def]) >>
   qpat_x_assum `ptr_mixed_vars _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `_.inst_opcode = MLOAD` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> strip_tac >>
