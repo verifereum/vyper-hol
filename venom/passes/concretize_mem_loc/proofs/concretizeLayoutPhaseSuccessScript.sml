@@ -2,7 +2,7 @@ Theory concretizeLayoutPhaseSuccess
 Ancestors concretizeLayoutPhaseBindings concretizeLayoutPhaseOrigin
   concretizeLayoutSupplement frameRelocationLocal frameRelocationGuardedValues
   frameRelocationTaintOrder frameJointDemand frameRelocationBinding
-  concretizeLayoutPhaseInputs
+  concretizeLayoutPhaseInputs frameResolvedCoherent
 
 Theorem layout_ordinary_success_phase:
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -34,6 +34,10 @@ Theorem layout_ordinary_success_phase:
   post.vs_initial_fmp = tpost.vs_initial_fmp /\
   post.vs_params = s.vs_params /\ tpost.vs_params = t.vs_params ==>
   ?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\ k.lop_target_taint = un /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)
 Proof
@@ -43,6 +47,8 @@ Proof
     gvs[layout_ordinary_entry_def] >>
   drule_all layout_ordinary_bound_trace_advance >> strip_tac >>
   qexists_tac `k with lop_target_taint := un` >> simp[] >>
+  conj_tac >- gvs[layout_phase_normalize_def] >>
+  conj_tac >- simp[Once resolved_annotation_update_cases] >>
   irule layout_ordinary_pending_outcome >> simp[layout_phase_origin_def] >>
   conj_tac >- (drule_all layout_origin_successful_step >> simp[]) >>
   simp[] >> irule layout_ordinary_state_intro >> gvs[] >>

@@ -28,6 +28,10 @@ Theorem layout_external_trace_step:
   step_inst_base inst s = OK post ==>
   ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
     k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)
 Proof
@@ -68,11 +72,15 @@ Proof
     metis_tac[step_inst_ok_code_data] >>
   `?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
     k.lop_target_taint = step_taint inst t tpost g.lop_target_taint /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)` by
     (irule layout_ordinary_success_phase >>
      simp[resolved_out_def, ETA_AX] >>
      metis_tac[ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp,
        venomInstPropsTheory.step_preserves_params]) >>
-  qexistsl_tac [`k`, `tpost`] >> simp[]
+  qexistsl_tac [`k`, `tpost`] >> gvs[]
 QED

@@ -16,6 +16,10 @@ Theorem layout_param_trace_step:
   step_inst_base inst s = OK post ==>
   ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
     k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)
 Proof
@@ -57,8 +61,13 @@ Proof
   `step_inst fuel C inst s = OK post` by simp[step_inst_non_invoke] >>
   `?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
     k.lop_target_taint = step_taint inst t tpost g.lop_target_taint /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
-      (INL g) (INL k) (OK post) (OK tpost)` suffices_by metis_tac[] >>
+      (INL g) (INL k) (OK post) (OK tpost)` suffices_by
+    (strip_tac >> qexistsl_tac [`k`, `tpost`] >> gvs[]) >>
   irule layout_var_gas_success_phase >> simp[] >>
   goal_assum (drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[is_terminator_def, ETA_AX] >>

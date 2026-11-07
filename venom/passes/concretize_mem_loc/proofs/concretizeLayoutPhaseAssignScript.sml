@@ -19,6 +19,10 @@ Theorem layout_assign_trace_step:
   step_inst_base inst s = OK post ==>
   ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
     k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)
 Proof

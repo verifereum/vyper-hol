@@ -27,6 +27,10 @@ Theorem layout_readcopy_trace_step:
   step_inst_base inst s = OK post ==>
   ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
     k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)
 Proof
@@ -61,7 +65,7 @@ Proof
     (map_every (fn pat => qpat_x_assum pat mp_tac)
        [`step_inst_base inst s = OK post`, `step_inst_base inst t = OK tpost`] >>
      pure_once_rewrite_tac[step_inst_base_def] >>
-     fs[MEM] >> simp[opcode_case_def, AllCaseEqs()] >> rpt strip_tac >>
+     simp[opcode_case_def, AllCaseEqs()] >> rpt strip_tac >>
      gvs[write_memory_with_expansion_def]) >>
   `concretize_supplement D (step_taint inst s post tn) post tpost /\
    post.vs_inst_idx = s.vs_inst_idx /\ post.vs_initial_fmp = tpost.vs_initial_fmp /\

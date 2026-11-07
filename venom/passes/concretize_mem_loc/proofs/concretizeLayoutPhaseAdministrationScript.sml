@@ -51,6 +51,10 @@ Theorem layout_var_gas_success_phase:
   (step_taint inst s post tn).t_trans = tn.t_trans /\
   (step_taint inst s post tn).t_imm = tn.t_imm ==>
   ?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\ k.lop_target_taint = un /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
     layout_phase_ok_abort D lo vs0 C C' q0 es qs q
       (INL g) (INL k) (OK post) (OK tpost)
 Proof
