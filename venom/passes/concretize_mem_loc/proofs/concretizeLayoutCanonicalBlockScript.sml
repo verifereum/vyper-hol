@@ -1,6 +1,6 @@
 Theory concretizeLayoutCanonicalBlock
 Ancestors concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
-  concretizeLayoutCanonicalDriver
+  concretizeLayoutCanonicalDriver concretizeLayoutAlignedControl concretizeLayoutPhaseCompose
   concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin frameRankedTerminalCorridor
   concretizeLayoutPairedEntry concretizeLayoutStagePairing concretizeStepStructure
   frameSelectedSimulation frameFiniteExecution venomExecSemantics venomInst
@@ -166,6 +166,99 @@ Proof
   first_assum (drule_then strip_assume_tac) >>
   gvs[] >> qexistsl [`g'`, `i`, `j`, `s`, `t`] >>
   fs[layout_canonical_block_witness_def, layout_paired_ordinary_def]
+QED
+
+Theorem layout_canonical_success_ready:
+  layout_canonical_success D lo vs0 C C' q0 es qs ass qend m invoke a p tp /\
+  qn = EL (SUC m) (q0::qs) ==>
+  ?b. layout_phase_origin b = layout_phase_origin a /\
+    layout_canonical_entry D lo vs0 C C' q0 es qs ass qend
+      qn (SUC m) b
+      (p with vs_inst_idx := SUC p.vs_inst_idx)
+      (tp with vs_inst_idx := SUC tp.vs_inst_idx)
+Proof
+  simp[layout_canonical_success_def] >> strip_tac >>
+  Cases_on `b`
+  >- (gvs[] >>
+      rename1 `layout_driver_indexed es ass k` >>
+      qexists `INL (k with lop_pending := F)` >>
+      simp[layout_phase_origin_def, layout_canonical_entry_def] >>
+      fs[layout_aligned_entry_def] >>
+      drule layout_ordinary_administrative >> strip_tac >>
+      Cases_on `invoke` >>
+      gvs[layout_canonical_ready_def, layout_aligned_entry_def,
+         layout_ordinary_entry_def, layout_ordinary_trace_def,
+         layout_phase_normalize_def, layout_phase_origin_def, layout_driver_indexed_def,
+         concretizeLayoutCanonicalIndexTheory.layout_phase_canonical_def]) >>
+  gvs[] >> qexists `INR (y with ltp_pending := F)` >>
+  simp[layout_phase_origin_def, layout_canonical_entry_def] >>
+  drule layout_corridor_administrative >> gvs[layout_phase_origin_def]
+QED
+
+Theorem layout_canonical_corridor_next:
+  ~g.ltp_pending /\ layout_corridor_entry C g s t /\
+  get_instruction g.ltp_origin.lbo_source s.vs_inst_idx = SOME i /\
+  ~is_terminator i.inst_opcode /\ finite_step C i s (OK p) ==>
+  ?k tp. k.ltp_origin = g.ltp_origin /\ ~k.ltp_pending /\
+    get_instruction g.ltp_origin.lbo_target t.vs_inst_idx = SOME i /\
+    finite_step C' i t (OK tp) /\
+    p.vs_inst_idx = s.vs_inst_idx /\ tp.vs_inst_idx = t.vs_inst_idx /\
+    layout_corridor_entry C k
+      (p with vs_inst_idx := SUC s.vs_inst_idx)
+      (tp with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `ranked_terminal_entry g.ltp_origin.lbo_source g.ltp_origin.lbo_target
+     g.ltp_remaining s t` by
+    gvs[layout_corridor_entry_def, layout_phase_normalize_def] >>
+  Cases_on `g.ltp_remaining`
+  >- (fs[ranked_terminal_entry_def, ranked_terminal_corridor_def] >>
+      gvs[] >> fs[is_terminator_def]) >>
+  `i.inst_opcode = ASSIGN` by
+    (fs[ranked_terminal_entry_def, ranked_terminal_corridor_def] >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]) >>
+  `step_inst_base i s = OK p` by
+    (qpat_x_assum `finite_step C i s (OK p)` mp_tac >>
+     simp[Once finite_step_cases] >> metis_tac[]) >>
+  drule_all layout_corridor_assign >> strip_tac >>
+  `p.vs_inst_idx = s.vs_inst_idx /\ q.vs_inst_idx = t.vs_inst_idx` by
+    metis_tac[step_inst_base_preserves_inst_idx, is_terminator_def] >>
+  drule layout_corridor_administrative >> simp[] >> strip_tac >>
+  qexistsl [`g with <|ltp_pending := F; ltp_remaining := n|>`, `q`] >>
+  simp[] >> irule finite_step_base >> simp[]
+QED
+
+Theorem layout_canonical_retained_reenter:
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    q n bb s bb' t (INL a) /\
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INL a) /\
+  i.inst_opcode <> NOP /\ get_instruction bb s.vs_inst_idx = SOME i /\
+  decoration_at fn i s q /\ decoration_entry fn sn qn /\
+  sn.vs_current_bb = s.vs_current_bb /\
+  sn.vs_inst_idx = SUC s.vs_inst_idx /\ tn.vs_inst_idx = SUC t.vs_inst_idx /\
+  layout_phase_origin b = a.lop_origin /\
+  layout_canonical_entry D lo vs0 C C' q0 es qs ass qend qn m b sn tn ==>
+  layout_canonical_block_witness D lo vs0 C C' q0 es qs ass qend
+    qn m bb sn bb' tn b
+Proof
+  Cases_on `b`
+  >- (simp[layout_canonical_block_witness_def,
+        layout_canonical_step_witness_def, layout_canonical_entry_def,
+        layout_canonical_ready_def, layout_phase_origin_def,
+        layout_paired_ordinary_def] >> strip_tac >>
+      Cases_on `q` >>
+      gvs[frameFiniteJointDecorationTheory.decoration_entry_def,
+          frameFiniteJointDecorationTheory.decoration_at_def] >>
+      rename1 `(concretize_inst_with_positions pp i).inst_opcode <> NOP` >>
+      qmatch_asmsub_rename_tac `layout_driver_row C' fn ft pp` >>
+      qexistsl [`fn`, `ft`, `pp`] >> simp[] >>
+      qpat_x_assum `layout_block_pair pp _ _ _ _` mp_tac >>
+      disch_then (mp_then Any mp_tac
+        concretizeLayoutBlockPairingTheory.layout_block_pair_advance) >>
+      simp[ADD1] >> metis_tac[]) >>
+  simp[layout_canonical_block_witness_def, layout_paired_ordinary_def,
+       layout_canonical_entry_def, layout_phase_origin_def] >> metis_tac[]
 QED
 
 val _ = export_theory();
