@@ -480,6 +480,110 @@ Proof
      contract_transient_def] >> gvs[]
 QED
 
+Theorem ptr_paired_hash_log_execution[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  MEM a.po_inst.inst_opcode [SHA3; LOG] /\
+  (!out. MEM out a.po_inst.inst_outputs ==> ~retpc_var a.po_fn out) /\
+  step_inst fuel C' a.po_inst at.po_state = OK postt ==>
+  ?post. step_inst 0 C a.po_inst a.po_state = OK post /\
+    ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
+      (step_taint a.po_inst a.po_state post a.po_taint)
+      a.po_fn at.po_fn post postt /\
+    ptr_history_content (step_taint a.po_inst a.po_state post a.po_taint) post postt /\
+    post.vs_allocas = a.po_state.vs_allocas /\
+    post.vs_current_bb = a.po_state.vs_current_bb /\
+    post.vs_inst_idx = a.po_state.vs_inst_idx /\
+    post.vs_params = a.po_state.vs_params /\
+    postt.vs_params = at.po_state.vs_params
+Proof
+  strip_tac >> drule_all ptr_paired_hash_log_endpoint >> strip_tac >>
+  `ptr_history_content a.po_taint a.po_state at.po_state` by
+    (drule ptr_paired_prefix_endpoint >> simp[ptr_paired_sample_def]) >>
+  `?off n. MEM (off,n) (source_memory_read_ranges a.po_inst at.po_state)` by
+    (irule ptr_hash_log_successful_read >> metis_tac[]) >>
+  drule_all ptr_paired_hash_log_read_inputs >> strip_tac >>
+  `opaque_use_ok a.po_fn` by fs[fn_shape_ok_def] >>
+  Cases_on `a.po_inst.inst_opcode = SHA3`
+  >- suspend "sha3"
+  >> suspend "log"
+QED
+
+Resume ptr_paired_hash_log_execution[sha3]:
+  `?addr szop out. a.po_inst.inst_operands = [addr;szop] /\
+     a.po_inst.inst_outputs = [out]` by
+    gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute] >>
+  `ops.iao_ofst = addr` by gvs[mem_read_ops_def] >>
+  `?sz. eval_operand szop a.po_state = SOME sz /\ n = w2n sz` by
+    (qpat_x_assum `MEM (w2n x,n) (source_memory_read_ranges _ _)` mp_tac >>
+     Cases_on `eval_operand szop a.po_state` >>
+     gvs[source_memory_read_ranges_def, memory_range_of_operands_def]) >>
+  `eval_operand szop a.po_state = eval_operand szop at.po_state` by
+    (irule ptr_sha3_size_evaluation >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `?v. step_inst 0 C a.po_inst a.po_state = OK (update_var out v a.po_state) /\
+       step_inst fuel C' a.po_inst at.po_state = OK (update_var out v at.po_state)` by
+    (irule ptr_sha3_execution >> metis_tac[]) >>
+  `postt = update_var out v at.po_state` by fs[] >>
+  `ptr_mixed_vars births positions
+     (step_prov PT TG a.po_inst (update_var out v a.po_state))
+     (step_taint a.po_inst a.po_state (update_var out v a.po_state) a.po_taint)
+     a.po_fn at.po_fn (update_var out v a.po_state) (update_var out v at.po_state) /\
+   ptr_history_content
+     (step_taint a.po_inst a.po_state (update_var out v a.po_state) a.po_taint)
+     (update_var out v a.po_state) (update_var out v at.po_state)` by
+    (irule ptr_sha3_successor_relations >> simp[] >> metis_tac[MEM]) >>
+  qexists_tac `update_var out v a.po_state` >> gvs[] >> simp[update_var_def]
+QED
+Resume ptr_paired_hash_log_execution[log]:
+  `a.po_inst.inst_opcode = LOG` by fs[MEM] >>
+  `?tc rest. a.po_inst.inst_operands = Lit tc::rest /\
+     LENGTH rest = w2n tc+2 /\ a.po_inst.inst_outputs = []` by
+    (qpat_x_assum `inst_wf a.po_inst` mp_tac >>
+     simp[inst_wf_def] >> metis_tac[LENGTH_NIL]) >>
+  `?addr szop topics. REVERSE rest = addr::szop::topics` by
+    (Cases_on `REVERSE rest` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  `ops.iao_ofst = addr` by
+    (drule_all ptr_log_read_descriptor >> strip_tac >> gvs[]) >>
+  drule_all ptr_log_scalar_evaluations >> strip_tac >>
+  `?sz vals. eval_operand szop at.po_state = SOME sz /\
+     eval_operands topics at.po_state = SOME vals /\ n = w2n sz` by
+    (qpat_x_assum `MEM (off,n) (source_memory_read_ranges _ _)` mp_tac >>
+     Cases_on `eval_operand szop at.po_state` >>
+     Cases_on `eval_operands topics at.po_state` >>
+     gvs[source_memory_read_ranges_def, memory_range_of_operands_def]) >>
+  `a.po_state.vs_call_ctx = at.po_state.vs_call_ctx` by
+    metis_tac[ptr_history_content_call_ctx] >>
+  `?ev. step_inst 0 C a.po_inst a.po_state =
+       OK (a.po_state with vs_logs := a.po_state.vs_logs ++ [ev]) /\
+     postt = at.po_state with vs_logs := at.po_state.vs_logs ++ [ev]` by
+    (irule ptr_log_execution >>
+     rpt (goal_assum (drule_at Any)) >> gvs[] >> metis_tac[]) >>
+  `ptr_mixed_vars births positions
+     (step_prov PT TG a.po_inst (a.po_state with vs_logs := a.po_state.vs_logs ++ [ev]))
+     (step_taint a.po_inst a.po_state
+       (a.po_state with vs_logs := a.po_state.vs_logs ++ [ev]) a.po_taint)
+     a.po_fn at.po_fn (a.po_state with vs_logs := a.po_state.vs_logs ++ [ev])
+       (at.po_state with vs_logs := at.po_state.vs_logs ++ [ev]) /\
+   ptr_history_content
+     (step_taint a.po_inst a.po_state
+       (a.po_state with vs_logs := a.po_state.vs_logs ++ [ev]) a.po_taint)
+     (a.po_state with vs_logs := a.po_state.vs_logs ++ [ev])
+     (at.po_state with vs_logs := at.po_state.vs_logs ++ [ev])` by
+    (irule ptr_log_successor_relations >> simp[]) >>
+  qexists_tac `a.po_state with vs_logs := a.po_state.vs_logs ++ [ev]` >> simp[]
+QED
+Finalise ptr_paired_hash_log_execution
+
 Theorem ptr_paired_hash_log_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
