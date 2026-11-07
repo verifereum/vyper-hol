@@ -2358,7 +2358,7 @@ Resume internal_prologue_run[separation]:
        _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` irule >>
     simp[] >> metis_tac[]])
 QED
-Finalise internal_prologue_run[local]
+Finalise internal_prologue_run
 
 
 (* Running the prologue of an internal function func, compiled in cenv from
