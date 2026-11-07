@@ -159,6 +159,138 @@ Proof
   gvs[regions_disjoint_def] >> decide_tac
 QED
 
+Theorem immutable_store_wb_frame[local]:
+  !ctx func cenv cx env es s imms id off tv a k word sm.
+    expr_sim_inv cenv cx env es /\
+    stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,a) /\
+    k + 32 <= type_memory_size tv ==>
+    wb_frame cenv es sm s (mstore (off+k) word s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!b sz. ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
+           (?name. local_region cenv es.scopes s name b sz)) ==>
+     mem_bytes_at b sz (mstore (off+k) word s).vs_memory =
+     mem_bytes_at b sz s.vs_memory` by
+    (rpt gen_tac >> disch_tac >>
+     irule immutable_store_frame_bytes >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `(mstore (off+k) word s).vs_vars = s.vs_vars /\
+   (mstore (off+k) word s).vs_allocas = s.vs_allocas` by
+    simp[mstore_def, write_memory_with_expansion_def] >>
+  simp[wb_frame_def, lookup_var_def] >>
+  conj_tac
+  >- (rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  irule locals_kept_regions >> rpt strip_tac >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem immutable_replace_mstore_stmt_frame[local]:
+  !ctx func cenv cx es s imms id tv a updated es' p word.
+    stmt_state_rel ctx func cenv cx es s /\
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,a) /\
+    es' = es with immutables :=
+      (cx.txn.target,set_source_immutables cenv.ce_module
+        (get_source_immutables cenv.ce_module imms |+ (id,(tv,updated))) imms) ::
+      ADELKEY cx.txn.target es.immutables /\
+    immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor
+      es' (mstore p word s) /\
+    local_ptrs_rel func cenv es.scopes (mstore p word s) ==>
+    stmt_state_rel ctx func cenv cx es' (mstore p word s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `immutable_alloca_sep func cenv cx es' (mstore p word s)` by
+    (`immutable_alloca_sep func cenv cx es s` by gvs[stmt_state_rel_def] >>
+     gvs[immutable_alloca_sep_def, immutable_decl_sep_alt,
+         mstore_def, write_memory_with_expansion_def,
+         get_source_immutables_def, set_source_immutables_def,
+         local_region_def, lookup_var_def] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     strip_tac >> rpt gen_tac >> strip_tac >>
+     Cases_on `name = id` >> gvs[FLOOKUP_UPDATE] >>
+     metis_tac[]) >>
+  irule stmt_state_rel_allocas_frame >>
+  reverse (rpt conj_tac)
+  >- (qexistsl [`es`, `s`] >>
+      simp[mstore_def, write_memory_with_expansion_def])
+  >- (gvs[stmt_state_rel_def, state_rel_def,
+           storage_rel_def, transient_rel_def, accounts_rel_def, logs_rel_def,
+           contract_storage_def, contract_transient_def,
+           mstore_def, write_memory_with_expansion_def])
+  >- first_assum ACCEPT_TAC >>
+  gvs[stmt_state_rel_def, immutable_base_zero_def,
+      mstore_def, write_memory_with_expansion_def]
+QED
+
+Theorem immutable_pop_stmt_state_rel[local]:
+  !ctx func cenv cx env es s imms id off tv a path k etv n vs updated.
+    cenv.ce_is_ctor /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel ctx func cenv cx es s /\
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+    FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,a) /\
+    mutable_place_path tv path /\ value_has_type tv a /\ well_formed_type_value tv /\
+    mem_path_offset tv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+    evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] /\
+    assign_subscripts tv a path (Replace (ArrayV (DynArrayV (FRONT vs)))) =
+      INL updated ==>
+    stmt_state_rel ctx func cenv cx
+      (es with immutables :=
+        (cx.txn.target,set_source_immutables cenv.ce_module
+          (get_source_immutables cenv.ce_module imms |+ (id,(tv,updated))) imms) ::
+        ADELKEY cx.txn.target es.immutables)
+      (mstore (off+k) (n2w (LENGTH vs-1)) s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module T es s` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
+  `immutable_value_admissible tv a /\ val_in_memory tv a off s.vs_memory` by
+    (gvs[immutables_rel_def] >> first_x_assum drule_all >> simp[]) >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `k + 32 <= type_memory_size tv` by
+    (gvs[valueEncodingTheory.type_memory_size_def] >> decide_tac) >>
+  `val_wf tv a` by metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
+  `immutable_value_admissible tv updated` by
+    (irule immutable_pop_path_admissible >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `val_in_memory tv updated off
+     (mstore (off+k) (n2w (LENGTH vs-1)) s).vs_memory` by
+    (irule exprSimPopNestedLocalMemoryTheory.val_in_memory_pop_path >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `immutable_value_bytes_rel tv updated
+     (mem_bytes_at off (type_memory_size tv)
+       (mstore (off+k) (n2w (LENGTH vs-1)) s).vs_memory)` by
+    (irule immutable_pop_path_bytes >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx es' t` >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module T es' t` by
+    (irule immutables_rel_ctor_update >>
+     qexistsl [`es`, `id`, `imms`, `off`, `s`, `tv`, `updated`] >>
+     simp[Abbr `es'`, Abbr `t`] >> rpt strip_tac >>
+     pure_once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+     irule immutable_store_other_bytes >>
+     metis_tac[]) >>
+  `t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
+   t.vs_alloca_next = s.vs_alloca_next` by
+    simp[Abbr `t`, mstore_def, write_memory_with_expansion_def] >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
+  `!name b sz. local_region cenv es.scopes s name b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+    (rpt strip_tac >> unabbrev_all_tac >>
+     irule immutable_store_frame_bytes >> metis_tac[]) >>
+  `local_ptrs_rel func cenv es.scopes t` by
+    (irule localPtrsPropsTheory.local_ptrs_rel_mem_agree >> qexists `s` >>
+     simp[lookup_var_def] >> conj_tac >- metis_tac[] >>
+     rpt strip_tac >> gvs[]) >>
+  unabbrev_all_tac >>
+  irule immutable_replace_mstore_stmt_frame >>
+  conj_tac >- asm_rewrite_tac[] >>
+  metis_tac[]
+QED
+
 (* Pop on a member of an immutable in the constructor, which Python's
    checker accepts for a complex immutable (local.py skips the
    modification count when var_info is None), with pure indices.  The
