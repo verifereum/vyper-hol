@@ -24,7 +24,7 @@
  *)
 Theory bodyPtrCallResidual
 Ancestors
-  bodyPtrPreds vyperAST vyperInterpreter list
+  bodyPtrPreds vyperAST vyperInterpreter list rawLogPtr
 
 val _ = Parse.hide "body";
 
@@ -34,7 +34,8 @@ Theorem raw_log_case_ptr_residual:
   !cx v20 es v21.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v20 RawLog es v21)
 Proof
-  cheat
+  rpt strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt strip_tac >> drule_all raw_log_body_sim_ptr >> simp[]
 QED
 
 (* RESIDUAL: false while RawRevert lowers to INVALID; waits on the
