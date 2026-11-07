@@ -20,7 +20,9 @@ fun rewrite_step_inst_base_opcode eq = let
   val (_, rewrite) = valOf (List.find
     (fn (key, _) => aconv key (rhs (concl eq)))
     step_inst_base_opcode_rewrites)
-in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+  val th = MATCH_MP rewrite eq
+in RULE_ASSUM_TAC (PURE_ONCE_REWRITE_RULE [th]) >>
+   PURE_ONCE_REWRITE_TAC [th] end;
 
 val step_inst_base_opcode_tac =
   qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
@@ -48,7 +50,9 @@ Theorem step_base_preserves_transient[local]:
     s'.vs_transient = s.vs_transient
 Proof
   rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[step_inst_base_def]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+     step_inst_base_opcode_tac >> simp[]) >>
   `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
   drule_all write_effects_sound_transient >> simp[]
 QED
@@ -63,7 +67,9 @@ Theorem step_base_preserves_accounts[local]:
     s'.vs_accounts = s.vs_accounts
 Proof
   rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[step_inst_base_def]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+     step_inst_base_opcode_tac >> simp[]) >>
   `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
   drule_all write_effects_sound_accounts >> simp[]
 QED
@@ -77,7 +83,9 @@ Theorem step_base_preserves_logs[local]:
     s'.vs_logs = s.vs_logs
 Proof
   rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[step_inst_base_def]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+     step_inst_base_opcode_tac >> simp[]) >>
   `step_inst ARB ARB inst s = OK s'` by simp[Once step_inst_def] >>
   drule_all write_effects_sound_log >> simp[]
 QED
@@ -149,9 +157,9 @@ Theorem step_inst_base_ordinary_fmp_agreement:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = SETFMP`
-  >- (gvs[step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
+  >- (step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
-  >- (gvs[step_inst_base_def, AllCaseEqs()] >> simp[update_var_def]) >>
+  >- (step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> simp[update_var_def]) >>
   imp_res_tac venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
   metis_tac[]
 QED
@@ -185,9 +193,9 @@ Proof
    v2.vs_return_pc_token = s2.vs_return_pc_token` by
     metis_tac[step_inst_base_preserves_stable_frame_metadata] >>
   Cases_on `inst.inst_opcode = SETFMP`
-  >- (gvs[step_inst_base_def, AllCaseEqs()] >> metis_tac[]) >>
+  >- (step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = DALLOCA`
-  >- (gvs[step_inst_base_def, AllCaseEqs()] >> simp[update_var_def]) >>
+  >- (step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> simp[update_var_def]) >>
   imp_res_tac venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
   metis_tac[]
 QED
