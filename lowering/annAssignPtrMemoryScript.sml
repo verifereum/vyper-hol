@@ -136,7 +136,7 @@ Resume compile_annassign_memory_widen_stmt_frag_ptr[continue]:
  irule annassign_memory_concrete_rhs_outcome_ptr >>
  simp[] >>
  conj_tac >- metis_tac[] >>
- conj_tac >- metis_tac[] >>
+ conj_tac >- (qpat_assum `expr_type e = vtyp \/ _` strip_assume_tac >> simp[]) >>
  conj_tac >- metis_tac[] >>
  conj_tac >- metis_tac[] >>
  goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
