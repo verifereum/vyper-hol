@@ -173,16 +173,25 @@ val ok_transfer_finish_tac =
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
   rpt strip_tac >>
-  TRY (exec_ok_transfer_tac >> NO_TAC) >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >> NO_TAC) >>
-  TRY (res_tac >> gvs[] >> NO_TAC) >>
-  `2 <= LENGTH rest` by simp[] >>
-  `!op. MEM op rest ==>
-        eval_operand op s' = eval_operand op s` by metis_tac[] >>
-  drule_all log_reversed_operands_agree >> strip_tac >>
-  gvs[];
+  (fn (asl,w) =>
+    let
+      fun has c = can (find_term (same_const c)) w
+      val tac =
+        if has ``exec_pure1`` then drule_all exec_pure1_ok_transfer >> simp[]
+        else if has ``exec_pure2`` then drule_all exec_pure2_ok_transfer >> simp[]
+        else if has ``exec_pure3`` then drule_all exec_pure3_ok_transfer >> simp[]
+        else if has ``exec_read0`` then drule_all exec_read0_ok_transfer >> simp[]
+        else if has ``exec_read1`` then drule_all exec_read1_ok_transfer >> simp[]
+        else if has ``exec_write2`` then drule_all exec_write2_ok_transfer >> simp[]
+        else
+          gvs[AllCaseEqs()] >>
+          rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+          res_tac >> gvs[] >>
+          `2 <= LENGTH rest` by simp[] >>
+          `!op. MEM op rest ==>
+                eval_operand op s' = eval_operand op s` by metis_tac[] >>
+          drule_all log_reversed_operands_agree >> strip_tac >> gvs[]
+    in tac (asl,w) end);
 
 val transfer_determined_finish_tac =
   qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
@@ -246,6 +255,13 @@ Proof
     (rpt strip_tac >> res_tac >> gvs[]) >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
+  >- ok_transfer_finish_tac
   >- ok_transfer_finish_tac
   >- ok_transfer_finish_tac
   >- ok_transfer_finish_tac
@@ -583,6 +599,13 @@ Proof
       gvs[AllCaseEqs()] >>
       rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
       transfer_close_tac)
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
   >> transfer_determined_finish_tac
 QED
 
@@ -638,6 +661,13 @@ Proof
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
       read_effects_def, write_effects_def,
       all_effects_def, empty_effects_def]
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
+  >- output_vars_finish_tac
   >- output_vars_finish_tac
   >- output_vars_finish_tac
   >- output_vars_finish_tac
@@ -825,7 +855,12 @@ Proof
   >- transfer_determined_finish_tac  (* EXTCODEHASH *)
   >- transfer_determined_finish_tac  (* ASSIGN *)
   >- transfer_determined_finish_tac  (* PARAM *)
-  >> transfer_determined_finish_tac  (* remaining effect-free opcodes *)
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >- transfer_determined_finish_tac
+  >> transfer_determined_finish_tac  (* remaining effect-free opcode *)
 QED
 
 

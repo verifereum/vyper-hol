@@ -541,7 +541,7 @@ val alloca_field_finish_tac =
     qpat_x_assum `step_inst_base inst s = _` mp_tac
   ] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
   FIRST [
     rw[exec_pure1_def] >> alloca_field_solve_tac >> NO_TAC,
     rw[exec_pure2_def] >> alloca_field_solve_tac >> NO_TAC,
@@ -775,7 +775,11 @@ Triviality step_inst_base_fmp_write_alloca_fields[local]:
     (inst.inst_opcode = DALLOCA \/ inst.inst_opcode = SETFMP) ==>
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next
 Proof
-  rpt strip_tac >> alloca_field_finish_tac
+  rpt gen_tac >> DISCH_TAC >>
+  Cases_on `inst.inst_opcode = DALLOCA`
+  >- gvs[step_inst_base_opcode_eqs, AllCaseEqs(), update_var_def] >>
+  `inst.inst_opcode = SETFMP` by fs[] >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs(), update_var_def]
 QED
 
 Triviality step_inst_base_mem_write_alloca_fields[local]:
@@ -817,15 +821,12 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[] >>
-  simp[exec_ext_call_not_terminal, exec_delegatecall_not_terminal,
-       exec_create_not_terminal] >>
-  rpt strip_tac >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  strip_tac >>
   gvs[AllCaseEqs()] >>
-  imp_res_tac exec_ext_call_preserves_alloca_fields >>
-  imp_res_tac exec_delegatecall_preserves_alloca_fields >>
-  imp_res_tac exec_create_preserves_alloca_fields >>
-  gvs[]
+  FIRST [drule exec_ext_call_preserves_alloca_fields >> simp[],
+         drule exec_delegatecall_preserves_alloca_fields >> simp[],
+         drule exec_create_preserves_alloca_fields >> simp[]]
 QED
 
 Triviality step_inst_base_sstore_alloca_fields[local]:
@@ -917,7 +918,7 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
   simp[] >>
   strip_tac >>
   alloca_field_solve_tac
@@ -1122,7 +1123,9 @@ Proof
     )
     >> Cases_on `inst.inst_opcode = ALLOCA`
     >- (
-      ONCE_REWRITE_TAC[step_inst_def] >> simp[step_inst_base_def] >>
+      ONCE_REWRITE_TAC[step_inst_def] >> simp[] >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
       gvs[venomInstTheory.is_alloca_op_def] >>
       rpt (BasicProvers.TOP_CASE_TAC >> gvs[result_alloca_inv_def]) >>
       metis_tac[exec_alloca_result_inv]
