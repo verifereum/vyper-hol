@@ -1,6 +1,55 @@
 Theory concretizeLayoutCanonicalRunNext
 Ancestors concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
   concretizeLayoutCanonicalDeferred frameSelectedSimulation
+  concretizeLayoutScopedPhase concretizeLayoutPhaseOrigin concretizeLayoutPairedEntry
+  concretizeLayoutStagePairing concretizeLayoutBlockPairing concretizeMemLocDefs
+  concretizeStepStructure passSimulationProofs
+  passSharedDefs venomExecSemantics venomExecProofs venomWf venomInst list
+
+Theorem layout_canonical_run_block_entry[local]:
+  layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
+  EVERY wf_function C.ctx_functions /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK phi /\
+  decoration_entry fn (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) q ==>
+  ?bb' phi'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    eval_phis t bb'.bb_instructions = OK phi' /\
+    layout_canonical_EB D lo vs0 C C' q0 es qs ass qend q n bb
+      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) bb'
+      (phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+Proof
+  strip_tac >> drule layout_canonical_run_phi >>
+  disch_then (qspec_then `ARB` strip_assume_tac) >> gvs[] >>
+  rename1 `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb'` >>
+  fs[layout_canonical_run_def] >>
+  rename1 `layout_driver_row C' fn fn' positions` >>
+  `bb_well_formed bb` by
+    (fs[EVERY_MEM, venomWfTheory.wf_function_def] >>
+     fs[lookup_block_def] >> metis_tac[FIND_MEM]) >>
+  fs[layout_driver_row_def] >>
+  `s.vs_current_bb = t.vs_current_bb` by
+    (fs[contextCodegenRelTheory.enters_block_def, frameControlAgreementTheory.control_agree_def] >>
+     gvs[] >> imp_res_tac eval_phis_preserves_current_bb >> gvs[]) >>
+  `layout_block_pair layout.cl_positions bb bb'
+     (phi_prefix_length bb.bb_instructions)
+     (phi_prefix_length bb'.bb_instructions)` by
+    (irule layout_block_pair_phi_entry >> simp[] >>
+     qpat_x_assum `lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb'` mp_tac >>
+     fs[layout_stage_row_def, apply_context_concretize_layout_def,
+        apply_concretize_layout_def] >>
+     simp[concretize_positions_blocks, lookup_block_map_proof,
+          concretize_positions_block_label] >>
+     gvs[]) >>
+  simp[layout_canonical_EB_def] >> qexists `INL b` >>
+  simp[layout_canonical_block_witness_def] >>
+  (conj_tac >- fs[layout_canonical_entry_def, layout_canonical_ready_def]) >>
+  qexistsl [`fn`, `fn'`, `layout.cl_positions`] >>
+  gvs[layout_canonical_entry_def, layout_canonical_ready_def,
+      layout_scoped_phi_link_def, layout_phase_begins_def,
+      layout_phase_origin_def, layout_paired_ordinary_def,
+      layout_driver_row_def] >>
+  imp_res_tac eval_phis_preserves_current_bb >> gvs[] >> metis_tac[]
+QED
 
 (* Leaf of the canonical simulation contract, run-next: a non-halted OK block ending in a terminator, followed by
    the OriginBlock edge and the rest of the run. *)
