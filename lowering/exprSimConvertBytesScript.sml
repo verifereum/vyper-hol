@@ -1091,14 +1091,14 @@ QED
 
 Theorem convert_wb_frame_trans:
   !ctx func cenv cx es es1 sa sm s0 s1 s2.
-    wb_frame cenv es es sa s0 s1 /\ wb_frame cenv es1 es1 sm s1 s2 /\
+    wb_frame cenv es es1 sa s0 s1 /\ wb_frame cenv es1 es1 sm s1 s2 /\
     stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id ==>
-    wb_frame cenv es es sa s0 s2
+    wb_frame cenv es es1 sa s0 s2
 Proof
   rpt gen_tac >> strip_tac >>
-  `locals_kept cenv es es s0 s2` by
+  `locals_kept cenv es es1 s0 s2` by
     (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es1`, `sa`, `s1`] >>
      gvs[loweringPostsTheory.wb_frame_def]) >>
