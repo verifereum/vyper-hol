@@ -9,7 +9,9 @@ Ancestors bodyPtrTypeBuiltinsUintContinue bodyPtrTypeBuiltinsUnsignedValue
   bodyPtrTypeBuiltinsUintCounted bodyPtrTypeBuiltinsUnsignedLoad rich_list
   freshWrites varsExt convertScalarEncoding exprSimConvert
   vyperTyping vyperValueOperation valueEncoding valueEncodingProofs byte words
-  exprSimDefs loweringPosts
+  exprSimDefs loweringPosts bodyPtrDefs exprSimWordArgs exprSimProps
+  bodyPtrTypeBuiltinsSourceTyping loweringShapeDefs vyperAST
+Libs monadsyntax
 
 Theorem dynamic_scalar_conversion_partition:
   is_bytestring_type src /\ valid_conversion src dst /\
@@ -370,4 +372,215 @@ Proof
     gvs[expr_val_rel_def] >>
   drule_all bodyPtrTypeBuiltinsFrameProbeTheory.expr_val_at_payload_nonwrap >> strip_tac >>
   qexists_tac `a` >> simp[]
+QED
+
+(* A representation-neutral packet for the shared counted conversion. *)
+Theorem bytestring_fixed_source_facts:
+  (expr_type e = BaseT (BytesT (Dynamic n)) \/ expr_type e = BaseT (StringT n)) /\
+  valid_conversion (expr_type e) (BaseT (BytesT (Fixed m))) /\
+  well_formed_type tenv (BaseT (BytesT (Fixed m))) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
+  ptr_val_ok cx (expr_type e) v (Var src) G tn s /\
+  ptr_buf_ok cenv e (Var src) G s /\ lookup_var src s = SOME a /\
+  64 <= type_memory_bytes cenv (lowered_value_type cenv e) ==>
+  ?k. ptr_covers G tn src s (type_memory_bytes cenv (lowered_value_type cenv e)) /\
+    mload (w2n a) s = n2w k /\ k <= 32 /\
+    (!x. w2n a <= x /\ x < w2n a+32+k ==> x NOTIN tn.t_mem)
+Proof
+  strip_tac >>
+  `ptr_mem_ok cx (expr_type e) v (Var src) G tn s /\
+   op_taint tn (Var src) = {}` by
+    gvs[ptr_val_ok_def, is_word_type_def] >>
+  Cases_on `v` >>
+  gvs[vyperValueTheory.evaluate_type_def, value_has_type_def,
+      valid_conversion_def, well_formed_type_def]
+  >~ [`BytesV bs`] >- (
+    `ptr_mem_ok cx (expr_type e) (BytesV bs) (Var src) G tn s /\
+     evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic n)))` by
+      simp[vyperValueTheory.evaluate_type_def] >>
+    `BaseTV (BytesT (Dynamic n)) <> BaseTV AddressT /\
+     (!k. BaseTV (BytesT (Dynamic n)) <> BaseTV (BytesT (Fixed k)))` by simp[] >>
+    drule_all unsigned_bytes_value_source_facts >> strip_tac >>
+    qexists_tac `LENGTH bs` >> simp[] >> decide_tac) >>
+  rename1 `StringV str` >>
+  `ptr_mem_ok cx (expr_type e) (StringV str) (Var src) G tn s /\
+   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT n))` by
+    simp[vyperValueTheory.evaluate_type_def] >>
+  drule_all unsigned_string_value_source_facts >> strip_tac >>
+  qexists_tac `LENGTH str` >> simp[] >> decide_tac
+QED
+
+Theorem bytestring_fixed_nonzero_continuation:
+  expr_post ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  t0.vs_current_bb = s1.cs_current_bb /\
+  t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
+  (expr_type e = BaseT (BytesT (Dynamic n)) \/ expr_type e = BaseT (StringT n)) /\
+  valid_conversion (expr_type e) (BaseT (BytesT (Fixed m))) /\
+  well_formed_type tenv (BaseT (BytesT (Fixed m))) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\ value_has_type stv v1 /\
+  64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
+  compile_type_convert x (ConvBytestringToBytesM m) s1 = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\
+  fn_has_code s1 sb func /\ local_ptrs_reserved cenv s1 /\
+  sa.cs_next_var <= s1.cs_next_var /\ ~ctx_has_dalloca ctx /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at s1 p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at s1 p) /\
+  ptr_val_ok cx (expr_type e) v1 x G tn t0 /\ ptr_buf_ok cenv e x G t0 /\
+  ghost_inv d cenv cx (ee with gas_obs := []) G tn t0 /\
+  ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+  gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+    (\vs. (convert_result cx (expr_type e) (BaseT (BytesT (Fixed m))) v1,vs))
+    (ee with gas_obs := [],t0,G,tn)
+    (\res fin H th ss. ?v. res = INL v /\
+      expr_post ctx func cenv cx
+        (TypeBuiltin (BaseT (BytesT (Fixed m))) Convert (BaseT (BytesT (Fixed m))) [e])
+        es sa sb s0 fin v op ss /\
+      ss.vs_current_bb = sb.cs_current_bb /\ ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ghost_inv d cenv cx fin H th ss /\
+      ptr_val_ok cx (BaseT (BytesT (Fixed m))) v op H th ss /\
+      ghost_kept cenv es sa G0 tn0 s0 H th)
+    (\res fin gt out. expr_exit res out)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all bytestring_fixed_source_packet >> strip_tac >>
+  `?src. x = Var src` by
+    (Cases_on `x` >> gvs[ptr_val_ok_def, is_word_type_def, ptr_mem_ok_def,
+                         ptr_buf_ok_def, op_prov_def]) >>
+  qpat_x_assum `x = Var src` SUBST_ALL_TAC >>
+  `lookup_var src t0 = SOME a` by fs[eval_operand_def] >>
+  drule_all bytestring_fixed_source_facts >> strip_tac >>
+  `!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+               not_fresh_at s1 p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `not_fresh_at s1 src` by fs[] >>
+  drule_all bytestring_fixed_semantic_run_actual >> strip_tac >>
+  drule_all bytestring_fixed_counted_success >>
+  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
+  suspend "post"
+QED
+
+Resume bytestring_fixed_nonzero_continuation[post]:
+  `m <= 32` by fs[well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
+  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) sf` by
+    (irule bytestring_fixed_stmt_frame >> goal_assum (drule_at Any) >>
+     fs[expr_post_def] >> metis_tac[]) >>
+  `expr_post ctx func cenv cx
+      (TypeBuiltin (BaseT (BytesT (Fixed m))) Convert (BaseT (BytesT (Fixed m))) [e])
+      es sa sb s0 (ee with gas_obs := []) vout op
+      (sf with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule scalar_suffix_expr_post >>
+     simp[expr_type_def, is_word_type_def, stmt_state_rel_inst_idx,
+          instIdxIndepTheory.eval_op_inst_idx, vyperValueTheory.evaluate_type_def] >>
+     conj_tac >- (fs[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+     qexistsl_tac [`e`,`s1`,`t0`,`v1`,`Var src`] >>
+     simp[lookup_var_def] >>
+     qpat_x_assum `sf = t0 with vs_vars := _` SUBST1_TAC >> simp[]) >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL vout`,`ee`,`H`,`th`,
+    `OK (sf with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  simp[ptr_val_ok_def, is_word_type_def]
+QED
+
+Finalise bytestring_fixed_nonzero_continuation
+
+Theorem zero_fixed_continuation:
+  expr_post ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  t0.vs_current_bb = s1.cs_current_bb /\
+  t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
+  (expr_type e = BaseT (BytesT (Dynamic n)) \/ expr_type e = BaseT (StringT n)) /\
+  (v1 = BytesV [] \/ v1 = StringV "") /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\ value_has_type stv v1 /\
+  valid_conversion (expr_type e) (BaseT (BytesT (Fixed m))) /\
+  well_formed_type tenv (BaseT (BytesT (Fixed m))) /\
+  ghost_inv d cenv cx (ee with gas_obs := []) G tn t0 /\
+  ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+  gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+    (\vs. (convert_result cx (expr_type e) (BaseT (BytesT (Fixed m))) v1,vs))
+    (ee with gas_obs := [],t0,G,tn)
+    (\res fin H th ss. ?v. res = INL v /\
+      expr_post ctx func cenv cx
+        (TypeBuiltin (BaseT (BytesT (Fixed m))) Convert (BaseT (BytesT (Fixed m))) [e])
+        es sa s1 s0 fin v (Lit 0w) ss /\
+      ss.vs_current_bb = s1.cs_current_bb /\ ss.vs_inst_idx = LENGTH s1.cs_current_insts /\
+      ghost_inv d cenv cx fin H th ss /\
+      ptr_val_ok cx (BaseT (BytesT (Fixed m))) v (Lit 0w) H th ss /\
+      ghost_kept cenv es sa G0 tn0 s0 H th)
+    (\res fin gt out. expr_exit res out)
+Proof
+  strip_tac >> gvs[] >>
+  `m <= 32` by fs[well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, value_has_type_def] >>
+  simp[convert_result_def, evaluate_convert_from_def, evaluate_convert_def] >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (BytesV (PAD_RIGHT 0w m []))`,`ee`,`G`,`tn`,`OK t0`] >>
+  simp[gas_path_ptr_rules, bodyPtrTypeBuiltinsLiteralPostTheory.ptr_val_ok_word_literal,
+       is_word_type_def] >>
+  irule zero_convert_child_post >>
+  simp[is_word_type_def, vyperValueTheory.evaluate_type_def,
+       typed_val_to_w256_def, word_of_bytes_be_pad_right] >>
+  simp[PAD_RIGHT, word_of_bytes_be_def, GSYM REPLICATE_GENLIST,
+       word_of_bytes_replicate_zero] >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem bytestring_fixed_continuation:
+  expr_post ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  t0.vs_current_bb = s1.cs_current_bb /\
+  t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
+  (expr_type e = BaseT (BytesT (Dynamic n)) \/ expr_type e = BaseT (StringT n)) /\
+  valid_conversion (expr_type e) (BaseT (BytesT (Fixed m))) /\
+  well_formed_type tenv (BaseT (BytesT (Fixed m))) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\ value_has_type stv v1 /\
+  expr_body_pre cenv cx env e es /\ supported_expr tops e /\ supported_program tops /\
+  get_module_code cx NONE = SOME tops /\
+  cenv.ce_func_return_type = build_func_return_type tops /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v1,ee) /\
+  (if lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
+      lowered_value_type cenv e = BaseT (StringT 0)
+   then op = Lit 0w /\ sb = s1
+   else compile_type_convert x (mk_convert_op (expr_type e) (BaseT (BytesT (Fixed m)))) s1 =
+        (op,sb)) /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\
+  fn_has_code s1 sb func /\ local_ptrs_reserved cenv s1 /\
+  sa.cs_next_var <= s1.cs_next_var /\ ~ctx_has_dalloca ctx /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at s1 p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at s1 p) /\
+  ptr_val_ok cx (expr_type e) v1 x G tn t0 /\ ptr_buf_ok cenv e x G t0 /\
+  ghost_inv d cenv cx (ee with gas_obs := []) G tn t0 /\
+  ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+  gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+    (\vs. (convert_result cx (expr_type e) (BaseT (BytesT (Fixed m))) v1,vs))
+    (ee with gas_obs := [],t0,G,tn)
+    (\res fin H th ss. ?v. res = INL v /\
+      expr_post ctx func cenv cx
+        (TypeBuiltin (BaseT (BytesT (Fixed m))) Convert (BaseT (BytesT (Fixed m))) [e])
+        es sa sb s0 fin v op ss /\
+      ss.vs_current_bb = sb.cs_current_bb /\ ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ghost_inv d cenv cx fin H th ss /\
+      ptr_val_ok cx (BaseT (BytesT (Fixed m))) v op H th ss /\
+      ghost_kept cenv es sa G0 tn0 s0 H th)
+    (\res fin gt out. expr_exit res out)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
+            lowered_value_type cenv e = BaseT (StringT 0)`
+  >- (`op = Lit 0w /\ sb = s1` by fs[] >>
+      `v1 = BytesV [] \/ v1 = StringV ""` by
+        (Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0))`
+         >- (drule_all source_read_zero_bytes >> simp[]) >>
+         `lowered_value_type cenv e = BaseT (StringT 0)` by fs[] >>
+         drule_all source_read_zero_string >> simp[]) >>
+      qpat_x_assum `op = Lit 0w` SUBST_ALL_TAC >>
+      qpat_x_assum `sb = s1` SUBST_ALL_TAC >>
+      irule zero_fixed_continuation >> simp[] >> metis_tac[]) >>
+  `is_bytestring_type (expr_type e)` by
+    (qpat_assum `_ \/ _` strip_assume_tac >> simp[is_bytestring_type_def]) >>
+  `lowered_value_type cenv e <> BaseT (BytesT (Dynamic 0)) /\
+   lowered_value_type cenv e <> BaseT (StringT 0)` by fs[] >>
+  `64 <= type_memory_bytes cenv (lowered_value_type cenv e)` by
+    (drule_all source_lowered_nonzero_capacity >> simp[]) >>
+  `compile_type_convert x (ConvBytestringToBytesM m) s1 = (op,sb)` by
+    (qpat_x_assum `if _ then _ else _` mp_tac >>
+     qpat_assum `expr_type e = _ \/ _` strip_assume_tac >>
+     simp[mk_convert_op_def, is_bytestring_type_def]) >>
+  irule bytestring_fixed_nonzero_continuation >> simp[] >> metis_tac[]
 QED
