@@ -39,7 +39,8 @@ Definition test_result_summary_def:
         | AssertException message => "AssertException: " ++ message
         | BreakException => "BreakException"
         | ContinueException => "ContinueException"
-        | ReturnException _ => "ReturnException")
+        | ReturnException _ => "ReturnException"
+        | HaltException => "HaltException")
 End
 
 val () = cv_auto_trans test_result_summary_def;

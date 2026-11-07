@@ -211,6 +211,8 @@ Theorem external_call_result_success_cases:
                  | SOME v_cast =>
                      (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
         | (INR e, st') => (INR e, am, st'.requests))
+   | (INR HaltException, st) =>
+       (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
    | (INR e, st) => (INR e, am, st.requests)) = (INL v, am_out, rqs) ==>
   ?res st_body st_unlocked.
     body_res = (res,st_body) /\
@@ -219,8 +221,13 @@ Theorem external_call_result_success_cases:
     am_out = abstract_machine_from_state srcs exps layouts st_unlocked /\
     rqs = st_unlocked.requests
 Proof
-  PairCases_on `body_res` >> Cases_on `body_res0` >> gvs[] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >> metis_tac[]
+  namedCases_on `body_res` ["tag st_body"] >> Cases_on `tag`
+  >- (simp[oneTheory.one] >>
+      Cases_on `unlock st_body` >> Cases_on `q` >> gvs[oneTheory.one]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> simp[] >>
+  Cases_on `unlock st_body` >> Cases_on `q` >> simp[oneTheory.one] >>
+  Cases_on `evaluate_type tenv ret` >> simp[] >>
+  rename1 `safe_cast tv v_ret` >> Cases_on `safe_cast tv v_ret` >> gvs[]
 QED
 
 Theorem call_external_function_success_phases:
@@ -262,6 +269,107 @@ Proof
   drule external_entry_success_phases >> simp[] >> strip_tac >>
   qexistsl [`s1`, `dflt_vs`, `s2`, `env`, `res`, `st_body`, `st_unlocked`] >>
   simp[]
+QED
+
+(* Shared result-spine simplification, also used by deployment wrappers. *)
+Theorem triple_identity:
+  !p. (\(res,am_out,rqs). (res,am_out,rqs)) p = p
+Proof
+  gen_tac >> PairCases_on `p` >> simp[]
+QED
+
+Theorem release_action_result:
+  (if nr /\ ~is_view then
+     case cx.nonreentrant_slot of
+       NONE => return ()
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+   else return ()) st = (res,st') ==> res = INL ()
+Proof
+  Cases_on `nr /\ ~is_view` >> simp[return_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  simp[release_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+       update_transient_def, return_def]
+QED
+
+(* The halt branch of an external call's result spine: the entry itself
+   halted, provided the unlock action cannot halt. *)
+Theorem external_call_result_halt_cases:
+  (!s s'. unlock s <> (INR HaltException,s')) /\
+  (\(res,am_out,rqs). (res,am_out,rqs))
+  (case body_res of
+     (INL (), st) =>
+       (case unlock st of
+          (INL (), st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st', st'.requests)
+        | (INR e, st') => (INR e, am, st'.requests))
+   | (INR (ReturnException v_ret), st) =>
+       (case unlock st of
+          (INL (), st') =>
+            (case evaluate_type tenv ret of
+               NONE => (INR (Error (TypeError "eval ret")), am, st'.requests)
+             | SOME tv =>
+                 case safe_cast tv v_ret of
+                   NONE => (INR (Error (TypeError "ext cast ret")), am, st'.requests)
+                 | SOME v_cast =>
+                     (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
+        | (INR e, st') => (INR e, am, st'.requests))
+   | (INR HaltException, st) =>
+       (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
+   | (INR e, st) => (INR e, am, st.requests)) = (INR HaltException, am_out, rqs) ==>
+  ?st_body.
+    body_res = (INR HaltException,st_body) /\
+    am_out = abstract_machine_from_state srcs exps layouts st_body /\
+    rqs = st_body.requests
+Proof
+  strip_tac >>
+  namedCases_on `body_res` ["tag st_body"] >> Cases_on `tag`
+  >- (qpat_x_assum `_ = (INR HaltException,_,_)` mp_tac >> simp[oneTheory.one] >>
+      Cases_on `unlock st_body` >> Cases_on `q` >> simp[oneTheory.one] >>
+      metis_tac[]) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  qpat_x_assum `_ = (INR HaltException,_,_)` mp_tac >> simp[] >>
+  Cases_on `unlock st_body` >> Cases_on `q` >> simp[oneTheory.one] >>
+  rewrite_tac[triple_identity] >> simp[AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+(* Exact committed-halt branch, shared by calls and constructor execution. *)
+Theorem call_external_function_halt_cases:
+  call_external_function orc gobs am cx nr mut ts mods args dflts vals body ret =
+    (INR HaltException,am_out,rqs) ==>
+  ?am_c st_body.
+    (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target mods
+     else SOME am) = SOME am_c /\
+    (do
+       send_call_value mut cx;
+       dvs <- eval_external_defaults cx (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts);
+       case bind_arguments (type_env_all_modules mods) args (vals ++ dvs) of
+         NONE => raise (Error (RuntimeError "call bind_arguments"))
+       | SOME scope => do
+           set_scopes [scope];
+           (if nr then
+              case cx.nonreentrant_slot of
+                NONE => raise (Error (TypeError "nonreentrant slot missing"))
+              | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+            else return ());
+           eval_stmts cx body
+         od
+     od) (initial_state am_c [FEMPTY] with
+            <|outcomes := orc; requests := []; gas_obs := gobs|>) =
+      (INR HaltException,st_body) /\
+    am_out = abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st_body /\
+    rqs = st_body.requests
+Proof
+  simp[call_external_function_def] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `if cx.in_deploy then evaluate_all_constants cx am cx.txn.target mods else SOME am` >>
+  simp[] >> strip_tac >>
+  drule_at (Pos last) external_call_result_halt_cases >>
+  impl_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule (release_action_result |> SPEC_ALL |>
+        Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |> SRULE []) >>
+      simp[]) >>
+  strip_tac >> simp[]
 QED
 
 Theorem eval_external_defaults_preserves_tv:
