@@ -265,3 +265,68 @@ Proof
       disch_then (qspec_then `Var w` mp_tac) >> simp[] >> decide_tac) >>
   simp[]
 QED
+
+(* Physical persistence needs neither exact inventory nor output freshness. *)
+Theorem generate_phi_plan_other_elem_count:
+  !inst next halt ps ops qs v.
+    ~MEM (Var v) inst.inst_operands /\ v <> HD inst.inst_outputs /\
+    generate_phi_plan inst next halt ps = (ops,qs) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack = LIST_ELEM_COUNT (Var v) ps.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- gvs[stackPlanGenTheory.generate_phi_plan_def] >>
+  rename1 `stack_get_phi_depth _ _ = SOME d` >>
+  `d < LENGTH ps.ps_stack /\
+   MEM (stack_peek d ps.ps_stack) inst.inst_operands` by
+    (fs[stackModelTheory.stack_get_phi_depth_def] >>
+     drule planAlignTheory.stack_find_bound >> simp[] >> strip_tac >>
+     drule stack_find_el >>
+     simp[listTheory.MEM_FILTER, stackModelTheory.stack_peek_def, listTheory.EL_REVERSE] >>
+     `PRE (LENGTH ps.ps_stack - d) = LENGTH ps.ps_stack - (d+1)` by decide_tac >>
+     simp[]) >>
+  `Var v <> stack_peek d ps.ps_stack` by metis_tac[] >>
+  drule fnPlanLineagePhiTemporalTheory.generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`next`,`halt`] mp_tac) >>
+  Cases_on `fnPlanLineagePhiTemporal$phi_write_phase inst next d ps` >>
+  simp[] >> strip_tac >>
+  rename1 `phi_write_phase inst next d ps = (wops,ws)` >>
+  `LIST_ELEM_COUNT (Var v) ws.ps_stack = LIST_ELEM_COUNT (Var v) ps.ps_stack` by
+    (qpat_x_assum `phi_write_phase _ _ _ _ = _` mp_tac >>
+     simp[fnPlanLineagePhiTemporalTheory.phi_write_phase_def] >> IF_CASES_TAC
+     >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+         drule doSwapSimTheory.do_dup_stack_exact >> simp[] >> strip_tac >>
+         simp[stackModelTheory.stack_poke_def, rich_listTheory.LUPDATE_APPEND2,
+              listTheory.LUPDATE_def, reorderSimTheory.elem_count_append,
+              rich_listTheory.LIST_ELEM_COUNT_DEF, listTheory.FILTER_APPEND_DISTRIB]) >>
+     strip_tac >> gvs[] >> drule stack_poke_count_balance >>
+     disch_then (qspecl_then [`Var v`,`Var (HD inst.inst_outputs)`] mp_tac) >> simp[]) >>
+  Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) next` >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  drule_at (Pat `popmany_plan _ _ = _`) fnPlanLineageInventoryTheory.popmany_plan_other_elem_count >>
+  disch_then (qspec_then `Var v` mp_tac) >> simp[]
+QED
+
+Theorem generate_phi_plan_other_elem_mem:
+  !inst next halt ps ops qs v.
+    ~MEM (Var v) inst.inst_operands /\ v <> HD inst.inst_outputs /\
+    generate_phi_plan inst next halt ps = (ops,qs) ==>
+    (MEM (Var v) qs.ps_stack <=> MEM (Var v) ps.ps_stack)
+Proof
+  rpt strip_tac >> drule_all generate_phi_plan_other_elem_count >>
+  metis_tac[rich_listTheory.LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem generate_phi_plan_later_selection:
+  !inst later next halt ps ops qs v.
+    MEM (Var v) ps.ps_stack /\ ~MEM (Var v) inst.inst_operands /\
+    v <> HD inst.inst_outputs /\ MEM (Var v) later.inst_operands /\
+    generate_phi_plan inst next halt ps = (ops,qs) ==>
+    ?d w.
+      stack_get_phi_depth (FILTER is_var_operand later.inst_operands) qs.ps_stack = SOME d /\
+      stack_peek d qs.ps_stack = Var w /\ MEM (Var w) later.inst_operands
+Proof
+  rpt strip_tac >> irule phi_selection_from_present_operand >>
+  drule_all generate_phi_plan_other_elem_mem >> strip_tac >>
+  qexists_tac `v` >> simp[]
+QED

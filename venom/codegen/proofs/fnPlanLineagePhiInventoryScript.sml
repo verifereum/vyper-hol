@@ -289,7 +289,7 @@ Proof
 QED
 
 (* Exact copy from genBlockSim, avoiding a frame-simulation import here. *)
-Theorem stack_find_el[local]:
+Theorem stack_find_el:
   !P l d. stack_find P l = SOME d ==> P (EL d l)
 Proof
   Induct_on `l` >> simp[stack_find_def] >> rpt strip_tac >>

@@ -482,3 +482,33 @@ Proof
   simp[] >> strip_tac >>
   fs[lineage_inventory_def, lineage_core_def] >> metis_tac[IN_UNION, MEM_APPEND]
 QED
+
+Theorem visited_definition_fresh_block_outputs:
+  !fn visited bb db di v.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\ ~MEM bb.bb_label visited /\
+    MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM db.bb_label visited /\ MEM v di.inst_outputs ==>
+    EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >> simp[listTheory.EVERY_MEM] >>
+  rpt strip_tac >>
+  `?j. j < LENGTH db.bb_instructions /\ EL j db.bb_instructions = di` by
+    metis_tac[listTheory.MEM_EL] >>
+  `?i. i < LENGTH bb.bb_instructions /\ EL i bb.bb_instructions = inst` by
+    metis_tac[listTheory.MEM_EL] >>
+  `db = bb` by metis_tac[ssa_form_position] >> gvs[]
+QED
+
+Theorem visited_definition_fresh_block_head_output:
+  !fn visited bb db di v inst.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\ ~MEM bb.bb_label visited /\
+    MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM db.bb_label visited /\ MEM v di.inst_outputs /\
+    MEM inst bb.bb_instructions /\ inst.inst_outputs <> [] ==>
+    v <> HD inst.inst_outputs
+Proof
+  rpt strip_tac >> drule_all visited_definition_fresh_block_outputs >>
+  strip_tac >> fs[listTheory.EVERY_MEM] >>
+  first_x_assum (qspec_then `inst` mp_tac) >> simp[] >>
+  Cases_on `inst.inst_outputs` >> gvs[]
+QED

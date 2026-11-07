@@ -97,7 +97,7 @@ Proof
   Cases_on `h.inst_opcode = PHI` >> gvs[] >> metis_tac[]
 QED
 
-Theorem phi_uses_disjoint_later[local]:
+Theorem phi_uses_disjoint_later:
   !phis i j v.
   phi_uses_disjoint phis /\ i < j /\ j < LENGTH phis /\
   MEM v (inst_uses (EL i phis)) ==> ~MEM v (inst_uses (EL j phis))
@@ -263,4 +263,16 @@ Proof
   disch_then (fn th => fs[th, cfgDefsTheory.cfg_path_def]) >>
   irule relationTheory.RTC_TRANS >> qexists_tac `pred` >>
   simp[] >> irule relationTheory.RTC_SINGLE >> simp[]
+QED
+
+Theorem ready_phi_later_operand_isolated:
+  !liveness bb i j v.
+    phi_block_ready liveness bb /\ i < j /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM (Var v) (EL j (collect_phis bb.bb_instructions)).inst_operands ==>
+    ~MEM (Var v) (EL i (collect_phis bb.bb_instructions)).inst_operands
+Proof
+  simp[phi_block_ready_def, GSYM passSharedDefsTheory.MEM_operand_vars_eq_Var,
+       GSYM venomInstTheory.inst_uses_def] >>
+  metis_tac[phi_uses_disjoint_later]
 QED
