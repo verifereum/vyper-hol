@@ -4,7 +4,7 @@ Ancestors
   immutableValue immutableEncoding immutableEncodingProofs valueEncodingProofs
   abiEncoderMemory abiCanonicalHeadSize valueTypingMemoryProps
   valueEncoding immutableDeployAssignAdmissible vyperTyping
-  ctorDeployDeadSectionRel list rich_list
+  ctorDeployDeadSectionRel exprSimAggregateEncoding list rich_list
 
 Theorem immutable_mask_prefix_agreement:
   !n k actual expected.
@@ -120,7 +120,6 @@ Proof
   fs[]
 QED
 
-(* Temporarily retained for the array-integration milestone.
 Theorem immutable_memory_bytes_mutual:
   (!tv v off mem.
     well_formed_type_value tv /\ immutable_value_admissible tv v /\
@@ -215,11 +214,108 @@ Resume immutable_memory_bytes_mutual[fields_cons]:
   gvs[immutable_value_bytes_rel_def]
 QED
 Resume immutable_memory_bytes_mutual[fixed]:
-  FAIL_TAC "fixed"
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `v` >>
+  simp[immutable_value_admissible_def] >> Cases_on `a` >>
+  simp[immutable_value_admissible_def, val_in_memory_def,
+       well_formed_type_value_def] >> strip_tac >>
+  `LENGTH (FLAT (GENLIST (\i. immutable_value_mask tv
+      (case ALOOKUP l i of NONE => default_value tv | SOME x => x)) n)) =
+      n * type_memory_size tv` by
+    (irule EQ_TRANS >>
+     qexists `LENGTH (GENLIST (\i. immutable_value_mask tv
+       (case ALOOKUP l i of NONE => default_value tv | SOME x => x)) n) * type_memory_size tv` >>
+     conj_tac >- (irule immutable_flat_uniform_length >> simp[EVERY_GENLIST]) >> simp[]) >>
+  `LENGTH (FLAT (GENLIST (\i. case ALOOKUP l i of
+       NONE => REPLICATE (type_memory_size tv) 0w | SOME x => encode_immutable_value tv x) n)) =
+      n * type_memory_size tv` by
+    (irule EQ_TRANS >>
+     qexists `LENGTH (GENLIST (\i. case ALOOKUP l i of
+       NONE => REPLICATE (type_memory_size tv) 0w | SOME x => encode_immutable_value tv x) n) * type_memory_size tv` >>
+     conj_tac >- (irule immutable_flat_uniform_length >> simp[EVERY_GENLIST] >> gen_tac >> strip_tac >> CASE_TAC >> simp[]) >> simp[]) >>
+  simp[immutable_value_bytes_rel_def, immutable_value_mask_def,
+       encode_immutable_value_def, type_memory_size_def, immutable_fit_exact,
+       immutable_mask_fit_def, TAKE_APPEND1, TAKE_LENGTH_ID_rwt] >>
+  irule immutable_masked_memory_genlist >>
+  gen_tac >> strip_tac >> Cases_on `ALOOKUP l i` >> simp[]
+  >- (`immutable_value_admissible tv (default_value tv)` by
+        metis_tac[default_immutable_admissible] >>
+      `val_in_memory tv (default_value tv) 0 (REPLICATE (type_memory_size tv) 0w)` by
+        (mp_tac (cj 1 immutable_default_zero_decodes_mutual) >>
+         disch_then (qspecl_then [`tv`, `[]`, `[]`] mp_tac) >> simp[]) >>
+      `immutable_value_bytes_rel tv (default_value tv)
+         (mem_bytes_at 0 (type_memory_size tv) (REPLICATE (type_memory_size tv) 0w))` by
+        (first_x_assum irule >> simp[]) >>
+      `immutable_value_bytes_rel tv (default_value tv)
+         (mem_bytes_at (off + i * type_memory_size tv) (type_memory_size tv) mem)` by
+        (first_x_assum irule >> simp[]) >>
+      `val_in_memory tv (default_value tv)
+         (off + i * type_memory_size tv) mem` by metis_tac[] >>
+      gvs[immutable_value_bytes_rel_def, mem_bytes_at_def, EVERY_EL, EL_ZIP,
+          TAKE_APPEND1, EL_TAKE] >>
+      metis_tac[]) >>
+  `MEM (i,x) l` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  `immutable_value_admissible tv x` by
+    (fs[EVERY_MEM] >>
+     qpat_x_assum `!e. MEM e l ==> _` (qspec_then `(i,x)` mp_tac) >> simp[]) >>
+  `val_in_memory tv x (off + i * type_memory_size tv) mem` by
+    metis_tac[kvs_in_memory_lookup] >>
+  first_x_assum (drule_all_then mp_tac) >>
+  simp[immutable_value_bytes_rel_def]
 QED
 Resume immutable_memory_bytes_mutual[dynamic]:
-  FAIL_TAC "dynamic"
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `v` >>
+  simp[immutable_value_admissible_def] >> Cases_on `a` >>
+  simp[immutable_value_admissible_def, val_in_memory_def,
+       well_formed_type_value_def] >> strip_tac >>
+  rename1 `elems_in_memory vs (off + 32) tv mem` >>
+  `LENGTH (FLAT (MAP (immutable_value_mask tv) vs)) = LENGTH vs * type_memory_size tv` by
+    (`EVERY (\bs. LENGTH bs = type_memory_size tv) (MAP (immutable_value_mask tv) vs)` by simp[EVERY_MAP] >>
+     drule immutable_flat_uniform_length >> simp[]) >>
+  `LENGTH (FLAT (MAP (encode_immutable_value tv) vs)) = LENGTH vs * type_memory_size tv` by
+    (`EVERY (\bs. LENGTH bs = type_memory_size tv) (MAP (encode_immutable_value tv) vs)` by simp[EVERY_MAP] >>
+     drule immutable_flat_uniform_length >> simp[]) >>
+  `EVERY (\(used,(a,e)). used ==> a = e)
+      (ZIP (FLAT (MAP (immutable_value_mask tv) vs),
+        ZIP (mem_bytes_at (off + 32) (LENGTH vs * type_memory_size tv) mem,
+          FLAT (MAP (encode_immutable_value tv) vs))))` by
+    (rewrite_tac[GSYM GENLIST_EL_MAP] >>
+     irule immutable_masked_memory_genlist >> simp[] >>
+     rpt strip_tac >>
+     `immutable_value_admissible tv (EL i vs)` by metis_tac[EVERY_EL] >>
+     `val_in_memory tv (EL i vs) ((off + 32) + i * type_memory_size tv) mem` by
+       metis_tac[elems_in_memory_EL] >>
+     first_x_assum (drule_all_then mp_tac) >> simp[immutable_value_bytes_rel_def]) >>
+  `EVERY (\(used,(a,e)). used ==> a = e)
+      (ZIP (REPLICATE 32 T ++ FLAT (MAP (immutable_value_mask tv) vs),
+        ZIP (mem_bytes_at off (32 + LENGTH vs * type_memory_size tv) mem,
+          immutable_word_bytes (n2w (LENGTH vs)) ++
+            FLAT (MAP (encode_immutable_value tv) vs))))` by
+    (irule immutable_masked_memory_append >> simp[] >>
+     simp[mem_bytes_at_word, immutable_word_bytes_def,
+          immutable_mask_same_bytes]) >>
+  simp[immutable_value_bytes_rel_def, immutable_value_mask_def,
+       encode_immutable_value_def, type_memory_size_def] >>
+  qpat_x_assum `EVERY _ (ZIP (REPLICATE 32 T ++ _, _))` mp_tac >>
+  simp[EVERY_EL, EL_ZIP, SF ETA_ss] >> strip_tac >>
+  simp[immutable_mask_fit_def, immutable_fit_def, EVERY_EL, EL_ZIP, EL_TAKE,
+       SF ETA_ss] >>
+  rpt strip_tac >>
+  Cases_on `n' < 32 + LENGTH vs * type_memory_size tv`
+  >- (gvs[EL_APPEND_EQN] >>
+      first_x_assum (qspec_then `n'` mp_tac) >>
+      simp[mem_bytes_at_def, EL_TAKE] >>
+      Cases_on `n' < LENGTH (DROP off mem)` >>
+      gvs[EL_APPEND_EQN, EL_REPLICATE]) >>
+  gvs[EL_APPEND_EQN, EL_REPLICATE]
 QED
 Finalise immutable_memory_bytes_mutual
 
-*)
+
+Theorem immutable_memory_bytes:
+  !tv v off mem.
+    well_formed_type_value tv /\ immutable_value_admissible tv v /\
+    val_in_memory tv v off mem ==>
+    immutable_value_bytes_rel tv v (mem_bytes_at off (type_memory_size tv) mem)
+Proof
+  metis_tac[immutable_memory_bytes_mutual]
+QED
