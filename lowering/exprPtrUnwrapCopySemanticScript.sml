@@ -17,8 +17,8 @@ Theorem unwrap_copy_semantic_post:
   u = update_var root d (buffer_allocation_fields s sm.cs_next_id nb) /\
   step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
   a = u with vs_inst_idx := k /\ slot_copy_runtime_frame mid d n a z /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
+  ~is_word_type (post_value_type cenv e) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty /\
   val_wf ty v /\ val_in_memory ty v (w2n d) z.vs_memory /\
   val_footprint ty v <= nb /\ eval_operand op z = SOME d ==>
   expr_post ctx func cenv cx e es sa sb s0 es' v op z
@@ -33,7 +33,7 @@ Proof
   qpat_x_assum `root = STRING _ _` kall_tac >>
   qpat_x_assum `out = STRING _ _` kall_tac >>
   qpat_x_assum `buf.buf_size = nb` kall_tac >>
-  irule copy_buffer_post_transport >> simp[] >>
+  irule copy_buffer_post_transport_physical >> simp[] >>
   goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]`,
     `mid`, `nb`, `a`] >>
