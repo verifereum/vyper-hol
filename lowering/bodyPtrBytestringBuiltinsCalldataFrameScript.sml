@@ -191,7 +191,7 @@ Theorem compile_slice_calldata_semantic:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?s1 s2 s3 s4 data limit t v q z w G2 tn2 r p.
+  ?s1 s2 s3 s4 data limit t v q z zf w G2 tn2 r p.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK t) /\
     out = Var r /\ data = Var p /\
     ptr_covers G2 tn2 r t N /\ ptr_covers G2 tn2 p t (N - 32) /\
@@ -208,20 +208,23 @@ Theorem compile_slice_calldata_semantic:
     run_inst_seq (emitted_insts s3 sb) q = OK z /\
     z = mstore (w2n w) (n2w n) (write_memory_with_expansion (w2n w + 32)
       (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) q) /\
-    stmt_state_rel ctx fn cenv cx es z /\
+    q.vs_inst_idx = LENGTH s1.cs_current_insts /\
+    z.vs_inst_idx = LENGTH s1.cs_current_insts /\
+    zf = z with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    stmt_state_rel ctx fn cenv cx es zf /\
     val_in_memory (BaseTV (BytesT (Dynamic bound)))
-      (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) (w2n w) z.vs_memory /\
-    eval_operand out z = SOME w /\
-    FLOOKUP z.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
+      (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) (w2n w) zf.vs_memory /\
+    eval_operand out zf = SOME w /\
+    FLOOKUP zf.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
     (!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>
-      lookup_var x z = SOME val) /\
+      lookup_var x zf = SOME val) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-      FLOOKUP z.vs_allocas aid = SOME entry) /\
+      FLOOKUP zf.vs_allocas aid = SOME entry) /\
     (!aid b len. aid < sa.cs_next_id /\
       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
-      mem_bytes_at b len z.vs_memory = mem_bytes_at b len s.vs_memory) /\
-    locals_kept cenv es s z /\
-    (!name b len. local_region cenv es.scopes z name b len ==>
+      mem_bytes_at b len zf.vs_memory = mem_bytes_at b len s.vs_memory) /\
+    locals_kept cenv es s zf /\
+    (!name b len. local_region cenv es.scopes zf name b len ==>
       regions_disjoint (w2n w) N b len)
 Proof
   strip_tac >>
@@ -344,8 +347,20 @@ Resume compile_slice_calldata_semantic[finish]:
      qspecl_then [`w2n w`,`TAKE n (DROP a q.vs_call_ctx.cc_calldata)`,`q`]
        mp_tac bytes_buffer_write_frame >>
      simp[] >> disch_then irule >> fs[regions_disjoint_def] >> decide_tac) >>
-  qexistsl_tac [`s1`,`s2`,`s3`,`s4`,`data`,`limit`,`t`,`v`,`q`,`z`,`w`,`G2`,`tn2`,`r`,`p`] >>
-  simp[eval_operand_def] >>
+  `q.vs_inst_idx = LENGTH s1.cs_current_insts` by
+    (qpat_assum `q = t with vs_vars := _` SUBST1_TAC >> simp[]) >>
+  `z.vs_inst_idx = LENGTH s1.cs_current_insts` by
+    (qpat_assum `z = _` SUBST1_TAC >>
+     simp[write_state_inst_idx]) >>
+  `!x. lookup_var x (z with vs_inst_idx := LENGTH sb.cs_current_insts) = lookup_var x z` by
+    simp_tac (srw_ss()) [lookup_var_def] >>
+  `!name b len. local_region cenv es.scopes
+      (z with vs_inst_idx := LENGTH sb.cs_current_insts) name b len <=>
+    local_region cenv es.scopes z name b len` by
+    simp_tac (srw_ss()) [local_region_def, lookup_var_def] >>
+  qexistsl_tac [`s1`,`s2`,`s3`,`s4`,`data`,`limit`,`t`,`v`,`q`,`z`,
+    `z with vs_inst_idx := LENGTH sb.cs_current_insts`,`w`,`G2`,`tn2`,`r`,`p`] >>
+  simp[eval_operand_def, stmt_state_rel_inst_idx, locals_kept_inst_idx] >>
   rpt conj_tac >> rpt strip_tac >>
   metis_tac[eval_operand_def]
 QED
