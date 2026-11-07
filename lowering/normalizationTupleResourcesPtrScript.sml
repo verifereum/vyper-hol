@@ -124,3 +124,93 @@ Proof
   disch_then (qspec_then `k+31` strip_assume_tac) >>
   `(k+31) MOD 32 < 32` by simp[] >> decide_tac
 QED
+
+(* Consumer boundary: source resources come from the typed expression endpoint. *)
+Theorem compile_alloc_tuple_bytes_endpoint_ptr:
+  !ctx func cenv cx env e es sa sb s0 es' vals root s n buf sc sd
+   stvs sts dts tn PG G R.
+    expr_sim_inv cenv cx env es /\
+    IS_SOME (type_stmt env (TupleT dts) (Return (SOME e))) /\
+    expr_type e = TupleT sts /\ expr_type e <> TupleT dts /\
+    EVERY is_bytestring_type sts /\ EVERY is_bytestring_type dts /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME (TupleTV stvs) /\
+    value_has_type (TupleTV stvs) (ArrayV (TupleV vals)) /\
+    ptr_val_ok cx (expr_type e) (ArrayV (TupleV vals)) (Var root) G tn s /\
+    expr_post ctx func cenv cx e es sa sb s0 es' (ArrayV (TupleV vals)) (Var root) s /\
+    fresh_vars_wrt sb s /\ fn_inst_ids_distinct func /\ not_fresh_at sb root /\
+    compile_alloc_buffer n sb = (buf,sc) /\
+    compile_store_memory_typed cenv buf.buf_operand (TupleT dts)
+      (Var root) (TupleT sts) sc = ((),sd) /\ fn_has_code sb sd func /\
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+      type_memory_bytes cenv ty = type_memory_size tv) /\
+    n = type_memory_bytes cenv (TupleT dts) /\ n < dimword(:256) ==>
+    ?dtvs out b Gf tnf sf.
+      evaluate_type (get_tenv cx) (TupleT dts) = SOME (TupleTV dtvs) /\
+      buf.buf_operand = Var out /\ b+n < dimword(:256) /\
+      frag_exec_ptr cx ctx PG sb sd
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (n2w b) /\ ptr_covers Gf tnf out sf n /\
+      (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+        val_in_memory (TupleTV dtvs) (ArrayV (TupleV vals)) b m) /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      (!q. not_fresh_at sb q ==>
+        lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
+        op_taint tnf (Var q) = op_taint tn (Var q)) /\
+      (!ft fv p. val_wf ft fv /\
+        (p+type_memory_size ft <= b \/ b+n <= p) /\
+        (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory ft fv p m) ==>
+        !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory ft fv p m)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typedCopyPtrTheory.typed_return_normalization_layout >> strip_tac >>
+  drule vyperTypeValuesTheory.evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
+  qpat_assum `evaluate_type _ (TupleT sts) = _`
+    (mp_then Any mp_tac (SRULE [] tuple_bytestring_resources)) >>
+  disch_then (qspecl_then [`dts`, `tvs`, `vals`, `cenv`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `~is_word_type (TupleT sts)` by simp[compileEnvTheory.is_word_type_def] >>
+  `dts <> []` by (strip_tac >> gvs[]) >>
+  `0 < val_footprint (TupleTV stvs) (ArrayV (TupleV vals))` by
+    (`0 < LENGTH dts` by (Cases_on `dts` >> gvs[]) >>
+     qpat_assum `!i. i < LENGTH dts ==> _` (drule_then strip_assume_tac) >> decide_tac) >>
+  `stmt_state_rel ctx func cenv cx es' s /\
+   expr_val_at cenv cx (TupleT sts) sa sb es' (ArrayV (TupleV vals)) (Var root) s` by
+    gvs[exprSimTheory.expr_post_def] >>
+  `?a. lookup_var root s = SOME a` by
+    (qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [exprSimTheory.expr_val_at_def]) >>
+     disch_then (qspec_then `TupleTV stvs` mp_tac) >>
+     simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>
+  `eval_operand (Var root) s = SOME a` by simp[venomStateTheory.eval_operand_def] >>
+  `ptr_covers G tn root s (val_footprint (TupleTV stvs) (ArrayV (TupleV vals)))` by
+    (`val_footprint (TupleTV stvs) (ArrayV (TupleV vals)) <> 0 /\
+      val_footprint (TupleTV stvs) (ArrayV (TupleV vals)) <=
+        val_footprint (TupleTV stvs) (ArrayV (TupleV vals))` by decide_tac >>
+     drule_all representationCleanPtrTheory.ptr_val_ok_read_covers >> simp[]) >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory (TupleTV stvs) (ArrayV (TupleV vals)) (w2n a) m` by
+    (fs[bodyPtrDefsTheory.ptr_val_ok_def, bodyPtrDefsTheory.ptr_mem_ok_def] >>
+     metis_tac[]) >>
+  `s.vs_alloca_next < dimword(:256)` by
+    (irule exprLoweringPropsTheory.alloca_room_next_lt >>
+     fs[exprLoweringPropsTheory.stmt_state_rel_def] >> metis_tac[]) >>
+  `!i. i < LENGTH dts ==>
+    w2n a + SUM (MAP (type_memory_bytes cenv) (TAKE i sts)) < dimword(:256)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!i. i < LENGTH dts ==> _` (drule_then strip_assume_tac) >>
+     `w2n a <= w2n a + SUM (MAP (type_memory_bytes cenv) (TAKE i sts)) /\
+      w2n a + SUM (MAP (type_memory_bytes cenv) (TAKE i sts)) <
+        w2n a + val_footprint (TupleTV stvs) (ArrayV (TupleV vals))` by decide_tac >>
+     drule_all allocationPtrTheory.expr_val_at_below_frontier >> decide_tac) >>
+  irule normalizationTupleBytesPtrTheory.compile_alloc_tuple_bytes_robust_frag_ptr >>
+  asm_rewrite_tac[] >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `lookup_var _ _ = _`)) >>
+  qexists `lens` >> simp[] >> gen_tac >> strip_tac >>
+  qpat_assum `!i. i < LENGTH dts ==> is_bytestring_type _ /\ _`
+    (drule_then strip_assume_tac) >> decide_tac
+QED
