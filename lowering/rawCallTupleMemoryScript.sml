@@ -108,7 +108,7 @@ QED
 
 Finalise raw_call_tuple_tail_mem_ok
 
-Theorem raw_call_nonrevert_positive_mem_ok[local]:
+Theorem raw_call_nonrevert_positive_mem_ok:
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];

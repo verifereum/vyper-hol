@@ -3,7 +3,7 @@
 Theory bodyMemRawCall
 Ancestors
   bodyMemoryPreds bodyMemRawCallRevert bodyMemRawCallBounds bodyMemRawCallFinish
-  rawCallFinishPathMemory rawCallTupleMemory
+  rawCallFinishPathMemory rawCallTupleMemory rawCallSuffixMemory
 
 Theorem body_raw_call_mem_case:
   !cx ty flags es v18.
