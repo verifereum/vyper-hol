@@ -6,8 +6,9 @@
 Theory exprSimPopNestedImmutableDeploy
 Ancestors
   exprSimPopNestedBase exprSimPopImmutableTarget
+  exprSimHash fragGasSeqAbort gasSummaryCompose gasExemptCert gasSummary
   loweringPosts bodySim
-  list fragExec exprSimDefs exprSimProps exprSimHyps exprSimPop exprSimPopStorage
+  list rich_list arithmetic words fragExec exprSimDefs exprSimProps exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases vyperTypeEnv vyperTypeInvariants
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
@@ -347,6 +348,135 @@ Proof
   >- (rewrite_tac[immutable_holds_def] >>
       qexistsl [`id`, `off`, `tv`, `updated`, `j`, `etv`, `v`] >> simp[]) >>
   gvs[wb_frame_def] >> first_assum ACCEPT_TAC
+QED
+
+(* Operational suffix at the compiler boundary; the immutable map is only
+   bookkeeping, while the canonical byte update is MSTORE. *)
+Theorem immutable_pop_run[local]:
+  compile_dynarray_pop hdr 32 esz T imm LocCode sa = (r,sb) /\
+  (!x. hdr = Var x ==> not_fresh_at sa x) /\
+  (!region. imm = SOME region ==>
+     eval_operand region s = SOME 0w /\
+     (!x. region = Var x ==> not_fresh_at sa x)) /\
+  eval_operand hdr s = SOME w /\ mload (w2n w) s <> 0w ==>
+  ?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+    u.vs_memory = (mstore (w2n w) (mload (w2n w) s - 1w) s).vs_memory /\
+    u = s with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+                vs_immutables := u.vs_immutables|> /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    eval_operand r u = SOME (w + 32w + (mload (w2n w) s - 1w) * n2w esz)
+Proof
+  Cases_on `imm` >>
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, contextTheory.compile_imm_load_word_def,
+       contextTheory.compile_imm_store_word_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `hdr` >> gvs[eval_operand_def] >>
+  TRY (rename1 `eval_operand region s = SOME 0w` >>
+       `!a V. mload a (s with vs_vars := V) = mload a s` by simp[mload_def] >>
+       Cases_on `region` >> gvs[eval_operand_def]) >>
+  fs[not_fresh_at_def, lookup_var_def] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  pure_rewrite_tac[DROP_LENGTH_APPEND, APPEND] >>
+  simp[Once run_inst_seq_def, mk_inst_def,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
+  simp[run_inst_seq_def,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
+  simp[istore_def, mstore_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem immutable_pop_run_empty[local]:
+  compile_dynarray_pop hdr 32 esz T imm LocCode sa = (r,sb) /\
+  (!region. imm = SOME region ==> eval_operand region s = SOME 0w) /\
+  eval_operand hdr s = SOME w /\ mload (w2n w) s = 0w ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t
+Proof
+  Cases_on `imm` >>
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, contextTheory.compile_imm_load_word_def,
+       contextTheory.compile_imm_store_word_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt strip_tac >> gvs[] >>
+  `!a V. mload a (s with vs_vars := V) = mload a s` by simp[mload_def] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  pure_rewrite_tac[DROP_LENGTH_APPEND, APPEND] >>
+  simp[Once run_inst_seq_def, mk_inst_def,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0] >>
+  simp[run_inst_seq_def,
+       step_inst_base_opcode_eqs, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       ASCIInumbersTheory.toString_11, bool_to_word_def, WORD_ADD_0]
+QED
+
+Theorem immutable_pop_code[local]:
+  compile_dynarray_pop hdr 32 esz T imm LocCode sa = (r,sb) ==>
+  same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+  sa.cs_next_id <= sb.cs_next_id /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+Proof
+  Cases_on `imm` >>
+  simp[compile_dynarray_pop_def, contextTheory.compile_ptr_load_def,
+       contextTheory.compile_ptr_store_def, contextTheory.compile_imm_load_word_def,
+       contextTheory.compile_imm_store_word_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt strip_tac >> gvs[same_blocks_def] >>
+  simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  pure_rewrite_tac[DROP_LENGTH_APPEND, APPEND] >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem immutable_pop_gas_path[local]:
+  compile_dynarray_pop hdr 32 esz T imm LocCode sa = (r,sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >> drule immutable_pop_code >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  gvs[same_blocks_def] >> drule_all hash_run_path >> simp[]
+QED
+
+Theorem immutable_pop_abort_path[local]:
+  compile_dynarray_pop hdr 32 esz T imm LocCode sa = (r,sb) /\
+  fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = Abort a t ==>
+  ?j. gas_marked_path F ctx func s 0 (Abort a (t with vs_inst_idx := j))
+Proof
+  strip_tac >> drule immutable_pop_code >> strip_tac >>
+  `isPREFIX sa.cs_current_insts sb.cs_current_insts` by
+    simp[IS_PREFIX_APPEND] >>
+  drule_all storageCopyGasPathTheory.storage_copy_code_prefix >> strip_tac >>
+  `isPREFIX (emitted_insts sa sb)
+     (DROP s.vs_inst_idx bb.bb_instructions)` by gvs[] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  drule_all run_inst_seq_abort_zero_path >> simp[]
 QED
 
 (* Pop on a member of an immutable in the constructor, which Python's
