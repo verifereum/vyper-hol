@@ -161,7 +161,8 @@ Proof
      DRESTRICT G (COMPL {mv}) /\
    step_taint (mk_inst id MUL [Var ctr;Lit 32w] [mv]) s v tn =
      (tn with t_var := tn.t_var |+ (mv,{}))` by
-    (irule typed_copy_loop_arith_ghost >> simp[Abbr `v`, update_var_def]) >>
+    (irule typed_copy_loop_arith_ghost_clean >>
+     simp[Abbr `v`, update_var_def] >> rw[] >> gvs[op_taint_def]) >>
   qexistsl_tac [`DRESTRICT G (COMPL {mv})`,
     `tn with t_var := tn.t_var |+ (mv,{})`,
     `v with vs_inst_idx := SUC s.vs_inst_idx`] >>
@@ -567,7 +568,7 @@ Proof
       DRESTRICT G (COMPL {out}) /\
    step_taint (mk_inst id opc ops [out]) s (update_var out w s) tn =
       (tn with t_var := tn.t_var |+ (out,{}))` by
-    (irule typed_copy_loop_arith_ghost >> simp[update_var_def] >> metis_tac[]) >>
+    (irule typed_copy_loop_arith_ghost_clean >> simp[update_var_def] >> metis_tac[]) >>
   mp_tac (Q.GENL [`u`, `G'`, `tn'`, `r`]
     (Q.INST [`n` |-> `0`, `lo` |-> `0`,
       `i` |-> `mk_inst id opc ops [out]`] gas_path_ptr_step)) >>
