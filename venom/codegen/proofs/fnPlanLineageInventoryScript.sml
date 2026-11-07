@@ -371,6 +371,34 @@ Proof
   simp[GSYM FDOM_EQ_EMPTY, restore_spilled_plan_domain] >> ASM_SET_TAC[]
 QED
 
+Theorem lineage_inventory_exhaustive_suffix:
+  !S ps prefix suffix.
+    lineage_inventory S ps /\ ps.ps_stack = prefix ++ suffix /\
+    EVERY is_var_operand suffix /\ S SUBSET set suffix ==>
+    ?m. prefix = REPLICATE m dead_stack_marker
+Proof
+  simp[lineage_inventory_def, lineage_core_def] >> rpt strip_tac >>
+  `~MEM dead_stack_marker core /\ ~MEM dead_stack_marker suffix` by
+    (gvs[EVERY_MEM, stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def] >>
+     metis_tac[stackPlanTypesTheory.is_var_operand_def]) >>
+  `FILTER (\op. op <> dead_stack_marker) core = core /\
+   FILTER (\op. op <> dead_stack_marker) suffix = suffix /\
+   FILTER (\op. op <> dead_stack_marker) (REPLICATE m dead_stack_marker) = []` by
+    simp[FILTER_EQ_ID, FILTER_EQ_NIL, EVERY_MEM, MEM_REPLICATE] >>
+  `core = FILTER (\op. op <> dead_stack_marker) prefix ++ suffix` by
+    (qpat_x_assum `ps.ps_stack = prefix ++ suffix` (mp_tac o
+       AP_TERM ``FILTER (\op. op <> dead_stack_marker)``) >>
+     simp[FILTER_APPEND]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  `FILTER (\op. op <> dead_stack_marker) prefix = []` by
+    (Cases_on `FILTER (\op. op <> dead_stack_marker) prefix` >>
+     gvs[] >> ASM_SET_TAC[]) >>
+  qexists_tac `LENGTH prefix` >>
+  gvs[FILTER_EQ_NIL, EVERY_MEM] >>
+  qpat_x_assum `!x. MEM x prefix ==> _` mp_tac >>
+  qid_spec_tac `prefix` >> Induct >> simp[]
+QED
+
 Theorem lineage_inventory_target_suffix:
   !targets ps.
     lineage_inventory (set targets) ps /\ ALL_DISTINCT targets /\
@@ -379,24 +407,17 @@ Theorem lineage_inventory_target_suffix:
     ps.ps_spilled = FEMPTY /\
     ?m. ps.ps_stack = REPLICATE m dead_stack_marker ++ targets
 Proof
-  simp[lineage_inventory_def, lineage_core_def] >> rpt strip_tac >>
-  `FILTER (\op. op <> dead_stack_marker) core = core` by
-    (simp[FILTER_EQ_ID, EVERY_MEM] >> ASM_SET_TAC[]) >>
-  `FILTER (\op. op <> dead_stack_marker) targets = targets` by
-    simp[FILTER_EQ_ID, EVERY_MEM] >>
-  `FILTER (\op. op <> dead_stack_marker) (REPLICATE m dead_stack_marker) = []` by
-    simp[FILTER_EQ_NIL, EVERY_MEM, MEM_REPLICATE] >>
-  `core = FILTER (\op. op <> dead_stack_marker) prefix ++ targets` by
-    (qpat_x_assum `ps.ps_stack = prefix ++ targets` (mp_tac o
-       AP_TERM ``FILTER (\op. op <> dead_stack_marker)``) >>
-     simp[FILTER_APPEND]) >>
-  gvs[ALL_DISTINCT_APPEND] >>
-  `FILTER (\op. op <> dead_stack_marker) prefix = []` by
-    (Cases_on `FILTER (\op. op <> dead_stack_marker) prefix` >>
-     gvs[] >> ASM_SET_TAC[]) >>
-  gvs[] >>
-  `FDOM ps.ps_spilled = {}` by ASM_SET_TAC[] >>
-  gvs[FDOM_EQ_EMPTY] >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  `EVERY is_var_operand targets` by
+    (gvs[lineage_inventory_def, lineage_core_def, EVERY_MEM] >>
+     metis_tac[MEM_APPEND, MEM_REPLICATE]) >>
+  `set targets SUBSET set targets` by simp[] >>
+  drule_all lineage_inventory_exhaustive_suffix >> strip_tac >>
+  reverse conj_tac >- metis_tac[] >>
+  gvs[lineage_inventory_def, lineage_core_def] >>
+  `set targets SUBSET set core` by
+    (simp[SUBSET_DEF] >> metis_tac[MEM_APPEND, MEM_REPLICATE]) >>
+  simp[GSYM FDOM_EQ_EMPTY] >> ASM_SET_TAC[]
 QED
 
 Theorem do_swap_core:
@@ -6383,4 +6404,15 @@ Proof
   drule (iffLR select_spill_candidate_first_iff) >> strip_tac >>
   simp[] >> irule do_spill_at_survivor_geometry >>
   gvs[]
+QED
+
+Theorem lineage_inventory_common_exhaustive_suffix:
+  !S p q prefixP prefixQ suffix.
+    lineage_inventory S p /\ lineage_inventory S q /\
+    p.ps_stack = prefixP ++ suffix /\ q.ps_stack = prefixQ ++ suffix /\
+    EVERY is_var_operand suffix /\ S SUBSET set suffix ==>
+    ?m n. prefixP = REPLICATE m dead_stack_marker /\
+          prefixQ = REPLICATE n dead_stack_marker
+Proof
+  metis_tac[lineage_inventory_exhaustive_suffix]
 QED
