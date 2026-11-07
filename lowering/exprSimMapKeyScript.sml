@@ -88,9 +88,11 @@ Theorem emit_ADD_frame:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (u + v) s` >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
-       bind_outputs_def, eval_operand_def, lookup_var_update_var,
-       update_var_def] >>
+  conj_tac >-
+    (simp[run_inst_seq_def, mk_inst_def] >>
+     simp_tac (srw_ss()) [Once step_inst_base_def] >>
+     simp[exec_pure2_def, bind_outputs_def]) >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
