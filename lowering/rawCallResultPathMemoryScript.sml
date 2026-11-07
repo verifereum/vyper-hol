@@ -2,12 +2,17 @@
 Theory rawCallResultPathMemory
 Ancestors
   rawCallSuffixMemory exprSimRawCall rawCallTupleMemory
+  bodyMemAggregateBounds exprSimVVFrame exprSimMemDefs valueEncoding
   exprSimDefs exprLoweringProps venomState venomInst compileEnv context
   finite_map words
 Libs
   monadsyntax
 
 Theorem raw_call_nonrevert_positive_path_mem:
+  expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
+  lowered_value_type cenv e = expr_type e /\
+  evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]) /\
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -51,13 +56,39 @@ Theorem raw_call_nonrevert_positive_path_mem:
       w2n tw + (64 + ((n + 31) DIV 32) * 32) <= lb \/ lb + lsz <= w2n tw) /\
     gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    t.vs_current_bb = sb.cs_current_bb
+    t.vs_current_bb = sb.cs_current_bb /\
+    vv_post ctx func cenv cx e es0 sf sb s0 es
+      (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+      (LocatedValue (expr_type e) (mk_ptr result LocMemory))
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
+      (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+      (LocatedValue (expr_type e) (mk_ptr result LocMemory))
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   strip_tac >>
   drule_all raw_call_nonrevert_positive_run >> strip_tac >>
   drule_all raw_call_nonrevert_positive_mem_ok >> strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   drule_all raw_call_nonrevert_suffix_counted_mem >> strip_tac >>
+  `vv_post ctx func cenv cx e es0 sf sb s0 es
+    (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+    (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
+    (irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
+     fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
+  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
+    (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+    (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
+    (irule aggregate_allocated_result_store_bound_mem >>
+     conj_tac >- fs[stmt_state_rel_def] >>
+     conj_tac
+     >- (qexistsl_tac [`ti`,`w2n tw`,
+           `TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]`,
+           `64 + ((n+31) DIV 32)*32`] >>
+         pure_rewrite_tac[mk_ptr_def, type_memory_size_def,
+           vfmConstantsTheory.word_size_def] >> simp[arithmeticTheory.MULT_COMM]) >>
+     simp[] >> metis_tac[]) >>
   qexistsl_tac [`t`,`tw`,`ti`] >>
-  fs[arithmeticTheory.MULT_COMM] >> metis_tac[]
+  fs[arithmeticTheory.MULT_COMM, vv_store_bound_def, mk_ptr_def,
+     eval_operand_def, lookup_var_def] >> metis_tac[]
 QED

@@ -4306,7 +4306,7 @@ Proof
   gvs[expr_val_rel_def, is_word_type_def]
 QED
 
-Theorem raw_call_tuple_post[local]:
+Theorem raw_call_tuple_post:
   expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]) /\
