@@ -27,10 +27,10 @@ Libs
   pairLib
 
 (* An element of an array or a mapping, by the target's root and its
-   indices (targetSubscriptSplit): a storage root with an effectful index
-   and a local root with a pop in an index are residual; the rest is
-   target_subscript_main_case.  A target's root is a name, local or
-   module. *)
+   indices (targetSubscriptSplit): only a local root with a pop in an
+   index is residual.  Pure and effectful storage indices share the
+   capacity-based target_subscript_shared_case path.  A target's root
+   is a name, local or module. *)
 Theorem target_subscript_case:
   !nocalls ctx func cenv cx bt e.
     target_case nocalls ctx func cenv cx bt /\
