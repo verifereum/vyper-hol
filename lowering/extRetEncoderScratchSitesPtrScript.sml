@@ -1,8 +1,8 @@
 (* Compiler-region resources for recursive external-return encoding. *)
 Theory extRetEncoderScratchSitesPtr
 Ancestors
-  extRetScratchResourcePtr abiEncoderWindowContract abiEncoderProps
-  exprSimOperands venomMemDefs pred_set arithmetic abiDecoderCode abiEncoder context
+  extRetScratchResourcePtr extRetEncoderRegionPtr abiEncoderWindowContract abiEncoderProps
+  exprSimOperands venomMemDefs pred_set arithmetic abiDecoderCode abiEncoder context venomInst
 
 Theorem scratch_resource_restrict:
   scratch_resource ctx fn sites q len s /\ children SUBSET sites /\
@@ -195,4 +195,31 @@ Proof
   `abi_decoder_code st en` by
     metis_tac[encoder_alloc_code_mutual, pairTheory.SND] >>
   drule_all abi_decoder_code_alloca >> simp[]
+QED
+
+Theorem encoder_window_scratch_resource:
+  compile_abi_encode_to_buf dst src ei st = (result,en) /\
+  fn_has_code st en fn /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv st /\ sb.cs_next_id <= st.cs_next_id /\
+  stmt_state_rel ctx fn cenv cx es s /\
+  expr_val_at cenv cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  eval_operand op s = SOME w ==>
+  scratch_resource ctx fn (window_alloca_sites fn (frag_ids st en))
+    (w2n w) (val_footprint tv v) s
+Proof
+  strip_tac >> irule scratch_resource_from_expr >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  qexistsl [`cenv`, `cx`, `es`, `sa`, `sb`] >> simp[] >>
+  rpt gen_tac >> simp[window_alloca_sites_def, frag_ids_def] >> strip_tac >>
+  `encoder_region st en` by metis_tac[encoder_region_mutual, pairTheory.SND] >>
+  `st.cs_next_id <= inst.inst_id /\ inst.inst_id < en.cs_next_id` by simp[] >>
+  drule_all encoder_region_alloca_fresh >> strip_tac >>
+  qexists `out` >>
+  conj_tac
+  >- (qpat_x_assum `MEM inst (fn_insts fn)` mp_tac >>
+      `inst = mk_inst id ALLOCA [Lit 32w] [out]` by
+        (simp[venomInstTheory.instruction_component_equality, venomInstTheory.mk_inst_def]) >> simp[]) >>
+  metis_tac[fresh_not_local_ptr]
 QED
