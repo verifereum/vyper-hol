@@ -186,6 +186,11 @@ Definition intcall_entry_def:
              off <= w2n (EL ((if has_rb then 1 else 0) + i) argv) /\
              w2n (EL ((if has_rb then 1 else 0) + i) argv) + psz <=
                off + asz) /\
+        (has_rb ==> !i po psz.
+           i < LENGTH params /\ ~SND (EL i params) /\
+           FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) ==>
+           regions_disjoint (w2n (HD argv)) (type_memory_size rtv)
+             (w2n (EL (1 + i) argv)) psz) /\
         (ce.ce_is_ctor ==> !i po psz nm tv iv io.
           i < LENGTH params /\ ~SND (EL i params) /\
           FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
