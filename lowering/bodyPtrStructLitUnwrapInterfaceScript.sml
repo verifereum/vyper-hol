@@ -4,6 +4,24 @@ Ancestors bodyPtrStructLitMemoryCaller bodyPtrStructLitMemoryRead
   exprSimSource bodyPtrDefs
   exprSimDefs context venomState
 
+Theorem typed_child_memory_word_resources:
+  (?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    eval_result_typed (env,cx,ee) tv (Type (expr_type e)) /\
+    (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type tvt v)) /\ 
+  vv_post ctx fn ce cx e es sb sm t ee tv (LocatedValue ty q) s /\
+  ptr_vv_ok cx (expr_type e) tv (LocatedValue ty q) ee G tn s /\
+  q.ptr_location = LocMemory /\ is_word_type ty ==>
+  ?a src. eval_operand q.ptr_operand s = SOME a /\
+    q.ptr_operand = Var src /\ ptr_covers G tn src s 32 /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem)
+Proof
+  strip_tac >> drule_all vv_post_memory_word_read >> strip_tac >>
+  `ptr_mem_ok cx ty v q.ptr_operand G tn s /\
+   op_taint tn q.ptr_operand = {} /\ value_has_type tvt v` by
+    (gvs[ptr_vv_ok_def] >> metis_tac[]) >>
+  gvs[] >> drule_all ptr_mem_ok_word_read >> strip_tac >> metis_tac[]
+QED
+
 Theorem raw_child_memory_word_resources:
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,ee) /\
   vv_post ctx fn ce cx e es sb sm t ee tv (LocatedValue ty q) s /\
@@ -13,12 +31,8 @@ Theorem raw_child_memory_word_resources:
     q.ptr_operand = Var src /\ ptr_covers G tn src s 32 /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem)
 Proof
-  strip_tac >> drule_all vv_post_memory_word_read >> strip_tac >>
-  drule_all expr_body_pre_runtime_typed >> strip_tac >>
-  `ptr_mem_ok cx ty v q.ptr_operand G tn s /\
-   op_taint tn q.ptr_operand = {} /\ value_has_type tvt v` by
-    (gvs[ptr_vv_ok_def] >> metis_tac[]) >>
-  gvs[] >> drule_all ptr_mem_ok_word_read >> strip_tac >> metis_tac[]
+  strip_tac >> drule_all expr_body_pre_runtime_typed >> strip_tac >>
+  irule typed_child_memory_word_resources >> metis_tac[]
 QED
 
 (* Premise ledger for memory_word_unwrap_continuation at post-ADD entry:
