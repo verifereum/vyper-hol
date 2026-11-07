@@ -807,7 +807,9 @@ Proof
   simp[Once exec_block_def] >>
   simp[Once step_inst_def] >>
   simp_tac (srw_ss()) [mk_inst_def] >>
-  simp[step_inst_base_def, is_terminator_def, jump_to_def]
+  once_rewrite_tac [step_inst_base_def] >>
+  simp_tac (srw_ss()) [] >>
+  simp[is_terminator_def, jump_to_def]
 QED
 
 (* Full single-block execution ending with JNZ *)
