@@ -5,11 +5,12 @@ Ancestors
   whitelistForIterImmCopy whitelistForIterImmFrame whitelistForIterDynLoop
   exprSimTopLevelImmutable stmtLowering exprLoweringProps compileEnv context
   vyperAST list finite_map stmtSimForArrayParts stmtSimProps emitHelper venomInst fragExec
-  stmtSimForArrayLoop stmtSimDefs venomState venomExecSemantics
+  stmtSimForArrayLoop stmtSimForArrayFrag stmtSimDefs venomState venomExecSemantics
   venomExecProofs loweringPosts fragGasMode fragGasPath
   fragGasSeq gasCount gasSummary gasExemptCert gasContext gasOutcome
   gasSummaryCompose stmtSimForRounds vyperInterpreter vyperState
-  words arithmetic emitHelperProps
+  words arithmetic rich_list emitHelperProps exprSimBopRestWordLoads
+  exprSimBopRestWordLayout exprSimProps
 Libs
   monadsyntax
 
@@ -884,4 +885,283 @@ Proof
      simp[stmt_state_rel_inst_idx]) >>
   qexists_tac `next` >> fs[array_loop_inv_def] >>
   fs[array_caller_frame_def] >> metis_tac[]
+QED
+
+(* The entry guard consumes a length operand; Fixed omits it altogether. *)
+Theorem immutable_entry_block_run:
+  eval_operand lvo s = SOME (n2w L) /\ L <= cap /\ cap < dimword (:256) /\
+  ALL_DISTINCT [idx; g; vld] /\
+  (!x. lvo = Var x ==> x <> idx) ==>
+  run_inst_seq
+    ([mk_inst i1 ASSIGN [Lit 0w] [idx]] ++
+     if dyn then
+       [mk_inst i2 GT [lvo; Lit (n2w cap)] [g];
+        mk_inst i3 ISZERO [Var g] [vld];
+        mk_inst i4 ASSERT [Var vld] []]
+     else []) s =
+  OK (if dyn then update_var vld 1w (update_var g 0w (update_var idx 0w s))
+      else update_var idx 0w s)
+Proof
+  strip_tac >> fs[ALL_DISTINCT] >>
+  `step_inst_base (mk_inst i1 ASSIGN [Lit 0w] [idx]) s =
+   OK (update_var idx 0w s)` by
+    simp[mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def] >>
+  reverse (Cases_on `dyn`) >- simp[run_inst_seq_def] >>
+  qabbrev_tac `s1 = update_var idx 0w s` >>
+  `eval_operand lvo s1 = SOME (n2w L)` by
+    (simp[Abbr `s1`] >> irule eval_operand_update_var_mstore >> simp[]) >>
+  `L < dimword (:256)` by decide_tac >>
+  `bool_to_word (w2n (n2w L : bytes32) > w2n (n2w cap : bytes32)) = 0w` by
+    simp[bool_to_word_def] >>
+  `step_inst_base (mk_inst i2 GT [lvo; Lit (n2w cap)] [g]) s1 =
+   OK (update_var g 0w s1)` by
+    (qpat_x_assum `bool_to_word _ = 0w` (SUBST1_TAC o SYM) >>
+     irule step_GT >> simp[eval_operand_def]) >>
+  qabbrev_tac `s2 = update_var g 0w s1` >>
+  `step_inst_base (mk_inst i3 ISZERO [Var g] [vld]) s2 =
+   OK (update_var vld 1w s2)` by
+    (`1w = bool_to_word ((0w:bytes32) = 0w)` by simp[bool_to_word_def] >>
+     pop_assum SUBST1_TAC >> irule step_ISZERO >>
+     simp[Abbr `s2`, eval_operand_def, lookup_var_update_var]) >>
+  qabbrev_tac `s3 = update_var vld 1w s2` >>
+  `step_inst_base (mk_inst i4 ASSERT [Var vld] []) s3 = OK s3` by
+    (irule step_ASSERT_ok >>
+     simp[Abbr `s3`, eval_operand_def, lookup_var_update_var]) >>
+  simp[run_inst_seq_def]
+QED
+
+(* Initialization after the optional source-header load.  The source pointer
+   is a literal code offset, while the loaded length is framed as an operand. *)
+Theorem immutable_allocate_initialize:
+  ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
+  MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
+  ainst.inst_operands = [Lit (n2w sz)] /\ sz < dimword (:256) /\
+  lookup_block s0.vs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      pre ++ [ainst; mk_inst j JMP [Label entry] []]|> /\
+  lookup_block entry func.fn_blocks =
+    SOME <|bb_label := entry; bb_instructions :=
+      [mk_inst e1 ASSIGN [Lit 0w] [idx]] ++
+      (if dyn then
+        [mk_inst e2 GT [lvo; Lit (n2w cap)] [g];
+         mk_inst e3 ISZERO [Var g] [vld];
+         mk_inst e4 ASSERT [Var vld] []] else []) ++
+      [mk_inst e5 JMP [Label cond_lbl] []]|> /\
+  s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s0 /\ P es /\
+  lookup_scopes id es.scopes = NONE /\
+  eval_operand lvo s0 = SOME (n2w (LENGTH vs)) /\
+  LENGTH vs <= cap /\ cap < dimword (:256) /\
+  ret_pc_ok cenv st s0 /\ ALL_DISTINCT [p; idx; g; vld] /\
+  not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es.scopes idx /\
+  not_local_ptr cenv es.scopes g /\ not_local_ptr cenv es.scopes vld /\
+  (!x. lvo = Var x ==> ~MEM x [p; idx; g; vld]) /\
+  (!x. not_fresh_at st x ==> ~MEM x [p; idx; g; vld]) ==>
+  ?dst cc.
+    array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+      p dst sz ainst cond_lbl st 0 es cc /\
+    eval_operand lvo cc = SOME (n2w (LENGTH vs)) /\
+    array_caller_frame st s0 cc /\
+    gas_marked_path F ctx func s0 0 (OK cc)
+Proof
+  strip_tac >> fs[ALL_DISTINCT] >>
+  `eval_operand (Lit (n2w off)) s0 = SOME (n2w off : bytes32)` by
+    simp[eval_operand_def] >>
+  `!x. Lit (n2w off : bytes32) = Var x ==> x <> p` by simp[] >>
+  drule_all array_allocate_ready >> strip_tac >>
+  rename1 `exec_alloca ainst s0 (n2w sz : bytes32) = OK s1` >>
+  rename1 `lookup_var p s1 = SOME dst` >>
+  drule_all array_alloca_frame >> strip_tac >>
+  `step_inst_base ainst s0 = OK s1` by
+    simp[step_inst_base_opcode_eqs, eval_operand_def] >>
+  `gas_marked_path F ctx func s0 0 (OK (jump_to entry s1))` by
+    (irule inst_seq_jump_zero_path >> simp[] >>
+     qexistsl_tac [`[ainst]`, `j`] >>
+     simp[DROP_LENGTH_APPEND, run_inst_seq_def, is_terminator_def]) >>
+  `s1.vs_labels = s0.vs_labels` by
+    (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+     simp[exec_alloca_def] >>
+     gvs[AllCaseEqs(), update_var_def] >> rpt strip_tac >> gvs[]) >>
+  `eval_operand lvo s1 = SOME (n2w (LENGTH vs))` by
+    (Cases_on `lvo` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  qabbrev_tac `e0 = jump_to entry s1` >>
+  `eval_operand lvo e0 = SOME (n2w (LENGTH vs)) /\
+   e0.vs_current_bb = entry /\ e0.vs_inst_idx = 0 /\ ~e0.vs_halted` by
+    (Cases_on `lvo` >> gvs[Abbr `e0`, jump_to_def, eval_operand_def, lookup_var_def]) >>
+  qabbrev_tac `is = [mk_inst e1 ASSIGN [Lit 0w] [idx]] ++
+    if dyn then
+      [mk_inst e2 GT [lvo; Lit (n2w cap)] [g];
+       mk_inst e3 ISZERO [Var g] [vld];
+       mk_inst e4 ASSERT [Var vld] []] else []` >>
+  qabbrev_tac `e4s = if dyn then
+    update_var vld 1w (update_var g 0w (update_var idx 0w e0))
+    else update_var idx 0w e0` >>
+  `run_inst_seq is e0 = OK e4s` by
+    (qunabbrev_tac `is` >> qunabbrev_tac `e4s` >>
+     irule immutable_entry_block_run >> simp[ALL_DISTINCT] >>
+     conj_tac >- metis_tac[] >>
+     qexists_tac `LENGTH vs` >> simp[]) >>
+  `gas_marked_path F ctx func e0 0 (OK (jump_to cond_lbl e4s))` by
+    (irule inst_seq_jump_zero_path >> simp[] >>
+     qexists_tac `e5` >>
+     gvs[Abbr `is`, is_terminator_def] >> Cases_on `dyn` >> simp[is_terminator_def]) >>
+  qabbrev_tac `cc = jump_to cond_lbl e4s` >>
+  `!x. x <> idx /\ x <> g /\ x <> vld ==> lookup_var x cc = lookup_var x s1` by
+    (Cases_on `dyn` >> simp[Abbr `cc`, Abbr `e4s`, Abbr `e0`,
+       jump_to_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `cc.vs_allocas = s1.vs_allocas /\ cc.vs_current_bb = cond_lbl /\
+   cc.vs_inst_idx = 0 /\ ~cc.vs_halted` by
+    (Cases_on `dyn` >> simp[Abbr `cc`, Abbr `e4s`, Abbr `e0`,
+       jump_to_def, update_var_def]) >>
+  `stmt_state_rel ctx func cenv cx es cc` by
+    (Cases_on `dyn` >> simp[Abbr `cc`, stmt_state_rel_jump_to, Abbr `e4s`] >>
+     rpt (irule stmt_state_rel_update_var >> simp[]) >>
+     simp[Abbr `e0`, stmt_state_rel_jump_to]) >>
+  `lookup_var idx cc = SOME (n2w 0)` by
+    (Cases_on `dyn` >> simp[Abbr `cc`, Abbr `e4s`, jump_to_def,
+       lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `lookup_var p cc = SOME dst` by metis_tac[] >>
+  `ret_pc_ok cenv st cc` by
+    (Cases_on `dyn` >> simp[Abbr `cc`, ret_pc_ok_jump_to, Abbr `e4s`,
+       array_ret_pc_update, Abbr `e0`]) >>
+  `cc.vs_labels = s1.vs_labels` by
+    (Cases_on `dyn` >> simp[Abbr `cc`, Abbr `e4s`, Abbr `e0`,
+       jump_to_def, update_var_def]) >>
+  qexistsl_tac [`dst`, `cc`] >> rpt conj_tac
+  >- simp[array_loop_inv_def, eval_operand_def]
+  >- (Cases_on `lvo` >> gvs[eval_operand_def] >> metis_tac[])
+  >- (simp[array_caller_frame_def] >> metis_tac[]) >>
+  drule_all gas_marked_path_then >> simp[]
+QED
+
+(* Typed immutable-header reading is independent of the allocation prefix. *)
+Theorem immutable_length_load_boundary:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  immutable_holds cenv cx (ArrayT et (Dynamic cap)) (Value (ArrayV av))
+    (n2w off) es s /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
+  LENGTH vs = array_length (ArrayTV tv (Dynamic cap)) av /\
+  compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca (Lit (n2w off)) sa = (lvo,sb) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ret_pc_ok cenv sa s ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    eval_operand lvo u = SOME (n2w (LENGTH vs)) /\
+    stmt_state_rel ctx func cenv cx es u /\ ret_pc_ok cenv sa u /\
+    array_caller_frame sa s u /\ ~u.vs_halted /\
+    u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >>
+  `context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode
+     (Lit (n2w off)) sa = (lvo,sb)` by simp[compile_ptr_load_def] >>
+  `eval_operand (Lit (n2w off)) s = SOME (n2w off : bytes32)` by
+    simp[eval_operand_def] >>
+  drule_all rest_word_array_immutable_header_path >> strip_tac >>
+  drule rest_word_ptr_load_fresh >> strip_tac >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
+    (simp[lookup_var_def] >> rpt strip_tac >> first_x_assum irule >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx es (s with vs_vars := u.vs_vars)` by
+    (irule stmt_state_rel_vars_frame >> simp[lookup_var_def] >>
+     fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx es
+     ((s with vs_vars := u.vs_vars) with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    metis_tac[stmt_state_rel_inst_idx] >>
+  `stmt_state_rel ctx func cenv cx es u` by
+    (qpat_x_assum `u = _` SUBST1_TAC >> simp[] >> fs[]) >>
+  qexists_tac `u` >> simp[gas_marked_path_def] >>
+  conj_tac
+  >- (fs[ret_pc_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (fs[array_caller_frame_def] >>
+      qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
+  qpat_x_assum `u = _` SUBST1_TAC >> simp[]
+QED
+
+(* A Fixed length is already a literal; a Dynamic length is a typed immutable
+   header.  Both expose the same entry-state/operand interface. *)
+Theorem immutable_optional_length_boundary:
+  (if dyn then
+     compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca (Lit (n2w off))
+   else return (Lit (n2w cap))) sa = (lvo,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (dyn ==>
+    immutable_holds cenv cx (ArrayT et (Dynamic cap)) (Value (ArrayV av))
+      (n2w off) es s /\
+    evaluate_type (get_tenv cx) et = SOME tv /\
+    value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
+    LENGTH vs = array_length (ArrayTV tv (Dynamic cap)) av) /\
+  (~dyn ==> LENGTH vs = cap) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ret_pc_ok cenv sa s ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    eval_operand lvo u = SOME (n2w (LENGTH vs)) /\
+    stmt_state_rel ctx func cenv cx es u /\ ret_pc_ok cenv sa u /\
+    array_caller_frame sa s u /\ ~u.vs_halted /\
+    u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  Cases_on `dyn` >> simp[comp_return_def] >> strip_tac
+  >- (drule_all immutable_length_load_boundary >> strip_tac >>
+      qexists_tac `u` >> simp[]) >>
+  gvs[] >> qexists_tac `s` >> simp[eval_operand_def] >>
+  simp[gas_marked_path_def, gas_path_rules]
+QED
+
+(* Complete source-independent initialization: optional header read, loop
+   variable allocation, then index initialization and the optional guard. *)
+Theorem immutable_loop_initialize:
+  (if dyn then
+     compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca (Lit (n2w off))
+   else return (Lit (n2w cap))) sa = (lvo,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (dyn ==>
+    immutable_holds cenv cx (ArrayT et (Dynamic cap)) (Value (ArrayV av))
+      (n2w off) es s /\
+    evaluate_type (get_tenv cx) et = SOME tv /\
+    value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
+    LENGTH vs = array_length (ArrayTV tv (Dynamic cap)) av) /\
+  (~dyn ==> LENGTH vs = cap) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ret_pc_ok cenv sa s /\
+  ainst.inst_opcode = ALLOCA /\ ainst.inst_outputs = [p] /\
+  MEM ainst (fn_insts func) /\ fn_inst_ids_distinct func /\
+  ainst.inst_operands = [Lit (n2w sz)] /\ sz < dimword (:256) /\
+  lookup_block sb.cs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      sb.cs_current_insts ++ [ainst; mk_inst j JMP [Label entry] []]|> /\
+  lookup_block entry func.fn_blocks =
+    SOME <|bb_label := entry; bb_instructions :=
+      [mk_inst e1 ASSIGN [Lit 0w] [idx]] ++
+      (if dyn then
+        [mk_inst e2 GT [lvo; Lit (n2w cap)] [g];
+         mk_inst e3 ISZERO [Var g] [vld];
+         mk_inst e4 ASSERT [Var vld] []] else []) ++
+      [mk_inst e5 JMP [Label cond_lbl] []]|> /\
+  P es /\ lookup_scopes id es.scopes = NONE /\
+  LENGTH vs <= cap /\ cap < dimword (:256) /\
+  ALL_DISTINCT [p; idx; g; vld] /\
+  not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es.scopes idx /\
+  not_local_ptr cenv es.scopes g /\ not_local_ptr cenv es.scopes vld /\
+  (!x. lvo = Var x ==> ~MEM x [p; idx; g; vld]) /\
+  (!x. not_fresh_at sa x ==> ~MEM x [p; idx; g; vld]) ==>
+  ?dst cc.
+    array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+      p dst sz ainst cond_lbl sa 0 es cc /\
+    eval_operand lvo cc = SOME (n2w (LENGTH vs)) /\
+    array_caller_frame sa s cc /\
+    gas_marked_path F ctx func s 0 (OK cc)
+Proof
+  strip_tac >> drule_all immutable_optional_length_boundary >> strip_tac >>
+  `lookup_block u.vs_current_bb func.fn_blocks =
+    SOME <|bb_label := lbl; bb_instructions :=
+      sb.cs_current_insts ++ [ainst; mk_inst j JMP [Label entry] []]|>` by simp[] >>
+  drule_all immutable_allocate_initialize >>
+  disch_then (qspec_then `off` strip_assume_tac) >>
+  qexistsl_tac [`dst`, `cc`] >> simp[] >> conj_tac
+  >- (drule_all array_caller_frame_trans >> simp[]) >>
+  drule_all gas_marked_path_then >> simp[]
 QED
