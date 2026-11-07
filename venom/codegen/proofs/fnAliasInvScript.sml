@@ -13603,6 +13603,49 @@ Proof
   disch_then (drule_then mp_tac) >> simp[alias_occ_read_log_ok_def] >> metis_tac[]
 QED
 
+(* stack_poke uses saturating subtraction: an excessive depth still
+   selects index zero on a nonempty stack. Only the actual list index,
+   not a depth-validity premise, controls whether a slot exists. *)
+Definition alias_occ_relabel_def:
+  alias_occ_relabel dist at s =
+    s with alias_occs := LUPDATE
+      (at, SND (EL (LENGTH s.alias_occs - 1 - dist) s.alias_occs))
+      (LENGTH s.alias_occs - 1 - dist) s.alias_occs
+End
+
+Theorem alias_occ_relabel_align:
+  alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_relabel dist at s)
+    (ps with ps_stack := stack_poke dist at ps.ps_stack)
+Proof
+  simp[alias_occ_align_def, alias_occ_relabel_def, LUPDATE_MAP, stack_poke_def] >>
+  strip_tac >> qpat_x_assum `MAP FST _ = _` (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem alias_occ_relabel_ids:
+  alias_occ_ids (alias_occ_relabel dist at s) = alias_occ_ids s
+Proof
+  simp[alias_occ_ids_def, alias_occ_relabel_def, LUPDATE_MAP] >>
+  Cases_on `s.alias_occs = []` >> simp[] >>
+  `LENGTH s.alias_occs - 1 - dist < LENGTH s.alias_occs` by
+    (Cases_on `s.alias_occs` >> gvs[]) >>
+  `SND (EL (LENGTH s.alias_occs - 1 - dist) s.alias_occs) =
+   EL (LENGTH s.alias_occs - 1 - dist) (MAP SND s.alias_occs)` by simp[EL_MAP] >>
+  gvs[] >> simp[LUPDATE_SAME]
+QED
+
+Theorem alias_occ_relabel_wf:
+  alias_occ_wf s ==> alias_occ_wf (alias_occ_relabel dist at s)
+Proof
+  simp[alias_occ_wf_def, alias_occ_relabel_ids, alias_occ_relabel_def]
+QED
+
+Theorem alias_occ_relabel_next:
+  (alias_occ_relabel dist at s).alias_next = s.alias_next
+Proof
+  simp[alias_occ_relabel_def]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
