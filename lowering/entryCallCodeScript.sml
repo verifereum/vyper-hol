@@ -268,7 +268,7 @@ Proof
 QED
 
 Theorem entry_code_supported_call:
-  supported_effect_expr tops (Call ty ct args default_ret) /\
+  supported_effect_expr tops (Call source_ty ct args default_ret) /\
   (!e ce et. MEM e args ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
