@@ -225,3 +225,63 @@ Proof
   `ssa_form fn` by gvs[codegen_ready_fn_def] >>
   simp[] >> irule chronological_origin_output_fresh >> metis_tac[]
 QED
+
+Theorem native_phi_worker_live_step:
+  !fn bb visited ps qs rs k dfg cfg halt inst rest ops dist out.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~MEM bb.bb_label visited /\ k < LENGTH (collect_phis bb.bb_instructions) /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) /\
+    native_inst_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt
+      (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+      (non_param_insts bb) ps k qs /\
+    DROP k (non_param_insts bb) = inst::rest /\
+    inst.inst_outputs = [out] /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) qs.ps_stack = SOME dist /\
+    native_live_boundary fn bb (LENGTH (get_params bb.bb_instructions) + k) qs /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn inst
+      (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+         (k + LENGTH (get_params bb.bb_instructions) + 1)) halt
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      bb.bb_label qs = SOME (ops,rs) ==>
+    native_live_boundary fn bb (LENGTH (get_params bb.bb_instructions) + SUC k) rs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k < LENGTH (non_param_insts bb)` by
+    (qspec_then `bb` (qx_choose_then `tail` assume_tac) non_param_insts_phi_prefix >>
+     gvs[] >> decide_tac) >>
+  `inst = EL k (non_param_insts bb)` by
+    (qpat_x_assum `DROP k _ = _` mp_tac >> simp[DROP_CONS_EL] >> strip_tac >> gvs[]) >>
+  `inst = EL (LENGTH (get_params bb.bb_instructions) + k) bb.bb_instructions` by
+    metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
+  `inst.inst_opcode = PHI` by
+    (qspec_then `bb` (qx_choose_then `tail` assume_tac) non_param_insts_phi_prefix >>
+     `MEM inst (collect_phis bb.bb_instructions)` by
+       metis_tac[listTheory.EL_APPEND_EQN, listTheory.EL_MEM] >>
+     metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  `EVERY (\v. ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled)
+    inst.inst_outputs` by
+    (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)
+       native_phi_worker_output_fresh >>
+     disch_then (qspec_then `visited` mp_tac) >> simp[] >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> gvs[]) >>
+  `LENGTH (get_params bb.bb_instructions) + k < LENGTH bb.bb_instructions` by
+    (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `(if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)
+    else live_vars_at (liveness_analyze fn) bb.bb_label
+      (k + LENGTH (get_params bb.bb_instructions) + 1)) =
+    live_vars_at (liveness_analyze fn) bb.bb_label
+      (SUC (LENGTH (get_params bb.bb_instructions) + k))` by
+    (irule fnPlanLineageCallersTheory.ready_block_suffix_next_live >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  gvs[] >>
+  qpat_x_assum `EL _ bb.bb_instructions = EL _ (non_param_insts bb)`
+    (fn th => rule_assum_tac (REWRITE_RULE [GSYM th])) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    native_phi_live_boundary_step >>
+  disch_then (qspecl_then [`out`, `dist`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
