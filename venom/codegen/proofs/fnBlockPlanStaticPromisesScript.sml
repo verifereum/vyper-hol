@@ -154,9 +154,15 @@ Proof
   >~ [`venom_to_evm_name _ = SOME _`]
   >- (gvs[] >> simp[generate_emit_ops_def]) >>
   Cases_on `inst.inst_opcode = JNZ`
-  >- (gvs[] >> simp[generate_emit_ops_def] >> rpt (CASE_TAC >> gvs[])) >>
+  >- (gvs[] >> simp[generate_emit_ops_def] >>
+      BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[]) >>
   Cases_on `inst.inst_opcode = JMP`
-  >- (gvs[] >> simp[generate_emit_ops_def] >> rpt (CASE_TAC >> gvs[])) >>
+  >- (gvs[] >> simp[generate_emit_ops_def] >>
+      BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[] >> BasicProvers.TOP_CASE_TAC >> simp[] >>
+      BasicProvers.TOP_CASE_TAC >> simp[]) >>
   Cases_on `inst.inst_opcode = DJMP`
   >- (gvs[] >> simp[generate_emit_ops_def]) >>
   Cases_on `inst.inst_opcode = INVOKE`

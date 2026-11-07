@@ -578,7 +578,8 @@ Proof
   `!v j. FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME j <=>
      j < LENGTH (collect_phis instrs) /\
      MEM v (MAP SND (phi_pairs (EL j (collect_phis instrs)).inst_operands))`
-    by metis_tac[build_phi_owner_lookup] >>
+    by (rpt gen_tac >> match_mp_tac build_phi_owner_lookup >>
+        first_assum ACCEPT_TAC) >>
   `?seed. MEM seed live /\ MEM seed (MAP SND (phi_pairs phi.inst_operands))`
     by metis_tac[] >>
   `~NULL (collect_phis instrs)` by (Cases_on `collect_phis instrs` >> gvs[]) >>
