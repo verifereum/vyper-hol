@@ -2,6 +2,7 @@ Theory lowerDloadTerminalObservation
 Ancestors
   lowerDloadRecursiveInterface lowerDloadResidualRead lowerDloadRevertSuffix
   lowerDloadSharedState ptrDiscipline o1PassContract venomExecSemantics
+  o1LowerDloadRangeTransport lowerDloadRelocation pred_set words list venomState
 
 (* Terminal interface audit (not a proof of the quoted obligation).
 
@@ -73,3 +74,25 @@ val ld_final_observation_goal = ``
       (t_h.vs_transient t_h.vs_call_ctx.cc_address) /\
     un.t_imm SUBSET D.d_imm t_h.vs_immutables /\
     R SUBSET D.d_ret t_h.vs_returndata``;
+
+Theorem ld_byte_rel_masked_slice:
+  (!j. j < n ==> R (a+j) (b+j)) /\
+  ld_byte_rel R X Y (\q. venomState$read_memory q 1 s)
+    (\q. venomState$read_memory q 1 t) ==>
+  LENGTH (venomState$read_memory a n s) =
+    LENGTH (venomState$read_memory b n t) /\
+  (!j. j < n /\ a+j NOTIN X ==>
+    EL j (venomState$read_memory a n s) =
+    EL j (venomState$read_memory b n t)) /\
+  {j | j < n /\ b+j IN Y} SUBSET {j | j < n /\ a+j IN X}
+Proof
+  strip_tac >> conj_tac >- simp[ld_read_memory_length] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `venomState$read_memory (a+j) 1 s =
+       venomState$read_memory (b+j) 1 t` by
+        (fs[ld_byte_rel_def] >> metis_tac[]) >>
+      pop_assum (mp_tac o AP_TERM ``EL 0 : word8 list -> word8``) >>
+      simp[ld_read_memory_element]) >>
+  fs[ld_byte_rel_def, SUBSET_DEF] >> metis_tac[]
+QED
