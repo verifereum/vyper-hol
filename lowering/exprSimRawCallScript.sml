@@ -563,7 +563,7 @@ Proof
   fs[ignore_bind_def] >> goal_assum (drule_at Any)
 QED
 
-Theorem raw_call_value_outcome_bind[local]:
+Theorem raw_call_value_outcome_bind:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> value evaluation_result) (es,s0) P E /\
   (!rr ee r. E rr ee r ==> ?exc. rr = INR exc /\ R (INR exc) ee r) /\
@@ -793,7 +793,7 @@ QED
 
 (* Only the keyword suffix is all-word. Its compiler is the standard ordered
    word-argument runner followed by selection of value= and gas=. *)
-Theorem raw_call_kwargs_word_args[local]:
+Theorem raw_call_kwargs_word_args:
   !ks es sa vo go d sb.
     EVERY (\k. k = EKValue \/ k = EKGas) ks /\
     LENGTH es = LENGTH ks /\
@@ -1349,7 +1349,7 @@ Proof
   drule_all raw_call_frame_bytes >> simp[]
 QED
 
-Theorem raw_call_addr_data_post[local]:
+Theorem raw_call_addr_data_post:
   expr_post ctx func cenv cx d es1 s1 s2 ta es2 (BytesV bs) data td /\
   expr_type d = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
