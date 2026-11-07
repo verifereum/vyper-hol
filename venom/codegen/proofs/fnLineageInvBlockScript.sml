@@ -142,7 +142,8 @@ Theorem analyzed_join_outgoing_block_inventory:
  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
  cfg_reachable_of (cfg_analyze fn) pred /\
  MEM next (cfg_succs_of (cfg_analyze fn) succ) /\
- generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (pops,ps) /\
+ (?A. generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (pops,A) /\
+      ps.ps_stack = A.ps_stack /\ ps.ps_spilled = A.ps_spilled) /\
  lineage_inventory (set (MAP Var (live_vars_at (liveness_analyze fn) pred
    (LENGTH pb.bb_instructions)))) ps /\
  lineage_core m core ps /\ EVERY is_var_operand core /\
