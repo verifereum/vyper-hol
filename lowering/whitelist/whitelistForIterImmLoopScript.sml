@@ -9,6 +9,7 @@ Ancestors
   venomExecProofs loweringPosts fragGasMode fragGasPath
   fragGasSeq gasCount gasSummary gasExemptCert gasContext gasOutcome
   gasSummaryCompose stmtSimForRounds vyperInterpreter vyperState
+  words arithmetic emitHelperProps
 Libs
   monadsyntax
 
@@ -503,3 +504,182 @@ Resume counted_array_round_from_body[normal_finish]:
   simp[Abbr `Q`, Abbr `fin`, Abbr `wrapped`] >> gvs[]
 QED
 Finalise counted_array_round_from_body
+
+(* Once the location-aware entry has produced the body state, invocation is
+   independent of the element's source representation. *)
+Theorem immutable_round_prepare:
+  gas_marked_path F ctx func cc 0 (OK s2) /\
+  s2.vs_current_bb = sb0.cs_current_bb /\
+  s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s2.vs_halted /\
+  stmt_state_rel ctx func bc cx
+    (es with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) s2 /\
+  ret_pc_ok bc sb0 s2 /\
+  ei = es with <|scopes := (FEMPTY |+ (id,
+    <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
+    gas_obs := []|> /\
+  stmt_frag ctx func cx lctx RetQ bc m source ei /\
+  m sb0 = (bc',sb1) /\ fn_has_code sb0 sb1 func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved bc sb0 /\
+  ~block_is_terminated sb0 /\ gas_admissible source (stmt_res_ok lctx) ei ==>
+  gas_marked_exec F (ctx,func) (push_scope_with_var id tv v) (es,cc) []
+    (INL ()) (es with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
+    (OK s2) /\
+  gas_outcome F (cx_tops cx) (ctx,func) source (ei,s2)
+    (stmt_post ctx func cx lctx bc bc' sb0 sb1 s2)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >>
+  (conj_tac >- (irule push_scope_with_var_zero_exec >> simp[])) >>
+  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
+  disch_then irule >> simp[] >>
+  `!E. stmt_state_rel ctx func bc cx E s2 ==>
+       stmt_state_rel ctx func bc cx (E with gas_obs := []) s2` by
+    (rpt strip_tac >>
+     `s2 = s2 with <|vs_gas_readings := s2.vs_gas_readings;
+                     vs_inst_idx := s2.vs_inst_idx|>` by
+       simp[venomStateTheory.venom_state_component_equality] >>
+     pop_assum SUBST1_TAC >> irule msg_gas_state_frame >> simp[]) >>
+  first_x_assum (qspec_then `es with scopes :=
+    (FEMPTY |+ (id, <|assignable := F; type := tv; value := v; popped := []|>))
+      :: es.scopes` mp_tac) >>
+  impl_tac >- fs[] >>
+  match_mp_tac EQ_IMPLIES >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp[vyperStateTheory.evaluation_state_component_equality]
+QED
+
+Theorem immutable_address_prefix_run:
+  lookup_var idx s = SOME (n2w k) /\ ov <> tot ==>
+  run_inst_seq
+    ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+     (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+     [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]]) s =
+  OK (update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+       (if dyn then update_var tot (n2w (32 + k * stride))
+          (update_var ov (n2w (k * stride)) s)
+        else update_var ov (n2w (k * stride)) s))
+Proof
+  strip_tac >> Cases_on `dyn`
+  >- (simp[GSYM word_add_n2w, AC WORD_ADD_ASSOC WORD_ADD_COMM] >>
+      irule (SRULE [GSYM word_add_n2w, AC WORD_ADD_ASSOC WORD_ADD_COMM]
+        dynarray_address_prefix_run) >> simp[eval_operand_def]) >>
+  simp[] >>
+  `step_inst_base (mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]) s =
+   OK (update_var ov (n2w (k * stride)) s)` by
+    (simp[GSYM word_mul_n2w] >> irule step_MUL >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst j5 ADD [Lit (n2w off); Var ov] [ep])
+      (update_var ov (n2w (k * stride)) s) =
+   OK (update_var ep (n2w off + n2w (k * stride))
+      (update_var ov (n2w (k * stride)) s))` by
+    (irule step_ADD >> simp[eval_operand_def, lookup_var_update_var]) >>
+  simp[run_inst_seq_def]
+QED
+
+Theorem immutable_value_holds_transport:
+  cenv_top_ext cenv bc scopes /\
+  es'.immutables = es.immutables /\ t.vs_memory = s.vs_memory /\
+  immutable_holds cenv cx ty (Value v) a es s ==>
+  immutable_holds bc cx ty (Value v) a es' t
+Proof
+  simp[cenv_top_ext_def] >> strip_tac >>
+  qpat_x_assum `_ = cenv` (SUBST_ALL_TAC o SYM) >>
+  gvs[immutable_holds_def, read_result_def, return_def] >>
+  qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
+QED
+
+Theorem immutable_iter_copy_top_ext:
+  cenv_top_ext cenv bc scopes ==>
+  compile_iter_elem_copy cenv src dst bytes LocCode F et et =
+  compile_iter_elem_copy bc src dst bytes LocCode F et et
+Proof
+  simp[cenv_top_ext_def] >> strip_tac >>
+  qpat_x_assum `_ = cenv` (SUBST_ALL_TAC o SYM) >>
+  simp[compile_iter_elem_copy_def]
+QED
+
+(* The straight-line execution cut retains the copy's allocation/static frame;
+   the later path wrapper accounts for instruction indices. *)
+Theorem immutable_array_entry_seq:
+  compile_iter_elem_copy cenv (Var ep) (Var p) stride LocCode F et et sa = ((),sb0) /\
+  stride = type_memory_size tv /\ 0 < stride /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  stmt_state_rel ctx func cenv cx es s /\
+  cenv_top_ext cenv bc (FEMPTY :: es.scopes) /\ local_ptrs_reserved bc sa /\
+  lookup_scopes id es.scopes = NONE /\
+  FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  not_local_ptr bc (FEMPTY :: es.scopes) p /\
+  not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes tot /\
+  not_local_ptr cenv es.scopes ep /\
+  lookup_var idx s = SOME (n2w k) /\ lookup_var p s = SOME dst /\
+  p <> ov /\ p <> tot /\ p <> ep /\ ov <> tot /\ not_fresh_at sa ep /\
+  MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
+  ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
+  FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\ stride <= sz /\
+  w2n dst + stride < dimword (:256) /\
+  immutable_holds cenv cx et (Value v)
+    (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) es s ==>
+  ?s1 t.
+    s1 = update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+      (if dyn then update_var tot (n2w (32 + k * stride))
+         (update_var ov (n2w (k * stride)) s)
+       else update_var ov (n2w (k * stride)) s) /\
+    run_inst_seq
+      ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+       (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+       [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]] ++
+       emitted_insts sa sb0) s = OK t /\
+    copy_runtime_frame sa s1 sb0 t /\
+    stmt_state_rel ctx func bc cx
+      (es with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes) t
+Proof
+  strip_tac >>
+  qabbrev_tac `rhs = update_var ep
+    (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+    (if dyn then update_var tot (n2w (32 + k * stride))
+       (update_var ov (n2w (k * stride)) s)
+     else update_var ov (n2w (k * stride)) s)` >>
+  qexists_tac `rhs` >> simp[] >>
+  `run_inst_seq
+      ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+       (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+       [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]]) s = OK rhs` by
+    (qunabbrev_tac `rhs` >> irule immutable_address_prefix_run >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es rhs` by
+    (Cases_on `dyn` >> simp[Abbr `rhs`] >>
+     rpt (irule stmt_state_rel_update_var >> simp[])) >>
+  `stmt_state_rel ctx func bc cx (es with scopes := FEMPTY :: es.scopes) rhs` by
+    (irule array_empty_scope_rel_transport >> qexists_tac `cenv` >> simp[]) >>
+  `immutable_holds bc cx et (Value v)
+     (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+     (es with scopes := FEMPTY :: es.scopes) rhs` by
+    (irule immutable_value_holds_transport >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexists_tac `FEMPTY :: es.scopes` >> simp[] >>
+     Cases_on `dyn` >> simp[Abbr `rhs`, update_var_def]) >>
+  `compile_iter_elem_copy bc (Var ep) (Var p) stride LocCode F et et sa = ((),sb0)` by
+    (drule immutable_iter_copy_top_ext >> disch_then (fn th => fs[GSYM th])) >>
+  `lookup_var p rhs = SOME dst /\
+   FLOOKUP rhs.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+   eval_operand (Var ep) rhs =
+     SOME (n2w off + n2w ((if dyn then 32 else 0) + k * stride))` by
+    (Cases_on `dyn` >>
+     simp[Abbr `rhs`, lookup_var_update_var, eval_operand_def] >>
+     simp[update_var_def]) >>
+  `copy_old_operand sa (Var ep)` by simp[exprSimCopyTheory.copy_old_operand_def] >>
+  `!q. q = p \/ ~not_local_ptr bc
+      (es with scopes := FEMPTY :: es.scopes).scopes q ==> not_fresh_at sa q` by
+    (simp[] >> metis_tac[array_copy_live_ptrs_reserved]) >>
+  `(es with scopes := FEMPTY :: es.scopes).scopes = FEMPTY :: es.scopes /\
+   lookup_scopes id (es with scopes := FEMPTY :: es.scopes).scopes = NONE /\
+   not_local_ptr bc (es with scopes := FEMPTY :: es.scopes).scopes p` by
+    simp[lookup_scopes_def] >>
+  drule_all immutable_iter_copy_declare_rel >>
+  disch_then (qspec_then `F` strip_assume_tac) >>
+  qexists_tac `z` >> simp[] >>
+  qpat_assum `run_inst_seq _ s = OK rhs`
+    (mp_then Any (qspec_then `emitted_insts sa sb0` mp_tac) run_inst_seq_append) >>
+  fs[exprSimCopyTheory.copy_runtime_frame_def]
+QED
