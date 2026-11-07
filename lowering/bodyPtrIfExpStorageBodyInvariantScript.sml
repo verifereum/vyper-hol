@@ -134,7 +134,7 @@ Resume ifexp_copy_ptr_body[ordinary]:
   `w2n d+32*n < 2**256` by fs[slot_copy_inv_def] >>
   drule_all ifexp_slot_body_memory_frame >>
   disch_then (qspecl_then [`s`, `p`, `load`, `cs`] strip_assume_tac) >>
-  simp[ifexp_slot_body_ordinary] >>
+  simp[ifexp_slot_body_ordinary, ifexp_slot_copy_static] >>
   conj_tac
   >- (qpat_x_assum `LENGTH s.vs_memory <= LENGTH (slot_copy_body_result _ _ _ _ _ _).vs_memory`
         mp_tac >> simp[ifexp_slot_body_ordinary] >> decide_tac) >>

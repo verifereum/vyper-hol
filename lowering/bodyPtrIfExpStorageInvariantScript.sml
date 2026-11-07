@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpStorageFrame bodyPtrIfExpStorageInit bodyPtrIfExpStorageControl
   slotCopyExecution copyExecution createSourceCallback bodyPtrDefs appendStorageGhostPtr
   ptrDiscipline compileEnv venomState finite_map pred_set words
-  bodyPtrIfExpStorageOrdinary
+  bodyPtrIfExpStorageOrdinary exprSimStorageCopy
 
 (* Packages the recurrent pointer induction hypothesis alongside the existing
    runtime invariant; this is not a replacement copy semantics. Original-frame
@@ -24,6 +24,7 @@ Definition ifexp_copy_ptr_inv_def:
   ghost_inv rty ce cx ee G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\
   (!j k. j < i /\ k < 32 /\ w2n d + 32*j + k IN tn.t_mem ==> (j,k) IN X) /\
+  copy_static s = copy_static sBase /\
   s.vs_allocas = sBase.vs_allocas /\ s.vs_data_section = sBase.vs_data_section /\
   LENGTH sBase.vs_memory <= LENGTH s.vs_memory /\
   (!b len. b+len <= w2n d \/ w2n d+32*n <= b ==>
@@ -33,6 +34,7 @@ End
 Theorem ifexp_copy_ptr_ordinary_frame:
   ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
     cs load src dst sBase GBase tnBase p d n X i s G tn ==>
+  copy_static s = copy_static sBase /\
   s.vs_allocas = sBase.vs_allocas /\ s.vs_data_section = sBase.vs_data_section /\
   LENGTH sBase.vs_memory <= LENGTH s.vs_memory /\
   (!b len. b+len <= w2n d \/ w2n d+32*n <= b ==>
@@ -56,6 +58,7 @@ Theorem ifexp_copy_ptr_no_write:
     slot_copy_external cs (Var x)) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> slot_copy_external cs (Var x)) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> slot_copy_external cs (Var x)) /\
+  copy_static t = copy_static s /\
   t.vs_allocas = s.vs_allocas /\ t.vs_data_section = s.vs_data_section /\
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx /\
@@ -125,7 +128,8 @@ Proof
       `x <> slot_copy_var cs 1` by
         (fs[slot_copy_external_def] >> metis_tac[DECIDE ``1 < 7``]) >>
       metis_tac[]) >>
-  simp[slot_copy_cond_result_def, update_var_def, jump_to_def]
+  simp[ifexp_slot_copy_static, slot_copy_cond_result_def, update_var_def, jump_to_def,
+    copy_static_def]
 QED
 
 Theorem ifexp_copy_ptr_initial:
@@ -165,7 +169,7 @@ Proof
     (irule ghost_kept_suffix_compose >> qexistsl_tac [`G`, `cs`, `tn`] >>
      simp[] >> metis_tac[ifexp_copy_not_fresh_external]) >>
   qexistsl_tac [`G'`, `tn'`] >>
-  simp[ifexp_copy_ptr_inv_def, ifexp_slot_initial_ordinary] >>
+  simp[ifexp_copy_ptr_inv_def, ifexp_slot_initial_ordinary, ifexp_slot_copy_static] >>
   conj_tac
   >- (irule slot_copy_initial_invariant >>
       simp[create_memory_snapshot_def]) >>

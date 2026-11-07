@@ -1,5 +1,5 @@
 Theory bodyPtrIfExpStorageOrdinary
-Ancestors slotCopyExecution venomMemProps valueEncodingProps
+Ancestors slotCopyExecution venomMemProps valueEncodingProps exprSimStorageCopy
   venomState words arithmetic
 
 Theorem ifexp_slot_condition_ordinary:
@@ -39,4 +39,14 @@ Theorem ifexp_slot_initial_ordinary:
   (slot_copy_initial cs s).vs_memory = s.vs_memory
 Proof
   simp[slot_copy_initial_def, update_var_def, jump_to_def]
+QED
+
+Theorem ifexp_slot_copy_static:
+  copy_static (slot_copy_initial cs s) = copy_static s /\
+  copy_static (slot_copy_cond_result cs n i s) = copy_static s /\
+  copy_static (slot_copy_body_result cs p d load i s) = copy_static s
+Proof
+  simp[slot_copy_initial_def, slot_copy_cond_result_def,
+    slot_copy_body_result_def, copy_static_def, update_var_def,
+    jump_to_def, mstore_def]
 QED
