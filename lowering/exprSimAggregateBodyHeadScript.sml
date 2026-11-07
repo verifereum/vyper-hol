@@ -63,7 +63,7 @@ Theorem aggregate_body_tuple_head_path:
     (!p n. b <= p /\ p+n <= b+asz /\
       (p+n <= b+off \/ b+off+type_memory_size tv <= p) ==>
       mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-    locals_kept ce es s0 q
+    locals_kept ce es (mid with gas_obs := []) s0 q
 Proof
   strip_tac >>
   `?v. read_result cx tvv (mid with gas_obs := []) =

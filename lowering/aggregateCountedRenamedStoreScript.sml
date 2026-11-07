@@ -58,7 +58,7 @@ Proof
   simp[expr_post_def, aggregate_stmt_state_rel_current_bb,
        expr_val_rel_def, expr_val_at_def, expr_val_own_def,
        start_relabel_def, eval_operand_def, lookup_var_def,
-       local_region_def, locals_kept_def]
+       local_region_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem aggregate_typed_sarray_start_swap_endpoint:
@@ -120,7 +120,7 @@ Theorem aggregate_typed_sarray_renamed_body_run:
       off <= a /\ a+len <= off+sz /\
       (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     (!fuel rr. run_from fuel ctx fn' q = rr /\ (!err. rr <> Error err) ==>
       ?fuel'. run_from fuel' ctx fn' (s with vs_current_bb := L) = rr)
 Proof

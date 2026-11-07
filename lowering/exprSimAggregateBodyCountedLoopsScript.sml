@@ -317,7 +317,7 @@ Theorem aggregate_make_tuple_body_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -327,7 +327,7 @@ Proof
       strip_tac >> gvs[] >>
       simp[Once evaluate_def] >>
       irule counted_outcome_return >>
-      simp[expr_sim_inv_gas_obs, val_in_memory_def, locals_kept_def]) >>
+      simp[expr_sim_inv_gas_obs, val_in_memory_def, locals_kept_def, popped_kept_def]) >>
   suspend "cons"
 QED
 
@@ -609,7 +609,7 @@ Resume aggregate_make_tuple_body_sim[cons]:
           (qpat_x_assum `!aid p n. _ ==> mem_bytes_at p n u.vs_memory = _` irule >>
            conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
            conj_tac >- (qexists_tac `aid` >> simp[]) >> decide_tac) >> simp[]) >>
-    `locals_kept ce (mid with gas_obs := []) q t''` by
+    `locals_kept ce (mid with gas_obs := []) (mid' with gas_obs := []) q t''` by
       (irule locals_kept_trans >>
        qexistsl_tac [`mid with gas_obs := []`, `sn`, `u`] >> simp[]) >>
     irule locals_kept_trans >>
@@ -690,7 +690,7 @@ Theorem aggregate_struct_fields_body_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof

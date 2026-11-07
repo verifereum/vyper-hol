@@ -61,7 +61,7 @@ Theorem aggregate_body_make_tuple_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -178,7 +178,7 @@ Proof
         (!name lo sz. local_region ce (mid with gas_obs := []).scopes q name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
-      locals_kept ce (mid with gas_obs := []) q r)
+      locals_kept ce (mid with gas_obs := []) ee q r)
     (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
     (simp[] >> first_x_assum (irule o SRULE [] o
        Q.INST [`es'` |-> `mid with gas_obs := []`] o SPEC_ALL o cj 2) >>
@@ -217,7 +217,7 @@ Proof
         (!name lo sz. local_region ce (mid with gas_obs := []).scopes q name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
-      locals_kept ce (mid with gas_obs := []) q r` >>
+      locals_kept ce (mid with gas_obs := []) ee q r` >>
   reverse conj_tac >-
     (qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` mp_tac >> simp[]) >>
   rpt gen_tac >> simp[] >> strip_tac >> simp[] >>
@@ -340,7 +340,7 @@ Theorem aggregate_body_make_array_elems_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -422,7 +422,7 @@ Theorem aggregate_body_make_array_sim:
         (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-      locals_kept ce es s0 r)
+      locals_kept ce es es' s0 r)
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -464,7 +464,7 @@ Resume aggregate_body_make_array_sim[dynamic]:
      disch_then (qspecl_then [`n2w b`, `s0`, `ctx`] mp_tac) >> simp[]) >>
   qabbrev_tac `s1 = mstore b (n2w (LENGTH args)) s0 with vs_inst_idx := LENGTH sm.cs_current_insts` >>
   `stmt_state_rel ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
-   locals_kept ce es s0 (mstore b (n2w (LENGTH args)) s0) /\
+   locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
    mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args)` by
     (drule aggregate_body_header_store_boundary >>
      disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (b,asz)`)) >>
@@ -520,12 +520,9 @@ Resume aggregate_body_make_array_sim[dynamic]:
             fs[local_region_def, lookup_var_def] >> metis_tac[]) >>
          conj_tac >- (qexists_tac `aid` >> simp[Abbr `s1`, mstore_def]) >> simp[]) >>
       simp[Abbr `s1`] >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
-  qpat_x_assum `locals_kept ce es s1 t` mp_tac >>
-  qpat_x_assum `locals_kept ce es s0 _` mp_tac >>
-  simp[locals_kept_def, Abbr `s1`, local_region_def, lookup_var_def, mstore_def] >>
-  rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  qmatch_asmsub_abbrev_tac `mem_bytes_at _ _ M = mem_bytes_at _ _ s0.vs_memory` >>
-  metis_tac[]
+  irule locals_kept_trans >>
+  qexistsl_tac [`es`, `sm`, `s1`] >> simp[] >>
+  simp[Abbr `s1`, locals_kept_inst_idx, mstore_def, lookup_var_def]
 QED
 
 Finalise aggregate_body_make_array_sim

@@ -59,7 +59,7 @@ Theorem aggregate_body_header_store_boundary:
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint io (type_memory_size tv) b 32) ==>
   stmt_state_rel ctx func ce cx es (mstore b w s) /\
-  locals_kept ce es s (mstore b w s) /\
+  locals_kept ce es es s (mstore b w s) /\
   mem_word_at b (mstore b w s).vs_memory = w /\
   (!p n. p+n <= b \/ b+32 <= p ==>
     mem_bytes_at p n (mstore b w s).vs_memory = mem_bytes_at p n s.vs_memory)

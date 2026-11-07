@@ -121,7 +121,9 @@ Resume compile_struct_lit_body_case[outcome]:
      goal_assum (drule_at Any) >>
      metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh]) >>
   conj_tac >- suspend "frame" >>
-  fs[locals_kept_def] >> metis_tac[]
+  irule exprBopSimPropsTheory.locals_kept_trans >>
+  qexistsl_tac [`es`, `sa`, `t`] >> simp[] >>
+  irule exprSimPropsTheory.locals_kept_mem >> simp[]
 QED
 
 Resume compile_struct_lit_body_case[holds]:

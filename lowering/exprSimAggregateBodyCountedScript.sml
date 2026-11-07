@@ -149,7 +149,7 @@ Theorem aggregate_store_body_rebased_slice_path:
       off <= a /\ a+len <= off+sz /\
       (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-    locals_kept ce es' r q
+    locals_kept ce es' es' r q
 Proof
   strip_tac >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
@@ -299,7 +299,7 @@ Theorem aggregate_body_child_store_slice_path:
         off <= a /\ a+k <= off+sz /\
         (a+k <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-      locals_kept ce es' r q ==> Q q) /\
+      locals_kept ce es' es' r q ==> Q q) /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?q. gas_marked_path F ctx func r 0 (OK q) /\ Q q /\

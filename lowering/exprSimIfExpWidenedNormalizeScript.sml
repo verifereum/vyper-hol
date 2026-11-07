@@ -1,6 +1,6 @@
 Theory exprSimIfExpWidenedNormalize
 Ancestors
-  exprSimIfExpWidenedAggregate exprSimIfExpWidenedAdapter
+  exprBopSimProps exprSimIfExpWidenedAggregate exprSimIfExpWidenedAdapter
   exprSimIfExpWidenedPosts exprSimAggregateChildren exprSimProps
   exprSimHyps exprSimHypsDefs exprOperandVar freshWrites
   valueEncodingTyping valueEncodingProps placeMemoryProtectedFrame
@@ -166,13 +166,10 @@ Resume compile_bytes_ifexp_post_frag[frames]:
       disch_then irule >>
       qpat_assum `!n b sz'. local_region ce es.scopes s0 _ _ _ ==> _`
         MATCH_ACCEPT_TAC) >>
-  fs[locals_kept_def] >> rpt strip_tac >>
-  `local_region ce ee.scopes u n b sz` by
-    (irule local_region_frame_fwd >>
-     qexistsl [`s0`, `origin`, `es.scopes`] >> asm_rewrite_tac[]) >>
-  `mem_bytes_at off len q.vs_memory = mem_bytes_at off len u.vs_memory` by
-    (qpat_x_assum `!n b sz off len. local_region ce ee.scopes u _ _ _ /\ _ ==> _`
-       drule_all >> simp[]) >>
+  irule locals_kept_trans >>
+  qexistsl [`ee`, `origin`, `u`] >> simp[] >>
+  rpt strip_tac >>
+  `not_fresh_at sa x'` by metis_tac[not_fresh_at_mono] >>
   metis_tac[]
 QED
 

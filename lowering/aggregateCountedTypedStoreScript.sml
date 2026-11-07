@@ -51,7 +51,7 @@ Theorem aggregate_typed_store_renamed_body_run:
       off <= a /\ a+len <= off+sz /\
       (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     (!fuel rr. run_from fuel ctx fn' q = rr /\ (!err. rr <> Error err) ==>
       ?fuel'. run_from fuel' ctx fn' (s with vs_current_bb := L) = rr)
 Proof
@@ -162,7 +162,7 @@ Theorem aggregate_store_body_typed_counted:
        off <= a /\ a+len <= off+sz /\
        (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
        mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-     locals_kept ce es' r q) /\
+     locals_kept ce es' es' r q) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -178,8 +178,8 @@ Proof
       strip_tac >> qexists_tac `q` >>
       gvs[arithmeticTheory.ADD_COMM] >> first_assum MATCH_ACCEPT_TAC) >>
   simp[hash_returndata_state_rel, aggregate_stmt_state_rel_prev_bb,
-       lookup_var_def, locals_kept_def] >>
-  rpt gen_tac >> strip_tac >> conj_tac >> first_assum MATCH_ACCEPT_TAC
+       lookup_var_def, locals_kept_def, popped_kept_def] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
 Resume aggregate_store_body_typed_counted[straight]:
@@ -192,8 +192,8 @@ Resume aggregate_store_body_typed_counted[straight]:
   qexists_tac `su` >>
   goal_assum (drule_at Any) >>
   simp[arithmeticTheory.ADD_COMM] >>
-  simp[hash_returndata_state_rel, lookup_var_def, locals_kept_def] >>
-  rpt gen_tac >> strip_tac >> conj_tac >> first_assum MATCH_ACCEPT_TAC
+  simp[hash_returndata_state_rel, lookup_var_def, locals_kept_def, popped_kept_def] >>
+  rpt gen_tac >> strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
 Finalise aggregate_store_body_typed_counted

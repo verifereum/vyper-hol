@@ -18,7 +18,7 @@ Theorem normalized_expr_post_frame:
     (!n b sz. local_region ce es.scopes s0 n b sz ==>
       off+len <= b \/ b+sz <= off) ==>
     mem_bytes_at off len q.vs_memory = mem_bytes_at off len s.vs_memory) /\
-  locals_kept ce es s0 q ==>
+  locals_kept ce es ee s0 q ==>
   expr_post ctx func ce cx out es sa sb s0 ee v dst q
 Proof
   rewrite_tac[expr_post_def] >> strip_tac >> asm_rewrite_tac[] >>
@@ -94,16 +94,9 @@ Proof
       `FLOOKUP s.vs_allocas aid' = SOME (off,len)` by metis_tac[] >>
       `b + N <= off \/ off + len <= b` by metis_tac[] >>
       metis_tac[]) >>
-  fs[locals_kept_def] >> rpt strip_tac >>
+  irule exprSimPropsTheory.locals_kept_regions_tail >>
+  qexists_tac `s` >> asm_rewrite_tac[] >> rpt strip_tac >>
   `local_region ce ee.scopes s n b' sz` by metis_tac[] >>
-  `b + N <= b' \/ b' + sz <= b` by
-    (qpat_x_assum `!n lb len. local_region _ _ s _ _ _ ==> _` drule >>
-     simp[arithmeticTheory.ADD_COMM]) >>
-  `b + N <= off \/ off + len <= b` by decide_tac >>
-  `mem_bytes_at off len q.vs_memory = mem_bytes_at off len s.vs_memory` by
-    (qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ q.vs_memory = _`
-       (qspecl_then [`off`, `len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]) >>
-  asm_rewrite_tac[] >>
-  qpat_x_assum `!n b sz off len. _ ==> mem_bytes_at _ _ s.vs_memory = _` irule >>
-  qexistsl_tac [`b'`, `n`, `sz`] >> asm_rewrite_tac[]
+  `b + N <= b' \/ b' + sz <= b` by metis_tac[] >>
+  metis_tac[]
 QED
