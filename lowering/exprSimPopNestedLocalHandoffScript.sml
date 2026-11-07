@@ -58,9 +58,9 @@ QED
 Theorem pop_counted_source_handoff:
   expr_body_pre cenv cx env (Pop ann bt) es /\
   target_root bt = NameTarget id /\
-  (!s path t entry err.
-     eval_target_place cx bt s = (INL (MemoryPlace id path),t) /\
-     lookup_scopes id t.scopes = SOME entry /\
+  (!path entry err.
+     p = MemoryPlace id path /\
+     lookup_scopes id tend.scopes = SOME entry /\
      evaluate_subscripts entry.type entry.value path = INR err ==>
      read_popped entry.type path entry.popped = NONE) /\
   gas_marked_exec F (ctx,func) (eval_target_place cx bt)
@@ -88,13 +88,6 @@ Proof
   qpat_x_assum `expr_body_pre _ _ _ _ es` kall_tac >>
   drule pop_target_live_array >>
   disch_then (drule_at Any) >> simp[] >>
-  impl_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!s path t entry err. _` irule >>
-      conj_tac
-      >- (qexistsl_tac [`es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-                       `tend with gas_obs := []`] >> simp[]) >>
-      metis_tac[]) >>
   strip_tac >>
   `?root_ty. cenv.ce_var_type id = SOME root_ty /\
      evaluate_type (get_tenv cx) root_ty = SOME entry.type` by
@@ -112,7 +105,7 @@ Theorem memory_target_encoding_handoff:
   evaluate_type (get_tenv cx) root_ty = SOME entry.type ==>
   loc = SOME LocMemory /\ pt = SOME (value_type_place (Type ty)) /\
   stmt_state_rel ctx func cenv cx es' s /\
-  wb_frame cenv es sa s0 s /\
+  wb_frame cenv es es' sa s0 s /\
   (!x. hdr = Var x ==> not_fresh_at sb x) /\
   ?p b sz k tv w.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\

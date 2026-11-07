@@ -62,7 +62,7 @@ Proof
   Cases_on `op` >>
   simp[expr_post_def, hash_returndata_state_rel, expr_val_rel_def,
        expr_val_at_def, expr_val_own_def, eval_operand_def, lookup_var_def,
-       local_region_def, local_backed_def, locals_kept_def]
+       local_region_def, local_backed_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem aggregate_body_unwrap_marked:
@@ -197,7 +197,7 @@ Theorem aggregate_store_body_rebased_slice_marked:
        off <= a /\ a+len <= off+sz /\
        (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
        mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-     locals_kept ce es' r q) /\
+     locals_kept ce es' es' r q) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -238,9 +238,9 @@ Resume aggregate_store_body_rebased_slice_marked[ordinary]:
   disch_then (qspecl_then [`func`, `s`] mp_tac) >>
   simp[] >> impl_tac
   >- (POP_ASSUM_LIST (K all_tac) >>
-      simp[hash_returndata_state_rel, lookup_var_def, locals_kept_def] >>
+      simp[hash_returndata_state_rel, lookup_var_def, locals_kept_def, popped_kept_def] >>
       rpt gen_tac >> strip_tac >> fs[arithmeticTheory.ADD_COMM] >>
-      conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   simp[]
 QED
 
@@ -296,7 +296,7 @@ Theorem aggregate_body_child_store_slice_marked:
        off <= a /\ a+len <= off+sz /\
        (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
        mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-     locals_kept ce es' r q) /\
+     locals_kept ce es' es' r q) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof

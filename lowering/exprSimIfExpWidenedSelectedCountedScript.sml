@@ -156,7 +156,7 @@ Proof
   `vv_post ctx func ce cx e
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
     sc sa s0 (mid with gas_obs := []) v vv t` by
-    (fs[vv_post_def, locals_kept_def] >> metis_tac[]) >>
+    (fs[vv_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
     (drule eval_expr_preserves_scopes_dom >> simp[]) >>
   drule_at (Pat `eval_expr _ _ _ = _`) compile_selected_ifexp_post_path >>
@@ -170,7 +170,7 @@ Proof
   (impl_tac >- metis_tac[]) >> strip_tac >>
   `expr_post ctx func ce cx (IfExp (expr_type e) c a b)
     es sc sb s0 (mid with gas_obs := []) v' op q` by
-    (fs[expr_post_def, locals_kept_def] >> metis_tac[]) >>
+    (fs[expr_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
   simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL tv`, `mid with gas_obs := []`, `OK q`] >>

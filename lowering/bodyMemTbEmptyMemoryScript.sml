@@ -19,6 +19,9 @@ Theorem memory_value_post_gas_obs[local]:
     (Value v) (LocatedValue ty p) t
 Proof
   strip_tac >>
+  `locals_kept cenv es (ee with gas_obs := gs) s0 t <=>
+   locals_kept cenv es ee s0 t` by
+    simp[NoAsms, locals_kept_def, popped_kept_def] >>
   gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
       read_result_def, return_def] >>
   metis_tac[]

@@ -444,7 +444,7 @@ Theorem aggregate_store_rebased_slice_run:
       off <= a /\ a + k <= off + sz /\
       (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-    locals_kept ce es' r q
+    locals_kept ce es' es' r q
 Proof
   strip_tac >>
   `lookup_var x s = SOME w` by
@@ -471,7 +471,7 @@ Proof
     (irule buffer_store_state_frame >>
      qexistsl_tac [`w2n w`, `type_memory_size tv`, `s`, `su`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `locals_kept ce es' r q` by
+  `locals_kept ce es' es' r q` by
     (irule locals_kept_regions_tail >> qexists_tac `s` >>
      reverse conj_tac >- gvs[expr_post_def] >>
      rpt strip_tac >> metis_tac[]) >>
@@ -546,7 +546,7 @@ Theorem aggregate_store_rebased_slice_sim:
         off <= a /\ a + k <= off + sz /\
         (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-      locals_kept ce es' r q) R
+      locals_kept ce es' es' r q) R
 Proof
   strip_tac >> drule buffer_store_memory_shape >> strip_tac >>
   irule hash_run_frag >> simp[] >>
@@ -635,7 +635,7 @@ Theorem aggregate_unwrap_store_slice_sim:
         off <= a /\ a + k <= off + sz /\
         (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-      locals_kept ce es' r q ==>
+      locals_kept ce es' es' r q ==>
       Q q) ==>
   frag_exec ctx sm sb (\s. s = r) Q R
 Proof
@@ -813,12 +813,18 @@ Theorem buffer_loop_memory_vv_post:
     (!name lo k. local_region ce es.scopes t name lo k ==>
       a+n <= lo \/ lo+k <= a) ==>
     mem_bytes_at a n r.vs_memory = mem_bytes_at a n t.vs_memory) /\
-  t.vs_memory = s0.vs_memory /\ locals_kept ce es t r ==>
+  t.vs_memory = s0.vs_memory /\ locals_kept ce es es' t r ==>
   vv_post ctx func ce cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) r
 Proof
   strip_tac >>
   `b < dimword (:256)` by decide_tac >>
+  `locals_kept ce es es' s0 r` by
+    (qpat_x_assum `locals_kept ce es es' t r` mp_tac >>
+     rewrite_tac[locals_kept_def, popped_kept_def] >>
+     qpat_assum `!name a n. local_region _ _ t _ _ _ <=> _`
+       (fn th => rewrite_tac[th]) >>
+     qpat_assum `t.vs_memory = _` (fn th => rewrite_tac[th])) >>
   irule buffer_memory_vv_post_general >>
   simp[] >>
   conj_tac
@@ -838,8 +844,6 @@ Proof
         (qspecl_then [`aid`,`off`,`len`] mp_tac) >>
       simp[regions_disjoint_def] >> decide_tac) >>
   conj_tac >- (gvs[ci_mono_def] >> decide_tac) >>
-  conj_tac
-  >- (gvs[locals_kept_def] >> metis_tac[]) >>
   qexists `sz` >>
   simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> metis_tac[]
 QED
@@ -1026,7 +1030,7 @@ Theorem aggregate_store_rebased_control_frame:
       off+sz <= b \/ b+k <= off) /\
     off <= a /\ a+len <= off+sz /\ (a+len <= dst \/ dst+n <= a) ==>
     mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-  locals_kept ce es' r q
+  locals_kept ce es' es' r q
 Proof
   strip_tac >>
   conj_tac
@@ -1099,7 +1103,7 @@ Theorem aggregate_store_body_typed_run:
       off <= a /\ a+len <= off+sz /\
       (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-    locals_kept ce es' r q /\
+    locals_kept ce es' es' r q /\
     (!fuel rr. run_from fuel ctx fn q = rr /\ (!err. rr <> Error err) ==>
       ?fuel'. run_from fuel' ctx fn s = rr)
 Proof
@@ -1178,7 +1182,7 @@ Theorem aggregate_store_body_typed_sim:
         off <= a /\ a+len <= off+sz /\
         (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
         mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-      locals_kept ce es' r q) R
+      locals_kept ce es' es' r q) R
 Proof
   strip_tac >> simp[frag_exec_def] >> rpt strip_tac >>
   drule_all aggregate_store_body_typed_run >> strip_tac >>
@@ -1243,7 +1247,7 @@ Theorem aggregate_store_body_rebased_slice_sim:
         off <= a /\ a+len <= off+sz /\
         (a+len <= w2n w \/ w2n w+type_memory_size tv <= a) ==>
         mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
-      locals_kept ce es' r q) R
+      locals_kept ce es' es' r q) R
 Proof
   strip_tac >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
@@ -1324,7 +1328,7 @@ Theorem aggregate_body_unwrap_store_slice_sim:
         off <= a /\ a + k <= off + sz /\
         (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-      locals_kept ce es' r q ==>
+      locals_kept ce es' es' r q ==>
       Q q) ==>
   frag_exec ctx sm sb (\s. s = r) Q R
 Proof
@@ -1449,7 +1453,7 @@ Theorem aggregate_body_child_store_slice_sim:
         off <= a /\ a + k <= off + sz /\
         (a + k <= w2n w \/ w2n w + type_memory_size tv <= a) ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k r.vs_memory) /\
-      locals_kept ce es' r q ==> Q q) ==>
+      locals_kept ce es' es' r q ==> Q q) ==>
   frag_exec ctx sm sb (\s. s = r) Q R
 Proof
   strip_tac >> irule frag_exec_seq >>

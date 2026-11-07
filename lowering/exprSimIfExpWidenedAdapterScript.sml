@@ -262,7 +262,7 @@ Proof
     vv_own ce cx (post_value_type ce e) sa sn ee tv vv u` by
     (strip_tac >> irule vv_own_alloc_mono_frame >>
      qexistsl [`s`, `sm`] >> simp[]) >>
-  `locals_kept ce es s0 u` by
+  `locals_kept ce es ee s0 u` by
     (irule locals_kept_mem_tail >> goal_assum (drule_at Any) >> simp[]) >>
   `vv_storage_live cx vv ee s ==> vv_storage_live cx vv ee u` by
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>

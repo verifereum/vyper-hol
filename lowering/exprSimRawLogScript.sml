@@ -118,11 +118,15 @@ Proof
 QED
 
 Theorem raw_log_wb_frame:
-  wb_frame cenv es sa s0 s ==>
-  wb_frame cenv es sa s0 (s with vs_logs := logs)
+  wb_frame cenv es es' sa s0 s /\ es''.scopes = es'.scopes ==>
+  wb_frame cenv es es'' sa s0 (s with vs_logs := logs)
 Proof
-  simp[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> irule wb_frame_readonly_tail >>
+  qexistsl_tac [`sa`, `s`] >> simp[lookup_var_def] >>
+  qpat_x_assum `wb_frame _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+  qpat_x_assum `es''.scopes = _` (fn th => pure_rewrite_tac[th]) >>
+  disch_then ACCEPT_TAC
 QED
 
 Theorem raw_log_topics_lowering_bridge:
@@ -286,14 +290,14 @@ Proof
 QED
 
 Theorem raw_log_mstore_frame:
-  wb_frame cenv es0 sa s0 s /\ local_ptrs_reserved cenv sa /\
+  wb_frame cenv es0 es' sa s0 s /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   (!aid b sz. aid < sa.cs_next_id /\
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint a 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
      regions_disjoint a 32 b sz) ==>
-  wb_frame cenv es0 sa s0 (mstore a w s)
+  wb_frame cenv es0 es' sa s0 (mstore a w s)
 Proof
   strip_tac >> irule wb_frame_allocating_tail >> simp[] >>
   qexistsl_tac [`s`, `es.scopes`, `sa`] >>
@@ -331,14 +335,14 @@ Theorem raw_log_dynamic_prepare_frame:
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
     eval_operand ptr_op t = SOME (n2w (b + 32)) /\
     eval_operands ops t = SOME topics /\
     TAKE (LENGTH bs) (DROP (b + 32) t.vs_memory ++
       REPLICATE (LENGTH bs) 0w) = bs /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 sa s0 t
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sa s0 t
 Proof
   strip_tac >> drule_all raw_log_dynamic_prepare_run >> strip_tac >>
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
@@ -361,12 +365,12 @@ Theorem raw_log_core_frame:
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\
   TAKE (w2n len) (DROP (w2n off) s.vs_memory ++
     REPLICATE (w2n len) 0w) = bytes /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s ==>
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s ==>
   ?t. step_inst_base inst s = OK t /\
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bytes]) t /\
-    wb_frame cenv es0 sa s0 t
+    wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) sa s0 t
 Proof
   strip_tac >>
   `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
@@ -376,7 +380,7 @@ Proof
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   simp[encode_raw_event_values_def, encode_raw_event_def] >>
   conj_tac >- (irule raw_log_state_rel >> simp[]) >>
-  irule raw_log_wb_frame >> simp[]
+  irule raw_log_wb_frame >> simp[] >> qexists_tac `es` >> simp[]
 QED
 
 Theorem raw_log_dynamic_tail_core:
@@ -394,7 +398,7 @@ Theorem raw_log_dynamic_tail_core:
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
-  wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
     (expr_post ctx func cenv cx e es0 sa sb s0
@@ -439,7 +443,7 @@ Proof
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t' /\
-    wb_frame cenv es0 sa s0 t'` by
+    wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t'` by
     (irule raw_log_core_frame >>
      simp[mk_inst_def] >>
      qexistsl_tac [`ops`, `len_op`, `ptr_op`,
@@ -447,8 +451,8 @@ Proof
      simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
   fs[mk_inst_def, run_inst_seq_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  fs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t'`] >>
+  simp[lookup_var_def]
 QED
 
 Theorem raw_log_fixed_store_run:
@@ -475,7 +479,7 @@ Theorem raw_log_fixed_store_frame:
   emit_void MSTORE [ptr_op; data_op] sm = (u, sb) /\
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -489,7 +493,7 @@ Theorem raw_log_fixed_store_frame:
   TAKE 32 (DROP (w2n p) (mstore (w2n p) w s).vs_memory ++
     REPLICATE 32 0w) = bs /\
   stmt_state_rel ctx func cenv cx es (mstore (w2n p) w s) /\
-  wb_frame cenv es0 sa s0 (mstore (w2n p) w s)
+  wb_frame cenv es0 es sa s0 (mstore (w2n p) w s)
 Proof
   strip_tac >> drule_all raw_log_fixed_store_run >> strip_tac >> simp[] >>
   conj_tac
@@ -511,7 +515,7 @@ Theorem raw_log_fixed_tail_core:
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\
   LENGTH ops < dimword (:256) /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sa s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -557,12 +561,12 @@ Proof
     stmt_state_rel ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t /\
-    wb_frame cenv es0 sa s0 t` by
+    wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` by
     (irule raw_log_core_frame >> simp[mk_inst_def] >>
      qexists_tac `32w` >> simp[eval_operand_def, wordsTheory.dimword_def]) >>
   fs[mk_inst_def] >>
   simp[run_inst_seq_def, Once step_inst_base_def, exec_write2_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  fs[wb_frame_def, locals_kept_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
+  simp[lookup_var_def]
 QED
