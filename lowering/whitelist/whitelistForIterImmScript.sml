@@ -4,7 +4,7 @@
 Theory whitelistForIterImm
 Ancestors
   whitelistForIterImmCopy whitelistForIterImmSource whitelistForIterImmFrame
-  whitelistForIterImmLoop
+  whitelistForIterImmLoop whitelistForIterImmFrag
   bodySimDeclCases whitelistForIterDynFrag whitelistForIterDynLoop
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs list finite_map
   bodySim bodySimStmtCases allocLimits exprSimHyps exprLoweringProps
@@ -200,6 +200,21 @@ Proof
   irule array_body_fragment_callback >> metis_tac[]
 QED
 
+Theorem immutable_for_elements_typed[local]:
+  value_has_type (ArrayTV tv bd) (ArrayV av) /\
+  well_formed_type_value (ArrayTV tv bd) /\
+  k < LENGTH (array_elements (ArrayTV tv bd) av) ==>
+  value_has_type tv (EL k (array_elements (ArrayTV tv bd) av))
+Proof
+  Cases_on `bd` >> Cases_on `av` >> strip_tac >>
+  gvs[value_has_type_def]
+  >- (`k < n` by fs[array_elements_def] >>
+      `value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV l))` by
+        simp[value_has_type_def] >>
+      drule_all stmtSimForArrayTheory.fixed_array_elements_typed >> simp[]) >>
+  gvs[array_elements_def, all_have_type_EVERY, EVERY_EL]
+QED
+
 Theorem body_for_immutable_array:
   !cx id typ bd src name n stmts tops bindings ctx func cenv env env'
    ret_ty lctx RetQ es.
@@ -259,5 +274,53 @@ Proof
     (qpat_x_assum `!s1 vs t1 s2 t2. _` mp_tac >>
      simp[return_def, check_def, assert_def, compatible_bound_def] >>
      disch_then irule >> simp[] >> qexistsl_tac [`es`, `es`] >> simp[]) >>
-  cheat
+  `cenv.ce_alloca_locals /\ supported_program tops /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+       alloc_limits_stmt_def, stmt_valued_return_def] >>
+  `type_memory_bytes cenv typ = type_memory_size tv` by
+    metis_tac[expr_sim_inv_memory_size] >>
+  `elem_size_in_location cenv LocCode typ = type_memory_size tv` by
+    simp[elem_size_in_location_def, is_slot_addressed_def] >>
+  `0 < type_memory_size tv` by
+    metis_tac[immutable_array_element_size_positive] >>
+  `type_memory_bytes cenv typ + 64 < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  `!k. k < LENGTH vs ==> value_has_type tv (EL k vs)` by
+    (simp[Abbr `vs`] >> metis_tac[immutable_for_elements_typed]) >>
+  MATCH_MP_TAC
+    (Q.GENL [`off`, `tv`, `vs`]
+      (BETA_RULE (Q.SPEC `\ei. expr_sim_inv cenv cx env ei /\
+         lookup_immutable cx ei cenv.ce_module name =
+           lookup_immutable cx es cenv.ce_module name`
+        (Q.GEN `P` (SPEC_ALL compile_for_immutable_frag_zero))))) >>
+  qexistsl_tac [`off`, `tv`, `vs`] >> simp[] >>
+  rpt conj_tac
+  >- (Cases_on `bd` >> fs[bound_length_def])
+  >- (rpt gen_tac >> strip_tac >>
+      drule (SIMP_RULE std_ss [cs_mono_def] (cj 2 compile_stmt_cs_mono)) >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      `lookup_immutable cx ei cenv.ce_module name = SOME (ArrayTV tv bd,ArrayV av)` by
+        gvs[vyperBareGlobalNameTheory.lookup_immutable_def] >>
+      once_rewrite_tac[ADD_COMM] >>
+      irule immutable_for_source_callback >> simp[Abbr `vs`] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all immutable_for_body_callback >>
+      disch_then irule >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      `call_evaluation_safe cx (int_calls_stmts stmts)` by
+        (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
+      `expr_sim_inv cenv cx env (ei with gas_obs := gs)` by
+        simp[expr_sim_inv_gas_obs] >>
+      `value_has_type tv (EL k vs)` by simp[] >>
+      `lookup_scopes id (ei with gas_obs := gs).scopes = NONE` by simp[] >>
+      `eval_stmts cx stmts
+        ((ei with gas_obs := gs) with scopes := (FEMPTY |+ (id,
+          <|assignable := F; type := tv; value := EL k vs; popped := []|>)) ::
+          (ei with gas_obs := gs).scopes) = (r,es2)` by simp[] >>
+      drule_all immutable_for_scope_callback >>
+      gvs[vyperBareGlobalNameTheory.lookup_immutable_def] >>
+      metis_tac[])
+  >> simp[expr_sim_inv_gas_obs, vyperBareGlobalNameTheory.lookup_immutable_def]
 QED
