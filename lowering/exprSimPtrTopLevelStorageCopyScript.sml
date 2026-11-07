@@ -42,7 +42,7 @@ Proof
   simp[step_prov_def, set_prov_def, out_prov_def, mk_inst_def,
        FLOOKUP_DRESTRICT, step_taint_def, set_var_taint_def,
        out_taint_def, op_taint_def, FLOOKUP_UPDATE] >>
-  Cases_on `eval_operand (Var cv) s` >> simp[]
+  Cases_on `eval_operand (Var cv) s` >> simp[eval_operand_def, wordsTheory.dimword_def]
 QED
 
 Theorem toplevel_entry_non_phi_ghost:
@@ -1190,8 +1190,13 @@ Theorem toplevel_copy_counter_suffix_ghost:
 Proof
   strip_tac >>
   Cases_on `lookup_var cv s`
-  >- gvs[exprLoweringPropsTheory.run_inst_seq_def, step_inst_base_def,
-         exec_pure2_def, mk_inst_def, eval_operands_def, eval_operand_def] >>
+  >- (qpat_x_assum `run_inst_seq _ _ = OK _` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[exprLoweringPropsTheory.run_inst_seq_def] >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      PURE_REWRITE_TAC[mk_inst_def, instruction_accessors,
+                       instruction_accfupds, combinTheory.K_THM,
+                       opcode_case_def] >>
+      simp[exec_pure2_def, eval_operands_def, eval_operand_def]) >>
   rename1 `lookup_var cv s = SOME w` >>
   qabbrev_tac `i = mk_inst id ADD [Var cv;Lit 1w] [nv]` >>
   qabbrev_tac `j = mk_inst (id+1) ASSIGN [Var nv] [cv]` >>

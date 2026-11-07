@@ -86,7 +86,7 @@ Proof
   >- (Cases_on `eval_operand a s` >> gvs[out_taint_def, mk_inst_def]) >>
   namedCases_on `more` ["", "c tail"]
   >- (Cases_on `eval_operand a s` >>
-      gvs[out_taint_def, mk_inst_def, shift_taint_def, EXTENSION]) >>
+      gvs[out_taint_def, mk_inst_def, shift_taint_def] >> gvs[EXTENSION]) >>
   Cases_on `tail` >> simp[out_taint_def, mk_inst_def])
 QED
 

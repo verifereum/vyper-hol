@@ -36,7 +36,9 @@ Proof
       (update_var out (a*b) s) = DRESTRICT G (COMPL {out}) /\
    step_taint (mk_inst id MUL [Var idx; Lit b] [out]) s
       (update_var out (a*b) s) tn = tn with t_var := tn.t_var |+ (out,{})` by
-    (irule typed_copy_loop_arith_ghost >> simp[update_var_def]) >> gvs[]
+    (irule typed_copy_loop_arith_ghost_clean >>
+     fs[update_var_def, op_taint_def, DISJ_IMP_THM, FORALL_AND_THM]) >>
+  gvs[]
 QED
 
 Theorem for_dynamic_add_ghost[local]:
