@@ -12,7 +12,7 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipRecursio
   bodyPtrStructLitOwnershipTyped bodyPtrStructLitOwnershipPrimitives
   bodyPtrStructLitOwnershipAbiEncode bodyPtrStructLitOwnershipPop
   bodyPtrStructLitEmitterFrame bodyPtrStructLitOwnershipScalar
-  bodyPtrStructLitOwnershipStmtLoops
+  bodyPtrStructLitOwnershipStmtLoops bodyPtrStructLitOwnershipConsumers
 
 Theorem alloc_run_stmt_nonannassign_route:
   (!id vt e. s <> AnnAssign id vt e) /\
@@ -469,4 +469,30 @@ Proof
   rpt strip_tac >>
   irule (SRULE [loop_comp_return_bind] alloc_run_stmt_annassign_initializer) >>
   simp[]
+QED
+
+Theorem alloc_run_stmt_append:
+  ~supported_expr_exists expr_shape_root e ==>
+  alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
+    (compile_stmt ce lctx ty (Append bt e)) (\u s. fresh_outputs s)
+Proof
+  strip_tac >> simp[compile_stmt_def] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_stmt_lower_value >>
+      simp[shape_state_def, shape_base_fresh_outputs]) >>
+  gen_tac >> simp[loop_comp_return_bind] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (IF_CASES_TAC
+      >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
+      simp[comp_ignore_bind_def] >>
+      rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+        reverse conj_tac
+        >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_alloc_buffer,
+              SRULE [SF ETA_ss] alloc_run_compile_store_memory] >> NO_TAC) >>
+        gen_tac >> simp[]) >>
+      simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+  gen_tac >> simp[loop_comp_return_bind, SF ETA_ss] >>
+  irule (SRULE [SF ETA_ss] alloc_run_compile_dynarray_append) >>
+  Cases_on `infer_array_location ce (target_to_expr bt)` >>
+  simp[store_opc_for_def]
 QED

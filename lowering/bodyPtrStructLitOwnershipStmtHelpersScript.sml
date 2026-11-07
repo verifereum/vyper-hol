@@ -7,7 +7,7 @@ Ancestors bodyPtrStructLitOwnershipConsumers bodyPtrStructLitOwnershipLoops
   bodyPtrStructLitOwnershipAbiEncode bodyPtrStructLitOwnershipInterfaces
   context compileEnv stmtLowering loweringShapeDefs loweringShapeRules
   bodyPtrStructLitOwnershipFrame bodyPtrStructLitOwnershipPop
-  loweringShapeProps supportedExprTraverse
+  loweringShapeProps supportedExprTraverse exprLowering
 
 Theorem alloc_run_compile_range_bound_checks:
   alloc_run fresh_outputs
@@ -362,3 +362,29 @@ Proof
     comp_bind_assoc, FUN_EQ_THM, comp_bind_def, comp_return_def]
 QED
 
+
+Theorem alloc_run_compile_dynarray_append:
+  store_opc <> ALLOCA ==>
+  alloc_run fresh_outputs
+    (compile_dynarray_append ce base_op val_op ws es dt st cap prim load_opc store_opc)
+    (\u s. fresh_outputs s)
+Proof
+  strip_tac >> simp[compile_dynarray_append_def, comp_ignore_bind_def,
+    comp_bind_assoc] >>
+  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac
+    >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+          SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >> NO_TAC) >>
+    gen_tac >> simp[comp_ignore_bind_def, comp_bind_assoc]) >>
+  irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >> conj_tac
+  >- (gen_tac >> simp[] >> irule alloc_run_bind >>
+      qexists `\v s. fresh_outputs s` >>
+      simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+        SRULE [SF ETA_ss] alloc_run_emit_void_fresh]) >>
+  IF_CASES_TAC >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
+  IF_CASES_TAC >> simp[comp_ignore_bind_def] >>
+  irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory,
+    SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop] >>
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
+QED
