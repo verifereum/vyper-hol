@@ -833,3 +833,214 @@ Proof
   simp[] >> strip_tac >>
   first_x_assum drule >> simp[]
 QED
+
+(* Initialization uses the real spill base, even when parameter cleanup
+   performs deep swaps and advances the allocator. *)
+Theorem prepare_params_structural_budget:
+  !lv fn ps spillbase.
+    ps.ps_stack = [] /\ ps.ps_spilled = FEMPTY /\
+    residual_budget_wf spillbase [] ps /\
+    ALL_DISTINCT (MAP (\inst. HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions)) ==>
+    residual_budget_wf spillbase [] (SND (prepare_params_plan lv fn ps))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `get_params (HD fn.fn_blocks).bb_instructions = []`
+  >- simp[prepare_params_plan_def] >>
+  `residual_budget_wf spillbase []
+    (ps with ps_stack := MAP (\inst. Var (HD inst.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions))` by
+    (irule reorderSimTheory.residual_budget_wf_canonical >>
+     gvs[reorderSimTheory.residual_budget_wf_def,
+       planSpillBoundsTheory.plan_slots_bounded_def] >>
+     `MAP (\inst. Var (HD inst.inst_outputs))
+        (get_params (HD fn.fn_blocks).bb_instructions) =
+      MAP Var (MAP (\inst. HD inst.inst_outputs)
+        (get_params (HD fn.fn_blocks).bb_instructions))` by
+        simp[MAP_MAP_o, combinTheory.o_DEF] >>
+     pop_assum SUBST1_TAC >> irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
+  simp[prepare_params_plan_def, parameter_push_fold] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  qpat_x_assum `optimistic_swap_plan _ _ _ _ _ = _`
+    (mp_tac o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >>
+  simp[] >> disch_then (SUBST1_TAC o SYM) >>
+  irule residual_budget_wf_optimistic_swap_plan >>
+  qpat_x_assum `popmany_plan _ _ = _`
+    (assume_tac o GSYM o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >>
+  drule_at (Pat `_ = SND (popmany_plan _ _)`) popmany_plan_core_resource >>
+  disch_then (qspecl_then [`[]`, `MAP (\inst. Var (HD inst.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions)`, `spillbase`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem initialized_entry_structural_budget:
+  !fn ch growth spill_base lbl_ctr ps.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    ps = SND (prepare_params_plan (liveness_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) ==>
+    (?core. lineage_core 0 core ps /\
+      residual_budget_wf spill_base [] (ps with ps_stack := core))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `residual_budget_wf spill_base [] ps` by
+    (gvs[] >> irule prepare_params_structural_budget >>
+     simp[fnPlanLineageInventoryTheory.init_cleanup_residual_budget] >>
+     simp[init_cleanup_plan_state_def, stackPlanTypesTheory.init_plan_state_def] >>
+     irule ready_parameter_names_distinct >> simp[]) >>
+  drule_all native_parameter_lineage_inventory >>
+  disch_then (qspecl_then [`ch`, `growth`, `spill_base`, `lbl_ctr`] mp_tac) >>
+  simp[fnPlanLineageInventoryTheory.lineage_inventory_def] >> strip_tac >>
+  qexists_tac `ps.ps_stack` >>
+  simp[fnPlanLineageInventoryTheory.lineage_core_def] >>
+  gvs[fnPlanLineageInventoryTheory.lineage_core_def]
+QED
+
+Theorem prefix_inventory_demand_available:
+  !fn bb i ps v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    prefix_inventory_origins bb i ps /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    fnPlanLineageDemandSupport$demand_available fn bb i v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?j. j < i /\ j < LENGTH bb.bb_instructions /\
+    MEM v (EL j bb.bb_instructions).inst_outputs` by
+    metis_tac[prefix_inventory_origins_def] >>
+  irule fnPlanLineageDemandSupportTheory.demand_available_mono >>
+  qexists_tac `SUC j` >> simp[] >>
+  irule fnPlanLineageDemandSupportTheory.current_output_demand_available_suc >>
+  simp[] >> gvs[codegen_ready_fn_def]
+QED
+
+Theorem entry_inst_structural_step:
+  !fn bb i ps dfg cfg halting term ops qs m core spillbase.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode <> JMP /\
+    (EL i bb.bb_instructions).inst_opcode <> PHI /\
+    ~is_param_opcode (EL i bb.bb_instructions).inst_opcode /\
+    entry_boundary_resources fn bb i ps /\ lineage_core m core ps /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn
+      (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))
+      halting term bb.bb_label ps = SOME (ops,qs) ==>
+    ?rest. lineage_core m rest qs /\
+      residual_budget_wf spillbase [] (qs with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+    fnPlanLineageDemandSupport$demand_available fn bb i v` by
+    metis_tac[entry_boundary_resources_def, prefix_inventory_demand_available] >>
+  `ps.ps_stack = REPLICATE m dead_stack_marker ++ core` by
+    gvs[fnPlanLineageInventoryTheory.lineage_core_def] >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, AllCaseEqs()] >> strip_tac >>
+  gvs[]
+  >- (drule_at (Pat `generate_offset_plan _ _ = _`) offset_position_invariant >>
+      disch_then (qspecl_then [`fn`, `m`, `core`, `spillbase`] mp_tac) >>
+      simp[] >> (impl_tac >- (gvs[entry_boundary_resources_def] >> metis_tac[])) >> simp[])
+  >- (qexists_tac `core` >> simp[]) >>
+  `EVERY (\x. x <> dead_stack_marker)
+      (compute_operands (EL i bb.bb_instructions))` by
+    (`codegen_ready_inst (EL i bb.bb_instructions)` by
+       (gvs[codegen_ready_fn_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+     gvs[codegen_ready_inst_def, EVERY_MEM, compute_operands_def,
+       asmIRTheory.get_non_label_operands_def] >>
+     rpt strip_tac >>
+     Cases_on `(EL i bb.bb_instructions).inst_opcode = DJMP \/
+       (EL i bb.bb_instructions).inst_opcode = JNZ \/
+       (EL i bb.bb_instructions).inst_opcode = INVOKE`
+     >- gvs[MEM_FILTER] >>
+     Cases_on `(EL i bb.bb_instructions).inst_opcode = LOG` >>
+     gvs[] >> metis_tac[MEM_TL]) >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    ordinary_position_invariant >>
+  disch_then (qspecl_then [`m`, `core`, `spillbase`] mp_tac) >>
+  simp[] >> (impl_tac >- (gvs[entry_boundary_resources_def] >> metis_tac[])) >> simp[]
+QED
+
+Theorem native_inst_prefix_structural:
+  !lv dfg cfg fn label halting n len xs ps0 k ps.
+    native_inst_prefix lv dfg cfg fn label halting n len xs ps0 k ps ==>
+    !bb spillbase. lv = liveness_analyze fn /\ label = bb.bb_label /\
+      n = LENGTH (get_params bb.bb_instructions) /\
+      len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+      entry_boundary_resources fn bb n ps0 /\
+      (?m core. lineage_core m core ps0 /\
+        residual_budget_wf spillbase [] (ps0 with ps_stack := core)) /\
+      (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\
+                       (EL j xs).inst_opcode <> PHI) ==>
+      ?m core. lineage_core m core ps /\
+        residual_budget_wf spillbase [] (ps with ps_stack := core)
+Proof
+  ho_match_mp_tac native_inst_prefix_strongind >> conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `k < LENGTH (non_param_insts bb)` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst = EL k (non_param_insts bb)` by
+    metis_tac[listTheory.HD_DROP, listTheory.HD] >>
+  `inst = EL (LENGTH (get_params bb.bb_instructions) + k) bb.bb_instructions` by
+    metis_tac[ready_block_suffix_index] >>
+  `?m core. lineage_core m core ps /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core)` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `entry_boundary_resources fn bb (LENGTH (get_params bb.bb_instructions)+k) ps` by
+    (drule native_inst_prefix_resources >> disch_then irule >> simp[] >> metis_tac[]) >>
+  `LENGTH (get_params bb.bb_instructions)+k < LENGTH bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `~is_param_opcode inst.inst_opcode` by
+    (`MEM inst (non_param_insts bb)` by metis_tac[EL_MEM] >>
+     gvs[non_param_insts_def, MEM_FILTER]) >>
+  `(if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH bb.bb_instructions)
+    else live_vars_at (liveness_analyze fn) bb.bb_label
+      (k + LENGTH (get_params bb.bb_instructions) + 1)) =
+    live_vars_at (liveness_analyze fn) bb.bb_label
+      (SUC (LENGTH (get_params bb.bb_instructions) + k))` by
+    (irule ready_block_suffix_next_live >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `inst.inst_opcode <> JMP /\ inst.inst_opcode <> PHI` by
+    (qpat_x_assum `!j. j < SUC k ==> _` (qspec_then `k` mp_tac) >>
+     simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  qexists_tac `m'` >> irule entry_inst_structural_step >>
+  rpt (goal_assum (drule_at Any)) >>
+  metis_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem initialized_entry_prefix_structural:
+  !fn dfg ch growth spill_base lbl_ctr k ps.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks).bb_label (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions)
+      (non_param_insts (HD fn.fn_blocks))
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))) k ps /\
+    (!j. j < k ==> (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode <> JMP /\
+      (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode <> PHI) ==>
+    entry_boundary_resources fn (HD fn.fn_blocks)
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+k) ps /\
+    ?m core. lineage_core m core ps /\
+      residual_budget_wf spill_base [] (ps with ps_stack := core)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  drule_all ready_entry_static_boundary >> strip_tac >>
+  `entry_boundary_resources fn (HD fn.fn_blocks)
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+    (SND (prepare_params_plan (liveness_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)))` by
+    (irule initialized_entry_boundary_resources >>
+     metis_tac[]) >>
+  conj_tac
+  >- (drule native_inst_prefix_resources >> disch_then irule >> simp[]) >>
+  drule native_inst_prefix_structural >> disch_then irule >> simp[] >>
+  conj_tac
+  >- metis_tac[initialized_entry_structural_budget] >>
+  qexists_tac `HD fn.fn_blocks` >> simp[]
+QED
