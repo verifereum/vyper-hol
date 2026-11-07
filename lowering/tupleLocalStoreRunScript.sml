@@ -8,7 +8,7 @@
  *)
 Theory tupleLocalStoreRun
 Ancestors
-  tupleLocalStoreProps stmtSimAssignStore stmtSimAssignMem tupleMemoryFrame
+  stmtSimDefs tupleLocalStoreProps stmtSimAssignStore stmtSimAssignMem tupleMemoryFrame
   localMemoryStorePath stmtSimDeclPath fragGasMode fragGasPath
   tupleMemoryLayout  exprLoweringProps localPtrsProps compileEnv
   valueEncoding valueEncodingProps valueEncodingProofs vyperState vyperLookup
@@ -58,6 +58,29 @@ Proof
   `written <= dsz` by decide_tac >>
   drule_all (tuple_in_memory_unread_suffix |> SPEC_ALL
     |> Q.INST [`off` |-> `0`] |> GEN_ALL |> SRULE []) >> simp[]
+QED
+
+(* Adapt register-preserving region writes to stores with fresh temporaries. *)
+Theorem tuple_local_region_write_frame:
+  alloca_frame c0 e0 sa0 s0 c ee s /\
+  local_region c ee.scopes s n b z /\
+  MAP FDOM ee1.scopes = MAP FDOM ee.scopes /\
+  (!id p sz. FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+     lookup_var p t = lookup_var p s) /\
+  (!a len. a + len <= b \/ b + z <= a ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) ==>
+  alloca_frame c0 e0 sa0 s0 c ee1 t
+Proof
+  strip_tac >>
+  `alloca_frame c0 e0 sa0 s0 c ee1 (t with vs_vars := s.vs_vars)` by
+    (irule alloca_frame_region_write >>
+     goal_assum (drule_at Any) >>
+     qexistsl [`b`, `n`, `s`, `z`] >> simp[lookup_var_def] >>
+     asm_rewrite_tac[]) >>
+  `!id a sz. local_region c ee1.scopes (t with vs_vars := s.vs_vars) id a sz <=>
+             local_region c ee1.scopes t id a sz` by
+    (rpt gen_tac >> simp[local_region_def, lookup_var_def] >> metis_tac[lookup_var_def]) >>
+  fs[alloca_frame_def] >> gvs[]
 QED
 
 (* One execution interface for both representations; memory mode preserves
