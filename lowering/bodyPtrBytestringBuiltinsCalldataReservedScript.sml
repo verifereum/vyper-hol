@@ -15,7 +15,8 @@ Theorem calldata_size_reserved_runtime:
     u = update_var (STRING #"%" (toString sa.cs_next_var))
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s /\
     eval_operand limit u = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
-    eval_operand start u = eval_operand start s
+    eval_operand start u = eval_operand start s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
 Proof
   strip_tac >>
   `limit = Var (STRING #"%" (toString sa.cs_next_var)) /\
@@ -33,7 +34,9 @@ Proof
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)` by
     (irule external_size_step >> simp[]) >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var] >>
-  irule eval_operand_update_not_fresh >> qexists_tac `sa` >> simp[]
+  conj_tac
+  >- (irule eval_operand_update_not_fresh >> qexists_tac `sa` >> simp[]) >>
+  rpt strip_tac >> fs[not_fresh_at_def] >> metis_tac[]
 QED
 
 Theorem stmt_state_rel_reserved_vars_update:
