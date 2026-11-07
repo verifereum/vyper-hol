@@ -11,7 +11,7 @@ Ancestors
   concretizePtrActivationChronology concretizePtrHistoricalWriteClassification
   concretizePtrExactWriteTransport concretizePtrBufferCopyContent
   concretizePtrValueTransport concretizePtrPrefixLedger concretizePtrBytes concretizePtrPairedFields
-  concretizePtrComparisonTransport
+  concretizePtrComparisonTransport concretizePtrPairedPrefixProbe
   venomMemProps regularCallEmitSim
   concretizeStepStructure concretizeStepShape concretizeStepRetpc concretizeStageShape
   concretizePtrOperationalOpcodes concretizePtrDeletedGaps concretizePtrExecutedCoverage
@@ -1141,6 +1141,69 @@ Resume ptr_create_family_delegate_write_certificate[owned]:
 QED
 Finalise ptr_create_family_delegate_write_certificate
 
+Theorem ptr_paired_prefix_delegate_successor[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  a.po_inst.inst_opcode = DELEGATECALL /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ?z TG' ws'. TG' = step_prov PT TG a.po_inst z.po_state /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry births PT TG' saved entries
+      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws'
+Proof
+  strip_tac >> drule_all ptr_create_family_delegate_structural_successor >> strip_tac >>
+  qexistsl_tac [`z`,`TG'`] >> gvs[] >>
+  Cases_on `range_bytes (step_writes a.po_inst a.po_state z.po_state) = {}`
+  >- (qexists_tac `ws` >> irule concretizePtrPairedNextAttachTheory.ptr_paired_prefix_nonwrite_attach >>
+      rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
+  `ptr_chrono_step C a z` by (drule ptr_tagged_chrono_step_projection >> simp[]) >>
+  drule_all ptr_create_family_delegate_write_certificate >>
+  disch_then (qspec_then `step_prov PT TG a.po_inst z.po_state` mp_tac) >>
+  disch_then (qx_choose_then `reloc` assume_tac) >>
+  qexists_tac `ws ++ [(LENGTH h - 1,LENGTH ht - 1,reloc)]` >>
+  suspend "attach"
+QED
+Resume ptr_paired_prefix_delegate_successor[attach]:
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  `LAST h = a` by metis_tac[ptr_chrono_history_end] >>
+  `EVERY (\n. SUC n < LENGTH h) done` by
+    (qpat_assum `ptr_structural_transcript _ _ _ _ (h ++ _) _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     disch_then (strip_assume_tac o MATCH_MP ptr_structural_transcript_erasure) >>
+     drule ptr_structural_trace_embedding >>
+     simp[concretizePtrEventEmbeddingTheory.ptr_event_embedding_def, EVERY_EL] >> strip_tac >>
+     gen_tac >> strip_tac >>
+     qpat_x_assum `!i j. _` (qspecl_then [`n`,`LENGTH done`] mp_tac) >>
+     simp[EL_APPEND_EQN] >> fs[ptr_paired_prefix_def, ptr_paired_samples_def,
+       ptr_sample_list_def] >> decide_tac) >>
+  `LENGTH ht = SUC (LENGTH done)` by
+    (drule ptr_structural_trace_embedding >>
+     simp[concretizePtrEventEmbeddingTheory.ptr_event_embedding_def]) >>
+  `LENGTH ht - 1 = LENGTH done` by decide_tac >>
+  fs[ptr_paired_prefix_def] >>
+  conj_tac >- (irule ptr_paired_samples_pair >> simp[]) >>
+  conj_tac >- (irule ptr_paired_alignment_pair >> simp[]) >>
+  conj_tac >- (irule ptr_paired_callers_retained >> simp[] >>
+    fs[ptr_paired_samples_def, ptr_sample_list_def] >> qexistsl_tac [`a`,`at`] >> simp[]) >>
+  irule ptr_paired_writes_pair >> simp[] >>
+  fs[ptr_paired_samples_def, ptr_sample_list_def]
+QED
+Finalise ptr_paired_prefix_delegate_successor
+
 Theorem ptr_paired_create_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -1174,6 +1237,31 @@ Theorem ptr_paired_create_prefix_normalize:
     z.po_inst.inst_opcode <> NOP /\
     zt.po_inst = concretize_inst_with_positions (lp z.po_fn) z.po_inst
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?z TG' ws'. TG' = step_prov PT TG a.po_inst z.po_state /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry births PT TG' saved entries
+      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws'` by
+    (Cases_on `a.po_inst.inst_opcode = DELEGATECALL`
+     >- (drule_all ptr_paired_prefix_delegate_successor >> metis_tac[]) >>
+     `MEM a.po_inst.inst_opcode [CREATE; CREATE2]` by fs[] >>
+     drule_all ptr_paired_prefix_create_successor >> metis_tac[]) >>
+  `fn_inst_wf z.po_fn` by
+    (qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any mp_tac ptr_paired_prefix_transcript) >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >> strip_tac >>
+     drule ptr_chrono_history_reachable >> strip_tac >>
+     fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> strip_tac >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  qpat_assum `ptr_paired_prefix _ _ _ _ _ _ _ (_ ++ [_]) _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_then Any mp_tac ptr_paired_prefix_normalize) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`[z] ++ delta`, `ptr_gap_scan bb (LENGTH delta) z`,
+    `tokens`, `registry`, `births`, `PT`, `TG'`, `saved`, `entries`,
+    `[(tokens,registry,births,PT,TG',saved,entries)] ++ snapshots`, `calls`, `ws'`] >>
+  simp[APPEND_ASSOC, ptr_gap_scan_fields]
 QED
 
