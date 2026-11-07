@@ -136,8 +136,10 @@ Proof
   `at.po_inst = a.po_inst` by gvs[concretize_positions_unchanged] >>
   `ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
     a.po_state at.po_state /\ a.po_state.vs_labels = at.po_state.vs_labels` by
-    fs[ptr_paired_sample_def, ptr_core_shared_def,
-      concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
+    (fs[ptr_paired_sample_def] >>
+     drule concretizePtrRequestHistoryTheory.ptr_history_content_control >>
+     simp[concretizePtrTaintContentTheory.ptr_taint_control_def,
+       ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def]) >>
   `?ret tr. step_inst 0 C' at.po_inst at.po_state = IntRet ret at.po_state /\
     ret.iret_adopt_fmp = NONE /\ at.po_stack <> [] /\
     bind_outputs (HD at.po_stack).cf_inst.inst_outputs ret.iret_values
@@ -172,7 +174,7 @@ Proof
      drule ptr_paired_prefix_alignment >>
      disch_then (qspec_then `r` mp_tac) >>
      `r < LENGTH ht` by
-       (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def] >> decide_tac) >>
+       (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def, ptr_sample_list_def] >> decide_tac) >>
      simp[EL_APPEND_EQN] >> strip_tac >>
      qpat_x_assum `ptr_paired_cursor lp (EL _ h) _` mp_tac >>
      simp[concretizePtrPairedFieldsTheory.ptr_paired_cursor_def] >> strip_tac >>
@@ -245,16 +247,16 @@ Proof
   PairCases_on `snap` >>
   fs[concretizePtrPairedFieldsTheory.ptr_paired_saved_tags_def] >>
   drule ptr_paired_prefix_samples >> strip_tac >>
-  `r < LENGTH ht` by fs[ptr_paired_samples_def] >>
+  `r < LENGTH ht` by fs[ptr_paired_samples_def, ptr_sample_list_def] >>
   `ptr_mixed_vars snap2 positions snap4 (EL q h).po_taint
     (EL q h).po_fn (EL r ht).po_fn (EL q h).po_state (EL r ht).po_state` by
-    (gvs[] >> fs[ptr_paired_samples_def] >>
+    (gvs[] >> fs[ptr_paired_samples_def, ptr_sample_list_def] >>
      qpat_x_assum `!j. j < LENGTH ht ==> _` (qspec_then `r` mp_tac) >>
      simp[EL_APPEND_EQN, ptr_paired_sample_def]) >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_endpoint >> strip_tac >>
   `q < LENGTH h` by
-    (fs[ptr_paired_samples_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+    (fs[ptr_paired_samples_def, ptr_sample_list_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
   `EL (LENGTH h - 1) H = (tokens,registry,births,PT,TG,saved,entries)` by
     (Cases_on `H` >> gvs[LAST_EL, arithmeticTheory.PRE_SUB1]) >>
   `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
@@ -365,6 +367,61 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >> decide_tac
 QED
 
+Theorem ptr_ret_phis_call_context[local]:
+  !s t. eval_phis s insts = OK t ==> t.vs_call_ctx = s.vs_call_ctx
+Proof
+  Induct_on `insts` >- simp[eval_phis_def] >>
+  rpt gen_tac >> simp[Once eval_phis_def] >>
+  strip_tac >> gvs[AllCaseEqs(), update_var_def] >> metis_tac[]
+QED
+
+Theorem ptr_ret_block_call_context[local]:
+  enters_block fn s t ==> t.vs_call_ctx = s.vs_call_ctx
+Proof
+  rw[enters_block_def] >> drule ptr_ret_phis_call_context >> simp[]
+QED
+
+Theorem ptr_ret_terminator_call_context[local]:
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK t ==>
+  t.vs_call_ctx = s.vs_call_ctx
+Proof
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >> gvs[Once step_inst_def, step_inst_base_opcode_eqs] >>
+  gvs[AllCaseEqs(), jump_to_def] >> pairarg_tac >> gvs[]
+QED
+
+Theorem ptr_ret_reachable_stack_context[local]:
+  !vs C stk PG G tn fn inst s. frame_reachable vs C stk PG G tn fn inst s ==>
+  !f. MEM f stk ==> s.vs_call_ctx = f.cf_state.vs_call_ctx
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >> drule_all venomInstProofsTheory.step_preserves_call_ctx >>
+      strip_tac >> simp[])
+  >- (rpt strip_tac >> drule_all ptr_ret_terminator_call_context >>
+      drule ptr_ret_block_call_context >> metis_tac[])
+  >- (rpt strip_tac >> drule ptr_ret_block_call_context >>
+      qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
+      simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[])
+  >> rpt strip_tac >>
+  `s'.vs_call_ctx = f.cf_state.vs_call_ctx` by
+    (qspec_then `(\u. u.vs_call_ctx)` mp_tac bind_outputs_preserves >>
+     simp[update_var_def] >> disch_then drule >>
+     Cases_on `ret.iret_adopt_fmp` >> simp[adopt_return_fmp_def, merge_callee_state_def]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem ptr_ret_reachable_caller_address[local]:
+  ptr_observation_reachable vs C a /\ a.po_stack <> [] ==>
+  a.po_state.vs_call_ctx.cc_address =
+    (HD a.po_stack).cf_state.vs_call_ctx.cc_address
+Proof
+  strip_tac >> fs[ptr_observation_reachable_def] >>
+  drule ptr_ret_reachable_stack_context >>
+  disch_then (qspec_then `HD a.po_stack` mp_tac) >>
+  Cases_on `a.po_stack` >> gvs[]
+QED
+
 Theorem ptr_paired_ret_successor:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
@@ -424,7 +481,7 @@ Proof
   drule ptr_paired_prefix_alignment >>
   disch_then (qspec_then `r` mp_tac) >>
   `r < LENGTH ht` by
-    (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def] >> decide_tac) >>
+    (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def, ptr_sample_list_def] >> decide_tac) >>
   simp[EL_APPEND_EQN] >> strip_tac >>
   suspend "target_control"
 QED
@@ -438,11 +495,9 @@ Resume ptr_paired_ret_successor[target_control]:
     (qpat_x_assum `ptr_chrono_step C' at zt` mp_tac >>
      simp[Once ptr_chrono_step_cases, ptr_observe_def] >>
      rpt strip_tac >> gvs[is_terminator_def] >>
-     qpat_x_assum `step_inst fuel C' _ _ = _` mp_tac >>
-     simp[Once run_defs, step_inst_base_def] >>
-     qpat_x_assum `step_inst 0 C' _ _ = _` mp_tac >>
-     simp[Once run_defs, step_inst_base_def] >>
-     gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+     `!fuel. step_inst fuel C' a.po_inst s = step_inst 0 C' a.po_inst s` by
+       (irule ptrSafeRunTheory.step_inst_non_invoke_fuel >> simp[]) >>
+     gvs[]) >>
   `active_inst a.po_fn a.po_inst a.po_state` by
     (drule ptr_paired_prefix_endpoint >> strip_tac >>
      drule ptr_ret_cursor_active >> simp[]) >>
@@ -455,7 +510,7 @@ Resume ptr_paired_ret_successor[target_control]:
      imp_res_tac ptr_chrono_history_reachable >>
      `ptr_observation_reachable vs C' (EL r ht) /\
       ptr_observation_reachable vs C (EL (EL r done) h)` by
-       (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def] >>
+       (drule ptr_paired_prefix_samples >> simp[ptr_paired_samples_def, ptr_sample_list_def] >>
         strip_tac >> fs[EVERY_MEM] >> metis_tac[EL_MEM]) >>
      fs[ptr_observation_reachable_def] >>
      imp_res_tac ptr_frame_context_membership >> simp[]) >>
@@ -517,27 +572,34 @@ Resume ptr_paired_ret_successor[tagged_return]:
 QED
 
 Resume ptr_paired_ret_successor[restored_fields]:
-  `ptr_core_shared a.po_state at.po_state /\
-   ptr_core_shared (HD a.po_stack).cf_state (HD at.po_stack).cf_state` by
-    (conj_tac
-     >- (drule ptr_paired_prefix_endpoint >> simp[ptr_paired_sample_def]) >>
-     drule ptr_paired_prefix_samples >> strip_tac >>
-     drule_all ptr_paired_samples_core >>
-     simp[EL_APPEND_EQN] >>
+  `ptr_history_content a.po_taint a.po_state at.po_state` by
+    (drule ptr_paired_prefix_endpoint >> simp[ptr_paired_sample_def]) >>
+  `ptr_taint_control
+     ((HD a.po_stack).cf_state with vs_requests := (HD at.po_stack).cf_state.vs_requests)
+     (HD at.po_stack).cf_state` by
+    (drule ptr_paired_prefix_samples >>
+     simp[ptr_paired_samples_def, ptr_sample_list_def] >> strip_tac >>
+     first_x_assum (qspec_then `r` mp_tac) >>
+     simp[EL_APPEND_EQN] >> strip_tac >>
+     qmatch_asmsub_abbrev_tac `ptr_paired_sample positions _ _ snap` >>
+     PairCases_on `snap` >> fs[ptr_paired_sample_def] >>
+     qpat_x_assum `ptr_history_content _ (EL _ h).po_state _`
+       (mp_then Any mp_tac concretizePtrRequestHistoryTheory.ptr_history_content_control) >>
      gvs[concretizePtrPairedFieldsTheory.ptr_paired_frame_def]) >>
-  `ptr_core_shared sr tr` by
-    (`ptr_core_shared
-       (merge_callee_state (HD a.po_stack).cf_state a.po_state)
-       (merge_callee_state (HD at.po_stack).cf_state at.po_state)` by
-       (irule ptr_core_shared_merge >> simp[]) >>
-     imp_res_tac ptr_ret_bind_control >>
-     qpat_assum `sr = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
-     qpat_assum `tr = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
-     fs[adopt_return_fmp_def, ptr_core_shared_def,
-       concretizePtrSharedFieldsTheory.ptr_shared_fields_def]) >>
-  `ptr_core_shared b.po_state zt.po_state` by
-    (gvs[Abbr `b`, Abbr `b0`, ptr_observe_def, ptr_core_shared_def,
-       concretizePtrSharedFieldsTheory.ptr_shared_fields_def]) >>
+  `ptr_observation_reachable vs C a /\ ptr_observation_reachable vs C' at` by
+    (drule ptr_paired_prefix_transcript >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_source >>
+     drule ptr_structural_trace_target >> rpt strip_tac >>
+     imp_res_tac ptr_chrono_history_reachable >> simp[]) >>
+  `a.po_state.vs_call_ctx.cc_address = (HD a.po_stack).cf_state.vs_call_ctx.cc_address /\
+   at.po_state.vs_call_ctx.cc_address = (HD at.po_stack).cf_state.vs_call_ctx.cc_address` by
+    metis_tac[ptr_ret_reachable_caller_address] >>
+  `ptr_history_content b.po_taint b.po_state zt.po_state` by
+    (simp[Abbr `b`, Abbr `b0`, ptr_observe_def,
+       Excl "ptr_history_content_cursor", Excl "ptr_history_content_tvar"] >>
+     irule concretizePtrRequestHistoryTheory.ptr_history_content_return >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>
   `ptr_mixed_vars births positions (DRESTRICT TGc (COMPL (set outs)))
      b.po_taint b.po_fn zt.po_fn b.po_state zt.po_state` by
     (qpat_x_assum `ptr_mixed_vars births positions _ _ _ _ sr tr` mp_tac >>
