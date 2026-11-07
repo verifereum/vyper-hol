@@ -2,9 +2,27 @@ Theory concretizeLayoutCanonicalBaseCorridor
 Ancestors concretizeLayoutCanonicalBase concretizeLayoutCanonicalDriver
   concretizeLayoutSelectedBaseInterface concretizeLayoutCompletedJump
   ptrDiscipline venomExecSemantics venomInst list
+  concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin frameRankedTerminalCorridor
 
 (* Leaf of the exhaustive base certificate: steps from a corridor witness.
    A corridor holds only ASSIGN and its final REVERT. *)
+
+Theorem canonical_corridor_shape[local]:
+  layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
+    q n i s j t (INR g) ==>
+  ~g.ltp_pending /\ layout_corridor_entry C g s t /\
+  get_instruction g.ltp_origin.lbo_source s.vs_inst_idx = SOME i /\
+  get_instruction g.ltp_origin.lbo_target t.vs_inst_idx = SOME j /\
+  i.inst_opcode = (if g.ltp_remaining = 0 then REVERT else ASSIGN)
+Proof
+  simp[layout_canonical_step_witness_def, layout_canonical_block_witness_def] >>
+  strip_tac >> gvs[] >>
+  fs[layout_corridor_entry_def, layout_phase_normalize_def,
+     ranked_terminal_entry_def, ranked_terminal_corridor_def] >>
+  Cases_on `g.ltp_remaining = 0`
+  >- gvs[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]
+QED
 
 Theorem layout_canonical_corridor_success:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -34,7 +52,17 @@ Theorem layout_canonical_corridor_success:
   ?tpost. step_inst_base j t = OK tpost /\
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INR g) post tpost
 Proof
-  cheat
+  strip_tac >> drule canonical_corridor_shape >> strip_tac >>
+  Cases_on `g.ltp_remaining`
+  >- (gvs[] >>
+      qpat_x_assum `step_inst_base i s = OK post` mp_tac >>
+      simp[Once step_inst_base_def, AllCaseEqs()]) >>
+  `i.inst_opcode = ASSIGN` by gvs[] >>
+  conj_tac >- simp[is_terminator_def] >>
+  drule_all layout_corridor_assign >> strip_tac >> gvs[] >>
+  simp[layout_canonical_success_def] >>
+  qexists_tac `INR (g with <|ltp_pending := T; ltp_remaining := n'|>)` >>
+  simp[layout_phase_origin_def] >> fs[layout_corridor_entry_def]
 QED
 
 Theorem layout_canonical_corridor_exit:
@@ -64,5 +92,16 @@ Theorem layout_canonical_corridor_exit:
   ?r'. step_inst_base j t = r' /\
     layout_canonical_result D lo vs0 C C' q0 es qs ass qend q n r r'
 Proof
-  cheat
+  strip_tac >> drule canonical_corridor_shape >> strip_tac >>
+  Cases_on `g.ltp_remaining = 0`
+  >- (`?a post. r = Abort a post` by
+        (qpat_x_assum `step_inst_base i s = r` mp_tac >>
+         gvs[] >> simp[Once step_inst_base_def, AllCaseEqs()] >>
+         metis_tac[]) >>
+      gvs[] >> drule_all layout_corridor_revert >>
+      disch_then (qspec_then `D` strip_assume_tac) >> gvs[] >>
+      simp[layout_canonical_result_def]) >>
+  `i.inst_opcode = ASSIGN` by gvs[] >>
+  qpat_x_assum `step_inst_base i s = r` mp_tac >>
+  simp[Once step_inst_base_def, AllCaseEqs()] >> metis_tac[]
 QED
