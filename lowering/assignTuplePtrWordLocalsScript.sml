@@ -28,7 +28,13 @@ Proof
   Cases_on `name = id`
   >- suspend "changed" >>
   `lookup_scopes name es.scopes = SOME entry` by metis_tac[] >>
-  `ptr_covers G tn p s sz` by metis_tac[ghost_inv_def] >>
+  `ptr_covers G tn p s sz /\
+   !w mem. lookup_var p s = SOME w /\
+     mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     val_in_memory entry.type entry.value (w2n w) mem` by
+    (qpat_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >> rewrite_tac[ghost_inv_def] >>
+     disch_then (qspecl_then [`name`, `entry`, `p`, `sz`] mp_tac o CONJUNCT1) >>
+     simp[]) >>
   simp[] >> rpt gen_tac >> strip_tac >>
   drule_all local_region_other_footprint_ptr >> strip_tac >>
   irule robust_val_in_memory_exterior_frame >>
@@ -36,7 +42,7 @@ Proof
   goal_assum (drule_at Any) >>
   qexistsl_tac [`s.vs_memory`, `(mstore dst word s).vs_memory`,
     `tn.t_mem`, `tn.t_mem DIFF {i | dst <= i /\ i < dst+32}`] >>
-  simp[] >> conj_tac >- metis_tac[ghost_inv_def] >>
+  simp[] >>
   rpt strip_tac >> irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
