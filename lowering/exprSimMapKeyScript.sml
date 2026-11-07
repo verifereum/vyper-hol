@@ -896,7 +896,7 @@ Proof
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `wb_frame cenv es en sa s0 u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `s`] >> simp[]) >>
      goal_assum (drule_at Any)) >>
   qpat_x_assum `wb_frame cenv es en sa s0 u` mp_tac >>
   simp[loweringPostsTheory.wb_frame_def, lookup_var_def] >>
@@ -970,7 +970,7 @@ Proof
     (drule exprSimWordArgsTheory.expr_post_frame >> simp[]) >>
   `wb_frame cenv em en sm s1 u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >> simp[] >>
-     conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
      goal_assum (drule_at Any)) >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[stmt_state_rel_inst_idx] >>
