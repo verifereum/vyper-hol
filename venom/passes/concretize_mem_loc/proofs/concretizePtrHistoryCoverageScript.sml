@@ -1,7 +1,35 @@
 Theory concretizePtrHistoryCoverage
 Ancestors
   concretizePtrContextRoot concretizePtrChronologicalHistory
-  concretizePtrPairedRoot list finite_map
+  concretizePtrPairedRoot concretizePtrForwardingTransport
+  concretizePtrOperationalOpcodes venomWf unitLabelMapIdentity
+  concretizePtrPairedPrefix concretizePtrStructuralTranscript
+  concretizePtrStructuralTrace list finite_map
+
+Theorem ptr_paired_history_forwarding_transport[local]:
+  EVERY fn_inst_wf C.ctx_functions /\
+  ptr_paired_prefix R lp positions lo vs C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  a.po_inst.inst_opcode <> NOP /\ in_revert_forward a.po_fn a.po_state ==>
+  in_revert_forward at.po_fn at.po_state
+Proof
+  strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_source >> strip_tac >>
+  drule ptr_chrono_history_reachable >>
+  strip_tac >>
+  `MEM a.po_fn C.ctx_functions` by
+    (fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> simp[]) >>
+  irule ptr_paired_cursor_forwarding >>
+  qexistsl_tac [`a`, `lp`] >> simp[EVERY_MEM] >>
+  rpt strip_tac >>
+  `inst_wf inst` by
+    (fs[EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
+  gvs[inst_wf_def]
+QED
 
 (* Conditional integration only: the universal step premise is not discharged.
    A history that runs a revert forwarding's RETURNDATACOPY leaves the paired
