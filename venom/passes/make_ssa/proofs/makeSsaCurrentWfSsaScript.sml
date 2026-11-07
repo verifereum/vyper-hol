@@ -11,6 +11,7 @@
  *)
 Theory makeSsaCurrentWfSsa
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
@@ -1919,15 +1920,6 @@ Proof
      simp[] >> metis_tac[]) >>
   irule current_wf_source_cut_name >>
   fs[EVERY_MEM] >> metis_tac[]
-QED
-
-Theorem current_wf_nonphi_after_collect:
-  !xs i. i < LENGTH xs /\ (EL i xs).inst_opcode <> PHI ==>
-    LENGTH (collect_phis xs) <= i
-Proof
-  Induct >> simp[] >> gen_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[livenessDefsTheory.collect_phis_def] >>
-  Cases_on `i` >> simp[]
 QED
 
 Theorem current_wf_entry_undemanded:
