@@ -11,7 +11,8 @@ Ancestors
   lowerDloadControlPosition lowerDloadOwnership lowerDloadDefs
   lowerDloadCoverageAlloca lowerDloadNormalLive lowerDloadReachableFloor
   lowerDloadConfiguredSuccessor lowerDloadOrdinaryNext lowerDloadExternalNext
-  lowerDloadSourceInterface venomInstProps
+  lowerDloadSourceInterface venomInstProps lowerDloadRequestObservation
+  lowerDloadCoverageInvariant lowerDloadSharedState lowerDloadExternalInputs
   lowerDloadIndexedStageEntry lowerDloadTopEntryControl ctxLookupAgreeHelpers
   contextCodegenRel venomExecSemantics venomInst venomExecProofs venomWf
   ptrDiscipline list rich_list finite_map pred_set words o1ContractSimplifyCfg
@@ -5529,3 +5530,82 @@ QED
    discharge. Terminal/Halt/dead-set consumers and frozen final taint assembly
    remain outside this diagnostic; conditional coverage proves none of them.
 *)
+
+Theorem ld_supply_external_singleton[local]:
+  lower_dload_inst_supply a i = (code,b) /\ MEM j code /\
+  MEM j.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] ==>
+  code = [i] /\ j = i
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
+  simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_recursive_combined_request_observation:
+  dead_wf D /\ taint_within D CS vs0 /\ ptr_discipline lo CS vs0 /\
+  o1_ctx_shape CS /\ mem_inv dload_headroom_ok CS vs0 /\
+  callee_first names CS.ctx_functions /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  (^ld_recursive_combined_candidate) vs0 CT stk un gn j t /\
+  j.inst_opcode <> INVOKE /\ step_inst fuel CT j t = OK t' /\
+  LENGTH t.vs_requests < LENGTH t'.vs_requests ==>
+  un.t_stor SUBSET D.d_stor t.vs_call_ctx.cc_address
+    (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+  un.t_trans SUBSET D.d_trans t.vs_call_ctx.cc_address
+    (t.vs_transient t.vs_call_ctx.cc_address)
+Proof
+  strip_tac >>
+  drule ld_recursive_combined_saved_forget >>
+  disch_then (mp_tac o MATCH_MP ld_recursive_saved_forget) >>
+  qpat_x_assum `(^ld_recursive_combined_candidate) _ _ _ _ _ _ _` kall_tac >>
+  BETA_TAC >> disch_then (DISJ_CASES_THEN2 mp_tac mp_tac)
+  >- (strip_tac >> drule_all ld_request_growth_external >> disch_tac >>
+      `MEM j code` by
+        (FIRST [qpat_x_assum `j = HD code` SUBST1_TAC >>
+                  Cases_on `code` >> fs[],
+                qpat_x_assum `j = EL n code` SUBST1_TAC >>
+                  irule EL_MEM >> simp[]]) >>
+      drule_all ld_supply_external_singleton >> strip_tac >>
+      TRY (qpat_x_assum `0 < n` mp_tac >>
+           qpat_x_assum `n < LENGTH code` mp_tac >>
+           qpat_x_assum `code = [i]` SUBST1_TAC >> simp[] >> NO_TAC) >>
+      qpat_x_assum `!q. q < LENGTH astk ==> _` kall_tac >>
+      `opaque_use_ok fn` by
+        (qpat_assum `o1_ctx_shape CS` mp_tac >>
+         qpat_assum `CS.ctx_functions = _` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+         fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
+           o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
+      `MEM i (fn_insts fn)` by
+        (qpat_assum `active_inst fn i s` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
+         metis_tac[EL_MEM]) >>
+      `!v. MEM (Var v) i.inst_operands ==> MEM v (fn_ir_vars fn)` by
+        metis_tac[ld_original_operand_support] >>
+      qpat_x_assum `CS.ctx_functions = _` kall_tac >>
+      qpat_x_assum `CT.ctx_functions = _` kall_tac >>
+      `j = i` by simp[] >>
+      qpat_x_assum `j = i` SUBST_ALL_TAC >>
+      drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+        ld_normal_request_observation >>
+      disch_then drule >>
+      disch_then (drule_at (Pat `ld_stack_origin _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `callee_first _ _`)) >>
+      disch_then (drule_at (Pat `dead_wf _`)) >>
+      disch_then (qspecl_then [`t'`, `fuel`, `P`, `CT`] mp_tac) >>
+      simp_tac (srw_ss()) [listTheory.MAP_MAP_o, combinTheory.o_DEF, ld_erase_frame_def] >>
+      qpat_x_assum `t = ta` SUBST_ALL_TAC >>
+      qpat_x_assum `un = ua` SUBST_ALL_TAC >>
+      impl_tac >- (
+        rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+          qpat_x_assum `LIST_REL _ (A::suspended) _` mp_tac >>
+            simp_tac (srw_ss()) [] >> NO_TAC,
+          qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp_tac (srw_ss()) [] >> NO_TAC,
+          qpat_x_assum `V = set (fn_ir_vars fn)` (fn th => rewrite_tac[th]) >>
+            metis_tac[]]) >> simp[]) >>
+  strip_tac >> drule_all ld_revert_interval_requests >> strip_tac >> gvs[]
+QED
