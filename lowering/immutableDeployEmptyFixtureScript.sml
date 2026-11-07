@@ -1,6 +1,7 @@
 Theory immutableDeployEmptyFixture
 Ancestors
   immutableDeployEmptyProbe exprSimAggregates exprSimHypsDefs compileVyper supportedProgram
+  stmtSimDefs exprLoweringProps compileEnv valueEncoding
 
 Theorem empty_struct_vv_sim:
   !ctx func cenv cx env ann nsid ty es.
@@ -71,3 +72,60 @@ Proof
        build_positional_args_def] >>
   EVAL_TAC
 QED
+
+(* Normal completion fixes the returned environment, so an unchanged source
+   integer immutable still constrains the staged memory, not just ISTORE's map. *)
+Theorem normal_stmt_post_immutable_int_word:
+  stmt_post ctx func cx lctx ce ce' sa sb s0 (INL ()) ee t /\
+  ce'.ce_is_ctor /\
+  FLOOKUP ce'.ce_module_vars (ce'.ce_module,name) = SOME (ImmutableLoc off) /\
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+             NONE => FEMPTY
+           | SOME imms => get_source_immutables ce'.ce_module imms) name =
+    SOME (tv,IntV n) ==>
+  mem_word_at off t.vs_memory = val_to_w256 (IntV n)
+Proof
+  simp[stmt_post_def] >> rpt strip_tac >> gvs[] >>
+  fs[stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >>
+  simp[immutables_rel_def] >>
+  disch_then drule >> simp[val_in_memory_def]
+QED
+
+(* The declaration separation clause permits this layout at a frontier of 32.
+   No allocation for the immutable buffer is required: its base is absolute 0. *)
+Theorem empty_immutable_decl_sep_probe:
+  get_tenv cx = FEMPTY |+ ((NONE,"Empty"),StructArgs []) ==>
+  immutable_decl_sep
+    (build_compile_env empty_immutable_tops Deploy Payable "__init__"
+       [] NoneT [] F) cx [] FEMPTY FEMPTY 32
+Proof
+  strip_tac >>
+  simp[immutable_decl_sep_def, build_compile_env_def,
+       empty_immutable_tops_def] >>
+  EVAL_TAC >> rpt gen_tac >>
+  Cases_on `name = "dst"` >> Cases_on `name = "neighbor"` >>
+  gvs[] >> rpt strip_tac >>
+  gvs[empty_struct_evaluated_probe, vyperValueTheory.evaluate_type_def,
+      valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem empty_immutable_alloca_sep_probe:
+  get_tenv cx = FEMPTY |+ ((NONE,"Empty"),StructArgs []) ==>
+  immutable_alloca_sep func
+    (build_compile_env empty_immutable_tops Deploy Payable "__init__"
+       [] NoneT [] F) cx
+    (es with <|scopes := []; immutables := [(cx.txn.target,
+       [(NONE,FEMPTY |+ ("dst",(StructTV [],StructV [])) |+
+                       ("neighbor",(BaseTV (UintT 256),IntV 1)))])]|>)
+    (s with <|vs_vars := FEMPTY; vs_allocas := FEMPTY; vs_alloca_next := 32|>)
+Proof
+  strip_tac >> simp[immutable_alloca_sep_def, empty_immutable_decl_sep_probe] >>
+  simp[build_compile_env_def, empty_immutable_tops_def,
+       vyperStateTheory.get_source_immutables_def, local_region_def,
+       vyperStateTheory.lookup_scopes_def] >>
+  EVAL_TAC >> rpt gen_tac >>
+  Cases_on `name = "dst"` >> Cases_on `name = "neighbor"` >>
+  gvs[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+QED
+
