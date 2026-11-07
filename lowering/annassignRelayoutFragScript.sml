@@ -102,6 +102,23 @@ Proof
   metis_tac[internal_call_location_cases, compile_intcall_open]
 QED
 
+(* The widened RHS's post type is its lowered type, in a context small
+   enough that the case split on the call stays cheap. *)
+Theorem relayout_post_value_type[local]:
+  !c cenv env e typ.
+    well_typed_expr env e /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+            well_formed_type env.type_defs t) /\
+    sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
+    (!e. lowered_value_type c e = lowered_value_type cenv e) /\
+    expr_type e = typ /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
+    lowered_value_type cenv e <> typ ==>
+    post_value_type c e = lowered_value_type cenv e
+Proof
+  rpt strip_tac >> drule_all ifexp_lowered_type_classify >> strip_tac >>
+  gvs[post_value_type_def, vyperASTTheory.expr_type_def]
+QED
+
 Theorem compile_annassign_relayout_stmt_frag:
   !ctx func cx lctx RetQ cenv ret_ty id typ e es stv tyv.
     cenv.ce_alloca_locals /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
@@ -188,15 +205,12 @@ Proof
   `~block_is_terminated sB` by (drule_all unwrap_value_open >> simp[]) >>
   `!x. op = Var x ==> not_fresh_at sB x` by metis_tac[compile_lower_value_var] >>
   `post_value_type c e = lowered_value_type cenv e` by
-    (drule expr_body_pre_var_types_well_formed >> strip_tac >>
-     `well_typed_expr env e /\
+    (`well_typed_expr env e /\
       sfields_tenv_consistent c.ce_struct_fields env.type_defs` by
        fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
           env_context_consistent_def] >>
-     drule ifexp_lowered_type_classify >>
-     disch_then (qspec_then `c` mp_tac) >>
-     (impl_tac >- metis_tac[]) >> strip_tac >>
-     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
+     match_mp_tac relayout_post_value_type >> qexistsl_tac [`env`, `typ`] >>
+     simp[] >> metis_tac[expr_body_pre_var_types_well_formed]) >>
   (irule annassign_outcome_entry_prefix >>
   qexistsl_tac [`sA`, `salloc`] >> simp[] >>
   irule annassign_relayout_rhs_outcome >>
