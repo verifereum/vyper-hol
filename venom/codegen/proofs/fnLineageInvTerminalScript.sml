@@ -220,6 +220,59 @@ Proof
   first_x_assum irule >> metis_tac[]
 QED
 
+Theorem restore_spilled_plan_materialized_core:
+  !targets m core ps ops qs.
+    lineage_core m core ps /\ ALL_DISTINCT core /\
+    EVERY is_var_operand core /\ EVERY is_var_operand targets /\
+    DISJOINT (set core) (FDOM ps.ps_spilled) /\
+    restore_spilled_plan targets ps = (ops,qs) ==>
+    ?tail. lineage_core m tail qs /\ ALL_DISTINCT tail /\
+      EVERY is_var_operand tail /\
+      set tail = set core UNION (set targets INTER FDOM ps.ps_spilled) /\
+      DISJOINT (set tail) (FDOM qs.ps_spilled)
+Proof
+  Induct >- (simp[restore_spilled_plan_def] >> rpt strip_tac >>
+             gvs[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `FLOOKUP ps.ps_spilled h`
+  >- (gvs[restore_spilled_plan_def, do_restore_def] >>
+      pairarg_tac >> gvs[] >>
+      first_x_assum drule >> simp[] >> strip_tac >>
+      qexists_tac `tail` >> simp[] >>
+      gvs[FLOOKUP_DEF] >> ASM_SET_TAC[]) >>
+  `h IN FDOM ps.ps_spilled` by gvs[FLOOKUP_DEF] >>
+  `~MEM h core` by ASM_SET_TAC[] >>
+  gvs[restore_spilled_plan_def, do_restore_def, stack_push_def] >>
+  pairarg_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`m`, `core ++ [h]`] mp_tac) >>
+  disch_then (drule_at (Pat `restore_spilled_plan _ _ = _`)) >>
+  simp[lineage_core_def, ALL_DISTINCT_APPEND, EVERY_APPEND, FDOM_DOMSUB,
+       rich_listTheory.SNOC_APPEND, APPEND_ASSOC] >>
+  impl_tac >- (gvs[lineage_core_def] >> ASM_SET_TAC[]) >>
+  strip_tac >> qexists_tac `tail` >> simp[] >> ASM_SET_TAC[]
+QED
+
+Theorem restore_spilled_plan_target_core:
+  !targets m core ps ops qs base.
+    lineage_core m core ps /\ ALL_DISTINCT core /\
+    EVERY is_var_operand core /\ EVERY is_var_operand targets /\
+    DISJOINT (set core) (FDOM ps.ps_spilled) /\
+    set core SUBSET set targets /\
+    set targets SUBSET set core UNION FDOM ps.ps_spilled /\
+    plan_slots_bounded base ps /\ spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    restore_spilled_plan targets ps = (ops,qs) ==>
+    (?tail. lineage_core m tail qs /\ ALL_DISTINCT tail /\
+      EVERY is_var_operand tail /\ set tail = set targets) /\
+    DISJOINT (set targets) (FDOM qs.ps_spilled) /\
+    plan_slots_bounded base qs /\ spill_alloc_layout_wf qs.ps_alloc qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all restore_spilled_plan_materialized_core >> strip_tac >>
+  drule_all restore_spilled_plan_resources >> strip_tac >>
+  `set tail = set targets` by ASM_SET_TAC[] >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem full_inventory_restore_reorder_preservation:
   !base targets dfg ps rops rs qops qs.
     ALL_DISTINCT targets /\ lineage_inventory (set targets) ps /\
