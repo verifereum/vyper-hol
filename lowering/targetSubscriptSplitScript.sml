@@ -1249,44 +1249,6 @@ Proof
   qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
-Theorem target_subscript_storage_base_continuation:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) /\
-  target_root bt = TopLevelNameTarget nsid /\
-  type_place_target env bt = SOME bvt /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
-  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
-  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
-  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
-  fn_has_code sm sn func /\ fn_has_code sn sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
-  t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\key. extend_place cx pv (ValueSubscript key)))
-    (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
-Proof
-  strip_tac >> irule target_subscript_continuation >> simp[] >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> metis_tac[]
-QED
-
 (* An element of an array or a mapping, with no local ancestor pop:
    the base's fragment, the index's (lower_value),
    then, by the base's place type, the slot of the key
