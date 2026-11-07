@@ -540,10 +540,9 @@ Theorem pop_array_last_slots:
 Proof
   strip_tac >>
   `len <= n` by metis_tac[pop_array_length_bound] >>
-  `MIN len n = len` by simp[arithmeticTheory.MIN_DEF] >>
-  `dyn_slots_in_range st (w2n w + 1) tv len` by
+  `dyn_slots_in_range st (w2n w + 1) tv n` by
     gvs[Once slots_in_range_def, read_slot_def] >>
-  `len - 1 < len` by decide_tac >>
+  `len - 1 < n` by decide_tac >>
   drule_all vyperStorageWritePreservationTheory.dyn_slots_in_range_index >>
   strip_tac >>
   `slots_in_range st
