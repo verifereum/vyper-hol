@@ -12800,6 +12800,20 @@ Proof
     disj2_tac >> gvs[alias_occ_swap_logs_def] >> metis_tac[])
 QED
 
+Theorem alias_occ_fmap_extract_perm:
+  FLOOKUP fm key = SOME id ==>
+  sorting$PERM (fmap_to_alist fm) ((key,id)::fmap_to_alist (fm \\ key))
+Proof
+  strip_tac >> irule sortingTheory.PERM_ALL_DISTINCT >>
+  `ALL_DISTINCT (fmap_to_alist fm)` by
+    metis_tac[alistTheory.ALL_DISTINCT_fmap_to_alist_keys, ALL_DISTINCT_MAP] >>
+  `ALL_DISTINCT (fmap_to_alist (fm \\ key))` by
+    metis_tac[alistTheory.ALL_DISTINCT_fmap_to_alist_keys, ALL_DISTINCT_MAP] >>
+  simp[alistTheory.MEM_fmap_to_alist_FLOOKUP,
+       finite_mapTheory.DOMSUB_FLOOKUP_THM, pairTheory.FORALL_PROD] >>
+  map_every qx_gen_tac [`at`,`value`] >> Cases_on `at = key` >> gvs[] >> metis_tac[]
+QED
+
 Theorem alias_occ_from_spill_align:
   alias_occ_align shadow ps ==>
   alias_occ_align (alias_occ_from_spill key shadow) (SND (do_restore key ps))
@@ -12815,6 +12829,39 @@ Theorem alias_occ_from_spill_next:
   (alias_occ_from_spill key shadow).alias_next = shadow.alias_next
 Proof
   Cases_on `FLOOKUP shadow.alias_spill_ids key` >> simp[alias_occ_from_spill_def]
+QED
+
+Theorem alias_occ_from_spill_ids_perm:
+  sorting$PERM (alias_occ_ids (alias_occ_from_spill key shadow))
+              (alias_occ_ids shadow)
+Proof
+  Cases_on `FLOOKUP shadow.alias_spill_ids key`
+  >- simp[alias_occ_from_spill_def] >>
+  drule alias_occ_fmap_extract_perm >>
+  disch_then (assume_tac o MATCH_MP
+    (Q.ISPEC `(SND : operand # num -> num)` sortingTheory.PERM_MAP)) >>
+  simp[alias_occ_from_spill_def, alias_occ_ids_def, MAP_SNOC,
+       rich_listTheory.SNOC_APPEND] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
+  gvs[sortingTheory.PERM_SYM, MAP]
+QED
+
+Theorem alias_occ_wf_perm:
+  sorting$PERM (alias_occ_ids after) (alias_occ_ids before) /\
+  after.alias_next = before.alias_next /\ alias_occ_wf before ==>
+  alias_occ_wf after
+Proof
+  simp[alias_occ_wf_def] >> rpt strip_tac
+  >- metis_tac[sortingTheory.ALL_DISTINCT_PERM] >>
+  metis_tac[sortingTheory.PERM_EVERY]
+QED
+
+Theorem alias_occ_from_spill_wf:
+  alias_occ_wf shadow ==> alias_occ_wf (alias_occ_from_spill key shadow)
+Proof
+  strip_tac >> irule alias_occ_wf_perm >>
+  qexists_tac `shadow` >>
+  simp[alias_occ_from_spill_ids_perm, alias_occ_from_spill_next]
 QED
 
 Theorem alias_occ_from_spill_deleted:
