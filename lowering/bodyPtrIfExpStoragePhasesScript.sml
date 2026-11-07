@@ -214,26 +214,3 @@ Proof
   conj_tac >- simp[ifexp_materialize_mstore_taint] >>
   simp[ifexp_materialize_mstore_ghost]
 QED
-
-(* The uniform append interface is stronger than the phase consumer needs:
-   the suffix is checked at the one cursor actually reached by the prefix. *)
-Theorem ifexp_inst_seq_ptr_append_at:
-  !xs s t G tn G1 tn1 G2 tn2 ys.
-    EVERY (\i. ~is_terminator i.inst_opcode) xs /\
-    run_inst_seq xs s = OK t /\
-    inst_seq_ptr D lo ctx fn PG G tn xs s G1 tn1 /\
-    inst_seq_ptr D lo ctx fn PG G1 tn1 ys
-      (t with vs_inst_idx := s.vs_inst_idx + LENGTH xs) G2 tn2 ==>
-    inst_seq_ptr D lo ctx fn PG G tn (xs ++ ys) s G2 tn2
-Proof
-  Induct_on `xs`
-  >- (simp[run_inst_seq_def, inst_seq_ptr_def] >> rpt strip_tac >> gvs[]) >>
-  rpt gen_tac >> simp[run_inst_seq_def] >> strip_tac >>
-  Cases_on `step_inst_base h s` >> gvs[inst_seq_ptr_def] >>
-  first_x_assum irule >>
-  qexistsl_tac [`G1`, `t with vs_inst_idx := SUC s.vs_inst_idx`, `tn1`] >>
-  simp[run_inst_seq_inst_idx, exec_result_map_def, arithmeticTheory.ADD_CLAUSES,
-       arithmeticTheory.ADD1] >>
-  `SUC (LENGTH xs) + s.vs_inst_idx = LENGTH xs + (s.vs_inst_idx + 1)` by decide_tac >>
-  metis_tac[]
-QED

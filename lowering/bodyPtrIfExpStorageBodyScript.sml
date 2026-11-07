@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpStorageBody
 Ancestors
-  bodyPtrIfExpStoragePhases slotCopyExecution copyExecution
+  bodyPtrIfExpStoragePhases bodyPtrIfExpBytesCounted slotCopyExecution copyExecution
   exprLoweringProps fragExec venomExecSemantics venomState venomInst
   finite_map ptrDiscipline instIdxIndep bodyPtrDefs fragGasSeqPtr
 
@@ -168,8 +168,8 @@ Proof
         simp[run_inst_seq_inst_idx, exec_result_map_def] >>
       qpat_assum `run_inst_seq xs s = OK r` (mp_then Any mp_tac run_inst_seq_append) >>
       disch_then (qspec_then `ys` mp_tac) >> gvs[]) >>
-  irule ifexp_inst_seq_ptr_append_at >> simp[] >>
-  qexistsl_tac [`G1`, `tn1`] >> gvs[arithmeticTheory.ADD_COMM]
+  drule_all inst_seq_ptr_append_run >>
+  disch_then irule >> gvs[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ifexp_copy_body_first_four:
