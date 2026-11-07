@@ -119,7 +119,8 @@ QED
    Integer-to-Address: IntegerAddressContinue supplies direct-clamp actual replay
      and typed success/revert semantics for both integer signs. Signed sources
      use ConvToAddress; unsigned sources use ConvIntToInt F bi F 160.
-     Full pointer continuation remains. Do not import Outputs (broken aggregate).
+     scalar_integer_address_continuation supplies the full counted pointer summary.
+     Do not import Outputs (broken aggregate).
    ConvBytesToAddress: BytesRun.scalar_bytes_address_run_ok/abort supply fresh
      semantics; ScalarArithmetic.convert_bytes_address_eq reduces pointer code
      to unsigned160. Actual semantic packet and summary remain.
