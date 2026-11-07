@@ -147,8 +147,12 @@ Theorem ld_return_head_table:
   (!v. ld_owned_selection (DRESTRICT E owners)
     (FLOOKUP (DRESTRICT sf.lf_prov keep) v) (FLOOKUP BH v))
 Proof
-  strip_tac >> drule ld_return_owner_lookup >>
-  disch_then (assume_tac o Q.ISPEC `(E : (num # num, num # num # num) fmap)`) >> gvs[] >>
+  strip_tac >>
+  `!owner bs sz.
+    ld_live astail sf.lf_local sf.lf_params (DRESTRICT sf.lf_prov keep)
+      (owner,(bs,sz)) ==>
+    FLOOKUP (DRESTRICT E owners) owner = FLOOKUP E owner` by
+    (rpt strip_tac >> simp[FLOOKUP_DRESTRICT] >> metis_tac[IN_GSPEC_IFF]) >> gvs[] >>
   conj_tac
   >- (irule ld_frame_embedding_support >> qexists_tac `E` >> simp[] >>
       rpt strip_tac >> first_x_assum irule >>
@@ -415,3 +419,12 @@ Proof
   irule ld_paired_live_endpoints >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> metis_tac[]
 QED
+
+(* Return boundaries must be unconditional kernel theorems. *)
+val _ = List.app (fn (name,th) =>
+  if null (hyp th) then print ("KERNEL_HYP_EMPTY " ^ name ^ "\n")
+  else raise Fail ("unexpected kernel hypothesis: " ^ name))
+  [("ld_return_owner_lookup",ld_return_owner_lookup),
+   ("ld_return_head_table",ld_return_head_table),
+   ("ld_return_owned_vars_table",ld_return_owned_vars_table),
+   ("ld_return_frame_data",ld_return_frame_data)];
