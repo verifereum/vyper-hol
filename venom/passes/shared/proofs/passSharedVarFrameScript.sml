@@ -188,8 +188,8 @@ val exec_delegatecall_update_var = prove(
     | Abort ab s' => Abort ab (update_var x w s')
     | Halt s' => Halt (update_var x w s')
     | IntRet vs s' => IntRet vs (update_var x w s')``,
-  rw[exec_delegatecall_def, read_memory_def, update_var_def,
-     make_venom_delegatecall_state_def, venom_to_tx_params_def,
+  rw[exec_delegatecall_def, venom_call_request_def, read_memory_def,
+     update_var_def, make_venom_delegatecall_state_def, venom_to_tx_params_def,
      extract_venom_result_def, write_memory_with_expansion_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]);
 

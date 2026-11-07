@@ -33,7 +33,7 @@ Theorem take_call_outcome_gas_obs[local]:
        SND (take_call_outcome target cd vo st) with gas_obs := g) /\
     (SND (take_call_outcome target cd vo st)).gas_obs = st.gas_obs
 Proof
-  rpt gen_tac >> simp[take_call_outcome_def, call_outcome_request_def] >>
+  rpt gen_tac >> simp[take_call_outcome_def, take_request_outcome_def, call_outcome_request_def] >>
   Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >> rw[]
 QED
 
