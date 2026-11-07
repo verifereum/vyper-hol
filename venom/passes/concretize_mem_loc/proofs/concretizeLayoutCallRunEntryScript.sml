@@ -31,7 +31,8 @@ Theorem layout_selected_call_scoped_run:
   EVERY bb_well_formed callee.fn_blocks /\
   target.fn_blocks = (concretize_function_with_positions positions callee).fn_blocks /\
   ~NULL target.fn_blocks /\ caller.vs_labels = caller'.vs_labels /\
-  vs0.vs_allocas = FEMPTY ==>
+  vs0.vs_allocas = FEMPTY /\
+  MEM callee C.ctx_functions /\ layout_driver_row C' callee target positions ==>
   ?args' ct h. eval_operands ops caller' = SOME args' /\
     setup_callee target args' caller' = SOME ct /\
     h.lop_cursor = SUC n /\ h.lop_ids = SUC n::a.lop_ids /\
@@ -137,6 +138,8 @@ Proof
       (EL (SUC a.lop_cursor) (q0::qs)) (SUC a.lop_cursor) callee cs
       target tc` by
     (rpt strip_tac >> irule layout_canonical_run_intro >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qexists `positions` >> first_assum ACCEPT_TAC) >>
      qexistsl [`h`, `cs`, `tc`] >>
      simp[Abbr `h`, layout_driver_indexed_def, layout_phase_canonical_def,
        control_agree_def]) >>

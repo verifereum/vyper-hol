@@ -30,6 +30,12 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]
 QED
 
+Theorem lookup_function_fn_name[local]:
+  !name fns fn. lookup_function name fns = SOME fn ==> fn.fn_name = name
+Proof
+  Induct_on `fns` >> rw[lookup_function_def, FIND_thm]
+QED
+
 Theorem layout_canonical_call_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -113,6 +119,9 @@ Proof
      simp[layout_ordinary_entry_def, layout_ordinary_state_def] >>
      asm_rewrite_tac[] >> metis_tac[]) >>
   `phase.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
+  `MEM fn C.ctx_functions /\ layout_driver_row C' fn out layout.cl_positions` by
+    (simp[layout_driver_row_def] >>
+     metis_tac[lookup_function_MEM, lookup_function_fn_name]) >>
   gvs[] >>
   drule layout_selected_call_scoped_run >> simp[] >>
   qpat_x_assum `birth::ids = _` (SUBST_ALL_TAC o SYM) >>
