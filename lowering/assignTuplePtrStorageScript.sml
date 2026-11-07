@@ -89,7 +89,8 @@ Proof
        source_memory_read_ranges_def, fixed_source_write_range_def] >>
   simp[step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
   rpt strip_tac >> gvs[]
 QED
