@@ -1391,7 +1391,8 @@ Proof
   Cases_on `av` >> gvs[vyperValueOperationTheory.array_index_def,
                        vyperValueOperationTheory.array_length_def] >>
   simp[listTheory.oEL_THM] >>
-  rpt CASE_TAC >> gvs[]
+  simp[COND_RAND] >>
+  Cases_on `ALOOKUP l (Num ix)` >> simp[]
 QED
 
 Theorem imm_typed_array_length[local]:
@@ -3153,4 +3154,129 @@ Proof
   gvs[immutable_value_admissible_def, alistTheory.ADELKEY_def,
       listTheory.EVERY_MEM, listTheory.MEM_FILTER] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem immutable_fields_admissible_lookup[local]:
+  !fs vals id ct v.
+    immutable_fields_admissible fs vals /\ ALOOKUP fs id = SOME ct /\
+    ALOOKUP vals id = SOME v ==> immutable_value_admissible ct v
+Proof
+  Induct_on `fs` >- simp[immutable_value_admissible_def] >>
+  Cases >> Cases_on `vals` >> simp[immutable_value_admissible_def] >>
+  PairCases_on `h` >> simp[immutable_value_admissible_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `h0 = id` >> gvs[] >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem immutable_pop_path_admissible:
+  !path tv a etv n vs updated.
+    mutable_place_path tv path /\ value_has_type tv a /\
+    immutable_value_admissible tv a /\
+    subscripts_type tv path = SOME (ArrayTV etv (Dynamic n)) /\
+    evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] /\
+    assign_subscripts tv a path (Replace (ArrayV (DynArrayV (FRONT vs)))) =
+      INL updated ==>
+    immutable_value_admissible tv updated
+Proof
+  Induct_on `path`
+  >- (rpt strip_tac >>
+      gvs[subscripts_type_def, evaluate_subscripts_def, assign_subscripts_def,
+          immutable_value_admissible_def] >>
+      simp[rich_listTheory.LENGTH_FRONT] >>
+      simp[rich_listTheory.FRONT_BY_TAKE, rich_listTheory.EVERY_TAKE]) >>
+  rpt gen_tac >> strip_tac >> Cases_on `h`
+  >- (rename1 `ValueSubscript key` >> Cases_on `key` >> Cases_on `tv` >>
+      gvs[vyperPlaceWriteSoundnessTheory.mutable_place_path_def] >>
+      rename1 `ArrayTV ct bd` >>
+      Cases_on `a` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      gvs[vyperTypingTheory.value_has_type_def]
+      >- suspend "sparse"
+      >> suspend "dynamic") >>
+  Cases_on `tv` >>
+  gvs[vyperPlaceWriteSoundnessTheory.mutable_place_path_def] >>
+  Cases_on `a` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  suspend "struct"
+QED
+
+Resume immutable_pop_path_admissible[sparse]:
+  rpt strip_tac >> Cases_on `bd` >>
+  gvs[immutable_value_admissible_def, vyperTypingTheory.value_has_type_def,
+      subscripts_type_def, subscript_type_def, evaluate_subscripts_def,
+      assign_subscripts_def, vyperValueOperationTheory.array_index_def,
+      AllCaseEqs()] >>
+  `value_has_type ct v` by
+    (gvs[vyperTypingTheory.all_have_type_EVERY, listTheory.oEL_THM,
+         AllCaseEqs()] >> metis_tac[listTheory.EVERY_EL]) >>
+  `immutable_value_admissible ct v` by
+    (gvs[listTheory.oEL_THM, AllCaseEqs()] >>
+     metis_tac[listTheory.EVERY_EL]) >>
+  `immutable_value_admissible ct vj` by
+    (first_x_assum drule_all >> simp[]) >>
+  gvs[vyperValueOperationTheory.array_set_index_def, AllCaseEqs()] >>
+  simp[immutable_value_admissible_def, listTheory.IMP_EVERY_LUPDATE,
+       rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]
+QED
+
+Resume immutable_pop_path_admissible[dynamic]:
+  Cases_on `bd` >>
+  gvs[vyperTypingTheory.value_has_type_def,
+      subscripts_type_def, subscript_type_def, evaluate_subscripts_def,
+      assign_subscripts_def, vyperValueOperationTheory.array_index_def,
+      AllCaseEqs()]
+  >- (drule_all immutable_default_path_pop_empty >> simp[]) >>
+  `value_has_type ct v` by
+    (drule_all vyperAssignPreservesTypeTheory.ALOOKUP_sparse_has_type >> simp[]) >>
+  `immutable_value_admissible ct v` by
+    (gvs[immutable_value_admissible_def, listTheory.EVERY_MEM] >>
+     drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `immutable_value_admissible ct vj` by
+    (first_x_assum drule_all >> simp[]) >>
+  gvs[vyperValueOperationTheory.array_set_index_def, AllCaseEqs()] >>
+  IF_CASES_TAC
+  >- (irule immutable_sparse_admissible_delete >> simp[]) >>
+  irule immutable_sparse_admissible_insert >> simp[]
+QED
+
+Resume immutable_pop_path_admissible[struct]:
+  gvs[subscripts_type_def, subscript_type_def, evaluate_subscripts_def,
+      assign_subscripts_def, AllCaseEqs()] >>
+  `value_has_type etv' v` by
+    (drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
+     strip_tac >> gvs[]) >>
+  `immutable_fields_admissible l l'` by
+    gvs[immutable_value_admissible_def] >>
+  `immutable_value_admissible etv' v` by
+    (drule_all immutable_fields_admissible_lookup >> simp[]) >>
+  `immutable_value_admissible etv' v'` by
+    (first_x_assum drule_all >> simp[]) >>
+  simp[immutable_value_admissible_def] >>
+  irule immutable_fields_admissible_update >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise immutable_pop_path_admissible
+
+(* A nested pop changes the represented root only at its length word. *)
+Theorem immutable_pop_path_bytes:
+  !path tv a base k etv n vs updated s.
+    mutable_place_path tv path /\ value_has_type tv a /\
+    well_formed_type_value tv /\ immutable_value_admissible tv a /\
+    val_in_memory tv a base s.vs_memory /\
+    mem_path_offset tv path = SOME (k,ArrayTV etv (Dynamic n)) /\
+    evaluate_subscripts tv a path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] /\
+    assign_subscripts tv a path (Replace (ArrayV (DynArrayV (FRONT vs)))) =
+      INL updated ==>
+    immutable_value_bytes_rel tv updated
+      (mem_bytes_at base (type_memory_size tv)
+        (mstore (base + k) (n2w (LENGTH vs - 1)) s).vs_memory)
+Proof
+  rpt strip_tac >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  `val_wf tv a` by
+    metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
+  `immutable_value_admissible tv updated` by
+    (drule_all immutable_pop_path_admissible >> simp[]) >>
+  irule immutable_admissible_memory_bytes >> simp[] >>
+  drule_all exprSimPopNestedLocalMemoryTheory.val_in_memory_pop_path >> simp[]
 QED
