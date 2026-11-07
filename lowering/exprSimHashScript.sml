@@ -2410,7 +2410,7 @@ QED
 (* A straight-line suffix protects every older allocation, a stronger frame
    than the expression judgment needs. *)
 Theorem wb_frame_allocating_tail:
-  wb_frame cenv es es sa s0 s /\
+  wb_frame cenv es es' sa s0 s /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -2421,7 +2421,7 @@ Theorem wb_frame_allocating_tail:
   local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM scopes /\
   (!n b sz. local_region cenv scopes s n b sz ==>
      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) ==>
-  wb_frame cenv es es sa s0 t
+  wb_frame cenv es es' sa s0 t
 Proof
   simp[wb_frame_def] >> strip_tac >> conj_tac
   >- (rpt strip_tac >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
