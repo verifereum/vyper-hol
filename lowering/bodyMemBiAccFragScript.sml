@@ -123,9 +123,10 @@ Proof
      (impl_tac >- (qpat_x_assum `!x ss n out. _ ==> step_inst_base _ _ = _` mp_tac >> simp[] >>
                   disch_then irule >> simp[])) >>
      strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
      qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) r s0
                     with vs_inst_idx := LENGTH s1.cs_current_insts` >>
-     gvs[update_var_def, eval_operand_def, lookup_var_def]) >>
+     gvs[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[unop_frag_mem_def] >>
   disch_then (qspecl_then [`s1`, `sb`, `c`, `op`, `u`] mp_tac) >>
