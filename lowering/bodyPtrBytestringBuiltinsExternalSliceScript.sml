@@ -733,7 +733,9 @@ Theorem external_slice_fragment_counted_ok:
       copyops = [addr;Var data;start;len] /\ eval_operand addr s = SOME a /\
       op_prov G addr = NONE /\ op_taint tn addr = {} /\
       src = (lookup_account (w2w a) s.vs_accounts).code)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (!op z. MEM op ([start;len;Var root;Var data] ++ sizeops) /\ op = Var z ==>
+    not_fresh_at sa z) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
   lookup_var root s = SOME b /\ lookup_var data s = SOME d /\
@@ -765,26 +767,29 @@ Proof
   `MEM sizeopc [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH sizeops <= 1 /\
    (!arg. MEM arg sizeops ==> op_taint tn arg = {})` by
     (qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[]) >>
+  `!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z` by
+    (fs[MEM] >> metis_tac[]) >>
   qpat_assum `step_inst_base _ s = _`
-    (mp_then Any mp_tac external_query_bounds_counted_ok) >>
+    (mp_then Any mp_tac external_query_bounds_reserved_counted_ok) >>
   disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `!op. MEM op ([start;len;Var root;Var data] ++ sizeops) ==>
+    eval_operand op r = eval_operand op s /\ op_prov H op = op_prov G op /\
+    op_taint tm op = op_taint tn op` by metis_tac[] >>
   `eval_operand start r = SOME wa /\ eval_operand len r = SOME wn /\
    lookup_var root r = SOME b /\ lookup_var data r = SOME d /\
    op_taint tm start = {} /\ op_taint tm len = {}` by
-    (qpat_x_assum `r = _` kall_tac >>
-     qpat_assum `!op v. eval_operand op s = SOME v ==> _`
-       (fn th => map_every (fn opq => qspec_then opq mp_tac th) [`start`,`len`]) >>
-     simp[eval_operand_def] >>
-     qpat_x_assum `!op v. eval_operand op s = SOME v ==> _` mp_tac >>
-     qpat_x_assum `lookup_var root s = SOME b` mp_tac >>
-     qpat_x_assum `lookup_var data s = SOME d` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[eval_operand_def]) >>
-  `ptr_covers H tm root r N /\ ptr_covers H tm data r (w2n wn)` by metis_tac[] >>
+    (qpat_assum `!op. MEM op (_ ++ sizeops) ==> _`
+       (fn th => map_every (fn opq => qspec_then opq mp_tac th)
+         [`start`,`len`,`Var root`,`Var data`]) >>
+     simp[eval_operand_def] >> metis_tac[]) >>
+  `ptr_covers H tm root r N /\ ptr_covers H tm data r (w2n wn)` by
+    (fs[MEM] >> metis_tac[]) >>
   Q.SUBGOAL_THEN
     `((copyopc = CALLDATACOPY \/ copyopc = CODECOPY) /\ copyops = [Var data;start;len]) \/
      (?ad. copyopc = EXTCODECOPY /\ copyops = [ad;Var data;start;len] /\
        (?w. eval_operand ad r = SOME w) /\ op_taint tm ad = {})` assume_tac
-  >- (qpat_x_assum `r = _` kall_tac >> metis_tac[]) >>
+  >- (qpat_x_assum `r = _` kall_tac >>
+      qpat_x_assum `_ \/ _ \/ _` strip_assume_tac >> gvs[MEM] >> metis_tac[]) >>
   `step_inst_base (mk_inst sd.cs_next_id copyopc copyops []) r =
    OK (write_memory_with_expansion (w2n d)
      (TAKE (w2n wn) (DROP (w2n wa) src ++ REPLICATE (w2n wn) 0w)) r)` by
@@ -796,7 +801,7 @@ Proof
      {i | w2n d <= i /\ i < w2n d + w2n wn}` by
     (qpat_x_assum `r = _` kall_tac >>
      `eval_operand start r = SOME wa /\ eval_operand len r = SOME wn` by metis_tac[] >>
-     qpat_x_assum `!op v. eval_operand op s = SOME v ==> _` kall_tac >>
+     qpat_x_assum `!op. MEM op (_ ++ sizeops) ==> _` kall_tac >>
      qpat_x_assum `(_ /\ _) \/ (?ad. _)` strip_assume_tac >>
      gvs[source_memory_write_ranges_def, sized_source_write_range_def,
        range_bytes_def, mk_inst_def, eval_operand_def, lookup_var_def]) >>
@@ -809,9 +814,12 @@ Resume external_slice_fragment_counted_ok[copy_store]:
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm' (OK t)` by
     (drule_all gas_path_ptr_then >> simp[]) >>
+  `!x. not_fresh_at sa x ==> op_taint tm' (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\ _`
+       (qspec_then `x` strip_assume_tac) >> fs[op_taint_def]) >>
   qexistsl_tac [`r`,`v`,`t`,`H`,`tm'`] >>
-  rpt conj_tac >> simp[op_taint_def] >>
-  qpat_x_assum `!x. not_fresh_at sa x ==> _` mp_tac >> simp[op_taint_def]
+  rpt conj_tac >> simp[op_taint_def]
 QED
 
 Finalise external_slice_fragment_counted_ok
@@ -855,6 +863,10 @@ Proof
   `op_prov G addr = NONE /\ op_taint tn addr = {}` by (fs[] >> metis_tac[]) >>
   `!op. op = start \/ op = len ==> op_prov G op = NONE /\ op_taint tn op = {}` by
     (fs[] >> metis_tac[]) >>
+  `!z. (Var z = start \/ Var z = len \/ z = root \/ z = data) \/ Var z = addr ==>
+    not_fresh_at sa z` by
+    (rpt strip_tac >> rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, eval_operand_def, arithmeticTheory.GREATER_EQ]) >>
   conj_tac >- simp[] >>
   qpat_assum `emit_op EXTCODESIZE _ _ = _`
     (mp_then Any (mp_tac o SRULE []) external_slice_fragment_counted_ok) >>
@@ -959,7 +971,8 @@ Theorem external_slice_two_source_counted_ok[local]:
   fn_has_code sd se fn /\ fn_has_code se sb fn /\
   ((sizeopc = CALLDATASIZE /\ copyopc = CALLDATACOPY /\ src = s.vs_call_ctx.cc_calldata) \/
    (sizeopc = CODESIZE /\ copyopc = CODECOPY /\ src = s.vs_code)) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fresh_vars_wrt sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  (!op z. MEM op [start;len;Var root;Var data] /\ op = Var z ==> not_fresh_at sa z) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
   lookup_var root s = SOME b /\ lookup_var data s = SOME d /\
@@ -984,8 +997,23 @@ Theorem external_slice_two_source_counted_ok[local]:
       DIFF {i | w2n b <= i /\ i < w2n b + 32}
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  irule external_slice_fragment_counted_ok >>
-  fs[] >> metis_tac[]
+  `!op z. MEM op ([start;len;Var root;Var data] ++ []) /\ op = Var z ==>
+    not_fresh_at sa z` by simp[] >>
+  Q.SUBGOAL_THEN
+  `((sizeopc = CALLDATASIZE /\ ([]:operand list) = [] /\ copyopc = CALLDATACOPY /\
+      [Var data;start;len] = [Var data;start;len] /\ src = s.vs_call_ctx.cc_calldata) \/
+    (sizeopc = CODESIZE /\ ([]:operand list) = [] /\ copyopc = CODECOPY /\
+      [Var data;start;len] = [Var data;start;len] /\ src = s.vs_code) \/
+    (sizeopc = EXTCODESIZE /\ [] = [(Lit 0w)] /\ copyopc = EXTCODECOPY /\
+      [Var data;start;len] = [(Lit 0w);Var data;start;len] /\
+      eval_operand (Lit 0w) s = SOME 0w /\ op_prov G (Lit 0w) = NONE /\
+      op_taint tn (Lit 0w) = {} /\
+      src = (lookup_account (w2w (0w:bytes32)) s.vs_accounts).code))` assume_tac
+  >- simp[] >>
+  qpat_assum `emit_op sizeopc [] sa = _`
+    (mp_then Any mp_tac external_slice_fragment_counted_ok) >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
 QED
 
 Theorem external_slice_alloc_counted_ok:
@@ -1044,6 +1072,10 @@ Proof
     `((sizeopc = CALLDATASIZE /\ copyopc = CALLDATACOPY /\ src = t0.vs_call_ctx.cc_calldata) \/
       (sizeopc = CODESIZE /\ copyopc = CODECOPY /\ src = t0.vs_code))` assume_tac
   >- (qpat_x_assum `t0 = _` kall_tac >> metis_tac[]) >>
+  `!op z. MEM op [start;len;Var root;Var data] /\ op = Var z ==>
+    not_fresh_at s1 z` by
+    (fs[MEM] >> rpt strip_tac >> rw[not_fresh_at_def] >>
+     metis_tac[fresh_vars_wrt_eval_operand, eval_operand_def, arithmeticTheory.GREATER_EQ]) >>
   qpat_assum `emit_op sizeopc _ _ = _`
     (mp_then Any mp_tac external_slice_two_source_counted_ok) >>
   disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
