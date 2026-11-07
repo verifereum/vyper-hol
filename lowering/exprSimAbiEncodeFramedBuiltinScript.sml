@@ -281,7 +281,8 @@ Theorem abi_encode_framed_allocate_reach:
     abi_encode_exec_frame func initial actual /\
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
-    actual.vs_pending_deletions = initial.vs_pending_deletions
+    actual.vs_pending_deletions = initial.vs_pending_deletions /\
+    actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_allocate_shape >> strip_tac >>
@@ -289,6 +290,10 @@ Proof
   drule_all abi_builtin_encode_allocate_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st address_st) initial = OK encoded` >>
   drule_all abi_encode_setup_sequence_world >> strip_tac >>
+  `encoded.vs_labels = initial.vs_labels` by
+    (irule ctor_actual_sequence_labels >> goal_assum (drule_at Any) >>
+     fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+     simp[abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   `~encoded.vs_halted` by fs[abi_builtin_allocation_frame_def] >>
@@ -313,7 +318,8 @@ Theorem abi_encode_framed_setup_none_reach:
     abi_encode_exec_frame func initial actual /\
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
-    actual.vs_pending_deletions = initial.vs_pending_deletions
+    actual.vs_pending_deletions = initial.vs_pending_deletions /\
+    actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_setup_shape >> strip_tac >>
@@ -321,6 +327,10 @@ Proof
   drule_all abi_builtin_encode_setup_none_execute >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st ready) initial = OK encoded` >>
   drule_all abi_encode_setup_sequence_world >> strip_tac >>
+  `encoded.vs_labels = initial.vs_labels` by
+    (irule ctor_actual_sequence_labels >> goal_assum (drule_at Any) >>
+     fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+     simp[abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   `~encoded.vs_halted` by fs[abi_builtin_allocation_frame_def] >>
@@ -356,7 +366,8 @@ Theorem abi_encode_framed_method_reach:
     abi_encode_exec_frame func initial actual /\
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
-    actual.vs_pending_deletions = initial.vs_pending_deletions
+    actual.vs_pending_deletions = initial.vs_pending_deletions /\
+    actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_method_shape >> strip_tac >>
@@ -364,6 +375,10 @@ Proof
   drule_all abi_builtin_encode_method_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK encoded` >>
   drule_all abi_encode_setup_sequence_world >> strip_tac >>
+  `encoded.vs_labels = initial.vs_labels` by
+    (irule ctor_actual_sequence_labels >> goal_assum (drule_at Any) >>
+     fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+     simp[abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
   `abi_encode_exec_frame func initial encoded` by
     (drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   drule abi_builtin_encode_method_window >> strip_tac >>
@@ -390,7 +405,8 @@ Theorem abi_encode_framed_setup_some_reach:
     abi_encode_exec_frame func initial actual /\
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
-    actual.vs_pending_deletions = initial.vs_pending_deletions
+    actual.vs_pending_deletions = initial.vs_pending_deletions /\
+    actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_encode_method_setup_context >> strip_tac >>

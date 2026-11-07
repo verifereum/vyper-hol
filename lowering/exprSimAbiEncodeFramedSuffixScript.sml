@@ -42,7 +42,8 @@ Theorem abi_encode_framed_setup_window:
     abi_encode_exec_frame func initial actual /\
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
-    actual.vs_pending_deletions = initial.vs_pending_deletions
+    actual.vs_pending_deletions = initial.vs_pending_deletions /\
+    actual.vs_labels = initial.vs_labels
 Proof
   Cases_on `method_id` >> simp[] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -251,7 +252,8 @@ Theorem abi_encode_framed_phases_open:
     LENGTH initial.vs_memory <= LENGTH actual.vs_memory /\
     prepared.vs_accounts = initial.vs_accounts /\ prepared.vs_transient = initial.vs_transient /\
     prepared.vs_logs = initial.vs_logs /\ prepared.vs_requests = initial.vs_requests /\
-    prepared.vs_pending_deletions = initial.vs_pending_deletions
+    prepared.vs_pending_deletions = initial.vs_pending_deletions /\
+    prepared.vs_labels = initial.vs_labels /\ actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_encode_framed_setup_window >>
@@ -337,6 +339,8 @@ Resume abi_encode_framed_phases_open[observations]:
      conj_tac >> first_assum ACCEPT_TAC) >>
   `LENGTH initial.vs_memory <= LENGTH actual.vs_memory` by
     (drule abi_encode_exec_frame_memory_length >> simp[]) >>
+  `actual.vs_labels = initial.vs_labels` by
+    (drule window_strong_result_labels >> simp[]) >>
   qexistsl [`prepared`, `body_state`, `actual`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED

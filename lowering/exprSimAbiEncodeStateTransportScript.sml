@@ -305,3 +305,17 @@ Proof
   qpat_x_assum `!op v. _` (qspec_then `Var x` mp_tac) >>
   simp[eval_operand_def]
 QED
+
+Theorem abi_encode_caller_immutable_base:
+  immutable_base_zero cenv initial /\ actual.vs_labels = initial.vs_labels /\
+  (!x v. cenv.ce_imm_alloca = SOME (Var x) /\ lookup_var x initial = SOME v ==>
+    lookup_var x actual = SOME v) ==>
+  immutable_base_zero cenv actual
+Proof
+  strip_tac >> irule immutable_base_zero_frame >>
+  qexists `initial` >> simp[] >> rpt strip_tac >>
+  `lookup_var x initial = SOME 0w` by
+    (fs[immutable_base_zero_alt, lookup_var_def] >>
+     qpat_x_assum `!base. _` (qspec_then `Var x` mp_tac) >> simp[]) >>
+  qpat_x_assum `!x v. _` drule_all >> simp[]
+QED
