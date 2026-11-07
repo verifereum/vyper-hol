@@ -85,6 +85,8 @@ Theorem raw_call_scalar_action_outcome:
     (\res ee H un t. ?v em tm J jn u K kn.
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\ ptr_val_ok cx (BaseT BoolT) v result H un t /\
+      expr_val_rel cx (BaseT BoolT) v result t /\
+      expr_val_at cenv cx (BaseT BoolT) sa sb ee v result t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
       ghost_kept cenv em s6 J jn tm K kn /\ wb_frame cenv em s6 tm u /\
@@ -240,7 +242,10 @@ Resume raw_call_scalar_action_outcome[finish]:
   >- (simp[wordsTheory.w2n_n2w] >> decide_tac) >>
   strip_tac >> irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >>
-  qexistsl_tac [`v`, `mid with gas_obs := []`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[]
+  qexistsl_tac [`v`, `mid with gas_obs := []`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[] >>
+  irule exprSimPropsTheory.expr_val_at_start_mono >>
+  goal_assum (drule_at Any) >>
+  fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_def]
 QED
 
 Finalise raw_call_scalar_action_outcome
@@ -283,6 +288,7 @@ Theorem raw_call_prepared_prefix_sim_ptr:
       wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+      sa.cs_next_id <= s6.cs_next_id /\
       t.vs_current_bb = s6.cs_current_bb /\
       t.vs_inst_idx = LENGTH s6.cs_current_insts /\ ~t.vs_halted /\
       expr_val_rel cx (BaseT AddressT) av addr t /\ op_taint tn addr = {} /\
@@ -417,6 +423,8 @@ QED
 
 Resume raw_call_prepared_prefix_sim_ptr[post]:
   qexistsl_tac [`xs`, `ea`, `ed`, `ta`, `tb`, `th`, `b`, `t5`, `gasw`, `n`] >>
+  `sa.cs_next_id <= s6.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_def] >> decide_tac) >>
   gvs[] >> Cases_on `flags.rcf_is_static` >> gvs[] >> metis_tac[]
 QED
 
@@ -446,6 +454,8 @@ Theorem raw_call_zero_reverting_action_outcome:
     (\res ee H un t. ?v em tm J jn u K kn.
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\ ptr_val_ok cx NoneT v result H un t /\
+      expr_val_rel cx NoneT v result t /\
+      expr_val_at cenv cx NoneT sa sb ee v result t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
@@ -498,7 +508,10 @@ Resume raw_call_zero_reverting_action_outcome[normal]:
   impl_tac >- (simp[wordsTheory.w2n_n2w] >> decide_tac) >>
   strip_tac >> irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >>
-  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[]
+  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[] >>
+  irule exprSimPropsTheory.expr_val_at_start_mono >>
+  goal_assum (drule_at Any) >>
+  fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_def]
 QED
 
 Finalise raw_call_zero_reverting_action_outcome
@@ -528,6 +541,8 @@ Theorem raw_call_bytes_action_outcome:
     (\res ee H un t. ?v em tm J jn u K kn.
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) v result H un t /\
+      expr_val_rel cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) v result t /\
+      expr_val_at cenv cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) sa sb ee v result t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
@@ -576,7 +591,10 @@ Resume raw_call_bytes_action_outcome[normal]:
   impl_tac >- (simp[wordsTheory.w2n_n2w] >> decide_tac) >>
   strip_tac >> irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >>
-  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[]
+  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[] >>
+  irule exprSimPropsTheory.expr_val_at_start_mono >>
+  goal_assum (drule_at Any) >>
+  fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_def]
 QED
 
 Finalise raw_call_bytes_action_outcome
@@ -607,6 +625,8 @@ Theorem raw_call_tuple_action_outcome:
       MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\
       ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) v result H un t /\
+      expr_val_rel cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) v result t /\
+      expr_val_at cenv cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) sa sb ee v result t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
@@ -658,7 +678,10 @@ Resume raw_call_tuple_action_outcome[normal]:
   >- (simp[wordsTheory.w2n_n2w, rawCallResultLayoutPtrTheory.raw_call_bytes_type_capacity] >> decide_tac) >>
   strip_tac >> irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >>
-  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[]
+  qexistsl_tac [`v`, `ee`, `t`, `G`, `tn`, `u`, `J`, `jn`] >> simp[] >>
+  irule exprSimPropsTheory.expr_val_at_start_mono >>
+  goal_assum (drule_at Any) >>
+  fs[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_def]
 QED
 
 Finalise raw_call_tuple_action_outcome
