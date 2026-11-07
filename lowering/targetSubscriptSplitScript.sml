@@ -1093,6 +1093,153 @@ Proof
   drule gas_marked_path_exec >> strip_tac >> metis_tac[gas_path_normal]
 QED
 
+Theorem target_subscript_continuation_core[local]:
+  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
+  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
+    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_vv_case nocalls ctx func cenv cx e) /\
+  (((!nsid. target_root bt = TopLevelNameTarget nsid ==>
+      EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
+    (!id. target_root bt = NameTarget id ==>
+      ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e))) \/
+   (?id. !gs key ee.
+     bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) = (INL key,ee) ==>
+     ?path entry v. pv = PlaceR (MemoryPlace id path) /\
+       lookup_scopes id ee.scopes = SOME entry /\
+       evaluate_subscripts entry.type entry.value path = INL v)) /\
+  type_place_target env bt = SOME bvt /\
+  subscript_vtype bvt (expr_type e) = SOME vt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
+  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
+  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
+    (es,s0) left (INL pv) mid (OK t) /\
+  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key)))
+    (mid with gas_obs := [],t)
+    (\res ee u. ?pv'. res = INL pv' /\
+      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := []) /\
+   expr_vv_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := [])` by
+    (irule target_subscript_marked_index_sim >> goal_assum (drule_at Any) >>
+     qexistsl [`env`, `nocalls`] >> simp[] >> first_assum ACCEPT_TAC) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
+    (mid with gas_obs := [])` by
+    (irule target_subscript_index_admissible >> goal_assum (drule_at Any) >> simp[]) >>
+  `!gs v ee. bind (eval_expr cx e) (read_result cx)
+    (mid with gas_obs := gs) = (INL v,ee) ==>
+    place_readable cx ee pv` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac
+     >- (`place_readable cx (mid with gas_obs := []) pv` by fs[target_post_def] >>
+         rpt gen_tac >> strip_tac >>
+         drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
+           target_subscript_marked_index_readable >>
+         disch_then (qspec_then `e` irule) >> simp[] >>
+         goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >>
+         simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     rpt gen_tac >> strip_tac >>
+     first_x_assum drule >> strip_tac >> gvs[] >>
+     irule place_readable_memory_live >> metis_tac[]) >>
+  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
+  `!l. FST rb <> Label l` by
+    (drule_all target_subscript_typed_base_not_label >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
+  `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
+    (drule target_subscript_marked_base_domains >> simp[]) >>
+  `~t.vs_halted` by metis_tac[target_subscript_marked_base_nonhalted] >>
+  `gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (eval_expr cx e) (read_result cx)) (mid with gas_obs := [],t)
+    (\res ee u. ?key. res = INL key /\
+      target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
+      expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+      u.vs_current_bb = sn.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sn.cs_current_insts)
+    (\res ee r. expr_exit res r)` by
+    (irule target_index_outcome >> goal_assum (drule_at Any) >>
+     gvs[ci_mono_def] >> first_assum ACCEPT_TAC) >>
+  irule target_subscript_index_bind_outcome >>
+  qexists `\key ee u.
+    target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
+    expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+    u.vs_current_bb = sn.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
+  pure_rewrite_tac[BETA_THM] >> reverse conj_tac >- (gvs[] >> first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `(\key ee u. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  `bind (eval_expr cx e) (read_result cx)
+    (mid with gas_obs := gas_explicit right t.vs_gas_readings) =
+    (INL key, ee with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  drule target_subscript_marked_base_source >>
+  disch_then (qspec_then `gas_explicit right t.vs_gas_readings` assume_tac) >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `expr_sim_inv cenv cx env (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
+    (drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_sim_inv >>
+     simp[]) >>
+  `expr_body_pre cenv cx env e (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
+    fs[target_pre_def, target_indices_pre_def] >>
+  drule_all target_subscript_index_source_diagnostic >> strip_tac >>
+  drule_all target_subscript_index_runtime_diagnostic >> strip_tac >>
+  `(!id path. pv = PlaceR (MemoryPlace id path) ==>
+      ?entry av. lookup_scopes id (ee with gas_obs := []).scopes = SOME entry /\
+        evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
+   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+      storage_read_live cx tr (get_storage cx (ee with gas_obs := []) tr) slot tv /\
+      w2n slot + type_slot_size tv <= dimword(:256) /\
+      (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+        w2n (lookup_storage slot (get_storage cx (ee with gas_obs := []) tr)) <= cnt))` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac
+     >- (drule_at (Pat `eval_base_place _ _ _ = _`) target_subscript_source_readiness >>
+         simp[] >> disch_then drule_all >> simp[]) >>
+     qpat_x_assum `!gs key ee. _` drule >> strip_tac >> gvs[] >>
+     `?av. v = ArrayV av` by
+       (irule target_subscript_memory_array_ready >>
+        goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+        simp[] >> metis_tac[]) >> gvs[]) >>
+  `local_ptrs_reserved cenv sn` by
+    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
+  `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes` by
+    (drule (CONV_RULE (DEPTH_CONV ETA_CONV) bop_marked_scopes_dom) >> simp[]) >>
+  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    target_subscript_typed_summary >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then irule >> simp[] >>
+  `?env'. expr_sim_inv cenv cx env' ee` by (qexists `env` >> fs[]) >>
+  `!x. ix = Var x ==> not_fresh_at sn x` by
+    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
+  `!x. FST op = Var x ==> not_fresh_at sb x` by
+    (drule target_subscript_suffix_var >> simp[]) >>
+  `~u.vs_halted` by (drule target_subscript_marked_nonhalted >> simp[]) >>
+  `well_formed_vtype (get_tenv cx) vt` by
+    (`well_formed_vtype (get_tenv cx) bvt` by
+       metis_tac[target_subscript_pre_result_well_formed] >>
+     metis_tac[target_subscript_vtype_well_formed]) >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  irule lower_compile_expr_not_label >>
+  goal_assum (drule_at (Pat `lower_value`)) >>
+  qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
+QED
+
 Theorem target_subscript_base_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
@@ -1129,92 +1276,9 @@ Theorem target_subscript_base_continuation:
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  `expr_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := []) /\
-   expr_vv_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := [])` by
-    (irule target_subscript_marked_index_sim >> goal_assum (drule_at Any) >>
-     qexistsl [`env`, `nocalls`] >> simp[] >> first_assum ACCEPT_TAC) >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
-    (mid with gas_obs := [])` by
-    (irule target_subscript_index_admissible >> goal_assum (drule_at Any) >> simp[]) >>
-  `!gs v ee. bind (eval_expr cx e) (read_result cx)
-    (mid with gas_obs := gs) = (INL v,ee) ==>
-    place_readable cx ee pv` by
-    (`place_readable cx (mid with gas_obs := []) pv` by fs[target_post_def] >>
-     rpt gen_tac >> strip_tac >>
-     drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
-       target_subscript_marked_index_readable >>
-     disch_then (qspec_then `e` irule) >> simp[] >>
-     goal_assum (drule_at (Pat `bind (eval_expr _ _) _ _ = _`)) >>
-     simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
-  `!l. FST rb <> Label l` by
-    (drule_all target_subscript_typed_base_not_label >> simp[]) >>
-  `local_ptrs_reserved cenv sm` by
-    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
-  `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
-    (drule target_subscript_marked_base_domains >> simp[]) >>
-  `~t.vs_halted` by metis_tac[target_subscript_marked_base_nonhalted] >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
-    (bind (eval_expr cx e) (read_result cx)) (mid with gas_obs := [],t)
-    (\res ee u. ?key. res = INL key /\
-      target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
-      expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
-      u.vs_current_bb = sn.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sn.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
-    (irule target_index_outcome >> goal_assum (drule_at Any) >>
-     gvs[ci_mono_def] >> first_assum ACCEPT_TAC) >>
-  irule target_subscript_index_bind_outcome >>
-  qexists `\key ee u.
-    target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
-    expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
-    u.vs_current_bb = sn.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
-  pure_rewrite_tac[BETA_THM] >> reverse conj_tac >- (gvs[] >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >>
-  gvs[BETA_THM] >>
-  `bind (eval_expr cx e) (read_result cx)
-    (mid with gas_obs := gas_explicit right t.vs_gas_readings) =
-    (INL key, ee with gas_obs := [])` by
-    (qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
-     simp[gas_marked_exec_def] >> strip_tac >>
-     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  drule target_subscript_marked_base_source >>
-  disch_then (qspec_then `gas_explicit right t.vs_gas_readings` assume_tac) >>
-  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
-  `expr_sim_inv cenv cx env (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
-    (drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_sim_inv >>
-     simp[]) >>
-  `expr_body_pre cenv cx env e (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
-    fs[target_pre_def, target_indices_pre_def] >>
-  drule_all target_subscript_index_source_diagnostic >> strip_tac >>
-  drule_all target_subscript_index_runtime_diagnostic >> strip_tac >>
-  drule_at (Pat `eval_base_place _ _ _ = _`) target_subscript_source_readiness >>
-  simp[] >> disch_then drule_all >> strip_tac >>
-  `local_ptrs_reserved cenv sn` by
-    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
-  `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
-    (fs[ci_mono_def] >> decide_tac) >>
-  `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes` by
-    (drule (CONV_RULE (DEPTH_CONV ETA_CONV) bop_marked_scopes_dom) >> simp[]) >>
-  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    target_subscript_typed_summary >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then irule >> simp[] >>
-  `?env'. expr_sim_inv cenv cx env' ee` by (qexists `env` >> fs[]) >>
-  `!x. ix = Var x ==> not_fresh_at sn x` by
-    metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
-  `!x. FST op = Var x ==> not_fresh_at sb x` by
-    (drule target_subscript_suffix_var >> simp[]) >>
-  `~u.vs_halted` by (drule target_subscript_marked_nonhalted >> simp[]) >>
-  `well_formed_vtype (get_tenv cx) vt` by
-    (`well_formed_vtype (get_tenv cx) bvt` by
-       metis_tac[target_subscript_pre_result_well_formed] >>
-     metis_tac[target_subscript_vtype_well_formed]) >>
-  simp[] >> reverse conj_tac >- metis_tac[] >>
-  irule lower_compile_expr_not_label >>
-  goal_assum (drule_at (Pat `lower_value`)) >>
-  qexists_tac `env` >> fs[expr_body_pre_def, expr_sim_inv_def]
+  drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation_core >>
+  disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  disch_then irule >> simp[] >> metis_tac[]
 QED
 
 (* target_subscript_base_continuation for a local root whose indices may
@@ -1260,7 +1324,10 @@ Theorem target_subscript_local_live_continuation:
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
 Proof
-  cheat
+  strip_tac >>
+  drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation_core >>
+  disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  disch_then irule >> simp[] >> metis_tac[]
 QED
 
 (* RESIDUAL (self-overlap): a run of the index pops the base's own place
