@@ -342,5 +342,5 @@ Theorem extract32_expr_post_end_gas_obs:
   expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
   simp[expr_post_def, expr_val_at_def, expr_val_own_def, stmt_state_rel_def,
-       state_rel_gas_obs]
+       state_rel_gas_obs, locals_kept_def, popped_kept_def]
 QED
