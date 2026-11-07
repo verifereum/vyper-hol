@@ -10,6 +10,12 @@ Ancestors
   fragGasSeq fragGasMode fragGasPath gasCount context gasSummary gasExemptCert
   gasContext gasOutcome gasSummaryCompose stmtSimForRounds
 
+(* An address temporary written into an unchanged state keeps the frame. *)
+val alloca_frame_update_var_same =
+  Q.INST [`c0` |-> `c`, `es` |-> `ee`, `t` |-> `s0`]
+    stmtSimDefsTheory.alloca_frame_update_var
+  |> SIMP_RULE std_ss [stmtSimDefsTheory.alloca_frame_same];
+
 Definition array_for_code_def:
   array_for_code func cenv bc ty stmts id et tv n stride saved_base
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
@@ -331,8 +337,8 @@ Proof
       simp[get_instruction_def, mk_inst_def, eval_operand_def]) >>
   reverse conj_tac
   >- (irule alloca_frame_same_state >>
-      irule_at Any alloca_frame_update_var >>
-      qexistsl_tac [`dv`, `bool_to_word (k = n)`] >>
+      irule_at Any alloca_frame_update_var_same >>
+      qexistsl_tac [`bool_to_word (k = n)`, `dv`] >>
       simp[jump_to_def, update_var_def]) >>
   fs[array_loop_inv_def] >> drule array_condition_block >>
   simp[] >> disch_then (qspecl_then [`ctx`, `cc`, `n2w k`] mp_tac) >>
@@ -778,9 +784,9 @@ Resume array_for_body_entry_run[entry_frame]:
   irule alloca_frame_trans >> goal_assum (drule_at Any) >>
   simp[] >> conj_tac >- simp[Abbr `s1`, update_var_def] >>
   simp[Abbr `s1`] >> irule alloca_frame_trans >>
-  irule_at Any alloca_frame_update_var >>
-  qexistsl_tac [`ov`, `n2w (k * type_memory_size tv)`, `caller`] >>
-  simp[update_var_def, alloca_frame_update_var]
+  irule_at Any alloca_frame_update_var_same >>
+  qexistsl_tac [`n2w (k * type_memory_size tv)`, `caller`, `ov`] >>
+  simp[update_var_def, alloca_frame_update_var_same]
 QED
 
 Finalise array_for_body_entry_run
