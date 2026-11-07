@@ -1,20 +1,16 @@
 (*
- * Storing a value from memory into storage by copying its words.
+ * Relating source encoding to memory words used by a storage copy.
  *
- * The lowering stores a non-word value held in memory by copying its
- * memory words, one per slot, over the whole of its storage region
- * (compile_memory_to_storage).  The source writes only the slots of its
- * encoding (encode_value): a bytestring's length and used data slots, a
- * DynArray's length and present elements.  The words differ only where
- * the stored value leaves bytes dead (dead_bytes), so the storages agree up
- * to the dead bytes afterwards.
+ * The source encoder writes sparse slots. Written slots agree with memory
+ * at bytes observed by dead_bytes; unwritten slots retain their old storage
+ * contents. Dynamic-array capacity slots remain observable even beyond the
+ * current length, while bytestring padding can be masked.
  *
  * Main theorems:
- *   encode_value_memory_live    — a byte of the stored value's region that
- *                                 is not dead holds the matching byte of its
- *                                 memory words
- *   storage_agree_copy_region   — copying a declared region's memory words
- *                                 keeps the storages agreeing
+ *   encode_value_memory_live  — observed bytes of an encoded slot agree
+ *                               with the corresponding memory word
+ *   storage_agree_copy_region — a bulk copy preserves storage agreement
+ *                               when encoding covers every observed slot
  *)
 
 Theory storageCopyLive
@@ -947,11 +943,8 @@ Proof
   gvs[MEM_MAP] >> PairCases_on `y` >> gvs[] >> metis_tac[]
 QED
 
-(* Storing v of type tv at slot k as the source does (encode_value), every
-   byte of slot k + j that v does not leave dead equals that byte of v's
-   j-th memory word.  The slots past a bytestring's used words and a
-   DynArray's present elements keep their old words in storage while
-   memory holds anything there; those are v's dead bytes. *)
+(* An observed byte agrees with memory when its slot occurs in the source
+   encoding. No claim is made about retained, unwritten storage slots. *)
 Theorem encode_value_memory_live:
   !tv v off mem k writes st j b.
     well_formed_type_value tv /\ value_has_type tv v /\
