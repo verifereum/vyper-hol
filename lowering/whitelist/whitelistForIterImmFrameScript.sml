@@ -643,3 +643,130 @@ Proof
     simp[] >> metis_tac[]) >>
   metis_tac[]
 QED
+
+Theorem append_guarded_immutable_frame:
+  append_place cx p v es = (res,es') /\
+  (!other_src other_name path. p = ImmutablePlace other_src other_name path ==>
+     (other_src,other_name) <> (src,name)) ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Cases_on `p` >> rpt strip_tac
+  >~ [`append_place _ (StoragePlace _ _ _) _ _ = _`]
+  >- (drule vyperScopePreservationTheory.append_storage_place_scopes_immutables >>
+      simp[lookup_immutable_def]) >>
+  gvs[append_place_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
+  imp_res_tac lift_sum_state >> gvs[] >>
+  irule lookup_immutable_write_other >> goal_assum (drule_at Any) >> simp[]
+QED
+
+
+Theorem get_place_state_immutable[local]:
+  get_place pv s = (r,t) ==> t = s
+Proof
+  Cases_on `pv` >> simp[get_place_def, return_def, raise_def] >> strip_tac >> gvs[]
+QED
+
+Theorem get_place_success_immutable[local]:
+  get_place pv s = (INL p,t) ==> pv = PlaceR p /\ t = s
+Proof
+  Cases_on `pv` >> simp[get_place_def, return_def, raise_def] >> strip_tac >> gvs[]
+QED
+
+Theorem same_immutables_observation[local]:
+  t.immutables = s.immutables ==>
+  lookup_immutable cx t src name = lookup_immutable cx s src name
+Proof
+  simp[lookup_immutable_def]
+QED
+
+Theorem append_immutable_frame:
+  supported_append_target tops bt /\
+  ~place_contains bt (TopLevelNameTarget (src,name)) /\
+  (!s r t. eval_expr cx rhs s = (r,t) ==>
+    lookup_immutable cx t src name = lookup_immutable cx s src name) /\
+  eval_stmt cx (Append bt rhs) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  Cases_on `bt` >> strip_tac >> gvs[supported_append_target_def] >>
+  rename1 `eval_stmt cx (Append (TopLevelNameTarget nsid) rhs) es = _` >>
+  PairCases_on `nsid` >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
+  imp_res_tac vyperImmutablesPreservationTheory.lookup_global_immutables >>
+  imp_res_tac same_immutables_observation >>
+  imp_res_tac get_place_state_immutable >>
+  imp_res_tac get_place_success_immutable >>
+  imp_res_tac read_result_state >> gvs[IgnAsm `!s r t. _`] >>
+  qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` (fn th => imp_res_tac th) >>
+  all_tac
+  >>~- ([`append_place _ _ _ _ = _`],
+    qmatch_asmsub_rename_tac `append_place cx p value mid` >>
+    `!other_src other_name path. p = ImmutablePlace other_src other_name path ==>
+       (other_src,other_name) <> (src,name)` by
+      (rpt strip_tac >> gvs[] >> drule lookup_global_immutable_root >>
+       gvs[place_contains_def, place_access_def]) >>
+    drule_all append_guarded_immutable_frame >> strip_tac >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem typed_assign_immutable_frame:
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  supported_stmt tops bindings (Assign target rhs) /\
+  type_stmt env ret_ty (Assign target rhs) = SOME env' /\
+  stmt_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) (Assign target rhs) /\
+  ~supported_stmt_expr_exists expr_internal_call_root (Assign target rhs) /\
+  eval_stmt cx (Assign target rhs) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >>
+  gvs[supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  drule_all vyperTypeArgFitsTheory.atarget_accepts_well_typed_atarget >> strip_tac >>
+  `supported_expr tops rhs` by
+    (Cases_on `target` >> gvs[supported_assignment_def]) >>
+  irule assign_immutable_frame >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[supported_expr_immutable]
+QED
+
+Theorem typed_augassign_immutable_frame:
+  (type_place_target env (TopLevelNameTarget (src,name)) = NONE \/
+   type_place_target env (TopLevelNameTarget (src,name)) = SOME (Type (ArrayT elem bound))) /\
+  supported_stmt tops bindings (AugAssign ty target bop rhs) /\
+  type_stmt env ret_ty (AugAssign ty target bop rhs) = SOME env' /\
+  stmt_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) (AugAssign ty target bop rhs) /\
+  ~supported_stmt_expr_exists expr_internal_call_root (AugAssign ty target bop rhs) /\
+  eval_stmt cx (AugAssign ty target bop rhs) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >>
+  gvs[supported_stmt_def, type_stmt_def, stmt_writes_ok_def,
+      supported_stmt_expr_exists_def, AllCaseEqs()] >>
+  irule augassign_immutable_frame >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`bindings`,`tops`] >> simp[] >>
+  gvs[supported_aug_target_def, AllCaseEqs()] >>
+  Cases_on `supported_target_info tops bindings target` >> gvs[] >>
+  metis_tac[supported_expr_immutable]
+QED
+
+Theorem typed_append_immutable_frame:
+  supported_stmt tops bindings (Append target rhs) /\
+  type_stmt env ret_ty (Append target rhs) = SOME env' /\
+  stmt_writes_ok (\w. ~place_contains w (TopLevelNameTarget (src,name))) (Append target rhs) /\
+  ~supported_stmt_expr_exists expr_internal_call_root (Append target rhs) /\
+  eval_stmt cx (Append target rhs) es = (res,es') ==>
+  lookup_immutable cx es' src name = lookup_immutable cx es src name
+Proof
+  strip_tac >>
+  gvs[supported_stmt_def, stmt_writes_ok_def, supported_stmt_expr_exists_def] >>
+  irule append_immutable_frame >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[supported_pure_immutable_mutual]
+QED
