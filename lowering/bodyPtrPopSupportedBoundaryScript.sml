@@ -11,7 +11,7 @@ Proof
   Cases_on `x` >> simp[comp_return_def] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem pop_literal_scaled_locations_boundary[local]:
+Theorem pop_literal_scaled_locations_boundary:
   pop_comp_boundary sa /\
   compile_dynarray_pop (Lit h) (word_scale loc) esz ctor imm loc sa = (r,sb) ==>
   pop_comp_boundary sb
