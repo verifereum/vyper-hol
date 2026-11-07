@@ -34,7 +34,7 @@ Proof
     (gvs[] >> simp[copy_len_binop_ghost_frame]) >>
   `step_inst_base (mk_inst (cs.cs_next_id+4) ADD
      [src;Var (slot_copy_var cs 0)] [slot_copy_var cs 2]) s = OK u` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_pure2_def]) >>
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]) >>
   `eval_operand (Var (slot_copy_var cs 2)) w = SOME (a+k)` by
     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst (cs.cs_next_id+4) ADD
@@ -48,7 +48,7 @@ Proof
   `step_inst_base (mk_inst (cs.cs_next_id+5) load
      [Var (slot_copy_var cs 2)] [slot_copy_var cs 3]) w =
      OK (update_var (slot_copy_var cs 3) (slot_copy_word load s (a+k)) w)` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_read1_def,
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
                   slot_copy_word_def, update_var_def, sload_def, tload_def,
                   contract_storage_def, contract_transient_def]) >>
   gvs[] >> simp[inst_seq_ptr_def]
@@ -104,8 +104,8 @@ Theorem copy_generated_source_execution:
        (update_var (slot_copy_var cs 2) (a+k) s))
 Proof
   strip_tac >> gvs[] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
        slot_copy_word_def, eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE, sload_def, tload_def,
        contract_storage_def, contract_transient_def]
