@@ -400,10 +400,13 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_encode_none_setup_buffer_old >> strip_tac >>
   qpat_x_assum `outsz = _` SUBST_ALL_TAC >>
-  drule_all (SIMP_RULE (srw_ss()) [abi_encode_empty_region]
-    (Q.INST [`method_id` |-> `NONE`, `m` |-> `0`, `w` |-> `0`, `d` |-> `p+32`,
+  mp_tac (Q.INST [`method_id` |-> `NONE`, `m` |-> `0`, `w` |-> `0`, `d` |-> `p+32`,
         `outsz` |-> `32+32*word_size maxlen`]
-      (SPEC_ALL abi_encode_window_phases_open))) >>
+      (SPEC_ALL abi_encode_window_phases_open)) >>
+  (impl_tac >-
+    (pure_asm_rewrite_tac [optionTheory.option_CLAUSES, arithmeticTheory.ADD_0,
+       abi_encode_empty_region] >> simp_tac bool_ss [] >> first_assum ACCEPT_TAC)) >>
+  pure_rewrite_tac [optionTheory.option_CLAUSES, arithmeticTheory.ADD_0] >>
   simp_tac bool_ss []
 QED
 
@@ -458,14 +461,15 @@ Proof
   qpat_x_assum `outsz = _` SUBST_ALL_TAC >>
   `venomMemDefs$regions_disjoint (p+32,4) (p+36,LENGTH (enc at av))` by
     (simp_tac std_ss [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  mp_tac (SIMP_RULE (srw_ss()) [GSYM arithmeticTheory.ADD_ASSOC]
-    (Q.INST [`method_id` |-> `SOME mid`, `m` |-> `4`, `w` |-> `32`, `d` |-> `p+36`,
+  `p+32+4 = p+36` by decide_tac >>
+  `p+32+32 = p+64` by decide_tac >>
+  mp_tac (Q.INST [`method_id` |-> `SOME mid`, `m` |-> `4`, `w` |-> `32`, `d` |-> `p+36`,
         `outsz` |-> `32+32*word_size (maxlen+4)`]
-      (SPEC_ALL abi_encode_window_phases_open))) >>
+      (SPEC_ALL abi_encode_window_phases_open)) >>
   (impl_tac >-
-    (rule_assum_tac (SIMP_RULE (srw_ss()) [GSYM arithmeticTheory.ADD_ASSOC]) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  simp_tac bool_ss []
+    (pure_asm_rewrite_tac [optionTheory.option_CLAUSES] >>
+     simp_tac bool_ss [] >> first_assum ACCEPT_TAC)) >>
+  pure_rewrite_tac [optionTheory.option_CLAUSES] >> simp_tac bool_ss []
 QED
 
 (* Producer-facing view: resources remain explicit, while the encoded value
