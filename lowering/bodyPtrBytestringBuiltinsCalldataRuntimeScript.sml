@@ -3,7 +3,9 @@ Theory bodyPtrBytestringBuiltinsCalldataRuntime
 Ancestors
   bodyPtrBytestringBuiltinsBounds exprLoweringProps fragExec
   venomState venomExecSemantics words list rich_list
-  exprSimAlloc loweringHalt context finite_map
+  exprSimAlloc loweringHalt context finite_map emitHelper emitHelperProps
+  bodyPtrBytestringBuiltinsExternalSlice freshWrites compileEnv
+  exprSimWordBuiltins venomInst
 
 Theorem slice_bounds_runtime:
   compile_assert_slice_bounds start len limit sa = ((),sb) /\
@@ -83,4 +85,41 @@ Proof
   qexistsl_tac [`t`,`w`] >> simp[] >>
   qpat_x_assum `run_inst_seq _ _ = OK _` mp_tac >>
   simp[run_inst_seq_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem calldata_size_runtime:
+  emit_op CALLDATASIZE [] sa = (limit,sb) /\ fresh_vars_wrt sa s ==>
+  ?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+    u = update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s /\
+    eval_operand limit u = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
+    fresh_vars_wrt sb u /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op u = SOME w)
+Proof
+  strip_tac >>
+  `limit = Var (STRING #"%" (toString sa.cs_next_var)) /\
+   sb.cs_next_var = SUC sa.cs_next_var /\
+   emitted_insts sa sb = [mk_inst sa.cs_next_id CALLDATASIZE []
+     [STRING #"%" (toString sa.cs_next_var)]]` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+       fresh_var_def, emit_def, emitted_insts_def, DROP_APPEND1] >>
+     strip_tac >> gvs[DROP_APPEND1]) >>
+  qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var))
+    (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s` >>
+  `step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE []
+    [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)` by
+    (irule external_size_step >> simp[]) >>
+  simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var] >>
+  conj_tac
+  >- (fs[fresh_vars_wrt_def, update_var_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  rpt strip_tac >>
+  `eval_operand op (update_var (STRING #"%" (toString sa.cs_next_var))
+    (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s) = eval_operand op s` suffices_by simp[] >>
+  irule eval_operand_update_not_fresh >> qexists_tac `sa` >> simp[] >>
+  rw[not_fresh_at_def] >>
+  metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]
 QED
