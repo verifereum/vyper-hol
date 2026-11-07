@@ -844,7 +844,6 @@ Proof
         (qspecl_then [`aid`,`off`,`len`] mp_tac) >>
       simp[regions_disjoint_def] >> decide_tac) >>
   conj_tac >- (gvs[ci_mono_def] >> decide_tac) >>
-  rpt conj_tac >~ [`locals_kept _ _ _ _ _`] >- first_assum ACCEPT_TAC >>
   qexists `sz` >>
   simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> metis_tac[]
 QED
