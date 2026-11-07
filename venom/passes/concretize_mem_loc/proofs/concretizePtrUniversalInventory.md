@@ -42,7 +42,7 @@ of h/H appends to match HistoryCoverage's extension conclusion.
 | N10 CALLDATACOPY/CODECOPY/DLOADBYTES/RETURNDATACOPY | Local content facts only; complete family prefix supplier missing, including returndata OOB success guard |
 | N11 EXTCODECOPY | Complete prefix supplier missing; account-code payload and shared fields needed |
 | N12 SLOAD/SSTORE/TLOAD/TSTORE | Complete prefix supplier missing; storage/transient observation, taint and static-frame guard needed |
-| N13 environment reads | ptr_paired_prefix_environment_read and ptr_paired_environment_read_prefix_normalize cover exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE. ptr_paired_prefix_unary_environment_read and ptr_paired_unary_environment_read_prefix_normalize additionally cover exactly BLOCKHASH, BLOBHASH, BALANCE, EXTCODESIZE, EXTCODEHASH, CALLDATALOAD. The existing zero-input supplier now also includes SELFBALANCE, and the unary supplier now also includes DLOAD (shared data section, not memory). Remaining GAS lacks a complete supplier |
+| N13 environment reads | ptr_paired_prefix_environment_read and ptr_paired_environment_read_prefix_normalize cover exactly CALLER, ADDRESS, CALLVALUE, ORIGIN, GASPRICE, CHAINID, COINBASE, TIMESTAMP, NUMBER, PREVRANDAO, GASLIMIT, BASEFEE, CALLDATASIZE, RETURNDATASIZE, BLOBBASEFEE, CODESIZE. ptr_paired_prefix_unary_environment_read and ptr_paired_unary_environment_read_prefix_normalize additionally cover exactly BLOCKHASH, BLOBHASH, BALANCE, EXTCODESIZE, EXTCODEHASH, CALLDATALOAD. The existing zero-input supplier now also includes SELFBALANCE, and the unary supplier now also includes DLOAD (shared data section, not memory). ptr_paired_prefix_gas and ptr_paired_gas_prefix_normalize complete GAS with actual consumption of the shared gas-reading list. N13 now has complete per-opcode suppliers; this is not universal HistoryCoverage |
 | N14 SHA3/LOG | Complete supplier missing; read payload/hash/topics/static guard required |
 | N15 CALL/STATICCALL | Content boundaries only; no complete prefix supplier; full request bytes and shared-state equality not free consequences of masked equality |
 | N16 DELEGATECALL/CREATE/CREATE2 | Complete prefix supplier missing; cannot rename CALL content facts |
@@ -2176,3 +2176,16 @@ This supersedes the preceding current-coverage residual list: only GAS now
 remains in N13. Its exec_gas consumes the shared vs_gas_readings list; its
 paired-prefix producer is not yet proved. The remainingEnvironment component
 is therefore still open, not closed by these two additions.
+
+### N13 residual completion
+
+`ptr_paired_prefix_gas` and `ptr_paired_gas_prefix_normalize` in
+concretizePtrEnvironmentReadProducer now construct the actual GAS source step,
+including consumption of the common vs_gas_readings list (and the exhausted
+list's zero result). Mixed-variable and shared-field preservation account for
+the changed list before ordinary nonwrite attachment and NOP normalization.
+No source success or equal-state premise is supplied by the consumer.
+Combined with the in-place SELFBALANCE and DLOAD extensions, this completes
+per-opcode immediate/normalized production for N13. This supersedes the
+preceding partial checkpoint, not the remaining obligations of other dispatch
+families, universal HistoryCoverage, or final raw-observation packaging.
