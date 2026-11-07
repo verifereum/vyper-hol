@@ -498,6 +498,53 @@ Proof
   gvs[plan_slots_bounded_def, popmany_plan_spilled_unchanged] >> ASM_SET_TAC[]
 QED
 
+Theorem native_parameter_residual_budget:
+  !fn ch growth spill_base lbl_ctr ps.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    ps = SND (prepare_params_plan (liveness_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) ==>
+    residual_budget_wf spill_base [] ps
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ready_parameter_names_distinct >> strip_tac >>
+  Cases_on `get_params (HD fn.fn_blocks).bb_instructions = []`
+  >- gvs[prepare_params_plan_def, init_cleanup_residual_budget] >>
+  gvs[prepare_params_plan_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `popmany_plan dead pushed` >>
+  `residual_budget_wf spill_base [] pushed` by
+    (qmatch_goalsub_abbrev_tac `residual_budget_wf sb [] _` >>
+     `residual_budget_wf sb []
+       (FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack)
+         (init_cleanup_plan_state ch growth sb lbl_ctr)
+         (MAP (\inst. HD inst.inst_outputs)
+           (get_params (HD fn.fn_blocks).bb_instructions)))` by
+       (rewrite_tac[parameter_push_fold] >>
+        irule fresh_outputs_residual_budget >>
+        simp[init_cleanup_residual_budget, init_cleanup_plan_state_def,
+             init_plan_state_def]) >>
+     gvs[Abbr `pushed`, parameter_push_fold, MAP_MAP_o, combinTheory.o_DEF,
+         Abbr `sb`]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  rename1 `popmany_plan dead pushed = (pop_ops,popped)` >>
+  `?rest. popped.ps_stack = [] ++ rest /\
+    set rest = set pushed.ps_stack DIFF set dead /\
+    popped.ps_spilled = pushed.ps_spilled /\
+    residual_budget_wf spill_base [] (popped with ps_stack := rest)` by
+    (irule popmany_plan_core_resource >> simp[] >>
+     qexists_tac `pushed` >> simp[]) >>
+  `residual_budget_wf spill_base [] popped` by gvs[] >>
+  drule residual_budget_wf_optimistic_swap_plan >>
+  disch_then (qspecl_then [`dfg_empty`,
+    `LAST (get_params (HD fn.fn_blocks).bb_instructions)`] mp_tac) >>
+  disch_then (qspecl_then
+    [`live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))`,
+     `case FIND (\inst. ~is_param_opcode inst.inst_opcode)
+        (HD fn.fn_blocks).bb_instructions of NONE => F
+      | SOME inst => is_terminator inst.inst_opcode`] mp_tac) >>
+  gvs[]
+QED
+
 Theorem residual_budget_wf_remove_free[local]:
   !spillbase pending ps op off.
     residual_budget_wf spillbase pending ps /\
