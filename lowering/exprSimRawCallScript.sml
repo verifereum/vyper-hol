@@ -3189,7 +3189,7 @@ Proof
   fs[lookup_var_drop_fresh]
 QED
 
-Theorem raw_call_finish_state_rel_aged[local]:
+Theorem raw_call_finish_state_rel_aged:
   stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv sa /\
   (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
     eval_operand a t = SOME w ==> eval_operand a u = SOME w) /\
@@ -3216,7 +3216,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem raw_call_finish_frame_aged[local]:
+Theorem raw_call_finish_frame_aged:
   wb_frame cenv es st0 s0 t /\
   st0.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sa /\
   (!a w. (!x. a = Var x ==> not_fresh_at sa x) /\
