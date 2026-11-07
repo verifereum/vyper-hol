@@ -1,7 +1,7 @@
 (* Allocation-facing bounds from the arbitrary statement's capacity guard. *)
 Theory extRetSingletonWordCapacityPtr
 Ancestors
-  extRetSingletonCapacityPtr extRetCapacityFrameProbePtr words
+  extRetSingletonCapacityPtr extRetCapacityFramePtr words
 
 val _ = Parse.hide "body";
 

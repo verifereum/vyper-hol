@@ -19,9 +19,9 @@ Ancestors
   extRetStaticStmtPtr extRetStaticReservedPtr extRetStaticFrameMetadataPtr
   extRetStaticFrameConsumerPtr extRetStaticCapacityPtr extRetStaticBoundedConsumerPtr
   extRetTypedStaticConsumerPtr extRetStaticLoweredFramePtr extRetStaticPlanSelectionPtr
-  extRetStaticUnrestrictedProbePtr extRetZeroStmtPtr extRetRecursiveDomainProbePtr
-  extRetRecursiveDynamicProbePtr extRetEvaluatedStaticPtr
-  extRetRecursiveInterfacePtr extRetRecursivePlanPtr extRetSupportedShapePtr
+ extRetZeroStmtPtr
+ extRetEvaluatedStaticPtr
+ extRetRecursivePlanPtr extRetSupportedShapePtr
   extRetPointwiseSourcePtr extRetRobustSourceChildrenPtr extRetRecursiveContractAuditPtr
   extRetRawValuePtr extRetRawStmtPtr extRetAbiReadCleanPtr extRetAbiReadBoundsPtr
   extRetAbiBytesHeaderPtr extRetAbiBytesCountedPtr extRetAbiStaticCountedPtr
@@ -30,15 +30,15 @@ Ancestors
   extRetAbiArrayStaticLoopPtr extRetAbiArrayStaticCountedPtr extRetAbiArrayParentPtr extRetAbiSourceInputPtr
   extRetAbiWrappedSourcePtr extRetAbiSingletonCountedPtr extRetAbiSingletonWrapperPtr
   extRetAbiChildBoundaryPtr extRetScratchInitPtr extRetSourceWindowPtr
-  extRetScratchResourceInitPtr extRetNestedScratchResourceProbePtr
+  extRetScratchResourceInitPtr
   extRetAbiSourceBytesCountedPtr extRetAbiSourceStaticCountedPtr extRetAbiSourceArrayStaticCountedPtr
   extRetAbiSourceArrayDispatchPtr extRetAbiChildComposePtr extRetAbiSourceChildPtr
-  extRetAbiSourceComplexBytesPtr extRetRecursiveScratchProbePtr
+  extRetAbiSourceComplexBytesPtr
   extRetAbiStorageFramePtr extRetAbiSingletonReturnPtr extRetBufferAllocCountedPtr
   extRetAbiReturnConsumerPtr extRetAbiBytesLivePtr extRetAbiSingletonLivePtr
   extRetBufferStatePtr extRetCursorResourcePtr extRetBufferCursorStatePtr
   extRetSingletonCapacityPtr extRetSourceAllocationPtr extRetCapacityAuditPtr
-  extRetCapacityFrameProbePtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
+  extRetCapacityFramePtr extRetWidenedPtr extRetSingletonWordCapacityPtr extRetSingletonStmtPtr
   extRetFrameFactsPtr extRetNoneFramePtr extRetWordFramePtr extRetRawFramePtr
   extRetSignatureFramePtr extRetLoweredBytesFramePtr extRetSingletonFramePtr returnMetadataPtr vyperTypeCallGraph
 
@@ -185,5 +185,10 @@ Proof
       goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  cheat
+  Cases_on `lowered_value_type cenv' x = expr_type x`
+  >- cheat >>
+  drule source_deployment_context >> strip_tac >>
+  first_x_assum (qspecl_then [`x`, `expr_type x`] mp_tac) >>
+  impl_tac >- rw[] >> strip_tac >>
+  drule_all external_frame_ret_widened_ptr >> disch_then irule
 QED

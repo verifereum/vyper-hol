@@ -1,7 +1,7 @@
 (* The arbitrary frame Return has its own allocation-limit guard.
    This excludes the oversized candidate even when the packaged body has
    no valued Return. No global counterexample is asserted here. *)
-Theory extRetCapacityFrameProbePtr
+Theory extRetCapacityFramePtr
 Ancestors
   extRetCapacityAuditPtr bodyExprPreFacts bodyPtrDefs bodySim compileVyper words
 
