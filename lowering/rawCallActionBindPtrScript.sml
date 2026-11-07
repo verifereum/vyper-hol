@@ -83,6 +83,7 @@ Theorem raw_call_scalar_action_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
     (\res ee H un t. ?v em tm J jn u K kn.
+      MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\ ptr_val_ok cx (BaseT BoolT) v result H un t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
       ghost_kept cenv es sa G0 tn0 s0 J jn /\ wb_frame cenv es sa s0 tm /\
@@ -443,6 +444,7 @@ Theorem raw_call_zero_reverting_action_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
     (\res ee H un t. ?v em tm J jn u K kn.
+      MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\ ptr_val_ok cx NoneT v result H un t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
@@ -524,6 +526,7 @@ Theorem raw_call_bytes_action_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
     (\res ee H un t. ?v em tm J jn u K kn.
+      MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\ ptr_val_ok cx (BaseT (BytesT (Dynamic flags.rcf_max_outsize))) v result H un t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
       stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee H un t /\
@@ -601,6 +604,7 @@ Theorem raw_call_tuple_action_outcome:
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Call ann (RawCallTarget flags) (a::d::kws) dflt)) (es,s0,G0,tn0)
     (\res ee H un t. ?v em tm J jn u K kn.
+      MAP FDOM es.scopes = MAP FDOM em.scopes /\
       res = INL (Value v) /\
       ptr_val_ok cx (TupleT [BaseT BoolT;BaseT (BytesT (Dynamic flags.rcf_max_outsize))]) v result H un t /\
       ptr_buf_ok cenv (Call ann (RawCallTarget flags) (a::d::kws) dflt) result H t /\
