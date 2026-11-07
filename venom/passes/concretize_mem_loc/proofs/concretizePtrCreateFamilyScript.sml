@@ -6,6 +6,12 @@ Ancestors
   concretizePtrStorageReadProducer concretizePtrRequestHistory
   concretizePtrMloadRecovery concretizePtrPairedPrefix concretizePtrChronologicalHistory
   concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrDeletedGapHistory
+  concretizePtrOrdinaryNext concretizePtrLedgerProbe concretizePtrLedgerAlignment
+  concretizePtrSourceOwnership concretizePtrTaggedSupport concretizePtrReturnTransport
+  concretizeStepStructure concretizeStepShape concretizeStepRetpc concretizeStageShape
+  concretizePtrOperationalOpcodes concretizePtrDeletedGaps concretizePtrExecutedCoverage
+  concretizePtrAllocationSize unitLabelMapIdentity frameViewFacts
+  venomInstProofs opcodeClass venomWf cfgWf memSafeRun
   regularMemorySim o1PassContract unitShapeDefs contextCodegenRel memLocDefs
   pointerConfinedDefs venomInst
   concretizePtrTaintContent ptrDiscipline venomState venomCallOracleDefs
@@ -408,6 +414,139 @@ Proof
   irule (INST_TYPE [alpha |-> ``:num``] ptr_create_family_mixed_execution) >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
   qexistsl_tac [`offset`,`at.po_state`] >> simp[]
+QED
+
+Theorem ptr_paired_prefix_create_successor[local]:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  MEM a.po_inst.inst_opcode [CREATE; CREATE2] /\
+  at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
+  ptr_chrono_step C' at zt ==>
+  ?z TG'.
+    TG' = step_prov PT TG a.po_inst z.po_state /\
+    ptr_paired_prefix R lp positions lo vs C C'
+      (h ++ [z]) z (ht ++ [zt]) zt (done ++ [LENGTH h - 1])
+      tokens registry births PT TG' saved entries
+      (H ++ [(tokens,registry,births,PT,TG',saved,entries)]) calls ws
+Proof
+  strip_tac >>
+  drule ptr_paired_prefix_endpoint >> strip_tac >>
+  drule ptr_paired_prefix_transcript >> strip_tac >>
+  drule ptr_structural_transcript_erasure >> strip_tac >>
+  drule ptr_structural_trace_ownership >> strip_tac >>
+  `frame_reachable vs C a.po_stack a.po_params a.po_prov a.po_taint
+    a.po_fn a.po_inst a.po_state` by
+    (drule ptr_gap_ownership_history >> strip_tac >>
+     drule ptr_chrono_history_reachable >> simp[ptr_observation_reachable_def]) >>
+  `MEM a.po_fn C.ctx_functions` by (drule_all ptr_frame_sizes >> simp[]) >>
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `MEM a.po_inst (fn_insts a.po_fn) /\ inst_wf a.po_inst` by
+    (`MEM a.po_inst (fn_insts a.po_fn)` by
+       (fs[active_inst_def, fn_insts_MEM] >> metis_tac[MEM_EL]) >>
+     fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def,
+        wf_function_def, fn_inst_wf_def, EVERY_MEM, fn_insts_MEM] >> metis_tac[]) >>
+  `?out. a.po_inst.inst_outputs = [out]` by
+    (fs[MEM] >> gvs[inst_wf_def, listTheory.LENGTH_EQ_NUM_compute]) >>
+  `a.po_inst.inst_opcode <> ALLOCA /\ a.po_inst.inst_opcode <> NOP /\
+   a.po_inst.inst_opcode <> INVOKE /\ a.po_inst.inst_opcode <> ASSIGN /\
+   a.po_inst.inst_opcode <> PHI /\ a.po_inst.inst_opcode <> RETPC_PARAM /\
+   ~is_terminator a.po_inst.inst_opcode` by (fs[MEM] >> simp[is_terminator_def]) >>
+  `~retpc_var a.po_fn out` by
+    (irule noncopy_output_not_retpc >>
+     conj_tac >- fs[EVERY_MEM] >> qexists_tac `a.po_inst` >> simp[]) >>
+  `at.po_inst = a.po_inst` by simp[concretize_positions_unchanged] >>
+  `ALL_DISTINCT (fn_labels a.po_fn)` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+  `~in_revert_forward a.po_fn a.po_state` by
+    (fs[in_revert_forward_def, active_inst_def] >> rpt strip_tac >>
+     `lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb` by
+       (irule venomExecProofsTheory.MEM_lookup_block >> fs[fn_labels_def]) >>
+     gvs[] >>
+     `get_instruction bb a.po_state.vs_inst_idx = SOME a.po_inst` by
+       simp[get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> fs[MEM]) >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
+        EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
+    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `!v tag. FLOOKUP TG v = SOME tag ==> v IN fn_pv P a.po_fn` by
+    (rpt strip_tac >> irule ptr_source_tagged_var_support >>
+     rpt (goal_assum (drule_at Any))) >>
+  `fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  `ptr_use_ok P (fn_pv P a.po_fn) a.po_inst` by
+    (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `EVERY (ptr_nonopaque_operand a.po_fn) a.po_inst.inst_operands` by
+    (irule ptr_nonopaque_instruction_operands >> simp[] >> fs[MEM]) >>
+  qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
+  once_rewrite_tac[ptr_chrono_step_cases] >>
+  simp[ptr_observe_def, ptr_observation_component_equality] >>
+  strip_tac >> gvs[Excl "MEM"] >>
+  IF (qpat_assum `step_inst _ _ _ _ = OK _` (K all_tac)) all_tac
+    (qpat_x_assum `step_inst _ _ _ _ = IntRet _ _` mp_tac >>
+     simp[step_inst_non_invoke] >> strip_tac >>
+     drule step_inst_base_intret_opcodes >> fs[MEM]) >>
+  `?post. step_inst 0 C a.po_inst a.po_state = OK post /\
+    ptr_history_content a.po_taint post s' /\
+    ptr_mixed_vars births positions (step_prov PT TG a.po_inst post)
+      (step_taint a.po_inst a.po_state post a.po_taint) a.po_fn at.po_fn post s'` by
+    (irule ptr_create_family_endpoint_execution >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (qexistsl_tac [`P`,`fn_pv P a.po_fn`] >> simp[]) >>
+     goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  `is_ext_call_op a.po_inst.inst_opcode` by (fs[MEM] >> simp[is_ext_call_op_def]) >>
+  qpat_assum `step_inst 0 C _ _ = OK post`
+    (mp_then Any mp_tac venomInstProofsTheory.step_ext_call_preserves) >>
+  simp[] >> strip_tac >>
+  qpat_assum `step_inst fuel C' _ _ = OK s'`
+    (mp_then Any mp_tac venomInstProofsTheory.step_ext_call_preserves) >>
+  simp[] >> strip_tac >>
+  `?i. active_inst a.po_fn i (post with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
+    (`EVERY bb_well_formed a.po_fn.fn_blocks` by
+       (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >> metis_tac[]) >>
+     irule ptr_ordinary_next_active >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  qabbrev_tac `z = ptr_ledger_next a i post` >>
+  qexists_tac `z` >>
+  `ALL_DISTINCT (fn_labels at.po_fn)` by
+    (fs[concretizePtrPairedFieldsTheory.ptr_paired_code_def] >> metis_tac[fn_labels_def, concretize_positions_labels]) >>
+  drule ptr_paired_stage_local_allocas >>
+  disch_then (qspecl_then [`o1_walk_view rpolicy 2`,`rpolicy`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `ptr_paired_sample positions z zt
+     (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
+    (simp[ptr_paired_sample_def, Abbr `z`, ptr_ledger_next_def, ptr_observe_def] >>
+     (reverse conj_tac
+      >- (irule ptr_history_content_masks >> goal_assum (drule_at Any) >>
+          fs[MEM] >> simp[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def])) >>
+     gvs[step_prov_def, out_prov_def] >>
+     irule ptr_mixed_vars_fields >> rpt (goal_assum (drule_at Any)) >>
+     simp[step_taint_def]) >>
+  `ptr_paired_params positions z zt
+     (tokens,registry,births,PT,step_prov PT TG a.po_inst z.po_state,saved,entries)` by
+    (fs[concretizePtrPairedFieldsTheory.ptr_paired_params_def,
+        Abbr `z`, ptr_ledger_next_def, ptr_observe_def]) >>
+  drule ptr_paired_prefix_ordinary_nonwrite >> disch_then irule >>
+  simp[Abbr `z`, ptr_ledger_next_def, ptr_observe_def, ptr_tagged_step_def] >>
+  fs[MEM] >> simp[step_prov_def, out_prov_def, step_writes_def,
+       range_bytes_def, codegenRelTheory.source_memory_write_ranges_def] >>
+  qexistsl_tac [`0`,`post`] >> simp[]
 QED
 
 Theorem ptr_paired_create_prefix_normalize:
