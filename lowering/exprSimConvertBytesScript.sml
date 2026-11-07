@@ -131,7 +131,7 @@ Proof
   Cases_on `t` >> gvs[is_bytestring_type_def]
 QED
 
-Theorem lower_value_convert_bytestring[local]:
+Theorem lower_value_convert_bytestring:
   !cenv ty ann t e1 sa op sb.
     lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa =
       (op,sb) /\ is_bytestring_type t ==>
