@@ -3,7 +3,52 @@
  *)
 Theory concretizePtrAffineFamily
 Ancestors
-  concretizePtrStorageReadProducer
+  concretizePtrStorageReadProducer concretizePtrAffineTransport
+  concretizePtrOpaqueRetpc concretizePtrValueTransport ptrDiscipline
+  venomExecSemantics finite_map list words
+
+Theorem ptr_mixed_affine_execution_back[local]:
+  ptr_mixed_vars births positions TG tn f g s t /\
+  s.vs_labels = t.vs_labels /\
+  ptr_nonopaque_operand f x /\ ptr_nonopaque_operand f y /\
+  inst.inst_operands = [x;y] /\ inst.inst_outputs = [out] /\
+  MEM inst.inst_opcode [ADD;SUB] /\
+  (inst.inst_opcode = ADD ==> op_prov TG x = NONE \/ op_prov TG y = NONE) /\
+  (inst.inst_opcode = SUB ==> op_prov TG y = NONE) /\
+  op_taint tn x = {} /\ op_taint tn y = {} /\ ~retpc_var f out /\
+  step_inst fuel Ct inst t = OK t' ==>
+  ?sv tv. step_inst 0 C inst s = OK (update_var out sv s) /\
+    t' = update_var out tv t /\
+    ptr_mixed_vars births positions
+      (step_prov PT TG inst (update_var out sv s))
+      (step_taint inst s (update_var out sv s) tn)
+      f g (update_var out sv s) t'
+Proof
+  strip_tac >>
+  `ptr_lookup_transport births positions (op_prov TG x) {}
+     (eval_operand x s) (eval_operand x t)` by
+    (metis_tac[ptr_mixed_vars_eval]) >>
+  `ptr_lookup_transport births positions (op_prov TG y) {}
+     (eval_operand y s) (eval_operand y t)` by
+    (metis_tac[ptr_mixed_vars_eval]) >>
+  gvs[MEM] >>
+  gvs[ptr_affine_step, exec_pure2_def, AllCaseEqs()] >>
+  gvs[ptr_lookup_transport_some_right] >>
+  qmatch_goalsub_abbrev_tac `update_var out sv s` >>
+  qmatch_goalsub_abbrev_tac `update_var out tv t` >>
+  qexistsl_tac [`sv`, `tv`] >> simp[] >>
+  drule ptr_mixed_vars_update >> disch_then irule >> simp[] >>
+  simp[step_prov_def, out_prov_def, first_prov_def, set_prov_def,
+       step_taint_def, out_taint_def, set_var_taint_def, op_taint_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  Cases_on `op_prov TG x` >> Cases_on `op_prov TG y` >>
+  gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, ptr_value_transport_scalar_empty,
+      Abbr `sv`, Abbr `tv`] >>
+  rpt conj_tac >> rpt strip_tac >>
+  fs[ptr_mixed_vars_def, op_taint_def] >>
+  metis_tac[ptr_value_transport_add_left, ptr_value_transport_add_right,
+            ptr_value_transport_sub_right, WORD_ADD_COMM]
+QED
 
 Theorem ptr_paired_affine_prefix_normalize:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
