@@ -3,7 +3,10 @@ Ancestors
   bodyPtrBytestringBuiltinsEval bodyPtrBytestringBuiltinsExternalSlice
   bodyPtrPreds exprPtrUnwrap vyperTypeSystem exprSimHypsDefs
   emitHelperProps compileEnv fragExec bodyPtrBytestringBuiltinsCalldataOutcome
-  exprSimWordArgs loweringPosts bodyPtrDefs
+  exprSimWordArgs loweringPosts bodyPtrDefs exprOperandVar
+  exprLoweringProps stmtLoweringMono allocLimits valueEncoding
+  valueEncodingProps vfmConstants words vyperAST vyperTyping vyperValue
+  immutableEncodingProofs
   vyperContext exprSimSource exprLowering exprBopLowering list
 
 (* Expose the actual lowered operand from the conditional body hypothesis.
@@ -63,3 +66,44 @@ Proof
   metis_tac[cs_extends_trans]
 QED
 
+
+Theorem calldata_slice_operand_static_cut:
+  lower_value compile_expr cenv cty e sa = (op,sm) /\
+  local_ptrs_reserved cenv sa ==>
+  (!z. op = Var z ==> not_fresh_at sm z) /\
+  sa.cs_next_var <= sm.cs_next_var
+Proof
+  strip_tac >>
+  `ci_mono sa (SND (lower_value compile_expr cenv cty e sa))` by
+    (irule ci_mono_lower_value_cfn >>
+     simp[cj 1 ci_mono_compile_expr_sa]) >>
+  conj_tac >- metis_tac[compile_lower_value_var] >>
+  gvs[ci_mono_def]
+QED
+
+Theorem calldata_slice_result_requirements:
+  expr_body_pre cenv cx env
+    (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) args) es /\
+  N = type_memory_bytes cenv (BaseT (BytesT (Dynamic n))) ==>
+  ~is_word_type (expr_type (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) args)) /\
+  evaluate_type (get_tenv cx)
+    (expr_type (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) args)) =
+      SOME (BaseTV (BytesT (Dynamic n))) /\
+  type_memory_bytes cenv
+    (lowered_value_type cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) args)) = N /\
+  type_memory_size (BaseTV (BytesT (Dynamic n))) = N /\
+  32 + n <= N /\ N < dimword (:256) /\
+  val_wf (BaseTV (BytesT (Dynamic n))) (BytesV (TAKE n (DROP a bs)))
+Proof
+  strip_tac >>
+  `N < 2 ** 64` by
+    fs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def, is_word_type_def] >>
+  `n <= 32 * ((n + 31) DIV 32)` by
+    metis_tac[immutable_capacity_roundup, word_size_def] >>
+  `LENGTH (TAKE n (DROP a bs)) <= n` by
+    simp[LENGTH_TAKE_EQ] >>
+  gvs[type_memory_bytes_def] >>
+  simp[expr_type_def, is_word_type_def, evaluate_type_def, lowered_value_type_def,
+    type_memory_size_def, type_slot_size_def, type_memory_bytes_def,
+    word_size_def, val_wf_def, dimword_def] >> decide_tac
+QED
