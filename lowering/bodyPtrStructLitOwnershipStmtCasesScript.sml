@@ -8,7 +8,8 @@ Ancestors bodyPtrStructLitOwnershipStmtHelpers bodyPtrStructLitOwnershipRecursio
   bodyPtrStructLitOwnershipStructFrame bodyPtrStructLitTupleFrame
   bodyPtrStructLitOwnershipControlFrame bodyPtrStructLitLoopShapeDynBody
   bodyPtrStructLitOwnershipIfexpFrame context emitHelper unitShapeDefs
-  venomInst stackPlanTypes
+  venomInst stackPlanTypes bodyPtrStructLitOwnershipMemory
+  bodyPtrStructLitOwnershipTyped bodyPtrStructLitOwnershipPrimitives
 
 Theorem alloc_run_stmt_nonannassign_route:
   (!id vt e. s <> AnnAssign id vt e) /\
@@ -182,4 +183,84 @@ Proof
      SF ETA_ss] alloc_run_stmt_assert_tail) >>
    irule alloc_run_conseq >> irule_at Any alloc_run_emit_empty_fresh >>
    simp[shape_state_def, shape_base_fresh_outputs])
+QED
+
+Theorem alloc_run_stmt_return_exit:
+  alloc_run fresh_outputs
+    (case ce.ce_ctor_exit_label of
+       SOME l => emit_inst JMP [Label l] []
+     | NONE => (\(nr,key,tr,view).
+         comp_ignore_bind
+           (if nr then compile_nonreentrant_unlock key tr view else comp_return ())
+           (emit_inst STOP [] [])) ce.ce_nonreentrant)
+    (\u s. fresh_outputs s)
+Proof
+  Cases_on `ce.ce_ctor_exit_label` >> simp[alloc_run_emit_empty_fresh] >>
+  pairarg_tac >> simp[comp_ignore_bind_def] >>
+  irule alloc_run_bind >> qexists `\u s. fresh_outputs s` >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[alloc_run_compile_nonreentrant_unlock] >>
+      simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]
+QED
+
+Theorem alloc_run_stmt_return_none:
+  alloc_run fresh_outputs (compile_stmt ce lctx ty (Return NONE))
+    (\u s. fresh_outputs s)
+Proof
+  simp[compile_stmt_def] >> Cases_on `ce.ce_return_pc` >>
+  simp[alloc_run_stmt_return_exit] >>
+  Cases_on `x` >> simp[alloc_run_emit_empty_fresh, alloc_run_stmt_return_exit] >>
+  simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\u s. fresh_outputs s` >> reverse conj_tac
+  >- simp[alloc_run_emit_op_fresh] >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_empty_fresh]
+QED
+
+Theorem alloc_run_stmt_return_external_value:
+  alloc_run fresh_outputs
+    (comp_bind
+      (if normalize then
+         comp_bind (compile_alloc_buffer (type_memory_bytes ce ty)) (\buf.
+           comp_bind (comp_return buf.buf_operand) (\ptr.
+             comp_ignore_bind (compile_store_memory_typed ce ptr ty op src)
+               (comp_return ptr)))
+       else comp_return op)
+      (\ret. compile_external_return (SOME ret) (is_word_type ty) ce.ce_raw_return
+        ce.ce_ret_enc_info ce.ce_max_return_size (FST ce.ce_nonreentrant)
+        (FST (SND ce.ce_nonreentrant)) (FST (SND (SND ce.ce_nonreentrant)))
+        (SND (SND (SND ce.ce_nonreentrant)))))
+    (\u s. fresh_outputs s)
+Proof
+  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[]
+      >- (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+          reverse conj_tac >- simp[alloc_run_compile_alloc_buffer] >>
+          gen_tac >> simp[loop_comp_return_bind, comp_ignore_bind_def] >>
+          irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+          reverse conj_tac
+          >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory_typed] >>
+          simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+      simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_external_return]
+QED
+
+Theorem alloc_run_stmt_return_some:
+  ~supported_expr_exists expr_shape_root e ==>
+  alloc_run (\st. shape_state st /\ cenv_shape_ok st ce)
+    (compile_stmt ce lctx ty (Return (SOME e))) (\u st. fresh_outputs st)
+Proof
+  strip_tac >> simp[Once compile_stmt_def] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- (irule alloc_run_conseq >> irule_at Any alloc_run_stmt_lower_value >>
+      simp[shape_state_def, shape_base_fresh_outputs]) >>
+  gen_tac >> simp[SF ETA_ss] >> Cases_on `ce.ce_return_pc` >>
+  simp[LET_THM, SF ETA_ss, SRULE [SF ETA_ss] alloc_run_stmt_return_external_value] >>
+  Cases_on `x` >> simp[LET_THM, SF ETA_ss,
+    SRULE [SF ETA_ss] alloc_run_compile_internal_return_from_env,
+    SRULE [SF ETA_ss] alloc_run_stmt_return_external_value] >>
+  simp[comp_ignore_bind_def] >> irule alloc_run_bind >>
+  qexists `\v s. fresh_outputs s` >> reverse conj_tac
+  >- simp[alloc_run_emit_op_fresh] >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_internal_return_from_env]
 QED
