@@ -803,6 +803,17 @@ Proof
   Cases_on `read_memory_path x l` >> simp[return_def, raise_def]
 QED
 
+Theorem target_subscript_storage_index_readable:
+  target_root bt = TopLevelNameTarget nsid /\
+  eval_base_place cx bt es = (INL pv,mid) ==>
+  place_readable cx fin pv
+Proof
+  strip_tac >> Cases_on `pv` >> simp[place_readable_def] >>
+  Cases_on `p` >> simp[place_readable_def] >>
+  drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
+  simp[place_access_target_root]
+QED
+
 Theorem target_subscript_marked_index_readable:
   (!nsid. target_root bt = TopLevelNameTarget nsid ==>
     EVERY pure_expr (target_indices (SubscriptTarget bt e))) /\
