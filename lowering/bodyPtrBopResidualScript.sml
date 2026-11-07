@@ -2,6 +2,9 @@ Theory bodyPtrBopResidual
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list compileEnv
+  bodyPtrBopHashCompile bodyPtrBopCompareCompile bodyPtrBopOperandContract
+  bodyPtrBopEntry bodyPtrBopTypedSource exprPtrUnwrap exprSimBopBytestring
+  exprBopLowering exprLowering emitHelper exprLoweringProps
 
 (* RESIDUAL: dynamic bytestring Eq/NotEq; held with S1's compile_bop_bytestring_eqne_case *)
 Theorem bop_bytestring_expr_ptr_residual:
