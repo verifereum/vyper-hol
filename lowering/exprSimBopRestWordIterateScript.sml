@@ -203,7 +203,7 @@ QED
 (* Boundary check: freshness and the tested register come from the SAME
    compiler certificate, without reconciling independent layout witnesses. *)
 Theorem rest_word_safe_cond_probe[local]:
-  rest_word_loop_layout_safe cs ct fn needleop arrop lenop stride off is_in out h code cl cm valueop /\
+  rest_word_loop_layout_safe cs ct fn needleop arrop lenop stride off bound_opt is_in out h code cl cm valueop /\
   rest_word_membership_inv h.rw_idx h.rw_result len needle elem R i s /\
   s.vs_current_bb = h.rw_cond /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
   eval_operand lenop s = SOME (n2w len) /\
@@ -227,15 +227,16 @@ QED
    element load.  In particular it does not assume any loop transitions. *)
 Theorem rest_word_compiled_search:
   compile_array_membership_loop needleop arrop lenop stride off
-    (context$compile_ptr_load ctor imm loc) is_in cs = (out,ct) /\
+    (context$compile_ptr_load ctor imm loc) bound_opt is_in cs = (out,ct) /\
   fn_has_code cs ct fn /\ loc <> LocCalldata /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   sm.cs_next_var <= cs.cs_next_var /\
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
   (!z. needleop = Var z \/ arrop = Var z \/ lenop = Var z ==> not_fresh_at cs z) /\
   len < dimword (:256) /\
+  (case bound_opt of NONE => T | SOME cap => len <= cap /\ cap < dimword (:256)) /\
   (!h cl cm v i p.
-    rest_word_loop_prefix needleop arrop lenop stride off cs = (h,cl) /\
+    rest_word_loop_prefix needleop arrop lenop stride off bound_opt cs = (h,cl) /\
     context$compile_ptr_load ctor imm loc h.rw_addr cl = (v,cm) /\ i < len /\
     rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len p /\
@@ -281,7 +282,8 @@ Proof
   `cs.cs_next_var <= cl.cs_next_var /\ cl.cs_next_var <= cm.cs_next_var` by
     (qspec_then `cl` mp_tac (Q.SPECL [`ctor`, `imm`, `loc`, `h.rw_addr`]
        exprLoweringPropsTheory.ci_mono_compile_ptr_load) >>
-     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+     simp[exprLoweringPropsTheory.ci_mono_def] >>
+     Cases_on `bound_opt` >> simp[]) >>
   `!z. not_fresh_at cs z ==> not_fresh_at cl z` by metis_tac[not_fresh_at_mono] >>
   `~not_fresh_at cs h.rw_idx /\ ~not_fresh_at cs h.rw_result` by
     simp[compileEnvTheory.not_fresh_at_def] >>
@@ -315,8 +317,14 @@ Proof
   `?u. gas_marked_path memory execctx fn (jump_to h.rw_entry s) 0 (OK u) /\
     u.vs_current_bb = h.rw_cond /\ u.vs_inst_idx = 0 /\ ~u.vs_halted /\
     rest_word_membership_inv h.rw_idx h.rw_result len needle elem R 0 u` by
-    (irule rest_word_layout_entry_path >> simp[venomStateTheory.jump_to_def] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    (irule rest_word_layout_entry_path >>
+     qpat_assum `rest_word_loop_layout_safe _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (irule_at Any) >>
+     simp[venomStateTheory.jump_to_def] >>
+     Cases_on `lenop` >>
+     gvs[rest_word_search_rep_def, venomStateTheory.eval_operand_def,
+         venomStateTheory.lookup_var_def, venomStateTheory.update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
   qpat_x_assum `!i u. _` drule_all >> strip_tac >>
   `?w. gas_marked_path memory execctx fn t 0 (OK w) /\
     w.vs_current_bb = ct.cs_current_bb /\
