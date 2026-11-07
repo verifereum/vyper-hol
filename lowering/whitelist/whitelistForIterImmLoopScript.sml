@@ -1165,3 +1165,226 @@ Proof
   >- (drule_all array_caller_frame_trans >> simp[]) >>
   drule_all gas_marked_path_then >> simp[]
 QED
+
+(* A prepared immutable copy is the sole entry-specific input to a round.
+   The condition and copy boundaries supply this state without a memory-source
+   representation; all subsequent control flow is source independent. *)
+Theorem immutable_for_round_counted:
+  k < LENGTH vs /\
+  gas_marked_path F ctx func cc 0 (OK s2) /\
+  s2.vs_current_bb = sb0.cs_current_bb /\
+  s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s2.vs_halted /\
+  stmt_state_rel ctx func bc cx
+    (es with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes) s2 /\
+  ret_pc_ok bc sb0 s2 /\ ret_pc_ok cenv st s2 /\
+  entry = es with <|scopes := (FEMPTY |+ (id,
+    <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes;
+    gas_obs := []|> /\
+  stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+    (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts) entry /\
+  stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = (bc',sb1) /\
+  fn_has_code sb0 sb1 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved bc sb0 /\ ~block_is_terminated sb0 /\
+  gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl)) entry /\
+  (~block_is_terminated sb1 ==>
+    sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+    sj.cs_current_insts = sb1.cs_current_insts ++
+      [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb1 sj func) /\
+  lookup_block incr_lbl func.fn_blocks =
+    SOME <|bb_label := incr_lbl; bb_instructions :=
+      [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+       mk_inst i2 ASSIGN [Var nv] [idx];
+       mk_inst i3 JMP [Label cond_lbl] []]|> /\
+  (!scopes. not_local_ptr cenv scopes idx /\ not_local_ptr cenv scopes nv) /\
+  p <> idx /\ p <> nv /\
+  cenv_top_ext cenv bc entry.scopes /\
+  (!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+    stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
+  lookup_var idx s2 = SOME (n2w k) /\ lookup_var p s2 = SOME dst /\
+  FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+  not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv) /\
+  array_caller_frame caller cc s2 ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (do push_scope_with_var id tv (EL k vs);
+        finally (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+          pop_scope od) (es,cc)
+    (\res ee t. ?broke. res = INL broke /\ array_caller_frame caller cc t /\
+      (broke ==> t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+        stmt_state_rel ctx func cenv cx ee t) /\
+      (~broke ==> array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off))
+        (n2w off) p dst sz ainst cond_lbl st (SUC k) ee t))
+    (\res ee r. ?ex. res = INR ex /\
+      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+Proof
+  strip_tac >> drule_all immutable_round_prepare >> strip_tac >>
+  irule counted_array_round_from_body >>
+  qexistsl_tac [`bc`, `bc'`, `entry`, `incr_lbl`, `s2`, `sb0`, `sb1`] >>
+  simp[] >> rpt strip_tac
+  >- (irule (SRULE [] counted_array_body_finish) >>
+      simp[eval_operand_def] >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[]) >>
+  gvs[] >> metis_tac[]
+QED
+
+(* The entry callback is exactly the output interface of immutable_array_entry_run.
+   It is quantified at the true condition successor, so source observation and
+   location-aware copy execution remain separate from counted control flow. *)
+Theorem immutable_for_loop_counted:
+  LENGTH vs < dimword (:256) /\
+  lookup_block cond_lbl func.fn_blocks =
+    SOME <|bb_label := cond_lbl; bb_instructions :=
+      [mk_inst j1 EQ [Var idx; lvo] [dv];
+       mk_inst j2 JNZ [Var dv; Label exit_lbl; Label bod] []]|> /\
+  lookup_block incr_lbl func.fn_blocks =
+    SOME <|bb_label := incr_lbl; bb_instructions :=
+      [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+       mk_inst i2 ASSIGN [Var nv] [idx];
+       mk_inst i3 JMP [Label cond_lbl] []]|> /\
+  (!scopes. not_local_ptr cenv scopes idx /\ not_local_ptr cenv scopes nv /\
+    not_local_ptr cenv scopes dv) /\
+  dv <> idx /\ dv <> p /\ p <> idx /\ p <> nv /\
+  (!x. not_fresh_at caller x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv /\ x <> dv) /\
+  not_fresh_at sb0 idx /\ not_fresh_at sb0 p /\
+  (!x. lvo = Var x ==> not_fresh_at caller x) /\ (!l. lvo <> Label l) /\
+  eval_operand lvo old = SOME (n2w (LENGTH vs)) /\
+  stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = (bc',sb1) /\
+  fn_has_code sb0 sb1 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved bc sb0 /\ ~block_is_terminated sb0 /\
+  (~block_is_terminated sb1 ==>
+    sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
+    sj.cs_current_insts = sb1.cs_current_insts ++
+      [mk_inst sb1.cs_next_id JMP [Label incr_lbl] []] /\ fn_has_code sb1 sj func) /\
+  (!j ei s. array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off))
+      (n2w off) p dst sz ainst bod st j ei s /\ j < LENGTH vs ==>
+    ?s2. s2.vs_current_bb = sb0.cs_current_bb /\
+      s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s2.vs_halted /\
+      stmt_state_rel ctx func bc cx
+        (ei with scopes := (FEMPTY |+ (id,
+          <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes) s2 /\
+      ret_pc_ok bc sb0 s2 /\ ret_pc_ok cenv st s2 /\
+      lookup_var idx s2 = SOME (n2w j) /\ lookup_var p s2 = SOME dst /\
+      FLOOKUP s2.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
+      array_caller_frame caller s s2 /\ gas_marked_path F ctx func s 0 (OK s2)) /\
+  (!ei j. P ei /\ lookup_scopes id ei.scopes = NONE /\ j < LENGTH vs ==>
+    cenv_top_ext cenv bc ((FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes) /\
+    stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+      (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
+      (ei with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes;
+        gas_obs := []|>) /\
+    (!gs r es2. eval_stmts cx stmts
+      (ei with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes;
+        gas_obs := gs|>) = (r,es2) ==>
+      stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
+      ?sc rest. es2.scopes = sc :: rest /\
+        (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+        ((r = INL () \/ r = INR ContinueException) ==>
+          P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE))) /\
+  k <= LENGTH vs /\
+  array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+    p dst sz ainst cond_lbl st k es cc /\ array_caller_frame caller old cc /\
+  gas_admissible (eval_for cx tv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (eval_for cx tv id stmts (DROP k vs)) (es,cc)
+    (\res ee t. res = INL () /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
+      ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
+      array_caller_frame caller old t)
+    (\res ee r. ?ex. res = INR ex /\
+      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+Proof
+  strip_tac >>
+  `!s. array_caller_frame caller old s ==>
+    eval_operand lvo s = SOME (n2w (LENGTH vs))` by
+    (rpt strip_tac >> Cases_on `lvo` >>
+     fs[eval_operand_def, array_caller_frame_def] >> metis_tac[]) >>
+  qabbrev_tac `Inv = \j ei s.
+    array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+      p dst sz ainst cond_lbl st j ei s /\ array_caller_frame caller old s` >>
+  qabbrev_tac `Done = \ei s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
+    ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ei s /\
+    array_caller_frame caller old s` >>
+  qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
+  `(!j ei s. j < LENGTH vs /\ Inv j ei s /\
+      gas_admissible (eval_for cx tv id stmts (DROP j vs)) (stmt_res_ok lctx) ei ==>
+      gas_outcome F (cx_tops cx) (ctx,func)
+        (do push_scope_with_var id tv (EL j vs);
+            finally (try (do eval_stmts cx stmts; return F od)
+              handle_loop_exception) pop_scope od) (ei,s)
+        (\res ee t. ?broke. res = INL broke /\
+          (broke ==> Done ee t) /\ (~broke ==> Inv (SUC j) ee t))
+        (\res ee r. ?ex. res = INR ex /\ R ex ee r)) /\
+    (!ei s. Inv (LENGTH vs) ei s ==>
+      ?t. gas_marked_path F ctx func s 0 (OK t) /\ Done (ei with gas_obs := []) t)` by
+    (conj_tac >- suspend "round" >> suspend "last") >>
+  drule eval_for_rounds >>
+  disch_then (qspecl_then [`k`, `es`, `cc`] mp_tac) >>
+  simp[Abbr `Inv`, Abbr `Done`, Abbr `R`]
+QED
+
+Resume immutable_for_loop_counted[last]:
+  rpt gen_tac >> simp[Abbr `Inv`, Abbr `Done`] >> strip_tac >>
+  `eval_operand lvo s = SOME (n2w (LENGTH vs))` by metis_tac[] >>
+  `not_local_ptr cenv ei.scopes dv` by metis_tac[] >>
+  `!x. not_fresh_at caller x ==> x <> dv` by metis_tac[] >>
+  qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ k _ _` kall_tac >>
+  qpat_x_assum `array_caller_frame caller old cc` kall_tac >>
+  `~not_fresh_at caller dv` by metis_tac[] >>
+  drule_all (SRULE [] (Q.INST [`saved_base` |-> `Lit (n2w off)`]
+    (SPEC_ALL immutable_loop_last))) >> simp[]
+QED
+
+Resume immutable_for_loop_counted[round]:
+  rpt gen_tac >> simp[Abbr `Inv`] >> strip_tac >>
+  `eval_operand lvo s = SOME (n2w (LENGTH vs))` by metis_tac[] >>
+  `not_local_ptr cenv ei.scopes dv` by metis_tac[] >>
+  qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ k _ _` kall_tac >>
+  qpat_x_assum `array_caller_frame caller old cc` kall_tac >>
+  drule_all (SRULE [] (Q.INST [`saved_base` |-> `Lit (n2w off)`]
+    (SPEC_ALL immutable_condition_boundary))) >> simp[] >> strip_tac >>
+  `array_caller_frame caller s next` by
+    (fs[array_caller_frame_def] >> metis_tac[]) >>
+  qpat_assum `!j ei s. _` drule_all >> strip_tac >>
+  `gas_marked_path F ctx func s 0 (OK s2)` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  `array_caller_frame caller s s2` by
+    (irule array_caller_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  `P ei /\ lookup_scopes id ei.scopes = NONE` by fs[array_loop_inv_def] >>
+  qpat_assum `!ei j. _` drule_all >> strip_tac >>
+  qabbrev_tac `entry = ei with <|scopes := (FEMPTY |+ (id,
+    <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes;
+    gas_obs := []|>` >>
+  `gas_admissible (eval_stmts cx stmts)
+    (stmt_res_ok (InLoop exit_lbl incr_lbl)) entry` by
+    (simp[Abbr `entry`] >> qpat_x_assum `!gs r es2. _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[gas_admissible_def] >> metis_tac[]) >>
+  `entry = ei with <|scopes := (FEMPTY |+ (id,
+    <|assignable := F; type := tv; value := EL j vs; popped := []|>)) :: ei.scopes;
+    gas_obs := []|>` by simp[Abbr `entry`] >>
+  `!scopes. not_local_ptr cenv scopes idx /\ not_local_ptr cenv scopes nv` by metis_tac[] >>
+  `!x. not_fresh_at caller x ==> not_fresh_at sb0 x /\ x <> idx /\ x <> nv` by metis_tac[] >>
+  `cenv_top_ext cenv bc entry.scopes` by simp[Abbr `entry`] >>
+  `!gs r es2. eval_stmts cx stmts (entry with gas_obs := gs) = (r,es2) ==>
+    stmt_res_ok (InLoop exit_lbl incr_lbl) r /\
+    ?sc rest. es2.scopes = sc :: rest /\
+      (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+      ((r = INL () \/ r = INR ContinueException) ==>
+        P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)` by
+    (simp[Abbr `entry`] >> metis_tac[]) >>
+  drule_all immutable_for_round_counted >>
+  disch_then (qspec_then `off` assume_tac) >>
+  simp[Abbr `R`] >> irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  simp[Abbr `Done`] >> rpt strip_tac >>
+  `array_caller_frame caller old t` by
+    (irule array_caller_frame_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[]
+QED
+Finalise immutable_for_loop_counted
