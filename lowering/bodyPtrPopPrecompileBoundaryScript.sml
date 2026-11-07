@@ -5,8 +5,11 @@ Ancestors bodyPtrPopClampBoundary bodyPtrPopCompilerBoundary
   builtinMisc compileEnv emitHelper venomInst list
 Libs monadsyntax
 
+(* Retain the public name, but share the complete two-op guard with CALL
+   (Send) and EXTCODESIZE. ISZERO is excluded because it can finish guard4. *)
 Theorem pop_staticcall_guard_template:
-  MAP (\i. i.inst_opcode) t = [STATICCALL;ASSERT] /\
+  opc <> SUB /\ opc <> ISZERO /\
+  MAP (\i. i.inst_opcode) t = [opc;ASSERT] /\
   pop_boundary_clean p ==> pop_boundary_clean (p ++ t)
 Proof
   simp[MAP_EQ_CONS] >> rpt strip_tac >> gvs[] >>
@@ -15,8 +18,8 @@ Proof
 QED
 
 Theorem pop_staticcall_guard_boundary:
-  pop_comp_boundary sa /\
-  (do success <- emit_op STATICCALL args; emit_void ASSERT [success] od) sa = (r,sb) ==>
+  opc <> SUB /\ opc <> ISZERO /\ pop_comp_boundary sa /\
+  (do success <- emit_op opc args; emit_void ASSERT [success] od) sa = (r,sb) ==>
   pop_comp_boundary sb
 Proof
   simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
