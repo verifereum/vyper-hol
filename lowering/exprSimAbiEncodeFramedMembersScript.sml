@@ -740,3 +740,51 @@ Proof
   qpat_x_assum `window_alloca_sites func (frag_ids ready en) SUBSET _` mp_tac >>
   simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
 QED
+
+Theorem abi_encode_framed_members_remaining_run:
+  !rest ctx func infos at ats avs k src dst dp site slot sb cap d st en s out.
+  window_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ DROP k infos = rest /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> abi_encode_framed_contract ei) /\
+  compile_abi_encode_complex_elems dst src rest
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      window_members_inv ctx func infos at ats avs (LENGTH infos) src dst dp site slot
+        sb cap d en en t /\ abi_encode_exec_frame func s t
+Proof
+  Induct_on `rest`
+  >- (rpt gen_tac >>
+      simp_tac bool_ss [Once abiEncoderTheory.compile_abi_encode_child_def,
+        comp_return_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      `k = LENGTH infos` by
+        (qpat_assum `window_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp_tac bool_ss [window_members_inv_def, window_member_prefix_def] >>
+         strip_tac >> fs[DROP_EQ_NIL] >> decide_tac) >>
+      gvs[] >> qexists_tac `s` >> asm_rewrite_tac[] >>
+      reverse conj_tac >- simp[abi_encode_exec_frame_refl] >>
+      irule window_phase_refl >>
+      qpat_assum `window_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp_tac bool_ss [window_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
+  `abi_encode_framed_contract h0` by metis_tac[MEM] >>
+  drule_all abi_encode_framed_members_cons_run >> strip_tac >>
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> abi_encode_framed_contract ei` by metis_tac[MEM] >>
+  first_x_assum drule_all >> strip_tac >>
+  `abi_encode_exec_frame func s t` by
+    (irule abi_encode_exec_frame_trans >> qexists_tac `u` >> asm_rewrite_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  irule window_phase_chain >>
+  qexistsl_tac [`window_alloca_sites func (frag_ids st en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `mid`,
+    `window_alloca_sites func (frag_ids mid en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `window_alloca_sites func (frag_ids mid en) SUBSET _` mp_tac >>
+  simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
+QED
