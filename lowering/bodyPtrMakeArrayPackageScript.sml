@@ -132,8 +132,9 @@ Theorem literal_empty_tuple_loop:
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
@@ -147,7 +148,7 @@ Theorem literal_empty_tuple_loop:
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   strip_tac >> irule literal_tuple_loop_outcome_ptr >>
-  goal_assum (drule_at Any) >> simp[] >> qexists `sm` >> simp[]
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem literal_allocated_tuple_outcome:
@@ -163,8 +164,9 @@ Theorem literal_allocated_tuple_outcome:
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   out = Var root /\
   ?addr. addr + type_memory_size_list tvs < dimword(:256) /\
@@ -242,8 +244,9 @@ QED
 
 Theorem literal_tuple_vv_sim_ptr:
   expr_body_pre ce cx env (Builtin ann (MakeArray NONE bnd) args) es /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray NONE bnd) args) es
 Proof
@@ -258,7 +261,8 @@ Proof
      simp[wordsTheory.dimword_def] >> decide_tac) >>
   `?root. ba.buf_operand = Var root` by
     metis_tac[bodyPtrMakeArrayAllocBufferTheory.alloc_buffer_emitted] >>
-  fs[] >> drule_all literal_allocated_tuple_outcome >> strip_tac >> gvs[] >>
+  fs[] >> drule_all literal_allocated_tuple_outcome >>
+  disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >>
   simp[literal_tuple_action, combinTheory.o_DEF] >>
   drule (gas_outcome_ptr_return_map
     |> Q.GEN `f` |> Q.ISPEC `\(vs : value list). Value (ArrayV (TupleV vs))`
@@ -297,8 +301,9 @@ Theorem literal_empty_array_loop:
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
@@ -314,7 +319,8 @@ Theorem literal_empty_array_loop:
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   strip_tac >> irule literal_array_loop_outcome_ptr >>
-  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  simp[] >> (conj_tac >- metis_tac[]) >>
+  goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`et`, `header`, `0`] >> simp[]
 QED
 
@@ -403,8 +409,9 @@ Theorem literal_allocated_array_outcome:
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   out = Var root /\
   ?addr. addr + capacity < dimword(:256) /\
@@ -532,8 +539,9 @@ QED
 
 Theorem literal_array_vv_sim_ptr:
   expr_body_pre ce cx env (Builtin ann (MakeArray (SOME et) bnd) args) es /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   expr_vv_sim_ptr d ctx PG func ce cx ty (Builtin ann (MakeArray (SOME et) bnd) args) es
 Proof
@@ -556,9 +564,9 @@ Proof
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >> simp[] >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >> simp[] >>
   disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >> simp[] >>
-  disch_then (qspec_then `env` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`tops`, `env`] mp_tac) >> simp[] >>
   disch_then (qspec_then `PG` mp_tac) >>
-  (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >>
+  strip_tac >> gvs[] >>
   `eval_expr cx (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args) =
      bind (eval_exprs cx args) (return o (\vs. Value (ArrayV (make_array_value tv bnd vs))))` by
     (irule literal_array_action >> simp[]) >>

@@ -7,6 +7,7 @@ Ancestors
   fragGasPathPtr gasExemptCert gasSummary vyperState exprSimHyps
   exprSimWordArgs bodyPtrMakeArrayConsInvariant valueEncoding argsTailPtr
   assignTuplePtrBodyReady freshWrites list option fragExec
+  bodyPtrMakeArrayChildren
   exprSimAggregateLoops exprSimAggregateEncoding
 
 Theorem literal_tuple_cons_compile:
@@ -128,9 +129,9 @@ Theorem literal_tuple_loop_outcome_ptr:
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\
-    expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
@@ -168,7 +169,8 @@ Resume literal_tuple_loop_outcome_ptr[cons]:
   `fn_has_code si ss func /\ fn_has_code ss sb func` by
     metis_tac[fn_has_code_split, ci_mono_def] >>
   `expr_body_pre ce cx env h es /\
-   expr_vv_sim_ptr d ctx PG func ce cx (expr_type h) h es` by metis_tac[] >>
+   expr_vv_sim_ptr d ctx PG func ce cx (expr_type h) h es` by
+    metis_tac[literal_body_child_vv] >>
   `gas_admissible (eval_expr cx h) expr_vv_res_ok es` by
     metis_tac[expr_body_pre_vv_gas_admissible] >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
@@ -195,6 +197,7 @@ Resume literal_tuple_loop_outcome_ptr[cons]:
   conj_tac >- (simp[] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `expr_sim_inv ce cx env ee` by metis_tac[literal_marked_value_inv] >>
+  `body_exprs_ptr_ok cx args` by metis_tac[literal_marked_children_tail] >>
   suspend "tail"
 QED
 Resume literal_tuple_loop_outcome_ptr[tail]:
@@ -244,9 +247,9 @@ Theorem literal_array_loop_outcome_ptr:
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
+  body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\
-    expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e st) /\
+    expr_body_pre ce cx env e st) /\
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
@@ -266,5 +269,6 @@ Proof
   disch_then (qspecl_then [`header`, `compile_expr`, `ce`, `Var root`, `idx`] assume_tac) >>
   irule literal_tuple_loop_outcome_ptr >>
   simp[] >> conj_tac >- metis_tac[OPT_MMAP_uniform_map] >>
+  conj_tac >- metis_tac[] >>
   qexists `si` >> gvs[arithmeticTheory.ADD_COMM]
 QED
