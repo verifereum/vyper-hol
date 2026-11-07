@@ -1049,3 +1049,60 @@ Proof
   simp[] >> strip_tac >>
   first_x_assum drule >> simp[]
 QED
+
+Theorem analyzed_single_pred_physical_live_boundary:
+  !fn pred pred_bb lbl bb after incoming.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 /\
+    native_live_boundary fn pred_bb (LENGTH pred_bb.bb_instructions) after /\
+    incoming.ps_stack = after.ps_stack /\ incoming.ps_spilled = after.ps_spilled ==>
+    native_live_boundary fn bb 0 incoming
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\ pred_bb.bb_label = pred` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `NULL (collect_phis bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+     first_x_assum (qspec_then `bb` mp_tac) >> simp[]) >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule_all fnPlanLineageLivenessTheory.analyzed_live_out_edge_subset >>
+  simp[livenessDefsTheory.input_vars_from_def, pred_setTheory.SUBSET_DEF] >> disch_tac >>
+  gvs[native_live_boundary_def] >> metis_tac[]
+QED
+
+Theorem analyzed_single_pred_physical_clean_live_boundary:
+  !fn pred pred_bb lbl bb after incoming ops cleaned.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 /\
+    native_live_boundary fn pred_bb (LENGTH pred_bb.bb_instructions) after /\
+    incoming.ps_stack = after.ps_stack /\ incoming.ps_spilled = after.ps_spilled /\
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming = (ops,cleaned) ==>
+    native_live_boundary fn bb 0 cleaned
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  drule_all analyzed_single_pred_physical_live_boundary >> disch_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+    LIST_ELEM_COUNT (Var v) cleaned.ps_stack +
+      (if Var v IN FDOM cleaned.ps_spilled then 1 else 0) =
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0)` by
+    (rpt strip_tac >> drule_all analyzed_single_pred_cleanup_resource >> simp[]) >>
+  gvs[native_live_boundary_def] >> rpt strip_tac >>
+  Cases_on `Var v IN FDOM cleaned.ps_spilled` >> simp[] >>
+  `LIST_ELEM_COUNT (Var v) cleaned.ps_stack =
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+    (if Var v IN FDOM after.ps_spilled then 1 else 0)` by
+    (qpat_x_assum `!v. _ ==> _ = _` drule >> simp[]) >>
+  `MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled` by metis_tac[] >>
+  `0 < LIST_ELEM_COUNT (Var v) cleaned.ps_stack` by
+    (Cases_on `Var v IN FDOM after.ps_spilled` >>
+     gvs[] >> metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]) >>
+  metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]
+QED
