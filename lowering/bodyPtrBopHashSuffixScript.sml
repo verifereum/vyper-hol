@@ -141,6 +141,39 @@ Proof
   qexistsl_tac [`G`, `s`, `tn`] >> simp[]
 QED
 
+Theorem bop_hash_compile_ptr_cursor_full:
+  compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
+  fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  stmt_state_rel ctx func cenv cx es (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
+  expr_val_at cenv cx ty sa sb es v (Var p)
+    (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
+  ptr_val_ok cx ty v (Var p) G tn (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  lookup_var p (s with vs_inst_idx := LENGTH sc.cs_current_insts) = SOME w /\
+  ((?bs. v = BytesV bs /\ LENGTH bs < dimword(:256) /\
+       tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k)))) \/
+   (?str. v = StringV str /\ LENGTH str < dimword(:256))) /\
+  run_inst_seq (emitted_insts sc sd) (s with vs_inst_idx := LENGTH sc.cs_current_insts) = OK t ==>
+  ?G' tn'.
+    gas_path_ptr D 0 ctx fn PG G tn (s with vs_inst_idx := LENGTH sc.cs_current_insts)
+      0 G' tn' (OK (t with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
+    tn'.t_imm = tn.t_imm /\
+    op_prov G' op = NONE /\ op_taint tn' op = {} /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    (!x. not_fresh_at sc x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule bop_hash_compile_layout >> strip_tac >>
+  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
+    (Q.INST [`s` |-> `u with vs_inst_idx := LENGTH sc.cs_current_insts`]
+      (SPEC_ALL bop_hash_compile_ptr_full)))) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+QED
+
 Theorem bop_hash_compile_ptr_cursor:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
   fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\ ~s.vs_halted /\
@@ -164,13 +197,8 @@ Theorem bop_hash_compile_ptr_cursor:
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule bop_hash_compile_layout >> strip_tac >>
-  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
-    (Q.INST [`s` |-> `u with vs_inst_idx := LENGTH sc.cs_current_insts`]
-      (SPEC_ALL bop_hash_compile_ptr)))) >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
-  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+  drule_all bop_hash_compile_ptr_cursor_full >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> metis_tac[]
 QED
 
 Theorem bop_hash_pair_ptr:
