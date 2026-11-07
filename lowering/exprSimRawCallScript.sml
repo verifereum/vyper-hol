@@ -957,7 +957,7 @@ Proof
   fs[] >> decide_tac
 QED
 
-Theorem raw_call_outbuf_zero_run[local]:
+Theorem raw_call_outbuf_zero_run:
   compile_raw_call_outbuf 0 sa = ((ov,op),sb) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
@@ -1133,7 +1133,7 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
 QED
 
-Theorem raw_call_outbuf_positive_run[local]:
+Theorem raw_call_outbuf_positive_run:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
   ((cap + 31) DIV 32) * 32 + 32 < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -3487,7 +3487,7 @@ Proof
             loweringHaltTheory.emit_inst_metadata, cs_extends_trans]
 QED
 
-Theorem raw_call_oracle_emit_run_aged[local]:
+Theorem raw_call_oracle_emit_run_aged:
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sb) /\
@@ -3948,7 +3948,7 @@ Proof
   simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
 QED
 
-Theorem raw_call_oracle_frame[local]:
+Theorem raw_call_oracle_frame:
   wb_frame cenv es sa s0 s /\
   t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
   t.vs_memory = (write_memory_with_expansion dst payload s).vs_memory /\
