@@ -769,5 +769,17 @@ Theorem lower_dload_stage_taint:
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     taint_within D C' vs
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.INST [`CS` |-> `C`, `CT` |-> `C'`, `vs0` |-> `vs`]
+    ld_reachable_request_observation) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  mp_tac (Q.INST [`CS` |-> `C`, `CT` |-> `C'`, `vs0` |-> `vs`]
+    ld_reachable_final_observation) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  rewrite_tac[taint_within_def] >> conj_tac >> first_assum ACCEPT_TAC
 QED
+
+(* Build-time integrity audit of the assembled theorem and its dependencies. *)
+val _ = let val (oracles, axioms) = Tag.dest_tag (Thm.tag lower_dload_stage_taint)
+  in if null axioms andalso List.all (fn s => s = "DISK_THM") oracles
+     then () else raise Fail "lower_dload_stage_taint: untrusted dependencies" end;
