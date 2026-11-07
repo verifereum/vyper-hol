@@ -76,8 +76,9 @@ Theorem slot_copy_step_load[local]:
   step_inst_base (mk_inst id load [a] [out]) s =
     OK (update_var out (slot_copy_word load s x) s)
 Proof
-  strip_tac >> gvs[step_inst_base_def, mk_inst_def, exec_read1_def,
-    slot_copy_word_def]
+  strip_tac >> gvs[] >> simp[mk_inst_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       exec_read1_def, slot_copy_word_def]
 QED
 
 Theorem slot_copy_step_store[local]:
@@ -218,7 +219,7 @@ Proof
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
   simp[slot_copy_cond_insts_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   simp[slot_copy_cond_result_def, eval_operand_lit_local,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, bool_to_word_def] >>
@@ -430,10 +431,10 @@ Proof
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def, exec_pure2_def,
+       mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
        eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def,
+       mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs,
        eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def,
        slot_copy_cond_result_def, jump_to_def, bool_to_word_def] >>
