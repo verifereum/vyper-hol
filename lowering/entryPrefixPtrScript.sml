@@ -1,6 +1,6 @@
 (* Actual endpoint transport for the external entry prefix. *)
 Theory entryPrefixPtr
-Ancestors entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
+Ancestors entryDispatchCounters entryDispatchPtr ptrSafeRun ptrDiscipline moduleLoweringProps
   moduleLowering fragExec venomExecSemantics venomInst venomState list
   finite_map words contextCodegenRel codegenRel compileEnv emitHelperProps
   exprLoweringProps typedCopyArrayPtr
@@ -272,3 +272,246 @@ Proof
 QED
 
 
+Theorem compile_selector_dispatch_linear_ptr_endpoint:
+  compile_selector_dispatch_linear selectors fallback st = ((),st') /\
+  fn_has_code st st' fn /\
+  EVERY (\(sel,lbl). sel < 2 ** 32) selectors /\
+  LENGTH ss.vs_call_ctx.cc_calldata < dimword (:256) /\
+  fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo ss /\ (ctx_has_dalloca ctx ==> allocas_below_fmp ss) ==>
+  ?tt G' tn'.
+    vars_pc_only ss tt /\ fresh_vars_wrt st' tt /\ ~tt.vs_halted /\
+    tt.vs_current_bb = linear_dispatch_target ss.vs_call_ctx.cc_calldata selectors fallback /\
+    tt.vs_inst_idx = 0 /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G' tn' tt) ==>
+        !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss
+Proof
+  strip_tac >> drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
+  qabbrev_tac `cd = ss.vs_call_ctx.cc_calldata` >>
+  `!fuel. step_inst fuel ctx
+     (mk_inst st.cs_next_id CALLDATASIZE []
+       [STRING #"%" (toString st.cs_next_var)]) ss =
+     OK (update_var (STRING #"%" (toString st.cs_next_var)) (n2w (LENGTH cd)) ss)` by
+    simp[Abbr `cd`, step_inst_non_invoke, mk_inst_def,
+         step_inst_base_def, exec_read0_def] >>
+  drule dispatch_scalar_update_ptr_endpoint >>
+  disch_then (qspecl_then [`fn`, `b0`] mp_tac) >>
+  disch_then (qspecl_then [`st`, `st with cs_next_var := SUC st.cs_next_var`,
+    `lo`, `PG`, `G`, `tn`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `vars_pc_only ss u1` >>
+  rename1 `op_taint tn1 (Var _) = {}` >>
+  rename1 `G1 = step_prov PG G _ _` >>
+  qpat_x_assum `u1 = _` kall_tac >>
+  qpat_x_assum `G1 = _` kall_tac >>
+  qpat_x_assum `tn1 = _` kall_tac >>
+  suspend "lt"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[lt]:
+  `!fuel. step_inst fuel ctx
+     (mk_inst (st.cs_next_id + 1) LT
+       [Var (STRING #"%" (toString st.cs_next_var)); Lit 4w]
+       [STRING #"%" (toString (st.cs_next_var + 1))]) u1 =
+     OK (update_var (STRING #"%" (toString (st.cs_next_var + 1)))
+       (bool_to_word (LENGTH cd < 4)) u1)` by
+    simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+         exec_pure2_def, eval_operand_def, dimword_def] >>
+  drule dispatch_scalar_update_ptr_endpoint >>
+  disch_then (qspecl_then [`fn`, `b0`] mp_tac) >>
+  disch_then (qspecl_then [`st with cs_next_var := SUC st.cs_next_var`,
+    `st with cs_next_var := st.cs_next_var + 2`, `lo`, `PG`, `G1`, `tn1`] mp_tac) >>
+  (impl_tac >- fs[op_taint_def, arithmeticTheory.ADD1]) >> strip_tac >>
+  rename1 `vars_pc_only u1 u2` >>
+  rename1 `op_taint tn2 (Var (STRING #"%" (toString (st.cs_next_var + 1)))) = {}` >>
+  rename1 `G2 = step_prov PG G1 _ _` >>
+  suspend "iszero"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[iszero]:
+  qpat_x_assum `u2 = _` kall_tac >>
+  qpat_x_assum `G2 = _` kall_tac >>
+  qpat_x_assum `tn2 = _` kall_tac >>
+  `!fuel. step_inst fuel ctx
+     (mk_inst (st.cs_next_id + 2) ISZERO
+       [Var (STRING #"%" (toString (st.cs_next_var + 1)))]
+       [STRING #"%" (toString (st.cs_next_var + 2))]) u2 =
+     OK (update_var (STRING #"%" (toString (st.cs_next_var + 2)))
+       (bool_to_word (4 <= LENGTH cd)) u2)` by
+    (simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def, exec_pure1_def] >>
+     Cases_on `LENGTH cd < 4` >> simp[bool_to_word_def]) >>
+  drule dispatch_scalar_update_ptr_endpoint >>
+  disch_then (qspecl_then [`fn`, `b0`] mp_tac) >>
+  disch_then (qspecl_then [`st with cs_next_var := st.cs_next_var + 2`,
+    `st with cs_next_var := st.cs_next_var + 3`, `lo`, `PG`, `G2`, `tn2`] mp_tac) >>
+  (impl_tac >- fs[arithmeticTheory.ADD1]) >> strip_tac >>
+  rename1 `vars_pc_only u2 u3` >>
+  rename1 `op_taint tn3 (Var (STRING #"%" (toString (st.cs_next_var + 2)))) = {}` >>
+  rename1 `G3 = step_prov PG G2 _ _` >>
+  qpat_x_assum `u3 = _` kall_tac >>
+  qpat_x_assum `G3 = _` kall_tac >>
+  qpat_x_assum `tn3 = _` kall_tac >>
+  `vars_pc_only ss u3` by metis_tac[vars_pc_only_trans] >>
+  suspend "branch"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[branch]:
+  drule compile_selector_dispatch_linear_next_var_exact >> strip_tac >>
+  `st.cs_next_var + 5 <= st'.cs_next_var` by simp[] >>
+  Cases_on `4 <= LENGTH cd`
+  >- suspend "load"
+  >> suspend "short"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[short]:
+  qabbrev_tac `tt = jump_to fallback u3` >>
+  qexistsl_tac [`tt`, `entry_prov fn tt G3`, `entry_taint_vars fn tt tn3`] >>
+  `fresh_vars_wrt st' tt` by
+    (simp[Abbr `tt`, control_moves_keep_vars] >>
+     irule fresh_vars_wrt_mono >>
+     qexists_tac `st with cs_next_var := st.cs_next_var + 3` >> simp[]) >>
+  simp[entry_taint_vars_frame, linear_dispatch_target_short, Abbr `cd`] >>
+  `vars_pc_only ss tt` by simp[Abbr `tt`, vars_pc_only_jump_to] >>
+  simp[Abbr `tt`, jump_to_def] >>
+  rpt strip_tac >>
+  `ptr_safe_run D lo fuel ctx fn PG G3 tn3 u3` suffices_by metis_tac[] >>
+  irule ptr_safe_cond_jump_continuation >>
+  simp[] >>
+  qexistsl_tac [`st.cs_next_id + 3`, `fallback`,
+    `Var (STRING #"%" (toString (st.cs_next_var + 2)))`,
+    `bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata)`, `d`] >>
+  simp[bool_to_word_def, jump_to_def]
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[load]:
+  qabbrev_tac `s4 = jump_to d u3` >>
+  `entry_prov fn s4 G3 = G3 /\ entry_taint_vars fn s4 tn3 = tn3` by
+    (irule entry_ghost_no_phi >> simp[Abbr `s4`, jump_to_def]) >>
+  `vars_pc_only ss s4` by simp[Abbr `s4`, vars_pc_only_jump_to] >>
+  `s4.vs_current_bb = d /\ s4.vs_inst_idx = 0 /\ ~s4.vs_halted /\
+   s4.vs_call_ctx.cc_calldata = cd /\ allocas_from lo s4 /\
+   (ctx_has_dalloca ctx ==> allocas_below_fmp s4) /\
+   fresh_vars_wrt (st with cs_next_var := st.cs_next_var + 3) s4` by
+    (simp[Abbr `s4`, jump_to_def, control_moves_keep_vars] >>
+     fs[vars_pc_only_def, venom_state_component_equality,
+        allocas_from_def, allocas_below_fmp_def, Abbr `cd`] >> metis_tac[]) >>
+  qabbrev_tac `w = word_of_bytes T (0w:bytes32)
+                    (TAKE 32 (DROP 0 cd ++ REPLICATE 32 0w))` >>
+  `!fuel. step_inst fuel ctx
+     (mk_inst (st.cs_next_id + 4) CALLDATALOAD [Lit 0w]
+       [STRING #"%" (toString (st.cs_next_var + 3))]) s4 =
+     OK (update_var (STRING #"%" (toString (st.cs_next_var + 3))) w s4)` by
+    simp[Abbr `w`, step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+         exec_read1_def, eval_operand_def] >>
+  drule dispatch_scalar_update_ptr_endpoint >>
+  disch_then (qspecl_then [`fn`, `bd`] mp_tac) >>
+  disch_then (qspecl_then [`st with cs_next_var := st.cs_next_var + 3`,
+    `st with cs_next_var := st.cs_next_var + 4`, `lo`, `PG`, `G3`, `tn3`] mp_tac) >>
+  (impl_tac >- simp[op_taint_def]) >> strip_tac >>
+  rename1 `vars_pc_only s4 u5` >>
+  rename1 `op_taint tn5 (Var (STRING #"%" (toString (st.cs_next_var + 3)))) = {}` >>
+  rename1 `G5 = step_prov PG G3 _ _` >>
+  qpat_x_assum `u5 = _` kall_tac >>
+  qpat_x_assum `G5 = _` kall_tac >>
+  qpat_x_assum `tn5 = _` kall_tac >>
+  suspend "shift"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[shift]:
+  `w >>> 224 = calldata_method_id cd` by
+    simp[Abbr `w`, calldataload_0_shr_224] >>
+  qpat_x_assum `Abbrev (w = _)` kall_tac >>
+  `!fuel. step_inst fuel ctx
+     (mk_inst (st.cs_next_id + 5) SHR
+       [Lit 224w; Var (STRING #"%" (toString (st.cs_next_var + 3)))]
+       [STRING #"%" (toString (st.cs_next_var + 4))]) u5 =
+     OK (update_var (STRING #"%" (toString (st.cs_next_var + 4)))
+       (calldata_method_id cd) u5)` by
+    (simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+          exec_pure2_def, eval_operand_def] >>
+     simp[dimword_def]) >>
+  drule dispatch_scalar_update_ptr_endpoint >>
+  disch_then (qspecl_then [`fn`, `bd`] mp_tac) >>
+  disch_then (qspecl_then [`st with cs_next_var := st.cs_next_var + 4`,
+    `q`, `lo`, `PG`, `G5`, `tn5`] mp_tac) >>
+  (impl_tac >- simp[op_taint_def]) >> strip_tac >>
+  rename1 `vars_pc_only u5 u6` >>
+  rename1 `op_taint tn6 (Var (STRING #"%" (toString (st.cs_next_var + 4)))) = {}` >>
+  rename1 `G6 = step_prov PG G5 _ _` >>
+  qpat_x_assum `u6 = _` kall_tac >>
+  qpat_x_assum `G6 = _` kall_tac >>
+  qpat_x_assum `tn6 = _` kall_tac >>
+  `vars_pc_only ss u6` by metis_tac[vars_pc_only_trans] >>
+  suspend "checks"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[checks]:
+  `!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G6 tn6 u6) ==>
+       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn ss` by
+    (rpt strip_tac >>
+     `!fuel. ptr_safe_run D lo fuel ctx fn PG G3 tn3 s4` by metis_tac[] >>
+     `!fuel. ptr_safe_blocks D lo fuel ctx fn PG G3 tn3 s4` by
+       (irule ptr_safe_blocks_from_phi_free_run >> simp[]) >>
+     `ptr_safe_run D lo fuel ctx fn PG G3 tn3 u3` suffices_by metis_tac[] >>
+     irule ptr_safe_cond_jump_continuation >> simp[] >>
+     qexistsl_tac [`st.cs_next_id + 3`, `fallback`,
+       `Var (STRING #"%" (toString (st.cs_next_var + 2)))`,
+       `bool_to_word (4 <= LENGTH cd)`, `d`] >>
+     simp[bool_to_word_def] >>
+     qpat_x_assum `!fuel. ptr_safe_blocks _ _ _ _ _ _ _ _ s4`
+       (qspec_then `fuel` mp_tac) >>
+     fs[Abbr `s4`]) >>
+  drule compile_selector_checks_next_var_exact >> strip_tac >>
+  `r.cs_next_var = st'.cs_next_var` by simp[] >>
+  drule compile_selector_checks_ptr_endpoint >>
+  disch_then (qspecl_then [`ctx`, `fn`, `u6`, `calldata_method_id cd`,
+    `lo`, `PG`, `G6`, `tn6`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  rename1 `vars_pc_only u6 t7` >>
+  rename1 `tn7.t_mem = tn6.t_mem` >>
+  `vars_pc_only ss t7` by metis_tac[vars_pc_only_trans] >>
+  `fresh_vars_wrt st' t7` by
+    (irule fresh_vars_wrt_mono >> qexists_tac `r` >> simp[]) >>
+  `linear_dispatch_target cd selectors fallback =
+     case selector_hit (calldata_method_id cd) selectors of
+       SOME l => l | NONE => fallback` by
+    (irule linear_dispatch_target_selector_hit >> simp[]) >>
+  Cases_on `selector_hit (calldata_method_id cd) selectors`
+  >- suspend "fallback"
+  >> suspend "hit"
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[hit]:
+  qexistsl_tac [`t7`, `G'`, `tn7`] >>
+  fs[Abbr `cd`] >> metis_tac[]
+QED
+
+Resume compile_selector_dispatch_linear_ptr_endpoint[fallback]:
+  fs[] >>
+  `allocas_from lo t7 /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t7)` by
+    (qpat_x_assum `vars_pc_only ss t7` mp_tac >>
+     qpat_x_assum `allocas_from lo ss` mp_tac >>
+     qpat_x_assum `ctx_has_dalloca ctx ==> allocas_below_fmp ss` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[vars_pc_only_def, venom_state_component_equality,
+          allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  qabbrev_tac `tt = jump_to fallback t7` >>
+  qexistsl_tac [`tt`, `entry_prov fn tt G'`, `entry_taint_vars fn tt tn7`] >>
+  `vars_pc_only ss tt` by simp[Abbr `tt`, vars_pc_only_jump_to] >>
+  `fresh_vars_wrt st' tt` by simp[Abbr `tt`, control_moves_keep_vars] >>
+  simp[Abbr `tt`, jump_to_def, entry_taint_vars_frame, Abbr `cd`] >>
+  rpt strip_tac >>
+  qpat_x_assum `!D. (!fuel. ptr_safe_run _ _ _ _ _ _ _ _ u6) ==> _`
+    (qspec_then `D` irule) >>
+  qpat_x_assum `!D. _ ==> !fuel. ptr_safe_run _ _ _ _ _ _ _ _ u6`
+    (qspec_then `D` irule) >>
+  simp[] >> gen_tac >>
+  irule ptr_safe_jump_exact_continuation >> simp[jump_to_def] >>
+  qexistsl_tac [`r.cs_next_id`, `fallback`] >> simp[]
+QED
+
+Finalise compile_selector_dispatch_linear_ptr_endpoint
