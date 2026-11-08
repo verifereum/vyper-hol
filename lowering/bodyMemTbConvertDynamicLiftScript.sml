@@ -9,7 +9,7 @@ Ancestors
   valueCopyBytes fragGasMode fragGasPath gasSummaryCompose vyperInterpreter
   exprSimDefs loweringPosts bodyMemTbConvertDynamicScalar
 
-Theorem dynamic_convert_mem_layout[local]:
+Theorem dynamic_convert_mem_layout:
   lower_value compile_expr cenv ty (TypeBuiltin ann Convert dst [e]) sa = (op,sb) /\
   is_bytestring_type (expr_type e) /\ is_word_type dst /\
   valid_conversion (expr_type e) dst /\

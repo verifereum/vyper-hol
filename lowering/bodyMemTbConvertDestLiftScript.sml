@@ -9,7 +9,7 @@ Ancestors
   gasSummary gasSummaryCompose fragGasMode fragGasPath vyperState
   vyperInterpreter loweringPosts
 
-Theorem bytestring_convert_mem_layout[local]:
+Theorem bytestring_convert_mem_layout:
   lower_value compile_expr cenv ty (TypeBuiltin ann Convert dst [e]) sa = (op,sb) /\
   valid_conversion (expr_type e) dst /\
   is_bytestring_type dst /\ is_bytestring_type (expr_type e) /\
@@ -286,7 +286,7 @@ QED
 
 Finalise bytestring_convert_capacity_outcome
 
-Theorem bytestring_convert_capacity_posts[local]:
+Theorem bytestring_convert_capacity_posts:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert ann [e]) es /\
   expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
     fin v op ss /\
@@ -313,7 +313,7 @@ Proof
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-Theorem bytestring_convert_stack_outcome[local]:
+Theorem bytestring_convert_stack_outcome:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert ann [e]) es /\
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (TypeBuiltin ann Convert ann [e])) (read_result cx)) (es,s0)
