@@ -258,8 +258,9 @@ Proof
     (drule_all gas_marked_path_then >> simp[]) >>
   qexistsl_tac [`u`, `w`] >> simp[] >>
   conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  `regions_disjoint p' k (w2n w) (32*n)` by
-    (fs[regions_disjoint_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qx_gen_tac `protected_addr` >> qx_gen_tac `protected_len` >> strip_tac >>
+  `protected_addr + protected_len <= lo` by metis_tac[] >>
+  `regions_disjoint protected_addr protected_len (w2n w) (32*n)` by
+    (simp[regions_disjoint_def] >> decide_tac) >>
   metis_tac[]
 QED
