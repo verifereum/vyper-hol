@@ -2,7 +2,7 @@
 Theory bodyMemAssignTupleLocalsPrep
 Ancestors
   bodyMemAssignTupleLocalsFacts bodyMemoryPreds bodySim bodyExprPreFacts
-  bodyRhsRoomMemory exprSimAggregateLayout vyperTypeArgFits
+  bodyRhsRoomMemory tupleRhsPostRoom exprSimAggregateLayout vyperTypeArgFits
   supportedStmtTraverse supportedStmts supportedExprs vyperTypeSystem
   vyperTypeEnv exprSimHyps exprSimHypsDefs exprSimDefs gasContext
   vyperTypeCallGraph vyperTypeInvariants gasOutcome exprSimMemDefs
@@ -197,7 +197,20 @@ Theorem tuple_rhs_located_mem:
         (\res ee r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `post_value_type c e = expr_type e`) >- cheat >>
+  reverse (Cases_on `post_value_type c e = expr_type e`)
+  >- (rpt gen_tac >> strip_tac >>
+      `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
+        metis_tac[body_expr_mem_ok_def] >>
+      drule_at (Pat `expr_vv_sim_mem _ _ _ _ _ _ _`)
+        changed_post_expr_sim_mem_room >>
+      disch_then (qspec_then `env` mp_tac) >>
+      disch_then (qspecl_then [`sa`, `sm`, `sb`, `vv`, `op`, `s0`] mp_tac) >>
+      impl_tac >- simp[] >> strip_tac >>
+      irule gas_outcome_post_mono >>
+      first_x_assum (irule_at (Pos last)) >>
+      simp[] >> rpt strip_tac >> gvs[] >>
+      rpt strip_tac >> qpat_x_assum `vv_location _ = _ ==> _` drule >>
+      disch_then drule >> strip_tac >> decide_tac) >>
   qpat_x_assum `post_value_type _ _ = _` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th] >> assume_tac th) >>
   qspecl_then [`tops`, `ctx`, `func`, `c`, `cx`, `env`, `e`, `es`, `ltv`, `etv`]
