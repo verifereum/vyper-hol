@@ -9,7 +9,7 @@ Libs
 
 val _ = hide "count";
 
-Theorem place_store_runtime_copy_code[local]:
+Theorem place_store_runtime_copy_code:
   (loc = LocStorage \/ loc = LocTransient) /\
   compile_word_copy_loop_op src dst count LocMemory loc ctor sa = (u,sb) /\
   fn_has_code sa sb func ==>
