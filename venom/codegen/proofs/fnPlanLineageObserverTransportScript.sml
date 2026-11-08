@@ -214,15 +214,15 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem prepare_params_plan_nondefining_resource_nonincrease:
+Theorem prepare_params_plan_resource_bound:
   !lv fn ps ops qs v.
-    prepare_params_plan lv fn ps = (ops,qs) /\
-    EVERY (\inst. v <> HD inst.inst_outputs)
-      (get_params (HD fn.fn_blocks).bb_instructions) ==>
+    prepare_params_plan lv fn ps = (ops,qs) ==>
     LIST_ELEM_COUNT (Var v) qs.ps_stack +
       (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
     LIST_ELEM_COUNT (Var v) ps.ps_stack +
-      (if Var v IN FDOM ps.ps_spilled then 1 else 0)
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) +
+      LIST_ELEM_COUNT (Var v) (MAP (\inst. Var (HD inst.inst_outputs))
+        (get_params (HD fn.fn_blocks).bb_instructions))
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `get_params (HD fn.fn_blocks).bb_instructions = []`
@@ -234,13 +234,53 @@ Proof
   disch_then (qspec_then `Var v` mp_tac) >>
   drule fnPlanLineageInventoryTheory.popmany_plan_resource_nonincrease >>
   disch_then (qspec_then `Var v` mp_tac) >>
+  fs[LIST_ELEM_COUNT_DEF] >> simp[FILTER_APPEND]
+QED
+
+Theorem prepare_params_plan_nondefining_resource_nonincrease:
+  !lv fn ps ops qs v.
+    prepare_params_plan lv fn ps = (ops,qs) /\
+    EVERY (\inst. v <> HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule prepare_params_plan_resource_bound >>
+  disch_then (qspec_then `v` mp_tac) >>
   `~MEM (Var v) (MAP (\inst. Var (HD inst.inst_outputs))
       (get_params (HD fn.fn_blocks).bb_instructions))` by
     (gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
   `LIST_ELEM_COUNT (Var v) (MAP (\inst. Var (HD inst.inst_outputs))
       (get_params (HD fn.fn_blocks).bb_instructions)) = 0` by
-    (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
-  fs[LIST_ELEM_COUNT_DEF] >> simp[FILTER_APPEND]
+    gvs[GSYM LIST_ELEM_COUNT_MEM] >> simp[]
+QED
+
+Theorem prepare_params_plan_fresh_output_resource_bound:
+  !lv fn ps ops qs v.
+    prepare_params_plan lv fn ps = (ops,qs) /\
+    ALL_DISTINCT (MAP (\inst. HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions)) /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule prepare_params_plan_resource_bound >>
+  disch_then (qspec_then `v` mp_tac) >>
+  `ALL_DISTINCT (MAP (\inst. Var (HD inst.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions))` by
+    (`MAP (\inst. Var (HD inst.inst_outputs))
+        (get_params (HD fn.fn_blocks).bb_instructions) =
+      MAP Var (MAP (\inst. HD inst.inst_outputs)
+        (get_params (HD fn.fn_blocks).bb_instructions))` by simp[MAP_MAP_o, combinTheory.o_DEF] >>
+     asm_rewrite_tac[] >> irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
+  drule fnPlanLineageInventoryTheory.all_distinct_elem_count_le_one >>
+  disch_then (qspec_then `Var v` mp_tac) >>
+  `LIST_ELEM_COUNT (Var v) ps.ps_stack = 0` by
+    gvs[GSYM LIST_ELEM_COUNT_MEM] >> simp[] >> decide_tac
 QED
 
 Theorem resource_zero_iff_absent:

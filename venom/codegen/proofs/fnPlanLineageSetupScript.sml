@@ -1329,6 +1329,33 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+Theorem native_inst_fresh_output_resource_bound:
+  !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
+    inst_wf inst /\ inst.inst_opcode <> JMP /\ inst.inst_opcode <> PHI /\
+    ~is_param_opcode inst.inst_opcode /\ ALL_DISTINCT inst.inst_outputs /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+    ~MEM (Var v) (compute_operands inst) /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_inst_plan lv dfg cfg fn inst nl halting term lbl ps = SOME (ops,qs)
+    ==> LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (drule_all inst_wf_offset_shape >> strip_tac >>
+      gvs[generate_inst_plan_def, generate_offset_plan_def,
+        stackModelTheory.stack_push_def, SNOC_APPEND,
+        elem_count_append, LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM] >>
+      gvs[LIST_ELEM_COUNT_DEF] >> IF_CASES_TAC >> gvs[] >> decide_tac) >>
+  Cases_on `inst.inst_opcode = NOP`
+  >- (gvs[generate_inst_plan_def, GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  irule native_regular_fresh_output_resource_bound >>
+  goal_assum (drule_at Any) >>
+  gvs[generate_inst_plan_def, AllCaseEqs()] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem native_inst_observer_upper:
   !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
     inst_wf inst /\ inst.inst_opcode <> JMP /\ inst.inst_opcode <> PHI /\
