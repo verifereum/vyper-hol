@@ -42,6 +42,13 @@ Theorem word_args_compose_sim_ptr:
   expr_sim_ptr d ctx PG func cenv cx ty (Builtin ann bt args) es
 Proof
   strip_tac >>
+  `well_typed_builtin_app ann bt (MAP expr_type args)` by
+    fs[expr_body_pre_def, Once well_typed_expr_def] >>
+  `bt <> Bop In /\ bt <> Bop NotIn` by
+    (conj_tac >> CCONTR_TAC >> gvs[well_typed_builtin_app_def] >>
+     Cases_on `args` >> gvs[] >> rename1 `LENGTH tail = 1` >>
+     Cases_on `tail` >> gvs[] >>
+     gvs[well_typed_binop_def]) >>
   `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)` by suspend "pre" >>
   `typed_args_ready ctx func cenv cx (\e. ty) (expr_sim_inv cenv cx env) args` by
