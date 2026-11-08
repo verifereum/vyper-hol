@@ -321,3 +321,36 @@ Proof
   disch_then (qspec_then `v` mp_tac) >>
   simp[] >> gvs[codegen_ready_inst_def]
 QED
+
+Theorem native_terminal_jmp_nondefining_absent:
+  !fn bb dfg ps ops qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
+    (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
+      (PRE (LENGTH bb.bb_instructions))) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst_wf (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[LAST_MEM]) >>
+  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ] /\
+    (LAST bb.bb_instructions).inst_outputs = []` by gvs[venomWfTheory.inst_wf_def] >>
+  Cases_on `join_target_ops (liveness_analyze fn) fn bb.bb_label (LAST bb.bb_instructions)`
+  >- (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        fnPlanLineageEntryProductionTheory.jmp_no_target_state >>
+      simp[] >> strip_tac >> gvs[fnPlanLineageInventoryTheory.release_dead_spills_domain,
+          fnPlanLineageInventoryTheory.release_dead_spills_stack]) >>
+  rename1 `join_target_ops _ _ _ _ = SOME targets` >>
+  `!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (drule_at (Pat `join_target_ops _ _ _ _ = _`) native_terminal_jmp_target_available >> simp[]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    fnPlanLineageInventoryTheory.generate_inst_plan_jmp_variable_support >>
+  disch_then (qspecl_then [`targets`,`(\w. w <> v)`,`v`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
