@@ -4137,7 +4137,7 @@ Proof
 QED
 
 Theorem ctor_invalid_call_first_emission_strong:
-  !target. (target = RawLog \/ target = RawRevert \/ target = SelfDestructTarget) ==>
+  !target. (target = SelfDestructTarget) ==>
   !env rt ty args def a x b. compile_call cfn env rt ty target args def a = (x,b) ==>
     cs_extends a b /\
     (!fn. fn_has_code a b fn ==> ?bb i.
@@ -4147,6 +4147,88 @@ Proof
   gen_tac >> strip_tac >> gvs[] >>
   simp_tac (srw_ss()) [compile_call_def] >>
   metis_tac[ctor_invalid_stack_first_emission_strong]
+QED
+
+Theorem ctor_raw_revert_first_emission[local]:
+  !data a x b. builtinSystem$compile_raw_revert data a = (x,b) ==>
+    cs_extends a b /\
+    (!fn. fn_has_code a b fn ==> ?bb i.
+      lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+      isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI)
+Proof
+  gen_tac >> rewrite_tac[builtinSystemTheory.compile_raw_revert_def] >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
+      goal_assum $ drule_at Any >> simp[]) >>
+  gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+  ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+  gen_tac >> simp[cs_appends_emit_helpers]
+QED
+
+Theorem ctor_real_system_call_first_emission:
+  (!env ty e a x b. cfn env ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !target. (target = RawLog \/ target = RawRevert) ==>
+  !env rt ty args def a x b. compile_call cfn env rt ty target args def a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> drule ctor_multi_exprs_first_emission >> disch_tac >>
+  gen_tac >> strip_tac >> gvs[]
+  >- (ntac 3 gen_tac >> namedCases_on `args` ["", "topics rest"] >>
+      simp_tac (srw_ss()) [compile_call_def]
+      >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_invalid_stack_first_emission_strong]) >>
+      namedCases_on `rest` ["", "data tail"] >> simp_tac (srw_ss()) []
+      >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_invalid_stack_first_emission_strong]) >>
+      Cases_on `tail` >> simp_tac (srw_ss()) []
+      >- (simp_tac (srw_ss()) [LET_THM] >> rewrite_tac[state_pair_let_bind] >>
+          ho_match_mp_tac first_emission_bind >> conj_tac
+          >- metis_tac[] >>
+          gen_tac >> Cases_on `expr_type data = BaseT (BytesT (Fixed 32))` >> simp[]
+          >- (ho_match_mp_tac first_emission_bind >> conj_tac
+              >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_alloc_buffer_first_emission]) >>
+              gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+              >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+              gen_tac >> ho_match_mp_tac first_emission_strong >>
+              ho_match_mp_tac first_emission_strong_bind >> conj_tac
+              >- (rpt gen_tac >> strip_tac >> irule (cj 2 first_emission_emit_helpers) >>
+                  goal_assum $ drule_at Any >> simp[]) >>
+              gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+              ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+              simp[cs_appends_def, cs_extends_refl]) >>
+          ho_match_mp_tac first_emission_bind >> conj_tac
+          >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+          gen_tac >> ho_match_mp_tac first_emission_strong >>
+          ho_match_mp_tac first_emission_strong_bind >> conj_tac
+          >- (rpt gen_tac >> strip_tac >> irule (cj 3 first_emission_emit_helpers) >>
+              goal_assum $ drule_at Any >> simp[]) >>
+          gen_tac >> rewrite_tac[GSYM cs_appends_def] >>
+          ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+          gen_tac >> simp_tac (srw_ss()) [SF ETA_ss] >>
+          ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers] >>
+          simp[cs_appends_def, cs_extends_refl]) >>
+      ho_match_mp_tac first_emission_strong >> metis_tac[ctor_invalid_stack_first_emission_strong]) >>
+  ntac 3 gen_tac >> namedCases_on `args` ["", "data tail"] >>
+  simp_tac (srw_ss()) [compile_call_def]
+  >- (ho_match_mp_tac first_emission_strong >> metis_tac[ctor_invalid_stack_first_emission_strong]) >>
+  Cases_on `tail` >> simp_tac (srw_ss()) []
+  >- (simp_tac (srw_ss()) [LET_THM] >> rewrite_tac[state_pair_let_bind] >>
+      ho_match_mp_tac first_emission_bind >> conj_tac
+      >- (ho_match_mp_tac ctor_lower_value_first_emission >> metis_tac[]) >>
+      gen_tac >> ho_match_mp_tac first_emission_strong >>
+      ho_match_mp_tac first_emission_strong_bind >> conj_tac
+      >- metis_tac[ctor_raw_revert_first_emission] >>
+      simp[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_strong >> metis_tac[ctor_invalid_stack_first_emission_strong]
 QED
 
 Theorem ctor_send_call_first_emission:
@@ -4218,8 +4300,36 @@ Proof
   disch_then irule >> metis_tac[]
 QED
 
+Theorem ctor_guarded_real_system_expr_first_emission:
+  (!e env ty a. expr_size e < bound ==> !x b.
+    compile_expr env ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !target. (target = RawLog \/ target = RawRevert) ==>
+  !env ty ann args def a x b.
+    compile_expr_body (expr_child_callback bound compile_expr) bfn tfn
+      env ty (Call ann target args def) a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==> ?bb i.
+       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> dxrule ctor_expr_callback_first_emission >> disch_tac >>
+  gen_tac >> strip_tac >>
+  simp_tac (srw_ss()) [Once compile_expr_body_def, LET_THM] >>
+  rpt gen_tac >> disch_tac >>
+  drule_at (Pos last) ctor_real_system_call_first_emission >>
+  disch_then irule >> metis_tac[]
+QED
+
 Theorem ctor_invalid_call_expr_first_emission_strong:
-  !target. (target = RawLog \/ target = RawRevert \/ target = SelfDestructTarget) ==>
+  !target. (target = SelfDestructTarget) ==>
   !env ty ann args def a x b.
     compile_expr_body cfn bfn tfn env ty (Call ann target args def) a = (x,b) ==>
     cs_extends a b /\
@@ -4712,14 +4822,14 @@ Proof
   rewrite_tac[GSYM cs_appends_def] >> irule ctor_ci_mono_appends >>
   gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
   >- simp[ci_mono_emit_void] >>
-  rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
   >- (gen_tac >> IF_CASES_TAC >- simp[ci_mono_comp_return] >>
       ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_alloc_buffer] >>
       rpt gen_tac >> simp_tac (srw_ss()) [LET_THM] >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ctor_extcall_store_values_ci_mono] >>
       rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
-      rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >>
-      simp[cj 2 ci_mono_compile_abi_encode, ci_mono_comp_return]) >>
+      rpt gen_tac >> ho_match_mp_tac ci_mono_bind >>
+      simp[cj 2 ci_mono_compile_abi_encode, ci_mono_emit_op]) >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
   rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
   >- (gen_tac >> IF_CASES_TAC >> simp[ctor_extcodesize_check_ci_mono, ci_mono_comp_return]) >>
@@ -5302,6 +5412,12 @@ Proof
       drule ctor_target_callback_first_emission >> disch_tac >> rpt gen_tac >> strip_tac >>
       drule_at (Pos last) ctor_pop_body_first_emission >> disch_then irule >> metis_tac[])
   >> Cases_on `c`
+  >~ [`RawLog`] >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pos last) ctor_guarded_real_system_expr_first_emission >>
+      disch_then irule >> gvs[] >> metis_tac[])
+  >~ [`RawRevert`] >- (rpt gen_tac >> strip_tac >>
+      drule_at (Pos last) ctor_guarded_real_system_expr_first_emission >>
+      disch_then irule >> gvs[] >> metis_tac[])
   >~ [`Send _`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_send_expr_first_emission >> disch_then irule >> metis_tac[])
   >~ [`IntCall _`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_int_call_expr_first_emission >> disch_then irule >> metis_tac[])
   >~ [`RawCallTarget _`] >- (rpt gen_tac >> strip_tac >> drule_at (Pos last) ctor_guarded_raw_call_expr_first_emission >> disch_then irule >> metis_tac[])
