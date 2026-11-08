@@ -18,7 +18,7 @@
 Theory entryPtrSeamRegister
 Ancestors
   entryPtrSeamDecoder entryDecoderBudgetBoundary actualDecoderAllocationPtr
-  actualAllocSitesCredit
+  actualAllocSitesCredit acceptedContextPhi
   entryStateRel entryArgPtrs entryLocals
   entryDecodePlanProps entryDecodeProps bodySimEntry actualRegistrationCode
   vyperCompiler moduleLoweringProps exprLoweringProps vyperInterpreter
