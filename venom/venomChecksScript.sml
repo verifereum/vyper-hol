@@ -14,5 +14,6 @@ Ancestors
   (* passes: effect and abort order in DFT, FMP aliasing *)
   dftEffectOrderTest dftAbortOrderTest fmpAliasProbe
   functionInlinerReturnPcWitness
+  functionInlinerCallWitness
   (* execution of INVOKE with no arguments and of STOP after a call *)
   invokeEmptyArgs stopReturndata
