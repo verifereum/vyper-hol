@@ -12,7 +12,8 @@ Theorem body_raw_call_mem_case:
     body_exprs_mem_ok cx es ==>
     body_expr_mem_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >> irule body_expr_mem_ok_intro >>
+  conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
   drule raw_call_pre_operands >> strip_tac >> gvs[] >>
   `expr_vv_sim_mem ctx func cenv cx ty'
