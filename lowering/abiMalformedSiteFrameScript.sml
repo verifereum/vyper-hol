@@ -178,5 +178,6 @@ Proof
   qpat_x_assum `!live B cap L. _ ==> mem_bytes_at B L u.vs_memory = _`
     (qspecl_then [`ancestor`, `A`, `32`, `32`] mp_tac) >>
   simp[] >> strip_tac >>
-  simp[] >> gvs[mload_def, mem_bytes_at_def]
+  simp[] >> gvs[mload_def, mem_bytes_at_def] >>
+  simp[mcopy_def] >> metis_tac[]
 QED

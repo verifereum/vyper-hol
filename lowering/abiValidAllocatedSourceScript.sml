@@ -135,8 +135,7 @@ Proof
   Cases_on `type_to_abi_dec_info sf ce ty = DecComplex T []`
   >- (gvs[abi_decoder_empty_dynamic_translation, vyper_to_abi_type_def,
         dec_info_needs_offset_def] >>
-      simp[abi_decode_member_bytes_def, vyper_decode_valid_enc_def] >>
-      cheat) >>
+      simp[abi_decode_member_bytes_def, vyper_decode_valid_enc_def]) >>
   drule abi_decoder_coherent_dynamic >> strip_tac >>
   `dec_info_needs_offset (type_to_abi_dec_info sf ce ty) =
      is_dynamic (vyper_to_abi_type env ty)` by
