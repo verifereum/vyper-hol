@@ -1574,6 +1574,40 @@ Proof
   first_x_assum irule >> simp[] >> qexists_tac `(z0,z1)` >> gvs[]
 QED
 
+(* A label-avoiding actual history has not executed this definition yet.
+   Returning histories need a separate extinction argument. *)
+Theorem lineage_history_first_arrival_output_absent:
+  !fn dfg ch growth spill_base lbl_ctr entry vertices lbl ps bb inst v.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs /\
+    ~MEM lbl (MAP FST vertices) /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices
+      (entry,init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) ==>
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn` by
+    gvs[codegen_ready_fn_def, venomWfTheory.wf_function_def] >>
+  `EVERY (\vertex. !other.
+     lookup_block (FST vertex) fn.fn_blocks = SOME other ==>
+     EVERY (\i. ~MEM v i.inst_outputs) other.bb_instructions) vertices` by
+    (simp[Once listTheory.EVERY_MEM] >> rpt strip_tac >>
+     `FST vertex <> lbl` by
+       (strip_tac >>
+        qpat_x_assum `~MEM lbl (MAP FST vertices)` mp_tac >>
+        simp[listTheory.MEM_MAP] >> qexists_tac `vertex` >> simp[]) >>
+     metis_tac[fnPlanLineagePathTheory.ssa_output_other_block_no_outputs]) >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr) entry
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr)` by
+    simp[lineage_state_entry] >>
+  drule lineage_history_nondefining_absent >>
+  disch_then (drule_at Any) >> simp[] >>
+  disch_then (drule_at Any) >> simp[]
+QED
+
 Theorem lineage_state_ordinary_last_use_extinction:
   !fn dfg ch growth spill_base lbl_ctr entry lbl ps h promised bb ops after
    setup_ops start k qs inst nl iops last v.

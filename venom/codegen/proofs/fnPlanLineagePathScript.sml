@@ -110,6 +110,22 @@ Proof
   metis_tac[ssa_form_position]
 QED
 
+Theorem ssa_output_other_block_no_outputs:
+  !fn d bb inst v lbl bb'.
+    ssa_form fn /\ lookup_block d fn.fn_blocks = SOME bb /\
+    MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs /\
+    lookup_block lbl fn.fn_blocks = SOME bb' /\ lbl <> d ==>
+    EVERY (\i. ~MEM v i.inst_outputs) bb'.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[listTheory.EVERY_MEM] >>
+  rpt strip_tac >>
+  `MEM bb fn.fn_blocks /\ MEM bb' fn.fn_blocks /\
+   bb.bb_label = d /\ bb'.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+              venomExecPropsTheory.lookup_block_label] >>
+  metis_tac[ssa_unique_output_block]
+QED
+
 Theorem ssa_phi_prefix_unique_definition:
   !fn d bb j v lbl bb' k.
     ssa_form fn /\
