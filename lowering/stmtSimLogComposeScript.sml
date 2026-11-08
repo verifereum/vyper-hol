@@ -225,7 +225,8 @@ Resume compile_log_ready_stmt_frag[args_value]:
   `local_ptrs_reserved cenv sm` by
     (drule_all compile_log_eval_all_grows >> strip_tac >>
      metis_tac[local_ptrs_reserved_next_var]) >>
-  `LENGTH flags = LENGTH xs` by simp[] >>
+  `LENGTH flags = LENGTH xs` by
+    (qpat_assum `MAP SND xs = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
