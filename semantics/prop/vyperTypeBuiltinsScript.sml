@@ -52,11 +52,17 @@ Theorem CalldataSlice_builtin_success_type:
   evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (CalldataSlice n) tys vs = INL v ==>
   value_has_type tv v
 Proof
-  rpt strip_tac >> Cases_on `vs` >>
-  gvs[evaluate_builtin_def, AllCaseEqs()] >>
-  drule evaluate_calldata_slice_success_bound >>
-  strip_tac >> gvs[evaluate_type_def, value_has_type_def,
-                   compatible_bound_def, AllCaseEqs()]
+  let
+    val slice_eq = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) []))
+      (Q.INST [`bt` |-> `CalldataSlice n`] (SPEC_ALL evaluate_builtin_def))
+  in
+    rpt strip_tac >> Cases_on `vs` >>
+    gvs[slice_eq, AllCaseEqs()] >>
+    drule evaluate_calldata_slice_success_bound >>
+    strip_tac >> gvs[evaluate_type_def, value_has_type_def,
+                     compatible_bound_def, AllCaseEqs()]
+  end
 QED
 
 (* ===== Environment/account items ===== *)
@@ -65,9 +71,15 @@ Theorem Env_builtin_no_type_error:
   context_well_typed cx ∧ item <> MsgGas ==>
   !msg. evaluate_builtin cx acc (env_item_type item) (Env item) tys [] <> INR (TypeError msg)
 Proof
-  strip_tac >> Cases_on `item` >>
-  gvs[evaluate_builtin_def, env_item_type_def]
-  >> rw[evaluate_block_hash_def]
+  let
+    (* Select Env before rewriting instantiated contexts and operands. *)
+    val env_eq = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) []))
+      (Q.INST [`bt` |-> `Env item`] (SPEC_ALL evaluate_builtin_def))
+  in
+    strip_tac >> Cases_on `item` >>
+    gvs[env_eq, env_item_type_def] >> rw[evaluate_block_hash_def]
+  end
 QED
 
 Theorem Env_builtin_success_type:
@@ -75,11 +87,17 @@ Theorem Env_builtin_success_type:
   evaluate_builtin cx acc (env_item_type item) (Env item) tys [] = INL v ==>
   value_has_type tv v
 Proof
-  Cases_on`item` >> simp[evaluate_builtin_def, env_item_type_def] >>
-  rw[] >> gvs[value_has_type_def, evaluate_type_def] >>
-  gvs[context_well_typed_def]
-  >> gvs[evaluate_block_hash_def, AllCaseEqs(), LET_THM, value_has_type_def]
-  >> simp[LENGTH_word_to_bytes,word_to_bytes_be_def]
+  let
+    val env_eq = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) []))
+      (Q.INST [`bt` |-> `Env item`] (SPEC_ALL evaluate_builtin_def))
+  in
+    Cases_on `item` >> simp[env_eq, env_item_type_def] >>
+    rw[] >> gvs[value_has_type_def, evaluate_type_def] >>
+    gvs[context_well_typed_def] >>
+    gvs[evaluate_block_hash_def, AllCaseEqs(), LET_THM, value_has_type_def] >>
+    simp[LENGTH_word_to_bytes,word_to_bytes_be_def]
+  end
 QED
 
 (* Both codehash branches have the same fixed result width. *)
@@ -373,11 +391,23 @@ Proof
       is_flag_type_inv, is_comparable_type_inv] >>
   gvs[evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
   gen_tac >>
-  TRY (
-    (* NotIn/NotEq: unfold once to binop_negate, then simp with binop_negate lemmas *)
-    simp[Once evaluate_binop_def, binop_negate_def] >>
-    NO_TAC) >>
-  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def] >>
+  (fn (g as (_, w)) =>
+    let
+      val call = find_term (fn t =>
+        let val (h, args) = strip_comb t in
+          same_const h ``evaluate_binop`` andalso length args = 5
+        end) w
+      val op_tm = List.nth (#2 (strip_comb call), 2)
+      fun equation tm = CONV_RULE
+        (STRIP_QUANT_CONV (RHS_CONV (SIMP_CONV (srw_ss()) [])))
+        (Q.SPECL [`v2`, `v1`, `u`, `tv`, [ANTIQUOTE tm]] evaluate_binop_def)
+      val eqs = if same_const op_tm ``vyperAST$NotEq`` then
+          [equation op_tm, equation ``vyperAST$Eq``]
+        else if same_const op_tm ``vyperAST$NotIn`` then
+          [equation op_tm, equation ``vyperAST$In``]
+        else [equation op_tm]
+    in simp (binop_negate_def :: eqs) g end) >>
+  gvs[AllCaseEqs(), value_has_type_def] >>
   rpt (Cases_on `v2` >> gvs[value_has_type_def]) >>
   rpt (COND_CASES_TAC >> simp[])
 QED
@@ -785,8 +815,14 @@ Theorem negated_flag_membership_INL[local]:
   binop_negate (evaluate_binop u tv In (FlagV k) (FlagV k')) = INL v ==>
   ?b. v = BoolV b
 Proof
-  simp[Once evaluate_binop_def, binop_negate_def] >> strip_tac >>
-  qexists_tac `int_and (&k) (&k') = 0` >> gvs[]
+  let
+    val in_eq = CONV_RULE
+      (STRIP_QUANT_CONV (RHS_CONV (SIMP_CONV (srw_ss()) [])))
+      (Q.SPECL [`v2`, `v1`, `u`, `tv`, `In`] evaluate_binop_def)
+  in
+    simp[in_eq, binop_negate_def] >> strip_tac >>
+    qexists_tac `int_and (&k) (&k') = 0` >> gvs[]
+  end
 QED
 
 Theorem negated_array_membership_INL[local]:
@@ -795,7 +831,11 @@ Theorem negated_array_membership_INL[local]:
   ?b. v = BoolV b
 Proof
   Cases_on `v2` >> gvs[value_has_type_def] >>
-  simp[Once evaluate_binop_def, binop_negate_def] >>
+  (let
+    val in_eq = CONV_RULE
+      (STRIP_QUANT_CONV (RHS_CONV (SIMP_CONV (srw_ss()) [])))
+      (Q.SPECL [`v2`, `v1`, `u`, `tv`, `In`] evaluate_binop_def)
+   in simp[in_eq, binop_negate_def] end) >>
   metis_tac[]
 QED
 
@@ -804,7 +844,11 @@ Theorem negated_equality_INL[local]:
   ?b. v = BoolV b
 Proof
   Cases_on `v1` >> Cases_on `v2` >>
-  simp[Once evaluate_binop_def, binop_negate_def] >>
+  (let
+    val eq_eq = CONV_RULE
+      (STRIP_QUANT_CONV (RHS_CONV (SIMP_CONV (srw_ss()) [])))
+      (Q.SPECL [`v2`, `v1`, `u`, `tv`, `Eq`] evaluate_binop_def)
+   in simp[eq_eq, binop_negate_def] end) >>
   metis_tac[]
 QED
 
@@ -828,100 +872,60 @@ Proof
   gvs[evaluate_type_def] >>
   gvs[type_to_int_bound_def] >>
   gvs[AllCaseEqs()] >>
-  (* Signed Add: route the successful bounded operation through its inversion lemma. *)
-  TRY (
-    qpat_x_assum `evaluate_binop (Signed n) (BaseTV (IntT n)) Add
-                    (IntV i) (IntV i') = INL v` mp_tac >>
-    simp[Once evaluate_binop_def] >> strip_tac >>
-    imp_res_tac bounded_int_op_INL >> gvs[] >> NO_TAC) >>
-  (* NotIn/NotEq: unfold once to binop_negate, result is BoolV *)
-  TRY (
-    simp[Once evaluate_binop_def, binop_negate_def] >> NO_TAC) >>
-  (* In: result is FlagV or BoolV *)
-  TRY (
-    simp[Once evaluate_binop_def] >>
-    first_assum (irule_at (Pat `value_has_type _ (FlagV _)`)) >> NO_TAC) >>
-  (* Comparison: BoolV result *)
-  TRY (
-    simp[Once evaluate_binop_def] >>
-    rpt (Cases_on `v1` >> gvs[value_has_type_def]) >>
-    rpt (Cases_on `v2` >> gvs[value_has_type_def]) >>
-    first_assum (irule_at (Pat `value_has_type _ (BoolV _)`)) >> NO_TAC) >>
-  (* Flag bitwise: FlagV result with w2n_and_low_mask_lt *)
-  TRY (
-    simp[Once evaluate_binop_def] >>
-    gvs[value_has_type_def, w2n_and_low_mask_lt] >> NO_TAC) >>
-  (* All remaining: expand evaluate_binop but keep bounded/wrapped ops opaque.
-     Use INL inversion lemmas to extract within_int_bound. *)
   qpat_x_assum `evaluate_binop _ _ _ _ _ = INL v` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[evaluate_binop_def] >>
-  PURE_REWRITE_TAC[vyperASTTheory.binop_case_def,
-                   vyperValueTheory.value_case_def] >>
+  (fn (g as (_, w)) =>
+    let
+      val call = find_term (fn t =>
+        let val (h, args) = strip_comb t in
+          same_const h ``evaluate_binop`` andalso length args = 5
+        end) w
+      val op_tm = List.nth (#2 (strip_comb call), 2)
+      val eq = CONV_RULE
+        (STRIP_QUANT_CONV (RHS_CONV (SIMP_CONV (srw_ss()) [])))
+        (Q.SPECL [`v2`, `v1`, `u`, `tv`, [ANTIQUOTE op_tm]] evaluate_binop_def)
+    in pure_rewrite_tac [eq, vyperValueTheory.value_case_def] g end) >>
   simp_tac std_ss [LET_THM] >> strip_tac >>
   gvs[CaseEq "bool", CaseEq "sum", CaseEq "option"] >>
-  gvs[value_has_type_def, Excl "within_int_bound_def"] >>
-  (* Re-abstract within_int_bound that got expanded by value_has_type_def *)
-  TRY (simp[GSYM within_int_bound_def] >> NO_TAC) >>
-  (* Bounded int ops: INL gives within_int_bound *)
-  TRY (
-    imp_res_tac bounded_int_op_INL >>
-    gvs[within_int_bound_def] >> NO_TAC) >>
-  (* Bounded decimal ops: INL gives within_int_bound (Signed 168) *)
-  TRY (
-    imp_res_tac bounded_decimal_op_INL >>
-    gvs[within_int_bound_def] >> NO_TAC) >>
-  (* Wrapped int ops (Unsigned): use specialized lemma *)
-  TRY (
-    imp_res_tac wrapped_int_op_INL_Unsigned >>
-    gvs[within_int_bound_def] >> NO_TAC) >>
-  (* Wrapped int ops (Signed): use specialized lemma *)
-  TRY (
-    imp_res_tac wrapped_int_op_INL_Signed >>
-    gvs[within_int_bound_def] >> NO_TAC) >>
-  (* Decimal Mul: the checked signed quotient is the returned value. *)
-  TRY (gvs[within_int_bound_def] >> NO_TAC) >>
-  (* ExpMod: word_exp result bounded by 2^256 *)
-  TRY (
-    mp_tac w2n_word_exp_lt_256 >> simp[] >> NO_TAC) >>
-  (* Flag bitwise: unfold to int_bitwise, apply nat bound (just the < part) *)
-  PURE_REWRITE_TAC[int_bitwiseTheory.int_and_def, int_bitwiseTheory.int_or_def,
-                   int_bitwiseTheory.int_xor_def] >>
-  TRY (
-    mp_tac int_bitwise_nat_bound_lt >> simp[] >> NO_TAC) >>
-  (* ShL/ShR: re-abstract to within_int_bound, then use bound lemmas *)
-  TRY (
-    simp[GSYM within_int_bound_def] >>
-    irule int_mod_unsigned_within_bound >> simp[] >> NO_TAC) >>
-  TRY (
-    simp[GSYM within_int_bound_def] >>
-    irule signed_int_mod_within_bound >> simp[] >> NO_TAC) >>
-  TRY (
-    simp[GSYM within_int_bound_def] >>
-    irule int_shift_right_within_bound >> simp[] >> NO_TAC) >>
-  (* ShR unsigned: expanded to 0 ≤ X ∧ Num X < 2**n form, use bridge lemma *)
-  TRY (
-    irule int_shift_right_unsigned_Num_bound >> simp[] >> NO_TAC) >>
-  (* In_array: resolve binop_negate value constructors *)
-  TRY (
-    Cases_on `v2` >> gvs[value_has_type_def, binop_negate_INL] >> NO_TAC) >>
-  (* Min: choose the smaller value *)
-  TRY (
-    irule within_int_bound_min >> simp[] >> NO_TAC) >>
-  (* Max: choose the larger value *)
-  TRY (
-    irule within_int_bound_max >> simp[] >> NO_TAC) >>
-  (* Negated flag membership has a boolean result. *)
-  TRY (drule_all_then ACCEPT_TAC negated_flag_membership_INL >> NO_TAC) >>
-  TRY (drule_all_then ACCEPT_TAC negated_array_membership_INL >> NO_TAC) >>
-  TRY (drule_all_then ACCEPT_TAC negated_equality_INL >> NO_TAC) >>
-  (* Negated membership/equality: expose the inner boolean result. *)
-  TRY (
-    qpat_x_assum `binop_negate _ = INL v` mp_tac >>
-    simp[Once evaluate_binop_def, binop_negate_def] >> NO_TAC) >>
-  (* Catch-all for simple remaining cases *)
-  TRY (gvs[within_int_bound_def] >> NO_TAC) >>
-  TRY (intLib.ARITH_TAC >> NO_TAC) >>
-  TRY (gvs[] >> NO_TAC)
+  gvs[value_has_type_def, Excl "within_int_bound_def"]
+  >>~- ([`bounded_int_op _ _ = INL _`],
+    drule bounded_int_op_INL >> strip_tac >> gvs[within_int_bound_def])
+  >>~- ([`bounded_decimal_op _ = INL _`],
+    drule bounded_decimal_op_INL >> strip_tac >> gvs[within_int_bound_def])
+  >>~- ([`wrapped_int_op (Unsigned _) _ = INL _`],
+    drule_all wrapped_int_op_INL_Unsigned >> simp[])
+  >>~- ([`wrapped_int_op (Signed _) _ = INL _`],
+    `1 < n` by (Cases_on `n = 1` >> gvs[]) >>
+    drule_all wrapped_int_op_INL_Signed >> strip_tac >> gvs[within_int_bound_def])
+  >>~- ([`Num (int_and _ _) < _`],
+    rewrite_tac[int_bitwiseTheory.int_and_def] >>
+    irule int_bitwise_nat_bound_lt >> simp[])
+  >>~- ([`Num (int_or _ _) < _`],
+    rewrite_tac[int_bitwiseTheory.int_or_def] >>
+    irule int_bitwise_nat_bound_lt >> simp[])
+  >>~- ([`Num (int_xor _ _) < _`],
+    rewrite_tac[int_bitwiseTheory.int_xor_def] >>
+    irule int_bitwise_nat_bound_lt >> simp[])
+  >>~- ([`within_int_bound (Signed _) (signed_int_mod _ _)`],
+    irule signed_int_mod_within_bound >> simp[])
+  >>~- ([`0 <= _ % _ /\ _`],
+    qmatch_goalsub_abbrev_tac `x % _` >>
+    mp_tac (Q.SPECL [`256`, `x`] int_mod_unsigned_within_bound) >>
+    simp[within_int_bound_def])
+  >>~- ([`0 <= int_shift_right _ _ /\ _`],
+    irule int_shift_right_unsigned_Num_bound >> simp[])
+  >>~- ([`within_int_bound _ (int_shift_right _ _)`],
+    irule int_shift_right_within_bound >> simp[])
+  >>~- ([`value_has_type (ArrayTV _ _) _`,
+          `binop_negate (evaluate_binop _ _ In _ _) = INL _`],
+    drule_all negated_array_membership_INL >> simp[])
+  >>~- ([`value_has_type (ArrayTV _ _) v2`],
+    Cases_on `v2` >> gvs[value_has_type_def, binop_negate_INL])
+  >>~- ([`binop_negate (evaluate_binop _ _ In (FlagV _) (FlagV _)) = INL _`],
+    drule negated_flag_membership_INL >> simp[])
+  >>~- ([`binop_negate (evaluate_binop _ _ Eq _ _) = INL _`],
+    drule negated_equality_INL >> simp[])
+  >> qmatch_goalsub_abbrev_tac `(b /\ _) \/ (~b /\ _)`
+  >> Cases_on `b` >> gvs[]
 QED
 Theorem builtin_bop_success_type[local]:
   well_typed_binop ty bop t1 t2 /\
@@ -1312,7 +1316,11 @@ Proof
      assumptions, but prevent vht_BaseTV_UintT from consuming value_has_type
      assumptions needed by evaluate_slice_BytesT_no_type_error *)
   imp_res_tac evaluate_type_BaseT_SOME >>
-  fs[evaluate_builtin_def, Excl "vht_BaseTV_UintT"] >>
+  (let
+    val slice_eq = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) []))
+      (Q.INST [`bt` |-> `Slice n`] (SPEC_ALL evaluate_builtin_def))
+   in fs[slice_eq, Excl "vht_BaseTV_UintT"] end) >>
   metis_tac[evaluate_slice_BytesT_no_type_error]
 QED
 
@@ -1340,7 +1348,11 @@ Proof
   Cases_on `t` >> gvs[] >>
   Cases_on `t'` >> gvs[] >>
   imp_res_tac evaluate_type_BaseT_SOME >>
-  fs[evaluate_builtin_def, Excl "vht_BaseTV_UintT", Excl "vht_BaseTV_StringT"] >>
+  (let
+    val slice_eq = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) []))
+      (Q.INST [`bt` |-> `Slice n`] (SPEC_ALL evaluate_builtin_def))
+   in fs[slice_eq, Excl "vht_BaseTV_UintT", Excl "vht_BaseTV_StringT"] end) >>
   metis_tac[evaluate_slice_StringT_no_type_error]
 QED
 
@@ -1596,7 +1608,12 @@ Proof
     map_every qexists [`EL 0 vs`, `EL 1 vs`, `EL 2 vs`, `EL 3 vs`] >>
     simp[list_el_decomp_4]) >>
   fs[EL] >>
-  Cases_on `v0` >> fs[vht_BaseTV_BytesT_Fixed, evaluate_builtin_def] >>
+  Cases_on `v0` >>
+  (let
+    val ecrecover_eq = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) []))
+      (Q.INST [`bt` |-> `ECRecover`] (SPEC_ALL evaluate_builtin_def))
+   in fs[vht_BaseTV_BytesT_Fixed, ecrecover_eq] end) >>
   metis_tac[evaluate_ecrecover_no_type_error]
 QED
 
@@ -2439,7 +2456,11 @@ Theorem methodid_success_type[local]:
 Proof
   rpt strip_tac >>
   Cases_on `arg` >>
-  gvs[evaluate_builtin_def, LENGTH_TAKE, LENGTH_Keccak_256_w64]
+  (let
+    val methodid_eq = CONV_RULE
+      (RHS_CONV (SIMP_CONV (srw_ss()) []))
+      (Q.INST [`bt` |-> `MethodId`] (SPEC_ALL evaluate_builtin_def))
+   in gvs[methodid_eq, LENGTH_TAKE, LENGTH_Keccak_256_w64] end)
 QED
 
 
@@ -2455,7 +2476,13 @@ Proof
   strip_tac >>
   gvs[well_typed_builtin_app_def, well_typed_binop_def] >>
   gvs[evaluate_type_def, AllCaseEqs()] >>
-  simp[evaluate_membership_flag, evaluate_binop_def, binop_negate_def] >>
+  (let
+    fun membership_eq op_tm = CONV_RULE
+      (STRIP_QUANT_CONV (RHS_CONV (SIMP_CONV (srw_ss()) [])))
+      (Q.SPECL [`v2`, `v1`, `u`, `tv`, op_tm] evaluate_binop_def)
+    val in_eq = membership_eq `In`
+    val notin_eq = membership_eq `NotIn`
+   in simp[evaluate_membership_flag, in_eq, notin_eq, binop_negate_def] end) >>
   drule vht_ArrayTV_exists >> strip_tac >>
   simp[evaluate_membership_array]
 QED
@@ -2610,154 +2637,163 @@ Proof
       is_int_type_inv, is_numeric_type_inv, is_bool_type_inv,
       is_flag_type_inv, is_comparable_type_inv,
       is_uint256_type_inv, is_bytes32_type_inv,
-      is_bytes_or_string_type_inv] >>
-  TRY (drule_all CalldataLen_builtin_success_type >> simp[] >> NO_TAC) >>
-  TRY (drule_all CalldataSlice_builtin_success_type >> simp[] >> NO_TAC) >>
-  (* Phase 2: resolve type values *)
-  gvs[evaluate_type_def] >>
-  (* Not: solve each concrete type without searching across unrelated builtins. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) Not _ [BytesV bs] = INL v` >>
-       gvs[evaluate_builtin_def, value_has_type_def,
-           LENGTH_word_to_bytes_be_32] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) Not _ [IntV i] = INL v` >>
-       gvs[evaluate_builtin_def, type_to_int_bound_def, is_Unsigned_def] >>
-       qspec_then `~((n2w (Num i)) : bytes32)` mp_tac wordsTheory.w2n_lt >>
-       simp[dimword_256] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not _ [BoolV b] = INL v` >>
-       gvs[evaluate_builtin_def, value_has_type_def] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not _ [_] = INL _` >>
-       Cases_on `FLOOKUP (get_tenv cx) fid` >> gvs[] >>
-       Cases_on `x` >> gvs[] >>
-       gvs[value_has_type_def, evaluate_builtin_def, evaluate_type_def] >>
-       rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
-       simp[w2n_and_low_mask_lt] >> NO_TAC)
-    >> TRY (rename1 `evaluate_builtin _ _ _ Neg _ [_] = INL _` >>
-   gvs[evaluate_builtin_def, type_to_int_bound_def] >>
-   pop_assum mp_tac >> rw[] >>
-   imp_res_tac bounded_decimal_op_INL >> gvs[] >>
-   imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC)
-  
-  (* Hash builtins return fixed 32-byte values. *)
-  >> TRY (rename1 `evaluate_builtin _ _ _ Keccak256 _ [arg] = INL _` >>
-       Cases_on `arg` >>
-       gvs[evaluate_builtin_def, value_has_type_def, LENGTH_Keccak_256_w64] >>
-       NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ _ Sha256 _ [arg] = INL _` >>
-       Cases_on `arg` >>
-       gvs[evaluate_builtin_def, value_has_type_def, LENGTH_word_to_bytes] >>
-       NO_TAC) >>
-  (* AsWeiValue returns Uint256 on successful evaluation by construction. *)
-  TRY (rename1 `evaluate_builtin _ _ _ (AsWeiValue d) _ [_] = INL _` >>
-       gvs[evaluate_builtin_def, evaluate_as_wei_value_def, LET_THM,
-           value_has_type_def, within_int_bound_def, AllCaseEqs()] >>
-       NO_TAC) >>
-  (* Concat success preserves the dynamic bytes/string bound. *)
-  TRY (rename1 `EVERY (λt. ∃bd. t = BaseT (BytesT bd)) ts` >>
-       rename1 `evaluate_builtin _ _ _ (Concat n) _ vs = INL v` >>
-       drule LIST_REL_value_has_type_imp_combined >>
-       disch_then (qspecl_then [`ts`, `get_tenv cx`] mp_tac) >> simp[] >> strip_tac >>
-       `EVERY (λv. ∃bs. v = BytesV bs) vs` by
-         (drule (REWRITE_RULE[AND_IMP_INTRO] list_rel_bytes_all_bytesv) >> simp[]) >>
-       gvs[evaluate_builtin_def, evaluate_concat_def] >>
-       Cases_on `vs` >> gvs[] >>
-       Cases_on `t` >> gvs[] >>
-       gvs[init_concat_output_def] >>
-       imp_res_tac evaluate_concat_loop_bytes_success_type >> gvs[] >> NO_TAC) >>
-  TRY (rename1 `EVERY (λt. ∃m. t = BaseT (StringT m)) ts` >>
-       rename1 `evaluate_builtin _ _ _ (Concat n) _ vs = INL v` >>
-       drule LIST_REL_value_has_type_imp_combined >>
-       disch_then (qspecl_then [`ts`, `get_tenv cx`] mp_tac) >> simp[] >> strip_tac >>
-       `EVERY (λv. ∃s. v = StringV s) vs` by
-         (drule (REWRITE_RULE[AND_IMP_INTRO] list_rel_string_all_stringv) >> simp[]) >>
-       gvs[evaluate_builtin_def, evaluate_concat_def] >>
-       Cases_on `vs` >> gvs[] >>
-       Cases_on `t` >> gvs[] >>
-       gvs[init_concat_output_def] >>
-       imp_res_tac evaluate_concat_loop_string_success_type >> gvs[] >> NO_TAC) >>
-  (* Slice success preserves the dynamic bytes/string bound. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Dynamic n))) (Slice n) _ vs = INL v` >>
-       metis_tac[slice_bytes_builtin_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Slice n) _ vs = INL v` >>
-       metis_tac[slice_string_builtin_success_type] >> NO_TAC) >>
-  (* MakeArray success produces the tuple/array value requested by the static rule. *)
-  TRY (rename1 `evaluate_builtin _ _ ty (MakeArray o' b) _ vs = INL v` >>
-       metis_tac[make_array_success_type] >> NO_TAC) >>
-  (* Uint2Str success returns a string within the statically required bound. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Uint2Str n) _ [IntV i] = INL v` >>
-       gvs[evaluate_builtin_def, compatible_bound_def] >>
-       `STRLEN (toString (Num i)) <= 78` by
-         (irule uint2str_strlen_bound >>
-          qexists `BaseTV (UintT k)` >>
-          gvs[value_has_type_def, well_formed_type_value_def]) >>
-       gvs[] >> NO_TAC) >>
-  (* Floor/Ceil success returns Int256 by the decimal division bounds. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (IntT 256)) Ceil _ [DecimalV d] = INL v` >>
-       metis_tac[ceil_builtin_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (IntT 256)) Floor _ [DecimalV d] = INL v` >>
-       metis_tac[floor_builtin_success_type] >> NO_TAC) >>
-  (* Modular arithmetic builtins return Uint256 results. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) AddMod _ vs = INL v` >>
-       `value_has_type (BaseTV (UintT 256)) v` by
-         metis_tac[addmod_success_type] >>
-       gvs[value_has_type_def] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) MulMod _ vs = INL v` >>
-       `value_has_type (BaseTV (UintT 256)) v` by
-         metis_tac[mulmod_success_type] >>
-       gvs[value_has_type_def] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) PowMod256 _ vs = INL v` >>
-       `value_has_type (BaseTV (UintT 256)) v` by
-         metis_tac[powmod256_success_type] >>
-       gvs[value_has_type_def] >> NO_TAC) >>
-  (* BlockHash/BlobHash success returns fixed bytes32 values. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) BlockHash _ [IntV i] = INL v` >>
-       metis_tac[blockhash_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) BlobHash _ [IntV i] = INL v` >>
-       metis_tac[blobhash_success_type] >> NO_TAC) >>
-  (* Phase 3: resolve builtin execution + related defs *)
-  TRY (gvs[evaluate_builtin_def, type_to_int_bound_def,
-           int_bound_bits_def, is_Unsigned_def, LET_THM] >> NO_TAC) >>
-  (* INL inversions for bounded/wrapped ops *)
-  TRY (imp_res_tac bounded_int_op_INL >> gvs[] >> NO_TAC) >>
-  TRY (imp_res_tac bounded_decimal_op_INL >> gvs[] >> NO_TAC) >>
-  TRY (
-    `0 < int_bound_bits u` by (Cases_on `u` >> simp[int_bound_bits_def] >> intLib.ARITH_TAC) >>
-    imp_res_tac wrapped_int_op_INL >> gvs[] >> NO_TAC) >>
-  (* Crypto/bytes length lemmas *)
-  TRY (gvs[LENGTH_Keccak_256_w64] >> NO_TAC) >>
-  (* AsWeiValue: expand and use within_int_bound + evaluate_as_wei_value *)
-  TRY (gvs[evaluate_as_wei_value_def, LET_THM] >> NO_TAC) >>
-  (* Bop: delegate to the binary-operation boundary helper. *)
-  TRY (rename1 `evaluate_builtin _ _ ty (Bop b) _ vs = INL v` >>
-       metis_tac[builtin_bop_success_type] >> NO_TAC) >>
-  (* Env: delegate to Env_builtin_success_type *)
-  TRY (metis_tac[Env_builtin_success_type] >> NO_TAC) >>
-  (* Acc: delegate to account builtin success helper. *)
-  TRY (rename1 `evaluate_builtin _ _ (account_item_type a) (Acc a) _ [BytesV bs] = INL v` >>
-       metis_tac[acc_builtin_success_type] >> NO_TAC) >>
-  (* MethodId returns fixed bytes4. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 4))) MethodId _ [arg] = INL v` >>
-       metis_tac[methodid_success_type] >> NO_TAC) >>~
-  (* MethodId returns dynamic Bytes[4]. *)
-  [`evaluate_builtin _ _ (BaseT (BytesT (Dynamic 4))) MethodId _ [arg] = INL v`]
-  >- (Cases_on `arg` >> gvs[evaluate_builtin_def, LENGTH_TAKE_EQ])
-  >- (Cases_on `arg` >> gvs[evaluate_builtin_def, LENGTH_TAKE_EQ]) >>
-  (* ECRecover returns an address on success. *)
-  TRY (rename1 `evaluate_builtin _ _ (BaseT AddressT) ECRecover _ vs = INL v` >>
-       `value_has_type (BaseTV AddressT) v` by metis_tac[ecrecover_success_type] >>
-       gvs[value_has_type_def] >> NO_TAC) >>
-  (* ECAdd/ECMul return uint256[2] arrays on success. *)
-  TRY (rename1 `evaluate_builtin _ _ (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd _ vs = INL v` >>
-       metis_tac[ecadd_success_type] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul _ vs = INL v` >>
-       metis_tac[ecmul_success_type] >> NO_TAC) >>
-  (* Flag bitwise not: use w2n_and_low_mask_lt *)
-  TRY (gvs[w2n_and_low_mask_lt] >> NO_TAC)
-  (* Abs *)
-  >>~ [`evaluate_builtin _ _ _ Abs _ _`] >- (
-    gvs[evaluate_builtin_def, type_to_int_bound_def,
-        bounded_int_op_def] ) >>
-  (* Arithmetic cleanup *)
-  intLib.ARITH_TAC
+      is_bytes_or_string_type_inv]
+  >>~- ([`evaluate_builtin _ _ _ CalldataLen _ _ = INL _`],
+    drule_all CalldataLen_builtin_success_type >> simp[])
+  >>~- ([`evaluate_builtin _ _ _ (CalldataSlice _) _ _ = INL _`],
+    drule_all CalldataSlice_builtin_success_type >> simp[])
+  >> fs[evaluate_type_def]
+  >> gvs[AllCaseEqs()]
+  >>~- ([`evaluate_builtin _ _ (BaseT (BytesT _)) (Slice _) _ _ = INL _`],
+    drule_all slice_bytes_builtin_success_type >> simp[])
+  >>~- ([`evaluate_builtin _ _ (BaseT (StringT _)) (Slice _) _ _ = INL _`],
+    drule_all slice_string_builtin_success_type >> simp[])
+  >>~- ([`evaluate_builtin _ _ _ (MakeArray _ _) _ _ = INL _`],
+    metis_tac[make_array_success_type])
+  >>~- ([`evaluate_builtin _ _ _ Ceil _ _ = INL _`],
+    metis_tac[ceil_builtin_success_type])
+  >>~- ([`evaluate_builtin _ _ _ Floor _ _ = INL _`],
+    metis_tac[floor_builtin_success_type])
+  >>~- ([`evaluate_builtin _ _ _ AddMod _ _ = INL _`],
+    `value_has_type (BaseTV (UintT 256)) v` by metis_tac[addmod_success_type] >>
+    gvs[value_has_type_def])
+  >>~- ([`evaluate_builtin _ _ _ MulMod _ _ = INL _`],
+    `value_has_type (BaseTV (UintT 256)) v` by metis_tac[mulmod_success_type] >>
+    gvs[value_has_type_def])
+  >>~- ([`evaluate_builtin _ _ _ PowMod256 _ _ = INL _`],
+    `value_has_type (BaseTV (UintT 256)) v` by metis_tac[powmod256_success_type] >>
+    gvs[value_has_type_def])
+  >>~- ([`evaluate_builtin _ _ _ BlockHash _ _ = INL _`],
+    metis_tac[blockhash_success_type])
+  >>~- ([`evaluate_builtin _ _ _ BlobHash _ _ = INL _`],
+    metis_tac[blobhash_success_type])
+  >>~- ([`evaluate_builtin _ _ _ (Bop _) _ _ = INL _`],
+    metis_tac[builtin_bop_success_type])
+  >>~- ([`evaluate_builtin _ _ _ (Env _) _ _ = INL _`],
+    metis_tac[Env_builtin_success_type])
+  >>~- ([`evaluate_builtin _ _ _ (Acc _) _ _ = INL _`],
+    metis_tac[acc_builtin_success_type])
+  >>~- ([`evaluate_builtin _ _ _ ECRecover _ _ = INL _`],
+    `value_has_type (BaseTV AddressT) v` by metis_tac[ecrecover_success_type] >>
+    gvs[value_has_type_def])
+  >>~- ([`evaluate_builtin _ _ _ ECAdd _ _ = INL _`],
+    metis_tac[ecadd_success_type])
+  >>~- ([`evaluate_builtin _ _ _ ECMul _ _ = INL _`],
+    metis_tac[ecmul_success_type])
+  >>~- ([`EVERY (\t. ?bd. t = BaseT (BytesT bd)) ts`,
+          `evaluate_builtin _ _ _ (Concat n) _ vs = INL v`],
+    drule LIST_REL_value_has_type_imp_combined >>
+    disch_then (qspecl_then [`ts`, `get_tenv cx`] mp_tac) >> simp[] >> strip_tac >>
+    `EVERY (\v. ?bs. v = BytesV bs) vs` by
+      (drule (REWRITE_RULE[AND_IMP_INTRO] list_rel_bytes_all_bytesv) >> simp[]) >>
+    (let val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) []))
+       (Q.INST [`bt` |-> `Concat n`] (SPEC_ALL evaluate_builtin_def))
+     in gvs[eq, evaluate_concat_def] end) >>
+    Cases_on `vs` >> gvs[] >> Cases_on `t` >> gvs[] >>
+    gvs[init_concat_output_def] >>
+    imp_res_tac evaluate_concat_loop_bytes_success_type >> gvs[])
+  >>~- ([`EVERY (\t. ?m. t = BaseT (StringT m)) ts`,
+          `evaluate_builtin _ _ _ (Concat n) _ vs = INL v`],
+    drule LIST_REL_value_has_type_imp_combined >>
+    disch_then (qspecl_then [`ts`, `get_tenv cx`] mp_tac) >> simp[] >> strip_tac >>
+    `EVERY (\v. ?s. v = StringV s) vs` by
+      (drule (REWRITE_RULE[AND_IMP_INTRO] list_rel_string_all_stringv) >> simp[]) >>
+    (let val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) []))
+       (Q.INST [`bt` |-> `Concat n`] (SPEC_ALL evaluate_builtin_def))
+     in gvs[eq, evaluate_concat_def] end) >>
+    Cases_on `vs` >> gvs[] >> Cases_on `t` >> gvs[] >>
+    gvs[init_concat_output_def] >>
+    imp_res_tac evaluate_concat_loop_string_success_type >> gvs[])
+  >>~- ([`evaluate_builtin _ _ (BaseT BoolT) Not _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `Not`] (SPEC_ALL evaluate_builtin_def)
+      val rhs = rand (concl full)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) rhs)
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Not``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >> gvs[])
+  >>~- ([`evaluate_builtin _ _ _ Not _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `Not`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Not``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >>
+    gvs[type_to_int_bound_def, is_Unsigned_def, LENGTH_word_to_bytes_be_32]
+    >>~- ([`w2n _ < _`],
+      qspec_then `~((n2w (Num i)) : bytes32)` mp_tac wordsTheory.w2n_lt >>
+      simp[dimword_256])
+    >> gvs[value_has_type_def, evaluate_type_def] >>
+    rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
+    simp[w2n_and_low_mask_lt])
+  >>~- ([`evaluate_builtin _ _ _ Neg _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `Neg`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Neg``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >>
+    gvs[type_to_int_bound_def] >>
+    imp_res_tac bounded_int_op_INL >>
+    imp_res_tac bounded_decimal_op_INL >> gvs[])
+  >>~- ([`evaluate_builtin _ _ _ Abs _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `Abs`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Abs``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >>
+    gvs[type_to_int_bound_def] >>
+    imp_res_tac bounded_int_op_INL >> gvs[])
+  >>~- ([`evaluate_builtin _ _ _ Keccak256 _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `Keccak256`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Keccak256``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >> gvs[LENGTH_Keccak_256_w64])
+  >>~- ([`evaluate_builtin _ _ _ Sha256 _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `Sha256`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Sha256``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >> gvs[LENGTH_word_to_bytes])
+  >>~- ([`evaluate_builtin _ _ _ (AsWeiValue d) _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `AsWeiValue d`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Not``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >>
+    gvs[evaluate_as_wei_value_def, AllCaseEqs(), within_int_bound_def])
+  >>~- ([`evaluate_builtin _ _ _ (Uint2Str n) _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `Uint2Str n`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Not``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >>
+    `STRLEN (toString (Num i)) <= 78` by
+      (irule uint2str_strlen_bound >>
+       qexists_tac `BaseTV (UintT k)` >>
+       simp[value_has_type_def, well_formed_type_value_def]) >> gvs[])
+  >>~- ([`evaluate_builtin _ _ _ MethodId _ _ = INL _`],
+    (let
+      val full = Q.INST [`bt` |-> `MethodId`] (SPEC_ALL evaluate_builtin_def)
+      val clause = valOf (List.find
+        (fn th => can (match_term (lhs (concl th))) (rhs (concl full)))
+        (map SPEC_ALL (CONJUNCTS (TypeBase.case_def_of (type_of ``vyperAST$Not``)))))
+      val eq = CONV_RULE (RHS_CONV (REWR_CONV clause)) full
+     in fs[eq] end) >> gvs[LENGTH_TAKE, LENGTH_Keccak_256_w64])
 QED
 
 Theorem is_sized_type_cases[local]:
@@ -2907,7 +2943,6 @@ Proof
       rewrite_tac[is_int_type_inv] >> strip_tac >>
       gvs[evaluate_type_def, evaluate_min_value_def])
   >- simp[evaluate_min_value_def]
-  >- simp[evaluate_type_builtin_def]
   >- (drule_all evaluate_convert_no_type_error >> gvs[evaluate_type_builtin_def])
   >- suspend"extract32"
   >- suspend"abi_decode"
@@ -3041,12 +3076,7 @@ Proof
          within_int_bound_def, value_has_type_def]
   >- (gvs[evaluate_type_builtin_def, LENGTH_EQ_NUM_compute] >>
       drule_all well_typed_convert_success >> simp[])
-  >- (gvs[LENGTH_EQ_NUM_compute] >>
-      Cases_on `tvs` >> gvs[] >>
-      drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
-      drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
-      gvs[evaluate_type_builtin_def, AllCaseEqs()] >>
-      drule_all evaluate_extract32_well_typed >> simp[])
+  >- (drule_all evaluate_extract32_well_typed >> simp[])
   >- (`evaluate_type (get_tenv cx) (TupleT [result_ty]) =
         SOME (TupleTV [result_tv])` by
        (simp[evaluate_type_def, type_slot_size_def] >>
@@ -3056,13 +3086,16 @@ Proof
       gvs[evaluate_type_builtin_def, AllCaseEqs(), LET_THM] >>
       drule_all evaluate_abi_decode_well_typed >>
       simp[evaluate_type_def, value_has_type_def])
-  >| [ (`abi_encode_method_id_size o' +
-         vyper_abi_size_bound (get_tenv cx) t <= n` by
-          gvs[abi_encode_size_ok_def] >>
-        irule evaluate_abi_encode_bytes_success_type_bound >>
-        qexistsl [`n`, `get_tenv cx`, `x0`, `t`, `v'`] >> simp[])
-     , metis_tac[well_typed_abi_encode_tuple_success]
-     , metis_tac[well_typed_abi_encode_tuple_success] ]
+  >>~- ([`evaluate_abi_decode _ _ _ = INL _`],
+    drule_all evaluate_abi_decode_well_typed >> simp[])
+  >>~- ([`evaluate_abi_encode_bytes _ t v' = INL _`,
+          `value_has_type x0 v'`],
+    `abi_encode_method_id_size o' +
+     vyper_abi_size_bound (get_tenv cx) t <= n` by
+      gvs[abi_encode_size_ok_def] >>
+    irule evaluate_abi_encode_bytes_success_type_bound >>
+    qexistsl [`n`, `get_tenv cx`, `x0`, `t`, `v'`] >> simp[])
+  >> metis_tac[well_typed_abi_encode_tuple_success]
 QED
 
 (* ===== Calls / special targets ===== *)
