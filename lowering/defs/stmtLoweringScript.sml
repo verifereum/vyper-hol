@@ -1090,9 +1090,24 @@ Definition compile_stmt_def:
                        return norm_ptr
                     od
                   else return val_op);
-               compile_external_return (SOME ret_op) is_prim cenv.ce_raw_return
-                 cenv.ce_ret_enc_info cenv.ce_max_return_size
-                 is_nonreentrant nkey use_transient is_view
+               (* Raw returns unlock, then copy into a fresh typed temporary
+                  before RETURN, as Python's do_raw_return branch does. *)
+               if cenv.ce_raw_return then
+                 let raw_src_ty = (if needs_normalize then ty else src_ty) in
+                 do (if is_nonreentrant then
+                       compile_nonreentrant_unlock nkey use_transient is_view
+                     else return ());
+                    raw_buf <- compile_alloc_buffer (type_memory_bytes cenv ty);
+                    compile_store_memory_typed cenv raw_buf.buf_operand ty
+                      ret_op raw_src_ty;
+                    compile_external_return (SOME raw_buf.buf_operand) is_prim T
+                      cenv.ce_ret_enc_info cenv.ce_max_return_size
+                      F nkey use_transient is_view
+                 od
+               else
+                 compile_external_return (SOME ret_op) is_prim F
+                   cenv.ce_ret_enc_info cenv.ce_max_return_size
+                   is_nonreentrant nkey use_transient is_view
             od)
     od ∧
 

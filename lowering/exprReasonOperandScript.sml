@@ -738,6 +738,15 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
+  >~ [`raw_log_topic_exprs _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_raw_revert _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_selfdestruct _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
   >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
     >- suspend "create"
   >> suspend "send"

@@ -196,3 +196,36 @@ val () = List.app (fn (name, th) =>
    ("bytestring_bytes_literal_selection", bytestring_bytes_literal_selection),
    ("bytestring_mixed_eq_dispatch", bytestring_mixed_eq_dispatch),
    ("bytestring_runtime_hash_order", bytestring_runtime_hash_order)];
+
+(* RawLog lowers topics before data, but LOG consumes them in reverse order.
+   The fixed-data path allocates before evaluating the data expression. *)
+Theorem raw_log_four_topics_fixed_dispatch:
+  expr_type data_e = BaseT (BytesT (Fixed 32)) ==>
+  compile_call cfn cenv ret_ty ty RawLog
+    [Builtin ann (MakeArray elem_ty bnd) [a;b;c;d]; data_e] default_ret st =
+    (let (ops, st1) = compile_multi_exprs cfn cenv [a;b;c;d] st in
+     let (tmp, st2) = compile_alloc_buffer 32 st1 in
+     let (v, st3) = lower_value cfn cenv (BaseT (BytesT (Fixed 32))) data_e st2 in
+     let (_, st4) = emit_void MSTORE [tmp.buf_operand; v] st3 in
+     let (_, st5) = emit_inst LOG
+       (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w; tmp.buf_operand]) [] st4 in
+     (StackValue ret_ty (Lit 0w), st5))
+Proof
+  simp[compile_call_def, raw_log_topic_exprs_def]
+QED
+
+(* For dynamic Bytes, lower_value performs any required storage-to-memory copy.
+   The log skips the length word of that memory representation. *)
+Theorem raw_log_empty_topics_dynamic_dispatch:
+  expr_type data_e <> BaseT (BytesT (Fixed 32)) ==>
+  compile_call cfn cenv ret_ty ty RawLog
+    [Builtin ann (MakeArray elem_ty bnd) []; data_e] default_ret st =
+    (let (data, st1) = lower_value cfn cenv (expr_type data_e) data_e st in
+     let (len, st2) = emit_op MLOAD [data] st1 in
+     let (ptr, st3) = emit_op ADD [data; Lit 32w] st2 in
+     let (_, st4) = emit_inst LOG [Lit 0w; len; ptr] [] st3 in
+     (StackValue ret_ty (Lit 0w), st4))
+Proof
+  simp[compile_call_def, raw_log_topic_exprs_def, compile_multi_exprs_def,
+       comp_return_def]
+QED

@@ -389,6 +389,25 @@ Proof
   simp[log_entry_corresponds_def]
 QED
 
+Theorem log_entry_equiv_raw_event:
+  log_entry_equiv cenv addr (encode_raw_event_values addr topic_vals bytes) ev <=>
+  ev = <| logger := addr; topics := MAP event_value_to_word topic_vals;
+          data := bytes |>
+Proof
+  simp[log_entry_equiv_def, encode_raw_event_values_def, encode_raw_event_def,
+       EQ_SYM_EQ]
+QED
+
+Theorem log_entry_corresponds_raw_event:
+  log_entry_corresponds event_info tenv addr
+    (encode_raw_event_values addr topic_vals bytes) ev <=>
+  ev = <| logger := addr; topics := MAP event_value_to_word topic_vals;
+          data := bytes |>
+Proof
+  simp[log_entry_corresponds_def, encode_raw_event_values_def, encode_raw_event_def,
+       EQ_SYM_EQ]
+QED
+
 (* Vyper logs correspond to EVM events (ordered, same-length).
    event_info maps event name -> SOME (hash, arg_types, indexed_flags)
    for declared events (from EventDecl with indexed flag). *)
