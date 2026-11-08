@@ -55,9 +55,38 @@ Proof
  `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
  drule_all ctor_checked_alloc_buffer_run_from >> strip_tac >>
  `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
- drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_state_props >> strip_tac >>
+ `not_scope_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
+   (irule local_ptrs_rel_fresh_not_scope_ptr >>
+    qexistsl [`func`, `initial`, `st`] >> simp[GREATER_EQ]) >>
+ `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) =
+    OK (a with vs_inst_idx := initial.vs_inst_idx)` by
+   gvs[exec_alloca_def, mk_inst_def, update_var_def, w2n_n2w,
+       venom_state_component_equality] >>
+ drule local_ptrs_rel_exec_alloca_fresh >> simp[mk_inst_def, IgnAsm `a = _`] >>
+ disch_then (qspecl_then [`func`, `ce`, `scopes`] mp_tac) >>
+ simp[local_ptrs_rel_inst_idx, IgnAsm `a = _`] >> strip_tac >>
+ `w = n2w initial.vs_alloca_next` by metis_tac[n2w_w2n] >>
+ drule compile_alloc_buffer_parts >> strip_tac >>
  qexists `a` >> asm_rewrite_tac[] >>
- gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+ simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+ conj_tac
+ >- (simp[local_backed_def] >> disj1_tac >>
+     qexists `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString st.cs_next_var)]` >>
+     drule_all entry_alloc_buffer_inst >> gvs[mk_inst_def]) >>
+ conj_tac
+ >- (fs[fresh_vars_wrt_def, update_var_def, GREATER_EQ] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+ conj_tac
+ >- (rpt strip_tac >>
+     qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
+     fs[local_region_def, lookup_var_def, update_var_def] >> metis_tac[]) >>
+ conj_tac
+ >- (rpt strip_tac >> IF_CASES_TAC >> gvs[lookup_var_def]) >>
+ simp[abi_encoder_registered_effect_def, frag_ids_def, GSPECIFICATION,
+      update_var_def, FLOOKUP_UPDATE] >>
+ rpt strip_tac >> IF_CASES_TAC >> gvs[]
 QED
 
 Theorem ctor_checked_register_one_world_actual_from:

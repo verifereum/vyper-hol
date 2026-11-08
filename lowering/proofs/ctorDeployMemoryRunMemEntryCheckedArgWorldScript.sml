@@ -201,8 +201,20 @@ Proof
     metis_tac[LESS_EQ_TRANS]) >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_blocks = middle.cs_blocks` by asm_rewrite_tac[] >>
- drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+ drule cs_extends_abi_decode >> strip_tac >>
+ drule_all fn_has_code_split >> strip_tac >>
+ drule abi_decoder_variable_counter >> strip_tac >>
+ drule_all abi_decoder_to_buf_code >>
+ simp_tac bool_ss [abi_decoder_code_def] >> strip_tac >>
+ qpat_x_assum `!i. abi_decoder_code_member _ _ ==> _` kall_tac >>
+ `frag_ids middle st' SUBSET frag_ids st st'` by
+   (qpat_x_assum `st.cs_next_id <= middle.cs_next_id` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+ Q.SUBGOAL_THEN
+   `middle.cs_blocks = st'.cs_blocks \/
+    !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` assume_tac >- metis_tac[] >>
  `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
    (asm_rewrite_tac[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
  qpat_assum `eval_operand src prepared = _` assume_tac >>
@@ -273,8 +285,20 @@ Proof
  `st.cs_blocks = middle.cs_blocks` by simp[] >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_next_id <= middle.cs_next_id` by simp[] >>
- drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+ drule cs_extends_abi_decode >> strip_tac >>
+ drule_all fn_has_code_split >> strip_tac >>
+ drule abi_decoder_variable_counter >> strip_tac >>
+ drule_all abi_decoder_to_buf_code >>
+ simp_tac bool_ss [abi_decoder_code_def] >> strip_tac >>
+ qpat_x_assum `!i. abi_decoder_code_member _ _ ==> _` kall_tac >>
+ `frag_ids middle st' SUBSET frag_ids st st'` by
+   (qpat_x_assum `st.cs_next_id <= middle.cs_next_id` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+ Q.SUBGOAL_THEN
+   `middle.cs_blocks = st'.cs_blocks \/
+    !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` assume_tac >- metis_tac[] >>
  drule ctor_checked_arg_add_reach >> simp_tac (srw_ss()) [eval_operand_def] >>
  disch_then drule_all >>
  disch_then (qspec_then `ctx` (MAP_EVERY assume_tac o CONJUNCTS)) >>
@@ -429,8 +453,20 @@ Proof
    (imp_res_tac ctor_checked_arg_emit_shape >> simp[] >> decide_tac) >>
  `cs_extends st m2 /\ cs_extends st middle` by metis_tac[cs_extends_trans] >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
- drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+ drule cs_extends_abi_decode >> strip_tac >>
+ drule_all fn_has_code_split >> strip_tac >>
+ drule abi_decoder_variable_counter >> strip_tac >>
+ drule_all abi_decoder_to_buf_code >>
+ simp_tac bool_ss [abi_decoder_code_def] >> strip_tac >>
+ qpat_x_assum `!i. abi_decoder_code_member _ _ ==> _` kall_tac >>
+ `frag_ids middle st' SUBSET frag_ids st st'` by
+   (qpat_x_assum `st.cs_next_id <= middle.cs_next_id` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+ Q.SUBGOAL_THEN
+   `middle.cs_blocks = st'.cs_blocks \/
+    !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` assume_tac >- metis_tac[] >>
  `fn_has_code st m1 func /\ fn_has_code m1 m2 func /\ fn_has_code m2 middle func` by
    metis_tac[fn_has_code_split, cs_extends_trans] >>
  drule_all ctor_checked_arg_dynamic_world_setup >>

@@ -368,17 +368,17 @@ Proof
   `end_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   asm "child" assume_tac >>
   drule_all ctor_checked_array_body_world_at_index_from >>
-  disch_then (qx_choose_then `body_result` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  disch_then (qx_choose_then `body_actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   asm_x "child" kall_tac >>
   `all_have_type tv vs` by metis_tac[abi_decoder_dynarray_values] >>
-  `lookup_block body_result.vs_current_bb func.fn_blocks = SOME bb /\
-   eval_operand (Var iv) body_result = SOME (n2w j)` by
+  `lookup_block body_actual.vs_current_bb func.fn_blocks = SOME bb /\
+   eval_operand (Var iv) body_actual = SOME (n2w j)` by
     (asm_simp_tac bool_ss [] >> metis_tac[]) >>
   drule_all ctor_checked_array_backedge_world_run_from >>
   disch_then (qx_choose_then `t` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   qexists `t` >> asm_simp_tac bool_ss [] >> conj_tac
   >- metis_tac[abi_decode_sim_trans] >>
-  qpat_x_assum `gas_path_mem ctx func s 0 (OK body_result)` mp_tac >>
-  qpat_x_assum `gas_path_mem ctx func body_result 0 (OK t)` mp_tac >>
+  qpat_x_assum `gas_path_mem ctx func s 0 (OK body_actual)` mp_tac >>
+  qpat_x_assum `gas_path_mem ctx func body_actual 0 (OK t)` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_mem_then, ADD]
 QED
