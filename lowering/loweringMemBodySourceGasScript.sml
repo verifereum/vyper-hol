@@ -31,7 +31,7 @@ Proof
   Induct >- simp[lookup_function_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
+  BasicProvers.every_case_tac >> gvs[lookup_function_def] >>
   metis_tac[]
 QED
 
