@@ -1476,6 +1476,36 @@ Proof
     gvs[Abbr `input`, arithmeticTheory.ADD_COMM] >> metis_tac[]) >> simp[]
 QED
 
+Theorem lineage_history_nondefining_observer_upper:
+  !fn dfg ch growth spill_base lbl_ctr.
+    codegen_ready_fn fn ==>
+    !vertices a b v.
+      lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr) (FST a) (SND a) /\
+      LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices a b /\
+      EVERY (\vertex. !bb. lookup_block (FST vertex) fn.fn_blocks = SOME bb ==>
+        EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions) vertices /\
+      LIST_ELEM_COUNT (Var v) (SND a).ps_stack +
+        (if Var v IN FDOM (SND a).ps_spilled then 1 else 0) <= 1 ==>
+      LIST_ELEM_COUNT (Var v) (SND b).ps_stack +
+        (if Var v IN FDOM (SND b).ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >> Induct >> simp[listTheory.LRC_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  PairCases_on `h` >> PairCases_on `z` >> gvs[] >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) z0 z1` by
+    metis_tac[lineage_edge_step] >>
+  drule lineage_edge_physical >> strip_tac >>
+  `EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions` by metis_tac[] >>
+  `LIST_ELEM_COUNT (Var v) z1.ps_stack +
+    (if Var v IN FDOM z1.ps_spilled then 1 else 0) <= 1` by
+    (gvs[] >> irule lineage_state_block_nondefining_observer_upper >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >> qexists_tac `(z0,z1)` >> gvs[]
+QED
+
 Theorem lineage_state_ordinary_last_use_extinction:
   !fn dfg ch growth spill_base lbl_ctr entry lbl ps h promised bb ops after
    setup_ops start k qs inst nl iops last v.
