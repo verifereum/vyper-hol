@@ -1849,6 +1849,122 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> gvs[] >> metis_tac[]
 QED
 
+Theorem lineage_state_incoming_block_dead_stack:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after pred v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    ~MEM (Var v) ps.ps_stack /\
+    ~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0)) /\
+    EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions ==>
+    ~MEM (Var v) after.ps_stack /\
+    ~MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_block_native_run >> strip_tac >>
+  `bb <> HD fn.fn_blocks` by
+    (irule fnPlanLineageObserverTransportTheory.ready_incoming_block_nonentry >>
+     simp[] >> qexists_tac `pred` >> simp[]) >>
+  `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
+    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+     gvs[codegen_ready_fn_def] >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `!j before w. _` kall_tac >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qspec_then `bb.bb_instructions` strip_assume_tac
+       fnPlanLineageLivenessTheory.collect_phis_prefix >>
+     metis_tac[listTheory.LENGTH_APPEND, arithmeticTheory.LESS_EQ_ADD]) >>
+  `~MEM (Var v) (ps with <|ps_cleanup_height := h;
+     ps_cleanup_promised := promised|>).ps_stack` by simp[] >>
+  `!j. j < LENGTH bb.bb_instructions ==>
+    ~MEM v (EL j bb.bb_instructions).inst_outputs` by
+    gvs[listTheory.EVERY_EL] >>
+  qspecl_then [`fn`, `bb`] mp_tac
+    fnPlanLineageObserverTransportTheory.native_incoming_prefix_dead_stack >>
+  simp[] >>
+  disch_then (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem lineage_edge_incoming_dead_stack:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps succ qs pred v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) (succ,qs) /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    ~MEM (Var v) ps.ps_stack /\
+    (!bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+      ~MEM v (input_vars_from pred bb.bb_instructions
+        (live_vars_at (liveness_analyze fn) lbl 0)) /\
+      EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions) ==>
+    ~MEM (Var v) qs.ps_stack /\ MEM succ (cfg_succs_of (cfg_analyze fn) lbl) /\
+    (!sb. lookup_block succ fn.fn_blocks = SOME sb ==>
+      ~MEM v (input_vars_from lbl sb.bb_instructions
+        (live_vars_at (liveness_analyze fn) succ 0)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule lineage_edge_physical >> strip_tac >>
+  `~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0)) /\
+    EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions` by metis_tac[] >>
+  `~MEM (Var v) after.ps_stack /\
+    ~MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions))` by
+    (irule lineage_state_incoming_block_dead_stack >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by
+    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze] >>
+  drule_all fnPlanLineageLivenessTheory.analyzed_live_out_edge_subset >>
+  simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem lineage_history_incoming_dead_stack:
+  !fn dfg ch growth spill_base lbl_ctr.
+    codegen_ready_fn fn ==>
+    !vertices a b pred v.
+      lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr) (FST a) (SND a) /\
+      LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices a b /\
+      MEM (FST a) (cfg_succs_of (cfg_analyze fn) pred) /\
+      ~MEM (Var v) (SND a).ps_stack /\
+      (!bb. lookup_block (FST a) fn.fn_blocks = SOME bb ==>
+        ~MEM v (input_vars_from pred bb.bb_instructions
+          (live_vars_at (liveness_analyze fn) (FST a) 0))) /\
+      EVERY (\vertex. !bb. lookup_block (FST vertex) fn.fn_blocks = SOME bb ==>
+        EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions) vertices ==>
+      ~MEM (Var v) (SND b).ps_stack /\
+      ?last_pred. MEM (FST b) (cfg_succs_of (cfg_analyze fn) last_pred) /\
+        (!bb. lookup_block (FST b) fn.fn_blocks = SOME bb ==>
+          ~MEM v (input_vars_from last_pred bb.bb_instructions
+            (live_vars_at (liveness_analyze fn) (FST b) 0)))
+Proof
+  rpt gen_tac >> strip_tac >> Induct >> simp[listTheory.LRC_def]
+  >- (rpt strip_tac >> qexists_tac `pred` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  PairCases_on `h` >> PairCases_on `z` >> gvs[] >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) z0 z1` by
+    metis_tac[lineage_edge_step] >>
+  `~MEM (Var v) z1.ps_stack /\ MEM z0 (cfg_succs_of (cfg_analyze fn) h0) /\
+    (!sb. lookup_block z0 fn.fn_blocks = SOME sb ==>
+      ~MEM v (input_vars_from h0 sb.bb_instructions
+        (live_vars_at (liveness_analyze fn) z0 0)))` by
+    (irule lineage_edge_incoming_dead_stack >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >>
+  qexistsl_tac [`(z0,z1)`, `h0`] >> gvs[]
+QED
+
 (* KEY LEMMA (cheated, for alan): a lineage state regenerates the block's
    DFS code, so the code at the block's label is the plan of a state that
    carries the run-time path's stack and spill map.  With the cleanup

@@ -1525,3 +1525,126 @@ Proof
   drule fnPlanLineageInventoryTheory.clean_stack_plan_spilled_unchanged >>
   strip_tac >> gvs[GSYM LIST_ELEM_COUNT_MEM]
 QED
+
+Theorem prepare_params_plan_stack_absent:
+  !lv fn ps ops qs v.
+    prepare_params_plan lv fn ps = (ops,qs) /\
+    EVERY (\inst. v <> HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions) /\
+    ~MEM (Var v) ps.ps_stack ==> ~MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `get_params (HD fn.fn_blocks).bb_instructions = []`
+  >- gvs[prepare_params_plan_def] >>
+  qpat_x_assum `prepare_params_plan _ _ _ = _` mp_tac >>
+  simp[prepare_params_plan_def, fnPlanLineageSetupTheory.parameter_push_fold, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `MEM (Var v) ps''.ps_stack` by
+    (qpat_x_assum `optimistic_swap_plan _ _ _ _ _ = _`
+       (mp_tac o AP_TERM ``SND : stack_op list # plan_state -> plan_state``) >>
+     simp[] >> disch_then (SUBST_ALL_TAC o SYM) >>
+     gvs[SRULE [pred_setTheory.EXTENSION]
+       fnPlanLineageSetupTheory.optimistic_swap_plan_slots]) >>
+  drule_all fnPlanLineageQuarantineTheory.popmany_plan_stack_support >>
+  gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem native_block_setup_stack_absent:
+  !lv cfg fn bb ps ops qs v.
+    (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps
+     else if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+       clean_stack_plan lv cfg fn bb ps else ([],ps)) = (ops,qs) /\
+    EVERY (\inst. v <> HD inst.inst_outputs) (get_params bb.bb_instructions) /\
+    ~MEM (Var v) ps.ps_stack ==> ~MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `bb = HD fn.fn_blocks`
+  >- (gvs[] >> metis_tac[prepare_params_plan_stack_absent]) >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[] >>
+  metis_tac[clean_stack_plan_stack_absent]
+QED
+
+(* A setup cut traverses every parameter push but only the specified worker
+   prefix. No premise constrains outputs of the unexecuted worker tail. *)
+Theorem native_setup_prefix_dead_stack:
+  !fn bb dfg ps setup_ops start k qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    (if bb = HD fn.fn_blocks then prepare_params_plan (liveness_analyze fn) fn ps
+     else if LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb ps
+     else ([],ps)) = (setup_ops,start) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
+    ~MEM (Var v) ps.ps_stack /\
+    EVERY (\inst. v <> HD inst.inst_outputs) (get_params bb.bb_instructions) /\
+    (LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (MAX (LENGTH (get_params bb.bb_instructions))
+          (LENGTH (collect_phis bb.bb_instructions))))) /\
+    (!j. j < k ==> ~MEM v (EL j (non_param_insts bb)).inst_outputs) ==>
+    ~MEM (Var v) qs.ps_stack /\
+    (LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~MEM (Var v) start.ps_stack` by
+    (drule_all native_block_setup_stack_absent >> simp[]) >>
+  irule native_seeded_phi_body_dead_stack >>
+  simp[] >> qexistsl_tac [`0`, `dfg`, `start`, `start`] >>
+  simp[fnPlanLineageEntryProductionTheory.native_inst_prefix_rules]
+QED
+
+Theorem native_incoming_prefix_dead_stack:
+  !fn bb pred dfg ps setup_ops start k qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ bb <> HD fn.fn_blocks /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb ps
+     else ([],ps)) = (setup_ops,start) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
+    ~MEM (Var v) ps.ps_stack /\
+    ~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0)) /\
+    (!j. j < k ==> ~MEM v (EL j (non_param_insts bb)).inst_outputs) ==>
+    ~MEM (Var v) qs.ps_stack /\
+    (LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
+    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+     gvs[codegen_ready_fn_def] >> metis_tac[]) >>
+  irule native_setup_prefix_dead_stack >> simp[] >>
+  reverse conj_tac
+  >- (qexistsl_tac [`dfg`, `ps`, `setup_ops`, `start`] >> gvs[]) >>
+  strip_tac >>
+  irule native_edge_phi_body_dead >> simp[] >>
+  conj_tac >- (qexists_tac `pred` >> simp[]) >>
+  simp[EVERY_EL] >> rpt strip_tac >>
+  qspec_then `bb.bb_instructions` strip_assume_tac
+    fnPlanLineageLivenessTheory.collect_phis_prefix >>
+  `n < k` by decide_tac >>
+  `EL n (collect_phis bb.bb_instructions) = EL n bb.bb_instructions` by
+    metis_tac[EL_APPEND1] >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem ready_incoming_block_nonentry:
+  !fn pred bb.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred) ==>
+    bb <> HD fn.fn_blocks
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  `fn.fn_blocks <> []` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  gvs[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  gvs[fnPlanLineageCallersTheory.ready_entry_no_clean]
+QED
