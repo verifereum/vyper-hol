@@ -48,6 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
+  bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
   loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
@@ -2032,7 +2033,35 @@ Theorem body_assign_tuple_widened_call[local]:
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+    cx.in_deploy /\ IS_SOME (supported_immutable_type tops nsid)) gs`
+  >- (irule immutable_deploy_tuple_assign >> metis_tac[]) >>
+  Cases_on `EXISTS (\g. ?nsid key.
+    g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
+    ~supported_pure_expr tops key) gs`
+  >- (irule tuple_assign_effectful_index >> metis_tac[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule body_assign_tuple_rhs_pre >> metis_tac[]) >>
+  drule_all tuple_places_typing >> strip_tac >>
+  drule_all tuple_widened_physical_layout >> strip_tac >>
+  `cenv.ce_target CapMcopy` by metis_tac[body_inv_mcopy] >>
+  `get_module_code cx NONE = SOME tops /\
+   acyclic_struct_metadata cenv.ce_struct_fields` by gvs[body_inv_def] >>
+  `expr_sim ctx func cenv cx (TupleT tys) e es` by
+    (drule_all body_expr_ok_case >>
+     disch_then (qspec_then `func` strip_assume_tac) >>
+     gvs[expr_sim_case_def] >> metis_tac[]) >>
+  `EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
+    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
+    target_indices_pre cenv cx env bt) gs` by
+    (rw[EVERY_MEM] >>
+     drule_all tuple_places_member >> strip_tac >> gvs[] >>
+     conj_tac >- metis_tac[tuple_places_target_case] >>
+     metis_tac[tuple_places_indices_pre]) >>
+  irule compile_assign_tuple_places_stmt_frag >> simp[] >>
+  qexistsl_tac [`env`, `tops`] >> simp[] >>
+  metis_tac[tuple_places_component_bound, tuple_widened_component_bound]
 QED
 
 Theorem body_assign_tuple_case:
