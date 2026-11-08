@@ -56,19 +56,12 @@ Theorem ifexp_residual_noncall_bytes:
   ~(?ann fid args dret. arm = Call ann (IntCall fid) args dret) ==>
   is_bytestring_type ty
 Proof
-  (* LOCAL STUB (owner, 2026-11-08): the tip's lowered_value_type Concat clause
-     adds a Concat arm disjunct to ifexp_allocating_arm_exceptions, and this
-     proof leaves the Concat goal open (Concat's result type should be a
-     bytestring by well_typed_builtin_app). Prove this (keep the statement)
-     before finishing. Original proof:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_type arm = ty /\ well_typed_expr env arm` by
     gvs[expr_body_pre_def, well_typed_expr_def] >>
   drule_all ifexp_allocating_arm_exceptions >> strip_tac >>
   gvs[expr_type_def, is_bytestring_type_def, well_typed_expr_def,
-      type_builtin_result_ok_def]
-  *)
-  cheat
+      type_builtin_result_ok_def, well_typed_builtin_app_def]
 QED
 
 Theorem ifexp_bytes_caller_inputs:

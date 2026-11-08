@@ -102,13 +102,17 @@ Proof
   PairCases_on `result` >> gvs[as_ptr_val_def, mk_ptr_def]
 QED
 
-(* LOCAL STUB for the owner's rebase onto the Concat clause of
-   lowered_value_type_def: prove this (or restate it) before finishing. *)
 Theorem ifexp_concat_memory_result:
   compile_expr ce ret_ty (Builtin t (Concat n) args) sa = (vv,sb) ==>
   ?tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory
 Proof
-  cheat
+  `!bt es. names_builtin bt es ==> !k. bt <> Concat k` by
+    (ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]) >>
+  `~names_builtin (Concat n) args` by metis_tac[] >>
+  simp[compile_expr_builtin_dispatch,
+       Once compile_builtin_dispatch_component_eq] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[base_ptr_def, mk_ptr_def]
 QED
 
 Theorem ifexp_allocating_noop_representation:
