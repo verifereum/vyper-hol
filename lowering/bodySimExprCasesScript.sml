@@ -25,7 +25,6 @@
 Theory bodySimExprCases
 Ancestors
   bodySimIfExpWidened bodySimStructLitWidened bodySimMakeArrayWidened
-  bodySimSubscriptWidened
   bodySimBopInLiteralWord bodySimBopHeld
   bodySimConvertWidened
   exprSimSource
@@ -135,9 +134,34 @@ Proof
   metis_tac[body_struct_lit_widened_call_elem]
 QED
 
+(* A subscript's base value is laid out at the base's type: the type system
+   types an internal-call base at its callee's exact return type, which is
+   the type the lowering lays the call's value out at. *)
+Theorem expr_body_pre_subscript_base_type:
+  !cenv cx env ty e1 e2 es.
+    expr_body_pre cenv cx env (Subscript ty e1 e2) es ==>
+    post_value_type cenv e1 = expr_type e1
+Proof
+  rpt strip_tac >>
+  reverse (Cases_on `?t fid args drv. e1 = Call t (IntCall fid) args drv`)
+  >- (irule loweringPostsTheory.post_value_type_not_int_call >> metis_tac[]) >>
+  gvs[] >>
+  `well_typed_expr env (Subscript ty (Call t (IntCall fid) args drv) e2)` by
+    fs[expr_body_pre_def] >>
+  `type_place_expr env (Call t (IntCall fid) args drv) = NONE` by
+    simp[Once vyperTypeSystemTheory.well_typed_expr_def] >>
+  `subscript_base_type_exact env (Call t (IntCall fid) args drv)` by
+    (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
+     simp[Once vyperTypeSystemTheory.well_typed_expr_def]) >>
+  gvs[vyperTypeSystemTheory.subscript_base_type_exact_def, AllCaseEqs()] >>
+  `cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     rw[expr_body_pre_def, expr_sim_inv_def]) >>
+  simp[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
+QED
+
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
-   cheated there for compile_expr_sim too; a widened internal-call base is
-   body_subscript_widened_call_base. *)
+   cheated there for compile_expr_sim too. *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
     (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
@@ -146,9 +170,7 @@ Theorem body_subscript_case:
 Proof
   rpt strip_tac >> simp[Once body_expr_ok_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
-      >- (rw[expr_sim_case_def, expr_vv_case_def] >>
-          metis_tac[body_subscript_widened_call_base]) >>
+      drule expr_body_pre_subscript_base_type >> strip_tac >>
       `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
         (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
          >- metis_tac[body_expr_ok_case]
