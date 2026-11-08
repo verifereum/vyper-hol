@@ -38,7 +38,7 @@ Ancestors
   configuredE2ECorrectness
   finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
   asmOptPeephole
-  asmOptPruneUnused asmOptMergeJumpdests
+  asmOptPruneUnreachable asmOptPruneUnused asmOptMergeJumpdests
   asmOptInefficientJumps
   evalCompilerInternalImmutables
   evalAssignmentOrder
