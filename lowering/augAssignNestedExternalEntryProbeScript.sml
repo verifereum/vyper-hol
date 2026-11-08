@@ -3,6 +3,7 @@ Theory augAssignNestedExternalEntryProbe
 Ancestors
   augAssignNestedExternalCallerProbe compileVyper moduleLowering stmtLowering
   selectorDispatch exprLoweringProps stmtSimDefs
+  entryInternalAppend entryPrefixRetention entryRawFunction
 Libs finite_mapLib computeLib supportedEvalLib
 
 val () = supportedEvalLib.configure ()
@@ -205,4 +206,138 @@ Theorem runtime_linear_phases[local]:
    od) s
 Proof
   simp[compile_generate_runtime_def]
+QED
+
+Theorem external_noargs_phases[local]:
+  !lbl cenv body s. compile_external_fn_bodies
+    [(lbl,cenv,[],4,F,F,0,F,F,body,NONE)] s =
+  (do new_block lbl;
+      compile_entry_checks 4 F;
+      compile_stmts cenv NoLoop (BaseT BoolT) body;
+      cs <- comp_get;
+      if block_is_terminated cs then return ()
+      else emit_inst STOP [] []
+   od) s
+Proof
+  rpt gen_tac >>
+  simp[compile_external_fn_bodies_def, compile_external_function_body_def,
+       compile_register_positional_args_def, compile_guarded_body_def,
+       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_bind_assoc,
+       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `block_is_terminated cs` >>
+  gvs[compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_bind_def,
+      compileEnvTheory.comp_return_def]
+QED
+
+Theorem nested_external_slice_compile[local]:
+  compile_stmt nested_external_slice_cenv NoLoop (BaseT BoolT)
+    (AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+      (Literal (BaseT (UintT 256)) (IntL 1))) nested_external_slice_start =
+  ((),nested_external_slice_end)
+Proof
+  rewrite_tac[nested_external_slice_end_def, nested_external_slice_ret_ty,
+              loweringPostsTheory.stmt_env_def] >>
+  simp[declare_stmt_local_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  qpat_x_assum `((),_) = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  simp[]
+QED
+
+Theorem nested_external_slice_unterminated[local]:
+  ~block_is_terminated nested_external_slice_end
+Proof
+  simp[compileEnvTheory.block_is_terminated_def, nested_external_slice_insts,
+       nested_external_insts_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem nested_external_body_phase[local]:
+  compile_stmts nested_external_slice_cenv NoLoop (BaseT BoolT)
+    [AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+      (Literal (BaseT (UintT 256)) (IntL 1)); Return NONE]
+    nested_external_slice_start =
+  emit_inst STOP [] [] nested_external_slice_end
+Proof
+  simp[Once compile_stmt_def, declare_stmt_local_def,
+       compileEnvTheory.comp_get_def, compileEnvTheory.comp_ignore_bind_def,
+       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+       nested_external_slice_position, nested_external_slice_compile,
+       nested_external_slice_unterminated] >>
+  simp[compile_stmt_def, declare_stmt_local_def, nested_external_slice_cenv_def,
+       nested_external_compile_env, compileEnvTheory.comp_get_def,
+       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_return_def, nested_external_slice_unterminated] >>
+  simp[loweringShapeRulesTheory.emit_inst_eq]
+QED
+
+
+Theorem compiler_ignore_bind_projection:
+  !m n s. comp_ignore_bind m n s = n (SND (m s))
+Proof
+  rpt gen_tac >> Cases_on `m s` >>
+  simp[compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_bind_def]
+QED
+
+Theorem nested_external_function_phase[local]:
+  compile_external_fn_bodies
+    [("fn_probe",nested_external_slice_cenv,[],4,F,F,0,F,F,
+      [AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+        (Literal (BaseT (UintT 256)) (IntL 1)); Return NONE],NONE)]
+    (SND ((do fallback <- fresh_label "fallback";
+              compile_selector_dispatch_linear [(3075143081,"fn_probe")] fallback
+           od) (initial_compile_state "__entry"))) =
+  emit_inst STOP [] [] nested_external_slice_end
+Proof
+  mp_tac nested_external_slice_start_def >>
+  Cases_on `fresh_label "fallback" (initial_compile_state "__entry")` >>
+  simp[external_noargs_phases, compiler_ignore_bind_projection,
+       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_get_def] >>
+  disch_then (fn th => pure_rewrite_tac[th]) >>
+  simp[nested_external_body_phase, loweringShapeRulesTheory.emit_inst_eq,
+       compileEnvTheory.comp_return_def, compileEnvTheory.block_is_terminated_def,
+       venomInstTheory.is_terminator_def, venomInstTheory.mk_inst_def,
+       nested_external_slice_insts, nested_external_insts_def]
+QED
+
+Theorem nested_external_runtime_phase[local]:
+  !z ints bc md dense info.
+  compile_generate_runtime [(3075143081,"fn_probe",z)]
+    [("fn_probe",nested_external_slice_cenv,[],4,F,F,0,F,F,
+      [AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+        (Literal (BaseT (UintT 256)) (IntL 1)); Return NONE],NONE)]
+    ints NONE Linear bc md dense info (initial_compile_state "__entry") =
+  (do new_block (FST (fresh_label "fallback" (initial_compile_state "__entry")));
+      emit_inst REVERT [Lit 0w; Lit 0w] [];
+      _ <- compile_internal_fn_bodies ints;
+      return ()
+   od) (SND (emit_inst STOP [] [] nested_external_slice_end))
+Proof
+  rpt gen_tac >> mp_tac nested_external_function_phase >>
+  Cases_on `fresh_label "fallback" (initial_compile_state "__entry")` >>
+  simp[runtime_linear_phases, compiler_ignore_bind_projection,
+       compileEnvTheory.comp_bind_def] >>
+  disch_then (fn th => pure_rewrite_tac[th]) >>
+  simp[loweringShapeRulesTheory.emit_inst_eq]
+QED
+
+Theorem extracted_prefix_lookup:
+  extract_context_with_internals entry ints sz = SOME (ctx,data) /\
+  all_blocks sz = pre ++ tail /\
+  (!d. MEM d (internal_fn_descriptors ints) ==>
+       ~MEM (FST d) (MAP (\bb. bb.bb_label) pre)) /\
+  lookup_function entry ctx.ctx_functions = SOME efn /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) efn.fn_blocks) /\
+  MEM bb pre ==> lookup_block bb.bb_label efn.fn_blocks = SOME bb
+Proof
+  strip_tac >>
+  qpat_assum `extract_context_with_internals _ _ _ = _`
+    (mp_tac o REWRITE_RULE [vyperCompilerTheory.extract_context_with_internals_def]) >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  fs[GSYM loweringShapeDefsTheory.all_blocks_def] >>
+  `efn.fn_blocks = entry_blocks` by
+    (drule_all extracted_entry_blocks >> simp[]) >>
+  irule venomExecPropsTheory.MEM_lookup_block >> simp[] >>
+  irule package_internal_blocks_prefix_mem >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
