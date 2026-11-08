@@ -482,7 +482,9 @@ Theorem intcall_memory_vv_holds_frame:
      val_wf tv v /\
      mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory =
      mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory) /\
-  (is_word_type ty ==> !w. eval_operand p.ptr_operand s = SOME w ==>
+  (is_word_type ty ==> !tv w.
+     evaluate_type (get_tenv cx) ty = SOME tv /\
+     eval_operand p.ptr_operand s = SOME w ==>
      mem_word_at (w2n w) u.vs_memory = mem_word_at (w2n w) s.vs_memory) ==>
   vv_holds ce cx ty r (LocatedValue ann p) ee u
 Proof
@@ -601,6 +603,138 @@ Proof
   disch_then (qspec_then `r` mp_tac) >>
   Cases_on `read_result cx r ee` >> Cases_on `read_result cx r es` >>
   imp_res_tac vyperStateTheory.read_result_state >> simp[]
+QED
+
+Theorem intcall_pure_child_vv_holds:
+  vv_holds ce fp.jc_cx ty r vv es s /\
+  vv_at ce fp.jc_cx ty a b es r vv s /\
+  vv_storage_live fp.jc_cx vv es s /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at c x) /\
+  b.cs_next_id <= c.cs_next_id /\
+  supported_pure_expr fp.jc_tops child /\
+  eval_expr fp.jc_cx child es = (INL child_r,ee) /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx child es c d s ee child_r child_vv u /\
+  intcall_expr_cont fp ce env es c s ee d u /\
+  gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) ==>
+  vv_holds ce fp.jc_cx ty r vv ee u
+Proof
+  strip_tac >>
+  `eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s` by
+    (irule intcall_vv_operand_normal_frame >> metis_tac[]) >>
+  `!v. read_result fp.jc_cx r ee = (INL v,ee) <=>
+       read_result fp.jc_cx r es = (INL v,es)` by
+    (irule intcall_pure_child_read_agreement >> metis_tac[]) >>
+  `~expr_has_effect child` by
+    metis_tac[supportedExprTraverseTheory.supported_pure_expr_effect_free] >>
+  `!tr. get_storage fp.jc_cx ee tr = get_storage fp.jc_cx es tr` by
+    (gen_tac >> drule_all aug_place_pure_eval_storage >> simp[]) >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee u` by
+    fs[loweringPostsTheory.vv_post_def] >>
+  Cases_on `vv`
+  >- (rename1 `StackValue ann op` >>
+      irule intcall_stack_vv_holds_frame >>
+      qexistsl [`es`, `s`] >> fs[contextTheory.vv_operand_def] >>
+      disch_tac >> rpt gen_tac >> strip_tac >> conj_tac
+      >- (fs[loweringPostsTheory.vv_at_def,
+             loweringPostsTheory.expr_val_at_def] >> metis_tac[]) >>
+      sym_tac >> irule intcall_pure_child_stack_memory >> metis_tac[]) >>
+  rename1 `LocatedValue ann p` >>
+  Cases_on `p.ptr_location`
+  >- (irule intcall_memory_vv_holds_frame >> simp[] >>
+      qexistsl [`es`, `s`] >> fs[contextTheory.vv_operand_def] >>
+      conj_tac
+      >- (rpt gen_tac >> strip_tac >> conj_tac
+          >- (fs[loweringPostsTheory.vv_at_def] >> metis_tac[]) >>
+          sym_tac >> irule intcall_pure_child_located_memory >>
+          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      rpt strip_tac >> irule intcall_pure_child_memory_word >>
+      goal_assum (drule_at Any) >> simp[] >>
+      fs[loweringPostsTheory.vv_holds_def] >> metis_tac[])
+  >- (irule intcall_storage_vv_holds_frame >>
+      fs[contextTheory.vv_operand_def] >> metis_tac[]) 
+  >- (irule intcall_storage_vv_holds_frame >>
+      fs[contextTheory.vv_operand_def] >> metis_tac[]) 
+  >- (fs[loweringPostsTheory.vv_holds_def, contextTheory.vv_operand_def] >>
+      irule intcall_pure_child_immutable_holds >> metis_tac[]) >>
+  fs[loweringPostsTheory.vv_holds_def]
+QED
+
+(* The exact value certificate is independent of the child's own result.
+   In particular the W capacity witnesses are retained, not reframed. *)
+Theorem intcall_pure_child_value_certificate:
+  vv_holds ce fp.jc_cx ty r vv es s /\
+  vv_at ce fp.jc_cx ty a b es r vv s /\
+  (ty <> origin_ty ==> vv_own ce fp.jc_cx ty a b es r vv s) /\
+  vv_storage_live fp.jc_cx vv es s /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at b x) /\
+  (ty <> NoneT /\ ~is_word_type ty /\ ~is_bytestring_type ty /\
+   (case vv of StackValue _ _ => T
+             | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   !tv. evaluate_type (get_tenv fp.jc_cx) ty = SOME tv ==>
+     ?w off len. eval_operand (vv_operand vv) s = SOME w /\
+       off <= w2n w /\ w2n w + type_memory_size tv <= off + len /\
+       off + len < dimword (:256) /\
+       (fp.jc_lo <= off \/
+        ?base size. fp.jc_staged base size /\ base <= off /\
+                    off + len <= base + size)) /\
+  b.cs_next_id <= c.cs_next_id /\ b.cs_next_var <= c.cs_next_var /\
+  c.cs_next_id <= d.cs_next_id /\ c.cs_next_var <= d.cs_next_var /\
+  supported_pure_expr fp.jc_tops child /\
+  eval_expr fp.jc_cx child es = (INL child_r,ee) /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx child es c d s ee child_r child_vv u /\
+  intcall_joint_res fp ce env es c s /\
+  intcall_expr_cont fp ce env es c s ee d u /\
+  gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) ==>
+  vv_holds ce fp.jc_cx ty r vv ee u /\
+  vv_at ce fp.jc_cx ty a d ee r vv u /\
+  (ty <> origin_ty ==> vv_own ce fp.jc_cx ty a d ee r vv u) /\
+  vv_storage_live fp.jc_cx vv ee u /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at d x) /\
+  (ty <> NoneT /\ ~is_word_type ty /\ ~is_bytestring_type ty /\
+   (case vv of StackValue _ _ => T
+             | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   !tv. evaluate_type (get_tenv fp.jc_cx) ty = SOME tv ==>
+     ?w off len. eval_operand (vv_operand vv) u = SOME w /\
+       off <= w2n w /\ w2n w + type_memory_size tv <= off + len /\
+       off + len < dimword (:256) /\
+       (fp.jc_lo <= off \/
+        ?base size. fp.jc_staged base size /\ base <= off /\
+                    off + len <= base + size))
+Proof
+  strip_tac >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at c x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s` by
+    (irule intcall_vv_operand_normal_frame >> metis_tac[]) >>
+  `!v. read_result fp.jc_cx r ee = (INL v,ee) <=>
+       read_result fp.jc_cx r es = (INL v,es)` by
+    (irule intcall_pure_child_read_agreement >> metis_tac[]) >>
+  `ee.scopes = es.scopes` by
+    (drule_all aug_place_pure_expr_scopes >> simp[]) >>
+  `!name off len. local_region ce ee.scopes u name off len <=>
+                 local_region ce es.scopes s name off len` by
+    (rpt gen_tac >> irule stmtSimLogArgsTheory.log_frame_local_region >>
+     fs[intcall_joint_res_def, intcall_expr_cont_def,
+        loweringPostsTheory.wb_frame_def] >>
+     conj_tac >-
+       (qexists `c` >> simp[] >> rpt conj_tac >> rpt gen_tac >>
+        strip_tac >> first_x_assum irule >> simp[] >>
+        conj_tac >- (first_assum ACCEPT_TAC) >> qexists `aid` >> simp[]) >>
+     qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >> simp[]) >>
+  conj_tac
+  >- (irule intcall_pure_child_vv_holds >> metis_tac[]) >>
+  conj_tac
+  >- (irule intcall_vv_at_frame >> qexistsl [`b`, `es`, `s`] >>
+      fs[intcall_expr_cont_def] >> metis_tac[]) >>
+  conj_tac
+  >- (strip_tac >> irule intcall_vv_own_frame >>
+      qexistsl [`b`, `es`, `s`] >> fs[intcall_expr_cont_def] >> metis_tac[]) >>
+  conj_tac
+  >- (irule intcall_vv_storage_live_frame >> qexistsl [`es`, `s`] >>
+      simp[] >> gen_tac >> drule_all aug_place_pure_eval_storage >> simp[]) >>
+  conj_tac
+  >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  gvs[]
 QED
 
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
