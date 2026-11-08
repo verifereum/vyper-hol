@@ -555,73 +555,6 @@ Proof
   fs[cs_appends_def] >> first_x_assum drule >> simp[]
 QED
 
-Theorem len_imm_ctor_path[local]:
-  !ctx func cenv cx es pop sm op sb s0 w.
-    compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
-    local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-    s0.vs_current_bb = sm.cs_current_bb /\
-    s0.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    eval_operand pop s0 = SOME w ==>
-    ?s. gas_path ctx func s0 0 (OK s) /\
-        s.vs_current_bb = sb.cs_current_bb /\
-        s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        stmt_state_rel ctx func cenv cx es s /\
-        eval_operand op s = SOME (mload (w2n w) s0) /\
-        (!x w'. not_fresh_at sm x /\ lookup_var x s0 = SOME w' ==>
-                lookup_var x s = SOME w') /\
-        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-                 FLOOKUP s.vs_allocas aid = SOME b) /\
-        s.vs_memory = s0.vs_memory
-Proof
-  rpt strip_tac >> Cases_on `cenv.ce_imm_alloca` >>
-  gvs[contextTheory.compile_imm_load_word_def]
-  >- (drule len_emit_op_path >>
-      disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
-        `mload (w2n w) s0`] mp_tac) >>
-      impl_tac
-      >- (simp[is_terminator_def] >> rpt strip_tac >> irule len_step_ILOAD >>
-          simp[]) >>
-      strip_tac >> goal_assum drule >> simp[]) >>
-  rename1 `cenv.ce_imm_alloca = SOME ib` >>
-  qpat_x_assum `comp_bind _ _ _ = _` mp_tac >>
-  simp[comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
-  rename1 `emit_op ADD [pop; ib] sm = (addr, sm1)` >>
-  `cs_extends sm sm1 /\ cs_extends sm1 sb` by metis_tac[len_emit_op_cs_extends] >>
-  `fn_has_code sm sm1 func /\ fn_has_code sm1 sb func` by
-    metis_tac[fn_has_code_split] >>
-  `local_ptrs_reserved cenv sm1` by
-    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-     qexists_tac `sm` >>
-     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
-         comp_ignore_bind_def, comp_return_def, emit_def]) >>
-  qpat_x_assum `emit_op ADD _ _ = _` assume_tac >>
-  drule len_emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `w`]
-    mp_tac) >>
-  impl_tac
-  >- (simp[is_terminator_def] >> rpt strip_tac >>
-      irule len_step_ADD_imm_base >> metis_tac[]) >>
-  strip_tac >> rename1 `gas_path _ _ s0 0 (OK s1)` >>
-  `~s1.vs_halted` by metis_tac[fragGasPathTheory.gas_path_normal] >>
-  qpat_x_assum `emit_op ILOAD _ _ = _` assume_tac >>
-  drule len_emit_op_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s1`,
-    `mload (w2n w) s1`] mp_tac) >>
-  impl_tac
-  >- (simp[is_terminator_def] >> rpt strip_tac >> irule len_step_ILOAD >>
-      simp[]) >>
-  strip_tac >> rename1 `gas_path _ _ s1 0 (OK s2)` >>
-  qexists_tac `s2` >> gvs[mload_def] >>
-  conj_tac
-  >- (`0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
-      irule fragGasPathTheory.gas_path_then >> metis_tac[]) >>
-  rpt strip_tac >> first_x_assum irule >> conj_tac
-  >- (first_x_assum irule >> simp[]) >>
-  gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
-      comp_ignore_bind_def, comp_return_def, emit_def, not_fresh_at_def]
-QED
-
 Theorem len_step_TLOAD[local]:
   !op1 v1 id out ss.
     eval_operand op1 ss = SOME v1 ==>
@@ -653,7 +586,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `loc = LocCode /\ is_ctor`
   >- (gvs[compile_builtin_len_def, compile_ptr_load_def, ptr_load_val_def] >>
-      drule_all len_imm_ctor_path >> simp[]) >>
+      drule_all compile_imm_load_word_ctor_path >> simp[]) >>
   Cases_on `loc` >>
   gvs[compile_builtin_len_def, compile_ptr_load_def,
       compile_imm_load_word_runtime, ptr_load_val_def] >>

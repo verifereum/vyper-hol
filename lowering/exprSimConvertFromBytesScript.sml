@@ -288,7 +288,7 @@ QED
 
 Finalise dynamic_load_word_raw_exact
 
-Theorem dynamic_convert_typing_boundary[local]:
+Theorem dynamic_convert_typing_boundary:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert dst [e]) es ==>
   valid_conversion (expr_type e) dst /\ ann = dst /\
   well_formed_type env.type_defs dst
@@ -298,7 +298,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem dynamic_decimal_convert_op[local]:
+Theorem dynamic_decimal_convert_op:
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT DecimalT) =
     ConvBytestringToDecimal 10000000000
       (w2i (FST (type_bounds (BaseT DecimalT))))
@@ -307,7 +307,7 @@ Proof
   simp[mk_convert_op_def, is_bytestring_type_def] >> pairarg_tac >> simp[]
 QED
 
-Theorem dynamic_bytes_scalar_partition[local]:
+Theorem dynamic_bytes_scalar_partition:
   valid_conversion (BaseT (BytesT (Dynamic n))) dst /\
   ~is_bytestring_type dst ==>
   (dst = BaseT BoolT /\ n <= 32) \/
@@ -324,7 +324,7 @@ Proof
   simp[valid_conversion_def, is_bytestring_type_def]
 QED
 
-Theorem dynamic_string_scalar_partition[local]:
+Theorem dynamic_string_scalar_partition:
   valid_conversion (BaseT (StringT n)) dst /\
   ~is_bytestring_type dst ==>
   ?m. dst = BaseT (BytesT (Fixed m)) /\ n <= m
@@ -336,7 +336,7 @@ Proof
   simp[valid_conversion_def, is_bytestring_type_def]
 QED
 
-Theorem dynamic_scalar_convert_ops[local]:
+Theorem dynamic_scalar_convert_ops:
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT BoolT) =
     ConvBytestringToBool /\
   mk_convert_op (BaseT (BytesT (Dynamic n))) (BaseT AddressT) =
@@ -640,7 +640,7 @@ Proof
   drule_all dynamic_local_region_bound >> decide_tac
 QED
 
-Theorem dynamic_convert_operand_typed[local]:
+Theorem dynamic_convert_operand_typed:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
   (do r <- eval_expr cx e1; read_result cx r od) es = (INL v, es1) ==>
   ?stv. evaluate_type (get_tenv cx) (expr_type e1) = SOME stv /\
@@ -1728,9 +1728,9 @@ Resume dynamic_scalar_run_exact[string]:
   gvs[vyperValueTheory.evaluate_type_def]
 QED
 
-Finalise dynamic_scalar_run_exact[local]
+Finalise dynamic_scalar_run_exact
 
-Theorem dynamic_operand_packet[local]:
+Theorem dynamic_operand_packet:
   is_bytestring_type src /\
   evaluate_type (get_tenv cx) src = SOME stv /\ value_has_type stv v /\
   stmt_state_rel ctx func cenv cx es s /\ expr_val_rel cx src v op s /\
@@ -1899,7 +1899,7 @@ Proof
       venom_state_component_equality]
 QED
 
-Theorem dynamic_run_read_fresh[local]:
+Theorem dynamic_run_read_fresh:
   !is st ss tt.
     dynamic_writes_fresh st is /\ run_inst_seq is ss = OK tt ==>
     tt = ss with vs_vars := tt.vs_vars /\
@@ -1925,7 +1925,7 @@ Proof
   metis_tac[])
 QED
 
-Theorem dynamic_read_fresh_safe[local]:
+Theorem dynamic_read_fresh_safe:
   fresh_write_op opc \/ opc = MLOAD ==>
   opc <> INVOKE /\ ~is_terminator opc /\ ~is_ext_call_op opc
 Proof
@@ -1933,7 +1933,7 @@ Proof
   gvs[venomInstTheory.is_terminator_def, venomInstTheory.is_ext_call_op_def]
 QED
 
-Theorem dynamic_writes_fresh_path_opcodes[local]:
+Theorem dynamic_writes_fresh_path_opcodes:
   dynamic_writes_fresh sa code ==>
   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
              ~is_terminator i.inst_opcode /\ ~is_ext_call_op i.inst_opcode) code
@@ -2135,7 +2135,7 @@ Proof
   simp[rich_listTheory.IS_PREFIX_APPEND3]
 QED
 
-Theorem dynamic_scalar_straight_read_fresh[local]:
+Theorem dynamic_scalar_straight_read_fresh:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
   valid_conversion src dst ==>
   dynamic_straight_fresh (compile_type_convert op (mk_convert_op src dst))
@@ -2154,7 +2154,7 @@ Proof
       dynamic_straight_fresh_convert]
 QED
 
-Theorem dynamic_code_prefix[local]:
+Theorem dynamic_code_prefix:
   dynamic_straight_fresh m /\ m sa = (op,sb) /\ fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -2220,7 +2220,7 @@ Proof
   (impl_tac >- (simp[] >> fs[EVERY_MEM])) >> metis_tac[]
 QED
 
-Theorem dynamic_run_post[local]:
+Theorem dynamic_run_post:
   dynamic_straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
   stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
@@ -2441,7 +2441,7 @@ QED
 
 Finalise dynamic_scalar_counted_fragment
 
-Theorem dynamic_expr_post_convert[local]:
+Theorem dynamic_expr_post_convert:
   expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
   stmt_state_rel ctx func cenv cx es' ss /\
   evaluate_type (get_tenv cx) ann = SOME dtv /\
@@ -2468,7 +2468,7 @@ Proof
   rpt strip_tac >> fs[] >> metis_tac[]
 QED
 
-Theorem dynamic_scalar_type[local]:
+Theorem dynamic_scalar_type:
   is_bytestring_type src /\ ~is_bytestring_type dst /\ valid_conversion src dst /\
   well_formed_type tenv dst ==>
   is_word_type dst /\ (!n. dst <> FlagT n)
