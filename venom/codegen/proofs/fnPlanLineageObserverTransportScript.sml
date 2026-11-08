@@ -2380,3 +2380,149 @@ Proof
        qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >>
        simp[])) >> metis_tac[]
 QED
+
+Theorem native_supported_ordinary_suffix_joint[local]:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !bb p v.
+    lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\ lbl = bb.bb_label /\
+    halt = bb_is_halting bb /\ n = LENGTH (get_params bb.bb_instructions)+p /\
+    len = LENGTH bb.bb_instructions /\ xs = DROP p (non_param_insts bb) /\
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~bb_is_halting bb /\
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled) ==>
+      MEM v (live_vars_at lv lbl n)) /\
+    (!j. j < k ==> (EL j xs).inst_opcode <> PHI /\ (EL j xs).inst_opcode <> JMP /\
+      ~is_param_opcode (EL j xs).inst_opcode /\ ~MEM v (EL j xs).inst_outputs) /\
+    (!j before w. j < k /\
+      fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before /\
+      MEM (Var w) (compute_operands (EL j xs)) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+      MEM v (live_vars_at lv lbl (n+k)))
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_strongind >>
+  conj_tac >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gvs[] >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ before = SOME (ops,after)` >>
+  `LIST_ELEM_COUNT (Var v) before.ps_stack +
+    (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) before.ps_stack \/ Var v IN FDOM before.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+p+k)))` by
+    (simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     first_x_assum irule >>
+     simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+     reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+     `j < SUC k` by decide_tac >> metis_tac[]) >>
+  qpat_x_assum `!bb' p' v'. (bb.bb_label = bb'.bb_label /\ _) ==> _` kall_tac >>
+  `DROP (p+k) (non_param_insts bb) = inst::rest` by
+    metis_tac[arithmeticTheory.ADD_COMM, DROP_DROP_T] >>
+  `k < LENGTH (DROP p (non_param_insts bb)) /\
+   inst = EL k (DROP p (non_param_insts bb))` by
+    (conj_asm1_tac
+     >- (qpat_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+         simp[] >> decide_tac) >> metis_tac[HD_DROP, HD]) >>
+  `inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+    ~is_param_opcode inst.inst_opcode /\ ~MEM v inst.inst_outputs` by
+    (qpat_x_assum `!j. j < SUC k ==> _` (qspec_then `k` mp_tac) >> simp[]) >>
+  `!w. MEM (Var w) (compute_operands inst) ==>
+    MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled` by
+    (rpt strip_tac >> qpat_x_assum `!j before w. _`
+      (qspecl_then [`k`,`before`,`w`] mp_tac) >> simp[] >> metis_tac[]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    native_suffix_ordinary_step >>
+  disch_then (qspecl_then [`v`,`1`] mp_tac) >> simp[] >>
+  `k+(p+LENGTH (get_params bb.bb_instructions)) =
+    LENGTH (get_params bb.bb_instructions)+p+k` by decide_tac >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  `SUC k+(p+LENGTH (get_params bb.bb_instructions)) =
+    p+(LENGTH (get_params bb.bb_instructions)+SUC k)` by decide_tac >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >> metis_tac[]
+QED
+
+Theorem native_supported_ordinary_suffix_demand_support:
+  !fn bb dfg p incoming k qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~bb_is_halting bb /\
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+p))) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+      (DROP p (non_param_insts bb)) incoming k qs /\
+    (!j. j < k ==> (EL j (DROP p (non_param_insts bb))).inst_opcode <> PHI /\
+      (EL j (DROP p (non_param_insts bb))).inst_opcode <> JMP /\
+      ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode /\
+      ~MEM v (EL j (DROP p (non_param_insts bb))).inst_outputs) /\
+    (!j before w. j < k /\
+      fnPlanLineageEntryProduction$native_inst_prefix
+        (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+        (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+        (DROP p (non_param_insts bb)) incoming j before /\
+      MEM (Var w) (compute_operands (EL j (DROP p (non_param_insts bb)))) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) ==>
+    (MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+p+k))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule native_supported_ordinary_suffix_joint >>
+  disch_then (qspecl_then [`bb`,`p`,`v`] mp_tac) >> simp[] >>
+  (impl_tac
+   >- (conj_tac
+       >- (`p+LENGTH (get_params bb.bb_instructions) =
+             LENGTH (get_params bb.bb_instructions)+p` by decide_tac >>
+           pop_assum (fn th => pure_rewrite_tac[th]) >> metis_tac[]) >>
+       rpt strip_tac >>
+       qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >> simp[])) >>
+  metis_tac[]
+QED
+
+Theorem native_supported_ordinary_suffix_resource_bound:
+  !fn bb dfg p incoming k qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~bb_is_halting bb /\
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+p))) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+      (DROP p (non_param_insts bb)) incoming k qs /\
+    (!j. j < k ==> (EL j (DROP p (non_param_insts bb))).inst_opcode <> PHI /\
+      (EL j (DROP p (non_param_insts bb))).inst_opcode <> JMP /\
+      ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode /\
+      ~MEM v (EL j (DROP p (non_param_insts bb))).inst_outputs) /\
+    (!j before w. j < k /\
+      fnPlanLineageEntryProduction$native_inst_prefix
+        (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+        (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+        (DROP p (non_param_insts bb)) incoming j before /\
+      MEM (Var w) (compute_operands (EL j (DROP p (non_param_insts bb)))) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule native_supported_ordinary_suffix_joint >>
+  disch_then (qspecl_then [`bb`,`p`,`v`] mp_tac) >> simp[] >>
+  (impl_tac
+   >- (conj_tac
+       >- (`p+LENGTH (get_params bb.bb_instructions) =
+             LENGTH (get_params bb.bb_instructions)+p` by decide_tac >>
+           pop_assum (fn th => pure_rewrite_tac[th]) >> metis_tac[]) >>
+       rpt strip_tac >>
+       qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >> simp[])) >>
+  metis_tac[]
+QED
