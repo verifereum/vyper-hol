@@ -169,3 +169,46 @@ Proof
      drule_all gas_path_then >> simp[]) >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem arg_type_fits_trans:
+  (!t u. arg_type_fits t u ==> !v.
+    arg_type_fits u v ==> arg_type_fits t v) /\
+  (!ts us. arg_types_fit ts us ==> !vs.
+    arg_types_fit us vs ==> arg_types_fit ts vs)
+Proof
+  ho_match_mp_tac vyperTypeSystemTheory.arg_type_fits_ind >>
+  rpt conj_tac >>
+  simp[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+  rpt strip_tac
+  >~ [`arg_types_fit (t::ts) vs`]
+    >- (Cases_on `vs` >>
+        gvs[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+        simp[Once vyperTypeSystemTheory.arg_type_fits_def]) >>
+  Cases_on `v` >>
+  gvs[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+  all_tac
+  >~ [`arg_type_fits (BaseT (StringT n)) (BaseT b)`]
+    >- (Cases_on `b` >> gvs[vyperTypeSystemTheory.arg_type_fits_def])
+  >~ [`arg_type_fits (BaseT (BytesT (Dynamic n))) (BaseT b)`]
+    >- (Cases_on `b` >> gvs[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+        rename1 `arg_type_fits _ (BaseT (BytesT bd))` >> Cases_on `bd` >>
+        gvs[vyperTypeSystemTheory.arg_type_fits_def]) >>
+  all_tac
+  >~ [`arg_type_fits (ArrayT _ (Dynamic _)) (ArrayT elem bd)`]
+    >- (Cases_on `bd` >>
+        gvs[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+        simp[Once vyperTypeSystemTheory.arg_type_fits_def])
+  >~ [`arg_type_fits (ArrayT _ (Fixed _)) (ArrayT elem bd)`]
+    >- (Cases_on `bd` >>
+        gvs[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+        simp[Once vyperTypeSystemTheory.arg_type_fits_def]) >>
+  simp[Once vyperTypeSystemTheory.arg_type_fits_def]
+QED
+
+Theorem type_widens_to_trans:
+  type_widens_to tenv t u /\ type_widens_to tenv u v ==>
+  type_widens_to tenv t v
+Proof
+  simp[vyperTypeSystemTheory.type_widens_to_def] >>
+  metis_tac[cj 1 arg_type_fits_trans]
+QED
