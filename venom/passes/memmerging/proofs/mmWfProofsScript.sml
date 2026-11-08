@@ -2766,6 +2766,369 @@ Proof
   rpt strip_tac >> gvs[] >> res_tac >> metis_tac[]
 QED
 
+(* Occurrence-sensitive persistence, unlike set inclusion, retains duplicates. *)
+Theorem flat_map_sublist_mono[local]:
+  !xs f g.
+    (!x. MEM x xs ==> rich_list$sublist (f x) (g x)) ==>
+    rich_list$sublist (FLAT (MAP f xs)) (FLAT (MAP g xs))
+Proof
+  Induct >> simp[rich_listTheory.sublist_refl] >> rpt strip_tac >>
+  irule rich_listTheory.sublist_append_pair >> simp[]
+QED
+
+Theorem apply_memzero_ids_persist[local]:
+  !ns rm i.
+    rich_list$sublist [i.inst_id]
+      (MAP (\j. j.inst_id) (apply_memzero_inst ns rm i))
+Proof
+  rpt gen_tac >> simp[apply_memzero_inst_def] >>
+  IF_CASES_TAC >- simp[mk_nop_from_def, rich_listTheory.sublist_refl] >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[rich_listTheory.sublist_refl] >>
+  IF_CASES_TAC >> simp[mk_zero_store_inst_def, mk_calldatasize_inst_def,
+    mk_memzero_calldatacopy_def, rich_listTheory.sublist_def]
+QED
+
+Theorem apply_groups_ids_persist[local]:
+  !mode ns rm i.
+    rich_list$sublist [i.inst_id]
+      (MAP (\j. j.inst_id) (apply_groups_inst mode ns rm i))
+Proof
+  rpt gen_tac >> simp[apply_groups_inst_def] >>
+  IF_CASES_TAC >- simp[mk_nop_from_def, rich_listTheory.sublist_refl] >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[rich_listTheory.sublist_refl] >>
+  rpt IF_CASES_TAC >> simp[mk_bulk_copy_inst_def, mk_load_inst_def,
+    mk_mstore_from_load_def, rich_listTheory.sublist_def]
+QED
+
+Theorem flat_map_ids_persist[local]:
+  !xs f.
+    (!i. MEM i xs ==> rich_list$sublist [i.inst_id] (MAP (\j. j.inst_id) (f i))) ==>
+    rich_list$sublist (MAP (\i. i.inst_id) xs)
+      (MAP (\i. i.inst_id) (FLAT (MAP f xs)))
+Proof
+  Induct >> simp[rich_listTheory.sublist_refl] >> rpt strip_tac >>
+  simp[MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
+  irule rich_listTheory.sublist_trans >>
+  qexists_tac `MAP (\j. j.inst_id) (f h) ++ MAP (\j. j.inst_id) xs` >>
+  conj_tac >- metis_tac[rich_listTheory.sublist_append_pair,
+    rich_listTheory.sublist_refl, APPEND] >>
+  irule rich_listTheory.sublist_append_pair >> simp[rich_listTheory.sublist_refl] >>
+  gvs[MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem transform_block_memzero_ids_persist[local]:
+  !dfg bb. rich_list$sublist (MAP (\i. i.inst_id) bb.bb_instructions)
+    (MAP (\i. i.inst_id) (transform_block_memzero dfg bb).bb_instructions)
+Proof
+  simp[transform_block_memzero_def, LET_THM] >> rpt gen_tac >>
+  irule flat_map_ids_persist >> simp[apply_memzero_ids_persist]
+QED
+
+Theorem transform_block_mode_ids_persist[local]:
+  !dfg mode bb. rich_list$sublist (MAP (\i. i.inst_id) bb.bb_instructions)
+    (MAP (\i. i.inst_id) (transform_block_mode dfg mode bb).bb_instructions)
+Proof
+  simp[transform_block_mode_def, LET_THM] >> rpt gen_tac >>
+  irule flat_map_ids_persist >> simp[apply_groups_ids_persist]
+QED
+
+Theorem transform_block_ids_persist[local]:
+  !dfg bb. rich_list$sublist (MAP (\i. i.inst_id) bb.bb_instructions)
+    (MAP (\i. i.inst_id) (transform_block dfg bb).bb_instructions)
+Proof
+  simp[transform_block_def, LET_THM] >>
+  metis_tac[rich_listTheory.sublist_trans, transform_block_mode_ids_persist,
+    transform_block_memzero_ids_persist]
+QED
+
+Theorem flat_map_lupdate_persist[local]:
+  !xs n y f.
+    n < LENGTH xs /\ rich_list$sublist (f (EL n xs)) (f y) ==>
+    rich_list$sublist (FLAT (MAP f xs)) (FLAT (MAP f (LUPDATE y n xs)))
+Proof
+  Induct >> simp[] >> Cases_on `n` >> simp[LUPDATE_def] >>
+  rpt strip_tac >> irule rich_listTheory.sublist_append_pair >>
+  simp[rich_listTheory.sublist_refl]
+QED
+
+Definition plain_step_def:
+  plain_step fn n =
+    if n < LENGTH fn.fn_blocks then
+      let bb = EL n fn.fn_blocks in
+      let pairs = find_dload_pairs (dfg_build_function fn) bb.bb_instructions in
+      let updated = fn with fn_blocks := MAP (transform_block_dload pairs) fn.fn_blocks in
+      updated with fn_blocks := LUPDATE
+        (transform_block (dfg_build_function updated) (transform_block_dload pairs bb))
+        n updated.fn_blocks
+    else fn
+End
+
+Theorem plain_fold_projection[local]:
+  !ns fn.
+    FST (FOLDL (\(current, st:unit) n.
+      if n < LENGTH current.fn_blocks then
+        let bb = EL n current.fn_blocks in
+        let pairs = find_dload_pairs (dfg_build_function current) bb.bb_instructions in
+        let updated = current with fn_blocks :=
+          MAP (transform_block_dload pairs) current.fn_blocks in
+        (updated with fn_blocks := LUPDATE
+          (transform_block (dfg_build_function updated) (transform_block_dload pairs bb))
+          n updated.fn_blocks, ())
+      else (current, ())) (fn, ()) ns) = FOLDL plain_step fn ns
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[plain_step_def, LET_THM] >> IF_CASES_TAC >> gvs[]
+QED
+
+Theorem transform_function_fold:
+  !fn. transform_function fn = FOLDL plain_step fn (COUNT_LIST (LENGTH fn.fn_blocks))
+Proof
+  simp[transform_function_def, transform_function_with_def, LET_THM,
+       SRULE [LET_THM] plain_fold_projection]
+QED
+
+Definition mm_ids_def:
+  mm_ids fn = FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)
+End
+
+Theorem plain_step_ids_persist:
+  !fn n. rich_list$sublist (mm_ids fn) (mm_ids (plain_step fn n))
+Proof
+  rpt gen_tac >> simp[plain_step_def] >>
+  IF_CASES_TAC >- (
+    simp[LET_THM] >>
+    qmatch_goalsub_abbrev_tac `LUPDATE b n bbs` >>
+    `n < LENGTH bbs` by simp[Abbr `bbs`] >>
+    `rich_list$sublist
+       (MAP (\i. i.inst_id) (EL n bbs).bb_instructions)
+       (MAP (\i. i.inst_id) b.bb_instructions)` by (
+      simp[Abbr `b`, Abbr `bbs`, EL_MAP, transform_block_ids_persist]) >>
+    `mm_ids fn = FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)` by
+      simp[mm_ids_def, Abbr `bbs`, MAP_MAP_o, combinTheory.o_DEF,
+           dload_preserves_ids] >>
+    simp[mm_ids_def] >> irule flat_map_lupdate_persist >> simp[]) >>
+  simp[rich_listTheory.sublist_refl]
+QED
+
+Theorem plain_fold_ids_persist:
+  !ns fn. rich_list$sublist (mm_ids fn) (mm_ids (FOLDL plain_step fn ns))
+Proof
+  Induct >> simp[rich_listTheory.sublist_refl] >>
+  metis_tac[plain_step_ids_persist, rich_listTheory.sublist_trans]
+QED
+
+Theorem plain_fold_ids_backward:
+  !ns fn. fn_inst_ids_distinct (FOLDL plain_step fn ns) ==> fn_inst_ids_distinct fn
+Proof
+  simp[fn_inst_ids_distinct_def, GSYM mm_ids_def] >>
+  metis_tac[plain_fold_ids_persist, rich_listTheory.sublist_ALL_DISTINCT]
+QED
+
+Theorem apply_memzero_outputs_contract[local]:
+  !ns rm i.
+    ALL_DISTINCT (MAP (\j. j.inst_id) (apply_memzero_inst ns rm i)) ==>
+    rich_list$sublist
+      (FLAT (MAP (\j. j.inst_outputs) (apply_memzero_inst ns rm i))) i.inst_outputs
+Proof
+  rpt gen_tac >> simp[apply_memzero_inst_def] >>
+  IF_CASES_TAC >- simp[mk_nop_from_def, rich_listTheory.sublist_nil] >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[rich_listTheory.sublist_refl] >>
+  IF_CASES_TAC >> simp[mk_zero_store_inst_def, mk_calldatasize_inst_def,
+    mk_memzero_calldatacopy_def, rich_listTheory.sublist_nil]
+QED
+
+Theorem apply_groups_outputs_contract[local]:
+  !mode ns rm i.
+    ALL_DISTINCT (MAP (\j. j.inst_id) (apply_groups_inst mode ns rm i)) ==>
+    rich_list$sublist
+      (FLAT (MAP (\j. j.inst_outputs) (apply_groups_inst mode ns rm i))) i.inst_outputs
+Proof
+  rpt gen_tac >> simp[apply_groups_inst_def] >>
+  IF_CASES_TAC >- simp[mk_nop_from_def, rich_listTheory.sublist_nil] >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[rich_listTheory.sublist_refl] >>
+  rpt IF_CASES_TAC >> simp[mk_bulk_copy_inst_def, mk_load_inst_def,
+    mk_mstore_from_load_def, rich_listTheory.sublist_nil, rich_listTheory.sublist_refl]
+QED
+
+Theorem flat_map_outputs_contract[local]:
+  !xs f.
+    (!i. MEM i xs /\ ALL_DISTINCT (MAP (\j. j.inst_id) (f i)) ==>
+      rich_list$sublist (FLAT (MAP (\j. j.inst_outputs) (f i))) i.inst_outputs) /\
+    ALL_DISTINCT (MAP (\j. j.inst_id) (FLAT (MAP f xs))) ==>
+    rich_list$sublist
+      (FLAT (MAP (\j. j.inst_outputs) (FLAT (MAP f xs))))
+      (FLAT (MAP (\j. j.inst_outputs) xs))
+Proof
+  Induct >> simp[rich_listTheory.sublist_refl] >>
+  simp[MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF, ALL_DISTINCT_APPEND] >>
+  rpt strip_tac >>
+  qpat_x_assum `!g:instruction->instruction list. _` (mp_tac o Q.SPEC `f`) >>
+  simp[MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF] >> strip_tac >>
+  irule rich_listTheory.sublist_append_pair >> simp[]
+QED
+
+Theorem memzero_outputs_contract[local]:
+  !dfg bb.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (transform_block_memzero dfg bb).bb_instructions) ==>
+    rich_list$sublist
+      (FLAT (MAP (\i. i.inst_outputs) (transform_block_memzero dfg bb).bb_instructions))
+      (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  simp[transform_block_memzero_def, LET_THM] >> rpt strip_tac >>
+  irule flat_map_outputs_contract >> simp[apply_memzero_outputs_contract]
+QED
+
+Theorem mode_outputs_contract[local]:
+  !dfg mode bb.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (transform_block_mode dfg mode bb).bb_instructions) ==>
+    rich_list$sublist
+      (FLAT (MAP (\i. i.inst_outputs) (transform_block_mode dfg mode bb).bb_instructions))
+      (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  simp[transform_block_mode_def, LET_THM] >> rpt strip_tac >>
+  irule flat_map_outputs_contract >> simp[apply_groups_outputs_contract]
+QED
+
+Theorem transform_block_outputs_contract:
+  !dfg bb.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (transform_block dfg bb).bb_instructions) ==>
+    rich_list$sublist
+      (FLAT (MAP (\i. i.inst_outputs) (transform_block dfg bb).bb_instructions))
+      (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  simp[transform_block_def, LET_THM] >> rpt strip_tac >>
+  `!b m. ALL_DISTINCT (MAP (\i. i.inst_id) (transform_block_mode dfg m b).bb_instructions) ==>
+         ALL_DISTINCT (MAP (\i. i.inst_id) b.bb_instructions)` by
+    metis_tac[rich_listTheory.sublist_ALL_DISTINCT, transform_block_mode_ids_persist] >>
+  metis_tac[rich_listTheory.sublist_trans, mode_outputs_contract, memzero_outputs_contract]
+QED
+
+Theorem flat_map_lupdate_contract[local]:
+  !xs n y f.
+    n < LENGTH xs /\ rich_list$sublist (f y) (f (EL n xs)) ==>
+    rich_list$sublist (FLAT (MAP f (LUPDATE y n xs))) (FLAT (MAP f xs))
+Proof
+  Induct >> simp[] >> Cases_on `n` >> simp[LUPDATE_def] >>
+  rpt strip_tac >> irule rich_listTheory.sublist_append_pair >>
+  simp[rich_listTheory.sublist_refl]
+QED
+
+Theorem block_outputs_projection[local]:
+  !bbs. FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)) =
+    FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs)
+Proof
+  Induct >> simp[fn_insts_blocks_def, MAP_APPEND, FLAT_APPEND]
+QED
+
+Theorem plain_step_ssa:
+  !fn n. ssa_form fn /\ fn_inst_ids_distinct (plain_step fn n) ==>
+    ssa_form (plain_step fn n)
+Proof
+  rpt gen_tac >> Cases_on `n < LENGTH fn.fn_blocks` >>
+  simp[plain_step_def, LET_THM] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `LUPDATE b n bbs` >>
+  `ssa_form (fn with fn_blocks := bbs)` by (
+    simp[Abbr `bbs`] >> irule dload_function_ssa >> simp[]) >>
+  `n < LENGTH bbs` by simp[Abbr `bbs`] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) b.bb_instructions)` by (
+    irule fn_inst_ids_distinct_block >>
+    qexists_tac `fn with fn_blocks := LUPDATE b n bbs` >>
+    simp[MEM_LUPDATE]) >>
+  `rich_list$sublist
+    (FLAT (MAP (\i. i.inst_outputs) b.bb_instructions))
+    (FLAT (MAP (\i. i.inst_outputs) (EL n bbs).bb_instructions))` by (
+    simp[Abbr `b`, Abbr `bbs`, EL_MAP] >>
+    irule transform_block_outputs_contract >> simp[]) >>
+  gvs[ssa_form_def, fn_insts_def, block_outputs_projection] >>
+  irule rich_listTheory.sublist_ALL_DISTINCT >>
+  goal_assum (drule_at Any) >>
+  irule flat_map_lupdate_contract >> simp[]
+QED
+
+Theorem indexed_replacement_wf:
+  !fn n b.
+    n < LENGTH fn.fn_blocks /\ wf_function fn /\ bb_well_formed b /\
+    b.bb_label = (EL n fn.fn_blocks).bb_label /\
+    bb_succs b = bb_succs (EL n fn.fn_blocks) /\
+    fn_inst_ids_distinct (fn with fn_blocks := LUPDATE b n fn.fn_blocks) ==>
+    wf_function (fn with fn_blocks := LUPDATE b n fn.fn_blocks)
+Proof
+  rpt strip_tac >>
+  `MAP (\bb. bb.bb_label) (LUPDATE b n fn.fn_blocks) =
+   MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    (simp[LUPDATE_MAP] >> irule LIST_EQ >> simp[EL_LUPDATE, EL_MAP] >>
+     rpt strip_tac >> IF_CASES_TAC >> gvs[]) >>
+  fs[wf_function_def, fn_labels_def, fn_has_entry_def, fn_succs_closed_def] >>
+  simp[] >> conj_tac >- (rw[MEM_LUPDATE] >> metis_tac[MEM_EL]) >>
+  rw[MEM_LUPDATE] >> metis_tac[MEM_EL]
+QED
+
+Theorem transform_block_inst_wf:
+  !dfg bb. EVERY inst_wf bb.bb_instructions ==>
+    EVERY inst_wf (transform_block dfg bb).bb_instructions
+Proof
+  simp[transform_block_def, LET_THM] >>
+  metis_tac[transform_block_memzero_inst_wf, transform_block_mode_inst_wf]
+QED
+
+Theorem plain_step_inst_wf:
+  !fn n. fn_inst_wf fn ==> fn_inst_wf (plain_step fn n)
+Proof
+  rpt gen_tac >> Cases_on `n < LENGTH fn.fn_blocks` >>
+  simp[plain_step_def, LET_THM] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `LUPDATE b n bbs` >>
+  `fn_inst_wf (fn with fn_blocks := bbs)` by (
+    simp[Abbr `bbs`] >> irule dload_function_inst_wf >> simp[]) >>
+  `n < LENGTH bbs` by simp[Abbr `bbs`] >>
+  `EVERY inst_wf (EL n bbs).bb_instructions` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[MEM_EL]) >>
+  `EVERY inst_wf b.bb_instructions` by (
+    simp[Abbr `b`, Abbr `bbs`] >>
+    irule transform_block_inst_wf >> gvs[EL_MAP]) >>
+  fs[fn_inst_wf_def, EVERY_MEM] >> rw[MEM_LUPDATE] >> metis_tac[MEM_EL]
+QED
+
+Theorem plain_step_wf:
+  !fn n. fn_inst_wf fn /\ wf_function fn /\ ssa_form fn /\
+    fn_inst_ids_distinct (plain_step fn n) ==> wf_function (plain_step fn n)
+Proof
+  rpt gen_tac >> Cases_on `n < LENGTH fn.fn_blocks` >>
+  simp[plain_step_def, LET_THM] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `LUPDATE b n bbs` >>
+  `MEM (EL n fn.fn_blocks) fn.fn_blocks` by metis_tac[MEM_EL] >>
+  `wf_function (fn with fn_blocks := bbs)` by (
+    simp[Abbr `bbs`] >> irule selected_dload_function_wf >> simp[]) >>
+  `fn_inst_wf (fn with fn_blocks := bbs)` by (
+    simp[Abbr `bbs`] >> irule dload_function_inst_wf >> simp[]) >>
+  `ssa_form (fn with fn_blocks := bbs)` by (
+    simp[Abbr `bbs`] >> irule dload_function_ssa >> simp[]) >>
+  `n < LENGTH bbs` by simp[Abbr `bbs`] >>
+  `MEM (EL n bbs) bbs` by metis_tac[MEM_EL] >>
+  `bb_well_formed (EL n bbs)` by gvs[wf_function_def] >>
+  `b = transform_block (dfg_build_function (fn with fn_blocks := bbs)) (EL n bbs)` by
+    simp[Abbr `b`, Abbr `bbs`, EL_MAP] >>
+  `bb_well_formed b` by (
+    simp[] >> irule transform_block_wf >> simp[] >>
+    metis_tac[wf_function_def]) >>
+  `bb_succs b = bb_succs (EL n bbs)` by (
+    simp[] >> irule transform_block_succs >> simp[] >>
+    metis_tac[wf_function_def]) >>
+  qspecl_then [`fn with fn_blocks := bbs`, `n`, `b`] mp_tac indexed_replacement_wf >>
+  gvs[]
+QED
+
+Theorem plain_fold_wf:
+  !ns fn. fn_inst_wf fn /\ wf_function fn /\ ssa_form fn /\
+    fn_inst_ids_distinct (FOLDL plain_step fn ns) ==>
+    wf_function (FOLDL plain_step fn ns)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  `fn_inst_ids_distinct (plain_step fn h)` by
+    metis_tac[plain_fold_ids_backward] >>
+  first_x_assum irule >>
+  metis_tac[plain_step_inst_wf, plain_step_ssa, plain_step_wf]
+QED
+
 (* For transform_function, which reuses the rewritten instruction's id for
    the inserted one; the supply-threaded form is mmSupplyProofs'
    mm_preserves_wf_function. *)
@@ -2774,16 +3137,5 @@ Theorem mm_preserves_wf_function_simple:
        fn_inst_ids_distinct (transform_function fn) ⇒
        wf_function (transform_function fn)
 Proof
-  rpt strip_tac >>
-  `transform_function fn =
-   function_map_transform (transform_block (dfg_build_function fn)) fn`
-    by simp[transform_function_eq] >>
-  pop_assum (fn th => REWRITE_TAC[th]) >>
-  irule fmt_preserves_wf_function_mem >>
-  simp[transform_block_label] >> rpt conj_tac
-  >- (rpt strip_tac >> irule transform_block_wf >>
-      fs[wf_function_def])
-  >- (rpt strip_tac >> irule transform_block_succs >>
-      fs[wf_function_def])
-  >> fs[GSYM transform_function_eq]
+  simp[transform_function_fold] >> metis_tac[plain_fold_wf]
 QED
