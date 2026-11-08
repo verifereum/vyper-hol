@@ -92,8 +92,10 @@ Theorem codegen_asm_run_call:
                      frame_outcome es r es' (SOME exc) [] lgs)))
 Proof
   rpt strip_tac >>
-  `initial_ctx_rel_tail [] cp prog unit.cu_context vs es` by
+  rename1 `generate_context_plan unit.cu_context = SOME cplan` >>
+  `initial_ctx_rel_tail [] cplan prog unit.cu_context vs es` by
     fs[codegenEntryRelTheory.initial_ctx_rel_def] >>
   drule_all codegen_asm_run_call_tail >> strip_tac >>
-  qexistsl_tac [`r`, `es'`] >> simp[] >> metis_tac[]
+  qexistsl_tac [`r`, `es'`] >> simp[] >> disj2_tac >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> res_tac >> fs[] >> metis_tac[]
 QED
