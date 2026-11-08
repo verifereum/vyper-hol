@@ -16,9 +16,11 @@
  *
  * Named admissions (cheats), each a pointer twin of a piece S1 rests on:
  *   body_stmts_sim_ptr -- body_stmts_sim with the ghost
- *   external_entry_value_revert_ptr, external_entry_reaches_body_ptr --
- *     S1's entry bridge with the ghost
  *   external_frame_ret_ok_ptr -- the frame's returns with the ghost
+ *
+ * external_entry_reaches_body_ptr is composed from the seams
+ * entryPtrSeam{Dead,Prefix,Register} (and, under Register,
+ * entryPtrSeam{Decoder,Bulk}), each admitted until its own run proves it.
  *
  * Inherited admissions: the composition also uses S1's
  * external_body_frame, external_body_source_ok and stmts_env_ret_ty
@@ -41,6 +43,7 @@ Ancestors abiEncoderWindowLeavesPtr abiEncoderRobustWindowPtr externalReturnByte
   loweringShapeProps loweringShapeSource supportedNames supportedDecls
   entryDispatchProps o1PipelineCorrect selectedBodyCode calldataDecodePtr calldataTypedRobustPtr
   externalReturnRegisteredRun
+  entryPtrSeamDead entryPtrSeamPrefix entryPtrSeamRegister
 
 val _ = Parse.hide "body";
 
@@ -142,12 +145,13 @@ Proof
   gvs[mk_inst_def]
 QED
 
-(* ADMITTED: external_entry_reaches_body, with the body's frame free of a
-   caller return buffer, the ghost at the body's start in ghost_inv, and a
+(* external_entry_reaches_body, with the body's frame free of a caller
+   return buffer, the ghost at the body's start in ghost_inv, and a
    pointer-safe run from the body's start (from that ghost) making the run
    from __entry pointer-safe: the selector dispatch and the entry checks
-   touch no memory, and the argument decode writes only the parameters'
-   buffers, untainted. *)
+   touch no memory (entryPtrSeamPrefix), the argument decode writes only
+   the parameters' buffers, untainted (entryPtrSeamRegister), and the
+   body's dead bytes are the call's (entryPtrSeamDead). *)
 Theorem external_entry_reaches_body_ptr:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -202,7 +206,16 @@ Theorem external_entry_reaches_body_ptr:
                 (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                             vs_inst_idx := 0 |>))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all external_entry_reaches_registration_ptr >> strip_tac >>
+  drule_all register_positional_args_ptr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
+  qexistsl_tac [`lbl`, `cenv0`, `pos_args`, `min_cds`, `is_payable`, `nkey`,
+    `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`, `st'`, `efn`, `s0`, `G0`,
+    `tn0`] >>
+  simp[] >> strip_tac >>
+  first_x_assum irule >> first_x_assum irule >>
+  simp[external_call_dead_initial_cx]
 QED
 
 (* ===== The frame's returns ===== *)
