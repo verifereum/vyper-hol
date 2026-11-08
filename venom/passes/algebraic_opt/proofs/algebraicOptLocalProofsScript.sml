@@ -1,6 +1,6 @@
 Theory algebraicOptLocalProofs
 Ancestors
-  algebraicOptDefs venomExecSemantics venomState stateFrame
+  algebraicOptDefs venomExecSemantics venomState stateFrame algebraicOptRangeLocalProofs
 
 (* Successful source evaluation supplies the definedness needed when an
    identity drops an operand. *)
@@ -352,4 +352,43 @@ Proof
                          ``SHL``, ``SHR``, ``AND``]) >>
   gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
   simp[ao_power_of_two_mul, ao_power_of_two_div, ao_power_of_two_mod])
+QED
+
+Theorem ao_opt_signextend_correct:
+  !ra lbl idx inst s t out.
+    inst.inst_opcode = SIGNEXTEND /\ step_inst_base inst s = OK t /\
+    (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+      in_range (range_get_range ra lbl idx a) w) /\
+    MEM out (ao_opt_signextend ra lbl idx inst) ==>
+    step_inst_base out s = OK t
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[ao_opt_signextend_def] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[ao_opt_signextend_def] >>
+  rename1 `inst.inst_operands = a::b::tail` >>
+  Cases_on `tail` >> gvs[ao_opt_signextend_def] >>
+  Cases_on `a` >> gvs[ao_opt_signextend_def] >>
+  rename1 `inst.inst_operands = [Lit n;b]` >>
+  Cases_on `31w <=+ n`
+  >- (gvs[] >> gvs (local_opcode_eqs [``SIGNEXTEND``, ``ASSIGN``]) >>
+      gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
+      simp[exec_pure1_def, ao_sign_extend_large]) >>
+  gvs[wordsTheory.WORD_LS, wordsTheory.dimword_def] >>
+  Cases_on `vr_is_top (range_get_range ra lbl idx b)` >> gvs[] >>
+  Cases_on `vr_lo (range_get_range ra lbl idx b) >=
+              -&(2 ** (8 * (w2n n + 1) - 1)) /\
+            vr_hi (range_get_range ra lbl idx b) <=
+              &(2 ** (8 * (w2n n + 1) - 1)) - 1` >> gvs[] >>
+  gvs (local_opcode_eqs [``SIGNEXTEND``, ``ASSIGN``]) >>
+  gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
+  first_x_assum (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
+  `sign_extend n v2 = v2` by
+    (`n = n2w (w2n n)` by simp[] >> pop_assum SUBST1_TAC >>
+     irule ao_sign_extend_within >>
+     Cases_on `range_get_range ra lbl idx b` >>
+     gvs[valueRangeDefsTheory.in_range_def,
+         valueRangeDefsTheory.vr_is_top_def, valueRangeDefsTheory.vr_lo_def,
+         valueRangeDefsTheory.vr_hi_def] >> intLib.COOPER_TAC) >>
+  simp[exec_pure1_def]
 QED
