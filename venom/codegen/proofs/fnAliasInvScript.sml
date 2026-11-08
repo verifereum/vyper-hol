@@ -15057,6 +15057,123 @@ Proof
   irule alias_occ_emit_input_align >> simp[]
 QED
 
+Definition alias_occ_phi_events_def:
+  alias_occ_phi_events site inst live halting ps =
+    case stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack of
+      NONE => []
+    | SOME dist =>
+      let keep = MEM (operand_to_string (stack_peek dist ps.ps_stack)) live in
+      let prepared = if keep then SND (do_dup dist ps) else ps in
+      let depth = if keep then 0 else dist in
+      let ret = Var (HD inst.inst_outputs) in
+      let replaced = prepared with ps_stack := stack_poke depth ret prepared.ps_stack in
+      (if keep then [AliasOccPrimitive (AliasOccDup dist)] else []) ++
+      [AliasOccPhiBirth site depth ret] ++
+      (if ~halting /\ ~MEM (HD inst.inst_outputs) live then
+         alias_occ_popmany_events [ret] replaced else [])
+End
+
+Theorem alias_occ_phi_events_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_phi_events site inst live halting ps) s)
+    (SND (generate_phi_plan inst live halting ps))
+Proof
+  strip_tac >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack` >>
+  simp[alias_occ_phi_events_def, generate_phi_plan_def, alias_occ_events_shadow_def] >>
+  rename1 `SOME dist` >>
+  Cases_on `MEM (operand_to_string (stack_peek dist ps.ps_stack)) live`
+  >- (Cases_on `do_dup dist ps` >>
+      simp[alias_occ_events_append, alias_occ_events_shadow_def,
+        alias_occ_event_shadow_def] >>
+      `alias_occ_align (alias_occ_dup_inventory dist s) r` by
+        metis_tac[alias_occ_command_align, alias_occ_command_shadow_def,
+          alias_occ_command_real_def, pairTheory.SND] >>
+      Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) live` >>
+      simp[pairTheory.ELIM_UNCURRY, alias_occ_events_shadow_def,
+        alias_occ_command_shadow_def, alias_occ_popmany_align, alias_occ_replace_align]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) live` >>
+  simp[alias_occ_events_append, alias_occ_events_shadow_def,
+    alias_occ_event_shadow_def, pairTheory.ELIM_UNCURRY,
+    alias_occ_popmany_align, alias_occ_replace_align]
+QED
+
+Definition alias_occ_offset_events_def:
+  alias_occ_offset_events site inst =
+    case EL 1 inst.inst_operands of
+      Label l => [AliasOccOffsetBirth site (Var (HD inst.inst_outputs))]
+    | _ => []
+End
+
+Theorem alias_occ_offset_events_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_offset_events site inst) s)
+    (SND (generate_offset_plan inst ps))
+Proof
+  Cases_on `EL 1 inst.inst_operands` >>
+  simp[alias_occ_offset_events_def, generate_offset_plan_def,
+    alias_occ_events_shadow_def, alias_occ_event_shadow_def,
+    stack_push_def, alias_occ_insert_align]
+QED
+
+(* Planner branch reads are observations, not active-parent copy claims.
+   In particular HD outputs remains total even for an empty output list. *)
+Definition alias_occ_phi_reads_def:
+  alias_occ_phi_reads inst ps =
+    case stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack of
+      NONE => []
+    | SOME dist =>
+        [(dist, LENGTH ps.ps_stack - 1 - dist, ps.ps_stack,
+          stack_peek dist ps.ps_stack, inst.inst_outputs, HD inst.inst_outputs)]
+End
+
+Theorem alias_occ_phi_reads_exact:
+  MEM (dist,index,source,at,outputs,out) (alias_occ_phi_reads inst ps) ==>
+  stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME dist /\
+  source = ps.ps_stack /\ index = LENGTH source - 1 - dist /\
+  at = EL index source /\ outputs = inst.inst_outputs /\ out = HD outputs /\
+  EL (if MEM (operand_to_string at) live then 1 else 0)
+    (alias_occ_phi_events site inst live halting ps) =
+    AliasOccPhiBirth site (if MEM (operand_to_string at) live then 0 else dist) (Var out)
+Proof
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack` >>
+  simp[alias_occ_phi_reads_def] >> strip_tac >> gvs[] >>
+  Cases_on `MEM (operand_to_string (stack_peek dist ps.ps_stack)) live` >>
+  simp[alias_occ_phi_events_def] >> simp[stack_peek_def]
+QED
+
+Theorem alias_occ_offset_birth_certificate:
+  MEM (AliasOccOffsetBirth origin at) (alias_occ_offset_events site inst) ==>
+  origin = site /\ at = Var (HD inst.inst_outputs) /\
+  ?label. EL 1 inst.inst_operands = Label label
+Proof
+  Cases_on `EL 1 inst.inst_operands` >> simp[alias_occ_offset_events_def]
+QED
+
+Definition alias_occ_inst_events_def:
+  alias_occ_inst_events site liveness dfg fn lbl inst live halting term ps =
+    if inst.inst_opcode = PHI then alias_occ_phi_events site inst live halting ps
+    else if inst.inst_opcode = OFFSET then alias_occ_offset_events site inst
+    else if is_param_opcode inst.inst_opcode \/ inst.inst_opcode = NOP then []
+    else alias_occ_regular_events site liveness dfg fn lbl inst live halting term ps
+End
+
+Theorem alias_occ_inst_events_align:
+  alias_occ_align s ps /\
+  generate_inst_plan liveness dfg cfg fn inst live halting term lbl ps = SOME (ops,final) ==>
+  alias_occ_align
+    (alias_occ_events_shadow
+      (alias_occ_inst_events site liveness dfg fn lbl inst live halting term ps) s) final
+Proof
+  strip_tac >>
+  gvs[generate_inst_plan_def, AllCaseEqs()] >>
+  simp[alias_occ_inst_events_def, alias_occ_events_shadow_def] >>
+  metis_tac[alias_occ_phi_events_align, alias_occ_offset_events_align,
+    alias_occ_regular_events_align, pairTheory.SND]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
