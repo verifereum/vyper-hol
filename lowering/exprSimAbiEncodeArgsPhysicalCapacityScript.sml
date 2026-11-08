@@ -202,3 +202,25 @@ Proof
   imp_res_tac abi_args_fits_static_shape >>
   gvs[abi_embedded_static_size_def]
 QED
+
+Theorem abi_args_fits_size_bound:
+  (!t u. arg_type_fits t u ==>
+     abi_size_bound sf t <= abi_size_bound sf u) /\
+  (!ts us. arg_types_fit ts us ==>
+     abi_size_bound sf (TupleT ts) <= abi_size_bound sf (TupleT us))
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  simp[arg_type_fits_def, abi_size_bound_def] >> rpt strip_tac >>
+  imp_res_tac abi_args_fits_static_shape >>
+  gvs[abi_embedded_static_size_def]
+  >~ [`(_ + 31) DIV 32 <= (_ + 31) DIV 32`]
+  >- (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[])
+  >~ [`(_ + 31) DIV 32 <= (_ + 31) DIV 32`]
+  >- (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[])
+  >~ [`n * _ <= m * _`]
+  >- (irule arithmeticTheory.LESS_MONO_MULT2 >> simp[] >>
+      Cases_on `is_abi_dynamic sf u` >> simp[])
+  >~ [`n = 0 \/ _`]
+  >- (Cases_on `is_abi_dynamic sf u` >> simp[]) >>
+  Cases_on `is_abi_dynamic sf u` >> gvs[] >> decide_tac
+QED
