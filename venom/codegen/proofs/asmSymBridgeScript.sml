@@ -1441,7 +1441,7 @@ Proof
   metis_tac[sval_conc_add, wordsTheory.WORD_ADD_COMM]
 QED
 
-Theorem mstore_labels_lookup[local]:
+Theorem mstore_labels_lookup:
   !n L a l d i.
   FLOOKUP (L |++ GENLIST (\j. (a+j,(l,d,j))) n) i =
     if a <= i /\ i < a+n then SOME (l,d,i-a) else FLOOKUP L i
