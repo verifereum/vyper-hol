@@ -7,7 +7,7 @@
  *)
 Theory bodyPtrTypeBuiltinsSeamEmpty
 Ancestors
-  bodyPtrTypeBuiltinsEmptyExec bodyPtrTypeBuiltinsEmptyPost
+  bodyPtrTypeBuiltinsEmptyMemorySim
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
@@ -26,5 +26,10 @@ Theorem empty_memory_body_expr_ptr_ok:
     ~is_word_type typ ==>
     body_expr_ptr_ok cx (TypeBuiltin ann Empty typ args)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx ty
+    (TypeBuiltin ann Empty typ args) es` by
+    (irule empty_memory_vv_sim_ptr >> metis_tac[]) >>
+  simp[] >> irule expr_sim_ptr_of_vv >> metis_tac[]
 QED
