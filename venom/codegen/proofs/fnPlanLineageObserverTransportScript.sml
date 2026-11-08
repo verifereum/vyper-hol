@@ -226,17 +226,71 @@ Proof
   fs[LIST_ELEM_COUNT_DEF] >> simp[FILTER_APPEND]
 QED
 
-Theorem native_inst_prefix_nondefining_observer_upper:
+Theorem resource_zero_iff_absent:
+  !ps x. (LIST_ELEM_COUNT x ps.ps_stack +
+    (if x IN FDOM ps.ps_spilled then 1 else 0) <= 0) <=>
+    (~MEM x ps.ps_stack /\ x NOTIN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> Cases_on `x IN FDOM ps.ps_spilled` >>
+  simp[GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem elem_count_zero_iff:
+  !x xs. (LIST_ELEM_COUNT x xs = 0) <=> ~MEM x xs
+Proof
+  simp[GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem indicator_zero_iff:
+  !p. ((if p then 1n else 0) = 0) <=> ~p
+Proof
+  Cases >> simp[]
+QED
+
+Theorem native_terminal_jmp_nondefining_absent:
+  !fn bb dfg ps ops qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
+    (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
+      (PRE (LENGTH bb.bb_instructions))) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst_wf (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[LAST_MEM]) >>
+  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ] /\
+    (LAST bb.bb_instructions).inst_outputs = []` by gvs[venomWfTheory.inst_wf_def] >>
+  Cases_on `join_target_ops (liveness_analyze fn) fn bb.bb_label (LAST bb.bb_instructions)`
+  >- (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        fnPlanLineageEntryProductionTheory.jmp_no_target_state >>
+      simp[] >> strip_tac >> gvs[fnPlanLineageInventoryTheory.release_dead_spills_domain,
+          fnPlanLineageInventoryTheory.release_dead_spills_stack]) >>
+  rename1 `join_target_ops _ _ _ _ = SOME targets` >>
+  `!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (drule_at (Pat `join_target_ops _ _ _ _ = _`) native_terminal_jmp_target_available >> simp[]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    fnPlanLineageInventoryTheory.generate_inst_plan_jmp_variable_support >>
+  disch_then (qspecl_then [`targets`,`(\w. w <> v)`,`v`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem native_inst_prefix_nondefining_observer_bound:
   !lv dfg cfg fn lbl halt n len xs incoming k qs.
     fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
-    !bb v.
-      lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\ lbl = bb.bb_label /\
+    !bb v b.
+      b <= 1 /\ lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\ lbl = bb.bb_label /\
       halt = bb_is_halting bb /\ n = LENGTH (get_params bb.bb_instructions) /\
       len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
       codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
       EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions /\
       LIST_ELEM_COUNT (Var v) incoming.ps_stack +
-        (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+        (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= b /\
       (!j before w. j < k /\ LENGTH (collect_phis bb.bb_instructions) <= j /\
         fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before ==>
         (MEM w (live_vars_at lv lbl (n+j)) ==>
@@ -244,14 +298,15 @@ Theorem native_inst_prefix_nondefining_observer_upper:
         (MEM (Var w) (compute_operands (EL j xs)) ==>
           MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled)) ==>
       LIST_ELEM_COUNT (Var v) qs.ps_stack +
-        (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+        (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= b
 Proof
   ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_strongind >>
   conj_tac >- simp[] >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gvs[] >>
   rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ before = SOME (ops,after)` >>
   `LIST_ELEM_COUNT (Var v) before.ps_stack +
-    (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1` by
+    (if Var v IN FDOM before.ps_spilled then 1 else 0) <= b` by
     (first_x_assum irule >> simp[] >> qexists_tac `bb` >> simp[] >>
      rpt strip_tac >> `j < SUC k` by decide_tac >> metis_tac[]) >>
   `k < LENGTH (non_param_insts bb)` by
@@ -266,7 +321,7 @@ Proof
      gvs[non_param_insts_def, MEM_FILTER]) >>
   `inst_wf inst /\ codegen_ready_inst inst /\ ~MEM v inst.inst_outputs` by
     (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `!bb' v'. _ ==> LIST_ELEM_COUNT _ before.ps_stack + _ <= 1` kall_tac >>
+  qpat_x_assum `!bb' v' b'. _ ==> LIST_ELEM_COUNT _ before.ps_stack + _ <= b'` kall_tac >>
   Cases_on `inst.inst_opcode = PHI`
   >- (`v <> HD inst.inst_outputs` by
         (gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute]) >>
@@ -313,44 +368,85 @@ Proof
       `PRE (LENGTH bb.bb_instructions) = LENGTH (get_params bb.bb_instructions) + k` by decide_tac >>
       `LAST bb.bb_instructions = inst` by
         (metis_tac[LAST_EL]) >>
+      Cases_on `b = 0` >> gvs[]
+      >- (gvs[elem_count_zero_iff, indicator_zero_iff] >>
+          irule native_terminal_jmp_nondefining_absent >>
+          qexistsl_tac [`bb`,`dfg`,`fn`,`ops`,`before`] >>
+          `PRE (LENGTH (get_params bb.bb_instructions) + LENGTH (non_param_insts bb)) =
+             k + LENGTH (get_params bb.bb_instructions)` by decide_tac >>
+          simp[] >> gvs[]) >>
+      `b = 1` by decide_tac >> gvs[] >>
       irule native_terminal_jmp_observer_upper >>
       qexistsl_tac [`bb`,`dfg`,`fn`,`ops`,`before`] >>
+      `PRE (LENGTH (get_params bb.bb_instructions) + LENGTH (non_param_insts bb)) =
+         k + LENGTH (get_params bb.bb_instructions)` by decide_tac >>
       simp[] >> gvs[]) >>
+  Cases_on `b = 0` >> gvs[]
+  >- (gvs[elem_count_zero_iff, indicator_zero_iff] >>
+      drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        fnPlanLineageNativeOriginsTheory.native_inst_variable_origins >>
+      disch_then (qspec_then `v` mp_tac) >>
+      simp[] >>
+      `LENGTH (compute_operands (EL k (non_param_insts bb))) <= 16 /\
+       ((EL k (non_param_insts bb)).inst_opcode = OFFSET ==>
+        (EL k (non_param_insts bb)).inst_outputs <> [])` by
+        (conj_tac >- fs[codegen_ready_inst_def] >>
+         strip_tac >> gvs[venomWfTheory.inst_wf_def] >>
+         Cases_on `(EL k (non_param_insts bb)).inst_outputs` >> gvs[]) >>
+      metis_tac[]) >>
+  `b = 1` by decide_tac >> gvs[] >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
     fnPlanLineageSetupTheory.native_inst_observer_upper >>
   disch_then (qspec_then `v` mp_tac) >>
   simp[] >> gvs[codegen_ready_inst_def]
 QED
 
-Theorem native_terminal_jmp_nondefining_absent:
-  !fn bb dfg ps ops qs v.
-    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
-    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
-    (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
-      (PRE (LENGTH bb.bb_instructions))) ==>
-      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
-    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
-      (LAST bb.bb_instructions)
-      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
-      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) /\
-    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled ==>
-    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+
+Theorem native_inst_prefix_nondefining_observer_upper:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !bb v.
+      lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\ lbl = bb.bb_label /\
+      halt = bb_is_halting bb /\ n = LENGTH (get_params bb.bb_instructions) /\
+      len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+      EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions /\
+      LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+        (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+      (!j before w. j < k /\ LENGTH (collect_phis bb.bb_instructions) <= j /\
+        fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before ==>
+        (MEM w (live_vars_at lv lbl (n+j)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+        (MEM (Var w) (compute_operands (EL j xs)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled)) ==>
+      LIST_ELEM_COUNT (Var v) qs.ps_stack +
+        (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
 Proof
-  rpt gen_tac >> strip_tac >>
-  `inst_wf (LAST bb.bb_instructions)` by
-    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[LAST_MEM]) >>
-  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ] /\
-    (LAST bb.bb_instructions).inst_outputs = []` by gvs[venomWfTheory.inst_wf_def] >>
-  Cases_on `join_target_ops (liveness_analyze fn) fn bb.bb_label (LAST bb.bb_instructions)`
-  >- (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-        fnPlanLineageEntryProductionTheory.jmp_no_target_state >>
-      simp[] >> strip_tac >> gvs[fnPlanLineageInventoryTheory.release_dead_spills_domain,
-          fnPlanLineageInventoryTheory.release_dead_spills_stack]) >>
-  rename1 `join_target_ops _ _ _ _ = SOME targets` >>
-  `!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
-    (drule_at (Pat `join_target_ops _ _ _ _ = _`) native_terminal_jmp_target_available >> simp[]) >>
-  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    fnPlanLineageInventoryTheory.generate_inst_plan_jmp_variable_support >>
-  disch_then (qspecl_then [`targets`,`(\w. w <> v)`,`v`] mp_tac) >>
-  simp[] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule native_inst_prefix_nondefining_observer_bound >>
+  disch_then (qspecl_then [`bb`,`v`,`1`] mp_tac) >> gvs[] >> metis_tac[]
+QED
+
+Theorem native_inst_prefix_nondefining_absent:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !bb v.
+      lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\ lbl = bb.bb_label /\
+      halt = bb_is_halting bb /\ n = LENGTH (get_params bb.bb_instructions) /\
+      len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+      EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions /\
+      ~MEM (Var v) incoming.ps_stack /\ Var v NOTIN FDOM incoming.ps_spilled /\
+      (!j before w. j < k /\ LENGTH (collect_phis bb.bb_instructions) <= j /\
+        fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before ==>
+        (MEM w (live_vars_at lv lbl (n+j)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+        (MEM (Var w) (compute_operands (EL j xs)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled)) ==>
+      ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule native_inst_prefix_nondefining_observer_bound >>
+  disch_then (qspecl_then [`bb`,`v`,`0`] mp_tac) >>
+  gvs[elem_count_zero_iff, indicator_zero_iff] >> metis_tac[]
 QED

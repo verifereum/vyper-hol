@@ -1393,9 +1393,9 @@ QED
 
 (* ===== Successor transfer ===== *)
 
-Theorem lineage_state_block_nondefining_observer_upper:
-  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after v.
-    codegen_ready_fn fn /\
+Theorem lineage_state_block_nondefining_observer_bound:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after v b.
+    b <= 1 /\ codegen_ready_fn fn /\
     lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
@@ -1404,9 +1404,9 @@ Theorem lineage_state_block_nondefining_observer_upper:
       (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
       SOME (ops,after) /\
     LIST_ELEM_COUNT (Var v) ps.ps_stack +
-      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 ==>
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= b ==>
     LIST_ELEM_COUNT (Var v) after.ps_stack +
-      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= b
 Proof
   rpt gen_tac >> strip_tac >>
   `?entry. fn_entry_label fn = SOME entry` by metis_tac[lineage_state_has_entry] >>
@@ -1422,7 +1422,7 @@ Proof
     else ([],input)` >>
   rename1 `_ = (setup_ops,start)` >>
   `LIST_ELEM_COUNT (Var v) start.ps_stack +
-     (if Var v IN FDOM start.ps_spilled then 1 else 0) <= 1` by
+     (if Var v IN FDOM start.ps_spilled then 1 else 0) <= b` by
     (Cases_on `bb = HD fn.fn_blocks`
      >- (gvs[] >>
          `EVERY (\inst. v <> HD inst.inst_outputs)
@@ -1459,8 +1459,8 @@ Proof
      qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
      simp[generate_block_plan_def] >> gvs[AllCaseEqs()] >> metis_tac[]) >>
   drule fnPlanLineageEntryProductionTheory.native_worker_prefix_endpoint >> strip_tac >>
-  drule fnPlanLineageObserverTransportTheory.native_inst_prefix_nondefining_observer_upper >>
-  disch_then (qspecl_then [`bb`,`v`] mp_tac) >> simp[] >>
+  drule fnPlanLineageObserverTransportTheory.native_inst_prefix_nondefining_observer_bound >>
+  disch_then (qspecl_then [`bb`,`v`,`b`] mp_tac) >> simp[] >>
   impl_tac >- (rpt gen_tac >> strip_tac >> conj_tac
     >- (strip_tac >> irule lineage_state_ordinary_prefix_live_available >>
         goal_assum (drule_at Any) >> simp[] >>
@@ -1474,6 +1474,47 @@ Proof
     goal_assum (drule_at Any) >> simp[] >>
     goal_assum (drule_at Any) >> simp[] >>
     gvs[Abbr `input`, arithmeticTheory.ADD_COMM] >> metis_tac[]) >> simp[]
+QED
+
+Theorem lineage_state_block_nondefining_observer_upper:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 ==>
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule lineage_state_block_nondefining_observer_bound >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem lineage_state_block_nondefining_absent:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled ==>
+    ~MEM (Var v) after.ps_stack /\ Var v NOTIN FDOM after.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[GSYM fnPlanLineageObserverTransportTheory.resource_zero_iff_absent] >>
+  irule lineage_state_block_nondefining_observer_bound >> simp[] >>
+  goal_assum (drule_at Any) >>
+  simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff,
+       fnPlanLineageObserverTransportTheory.indicator_zero_iff] >> metis_tac[]
 QED
 
 Theorem lineage_history_nondefining_observer_upper:
@@ -1502,6 +1543,33 @@ Proof
   `LIST_ELEM_COUNT (Var v) z1.ps_stack +
     (if Var v IN FDOM z1.ps_spilled then 1 else 0) <= 1` by
     (gvs[] >> irule lineage_state_block_nondefining_observer_upper >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  first_x_assum irule >> simp[] >> qexists_tac `(z0,z1)` >> gvs[]
+QED
+
+Theorem lineage_history_nondefining_absent:
+  !fn dfg ch growth spill_base lbl_ctr.
+    codegen_ready_fn fn ==>
+    !vertices a b v.
+      lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr) (FST a) (SND a) /\
+      LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices a b /\
+      EVERY (\vertex. !bb. lookup_block (FST vertex) fn.fn_blocks = SOME bb ==>
+        EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions) vertices /\
+      ~MEM (Var v) (SND a).ps_stack /\ Var v NOTIN FDOM (SND a).ps_spilled ==>
+      ~MEM (Var v) (SND b).ps_stack /\ Var v NOTIN FDOM (SND b).ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >> Induct >> simp[listTheory.LRC_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  PairCases_on `h` >> PairCases_on `z` >> gvs[] >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) z0 z1` by
+    metis_tac[lineage_edge_step] >>
+  drule lineage_edge_physical >> strip_tac >>
+  `EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions` by metis_tac[] >>
+  `~MEM (Var v) z1.ps_stack /\ Var v NOTIN FDOM z1.ps_spilled` by
+    (gvs[] >> irule lineage_state_block_nondefining_absent >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   first_x_assum irule >> simp[] >> qexists_tac `(z0,z1)` >> gvs[]
 QED
