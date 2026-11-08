@@ -3,7 +3,7 @@ Theory bodyIntCallJointCall
 Ancestors
   bodyIntCallJointContract supportedExprs bodyIntCallSemanticEntry
   bodySimAugPlaceScopes stmtSimAugAssignPlaceStorage bodyIntCallJointCallSource
-  exprSimExtCallCase
+  exprSimExtCallCase stmtSimAugAssignPlaceMemory abiStaticAggregateProps
 
 Theorem internal_prologue_module_pins:
   compile_internal_prologue ce params has_rb ret sa = ((ce',pc),sb) /\
@@ -511,6 +511,96 @@ Proof
   qexists `v` >> simp[] >>
   Cases_on `is_word_type ty` >- fs[] >> fs[] >> rpt strip_tac >>
   irule exprSimPropsTheory.val_in_memory_footprint_agree >> metis_tac[]
+QED
+
+(* A successful value operand is retained by the child's actual normal path,
+   including Label operands; no compiler-shape exclusion is needed. *)
+Theorem intcall_vv_operand_normal_frame:
+  vv_holds ce fp.jc_cx ty r vv es s /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at c x) /\
+  intcall_expr_cont fp ce env es c s ee d u /\
+  gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) ==>
+  eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s
+Proof
+  strip_tac >>
+  `?w. eval_operand (vv_operand vv) s = SOME w` by
+    (Cases_on `vv` >>
+     fs[loweringPostsTheory.vv_holds_def,
+        loweringPostsTheory.expr_val_rel_def, contextTheory.vv_operand_def] >>
+     metis_tac[]) >>
+  `eval_operand (vv_operand vv) u = SOME w` by
+    (irule aug_place_saved_operand >>
+     qexists `c` >>
+     qexistsl [`fp.jc_ctx`, `fp.jc_func`, `F`, `n`, `s`] >>
+     fs[intcall_expr_cont_def]) >> simp[]
+QED
+
+Theorem intcall_pure_child_stack_memory:
+  vv_at ce fp.jc_cx ty a b es r (StackValue ann op) s /\
+  ~is_word_type ty /\
+  read_result fp.jc_cx r es = (INL v,es) /\
+  evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\
+  eval_operand op s = SOME w /\
+  b.cs_next_id <= c.cs_next_id /\
+  intcall_expr_cont fp ce env es c s ee d u /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx child es c d s ee child_r child_vv u /\
+  ~expr_has_effect child ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  `vv_at ce fp.jc_cx ty a b es r
+     (LocatedValue ann (mk_ptr op LocMemory)) s` by
+    (fs[loweringPostsTheory.vv_at_def,
+        loweringPostsTheory.expr_val_at_def, contextTheory.mk_ptr_def] >>
+     metis_tac[]) >>
+  irule intcall_pure_child_located_memory >>
+  goal_assum (drule_at Any) >> simp[contextTheory.mk_ptr_def] >>
+  metis_tac[]
+QED
+
+Theorem intcall_pure_child_memory_word:
+  vv_at ce fp.jc_cx ty a b es r (LocatedValue ann p) s /\
+  p.ptr_location = LocMemory /\ is_word_type ty /\
+  read_result fp.jc_cx r es = (INL v,es) /\
+  evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\
+  eval_operand p.ptr_operand s = SOME w /\
+  b.cs_next_id <= c.cs_next_id /\
+  intcall_expr_cont fp ce env es c s ee d u /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx child es c d s ee child_r child_vv u /\
+  ~expr_has_effect child ==>
+  mem_word_at (w2n w) u.vs_memory = mem_word_at (w2n w) s.vs_memory
+Proof
+  strip_tac >>
+  `val_footprint tv v = 32` by
+    (drule_all exprSimPropsTheory.word_tv_memory_size >> strip_tac >>
+     `~is_bytestring_type ty` by
+       metis_tac[exprSimConvertTheory.is_word_type_not_bytestring] >>
+     metis_tac[exprSimAggregateChildrenTheory.evaluated_nonbytes_footprint]) >>
+  `mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
+   mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory` by
+    (irule intcall_pure_child_located_memory >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  gvs[mem_word_at_bytes]
+QED
+
+Theorem intcall_pure_child_read_agreement:
+  supported_pure_expr tops child /\
+  eval_expr cx child es = (res,ee) ==>
+  !v. read_result cx r ee = (INL v,ee) <=>
+      read_result cx r es = (INL v,es)
+Proof
+  strip_tac >>
+  `ee.scopes = es.scopes` by
+    (drule_all aug_place_pure_expr_scopes >> simp[]) >>
+  `ee.immutables = es.immutables` by
+    (drule_all intcall_pure_expr_immutables >> simp[]) >>
+  `!tr. get_storage cx ee tr = get_storage cx es tr` by
+    (gen_tac >> drule_all aug_place_pure_eval_storage >> simp[]) >>
+  drule_all intcall_read_result_source_frame >>
+  disch_then (qspec_then `r` mp_tac) >>
+  Cases_on `read_result cx r ee` >> Cases_on `read_result cx r es` >>
+  imp_res_tac vyperStateTheory.read_result_state >> simp[]
 QED
 
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
