@@ -44,6 +44,8 @@ Owner note 2 (lowering fix): the previous run proved this statement false (`comp
   - `allocLimits`' `alloc_limits_expr` keeps AbiEncode at `expr_type` (so `alloc_limits_struct_fields` still holds); derive the `< 2 ** 64` bounds for `lowered_value_type` in `abiEncodeEndpointMetadata` by monotonicity.
 The counterexample and its witness theories (`exprSimAbiEncodeArgsTupleExclusion`, `exprSimAbiEncodeArgsTupleWitness`) were removed from the branch: they refute the old lowering only. The other `exprSimAbiEncodeArgsTuple*` theories from that run are probes. Port what helps and delete the rest before finishing; diagnostic theories must not stay. Proofs that unfolded the AbiEncode lowering or the old `abi_args_post` need to follow the new layout type.
 
+Owner note 3 (coherence helper, branch manager ruling): `abi_encode_lowered_well_typed_coherent` (`exprSimHyps`) is false after the lowering change (counterexample at commit a5da26932: an empty bytes literal annotated `Bytes[64]`). Delete it. Prove the AbiEncode arm of `memory_rhs_read_lowered_typed_unwidened` directly from "encoded length <= capacity at the lowered argument types", using the induction hypothesis that types the argument values there. That lemma's statement stays byte-identical; no definition or frozen target changes. The probe theory was removed from the branch (evidence stays at a5da26932). This note overrides "their statements stay" in owner note 2 for this one lemma only.
+
 ## Completion Criteria
 
 - The theorem is proved with no `cheat` in `lowering/exprSimAbiEncodeArgsScript.sml`, or in helper theories named `exprSimAbiEncodeArgs<Part>`.
