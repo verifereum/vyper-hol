@@ -640,6 +640,118 @@ Proof
   qexistsl_tac [`cfg_analyze fn`,`fn`,`ops`] >> simp[]
 QED
 
+Theorem analyzed_ordinary_step_available:
+  !fn bb i inst dfg cfg halt term ps ops qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+    ~is_param_opcode inst.inst_opcode /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    generate_inst_plan (liveness_analyze fn) dfg cfg fn inst
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halt term
+      bb.bb_label ps = SOME (ops,qs) ==>
+    !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+      MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst_wf inst` by
+    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  `LENGTH (compute_operands inst) <= 16` by
+    (gvs[codegen_ready_fn_def, EVERY_MEM, codegen_ready_inst_def] >> metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) (compute_operands inst) \/
+      (MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) /\
+       ~MEM v inst.inst_outputs) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+    metis_tac[analyzed_computed_operand_demand] >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (drule_all inst_wf_offset_shape >> strip_tac >>
+      `qs = FOLDL (\p v. p with ps_stack := stack_push (Var v) p.ps_stack) ps [out]` by
+        (drule_all fnPlanLineageStagesTheory.generate_offset_plan_frame >>
+         disch_then (qspec_then `ps` mp_tac) >>
+         gvs[generate_inst_plan_def, stackModelTheory.stack_push_def, SNOC_APPEND]) >>
+      gvs[stackModelTheory.stack_push_def, SNOC_APPEND] >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = NOP`
+  >- (gvs[generate_inst_plan_def, inst_wf_def] >> metis_tac[]) >>
+  gvs[generate_inst_plan_def, AllCaseEqs()] >>
+  rpt strip_tac >> irule native_regular_live_lower >>
+  goal_assum (drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem native_ordinary_interval_available:
+  !lv dfg cfg fn label halt n len xs ps0 k ps.
+    native_inst_prefix lv dfg cfg fn label halt n len xs ps0 k ps ==>
+    !bb a. lv = liveness_analyze fn /\ label = bb.bb_label /\
+      n = LENGTH (get_params bb.bb_instructions) + a /\
+      len = LENGTH bb.bb_instructions /\ xs = DROP a (non_param_insts bb) /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+      (!v. MEM v (live_vars_at lv label n) ==>
+        MEM (Var v) ps0.ps_stack \/ Var v IN FDOM ps0.ps_spilled) /\
+      (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI) ==>
+      !v. MEM v (live_vars_at lv label (n+k)) ==>
+        MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled
+Proof
+  ho_match_mp_tac native_inst_prefix_ind >> conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `DROP (a+k) (non_param_insts bb) = inst::rest` by
+    gvs[DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
+  `a+k < LENGTH (non_param_insts bb)` by
+    (qpat_x_assum `DROP (a+k) _ = _`
+      (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[] >> decide_tac) >>
+  `inst = EL (a+k) (non_param_insts bb)` by metis_tac[HD_DROP, HD] >>
+  `inst = EL (LENGTH (get_params bb.bb_instructions)+(a+k)) bb.bb_instructions` by
+    metis_tac[ready_block_suffix_index] >>
+  `LENGTH (get_params bb.bb_instructions)+(a+k) < LENGTH bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `~is_param_opcode inst.inst_opcode` by
+    (`MEM inst (non_param_insts bb)` by metis_tac[EL_MEM] >> gvs[non_param_insts_def, MEM_FILTER]) >>
+  `EL k (DROP a (non_param_insts bb)) = inst` by
+    (`k < LENGTH (DROP a (non_param_insts bb))` by simp[] >>
+     metis_tac[HD_DROP, HD]) >>
+  `inst.inst_opcode <> JMP /\ inst.inst_opcode <> PHI` by
+    (qpat_x_assum `!j. j < SUC k ==> _` (qspec_then `k` mp_tac) >>
+     pure_asm_rewrite_tac[] >> simp[]) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+       (LENGTH (get_params bb.bb_instructions)+(a+k))) ==>
+       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+    (first_x_assum (qspecl_then [`bb`,`a`] mp_tac) >>
+     asm_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  `(if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)
+     else live_vars_at (liveness_analyze fn) bb.bb_label
+       (k + (LENGTH (get_params bb.bb_instructions)+a) + 1)) =
+     live_vars_at (liveness_analyze fn) bb.bb_label
+       (SUC (LENGTH (get_params bb.bb_instructions)+(a+k)))` by
+    (`k + (LENGTH (get_params bb.bb_instructions)+a) + 1 =
+        (a+k) + LENGTH (get_params bb.bb_instructions) + 1` by decide_tac >>
+     pop_assum (fn th => pure_rewrite_tac[th]) >>
+     irule ready_block_suffix_next_live >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  rule_assum_tac (SIMP_RULE bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  qpat_x_assum `_ = live_vars_at _ _ (SUC _)`
+    (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
+  rpt strip_tac >> irule analyzed_ordinary_step_available >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  asm_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM,
+    arithmeticTheory.ADD_CLAUSES] >>
+  qpat_x_assum `MEM v (live_vars_at _ _ _)` mp_tac >>
+  simp_tac bool_ss [arithmeticTheory.ADD_CLAUSES,
+    AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem analyzed_live_coverage_computed_operands:
+  !fn bb i ps.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+    !v. MEM (Var v) (compute_operands (EL i bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled
+Proof
+  metis_tac[analyzed_computed_operand_demand]
+QED
+
 (* Factor the actual worker, retaining its full-tail lookahead. *)
 Theorem native_worker_prefix_split:
   !j rest lv dfg cfg fn label halt n len i ps ops after xs ps0.
