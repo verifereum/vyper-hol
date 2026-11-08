@@ -423,12 +423,13 @@ Theorem compile_flag_in_sim_mem:
     binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  match_mp_tac binop_frag_val_mem_straight >> conj_tac
+  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
+  strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `m`, `v1`, `v2`, `es0`] mp_tac
     bop_result_flag_in >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  match_mp_tac binop_frag_val_mem_straight >> conj_tac
-  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
-  strip_tac >> disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
+  disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
   qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
                `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
     compile_flag_in_correct >>
