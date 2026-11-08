@@ -135,6 +135,145 @@ Inductive lineage_state:
                      ps_spilled := ps_after.ps_spilled |>)
 End
 
+(* Exact physical edges of the frozen lineage rule, without its recursive
+   premise. No resource invariant is imposed on these witnesses. *)
+Definition lineage_edge_def:
+  lineage_edge lv dfg cfg fn ps0 (lbl,ps) (succ,qs) <=>
+    ?bb ps_dfs block_ops ps_dfs_after ch promised ps_after ps_succ.
+      lookup_block lbl fn.fn_blocks = SOME bb /\
+      dfs_block_state lv dfg cfg fn ps0 lbl ps_dfs /\
+      generate_block_plan lv dfg cfg fn bb ps_dfs = SOME (block_ops,ps_dfs_after) /\
+      generate_block_plan lv dfg cfg fn bb
+        (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+        SOME (block_ops,ps_after) /\
+      MEM succ (cfg_succs_of cfg lbl) /\
+      dfs_block_state lv dfg cfg fn ps0 succ ps_succ /\
+      ps_after.ps_spilled = ps_succ.ps_spilled /\
+      qs = ps_succ with <|ps_stack := ps_after.ps_stack;
+                         ps_spilled := ps_after.ps_spilled|>
+End
+
+Theorem lineage_edge_step:
+  lineage_state lv dfg cfg fn ps0 lbl ps /\
+  lineage_edge lv dfg cfg fn ps0 (lbl,ps) (succ,qs) ==>
+  lineage_state lv dfg cfg fn ps0 succ qs
+Proof
+  rewrite_tac[lineage_edge_def] >> rpt strip_tac >>
+  qpat_x_assum `qs = _` SUBST1_TAC >>
+  irule lineage_state_step >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem lineage_state_history:
+  !lv dfg cfg fn ps0 lbl ps.
+    lineage_state lv dfg cfg fn ps0 lbl ps ==>
+    ?entry vertices. fn_entry_label fn = SOME entry /\
+      LRC (lineage_edge lv dfg cfg fn ps0) vertices (entry,ps0) (lbl,ps)
+Proof
+  rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
+  ho_match_mp_tac lineage_state_ind >> rpt strip_tac
+  >- (qexistsl_tac [`lbl`,`[]`] >> simp[listTheory.LRC_def]) >>
+  qexistsl_tac [`entry`,`vertices ++ [(lbl,ps)]`] >>
+  simp[fnPlanLineageCallTraceTheory.LRC_APPEND, listTheory.LRC_def] >>
+  simp[lineage_edge_def] >>
+  qexists_tac `ps_dfs` >>
+  qexists_tac `block_ops` >> qexists_tac `ps_dfs_after` >>
+  qexists_tac `ch` >> qexists_tac `promised` >>
+  qexists_tac `ps_after` >> qexists_tac `ps_succ` >> simp[]
+QED
+
+Theorem lineage_history_reconstruct:
+  !vertices x y.
+    LRC (lineage_edge lv dfg cfg fn ps0) vertices x y ==>
+    lineage_state lv dfg cfg fn ps0 (FST x) (SND x) ==>
+    lineage_state lv dfg cfg fn ps0 (FST y) (SND y)
+Proof
+  Induct >> simp[listTheory.LRC_def] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!x y. _` (qspecl_then [`z`,`y`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  PairCases_on `h` >> PairCases_on `z` >> gvs[] >>
+  metis_tac[lineage_edge_step]
+QED
+
+Theorem lineage_state_history_iff:
+  lineage_state lv dfg cfg fn ps0 lbl ps <=>
+  ?entry vertices. fn_entry_label fn = SOME entry /\
+    LRC (lineage_edge lv dfg cfg fn ps0) vertices (entry,ps0) (lbl,ps)
+Proof
+  eq_tac >- metis_tac[lineage_state_history] >> rpt strip_tac >>
+  drule lineage_history_reconstruct >> simp[lineage_state_entry]
+QED
+
+Theorem lineage_edge_physical:
+  lineage_edge lv dfg cfg fn ps0 (lbl,ps) (succ,qs) ==>
+  ?bb ch promised ops after.
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    generate_block_plan lv dfg cfg fn bb
+      (ps with <|ps_cleanup_height := ch; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    MEM succ (cfg_succs_of cfg lbl) /\
+    qs.ps_stack = after.ps_stack /\ qs.ps_spilled = after.ps_spilled
+Proof
+  simp[lineage_edge_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem lineage_history_cfg:
+  codegen_ready_fn fn ==>
+  !vertices x y.
+    LRC (lineage_edge lv dfg (cfg_analyze fn) fn ps0) vertices x y ==>
+    LRC (venomWf$fn_cfg_edge fn) (MAP FST vertices) (FST x) (FST y)
+Proof
+  strip_tac >> Induct >> simp[listTheory.LRC_def] >> rpt strip_tac >> gvs[] >>
+  qexists_tac `FST z` >> conj_tac
+  >- (PairCases_on `h` >> PairCases_on `z` >> gvs[] >>
+      drule lineage_edge_physical >> strip_tac >>
+      `wf_function fn` by gvs[codegen_ready_fn_def] >>
+      metis_tac[codegenReadyComputeTheory.fn_cfg_edge_cfg_analyze]) >>
+  metis_tac[]
+QED
+
+Theorem lineage_history_path:
+  codegen_ready_fn fn /\
+  LRC (lineage_edge lv dfg (cfg_analyze fn) fn ps0) vertices x y ==>
+  is_fn_path fn (MAP FST vertices ++ [FST y]) /\
+  HD (MAP FST vertices ++ [FST y]) = FST x
+Proof
+  strip_tac >> drule lineage_history_cfg >> disch_then drule >>
+  metis_tac[codegenReadyComputeTheory.lrc_to_is_fn_path]
+QED
+
+Theorem lineage_history_consecutive_return:
+  LRC (lineage_edge lv dfg cfg fn ps0) pre root (d,ps) /\
+  lineage_edge lv dfg cfg fn ps0 (d,ps) z /\
+  LRC (lineage_edge lv dfg cfg fn ps0) rest z final /\
+  (EXISTS (\s. FST s = d) rest \/ FST final = d) ==>
+  ?middle b post.
+    rest = middle ++ post /\ FST b = d /\
+    EVERY (\s. FST s <> d) middle /\
+    LRC (lineage_edge lv dfg cfg fn ps0) pre root (d,ps) /\
+    LRC (lineage_edge lv dfg cfg fn ps0) ((d,ps)::middle) (d,ps) b /\
+    LRC (lineage_edge lv dfg cfg fn ps0) post b final /\
+    LRC (lineage_edge lv dfg cfg fn ps0) (pre ++ (d,ps)::rest) root final
+Proof
+  strip_tac >>
+  ho_match_mp_tac fnPlanLineageCallTraceTheory.LRC_consecutive_return >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem lineage_history_return_path:
+  codegen_ready_fn fn /\
+  LRC (lineage_edge lv dfg (cfg_analyze fn) fn ps0)
+    ((d,ps)::middle) (d,ps) (d,qs) /\
+  EVERY (\s. FST s <> d) middle ==>
+  is_fn_path fn (d::(MAP FST middle ++ [d])) /\
+  MAP FST middle ++ [d] <> [] /\
+  LAST (MAP FST middle ++ [d]) = d /\
+  ~MEM d (FRONT (MAP FST middle ++ [d]))
+Proof
+  strip_tac >> drule_all lineage_history_path >> simp[] >>
+  gvs[rich_listTheory.FRONT_APPEND, listTheory.EVERY_MEM, listTheory.MEM_MAP] >> metis_tac[]
+QED
+
 (* Helper: every field but the stack is a DFS state's. *)
 Theorem lineage_state_dfs_fields:
   !liveness dfg cfg fn ps0 lbl ps.

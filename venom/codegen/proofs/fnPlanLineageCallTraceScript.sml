@@ -300,3 +300,42 @@ Proof
   strip_tac >> drule (cj 2 plan_trace_physical_ancestry) >>
   disch_then (qspecl_then [`pre`, `lbl`, `qs`, `post`] mp_tac) >> simp[]
 QED
+
+(* Exact copy from vyperTypeCallGraphSoundnessTheory: importing that
+   semantics theory here would cross the planner-leaf boundary. *)
+Theorem LRC_APPEND:
+  LRC R (l1 ++ l2) x z <=> ?y. LRC R l1 x y /\ LRC R l2 y z
+Proof
+  qid_spec_tac `x` >> Induct_on `l1` >> simp[listTheory.LRC_def] >> metis_tac[]
+QED
+
+Theorem LRC_first_hit:
+  !ls x y. LRC R ls x y /\ (EXISTS P ls \/ P y) ==>
+    ?pre hit post. ls = pre ++ post /\
+      LRC R pre x hit /\ LRC R post hit y /\
+      P hit /\ EVERY (\v. ~P v) pre
+Proof
+  Induct >- (simp[listTheory.LRC_def] >> metis_tac[]) >>
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 mp_tac assume_tac) >>
+  simp[Once listTheory.LRC_def] >> strip_tac >> gnvs[] >>
+  Cases_on `P h`
+  >- (qexistsl_tac [`[]`,`h`,`h::ls`] >> simp[listTheory.LRC_def] >> metis_tac[]) >>
+  first_x_assum (qspecl_then [`z`,`y`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  qexistsl_tac [`h::pre`,`hit`,`post`] >> simp[listTheory.LRC_def] >> metis_tac[]
+QED
+
+Theorem LRC_consecutive_return:
+  LRC R pre root a /\ R a z /\ LRC R rest z final /\
+  P a /\ (EXISTS P rest \/ P final) ==>
+  ?middle b post.
+    rest = middle ++ post /\ P b /\ EVERY (\v. ~P v) middle /\
+    LRC R pre root a /\ LRC R (a::middle) a b /\ LRC R post b final /\
+    LRC R (pre ++ a::rest) root final
+Proof
+  strip_tac >> drule LRC_first_hit >>
+  disch_then (qspec_then `P` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`pre'`,`hit`,`post`] >>
+  simp[LRC_APPEND, listTheory.LRC_def] >> metis_tac[]
+QED
