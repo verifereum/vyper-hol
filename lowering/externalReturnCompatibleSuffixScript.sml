@@ -19,7 +19,7 @@ Theorem return_selected_compatible_suffix:
   source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
@@ -59,7 +59,7 @@ Proof
   >- (drule_all return_site_value_semantics >> strip_tac >>
       drule_all return_site_nocopy_memory >> strip_tac >>
       `compile_external_return (SOME op) F T ce.ce_ret_enc_info
-         ce.ce_max_return_size F nkey F (mut = View) sa = (u,sf)` by
+         ce.ce_max_return_size F nkey ut (mut = View) sa = (u,sf)` by
         (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
          gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
       `state_rel func ce cx ee s` by fs[stmt_state_rel_def] >>
@@ -75,7 +75,7 @@ Proof
   `ce.ce_max_return_size < dimword (:256)` by
     (drule_all return_site_output_buffer_bound >> simp[]) >>
   `compile_external_return (SOME op) F F ce.ce_ret_enc_info
-     ce.ce_max_return_size F nkey F (mut = View) sa = (u,sf)` by
+     ce.ce_max_return_size F nkey ut (mut = View) sa = (u,sf)` by
     (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
      gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\

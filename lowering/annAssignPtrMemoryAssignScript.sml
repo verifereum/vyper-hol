@@ -13,13 +13,15 @@ Theorem annassign_memory_scope_state_ptr:
  not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
- type_memory_size tv <= sz /\ val_wf tv v /\
+ type_memory_size tv <= sz /\ val_wf tv v /\ value_has_type tv v /\
  val_in_memory tv v (w2n w) s.vs_memory ==>
  stmt_state_rel ctx func cenv cx
    (es with scopes := (sc |+ (id, <|assignable := assignable; type := tv;
                                   value := v; popped := []|>)) :: rest) s
 Proof
  rpt gen_tac >> strip_tac >>
+ `memory_value_rel tv v (w2n w) s.vs_memory` by
+   (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[]) >>
  irule stmt_state_rel_declare_memory >>
  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s` by
    fs[stmt_state_rel_def, state_rel_def] >>
@@ -43,7 +45,7 @@ Theorem annassign_memory_destination_declaration_ptr:
     k = 32 + 32 * ((len + 31) DIV 32) /\ mload (w2n a) s = n2w len /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem)
   else k = type_memory_bytes cenv ty) /\
- val_wf tv v /\ val_footprint tv v <= k /\
+ val_wf tv v /\ value_has_type tv v /\ val_footprint tv v <= k /\
  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n a) m) /\
  stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\

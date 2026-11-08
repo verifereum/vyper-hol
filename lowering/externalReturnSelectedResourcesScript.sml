@@ -8,13 +8,13 @@ Theorem return_selected_consumer_resources:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) /\
   same_frame cenv ce ==>
   ce.ce_raw_return = rr /\ ce.ce_type_env = type_env tops /\
   ce.ce_struct_fields = make_struct_fields_map tops /\
-  ce.ce_nonreentrant = (F,nkey,F,mut = View) /\
+  ce.ce_nonreentrant = (F,nkey,ut,mut = View) /\
   ce.ce_is_external /\ ~ce.ce_is_ctor /\ ce.ce_return_pc = NONE /\
   acyclic_struct_metadata ce.ce_struct_fields /\
   type_memory_bytes ce ret < dimword (:256) /\
