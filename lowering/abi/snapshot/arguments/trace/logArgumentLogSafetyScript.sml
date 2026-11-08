@@ -101,7 +101,7 @@ Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
-  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[] >>
+  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[expr_can_mutate_def] >>
   `abi_request_reservation reserved requests ss` by (drule_all abi_request_credit_reservation >> simp[]) >>
   qspecl_then [`reserved`, `requests`, `allocation_cs.cs_next_id`, `capacity`, `ss`]
     mp_tac abi_request_reservation_room >>
