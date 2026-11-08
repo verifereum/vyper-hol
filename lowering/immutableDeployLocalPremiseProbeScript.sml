@@ -4,6 +4,7 @@ Ancestors
   immutableDeployLocalBackingProbe immutableDeployLocalCodeProbe
   immutableDeployEmptyValid immutableDeployEmptyStacked immutableDeployEmptyDeployment
   bodySim exprSimHypsDefs stmtSimDefs typedCopyMetadata vyperContext
+  exprSimMain exprSimSource
 
 Theorem local_probe_lowering_unit:
   lower_vyper_deploy_unit local_probe_tops empty_immutable_policy [] =
@@ -132,4 +133,94 @@ Proof
   conj_tac >- (EVAL_TAC >> rpt strip_tac >>
     gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >> EVAL_TAC >> simp[]) >>
   conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+
+Theorem local_probe_sim_inv:
+  expr_sim_inv local_probe_empty_ce local_probe_cx local_probe_env local_probe_es
+Proof
+  simp[expr_sim_inv_def, local_probe_env_consistent,
+       local_probe_state_typed, local_probe_functions_typed] >>
+  simp[local_probe_env_def, local_probe_empty_ce_def, local_probe_real_ce_shape] >>
+  conj_tac >- (rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+    EVAL_TAC >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  conj_tac >- (EVAL_TAC >> rpt strip_tac >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  conj_tac >- (rpt strip_tac >>
+    drule (cj 4 local_probe_context_metadata) >> strip_tac >>
+    gvs[local_probe_context_metadata] >>
+    qpat_x_assum `lookup_flag _ _ = SOME _` mp_tac >>
+    simp[local_probe_tops_def, vyperStateTheory.lookup_flag_def]) >>
+  conj_tac >- (simp[local_probe_context_metadata] >> EVAL_TAC >>
+    rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  conj_tac >- simp[local_probe_ce_def, compileVyperTheory.build_compile_env_def,
+    local_probe_context_metadata, compileVyperTheory.build_flag_info_def,
+    compileVyperTheory.allocate_args_def, local_probe_tops_def] >>
+  conj_tac >- (EVAL_TAC >> rpt strip_tac >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> rpt strip_tac >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- (EVAL_TAC >> rpt strip_tac >>
+    gvs[AllCaseEqs(), vyperStateTheory.find_var_decl_by_name_def]) >>
+  conj_tac >- (EVAL_TAC >> rpt strip_tac >>
+    gvs[AllCaseEqs()] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (rpt strip_tac >>
+    drule (cj 4 local_probe_context_metadata) >> strip_tac >>
+    gvs[local_probe_context_metadata] >>
+    qpat_x_assum `find_var_decl_by_name _ _ = SOME _` mp_tac >>
+    simp[local_probe_tops_def, vyperStateTheory.find_var_decl_by_name_def] >>
+    rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> rpt strip_tac >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (rpt strip_tac >>
+    gvs[immutableDeployEmptySourceTheory.empty_immutable_env_def, finite_mapTheory.FLOOKUP_UPDATE] >> EVAL_TAC) >>
+  conj_tac >- (rpt strip_tac >>
+    gvs[immutableDeployEmptySourceTheory.empty_immutable_env_def, finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+    EVAL_TAC >> rpt strip_tac >> gvs[] >> EVAL_TAC >>
+    simp[wordsTheory.dimword_def, valueEncodingTheory.type_memory_size_def]) >>
+  EVAL_TAC >> rpt strip_tac >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+  EVAL_TAC >> simp[compileEnvTheory.regions_disjoint_def,
+                   valueEncodingTheory.type_memory_size_def] >>
+  gvs[immutableDeployEmptyProbeTheory.empty_struct_evaluated_probe]
+QED
+
+Theorem local_probe_calls_safe:
+  call_evaluation_safe local_probe_cx []
+Proof
+  simp[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def] >>
+  qexists `[]` >> EVAL_TAC >> simp[] >> conj_tac
+  >- (simp[relationTheory.irreflexive_def] >>
+      metis_tac[relationTheory.TC_CASES1,
+        vyperTypeCallGraphSoundnessTheory.call_edge_rel_def, listTheory.MEM]) >>
+  simp[vyperInterpreterTheory.lookup_function_def] >>
+  rpt gen_tac >> Cases_on `fn = "__init__"` >>
+  simp[vyperTypeCallGraphTheory.int_calls_expr_def,
+       vyperTypeCallGraphTheory.int_calls_stmt_def,
+       vyperTypeCallGraphTheory.int_calls_atarget_def]
+QED
+
+Theorem local_probe_body_pre:
+  expr_body_pre local_probe_empty_ce local_probe_cx local_probe_env
+    (Name (StructT (NONE,"Empty")) "x") local_probe_es
+Proof
+  simp[expr_body_pre_def, local_probe_sim_inv,
+       cj 4 local_probe_target_typing,
+       vyperTypeCallGraphTheory.int_calls_expr_def, local_probe_calls_safe] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem local_probe_vv_sim:
+  !ctx func ty.
+    expr_vv_sim ctx func local_probe_empty_ce local_probe_cx ty
+      (Name (StructT (NONE,"Empty")) "x") local_probe_es
+Proof
+  rpt gen_tac >> irule compile_expr_vv_sim >>
+  qexists `local_probe_env` >>
+  simp[expr_sim_pre_body, local_probe_body_pre,
+       vyperTypeCallGraphTheory.int_calls_expr_def]
 QED
