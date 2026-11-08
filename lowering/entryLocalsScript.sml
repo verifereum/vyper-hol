@@ -234,7 +234,7 @@ QED
 
 (* ===== Each entry kind ===== *)
 
-Theorem build_positional_args_FST[local]:
+Theorem build_positional_args_FST:
   !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
 Proof
   Induct_on `fargs` >> fs[build_positional_args_def] >>

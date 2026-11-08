@@ -18,6 +18,7 @@
  *)
 Theory entryPtrSeamPrefix
 Ancestors
+  selectedEntryPrefixCode
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
   rawEntryCode entryCheckIntervals sourceEntrySelection actualRegistrationCode
   entryLocals
