@@ -1,4 +1,4 @@
-(* The internal-call callee body's joint induction: the held case of a
+(* The internal-call callee body's joint induction: the (vacuous) case of a
    subscript of a widened internal-call result.
  *
  * TOP-LEVEL:
@@ -6,16 +6,12 @@
  *)
 Theory bodyIntCallJointWidened
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodySimExprCases
 
-(* Held, like bodySimSubscriptWidenedTheory.body_subscript_widened_call_base
-   (the same case for the global body induction): a subscript whose base is
-   an internal call that the call's type widens (post_value_type differs from
-   the source type only for such a call, post_value_type_not_int_call).
-   compile_subscript reads the base at offsets taken from the base's source
-   type, so for a tuple base it reads the wrong field until the subscript
-   readers use the lowered layout.  Retired together with
-   body_subscript_widened_call_base. *)
+(* Vacuous: a subscript's internal-call base is typed at its callee's exact
+   return type (well_typed_expr's subscript_base_type_exact), so
+   post_value_type agrees with the source type there
+   (expr_body_pre_subscript_base_type). *)
 Theorem intcall_subscript_widened_producer:
   !fp a e1 e2 t fid cargs drv.
     e1 = Call t (IntCall fid) cargs drv /\
@@ -58,5 +54,5 @@ Theorem intcall_subscript_widened_producer:
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt strip_tac >> drule expr_body_pre_subscript_base_type >> simp[]
 QED

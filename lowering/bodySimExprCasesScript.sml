@@ -153,7 +153,9 @@ Theorem body_subscript_case:
     body_expr_ok cx (Subscript v8 e1 e2)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> reverse conj_tac >- simp[] >> rpt gen_tac >> strip_tac >>
-  drule expr_body_pre_subscript_base_type >> strip_tac >>
+  reverse (Cases_on `post_value_type cenv e1 = expr_type e1`)
+  >- (rw[expr_sim_case_def, expr_vv_case_def] >>
+      metis_tac[expr_body_pre_subscript_base_type]) >>
   `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
     (irule exprSimPlacesTheory.compile_subscript_case >> rpt conj_tac
      >- metis_tac[body_expr_ok_case]
