@@ -245,6 +245,20 @@ Proof
   simp[dft_gas_replay_def]
 QED
 
+(* Canonical replay records each observed nonzero word with its target
+   multiplicity. Missing events may contribute zero-filled slots. *)
+Theorem dft_gas_replay_slots:
+  !C C' si so.
+    o1_ctx_shape C /\ o1_ctx_shape C' /\
+    dft_gas_replay C C' si so ==>
+    ?slots unused.
+      si.vs_gas_readings =
+        MAP (\slot. case slot of NONE => 0w | SOME w => w) slots /\
+      PERM (MAP THE (FILTER IS_SOME slots) ++ unused) so.vs_gas_readings
+Proof
+  rpt strip_tac
+QED
+
 Theorem dft_ctx_sim_gas:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
