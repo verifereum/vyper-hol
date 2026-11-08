@@ -1,7 +1,7 @@
 (* Producer boundaries for the actual external Return normalization branch. *)
 Theory externalNormalizePremises
 Ancestors
-  externalReturnBounds typedNormalizeProducer valueEncodingTyping
+  externalReturnBounds typedMemoryCopy typedNormalizeProducer valueEncodingTyping
   typedNormalizeStaticRigidity valueCopyBytes vyperTypeSystem
   exprSimDefs exprSimProps loweringPosts vyperTyping vyperValue compileEnv valueEncoding
   externalReturnNormalizeMem allocaSiteResource exprLoweringProps
