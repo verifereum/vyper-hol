@@ -517,3 +517,41 @@ Proof
     vyperValueOperationTheory.evaluate_convert_from_not_address_bytes,
     vyperValueOperationTheory.evaluate_convert_def]
 QED
+
+Theorem scalar_decimal_uint256_actual_outcome:
+  within_int_bound decimal_bound i /\
+  compile_type_convert x (ConvDecimalToInt 10000000000 (-&(2**167)) (&(2**167)-1)
+    0 (&(2**167)-1) T) sa = (out,sb) /\
+  fresh_vars_wrt sa s /\ eval_operand x s = SOME (i2w i) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (BaseT DecimalT) (BaseT (UintT 256)) (DecimalV i) = INL vout /\
+    expr_val_rel cx (BaseT (UintT 256)) vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx (BaseT DecimalT) (BaseT (UintT 256)) (DecimalV i)) (Abort err t))
+Proof
+  strip_tac >>
+  `i <= (&(2**167)-1) * decimal_scale /\ i <= (&(2**256)-1) * decimal_scale` by
+    (fs[within_int_bound_ineq] >> intLib.ARITH_TAC) >>
+  Cases_on `0 <= i`
+  >- (drule_at (Pat `compile_type_convert _ _ _ = _`) scalar_decimal_to_int_ok >>
+      disch_then (qspecl_then [`i`, `s`] mp_tac) >>
+      (impl_tac >- gvs[]) >> strip_tac >>
+      `within_int_bound (Unsigned 256) (i / 10000000000)` by
+        (irule vyperDecimalBoundsTheory.decimal_div_unsigned_bound >> gvs[]) >>
+      `i quot 10000000000 = i / 10000000000` by
+        (rewrite_tac[GSYM vyperDecimalBoundsTheory.decimal_truncate_eq_quot] >>
+         `~(i < 0)` by intLib.ARITH_TAC >>
+         Cases_on `i = 0` >> simp[intExtensionTheory.SGN_def, integerTheory.INT_ABS]) >>
+      disj1_tac >> qexistsl_tac [`ss'`, `IntV (i / 10000000000)`] >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_not_address_bytes,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def]) >>
+  drule_at (Pat `compile_type_convert _ _ _ = _`) scalar_decimal_to_int_abort >>
+  disch_then (qspecl_then [`i`, `s`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`Revert_abort`, `ss'`] >>
+  simp[expr_exit_def, convert_result_def,
+    vyperValueOperationTheory.evaluate_convert_from_not_address_bytes,
+    vyperValueOperationTheory.evaluate_convert_def]
+QED
