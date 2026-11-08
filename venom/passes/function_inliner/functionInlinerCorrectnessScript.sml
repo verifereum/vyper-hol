@@ -2,17 +2,13 @@
 
 Theory functionInlinerCorrectness
 Ancestors
-  functionInlinerProof functionInlinerWf
+  functionInlinerProof functionInlinerWf functionInlinerContract
+  o1PassContract finite_map
 
 Theorem function_inliner_pass_correct:
-  ∀ctx s fuel threshold.
-    EVERY wf_function ctx.ctx_functions ∧
-    EVERY alloca_pointer_confined ctx.ctx_functions ⇒
-    let ctx' = function_inliner_ctx threshold ctx in
-    ∃fuel'.
-      observable_result_equiv
-        (run_context fuel ctx s)
-        (run_context fuel' ctx' s)
+  !ctx s threshold D.
+    inliner_input_ok ctx /\ s.vs_labels = FEMPTY /\ ~s.vs_halted ==>
+    ctx_sim D ctx (function_inliner_ctx threshold ctx) s s
 Proof
   ACCEPT_TAC function_inliner_correct
 QED
