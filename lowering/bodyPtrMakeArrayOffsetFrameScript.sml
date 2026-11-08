@@ -42,14 +42,14 @@ Proof
   rename1 `r = Var out` >>
   qmatch_asmsub_abbrev_tac `emit_op ADD [left; Lit (n2w off)] sa` >>
   `s' = update_var out (a+n2w off) s` by
-    (gvs[copy_runtime_frame_def, run_inst_seq_def, Once step_inst_base_def,
+    (gvs[copy_runtime_frame_def, run_inst_seq_def, step_inst_base_opcode_eqs,
          mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `left`]) >>
   qexistsl_tac [`s'`,
     `step_prov PG G (mk_inst sa.cs_next_id ADD [left; Lit (n2w off)] [out]) s'`,
     `step_taint (mk_inst sa.cs_next_id ADD [left; Lit (n2w off)] [out]) s s' tn`] >>
   gvs[] >> drule_at Any emit_binop_old_frame >> simp[] >> strip_tac >>
   simp[inst_seq_ptr_def, ptr_inst_ok_copy_len_binop, op_taint_def,
-       Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
        update_var_def] >>
   fs[lookup_var_def, update_var_def, mk_inst_def, Abbr `left`, eval_operand_def] >>
   simp[step_taint_def, set_var_taint_def, imm_taint_def, FLOOKUP_UPDATE] >> metis_tac[]
