@@ -156,8 +156,9 @@ Theorem step_inst_base_no_intret[local]:
     step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* ===================================================================== *)

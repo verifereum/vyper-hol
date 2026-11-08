@@ -11,7 +11,7 @@ Theorem step_TLOAD:
   step_inst_base (mk_inst id TLOAD [op] [out]) ss =
     OK (update_var out (tload key ss) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def]
 QED
 
 Theorem step_TSTORE:
@@ -19,7 +19,7 @@ Theorem step_TSTORE:
   step_inst_base (mk_inst id TSTORE [op1;op2] []) ss =
     OK (tstore key value ss)
 Proof
-  rw[step_inst_base_def, exec_write2_def]
+  rw[step_inst_base_opcode_eqs, exec_write2_def]
 QED
 
 Theorem tload_update_var[simp]:
@@ -39,14 +39,14 @@ Theorem step_TLOAD_lit[local]:
   step_inst_base (mk_inst id TLOAD [Lit key] [out]) ss =
     OK (update_var out (tload key ss) ss)
 Proof
-  simp[step_inst_base_def, exec_read1_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def]
 QED
 
 Theorem step_TSTORE_lit:
   step_inst_base (mk_inst id TSTORE [Lit key;Lit value] []) ss =
     OK (tstore key value ss)
 Proof
-  simp[step_inst_base_def, exec_write2_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def]
 QED
 
 Theorem step_EQ_recent_one[local]:
@@ -54,7 +54,7 @@ Theorem step_EQ_recent_one[local]:
     (update_var var value ss) =
   OK (update_var out (bool_to_word (value = 1w)) (update_var var value ss))
 Proof
-  simp[step_inst_base_def, exec_pure2_def,
+  simp[step_inst_base_opcode_eqs, exec_pure2_def,
        eval_operand_def, lookup_var_update_var]
 QED
 
@@ -63,7 +63,7 @@ Theorem step_ISZERO_recent[local]:
     (update_var var value ss) =
   OK (update_var out (bool_to_word (value = 0w)) (update_var var value ss))
 Proof
-  simp[step_inst_base_def, exec_pure1_def,
+  simp[step_inst_base_opcode_eqs, exec_pure1_def,
        eval_operand_def, lookup_var_update_var]
 QED
 
@@ -74,7 +74,7 @@ Theorem step_ASSERT_recent[local]:
         (revert_state (set_returndata [] (update_var var value ss)))
     else OK (update_var var value ss)
 Proof
-  simp[step_inst_base_def, mk_inst_def, eval_operand_def, lookup_var_update_var]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, lookup_var_update_var]
 QED
 
 Definition transient_lock_code_def:

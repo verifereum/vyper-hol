@@ -45,7 +45,7 @@ Theorem step_assign_value:
       inst_operands := [src]; inst_outputs := [out] |> s =
     OK (update_var out v s)
 Proof
-  rw[step_inst_base_def, exec_pure1_def, update_var_def]
+  rw[step_inst_base_opcode_eqs, exec_pure1_def, update_var_def]
 QED
 
 (* safe_between + inst_wf + operands evaluate ==> step_inst = OK *)
