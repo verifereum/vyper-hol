@@ -162,8 +162,9 @@ Definition rewrite_inline_block_def:
     (bb with bb_instructions := insts, pi')
 End
 
-(* Rewrite all cloned blocks. param_idx is shared across blocks
-   (matching Python's shared param_idx counter). *)
+(* Rewrite all cloned blocks. param_idx is reset to its initial value for each
+   block (matching Python _inline_call_site, which sets param_idx = 0 at the
+   top of the per-block loop). *)
 Definition rewrite_inline_blocks_def:
   rewrite_inline_blocks invoke_ops invoke_outs return_label [] param_idx =
     ([], param_idx) ∧
@@ -172,7 +173,7 @@ Definition rewrite_inline_blocks_def:
     let (bb', pi') =
       rewrite_inline_block invoke_ops invoke_outs return_label bb param_idx in
     let (rest', pi'') =
-      rewrite_inline_blocks invoke_ops invoke_outs return_label rest pi' in
+      rewrite_inline_blocks invoke_ops invoke_outs return_label rest param_idx in
     (bb' :: rest', pi'')
 End
 
