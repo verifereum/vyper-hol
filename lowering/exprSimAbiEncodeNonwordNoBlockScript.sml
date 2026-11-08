@@ -172,8 +172,6 @@ Theorem abi_encode_window_concrete_phases:
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
   outsz < dimword (:256) /\ p < dimword (:256) /\
   (method_id <> NONE ==> p+32 < dimword (:256)) /\
-  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
-  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_encoder_admissible ei /\ abi_encoder_window_input ei at av sb cap initial.vs_memory /\
@@ -237,7 +235,6 @@ Proof
     (mp_then (Pat `abi_encoder_window_input _ _ _ _ _ _`) mp_tac abi_encode_window_setup_concrete) >>
   disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   disch_then (qspecl_then [`w`, `p`, `outsz`, `m`, `ctx`] mp_tac) >>
   impl_tac >-
     (asm_rewrite_tac[] >> Cases_on `cap = 0`
@@ -318,13 +315,8 @@ Resume abi_encode_window_concrete_phases[empty_body]:
 QED
 
 Resume abi_encode_window_concrete_phases[finish]:
-  `fresh_vars_wrt limit_st body_state` by
-    (irule abi_encode_high_vars_fresh >>
-     qexistsl_tac [`body_end`, `prepared`] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule abi_encode_window_finish_concrete >>
   disch_then (drule_at (Pat `window_strong_result _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   disch_then (qspecl_then [`p`, `LENGTH (enc at av)`,
     `mem_bytes_at (p+32) (m+LENGTH (enc at av)) body_state.vs_memory`] mp_tac) >>
   impl_tac >- asm_rewrite_tac[] >>
@@ -463,10 +455,7 @@ Theorem abi_encode_nonword_no_block_phases:
   sa.cs_blocks = final.cs_blocks /\
   local_ptrs_reserved ce sa /\
   (!x. op = Var x ==> not_fresh_at sa x) ==>
-  ?p. !limit_st.
-    ready.cs_next_var <= limit_st.cs_next_var /\
-    body_end.cs_next_var <= limit_st.cs_next_var /\
-    final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  ?p.
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?raw. run_inst_seq (emitted_insts sa final) s = OK raw /\
@@ -519,7 +508,6 @@ Resume abi_encode_nonword_no_block_phases[apply]:
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `alloca_room _ _ _`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   disch_then (drule_at (Pat `abi_builtin_encode_finish _ _ _ _ = _`)) >>
   disch_then (qspec_then `p` mp_tac) >>
   qpat_assum `enc ct rv = _` (fn th => rewrite_tac[th]) >>
@@ -595,7 +583,7 @@ Theorem abi_encode_nonword_no_block_run:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
-  fresh_vars_wrt sb s /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p raw. run_inst_seq (emitted_insts sa sb) s = OK raw /\
@@ -640,7 +628,7 @@ Proof
     (qpat_assum `sb.cs_next_var = _` (fn th => rewrite_tac[th]) >> simp[]) >>
   `ready.cs_next_var <= sb.cs_next_var` by metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   drule_all abi_encode_nonword_no_block_phases >>
-  disch_then (qx_choose_then `p` (qspec_then `sb` mp_tac)) >>
+  disch_then (qx_choose_then `p` mp_tac) >>
   impl_tac >- (asm_rewrite_tac[] >> simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL]) >>
   strip_tac >> qexistsl_tac [`p`, `raw`] >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -660,7 +648,7 @@ Theorem abi_encode_nonword_no_block_observer:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sa.cs_blocks = sb.cs_blocks /\ local_ptrs_reserved ce sa /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
-  fresh_vars_wrt sb s /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ fn_has_code sa sb observer ==>
   ?p actual. abi_decode_sim ctx observer s actual /\

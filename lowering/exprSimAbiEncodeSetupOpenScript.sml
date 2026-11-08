@@ -11,6 +11,7 @@ Ancestors
   venomState venomInst finite_map words arithmetic list rich_list
   emitHelper exprLowering context abiDecoderVarSequence ctorAbiActualWorld
   ctorAbiActualObservations instIdxIndep abiDecoderLoop
+  exprSimAbiEncodeFramedBuiltin exprSimAbiEncodeExecFrame
 
 Theorem abi_encode_open_register_preserves[local]:
   (!op. abi_decoder_operand_live next op ==>
@@ -73,7 +74,7 @@ Proof
     lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem abi_encode_open_allocate_sequence[local]:
+Theorem abi_encode_open_allocate_sequence:
   abi_builtin_encode_allocate outsz data_offset st = (ops,address_st) /\
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
@@ -122,7 +123,7 @@ Proof
     mload_mstore_same, eval_operand_mstore]
 QED
 
-Theorem abi_encode_open_method_sequence[local]:
+Theorem abi_encode_open_method_sequence:
   abi_builtin_encode_method_id (SOME mid) buf st = ((),final) /\
   eval_operand buf initial = SOME (n2w p) /\ p+32 < dimword (:256) ==>
   ?actual. run_inst_seq (emitted_insts st final) initial = OK actual /\ inst_extends st final /\
@@ -181,7 +182,8 @@ Theorem abi_encode_open_allocate_reach[local]:
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
     actual.vs_pending_deletions = initial.vs_pending_deletions /\
-    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
+    abi_encode_exec_frame func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_allocate_shape >> strip_tac >>
@@ -190,6 +192,9 @@ Proof
   rename1 `run_inst_seq (emitted_insts st address_st) initial = OK encoded` >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
   drule_all ctor_actual_sequence_labels >> strip_tac >>
+  `abi_encode_exec_frame func initial encoded` by
+    (drule abi_encode_framed_allocate_opcodes >> strip_tac >>
+     drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   `~encoded.vs_halted` by fs[abi_builtin_allocation_frame_def] >>
   drule_all abi_encoder_run_sequence_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `encoded with vs_inst_idx := LENGTH address_st.cs_current_insts` >>
@@ -222,7 +227,8 @@ Theorem abi_encode_open_method_reach[local]:
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
     actual.vs_pending_deletions = initial.vs_pending_deletions /\
-    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
+    abi_encode_exec_frame func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_method_shape >> strip_tac >>
@@ -231,6 +237,9 @@ Proof
   rename1 `run_inst_seq (emitted_insts st final) initial = OK encoded` >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
   drule_all ctor_actual_sequence_labels >> strip_tac >>
+  `abi_encode_exec_frame func initial encoded` by
+    (drule abi_encode_framed_method_opcodes >> strip_tac >>
+     drule_all abi_encode_setup_sequence_frame >> simp[]) >>
   drule abi_builtin_encode_method_window >> strip_tac >>
   drule_all abi_encoder_run_sequence_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `encoded with vs_inst_idx := LENGTH final.cs_current_insts` >>
@@ -253,7 +262,8 @@ Theorem abi_encode_open_method_setup_reach[local]:
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
     actual.vs_pending_deletions = initial.vs_pending_deletions /\
-    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
+    abi_encode_exec_frame func initial actual
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_encode_method_setup_context >> strip_tac >>
@@ -274,6 +284,8 @@ Proof
   `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
     (32+32*word_size (maxlen+4)) p 32 initial actual` by
     (drule_all abi_builtin_encode_setup_frame_compose >> simp[]) >>
+  `abi_encode_exec_frame func initial actual` by
+    (irule abi_encode_exec_frame_trans >> qexists_tac `addressed` >> simp[]) >>
   qexists_tac `actual` >> asm_rewrite_tac[] >>
   irule abi_decode_sim_trans >> qexists_tac `addressed` >> asm_rewrite_tac[]
 QED
@@ -287,7 +299,7 @@ Proof
   pairarg_tac >> simp[]
 QED
 
-Theorem abi_encode_window_setup_observed_open:
+Theorem abi_encode_framed_setup_window_open:
   abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
   fn_has_code st ready func /\
   mid_size = (case method_id of NONE => 0 | SOME mid => 4) /\
@@ -314,7 +326,8 @@ Theorem abi_encode_window_setup_observed_open:
     actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
     actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
     actual.vs_pending_deletions = initial.vs_pending_deletions /\
-    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual /\
+    abi_encode_exec_frame func initial actual
 Proof
   Cases_on `method_id` >> simp[] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -350,4 +363,39 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   qexists_tac `actual` >>
   pure_rewrite_tac[Q.SPECL [`32*word_size (maxlen+4)`, `32`] ADD_COMM] >> simp[]
+QED
+
+Theorem abi_encode_window_setup_observed_open:
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  fn_has_code st ready func /\
+  mid_size = (case method_id of NONE => 0 | SOME mid => 4) /\
+  write_size = (case method_id of NONE => 0 | SOME mid => 32) /\
+  outsz = 32+32*word_size (maxlen+mid_size) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\ (method_id <> NONE ==> p+32 < dimword (:256)) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  abi_encoder_window_input ei at av sb cap initial.vs_memory /\
+  (sb+cap <= p+32 \/ p+32+write_size <= sb) ==>
+  ?actual.
+    eval_operand (FST ops) actual = SOME (n2w p) /\
+    eval_operand (SND ops) actual = SOME (n2w (p+32+mid_size)) /\
+    FLOOKUP actual.vs_allocas st.cs_next_id = SOME (p,outsz) /\
+    abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p write_size initial actual /\
+    abi_encoder_window_input ei at av sb cap actual.vs_memory /\
+    (case method_id of NONE => T | SOME mid =>
+      mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid) /\
+    actual.vs_current_bb = ready.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH ready.cs_current_insts /\
+    actual.vs_labels = initial.vs_labels /\
+    actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+    actual.vs_logs = initial.vs_logs /\ actual.vs_requests = initial.vs_requests /\
+    actual.vs_pending_deletions = initial.vs_pending_deletions /\
+    ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_framed_setup_window_open >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `actual` >> simp[]
 QED

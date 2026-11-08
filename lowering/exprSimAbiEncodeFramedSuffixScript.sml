@@ -4,7 +4,7 @@
 Theory exprSimAbiEncodeFramedSuffix
 Ancestors
   exprSimAbiEncodeFramedBuiltin exprSimAbiEncodeFramedBody
-  exprSimAbiEncodeOpenSetup exprSimAbiEncodeWindowRoom abiEncoderWindowContract
+  exprSimAbiEncodeOpenSetup exprSimAbiEncodeSetupOpen exprSimAbiEncodeWindowRoom abiEncoderWindowContract
   abiEncoderRegisteredEffect exprSimAbiEncodeFinish abiEncoderSequence
   instIdxIndep abiBuiltinEncodeCode venomState exprSimAbiEncodeExecution
   abiEncoderWindowLookup abiEncoderWindowSequence list venomMemDefs
@@ -210,8 +210,7 @@ Theorem abi_encode_framed_phases_open:
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
   outsz < dimword (:256) /\ p < dimword (:256) /\
   (method_id <> NONE ==> p+32 < dimword (:256)) /\
-  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
-  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_encoder_admissible ei /\ abi_encoder_window_input ei at av sb cap initial.vs_memory /\
@@ -256,7 +255,7 @@ Theorem abi_encode_framed_phases_open:
     prepared.vs_labels = initial.vs_labels /\ actual.vs_labels = initial.vs_labels
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encode_framed_setup_window >>
+  drule_all abi_encode_framed_setup_window_open >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` >>
   `abi_encoder_window_pre ctx func ready body_end (SND ops) src ei at av sb cap d prepared` by

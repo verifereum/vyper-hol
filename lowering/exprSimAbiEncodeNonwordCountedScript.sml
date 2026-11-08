@@ -35,7 +35,7 @@ Theorem abi_encode_nonword_counted_suffix:
   local_ptrs_reserved ce sa /\
   (!l. op <> Label l) /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
-  fresh_vars_wrt sb s /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/

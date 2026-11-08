@@ -76,7 +76,7 @@ Theorem abi_encode_nonword_relabel_observer:
   fn_has_code (start_relabel L ids sa) (start_swap sa L ids sb) obs /\
   sa.cs_blocks <> sb.cs_blocks /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
-  fresh_vars_wrt sb s /\ ~s.vs_halted /\
+  ~s.vs_halted /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?p actual.
     let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
@@ -132,7 +132,7 @@ Proof
   `fn_has_code rst rr obs /\ fn_has_code rr re obs /\ fn_has_code re rf obs` by
     (drule_all abi_builtin_encode_code >> strip_tac >> asm_rewrite_tac[]) >>
   `abi_encoder_admissible ei` by metis_tac[abi_enc_plan_admissible] >>
-  `fresh_vars_wrt rf rs /\ ~rs.vs_halted /\
+  `~rs.vs_halted /\
    rs.vs_current_bb = rst.cs_current_bb /\
    rs.vs_inst_idx = LENGTH rst.cs_current_insts` by
     (simp_tac (srw_ss()) [Abbr `rf`, Abbr `rs`, Abbr `rst`,
@@ -205,7 +205,6 @@ Resume abi_encode_nonword_relabel_observer[positive]:
   disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `alloca_room (ctx with ctx_functions := [obs]) obs _`)) >>
   disch_then (drule_at (Pat `fn_has_code re rf _`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   disch_then (qspec_then `p` mp_tac) >>
   qpat_assum `enc ct rv = _` (fn eq => rewrite_tac[eq]) >>
   impl_tac
@@ -226,10 +225,8 @@ Resume abi_encode_nonword_relabel_observer[empty]:
   disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `alloca_room _ _ _`)) >>
-  disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   disch_then (qspec_then `p` mp_tac) >>
-  disch_then (qspec_then `rf` mp_tac) >>
-  qpat_assum `enc ct rv = _` (fn eq => rewrite_tac[eq]) >>
+  disch_then (qspec_then `rf` mp_tac) >>  qpat_assum `enc ct rv = _` (fn eq => rewrite_tac[eq]) >>
   impl_tac
   >- (reverse (rpt conj_tac)
       >- (rpt strip_tac >>

@@ -1,7 +1,7 @@
 Theory exprSimAbiEncodeEmptyFramed
 Ancestors
   exprSimAbiEncodeEmptySource exprSimAbiEncodeExecFrame
-  exprSimAbiEncodeFramedSuffix abiBuiltinEncodeSetup abiBuiltinAllocation
+  exprSimAbiEncodeFramedSuffix exprSimAbiEncodeSetupOpen abiBuiltinEncodeSetup abiBuiltinAllocation
   abiEncodeWindowBuiltin abiDecoderContract abiDecoderLoop
   exprSimAbiEncodeExecution exprSimAbiEncodeStateTransport exprSimAbiEncodeWindowRoom
   abiEncoderWindowLeaves abiEncoderWindowContract abiEncoderRegisteredEffect
@@ -105,8 +105,6 @@ Theorem abi_encode_empty_framed_phases_open:
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
   outsz < dimword (:256) /\ p < dimword (:256) /\
   (method_id <> NONE ==> p+32 < dimword (:256)) /\
-  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
-  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_encoder_admissible (AbiCopy 0) /\
@@ -153,7 +151,7 @@ Proof
      simp_tac std_ss [abi_encoder_window_copy_iff, valueEncodingTheory.mem_bytes_at_def,
        listTheory.TAKE_0]) >>
   drule_all (SIMP_RULE std_ss [] (Q.INST [`sb` |-> `0:num`, `cap` |-> `0:num`]
-    (SPEC_ALL abi_encode_framed_setup_window))) >>
+    (SPEC_ALL abi_encode_framed_setup_window_open))) >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` >>
   `abi_encode_empty_window_pre ctx func ready body_end (SND ops) src at av a d prepared` by
@@ -258,8 +256,6 @@ Theorem abi_encode_empty_framed_caller_suffix:
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
   outsz < dimword (:256) /\ p < dimword (:256) /\
   (method_id <> NONE ==> p+32 < dimword (:256)) /\
-  ready.cs_next_var <= limit_st.cs_next_var /\ body_end.cs_next_var <= limit_st.cs_next_var /\
-  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_encoder_admissible (AbiCopy 0) /\

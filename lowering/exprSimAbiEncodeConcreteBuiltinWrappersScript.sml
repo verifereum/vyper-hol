@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeConcreteBuiltinWrappers
 Ancestors
-  exprSimAbiEncodeOpenSetup exprSimAbiEncodeConcreteCompose
+  exprSimAbiEncodeOpenSetup exprSimAbiEncodeSetupOpen exprSimAbiEncodeConcreteCompose
+  exprSimAbiEncodeFinish
   abiBuiltinEncodeAllocate context abiBuiltinEncodeMethod abiBuiltinAllocation
   abiEncodeWindowBuiltin abiBuiltinEncodeCorrect abiBuiltinEncodeCode
   abiEncoderSequence abiEncoderWindowContract abiEncoderRegisteredEffect
@@ -29,8 +30,7 @@ Theorem abi_encode_window_finish_concrete:
   eval_operand buf encoded = SOME (n2w p) /\
   eval_operand encoded_len encoded = SOME (n2w len) /\
   abi_decoder_operand_live st.cs_next_var buf /\
-  p < dimword (:256) /\ final.cs_next_var <= limit_st.cs_next_var /\
-  fresh_vars_wrt limit_st encoded /\ ~encoded.vs_halted /\
+  p < dimword (:256) /\ ~encoded.vs_halted /\
   encoded.vs_current_bb = st.cs_current_bb /\
   encoded.vs_inst_idx = LENGTH st.cs_current_insts /\
   mem_bytes_at (p+32) (mid_size+len) encoded.vs_memory = bytes /\
@@ -43,7 +43,6 @@ Theorem abi_encode_window_finish_concrete:
     eval_operand buf actual = SOME (n2w p) /\
     mload p actual = n2w (len+mid_size) /\
     mem_bytes_at (p+32) (mid_size+len) actual.vs_memory = bytes /\
-    fresh_vars_wrt limit_st actual /\
     abi_decode_frame p 32 encoded actual /\
     abi_encoder_registered_effect {} [(p,32)] encoded actual /\
     actual.vs_allocas = encoded.vs_allocas /\
@@ -63,7 +62,7 @@ Theorem abi_encode_window_finish_concrete:
 Proof
   strip_tac >>
   drule abi_builtin_encode_finish_shape >> strip_tac >>
-  drule_all abi_builtin_encode_finish_sequence >> strip_tac >>
+  drule_all abi_encode_finish_sequence_open >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) encoded = OK raw` >>
   `eval_operand buf raw = SOME (n2w p)` by metis_tac[] >>
   drule_all abi_encoder_run_sequence_reach >>
@@ -132,8 +131,7 @@ Theorem abi_encode_allocate_concrete:
   abi_builtin_encode_allocate outsz data_offset st = (ops,address_st) /\ fn_has_code st address_st func /\
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
-  outsz < dimword (:256) /\ address_st.cs_next_var <= limit_st.cs_next_var /\
-  fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
+  outsz < dimword (:256) /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?raw actual.
     run_inst_seq (emitted_insts st address_st) initial = OK raw /\
@@ -141,7 +139,7 @@ Theorem abi_encode_allocate_concrete:
     inst_extends st address_st /\
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st address_st) /\
     eval_operand (FST ops) actual = SOME (n2w p) /\
-    eval_operand (SND ops) actual = SOME (n2w (p+data_offset)) /\ fresh_vars_wrt limit_st actual /\
+    eval_operand (SND ops) actual = SOME (n2w (p+data_offset)) /\
     abi_builtin_allocation_frame st.cs_next_var st.cs_next_id outsz initial actual /\
     actual.vs_current_bb = address_st.cs_current_bb /\
     actual.vs_inst_idx = LENGTH address_st.cs_current_insts /\
@@ -154,7 +152,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_allocate_shape >> strip_tac >>
   drule abi_encode_allocate_opcodes >> strip_tac >>
-  drule_all abi_builtin_encode_allocate_sequence >> strip_tac >>
+  drule_all abi_encode_open_allocate_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st address_st) initial = OK raw` >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
   drule_all ctor_actual_sequence_labels >> strip_tac >>
@@ -179,7 +177,6 @@ QED
 Theorem abi_encode_method_concrete:
   abi_builtin_encode_method_id (SOME mid) buf st = ((),final) /\ fn_has_code st final func /\
   eval_operand buf initial = SOME (n2w p) /\ p+32 < dimword (:256) /\
-  final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?raw actual.
@@ -188,7 +185,7 @@ Theorem abi_encode_method_concrete:
     inst_extends st final /\
     EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st final) /\
     mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid /\
-    fresh_vars_wrt limit_st actual /\ abi_decode_frame (p+32) 32 initial actual /\
+    abi_decode_frame (p+32) 32 initial actual /\
     actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
       eval_operand op actual = SOME w) /\
@@ -202,7 +199,7 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_builtin_encode_method_shape >> strip_tac >>
   drule abi_encode_method_opcodes >> strip_tac >>
-  drule_all abi_builtin_encode_method_sequence >> strip_tac >>
+  drule_all abi_encode_open_method_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK raw` >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
   drule_all ctor_actual_sequence_labels >> strip_tac >>
@@ -218,7 +215,6 @@ Theorem abi_encode_method_setup_concrete:
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32+32*word_size (maxlen+4))) /\
   32+32*word_size (maxlen+4) < dimword (:256) /\ p+32 < dimword (:256) /\
-  ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?raw actual.
@@ -229,7 +225,6 @@ Theorem abi_encode_method_setup_concrete:
     eval_operand (FST ops) actual = SOME (n2w p) /\
     eval_operand (SND ops) actual = SOME (n2w (p+36)) /\
     mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes mid /\
-    fresh_vars_wrt limit_st actual /\
     abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id (32+32*word_size (maxlen+4)) p 32 initial actual /\
     actual.vs_current_bb = ready.cs_current_bb /\ actual.vs_inst_idx = LENGTH ready.cs_current_insts /\
     actual.vs_labels = initial.vs_labels /\
@@ -241,13 +236,13 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_encode_method_setup_context >> strip_tac >>
   drule abi_builtin_encode_allocate_live >> strip_tac >>
-  `address_st.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= address_st.cs_next_var` by decide_tac >>
+  `st.cs_next_var <= address_st.cs_next_var` by decide_tac >>
   drule abi_encode_allocate_concrete >> disch_then drule >>
-  disch_then (qspecl_then [`p`, `limit_st`, `initial`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`p`, `initial`, `ctx`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   rename1 `abi_decode_sim ctx func initial addressed` >>
   drule abi_encode_method_concrete >> disch_then drule >>
-  disch_then (qspecl_then [`p`, `limit_st`, `addressed`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`p`, `addressed`, `ctx`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   rename1 `abi_decode_sim ctx func addressed actual` >>
   `actual.vs_halted = addressed.vs_halted` by simp[] >>
@@ -289,7 +284,6 @@ Theorem abi_encode_window_setup_concrete:
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
     FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
   outsz < dimword (:256) /\ (method_id <> NONE ==> p+32 < dimword (:256)) /\
-  ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_encoder_window_input ei at av sb cap initial.vs_memory /\
@@ -301,7 +295,6 @@ Theorem abi_encode_window_setup_concrete:
     let actual = raw with vs_inst_idx := LENGTH ready.cs_current_insts in
     eval_operand (FST ops) actual = SOME (n2w p) /\
     eval_operand (SND ops) actual = SOME (n2w (p+32+mid_size)) /\
-    fresh_vars_wrt limit_st actual /\
     FLOOKUP actual.vs_allocas st.cs_next_id = SOME (p,outsz) /\
     abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id outsz p write_size initial actual /\
     abi_encoder_window_input ei at av sb cap actual.vs_memory /\
@@ -324,7 +317,7 @@ Proof
   >- (qpat_x_assum `abi_builtin_encode_setup NONE _ _ = _`
         (assume_tac o REWRITE_RULE [abi_encode_setup_none_allocate]) >>
       drule abi_encode_allocate_concrete >> disch_then drule >>
-      disch_then (qspecl_then [`p`, `limit_st`, `initial`, `ctx`] mp_tac) >>
+      disch_then (qspecl_then [`p`, `initial`, `ctx`] mp_tac) >>
       (impl_tac >- (pure_rewrite_tac[Q.SPECL [`32`, `32*word_size maxlen`] ADD_COMM] >>
         asm_rewrite_tac[])) >> strip_tac >>
       `abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
@@ -339,7 +332,7 @@ Proof
       qexists_tac `raw` >>
       pure_rewrite_tac[Q.SPECL [`32*word_size maxlen`, `32`] ADD_COMM] >> gvs[]) >>
   drule abi_encode_method_setup_concrete >> disch_then drule >>
-  disch_then (qspecl_then [`p`, `limit_st`, `initial`, `ctx`] mp_tac) >>
+  disch_then (qspecl_then [`p`, `initial`, `ctx`] mp_tac) >>
   (impl_tac >- (pure_rewrite_tac[Q.SPECL [`32`, `32*word_size (maxlen+4)`] ADD_COMM] >>
     asm_rewrite_tac[])) >> strip_tac >>
   `FLOOKUP actual.vs_allocas st.cs_next_id = SOME (p,32+32*word_size (maxlen+4))` by
