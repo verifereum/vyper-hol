@@ -1216,6 +1216,28 @@ Proof
   gvs[mm_local_operand_vars_eq, venomInstTheory.inst_uses_def]
 QED
 
+Theorem mm_local_build_ids_key[local]:
+  !xs dfg.
+  (!id i. dfg_get_inst_by_id dfg id = SOME i ==> i.inst_id = id) ==>
+  !id i. dfg_get_inst_by_id (dfg_build_insts_rev dfg xs) id = SOME i ==>
+    i.inst_id = id
+Proof
+  Induct >> simp[dfgDefsTheory.dfg_build_insts_rev_def] >> rpt strip_tac >>
+  qpat_x_assum `!dfg. _` (qspec_then `dfg_add_inst dfg h` mp_tac) >>
+  impl_tac
+  >- metis_tac[dfgCorrectnessProofTheory.dfg_add_inst_ids_sound] >>
+  disch_then drule >> simp[]
+QED
+
+Theorem mm_local_function_ids_key[local]:
+  dfg_get_inst_by_id (dfg_build_function fn0) id = SOME i ==> i.inst_id = id
+Proof
+  simp[dfgDefsTheory.dfg_build_function_def, dfgDefsTheory.dfg_build_insts_def] >>
+  strip_tac >> irule mm_local_build_ids_key >>
+  qexistsl_tac [`dfg_empty`, `REVERSE (fn_insts fn0)`] >>
+  simp[dfgDefsTheory.dfg_get_inst_by_id_def, dfgDefsTheory.dfg_empty_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
