@@ -1,7 +1,7 @@
 (* Robustness depends on the count and live element strides, not unused capacity. *)
 Theory dynarrayLiveRobustPtr
 Ancestors normalizationPrefixPtr calldataTypedRobustPtr exprSimAggregateEncoding
-  exprSim valueEncoding valueEncodingTyping vyperValue vyperTyping bodyPtrDefs
+  exprSimProps valueEncoding valueEncodingTyping vyperValue vyperTyping bodyPtrDefs
   list arithmetic pred_set
 
 Theorem clean_live_prefix_dynarray_robust:

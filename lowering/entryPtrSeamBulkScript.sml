@@ -19,7 +19,7 @@ Ancestors
   abiDecoderContract abiScratchLeafEffect abiScratchEffect abiDecoderReentry abiDecoderLoop
   valueEncoding valueEncodingTyping valueEncodingProps compileEnv exprLoweringProps
   exprLowering vyperABI arithmetic normalizationPrefixPtr exprSimAggregateEncoding
-  calldataTypedRobustPtr exprSim vyperValue vyperTyping dynarrayLiveRobustPtr
+  calldataTypedRobustPtr exprSimProps vyperValue vyperTyping dynarrayLiveRobustPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun venomState venomExecSemantics fragExec words list pred_set
   calldataScratchArrayConstructorPtr calldataScratchTuplePtr
   calldataScratchBytesPtr calldataScratchWordPtr decoderArrayInitPtr
