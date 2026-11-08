@@ -48,7 +48,8 @@ Proof
       comp_return_def, comp_get_def, emitHelperTheory.emit_inst_def,
       fresh_id_def, emit_def] >>
   qmatch_asmsub_abbrev_tac `sb.cs_current_insts ++ [inst]` >>
-  drule fn_has_code_same_block >> simp[] >>
+  drule fn_has_code_same_block >>
+  disch_then (qspec_then `[inst]` (mp_tac o SIMP_RULE (srw_ss()) [])) >>
   strip_tac >>
   `get_instruction bb s.vs_inst_idx = SOME inst` by simp[] >>
   gen_tac >>
@@ -60,7 +61,7 @@ Proof
        (!s'. r <> OK s') /\ (!e. r <> Error e)` by
     (simp[Abbr `inst`, step_inst_non_invoke, mk_inst_def] >>
      rpt strip_tac >> pop_assum mp_tac >>
-     pure_once_rewrite_tac[step_inst_base_def] >> simp[]) >>
+     simp[step_inst_base_opcode_eqs]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all run_from_step_exit >> simp[]
 QED
