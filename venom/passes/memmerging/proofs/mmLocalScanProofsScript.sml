@@ -1238,6 +1238,35 @@ Proof
   simp[dfgDefsTheory.dfg_get_inst_by_id_def, dfgDefsTheory.dfg_empty_def]
 QED
 
+Theorem mm_local_function_ids_exact[local]:
+  wf_function fn0 /\ MEM i (fn_insts fn0) ==>
+  dfg_get_inst_by_id (dfg_build_function fn0) i.inst_id = SOME i
+Proof
+  rpt strip_tac >>
+  drule dfgCorrectnessProofTheory.dfg_build_function_ids_complete_proof >>
+  strip_tac >>
+  drule dfgCorrectnessProofTheory.dfg_build_function_ids_sound_proof >>
+  strip_tac >>
+  drule mm_local_function_ids_key >> strip_tac >>
+  `inst' = i` by
+    (irule mmWfProofsTheory.fn_inst_ids_distinct_inj >>
+     conj_tac >- simp[] >>
+     qexists_tac `fn0` >> gvs[venomWfTheory.wf_function_def]) >>
+  gvs[]
+QED
+
+Theorem mm_local_prefix_original_lookup[local]:
+  wf_function fn0 /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ir_supply_covers_fn supply fn0 /\ MEM v (irSupply$fn_ir_vars fn0) /\
+  index < LENGTH fn0.fn_blocks /\
+  MEM i bb.bb_instructions /\ MEM v (venomInst$inst_uses i) ==>
+  dfg_get_inst_by_id (dfg_build_function fn0) i.inst_id = SOME i
+Proof
+  rpt strip_tac >> irule mm_local_function_ids_exact >> simp[] >>
+  drule_all mm_local_prefix_original_consumer >> simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
