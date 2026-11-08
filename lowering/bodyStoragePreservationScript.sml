@@ -136,7 +136,8 @@ Theorem body_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >> rpt gen_tac
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  TRY (rpt strip_tac >> REFL_TAC) >> rpt gen_tac
   >~ [`Call ty (IntCall (src_id_opt,fn)) es kw`] >- suspend "intcall_start"
   >~ [`eval_iterator cx (Array e)`] >-
     (strip_tac >> match_mp_tac body_array_iterator_consumer >>
@@ -176,12 +177,12 @@ Proof
     (rpt strip_tac >> metis_tac[body_eval_for_nil_storage, runtime_storage_consistent_storage])
   >~ [`eval_for _ _ _ _ (_::_)`] >- suspend "for_cons"
   >~ [`assign_tuple_target_list _ (_::_) (_::_)`] >-
-    (strip_tac >> match_mp_tac (SRULE [] body_tuple_list_cons_consumer) >>
+    (simp[] >> strip_tac >> match_mp_tac (SRULE [] body_tuple_list_cons_consumer) >>
      conj_tac >> first_assum ACCEPT_TAC)
   >~ [`assign_tuple_targets _ (BaseTarget _) _`] >-
     (strip_tac >> match_mp_tac body_tuple_base_consumer >> first_assum ACCEPT_TAC)
   >~ [`assign_tuple_targets _ (TupleTarget _) _`] >-
-    (strip_tac >> match_mp_tac body_tuple_nested_consumer >> first_assum ACCEPT_TAC)
+    (simp[] >> strip_tac >> match_mp_tac body_tuple_nested_consumer >> first_assum ACCEPT_TAC)
   >>~- ([`assign_tuple_target_list _ _ _`],
     rpt strip_tac >> gvs[Once evaluate_def, return_def, raise_def] >>
     metis_tac[runtime_storage_consistent_storage]) >>
@@ -566,7 +567,7 @@ Resume body_oracle_storage_mutual[literal_expr]:
 QED
 
 Resume body_oracle_storage_mutual[for_cons]:
-  strip_tac >> match_mp_tac (SRULE [] body_for_cons_consumer) >>
+  simp[] >> strip_tac >> match_mp_tac (SRULE [] body_for_cons_consumer) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
@@ -673,21 +674,23 @@ QED
 
 Resume body_oracle_storage_mutual[intcall_start]:
   strip_tac >>
-  qpat_x_assum `!a b c d e f g h i j k l m n p q r s. _ ==> _` kall_tac >>
-  qpat_x_assum `!a. _` (mk_asm "intcall_ih1") >>
+  qpat_x_assum `!a b c d e f g h i j k l m n p q r s t u v w x y z aa ab ac ad ae af ag ah. _` kall_tac >>
+  qpat_x_assum `!a b c d e f g h i j k l m n p q r s t u v. _` (mk_asm "intcall_ih1") >>
   qpat_x_assum `!a. _` (mk_asm "intcall_ih2") >>
-  rpt gen_tac >> strip_tac >> reverse conj_tac
+  simp[] >> rpt gen_tac >> strip_tac >> reverse conj_tac
   >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
   strip_tac >>
   gvs[int_calls_expr_def, EVERY_APPEND, expr_has_evm_run_def,
       supported_expr_exists_def] >>
   Cases_on `MEM (NONE,fn) cx.stk`
   >- (gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
-          ignore_bind_apply] >> metis_tac[runtime_storage_consistent_storage]) >>
+          ignore_bind_apply] >> qpat_x_assum `runtime_storage_consistent _ _ _`
+        (ACCEPT_TAC o MATCH_MP runtime_storage_consistent_storage)) >>
   Cases_on `lookup_callable_function cx.in_deploy fn tops`
   >- (gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
           return_def, raise_def, ignore_bind_apply, bind_apply] >>
-      metis_tac[runtime_storage_consistent_storage]) >>
+      qpat_x_assum `runtime_storage_consistent _ _ _`
+        (ACCEPT_TAC o MATCH_MP runtime_storage_consistent_storage)) >>
   rename1 `lookup_callable_function cx.in_deploy fn tops = SOME tup` >>
   PairCases_on `tup` >>
   rename1 `lookup_callable_function cx.in_deploy fn tops =
@@ -700,14 +703,85 @@ Resume body_oracle_storage_mutual[intcall_start]:
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
        return_def, raise_def, ignore_bind_apply, bind_apply] >>
-  strip_tac >> gvs[] >> metis_tac[runtime_storage_consistent_storage]
+  strip_tac >> gvs[] >> qpat_x_assum `runtime_storage_consistent _ _ _`
+        (ACCEPT_TAC o MATCH_MP runtime_storage_consistent_storage)
 QED
 
 Resume body_oracle_storage_mutual[intcall_live]:
-  asm_x "intcall_ih1" mp_tac >> simp[] >> disch_then assume_tac >>
-  asm_x "intcall_ih2" mp_tac >> simp[] >> disch_then assume_tac >>
-  rule_assum_tac (SRULE [type_check_def, assert_def, return_def,
-                        body_empty_defaults_finally, get_scopes_def]) >>
+  asm_x "intcall_ih1" (assume_tac o SIMP_RULE (srw_ss())
+    [type_check_def, assert_def, return_def]) >>
+  asm_x "intcall_ih2" mp_tac >>
+  pure_asm_rewrite_tac [type_check_def, assert_def, return_def,
+                       get_scopes_def, lift_option_type_def] >>
+  pure_rewrite_tac [boolTheory.NOT_CLAUSES, boolTheory.COND_CLAUSES,
+                    optionTheory.option_CLAUSES, return_def,
+                    pairTheory.PAIR_EQ, sumTheory.INL_11] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac [boolTheory.FORALL_SIMP, return_def,
+                    pairTheory.PAIR_EQ, sumTheory.INL_11] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_asm_rewrite_tac [optionTheory.option_CLAUSES, return_def,
+                       pairTheory.PAIR_EQ, sumTheory.INL_11] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac [boolTheory.FORALL_SIMP, return_def,
+                    pairTheory.PAIR_EQ, sumTheory.INL_11] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [boolTheory.FORALL_SIMP, pairTheory.FST,
+                    pairTheory.SND] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [pairTheory.FST, pairTheory.SND] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [pairTheory.FST, pairTheory.SND] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [pairTheory.FST, pairTheory.SND] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [pairTheory.FST, pairTheory.SND] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [pairTheory.FST, pairTheory.SND] >>
+  pure_rewrite_tac [arithmeticTheory.LESS_EQ_REFL,
+    arithmeticTheory.SUB_EQUAL_0, listTheory.LENGTH, listTheory.DROP_def,
+    boolTheory.AND_CLAUSES, boolTheory.COND_CLAUSES, sumTheory.INL_11] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [boolTheory.FORALL_SIMP] >>
+  CONV_TAC (LAND_CONV (QUANT_CONV (QUANT_CONV
+    (QUANT_CONV Unwind.UNWIND_FORALL_CONV)))) >>
+  CONV_TAC (LAND_CONV (QUANT_CONV (QUANT_CONV
+    (QUANT_CONV Unwind.UNWIND_FORALL_CONV)))) >>
+  CONV_TAC (LAND_CONV (QUANT_CONV (QUANT_CONV (QUANT_CONV
+    (QUANT_CONV Unwind.UNWIND_FORALL_CONV))))) >>
+  CONV_TAC (LAND_CONV (QUANT_CONV (QUANT_CONV (QUANT_CONV
+    (QUANT_CONV Unwind.UNWIND_FORALL_CONV))))) >>
+  pure_rewrite_tac [GSYM lift_option_type_def] >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)) >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV Unwind.UNWIND_FORALL_CONV)) >>
+  disch_then (mk_asm "intcall_body") >>
+  qpat_x_assum `!s0 ts t0 s1 tup t1. _` mp_tac >>
+  pure_asm_rewrite_tac [lift_option_type_def, optionTheory.option_CLAUSES,
+                       boolTheory.AND_CLAUSES] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac [return_def, pairTheory.PAIR_EQ, sumTheory.INL_11] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [boolTheory.FORALL_SIMP] >>
+  pure_asm_rewrite_tac [optionTheory.option_CLAUSES] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  pure_rewrite_tac [return_def, pairTheory.PAIR_EQ, sumTheory.INL_11] >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  CONV_TAC (LAND_CONV Unwind.UNWIND_FORALL_CONV) >>
+  pure_rewrite_tac [boolTheory.FORALL_SIMP, pairTheory.FST, pairTheory.SND] >>
+  simp_tac bool_ss [arithmeticTheory.LESS_EQ_REFL,
+                    arithmeticTheory.ADD_CLAUSES, listTheory.LENGTH] >>
+  disch_then assume_tac >>
   drule_all body_eval_intcall_empty_defaults >>
   disch_then (fn th => qpat_x_assum `eval_expr _ _ _ = _` (mp_tac o REWRITE_RULE [th])) >>
   simp_tac bool_ss [bind_def, ignore_bind_def] >>
@@ -789,15 +863,23 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
   (`push_function (NONE,fn) call_env cx lock_st =
       (INL (cx with stk updated_by CONS (NONE,fn)), lock_st with scopes := [call_env])` by
       simp[push_function_def, return_def] >>
-   qpat_x_assum `!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
-      (assume_tac o SIMP_RULE bool_ss [GSYM is_view_mut_def, GSYM lock_if_nr_def]) >>
-   drule body_intcall_guard_apply >> disch_then assume_tac >>
+   asm_x "intcall_body" mp_tac >>
+   CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (HO_REWR_CONV oneTheory.FORALL_ONE))) >>
+   pure_rewrite_tac [GSYM is_view_mut_def, GSYM lock_if_nr_def] >>
+   qpat_assum `~supported_stmts_expr_exists _ ss`
+     (fn th => pure_rewrite_tac [th]) >>
+   qpat_assum `EVERY _ (int_calls_stmts ss)`
+     (fn th => pure_rewrite_tac [th]) >>
+   pure_rewrite_tac [boolTheory.NOT_CLAUSES, boolTheory.AND_CLAUSES] >>
+   disch_then assume_tac >>
+   dxrule body_intcall_guard_apply >> disch_then assume_tac >>
    drule_all body_intcall_runtime_frame >> strip_tac >>
    `call_evaluation_safe (cx with stk updated_by CONS (NONE,fn)) (int_calls_stmts ss)` by
      (drule call_evaluation_safe_push_body >> simp[] >>
       disch_then drule >> disch_then drule >> simp[]) >>
    `functions_well_typed (cx with stk updated_by CONS (NONE,fn))` by
-     (fs[runtime_consistent_def] >>
+     (qpat_assum `runtime_consistent env cx args_st`
+        (strip_assume_tac o REWRITE_RULE [runtime_consistent_def]) >>
       drule_all vyperTypeEvalSoundnessTheory.intcall_default_env_side_conditions >>
       disch_then (qspec_then `fn` mp_tac) >> simp[]) >>
    `!r s. eval_stmts (cx with stk updated_by CONS (NONE,fn)) ss
