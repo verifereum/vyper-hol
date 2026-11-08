@@ -63,7 +63,7 @@ Theorem extrequest_tuple_store_fold:
     extrequest_history_frame cenv cx eb cb tb ee sm s /\
     cb.cs_next_id <= live /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    ee.gas_obs = [] /\ safe_operand cb buf /\ eval_operand buf s = SOME w /\
+    ee.gas_obs = [] /\ safe_operand sm buf /\ eval_operand buf s = SOME w /\
     FLOOKUP s.vs_allocas live = SOME (tuple_base,sz) /\ live < sm.cs_next_id /\
     tuple_base <= w2n w + off /\
     w2n w + off + SUM (MAP (\(e,r,vv,ty,tv,v). type_memory_size tv) cells) <=
@@ -157,9 +157,12 @@ Resume extrequest_tuple_store_fold[tail]:
   rename1 `gas_marked_exec _ _ _ _ _ _ _ (OK h)` >>
   `extrequest_history_frame cenv cx eb cb tb ee sh h` by metis_tac[] >>
   `eval_operand buf h = SOME w` by
-    (Cases_on `buf` >> gvs[venomStateTheory.eval_operand_def, exprSafeOperandTheory.safe_operand_def] >>
-     fs[extrequest_history_frame_def] >>
-     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+    (Cases_on `buf` >>
+     gvs[venomStateTheory.eval_operand_def, exprSafeOperandTheory.safe_operand_def] >>
+     metis_tac[]) >>
+  `safe_operand sh buf` by
+    (fs[exprSafeOperandTheory.safe_operand_def, ci_mono_def] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]) >>
   `!name b len. local_region cenv ee.scopes h name b len ==>
        regions_disjoint tuple_base sz b len` by
     (rpt strip_tac >>
