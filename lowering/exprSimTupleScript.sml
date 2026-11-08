@@ -73,7 +73,7 @@ open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
 
 (* ===== Lists ===== *)
 
-Theorem values_have_types_el[local]:
+Theorem values_have_types_el:
   !tvs vs k.
     values_have_types tvs vs /\ k < LENGTH tvs ==>
     LENGTH vs = LENGTH tvs /\ value_has_type (EL k tvs) (EL k vs)
@@ -83,7 +83,7 @@ Proof
   Cases_on `k` >> gvs[]
 QED
 
-Theorem tuple_val_wf_el[local]:
+Theorem tuple_val_wf_el:
   !vs tvs k.
     tuple_val_wf vs tvs /\ LENGTH vs = LENGTH tvs /\ k < LENGTH vs ==>
     val_wf (EL k tvs) (EL k vs)

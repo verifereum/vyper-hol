@@ -1,8 +1,10 @@
 (* Joint memory execution of heterogeneous typed field copies. *)
 Theory typedCopyTupleMemory
 Ancestors
-  typedCopyControlMemory typedMemoryCopy fragExecMem
+  typedCopyControlMemory typedMemoryCopy typedCopyDomain fragExecMem
   context compileEnv emitHelper exprLoweringProps
+  exprSimTuple exprSimAttributeFields vyperTypeABI
+  vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
   venomExecSemantics venomState valueEncoding words list arithmetic
 
 Theorem typed_copy_state_frame_frontier[local]:
@@ -231,3 +233,111 @@ Resume typed_copy_tuple_frag_mem[frames]:
 QED
 
 Finalise typed_copy_tuple_frag_mem
+
+Theorem typed_copy_tuple_entry_mem:
+  !cenv tenv ctx dtys sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname, fty, sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty (TupleT dtys) /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv (TupleT dtys) = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    val_wf stv v /\ val_wf dtv v /\
+    (!cd cs cdt cst cv.
+      type_rank cenv.ce_struct_fields cd <
+        type_rank cenv.ce_struct_fields (TupleT dtys) ==>
+      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
+      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
+      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
+      !dst src sa sb s dw sw.
+        compile_store_memory_typed cenv dst cd src cs sa = ((),sb) /\
+        (!x. dst = Var x ==> not_fresh_at sa x) /\
+        (!x. src = Var x ==> not_fresh_at sa x) /\
+        eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+        val_in_memory cst cv (w2n sw) s.vs_memory /\
+        w2n sw + type_memory_size cst < dimword (:256) /\
+        w2n dw + type_memory_size cdt < dimword (:256) /\
+        (w2n sw + type_memory_size cst <= w2n dw \/
+         w2n dw + type_memory_size cdt <= w2n sw) /\
+        w2n sw + type_memory_size cst <= s.vs_alloca_next /\
+        w2n dw + type_memory_size cdt <= s.vs_alloca_next ==>
+        frag_exec_mem ctx sa sb (\u. u = s)
+          (\t. val_in_memory cdt cv (w2n dw) t.vs_memory /\
+               typed_copy_state_frame sa (w2n dw) (type_memory_size cdt) s t) (\r. F)) ==>
+    !dst src sa sb s dw sw.
+      compile_store_memory_typed cenv dst (TupleT dtys) src sty sa = ((),sb) /\
+      (!x. dst = Var x ==> not_fresh_at sa x) /\
+      (!x. src = Var x ==> not_fresh_at sa x) /\
+      eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+      val_in_memory stv v (w2n sw) s.vs_memory /\
+      w2n sw + type_memory_size stv < dimword (:256) /\
+      w2n dw + type_memory_size dtv < dimword (:256) /\
+      (w2n sw + type_memory_size stv <= w2n dw \/
+       w2n dw + type_memory_size dtv <= w2n sw) /\
+      w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+      w2n dw + type_memory_size dtv <= s.vs_alloca_next ==>
+      frag_exec_mem ctx sa sb (\u. u = s)
+        (\t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+             typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?stys. sty = TupleT stys` by metis_tac[typed_copy_tuple_widening] >> gvs[] >>
+  gvs[evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
+  `LIST_REL (type_widens_to tenv) stys dtys` by
+    (irule typed_copy_tuple_children_widen >>
+     (conj_tac >- metis_tac[]) >>
+     drule typed_copy_tuple_widening >> simp[] >> strip_tac >> simp[]) >>
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, is_word_type_def,
+       is_bytestring_type_def] >> strip_tac >>
+  drule_at (Pat `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`)
+    typed_copy_tuple_frag_mem >>
+  disch_then (qspecl_then [`ctx`, `tvs'`, `tvs`, `l`] mp_tac) >>
+  disch_then (qspecl_then [`s`, `dw`, `sw`] mp_tac) >>
+  simp[type_memory_size_def, val_in_memory_def] >>
+  (impl_tac >- suspend "indexed") >> simp[]
+QED
+
+Resume typed_copy_tuple_entry_mem[indexed]:
+  `LENGTH stys = LENGTH dtys /\ LENGTH tvs' = LENGTH dtys /\
+   LENGTH tvs = LENGTH dtys /\ LENGTH l = LENGTH dtys` by
+    metis_tac[OPT_MMAP_LENGTH, LIST_REL_LENGTH, values_have_types_length] >>
+  `tuple_val_wf l tvs /\ tuple_val_wf l tvs'` by gvs[val_wf_def] >>
+  `tuple_in_memory l tvs (w2n sw) s.vs_memory` by gvs[val_in_memory_def] >>
+  simp[] >> conj_tac >- suspend "children" >>
+  gvs[type_memory_size_def]
+QED
+
+Resume typed_copy_tuple_entry_mem[children]:
+  gen_tac >> strip_tac >>
+  `evaluate_type tenv (EL i dtys) = SOME (EL i tvs') /\
+   evaluate_type tenv (EL i stys) = SOME (EL i tvs)` by
+    metis_tac[opt_mmap_el] >>
+  `value_has_type (EL i tvs) (EL i l) /\
+   value_has_type (EL i tvs') (EL i l)` by
+    metis_tac[values_have_types_el] >>
+  `val_wf (EL i tvs) (EL i l) /\ val_wf (EL i tvs') (EL i l)` by
+    metis_tac[tuple_val_wf_el] >>
+  `type_widens_to tenv (EL i stys) (EL i dtys)` by
+    metis_tac[LIST_REL_EL_EQN] >>
+  conj_tac >- metis_tac[typed_copy_memory_size] >>
+  conj_tac >- metis_tac[typed_copy_memory_size] >>
+  `type_rank cenv.ce_struct_fields (EL i dtys) <
+   type_rank cenv.ce_struct_fields (TupleT dtys)` by
+    metis_tac[member_rank_lt_tuple, EL_MEM] >>
+  qpat_x_assum `!cd cs cdt cst cv. _` (drule_then assume_tac) >>
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  first_x_assum irule >>
+  simp[] >>
+  goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  simp[] >> qexists_tac `EL i tvs` >> qexists_tac `sw'` >> simp[]
+QED
+
+Finalise typed_copy_tuple_entry_mem
