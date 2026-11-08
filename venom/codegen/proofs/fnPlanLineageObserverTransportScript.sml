@@ -944,3 +944,33 @@ Proof
   drule generate_regular_inst_plan_spill_support >>
   disch_then (qspec_then `v` mp_tac) >> simp[]
 QED
+
+Theorem native_inst_prefix_phi_resource_nonincrease:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !v. (!i. i < k ==> (EL i xs).inst_opcode = PHI /\
+          v <> HD (EL i xs).inst_outputs) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0)
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_ind >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ mid = SOME (ops,final)` >>
+  `k < LENGTH xs` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst = EL k xs` by metis_tac[HD_DROP, HD] >>
+  `LIST_ELEM_COUNT (Var v) mid.ps_stack +
+    (if Var v IN FDOM mid.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+    (if Var v IN FDOM incoming.ps_spilled then 1 else 0)` by
+    (first_x_assum irule >> rpt strip_tac >> `i < SUC k` by decide_tac >> metis_tac[]) >>
+  qpat_x_assum `!i. i < SUC k ==> _` (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def] >>
+  drule generate_phi_plan_nondefining_resource_nonincrease >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
