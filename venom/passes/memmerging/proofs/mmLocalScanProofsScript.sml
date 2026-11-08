@@ -2836,6 +2836,139 @@ Proof
   irule mm_local_prefix_phase_external_available >> metis_tac[]
 QED
 
+Theorem mm_local_prefix_function_wf[local]:
+  fn_inst_wf fn0 /\ wf_function fn0 /\ ssa_form fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  wf_function (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+Proof
+  strip_tac >>
+  `EVERY (\i. i.inst_id < supply.irs_next_inst)
+    (EL index fn0.fn_blocks).bb_instructions` by
+    (gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+      irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM, MEM_MAP]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions)` by
+    metis_tac[wf_function_def, mmWfProofsTheory.fn_inst_ids_distinct_block, EL_MEM] >>
+  drule_all mm_local_prefix_ids >> strip_tac >>
+  drule_all mm_local_prefix_wf_last >> strip_tac >>
+  `fn_inst_ids_distinct (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (simp[fn_inst_ids_distinct_def] >> irule (cj 1 mm_projection_lupdate_ids) >>
+     gvs[wf_function_def, fn_inst_ids_distinct_def, ir_supply_covers_fn_def,
+       irSupplyTheory.fn_ir_inst_ids_def, irSupplyTheory.block_ir_inst_ids_def] >>
+     qexistsl [`supply.irs_next_inst`, `sk.irs_next_inst`] >>
+     gvs[irSupplyTheory.block_ir_inst_ids_def, EVERY_MAP, combinTheory.o_DEF] >>
+     conj_tac
+     >- (rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]) >>
+     gvs[EVERY_FLAT, EVERY_MAP, irSupplyTheory.block_ir_inst_ids_def,
+       combinTheory.o_DEF]) >>
+  irule mmWfProofsTheory.indexed_replacement_wf >> simp[] >>
+  `bb.bb_instructions <> [] /\ (EL index fn0.fn_blocks).bb_instructions <> []` by
+    metis_tac[wf_function_def, EL_MEM, bb_well_formed_def] >>
+  simp[venomInstTheory.bb_succs_def] >>
+  Cases_on `bb.bb_instructions` >>
+  Cases_on `(EL index fn0.fn_blocks).bb_instructions` >> gvs[]
+QED
+
+Theorem mm_local_prefix_frame[local]:
+  !fn0 supply index k bb sk L R.
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  mm_frame supply.irs_used_vars L
+    (FLAT (MAP (\i. i.inst_outputs) (EL index fn0.fn_blocks).bb_instructions)) R ==>
+  mm_frame sk.irs_used_vars L (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) R
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `mm_frame sp.irs_used_vars L
+    (FLAT (MAP (\i. i.inst_outputs) prev.bb_instructions)) R` by
+    (first_x_assum irule >> simp[]) >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  Cases_on `EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]` >>
+  gvs[mm_local_phase_def] >>
+  metis_tac[transform_block_mode_supply_frame, transform_block_memzero_supply_frame]
+QED
+
+Theorem mm_local_prefix_ssa_form[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  index < LENGTH fn0.fn_blocks /\ ssa_form fn0 /\
+  ir_supply_covers_fn supply fn0 ==>
+  ssa_form (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+Proof
+  strip_tac >>
+  `list_subset (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn0))) supply.irs_used_vars` by
+    (simp[venomInstTheory.fn_insts_def] >> irule mm_supply_outputs_covered >>
+     gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_vars_def]) >>
+  simp[ssa_form_def, venomInstTheory.fn_insts_def, mmWfProofsTheory.block_outputs_projection] >>
+  `mm_frame sk.irs_used_vars []
+    (FLAT (MAP (\b. FLAT (MAP (\i. i.inst_outputs) b.bb_instructions))
+      (LUPDATE bb index fn0.fn_blocks))) []` suffices_by simp[mm_frame_def] >>
+  irule mm_projection_lupdate_frame >> simp[] >>
+  qexists_tac `supply.irs_used_vars` >> simp[] >> reverse conj_tac
+  >- gvs[mm_frame_def, ssa_form_def, venomInstTheory.fn_insts_def, mmWfProofsTheory.block_outputs_projection] >>
+  metis_tac[mm_local_prefix_frame]
+QED
+
+Theorem mm_local_prefix_inst_wf[local]:
+  !fn0 supply index k bb sk.
+  fn_inst_wf fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  fn_inst_wf (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero, LUPDATE_SAME] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `fn_inst_wf (fn0 with fn_blocks := LUPDATE prev index fn0.fn_blocks)` by
+    (first_x_assum irule >> simp[]) >>
+  `EVERY inst_wf prev.bb_instructions` by
+    (gvs[fn_inst_wf_compute, EVERY_MEM] >> metis_tac[MEM_LUPDATE]) >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (Cases_on `EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]` >>
+     gvs[mm_local_phase_def] >>
+     metis_tac[transform_block_mode_supply_inst_wf,
+       transform_block_memzero_supply_inst_wf]) >>
+  gvs[fn_inst_wf_compute, EVERY_MEM, MEM_LUPDATE] >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_wf_ssa[local]:
+  !fn0 supply index k bb sk.
+  fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  wf_ssa (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero, LUPDATE_SAME] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4 /\ k <= 4 /\ ssa_form fn0` by (gvs[wf_ssa_def] >> decide_tac) >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `wf_ssa (fn0 with fn_blocks := LUPDATE prev index fn0.fn_blocks)` by
+    (first_x_assum irule >> simp[]) >>
+  `fn_inst_wf (fn0 with fn_blocks := LUPDATE prev index fn0.fn_blocks) /\
+    wf_function (fn0 with fn_blocks := LUPDATE prev index fn0.fn_blocks)` by
+    metis_tac[mm_local_prefix_inst_wf, mm_local_prefix_function_wf] >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `def_dominates_uses (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)` by
+    (irule mm_local_prefix_phase_dominates_uses >>
+     goal_assum (drule_at (Pat `mm_local_prefix _ _ _ k = _`)) >> simp[] >>
+     metis_tac[]) >>
+  simp[wf_ssa_def] >> irule mm_local_prefix_ssa_form >> metis_tac[]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
