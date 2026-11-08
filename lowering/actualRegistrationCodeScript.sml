@@ -375,10 +375,12 @@ Theorem runtime_selected_aggregate_packaged:
     compile_register_positional_args cenv ap 4 start = (ce,before) ==>
     ?loc mem_size. FLOOKUP ce.ce_vars name = SOME loc /\
       var_location_memory_size loc = SOME mem_size) ==>
-  ?dst src first last fn.
+  ?dst src first last fn entry_end.
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
     MEM fn unit.cu_context.ctx_functions /\ fn_has_code first last fn /\
-    !inst. abi_decoder_code_member inst last ==> MEM inst (fn_insts fn)
+    cs_extends last entry_end /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)) /\
+    (!inst. abi_decoder_code_member inst last ==> MEM inst (fn_insts fn))
 Proof
   strip_tac >>
   `shape_state (initial_compile_state "__entry")` by
@@ -397,7 +399,8 @@ Proof
   drule cs_extends_abi_decode >> strip_tac >>
   `cs_extends last entry_end` by metis_tac[cs_extends_trans] >>
   goal_assum $ drule_at Any >> goal_assum $ drule_at Any >>
-  conj_tac
+  qexists_tac `mk_raw_function "__entry" (all_blocks entry_end)` >>
+  simp[] >> conj_tac
   >- (irule external_decoder_fn_has_code >>
       goal_assum $ drule_at Any >> simp[] >>
       metis_tac[cs_extends_trans]) >>

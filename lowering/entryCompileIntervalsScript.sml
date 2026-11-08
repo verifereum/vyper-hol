@@ -201,10 +201,13 @@ Theorem external_fn_selected_check_intervals:
   !fns sa sx.
     MEM (lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt) fns /\
     compile_external_fn_bodies fns sa = ((),sx) ==>
-    ?sc sd. compile_entry_checks mc pay sc = ((),sd) /\
+    ?sc sd cenv sb se. compile_entry_checks mc pay sc = ((),sd) /\
       sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
       cs_extends sa sc /\ cs_extends sc sd /\ cs_extends sd sx /\
-      sa.cs_next_var <= sc.cs_next_var
+      sa.cs_next_var <= sc.cs_next_var /\
+      compile_register_positional_args ce pa 4 sd = (cenv,sb) /\
+      compile_guarded_body cenv nr key tr view stmts rt sb = ((),se) /\
+      cs_extends sb se /\ cs_extends se sx
 Proof
   Induct >> simp[compile_external_fn_bodies_def] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
@@ -216,11 +219,16 @@ Proof
   drule (SRULE [cs_appends_def] cs_appends_external_function_body) >> strip_tac >>
   drule (SRULE [cs_appends_def] cs_appends_external_fn_bodies) >> strip_tac >>
   gvs[]
-  >- (qexistsl_tac [`cs'`, `cs''`] >> simp[] >>
-      conj_tac >- gvs[new_block_def] >>
-      conj_tac >- gvs[new_block_def] >> metis_tac[cs_extends_trans]) >>
+  >- (qpat_x_assum `compile_external_function_body _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[compile_external_function_body_def, comp_bind_def] >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+      drule (SRULE [cs_appends_def] cs_appends_guarded_body) >> strip_tac >>
+      qexistsl_tac [`cs'`, `cs''`] >> simp[] >>
+      rpt (goal_assum (drule_at Any)) >>
+      gvs[new_block_def] >> metis_tac[cs_extends_trans]) >>
   first_x_assum drule >> strip_tac >>
-  qexistsl_tac [`sc`, `sd`] >> simp[] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
+  qexistsl_tac [`sc`, `sd`, `cenv`, `sb`, `se`] >> simp[] >>
+  metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem cs_appends_runtime_fallback_suffix:

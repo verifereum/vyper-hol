@@ -2032,7 +2032,7 @@ QED
 (* A step of an instruction of func other than an INVOKE keeps the room in
    func's frame: a fresh ALLOCA moves its size from the pending sizes to
    the frontier, and nothing else moves either. *)
-Theorem step_inst_base_alloca_room[local]:
+Theorem step_inst_base_alloca_room:
   !func inst s s' ctx.
     step_inst_base inst s = OK s' /\ MEM inst (fn_insts func) /\
     inst.inst_opcode <> INVOKE /\ alloca_room ctx func s ==>
@@ -2057,7 +2057,7 @@ Proof
             step_inst_base_preserves_alloca_next]
 QED
 
-Theorem run_inst_seq_alloca_room[local]:
+Theorem run_inst_seq_alloca_room:
   !is func s t ctx.
     run_inst_seq is s = OK t /\
     EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is /\
