@@ -1,6 +1,7 @@
 Theory fnAliasInvPhi
 Ancestors
   fnFrameStepsPhi fnPlanPrefix stackPlanGen
+  fnBlockPlanStaticRegion fnLineageStatic
 
 (* The value boundary depends on planner provenance, not assembly execution. *)
 Theorem phi_provenance_final_alias:
@@ -102,4 +103,63 @@ Proof
   `i + SUC j = SUC i + j` by decide_tac >>
   pop_assum SUBST1_TAC >> first_x_assum irule >>
   metis_tac[arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem lineage_entry_selected_phi_start:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth sb ctr) pred lbl ps /\
+  collect_phis bb.bb_instructions <> [] ==>
+  regional_selected_phi_inv (liveness_analyze fn) (dfg_build_function fn) sb bb 0 ps
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `~(LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1)` by
+    metis_tac[ready_small_preds_no_phis] >>
+  `ps.ps_spilled = FEMPTY` by
+    (irule phi_join_entry_spill_empty >> simp[] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  drule_all fnLineageStaticTheory.lineage_entry_phi_sources >>
+  simp[listTheory.EVERY_MEM] >> strip_tac >>
+  simp[fnBlockPlanStaticRegionTheory.regional_selected_phi_inv_def] >>
+  conj_tac >- metis_tac[fnLineageStaticTheory.lineage_entry_marked] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum drule >>
+    simp[EXISTS_UNIQUE_THM] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    drule_all fnLineageStaticTheory.lineage_entry_coverage >> simp[]) >>
+  metis_tac[fnLineageStaticTheory.lineage_entry_non_phi_fresh]
+QED
+
+Theorem lineage_entry_actual_phi_source:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  bb <> HD fn.fn_blocks /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth sb ctr) edge lbl ps /\
+  (!x. MEM x (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0)) ==>
+    MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled) /\
+  MEM phi (collect_phis bb.bb_instructions) /\
+  resolve_phi pred phi.inst_operands = SOME (Var src) ==>
+  MEM (Var src) ps.ps_stack /\
+  (!v. MEM (Var v) phi.inst_operands /\
+    (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> v = src)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+      venomExecPropsTheory.lookup_block_label] >>
+  drule_all phi_codegen_inst_shape >> strip_tac >>
+  `MEM (pred,src) (phi_pairs phi.inst_operands)` by
+    (gvs[cfgNormBaseTheory.resolve_phi_phi_pairs] >>
+     metis_tac[alistTheory.ALOOKUP_MEM]) >>
+  `MEM src (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))` by
+    metis_tac[phi_selected_input_vars] >>
+  `MEM (Var src) ps.ps_stack \/ Var src IN FDOM ps.ps_spilled` by metis_tac[] >>
+  `MEM (Var src) phi.inst_operands` by
+    metis_tac[cfgNormBaseTheory.phi_pairs_mem_var] >>
+  `collect_phis bb.bb_instructions <> []` by metis_tac[listTheory.MEM] >>
+  drule_all lineage_entry_selected_phi_start >>
+  simp[regional_selected_phi_inv_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> metis_tac[]
 QED
