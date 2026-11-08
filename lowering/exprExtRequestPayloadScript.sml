@@ -48,7 +48,8 @@ Theorem extrequest_offset_endpoint:
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved ce sb /\ safe_operand sb offset /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_memory = s.vs_memory
 Proof
   strip_tac >>
   `eval_operand (Lit 28w) s = SOME 28w` by simp[eval_operand_def] >>
@@ -140,6 +141,14 @@ Theorem extrequest_encoder_calldata_endpoint:
     t.vs_labels = s.vs_labels /\ t.vs_fmp = s.vs_fmp /\
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
     t.vs_outcomes = s.vs_outcomes /\ t.vs_immutables = s.vs_immutables /\
+    (!name p k. local_region ce ee.scopes s name p k ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (ce.ce_is_ctor ==> !name tv v p.
+      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
+      FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+      mem_bytes_at p (type_memory_size tv) t.vs_memory =
+        mem_bytes_at p (type_memory_size tv) s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     (!aid p k. aid < st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
       FLOOKUP t.vs_allocas aid = SOME (p,k) /\
@@ -169,8 +178,31 @@ Proof
   `read_memory (b+28) (4+LENGTH (enc at av)) t =
     function_selector fname (vyper_to_abi_types (get_tenv cx) tys) ++ enc at av` by
     (irule extrequest_calldata_window >> metis_tac[]) >>
-  qexists_tac `t` >> simp[] >> rpt strip_tac >>
-  qpat_x_assum `!aid q k. _` drule_all >>
+  `fn_has_code st en func /\ fn_inst_ids_distinct func /\
+   alloca_inv s /\ local_ptrs_rel func ce ee.scopes s /\
+   immutable_alloca_sep func ce cx ee s` by
+    fs[abiEncoderWindowContractTheory.abi_encoder_window_pre_def,
+       stmt_state_rel_def, state_rel_def] >>
+  `!name p k. local_region ce ee.scopes s name p k ==>
+    mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (rpt strip_tac >>
+     irule exprExtRequestEncoderWindowsTheory.extrequest_encoder_local_window >>
+     qpat_assum `abi_encoder_registered_effect _ _ s t` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `ce.ce_is_ctor ==> !name tv v p.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    mem_bytes_at p (type_memory_size tv) t.vs_memory =
+      mem_bytes_at p (type_memory_size tv) s.vs_memory` by
+    (rpt strip_tac >>
+     irule exprExtRequestEncoderWindowsTheory.extrequest_encoder_immutable_window >>
+     qpat_assum `abi_encoder_registered_effect _ _ s t` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  qexists_tac `t` >> simp[] >>
+  conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+  conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+  rpt strip_tac >> qpat_x_assum `!aid q k. _` drule_all >>
   strip_tac >> first_x_assum irule >> simp[ADD_COMM]
 QED
 
@@ -195,7 +227,9 @@ Theorem extrequest_allocate_tuple_endpoint:
     FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-    q.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved ce sb
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved ce sb /\
+    (!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory)
 Proof
   strip_tac >> drule_all extrequest_allocation_endpoint >> strip_tac >>
   `safe_operand sm buf.buf_operand` by
@@ -227,8 +261,14 @@ Proof
     (simp[eval_operand_def] >> first_x_assum irule >> gvs[eval_operand_def]) >>
   `gas_marked_path F ctx func s 0 (OK q)` by
     (drule_all gas_marked_path_then >> simp[]) >>
+  `!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+     mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (map_every qx_gen_tac [`aid`, `old_base`, `old_size`] >> strip_tac >>
+     `aid < sm.cs_next_id /\ aid <> sa.cs_next_id` by decide_tac >>
+     `FLOOKUP u.vs_allocas aid = SOME (old_base,old_size)` by metis_tac[] >>
+     metis_tac[]) >>
   qexistsl_tac [`q`, `w`] >> simp[] >>
-  gvs[exprExtRequestHistoryTheory.extrequest_history_frame_def]
+  gvs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]
 QED
 
 (* The two fixed ADDs following a nonempty encoded payload. *)
@@ -253,7 +293,7 @@ Theorem extrequest_payload_suffix_endpoint:
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\
     local_ptrs_reserved ce sp /\ safe_operand sp offset /\
     safe_operand sp len /\ t.vs_allocas = s.vs_allocas /\
-    t.vs_alloca_next = s.vs_alloca_next
+    t.vs_alloca_next = s.vs_alloca_next /\ t.vs_memory = s.vs_memory
 Proof
   strip_tac >>
   `eval_operand (Lit 4w) s = SOME 4w` by simp[eval_operand_def] >>
@@ -338,7 +378,19 @@ Theorem extrequest_tuple_payload_endpoint:
     local_ptrs_reserved ce sp /\
     eval_operand buf t = SOME (n2w b) /\ 
     (!x z. not_fresh_at sa x /\ lookup_var x s = SOME z ==>
-       lookup_var x t = SOME z)
+       lookup_var x t = SOME z) /\
+    (!name p k. local_region ce ee.scopes s name p k ==>
+       mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (ce.ce_is_ctor ==> !name tv v p.
+       FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc p) /\
+       FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+       mem_bytes_at p (type_memory_size tv) t.vs_memory =
+         mem_bytes_at p (type_memory_size tv) s.vs_memory) /\
+    (!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+       FLOOKUP t.vs_allocas aid = SOME (p,k) /\
+       (compileEnv$regions_disjoint b cap p k ==>
+        mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory))
 Proof
   strip_tac >> drule_all extrequest_allocate_tuple_endpoint >> strip_tac >>
   rename1 `gas_marked_path F ctx func s 0 (OK q)` >>
@@ -464,7 +516,36 @@ Resume extrequest_tuple_payload_endpoint[encoder]:
        (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def, ci_mono_def] >>
         metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
      fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
-  qexists_tac `r` >> gvs[]
+  qexists_tac `r` >> gvs[] >> suspend "frames"
+QED
+
+Resume extrequest_tuple_payload_endpoint[frames]:
+  conj_tac
+  >- (rpt strip_tac >>
+      `local_region ce ee.scopes u name p k` by
+        metis_tac[exprExtRequestHistoryTheory.extrequest_history_local_regions] >>
+      fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `aid < st.cs_next_id /\ FLOOKUP q.vs_allocas aid = SOME (p,k)` by
+    (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  qpat_x_assum `!aid p k. aid < st.cs_next_id /\ _ ==> _` drule_all >>
+  strip_tac >> simp[] >> strip_tac >>
+  `venomMemDefs$regions_disjoint (p,k)
+    (b+32,LENGTH (enc (vyper_to_abi_type (get_tenv cx)
+      (TupleT (MAP (\(e,r,vv,ty,tv,v). ty) cells))) av))` by
+    (fs[compileEnvTheory.regions_disjoint_def,
+        venomMemDefsTheory.regions_disjoint_def, vyperABITheory.vyper_to_abi_type_def] >>
+     decide_tac) >>
+  `mem_bytes_at p k t.vs_memory = mem_bytes_at p k q.vs_memory` by
+    (first_x_assum irule >> simp[ADD_COMM] >>
+     qpat_x_assum `venomMemDefs$regions_disjoint (p,k) _` mp_tac >>
+     pure_rewrite_tac[vyperABITheory.vyper_to_abi_type_def] >> simp[]) >>
+  `mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (qpat_assum `!aid p k. aid < sa.cs_next_id /\ _ ==> _` drule_all >> simp[]) >>
+  metis_tac[]
 QED
 
 Finalise extrequest_tuple_payload_endpoint
