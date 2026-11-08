@@ -256,23 +256,6 @@ Proof
   rw[venomStateTheory.venom_state_component_equality]
 QED
 
-Triviality run_block_OK_inst_idx_0[local]:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  rpt strip_tac >>
-  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >> strip_tac >>
-  fs[run_block_def] >> drule exec_block_OK_inst_idx_0 >> simp[]
-QED
-
-Triviality run_block_ok_sets_prev_bb[local]:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_prev_bb <> NONE
-Proof
-  rpt strip_tac >>
-  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >>
-  strip_tac >- (fs[run_block_def] >> metis_tac[exec_block_ok_sets_prev_bb]) >>
-  fs[run_block_def]
-QED
-
 (* ===== run_blocks one-step helpers ===== *)
 
 Triviality run_blocks_ok_block_at:

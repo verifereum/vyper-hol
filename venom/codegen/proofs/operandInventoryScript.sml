@@ -52,18 +52,12 @@ Proof
   Cases_on `x = op` >> gvs[flookup_thm, LIST_ELEM_COUNT_DEF]
 QED
 
-Theorem stack_get_depth_push_inventory:
-  !op stk. stack_get_depth op (stack_push op stk) = SOME 0
-Proof
-  rw[stack_get_depth_def, stack_push_def, REVERSE_SNOC, stack_find_def]
-QED
-
 Theorem stack_get_depth_restore_inventory:
   !(ps : plan_state) op off.
     FLOOKUP ps.ps_spilled op = SOME off ==>
     stack_get_depth op (SND (do_restore op ps)).ps_stack = SOME 0
 Proof
-  simp[do_restore_def, stack_get_depth_push_inventory]
+  simp[do_restore_def, stack_get_depth_push]
 QED
 
 Theorem emit_one_input_inventory_mono:

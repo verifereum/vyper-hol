@@ -9,7 +9,7 @@
 
 Theory ssaPipeline
 Ancestors
-  makeSsaDefs cfgTransformProps venomExecProofs
+  makeSsaDefs ssaSimDefs cfgTransformProps venomExecProofs venomExecSemantics
   list rich_list alist string pair venomState venomInst venomWf
 
 (* ==========================================================================
@@ -324,7 +324,7 @@ Proof
 QED
 
 (* rename_inst preserves opcode *)
-Triviality rename_inst_opcode_preserved:
+Theorem rename_inst_opcode_preserved:
   !rs inst. (SND (rename_inst rs inst)).inst_opcode = inst.inst_opcode
 Proof
   rw[rename_inst_def, LET_THM] >> pairarg_tac >> gvs[]
@@ -423,21 +423,6 @@ QED
 (* ==========================================================================
    Part 4: Lookup helpers
    ========================================================================== *)
-
-Theorem lookup_block_label[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
-Proof
-  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >> gvs[] >>
-  first_x_assum irule >> gvs[lookup_block_def]
-QED
-
-Theorem lookup_block_MEM[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >> gvs[] >>
-  disj2_tac >> first_x_assum irule >> gvs[lookup_block_def] >>
-  metis_tac[]
-QED
 
 Theorem lookup_block_EL[local]:
   !bbs n.
@@ -1043,3 +1028,27 @@ Proof
   >- gvs[EL_APPEND1, EVERY_EL]
   >> gvs[EL_APPEND2]
 QED
+
+(* resolve_phi after update_phi_for_pred: renaming for the matching label *)
+Theorem resolve_phi_update_phi_for_pred:
+  !rs lbl ops.
+    resolve_phi lbl (update_phi_for_pred rs lbl ops) =
+    OPTION_MAP (renamed_operand (latest_version rs)) (resolve_phi lbl ops)
+Proof
+  ho_match_mp_tac update_phi_for_pred_ind >>
+  rw[resolve_phi_def, update_phi_for_pred_def, renamed_operand_def] >>
+  Cases_on `x` >> rw[resolve_phi_def, renamed_operand_def]
+QED
+
+(* resolve_phi after update_phi_for_pred for a DIFFERENT label: unchanged *)
+Theorem resolve_phi_update_phi_for_pred_other:
+  !rs lbl ops lbl'.
+    lbl' <> lbl ==>
+    resolve_phi lbl' (update_phi_for_pred rs lbl ops) =
+    resolve_phi lbl' ops
+Proof
+  ho_match_mp_tac update_phi_for_pred_ind >>
+  rw[resolve_phi_def, update_phi_for_pred_def] >>
+  Cases_on `x` >> rw[resolve_phi_def]
+QED
+

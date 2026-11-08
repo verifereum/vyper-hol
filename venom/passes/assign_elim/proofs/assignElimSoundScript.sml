@@ -10,7 +10,7 @@
 
 Theory assignElimSound
 Ancestors
-  assignElimDefs passSharedDefs passSharedProps
+  runInstsProps venomExecProofs assignElimDefs passSharedDefs passSharedProps
   analysisSimDefs analysisSimProps passSimulationDefs passSimulationProps
   stateEquiv stateEquivProps
   execEquivParamDefs execEquivParamProps
@@ -33,15 +33,6 @@ Definition copy_sound_opt_def:
 End
 
 (* ===== Generic helpers ===== *)
-
-(* run_insts on a singleton equals step_inst *)
-Theorem run_insts_sing[local]:
-  !fuel ctx inst s.
-    run_insts fuel ctx [inst] s = step_inst fuel ctx inst s
-Proof
-  rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx inst s` >> simp[run_insts_def]
-QED
 
 (* copy_sound_opt + unwrap_copies lookup → eval equality *)
 Theorem copy_sound_opt_eval[local]:
@@ -254,7 +245,7 @@ Proof
     rpt conj_tac
     >- metis_tac[state_equiv_trans]
     >- metis_tac[execution_equiv_trans]
-    >- (rpt strip_tac >> simp[run_insts_sing] >>
+    >- (rpt strip_tac >> simp[run_insts_singleton] >>
         metis_tac[assign_nop_per_inst |> SIMP_RULE std_ss [LET_THM]])
     >- (rpt strip_tac >>
         qpat_x_assum `!bb inst x. _` (drule_then (drule_then drule)) >>
@@ -302,24 +293,6 @@ QED
 
 (* Terminator OK preserves vars. JMP/JNZI/DJMP only modify
    vs_current_bb/vs_prev_bb/vs_inst_idx, not vs_vars. *)
-(* ASSIGN step semantics *)
-Theorem step_assign_result[local]:
-  !fuel ctx inst src_op dst s s'.
-    inst.inst_opcode = ASSIGN /\
-    inst.inst_operands = [src_op] /\
-    inst.inst_outputs = [dst] /\
-    step_inst fuel ctx inst s = OK s' ==>
-    ?val. eval_operand src_op s = SOME val /\
-          s' = update_var dst val s
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by simp[] >>
-  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
-  pop_assum mp_tac >>
-  simp_tac std_ss [Once step_inst_base_def] >>
-  Cases_on `eval_operand src_op s` >> simp[]
-QED
-
 (* Copy-propagation transfer function preserves copy_sound *)
 Theorem copy_prop_transfer_sound:
   !pv. transfer_sound copy_sound_opt
@@ -431,7 +404,7 @@ Theorem assign_subst_inst_simulates:
     copy_sound_opt (\v inst. [assign_subst_inst v inst])
 Proof
   simp[analysis_inst_simulates_def, assign_subst_inst_structural] >>
-  rpt strip_tac >> simp[run_insts_sing] >>
+  rpt strip_tac >> simp[run_insts_singleton] >>
   `step_inst fuel ctx (assign_subst_inst v inst) s =
    step_inst fuel ctx inst s`
     by metis_tac[assign_subst_step_correct] >>

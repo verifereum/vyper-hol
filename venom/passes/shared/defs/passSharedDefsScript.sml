@@ -371,13 +371,8 @@ Definition fn_used_vars_def:
   fn_used_vars fn = FLAT (MAP inst_uses (fn_insts fn))
 End
 
-Theorem MEM_operand_vars_eq_Var:
-  !ops v. MEM v (operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[operand_vars_def] >>
-  rpt gen_tac >> Cases_on `h` >>
-  simp[operand_var_def, operand_vars_def]
-QED
+(* Kept under this theory's name for the compiler-proof integration branch. *)
+Theorem MEM_operand_vars_eq_Var = venomInstTheory.MEM_operand_vars_eq_Var
 
 Theorem MEM_fn_used_vars:
   MEM v (fn_used_vars fn) <=>

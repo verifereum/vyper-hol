@@ -403,13 +403,6 @@ Proof
   rw[] >> fs[lookup_block_def, clear_nops_block_def]
 QED
 
-(* If no element in the list is PHI, phi_prefix_length = 0 *)
-Triviality no_phi_prefix_length_0:
-  !l. EVERY (\inst. inst.inst_opcode <> PHI) l ==> phi_prefix_length l = 0
-Proof
-  Induct_on `l` >> simp[phi_prefix_length_def] >> Cases >> simp[phi_prefix_length_def]
-QED
-
 (* NOP is not PHI, so FILTER removing NOPs preserves phi_prefix_length
    when PHIs form a prefix (which bb_well_formed guarantees). *)
 Triviality phi_prefix_length_filter_nop:
@@ -424,7 +417,7 @@ Proof
   >- (
     (* h is NOP: FILTER removes it, phi_prefix_length (h::l) = 0 *)
     simp[phi_prefix_length_def] >>
-    irule no_phi_prefix_length_0 >>
+    irule no_phis_phi_prefix_length_zero >>
     simp[EVERY_FILTER, EVERY_MEM] >>
     gen_tac >> strip_tac >>
     CCONTR_TAC >> fs[] >>
@@ -455,7 +448,7 @@ Proof
 QED
 
 (* If no element of l is PHI, then eval_phis on FILTER of l returns OK s *)
-Triviality eval_phis_filter_no_phi:
+Theorem eval_phis_filter_no_phi:
   !s P l.
     (!i. i < LENGTH l ==> (EL i l).inst_opcode <> PHI) ==>
     eval_phis s (FILTER P l) = OK s
@@ -776,13 +769,6 @@ Proof
   >- (irule clear_nops_fn_inst_ids_distinct >> simp[])
 QED
 
-Triviality find_some_mem[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >>
-  rpt strip_tac >> Cases_on `P h` >> fs[] >> metis_tac[]
-QED
-
 Theorem clear_nops_function_correct_blocks_wf:
   !fuel ctx fn s.
     (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\ s.vs_inst_idx = 0 ==>
@@ -799,7 +785,7 @@ Proof
     simp[result_equiv_def] >>
   rename1 `SOME bb` >>
   `bb_well_formed bb` by (
-    fs[lookup_block_def] >> drule find_some_mem >> metis_tac[]) >>
+    fs[lookup_block_def] >> drule FIND_MEM >> metis_tac[]) >>
   `result_equiv {} (run_block fuel ctx bb s)
      (run_block fuel ctx (clear_nops_block bb) s)` by
     simp[clear_nops_run_block_equiv] >>

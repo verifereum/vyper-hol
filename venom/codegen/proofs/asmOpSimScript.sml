@@ -100,6 +100,21 @@ Proof
   Cases_on `asm_step_compare name s1` >> gvs[]
 QED
 
+(* MSTORE and MLOAD dispatch through asm_step_memory *)
+Theorem asm_step_op_mstore:
+  !o2pc st. asm_step_op o2pc "MSTORE" st = asm_mstore st
+Proof
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def]
+QED
+
+Theorem asm_step_op_mload:
+  !o2pc st. asm_step_op o2pc "MLOAD" st = asm_mload st
+Proof
+  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+       asm_step_bitwise_def, asm_step_memory_def]
+QED
+
 (* ===== Parametric simulation: binop ===== *)
 
 (* If name dispatches to asm_binop f via asm_step_op, and the asm stack

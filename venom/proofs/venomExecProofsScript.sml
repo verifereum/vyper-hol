@@ -12,7 +12,7 @@
 
 Theory venomExecProofs
 Ancestors
-  venomFnInstsProofs venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map stateEquiv passSimulationDefs
+  stateEquivProofs venomFnInstsProofs venomExecSemantics venomInst venomInstProofs venomState venomWf rich_list list finite_map stateEquiv passSimulationDefs
 
 (* ==========================================================================
    bool_to_word Properties
@@ -85,6 +85,22 @@ Proof
   rpt strip_tac >>
   asm_simp_tac behavior_ss
     [step_inst_base_for ``ISZERO``, exec_pure1_def]
+QED
+
+Theorem step_assign_result:
+  !fuel ctx inst src_op dst s s'.
+    inst.inst_opcode = ASSIGN /\
+    inst.inst_operands = [src_op] /\
+    inst.inst_outputs = [dst] /\
+    step_inst fuel ctx inst s = OK s' ==>
+    ?val. eval_operand src_op s = SOME val /\
+          s' = update_var dst val s
+Proof
+  rpt strip_tac >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_for ``ASSIGN``] >>
+  Cases_on `eval_operand src_op s` >> simp[]
 QED
 
 Theorem step_assert_behavior:
@@ -324,16 +340,6 @@ Proof
   rw[bind_outputs_def, AllCaseEqs()] >> simp[foldl_update_var_prev_bb]
 QED
 
-(* step_inst OK preserves vs_prev_bb for non-terminators (including INVOKE) *)
-Theorem step_inst_preserves_prev_bb:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_prev_bb = s.vs_prev_bb
-Proof
-  metis_tac[step_preserves_control_flow]
-QED
-
 (* step_inst_base returns Error for INVOKE *)
 Theorem step_inst_base_OK_not_INVOKE:
   step_inst_base inst s = OK s' ==> inst.inst_opcode <> INVOKE
@@ -393,7 +399,7 @@ Proof
   pairarg_tac >> gvs[]
 QED
 
-Triviality is_terminator_not_invoke[local]:
+Theorem is_terminator_not_invoke:
   !op. is_terminator op ==> op <> INVOKE
 Proof
   Cases >> EVAL_TAC
@@ -460,17 +466,9 @@ QED
    FIND Lemmas
    ========================================================================== *)
 
-Theorem FIND_MEM:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
-QED
-
-Theorem FIND_P:
-  !P l x. FIND P l = SOME x ==> P x
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rw[] >> metis_tac[]
-QED
+(* Kept under this theory's name for the compiler-proof integration branch. *)
+Theorem FIND_MEM = venomInstTheory.FIND_MEM
+Theorem FIND_P = venomInstTheory.FIND_P
 
 Triviality FIND_NONE:
   !P l. FIND P l = NONE ==> ~EXISTS P l
@@ -614,6 +612,14 @@ Theorem MEM_lookup_block:
 Proof
   Induct_on `bbs` >> simp[lookup_block_def, FIND_thm] >>
   rpt strip_tac >> gvs[MEM_MAP] >> rw[] >> gvs[lookup_block_def]
+QED
+
+Theorem wf_lookup_block:
+  !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==>
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb
+Proof
+  rpt strip_tac >> irule MEM_lookup_block >>
+  gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]
 QED
 
 Theorem extract_labels_eq_map:
@@ -1817,13 +1823,6 @@ Proof
   simp[]
 QED
 
-(* ALL_DISTINCT distributes through FLAT: each member is ALL_DISTINCT *)
-Triviality all_distinct_flat_mem:
-  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
 (* Same instruction record at two positions in same block ⟹ same index.
    Uses fn_inst_ids_distinct (part of wf_function). *)
 Theorem inst_ids_el_eq:
@@ -2114,7 +2113,7 @@ QED
    eval_phis State Equivalence
    ========================================================================== *)
 
-Triviality resolve_phi_MEM_el[local]:
+Theorem resolve_phi_MEM_el:
   !prev ops op. resolve_phi prev ops = SOME op ==> MEM op ops
 Proof
   recInduct resolve_phi_ind >>
@@ -2134,16 +2133,6 @@ Proof
   fs[execution_equiv_def] >>
   metis_tac[]
 QED
-
-Triviality update_var_state_equiv[local]:
-  !vars x v s1 s2.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars (update_var x v s1) (update_var x v s2)
-Proof
-  rw[state_equiv_def, execution_equiv_def,
-     update_var_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
-
 
 Triviality eval_one_phi_equiv[local]:
   !s1 s2 vars inst out v.
@@ -2183,7 +2172,7 @@ Proof
      by (qsuff_tac `∀s''. eval_phis s1 insts = OK s'' ⇒ ∃s2'. eval_phis s2 insts = OK s2' ∧ state_equiv vars s'' s2'`
          >- metis_tac[] >> metis_tac[])
   >> qexists `update_var x0 x1 s2'` >> simp[eval_phis_def] >>
-  metis_tac[update_var_state_equiv]
+  metis_tac[update_var_preserves]
 QED
 
 Theorem phi_prefix_length_le:
@@ -2202,21 +2191,22 @@ Proof
   Cases_on `i` >> simp[phi_prefix_length_def]
 QED
 
+Theorem phi_prefix_length_lt_last_non_phi:
+  !l. l <> [] /\ (LAST l).inst_opcode <> PHI ==>
+      phi_prefix_length l < LENGTH l
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  Cases_on `l` >> gvs[phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
+  res_tac >> simp[]
+QED
+
 Theorem phi_prefix_length_lt_wf:
   !bb. bb_well_formed bb ==>
        phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
 Proof
-  rpt strip_tac >> fs[bb_well_formed_def] >>
-  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
-    metis_tac[phi_prefix_length_le] >>
-  CCONTR_TAC >>
-  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[]) >>
-  `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
-    metis_tac[phi_prefix_length_el_phi] >>
-  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
-  gvs[is_terminator_def]
+  rw[bb_well_formed_def] >> irule phi_prefix_length_lt_last_non_phi >>
+  rpt strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem no_phis_phi_prefix_length_zero:
@@ -2239,6 +2229,23 @@ Proof
   rpt strip_tac >>
   ONCE_REWRITE_TAC[run_block_def] >>
   simp[eval_phis_no_phis, no_phis_phi_prefix_length_zero]
+QED
+
+Theorem run_block_OK_eq_exec_block:
+  !fuel ctx bb s s_phi.
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    run_block fuel ctx bb s =
+      exec_block fuel ctx bb (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rw[run_block_def]
+QED
+
+Theorem run_block_Error_eq:
+  !fuel ctx bb s e.
+    eval_phis s bb.bb_instructions = Error e ==>
+    run_block fuel ctx bb s = Error e
+Proof
+  rw[run_block_def]
 QED
 
 Theorem run_block_eq_from_exec_block_eq:

@@ -18,7 +18,7 @@
 
 Theory emitSim
 Ancestors
-  codegenRel asmSem planExec stackPlanGen stackPlanTypes stackModel
+  venomLayout codegenRel asmSem planExec stackPlanGen stackPlanTypes stackModel
   venomExecSemantics venomState venomInst
   instSimHelpers stackOpSim blockSimHelpers asmToBytecodeProofs
   strongPrefixSim list rich_list finite_map
@@ -73,11 +73,7 @@ QED
    Plain-add BUMP boundary
    ========================================================================= *)
 
-Theorem dimindex_256[local,simp]:
-  dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
+val _ = augment_srw_ss [rewrites [dimindex_256]];
 
 
 Theorem word_of_bytes_encode_num_bytes_256[local]:

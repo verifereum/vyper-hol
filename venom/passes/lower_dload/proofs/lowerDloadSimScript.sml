@@ -7,7 +7,7 @@
 
 Theory lowerDloadSim
 Ancestors
-  lowerDloadProofs lowerDloadClassify lowerDloadDefs lowerDloadOracleFields
+  runInstsProps lowerDloadProofs lowerDloadClassify lowerDloadDefs lowerDloadOracleFields
   stateEquiv venomExecSemantics passSimulationDefs
   venomExecProps venomInst venomState venomWf
   venomInstProps analysisSimDefs instIdxIndep
@@ -224,7 +224,7 @@ Proof
     (irule step_inst_base_ld_ok_full >> gvs[] >> metis_tac[]) >>
   (* step_inst_base h s1 is non-OK: contradicts OK disjunct, leaves Error or Abort *)
   Cases_on `step_inst fuel ctx h s1` >> gvs[] >>
-  simp[lower_dload_inst_passthrough, run_insts_append, run_insts_sing,
+  simp[lower_dload_inst_passthrough, run_insts_append, run_insts_singleton,
        lift_result_def]
 QED
 
@@ -324,7 +324,7 @@ Proof
               ld_equiv vars v1 v2)` by
     (irule step_inst_base_ld_ok_full >> gvs[] >> metis_tac[]) >>
   gvs[] >>
-  simp[lower_dload_inst_passthrough, run_insts_append, run_insts_sing,
+  simp[lower_dload_inst_passthrough, run_insts_append, run_insts_singleton,
        lift_result_def])
 QED
 
@@ -453,39 +453,6 @@ QED
    Establishes: for non-terminator/non-INVOKE prefix, if step_inst on head
    returns OK, the exec_block recurses and the IH applies to the tail. *)
 
-(* When run_insts on non-terminator prefix returns Error,
-   exec_block returns the same Error (Error carries no state). *)
-Theorem exec_block_prefix_error[local]:
-  !prefix fuel ctx bb s j e.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) prefix /\
-    (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = Error e ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) = Error e
-Proof
-  Induct >> simp[run_insts_def] >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `h :: prefix` >>
-  fs[EVERY_DEF] >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def] >>
-  Cases_on `step_inst fuel ctx h s` >>
-  gvs[exec_result_map_def, Once run_insts_def] >>
-  rename1 `step_inst _ _ h s = OK s'` >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s'`, `SUC j`, `e`] mp_tac) >>
-  simp[] >> impl_tac
-  >- (simp[] >> rpt strip_tac >>
-      first_x_assum (qspec_then `SUC k` mp_tac) >> simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[arithmeticTheory.ADD_CLAUSES]
-QED
-
 (* When run_insts on non-terminator prefix returns Abort,
    exec_block returns Abort with same abort type and idx-modified state. *)
 Theorem exec_block_prefix_abort[local]:
@@ -507,7 +474,7 @@ Proof
   `step_inst fuel ctx h (s with vs_inst_idx := j) =
    exec_result_map (\s'. s' with vs_inst_idx := j)
      (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
+    simp[step_inst_idx_indep] >>
   ONCE_REWRITE_TAC[exec_block_def] >>
   simp[get_instruction_def] >>
   Cases_on `step_inst fuel ctx h s` >>
@@ -544,7 +511,7 @@ Proof
   `step_inst fuel ctx h (s with vs_inst_idx := j) =
    exec_result_map (\s'. s' with vs_inst_idx := j)
      (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
+    simp[step_inst_idx_indep] >>
   ONCE_REWRITE_TAC[exec_block_def] >>
   simp[get_instruction_def] >>
   Cases_on `step_inst fuel ctx h s` >>
@@ -580,7 +547,7 @@ Proof
   `step_inst fuel ctx h (s with vs_inst_idx := j) =
    exec_result_map (\s'. s' with vs_inst_idx := j)
      (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
+    simp[step_inst_idx_indep] >>
   ONCE_REWRITE_TAC[exec_block_def] >>
   simp[get_instruction_def] >>
   Cases_on `step_inst fuel ctx h s` >>
@@ -614,7 +581,7 @@ Proof
 QED
 
 (* When s.vs_inst_idx = 0 and prefix returns OK, exec_block factors into
-   prefix + rest. Specializes exec_block_skip_prefix_local for idx=0. *)
+   prefix + rest. Specializes exec_block_skip_prefix for idx=0. *)
 Theorem exec_block_skip_prefix_idx0[local]:
   !prefix fuel ctx bb s s'.
     s.vs_inst_idx = 0 /\
@@ -627,7 +594,7 @@ Theorem exec_block_skip_prefix_idx0[local]:
 Proof
   rpt strip_tac >>
   mp_tac (Q.SPECL [`prefix`, `fuel`, `ctx`, `bb`, `s`, `0`, `s'`]
-    exec_block_skip_prefix_local) >>
+    exec_block_skip_prefix) >>
   simp[] >>
   `s with vs_inst_idx := 0 = s` by simp[venom_state_component_equality] >>
   gvs[]
@@ -645,7 +612,7 @@ Proof
   rpt strip_tac >>
   `(s with vs_inst_idx := s.vs_inst_idx) = s` by simp[venom_state_component_equality] >>
   mp_tac (Q.SPECL [`prefix`, `fuel`, `ctx`, `bb`, `s`, `s.vs_inst_idx`, `s'`]
-    exec_block_skip_prefix_local) >>
+    exec_block_skip_prefix) >>
   simp[arithmeticTheory.ADD_COMM] >> strip_tac >> gvs[]
 QED
 
@@ -1381,16 +1348,6 @@ Proof
   metis_tac[exec_block_preserves_code_layout_valid]
 QED
 
-Theorem phi_prefix_length_lt_last_non_phi[local]:
-  !insts.
-    insts <> [] /\ (LAST insts).inst_opcode <> PHI ==>
-    phi_prefix_length insts < LENGTH insts
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `insts` >> gvs[phi_prefix_length_def] >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def]
-QED
-
 Theorem MEM_BUTLAST_IMP[local]:
   !x xs. MEM x (BUTLAST xs) ==> MEM x xs
 Proof
@@ -1619,7 +1576,9 @@ Proof
     qabbrev_tac `exp_bb = lower_dload_block bb` >>
     qabbrev_tac `exp_prefix = FLAT (MAP lower_dload_inst prefix)` >>
     `j < LENGTH bb.bb_instructions` by
-      (qunabbrev_tac `j` >> irule phi_prefix_length_lt_last_non_phi >> simp[Abbr `term`]) >>
+      (qunabbrev_tac `j` >>
+       irule venomExecProofsTheory.phi_prefix_length_lt_last_non_phi >>
+       simp[Abbr `term`]) >>
     `DROP j bb.bb_instructions = prefix ++ [term]` by
       simp[Abbr `prefix`, Abbr `term`, DROP_APPEND_BUTLAST_LAST] >>
     `bb.bb_instructions = TAKE j bb.bb_instructions ++ prefix ++ [term]` by

@@ -407,7 +407,7 @@ Proof
 QED
 
 (* Helper: sccp_eval_phi_for_edge output is from inst_outputs *)
-Triviality sccp_eval_phi_output_bound[local]:
+Theorem sccp_eval_phi_output_bound:
   !src_lbl src_vals inst out v.
     sccp_eval_phi_for_edge src_lbl src_vals inst = SOME (out, v) ==>
     MEM out inst.inst_outputs
@@ -472,14 +472,6 @@ Proof
   simp[]
 QED
 
-(* Helper: FIND SOME implies MEM *)
-Triviality find_some_mem[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >>
-  rpt strip_tac >> every_case_tac >> fs[] >> metis_tac[]
-QED
-
 (* Helper: instructions from lookup_block have outputs in fn_all_assignments *)
 Triviality lookup_block_outputs_bound[local]:
   !lbl fn bb.
@@ -489,7 +481,7 @@ Triviality lookup_block_outputs_bound[local]:
 Proof
   rpt strip_tac >>
   `MEM bb fn.fn_blocks` by
-    (fs[lookup_block_def] >> imp_res_tac find_some_mem >> simp[]) >>
+    (fs[lookup_block_def] >> imp_res_tac FIND_MEM >> simp[]) >>
   simp[EVERY_MEM, SUBSET_DEF] >> rpt strip_tac >>
   simp[fn_all_assignments_def, MEM_nub, MEM_FLAT, MEM_MAP, PULL_EXISTS,
        inst_defs_def] >>
@@ -649,7 +641,7 @@ Triviality inst_successors_in_fn_labels[local]:
 Proof
   rpt strip_tac >>
   `MEM bb fn.fn_blocks` by
-    (fs[lookup_block_def] >> imp_res_tac find_some_mem) >>
+    (fs[lookup_block_def] >> imp_res_tac FIND_MEM) >>
   `bb_well_formed bb` by fs[wf_function_def] >>
   (* inst is a terminator, so it must be LAST *)
   `inst = LAST bb.bb_instructions` by (
@@ -1240,18 +1232,6 @@ Proof
   gvs[FDOM_FUPDATE]
 QED
 
-Triviality populate_inst_ds_boundary[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
-    (df_populate_inst dir bottom join transfer edge_transfer ctx
-       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
-Proof
-  rpt gen_tac >>
-  simp[df_populate_inst_def] >>
-  irule dfAnalyzeProofsTheory.foldl_inst_only_boundary >>
-  simp[LET_THM] >>
-  rpt gen_tac >> pairarg_tac >> simp[]
-QED
-
 (* ===== Helpers for df_populate_inst structural properties ===== *)
 
 (* Step 1: monotonicity — if m ⊑ acc and disjoint, then m ⊑ FOLDL *)
@@ -1535,7 +1515,7 @@ QED
 Resume sccp_measure_inv_at_fixpoint[state_inv]:
   simp[sccp_state_inv_def] >> conj_tac
   (* boundary part: result.ds_boundary = wl_result.ds_boundary *)
-  >- (qunabbrev_tac `result` >> simp[populate_inst_ds_boundary] >>
+  >- (qunabbrev_tac `result` >> simp[df_populate_inst_boundary] >>
       fs[sccp_measure_inv_def, sccp_state_inv_def])
   (* inst part: each value in result.ds_inst satisfies FDOM bounds.
      result.ds_inst = FOLDL of fold results over FEMPTY.
@@ -1685,7 +1665,7 @@ Resume sccp_measure_inv_at_fixpoint[C5]:
   rpt gen_tac >> strip_tac >>
   (* result.ds_boundary = wl_result.ds_boundary *)
   `result.ds_boundary = wl_result.ds_boundary` by
-    (qunabbrev_tac `result` >> simp[populate_inst_ds_boundary]) >>
+    (qunabbrev_tac `result` >> simp[df_populate_inst_boundary]) >>
   simp[] >>
   (* (lbl,0) ∈ FDOM result.ds_inst implies MEM lbl (MAP ...) *)
   `MEM lbl (MAP (\bb. bb.bb_label) fn.fn_blocks)` by (

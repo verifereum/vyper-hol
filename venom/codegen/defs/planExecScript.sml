@@ -71,3 +71,9 @@ End
 Definition execute_plan_def:
   execute_plan initial_fmp ops = FLAT (MAP (exec_stack_op initial_fmp) ops)
 End
+
+Theorem execute_plan_singleton:
+  execute_plan initial_fmp [op] = exec_stack_op initial_fmp op
+Proof
+  simp[execute_plan_def]
+QED

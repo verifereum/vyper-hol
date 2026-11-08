@@ -3,9 +3,7 @@
  *
  * Core theorems:
  *   transfer_sound_step, transfer_sound_exit,
- *   transfer_sound_exit_wf, transfer_sound_exit_wf_len, term_step_base_idx_0
- *   run_block_OK_not_halted, run_block_OK_inst_idx_0,
- *   eval_phis_OK_run_block_eq, run_block_eval_phis_Error
+ *   transfer_sound_exit_wf, transfer_sound_exit_wf_len
  *
  * Other parts split into separate files to avoid OOM:
  *   analysisSimProofsSound  — sound/widen sound correctness proofs
@@ -17,7 +15,7 @@
 
 Theory analysisSimProofs
 Ancestors
-  analysisSimProofsBase analysisSimProofsCompare
+  venomExecProofs analysisSimProofsBase analysisSimProofsCompare
   analysisSimDefs execEquivParamDefs dfAnalyzeProofs dfAnalyzeDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
@@ -27,33 +25,6 @@ Ancestors
 
 (* Transfer-sound chain: running original block from sound entry gives
    sound exit value. Uses the same idx-0 trick as analysis_block_sim. *)
-(* Helper: terminator step_inst_base is idx-independent for OK results *)
-Theorem term_step_base_idx_0:
-  !inst s v.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK v ==>
-    step_inst_base inst (s with vs_inst_idx := 0) = OK v
-Proof
-  rpt strip_tac >>
-  `v.vs_inst_idx = 0` by
-    metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0] >>
-  qabbrev_tac `f = \st:venom_state. st with vs_inst_idx := 0` >>
-  `exec_result_map f (step_inst_base inst (s with vs_inst_idx := 0)) =
-   exec_result_map f (step_inst_base inst s)` by
-    (unabbrev_all_tac >>
-     metis_tac[instIdxIndepTheory.terminator_step_inst_base_idx_norm0]) >>
-  `exec_result_map f (step_inst_base inst s) = OK v` by
-    (simp[Abbr `f`, instIdxIndepTheory.exec_result_map_def] >>
-     `v with vs_inst_idx := 0 = v` by
-       simp[venom_state_component_equality] >> fs[]) >>
-  fs[] >>
-  Cases_on `step_inst_base inst (s with vs_inst_idx := 0)` >>
-  fs[Abbr `f`, instIdxIndepTheory.exec_result_map_def] >>
-  `v'.vs_inst_idx = 0` by
-    metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0] >>
-  fs[venom_state_component_equality]
-QED
-
 (* Helper: apply transfer_sound to get soundness at SUC idx *)
 Theorem transfer_sound_step:
   !sound transfer run_ctx inst fuel ctx s s' v_in v_out.
@@ -488,37 +459,3 @@ QED
 
 (* ===== run_block boundary lemmas ===== *)
 
-Theorem run_block_OK_not_halted:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> ~v.vs_halted
-Proof
-  rpt strip_tac >>
-  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >> strip_tac >>
-  fs[run_block_def] >>
-  metis_tac[venomExecProofsTheory.exec_block_OK_not_halted]
-QED
-
-Theorem run_block_OK_inst_idx_0:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  rpt strip_tac >>
-  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >> strip_tac >>
-  fs[run_block_def] >>
-  drule venomExecProofsTheory.exec_block_OK_inst_idx_0 >> simp[]
-QED
-
-Theorem run_block_eval_phis_Error:
-  !fuel ctx bb s e.
-    eval_phis s bb.bb_instructions = Error e ==>
-    run_block fuel ctx bb s = Error e
-Proof
-  rpt strip_tac >> fs[run_block_def]
-QED
-
-Theorem eval_phis_OK_run_block_eq:
-  !fuel ctx bb s s_phi.
-    eval_phis s bb.bb_instructions = OK s_phi ==>
-    run_block fuel ctx bb s = exec_block fuel ctx bb
-      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-Proof
-  rpt strip_tac >> fs[run_block_def]
-QED

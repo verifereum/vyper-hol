@@ -6,7 +6,7 @@
 
 Theory varDefProofs
 Ancestors
-  varDefDefs cfgAnalysisProps dfAnalyzeProps venomWf cfgCorrectnessProof dfHelperProofs dfHelperDefs
+  dfAnalyzeProofs varDefDefs cfgAnalysisProps dfAnalyzeProps venomWf cfgCorrectnessProof dfHelperProofs dfHelperDefs
 
 (* ===== Convergence infrastructure ===== *)
 
@@ -256,30 +256,17 @@ Proof
   res_tac
 QED
 
-(* FIND P l = SOME x ==> MEM x l /\ P x *)
-Triviality find_some_mem:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[listTheory.FIND_thm] >> rw[] >> metis_tac[]
-QED
-
-Triviality find_some_pred:
-  !P l x. FIND P l = SOME x ==> P x
-Proof
-  Induct_on `l` >> simp[listTheory.FIND_thm] >> rw[] >> metis_tac[]
-QED
-
 (* lookup_block lbl bbs = SOME bb ==> MEM bb bbs /\ bb.bb_label = lbl *)
 Triviality lookup_block_mem:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
-  rw[venomInstTheory.lookup_block_def] >> drule find_some_mem >> simp[]
+  rw[venomInstTheory.lookup_block_def] >> drule venomInstTheory.FIND_MEM >> simp[]
 QED
 
 Triviality lookup_block_label:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
 Proof
-  rw[venomInstTheory.lookup_block_def] >> drule find_some_pred >> simp[]
+  rw[venomInstTheory.lookup_block_def] >> drule venomInstTheory.FIND_P >> simp[]
 QED
 
 (* vardef_joined monotonicity: shrinking a boundary preserves joined ⊆. *)
@@ -964,18 +951,6 @@ QED
    
    Proof via wl_iterate_invariant with P = vardef_state_inv ∧ entry_boundary = []. *)
 
-(* df_populate_inst preserves ds_boundary *)
-Triviality populate_inst_ds_boundary[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
-    (df_populate_inst dir bottom join transfer edge_transfer ctx
-       entry_val cfg bbs lbls st).ds_boundary = st.ds_boundary
-Proof
-  rpt gen_tac >>
-  simp[dfAnalyzeDefsTheory.df_populate_inst_def] >>
-  irule dfAnalyzeProofsTheory.foldl_inst_only_boundary >>
-  simp[LET_THM] >> rpt gen_tac >> pairarg_tac >> simp[]
-QED
-
 Triviality vardef_entry_boundary_empty[local]:
   !fn.
     wf_function fn /\
@@ -990,7 +965,7 @@ Proof
   >> qmatch_goalsub_abbrev_tac `wl_iterate changed process deps wl0 st0'`
   >> `FLOOKUP (SND (wl_iterate changed process deps wl0 st0')).ds_boundary
         (HD fn.fn_blocks).bb_label = SOME ([] : string list)`
-       suffices_by simp[populate_inst_ds_boundary]
+       suffices_by simp[df_populate_inst_boundary]
   >> `(\st. vardef_state_inv fn st /\
        FLOOKUP st.ds_boundary (HD fn.fn_blocks).bb_label = SOME ([] : string list))
       (SND (wl_iterate changed process deps wl0 st0'))` suffices_by simp[]

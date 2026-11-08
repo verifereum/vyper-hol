@@ -9,8 +9,9 @@
 
 Theory passSharedFrame
 Ancestors
-  oracleExecProps
+  stateEquivProofs oracleExecProps
   passSharedVarFrame passSharedTransfer passSharedField passResidualFrame
+  opcodeClass
 
 open venomStateTheory venomInstTheory venomExecSemanticsTheory
      venomEffectsTheory venomInstPropsTheory
@@ -61,74 +62,7 @@ fun spa_assume n inst_q s_q s'_q =
 (* ===== Non-terminator result type elimination ======================== *)
 (* ===================================================================== *)
 
-Triviality exec_result_helpers_no_halt_abort[simp]:
-  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
-  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
-  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_result_helpers_not_intret[simp]:
-  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
-  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_not_intret[simp]:
-  (!inst s g a v ao as_ ro rs is_s vs s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
-  (!inst s g a ao as_ ro rs vs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
-  (!inst s v off sz salt vs s'.
-     exec_create inst s v off sz salt <> IntRet vs s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_no_halt_abort[simp]:
-  (!inst s g a v ao as_ ro rs is_s s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
-  (!inst s g a ao as_ ro rs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
-  (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
+val _ = augment_srw_ss [rewrites [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret, exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
 
 (* Index the guarded equations once; never expand the full opcode case
    when the opcode is already known. Shared by all result/frame proofs. *)
@@ -148,26 +82,6 @@ in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
 
 val step_inst_base_opcode_tac =
   qpat_assum `i.inst_opcode = _` rewrite_step_inst_base_opcode;
-
-Theorem step_inst_base_no_halt[local]:
-  !inst s s'.
-    step_inst_base inst s = Halt s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule opcodeClassTheory.step_inst_base_halt_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_no_intret[local]:
-  !inst s vs s'.
-    step_inst_base inst s = IntRet vs s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
 
 (* Non-INVOKE non-terminator step_inst can't produce Halt *)
 Theorem step_inst_no_halt[local]:
@@ -213,151 +127,10 @@ Proof
 QED
 
 (* ===================================================================== *)
-(* ===== step_inst_result_equiv for full step_inst ===================== *)
-(* ===================================================================== *)
-
-(* FOLDL update_var preserves state_equiv *)
-Theorem foldl_update_var_state_equiv[local]:
-  !pairs s1 s2 vars.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars
-      (FOLDL (\s' (out,val). update_var out val s') s1 pairs)
-      (FOLDL (\s' (out,val). update_var out val s') s2 pairs)
-Proof
-  Induct >> rw[] >>
-  PairCases_on `h` >> gvs[] >>
-  first_x_assum irule >>
-  gvs[state_equiv_def, execution_equiv_def, update_var_def,
-      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[]
-QED
-
-(* eval_operands on state_equiv states with operand vars outside vars *)
-Theorem eval_operands_state_equiv[local]:
-  !ops s1 s2 vars.
-    state_equiv vars s1 s2 /\
-    (!x. MEM (Var x) ops ==> x NOTIN vars) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> rw[eval_operands_def] >>
-  `eval_operands ops s1 = eval_operands ops s2` by
-    (first_x_assum irule >> gvs[] >> metis_tac[]) >>
-  Cases_on `h` >> gvs[eval_operand_def]
-  >- (`lookup_var s s1 = lookup_var s s2` by
-        gvs[state_equiv_def, execution_equiv_def] >>
-      gvs[])
-  >- (`s1.vs_labels = s2.vs_labels` by
-        gvs[state_equiv_def, execution_equiv_def] >>
-      gvs[])
-QED
-
-(* setup_callee on state_equiv states gives same result *)
-Theorem setup_callee_state_equiv[local]:
-  !fn args s1 s2 vars.
-    state_equiv vars s1 s2 ==>
-    setup_callee fn args s1 = setup_callee fn args s2
-Proof
-  rw[setup_callee_def] >>
-  gvs[state_equiv_def, execution_equiv_def] >>
-  rw[venomStateTheory.venom_state_component_equality]
-QED
-
-(* merge_callee_state on state_equiv callers gives state_equiv result *)
-Theorem merge_callee_state_equiv[local]:
-  !s1 s2 callee vars.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars (merge_callee_state s1 callee)
-                     (merge_callee_state s2 callee)
-Proof
-  rw[state_equiv_def, execution_equiv_def, merge_callee_state_def] >>
-  gvs[lookup_var_def]
-QED
-
-(* Updating the returned FMP in the same way preserves state equivalence. *)
-Theorem adopt_return_fmp_state_equiv[local]:
-  !vars ir s1 s2.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars (adopt_return_fmp ir s1)
-                     (adopt_return_fmp ir s2)
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `ir.iret_adopt_fmp` >>
-  gvs[adopt_return_fmp_def, state_equiv_def, execution_equiv_def,
-      lookup_var_def]
-QED
-
-(* Extends execEquivProofs.step_inst_result_equiv (which only covers
-   step_inst_base) to handle INVOKE via step_inst. *)
-Theorem execution_equiv_refl[local]:
-  !vars s. execution_equiv vars s s
-Proof
-  rw[execution_equiv_def]
-QED
-
-Theorem step_inst_result_equiv_full[local]:
-  !vars fuel ctx inst s1 s2.
-    state_equiv vars s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-    ~is_terminator inst.inst_opcode ==>
-    result_equiv vars (step_inst fuel ctx inst s1)
-                      (step_inst fuel ctx inst s2)
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- (
-    simp[step_inst_def] >>
-    Cases_on `decode_invoke inst` >> gvs[result_equiv_def] >>
-    PairCases_on `x` >> gvs[] >>
-    rename1 `SOME (callee_name, arg_ops)` >>
-    `inst.inst_operands = Label callee_name :: arg_ops`
-      by gvs[decode_invoke_def, AllCaseEqs()] >>
-    `eval_operands arg_ops s1 = eval_operands arg_ops s2` by (
-      irule eval_operands_state_equiv >> qexists_tac `vars` >> gvs[] >>
-      rpt strip_tac >> first_x_assum irule >> gvs[]) >>
-    Cases_on `lookup_function callee_name ctx.ctx_functions`
-    >> gvs[result_equiv_def] >>
-    Cases_on `eval_operands arg_ops s2` >> gvs[result_equiv_def] >>
-    rename1 `SOME args` >>
-    `setup_callee x args s1 = setup_callee x args s2`
-      by (irule setup_callee_state_equiv >> metis_tac[]) >>
-    Cases_on `setup_callee x args s2` >> gvs[result_equiv_def] >>
-    Cases_on `run_blocks fuel ctx x x'` >> simp[] >>
-    gvs[result_equiv_def, execution_equiv_refl] >>
-    (* Only IntRet case remains *)
-    `state_equiv vars (merge_callee_state s1 v)
-                      (merge_callee_state s2 v)` by
-      (irule merge_callee_state_equiv >> gvs[]) >>
-    simp[bind_outputs_def] >>
-    IF_CASES_TAC >> gvs[result_equiv_def]
-    >- (`state_equiv vars
-          (adopt_return_fmp i (merge_callee_state s1 v))
-          (adopt_return_fmp i (merge_callee_state s2 v))` by
-          (irule adopt_return_fmp_state_equiv >> gvs[]) >>
-        irule foldl_update_var_state_equiv >> gvs[])
-    >> irule adopt_return_fmp_state_equiv >> gvs[])
-  >> (gvs[step_inst_non_invoke] >> irule step_inst_result_equiv >> gvs[])
-QED
-
-(* ===================================================================== *)
 (* ===== Helpers for effects_independent_commute ======================= *)
 (* ===================================================================== *)
 
 (* inst_defs = inst_outputs, inst_uses = operand_vars *)
-
-(* MEM (Var x) ops ==> MEM x (operand_vars ops) *)
-Theorem mem_var_operand_vars[local]:
-  !ops x. MEM (Var x) ops ==> MEM x (operand_vars ops)
-Proof
-  Induct >> rw[operand_vars_def] >>
-  Cases_on `operand_var h` >> gvs[operand_var_def]
-QED
-
-(* operand vars of inst are a subset of inst_uses *)
-Theorem operand_var_in_uses[local]:
-  !x inst. MEM (Var x) inst.inst_operands ==> MEM x (inst_uses inst)
-Proof
-  rw[inst_uses_def] >> irule mem_var_operand_vars >> gvs[]
-QED
 
 (* commute_equiv is weaker than state_equiv *)
 Theorem commute_equiv_subset[local]:
@@ -464,22 +237,6 @@ Proof
   >- (Cases_on `op2` >> EVAL_TAC)
 QED
 
-(* Non-terminator non-INVOKE step_inst_base can only Abort from
-   ASSERT (Revert_abort), ASSERT_UNREACHABLE (ExHalt_abort),
-   RETURNDATACOPY (ExHalt_abort). All set returndata to []. *)
-Theorem step_inst_base_abort_opcode:
-  !inst s a s'.
-    step_inst_base inst s = Abort a s' /\
-    ~is_terminator inst.inst_opcode ==>
-    inst.inst_opcode = ASSERT \/
-    inst.inst_opcode = ASSERT_UNREACHABLE \/
-    inst.inst_opcode = RETURNDATACOPY
-Proof
-  rpt strip_tac >>
-  drule opcodeClassTheory.step_inst_base_abort_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
 Theorem step_inst_base_abort_returndata[local]:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
@@ -566,7 +323,7 @@ Proof
     irule step_inst_ok_state_equiv >> gvs[] >> metis_tac[]) >>
   irule step_inst_result_equiv_full >> gvs[] >>
   rpt strip_tac >>
-  imp_res_tac operand_var_in_uses >>
+  imp_res_tac operand_var_in_inst_uses >>
   gvs[inst_defs_def] >>
   metis_tac[pred_setTheory.IN_DISJOINT]
 QED
@@ -623,7 +380,7 @@ Proof
   `!x. MEM (Var x) inst_b.inst_operands ==>
        lookup_var x s = lookup_var x v` by (
     rpt strip_tac >>
-    imp_res_tac operand_var_in_uses >>
+    imp_res_tac operand_var_in_inst_uses >>
     `~MEM x (inst_defs inst_a)` by
       metis_tac[pred_setTheory.IN_DISJOINT] >>
     gvs[inst_defs_def] >>
@@ -769,7 +526,7 @@ Proof
 QED
 
 (* Empty write_effects implies not ext_call *)
-Theorem empty_write_not_ext_call[local]:
+Theorem empty_write_not_ext_call:
   !op. write_effects op = {} ==> ~is_ext_call_op op
 Proof
   Cases >> rw[write_effects_def, is_ext_call_op_def, all_effects_def,

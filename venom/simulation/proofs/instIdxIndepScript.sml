@@ -586,4 +586,31 @@ Proof
   Cases_on `r` >> gvs[]
 QED
 
+(* Helper: terminator step_inst_base is idx-independent for OK results *)
+Theorem term_step_base_idx_0:
+  !inst s v.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK v ==>
+    step_inst_base inst (s with vs_inst_idx := 0) = OK v
+Proof
+  rpt strip_tac >>
+  `v.vs_inst_idx = 0` by
+    metis_tac[terminator_OK_inst_idx_0] >>
+  qabbrev_tac `f = \st:venom_state. st with vs_inst_idx := 0` >>
+  `exec_result_map f (step_inst_base inst (s with vs_inst_idx := 0)) =
+   exec_result_map f (step_inst_base inst s)` by
+    (unabbrev_all_tac >>
+     metis_tac[terminator_step_inst_base_idx_norm0]) >>
+  `exec_result_map f (step_inst_base inst s) = OK v` by
+    (simp[Abbr `f`, exec_result_map_def] >>
+     `v with vs_inst_idx := 0 = v` by
+       simp[venom_state_component_equality] >> fs[]) >>
+  fs[] >>
+  Cases_on `step_inst_base inst (s with vs_inst_idx := 0)` >>
+  fs[Abbr `f`, exec_result_map_def] >>
+  `v'.vs_inst_idx = 0` by
+    metis_tac[terminator_OK_inst_idx_0] >>
+  fs[venom_state_component_equality]
+QED
+
 

@@ -16,7 +16,7 @@
 
 Theory removeUnusedSsaProofs
 Ancestors
-  removeUnusedProofs removeUnusedDefs
+  venomExecProofs removeUnusedProofs removeUnusedDefs
   passSimulationDefs passSimulationProps analysisSimProps
   livenessProofs livenessDefs
   dfAnalyzeDefs dfAnalyzeProps dfHelperProps
@@ -121,15 +121,6 @@ QED
 
 (* ===== Main theorem: NOP'd variables not used as operands ===== *)
 
-(* Helper: operand var in inst_uses *)
-Theorem mem_var_operand_vars[local]:
-  !ops v. MEM (Var v) ops ==> MEM v (operand_vars ops)
-Proof
-  Induct >> simp[operand_vars_def] >> rpt strip_tac >> gvs[] >>
-  Cases_on `operand_var h` >> simp[] >>
-  Cases_on `h` >> gvs[operand_var_def]
-QED
-
 Theorem operand_var_in_inst_uses[local]:
   !inst v. MEM (Var v) inst.inst_operands ==>
            MEM v (inst_uses inst)
@@ -144,24 +135,9 @@ Proof
   Induct >> simp[fn_insts_blocks_def]
 QED
 
-(* ALL_DISTINCT (FLAT (MAP f l)) + v in two different elements => F *)
-Theorem all_distinct_flat_map_cross[local]:
-  !f l (x:'a) y (v:'b).
-    ALL_DISTINCT (FLAT (MAP f l)) /\
-    MEM x l /\ MEM y l /\ x <> y /\
-    MEM v (f x) /\ MEM v (f y) ==> F
-Proof
-  Induct_on `l` >> rw[MEM_FLAT, MEM_MAP, ALL_DISTINCT_APPEND] >> metis_tac[]
-QED
-
-(* ALL_DISTINCT (FLAT (MAP f l)) + MEM x l => ALL_DISTINCT (f x) *)
-Theorem all_distinct_flat_map_member:
-  !(f:'a -> 'b list) l x.
-    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM x l ==> ALL_DISTINCT (f x)
-Proof
-  Induct_on `l` >> rw[ALL_DISTINCT_APPEND] >> metis_tac[]
-QED
-
+(* Kept under this name for existing users; proved in venomFnInstsProofs. *)
+Theorem all_distinct_flat_map_member =
+  venomFnInstsProofsTheory.all_distinct_flat_map_member
 
 (* Strongest SSA uniqueness: same output var ⇒ same instruction AND same block *)
 Theorem ssa_unique_output_block[local]:
@@ -189,7 +165,7 @@ Proof
     (simp[Abbr `bouts`, MEM_FLAT, MEM_MAP] >> metis_tac[])
   >- (
     (* bb1 ≠ bb2: block-level *)
-    metis_tac[all_distinct_flat_map_cross])
+    metis_tac[venomFnInstsProofsTheory.all_distinct_flat_map_unique])
   >- (
     (* inst1 ≠ inst2: within-block *)
     Cases_on `bb1 = bb2`
@@ -197,59 +173,11 @@ Proof
       gvs[] >>
       drule_all all_distinct_flat_map_member >> strip_tac >>
       gvs[Abbr `bouts`] >>
-      metis_tac[all_distinct_flat_map_cross])
-    >- metis_tac[all_distinct_flat_map_cross])
+      metis_tac[venomFnInstsProofsTheory.all_distinct_flat_map_unique])
+    >- metis_tac[venomFnInstsProofsTheory.all_distinct_flat_map_unique])
 QED
 
 (* ===== Boilerplate: reachability / lookup helpers ===== *)
-
-(* is_fn_path → RTC fn_cfg_edge *)
-Theorem is_fn_path_rtc[local]:
-  !fn path. is_fn_path fn path /\ path <> [] ==>
-    (fn_cfg_edge fn)^* (HD path) (LAST path)
-Proof
-  Induct_on `path` >> simp[is_fn_path_def] >>
-  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def] >>
-  irule (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES)) >>
-  qexists_tac `h'` >> simp[]
-QED
-
-(* RTC fn_cfg_edge → is_fn_path *)
-Theorem rtc_to_fn_path[local]:
-  !fn x y. (fn_cfg_edge fn)^* x y ==>
-    ?path. is_fn_path fn path /\ path <> [] /\ HD path = x /\ LAST path = y
-Proof
-  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> rw[]
-  >- (qexists_tac `[x]` >> simp[is_fn_path_def])
-  >- (qexists_tac `x::path` >> Cases_on `path` >> gvs[is_fn_path_def])
-QED
-
-(* is_fn_path prefix: if d ∈ path, take prefix up to d *)
-Theorem is_fn_path_prefix[local]:
-  !fn path d. is_fn_path fn path /\ MEM d path ==>
-    ?pre. is_fn_path fn (pre ++ [d]) /\ HD (pre ++ [d]) = HD path
-Proof
-  Induct_on `path` >> simp[] >> rpt strip_tac >> gvs[]
-  >- (qexists_tac `[]` >> simp[is_fn_path_def])
-  >- (Cases_on `path` >> gvs[is_fn_path_def]
-      >- (qexists_tac `[h]` >> simp[is_fn_path_def])
-      >- (first_x_assum (qspecl_then [`fn`, `d`] mp_tac) >> simp[] >>
-          strip_tac >> qexists_tac `h::pre` >>
-          Cases_on `pre` >> gvs[is_fn_path_def]))
-QED
-
-(* fn_dominates → dominator is reachable *)
-Theorem fn_dominates_dom_reachable[local]:
-  !fn d n. fn_dominates fn d n ==> fn_reachable fn d
-Proof
-  rw[fn_dominates_def, fn_reachable_def] >>
-  qexists_tac `entry` >> simp[] >>
-  drule rtc_to_fn_path >> strip_tac >>
-  `MEM d path` by (first_x_assum irule >> simp[] >> metis_tac[]) >>
-  drule_all is_fn_path_prefix >> strip_tac >>
-  drule is_fn_path_rtc >>
-  simp[listTheory.APPEND_eq_NIL]
-QED
 
 Theorem fn_reachable_in_cfg_dfs_pre[local]:
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
@@ -277,56 +205,8 @@ Proof
   irule bb_succs_in_cfg_succs >> gvs[wf_function_def]
 QED
 
-Theorem wf_lookup_block[local]:
-  !fn bb. wf_function fn /\ MEM bb fn.fn_blocks ==>
-    lookup_block bb.bb_label fn.fn_blocks = SOME bb
-Proof
-  rpt strip_tac >>
-  irule MEM_lookup_block >> simp[] >>
-  gvs[wf_function_def, fn_labels_def]
-QED
-
-(* lookup_block returns a block with matching label *)
-Theorem lookup_block_label[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl
-Proof
-  rw[lookup_block_def] >>
-  pop_assum mp_tac >> Induct_on `bbs` >> simp[listTheory.FIND_thm] >>
-  rpt strip_tac >> Cases_on `h.bb_label = lbl` >> gvs[]
-QED
-
-(* is_fn_path can be extended by one edge *)
-Theorem is_fn_path_snoc[local]:
-  !fn path lbl. is_fn_path fn path /\ path <> [] /\
-    fn_cfg_edge fn (LAST path) lbl ==>
-    is_fn_path fn (path ++ [lbl])
-Proof
-  Induct_on `path` >> simp[is_fn_path_def] >>
-  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def]
-QED
-
 (* fn_dominates predecessor: if d dominates n, d ≠ n, and p → n is CFG edge,
    and p is reachable, then d dominates p *)
-Theorem fn_dominates_predecessor[local]:
-  !fn d n p.
-    fn_dominates fn d n /\ d <> n /\
-    fn_cfg_edge fn p n /\ fn_reachable fn p ==>
-    fn_dominates fn d p
-Proof
-  rw[fn_dominates_def] >> rpt strip_tac >>
-  (* path goes from entry to p; extend by edge p → n to get path to n *)
-  `is_fn_path fn (path ++ [n])` by (
-    irule is_fn_path_snoc >> simp[]) >>
-  `MEM d (path ++ [n])` by (
-    first_x_assum (qspec_then `path ++ [n]` mp_tac) >>
-    impl_tac >- (
-      simp[listTheory.LAST_APPEND_CONS] >>
-      Cases_on `path` >> gvs[]
-    ) >>
-    simp[]
-  ) >>
-  gvs[listTheory.MEM_APPEND]
-QED
 
 (* phi_pairs produces only vars present in the operand list *)
 Theorem phi_pairs_mem_var[local]:
@@ -344,16 +224,6 @@ Proof
   ho_match_mp_tac phi_pairs_ind >>
   rw[phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
 QED
-
-(* fn_cfg_edge → cfg_succs_of (bridge from path-level to analysis-level) *)
-Theorem fn_cfg_edge_succs[local]:
-  !fn a b. wf_function fn /\ fn_cfg_edge fn a b ==>
-    MEM b (cfg_succs_of (cfg_analyze fn) a)
-Proof
-  rw[fn_cfg_edge_def] >>
-  irule bb_succs_in_cfg_succs >> gvs[wf_function_def]
-QED
-
 
 (* Helper: fn_cfg_edge target has a block *)
 Theorem fn_cfg_edge_target_block[local]:
@@ -396,14 +266,6 @@ Proof
       first_x_assum drule_all >> strip_tac >>
       qexists_tac `suffix` >> simp[] >>
       Cases_on `suffix` >> gvs[listTheory.LAST_DEF])
-QED
-
-(* Helper: reachability extends by one cfg edge *)
-Theorem fn_reachable_step[local]:
-  !fn a b. fn_reachable fn a /\ fn_cfg_edge fn a b ==> fn_reachable fn b
-Proof
-  rw[fn_reachable_def] >> qexists_tac `entry` >> simp[] >>
-  metis_tac[relationTheory.RTC_RTC, relationTheory.RTC_SINGLE]
 QED
 
 (* Helper: reachable node along path from reachable start *)
@@ -539,7 +401,7 @@ Proof
   `MEM p (cfg_analyze fn).cfg_dfs_pre` by
     (irule fn_reachable_in_cfg_dfs_pre >> simp[]) >>
   `MEM x (cfg_succs_of (cfg_analyze fn) p)` by
-    (irule fn_cfg_edge_succs >> simp[]) >>
+    (irule fn_cfg_edge_cfg_succs >> simp[]) >>
   (* v live at x entry → v live at p exit (cross-block) *)
   `MEM v (live_vars_at (liveness_analyze fn) p
                        (LENGTH p_bb.bb_instructions))` by (

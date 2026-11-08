@@ -8,7 +8,7 @@
 
 Theory codegenReadyCompute
 Ancestors
-  stackPlanGen dominatorProofs dominatorDefs cfgAnalysisProps
+  venomExecProofs stackPlanGen dominatorProofs dominatorDefs cfgAnalysisProps
   simplifyCfgCompute venomExecProps venomWf venomInst cfgTransform cfgDefs
   passSharedDefs fcgDefs relation rich_list cfgCorrectnessProof
 
@@ -86,51 +86,6 @@ Proof
   gvs[is_fn_path_def, listTheory.LRC_def]
 QED
 
-Theorem is_fn_path_rtc_compute:
-  !fn path. is_fn_path fn path /\ path <> [] ==>
-    (fn_cfg_edge fn)^* (HD path) (LAST path)
-Proof
-  Induct_on `path` >> simp[is_fn_path_def] >>
-  rpt strip_tac >> Cases_on `path` >> gvs[is_fn_path_def] >>
-  irule (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES)) >>
-  qexists_tac `h'` >> simp[]
-QED
-
-Theorem rtc_to_fn_path_compute:
-  !fn x y. (fn_cfg_edge fn)^* x y ==>
-    ?path. is_fn_path fn path /\ path <> [] /\
-           HD path = x /\ LAST path = y
-Proof
-  gen_tac >> ho_match_mp_tac relationTheory.RTC_INDUCT >> rw[]
-  >- (qexists_tac `[x]` >> simp[is_fn_path_def])
-  >- (qexists_tac `x::path` >> Cases_on `path` >> gvs[is_fn_path_def])
-QED
-
-Theorem is_fn_path_prefix_compute:
-  !fn path d. is_fn_path fn path /\ MEM d path ==>
-    ?pre. is_fn_path fn (pre ++ [d]) /\ HD (pre ++ [d]) = HD path
-Proof
-  Induct_on `path` >> simp[] >> rpt strip_tac >> gvs[]
-  >- (qexists_tac `[]` >> simp[is_fn_path_def])
-  >- (Cases_on `path` >> gvs[is_fn_path_def]
-      >- (qexists_tac `[h]` >> simp[is_fn_path_def])
-      >- (first_x_assum (qspecl_then [`fn`, `d`] mp_tac) >> simp[] >>
-          strip_tac >> qexists_tac `h::pre` >>
-          Cases_on `pre` >> gvs[is_fn_path_def]))
-QED
-
-Theorem fn_dominates_dom_reachable_compute:
-  !fn d n. fn_dominates fn d n ==> fn_reachable fn d
-Proof
-  rw[fn_dominates_def, fn_reachable_def] >>
-  qexists_tac `entry` >> simp[] >>
-  drule rtc_to_fn_path_compute >> strip_tac >>
-  `MEM d path` by (first_x_assum irule >> simp[] >> metis_tac[]) >>
-  drule_all is_fn_path_prefix_compute >> strip_tac >>
-  drule is_fn_path_rtc_compute >>
-  simp[listTheory.APPEND_eq_NIL]
-QED
-
 (* The executable dominator analysis is extensionally equal to the original
  * all-paths definition on well-formed functions. *)
 Theorem fn_dominates_cfg_analyze:
@@ -155,7 +110,7 @@ Proof
         metis_tac[fn_reachable_cfg_analyze, fn_dominates_def] >>
       conj_tac >- simp[] >>
       `fn_reachable fn d` by
-        metis_tac[fn_dominates_dom_reachable_compute] >>
+        metis_tac[fn_dominates_dom_reachable] >>
       `cfg_reachable_of (cfg_analyze fn) d` by
         metis_tac[fn_reachable_cfg_analyze] >>
       `MEM d (fn_labels fn)` by
