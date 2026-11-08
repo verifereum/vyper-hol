@@ -1,6 +1,6 @@
 Theory algebraicOptRangeLocalProofs
 Ancestors
-  algebraicOptDefs venomExecSemantics exprSimArith
+  algebraicOptDefs venomExecSemantics intBits vyperValueOperation
 
 Theorem ao_range_comparison_bounds:
   !r w signed. ao_range_valid_for_cmp r signed /\ in_range r w ==>
@@ -40,6 +40,75 @@ Proof
   intLib.COOPER_TAC
 QED
 
+Theorem word_i2w_neg[local]:
+  -(i2w b : 'a word) = i2w (-b)
+Proof
+  `i2w (-b) + i2w b = 0w : 'a word` by (
+    rewrite_tac[integer_wordTheory.word_i2w_add] >>
+    `(-b + b : int) = 0` by intLib.COOPER_TAC >>
+    pop_assum (fn th => rewrite_tac[th]) >>
+    simp[integer_wordTheory.i2w_def]) >>
+  fs[wordsTheory.WORD_SUM_ZERO]
+QED
+
+Theorem word_i2w_sub[local]:
+  i2w a - i2w b = i2w (a - b) : 'a word
+Proof
+  rewrite_tac[wordsTheory.word_sub_def, integerTheory.int_sub] >>
+  rewrite_tac[GSYM integer_wordTheory.word_i2w_add, word_i2w_neg]
+QED
+
+Theorem i2w_signed_int_mod_sign_extend[local]:
+  !j x. j <= 30 ==>
+        (integer_word$i2w (signed_int_mod (8 * (j + 1)) x) : bytes32) =
+        sign_extend (n2w j) (integer_word$i2w x)
+Proof
+  rpt strip_tac >>
+  `fcp$dimindex (:256) = 256` by simp[fcpLib.INDEX_CONV ``fcp$dimindex(:256)``] >>
+  `w2n (n2w j : bytes32) = j` by simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  simp[sign_extend_def, signed_int_mod_def] >>
+  qabbrev_tac `b = 8 * (j + 1)` >>
+  `0 < b /\ b < 256 /\ 8 * j + 7 = b - 1 /\ 8 * j + 8 = b` by
+    simp[Abbr `b`] >>
+  asm_rewrite_tac[] >>
+  `(1w:bytes32) << b - 1w = n2w (2 ** b - 1)` by
+    (`(1w:bytes32) << b = n2w (2 ** b)` by simp[wordsTheory.word_lsl_n2w] >>
+     simp[wordsTheory.n2w_sub]) >>
+  `(integer_word$i2w x >>> (b - 1) && 1w = (1w:bytes32)) <=>
+   (integer_word$i2w x : bytes32) ' (b - 1)` by
+    (irule lsr_and_1 >> simp[]) >>
+  asm_rewrite_tac[] >>
+  `(integer_word$i2w (x % &(2 ** b)) : bytes32) =
+   integer_word$i2w x && n2w (2 ** b - 1)` by
+    (irule i2w_mod_pow2 >> simp[]) >>
+  `0 <= x % &(2 ** b) /\ x % &(2 ** b) < &(2 ** b)` by
+    (mp_tac (Q.SPECL [`x`, `&(2 ** b)`] integerTheory.INT_MOD_BOUNDS) >> simp[]) >>
+  qabbrev_tac `rm = x % &(2 ** b)` >>
+  `?tn. rm = &tn` by metis_tac[integerTheory.NUM_POSINT_EXISTS] >>
+  `tn < 2 ** b` by fs[] >>
+  qpat_x_assum `integer_word$i2w rm = _` mp_tac >>
+  asm_rewrite_tac[integer_wordTheory.i2w_pos] >> strip_tac >>
+  `(integer_word$i2w x : bytes32) ' (b - 1) =
+   (integer_word$i2w x && n2w (2 ** b - 1) : bytes32) ' (b - 1)` by
+    simp[wordsTheory.word_and_def, fcpTheory.FCP_BETA,
+         wordsTheory.word_index, bitTheory.BIT_EXP_SUB1] >>
+  `(n2w tn : bytes32) ' (b - 1) <=> 2 ** (b - 1) <= tn` by
+    (simp[wordsTheory.word_index] >> irule bit_top >> simp[]) >>
+  `(integer_word$i2w x : bytes32) ' (b - 1) <=> 2 ** (b - 1) <= tn` by
+    (qpat_x_assum `integer_word$i2w x ' _ <=> (_ && _) ' _` SUBST1_TAC >>
+     qpat_x_assum `n2w tn = _` (SUBST1_TAC o SYM) >> asm_rewrite_tac[]) >>
+  `&tn >= (&(2 ** (b - 1)) : int) <=> 2 ** (b - 1) <= tn` by
+    simp[integerTheory.INT_GE, integerTheory.INT_LE] >>
+  qpat_assum `&tn >= _ <=> _` (fn th1 =>
+    qpat_assum `integer_word$i2w x ' _ <=> 2 ** _ <= tn` (fn th2 =>
+      ONCE_REWRITE_TAC [th1, th2])) >>
+  Cases_on `2 ** (b - 1) <= tn` >> pure_asm_rewrite_tac[COND_CLAUSES]
+  >- (REWRITE_TAC[GSYM word_i2w_sub, integer_wordTheory.i2w_pos] >>
+      qpat_x_assum `n2w tn = _` SUBST1_TAC >> irule neg_mask >> simp[]) >>
+  REWRITE_TAC[integer_wordTheory.i2w_pos] >>
+  qpat_x_assum `n2w tn = _` ACCEPT_TAC
+QED
+
 Theorem ao_sign_extend_within:
   !n x. n < 31 /\
     -&(2 ** (8 * (n + 1) - 1)) <= w2i x /\
@@ -49,11 +118,11 @@ Proof
   rpt strip_tac >>
   qabbrev_tac `m = 8 * (n + 1)` >>
   `0 < m` by simp[Abbr `m`] >>
-  `2 ** m = 2 * 2 ** (m - 1)` by
+  `2n ** m = 2n * 2n ** (m - 1)` by
     (`m = SUC (m - 1)` by simp[] >> pop_assum SUBST1_TAC >> simp[arithmeticTheory.EXP]) >>
-  `&(2 ** m) = 2 * &(2 ** (m - 1)) : int` by
+  `&(2n ** m) = 2 * &(2n ** (m - 1)) : int` by
     asm_rewrite_tac[GSYM integerTheory.INT_MUL] >>
-  qpat_x_assum `2 ** m = _` kall_tac >>
+  qpat_x_assum `2n ** m = _` kall_tac >>
   `0 < &(2 ** (m - 1)) : int` by simp[] >>
   qabbrev_tac `H = &(2 ** (m - 1)) : int` >>
   `signed_int_mod m (w2i x) = w2i x` by
@@ -73,6 +142,8 @@ QED
 Theorem ao_sign_extend_large:
   !n x. 31w <=+ n ==> sign_extend n x = x
 Proof
-  simp[wordsTheory.WORD_LS, wordsTheory.dimword_def, sign_extend_def] >> rpt strip_tac >>
+  simp[wordsTheory.WORD_LS, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``fcp$dimindex(:256)``, sign_extend_def] >>
+  rpt strip_tac >>
   `30 < w2n n` by decide_tac >> simp[]
 QED

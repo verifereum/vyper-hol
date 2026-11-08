@@ -50,7 +50,7 @@ Proof
   Cases_on `tail` >> gvs[ao_opt_and_def] >>
   Cases_on `lit_eq b (0w - 1w)` >> gvs[] >>
   Cases_on `lit_eq a 0w \/ lit_eq b 0w` >> gvs[] >>
-  gvs (local_opcode_eqs [``AND``, ``ASSIGN``]) >>
+  gvs (local_opcode_eqs [``venomInst$AND``, ``venomInst$ASSIGN``]) >>
   gvs[exec_pure2_def, AllCaseEqs()] >>
   gvs[passSharedDefsTheory.lit_eq_def, AllCaseEqs()] >>
   Cases_on `a` >> Cases_on `b` >>
@@ -76,19 +76,19 @@ Proof
   Cases_on `tail` >> gvs[ao_opt_addsub_def] >>
   Cases_on `(inst.inst_opcode = SUB \/ inst.inst_opcode = XOR) /\ a = b`
   >- (gvs[ao_opt_addsub_def] >>
-      gvs (local_opcode_eqs [``SUB``, ``XOR``, ``ASSIGN``]) >>
+      gvs (local_opcode_eqs [``venomInst$SUB``, ``venomInst$XOR``, ``venomInst$ASSIGN``]) >>
       gvs[exec_pure2_def, AllCaseEqs(), exec_pure1_def, eval_operand_def,
           wordsTheory.WORD_SUB_REFL, wordsTheory.WORD_XOR_CLAUSES]) >>
   Cases_on `lit_eq b 0w`
   >- (gvs[ao_opt_addsub_def] >>
-      gvs (local_opcode_eqs [``ADD``, ``SUB``, ``XOR``, ``ASSIGN``]) >>
+      gvs (local_opcode_eqs [``venomInst$ADD``, ``venomInst$SUB``, ``venomInst$XOR``, ``venomInst$ASSIGN``]) >>
       gvs[exec_pure2_def, AllCaseEqs()] >>
       Cases_on `b` >>
       gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, exec_pure1_def,
           wordsTheory.WORD_XOR_CLAUSES]) >>
   Cases_on `inst.inst_opcode = SUB /\ lit_eq a (0w - 1w)`
   >- (gvs[ao_opt_addsub_def, wordsTheory.WORD_SUB_LZERO] >>
-      gvs (local_opcode_eqs [``SUB``, ``NOT``]) >>
+      gvs (local_opcode_eqs [``venomInst$SUB``, ``venomInst$NOT``]) >>
       gvs[exec_pure2_def, AllCaseEqs()] >>
       Cases_on `a` >>
       gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, exec_pure1_def,
@@ -96,7 +96,7 @@ Proof
       simp[wordsTheory.WORD_NOT]) >>
   Cases_on `inst.inst_opcode = XOR /\ lit_eq b (0w - 1w)`
   >- (gvs[ao_opt_addsub_def, wordsTheory.WORD_SUB_LZERO] >>
-      gvs (local_opcode_eqs [``XOR``, ``NOT``]) >>
+      gvs (local_opcode_eqs [``venomInst$XOR``, ``venomInst$NOT``]) >>
       gvs[exec_pure2_def, AllCaseEqs()] >>
       Cases_on `b` >>
       gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, exec_pure1_def,
@@ -119,7 +119,7 @@ Proof
   Cases_on `lit_eq b 1w` >> gvs[] >>
   Cases_on `lit_eq a 1w` >> gvs[] >>
   Cases_on `lit_eq a 0w` >> gvs[] >>
-  gvs (local_opcode_eqs [``Exp``, ``ASSIGN``, ``ISZERO``]) >>
+  gvs (local_opcode_eqs [``venomInst$Exp``, ``venomInst$ASSIGN``, ``venomInst$ISZERO``]) >>
   gvs[exec_pure2_def, AllCaseEqs()] >>
   Cases_on `a` >> Cases_on `b` >>
   gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, AllCaseEqs()] >>
@@ -141,12 +141,12 @@ Theorem ao_opt_or_correct:
       (w = v \/ (ao_all_truthy dfg inst /\ w = 1w /\ v <> 0w))
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs (local_opcode_eqs [``OR``]) >>
+  gvs (local_opcode_eqs [``venomInst$OR``]) >>
   gvs[exec_pure2_def, AllCaseEqs()] >>
   rename1 `inst.inst_operands = [a; b]` >>
   Cases_on `lit_eq b (0w - 1w)`
   >- (gvs[ao_opt_or_def] >>
-      gvs (local_opcode_eqs [``ASSIGN``]) >>
+      gvs (local_opcode_eqs [``venomInst$ASSIGN``]) >>
       Cases_on `b` >>
       gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def] >>
       qexistsl [`-1w`, `-1w`] >>
@@ -155,7 +155,7 @@ Proof
            wordsTheory.WORD_OR_CLAUSES]) >>
   Cases_on `ao_all_truthy dfg inst /\ is_lit_op b /\ ~lit_eq b 0w`
   >- (gvs[ao_opt_or_def] >>
-      gvs (local_opcode_eqs [``ASSIGN``]) >>
+      gvs (local_opcode_eqs [``venomInst$ASSIGN``]) >>
       Cases_on `b` >>
       gvs[passSharedDefsTheory.lit_eq_def, passSharedDefsTheory.is_lit_op_def,
           eval_operand_def] >>
@@ -168,12 +168,12 @@ Proof
       qexistsl [`word_or v1 c`, `1w`] >> simp[]) >>
   Cases_on `lit_eq b 0w`
   >- (gvs[ao_opt_or_def] >>
-      gvs (local_opcode_eqs [``ASSIGN``]) >>
+      gvs (local_opcode_eqs [``venomInst$ASSIGN``]) >>
       Cases_on `b` >>
       gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def] >>
       gvs[exec_pure1_def, wordsTheory.WORD_OR_CLAUSES] >> metis_tac[]) >>
   gvs[ao_opt_or_def] >>
-  gvs (local_opcode_eqs [``OR``]) >>
+  gvs (local_opcode_eqs [``venomInst$OR``]) >>
   gvs[exec_pure2_def] >> metis_tac[]
 QED
 
@@ -332,7 +332,7 @@ Proof
   Cases_on `tail` >> gvs[ao_opt_muldiv_def] >>
   Cases_on `lit_eq a 0w \/ lit_eq b 0w`
   >- (gvs[ao_opt_muldiv_def] >>
-      gvs (local_opcode_eqs [``MUL``, ``Div``, ``SDIV``, ``Mod``, ``SMOD``, ``ASSIGN``]) >>
+      gvs (local_opcode_eqs [``venomInst$MUL``, ``venomInst$Div``, ``venomInst$SDIV``, ``venomInst$Mod``, ``venomInst$SMOD``, ``venomInst$ASSIGN``]) >>
       gvs[exec_pure2_def, AllCaseEqs()] >>
       gvs[passSharedDefsTheory.lit_eq_def, AllCaseEqs()] >>
       Cases_on `a` >> Cases_on `b` >>
@@ -340,7 +340,7 @@ Proof
           ao_safe_arithmetic_zero_one]) >>
   Cases_on `lit_eq b 1w`
   >- (gvs[ao_opt_muldiv_def] >>
-      gvs (local_opcode_eqs [``MUL``, ``Div``, ``SDIV``, ``Mod``, ``SMOD``, ``ASSIGN``]) >>
+      gvs (local_opcode_eqs [``venomInst$MUL``, ``venomInst$Div``, ``venomInst$SDIV``, ``venomInst$Mod``, ``venomInst$SMOD``, ``venomInst$ASSIGN``]) >>
       gvs[exec_pure2_def, AllCaseEqs()] >>
       Cases_on `b` >>
       gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def,
@@ -348,8 +348,8 @@ Proof
   Cases_on `b` >> gvs[ao_opt_muldiv_def, passSharedDefsTheory.lit_eq_def] >>
   rename1 `inst.inst_operands = [a; Lit w]` >>
   Cases_on `is_power_of_two w` >> gvs[] >>
-  gvs (local_opcode_eqs [``MUL``, ``Div``, ``SDIV``, ``Mod``, ``SMOD``,
-                         ``SHL``, ``SHR``, ``AND``]) >>
+  gvs (local_opcode_eqs [``venomInst$MUL``, ``venomInst$Div``, ``venomInst$SDIV``, ``venomInst$Mod``, ``venomInst$SMOD``,
+                         ``SHL``, ``SHR``, ``venomInst$AND``]) >>
   gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
   simp[ao_power_of_two_mul, ao_power_of_two_div, ao_power_of_two_mod])
 QED
@@ -371,7 +371,7 @@ Proof
   Cases_on `a` >> gvs[ao_opt_signextend_def] >>
   rename1 `inst.inst_operands = [Lit n;b]` >>
   Cases_on `31w <=+ n`
-  >- (gvs[] >> gvs (local_opcode_eqs [``SIGNEXTEND``, ``ASSIGN``]) >>
+  >- (gvs[] >> gvs (local_opcode_eqs [``venomInst$SIGNEXTEND``, ``venomInst$ASSIGN``]) >>
       gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
       simp[exec_pure1_def, ao_sign_extend_large]) >>
   gvs[wordsTheory.WORD_LS, wordsTheory.dimword_def] >>
@@ -380,7 +380,7 @@ Proof
               -&(2 ** (8 * (w2n n + 1) - 1)) /\
             vr_hi (range_get_range ra lbl idx b) <=
               &(2 ** (8 * (w2n n + 1) - 1)) - 1` >> gvs[] >>
-  gvs (local_opcode_eqs [``SIGNEXTEND``, ``ASSIGN``]) >>
+  gvs (local_opcode_eqs [``venomInst$SIGNEXTEND``, ``venomInst$ASSIGN``]) >>
   gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
   first_x_assum (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
   `sign_extend n v2 = v2` by
