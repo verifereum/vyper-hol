@@ -8,13 +8,13 @@ Libs
   evalCompilerBytecodeLib finite_mapLib computeLib wordsLib cv_transLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../../lowering/defs/bytecode/create-builtins/oracle"]
+val () = holbuild_extra_deps ["../../bytecode/create-builtins/oracle"]
 val () = computeLib.upd_compset finite_mapLib.add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
 
 val compiled = memoryStoreWitnessLib.evaluate
-  "../../lowering/defs/bytecode/create-builtins/oracle" "cb01_blueprint"
+  "../../bytecode/create-builtins/oracle" "cb01_blueprint"
 val _ = save_thm ("create_blueprint_compiled", #evaluation compiled)
 val runtime = #2 (pairSyntax.dest_pair
   (optionSyntax.dest_some (rhs (concl (#evaluation compiled)))))
