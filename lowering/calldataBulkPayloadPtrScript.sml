@@ -1,10 +1,11 @@
 (* Ghost frame for the payload-copy instruction; independent of the ABI type. *)
 Theory calldataBulkPayloadPtr
-Ancestors calldataDecodePtr decoderNavigationPtr calldataBulkLive
+Ancestors calldataDecodePtr decoderRawEndpointPtr calldataBulkLive
   bodyPtrDefs ptrDiscipline venomInst venomState finite_map pred_set
   decoderGhostFramePtr emitHelperProps fragExec venomExecSemantics
   codegenRel contextCodegenRel ptrSafeRun compileEnv emitHelper list arithmetic
-  exprLoweringProps
+  exprLoweringProps abiDecoderBulk words abiDecoderComposition decoderArraySetupPtr
+  instIdxIndep
 
 Theorem calldatacopy_ghost_frame:
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -97,3 +98,4 @@ Proof
   >- fs[ptr_covers_def] >>
   first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
+
