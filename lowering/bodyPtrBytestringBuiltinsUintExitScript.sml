@@ -6,7 +6,7 @@ Ancestors
   bodyPtrBytestringBuiltinsUintGhost exprSimUint2Str
   fragGasPathPtr fragGasSeqPtr typedCopyPtr ptrDiscipline ptrSafeRun
   venomInst venomState venomExecSemantics finite_map words list rich_list
-  codegenRel contextCodegenRel bodyPtrDefs
+  codegenRel contextCodegenRel bodyPtrDefs wordLoadStorePtr
 
 Theorem u2s_final_address_counted_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\

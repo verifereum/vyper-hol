@@ -3,7 +3,7 @@ Ancestors
   bodyPtrBytestringBuiltinsUintGhost exprSimPtrProps bodyPtrAttributeAdd
   bodyPtrDefs exprSimUint2Str codegenRel contextCodegenRel
   ptrDiscipline venomState finite_map words venomExecSemantics
-  typedCopyPtr stmtFragPtr
+  typedCopyPtr stmtFragPtr wordLoadStorePtr
 
 (* This abbreviation packages the repeated loop-boundary ghost conjunction.
    Transient registers and allocated padding are deliberately unconstrained;

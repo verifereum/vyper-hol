@@ -363,6 +363,7 @@ Theorem compile_slice_calldata_success_posts:
   ghost_inv d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
   ~is_word_type (expr_type e) /\
   val_wf (BaseTV (BytesT (Dynamic bound)))
@@ -484,7 +485,7 @@ Theorem memory_vv_post_end_gas_obs[local]:
   vv_post ctx fn cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue ty <|ptr_operand := op; ptr_location := LocMemory|>) s
 Proof
-  simp[vv_post_def, vv_holds_def, vv_at_def, read_result_def,
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, read_result_def,
     vyperStateTheory.return_def]
 QED
 
@@ -513,6 +514,7 @@ Theorem compile_slice_calldata_source_outcome:
   ghost_inv d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic bound))) /\
   ~is_word_type (expr_type e) /\
   val_wf (BaseTV (BytesT (Dynamic bound))) (BytesV (TAKE n (DROP a bs))) /\

@@ -1,7 +1,7 @@
 Theory bodyPtrBytestringBuiltinsUintGhost
 Ancestors
   bodyPtrBytestringBuiltinsUintArithmetic bodyPtrBytestringBuiltinsCalldataCopy
-  typedCopyPtr immutableMemoryFrame bodyPtrDefs ptrDiscipline
+  typedCopyPtr immutableMemoryFrame bodyPtrDefs ptrDiscipline wordLoadStorePtr
   venomState venomInst finite_map byte words codegenRel
   exprSimPtrLiteralBuffer exprSimUint2Str loweringPosts valueEncoding
 

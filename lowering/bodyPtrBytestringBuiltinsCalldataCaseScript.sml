@@ -249,7 +249,7 @@ Theorem calldata_slice_body_expr_ptr_ok:
       body_exprs_ptr_ok cx args) ==>
     body_expr_ptr_ok cx (Builtin ann (CalldataSlice n) args)
 Proof
-  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >>
   rpt gen_tac >> strip_tac >>
   drule_all calldata_slice_body_operand_ptr >>
   disch_then (qspecl_then [`func`, `d`, `PG`] strip_assume_tac) >> gvs[] >>
@@ -265,6 +265,9 @@ Proof
   simp[calldata_slice_code_appends] >>
   reverse conj_tac >- metis_tac[calldata_slice_compile_cut] >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_word >> simp[is_word_type_def]) >>
+  gvs[] >>
   qpat_assum `expr_type e = _` (fn th => rewrite_tac[GSYM th]) >>
   irule calldata_slice_eval_continuation >> goal_assum (drule_at Any) >>
   simp[dimword_def] >> metis_tac[]

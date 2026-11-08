@@ -135,6 +135,9 @@ Proof
     metis_tac[not_fresh_at_mono] >>
   `op_prov G op = NONE /\ op_taint tn op = {}` by
     fs[ptr_val_ok_def, is_word_type_def] >>
+  `post_value_type cenv (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) =
+   expr_type (Builtin (BaseT (StringT n)) (Uint2Str n) [e])` by
+    simp[loweringPostsTheory.post_value_type_not_int_call] >>
   drule_all compile_uint2str_counted_ptr >>
   disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
   simp[expr_type_def] >> metis_tac[]
@@ -217,7 +220,7 @@ Theorem uint2str_body_expr_ptr_ok:
       body_exprs_ptr_ok cx args) ==>
     body_expr_ptr_ok cx (Builtin ann (Uint2Str n) args)
 Proof
-  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> disch_tac >> simp[body_expr_ptr_ok_def] >>
   rpt gen_tac >> strip_tac >>
   drule_all uint2str_body_operand_ptr >>
   disch_then (qspecl_then [`func`, `d`, `ty`, `PG`] strip_assume_tac) >> gvs[] >>
@@ -232,6 +235,9 @@ Proof
   simp[uint2str_code_appends] >>
   reverse conj_tac >- metis_tac[uint2str_compile_cut] >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_word >> simp[is_word_type_def]) >>
+  gvs[] >>
   qpat_assum `expr_type e = _` (fn th => rewrite_tac[GSYM th]) >>
   irule uint2str_eval_continuation >> goal_assum (drule_at Any) >>
   simp[] >> metis_tac[]

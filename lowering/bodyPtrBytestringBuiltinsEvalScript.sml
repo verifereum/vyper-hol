@@ -35,8 +35,8 @@ Theorem expr_sim_ptr_eval_suffix:
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
     ghost_inv d cenv cx ee G tn t /\
-    ptr_val_ok cx (expr_type e) v op G tn t /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+    ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     (?marks ee0. ee = ee0 with gas_obs := [] /\
@@ -87,8 +87,8 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
     ghost_inv d cenv cx ee G tn t /\
-    ptr_val_ok cx (expr_type e) v x G tn t /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G t) /\
+    ptr_val_ok cx (post_value_type cenv e) v x G tn t /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     (?marks ee0. ee = ee0 with gas_obs := [] /\

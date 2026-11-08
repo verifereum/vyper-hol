@@ -73,6 +73,7 @@ Theorem u2s_result_vv_post:
   inst.inst_id = sa.cs_next_id /\
   u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst sr t /\
   wb_frame cenv es sa s t /\
+  post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v addr t.vs_memory /\

@@ -17,6 +17,7 @@ Theorem compile_uint2str_counted_ptr:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   eval_operand op s = SOME (n2w X) /\ op_prov G op = NONE /\ op_taint tn op = {} /\
   X < dimword(:256) /\ 78 <= n /\ 32 <= sz /\ sz+n < dimword(:256) /\
+  post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)) /\
   type_memory_bytes cenv (lowered_value_type cenv e) =

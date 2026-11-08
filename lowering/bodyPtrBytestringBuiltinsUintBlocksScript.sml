@@ -2,7 +2,7 @@ Theory bodyPtrBytestringBuiltinsUintBlocks
 Ancestors
   bodyPtrBytestringBuiltinsUintGhost bodyPtrBytestringBuiltinsBounds
   fragGasSeqPtr fragGasPathPtr gasCount ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
-  venomExecProofs exprSimPtrProps bodyPtrDefs wordArgsPtr compileEnv
+  venomExecProofs exprSimPtrProps bodyPtrDefs wordArgsPtr compileEnv wordLoadStorePtr
   venomExecSemantics venomInst venomState finite_map exprSimUint2Str fragExec exprLoweringProps words list rich_list typedCopyPtr fragExecPtr
 
 Theorem uint_scalar_inst_check:

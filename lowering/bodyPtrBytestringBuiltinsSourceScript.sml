@@ -5,7 +5,7 @@ Ancestors
   bodyPtrBytestringBuiltinsBuffer exprSimPtrProps builtinBytes
   emitHelper compileEnv exprLoweringProps bodyPtrDefs venomState venomInstProofs
   finite_map fragExec freshWrites fragGasPathPtr typedCopyPtr bodyPtrAttributeAdd
-  ptrDiscipline venomInst emitHelperProps fragExecPtr valueEncodingProps
+  ptrDiscipline venomInst emitHelperProps fragExecPtr valueEncodingProps wordLoadStorePtr
 
 Theorem compile_bytestring_src_parts:
   compile_bytestring_src src sa = ((len,data),sb) ==>
