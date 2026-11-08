@@ -90,7 +90,9 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_case_ptr,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case_ptr,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case_ptr,
-    (* 36 *) MATCH_ACCEPT_TAC body_builtin_case_ptr,
+    (* 36 *) rpt strip_tac >> irule body_builtin_case_ptr >> conj_tac
+               >- (rpt strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+                   metis_tac[]) >> metis_tac[],
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case_ptr,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case_ptr,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case_ptr,
