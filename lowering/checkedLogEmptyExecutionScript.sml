@@ -19,6 +19,7 @@ Theorem checked_compile_log_empty_execution:
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
     ~cx.txn.is_static /\ ~before.vs_call_ctx.cc_static /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     type_stmt env ret (Log event_id exprs) = SOME env' /\
     cenv.ce_event_info (nsid_to_string event_id) = SOME (sig_hash,fts,flags) /\
     compile_log_eval_all cenv exprs cs = (args,eval_cut) /\

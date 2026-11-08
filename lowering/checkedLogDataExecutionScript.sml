@@ -181,6 +181,7 @@ Theorem checked_compile_saved_log_statement:
   log_statement_resources cenv es.scopes eval_cut topic_cut packed_cut encoder_start encoder_end
     data_capacity capacity lo top (TupleTV (select_log_args F flags ftvs)) ss /\
   ss.vs_current_bb = eval_cut.cs_current_bb /\ ss.vs_inst_idx = LENGTH eval_cut.cs_current_insts /\ ~ss.vs_halted/\
+  (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
   ~ss.vs_call_ctx.cc_static ==>
   ?out ev.
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
@@ -361,6 +362,7 @@ Theorem checked_compile_log_data_execution:
   cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   ~cx.txn.is_static /\ ~before.vs_call_ctx.cc_static /\
+  (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
   type_stmt env ret (Log event_id exprs) = SOME env' /\
   cenv.ce_event_info (nsid_to_string event_id) = SOME (sig_hash,fts,flags) /\
   compile_log_eval_all cenv exprs begin = (args,eval_cut) /\
