@@ -5,6 +5,8 @@ Ancestors
   context compileEnv abiTupleProps emitHelper emitHelperProps exprLoweringProps exprLowering
   fragExec venomInst list rich_list arithmetic intCallCallee
   stmtSimLogExecFields exprSimAbiEncodeSemantic exprSimAbiEncodeMemoryLength
+  ctorAbiActualAlloc exprSimCopy exprSimStorageCopy abiDecoderReservation venomState
+  exprSimAlloc abiDecoderContract
 
 Theorem abi_encode_tuple_slot_opcodes:
   compile_abi_tuple_slot ce buf off op ty st = ((),final) ==>
@@ -105,4 +107,110 @@ Proof
       fs[EVERY_MEM] >> first_x_assum drule >> strip_tac >> simp[]) >>
   irule abi_encode_leaf_sequence_memory_length >> goal_assum (drule_at Any) >>
   fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem abi_encode_tuple_slot_outputs:
+  compile_abi_tuple_slot ce buf off op ty st = ((),final) ==>
+  EVERY (\i. EVERY (\x. ~not_fresh_at st x) i.inst_outputs) (emitted_insts st final)
+Proof
+  Cases_on `is_word_type ty` >> Cases_on `type_memory_bytes ce ty` >>
+  asm_simp_tac (srw_ss()) [compile_abi_tuple_slot_def, compile_copy_memory_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
+    fresh_var_def, fresh_id_def, emit_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, not_fresh_at_def]
+QED
+
+Theorem abi_encode_tuple_store_outputs:
+  !xs ce buf off st final.
+  compile_store_abi_tuple ce buf off xs st = ((),final) ==>
+  EVERY (\i. EVERY (\x. ~not_fresh_at st x) i.inst_outputs) (emitted_insts st final)
+Proof
+  Induct >- simp[compile_store_abi_tuple_def, comp_return_def, emitted_insts_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp_tac bool_ss [abi_tuple_encode_store_cons, comp_ignore_bind_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `compile_abi_tuple_slot ce buf off h0 h1 st = ((),middle)` >>
+  drule abi_tuple_encode_slot_shape >> strip_tac >>
+  drule abi_tuple_encode_store_shape >> strip_tac >>
+  `emitted_insts st final = emitted_insts st middle ++ emitted_insts middle final` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  asm_rewrite_tac [EVERY_APPEND] >> conj_tac
+  >- (drule abi_encode_tuple_slot_outputs >> simp[]) >>
+  `EVERY (\i. EVERY (\x. ~not_fresh_at middle x) i.inst_outputs)
+     (emitted_insts middle final)` by (first_x_assum irule >> metis_tac[]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!i. MEM i (emitted_insts middle final) ==> _` drule >>
+  disch_then drule >> simp[not_fresh_at_def] >>
+  qpat_x_assum `not_fresh_at st x` mp_tac >> simp[not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem abi_encode_tuple_store_lookup:
+  compile_store_abi_tuple ce buf off xs st = ((),final) /\
+  run_inst_seq (emitted_insts st final) s = OK actual ==>
+  !x. not_fresh_at st x ==> lookup_var x actual = lookup_var x s
+Proof
+  strip_tac >> drule abi_tuple_encode_store_shape >> strip_tac >>
+  drule abi_encode_tuple_store_outputs >> strip_tac >> gen_tac >> strip_tac >>
+  irule ctor_actual_sequence_var_frame >> goal_assum (drule_at Any) >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem abi_encode_tuple_store_static:
+  compile_store_abi_tuple ce buf off xs st = ((),final) /\
+  run_inst_seq (emitted_insts st final) s = OK actual ==>
+  copy_static actual = copy_static s
+Proof
+  strip_tac >> drule abi_encode_tuple_store_opcodes >> strip_tac >>
+  drule abi_tuple_encode_store_shape >> strip_tac >>
+  `log_encode_external actual = log_encode_external s` by
+    (irule log_encode_run_external >> goal_assum (drule_at Any) >>
+     fs[EVERY_MEM, log_encode_safe_opcode_def] >> metis_tac[]) >>
+  `actual.vs_allocas = s.vs_allocas /\ actual.vs_alloca_next = s.vs_alloca_next` by
+    (irule abi_decode_sequence_allocation_frame >> goal_assum (drule_at Any) >>
+     fs[EVERY_MEM] >> gen_tac >> strip_tac >>
+     qpat_x_assum `!i. MEM i (emitted_insts st final) ==> _ \/ _ \/ _` drule >>
+     strip_tac >> simp[is_alloca_op_def]) >>
+  fs[log_encode_external_def, copy_static_def, venom_state_component_equality]
+QED
+
+Theorem abi_encode_tuple_staging_state_rel:
+  compile_alloc_buffer n st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
+  fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  n < dimword (:256) /\
+  run_inst_seq (emitted_insts st staged) s = OK actual /\
+  abi_decode_frame b n s actual /\
+  FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) ==>
+  stmt_state_rel ctx func ce cx es actual
+Proof
+  strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >>
+  disch_then (qx_choose_then `addressed` (qx_choose_then `w` strip_assume_tac)) >>
+  drule abi_tuple_encode_alloc_shape >> strip_tac >>
+  drule abi_tuple_encode_store_shape >> strip_tac >>
+  `emitted_insts st staged = emitted_insts st allocated ++ emitted_insts allocated staged` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `run_inst_seq (emitted_insts allocated staged) addressed = OK actual` by
+    (qpat_x_assum `run_inst_seq (emitted_insts st staged) s = _` mp_tac >>
+     drule run_inst_seq_append >> disch_then (qspec_then `emitted_insts allocated staged` mp_tac) >>
+     asm_rewrite_tac [] >> metis_tac[]) >>
+  drule_all abi_encode_tuple_store_static >> strip_tac >>
+  `actual.vs_allocas = addressed.vs_allocas` by metis_tac[copy_static_fields] >>
+  `b = w2n w` by gvs[] >> gvs[] >>
+  irule copy_buffer_state_rel_frame >>
+  qexistsl [`w2n w`, `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString st.cs_next_var)]`, `addressed`, `allocated`, `n`] >>
+  asm_rewrite_tac [mk_inst_def] >> rpt conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> simp[regions_disjoint_def])
+  >- metis_tac[abi_encode_tuple_store_lookup]
+  >- (fs[abi_decode_frame_def] >> metis_tac[])
+  >- (qpat_x_assum `addressed.vs_memory = s.vs_memory` (fn th => rewrite_tac[GSYM th]) >>
+      irule abi_encode_leaf_sequence_memory_length >>
+      qexists `emitted_insts allocated staged` >> asm_rewrite_tac [] >>
+      drule abi_encode_tuple_store_opcodes >> simp[EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]
 QED
