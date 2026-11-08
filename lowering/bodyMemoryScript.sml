@@ -86,7 +86,7 @@ Proof
      rename1 `code_slice_source bt es = SOME v` >> PairCases_on `v` >>
      `body_exprs_mem_ok cx (TL es)` by metis_tac[] >>
      gvs[vyperInterpreterTheory.code_slice_source_SOME] >>
-     gvs[body_exprs_mem_ok_def, body_acc_code_mem]) >>
+     gvs[body_exprs_mem_ok_def, bodyMemBiAccTheory.body_acc_code_mem]) >>
   qpat_x_assum `!s'' x t v code_ty addr s3 tail_vs t'. _` kall_tac >>
   qpat_x_assum `!s'' x t v code_ty addr. _` kall_tac >>
   qpat_x_assum `!s'' x t. _ /\ code_slice_source bt es = NONE ==> _` kall_tac >>
