@@ -1,6 +1,6 @@
 (* Exact pointer-safe endpoints of passing entry checks. *)
 Theory entryChecksPassPtr
-Ancestors entryPrefixPtr entryChecksPtr entryChecksProps moduleLowering
+Ancestors entryChecksLayout entryPrefixPtr entryChecksPtr entryChecksProps moduleLowering
   ptrSafeRun ptrDiscipline fragExec venomExecSemantics venomInst venomState
   compileEnv emitHelperProps exprLoweringProps codegenRel list finite_map words
   moduleLoweringProps typedCopyArrayPtr entryDispatchPtr contextCodegenRel
@@ -92,3 +92,73 @@ Proof
        source_memory_write_ranges_def, source_memory_read_ranges_def,
        step_inst_non_invoke, step_inst_base_def, mk_inst_def]
 QED
+
+Theorem compile_entry_value_check_ptr_endpoint[local]:
+  compile_entry_checks 4 pay st = ((),st') /\
+  (~pay ==> fn_has_code st st' fn) /\
+  fresh_vars_wrt st s /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  (pay \/ s.vs_call_ctx.cc_callvalue = 0w) ==>
+  ?u G' tn'.
+    vars_pc_only s u /\ fresh_vars_wrt st' u /\ ~u.vs_halted /\
+    u.vs_current_bb = st'.cs_current_bb /\
+    u.vs_inst_idx = LENGTH st'.cs_current_insts /\
+    allocas_from lo u /\ (ctx_has_dalloca ctx ==> allocas_below_fmp u) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u) ==>
+         !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  Cases_on `pay`
+  >- (simp[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+      rpt strip_tac >> gvs[] >> qexistsl_tac [`s`, `G`, `tn`] >> simp[vars_pc_only_refl]) >>
+  strip_tac >> fs[] >> drule_all compile_entry_checks_value_layout >> strip_tac >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst st.cs_next_id CALLVALUE [] [STRING #"%" (toString st.cs_next_var)])` by simp[] >>
+  drule callvalue_ptr_endpoint >> disch_then drule >>
+  disch_then (qspecl_then [`ctx`, `st`, `st with cs_next_var := st.cs_next_var + 1`,
+    `lo`, `PG`, `G`, `tn`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `vars_pc_only s s1` >> rename1 `G1 = step_prov PG G _ _` >>
+  rename1 `op_taint tn1 (Var _) = {}` >>
+  qpat_x_assum `s1 = _` kall_tac >> qpat_x_assum `G1 = _` kall_tac >>
+  qpat_x_assum `tn1 = _` kall_tac >>
+  suspend "iszero"
+QED
+
+Resume compile_entry_value_check_ptr_endpoint[iszero]:
+  `!fuel. step_inst fuel ctx
+    (mk_inst (st.cs_next_id + 1) ISZERO
+      [Var (STRING #"%" (toString st.cs_next_var))]
+      [STRING #"%" (toString (st.cs_next_var + 1))]) s1 =
+    OK (update_var (STRING #"%" (toString (st.cs_next_var + 1))) 1w s1)` by
+    simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def, exec_pure1_def,
+         bool_to_word_def] >>
+  drule dispatch_scalar_update_ptr_endpoint >>
+  disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
+  disch_then (qspecl_then [`st with cs_next_var := st.cs_next_var + 1`,
+    `st'`, `lo`, `PG`, `G1`, `tn1`] mp_tac) >>
+  (impl_tac >- fs[arithmeticTheory.ADD1]) >> strip_tac >>
+  rename1 `vars_pc_only s1 s2` >> rename1 `G2 = step_prov PG G1 _ _` >>
+  rename1 `op_taint tn2 (Var (STRING #"%" (toString (st.cs_next_var + 1)))) = {}` >>
+  qpat_x_assum `s2 = _` kall_tac >> qpat_x_assum `G2 = _` kall_tac >>
+  qpat_x_assum `tn2 = _` kall_tac >>
+  qexistsl_tac [`s2 with vs_inst_idx := SUC s2.vs_inst_idx`, `G2`, `tn2`] >>
+  `vars_pc_only s s2` by metis_tac[vars_pc_only_trans] >>
+  `allocas_from lo (s2 with vs_inst_idx := SUC s2.vs_inst_idx) /\
+   (ctx_has_dalloca ctx ==>
+    allocas_below_fmp (s2 with vs_inst_idx := SUC s2.vs_inst_idx))` by
+    (fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  simp[vars_pc_only_inst_idx, control_moves_keep_vars] >>
+  rpt strip_tac >>
+  `ptr_safe_run D lo fuel ctx fn PG G2 tn2 s2` suffices_by metis_tac[] >>
+  irule assert_pass_ptr_continuation >> simp[] >>
+  qexistsl_tac [`st.cs_next_id + 2`,
+    `Var (STRING #"%" (toString (st.cs_next_var + 1)))`, `1w`] >>
+  fs[arithmeticTheory.ADD1]
+QED
+
+Finalise compile_entry_value_check_ptr_endpoint
