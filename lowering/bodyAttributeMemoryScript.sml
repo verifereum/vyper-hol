@@ -43,7 +43,7 @@ Proof
 QED
 
 (* A field selection reads no gas observation. *)
-Theorem select_attr_gas_obs[local]:
+Theorem select_attr_gas_obs:
   !cx ty tv fld ee tail.
     select_result cx ty tv (AttrSubscript fld) (ee with gas_obs := tail) =
     (FST (select_result cx ty tv (AttrSubscript fld) ee),
