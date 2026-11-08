@@ -188,8 +188,12 @@ Theorem external_call_result_rel_abort_transport[local]:
   external_call_result_rel tops ret tx src (Abort a' ss')
 Proof
   PairCases_on `src` >> Cases_on `a` >> Cases_on `a'` >>
-  simp[external_call_result_rel_def] >> rpt CASE_TAC >> simp[]
+  simp[external_call_result_rel_def] >>
+  Cases_on `src0` >> simp[] >> Cases_on `y` >> simp[] >> CASE_TAC >> simp[]
 QED
+
+(* Move the first goal whose conclusion contains the pattern to the front. *)
+fun concl_goal_lt pat = FIRST_LT (qmatch_goalsub_rename_tac pat);
 
 (* The source relation holds of every run that matches one it holds of up
    to the source's dead bytes. *)
@@ -207,15 +211,16 @@ Proof
   qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
   `v'.vs_returndata = v.vs_returndata` by
     (irule LIST_EQ >> gvs[external_call_dead_def]) >>
-  (* The return and halt cases have different conjuncts; select each one
-     by the target state it mentions (v' only occurs in the conclusion). *)
+  (* The return and halt cases have different conjuncts.  Select each one
+     by its conclusion: >~ also matches the assumptions, which carry the
+     same relations for the source state. *)
   (rpt conj_tac
-   >~ [`accounts_agree cx _ (process_deletions _ v'.vs_accounts)`]
+   THEN_LT concl_goal_lt `accounts_agree _ _ (process_deletions _ _)`
    >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
        metis_tac[accounts_agree_except_process_deletions])
-   >~ [`transient_agree cx _ v'.vs_transient`]
+   THEN_LT concl_goal_lt `transient_agree _ _ _`
    >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
-   >~ [`LIST_REL (request_agree cx) _ v'.vs_requests`]
+   THEN_LT concl_goal_lt `LIST_REL (request_agree _) _ _`
    >- (gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
        irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
    gvs[])
