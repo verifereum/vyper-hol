@@ -39,3 +39,43 @@ Proof
   fs[indexedListsTheory.MAPi_def, combinTheory.o_DEF] >>
   metis_tac[sublist_cons, sublist_cons_include]
 QED
+
+Theorem le_optional_blocks_output_sublist:
+  !bs. (!b i x. f b i x = [] \/ MAP out (f b i x) = [g x]) ==>
+  sublist (MAP out (FLAT (MAP (\b. FLAT (MAPi (f b) (insts b))) bs)))
+          (FLAT (MAP (\b. MAP g (insts b)) bs))
+Proof
+  Induct >- simp[sublist_def] >> rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[MAP, FLAT, MAP_APPEND] >> BETA_TAC >>
+  irule sublist_append_pair >> conj_tac
+  >- (irule le_optional_mapi_output_sublist >> metis_tac[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem le_collected_action_output_sublist:
+  sublist (MAP (\pa. pa.pa_phi_out) (collect_phi_actions m ctx cfg result fn))
+    (FLAT (MAP (\bb. MAP (\inst. fresh_phi_var inst.inst_id)
+                            bb.bb_instructions) fn.fn_blocks))
+Proof
+  pure_rewrite_tac[collect_phi_actions_def, LET_THM] >>
+  BETA_TAC >> ho_match_mp_tac le_optional_blocks_output_sublist >>
+  rpt gen_tac >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  drule compute_phi_action_origin >> simp[]
+QED
+
+Theorem le_collected_action_outputs_distinct:
+  wf_function fn ==>
+  ALL_DISTINCT (MAP (\pa. pa.pa_phi_out) (collect_phi_actions m ctx cfg result fn))
+Proof
+  strip_tac >>
+  irule sublist_ALL_DISTINCT >>
+  irule_at Any le_collected_action_output_sublist >>
+  `ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id)
+                                    bb.bb_instructions) fn.fn_blocks))` by
+    gvs[wf_function_def, fn_inst_ids_distinct_def] >>
+  `ALL_DISTINCT (MAP fresh_phi_var
+     (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)))` by
+    (irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
+  fs[MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]
+QED
