@@ -1,8 +1,73 @@
 Theory abiEncodeMaterialize
 Ancestors
   abiEncodeMaterializeExec exprSimAggregateChildren exprSimUnwrap
+  valueCopyBytes exprSimHyps exprSimLayoutTransport
   exprSimDefs exprSimProps loweringPosts context finite_map exprSimCopy freshWrites fragExec exprSimStorageCopy
   exprSimWordArgs venomMemDefs exprSimAlloc exprLowering compileEnv
+
+Theorem materialize_post_lowered_classify:
+  !ce e. ~is_word_type (expr_type e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) ==>
+    post_value_type ce e = lowered_value_type ce e \/
+    is_bytestring_type (post_value_type ce e) /\
+    is_bytestring_type (lowered_value_type ce e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  simp[lowered_value_type_def, post_value_type_def, vyperASTTheory.expr_type_def,
+       is_bytestring_type_def, is_word_type_def, concat_buffer_type_def] >>
+  rpt strip_tac >> gvs[vyperTypeSystemTheory.arg_type_fits_def]
+  >~ [`MAP (concat_payload_capacity o expr_type) args`]
+  >- (Cases_on `ty` >>
+      gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def])
+  >~ [`abi_size_bound _ _`]
+  >- (rename1 `arg_type_fits (BaseT (BytesT (Dynamic _))) ty` >>
+      Cases_on `ty` >> gvs[vyperTypeSystemTheory.arg_type_fits_def,
+                          is_bytestring_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >>
+      gvs[vyperTypeSystemTheory.arg_type_fits_def, is_bytestring_type_def]) >>
+  IF_CASES_TAC >> gvs[] >>
+  metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]
+QED
+
+(* A physical expression post can be read at the layout chosen for capture.
+   Only bytestring capacities can differ; the copy reads the actual payload. *)
+Theorem materialize_expr_post_lowered_source:
+  expr_body_pre ce cx env e es /\
+  expr_post ctx func ce cx e es0 sa sb s0 es' v src s /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v ==>
+  ?w. eval_operand src s = SOME w /\
+      val_in_memory tv v (w2n w) s.vs_memory
+Proof
+  strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
+  drule_all materialize_post_lowered_classify >> strip_tac
+  >- (gvs[expr_post_def, expr_val_rel_def]) >>
+  `post_value_type ce e = expr_type e \/
+   post_value_type ce e = lowered_value_type ce e` by
+    (Cases_on `e` >> simp[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv` by
+    metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  gvs[expr_post_def, expr_val_rel_def] >>
+  irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >>
+  simp[] >> qexistsl [`expr_type e`, `lowered_value_type ce e`,
+                     `get_tenv cx`, `ptv`] >> simp[]
+QED
 
 (* Allocating a new buffer extends the allocation map, rather than leaving
    it equal.  Existing value ownership only needs preservation of entries. *)
