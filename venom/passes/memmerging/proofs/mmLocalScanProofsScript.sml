@@ -2378,6 +2378,29 @@ Proof
   irule mm_local_prefix_used_producer_unchanged >> metis_tac[]
 QED
 
+Theorem mm_local_phase_expansion[local]:
+  f = (case phase of
+    NONE => apply_memzero_inst_supply
+      (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+        (scan_block_memzero dfg bb).mz_flushed)
+      (rep_map_of_groups bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
+  | SOME mode => apply_groups_inst_supply mode
+      (nop_ids_of_groups dfg mode bb.bb_instructions
+        (scan_block dfg mode bb).ss_flushed)
+      (rep_map_of_groups bb.bb_instructions (scan_block dfg mode bb).ss_flushed)) /\
+  mm_local_phase dfg phase (bb,sk) = (bb',sk') ==>
+  mm_flat_map_supply f sk bb.bb_instructions = (bb'.bb_instructions,sk') /\
+  (!s i out t j v. f s i = (out,t) /\ j < LENGTH out /\
+    MEM v (venomInst$inst_uses (EL j out)) ==>
+    (EL j out = i /\ MEM v (venomInst$inst_uses i)) \/
+    (?a. a < j /\ MEM v (EL a out).inst_outputs))
+Proof
+  Cases_on `phase` >>
+  simp[mm_local_phase_def, transform_block_memzero_supply_def,
+       transform_block_mode_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[] >> metis_tac[mm_local_memzero_chunk_use, mm_local_mode_chunk_use]
+QED
+
 Theorem mm_local_available_endpoint_transport[local]:
   (!d n. fn_dominates fn d n ==> fn_dominates fn' d n) /\
   target'.bb_label = target.bb_label /\
@@ -2418,6 +2441,92 @@ Proof
   `def_bb.bb_label = target.bb_label` by metis_tac[] >>
   `def_bb = target` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_phase_ordinary_available[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k < 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
+  mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (bb,sk) = (bb',sk') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks /\
+  (!d n. fn_dominates fn d n ==> fn_dominates fn' d n) /\
+  fn_dominates fn' bb'.bb_label bb'.bb_label /\
+  f = (case EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem] of
+    NONE => apply_memzero_inst_supply
+      (nop_ids_of_groups (dfg_build_function fn0) Mem2Mem bb.bb_instructions
+        (scan_block_memzero (dfg_build_function fn0) bb).mz_flushed)
+      (rep_map_of_groups bb.bb_instructions
+        (scan_block_memzero (dfg_build_function fn0) bb).mz_flushed)
+  | SOME mode => apply_groups_inst_supply mode
+      (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+        (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+      (rep_map_of_groups bb.bb_instructions
+        (scan_block (dfg_build_function fn0) mode bb).ss_flushed)) /\
+  j < LENGTH bb'.bb_instructions /\ (EL j bb'.bb_instructions).inst_opcode <> PHI /\
+  MEM v (venomInst$inst_uses (EL j bb'.bb_instructions)) ==>
+  def_available_at fn' bb' (SOME (EL j bb'.bb_instructions)) v
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `MEM bb fn.fn_blocks /\ MEM bb' fn'.fn_blocks` by
+    (simp[] >> metis_tac[MEM_LUPDATE, EL_MEM, EL_LUPDATE, LENGTH_LUPDATE]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[wf_function_def, mmWfProofsTheory.fn_inst_ids_distinct_block] >>
+  drule_all mm_local_phase_expansion >> strip_tac >>
+  drule_all mm_local_flat_map_supply_use_order >> strip_tac
+  >- (`def_available_at fn bb (SOME (EL b bb.bb_instructions)) v` by
+        (qpat_x_assum `wf_ssa fn` mp_tac >>
+         pure_rewrite_tac[wf_ssa_def, def_dominates_uses_def] >> strip_tac >>
+         qpat_x_assum `!bb inst. _` (qspecl_then [`bb`, `EL b bb.bb_instructions`] mp_tac) >>
+         simp[] >>
+         `MEM (EL b bb.bb_instructions) bb.bb_instructions` by metis_tac[EL_MEM] >>
+         `MEM (Var v) (EL b bb.bb_instructions).inst_operands` by
+           metis_tac[passSharedDefsTheory.MEM_operand_vars_eq_Var,
+                     venomInstTheory.inst_uses_def] >>
+         metis_tac[]) >>
+      qpat_x_assum `def_available_at fn bb _ v` mp_tac >>
+      pure_rewrite_tac[def_available_at_def] >> strip_tac >>
+      `bb'.bb_label = bb.bb_label` by metis_tac[mm_local_phase_label] >>
+      Cases_on `def_bb = bb`
+      >- (qpat_x_assum `def_bb = bb` SUBST_ALL_TAC >>
+          `inst_wf def_inst` by
+            metis_tac[fn_inst_wf_def, EVERY_MEM] >>
+          `MEM (EL b bb.bb_instructions) bb.bb_instructions /\
+           MEM (EL b bb.bb_instructions) chunk` by metis_tac[EL_MEM] >>
+          `!r. f r def_inst = ([def_inst],r)` by
+            (irule mm_local_prefix_phase_producer_unchanged >>
+             conj_tac >- simp[] >>
+             goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+             goal_assum (drule_at (Pat `MEM _ (venomInst$inst_uses _)`)) >>
+             simp[] >> metis_tac[]) >>
+          qpat_x_assum `fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks` kall_tac >>
+          qpat_x_assum `bb = bb ==> _` mp_tac >> simp[] >> strip_tac >>
+          `j' = b` by
+            metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx] >>
+          `MEM def_inst (TAKE b bb.bb_instructions)` by
+            (simp[MEM_EL] >> qexists_tac `i` >> simp[LENGTH_TAKE, EL_TAKE]) >>
+          `?c. c < j /\ EL c bb'.bb_instructions = def_inst` by simp[] >>
+          qexistsl [`bb'`, `def_inst`] >> simp[] >>
+          conj_tac >- metis_tac[EL_MEM, arithmeticTheory.LESS_TRANS] >>
+          qexistsl [`c`, `j`] >> simp[]) >>
+      `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+        metis_tac[wf_function_def, venomInstTheory.fn_labels_def] >>
+      `def_bb.bb_label <> bb.bb_label` by
+        metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+      `MEM def_bb fn'.fn_blocks` by
+        (qpat_x_assum `MEM def_bb fn.fn_blocks` mp_tac >>
+         simp[MEM_LUPDATE] >> metis_tac[]) >>
+      `def_bb <> bb'` by metis_tac[] >>
+      qpat_x_assum `fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks` kall_tac >>
+      qexistsl [`def_bb`, `def_inst`] >> simp[]) >>
+  qpat_x_assum `fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks` kall_tac >>
+  simp[def_available_at_def] >>
+  qexistsl [`bb'`, `EL a bb'.bb_instructions`] >> simp[] >>
+  conj_tac >- (irule EL_MEM >> decide_tac) >>
+  qexistsl [`a`, `j`] >> simp[]
 QED
 
 (* Essential counterexample evidence: a variable-free unreachable block. *)
