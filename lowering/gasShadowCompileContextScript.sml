@@ -456,7 +456,7 @@ Theorem gas_shadow_compiles_store_memory:
     (compile_store_memory cenv src dst dst_ty src_ty)
 Proof
   Cases_on `is_word_type dst_ty` >> Cases_on `is_bytestring_type dst_ty` >>
-  Cases_on `dst_ty = src_ty` >>
+  Cases_on `dst_ty = src_ty` >> Cases_on `tuple_memory_layout_eq dst_ty src_ty` >>
   simp[compile_store_memory_def, gas_shadow_compiles_emit_void,
        gas_shadow_compiles_store_bytestring, gas_shadow_compiles_store_memory_typed,
        gas_shadow_compiles_copy_memory]
