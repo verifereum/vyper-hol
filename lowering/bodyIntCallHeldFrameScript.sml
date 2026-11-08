@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallProducerInterface bodyIntCallSourceFrame
   bodyIntCallArgOwnedFrame bodyIntCallArgLocalFrame bodyIntCallStorageFrame
   exprSimSubscriptArrayFrame exprSimProps loweringPosts exprLoweringProps
-  compileEnv context
+  compileEnv context bodyMemAssignTopCopySem
 
 Theorem intcall_vv_provenance_outcomes[simp]:
   intcall_vv_provenance ce cx ty sa sb
@@ -143,6 +143,36 @@ Proof
       irule intcall_provenance_memory_value >> metis_tac[])
 QED
 
+Theorem intcall_held_holds_storage_frame:
+  vv_holds ce cx ty raw vv es s /\
+  intcall_vv_provenance ce cx ty sa sm es raw vv s /\
+  vv_storage_live cx vv es s /\
+  (!v tv. read_result cx raw es = (INL v,es) /\
+          evaluate_type (get_tenv cx) ty = SOME tv ==>
+          val_wf tv v /\ value_has_type tv v) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  vv_post ctx func ce cx e es sm sn s ee r ev t /\
+  ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
+  local_ptrs_reserved ce sm /\
+  (!tr. storage_agree (storage_dead cx tr (get_storage cx es tr))
+      (get_storage cx es tr)
+      (if tr then contract_transient t else contract_storage t)) ==>
+  vv_holds ce cx ty raw vv es t
+Proof
+  strip_tac >> Cases_on `vv`
+  >- (irule intcall_memory_holds_frame >> metis_tac[]) >>
+  rename1 `LocatedValue sty p` >> Cases_on `p.ptr_location = LocMemory`
+  >- (irule intcall_memory_holds_frame >> metis_tac[]) >>
+  gvs[vv_holds_def, vv_operand_def] >>
+  Cases_on `p.ptr_location` >> gvs[]
+  >- (irule storage_holds_live_endpoint >> goal_assum (drule_at Any) >>
+      metis_tac[])
+  >- (irule storage_holds_live_endpoint >> goal_assum (drule_at Any) >>
+      metis_tac[]) >>
+  gvs[intcall_vv_provenance_def, immutable_holds_def] >>
+  metis_tac[]
+QED
+
 Theorem intcall_held_holds_frame:
   vv_holds ce cx ty raw vv es s /\
   intcall_vv_provenance ce cx ty sa sm es raw vv s /\
@@ -156,22 +186,9 @@ Theorem intcall_held_holds_frame:
   local_ptrs_reserved ce sm /\ stmt_state_rel ctx func ce cx es t ==>
   vv_holds ce cx ty raw vv es t
 Proof
-  strip_tac >> Cases_on `vv`
-  >- (irule intcall_memory_holds_frame >> metis_tac[]) >>
-  rename1 `LocatedValue sty p` >> Cases_on `p.ptr_location = LocMemory`
-  >- (irule intcall_memory_holds_frame >> metis_tac[]) >>
-  gvs[vv_holds_def, vv_operand_def] >>
-  Cases_on `p.ptr_location` >> gvs[]
-  >- (irule storage_holds_live_endpoint >> goal_assum (drule_at Any) >>
-      gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
-          vyperStorageBackendTheory.get_storage_def,
-          vfmStateTheory.lookup_account_def] >> metis_tac[])
-  >- (irule storage_holds_live_endpoint >> goal_assum (drule_at Any) >>
-      gvs[stmt_state_rel_def, state_rel_def, transient_rel_def,
-          vyperStorageBackendTheory.get_storage_def,
-          vfmStateTheory.lookup_account_def] >> metis_tac[]) >>
-  gvs[intcall_vv_provenance_def, immutable_holds_def] >>
-  metis_tac[]
+  strip_tac >> irule intcall_held_holds_storage_frame >>
+  goal_assum (drule_at Any) >>
+  metis_tac[topcopy_initial_agree]
 QED
 
 Theorem intcall_held_source_outcomes:
@@ -186,6 +203,35 @@ Proof
   simp[vv_holds_def, vv_at_def, expr_val_at_def,
        read_result_outcomes_iff, immutable_holds_def, storage_holds_outcomes,
        vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem intcall_held_storage_endpoint:
+  vv_holds ce cx ty raw vv es s /\ vv_at ce cx ty sa sm es raw vv s /\
+  intcall_vv_provenance ce cx ty sa sm es raw vv s /\
+  vv_storage_live cx vv es s /\
+  (!v tv. read_result cx raw es = (INL v,es) /\
+          evaluate_type (get_tenv cx) ty = SOME tv ==>
+          val_wf tv v /\ value_has_type tv v) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  vv_post ctx func ce cx e es sm sn s ee r ev t /\
+  ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
+  local_ptrs_reserved ce sm /\ local_ptrs_rel func ce es.scopes s /\
+  (!tr. storage_agree (storage_dead cx tr (get_storage cx es tr))
+      (get_storage cx es tr)
+      (if tr then contract_transient t else contract_storage t)) /\
+  wb_frame ce es sm s t /\ sm.cs_next_id <= sn.cs_next_id ==>
+  vv_holds ce cx ty raw vv es t /\ vv_at ce cx ty sa sn es raw vv t /\
+  intcall_vv_provenance ce cx ty sa sn es raw vv t /\
+  vv_storage_live cx vv es t
+Proof
+  strip_tac >>
+  `!n b sz. local_region ce es.scopes t n b sz <=>
+             local_region ce es.scopes s n b sz` by
+    (rpt gen_tac >> irule local_region_wb_frame >> metis_tac[]) >>
+  conj_tac >- (irule intcall_held_holds_storage_frame >> metis_tac[]) >>
+  conj_tac >- (irule held_vv_at_alloc_frame >> gvs[wb_frame_def] >> metis_tac[]) >>
+  conj_tac >- (irule intcall_vv_provenance_frame >> metis_tac[]) >>
+  Cases_on `vv` >> gvs[vv_operand_def]
 QED
 
 Theorem intcall_held_endpoint:
@@ -205,14 +251,8 @@ Theorem intcall_held_endpoint:
   intcall_vv_provenance ce cx ty sa sn es raw vv t /\
   vv_storage_live cx vv es t
 Proof
-  strip_tac >>
-  `!n b sz. local_region ce es.scopes t n b sz <=>
-             local_region ce es.scopes s n b sz` by
-    (rpt gen_tac >> irule local_region_wb_frame >> metis_tac[]) >>
-  conj_tac >- (irule intcall_held_holds_frame >> metis_tac[]) >>
-  conj_tac >- (irule held_vv_at_alloc_frame >> gvs[wb_frame_def] >> metis_tac[]) >>
-  conj_tac >- (irule intcall_vv_provenance_frame >> metis_tac[]) >>
-  Cases_on `vv` >> gvs[vv_operand_def]
+  strip_tac >> irule intcall_held_storage_endpoint >>
+  goal_assum (drule_at Any) >> metis_tac[topcopy_initial_agree]
 QED
 
 Theorem intcall_held_endpoint_outcomes:
@@ -235,4 +275,38 @@ Theorem intcall_held_endpoint_outcomes:
   vv_storage_live cx vv (es with <|outcomes := os; gas_obs := gs|>) t
 Proof
   simp[intcall_held_source_outcomes] >> metis_tac[intcall_held_endpoint]
+QED
+
+(* The endpoint relation belongs to the source after argument evaluation;
+   only its storage observations are used to retain earlier arguments. *)
+Theorem intcall_held_updated_endpoint_outcomes:
+  vv_holds ce cx ty raw vv es s /\ vv_at ce cx ty sa sm es raw vv s /\
+  intcall_vv_provenance ce cx ty sa sm es raw vv s /\
+  vv_storage_live cx vv es s /\
+  (!v tv. read_result cx raw es = (INL v,es) /\
+          evaluate_type (get_tenv cx) ty = SOME tv ==>
+          val_wf tv v /\ value_has_type tv v) /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  vv_post ctx func ce cx e es sm sn s ee r ev t /\
+  ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
+  ee.scopes = es.scopes /\ expr_sim_inv ce cx env es /\
+  local_ptrs_reserved ce sm /\ local_ptrs_rel func ce es.scopes s /\
+  stmt_state_rel ctx func ce cx ee t /\ wb_frame ce es sm s t /\
+  sm.cs_next_id <= sn.cs_next_id ==>
+  vv_holds ce cx ty raw vv (es with <|outcomes := os; gas_obs := gs|>) t /\
+  vv_at ce cx ty sa sn (es with <|outcomes := os; gas_obs := gs|>) raw vv t /\
+  intcall_vv_provenance ce cx ty sa sn
+    (es with <|outcomes := os; gas_obs := gs|>) raw vv t /\
+  vv_storage_live cx vv (es with <|outcomes := os; gas_obs := gs|>) t
+Proof
+  strip_tac >>
+  `!tr. storage_agree (storage_dead cx tr (get_storage cx es tr))
+      (get_storage cx es tr)
+      (if tr then contract_transient t else contract_storage t)` by
+    (gen_tac >> drule topcopy_initial_agree >>
+     disch_then (qspec_then `tr` mp_tac) >>
+     qpat_x_assum `ee = _` SUBST1_TAC >>
+     Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  simp[intcall_held_source_outcomes] >>
+  metis_tac[intcall_held_storage_endpoint]
 QED
