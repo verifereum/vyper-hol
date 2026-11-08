@@ -84,12 +84,21 @@ Theorem compile_get_target_ptr_endpoint_open:
 Proof
   rpt gen_tac >> Cases_on `bt`
   >- (simp[compile_get_target_ptr_def] >>
-      rpt CASE_TAC >> simp[comp_return_def] >> rpt strip_tac >> gvs[])
+      CASE_TAC >> simp[comp_return_def] >- (rpt strip_tac >> gvs[]) >>
+      CASE_TAC >> simp[comp_return_def] >> rpt strip_tac >> gvs[])
   >- (simp[compile_get_target_ptr_def] >>
-      rpt CASE_TAC >> simp[comp_return_def] >> rpt strip_tac >> gvs[])
+      Cases_on `FLOOKUP cenv.ce_module_vars p`
+      >- (simp[comp_return_def] >> rpt strip_tac >> gvs[]) >>
+      rename1 `SOME loc` >> Cases_on `loc` >>
+      simp[comp_return_def] >> rpt strip_tac >> gvs[])
   >- (simp[compile_get_target_ptr_def, comp_bind_def] >>
       rpt (pairarg_tac >> simp[]) >>
-      rpt CASE_TAC >> simp[comp_bind_def, comp_return_def] >>
+      Cases_on `SND (SND result)`
+      >- (simp[comp_bind_def, comp_return_def] >>
+          rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+          metis_tac[compile_array_subscript_open]) >>
+      rename1 `SOME pt` >> Cases_on `pt` >>
+      simp[comp_bind_def, comp_return_def] >>
       rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
       metis_tac[compile_mapping_subscript_open, compile_array_subscript_open]) >>
   simp[compile_get_target_ptr_def, comp_bind_def, comp_return_def] >>
