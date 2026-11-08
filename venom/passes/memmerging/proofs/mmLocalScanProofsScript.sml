@@ -2,7 +2,7 @@
 Theory mmLocalScanProofs
 Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
-  venomFnScheduleRunner allocaRemapSSA
+  venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
 Libs
   wordsLib finite_mapLib
@@ -1038,6 +1038,165 @@ Theorem mm_local_prefix_output_origin[local]:
   MEM i (EL index fn0.fn_blocks).bb_instructions
 Proof
   metis_tac[mm_local_prefix_old_output]
+QED
+
+Theorem mm_local_prefix_phi_origin[local]:
+  !fn0 supply index k bb sk i.
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM i bb.bb_instructions /\ i.inst_opcode = PHI ==>
+  MEM i (EL index fn0.fn_blocks).bb_instructions
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `MEM i prev.bb_instructions` by
+    (Cases_on `EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]` >>
+     gvs[mm_local_phase_def] >>
+     metis_tac[transform_block_memzero_supply_phi_origin,
+       transform_block_mode_supply_phi_origin]) >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_wf_last[local]:
+  !fn0 supply index k bb sk.
+  fn_inst_wf fn0 /\ wf_function fn0 /\ ssa_form fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  EVERY (\i. i.inst_id < supply.irs_next_inst)
+    (EL index fn0.fn_blocks).bb_instructions /\
+  mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  bb_well_formed bb /\
+  LAST bb.bb_instructions = LAST (EL index fn0.fn_blocks).bb_instructions /\
+  bb.bb_label = (EL index fn0.fn_blocks).bb_label
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- (simp[mm_local_prefix_zero] >> rpt strip_tac >>
+      gvs[wf_function_def] >> metis_tac[MEM_EL]) >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `bb_well_formed prev /\
+   LAST prev.bb_instructions = LAST (EL index fn0.fn_blocks).bb_instructions /\
+   prev.bb_label = (EL index fn0.fn_blocks).bb_label` by
+    (first_x_assum irule >> simp[]) >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `fn_inst_ids_distinct fn0 /\ MEM (EL index fn0.fn_blocks) fn0.fn_blocks` by
+    (gvs[wf_function_def] >> metis_tac[MEM_EL]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) prev.bb_instructions)` by
+    (irule mm_local_prefix_id_distinct >>
+     qexistsl [`fn0`, `index`, `k`, `sp`, `supply`] >>
+     simp[] >> metis_tac[mmWfProofsTheory.fn_inst_ids_distinct_block]) >>
+  `!i. MEM i prev.bb_instructions /\
+       i.inst_id = (LAST prev.bb_instructions).inst_id ==>
+       i = LAST prev.bb_instructions` by
+    (gvs[bb_well_formed_def] >>
+     metis_tac[mmWfProofsTheory.all_distinct_map_inv, MEM_LAST_NOT_NIL]) >>
+  `MEM (LAST prev.bb_instructions) (fn_insts fn0)` by
+    (irule mmWfProofsTheory.fn_insts_mem_block >>
+     qexists_tac `EL index fn0.fn_blocks` >> simp[] >>
+     `bb_well_formed (EL index fn0.fn_blocks)` by
+       metis_tac[wf_function_def] >>
+     qpat_x_assum `bb_well_formed (EL index _)` mp_tac >>
+     simp[bb_well_formed_def] >> metis_tac[MEM_LAST_NOT_NIL]) >>
+  `k <= 4` by decide_tac >>
+  `!i. MEM i prev.bb_instructions /\ i.inst_opcode = PHI ==>
+       MEM i (fn_insts fn0)` by
+    (rpt strip_tac >> irule mmWfProofsTheory.fn_insts_mem_block >>
+     qexists_tac `EL index fn0.fn_blocks` >> simp[] >>
+     metis_tac[mm_local_prefix_phi_origin]) >>
+  `bb.bb_label = prev.bb_label` by metis_tac[mm_local_phase_label] >>
+  Cases_on `EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]`
+  >- (gvs[mm_local_phase_def] >>
+      metis_tac[transform_block_memzero_supply_wf,
+        transform_block_memzero_supply_last]) >>
+  rename1 `EL k _ = SOME mode` >>
+  `MEM (SOME mode) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])` by
+    (`k = 0 \/ k = 1 \/ k = 2 \/ k = 3` by decide_tac >> gvs[]) >>
+  `!i. MEM i prev.bb_instructions /\ i.inst_opcode = mode_load_opcode mode /\
+       i.inst_outputs <> [] ==> MEM i (fn_insts fn0)` by
+    (rpt strip_tac >> irule mmWfProofsTheory.fn_insts_mem_block >>
+     qexists_tac `EL index fn0.fn_blocks` >> simp[] >>
+     metis_tac[mm_local_pending_load_origin]) >>
+  gvs[mm_local_phase_def] >>
+  `!p i. MEM p prev.bb_instructions /\ p.inst_opcode = PHI /\
+    MEM i prev.bb_instructions /\ i.inst_id = p.inst_id ==> i = p` by
+    metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+  conj_tac
+  >- (irule transform_block_mode_supply_wf >>
+      qexistsl [`prev`, `dfg_build_function fn0`, `fn0`, `mode`, `sp`, `sk`] >>
+      simp[]) >>
+  `LAST bb.bb_instructions = LAST prev.bb_instructions` suffices_by simp[] >>
+  drule_at (Pat `transform_block_mode_supply _ _ _ _ = _`)
+    transform_block_mode_supply_last >>
+  disch_then (qspec_then `fn0` mp_tac) >> simp[]
+QED
+
+Theorem mm_local_prefix_cfg_shape[local]:
+  fn_inst_wf fn0 /\ wf_function fn0 /\ ssa_form fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  EVERY (\i. i.inst_id < supply.irs_next_inst)
+    (EL index fn0.fn_blocks).bb_instructions /\
+  mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  MAP (\b. (b.bb_label, bb_succs b)) (LUPDATE bb index fn0.fn_blocks) =
+  MAP (\b. (b.bb_label, bb_succs b)) fn0.fn_blocks
+Proof
+  strip_tac >> drule_all mm_local_prefix_wf_last >> strip_tac >>
+  `bb_succs bb = bb_succs (EL index fn0.fn_blocks)` by
+    (`bb.bb_instructions <> [] /\
+      (EL index fn0.fn_blocks).bb_instructions <> []` by
+       (metis_tac[wf_function_def, MEM_EL, bb_well_formed_def]) >>
+     simp[venomInstTheory.bb_succs_def] >>
+     Cases_on `bb.bb_instructions` >>
+     Cases_on `(EL index fn0.fn_blocks).bb_instructions` >> gvs[]) >>
+  simp[LUPDATE_MAP] >>
+  `((\b. (b.bb_label, bb_succs b)) bb) =
+   EL index (MAP (\b. (b.bb_label, bb_succs b)) fn0.fn_blocks)` by
+    simp[EL_MAP] >>
+  gvs[LUPDATE_SAME]
+QED
+
+Theorem mm_local_prefix_cfg_transport[local]:
+  fn_inst_wf fn0 /\ wf_function fn0 /\ ssa_form fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  EVERY (\i. i.inst_id < supply.irs_next_inst)
+    (EL index fn0.fn_blocks).bb_instructions /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks ==>
+  fn_labels fn = fn_labels fn0 /\
+  fn_entry_label fn = fn_entry_label fn0 /\
+  fn_cfg_edge fn = fn_cfg_edge fn0 /\
+  (!l. fn_reachable fn l <=> fn_reachable fn0 l) /\
+  (!d n. fn_dominates fn d n <=> fn_dominates fn0 d n) /\
+  (all_reachable fn <=> all_reachable fn0)
+Proof
+  strip_tac >>
+  `MAP (\b. (b.bb_label, bb_succs b)) fn.fn_blocks =
+   MAP (\b. (b.bb_label, bb_succs b)) fn0.fn_blocks` by
+    (gvs[] >> irule mm_local_prefix_cfg_shape >> metis_tac[]) >>
+  `fn_cfg_edge fn = fn_cfg_edge fn0` by
+    (irule cfg_blocks_edges >> simp[]) >>
+  `fn_labels fn = fn_labels fn0` by
+    (pure_rewrite_tac[venomInstTheory.fn_labels_def] >>
+     metis_tac[makeSsaCurrentCfgTheory.block_succs_map_labels]) >>
+  `fn_entry_label fn = fn_entry_label fn0` by
+    simp[makeSsaCurrentCfgTheory.succs_map_cfg_edge] >>
+  `!l d n. (fn_reachable fn l <=> fn_reachable fn0 l) /\
+    (fn_dominates fn d n <=> fn_dominates fn0 d n)` by
+    (rpt gen_tac >> irule current_wf_cfg_dominance >> simp[]) >>
+  `all_reachable fn <=> all_reachable fn0` by
+    (qpat_x_assum `fn = _` kall_tac >>
+     pure_rewrite_tac[all_reachable_def] >>
+     `!l. MEM l (fn_labels fn) <=> MEM l (fn_labels fn0)` by simp[] >>
+     fs[venomInstTheory.fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  simp[]
 QED
 
 Theorem mm_local_mode_old_use[local]:
