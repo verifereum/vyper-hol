@@ -1,7 +1,7 @@
 (* Finite memory-safe paths for word and bytestring normalization. *)
 Theory typedNormalizePrimitivePath
 Ancestors
-  typedNormalizeFrame typedArrayLoopPathMem typedArrayIterationPathMem stmtReasonLitFragMemory fragGasSeqMem localMemoryStorePath
+  typedNormalizeFrame typedArrayLoopPathMem typedArrayFiniteIterationMem stmtReasonLitFragMemory fragGasSeqMem localMemoryStorePath
   typedCopyAgreement exprLoweringProps emitHelperProps list rich_list
   exprSimBufferStore exprSimAggregateChildren exprSimProps exprSimDefs
   exprLowering compileEnv externalReturnNormalizeMem valueEncodingProps
