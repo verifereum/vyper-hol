@@ -32,7 +32,7 @@ Proof
   Cases_on `call_external (SOME (MAP SND (call_trace es))) gobs am tx` >>
   rename1 `call_external _ _ am tx = (res, tail)` >>
   Cases_on `tail` >> Cases_on `res` >> simp[] >>
-  rename1 `INR exc` >> Cases_on `exc` >> simp[]
+  rename1 `INR exc` >> Cases_on `exc` >> simp[exception_outcome_rel_def]
 QED
 
 (* ===== Raw termination and pipeline transport ===== *)

@@ -179,7 +179,7 @@ Proof
   disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
   qexistsl_tac [`r`, `es'`] >> fs[] >>
   disj2_tac >> qexistsl_tac [`marks`, `vs_in.vs_gas_readings`] >> simp[] >>
-  fs[deploy_result_rel_def, exception_outcome_rel_def]
+  fs[deploy_result_rel_def, e2eDefsTheory.exception_outcome_rel_cases]
 QED
 
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds
@@ -203,7 +203,8 @@ val _ =
            deploy_result_rel tops runtime_bc tx es r es'
              (load_contract NONE (gas_explicit marks gs) am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE
-      [deploy_result_rel_def, exception_outcome_rel_def] (ASSUME expected));
+      [deploy_result_rel_def, e2eDefsTheory.exception_outcome_rel_cases]
+      (ASSUME expected));
   in
     if aconv expanded (concl savedDeploymentAdmission) andalso
        null (Thm.hyp savedDeploymentAdmission) then ()

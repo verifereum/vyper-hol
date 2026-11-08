@@ -414,6 +414,21 @@ Definition exception_outcome_rel_def:
   (exception_outcome_rel tops _ es r es' <=> F)
 End
 
+Theorem exception_outcome_rel_cases:
+  exception_outcome_rel tops exc es r es' <=>
+    case exc of
+      AssertException s =>
+        ?failure out lgs.
+          frame_outcome es r es' (SOME failure) out lgs /\
+          (failure = Reverted \/ s = "UNREACHABLE")
+    | Error e =>
+        unspecified_behaviour_exempt tops e \/
+        ?failure out lgs. frame_outcome es r es' (SOME failure) out lgs
+    | _ => F
+Proof
+  Cases_on `exc` >> simp[exception_outcome_rel_def]
+QED
+
 (* Fixed-reading transport used by the compiler proof. *)
 Definition call_result_rel_at_def:
   call_result_rel_at gobs tops ret am tx es r es' <=>
