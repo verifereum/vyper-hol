@@ -13,7 +13,7 @@
 
 Theory fnAliasStep
 Ancestors
-  fnAliasInv reorderSim frameRel codegenRel unitShapeDefs stackPlanGen
+  reorderSim frameRel codegenRel unitShapeDefs stackPlanGen
   stackPlanOps stackPlanTypes venomExecSemantics venomState livenessDefs
   dfgDefs cfgDefs deepResidualBudget fnFrameStepsRevertForward frameViewFacts
   venomExecProps venomInstProps planWf stackModel foldlSim
