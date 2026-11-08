@@ -7221,6 +7221,9 @@ Proof
               gvs[] >> drule stack_get_depth_bound >> strip_tac >>
               ` (\(a:stack_op list,b:plan_state). (a,b)) = I` by
                 (simp[FUN_EQ_THM] >> Cases >> simp[]) >> fs[] >>
+              `stack_dup x ps.ps_stack = (SND (do_dup x ps)).ps_stack` by
+                simp[do_dup_stack_exact, stack_dup_def, SNOC_APPEND] >>
+              pop_assum SUBST1_TAC >>
               conj_tac
               >- (irule do_dup_safe_stack_value_replay >> simp[] >> metis_tac[]) >>
               irule do_dup_safe_spill_provenance >> simp[] >> metis_tac[]) >>
