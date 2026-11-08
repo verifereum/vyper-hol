@@ -10,7 +10,7 @@ Ancestors
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
   emitHelper emitHelperProps compileEnv list finite_map
   tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingProps vyperTyping stmtLoweringMono
-  vyperInterpreter freshWrites
+  vyperInterpreter freshWrites memoryValueEncoding
 
 Theorem tuple_store_word_step:
   !cenv ty tys bt gs op ops st sp sf dst loc vt.
@@ -296,9 +296,12 @@ Proof
   `(if is_word_type ty then sw = typed_val_to_w256 entry.type v
     else val_in_memory entry.type v (w2n sw) s.vs_memory)` by simp[] >>
   drule_all compile_store_memory_run_frame_with_capacity >> strip_tac >>
+  `memory_value_rel entry.type v (w2n dw) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   qexistsl [`dw`, `t`] >> simp[] >>
   reverse conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   irule stmt_state_rel_write_local >>
+  qpat_assum `stmt_state_rel _ _ _ _ es s` (irule_at Any) >>
   first_assum (irule_at Any) >> simp[] >>
   reverse conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>

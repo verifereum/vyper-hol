@@ -11,6 +11,7 @@ Ancestors
   valueEncodingProps loweringPosts exprLowering compileEnv vyperState vyperInterpreter
   vyperTypeSystem vyperValue vyperValueOperation list rich_list pair
   words arithmetic finite_map venomState venomMemDefs exprSimSubscriptArrayFramed
+  memoryValueEncoding
 Libs
   pairLib
 
@@ -127,6 +128,7 @@ Proof
   qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
   simp[local_ptrs_rel_def] >> strip_tac >>
   qpat_x_assum `!name entry p sz. _ ==> _` drule_all >> strip_tac >> gvs[] >>
+  drule_all memory_value_rel_val_in_memory >> strip_tac >>
   drule_all mem_path_offset_current_value >> strip_tac >>
   drule mem_path_offset_sound >> strip_tac >>
   drule alloca_room_next_lt >> strip_tac >>

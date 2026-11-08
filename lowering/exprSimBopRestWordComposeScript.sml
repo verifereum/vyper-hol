@@ -318,9 +318,9 @@ Resume compile_rest_word_membership_sim[tail_extends]:
     compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   gvs[compileEnvTheory.comp_return_def] >>
-  qpat_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _`
     (strip_assume_tac o REWRITE_RULE [exprSimBopRestWordLayoutTheory.rest_word_loop_factor_eq]) >>
-  rename1 `rest_word_loop_prefix _ _ _ _ _ loopst = (h,cl)` >>
+  rename1 `rest_word_loop_prefix _ _ _ _ _ _ loopst = (h,cl)` >>
   drule exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape >>
   rewrite_tac[exprSimBopRestWordLayoutTheory.rest_word_loop_prefix_shape_def] >> strip_tac >>
   drule exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape >> strip_tac >>
@@ -330,7 +330,6 @@ Resume compile_rest_word_membership_sim[tail_extends]:
     (simp[compileEnvTheory.cs_extends_def] >> qexists `TAKE 6 sb.cs_blocks` >> simp[]) >>
   qpat_assum `compile_ptr_load _ _ _ (vv_operand arr_vv) st2 = _`
     (mp_tac o MATCH_MP exprSimBopRestWordLayoutTheory.rest_word_ptr_load_shape) >> strip_tac >>
-  drule_all rest_word_capacity_check_shape >> strip_tac >>
   `cs_extends st2 loopst` by
     simp[compileEnvTheory.cs_extends_def,
       rich_listTheory.IS_PREFIX_APPEND, listTheory.APPEND_ASSOC] >>
@@ -485,11 +484,9 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   qmatch_asmsub_abbrev_tac `eval_operand op q = SOME (bool_to_word answer)` >>
   `!ee. bop_result cx ann bop [expr_type e1; ArrayT (expr_type e1) bd]
           v1 (ArrayV av) ee = INL (BoolV answer)` by
-    (simp[exprBopSimDefsTheory.bop_result_def,
-          vyperContextTheory.evaluate_builtin_def] >>
-     Cases_on `bop = In` >>
-     fs[Abbr `answer`, vyperValueOperationTheory.evaluate_binop_def,
-        vyperValueOperationTheory.binop_negate_def]) >>
+    (Cases_on `bop = In` >>
+     fs[exprBopSimDefsTheory.bop_result_def, Abbr `answer`,
+        vyperValueOperationTheory.evaluate_membership_array]) >>
   qexistsl [`[]`, `fin`, `q`, `BoolV answer`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
   conj_tac

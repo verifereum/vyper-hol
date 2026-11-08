@@ -20,17 +20,17 @@ Libs
   monadsyntax
 
 (* The source of an internal call after push_function: the body, the
-   frame's cleanup, and the cast of the returned value.  A supported
-   callee is not nonreentrant and has no defaults
+   frame's cleanup with the nonreentrant lock's release, and the cast of
+   the returned value.  A supported callee has no defaults
    (body_intcall_source_selection). *)
 Definition intcall_rest_def:
-  intcall_rest cx name mut ss prev rtv =
+  intcall_rest cx name mut nr ss prev rtv =
     do rv <- finally
          (try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
                   return NoneV
                od) handle_function)
          (do pop_function prev;
-             unlock_if_nr cx F (is_view_mut mut)
+             unlock_if_nr cx nr (is_view_mut mut)
           od);
        crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
        return (Value crv)
@@ -45,14 +45,15 @@ Definition intcall_callee_src_def:
          od) handle_function
 End
 
-(* The INVOKE of internal function name (mut,args,ret,ss, raw-return flag
-   rr), called with arguments es from the caller func, whose code for the
+(* The INVOKE of internal function name (mut, nonreentrancy flag nr,
+   args,ret,ss, raw-return flag rr), called with arguments es from the caller func, whose code for the
    call runs from sa to sb and gives vv, at the source state es0 and Venom
    state s0.  t is at the INVOKE, es1 is the source state push_function
    leaves, prev the caller's scopes it saved, penv the parameters' scope
    and rtv the evaluated return type.
-   - Source: the arguments evaluated and read to the values penv binds;
-     the callee's body is call-safe at the pushed context.
+   - Source: the arguments evaluated and read to the values penv binds,
+     and the lock taken when the callee is nonreentrant; the callee's
+     body is call-safe at the pushed context.
    - Code: the call's code as compile_call_intcall_shape gives it: the
      arguments (sa to st1), the return buffer rbuf if any (st1 to st2),
      the staging (st2 to st3), the INVOKE of the callee's label at st3
@@ -75,17 +76,18 @@ End
      compile_internal_prologue_entry hold for argv. *)
 Definition intcall_entry_def:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-                (mut,args,ret,ss,rr) prev penv rtv es1 t <=>
+                (mut,nr,args,ret,ss,rr) prev penv rtv es1 t <=>
     ~MEM (NONE,name) cx.stk /\
-    (?s1 results t1 s2 vs t2.
+    (?s1 results t1 s2 vs t2 s3 u t3.
        eval_expr_results cx es s1 = (INL results,t1) /\
        read_results cx results s2 = (INL vs,t2) /\
-       bind_arguments (get_tenv cx) args vs = SOME penv) /\
+       bind_arguments (get_tenv cx) args vs = SOME penv /\
+       lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)) /\
     evaluate_type (get_tenv cx) ret = SOME rtv /\
     call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
       (int_calls_stmts ss) /\
     es1.scopes = [penv] /\
-    gas_admissible (intcall_rest cx name mut ss prev rtv) expr_vv_res_ok es1 /\
+    gas_admissible (intcall_rest cx name mut nr ss prev rtv) expr_vv_res_ok es1 /\
     stmt_state_rel ctx func cenv cx (es1 with scopes := prev) t /\
     expr_sim_inv cenv cx tenv (es1 with scopes := prev) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -148,7 +150,7 @@ Definition intcall_entry_def:
         set_internal_package_target cenv.ce_target
           (package_internal_fn tops use_trans (nkeys : string -> num)
              cenv.ce_is_ctor imm_len
-             (mut,F,rr,name,args,([] : expr list),ret,ss)) =
+             (mut,nr,rr,name,args,([] : expr list),ret,ss)) =
           (lbl',ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len',ss',rt) ==>
         lbl' = lbl /\ (has_rb <=> rc = 0 /\ 0 < rbs) /\
         (ce.ce_is_ctor ==> IS_SOME (FLOOKUP t.vs_labels "runtime_begin")) /\
@@ -213,12 +215,12 @@ End
    the whole call. *)
 Theorem intcall_args_frame_setup:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut args ret ss rr Q R.
+   mut nr args ret ss rr Q R.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     (~MEM (NONE,name) cx.stk ==> body_results_ok cx es) /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
@@ -232,8 +234,8 @@ Theorem intcall_args_frame_setup:
     (!res ee r. expr_exit res r ==> R res ee r) /\
     (!prev penv rtv es1 t.
        intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-         (mut,args,ret,ss,rr) prev penv rtv es1 t ==>
-       gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut ss prev rtv)
+         (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
+       gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut nr ss prev rtv)
          (es1,t) Q R) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) (es0,s0) Q R
@@ -250,15 +252,15 @@ QED
    writes there only through rb and its memory parameters' pointers),
    which this seam proves on its own. *)
 Theorem intcall_callee_body_sim:
-  !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut args ret ss rr
+  !tops ctx func cenv cx tenv name es sa sb vv s0 es0 mut nr args ret ss rr
    prev penv rtv es1 t callee entered rc rbs pvs.
     body_inv tops ctx cenv cx /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-      (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+      (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
     gas_invoke_entry (ctx,func) t callee entered /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) ==>
     !bb inst lbl arg_ops argv.
@@ -281,18 +283,18 @@ QED
    expr_vv_sim post, or an abort passed on. *)
 Theorem intcall_return_restore:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
-   mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
+   mut nr args ret ss rr prev penv rtv es1 t rc rbs pvs.
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,[],ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-      (mut,args,ret,ss,rr) prev penv rtv es1 t /\
+      (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
     (!callee entered bb inst lbl arg_ops argv.
        gas_invoke_entry (ctx,func) t callee entered /\
@@ -305,7 +307,7 @@ Theorem intcall_return_restore:
          (intcall_callee_exit func cenv cx rtv rc
             (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
             sa.cs_next_id t)) ==>
-    gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut ss prev rtv)
+    gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut nr ss prev rtv)
       (es1,t)
       (\res ee t'. ?tv. res = INL tv /\
          vv_post ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
@@ -320,13 +322,14 @@ QED
 (* The source facts an intcall_entry state carries. *)
 Theorem intcall_entry_source:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
-    (mut,args,ret,ss,rr) prev penv rtv es1 t ==>
+    (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
   ~MEM (NONE,name) cx.stk /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  ?s1 results t1 s2 vs t2.
+  ?s1 results t1 s2 vs t2 s3 u t3.
     eval_expr_results cx es s1 = (INL results,t1) /\
     read_results cx results s2 = (INL vs,t2) /\
-    bind_arguments (get_tenv cx) args vs = SOME penv
+    bind_arguments (get_tenv cx) args vs = SOME penv /\
+    lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)
 Proof
   rw[intcall_entry_def] >> metis_tac[]
 QED

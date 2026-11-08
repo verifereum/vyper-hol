@@ -5,6 +5,7 @@ Ancestors
   stmtSimDeclStore vyperPlaceStatePreservation vyperLookup stmtSimAssignStore
   exprSimHyps vyperTypeInvariants exprLoweringProps compileEnv exprSimBuffer
   venomState loweringPosts exprSimProps exprSimSource exprSimDefs exprSimHypsDefs
+  memoryValueEncoding
 Libs
   wordsLib
 
@@ -480,6 +481,7 @@ Theorem aug_place_memory_write_state_rel:
   lookup_scopes id es.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old /\
   store_lays_out etv ptv v /\ evaluate_type (get_tenv cx) ty = SOME ptv /\
+  value_has_type ptv v /\
   write_place cx (MemoryPlace id path) v es = (INL (),es') ==>
   stmt_state_rel ctx func cenv cx es'
     (mstore (w2n w) (typed_val_to_w256 etv v) s)
@@ -516,7 +518,8 @@ Resume aug_place_memory_write_state_rel[lift_local_store]:
    val_in_memory entry.type entry.value (w2n b) s.vs_memory` by
     (qpat_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
-     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[] >>
+     irule memory_value_rel_val_in_memory >> simp[]) >>
   `k + type_memory_size ptv <= type_memory_size entry.type` by
     metis_tac[mem_path_offset_sound] >>
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
@@ -526,6 +529,12 @@ Resume aug_place_memory_write_state_rel[lift_local_store]:
   qabbrev_tac `t = mstore (w2n b+k) (typed_val_to_w256 etv v) s` >>
   `val_wf entry.type x /\ val_in_memory entry.type x (w2n b) t.vs_memory` by
     (qunabbrev_tac `t` >> irule aug_place_path_mstore >> metis_tac[]) >>
+  `subscripts_type entry.type path = SOME ptv` by
+    metis_tac[mem_path_offset_sound] >>
+  `value_has_type entry.type x` by
+    (irule assign_subscripts_replace_type_metadata >> simp[] >> metis_tac[]) >>
+  `memory_value_rel entry.type x (w2n b) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `(t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
     simp[Abbr `t`, mstore_def, LET_THM, venom_state_component_equality] >>
   `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
@@ -555,6 +564,7 @@ Theorem aug_place_memory_store_frag:
   expr_sim_inv cenv cx env es /\ lookup_scopes id es.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old /\
   store_lays_out etv ptv v /\ evaluate_type (get_tenv cx) ty = SOME ptv /\
+  value_has_type ptv v /\
   write_place cx (MemoryPlace id path) v es = (INL (),es') ==>
   frag_exec ctx st sf (\s. s = u)
     (\s. stmt_state_rel ctx func cenv cx es' s /\

@@ -6,10 +6,10 @@ Ancestors
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
 
-(* The IHs at a supported callee (body_intcall_source_selection): not
-   nonreentrant, no defaults, as many arguments as parameters. *)
+(* The IHs at a supported callee (body_intcall_source_selection): no
+   defaults, as many arguments as parameters. *)
 Theorem intcall_results_ih[local]:
-  !cx src_id_opt fn es ts mut args ret ss.
+  !cx src_id_opt fn es ts mut nr args ret ss.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
@@ -26,7 +26,7 @@ Theorem intcall_results_ih[local]:
        body_results_ok cx es) /\
     get_module_code cx src_id_opt = SOME ts /\
     lookup_callable_function cx.in_deploy fn ts =
-      SOME (mut,F,args,[],ret,ss) /\
+      SOME (mut,nr,args,[],ret,ss) /\
     LENGTH es = LENGTH args /\ ~MEM (src_id_opt,fn) cx.stk ==>
     body_results_ok cx es
 Proof
@@ -35,7 +35,8 @@ Proof
 QED
 
 Theorem intcall_body_ih[local]:
-  !cx src_id_opt fn es ts mut args ret ss s1 results t1 s2 vs t2 penv rtv.
+  !cx src_id_opt fn es ts mut nr args ret ss s1 results t1 s2 vs t2 s3 u t3
+   penv rtv.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7' prev
          t'5' s'8' dflt_vs t'6' s'9' vs t'7' all_tenv s'10' env t'8' s'11' rtv
@@ -69,21 +70,22 @@ Theorem intcall_body_ih[local]:
        body_stmts_ok cxf body') /\
     get_module_code cx src_id_opt = SOME ts /\
     lookup_callable_function cx.in_deploy fn ts =
-      SOME (mut,F,args,[],ret,ss) /\
+      SOME (mut,nr,args,[],ret,ss) /\
     LENGTH es = LENGTH args /\ ~MEM (src_id_opt,fn) cx.stk /\
     eval_expr_results cx es s1 = (INL results,t1) /\
     read_results cx results s2 = (INL vs,t2) /\
     bind_arguments (get_tenv cx) args vs = SOME penv /\
+    lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
     evaluate_type (get_tenv cx) ret = SOME rtv ==>
     body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss
 Proof
   rpt strip_tac >> first_x_assum irule >>
   simp[type_check_def, assert_def, lift_option_type_def, return_def,
        get_scopes_def, finally_def, ignore_bind_def, bind_def,
-       set_scopes_def, lock_if_nr_def, push_function_def,
-       Once evaluate_def] >>
-  qexistsl_tac [`penv`,`results`,`s1`,`s2`,`s2`,`t1`,`t2`,`s2`,`vs`] >>
-  simp[return_def]
+       set_scopes_def, push_function_def, Once evaluate_def] >>
+  qexistsl_tac [`penv`,`results`,`s1`,`s2`,`s2`,`s3`,`t1`,`t2`,`s2`,`t3`,`vs`] >>
+  Cases_on `u` >> qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
+  simp[return_def, lock_if_nr_def, ignore_bind_def]
 QED
 
 (* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
@@ -196,11 +198,12 @@ Proof
   drule_all body_intcall_source_selection >> strip_tac >>
   `~MEM (src_id_opt,fn) cx.stk ==> body_results_ok cx es` by
     (strip_tac >> drule intcall_results_ih >> disch_then drule_all >> simp[]) >>
-  `!s1 results t1 s2 vs t2 penv rtv.
+  `!s1 results t1 s2 vs t2 s3 u t3 penv rtv.
      ~MEM (src_id_opt,fn) cx.stk /\
      eval_expr_results cx es s1 = (INL results,t1) /\
      read_results cx results s2 = (INL vs,t2) /\
      bind_arguments (get_tenv cx) args vs = SOME penv /\
+     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3) /\
      evaluate_type (get_tenv cx) ret = SOME rtv ==>
      body_stmts_ok (cx with stk updated_by CONS (src_id_opt,fn)) ss` by
     (rpt strip_tac >> drule intcall_body_ih >> disch_then drule_all >>
@@ -211,18 +214,22 @@ Proof
      cenv.ce_func_info (nsid_to_string (NONE,fn)) = (nrc,nrbs,npvs)`
     by metis_tac[pairTheory.ABS_PAIR_THM] >>
   irule intcall_args_frame_setup >> simp[] >>
-  qexistsl_tac [`args`,`cenv`,`mut`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
+  qexistsl_tac [`args`,`cenv`,`mut`,`nr`,`ret`,`rr`,`sa`,`sb`,`ss`,`tenv`,`tops`,
                 `ty`,`vv`] >>
   simp[] >> rpt strip_tac >>
   qspecl_then [`tops`,`ctx`,`func`,`cenv`,`cx`,`tenv`,`ty`,`v16`,`fn`,`es`,
-               `v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`args`,`ret`,`ss`,`rr`,
+               `v17`,`es0`,`sa`,`sb`,`vv`,`s0`,`mut`,`nr`,`args`,`ret`,`ss`,`rr`,
                `prev`,`penv`,`rtv`,`es1`,`t`,`nrc`,`nrbs`,`npvs`]
     mp_tac intcall_return_restore >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
       drule intcall_entry_source >> strip_tac >>
       `body_stmts_ok (cx with stk updated_by CONS (NONE,fn)) ss` by
-        metis_tac[] >>
+        (Cases_on `u` >>
+         qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
+         simp[lock_if_nr_def] >> strip_tac >>
+         qpat_x_assum `!s1 results t1 s2 vs t2 s3 t3 penv rtv. _` drule_all >>
+         simp[]) >>
       drule_all intcall_callee_body_sim >> simp[]) >>
   simp[]
 QED

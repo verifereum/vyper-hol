@@ -113,13 +113,12 @@ Proof
   EVAL_TAC
 QED
 
-(* Name-domain rejection now belongs to check_contract. The whitelist itself
-   permits internal/external sharing when the checker finds no call cycle. *)
-Theorem supported_function_name_duplicates_defer_to_checker:
-  supported_declaration_names
+(* The whitelist rejects function names shared across visibilities. *)
+Theorem supported_function_name_duplicates_reject:
+  ~supported_declaration_names
     [FunctionDecl External View F F "f" [] [] NoneT [];
      FunctionDecl Internal Pure F F "f" [] [] NoneT []] /\
-  supported_declaration_names
+  ~supported_declaration_names
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT [];
      FunctionDecl Deploy Payable F F "__init__" [] [] NoneT []]
 Proof
