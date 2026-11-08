@@ -293,7 +293,7 @@ Theorem ifexp_lowered_type_classify:
   lowered_value_type ce e = expr_type e \/
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
-  (?ty fid args drv. e = Call ty (IntCall fid) args drv)
+  int_calls_expr e <> []
 Proof
   ho_match_mp_tac lowered_value_type_ind >>
   simp[lowered_value_type_def, expr_type_def,
