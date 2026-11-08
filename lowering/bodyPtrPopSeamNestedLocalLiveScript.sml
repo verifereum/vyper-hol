@@ -10,6 +10,7 @@
  *)
 Theory bodyPtrPopSeamNestedLocalLive
 Ancestors
+  bodyPtrPopNestedLiveCompose
   bodyPtrPopTargetDefs bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs
   targetPlaceSim vyperInterpreter vyperState vyperAST
 
@@ -46,5 +47,5 @@ Theorem pop_nested_local_live_vv_ptr:
     expr_body_pre cenv cx env (Pop ann bt) es ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann bt) es
 Proof
-  cheat
+  rpt strip_tac >> irule pop_nested_live_compose >> simp[] >> metis_tac[]
 QED
