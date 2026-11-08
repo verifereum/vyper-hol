@@ -1061,6 +1061,21 @@ Proof
   disch_then (qspecl_then [`a-b`, `n`] mp_tac) >> simp[]
 QED
 
+(* A gas-transparent source action may be implemented by a zero-mark path. *)
+Theorem intcall_gas_transparent_path_outcome:
+  (!tail. source (es with gas_obs := tail) = (res, ee with gas_obs := tail)) /\
+  gas_marked_path memory ctx func s 0 r /\
+  ((?t. r = OK t /\ Q res (ee with gas_obs := []) t) \/
+   (exit_result r /\ R res (ee with gas_obs := []) r)) ==>
+  gas_outcome memory tops (ctx,func) source (es,s) Q R
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl_tac [`res`, `ee`, `r`] >>
+  gvs[gasSummaryTheory.gas_marked_exec_def]
+QED
+
 Theorem intcall_counted_child_store:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   intcall_expr_producer fp e /\
@@ -1123,6 +1138,10 @@ Proof
   conj_tac >- (Cases >> simp[exprSimDefsTheory.expr_exit_INL,
                            stmtSimPropsTheory.expr_exit_INR_type]) >>
   reverse conj_tac >- metis_tac[] >>
+  suspend "read_store"
+QED
+
+Resume intcall_counted_child_store[read_store]:
   rpt gen_tac >> strip_tac >>
   rename1 `gas_marked_exec _ _ _ _ marks (INL raw) mid (OK q)` >>
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es si sm t
@@ -1142,25 +1161,7 @@ Proof
   disch_then (rev_drule_at (Pat `intcall_expr_cont _ _ _ es0 s0c s0 es si t`)) >>
   (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
   rename1 `gas_marked_path F _ _ q 0 (OK uu)` >>
-  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
-    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
-  `sm.cs_next_var <= sn.cs_next_var` by
-    (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
-  `sn.cs_next_var <= su.cs_next_var /\ sn.cs_next_id <= su.cs_next_id` by
-    (mp_tac (Q.SPECL [`ce`, `vv`, `sn`] ci_mono_unwrap_value) >>
-     simp[ci_mono_def]) >>
-  `su.cs_next_var <= sb.cs_next_var` by
-    (mp_tac (Q.SPECL [`ce`, `op`, `dst`, `dty`, `post_value_type ce e`, `su`]
-       ci_mono_compile_store_memory) >> simp[ci_mono_def]) >>
-  `si.cs_next_var <= su.cs_next_var /\ s0c.cs_next_var <= su.cs_next_var` by
-    decide_tac >>
-  `!x. buf = Var x ==> not_fresh_at su x` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `!x. vv_operand vv = Var x ==> not_fresh_at sn x` by
-    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
-  `!x. op = Var x ==> not_fresh_at su x` by
-    (drule exprOperandVarTheory.compiler_unwrap_value_var >>
-     Cases_on `vv` >> fs[vv_operand_def]) >>
+  drule_all intcall_child_store_operands >> strip_tac >>
   `w2n bw + off < dimword (:256) /\ off < dimword (:256)` by decide_tac >>
   `w2n (bw + n2w off) = w2n bw + off` by
     (mp_tac (wordsTheory.w2n_add_2 |> INST_TYPE [alpha |-> ``:256``] |>
@@ -1168,52 +1169,31 @@ Proof
      simp[]) >>
   `b <= w2n (bw + n2w off) /\
    w2n (bw + n2w off) + type_memory_size dtv <= b+k` by fs[] >>
-  `!name a n. local_region ce (mid with gas_obs := []).scopes uu name a n ==>
-     a+n <= w2n (bw + n2w off) \/
-     w2n (bw + n2w off) + type_memory_size dtv <= a` by
-    (rpt strip_tac >>
-     qpat_x_assum `!n a z. local_region ce _ uu n a z ==> _` drule >>
-     fs[regions_disjoint_def] >> decide_tac) >>
-  `!name a n. local_region ce es0.scopes s0 name a n ==>
-     a+n <= b \/ b+k <= a` by
-    (rpt strip_tac >>
-     qpat_x_assum `!name a n. local_region ce es0.scopes s0 name a n ==> _` drule >>
-     simp[regions_disjoint_def, DISJ_COMM]) >>
   drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
-    intcall_child_store_landing >>
+    intcall_root_store_landing >>
   disch_then (drule_at (Pat `expr_val_rel _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
-  disch_then drule_all >> strip_tac >>
-  `!name a n. local_region ce (mid with gas_obs := []).scopes u name a n ==>
-      regions_disjoint b k a n` by
-    (rpt strip_tac >>
-     `local_region ce es0.scopes s0 name a n` by
-       (irule local_region_frame >>
-        conj_tac
-        >- (qexists_tac `fp.jc_func` >>
-            fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def]) >>
-        qexistsl_tac [`s0c`, `(mid with gas_obs := []).scopes`, `u`] >>
-        fs[intcall_expr_cont_def, intcall_joint_res_def]) >>
-     metis_tac[]) >>
+  disch_then (drule_at (Pat `FLOOKUP uu.vs_allocas _ = _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_cont _ _ _ es0 s0c s0 _ su uu`)) >>
+  disch_then (drule_at (Pat `mem_bytes_at b k uu.vs_memory = _`)) >>
+  disch_then (drule_at (Pat `eval_operand buf uu = _`)) >>
+  disch_then (drule_at (Pat `eval_operand dst uu = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ dty = _`)) >>
+  disch_then (qspec_then `dtv` mp_tac) >>
+  (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
   `gas_marked_path F fp.jc_ctx fp.jc_func q 0 (OK u)` by
     (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
-  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-  rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
-  qexistsl_tac [`INL v`, `mid`, `OK u`] >>
-  conj_tac
-  >- (simp[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
-  simp[] >>
+  irule intcall_gas_transparent_path_outcome >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`mid`, `INL v`] >> simp[] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   conj_tac >- fs[] >>
   rpt gen_tac >> strip_tac >>
-  `mem_bytes_at a n u.vs_memory = mem_bytes_at a n uu.vs_memory` by
-    (qpat_x_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _` irule >>
-     fs[] >> decide_tac) >>
-  `a = b + (a-b) /\ a-b+n <= k` by decide_tac >>
-  qpat_x_assum `mem_bytes_at b k uu.vs_memory = _` mp_tac >>
-  disch_then (mp_then Any mp_tac valueEncodingPropsTheory.mem_bytes_at_translated_window) >>
-  disch_then (qspecl_then [`a-b`, `n`] mp_tac) >> simp[]
+  qpat_x_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _` irule >>
+  fs[] >> decide_tac
 QED
+
+Finalise intcall_counted_child_store
 
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
    literals (MakeArray NONE), array literals (MakeArray (SOME _)), struct
