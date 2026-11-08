@@ -3,6 +3,8 @@ Theory bodyIntCallJointPureSlot
 Ancestors
   bodyIntCallJointContract exprLoweringProps compileEnv venomState
   exprSimHypsDefs exprLowering exprSimNameValue context vyperTypeSystem
+  typedCopyMetadata placeMemoryTypedBase valueEncodingTyping vyperTypeABI
+  structFieldsProps retAbiPlanProps
 
 Theorem joint_local_result_slot:
   intcall_joint_res fp ce env es sa s /\
@@ -122,4 +124,83 @@ Proof
        supportedTypesTheory.supported_word_type_def,
        supportedTypesTheory.supported_string_type_def] >>
   metis_tac[evaluated_base_memory_positive]
+QED
+
+Theorem evaluated_scalar_list_memory_positive:
+  !tys tvs. ~NULL tys /\ EVERY supportedTypes$supported_scalar_type tys /\
+    LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs ==>
+    0 < type_memory_size_list tvs
+Proof
+  Cases >> simp[] >> Cases >> simp[] >> rpt strip_tac >>
+  drule_all evaluated_scalar_memory_positive >>
+  simp[valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem evaluated_supported_struct_memory_positive:
+  supportedTypes$supported_struct_fields tops id = SOME args /\ args <> [] /\
+  EVERY (supportedTypes$supported_word_type o SND) args /\
+  struct_metadata_types_match tops sf /\ sfields_tenv_consistent sf tenv /\
+  evaluate_type tenv (StructT id) = SOME tv ==>
+  0 < type_memory_size tv
+Proof
+  PairCases_on `id` >> strip_tac >>
+  `id0 = NONE` by
+    (Cases_on `id0` >>
+     gvs[supportedTypesTheory.supported_struct_fields_other_module]) >>
+  gvs[] >> drule_all typed_memory_struct_evaluation >> strip_tac >>
+  `MAP (FST o SND) fields = MAP SND args` by
+    metis_tac[struct_metadata_types_match_def, nsid_to_string_def] >>
+  `~NULL (MAP SND args)` by (Cases_on `args` >> gvs[]) >>
+  `EVERY supportedTypes$supported_scalar_type (MAP SND args)` by
+    (fs[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
+     metis_tac[supportedTypesTheory.supported_scalar_type_def]) >>
+  drule evaluate_types_LIST_REL >> strip_tac >>
+  `0 < type_memory_size_list tvs` by
+    (irule evaluated_scalar_list_memory_positive >> metis_tac[]) >>
+  qpat_x_assum `MAP FST fields = _` kall_tac >>
+  gvs[valueEncodingTheory.type_memory_size_def, type_memory_size_fields_zip]
+QED
+
+Theorem evaluated_supported_value_memory_positive:
+  supportedTypes$supported_value_type tops ty /\
+  struct_metadata_types_match tops sf /\ sfields_tenv_consistent sf tenv /\
+  (!id fs. supportedTypes$supported_struct_fields tops id = SOME fs ==> fs <> []) /\
+  evaluate_type tenv ty = SOME tv ==> 0 < type_memory_size tv
+Proof
+  strip_tac >>
+  Cases_on `supportedTypes$supported_scalar_type ty`
+  >- metis_tac[evaluated_scalar_memory_positive] >>
+  Cases_on `ty` >>
+  gvs[supportedTypesTheory.supported_value_type_def]
+  >- (drule vyperTypeValuesTheory.evaluate_type_TupleT_cases >> strip_tac >>
+      gvs[valueEncodingTheory.type_memory_size_def] >>
+      irule evaluated_scalar_list_memory_positive >> metis_tac[])
+  >- (gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+      rename1 `ArrayTV etv bd` >> Cases_on `bd` >>
+      gvs[valueEncodingTheory.type_memory_size_def] >>
+      `0 < type_memory_size etv` by
+        metis_tac[evaluated_scalar_memory_positive,
+                  supportedTypesTheory.supported_scalar_type_def] >>
+      simp[]) >>
+  rename1 `evaluate_type tenv (StructT id) = SOME tv` >>
+  Cases_on `supportedTypes$supported_struct_fields tops id` >> gvs[] >>
+  irule evaluated_supported_struct_memory_positive >> metis_tac[]
+QED
+
+Theorem type_env_modules_struct_compare:
+  !mods src tops name ta args.
+    ALOOKUP mods src = SOME tops /\
+    FLOOKUP (type_env_for_module src tops) (src,name) = SOME ta /\
+    FLOOKUP (type_env_all_modules mods) (src,name) = SOME (StructArgs args) ==>
+    ta = StructArgs args
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[vyperContextTheory.type_env_all_modules_def] >> strip_tac >>
+  Cases_on `h0 = src`
+  >- gvs[finite_mapTheory.FLOOKUP_FUNION] >>
+  gvs[] >>
+  Cases_on `FLOOKUP (type_env_for_module h0 h1) (src,name)` >>
+  gvs[finite_mapTheory.FLOOKUP_FUNION]
+  >- (first_x_assum drule_all >> simp[]) >>
+  drule type_env_for_module_struct_mem >> simp[]
 QED
