@@ -112,3 +112,36 @@ Proof
   goal_assum (drule_at (Pat `compile_copy_memory_dynamic _ _ _ _ = _`)) >>
   qexistsl_tac [`a`, `n2w n`] >> simp[eval_operand_def, w2n_n2w, LESS_MOD]
 QED
+
+Theorem typed_copy_bytestring_frag_exact_mem:
+  compile_store_bytestring src dst sa = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s0 = SOME a /\ eval_operand dst s0 = SOME d /\
+  mem_word_at (w2n a) s0.vs_memory = n2w L /\
+  32 + 32 * word_size L < dimword (:256) /\
+  val_in_memory tv v (w2n a) s0.vs_memory /\ val_wf tv v /\
+  val_footprint tv v <= 32 + 32 * word_size L /\
+  32 + 32 * word_size L <= type_memory_size tv /\
+  w2n a + (32 + 32 * word_size L) <= s0.vs_alloca_next /\
+  w2n d + (32 + 32 * word_size L) <= s0.vs_alloca_next ==>
+  frag_exec_mem ctx sa sb (\s. s = s0)
+    (\t. val_in_memory tv v (w2n d) t.vs_memory /\
+         typed_copy_state_frame sa (w2n d) (type_memory_size tv) s0 t) (\r. F)
+Proof
+  strip_tac >> drule_all store_bytestring_run_exact >> strip_tac >>
+  irule fragExecMemTheory.frag_exec_mem_run_inst_seq >>
+  gvs[same_blocks_def] >> simp[] >> conj_tac
+  >- (irule compile_store_bytestring_body_mem_ok >>
+      goal_assum (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
+      qexistsl_tac [`d`, `L`, `a`] >>
+      simp[GSYM mem_word_at_eq_mload] >> metis_tac[]) >>
+  conj_tac >- (irule mcopy_val_in_memory >> simp[]) >>
+  simp[typed_copy_state_frame_def] >> conj_tac
+  >- gvs[venom_state_component_equality] >>
+  conj_tac >- gvs[lookup_var_def] >>
+  simp[typed_copy_frame_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
+      decide_tac) >>
+  simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity, MAX_DEF]
+QED
