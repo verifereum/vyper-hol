@@ -211,12 +211,16 @@ Proof
           env_context_consistent_def] >>
      match_mp_tac relayout_post_value_type >> qexistsl_tac [`env`, `typ`] >>
      simp[] >> metis_tac[expr_body_pre_var_types_well_formed]) >>
-  (irule annassign_outcome_entry_prefix >>
-  qexistsl_tac [`sA`, `salloc`] >> simp[] >>
+  `sa.cs_next_id <= ai.inst_id /\ sa.cs_next_id <= sA.cs_next_id /\
+   sa.cs_next_var <= sA.cs_next_var` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     drule emit_inst_extends >> simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
+     strip_tac >> gvs[]) >>
+  (irule annassign_outcome_entry_prefix >> simp[] >>
+  qexists_tac `salloc` >> simp[] >>
   irule annassign_relayout_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[ci_mono_def] >>
   conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  qexists_tac `ai` >> gvs[ci_mono_def] >> metis_tac[])
+  qexists_tac `ai` >> gvs[ci_mono_def] >> qexists_tac `sA` >> gvs[] >> first_assum ACCEPT_TAC)
 QED
