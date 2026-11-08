@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeArgsPhysicalCapacity
 Ancestors
-  abiTypeBoundProps vyperTypeArgFits vyperABIValid vyperABIRoundtrip
+  abiTypeBoundProps vyperTypeArgFits vyperABIValid vyperABIRoundtrip compileEnv
   vyperTypeSystem vyperABI vyperValue vyperTyping vyperTypeValues vyperAST list
 
 (* Bounds erased by ABI types do not change the wire representation. *)
@@ -161,4 +161,44 @@ Proof
   drule_all abi_args_physical_tuple_encoding_bound >> strip_tac >>
   Cases_on `mid` >>
   gvs[abi_encode_method_id_bytes_def, abi_encode_method_id_size_def]
+QED
+
+(* Static ABI shape ignores all permitted bound widening. *)
+Theorem abi_args_fits_static_shape:
+  (!t u. arg_type_fits t u ==>
+     is_abi_dynamic sf t = is_abi_dynamic sf u /\
+     abi_static_size sf t = abi_static_size sf u) /\
+  (!ts us. arg_types_fit ts us ==>
+     EXISTS (is_abi_dynamic sf) ts = EXISTS (is_abi_dynamic sf) us /\
+     SUM (MAP (abi_embedded_static_size sf) ts) =
+     SUM (MAP (abi_embedded_static_size sf) us))
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  simp[arg_type_fits_def, is_abi_dynamic_def, abi_static_size_def,
+       abi_embedded_static_size_def] >> rpt strip_tac >>
+  gvs[MAP_MAP_o, combinTheory.o_DEF,
+      GSYM abi_embedded_static_size_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+QED
+
+Theorem abi_args_embedded_bound_zero[local]:
+  abi_embedded_static_size sf t +
+    (if is_abi_dynamic sf t then abi_size_bound sf t else 0) = 0 <=>
+  abi_embedded_static_size sf t = 0
+Proof
+  Cases_on `is_abi_dynamic sf t` >> simp[abi_embedded_static_size_def]
+QED
+
+Theorem abi_args_fits_zero_bound:
+  (!t u. arg_type_fits t u ==>
+     (abi_size_bound sf t = 0 <=> abi_size_bound sf u = 0)) /\
+  (!ts us. arg_types_fit ts us ==>
+     (abi_size_bound sf (TupleT ts) = 0 <=>
+      abi_size_bound sf (TupleT us) = 0))
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  simp[arg_type_fits_def, abi_size_bound_def, arithmeticTheory.MULT_EQ_0,
+       abi_args_embedded_bound_zero] >> rpt strip_tac >>
+  imp_res_tac abi_args_fits_static_shape >>
+  gvs[abi_embedded_static_size_def]
 QED

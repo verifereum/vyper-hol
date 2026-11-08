@@ -46,6 +46,11 @@ The counterexample and its witness theories (`exprSimAbiEncodeArgsTupleExclusion
 
 Owner note 3 (coherence helper, branch manager ruling): `abi_encode_lowered_well_typed_coherent` (`exprSimHyps`) is false after the lowering change (counterexample at commit a5da26932: an empty bytes literal annotated `Bytes[64]`). Delete it. Prove the AbiEncode arm of `memory_rhs_read_lowered_typed_unwidened` directly from "encoded length <= capacity at the lowered argument types", using the induction hypothesis that types the argument values there. That lemma's statement stays byte-identical; no definition or frozen target changes. The probe theory was removed from the branch (evidence stays at a5da26932). This note overrides "their statements stay" in owner note 2 for this one lemma only.
 
+Owner note 4 (argon's proof notes, approved):
+1. `memory_rhs_read_lowered_typed_unwidened` (`exprSimHyps`) may drop its premise `(!a f args d. e = Call a (IntCall f) args d ==> lowered_value_type cenv e = expr_type e)`. Its IntCall arm follows from `ifexp_intcall_read_physical_typed` for any IntCall under `expr_body_pre`, and dropping the premise lets the AbiEncode induction hypothesis apply to widened IntCall arguments. This is the only statement change allowed there; existing callers still apply.
+2. In `memoryLocalRhsProps`, the theorem that unfolds `lowered_value_type_def` on AbiEncode is `memory_rhs_read_lowered_typed`. Its AbiEncode arm can call `memory_rhs_read_lowered_typed_unwidened`.
+3. `lowered_zero_bytestring_read_empty` (`exprSimHyps`) follows from `memory_rhs_read_lowered_typed_unwidened` and `value_runtime_typed_zero_bytestring_empty`; it does not need `expr_body_pre_abi_encode_zero_annotation`.
+
 ## Completion Criteria
 
 - The theorem is proved with no `cheat` in `lowering/exprSimAbiEncodeArgsScript.sml`, or in helper theories named `exprSimAbiEncodeArgs<Part>`.
