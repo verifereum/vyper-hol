@@ -75,8 +75,16 @@ Resume body_ifexp_mem_ok[arm_compiler_facts]:
        is_bytestring_type (lowered_value_type cenv e) /\
        arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
        same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
-    (rpt strip_tac >> irule ifexp_body_pre_lowered_type_compatible >>
-     metis_tac[]) >>
+    (disch_tac >> gen_tac >> disch_tac >>
+     `lowered_value_type cenv e = expr_type e \/
+      is_bytestring_type (expr_type e) /\
+      is_bytestring_type (lowered_value_type cenv e) /\
+      arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
+      (same_memory_layout cenv (lowered_value_type cenv e) (expr_type e) /\
+       arg_type_fits (lowered_value_type cenv e) (expr_type e) /\
+       ?tvp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvp)`
+       suffices_by metis_tac[] >>
+     irule ifexp_body_pre_lowered_type_compatible >> metis_tac[]) >>
   suspend "arm_source_typing"
 QED
 
