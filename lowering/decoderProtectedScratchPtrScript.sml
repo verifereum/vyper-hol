@@ -37,7 +37,7 @@ Proof
   strip_tac >>
   `exec_alloca (mk_inst aid ALLOCA [Lit 32w] [out]) s (32w:bytes32) = OK t` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   Cases_on `FLOOKUP s.vs_allocas aid`
   >- (mp_tac (Q.INST [`inst` |-> `mk_inst aid ALLOCA [Lit 32w] [out]`] abi_decoder_alloca32_fresh) >>
       simp[mk_inst_def] >> strip_tac >>

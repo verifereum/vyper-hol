@@ -44,7 +44,7 @@ Theorem zero_alloca_success:
     OK (update_var out (n2w s.vs_alloca_next)
       (s with vs_allocas := s.vs_allocas |+ (id,(s.vs_alloca_next,0))))
 Proof
-  simp[Once venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+  simp[Once venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
     venomStateTheory.eval_operand_def, venomExecSemanticsTheory.exec_alloca_def]
 QED
 

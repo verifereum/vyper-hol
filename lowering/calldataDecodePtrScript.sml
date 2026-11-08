@@ -116,7 +116,7 @@ Proof
   qexistsl_tac [`bb`, `mk_inst id CALLDATACOPY [Var p;src;n] []`, `t`] >>
   simp[mk_inst_def, is_terminator_def] >>
   conj_tac
-  >- simp[step_inst_non_invoke, step_inst_base_def] >>
+  >- simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
   conj_tac
   >- simp[write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
   `access_ok lo G fn (mk_inst id CALLDATACOPY [Var p;src;n] []) s` by
@@ -124,7 +124,7 @@ Proof
   `taint_ok fn tn (mk_inst id CALLDATACOPY [Var p;src;n] []) s` by
     (irule calldatacopy_taint_ok >> simp[]) >>
   gvs[ptr_safe_step_def, ptr_inst_ok_def, mk_inst_def,
-      step_inst_non_invoke, step_inst_base_def,
+      step_inst_non_invoke, step_inst_base_opcode_eqs,
       write_memory_with_expansion_def, write_memory_def, expand_memory_def]
 QED
 
@@ -199,7 +199,7 @@ Proof
   `ptr_covers (step_prov PG G i0 s1) (step_taint i0 s s1 tn) p s1 C /\
    op_taint (step_taint i0 s s1 tn) src = {}` by
     (qpat_x_assum `step_inst_base i0 s = OK s1` mp_tac >>
-     simp[Abbr `i0`, step_inst_base_def, exec_read1_def] >>
+     simp[Abbr `i0`, step_inst_base_opcode_eqs, exec_read1_def] >>
      strip_tac >> gvs[] >> conj_tac
      >- (irule ptr_covers_step_frame >>
          simp[mk_inst_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
@@ -216,7 +216,7 @@ Proof
     (first_x_assum (qspec_then `1` mp_tac) >> simp[Abbr `v1`]) >>
   `ptr_covers G2 tn2 p s2 C /\ op_taint tn2 src = {}` by
     (qpat_x_assum `step_inst_base i1 s1 = OK s2` mp_tac >>
-     simp[Abbr `i1`, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+     simp[Abbr `i1`, step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()] >>
      strip_tac >> gvs[] >>
      simp[Abbr `G2`, Abbr `tn2`] >> conj_tac
      >- (irule ptr_covers_step_frame >>
@@ -228,7 +228,7 @@ Proof
     (first_x_assum (qspec_then `2` mp_tac) >> simp[Abbr `v2`]) >>
   `ptr_covers G3 tn3 p s3 C /\ op_taint tn3 src = {}` by
     (qpat_x_assum `step_inst_base i2 s2 = OK s3` mp_tac >>
-     simp[Abbr `i2`, step_inst_base_def, exec_pure1_def, AllCaseEqs()] >>
+     simp[Abbr `i2`, step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs()] >>
      strip_tac >> gvs[] >>
      simp[Abbr `G3`, Abbr `tn3`] >> conj_tac
      >- (irule ptr_covers_step_frame >>
@@ -236,7 +236,7 @@ Proof
      simp[step_taint_single_output_preserves_other_operand]) >>
   `guarded = s3` by
     (qpat_x_assum `step_inst_base i3 s3 = OK guarded` mp_tac >>
-     simp[Abbr `i3`, step_inst_base_def, mk_inst_def, AllCaseEqs()] >>
+     simp[Abbr `i3`, step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >>
      metis_tac[]) >>
   qabbrev_tac `G4 = step_prov PG G3 i3 guarded` >>
   qabbrev_tac `tn4 = step_taint i3 s3 guarded tn3` >>
@@ -253,9 +253,9 @@ Proof
         `step_inst_base i1 s1 = OK s2`,
         `step_inst_base i2 s2 = OK s3`] >>
      simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, mk_inst_def] >>
-     simp[Once step_inst_base_def] >>
-     simp[Once step_inst_base_def] >>
-     simp[Once step_inst_base_def] >>
+     simp[step_inst_base_opcode_eqs] >>
+     simp[step_inst_base_opcode_eqs] >>
+     simp[step_inst_base_opcode_eqs] >>
      simp[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[] >> Cases_on `src` >>
      gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
@@ -292,14 +292,14 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      rpt disch_tac >>
      fs[mk_inst_def] >>
-     fs[Once step_inst_base_def] >>
+     fs[step_inst_base_opcode_eqs] >>
      fs[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
      gvs[update_var_def]) >>
   qpat_x_assum `guarded = s3` SUBST_ALL_TAC >>
   `run_inst_seq (emitted_insts sa sb) s = OK copied` by
     (simp[emitted_insts_def, DROP_PREFIX, Abbr `i4`] >>
      simp[run_inst_seq_def] >>
-     simp[step_inst_base_def, mk_inst_def, eval_operand_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
      gvs[eval_operand_def, Abbr `copied`]) >>
   `tn5.t_stor = tn.t_stor /\ tn5.t_trans = tn.t_trans /\
    tn5.t_imm = tn.t_imm` by
@@ -348,7 +348,7 @@ Proof
         `step_inst_base i2 s2 = OK s3`] >>
      qunabbrev_tac `i0` >> qunabbrev_tac `i1` >> qunabbrev_tac `i2` >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >> fs[mk_inst_def] >>
-     fs[Once step_inst_base_def] >>
+     fs[step_inst_base_opcode_eqs] >>
      fs[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
      gvs[update_var_def]) >>
   `copied.vs_fmp = s3.vs_fmp` by
@@ -418,7 +418,7 @@ Proof
         (s3 with vs_inst_idx := LENGTH sa.cs_current_insts + 3) =
         OK (s3 with vs_inst_idx := LENGTH sa.cs_current_insts + 3)` by
        (qpat_x_assum `step_inst_base _ s3 = OK s3` mp_tac >>
-        simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+        simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
              eval_operand_def, AllCaseEqs()] >> metis_tac[]) >>
      fs[mk_inst_def] >> conj_tac
      >- (qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ G4 tn4 _` mp_tac >>
@@ -438,7 +438,7 @@ Proof
         `step_inst_base i2 s2 = OK s3`] >>
      qunabbrev_tac `i0` >> qunabbrev_tac `i1` >> qunabbrev_tac `i2` >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >> fs[mk_inst_def] >>
-     fs[Once step_inst_base_def] >>
+     fs[step_inst_base_opcode_eqs] >>
      fs[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
      gvs[update_var_def]) >>
   `!fuel. ptr_safe_run D lo fuel ctx fn PG G2 tn2
@@ -447,7 +447,7 @@ Proof
      `step_inst fuel ctx i2 (s2 with vs_inst_idx := LENGTH sa.cs_current_insts + 2) =
         OK (s3 with vs_inst_idx := LENGTH sa.cs_current_insts + 2)` by
        (qpat_x_assum `step_inst_base i2 s2 = OK s3` mp_tac >>
-        simp[Abbr `i2`, step_inst_non_invoke, step_inst_base_def,
+        simp[Abbr `i2`, step_inst_non_invoke, step_inst_base_opcode_eqs,
              exec_pure1_def, eval_operand_def, AllCaseEqs()] >>
         strip_tac >> gvs[update_var_def]) >>
      irule ptr_safe_run_scalar_continuation >>
@@ -466,7 +466,7 @@ Proof
      `step_inst fuel ctx i1 (s1 with vs_inst_idx := LENGTH sa.cs_current_insts + 1) =
         OK (s2 with vs_inst_idx := LENGTH sa.cs_current_insts + 1)` by
        (qpat_x_assum `step_inst_base i1 s1 = OK s2` mp_tac >>
-        simp[Abbr `i1`, step_inst_non_invoke, step_inst_base_def,
+        simp[Abbr `i1`, step_inst_non_invoke, step_inst_base_opcode_eqs,
              exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
         strip_tac >> gvs[update_var_def]) >>
      irule ptr_safe_run_scalar_continuation >>
@@ -596,7 +596,7 @@ Proof
        (mp_then Any mp_tac run_inst_seq_append) >>
      disch_then (qspec_then
        `[mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]` mp_tac) >>
-     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, eval_operand_def] >>
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
      metis_tac[]) >>
   irule calldata_bytestring_overwrite_endpoint_core >>
   goal_assum (drule_at Any) >> simp[] >>

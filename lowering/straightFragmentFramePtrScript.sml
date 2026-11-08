@@ -21,7 +21,7 @@ Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (fs[] >> drule drop_cons_instruction >> strip_tac >>
       simp[Once ghost_block_def, get_instruction_def, step_inst_non_invoke,
-        step_inst_base_def, mk_inst_def]) >>
+        step_inst_base_opcode_eqs, mk_inst_def]) >>
   fs[] >> drule drop_cons_instruction >> strip_tac >>
   simp[Once ghost_block_def, get_instruction_def, step_inst_non_invoke] >>
   rename1 `step_inst_base inst s` >>
@@ -62,7 +62,7 @@ Proof
   `ghost_run 0 ctx fn PG H u sf = (H,u)` by
     simp[ghost_run_def, Abbr `fn`, Abbr `bb`, lookup_block_def,
       FIND_def, INDEX_FIND_def, Once ghost_block_def, get_instruction_def,
-      EL_APPEND_EQN, step_inst_non_invoke, step_inst_base_def, mk_inst_def] >>
+      EL_APPEND_EQN, step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def] >>
   qpat_x_assum `!fuel. _` (qspec_then `0` mp_tac) >>
   simp[] >> strip_tac >>
   `DROP s.vs_inst_idx bb.bb_instructions =

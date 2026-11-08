@@ -100,7 +100,7 @@ Proof
   strip_tac >> fs[MEM] >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [mk_inst_def] >>
-  simp_tac bool_ss [Once step_inst_base_def, instruction_accessors,
+  simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
                     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> simp[venom_state_component_equality]
@@ -188,7 +188,7 @@ Proof
   strip_tac >> fs[MEM] >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [mk_inst_def] >>
-  simp_tac bool_ss [Once step_inst_base_def, instruction_accessors,
+  simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
                     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE]

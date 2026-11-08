@@ -243,7 +243,7 @@ Proof
   qabbrev_tac `lv = STRING #"%" (toString sa.cs_next_var)` >>
   qabbrev_tac `loaded = update_var lv (n2w cnt) s` >>
   `run_inst_seq (emitted_insts sa sc) s = OK loaded` by
-    simp[Abbr `loaded`, run_inst_seq_def, step_inst_base_def, mk_inst_def,
+    simp[Abbr `loaded`, run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
       exec_read1_def, eval_operand_def, w2n_n2w, LESS_MOD] >>
   `!i. w2n (n2w p : 256 word) <= i /\
     i < w2n (n2w p : 256 word)+32 ==> i NOTIN tn.t_mem` by
@@ -277,7 +277,7 @@ Proof
   qabbrev_tac `q = STRING #"%" (toString sd.cs_next_var)` >>
   qabbrev_tac `actual = update_var q (n2w (d+contractABI$ceil32 cnt)) s2` >>
   `run_inst_seq (emitted_insts sd sb) s2 = OK actual` by
-    simp[Abbr `actual`, run_inst_seq_def, step_inst_base_def, mk_inst_def,
+    simp[Abbr `actual`, run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
       exec_pure2_def, eval_operand_def, word_add_n2w] >>
   `contractABI$ceil32 cnt + 32 <= 32+contractABI$ceil32 cnt /\
    w2n (n2w d : 256 word) + contractABI$ceil32 cnt < dimword(:256)` by

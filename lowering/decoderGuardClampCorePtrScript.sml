@@ -127,7 +127,7 @@ Proof
     gvs[run_inst_seq_def, AllCaseEqs()] >>
   `t = s` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def, AllCaseEqs()] >> metis_tac[]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >> metis_tac[]) >>
   `step_prov PG G (mk_inst sa.cs_next_id ASSERT [op] []) t = G /\
    step_taint (mk_inst sa.cs_next_id ASSERT [op] []) s t tn = tn` by
     simp[step_prov_def, set_prov_def, step_taint_def, set_var_taint_def,

@@ -14,7 +14,7 @@ Theorem alloca_step_exterior_effects:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+  simp[Once venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
     venomStateTheory.eval_operand_def, venomExecSemanticsTheory.exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>

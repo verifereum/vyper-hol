@@ -62,7 +62,7 @@ Proof
      (gen_tac >> irule ptr_inst_ok_lower_bound_transport >> simp[] >>
       qexists_tac `0` >> simp[] >> irule ptr_inst_ok_copy_len_binop >>
       gvs[ptr_covers_def, op_taint_def]) >>
-    simp[Abbr `t`, mk_inst_def, is_terminator_def, step_inst_base_def,
+    simp[Abbr `t`, mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
       exec_pure2_def, eval_operand_def, update_var_def]) >>
   qexistsl_tac [`gf`, `tf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
   simp[] >> conj_tac >-
@@ -184,7 +184,7 @@ Proof
     !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
     (rpt gen_tac >> strip_tac >>
      `step_inst_base (mk_inst id opc [left;right] [out]) s = OK t` by
-       gvs[Abbr `t`, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+       gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
      `!fuel. ptr_inst_ok D lower fuel ctx' func G tn
        (mk_inst id opc [left;right] [out]) s` by
        (gen_tac >> irule setup_scalar_binop_safe >> simp[]) >>
@@ -196,7 +196,7 @@ Proof
     (irule ptr_fragment_step >> simp[] >>
      reverse conj_tac >- gvs[is_terminator_def] >>
      rpt strip_tac >> gvs[] >> qexists_tac `t` >>
-     conj_tac >- gvs[Abbr `t`, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+     conj_tac >- gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
      simp[Abbr `H`, Abbr `u`, Abbr `t`, update_var_def] >>
      rpt strip_tac >> gvs[] >>
      irule setup_scalar_binop_safe >> simp[allocas_from_def]) >>
@@ -289,14 +289,14 @@ Proof
     (irule ptr_fragment_step >> simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
      rpt strip_tac >> gvs[] >> qexists_tac `t` >>
      simp[Abbr `t`, Abbr `H`, Abbr `u`, mk_inst_def,
-       step_inst_base_def, exec_read1_def, abi_decode_load_def,
+       step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
        abi_decode_source_def, update_var_def] >>
      rpt strip_tac >>
      irule (cj 1 (SRULE [ptr_safe_step_def, mk_inst_def] ptr_safe_dispatch_scalar_step)) >>
      simp[allocas_from_def] >>
      qexists_tac `update_var out (abi_decode_load CALLDATALOAD a s) s` >>
      simp[mk_inst_def, step_inst_non_invoke,
-       step_inst_base_def, exec_read1_def, abi_decode_load_def,
+       step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
        abi_decode_source_def, update_var_def]) >>
   conj_tac >-
     (simp[Abbr `u`, Abbr `inst`] >> irule dispatch_scalar_output_clean >> simp[]) >>
@@ -323,10 +323,10 @@ Proof
     irule (cj 1 (SRULE [ptr_safe_step_def, mk_inst_def] ptr_safe_dispatch_scalar_step)) >>
     simp[] >> qexists_tac `t` >>
     simp[Abbr `t`, mk_inst_def, step_inst_non_invoke,
-      step_inst_base_def, exec_read1_def, abi_decode_load_def,
+      step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
       abi_decode_source_def, update_var_def]) >>
   simp[Abbr `inst`, Abbr `t`, mk_inst_def, is_terminator_def,
-    step_inst_base_def, exec_read1_def, abi_decode_load_def,
+    step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
     abi_decode_source_def, update_var_def]
 QED
 
@@ -387,7 +387,7 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb` by
     (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
   `t = update_var x (f a b) s` by
-    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   `!q. not_fresh_at sa q ==> q <> x` by
     (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
   drule_at (Pat `sb.cs_current_insts = _`) scalar_binop_frag_ptr_core >>
@@ -467,7 +467,7 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb` by
     (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
   `t = update_var x (abi_decode_load CALLDATALOAD a s) s` by
-    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
       abi_decode_load_def, abi_decode_source_def] >>
   `!q. not_fresh_at sa q ==> q <> x` by
     (simp[not_fresh_at_def, Abbr `x`] >> metis_tac[LESS_EQ_REFL]) >>
@@ -689,7 +689,7 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb` by
     (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
   `t = update_var q (a + n2w off) s` by
-    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
       eval_operand_def] >>
   `!x. not_fresh_at sa x ==> x <> q` by
     (simp[not_fresh_at_def, Abbr `q`] >> metis_tac[LESS_EQ_REFL]) >>
@@ -876,7 +876,7 @@ Proof
   `sb.cs_current_bb = sa.cs_current_bb` by
     (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
   `t = update_var x (mload (w2n a) s) s` by
-    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
       eval_operand_def] >>
   qabbrev_tac `ins = mk_inst sa.cs_next_id MLOAD [Var q] [x]` >>
   qabbrev_tac `H = step_prov PG G ins t` >>
@@ -908,7 +908,7 @@ Proof
   (reverse conj_tac >- metis_tac[]) >>
   irule ptr_fragment_step >> simp[Abbr `ins`, mk_inst_def, is_terminator_def] >>
   rpt strip_tac >> gvs[] >> qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n a) s) s` >>
-  simp[Abbr `H`, Abbr `u`, step_inst_base_def, mk_inst_def,
+  simp[Abbr `H`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
     exec_read1_def, eval_operand_def, update_var_def] >>
   rpt strip_tac >> irule (SRULE [mk_inst_def] ptr_inst_ok_mload) >> simp[]
 QED

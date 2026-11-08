@@ -31,10 +31,10 @@ Proof
   `step_inst_base (mk_inst k MLOAD [Var dp] [data]) s = OK u` by
     (simp[Abbr `u`] >> irule step_MLOAD >> simp[eval_operand_def]) >>
   `step_inst_base (mk_inst l ISZERO [Var len] [empty]) u = OK v` by
-    (simp[Abbr `v`, step_inst_base_def, mk_inst_def, exec_pure1_def] >>
+    (simp[Abbr `v`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def] >>
      fs[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `step_inst_base (mk_inst m ISZERO [Var empty] [nonempty]) v = OK w` by
-    (simp[Abbr `w`, step_inst_base_def, mk_inst_def, exec_pure1_def] >>
+    (simp[Abbr `w`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def] >>
      simp[Abbr `v`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      Cases_on `nv = 0w` >> simp[bool_to_word_def]) >>
   `step_inst_base (mk_inst r MUL [Var data;Var nonempty] [selected]) w =
@@ -176,7 +176,7 @@ Proof
     (update_var nonempty (bool_to_word (nv <> 0w))
       (update_var empty (bool_to_word (nv = 0w))
         (update_var data (mload (w2n a) s) s)))) with vs_inst_idx := SUC (SUC (SUC q))` >>
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 

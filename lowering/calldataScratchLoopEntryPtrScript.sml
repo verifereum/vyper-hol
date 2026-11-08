@@ -33,14 +33,14 @@ Proof
     (mk_inst start.cs_next_id JMP
       [Label (fresh_label_output "dec_dyn_hdr" start.cs_next_label)] []) s` by
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-          mk_inst_def, step_inst_non_invoke, step_inst_base_def, jump_to_def,
+          mk_inst_def, step_inst_non_invoke, step_inst_base_opcode_eqs, jump_to_def,
           codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def,
           op_taint_def]) >>
   fs[] >> strip_tac >> Cases_on `fuel`
   >- (simp[Once ptr_safe_run_def, Once ptr_safe_block_def,
            get_instruction_def, EL_APPEND_EQN] >>
-      simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
            is_terminator_def, Once ptr_safe_blocks_def]) >>
   `is_terminator (mk_inst start.cs_next_id JMP
       [Label (fresh_label_output "dec_dyn_hdr" start.cs_next_label)] []).inst_opcode /\
@@ -49,7 +49,7 @@ Proof
    step_inst_base (mk_inst start.cs_next_id JMP
       [Label (fresh_label_output "dec_dyn_hdr" start.cs_next_label)] []) s =
      OK (jump_to (fresh_label_output "dec_dyn_hdr" start.cs_next_label) s)` by
-    simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
+    simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   drule_all ptr_safe_run_jump_no_phi >>
   disch_then (qspecl_then [`n`,`D`,`lower`,`ctx`,`PG`,`G`,`tn`] mp_tac) >>

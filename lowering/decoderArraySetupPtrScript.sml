@@ -187,7 +187,7 @@ Proof
        (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
      qpat_x_assum `run_inst_seq (emitted_insts st c1) s = OK s1` mp_tac >>
      asm_rewrite_tac[] >> POP_ASSUM_LIST (K all_tac) >>
-     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
           eval_operand_def, AllCaseEqs()] >>
      rpt strip_tac >> gvs[update_var_def]) >>
   `eval_operand idx s1 = SOME (n2w j) /\ op_taint u1 idx = {} /\ op_prov H1 idx = NONE` by
@@ -355,7 +355,7 @@ Proof
   `m.vs_current_bb = s.vs_current_bb` by
     (qpat_assum `emit_op CALLDATALOAD _ _ = _`
        (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
        AllCaseEqs(), update_var_def]) >>
   `m.vs_labels = s.vs_labels` by
     (irule emit_op_run_labels >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -364,7 +364,7 @@ Proof
   `?c. eval_operand off m = SOME c` by
     (qpat_assum `emit_op CALLDATALOAD _ _ = _`
        (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qabbrev_tac `sm = m with vs_inst_idx := SUC s.vs_inst_idx` >>
   `run_inst_seq (emitted_insts mid ready) sm = OK (t with vs_inst_idx := sm.vs_inst_idx)` by
@@ -400,7 +400,7 @@ Proof
      qpat_x_assum `out = _` (fn th => rewrite_tac[th]) >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      gvs[run_inst_seq_def] >>
-     gvs[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+     gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
      simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `!D lower ctx' func.
     fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
@@ -543,7 +543,7 @@ Proof
   `?v w. eval_operand data s2 = SOME v /\ eval_operand off s2 = SOME w` by
     (qpat_assum `emit_op ADD [data;off] c2 = _`
       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def, AllCaseEqs()]) >>
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, AllCaseEqs()]) >>
   qabbrev_tac `ss2 = s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)` >>
   `run_inst_seq (emitted_insts c2 ready) ss2 = OK (t with vs_inst_idx := ss2.vs_inst_idx)` by
     (qpat_assum `emit_op ADD _ c2 = _` (mp_then Any mp_tac emit_op_run_pc) >>
@@ -578,7 +578,7 @@ Proof
      qpat_assum `eval_operand src s = SOME a` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `eval_operand off s2 = SOME (b * n2w stride)` by
     (qpat_assum `emit_op MUL _ c1 = _` mp_tac >>
@@ -586,7 +586,7 @@ Proof
      qpat_assum `eval_operand idx s1 = SOME b` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `eval_operand data s2 = SOME (a + 32w)` by
     (qpat_assum `!q. not_fresh_at c1 q ==> _`
@@ -599,7 +599,7 @@ Proof
      qpat_assum `eval_operand off s2 = SOME (b * n2w stride)` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `eval_operand data t = SOME (a + 32w)` by
     (qpat_assum `!q. not_fresh_at c2 q ==> _`
@@ -766,7 +766,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[load_and_source]:
     (irule emit_op_run_control_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `eval_operand idx r0 = SOME (n2w j)` by
     (qpat_assum `emit_op MLOAD _ st = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read1_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
        eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   `!x. idx = Var x ==> not_fresh_at c0 x` by
     (qpat_assum `emit_op MLOAD _ st = _` (mp_then Any mp_tac abi_decoder_operand_live_emit) >>

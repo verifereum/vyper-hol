@@ -99,7 +99,7 @@ Proof
   strip_tac >>
   `t = update_var x (mload (w2n a) s) s` by
     (drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_read1_def, eval_operand_def]) >>
   `!fuel. ptr_inst_ok D lower fuel ctx func G tn
     (mk_inst sa.cs_next_id MLOAD [Var q] [x]) s` by
@@ -174,7 +174,7 @@ Proof
   strip_tac >>
   `t.vs_current_bb = s.vs_current_bb` by
     (drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, AllCaseEqs(), update_var_def]) >>
   `!fuel. ptr_inst_ok D lower fuel ctx func G tn
     (mk_inst sa.cs_next_id opc [left;right] [x]) s` by

@@ -35,7 +35,7 @@ Proof
   qabbrev_tac `out = "%" ++ toString sa.cs_next_var` >>
   qabbrev_tac `inst = mk_inst sa.cs_next_id CALLDATALOAD [src] [out]` >>
   `t = update_var out (abi_decode_load CALLDATALOAD a s) s` by
-    gvs[run_inst_seq_def, Abbr `out`, step_inst_base_def, mk_inst_def,
+    gvs[run_inst_seq_def, Abbr `out`, step_inst_base_opcode_eqs, mk_inst_def,
       exec_read1_def, abi_decode_load_def, abi_decode_source_def] >>
   qabbrev_tac `H = step_prov PG G inst t` >>
   qabbrev_tac `u = step_taint inst s t tn` >>
@@ -45,14 +45,14 @@ Proof
     (irule ptr_fragment_step >> simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
      rpt strip_tac >> qexists_tac `update_var out (abi_decode_load CALLDATALOAD a s) s` >>
      simp[Abbr `H`, Abbr `u`, Abbr `out`, mk_inst_def,
-       step_inst_base_def, exec_read1_def, abi_decode_load_def,
+       step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
        abi_decode_source_def, update_var_def] >>
      rpt strip_tac >>
      irule (cj 1 (SRULE [ptr_safe_step_def, mk_inst_def] ptr_safe_dispatch_scalar_step)) >>
      simp[allocas_from_def] >>
      qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (abi_decode_load CALLDATALOAD a s) s` >>
      simp[mk_inst_def, step_inst_non_invoke,
-       step_inst_base_def, exec_read1_def, abi_decode_load_def,
+       step_inst_base_opcode_eqs, exec_read1_def, abi_decode_load_def,
        abi_decode_source_def, update_var_def]) >>
   `!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
@@ -62,7 +62,7 @@ Proof
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
     (rpt gen_tac >> strip_tac >>
       `step_inst_base inst s = OK t` by
-        (simp[Abbr `inst`, mk_inst_def, step_inst_base_def,
+        (simp[Abbr `inst`, mk_inst_def, step_inst_base_opcode_eqs,
           exec_read1_def, abi_decode_load_def, abi_decode_source_def]) >>
       `!fuel. ptr_inst_ok D lower fuel ctx' func G tn inst s` by
         (gen_tac >> simp[Abbr `inst`] >>
