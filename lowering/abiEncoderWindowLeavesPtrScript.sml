@@ -6,6 +6,7 @@ Ancestors abiEncoderRobustWindowPtr abiEncoderBytesPtr representationCleanPtr
   straightFragmentFramePtr abiEncoderBytes abiEncoderBytesCode abiDecoderContract
   emitHelper compileEnv emitHelperProps exprLoweringProps rich_list abiDecodeStaticProps
   abiEncoderWindowBytes localPtrsProps abiEncoderRounding valueEncodingProps
+  typedCopyPtr fragExecPtr ptrSafeRun ptrDiscipline venomInst venomState venomExecSemantics
 
 Theorem abi_encoder_robust_word_read_clean:
   (!m. mem_agree_outside ta mem m ==>
@@ -169,7 +170,7 @@ Proof
     metis_tac[abi_encoder_ceil32_bounds] >>
   `not_fresh_at sa src /\ not_fresh_at sa dst` by metis_tac[] >>
   `lookup_var src s = SOME (n2w p) /\ lookup_var dst s = SOME (n2w d)` by
-    fs[venomStateTheory.eval_operand_def] >>
+    metis_tac[venomStateTheory.eval_operand_def] >>
   `mload p s = n2w (LENGTH bs)` by
     metis_tac[mem_word_at_eq_mload, mem_agree_outside_def] >>
   qpat_x_assum `!m. mem_agree_outside _ _ m ==> abi_encoder_window_input _ _ _ _ _ _` kall_tac >>
@@ -212,4 +213,29 @@ Proof
   conj_tac >- (irule frag_exec_ptr_false_exit_weaken >> first_assum ACCEPT_TAC) >>
   simp[abi_encoder_window_result_def] >>
   rpt strip_tac >> fs[] >> decide_tac)
+QED
+
+Theorem abi_encoder_empty_window_frag_ptr:
+  compile_abi_encode_to_buf dst src (AbiComplex []) sa = (out,sb) /\
+  abi_encoder_window_pre ctx fn sa sb dst src (AbiComplex []) at av p cap d s ==>
+  frag_exec_ptr cx ctx PG sa sb (\g z v. g=G /\ z=tn /\ v=s)
+    (\g z v. g=G /\ z=tn /\ v=s) R /\
+  abi_encoder_window_result ctx fn sa sb out at av d s s /\ op_taint tn out = {}
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_abi_encode_to_buf _ _ _ _ = _` mp_tac >>
+  simp[Once abiEncoderTheory.compile_abi_encode_child_def, comp_return_def] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[abi_encoder_window_pre_def] >> strip_tac >>
+  `enc at av = []` by
+    (fs[abi_encoder_window_complex_iff, abiEncoderInputTheory.abi_encoder_tuple_type_def,
+       abiEncoderInputTheory.abi_encoder_member_span_def, enc_def, LET_THM, REV_DEF]) >>
+  conj_tac
+  >- (simp[frag_exec_ptr_def] >> rpt strip_tac >>
+      disj1_tac >> rpt strip_tac >> qexists_tac `fuel` >> simp[]) >>
+  simp[abi_encoder_window_result_def, mem_bytes_at_def,
+    abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_refl,
+    abiDecoderLoopTheory.abi_decode_sim_refl,
+    venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def]
 QED
