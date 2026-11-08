@@ -1,6 +1,6 @@
 Theory exprSimAbiEncodeWordSuccess
 Ancestors
-  exprSimAbiEncodeStagedObserver exprSimAbiEncodePrefixWindow
+  exprSimAbiEncodeStagedObserver exprSimAbiEncodePrefixWindow exprSimAbiEncodeStagedFrame
   abiBuiltinEncodeWord abiBuiltinAllocation exprSimHash abiDecoderGuards context emitHelper emitHelperProps
   exprLoweringProps compileEnv venomState venomInst list rich_list
   abiBuiltinEncodeCode abiCopyExecution abiEncoder
@@ -11,7 +11,8 @@ Ancestors
   exprSimAbiEncodeTranslatedPhases exprSimAbiEncodeCallerSuffix
   exprSimAbiEncodeExecFrame exprSimAbiEncodeStateTransport
   exprSimAbiEncodeNoBlockBoundary exprSimAbiEncodeNoBlockSafety
-  exprSimAbiEncodeOblivious exprSimAbiGasBridge
+  exprSimAbiEncodeOblivious exprSimAbiGasBridge exprSimAlloc fragExec
+  exprSimAbiEncodeOriginFrame loweringPosts
 
 Theorem abi_encode_word_staging_path:
   compile_alloc_buffer 32 sa = (buf,sm) /\
@@ -404,4 +405,100 @@ Proof
   drule_all abi_encode_word_no_block_observer >> strip_tac >>
   qexists_tac `actual` >> asm_rewrite_tac[] >>
   simp_tac bool_ss [Abbr `Q`] >> qexists_tac `p` >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_encode_word_staged_counted:
+  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  emit_void MSTORE [buf.buf_operand;op] sm = ((),sh) /\
+  lower_abi_encode F mid buf.buf_operand
+    (type_to_abi_enc_info sf ce (expr_type e)) 32 sh = (out,final) /\
+  fn_has_code sa sh func /\ fn_has_code sh final func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  local_ptrs_reserved ce origin /\ origin.cs_next_var <= sa.cs_next_var /\
+  origin.cs_next_id <= sa.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?p ct rv initial actual.
+    gas_marked_path F ctx func s 0 (OK initial) /\
+    gas_marked_path F ctx func initial 0 (OK actual) /\
+    enc ct rv = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av /\
+    LENGTH (enc ct rv) = 32 /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_staged_observation ctx func ce cx es' sh out mid
+      (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4)))
+      p ct rv initial actual /\ wb_frame ce es origin s0 actual
+Proof
+  strip_tac >> drule abi_builtin_alloc_buffer_shape >> strip_tac >>
+  `fn_has_code sa sm func` by
+    (irule (cj 1 fn_has_code_split) >> conj_tac
+     >- (qpat_x_assum `emit_op ALLOCA _ sa = _` mp_tac >>
+         simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def, fresh_id_def,
+           emit_def, comp_return_def] >> strip_tac >> gvs[] >>
+         irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
+     qexists_tac `sh` >> asm_rewrite_tac[] >>
+     qpat_x_assum `emit_void MSTORE _ sm = _` mp_tac >>
+     simp[emit_void_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+       emit_def, comp_return_def] >> strip_tac >> gvs[] >>
+     irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all abi_encode_word_expr_post >> strip_tac >>
+  drule_all abi_builtin_encode_word_stage_shape >> strip_tac >>
+  drule_all abi_encode_word_source_window >>
+  disch_then (qspecl_then [`sf`, `ce`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func ce cx es' staged` >>
+  drule_all abi_encode_word_staging_path >> strip_tac >>
+  qabbrev_tac `initial = staged with vs_inst_idx := LENGTH sh.cs_current_insts` >>
+  `local_ptrs_reserved ce sh` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `FLOOKUP initial.vs_allocas sa.cs_next_id = SOME(w2n addr,32)` by
+    simp[Abbr `initial`, Abbr `staged`, mstore_def] >>
+  `sa.cs_next_id <> sh.cs_next_id` by decide_tac >>
+  `stmt_state_rel ctx func ce cx es' initial /\
+   abi_encoder_window_input (type_to_abi_enc_info sf ce (expr_type e))
+     ct rv (w2n addr) 32 initial.vs_memory /\
+   LENGTH (enc ct rv) = 32 /\
+   eval_operand buf.buf_operand initial = SOME(n2w (w2n addr)) /\
+   ~initial.vs_halted /\ initial.vs_current_bb = sh.cs_current_bb /\
+   initial.vs_inst_idx = LENGTH sh.cs_current_insts` by
+    (simp[Abbr `initial`, stmt_state_rel_inst_idx] >>
+     simp[Abbr `staged`, mstore_def, eval_operand_def] >>
+     Cases_on `buf.buf_operand` >> gvs[eval_operand_def]) >>
+  `(!l. buf.buf_operand <> Label l) /\
+   (!x. buf.buf_operand = Var x ==> not_fresh_at sh x)` by
+    (qpat_x_assum `emit_op ALLOCA _ sa = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_var_def, fresh_id_def, emit_def, comp_return_def] >>
+     strip_tac >> Cases_on `buf.buf_operand` >>
+     gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `stmt_state_rel ctx func ce cx es' s /\
+   eval_operand op s = SOME(typed_val_to_w256 tv v)` by
+    (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
+  drule_all hash_alloc_mstore_frame >> strip_tac >>
+  `run_inst_seq (emitted_insts sa sh) s = OK staged` by
+    (irule run_inst_seq_compose_ok >> qexistsl_tac [`allocated`, `sm`] >>
+     metis_tac[inst_extends_emit_op, inst_extends_emit_void]) >>
+  `t = staged` by gvs[] >>
+  qpat_x_assum `t = staged` SUBST_ALL_TAC >>
+  `wb_frame ce es origin s0 staged` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then Any irule abi_encode_nonword_origin_frame) >>
+     simp[] >> metis_tac[]) >>
+  `wb_frame ce es origin s0 initial` by
+    (qunabbrev_tac `initial` >>
+     qpat_assum `wb_frame _ _ _ _ staged` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[wb_frame_def, lookup_var_def, locals_kept_def] >>
+     metis_tac[]) >>
+  drule_all abi_encode_word_counted_encoder >> strip_tac >>
+  `origin.cs_next_var <= sh.cs_next_var /\
+   origin.cs_next_id <= sh.cs_next_id` by decide_tac >>
+  drule_all abi_encode_staged_origin_frame >> strip_tac >>
+  qexistsl_tac [`p`, `ct`, `rv`, `initial`, `actual`] >>
+  asm_rewrite_tac[] >> simp[Abbr `initial`]
 QED
