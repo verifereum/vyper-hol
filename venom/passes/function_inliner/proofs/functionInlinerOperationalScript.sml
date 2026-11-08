@@ -1171,3 +1171,119 @@ Proof
     venom_state_component_equality]
 QED
 
+
+Theorem inline_mcopy_eval_list:
+  inst.inst_opcode = MCOPY /\ LENGTH inst.inst_operands = 3 ==>
+  step_inst_base inst s =
+    case eval_operands inst.inst_operands s of
+      NONE => Error "undefined operand"
+    | SOME ws => OK (mcopy (w2n (EL 0 ws)) (w2n (EL 1 ws)) (w2n (EL 2 ws)) s)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operand h' s` >> simp[] >>
+  Cases_on `eval_operand h'' s` >> simp[]
+QED
+
+Theorem inline_returndatacopy_eval_list:
+  inst.inst_opcode = RETURNDATACOPY /\ LENGTH inst.inst_operands = 3 ==>
+  step_inst_base inst s =
+    case eval_operands inst.inst_operands s of
+      NONE => Error "undefined operand"
+    | SOME ws =>
+        if w2n (EL 1 ws) + w2n (EL 2 ws) > LENGTH s.vs_returndata
+        then Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else OK (write_memory_with_expansion (w2n (EL 0 ws))
+          (TAKE (w2n (EL 2 ws)) (DROP (w2n (EL 1 ws)) s.vs_returndata)) s)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operand h' s` >> simp[] >>
+  Cases_on `eval_operand h'' s` >> simp[]
+QED
+
+Theorem inline_shared_frame_bulk_memory:
+  (inline_shared_frame (mcopy dst src sz s) =
+    mcopy dst src sz (inline_shared_frame s)) /\
+  (inline_shared_frame (write_memory_with_expansion dst bytes s) =
+    write_memory_with_expansion dst bytes (inline_shared_frame s)) /\
+  (mcopy dst src sz s).vs_vars = s.vs_vars /\
+  (write_memory_with_expansion dst bytes s).vs_vars = s.vs_vars
+Proof
+  simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem inline_opaque_frame_mcopy:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_opaque_frame_rel ren V opaque saved P
+    (mcopy dst src sz s) (mcopy dst src sz t)
+Proof
+  strip_tac >> irule inline_opaque_frame_shared_effect >> conj_tac
+  >- (simp[inline_shared_frame_bulk_memory] >>
+      metis_tac[inline_opaque_frame_rel_def, inline_frame_rel_def]) >>
+  qexistsl [`s`, `t`] >> simp[inline_shared_frame_bulk_memory]
+QED
+
+Theorem inline_opaque_frame_write_memory:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_opaque_frame_rel ren V opaque saved P
+    (write_memory_with_expansion dst bytes s)
+    (write_memory_with_expansion dst bytes t)
+Proof
+  strip_tac >> irule inline_opaque_frame_shared_effect >> conj_tac
+  >- (simp[inline_shared_frame_bulk_memory] >>
+      metis_tac[inline_opaque_frame_rel_def, inline_frame_rel_def]) >>
+  qexistsl [`s`, `t`] >> simp[inline_shared_frame_bulk_memory]
+QED
+
+Theorem inline_mcopy_atomic_clone_result:
+  inst.inst_opcode = MCOPY /\ LENGTH inst.inst_operands = 3 /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = MCOPY /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 3` by
+    simp[clone_instruction_def] >>
+  simp[step_inst_non_invoke, inline_mcopy_eval_list] >>
+  simp[clone_instruction_def] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[inline_opaque_frame_mcopy]
+QED
+
+Theorem inline_returndatacopy_atomic_clone_result:
+  inst.inst_opcode = RETURNDATACOPY /\ LENGTH inst.inst_operands = 3 /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = RETURNDATACOPY /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 3` by
+    simp[clone_instruction_def] >>
+  `s.vs_returndata = t.vs_returndata` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  simp[step_inst_non_invoke, inline_returndatacopy_eval_list] >>
+  simp[clone_instruction_def] >>
+  Cases_on `eval_operands inst.inst_operands s` >> simp[] >>
+  IF_CASES_TAC >>
+  simp[inline_opaque_frame_exceptional_halt, inline_opaque_frame_write_memory]
+QED
