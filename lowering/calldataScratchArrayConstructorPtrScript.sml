@@ -150,7 +150,8 @@ Resume calldata_scratch_array_constructor_guarded_ptr[frames]:
     (qhdtm_assum `abi_decoder_recursive_loop_compiled` mp_tac >>
      qpat_assum `abi_decode_loop_suffix _ _ _ _ _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
-     simp[abi_decoder_recursive_loop_compiled_def] >> rpt strip_tac >>
+     simp[abi_decoder_recursive_loop_compiled_def,
+       abiDecoderExecutionTheory.abi_decode_position_header_delta_def] >> rpt strip_tac >>
      gvs[abi_decode_loop_suffix_shape, abi_decode_loop_suffix_state_def]) >>
   `t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = 0 /\ ~t.vs_halted` by
     fs[abi_scratch_decoder_loop_inv_def] >>

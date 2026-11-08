@@ -14,10 +14,25 @@ Ancestors
 val calldata_pos_live_lit = prove(
   ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
   simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+val calldata_pos_loop_cfg = prove(
+  ``abiDecoderExecution$abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl id ip src opc
+      (Lit 0w) first <=>
+    abi_decode_loop_cfg fn hdr body_lbl exit_lbl id ip src opc
+      (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
+      (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3)))``,
+  simp[abiDecoderExecutionTheory.abi_decode_position_loop_cfg_def,
+       abiDecoderExecutionTheory.abi_decode_loop_cfg_def,
+       abiDecoderExecutionTheory.abi_decode_position_header_zero]);
+val calldata_pos_delta = prove(
+  ``abiDecoderExecution$abi_decode_position_header_delta (Lit 0w) = 0``,
+  simp[abiDecoderExecutionTheory.abi_decode_position_header_delta_def]);
+val calldata_pos_loop_rws =
+  [calldata_pos_loop_cfg, calldata_pos_delta,
+   abiDecoderExecutionTheory.abi_decode_position_header_zero,
+   cj 1 arithmeticTheory.ADD_CLAUSES, cj 2 arithmeticTheory.ADD_CLAUSES];
 fun calldata_pos th =
   SIMP_RULE bool_ss
-    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
-     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    ([cj 1 venomStateTheory.eval_operand_def, calldata_pos_live_lit] @ calldata_pos_loop_rws)
     (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
 
 Theorem calldata_scratch_loop_iteration_prefix_guarded_ptr:
@@ -107,7 +122,7 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all (calldata_pos abi_decoder_recursive_compiled_facts) >> strip_tac >>
   qhdtm_assum `abi_decoder_recursive_loop_compiled`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE (abi_decoder_recursive_loop_compiled_def :: calldata_pos_loop_rws)) >>
   qhdtm_assum `abi_scratch_decoder_loop_data`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
   `abi_decoder_budget first last b cap s /\ FLOOKUP s.vs_allocas site = SOME (slot,32)` by
@@ -695,7 +710,7 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all (calldata_pos abi_decoder_recursive_compiled_facts) >> strip_tac >>
   qhdtm_assum `abi_decoder_recursive_loop_compiled`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE (abi_decoder_recursive_loop_compiled_def :: calldata_pos_loop_rws)) >>
   qhdtm_assum `abi_scratch_decoder_loop_data`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
   `abi_decoder_budget first last b cap s /\ FLOOKUP s.vs_allocas site = SOME (slot,32)` by

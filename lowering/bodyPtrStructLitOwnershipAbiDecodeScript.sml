@@ -7,9 +7,9 @@ Theorem alloc_run_compile_abi_dec_addr:
   alloc_run fresh_outputs (compile_abi_dec_addr base_op p)
     (\r s. fresh_outputs s)
 Proof
-  Cases_on `base_op = Lit 0w` >>
-  simp[compile_abi_dec_addr_def, comp_return_def, alloc_run_def, alloc_frame_refl,
-       SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
+  Cases_on `base_op = Lit 0w` >> simp[compile_abi_dec_addr_def]
+  >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh]
 QED
 
 Theorem alloc_run_compile_abi_decode_range_check:
