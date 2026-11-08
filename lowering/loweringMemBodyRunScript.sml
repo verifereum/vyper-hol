@@ -165,18 +165,33 @@ Theorem send_call_value_scopes_gas[local]:
            (r, s' with <| scopes := sc; gas_obs := g |>)
 Proof
   rpt gen_tac >>
-  simp[vyperInterpreterTheory.send_call_value_def,
-       vyperInterpreterTheory.transfer_value_def,
-       vyperStateTheory.return_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
-       vyperStateTheory.assert_def, vyperStateTheory.get_accounts_def,
-       vyperStateTheory.update_accounts_def, LET_THM] >>
-  rw[] >>
-  gvs[vyperStateTheory.return_def, vyperStateTheory.bind_def,
-      vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
-      vyperStateTheory.assert_def, vyperStateTheory.get_accounts_def,
-      vyperStateTheory.update_accounts_def, COND_RATOR, AllCaseEqs()] >>
-  rw[] >> gvs[]
+  Cases_on `cx.txn.value = 0` >-
+   (simp[vyperInterpreterTheory.send_call_value_def, LET_THM,
+         vyperStateTheory.return_def] >>
+    strip_tac >> gvs[]) >>
+  Cases_on `mut = Payable` >-
+   (Cases_on `cx.txn.sender = cx.txn.target` >-
+     (simp[vyperInterpreterTheory.send_call_value_def,
+          vyperInterpreterTheory.transfer_value_def, LET_THM,
+          vyperStateTheory.return_def, vyperStateTheory.bind_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+          vyperStateTheory.assert_def, vyperStateTheory.get_accounts_def,
+          vyperStateTheory.update_accounts_def] >>
+      strip_tac >> gvs[]) >>
+    simp[vyperInterpreterTheory.send_call_value_def,
+          vyperInterpreterTheory.transfer_value_def, LET_THM,
+          vyperStateTheory.return_def, vyperStateTheory.bind_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+          vyperStateTheory.assert_def, vyperStateTheory.get_accounts_def,
+          vyperStateTheory.update_accounts_def] >>
+    Cases_on `cx.txn.value <= (lookup_account cx.txn.sender s.accounts).balance` >>
+    Cases_on `(lookup_account cx.txn.target s.accounts).balance + cx.txn.value <
+              2 ** 256` >>
+    simp[] >> strip_tac >> gvs[]) >>
+  simp[vyperInterpreterTheory.send_call_value_def, LET_THM,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def] >>
+  strip_tac >> gvs[]
 QED
 
 (* call_external_body sets the scopes before it reads them. *)
