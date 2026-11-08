@@ -175,16 +175,27 @@ Proof
   fs[log_encode_external_def, copy_static_def, venom_state_component_equality]
 QED
 
-Theorem abi_encode_tuple_staging_state_rel:
+Theorem abi_encode_tuple_staging_split:
   compile_alloc_buffer n st = (buf,allocated) /\
   compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
   fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
   n < dimword (:256) /\
   run_inst_seq (emitted_insts st staged) s = OK actual /\
-  abi_decode_frame b n s actual /\
   FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) ==>
-  stmt_state_rel ctx func ce cx es actual
+  ?addressed.
+    stmt_state_rel ctx func ce cx es addressed /\
+    run_inst_seq (emitted_insts allocated staged) addressed = OK actual /\
+    addressed.vs_memory = s.vs_memory /\ copy_static actual = copy_static addressed /\
+    FLOOKUP addressed.vs_allocas st.cs_next_id = SOME (b,n) /\
+    b + n < dimword (:256) /\
+    (!x. not_fresh_at st x ==> lookup_var x addressed = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP addressed.vs_allocas aid = SOME entry) /\
+    (!aid a len. aid < st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+       regions_disjoint b n a len) /\
+    (!name a len. local_region ce es.scopes addressed name a len ==>
+       regions_disjoint b n a len)
 Proof
   strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
@@ -200,9 +211,26 @@ Proof
      asm_rewrite_tac [] >> metis_tac[]) >>
   drule_all abi_encode_tuple_store_static >> strip_tac >>
   `actual.vs_allocas = addressed.vs_allocas` by metis_tac[copy_static_fields] >>
-  `b = w2n w` by gvs[] >> gvs[] >>
+  `b = w2n w` by gvs[] >> gvs[] >> qexists `addressed` >> simp[] >> metis_tac[]
+QED
+
+Theorem abi_encode_tuple_staging_state_rel:
+  compile_alloc_buffer n st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
+  fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  n < dimword (:256) /\
+  run_inst_seq (emitted_insts st staged) s = OK actual /\
+  abi_decode_frame b n s actual /\
+  FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) ==>
+  stmt_state_rel ctx func ce cx es actual
+Proof
+  strip_tac >>
+  drule_all abi_encode_tuple_staging_split >>
+  disch_then (qx_choose_then `addressed` strip_assume_tac) >>
+  drule_all buffer_alloc_code >> strip_tac >>
   irule copy_buffer_state_rel_frame >>
-  qexistsl [`w2n w`, `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+  qexistsl [`b`, `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
     [STRING #"%" (toString st.cs_next_var)]`, `addressed`, `allocated`, `n`] >>
   asm_rewrite_tac [mk_inst_def] >> rpt conj_tac
   >- (rpt strip_tac >> first_x_assum drule >> simp[regions_disjoint_def])
@@ -212,5 +240,77 @@ Proof
       irule abi_encode_leaf_sequence_memory_length >>
       qexists `emitted_insts allocated staged` >> asm_rewrite_tac [] >>
       drule abi_encode_tuple_store_opcodes >> simp[EVERY_MEM] >> metis_tac[]) >>
-  simp[] >> irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]
+  simp[] >> irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >>
+  drule abi_tuple_encode_alloc_shape >> simp[]
+QED
+
+Theorem abi_encode_tuple_staging_origin_frame:
+  compile_alloc_buffer n st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
+  fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es' s /\ local_ptrs_reserved ce st /\
+  n < dimword (:256) /\
+  run_inst_seq (emitted_insts st staged) s = OK actual /\
+  abi_decode_frame b n s actual /\
+  FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) /\
+  wb_frame ce es origin s0 s /\ local_ptrs_reserved ce origin /\
+  origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+  wb_frame ce es origin s0 actual
+Proof
+  strip_tac >> drule_all abi_encode_tuple_staging_split >>
+  disch_then (qx_choose_then `addressed` strip_assume_tac) >>
+  drule abi_tuple_encode_alloc_shape >> strip_tac >>
+  `!x. not_fresh_at st x ==> lookup_var x actual = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at allocated x` by fs[not_fresh_at_def] >>
+     drule_all abi_encode_tuple_store_lookup >> simp[]) >>
+  `actual.vs_allocas = addressed.vs_allocas` by metis_tac[copy_static_fields] >>
+  irule wb_frame_allocating_tail >> asm_rewrite_tac [] >>
+  qexistsl [`s`, `es'.scopes`, `st`] >>
+  simp[] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `local_region ce es'.scopes addressed n' b' sz` by
+        (qpat_x_assum `!x. not_fresh_at st x ==> lookup_var x actual = _` kall_tac >>
+         drule_all copy_buffer_local_region_frame >> simp[]) >>
+      fs[abi_decode_frame_def] >>
+      qpat_x_assum `!name a len. _ ==> regions_disjoint _ _ _ _` drule >>
+      simp[regions_disjoint_def] >> strip_tac >>
+      qpat_x_assum `!p k. _ ==> mem_bytes_at _ _ actual.vs_memory = _` irule >>
+      simp[ADD_COMM])
+  >- (rpt strip_tac >> fs[abi_decode_frame_def] >>
+      qpat_x_assum `!aid a len. _ ==> regions_disjoint _ _ _ _` drule >>
+      simp[regions_disjoint_def] >> strip_tac >>
+      qpat_x_assum `!p k. _ ==> mem_bytes_at _ _ actual.vs_memory = _` irule >>
+      simp[ADD_COMM])
+QED
+
+Theorem abi_encode_tuple_wb_frame_cursor[local]:
+  wb_frame ce es origin s0 (s with vs_inst_idx := k) <=>
+  wb_frame ce es origin s0 s
+Proof
+  simp[loweringPostsTheory.wb_frame_def, exprSimPropsTheory.locals_kept_inst_idx,
+       lookup_var_def]
+QED
+
+Theorem abi_encode_tuple_staging_cursor:
+  compile_alloc_buffer n st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 xs allocated = ((),staged) /\
+  fn_has_code st allocated func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es' s /\ local_ptrs_reserved ce st /\
+  n < dimword (:256) /\
+  run_inst_seq (emitted_insts st staged) s = OK actual /\
+  abi_decode_frame b n s actual /\
+  FLOOKUP actual.vs_allocas st.cs_next_id = SOME (b,n) /\
+  wb_frame ce es origin s0 s /\ local_ptrs_reserved ce origin /\
+  origin.cs_next_var <= st.cs_next_var /\ origin.cs_next_id <= st.cs_next_id /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+  stmt_state_rel ctx func ce cx es'
+    (actual with vs_inst_idx := LENGTH staged.cs_current_insts) /\
+  wb_frame ce es origin s0
+    (actual with vs_inst_idx := LENGTH staged.cs_current_insts)
+Proof
+  strip_tac >> simp[stmt_state_rel_inst_idx, abi_encode_tuple_wb_frame_cursor] >>
+  conj_tac >- (irule abi_encode_tuple_staging_state_rel >> metis_tac[]) >>
+  irule abi_encode_tuple_staging_origin_frame >> metis_tac[]
 QED
