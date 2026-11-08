@@ -8,7 +8,7 @@
 
 Theory analysisSimProofsCompare
 Ancestors
-  analysisSimProofsBase
+  venomExecProofs analysisSimProofsBase runInstsProps
   analysisSimDefs execEquivParamDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
@@ -28,12 +28,6 @@ Triviality vsr_R_ok_halted:
   valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> (s1.vs_halted <=> s2.vs_halted)
 Proof
   rw[valid_state_rel_def]
-QED
-
-Triviality is_terminator_not_INVOKE:
-  is_terminator op ==> op <> INVOKE
-Proof
-  Cases_on `op` >> simp[is_terminator_def]
 QED
 
 (* ===== Terminator case helper ===== *)
@@ -71,8 +65,8 @@ Triviality abc_terminator_case:
 Proof
   rpt gen_tac >> DISCH_TAC >>
   pop_assum (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-  `inst1.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_INVOKE] >>
-  `inst2.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_INVOKE] >>
+  `inst1.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_invoke] >>
+  `inst2.inst_opcode <> INVOKE` by metis_tac[is_terminator_not_invoke] >>
   (* Split error/non-error without pattern matching *)
   Cases_on `?e. step_inst fuel ctx inst1 s2_0 = Error e`
   >- (
@@ -294,28 +288,6 @@ fun collapse_all_idx (asl, g) =
          >> collapse_all_idx) (asl, g)
   end;
 
-(* Error in run_insts prefix → Error in exec_block *)
-Triviality exec_block_prefix_error:
-  !R_ok R_term prefix fuel ctx bb s j e.
-    valid_state_rel R_ok R_term /\
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
-      prefix /\
-    (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = Error e
-  ==>
-    ?e'. exec_block fuel ctx bb (s with vs_inst_idx := j) = Error e'
-Proof
-  rpt strip_tac >>
-  `~(?s'. run_insts fuel ctx prefix s = OK s')` by
-    (pop_assum SUBST_ALL_TAC >> simp_tac (srw_ss()) []) >>
-  drule exec_block_prefix_fail_lift >>
-  disch_then (qspecl_then [`prefix`, `fuel`, `ctx`, `bb`, `s`, `j`] mp_tac) >>
-  simp[] >> strip_tac >>
-  drule_all lift_result_error_left >>
-  simp[]
-QED
-
 (* ===== Normal case helper ===== *)
 Triviality abc_normal_case:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -397,11 +369,12 @@ Proof
       (run_insts _ _ f1_group _)` mp_tac >>
     qpat_assum `_ = Error e` (fn th => REWRITE_TAC[th]) >>
     strip_tac >> drule lift_result_error_left >> strip_tac >>
-    qspecl_then [`R_ok`, `R_term`, `f1_group`, `fuel`, `ctx`, `bb1`,
+    qspecl_then [`f1_group`, `fuel`, `ctx`, `bb1`,
       `s1 with vs_inst_idx := 0`, `j1`, `e'`] mp_tac exec_block_prefix_error >>
     qpat_assum `bb1.bb_instructions = _` (fn th => REWRITE_TAC[th]) >>
     REWRITE_TAC abbrev_expand_thms >> collapse_all_idx >>
-    disch_then irule >> rpt conj_tac >> first_assum ACCEPT_TAC)
+    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    strip_tac >> qexists_tac `e'` >> first_assum ACCEPT_TAC)
   (* Case 2: f1 on s2 does NOT error — so we have lift_result f1→f2 *)
   \\ `lift_result R_ok R_term R_term
        (run_insts fuel ctx f1_group (s2 with vs_inst_idx := 0))
@@ -1308,15 +1281,6 @@ QED
 
 
 (* ===== Compare variant: two transforms at function level ===== *)
-
-Triviality run_block_OK_inst_idx_0[local]:
-  !fuel ctx bb s v. run_block fuel ctx bb s = OK v ==> v.vs_inst_idx = 0
-Proof
-  rpt strip_tac >>
-  qspecl_then [`s`, `bb.bb_instructions`] mp_tac eval_phis_ok_or_error_defs >> strip_tac >>
-  fs[run_block_def] >>
-  drule venomExecProofsTheory.exec_block_OK_inst_idx_0 >> simp[]
-QED
 
 Triviality block_sim_function_compare_ind_step:
   !(R_ok : venom_state -> venom_state -> bool)

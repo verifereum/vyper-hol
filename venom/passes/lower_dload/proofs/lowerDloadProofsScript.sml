@@ -12,7 +12,7 @@
 
 Theory lowerDloadProofs
 Ancestors
-  lowerDloadClassify venomWf analysisSimDefs
+  runInstsProps lowerDloadClassify venomWf analysisSimDefs
   lowerDloadDefs stateEquiv venomExecSemantics passSimulationDefs
   venomExecProps venomInst venomState venomInstProps instIdxIndep
   finite_map words list rich_list
@@ -88,17 +88,6 @@ Theorem lower_dload_function_blocks:
        MAP lower_dload_block fn.fn_blocks
 Proof
   simp[lower_dload_function_def, function_map_transform_def]
-QED
-
-Theorem lookup_block_MEM:
-  !lbl bbs bb.
-    lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  Induct_on `bbs` >>
-  rw[lookup_block_def, listTheory.FIND_thm] >>
-  DISJ2_TAC >>
-  first_x_assum (qspecl_then [`lbl`, `bb`] mp_tac) >>
-  simp[lookup_block_def]
 QED
 
 (* ===== code_layout_valid preservation ===== *)
@@ -298,74 +287,6 @@ QED
 
 (* ===== run_insts infrastructure (local) ===== *)
 
-(* step_inst for non-term non-INVOKE is idx-independent *)
-Theorem step_inst_idx_indep_local:
-  !fuel ctx inst s n.
-    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
-    step_inst fuel ctx inst (s with vs_inst_idx := n) =
-    exec_result_map (\s'. s' with vs_inst_idx := n)
-      (step_inst fuel ctx inst s)
-Proof
-  rw[step_inst_non_invoke, step_inst_inst_idx_indep]
-QED
-
-(* run_insts on non-term non-INVOKE instructions is idx-independent *)
-Theorem run_insts_idx_indep_local[local]:
-  !insts fuel ctx s n.
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) insts ==>
-    run_insts fuel ctx insts (s with vs_inst_idx := n) =
-    exec_result_map (\s'. s' with vs_inst_idx := n)
-      (run_insts fuel ctx insts s)
-Proof
-  Induct >> simp[run_insts_def, exec_result_map_def] >>
-  rpt gen_tac >> strip_tac >>
-  simp[run_insts_def, step_inst_idx_indep_local] >>
-  Cases_on `step_inst fuel ctx h s` >>
-  simp[exec_result_map_def] >>
-  `v.vs_inst_idx = s.vs_inst_idx` by
-    metis_tac[step_inst_preserves_inst_idx] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `v`, `n`] mp_tac) >>
-  simp[] >> strip_tac >> simp[exec_result_map_def]
-QED
-
-(* exec_block_skip_prefix: if run_insts succeeds on prefix, skip it *)
-Theorem exec_block_skip_prefix_local:
-  !prefix fuel ctx bb s j s'.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) prefix /\
-    (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = OK s'
-  ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) =
-    exec_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
-Proof
-  Induct >> rw[run_insts_def] >>
-  rename1 `h :: prefix` >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j)
-     (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep_local] >>
-  Cases_on `step_inst fuel ctx h s` >> gvs[exec_result_map_def] >>
-  rename1 `step_inst _ _ h s = OK s1` >>
-  `s1.vs_inst_idx = s.vs_inst_idx` by
-    metis_tac[step_inst_preserves_inst_idx] >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[get_instruction_def] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  gvs[] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`,
-    `SUC j`, `s'`] mp_tac) >>
-  simp[arithmeticTheory.ADD_CLAUSES] >>
-  impl_tac >- (
-    rw[] >>
-    first_x_assum (qspec_then `SUC k` mp_tac) >> simp[arithmeticTheory.ADD_CLAUSES]
-  ) >> simp[]
-QED
-
 (* run_insts preserves layout fields *)
 Theorem run_insts_preserves_layout[local]:
   !insts fuel ctx s v.
@@ -534,21 +455,12 @@ QED
 
 (* Shared tactic for terminator opcodes: unfold, case-split, derive
    operand agreements, close with ld_ok/ld_equiv helpers *)
-(* Key lemma: under ld_ok, eval_operand agrees for non-exempt vars *)
-Theorem ld_eval_operand_eq[local]:
-  !op s1 s2 vars.
-    ld_ok vars s1 s2 /\
-    (!x. op = Var x ==> x NOTIN vars) ==>
-    eval_operand op s1 = eval_operand op s2
-Proof
-  Cases >> rw[eval_operand_def, ld_ok_def]
-QED
 
 (* Core technique: derive operand agreement, unfold, case-split, close *)
 val ld_derive_agree_tac =
   `!op. MEM op inst.inst_operands ==>
         eval_operand op s1 = eval_operand op s2` by
-    (rpt strip_tac >> irule ld_eval_operand_eq >>
+    (rpt strip_tac >> irule ld_eval_operand_agree >>
      qexists_tac `vars` >> rw[] >>
      first_x_assum irule >> gvs[]);
 
@@ -576,20 +488,6 @@ val ld_close_tac =
   TRY (irule ld_ok_implies_ld_equiv >> simp[] >> NO_TAC) >>
   TRY (simp[ld_ok_def, ld_equiv_def, halt_state_def, revert_state_def,
             set_returndata_def, lookup_var_def] >> NO_TAC);
-
-(* eval_operands agrees when each operand agrees *)
-Theorem eval_operands_agree[local]:
-  !ops s1 s2.
-    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> simp[eval_operands_def] >>
-  rpt strip_tac >>
-  `eval_operand h s1 = eval_operand h s2` by (res_tac >> gvs[]) >>
-  `eval_operands ops s1 = eval_operands ops s2` by
-    (first_x_assum irule >> metis_tac[]) >>
-  simp[]
-QED
 
 (* Per-terminator tactic: unfold, case-split with agreement, close *)
 val ld_terminator_tac =
@@ -728,22 +626,6 @@ Proof
     (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
   simp[step_inst_non_invoke] >>
   irule step_inst_base_ld_ok_terminator >> metis_tac[]
-QED
-
-(* run_insts composes over list append *)
-Theorem run_insts_append:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-      case run_insts fuel ctx xs s of
-        OK s' => run_insts fuel ctx ys s'
-      | Halt v => Halt v
-      | Abort e v => Abort e v
-      | IntRet v1 v2 => IntRet v1 v2
-      | Error e => Error e
-Proof
-  Induct >> simp[run_insts_def] >>
-  rpt gen_tac >>
-  Cases_on `step_inst fuel ctx h s` >> simp[]
 QED
 
 (* ===== Per-opcode step helpers for run_insts simulation ===== *)
@@ -1035,10 +917,10 @@ Proof
   gvs[] >>
   (* Derive operand agreement *)
   `eval_operand dst_op s1 = eval_operand dst_op s2` by
-    (irule ld_eval_operand_eq >> qexists_tac `vars` >>
+    (irule ld_eval_operand_agree >> qexists_tac `vars` >>
      simp[] >> Cases_on `dst_op` >> gvs[]) >>
   `eval_operand size_op s1 = eval_operand size_op s2` by
-    (irule ld_eval_operand_eq >> qexists_tac `vars` >>
+    (irule ld_eval_operand_agree >> qexists_tac `vars` >>
      simp[] >> Cases_on `size_op` >> gvs[]) >>
   (* s2 side: lower_dload_inst produces [ADD; CODECOPY] *)
   simp[lower_dload_inst_def, LET_THM] >>
@@ -1093,19 +975,6 @@ Proof
   rw[lower_dload_inst_def]
 QED
 
-(* run_insts for a singleton list *)
-Theorem run_insts_sing:
-  run_insts fuel ctx [h] s =
-  case step_inst fuel ctx h s of
-    OK s' => OK s'
-  | Halt v => Halt v
-  | Abort e v' => Abort e v'
-  | IntRet v1 v2 => IntRet v1 v2
-  | Error e' => Error e'
-Proof
-  simp[run_insts_def] >> Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
-
 (* Single instruction step: dispatches to per-opcode lemmas *)
 Theorem ld_single_inst_step:
   !h fuel ctx s1 s2 vars s1_mid.
@@ -1143,7 +1012,7 @@ Proof
              ld_ok vars s1_mid s2'` by
         (irule ld_dloadbytes_step >> simp[] >> metis_tac[]) >>
       qexists_tac `s2'` >> simp[]) >>
-  simp[lower_dload_inst_passthrough, run_insts_sing] >>
+  simp[lower_dload_inst_passthrough, run_insts_singleton] >>
   Cases_on `h.inst_opcode = ALLOCA`
   >- (`?s2'. step_inst fuel ctx h s2 = OK s2' /\ ld_ok vars s1_mid s2'` by
         (irule ld_alloca_step >> simp[] >> metis_tac[]) >>

@@ -8,7 +8,7 @@
 
 Theory singleUseExpansionProofs
 Ancestors
-  singleUseExpansionDefs dretShapeDefs passSharedDefs passSharedProps
+  venomFnInstsProofs singleUseExpansionDefs dretShapeDefs passSharedDefs passSharedProps
   passSimulationDefs passSimulationProofs
   stateEquiv stateEquivProps execEquivParamProofs analysisSimProofsBase
   venomWf venomInstProps dfgAnalysisProps
@@ -49,20 +49,6 @@ Proof
 QED
 
 (* ===== Helper: run_insts append ===== *)
-
-Theorem run_insts_append[local]:
-  !prefix rest fuel ctx s.
-    run_insts fuel ctx (prefix ++ rest) s =
-    case run_insts fuel ctx prefix s of
-      OK s' => run_insts fuel ctx rest s'
-    | Halt v => Halt v
-    | Abort a v => Abort a v
-    | IntRet v1 v2 => IntRet v1 v2
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> rw[]
-QED
 
 (* ===== sue_expand_ops structural properties ===== *)
 
@@ -1352,72 +1338,6 @@ Proof
   simp[]
 QED
 
-Theorem lift_result_exec_result_map[local]:
-  !R_ok R_term g r1 r2.
-    lift_result R_ok R_term R_term r1 r2 /\
-    (!s1 s2. R_ok s1 s2 ==> R_ok (g s1) (g s2)) /\
-    (!s1 s2. R_term s1 s2 ==> R_term (g s1) (g s2))
-  ==> lift_result R_ok R_term R_term (exec_result_map g r1) (exec_result_map g r2)
-Proof
-  Cases_on `r1` >> Cases_on `r2` >>
-  simp[lift_result_def, exec_result_map_def]
-QED
-
-(* lift_result_halt_wrap: local re-proof of analysisSimProofsBase triviality *)
-Triviality lift_result_halt_wrap[local]:
-  !R_ok R_term r1 r2.
-    valid_state_rel R_ok R_term ==>
-    lift_result R_ok R_term R_term r1 r2 ==>
-    lift_result R_ok R_term R_term
-      (case r1 of
-         OK s'' => if s''.vs_halted then Halt s'' else OK s''
-       | Halt s' => Halt s'
-       | Abort a s' => Abort a s'
-       | IntRet rv ss => IntRet rv ss
-       | Error e => Error e)
-      (case r2 of
-         OK s'' => if s''.vs_halted then Halt s'' else OK s''
-       | Halt s' => Halt s'
-       | Abort a s' => Abort a s'
-       | IntRet rv ss => IntRet rv ss
-       | Error e => Error e)
-Proof
-  rpt strip_tac >>
-  Cases_on `r1` >> Cases_on `r2` >> gvs[lift_result_def] >>
-  imp_res_tac execEquivParamBaseTheory.vsr_R_ok_fields >> gvs[] >>
-  Cases_on `v.vs_halted` >> gvs[lift_result_def] >>
-  metis_tac[execEquivParamBaseTheory.vsr_R_ok_R_term]
-QED
-
-(* invoke_lift_result_idx_bridge: local re-proof *)
-Triviality invoke_lift_result_idx_bridge[local]:
-  !R_ok R_term fuel ctx inst1 inst2 s n.
-    valid_state_rel R_ok R_term /\
-    inst1.inst_opcode = INVOKE /\ inst2.inst_opcode = INVOKE /\
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx inst1 s)
-      (step_inst fuel ctx inst2 s)
-  ==>
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx inst1 (s with vs_inst_idx := n))
-      (step_inst fuel ctx inst2 (s with vs_inst_idx := n))
-Proof
-  rpt strip_tac >>
-  `step_inst fuel ctx inst1 (s with vs_inst_idx := n) =
-    case step_inst fuel ctx inst1 s of
-      OK s'' => OK (s'' with vs_inst_idx := n)
-    | x => x` by simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
-  `step_inst fuel ctx inst2 (s with vs_inst_idx := n) =
-    case step_inst fuel ctx inst2 s of
-      OK s'' => OK (s'' with vs_inst_idx := n)
-    | x => x` by simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
-  ntac 2 (pop_assum SUBST1_TAC) >>
-  Cases_on `step_inst fuel ctx inst1 s` >>
-  Cases_on `step_inst fuel ctx inst2 s` >>
-  gvs[lift_result_def] >>
-  metis_tac[analysisSimProofsBaseTheory.R_ok_idx_change]
-QED
-
 (* Per-instruction simulation at arbitrary state *)
 Triviality sue_inst_sim_at[local]:
   !dfg inst fuel ctx st fresh fn bb.
@@ -2401,23 +2321,6 @@ Proof
   fs[EVERY_MEM] >> res_tac >> gvs[sue_count_exempt_def, is_param_opcode_def]
 QED
 
-(* fn_insts_blocks = FLAT of MAP *)
-Triviality fn_insts_blocks_flat[local]:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
-(* MEM in fn_insts iff MEM in some block *)
-Triviality fn_insts_mem[local]:
-  !fn inst.
-    MEM inst (fn_insts fn) <=>
-    ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions
-Proof
-  rw[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
-QED
-
 (* MEM (Var v) ops ==> MEM v (operand_vars ops) — one direction suffices *)
 Triviality mem_var_operand_vars[local]:
   !ops v. MEM (Var v) ops ==> MEM v (operand_vars ops)
@@ -2462,7 +2365,8 @@ Triviality sue_fresh_var_in_fn_vars[local]:
     MEM inst (fn_insts fn) /\ j < LENGTH inst.inst_operands ==>
     sue_fresh_var inst.inst_id j IN sue_fresh_vars_fn fn
 Proof
-  rw[sue_fresh_vars_fn_def, fn_insts_mem] >>
+  rpt strip_tac >> drule fn_insts_mem_block >> strip_tac >>
+  rw[sue_fresh_vars_fn_def] >>
   simp[MEM_FLAT, MEM_MAP, MEM_MAPi, PULL_EXISTS] >>
   metis_tac[]
 QED
@@ -2476,7 +2380,7 @@ Triviality sue_original_not_fresh[local]:
     MEM (Var v) inst.inst_operands ==>
     v NOTIN sue_fresh_vars_fn fn
 Proof
-  rw[fn_insts_mem] >> metis_tac[]
+  metis_tac[fn_insts_mem_block]
 QED
 
 (* Combined: an original operand variable != any sue_fresh_var for any
@@ -2493,7 +2397,7 @@ Triviality sue_original_neq_fresh[local]:
 Proof
   rpt strip_tac >>
   `v NOTIN sue_fresh_vars_fn fn` by (
-    fs[fn_insts_mem] >> metis_tac[]) >>
+    metis_tac[fn_insts_mem_block]) >>
   `sue_fresh_var inst2.inst_id j IN sue_fresh_vars_fn fn` by (
     irule sue_fresh_var_in_fn_vars >> simp[]) >>
   metis_tac[]

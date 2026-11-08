@@ -66,16 +66,6 @@ QED
 (* Part 1: load_store_step properties                                 *)
 (* ================================================================== *)
 
-(* load_store_step returns either the instruction unchanged or mk_nop_inst *)
-Triviality lse_step_inst_or_nop:
-  !aliases bp uc lf inst.
-    SND (load_store_step aliases bp uc (lf, inst)) = inst \/
-    SND (load_store_step aliases bp uc (lf, inst)) = mk_nop_inst inst
-Proof
-  rw[load_store_step_def, LET_THM] >>
-  BasicProvers.every_case_tac >> simp[]
-QED
-
 (* If an instruction is none of load/store/copy/volatile-memory-writer,
    load_store_step returns it unchanged *)
 Triviality lse_step_identity:
@@ -99,14 +89,6 @@ Proof
   simp[is_terminator_def, load_store_step_def, LET_THM,
     is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
     write_effects_def, empty_effects_def]
-QED
-
-(* PHI satisfies the non-modifiable condition *)
-Triviality phi_not_modifiable:
-  ~is_load_fact_opcode PHI /\ ~is_store_opcode PHI /\
-  ~is_copy_opcode PHI /\ Eff_MEMORY NOTIN write_effects PHI
-Proof
-  EVAL_TAC
 QED
 
 (* ================================================================== *)
@@ -230,23 +212,6 @@ QED
 (* Part 3: load_store_elim_block properties (derived from combined)   *)
 (* ================================================================== *)
 
-Triviality lse_block_label:
-  !aliases bp uc bb.
-    (load_store_elim_block aliases bp uc bb).bb_label = bb.bb_label
-Proof
-  rw[load_store_elim_block_def, LET_THM] >> pairarg_tac >> gvs[]
-QED
-
-Triviality lse_block_length:
-  !aliases bp uc bb.
-    LENGTH (load_store_elim_block aliases bp uc bb).bb_instructions =
-    LENGTH bb.bb_instructions
-Proof
-  rw[load_store_elim_block_def, LET_THM] >>
-  pairarg_tac >> gvs[] >>
-  drule (REWRITE_RULE [LET_THM] lse_foldl_combined) >> simp[]
-QED
-
 (* Per-instruction trace: each output instruction traces to original *)
 Triviality lse_block_trace:
   !aliases bp uc bb i.
@@ -269,185 +234,13 @@ Proof
   drule (REWRITE_RULE [LET_THM] lse_foldl_combined) >> simp[LET_THM]
 QED
 
-(* PHI instructions pass through unchanged *)
-Triviality lse_block_phi_preserved:
-  !aliases bp uc bb i.
-    i < LENGTH bb.bb_instructions /\
-    (EL i bb.bb_instructions).inst_opcode = PHI ==>
-    EL i (load_store_elim_block aliases bp uc bb).bb_instructions =
-    EL i bb.bb_instructions
-Proof
-  rpt strip_tac >>
-  qspecl_then [`aliases`,`bp`,`uc`,`bb`,`i`] mp_tac
-    (REWRITE_RULE [LET_THM] lse_block_trace) >>
-  simp[lse_block_length] >> strip_tac >>
-  qpat_x_assum `~is_load_fact_opcode _ /\ _ ==> _` irule >>
-  simp[phi_not_modifiable]
-QED
-
-(* If the transformed instruction has opcode PHI, the original did too *)
-Triviality lse_block_phi_reverse:
-  !aliases bp uc bb i.
-    i < LENGTH bb.bb_instructions /\
-    (EL i (load_store_elim_block aliases bp uc bb).bb_instructions).inst_opcode
-      = PHI ==>
-    (EL i bb.bb_instructions).inst_opcode = PHI
-Proof
-  rpt strip_tac >>
-  qspecl_then [`aliases`,`bp`,`uc`,`bb`,`i`] mp_tac
-    (REWRITE_RULE [LET_THM] lse_block_trace) >>
-  simp[lse_block_length] >> strip_tac >> gvs[]
-QED
-
-(* Terminators pass through unchanged *)
-Triviality lse_block_last_eq:
-  !aliases bp uc bb.
-    bb_well_formed bb ==>
-    LAST (load_store_elim_block aliases bp uc bb).bb_instructions =
-    LAST bb.bb_instructions
-Proof
-  rpt strip_tac >>
-  qabbrev_tac `bb' = load_store_elim_block aliases bp uc bb` >>
-  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
-  `LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions` by
-    simp[Abbr `bb'`, lse_block_length] >>
-  `bb'.bb_instructions <> []` by
-    (Cases_on `bb'.bb_instructions` >> Cases_on `bb.bb_instructions` >> gvs[]) >>
-  simp[LAST_EL] >>
-  `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> gvs[]) >>
-  qspecl_then [`aliases`,`bp`,`uc`,`bb`,
-    `PRE (LENGTH bb.bb_instructions)`] mp_tac
-    (REWRITE_RULE [LET_THM] lse_block_trace) >>
-  simp[Abbr `bb'`, lse_block_length] >>
-  `is_terminator (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode` by
-    (gvs[bb_well_formed_def, LAST_EL]) >>
-  simp[]
-QED
-
-Triviality lse_block_wf:
-  !aliases bp uc bb.
-    bb_well_formed bb ==>
-    bb_well_formed (load_store_elim_block aliases bp uc bb)
-Proof
-  rpt strip_tac >>
-  qabbrev_tac `bb' = load_store_elim_block aliases bp uc bb` >>
-  `LENGTH bb'.bb_instructions = LENGTH bb.bb_instructions` by
-    simp[Abbr `bb'`, lse_block_length] >>
-  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
-  simp[bb_well_formed_def] >> rpt conj_tac
-  (* instructions <> [] *)
-  >- (Cases_on `bb.bb_instructions` >> Cases_on `bb'.bb_instructions` >> gvs[])
-  (* LAST is terminator *)
-  >- (
-    `LAST bb'.bb_instructions = LAST bb.bb_instructions` by
-      simp[Abbr `bb'`, lse_block_last_eq] >>
-    gvs[bb_well_formed_def])
-  (* only one terminator *)
-  >- (
-    rpt strip_tac >>
-    `i < LENGTH bb.bb_instructions` by gvs[] >>
-    qspecl_then [`aliases`,`bp`,`uc`,`bb`,`i`] mp_tac
-      (REWRITE_RULE [LET_THM] lse_block_trace) >>
-    simp[Abbr `bb'`, lse_block_length] >> strip_tac >>
-    `is_terminator bb.bb_instructions❲i❳.inst_opcode` by (
-      qpat_x_assum
-        `is_terminator (load_store_elim_block aliases bp uc bb).bb_instructions❲i❳.inst_opcode`
-        mp_tac >>
-      ASM_REWRITE_TAC[is_terminator_def]) >>
-    qpat_x_assum `bb_well_formed bb`
-      (STRIP_ASSUME_TAC o REWRITE_RULE [bb_well_formed_def]) >>
-    qpat_x_assum `!k. _ ==> k = PRE (LENGTH bb.bb_instructions)`
-      (qspec_then `i` mp_tac) >> simp[])
-  (* PHI ordering: bb'[j] = PHI /\ i<j => bb'[i] = PHI *)
-  >> (
-    rpt strip_tac >>
-    `i < LENGTH bb.bb_instructions` by simp[] >>
-    (* Reverse: bb'[j].opcode = PHI => bb[j].opcode = PHI *)
-    `(EL j bb.bb_instructions).inst_opcode = PHI` by
-      (qspecl_then [`aliases`,`bp`,`uc`,`bb`,`j`] mp_tac lse_block_phi_reverse >>
-       gvs[Abbr `bb'`]) >>
-    (* Original PHI ordering: bb[i].opcode = PHI *)
-    `(EL i bb.bb_instructions).inst_opcode = PHI` by
-      (gvs[bb_well_formed_def] >>
-       first_x_assum $ qspecl_then [`i`,`j`] mp_tac >> simp[]) >>
-    (* Forward: bb[i].opcode = PHI => bb'[i] = bb[i] *)
-    `EL i bb'.bb_instructions = EL i bb.bb_instructions` by
-      (simp[Abbr `bb'`] >> irule lse_block_phi_preserved >> simp[]) >>
-    gvs[])
-QED
-
-Triviality lse_block_succs:
-  !aliases bp uc bb.
-    bb_well_formed bb ==>
-    bb_succs (load_store_elim_block aliases bp uc bb) = bb_succs bb
-Proof
-  rpt strip_tac >>
-  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
-  `LAST (load_store_elim_block aliases bp uc bb).bb_instructions =
-   LAST bb.bb_instructions` by simp[lse_block_last_eq] >>
-  `LENGTH (load_store_elim_block aliases bp uc bb).bb_instructions =
-   LENGTH bb.bb_instructions` by simp[lse_block_length] >>
-  simp[bb_succs_def] >>
-  Cases_on `bb.bb_instructions` >>
-  Cases_on `(load_store_elim_block aliases bp uc bb).bb_instructions` >> gvs[]
-QED
-
 (* ================================================================== *)
 (* Part 4: fn_inst_ids_distinct preservation                          *)
 (* ================================================================== *)
 
-Triviality lse_fmt_preserves_ids_distinct:
-  !aliases bp uc fn.
-    fn_inst_ids_distinct fn ==>
-    fn_inst_ids_distinct
-      (function_map_transform (load_store_elim_block aliases bp uc) fn)
-Proof
-  rpt strip_tac >>
-  gvs[fn_inst_ids_distinct_def, function_map_transform_def] >>
-  `MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
-     (MAP (load_store_elim_block aliases bp uc) fn.fn_blocks) =
-   MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks`
-    suffices_by simp[] >>
-  once_rewrite_tac[MAP_MAP_o] >>
-  irule MAP_CONG >> simp[] >>
-  rpt strip_tac >>
-  irule listTheory.LIST_EQ >>
-  simp[lse_block_length] >>
-  rpt strip_tac >> simp[EL_MAP, lse_block_length] >>
-  qspecl_then [`aliases`,`bp`,`uc`,`x`,`x'`] mp_tac
-    (REWRITE_RULE [LET_THM] lse_block_trace) >>
-  simp[lse_block_length]
-QED
-
 (* ================================================================== *)
 (* Part 5: copy_elision_inst properties (extracted, used by WF + SSA) *)
 (* ================================================================== *)
-
-Triviality copy_opcode_not_term_phi:
-  !op. is_copy_opcode op ==> ~is_terminator op /\ op <> PHI
-Proof
-  Cases >> simp[is_copy_opcode_def, is_terminator_def]
-QED
-
-Triviality copy_elision_inst_properties:
-  (!bp dfg v inst. (copy_elision_inst bp dfg v inst).inst_id = inst.inst_id) /\
-  (!bp dfg v inst. is_terminator inst.inst_opcode ==>
-     copy_elision_inst bp dfg v inst = inst) /\
-  (!bp dfg v inst. ~is_terminator inst.inst_opcode ==>
-     ~is_terminator (copy_elision_inst bp dfg v inst).inst_opcode) /\
-  (!bp dfg v inst. inst.inst_opcode = PHI ==>
-     (copy_elision_inst bp dfg v inst).inst_opcode = PHI) /\
-  (!bp dfg v inst. inst.inst_opcode <> PHI ==>
-     (copy_elision_inst bp dfg v inst).inst_opcode <> PHI)
-Proof
-  rpt conj_tac >> rpt gen_tac >>
-  simp[copy_elision_inst_def, LET_THM] >>
-  rpt IF_CASES_TAC >> gvs[] >>
-  BasicProvers.every_case_tac >>
-  gvs[mk_nop_inst_def, is_terminator_def] >>
-  metis_tac[copy_opcode_not_term_phi]
-QED
 
 (* copy_elision_inst: id + output property (for SSA trace-back) *)
 Triviality copy_elision_inst_structural:
@@ -481,9 +274,9 @@ Proof
   (* Layer 1: wf_function fn1 via aft_singleton_preserves_wf *)
   `wf_function fn1` by (
     simp[Abbr `fn1`] >>
-    irule aft_singleton_preserves_wf >> simp[copy_elision_inst_properties]) >>
+    irule aft_singleton_preserves_wf >> simp[copy_elision_inst_wf_props]) >>
   rpt conj_tac
-  >- simp[Abbr `lse_b`, lse_block_label]
+  >- simp[Abbr `lse_b`, lse_label]
   >- (rpt strip_tac >> simp[Abbr `lse_b`] >> irule lse_block_wf >> simp[])
   >- (rpt strip_tac >> simp[Abbr `lse_b`] >> irule lse_block_succs >> simp[])
   >- (simp[Abbr `lse_b`] >> irule lse_fmt_preserves_ids_distinct >>
@@ -524,7 +317,7 @@ Proof
       `fn_inst_ids_distinct fn` by gvs[wf_function_def] >>
       `wf_function (analysis_function_transform bottom result
          (\v inst. [copy_elision_inst bp dfg v inst]) fn)` by (
-        irule aft_singleton_preserves_wf >> simp[copy_elision_inst_properties]) >>
+        irule aft_singleton_preserves_wf >> simp[copy_elision_inst_wf_props]) >>
       gvs[wf_function_def])
   (* ssa_form fn *)
   >> simp[]
@@ -541,10 +334,10 @@ Proof
   rpt strip_tac >>
   gvs[MEM_EL] >> rename1 `idx < _` >>
   qexists `EL idx bb.bb_instructions` >>
-  conj_tac >- (simp[MEM_EL] >> qexists `idx` >> gvs[lse_block_length]) >>
+  conj_tac >- (simp[MEM_EL] >> qexists `idx` >> gvs[lse_length]) >>
   qspecl_then [`aliases`,`bp`,`uc`,`bb`,`idx`]
     mp_tac (REWRITE_RULE [LET_THM] lse_block_trace) >>
-  (impl_tac >- simp[lse_block_length]) >>
+  (impl_tac >- simp[lse_length]) >>
   simp[]
 QED
 
@@ -579,7 +372,7 @@ Proof
   (* fn_inst_ids_distinct fn1 *)
   >- (`wf_function fn1` by (
         simp[Abbr `fn1`] >>
-        irule aft_singleton_preserves_wf >> simp[copy_elision_inst_properties]) >>
+        irule aft_singleton_preserves_wf >> simp[copy_elision_inst_wf_props]) >>
       gvs[wf_function_def])
   (* ssa_form fn1 *)
   >- simp[Abbr `fn1`, copy_elision_inst_preserves_ssa]

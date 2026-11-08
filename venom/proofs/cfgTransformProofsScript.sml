@@ -43,13 +43,6 @@ Proof
   rw[remove_block_def, MEM_FILTER]
 QED
 
-Theorem MEM_remove_block_iff:
-  !bb lbl bbs.
-    MEM bb (remove_block lbl bbs) <=> MEM bb bbs /\ bb.bb_label <> lbl
-Proof
-  rw[remove_block_def, MEM_FILTER] >> metis_tac[]
-QED
-
 Theorem LENGTH_remove_block:
   !lbl bbs.
     LENGTH (remove_block lbl bbs) <= LENGTH bbs
@@ -202,3 +195,14 @@ QED
 
 (* ===== Well-formedness Preservation ===== *)
 
+(* ===== Function Variables ===== *)
+
+Theorem inst_output_in_fn_all_vars:
+  !func bb inst out.
+    MEM bb func.fn_blocks /\ MEM inst bb.bb_instructions /\
+    MEM out inst.inst_outputs ==>
+    MEM out (fn_all_vars func)
+Proof
+  rw[fn_all_vars_def, listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS] >>
+  metis_tac[]
+QED

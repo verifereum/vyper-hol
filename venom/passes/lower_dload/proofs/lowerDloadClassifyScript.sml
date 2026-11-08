@@ -468,110 +468,9 @@ Proof
   gvs[ld_ok_def, lookup_var_def]
 QED
 
-(* For "boring" opcodes (non-terminator, non-INVOKE, non-DLOAD/DLOADBYTES/ALLOCA,
-   non-reads_memory, non-ASSERT/ASSERT_UNREACHABLE), step_inst_base only returns
-   OK or Error. This covers Halt, IntRet AND Abort impossibility in one theorem. *)
-Triviality exec_result_helpers_no_halt_abort_ld[simp]:
-  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
-  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
-  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
-  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
-  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_result_helpers_not_intret_ld[simp]:
-  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
-  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
-  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_not_intret_ld[simp]:
-  (!inst s g a v ao as_ ro rs is_s vs s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
-  (!inst s g a ao as_ ro rs vs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
-  (!inst s v off sz salt vs s'.
-     exec_create inst s v off sz salt <> IntRet vs s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality exec_call_helpers_no_halt_abort_ld[simp]:
-  (!inst s g a v ao as_ ro rs is_s s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s ab s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
-  (!inst s g a ao as_ ro rs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs ab s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
-  (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem step_inst_base_no_halt_ld[local]:
-  !inst s s'.
-    step_inst_base inst s = Halt s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule step_inst_base_halt_opcodes >> strip_tac >>
-  gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_no_intret_ld[local]:
-  !inst s vs s'.
-    step_inst_base inst s = IntRet vs s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule step_inst_base_intret_opcodes >> strip_tac >>
-  gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_abort_opcode_ld[local]:
-  !inst s a s'.
-    step_inst_base inst s = Abort a s' /\
-    ~is_terminator inst.inst_opcode ==>
-    inst.inst_opcode = ASSERT \/
-    inst.inst_opcode = ASSERT_UNREACHABLE \/
-    inst.inst_opcode = RETURNDATACOPY
-Proof
-  rpt strip_tac >>
-  drule step_inst_base_abort_opcodes >> strip_tac >>
-  gvs[is_terminator_def]
-QED
+val _ = augment_srw_ss [rewrites
+  [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret,
+   exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
 
 Theorem step_inst_base_not_halt_abort[local]:
   !inst s.
@@ -588,9 +487,9 @@ Theorem step_inst_base_not_halt_abort[local]:
     (!a v. step_inst_base inst s <> Abort a v)
 Proof
   rpt strip_tac
-  >- metis_tac[step_inst_base_no_halt_ld]
-  >- metis_tac[step_inst_base_no_intret_ld] >>
-  drule_all step_inst_base_abort_opcode_ld >>
+  >- metis_tac[step_inst_base_no_halt]
+  >- metis_tac[step_inst_base_no_intret] >>
+  drule_all step_inst_base_abort_opcode >>
   strip_tac >>
   gvs[reads_memory_def]
 QED

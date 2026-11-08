@@ -56,13 +56,6 @@ Proof
   gvs[MEM_APPEND] >> metis_tac[]
 QED
 
-Theorem find_some_mem[local]:
-  !P ls x. FIND P ls = SOME x ==> MEM x ls /\ P x
-Proof
-  Induct_on `ls` >> simp[FIND_thm] >> rpt gen_tac >>
-  Cases_on `P h` >> simp[] >> strip_tac >> gvs[] >> res_tac >> simp[]
-QED
-
 Theorem foldl_phi_matching_inv[local]:
   !phis n acc_op acc_m src i v.
     FLOOKUP (SND (FOLDL
@@ -93,7 +86,7 @@ Proof
       >> PairCases_on `x` >> gvs[FLOOKUP_UPDATE] >>
       Cases_on `n = i` >> gvs[] >>
       disj2_tac >> qexists_tac `h` >> simp[] >>
-      drule_then strip_assume_tac find_some_mem >> gvs[])
+      imp_res_tac venomInstTheory.FIND_MEM >> imp_res_tac venomInstTheory.FIND_P >> gvs[])
   >> disj2_tac >> metis_tac[]
 QED
 

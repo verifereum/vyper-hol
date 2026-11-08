@@ -71,6 +71,20 @@ Proof
   metis_tac[]
 QED
 
+(* ALL_DISTINCT distributes through FLAT: each member is ALL_DISTINCT *)
+Theorem all_distinct_flat_mem:
+  !ls l. ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
+Proof
+  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
+QED
+
+Theorem all_distinct_flat_map_member:
+  !(f:'a -> 'b list) l x.
+    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM x l ==> ALL_DISTINCT (f x)
+Proof
+  metis_tac[all_distinct_flat_mem, MEM_MAP]
+QED
+
 (* Outputs distinct across all blocks are distinct within each block. *)
 Theorem ssa_block_outputs_all_distinct:
   !bbs bb. ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)))
@@ -112,6 +126,19 @@ Proof
 QED
 
 (* An instruction lies in at most one block. *)
+(* fn_inst_ids_distinct gives per-block ALL_DISTINCT on inst_ids *)
+Theorem fn_inst_ids_block_distinct:
+  !fn bb. fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
+    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
+Proof
+  simp[venomWfTheory.fn_inst_ids_distinct_def] >>
+  rpt strip_tac >>
+  ntac 2 (pop_assum mp_tac) >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> simp[] >>
+  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MAP_APPEND, FLAT_APPEND]
+QED
+
 Theorem inst_in_unique_block:
   !fn bb1 bb2 inst.
     fn_inst_ids_distinct fn /\

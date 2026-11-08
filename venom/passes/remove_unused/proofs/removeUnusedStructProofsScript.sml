@@ -661,13 +661,6 @@ QED
 
 (* ===== SSA preservation by remove_unused_single_pass ===== *)
 
-(* Local copy — non-local version causes simpset pollution (L1708) *)
-Theorem fn_insts_blocks_flat_local[local]:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
 (* FILTER preserves relative order of surviving elements (forward direction). *)
 Theorem filter_preserves_el_order[local]:
   !P l i j. i < j /\ j < LENGTH l /\ P (EL i l) /\ P (EL j l) ==>

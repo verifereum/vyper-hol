@@ -78,7 +78,7 @@ Proof
   fs[MEM_FLAT, MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
-Theorem MEM_remove_block_iff[local]:
+Theorem MEM_remove_block_iff:
   !bb lbl bbs.
     MEM bb (remove_block lbl bbs) <=> MEM bb bbs /\ bb.bb_label <> lbl
 Proof
@@ -242,6 +242,17 @@ Proof
   rw[bb_well_formed_def, subst_label_block_def] >>
   gvs[LAST_MAP, EL_MAP, subst_label_inst_fields] >>
   metis_tac[]
+QED
+
+Theorem bb_well_formed_subst_label_terminator:
+  !old_lbl new_lbl bb.
+    bb_well_formed bb ==>
+    bb_well_formed (subst_label_terminator old_lbl new_lbl bb)
+Proof
+  rw[subst_label_terminator_def] >>
+  irule bb_well_formed_map_opcode_preserving >> rw[] >>
+  Cases_on `is_terminator inst.inst_opcode` >>
+  simp[subst_label_inst_def]
 QED
 
 Theorem wf_function_remove_block:

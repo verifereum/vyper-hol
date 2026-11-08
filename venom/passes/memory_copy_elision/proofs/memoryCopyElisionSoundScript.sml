@@ -20,7 +20,7 @@
 
 Theory memoryCopyElisionSound
 Ancestors
-  memoryCopyElisionDefs analysisSimDefs analysisSimProps
+  runInstsProps copyFwdEquiv memoryCopyElisionDefs analysisSimDefs analysisSimProps
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomInstProps venomState venomExecSemantics
   venomEffects venomMemDefs venomMemProps venomMemProofs
@@ -151,14 +151,14 @@ Definition cf_keys_ok_def:
 End
 
 (* cf_keys_ok is preserved by DRESTRICT *)
-Triviality cf_keys_ok_drestrict[local]:
+Theorem cf_keys_ok_drestrict:
   !bp cfl S. cf_keys_ok bp cfl ==> cf_keys_ok bp (DRESTRICT cfl S)
 Proof
   rw[cf_keys_ok_def] >> rpt strip_tac >> fs[FLOOKUP_DRESTRICT] >> res_tac
 QED
 
 (* cf_keys_ok holds for FEMPTY *)
-Triviality cf_keys_ok_fempty[local]:
+Theorem cf_keys_ok_fempty:
   !bp. cf_keys_ok bp FEMPTY
 Proof
   simp[cf_keys_ok_def]
@@ -166,7 +166,7 @@ QED
 
 (* cf_keys_ok preserved by FUPDATE when new entry has matching size
    and the key is fixed *)
-Triviality cf_keys_ok_fupdate[local]:
+Theorem cf_keys_ok_fupdate:
   !bp cfl ml cf.
     cf_keys_ok bp cfl /\ cf_key_size_ok bp ml cf /\ ml_is_fixed ml /\
     (cf.cf_opcode = MCOPY ==>
@@ -270,7 +270,7 @@ Proof
   rw[memloc_within_alloca_def]
 QED
 
-Triviality cf_alloca_ok_allocas_eq[local]:
+Theorem cf_alloca_ok_allocas_eq:
   !bp cfl s s'. s'.vs_allocas = s.vs_allocas ==>
     (cf_alloca_ok bp cfl s' <=> cf_alloca_ok bp cfl s)
 Proof
@@ -665,7 +665,7 @@ QED
 (* ===== analysis_inst_simulates for copy_elision_inst ===== *)
 
 (* Copy opcodes are not terminators or INVOKE *)
-Triviality copy_opcode_not_term[local]:
+Theorem copy_opcode_not_term:
   !op. is_copy_opcode op ==> ~is_terminator op
 Proof
   Cases >> simp[is_copy_opcode_def, is_terminator_def]
@@ -677,7 +677,7 @@ Proof
   Cases >> simp[is_copy_opcode_def]
 QED
 
-Triviality copy_opcode_not_phi[local]:
+Theorem copy_opcode_not_phi:
   !op. is_copy_opcode op ==> op <> PHI
 Proof
   Cases >> simp[is_copy_opcode_def]
@@ -708,15 +708,8 @@ Proof
   match_mp_tac write_memory_with_expansion_identity >> simp[]
 QED
 
-(* run_insts of singleton = step_inst *)
-Theorem run_insts_singleton[local]:
-  !fuel ctx inst s. run_insts fuel ctx [inst] s = step_inst fuel ctx inst s
-Proof
-  rw[run_insts_def] >> CASE_TAC
-QED
-
 (* inst_transform_structural for copy_elision_inst *)
-Theorem cei_structural[local]:
+Theorem cei_structural:
   !bp dfg.
     inst_transform_structural (\v inst. [copy_elision_inst bp dfg v inst])
 Proof
@@ -979,7 +972,8 @@ Proof
     gvs[inst_wf_def, LENGTH_EQ_NUM_compute, PULL_EXISTS] >>
     rename1 `inst.inst_operands = [dst_op; src_op; sz_op]` >>
     (* simplify original step_inst for MCOPY *)
-    simp[step_inst_non_invoke, step_inst_base_def] >>
+    simp[step_inst_non_invoke] >>
+    stepInstBaseLib.with_opcode_clause simp >>
     (* case split on operand evaluation *)
     Cases_on `eval_operand dst_op s` >> simp[] >>
     Cases_on `eval_operand src_op s` >> simp[] >>
@@ -1463,12 +1457,7 @@ QED
 
 (* ===== Memory write / disjoint read helpers ===== *)
 
-(* word_to_bytes of a bytes32 has length 32 *)
-Theorem word_to_bytes32_length[local,simp]:
-  !v:bytes32. LENGTH (word_to_bytes v T) = 32
-Proof
-  simp[byteTheory.LENGTH_word_to_bytes]
-QED
+val _ = augment_srw_ss [rewrites [len_word_to_bytes_256]];
 
 (* Reading a disjoint region after write_memory_with_expansion is unchanged.
    Key property: if [off, off+n) doesn't overlap [d, d+len) and is within
@@ -1615,7 +1604,7 @@ Triviality step_mstore_eq[local]:
 Proof
   rpt strip_tac >>
   gvs[Once step_inst_def] >>
-  gvs[step_inst_base_def, exec_write2_def] >>
+  stepInstBaseLib.with_opcode_clause (fn ths => gvs (ths @ [exec_write2_def])) >>
   BasicProvers.every_case_tac >> gvs[]
 QED
 
@@ -1775,7 +1764,7 @@ Triviality cft_mstore_entry[local]:
     cf_entry_sound bp dfg ml cf (mstore addr_w v' s)
 Proof
   rpt strip_tac >> simp[mstore_eq_write_mem] >>
-  irule cf_entry_sound_wmwe >> simp[word_to_bytes32_length]
+  irule cf_entry_sound_wmwe >> simp[len_word_to_bytes_256]
 QED
 
 
@@ -2065,7 +2054,7 @@ Triviality cft_mstore_var[local]:
       (mstore addr_w val_v s)
 Proof
   rpt strip_tac >> simp[mstore_eq_write_mem] >>
-  irule cft_invalidate_sound_wmwe >> simp[word_to_bytes32_length]
+  irule cft_invalidate_sound_wmwe >> simp[len_word_to_bytes_256]
 QED
 
 Triviality cft_mstore[local]:
@@ -2139,7 +2128,7 @@ QED
 Finalise cft_mstore
 
 (* cf_keys_ok preserved by copy_fact_invalidate *)
-Triviality cf_keys_ok_invalidate[local]:
+Theorem cf_keys_ok_invalidate:
   !bp aliases cfl wl.
     cf_keys_ok bp cfl ==>
     cf_keys_ok bp (copy_fact_invalidate aliases bp cfl wl)
@@ -2498,14 +2487,6 @@ Resume copy_fact_transfer_sound_thm[fwd_alloca]:
   gvs[cf_key_size_ok_def, ce_memloc_ml_size_only_sz]
 QED
 
-(* LENGTH of the TAKE/DROP/REPLICATE bytes used in MCOPY *)
-Triviality mcopy_bytes_length[local]:
-  !src sz mem. LENGTH (TAKE sz (DROP src mem ++ REPLICATE sz 0w)) = sz
-Proof
-  simp[LENGTH_TAKE_EQ, LENGTH_APPEND, LENGTH_DROP,
-       rich_listTheory.LENGTH_REPLICATE]
-QED
-
 Resume copy_fact_transfer_sound_thm[fu_sound]:
   (* Abbreviate for readability *)
   qabbrev_tac `s' = write_memory_with_expansion (w2n dst_val)
@@ -2533,7 +2514,7 @@ Resume copy_fact_transfer_sound_thm[inval_sound]:
 QED
 
 Resume copy_fact_transfer_sound_thm[discharge_cft]:
-  simp[Abbr `bytes`, mcopy_bytes_length, Abbr `write_loc`] >>
+  simp[Abbr `bytes`, mcopy_data_length, Abbr `write_loc`] >>
   gvs[] >> metis_tac[ml_is_fixed_eval_size, cf_alloca_ok_opt_unwrap]
 QED
 

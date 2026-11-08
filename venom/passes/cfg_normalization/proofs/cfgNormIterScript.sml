@@ -625,7 +625,7 @@ Proof
     `func.fn_blocks <> []` by
       fs[wf_function_no_ids_def, venomWfTheory.fn_has_entry_def] >>
     mp_tac (Q.SPECL [`func`, `pred_bb`, `target_bb`, `id_base`]
-      fn_entry_label_insert_split) >> simp[] >> NO_TAC) >>
+      insert_split_entry) >> simp[] >> NO_TAC) >>
   TRY (
     mp_tac (Q.SPECL [`func`, `pred_bb`, `target_bb`, `id_base`]
       insert_split_phi_preds_closed) >> simp[] >> NO_TAC) >>
@@ -808,7 +808,7 @@ Proof
   Induct_on `bbs` >>
   rw[find_and_split_def, LET_THM] >>
   BasicProvers.every_case_tac >> fs[] >>
-  metis_tac[fn_entry_label_insert_split]
+  metis_tac[insert_split_entry]
 QED
 
 (* One round preserves entry label *)
@@ -937,7 +937,8 @@ Proof
   `wf_function_no_ids func` by (imp_res_tac wf_function_imp_no_ids) >>
   `!bb. MEM bb func.fn_blocks ==>
      ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    (rpt strip_tac >> imp_res_tac wf_function_block_inst_ids_distinct) >>
+    (rpt strip_tac >> irule venomFnInstsProofsTheory.fn_inst_ids_block_distinct >>
+     qexists `func` >> fs[wf_function_def]) >>
   irule cfg_norm_inv_intro >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   rpt strip_tac >> imp_res_tac mem_block_mem_fn_labels >>

@@ -141,15 +141,6 @@ Proof
   ACCEPT_TAC venomExecProofsTheory.run_block_OK_not_halted
 QED
 
-Theorem step_inst_preserves_prev_bb:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_prev_bb = s.vs_prev_bb
-Proof
-  ACCEPT_TAC venomExecProofsTheory.step_inst_preserves_prev_bb
-QED
-
 (* ==========================================================================
    Lookup Helpers
    ========================================================================== *)

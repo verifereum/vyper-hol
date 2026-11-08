@@ -170,17 +170,6 @@ Definition pending_inventory_wf_def:
       (if op IN FDOM ps.ps_spilled then 1 else 0)
 End
 
-Theorem all_distinct_elem_count_le_one[local]:
-  !(xs : 'a list) x.
-    ALL_DISTINCT xs ==> LIST_ELEM_COUNT x xs <= 1
-Proof
-  Induct >> simp[LIST_ELEM_COUNT_THM] >> rpt strip_tac >>
-  Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
-  >- (`~(LIST_ELEM_COUNT h xs > 0)` by
-        metis_tac[LIST_ELEM_COUNT_MEM] >> decide_tac)
-  >> first_x_assum (qspec_then `x` mp_tac) >> simp[]
-QED
-
 Theorem elem_count_cons_mono[local]:
   !(h : 'a) x xs.
     LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x (h::xs)
@@ -1240,46 +1229,21 @@ QED
    Stack Model Helpers
    ========================================================================= *)
 
-(* stack_find returns element satisfying predicate *)
-Theorem stack_find_el[local]:
-  !p xs d. stack_find p xs = SOME d ==> p (EL d xs)
-Proof
-  Induct_on `xs` >> simp[stack_find_def] >>
-  rpt gen_tac >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_find p xs` >> simp[] >>
-  strip_tac >> gvs[] >>
-  simp[EL_CONS]
-QED
-
 (* stack_get_depth gives EL relationship *)
 Theorem stack_get_depth_el[local]:
   !op stk d.
     stack_get_depth op stk = SOME d ==>
     EL (LENGTH stk - 1 - d) stk = op
 Proof
-  rpt gen_tac >> simp[stack_get_depth_def] >> strip_tac >>
-  imp_res_tac stack_find_bound >>
-  imp_res_tac stack_find_el >> fs[] >>
-  (* Have: EL d (REVERSE stk) = op, d < LENGTH (REVERSE stk) *)
-  (* EL_REVERSE: n < LENGTH l ==> EL n (REVERSE l) = EL (PRE (LENGTH l - n)) l *)
-  mp_tac (SPECL [``d:num``, ``stk:'a list``] EL_REVERSE) >>
-  fs[LENGTH_REVERSE] >>
-  strip_tac >>
-  (* Now have: EL (PRE (LENGTH stk - d)) stk = EL d (REVERSE stk) = op *)
-  `PRE (LENGTH (stk:'a list) - d) = LENGTH stk - 1 - d`
-    suffices_by (disch_then (fn th => fs[th])) >>
-  decide_tac
+  metis_tac[stack_get_depth_props, stack_peek_def]
 QED
 
 (* stack_get_depth implies non-empty and bounded *)
-Theorem stack_get_depth_bound[local]:
+Theorem stack_get_depth_nonempty[local]:
   !op stk d. stack_get_depth op stk = SOME d ==>
     d < LENGTH stk /\ stk <> []
 Proof
-  rpt strip_tac
-  >- (fs[stack_get_depth_def] >> imp_res_tac stack_find_bound >> fs[])
-  >- (Cases_on `stk` >> fs[stack_get_depth_def, stack_find_def])
+  rpt strip_tac >> imp_res_tac stack_get_depth_bound >> gvs[]
 QED
 
 (* stack_get_depth = SOME 0 means LAST stk = op *)
@@ -1288,7 +1252,7 @@ Theorem stack_get_depth_zero_last[local]:
     stk <> [] /\ LAST stk = op
 Proof
   rpt gen_tac >> strip_tac >>
-  imp_res_tac stack_get_depth_bound >> simp[] >>
+  imp_res_tac stack_get_depth_nonempty >> simp[] >>
   imp_res_tac stack_get_depth_el >> gvs[] >>
   simp[LAST_EL] >>
   imp_res_tac (DECIDE ``0:num < n ==> PRE n = n - 1``) >>
@@ -1505,7 +1469,7 @@ Proof
     rename1 `stack_get_depth op ps.ps_stack = SOME d0` >>
     qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
     simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_empty_window] >>
-    imp_res_tac stack_get_depth_bound >>
+    imp_res_tac stack_get_depth_nonempty >>
     Cases_on `d0 > 16`
     >- suspend "deep"
     >> (* d <= 16 *)
@@ -1553,7 +1517,7 @@ Resume reorder_single_op_at_tos[deep]:
   Cases_on `d'` >- fs[] >>
   rename1 `stack_get_depth op ps2.ps_stack = SOME (SUC n)` >>
   qpat_assum `stack_get_depth _ _ = SOME (SUC _)`
-    (strip_assume_tac o MATCH_MP stack_get_depth_bound) >>
+    (strip_assume_tac o MATCH_MP stack_get_depth_nonempty) >>
   simp[] >>
   Cases_on `operand_equiv dfg op (stack_peek 0 ps2.ps_stack)`
   >- (
@@ -1605,7 +1569,7 @@ Proof
   simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_empty_window] >>
   rename1 `stack_get_depth op ps.ps_stack = SOME d0` >>
   imp_res_tac (DECIDE ``(d:num) <= 16 ==> ~(d > 16)``) >>
-  imp_res_tac stack_get_depth_bound >>
+  imp_res_tac stack_get_depth_nonempty >>
   simp[] >>
   (* All cases: extract plan_stack_rel_hd at the end *)
   (* Helper: given LAST stk = x, plan_stack_rel lo vs stk as_stk, stk <> [],
@@ -2338,26 +2302,6 @@ QED
 Finalise reduce_depth_plan_align;
 
 
-(* Prefix interpretation depends only on the planner stack and spill map. *)
-Theorem apply_prefix_ops_ext_stack_spilled[local]:
-  !ops lo ps1 ps2.
-    ps1.ps_stack = ps2.ps_stack /\
-    ps1.ps_spilled = ps2.ps_spilled ==>
-    (apply_prefix_ops initial_fmp lo ops ps1).ps_stack =
-      (apply_prefix_ops initial_fmp lo ops ps2).ps_stack /\
-    (apply_prefix_ops initial_fmp lo ops ps1).ps_spilled =
-      (apply_prefix_ops initial_fmp lo ops ps2).ps_spilled
-Proof
-  Induct >> simp[apply_prefix_ops_def] >>
-  rpt gen_tac >> strip_tac >>
-  first_x_assum irule >>
-  Cases_on `h` >>
-  simp[apply_prefix_op_def, apply_simple_op_def,
-       stack_push_def, stack_pop_def, stack_swap_def,
-       stack_peek_def, stack_poke_def, spill_lookup_def] >>
-  TRY (Cases_on `o'` >> simp[apply_simple_op_def, stack_push_def])
-QED
-
 (* One prefix operation is extensional in all fields observed by
    venom_asm_rel. *)
 Theorem apply_prefix_op_ext_relevant:
@@ -2469,7 +2413,7 @@ QED
 
 (* Restore interpretation and planning agree on the fields used by the runtime
    relation; freeing a slot changes only the allocator free-list. *)
-Theorem do_restore_relevant_align_layout[local]:
+Theorem do_restore_relevant_align_layout:
   !op ps ops ps' lo.
     spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
     do_restore op ps = (ops,ps') ==>
@@ -3817,7 +3761,7 @@ Proof
   (* Unfold reorder_one with d > 16 *)
   qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
   simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_empty_window] >>
-  imp_res_tac stack_get_depth_bound >>
+  imp_res_tac stack_get_depth_nonempty >>
   (* reduce_depth_plan *)
   pairarg_tac >> simp[] >>
   rename1 `reduce_depth_plan _ _ _ _ _ _ = (reduce_ops, ps2)` >>
@@ -3846,7 +3790,7 @@ Proof
   >>
   rename1 `stack_get_depth op ps2.ps_stack = SOME dist'` >>
   qpat_assum `stack_get_depth _ _ = SOME dist'`
-    (strip_assume_tac o MATCH_MP stack_get_depth_bound) >>
+    (strip_assume_tac o MATCH_MP stack_get_depth_nonempty) >>
   (* final_dist = 0 for single-op *)
   simp[] >>
   (* Case: dist' = 0 *)
@@ -4466,25 +4410,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem apply_prefix_op_spill_base[local]:
-  !initial_fmp op lo ps.
-    (apply_prefix_op initial_fmp lo op ps).ps_alloc.sa_spill_base =
-    ps.ps_alloc.sa_spill_base
-Proof
-  rpt gen_tac >> Cases_on `op` >>
-  simp[apply_prefix_op_def, apply_simple_op_def, stack_push_def,
-       stack_pop_def, stack_swap_def, stack_dup_def, stack_poke_def] >>
-  Cases_on `o'` >> simp[apply_simple_op_def, stack_push_def]
-QED
-
-Theorem apply_prefix_ops_spill_base[local]:
-  !initial_fmp ops lo ps.
-    (apply_prefix_ops initial_fmp lo ops ps).ps_alloc.sa_spill_base =
-    ps.ps_alloc.sa_spill_base
-Proof
-  gen_tac >> Induct >> simp[apply_prefix_ops_def, apply_prefix_op_spill_base]
-QED
-
 Theorem do_spill_at_spill_base[local]:
   !d ps.
     (SND (do_spill_at d ps)).ps_alloc.sa_spill_base =
@@ -4901,7 +4826,7 @@ Proof
   >- (Cases_on `FLOOKUP ps.ps_spilled h` >> simp[do_restore_def, LET_THM] >>
       `stack_get_unfixed_depth h 1 2 (stack_push h ps.ps_stack) = SOME 0` by
         (irule stack_get_unfixed_depth_zero >>
-         simp[stack_get_depth_push_inventory]) >>
+         simp[stack_get_depth_push]) >>
       simp[] >> rpt IF_CASES_TAC >> gvs[]) >>
   rename1 `stack_get_unfixed_depth h 1 2 ps.ps_stack = SOME src` >>
   Cases_on `src > 16` >> simp[]
@@ -4969,7 +4894,7 @@ Proof
   >- (Cases_on `FLOOKUP ps.ps_spilled h` >> simp[do_restore_def, LET_THM] >>
       `stack_get_unfixed_depth h 1 2 (stack_push h ps.ps_stack) = SOME 0` by
         (irule stack_get_unfixed_depth_zero >>
-         simp[stack_get_depth_push_inventory]) >>
+         simp[stack_get_depth_push]) >>
       simp[] >> rpt IF_CASES_TAC >> gvs[]) >>
   rename1 `stack_get_unfixed_depth h 1 2 ps.ps_stack = SOME src` >>
   Cases_on `src > 16` >> simp[]
@@ -5294,7 +5219,7 @@ Proof
       simp[do_restore_def, LET_THM] >>
       `stack_get_unfixed_depth h 1 2 (stack_push h ps.ps_stack) = SOME 0` by
         (irule stack_get_unfixed_depth_zero >>
-         simp[stack_get_depth_push_inventory]) >>
+         simp[stack_get_depth_push]) >>
       `spill_lookup x ps.ps_spilled = h` by
         metis_tac[spill_lookup_of_layout_flookup] >>
       simp[] >> fs[exact_two_planner_ready_def] >>

@@ -8,7 +8,7 @@
 
 Theory makeSsaSim
 Ancestors
-  makeSsaHelper ssaSimDefs ssaRenamedSim ssaPipeline makeSsaDefs stateEquiv stateEquivProps
+  stateEquivProofs venomInstProofs makeSsaHelper ssaSimDefs ssaRenamedSim ssaPipeline makeSsaDefs stateEquiv stateEquivProps
   venomExecSemantics venomExecProofs venomWf venomState venomInst
   cfgTransform cfgTransformProps passSimulationDefs passSimulationProps
   execEquivParamDefs execEquivParamProofs execEquivProofs
@@ -134,116 +134,6 @@ QED
 
 (* ===== State-equiv propagation for stale variables ===== *)
 
-(* Helper: eval_operands gives same result under state_equiv *)
-Triviality eval_operands_se:
-  !ops s1 s2 vars.
-    state_equiv vars s1 s2 /\
-    (!x. MEM (Var x) ops ==> x NOTIN vars) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> rw[eval_operands_def] >>
-  `eval_operands ops s1 = eval_operands ops s2` by
-    (first_x_assum irule >> gvs[] >> metis_tac[]) >>
-  Cases_on `h` >> gvs[eval_operand_def] >>
-  gvs[state_equiv_def, execution_equiv_def, lookup_var_def]
-QED
-
-(* Helper: setup_callee identical under state_equiv *)
-Triviality setup_callee_se:
-  !fn args s1 s2 vars.
-    state_equiv vars s1 s2 ==>
-    setup_callee fn args s1 = setup_callee fn args s2
-Proof
-  rw[setup_callee_def] >>
-  gvs[state_equiv_def, execution_equiv_def] >>
-  rw[venom_state_component_equality]
-QED
-
-(* Helper: merge_callee_state preserves state_equiv *)
-Triviality merge_callee_se:
-  !s1 s2 callee vars.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars (merge_callee_state s1 callee)
-                     (merge_callee_state s2 callee)
-Proof
-  rw[state_equiv_def, execution_equiv_def, merge_callee_state_def] >>
-  gvs[lookup_var_def]
-QED
-
-(* Helper: adopting the same returned FMP preserves state equivalence. *)
-Triviality adopt_return_fmp_se:
-  !ir s1 s2 vars.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars (adopt_return_fmp ir s1) (adopt_return_fmp ir s2)
-Proof
-  rpt strip_tac >> Cases_on `ir.iret_adopt_fmp` >>
-  gvs[adopt_return_fmp_def, state_equiv_def, execution_equiv_def,
-      lookup_var_def]
-QED
-
-(* Helper: FOLDL update_var preserves state_equiv *)
-Triviality foldl_update_var_se:
-  !pairs s1 s2 vars.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars
-      (FOLDL (\s' (out,val). update_var out val s') s1 pairs)
-      (FOLDL (\s' (out,val). update_var out val s') s2 pairs)
-Proof
-  Induct >> rw[] >>
-  PairCases_on `h` >> gvs[] >>
-  first_x_assum irule >>
-  gvs[state_equiv_def, execution_equiv_def, update_var_def,
-      lookup_var_def, FLOOKUP_UPDATE]
-QED
-
-(* Helper: step_inst result_equiv for ALL opcodes including INVOKE.
-   Key insight: for INVOKE, setup_callee uses FEMPTY for vs_vars,
-   so the callee state is identical for state_equiv states.
-   Hence run_function on the callee gives the same result. *)
-Triviality step_inst_se:
-  !vars fuel ctx inst s1 s2.
-    state_equiv vars s1 s2 /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
-    result_equiv vars (step_inst fuel ctx inst s1)
-                      (step_inst fuel ctx inst s2)
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = INVOKE`
-  >- (
-    simp[step_inst_def] >>
-    Cases_on `decode_invoke inst` >> gvs[result_equiv_def] >>
-    PairCases_on `x` >> gvs[] >>
-    rename1 `SOME (callee_name, arg_ops)` >>
-    `inst.inst_operands = Label callee_name :: arg_ops`
-      by gvs[decode_invoke_def, AllCaseEqs()] >>
-    `eval_operands arg_ops s1 = eval_operands arg_ops s2` by (
-      irule eval_operands_se >> qexists_tac `vars` >> gvs[] >>
-      rpt strip_tac >> first_x_assum irule >> gvs[]) >>
-    Cases_on `lookup_function callee_name ctx.ctx_functions`
-    >> gvs[result_equiv_def] >>
-    Cases_on `eval_operands arg_ops s2` >> gvs[result_equiv_def] >>
-    rename1 `SOME args` >>
-    `setup_callee x args s1 = setup_callee x args s2`
-      by (irule setup_callee_se >> metis_tac[]) >>
-    Cases_on `setup_callee x args s2` >> gvs[result_equiv_def] >>
-    (* run_blocks on identical callee state — same call, same result *)
-    Cases_on `run_blocks fuel ctx x x'` >> simp[] >>
-    gvs[result_equiv_def, stateEquivPropsTheory.execution_equiv_refl] >>
-    (* IntRet: merge + bind_outputs *)
-    `state_equiv vars (merge_callee_state s1 v)
-                      (merge_callee_state s2 v)` by
-      (irule merge_callee_se >> gvs[]) >>
-    `state_equiv vars
-       (adopt_return_fmp i (merge_callee_state s1 v))
-       (adopt_return_fmp i (merge_callee_state s2 v))` by
-      (irule adopt_return_fmp_se >> gvs[]) >>
-    simp[bind_outputs_def] >>
-    IF_CASES_TAC >> gvs[result_equiv_def] >>
-    irule foldl_update_var_se >> gvs[])
-  >> (simp[step_inst_non_invoke] >>
-      irule execEquivProofsTheory.step_inst_result_equiv >> gvs[])
-QED
-
 (* Helper: exec_block result_equiv for ALL instructions including INVOKE.
    Uses cj 2 of run_defs_ind with P_step=T, P_fn=T. *)
 Triviality exec_block_se:
@@ -270,7 +160,7 @@ Proof
     (gvs[get_instruction_def] >> metis_tac[EL_MEM]) >>
   `result_equiv vars (step_inst fuel ctx inst s1)
                       (step_inst fuel ctx inst s2)` by
-    (irule step_inst_se >> gvs[]) >>
+    (irule step_inst_result_equiv_full >> gvs[]) >>
   Cases_on `step_inst fuel ctx inst s1` >>
   Cases_on `step_inst fuel ctx inst s2` >>
   gvs[result_equiv_def] >>
@@ -539,7 +429,7 @@ Proof
          r.vs_prev_bb = s1.vs_prev_bb` by (
       rpt strip_tac >>
       `~is_terminator inst.inst_opcode` by gvs[is_terminator_def] >>
-      metis_tac[step_inst_preserves_prev_bb]) >>
+      metis_tac[step_preserves_prev_bb]) >>
     Cases_on `step_inst fuel ctx inst s1` >>
     Cases_on `step_inst fuel ctx inst s2` >>
     gvs[result_equiv_def] >>
@@ -556,7 +446,7 @@ Proof
       metis_tac[] >>
     `result_equiv vars (step_inst fuel ctx inst s1)
                         (step_inst fuel ctx inst s2)` by (
-      irule step_inst_se >> gvs[]) >>
+      irule step_inst_result_equiv_full >> gvs[]) >>
     Cases_on `step_inst fuel ctx inst s1` >>
     Cases_on `step_inst fuel ctx inst s2` >>
     gvs[result_equiv_def] >>
@@ -567,7 +457,7 @@ Proof
         fs[state_equiv_def]) >>
     (* prev_bb preserved by non-terminator step_inst *)
     `v.vs_prev_bb = s1.vs_prev_bb` by
-      metis_tac[step_inst_preserves_prev_bb] >>
+      metis_tac[step_preserves_prev_bb] >>
     first_x_assum irule >> simp[] >>
     gvs[] >>
     fs[state_equiv_def, execution_equiv_def] >>
@@ -884,28 +774,6 @@ in
   val bb_lbl_tm = ``^bb.bb_label``
 end;
 val univ_str_tm = ``UNIV : string set``;
-
-(* Wrapper for exec_block_OK_not_halted via run_block *)
-Triviality run_block_OK_not_halted:
-  !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v ==> ~v.vs_halted
-Proof
-  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
-  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
-  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
-  imp_res_tac exec_block_OK_not_halted >> fs[]
-QED
-
-(* Wrapper for exec_block_ok_sets_prev_bb via run_block *)
-Triviality run_block_ok_sets_prev_bb:
-  !fuel ctx bb s v.
-    run_block fuel ctx bb s = OK v ==> v.vs_prev_bb <> NONE
-Proof
-  ONCE_REWRITE_TAC[run_block_def] >> rpt strip_tac >>
-  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
-  Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct] >>
-  imp_res_tac exec_block_ok_sets_prev_bb >> fs[]
-QED
 
 (* OK/OK branch of the fuel induction — extracted as standalone Triviality
    to avoid rich-context issues. All facts are explicit
