@@ -23,6 +23,7 @@
 Theory phiWellFormed
 Ancestors
   phiTransform stateEquivProps venomExecSemantics venomState venomWf phiDefs phiOrigins list
+  venomWfProps
 
 (* ==========================================================================
    Well-Formedness Definitions
@@ -146,21 +147,6 @@ QED
 
 (* Note: resolve_phi_in_operands is in phiDefsTheory *)
 
-Theorem resolve_phi_well_formed:
-  !prev_bb ops v.
-    phi_well_formed ops /\
-    resolve_phi prev_bb ops = SOME v ==>
-    ?var. v = Var var
-Proof
-  measureInduct_on `LENGTH ops` >>
-  Cases_on `ops` >- rw[resolve_phi_def] >>
-  Cases_on `t` >- rw[resolve_phi_def] >>
-  Cases_on `h` >> Cases_on `h'` >>
-  rpt strip_tac >> fs[resolve_phi_def, phi_well_formed_def] >>
-  TRY (Cases_on `s = prev_bb` >> fs[]) >>
-  first_x_assum (qspec_then `t'` mp_tac) >> simp[] >>
-  strip_tac >> res_tac >> metis_tac[]
-QED
 
 (* Helper: eval_one_phi in terms of resolve_phi and eval_operand *)
 Theorem eval_one_phi_eq:

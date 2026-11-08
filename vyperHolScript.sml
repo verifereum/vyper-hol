@@ -19,39 +19,22 @@ Ancestors
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
-  (* gas: origins of each charge, the shadow lowering, gas bridges *)
-  msgGasOriginPost generatedGasOrigin gasShadowRawDeploy gasShadowRawRuntime
-  bodyGasAdmissible exprSimConvertGas exprSimAbiDecodeGas exprSimAbiGasBridge
-  gasIntCallArgs gasIntCallBody typeBuiltinGasPrefix
-  (* calldata and ABI: decoding, encoding windows, buffer execution *)
-  abiProofs abiEncoderWindowSourceRun abiBytesFrameExecution
-  abiWordTupleExecution bufferAllocationExecution
-  ctorAbiActualBytesRun placeTypingE2EProps
-  (* statements: bodies' memory, returns, nonreentrancy, conversions, copies,
-     CREATE dispatch *)
-  bodyDeclMemory bodyStmtClosureMemory bodyFieldMemory bodyFieldValueMemory
-  bodyFieldForceMemory bodyEnvMemory nonreentrantEntry
-  stmtSimReturnTuple stmtSimReturnWiden stmtSimReturnWord selectedBodyCode
-  builtinTypeConvert2 slotCopyExecution createDispatchExecution
-  createRequestCorrespondence
+  (* calldata and ABI *)
+  abiProofs
+  placeTypingE2EProps
+  (* statements: nonreentrancy *)
+  nonreentrantEntry
   (* pointer safety of the lowering *)
   batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
   ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
-  typedCopyArrayExecutionPtr wordCopyRobustPtr loweringPolicyOk
+  typedCopyArrayExecutionPtr wordCopyRobustPtr
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
-  ctorDeployLoweringFrameCallFree ctorDeployLoweringFrameCandidate
-  ctorDeployLoweringFrameCfgNorm ctorDeployLoweringFrameContracts
-  ctorDeployLoweringFrameJump ctorDeployLoweringFrameLowerDload
-  ctorDeployLoweringFrameO1Pruning ctorDeployLoweringFramePipeline
-  ctorDeployLoweringFrameSourceEntry ctorDeployLoweringFrameWidth
-  ctorDeployLoweringFrameWitness
-  (* Venom execution: oracle-aware core simulations, jump independence *)
-  coreOracleSim coreOracleUpdates jumpIndep
+  (* Venom execution: jump independence *)
+  jumpIndep
   (* passes: oracle projections, FMP lowering, memory merging, SSA *)
-  concretizeOracleSim ssaOracleSim passOracleSim remainingOracleSim
-  remainingOracleTransport remainingOracleUpdates fmpLowerSequenceExec
+  concretizeOracleSim ssaOracleSim
+  fmpLowerSequenceExec
   mmBlockSimProofs mmSupplySsaProofs mmSupplyWfProofs
-  makeSsaCurrentNonDegCertificate
   (* codegen: stack planning *)
   stackPlanGenCompute

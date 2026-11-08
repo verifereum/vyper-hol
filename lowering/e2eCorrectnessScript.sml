@@ -17,7 +17,6 @@ Ancestors
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource vfmExecution
-  venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness immutableCodeLayout
   stateEquiv stateEquivProps
