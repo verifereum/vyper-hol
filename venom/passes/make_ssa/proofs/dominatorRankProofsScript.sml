@@ -9,7 +9,7 @@ Theorem dominator_query_subset:
     (dom_analyze (cfg_analyze fn) fn).da_dominators p) SUBSET set (fn_labels fn)
 Proof
   simp[SUBSET_DEF] >> rpt strip_tac >>
-  metis_tac[dom_labels_bounded_proof]
+  metis_tac[dom_labels_bounded]
 QED
 
 Definition dominator_query_rank_def:

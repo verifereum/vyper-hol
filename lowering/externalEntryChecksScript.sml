@@ -295,7 +295,7 @@ Theorem selected_external_package:
   !tops target mut rr name args ret fbody.
   ?cenv pos_args min_cds is_payable nkey ut iv rt.
     set_external_package_target target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut, F, rr, name, args, ([] : expr list), ret, fbody)) =
     ("fn_" ++ name, cenv, pos_args, min_cds, is_payable, F,
      nkey, ut, iv, fbody, rt)
@@ -860,7 +860,7 @@ Theorem source_runtime_entry_checks_code:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,nr,rr,name,args,dflts,ret,fbody)) =
       (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) ==>
     ?func fb sa sd st st'.
@@ -1042,7 +1042,7 @@ Theorem external_entry_reaches_checks:
     ?rr lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\

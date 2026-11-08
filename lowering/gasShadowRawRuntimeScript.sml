@@ -17,7 +17,7 @@ Proof
   fs[markerTheory.Abbrev_def] >>
   pop_assum (assume_tac o SYM) >>
   asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [lower_vyper_runtime_unit_def, gas_shadow_classify_functions,
-    gas_shadow_type_env, gas_shadow_assign_nkeys, LET_THM,
+    gas_shadow_type_env, LET_THM,
     pairTheory.pair_case_thm, BETA_THM] >>
   asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [gas_shadow_build_selectors, gas_shadow_map_package_external_fn,
     gas_shadow_map_package_internal_fn, gas_shadow_package_fallback_fn,

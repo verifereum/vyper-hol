@@ -51,13 +51,13 @@ Theorem selected_external_package_member[local]:
   ?ce pa mc key view rt.
     MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,F,view,fbody,rt)
       (MAP (set_external_package_target target o
-        package_external_fn tops F (assign_nkeys tops 0))
+        package_external_fn tops T (K global_nonreentrant_slot))
         (FST (classify_functions tops)))
 Proof
   strip_tac >> drule_all selected_external_source_member >> strip_tac >>
   `?ce pa mc key view rt.
      set_external_package_target target
-       (package_external_fn tops F (assign_nkeys tops 0)
+       (package_external_fn tops T (K global_nonreentrant_slot)
          (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
        ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,F,view,fbody,rt)` by
     simp[package_external_fn_def, set_external_package_target_def] >>

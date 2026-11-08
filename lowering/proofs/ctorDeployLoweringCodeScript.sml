@@ -52,7 +52,7 @@ Theorem deploy_constructor_package_shape:
     deploy_source_ok tops am tx /\
     classify_functions tops = (exts,ints,fb,SOME cf) /\
     set_constructor_package_target target
-      (package_constructor tops F (assign_nkeys tops 0) cf) =
+      (package_constructor tops T (K global_nonreentrant_slot) cf) =
       (cenv,args,pay,nr,key,ut,body,ret) ==>
     cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
     ~supported_stmts_expr_exists expr_shape_root body
@@ -199,7 +199,7 @@ Theorem deploy_ctor_lowering_trace:
   ?cenv0 pos_args pay nr nkey ut body ret st_pay imm st1 cenv1 st2 st3
    exit_lbl sa sb sj old_bb st_exit st_epilogue st_final post ctx data.
     set_constructor_package_target rpolicy.rpol_target
-      (package_constructor tops F (assign_nkeys tops 0) cf) =
+      (package_constructor tops T (K global_nonreentrant_slot) cf) =
       (cenv0,pos_args,pay,nr,nkey,ut,body,ret) /\
     (if pay then comp_return () else
        comp_bind (emit_op CALLVALUE []) (\cv.
@@ -227,11 +227,11 @@ Theorem deploy_ctor_lowering_trace:
       st_epilogue = ((),st_final) /\
     compile_internal_fn_bodies
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops F (assign_nkeys tops 0) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
       st_final = ((),post) /\
     extract_context_with_internals "__deploy"
       (MAP (set_internal_package_target rpolicy.rpol_target o
-        package_internal_fn tops F (assign_nkeys tops 0) T (imm_len tops)) ints)
+        package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops)) ints)
       post = SOME (ctx,data) /\
     lowering_context_ok (install_immutable_reservation (imm_len tops) ctx) /\
     dunit = <|cu_context := install_immutable_reservation (imm_len tops) ctx;
@@ -313,7 +313,7 @@ Proof
   `supported_program tops` by fs[deploy_source_ok_def] >>
   qmatch_asmsub_abbrev_tac `compile_internal_fn_bodies ifns st_final` >>
   `ifns = MAP (set_internal_package_target rpolicy.rpol_target o
-      package_internal_fn tops F (assign_nkeys tops 0) T (imm_len tops))
+      package_internal_fn tops T (K global_nonreentrant_slot) T (imm_len tops))
       (FST (SND (classify_functions tops)))` by simp[Abbr `ifns`] >>
   drule_all deploy_internal_package_certificates >> strip_tac >>
   drule_all deploy_ctor_packaged_entry >> strip_tac >>

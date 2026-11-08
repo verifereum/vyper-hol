@@ -71,14 +71,14 @@ Proof
      disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   `call_ctx_rel tx s0.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx` by
     fs[initial_venom_state_rel_def, venom_env_rel_def] >>
-  `?c. package_external_fn tops F (assign_nkeys tops 0)
+  `?c. package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, rr, tx.function_name, args, ([] : expr list), ret, fbody) =
        (lbl, c, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt)` by
     (qmatch_asmsub_abbrev_tac `set_external_package_target _ pkg = _` >>
      PairCases_on `pkg` >>
      gvs[set_external_package_target_def, markerTheory.Abbrev_def]) >>
-  qspecl_then [`tops`, `am`, `tx`, `SOME vs.vs_outcomes`, `ret`, `F`,
-               `assign_nkeys tops 0`, `mut`, `rr`, `args`, `[] : expr list`, `fbody`,
+  qspecl_then [`tops`, `am`, `tx`, `SOME vs.vs_outcomes`, `ret`, `T`,
+               `K global_nonreentrant_slot`, `mut`, `rr`, `args`, `[] : expr list`, `fbody`,
                `lbl`, `c`, `pos_args`, `min_cds`, `is_payable`,
                `(F, nkey, ut', iv, fbody, rt)`, `sc`, `sc'`,
                `unit.cu_context`, `s0`, `vs.vs_tx_ctx`, `vs.vs_block_ctx`]

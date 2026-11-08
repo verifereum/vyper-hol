@@ -259,7 +259,7 @@ Theorem deploy_prefix_packaged_payable:
   vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
     SOME (mut,F,args,[],NoneT,body) /\
   set_constructor_package_target rp.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
     (ce,pa,pay,nr,key,ut,ss,ret) ==>
   pay = (mut = Payable)
 Proof

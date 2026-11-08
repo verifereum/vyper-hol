@@ -11,7 +11,7 @@ Theorem ctor_prefix_package_nonpayable:
   vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
     SOME (mut,F,args,[],NoneT,ffbody) /\ mut <> Payable /\
   set_constructor_package_target rpolicy.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
     (cenv,pos_args,pay,nr,nkey,ut,cb,ret) ==>
   ~pay
 Proof
@@ -48,7 +48,7 @@ Theorem ctor_prefix_code_restrict:
     (fbody,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,se,sp,sf,func) /\
   (!ce args pay nr key ut fbody ret.
     set_constructor_package_target rpolicy.rpol_target
-      (package_constructor tops F (assign_nkeys tops 0) cf) =
+      (package_constructor tops T (K global_nonreentrant_slot) cf) =
         (ce,args,pay,nr,key,ut,fbody,ret) ==> ~pay) /\
   classify_functions tops = (exts,ints,fb,SOME cf) ==>
   ?cv nv s1 s2 st_pay.

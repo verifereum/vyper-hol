@@ -1150,7 +1150,7 @@ Theorem deploy_frame_package_body_inv:
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
     classify_functions tops = (exts,ints,fb,SOME cf) /\
     set_constructor_package_target rpolicy.rpol_target
-      (package_constructor tops F (assign_nkeys tops 0) cf) = (cenv,args,rest) ==>
+      (package_constructor tops T (K global_nonreentrant_slot) cf) = (cenv,args,rest) ==>
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx)
 Proof
   rpt gen_tac >> strip_tac >>

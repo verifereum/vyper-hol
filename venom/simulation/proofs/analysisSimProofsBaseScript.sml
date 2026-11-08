@@ -3,10 +3,10 @@
  *
  * TOP-LEVEL:
  *   analysis_inst_sim_block_sim_proof       — inst sim ⟹ block sim (at idx=0)
- *   df_analysis_pass_correct_sound_proof    — with soundness threading
- *   df_analysis_pass_correct_widen_sound_proof — widening variant
- *   df_analysis_pass_correct_prepend_proof  — prepend-aware variant
- *   analysis_function_transform_compare_proof — compare two transforms
+ *   df_analysis_pass_correct_sound    — with soundness threading
+ *   df_analysis_pass_correct_widen_sound — widening variant
+ *   df_analysis_pass_correct_prepend  — prepend-aware variant
+ *   analysis_function_transform_compare — compare two transforms
  *   analysis_inst_simulates_from_1_proof    — 1:1 as special case of 1:N
  *
  * Helper:

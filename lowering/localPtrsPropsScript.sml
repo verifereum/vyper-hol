@@ -59,6 +59,19 @@ Proof
   `name <> id` by (strip_tac >> gvs[]) >> metis_tac[]
 QED
 
+Theorem mstore_keeps_val_in_memory:
+  ∀ty v off ss off2 (w:bytes32).
+    val_in_memory ty v off ss.vs_memory ∧ val_wf ty v ∧
+    (off2 + 32 ≤ off ∨ off + type_memory_size ty ≤ off2) ⇒
+    val_in_memory ty v off (mstore off2 w ss).vs_memory
+Proof
+  rpt strip_tac >>
+  `mstore off2 w ss = mstore off2 w (ss with vs_memory := ss.vs_memory)` by
+    simp[mstore_def] >>
+  pop_assum SUBST1_TAC >>
+  irule (CONJUNCT1 mstore_preserves_val_in_memory) >> simp[]
+QED
+
 (* An MSTORE outside a value's footprint keeps it. *)
 Theorem mstore_keeps_memory_value_rel:
   ∀ty v off ss off2 (w:bytes32).

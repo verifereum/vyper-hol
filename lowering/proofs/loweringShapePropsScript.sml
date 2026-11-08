@@ -9186,16 +9186,23 @@ Proof
 QED
 
 Theorem compile_log_save_arg_shape[local]:
-  shape_stable R ==>
-  shape_step internal compiler_label (\st. R st /\ plain_operand st arg_op)
+  shape_step internal compiler_label
+    (\st. cenv_shape_ok st cenv /\ plain_operand st arg_op)
     (compile_log_save_arg cenv src_ty arg_op es)
-    (\v st. R st /\ plain_operand st v)
+    (\v st. cenv_shape_ok st cenv /\ plain_operand st v)
 Proof
-  strip_tac >> simp[compile_log_save_arg_def] >> IF_CASES_TAC
+  simp[compile_log_save_arg_def] >> IF_CASES_TAC
   >- (irule shape_step_return >> simp[]) >>
-  irule (SRULE[value_shape_ok_def]
-    (Q.INST [`vv` |-> `StackValue src_ty arg_op`]
-      (SPEC_ALL compile_materialize_vv_shape))) >> simp[]
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. cenv_shape_ok st cenv /\ cenv_shape_ok st cenv /\
+          value_shape_ok st (StackValue src_ty arg_op)`,
+    `\v st. cenv_shape_ok st cenv /\ cenv_shape_ok st cenv /\ plain_operand st v`] >>
+  rpt conj_tac
+  >- (irule (BETA_RULE (Q.INST [`R` |-> `\st. cenv_shape_ok st cenv`]
+                 compile_materialize_vv_shape_under)) >>
+      simp[cenv_shape_ok_stable]) >>
+  simp[value_shape_ok_def]
 QED
 
 Theorem compile_log_eval_all_shape[local]:
@@ -9224,7 +9231,7 @@ Proof
       qexistsl_tac [`compiler_label`,
         `\st. cenv_shape_ok st cenv /\ plain_operand st arg_op`,
         `\saved st. cenv_shape_ok st cenv /\ plain_operand st saved`] >>
-      simp[] >> ho_match_mp_tac compile_log_save_arg_shape >> simp[cenv_shape_ok_stable]) >>
+      simp[compile_log_save_arg_shape]) >>
   ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. cenv_shape_ok st cenv` >>
   simp[cenv_shape_ok_stable] >> irule lower_value_shape >> simp[]
 QED

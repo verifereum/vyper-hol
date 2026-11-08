@@ -36,13 +36,13 @@ Proof
        gas_shadow_set_constructor_package_target, ctor_named_init_def] >>
   IF_CASES_TAC >> simp[] >>
   `MAP (set_internal_package_target rp.rpol_target o
-        package_internal_fn (MAP gas_shadow_toplevel tops) F (assign_nkeys tops 0) T
+        package_internal_fn (MAP gas_shadow_toplevel tops) T (K global_nonreentrant_slot) T
          (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops))
        (MAP (\(mut,nr,rr,name,args,defaults,ret,body).
           (mut,nr,rr,name,args,MAP gas_shadow_expr defaults,ret,MAP gas_shadow_stmt body)) int_fns) =
    MAP gas_shadow_internal_package
        (MAP (set_internal_package_target rp.rpol_target o
-        package_internal_fn tops F (assign_nkeys tops 0) T
+        package_internal_fn tops T (K global_nonreentrant_slot) T
          (compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops)) int_fns)` by
     (simp[MAP_MAP_o, combinTheory.o_DEF] >> irule MAP_CONG >> simp[] >>
      gen_tac >> strip_tac >> PairCases_on `x` >>

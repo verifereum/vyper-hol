@@ -62,13 +62,6 @@ Proof
   simp[gas_shadow_toplevel_def, build_event_info_def]
 QED
 
-Theorem gas_shadow_assign_nkeys[simp]:
-  !tops n. assign_nkeys (MAP gas_shadow_toplevel tops) n = assign_nkeys tops n
-Proof
-  Induct >> simp[assign_nkeys_def] >> Cases_on `h` >>
-  simp[gas_shadow_toplevel_def, assign_nkeys_def]
-QED
-
 Theorem gas_shadow_compute_immutables_len[simp]:
   !tops sft. compute_immutables_len sft (MAP gas_shadow_toplevel tops) =
     compute_immutables_len sft tops
