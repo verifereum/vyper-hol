@@ -14359,6 +14359,283 @@ Proof
   gvs[stack_peek_def]
 QED
 
+Definition alias_occ_event_contexts_def:
+  (alias_occ_event_contexts [] s = []) /\
+  (alias_occ_event_contexts (ev::evs) s =
+    (s,ev)::alias_occ_event_contexts evs (alias_occ_event_shadow ev s))
+End
+
+Theorem alias_occ_event_contexts_events:
+  !evs s. MAP SND (alias_occ_event_contexts evs s) = evs
+Proof
+  Induct >> simp[alias_occ_event_contexts_def]
+QED
+
+Theorem alias_occ_event_contexts_append:
+  !evs s more. alias_occ_event_contexts (evs ++ more) s =
+    alias_occ_event_contexts evs s ++
+    alias_occ_event_contexts more (alias_occ_events_shadow evs s)
+Proof
+  Induct >> simp[alias_occ_event_contexts_def, alias_occ_events_shadow_def]
+QED
+
+Theorem alias_occ_event_contexts_index:
+  !evs s n. n < LENGTH evs ==>
+    EL n (alias_occ_event_contexts evs s) =
+      (alias_occ_events_shadow (TAKE n evs) s, EL n evs)
+Proof
+  Induct >> simp[alias_occ_event_contexts_def] >>
+  rpt gen_tac >> Cases_on `n` >>
+  simp[alias_occ_event_contexts_def, alias_occ_events_shadow_def]
+QED
+
+Theorem alias_occ_event_contexts_wf:
+  !evs s. alias_occ_wf s ==>
+    EVERY (\(incoming,ev). alias_occ_wf incoming)
+      (alias_occ_event_contexts evs s)
+Proof
+  Induct >> simp[alias_occ_event_contexts_def, alias_occ_event_wf]
+QED
+
+Definition alias_occ_events_logs_def:
+  alias_occ_events_logs evs s =
+    FLAT (MAP (\(incoming,ev). alias_occ_event_logs ev incoming)
+      (alias_occ_event_contexts evs s))
+End
+
+Theorem alias_occ_events_logs_cons:
+  alias_occ_events_logs (ev::evs) s = alias_occ_event_logs ev s ++
+    alias_occ_events_logs evs (alias_occ_event_shadow ev s)
+Proof
+  simp[alias_occ_events_logs_def, alias_occ_event_contexts_def]
+QED
+
+Theorem alias_occ_events_logs_valid:
+  !evs s. alias_occ_wf s ==>
+    EVERY alias_occ_read_log_ok (alias_occ_events_logs evs s)
+Proof
+  Induct
+  >- simp[alias_occ_events_logs_def, alias_occ_event_contexts_def] >>
+  simp[alias_occ_events_logs_cons, alias_occ_event_logs_valid, alias_occ_event_wf]
+QED
+
+Theorem alias_occ_events_logs_append:
+  alias_occ_events_logs (evs ++ more) s = alias_occ_events_logs evs s ++
+    alias_occ_events_logs more (alias_occ_events_shadow evs s)
+Proof
+  simp[alias_occ_events_logs_def, alias_occ_event_contexts_append, MAP_APPEND,
+    FLAT_APPEND]
+QED
+
+Definition alias_occ_fold_contexts_def:
+  (alias_occ_fold_contexts step trace [] ps s = []) /\
+  (alias_occ_fold_contexts step trace (item::items) ps s =
+    (item,ps,s)::alias_occ_fold_contexts step trace items (SND (step item ps))
+      (alias_occ_events_shadow (trace item ps) s))
+End
+
+Theorem alias_occ_fold_contexts_flat:
+  !items step trace ps s.
+    FLAT (MAP (\(item,p,t). alias_occ_event_contexts (trace item p) t)
+      (alias_occ_fold_contexts step trace items ps s)) =
+    alias_occ_event_contexts (alias_occ_fold_events step trace items ps) s
+Proof
+  Induct >> simp[alias_occ_fold_contexts_def, alias_occ_fold_events_def,
+    alias_occ_event_contexts_def, alias_occ_event_contexts_append]
+QED
+
+Theorem alias_occ_fold_contexts_align:
+  !items step trace ps s.
+    (!item p t. alias_occ_align t p ==>
+      alias_occ_align (alias_occ_events_shadow (trace item p) t) (SND (step item p))) /\
+    alias_occ_align s ps ==>
+    EVERY (\(item,p,t). alias_occ_align t p)
+      (alias_occ_fold_contexts step trace items ps s)
+Proof
+  Induct >> simp[alias_occ_fold_contexts_def]
+QED
+
+Definition alias_occ_reorder_contexts_def:
+  alias_occ_reorder_contexts dfg target_ops ps s =
+    alias_occ_fold_contexts (\(idx,op) p. reorder_one dfg target_ops idx op p)
+      (\(idx,op) p. alias_occ_reorder_one_events dfg target_ops idx op p)
+      (MAPi (\idx op. (idx,op)) target_ops) ps s
+End
+
+Theorem alias_occ_reorder_contexts_flat:
+  FLAT (MAP (\((idx,op),p,t).
+    alias_occ_event_contexts (alias_occ_reorder_one_events dfg target_ops idx op p) t)
+    (alias_occ_reorder_contexts dfg target_ops ps s)) =
+  alias_occ_event_contexts (alias_occ_reorder_events dfg target_ops ps) s
+Proof
+  simp[alias_occ_reorder_contexts_def, alias_occ_reorder_events_def,
+    GSYM alias_occ_fold_contexts_flat] >>
+  AP_TERM_TAC >> irule listTheory.MAP_CONG >>
+  simp[pairTheory.FORALL_PROD]
+QED
+
+Theorem alias_occ_reorder_contexts_align:
+  alias_occ_align s ps ==>
+  EVERY (\(item,p,t). alias_occ_align t p)
+    (alias_occ_reorder_contexts dfg target_ops ps s)
+Proof
+  strip_tac >> rewrite_tac[alias_occ_reorder_contexts_def] >>
+  irule alias_occ_fold_contexts_align >>
+  simp[pairTheory.FORALL_PROD, alias_occ_reorder_one_align]
+QED
+
+Definition alias_occ_reorder_boundaries_def:
+  alias_occ_reorder_boundaries target_ops idx op ps s =
+    (alias_occ_commands_real (alias_occ_reorder_restore_commands target_ops idx op ps) ps,
+     alias_occ_events_shadow
+       (MAP AliasOccPrimitive (alias_occ_reorder_restore_commands target_ops idx op ps)) s)
+End
+
+Definition alias_occ_reorder_move_entry_def:
+  alias_occ_reorder_move_entry target_ops idx op ps s =
+    case alias_occ_reorder_boundaries target_ops idx op ps s of
+      (p1,s1) =>
+        (alias_occ_reorder_reduce_state target_ops idx op p1,
+         alias_occ_events_shadow (alias_occ_reorder_reduce_events target_ops idx op p1) s1)
+End
+
+Theorem alias_occ_reorder_boundaries_align:
+  alias_occ_align s ps /\
+  alias_occ_reorder_boundaries target_ops idx op ps s = (p1,s1) ==>
+  alias_occ_align s1 p1
+Proof
+  simp[alias_occ_reorder_boundaries_def, alias_occ_primitive_events] >>
+  rpt strip_tac >> gvs[] >> simp[alias_occ_commands_align]
+QED
+
+Theorem alias_occ_reorder_move_entry_align:
+  alias_occ_align s ps /\
+  alias_occ_reorder_move_entry target_ops idx op ps s = (p2,s2) ==>
+  alias_occ_align s2 p2
+Proof
+  rewrite_tac[alias_occ_reorder_move_entry_def] >>
+  Cases_on `alias_occ_reorder_boundaries target_ops idx op ps s` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  irule alias_occ_reorder_reduce_align >>
+  metis_tac[alias_occ_reorder_boundaries_align]
+QED
+
+Theorem alias_occ_reorder_one_contexts_segments:
+  alias_occ_reorder_boundaries target_ops idx op ps s = (p1,s1) /\
+  alias_occ_reorder_move_entry target_ops idx op ps s = (p2,s2) ==>
+  alias_occ_event_contexts (alias_occ_reorder_one_events dfg target_ops idx op ps) s =
+    alias_occ_event_contexts
+      (MAP AliasOccPrimitive (alias_occ_reorder_restore_commands target_ops idx op ps)) s ++
+    alias_occ_event_contexts (alias_occ_reorder_reduce_events target_ops idx op p1) s1 ++
+    alias_occ_event_contexts (alias_occ_reorder_move_events dfg target_ops idx op p2) s2
+Proof
+  simp[alias_occ_reorder_boundaries_def, alias_occ_reorder_move_entry_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[alias_occ_reorder_one_events_def, alias_occ_event_contexts_append,
+    alias_occ_events_append]
+QED
+
+(* Keep the move-entry states even for the second event: its source
+   operand was read before either relabel was applied. *)
+Definition alias_occ_reorder_move_records_def:
+  alias_occ_reorder_move_records dfg target_ops idx op p2 s2 =
+    MAPi (\n ev.
+      (n, alias_occ_events_shadow
+        (TAKE n (alias_occ_reorder_move_events dfg target_ops idx op p2)) s2, ev))
+      (alias_occ_reorder_move_events dfg target_ops idx op p2)
+End
+
+Theorem alias_occ_reorder_move_records_index:
+  MEM (n,incoming,ev) (alias_occ_reorder_move_records dfg target_ops idx op p2 s2) ==>
+  n < LENGTH (alias_occ_reorder_move_events dfg target_ops idx op p2) /\
+  EL n (alias_occ_event_contexts
+    (alias_occ_reorder_move_events dfg target_ops idx op p2) s2) = (incoming,ev)
+Proof
+  simp[alias_occ_reorder_move_records_def, indexedListsTheory.MEM_MAPi] >>
+  rpt strip_tac >> gvs[] >> simp[alias_occ_event_contexts_index]
+QED
+
+Theorem alias_occ_reorder_move_records_relabel:
+  MEM (n,incoming,AliasOccEquivRelabel site depth at)
+    (alias_occ_reorder_move_records dfg target_ops idx op p2 s2) ==>
+  ?dist.
+    site = idx /\
+    stack_get_unfixed_depth op (LENGTH target_ops - 1 - idx) (LENGTH target_ops) p2.ps_stack = SOME dist /\
+    dist <> LENGTH target_ops - 1 - idx /\
+    LENGTH target_ops - 1 - idx < LENGTH p2.ps_stack /\
+    operand_equiv dfg op (stack_peek (LENGTH target_ops - 1 - idx) p2.ps_stack) /\
+    alias_occ_reorder_move_records dfg target_ops idx op p2 s2 =
+      [(0,s2,AliasOccEquivRelabel idx dist
+          (stack_peek (LENGTH target_ops - 1 - idx) p2.ps_stack));
+       (1,alias_occ_event_shadow (AliasOccEquivRelabel idx dist
+          (stack_peek (LENGTH target_ops - 1 - idx) p2.ps_stack)) s2,
+          AliasOccEquivRelabel idx (LENGTH target_ops - 1 - idx) op)]
+Proof
+  simp[alias_occ_reorder_move_records_def, indexedListsTheory.MEM_MAPi] >>
+  rpt strip_tac >>
+  `MEM (AliasOccEquivRelabel site depth at)
+    (alias_occ_reorder_move_events dfg target_ops idx op p2)` by
+      metis_tac[listTheory.MEM_EL] >>
+  drule alias_occ_reorder_move_relabel_certificate >> strip_tac >>
+  qexists_tac `dist` >> simp[alias_occ_reorder_move_records_def,
+    alias_occ_events_shadow_def] >> gvs[]
+QED
+
+Definition alias_occ_reorder_site_move_records_def:
+  alias_occ_reorder_site_move_records dfg target_ops idx op ps s =
+    case alias_occ_reorder_move_entry target_ops idx op ps s of
+      (p2,s2) => MAP (\record.
+        (idx,op,ps,s,p2,s2,alias_occ_reorder_move_reads target_ops idx op p2,record))
+        (alias_occ_reorder_move_records dfg target_ops idx op p2 s2)
+End
+
+Definition alias_occ_reorder_all_move_records_def:
+  alias_occ_reorder_all_move_records dfg target_ops ps s =
+    FLAT (MAP (\((idx,op),p,t).
+      alias_occ_reorder_site_move_records dfg target_ops idx op p t)
+      (alias_occ_reorder_contexts dfg target_ops ps s))
+End
+
+Theorem alias_occ_reorder_all_move_records_inversion:
+  MEM (idx,op,p,t,p2,s2,reads,record)
+    (alias_occ_reorder_all_move_records dfg target_ops ps s) ==>
+  MEM ((idx,op),p,t) (alias_occ_reorder_contexts dfg target_ops ps s) /\
+  alias_occ_reorder_move_entry target_ops idx op p t = (p2,s2) /\
+  reads = alias_occ_reorder_move_reads target_ops idx op p2 /\
+  MEM record (alias_occ_reorder_move_records dfg target_ops idx op p2 s2)
+Proof
+  simp[alias_occ_reorder_all_move_records_def, MEM_FLAT, MEM_MAP,
+    pairTheory.EXISTS_PROD] >> strip_tac >> gvs[] >>
+  rename1 `MEM _ (alias_occ_reorder_site_move_records dfg target_ops i v p0 t0)` >>
+  Cases_on `alias_occ_reorder_move_entry target_ops i v p0 t0` >>
+  gvs[alias_occ_reorder_site_move_records_def, MEM_MAP]
+QED
+
+Theorem alias_occ_reorder_all_move_reads_exact:
+  MEM (idx,op,p,t,p2,s2,reads,record)
+    (alias_occ_reorder_all_move_records dfg target_ops ps s) /\
+  MEM (index,source,at) reads ==>
+  source = p2.ps_stack /\
+  index = LENGTH p2.ps_stack - 1 - (LENGTH target_ops - 1 - idx) /\
+  at = EL index source
+Proof
+  strip_tac >> drule alias_occ_reorder_all_move_records_inversion >>
+  strip_tac >> gvs[] >> drule alias_occ_reorder_move_reads_exact >> simp[]
+QED
+
+Theorem alias_occ_reorder_all_move_entry_align:
+  alias_occ_align s ps /\
+  MEM (idx,op,p,t,p2,s2,reads,record)
+    (alias_occ_reorder_all_move_records dfg target_ops ps s) ==>
+  alias_occ_align s2 p2
+Proof
+  strip_tac >> drule alias_occ_reorder_all_move_records_inversion >>
+  strip_tac >>
+  drule alias_occ_reorder_contexts_align >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD] >> strip_tac >>
+  irule alias_occ_reorder_move_entry_align >> metis_tac[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
