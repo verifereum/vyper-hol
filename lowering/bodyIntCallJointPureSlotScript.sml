@@ -274,3 +274,25 @@ Proof
   gvs[supportedTypesTheory.supported_tuple_type_def,
       supportedTypesTheory.supported_value_type_def]
 QED
+
+Theorem joint_type_builtin_result_slot:
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  intcall_joint_res fp ce env es sc s /\
+  supportedExprForms$supported_type_builtin_form fp.jc_tops ty tb target args /\
+  well_typed_expr env (TypeBuiltin ty tb target args) /\
+  vv_at ce fp.jc_cx ty sa sb es r vv s /\
+  read_result fp.jc_cx r es = (INL v,es) /\
+  evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\
+  ~is_word_type ty /\ ~is_bytestring_type ty /\
+  (case vv of StackValue _ _ => T
+            | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+  ?w a k. eval_operand (vv_operand vv) s = SOME w /\
+    a <= w2n w /\ w2n w + type_memory_size tv <= a + k /\
+    a + k < dimword (:256) /\
+    (fp.jc_lo <= a \/
+     ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)
+Proof
+  strip_tac >>
+  drule_all supported_type_builtin_complex_result >> strip_tac >>
+  drule_all joint_supported_result_slot >> simp[]
+QED
