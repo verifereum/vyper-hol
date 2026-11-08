@@ -79,6 +79,19 @@ Definition fn_sim_below_def:
       ?m. fn_run_rel D R_ret fn (run_blocks k C fn s) (run_blocks m C' fn' t)
 End
 
+(* Why it holds: strong induction on n for fn_sim_below n.  run_blocks
+   (SUC j) C fn s is one_block j C fn s followed by Halt (halted OK),
+   run_blocks j C fn s' (OK) or the propagated result; target fuels
+   compose by venomExecPropsTheory.fuel_mono.  The root reduces run_context
+   to run_blocks from the entry state, where frame_reachable's entry rule
+   gives block_reach; o1_ctx_shape rules out IntRet/OK at the root
+   (venomRetPropsTheory.run_context_not_int_ret, run_context_not_ok).
+   The missing piece is carrying frame_reachable along a source run
+   (across INVOKE via the call and ret rules), which nothing in the repo
+   proves yet; wf_function's distinct labels make active_inst pick the
+   block exec_block runs.  Pass proofs discharging the block obligation
+   need that same walk to reach their INVOKE sites, so it should be an
+   exported theorem. *)
 Theorem reachable_fn_sim_ctx_sim:
   !D vs C C' R R_ret.
     o1_ctx_shape C /\
