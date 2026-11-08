@@ -4,7 +4,7 @@ Ancestors
   stmtSimForArrayFrame vyperReadOnlyTargets vyperTypeContract vyperTypeSystem
   loweringPosts vyperState exprSimProps exprLoweringProps compileEnv
   exprSimAttributeFields valueEncoding finite_map words exprSimHypsDefs
-  vyperTypeInvariants
+  vyperTypeInvariants memoryValueEncoding
 
 (* Compiler local types stay aligned with source entries across target effects. *)
 Theorem pop_target_entry_compile_type:
@@ -108,6 +108,7 @@ Theorem memory_target_encoding_handoff:
   target_post ctx func cenv cx es sa sb s0 es'
     (PlaceR (MemoryPlace id path)) (Type ty) (hdr,loc,pt) s /\
   lookup_scopes id es'.scopes = SOME entry /\
+  value_has_type entry.type entry.value /\
   cenv.ce_var_type id = SOME root_ty /\
   evaluate_type (get_tenv cx) root_ty = SOME entry.type ==>
   loc = SOME LocMemory /\ pt = SOME (value_type_place (Type ty)) /\
@@ -138,7 +139,8 @@ Proof
      val_wf entry.type entry.value /\
      val_in_memory entry.type entry.value (w2n b') s.vs_memory` by
     (fs[local_ptrs_rel_def] >>
-     qpat_x_assum `!name entry p sz. _` drule_all >> simp[]) >>
+     qpat_x_assum `!name entry p sz. _` drule_all >> strip_tac >>
+     gvs[] >> metis_tac[memory_value_rel_val_in_memory]) >>
   gvs[] >>
   `local_region cenv es'.scopes s id (w2n b) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
