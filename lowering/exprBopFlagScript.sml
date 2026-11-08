@@ -79,7 +79,7 @@ Theorem bop_result_flag_in:
   !cx ann bop m v1 v2 es.
     (bop = In \/ bop = NotIn) /\
     value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\
-    m <= 256 ==>
+    m <= 256 /\ expr_res_ok (bop_result cx ann bop tys v1 v2 es) ==>
     bop_result cx ann bop tys v1 v2 es =
       INL (BoolV
         (if bop = In then word_and (val_to_w256 v1) (val_to_w256 v2) <> 0w
@@ -89,8 +89,9 @@ Proof
   Cases_on `v1` >> gvs[value_has_type_def] >>
   Cases_on `v2` >> gvs[value_has_type_def] >>
   rename1 `bop_result _ _ _ tys (FlagV k1) (FlagV k2) _` >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      binop_negate_def, val_to_w256_def] >>
+  Cases_on `evaluate_type (get_tenv cx) (EL 1 tys)` >>
+  gvs[bop_result_def, evaluate_membership_def, evaluate_binop_def,
+      expr_res_ok_def, binop_negate_def, val_to_w256_def] >>
   `k1 < 2 ** 256 /\ k2 < 2 ** 256` by
     (`2 ** m <= 2 ** 256` by simp[] >> conj_tac >>
      irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** m` >>
@@ -118,12 +119,13 @@ Theorem compile_flag_in_sim:
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  match_mp_tac binop_frag_straight >> conj_tac
+  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
+  strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `m`, `v1`, `v2`, `es0`] mp_tac
     bop_result_flag_in >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  match_mp_tac binop_frag_straight >> conj_tac
-  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
-  strip_tac >> disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
+  disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
   qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
                `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
     compile_flag_in_correct >>

@@ -61,7 +61,7 @@ Proof
 QED
 
 Theorem rest_word_layout_caller_path:
-  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code /\
+  rest_word_loop_layout cs ct fn needle arr len stride off bound_opt is_in out h code /\
   s.vs_current_bb = cs.cs_current_bb /\
   s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_halted ==>
   gas_marked_path memory ctx fn s 0 (OK (jump_to h.rw_entry s))
@@ -91,10 +91,11 @@ Theorem rest_word_init_path:
           vs_inst_idx := s.vs_inst_idx + 2))
 Proof
   strip_tac >>
-  qspec_then `[mk_inst a ASSIGN [Lit 0w] [idx];
-               mk_inst b ASSIGN [Lit 0w] [result]]` mp_tac
-    (Q.GEN `code` rest_word_sequence_marked) >>
-  disch_then (mp_tac o Q.INST [`t` |-> `update_var result 0w (update_var idx 0w s)`]) >>
+  mp_tac (Q.INST
+    [`code` |-> `[mk_inst a ASSIGN [Lit 0w] [idx];
+                  mk_inst b ASSIGN [Lit 0w] [result]]`,
+     `t` |-> `update_var result 0w (update_var idx 0w s)`]
+    rest_word_sequence_marked) >>
   simp[rest_word_init_sequence, mk_inst_def, is_terminator_def,
        fragExecMemTheory.run_inst_seq_mem_ok_def] >>
   impl_tac >- (rpt strip_tac >>
@@ -129,18 +130,67 @@ Proof
   drule_all gas_marked_path_then >> simp[]
 QED
 
+Theorem rest_word_capacity_check_run:
+  eval_operand lenop s = SOME (n2w len) /\ len <= cap /\ cap < dimword (:256) ==>
+  run_inst_seq
+    [mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar];
+     mk_inst id2 ISZERO [Var invvar] [valid];
+     mk_inst id3 ASSERT [Var valid] []] s =
+  OK (update_var valid 1w (update_var invvar 0w s))
+Proof
+  strip_tac >>
+  `len < dimword (:256)` by decide_tac >>
+  `step_inst_base (mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar]) s =
+    OK (update_var invvar 0w s)` by
+    (drule emitHelperPropsTheory.step_GT >>
+     disch_then (qspecl_then [`Lit (n2w cap)`, `n2w cap`] mp_tac) >>
+     simp[venomStateTheory.eval_operand_def, wordsTheory.w2n_n2w,
+       venomExecSemanticsTheory.bool_to_word_def]) >>
+  `step_inst_base (mk_inst id2 ISZERO [Var invvar] [valid]) (update_var invvar 0w s) =
+    OK (update_var valid 1w (update_var invvar 0w s))` by
+    (mp_tac (Q.SPECL [`Var invvar`, `0w`] emitHelperPropsTheory.step_ISZERO) >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       venomExecSemanticsTheory.bool_to_word_def]) >>
+  `step_inst_base (mk_inst id3 ASSERT [Var valid] [])
+    (update_var valid 1w (update_var invvar 0w s)) =
+    OK (update_var valid 1w (update_var invvar 0w s))` by
+    (irule emitHelperPropsTheory.step_ASSERT_ok >>
+     simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  simp[exprLoweringPropsTheory.run_inst_seq_def]
+QED
+
+Theorem rest_word_capacity_check_mem_ok:
+  run_inst_seq_mem_ok
+    [mk_inst id1 GT [lenop; Lit (n2w cap)] [invvar];
+     mk_inst id2 ISZERO [Var invvar] [validvar];
+     mk_inst id3 ASSERT [Var validvar] []] s
+Proof
+  irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+  simp[venomInstTheory.mk_inst_def] >> rpt conj_tac >> gen_tac >>
+  irule instMemFrontierTheory.below_frontier_no_ranges >> simp[]
+QED
+
 Theorem rest_word_layout_entry_path:
-  rest_word_loop_layout cs ct fn needle arr lenop stride off is_in out h code /\
+  rest_word_loop_layout_safe cs ct fn needle arr lenop stride off bound_opt is_in out h code cl cm v /\
   s.vs_current_bb = h.rw_entry /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
   h.rw_idx <> h.rw_result /\ len < dimword (:256) /\
   R (update_var h.rw_result 0w (update_var h.rw_idx 0w s)) /\
+  eval_operand lenop (update_var h.rw_result 0w (update_var h.rw_idx 0w s)) =
+    SOME (n2w len) /\
+  (case bound_opt of NONE => T | SOME cap => len <= cap /\ cap < dimword (:256)) /\
+  (!u x w. R u /\ ~not_fresh_at cs x /\ x <> h.rw_idx /\ x <> h.rw_result ==>
+    R (update_var x w u)) /\
   (!u lbl. R u ==> R (jump_to lbl u)) ==>
   ?t. gas_marked_path memory ctx fn s 0 (OK t) /\
       t.vs_current_bb = h.rw_cond /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
       rest_word_membership_inv h.rw_idx h.rw_result len needleval elem R 0 t
 Proof
-  strip_tac >> drule rest_word_loop_layout_entry >> strip_tac >>
+  strip_tac >> drule rest_word_loop_layout_safe_entry >> strip_tac >>
   qmatch_asmsub_abbrev_tac `R u` >>
+  Cases_on `bound_opt`
+  >- (gvs[] >>
   qexists `jump_to h.rw_cond u` >>
   conj_tac
   >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
@@ -154,7 +204,38 @@ Proof
   `rest_word_membership_inv h.rw_idx h.rw_result len needleval elem R 0 u` by
     (simp[Abbr `u`] >> irule rest_word_membership_init >> simp[]) >>
   gvs[rest_word_membership_inv_def, jump_to_def, eval_operand_def,
-      lookup_var_def, Abbr `u`, update_var_def]
+      lookup_var_def, Abbr `u`, update_var_def]) >>
+  gvs[] >> rename1 `len <= cap` >>
+  rename1 `mk_inst jc0 GT [lenop; Lit (n2w cap)] [invvar]` >>
+  `~not_fresh_at cs invvar /\ ~not_fresh_at cs valid /\
+   h.rw_idx <> invvar /\ h.rw_idx <> valid /\
+   h.rw_result <> invvar /\ h.rw_result <> valid` by metis_tac[] >>
+  qabbrev_tac `w = update_var valid 1w (update_var invvar 0w u)` >>
+  `R w` by (simp[Abbr `w`] >> metis_tac[]) >>
+  `run_inst_seq
+    ([mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
+      mk_inst b ASSIGN [Lit 0w] [h.rw_result]] ++
+     [mk_inst jc0 GT [lenop; Lit (n2w cap)] [invvar];
+      mk_inst jc1 ISZERO [Var invvar] [valid];
+      mk_inst jc2 ASSERT [Var valid] []]) s = OK w` by
+    (rewrite_tac[MATCH_MP exprLoweringPropsTheory.run_inst_seq_append rest_word_init_sequence] >>
+     simp[Abbr `w`, Abbr `u`] >>
+     irule rest_word_capacity_check_run >> metis_tac[]) >>
+  qexists `jump_to h.rw_cond w` >> conj_tac
+  >- (irule rest_word_block_path >> simp[Once CONJ_ASSOC] >>
+      qexistsl [`h.rw_cond`, `w`] >>
+      gvs[Abbr `w`, Abbr `u`, update_var_def, mk_inst_def,
+           step_inst_base_def, jump_to_def, is_terminator_def] >>
+      strip_tac >> irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+      simp[mk_inst_def, EVERY_MEM] >> rpt strip_tac >> gvs[] >>
+      irule below_frontier_no_ranges >> simp[]) >>
+  `R (jump_to h.rw_cond w)` by metis_tac[] >>
+  `rest_word_membership_inv h.rw_idx h.rw_result len needleval elem R 0 w` by
+    (simp[rest_word_membership_inv_def, Abbr `w`, Abbr `u`,
+          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     gvs[Abbr `w`, Abbr `u`]) >>
+  gvs[rest_word_membership_inv_def, jump_to_def, eval_operand_def, lookup_var_def,
+      Abbr `w`, Abbr `u`, update_var_def]
 QED
 
 Theorem rest_word_cond_path:
@@ -271,7 +352,7 @@ Proof
 QED
 
 Theorem rest_word_layout_exit_path:
-  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code /\
+  rest_word_loop_layout cs ct fn needle arr len stride off bound_opt is_in out h code /\
   s.vs_current_bb = h.rw_exit /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
   eval_operand (Var h.rw_result) s = SOME (bool_to_word found) /\ R s /\
   (!v. ~is_in /\ out = Var v ==>

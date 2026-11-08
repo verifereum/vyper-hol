@@ -41,7 +41,7 @@ Theorem rest_word_fixed_dispatch:
     (elem_size_in_location cenv
       (case vv_location vv of SOME l => l | NONE => LocMemory) et) 0
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
-      (case vv_location vv of SOME l => l | NONE => LocMemory)) is_in
+      (case vv_location vv of SOME l => l | NONE => LocMemory)) NONE is_in
 Proof
   simp[compile_var_array_membership_def, LET_THM] >>
   simp[FUN_EQ_THM, comp_bind_def, comp_ignore_bind_def, comp_return_def]
@@ -65,16 +65,12 @@ Theorem rest_word_dynamic_dispatch:
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
       (case vv_location vv of SOME l => l | NONE => LocMemory) (vv_operand vv))
     (\len_op.
-      comp_ignore_bind
-        (comp_bind (emit_op GT [len_op; Lit (n2w cap)])
-          (\inv. comp_bind (emit_op ISZERO [inv])
-            (\valid. emit_inst ASSERT [valid] [])))
-        (compile_array_membership_loop needle (vv_operand vv) len_op
+      compile_array_membership_loop needle (vv_operand vv) len_op
           (elem_size_in_location cenv
             (case vv_location vv of SOME l => l | NONE => LocMemory) et)
           (word_scale (case vv_location vv of SOME l => l | NONE => LocMemory))
           (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
-            (case vv_location vv of SOME l => l | NONE => LocMemory)) is_in))
+            (case vv_location vv of SOME l => l | NONE => LocMemory)) (SOME cap) is_in)
 Proof
   simp[compile_var_array_membership_def, LET_THM]
 QED
