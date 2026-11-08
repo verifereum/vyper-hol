@@ -1261,6 +1261,41 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+Theorem native_regular_fresh_output_resource_bound:
+  !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
+    inst.inst_opcode <> JMP /\ ALL_DISTINCT inst.inst_outputs /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+    ~MEM (Var v) (compute_operands inst) /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,qs)
+    ==> LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pos last) native_regular_stages >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `~MEM (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) /\
+   Var v NOTIN FDOM ps4.ps_spilled` by
+    (irule emit_reorder_pop_variable_absent >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >> simp[]) >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >>
+  disch_then (strip_assume_tac o SRULE [parameter_push_fold]) >>
+  `LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps4.ps_stack) = 0` by
+    gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  `ALL_DISTINCT (MAP Var inst.inst_outputs)` by
+    (irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
+  drule all_distinct_elem_count_le_one >>
+  disch_then (qspec_then `Var v` assume_tac) >>
+  `LIST_ELEM_COUNT (Var v) ps7.ps_stack +
+    (if Var v IN FDOM ps7.ps_spilled then 1 else 0) <= 1` by
+    gvs[elem_count_append] >>
+  drule_all regular_post_emit_tail_resource_nonincrease >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem native_regular_observer_upper:
   !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
     inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\

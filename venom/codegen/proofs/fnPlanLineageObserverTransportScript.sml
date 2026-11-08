@@ -54,18 +54,18 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem generate_phi_plan_nondefining_resource_nonincrease:
+Theorem generate_phi_plan_resource_bound:
   !inst next halt ps ops qs v.
-    generate_phi_plan inst next halt ps = (ops,qs) /\
-    v <> HD inst.inst_outputs ==>
+    generate_phi_plan inst next halt ps = (ops,qs) ==>
     LIST_ELEM_COUNT (Var v) qs.ps_stack +
       (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
     LIST_ELEM_COUNT (Var v) ps.ps_stack +
-      (if Var v IN FDOM ps.ps_spilled then 1 else 0)
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) +
+      (if v = HD inst.inst_outputs then 1 else 0)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
-  >- gvs[generate_phi_plan_def] >>
+  >- (gvs[generate_phi_plan_def] >> decide_tac) >>
   rename1 `stack_get_phi_depth _ _ = SOME d` >>
   `d < LENGTH ps.ps_stack` by
     (fs[stack_get_phi_depth_def] >> drule planAlignTheory.stack_find_bound >> simp[]) >>
@@ -75,22 +75,39 @@ Proof
   rename1 `phi_write_phase inst next d ps = (writes,ws)` >>
   simp[] >> strip_tac >>
   `ws.ps_spilled = ps.ps_spilled /\
-   LIST_ELEM_COUNT (Var v) ws.ps_stack <= LIST_ELEM_COUNT (Var v) ps.ps_stack` by
+   LIST_ELEM_COUNT (Var v) ws.ps_stack <= LIST_ELEM_COUNT (Var v) ps.ps_stack +
+     (if v = HD inst.inst_outputs then 1 else 0)` by
     (qpat_x_assum `phi_write_phase _ _ _ _ = _` mp_tac >>
      simp[fnPlanLineagePhiTemporalTheory.phi_write_phase_def] >> IF_CASES_TAC
      >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
          drule deepResidualBudgetTheory.do_dup_spilled_eq >> strip_tac >>
          drule doSwapSimTheory.do_dup_stack_exact >> simp[] >> strip_tac >>
+         Cases_on `v = HD inst.inst_outputs` >>
          simp[stack_poke_def, LUPDATE_APPEND2, LUPDATE_def,
               LIST_ELEM_COUNT_DEF, FILTER_APPEND]) >>
      strip_tac >> gvs[] >> drule stack_poke_count_balance >>
      disch_then (qspecl_then [`Var v`,`Var (HD inst.inst_outputs)`] mp_tac) >>
-     Cases_on `Var v = stack_peek d ps.ps_stack` >> simp[]) >>
+     Cases_on `Var v = stack_peek d ps.ps_stack` >>
+     Cases_on `v = HD inst.inst_outputs` >> simp[]) >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) next` >> gvs[]
   >- (pairarg_tac >> gvs[] >>
       drule fnPlanLineageInventoryTheory.popmany_plan_resource_nonincrease >>
-      disch_then (qspec_then `Var v` mp_tac) >> simp[] >> decide_tac) >>
-  simp[]
+      disch_then (qspec_then `Var v` mp_tac) >> simp[] >>
+      Cases_on `v = HD inst.inst_outputs` >> gvs[] >> decide_tac) >>
+  Cases_on `v = HD inst.inst_outputs` >> gvs[] >> decide_tac
+QED
+
+Theorem generate_phi_plan_nondefining_resource_nonincrease:
+  !inst next halt ps ops qs v.
+    generate_phi_plan inst next halt ps = (ops,qs) /\
+    v <> HD inst.inst_outputs ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >> drule generate_phi_plan_resource_bound >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
 QED
 
 (* Exact copy of deepResidualBudgetTheory.count_le_one_all_distinct (local),
