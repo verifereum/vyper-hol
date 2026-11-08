@@ -89,3 +89,14 @@ The proof you finished was merged onto the current s3-ptr tip (`2036cf0cb`, merg
 As a result `bodyPtrIfExpRepresentationCases.lowered_value_type_exceptions` is false as stated (its `TypeBuiltin` branch fails at line 18 on the goal `lowered_value_type ce (Builtin t b l) = expr_type (Builtin t b l)`). It is your own helper: add the `Concat` disjunct (and the matching premise in `lowered_value_type_ordinary`), then handle a `Concat` arm wherever the allocating-arm case split (`bodyPtrIfExpResidual.ifexp_allocating_arm_exceptions` and its consumers) needs it. A `Concat` result is a dynamic bytestring in a fresh memory buffer, like the dynamic bytes literal case; the pointer predicates on dynamic bytestrings don't depend on the capacity bound.
 
 Done when `bodyPtrIfExpTheory` builds again with `ifexp_expr_ptr_ok` unchanged and no new admission. Other tip changes may break further helpers; repair them the same way (proof-only, or restating your own helper theories). Theorems outside your own `bodyPtrIfExp*` files are not yours to restate.
+
+## Rebase status (owner note, 2026-11-08, later)
+
+The owner has done the rebase repairs: the `Concat` disjunct is in `lowered_value_type_exceptions`, `lowered_value_type_ordinary` and `ifexp_allocating_arm_exceptions`. Slow `step_inst_base_def` unfolds are switched to `step_inst_base_opcode_eqs`, and the storage-loop ghost steps use `typed_copy_loop_arith_ghost_clean`. `bodyPtrIfExpTheory` builds.
+
+Two LOCAL STUBs are left. Both are your own helpers, and both must be proved (statements kept) before you finish:
+
+1. `bodyPtrIfExpResidual.ifexp_concat_memory_result`: a compiled `Concat` returns `LocatedValue ret_ty (base_ptr buf)` from `compile_alloc_buffer`, so its location is memory (`exprLoweringScript.sml`, the `Concat max_len` branch of the builtin dispatch).
+2. `bodyPtrIfExpBytesInputs.ifexp_residual_noncall_bytes`: the original proof is commented out above the `cheat`. It leaves the new `Concat` disjunct open; a Concat's result type is a bytestring (`well_typed_builtin_app` / `type_builtin_result_ok`).
+
+Done when `holbuild -j4 build bodyPtrIfExpTheory` passes, with `ifexp_expr_ptr_ok` unchanged and no `cheat` in any `bodyPtrIfExp*` theory.

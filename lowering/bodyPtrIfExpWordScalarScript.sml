@@ -128,7 +128,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   ` (if tr then tload a s else sload a s) = typed_val_to_w256 tvt v` by
     metis_tac[storage_holds_load] >>
-  Cases_on `tr` >> gvs[compile_ptr_load_def, step_inst_base_def, exec_read1_def] >>
+  Cases_on `tr` >> gvs[compile_ptr_load_def, step_inst_base_opcode_eqs, exec_read1_def] >>
   metis_tac[]
 QED
 

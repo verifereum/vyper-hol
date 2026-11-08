@@ -30,7 +30,7 @@ Proof
   drule run_inst_seq_append >>
   disch_then (qspec_then
     `[mk_inst (cs.cs_next_id + 11) JMP [Label (slot_copy_cond cs)] []]` mp_tac) >>
-  gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def]
+  gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 (* Concrete code conclusions determine all generic phase selectors by matching. *)

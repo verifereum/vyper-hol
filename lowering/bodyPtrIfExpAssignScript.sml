@@ -24,7 +24,7 @@ Proof
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `step_inst_base (mk_inst sa.cs_next_id ASSIGN [src] [out]) s =
      OK (update_var out w s)` by
-    simp[mk_inst_def, step_inst_base_def, exec_pure1_def,
+    simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure1_def,
          comp_bind_def, comp_return_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst sa.cs_next_id ASSIGN [src] [out]) s` by
@@ -32,7 +32,7 @@ Proof
           source_memory_write_ranges_def, source_memory_read_ranges_def,
           allocas_from_def] >>
      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     simp[mk_inst_def, step_inst_base_def, exec_pure1_def,
+     simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure1_def,
           comp_bind_def, comp_return_def, update_var_def]) >>
   `~is_terminator (mk_inst sa.cs_next_id ASSIGN [src] [out]).inst_opcode /\
    (mk_inst sa.cs_next_id ASSIGN [src] [out]).inst_opcode <> INVOKE` by

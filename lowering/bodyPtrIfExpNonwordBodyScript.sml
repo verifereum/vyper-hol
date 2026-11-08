@@ -197,7 +197,7 @@ Theorem ifexp_nonword_expr_ptr_ok:
     body_expr_ptr_ok cx c ==>
     body_expr_ptr_ok cx (IfExp t c a b)
 Proof
-  rpt gen_tac >> strip_tac >> rewrite_tac[body_expr_ptr_ok_def] >> rpt strip_tac >>
+  rpt gen_tac >> strip_tac >> simp[body_expr_ptr_ok_def] >> rpt strip_tac >>
   `expr_vv_sim_ptr d ctx PG func cenv cx ty (IfExp t c a b) es` by
     (irule ifexp_nonword_framed_vv_ptr >> goal_assum (drule_at Any) >> metis_tac[]) >>
   simp[] >> irule expr_sim_ptr_of_vv >> goal_assum (drule_at Any) >> metis_tac[]

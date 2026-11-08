@@ -35,10 +35,10 @@ Proof
   qabbrev_tac `s1 = r with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `v = slot_copy_word load s (p+q)` >>
   `step_inst_base (mk_inst aid ADD [src;counter] [key]) s = OK r` by
-    simp[Abbr `r`, step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+    simp[Abbr `r`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   `step_inst_base (mk_inst lid load [Var key] [loaded]) s1 =
      OK (update_var loaded v s1)` by
-    (gvs[] >> simp[Abbr `s1`, Abbr `r`, Abbr `v`, step_inst_base_def,
+    (gvs[] >> simp[Abbr `s1`, Abbr `r`, Abbr `v`, step_inst_base_opcode_eqs,
       mk_inst_def, exec_read1_def, eval_operand_def, lookup_var_def,
       update_var_def, FLOOKUP_UPDATE, slot_copy_word_def, sload_def,
       tload_def, contract_storage_def, contract_transient_def]) >>
@@ -68,7 +68,7 @@ Proof
         FLOOKUP_DRESTRICT, lookup_var_def, update_var_def] >>
       rpt strip_tac >> simp[Abbr `G1`, scalar_step_old_prov] >>
       gvs[FLOOKUP_DRESTRICT, scalar_step_old_prov, op_taint_def, FLOOKUP_UPDATE]) >>
-  gvs[] >> simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+  gvs[] >> simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
     exec_read1_def, Abbr `r`, Abbr `v`, slot_copy_word_def,
     eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
     sload_def, tload_def, contract_storage_def, contract_transient_def]
@@ -98,11 +98,11 @@ Proof
   qabbrev_tac `r = update_var scaled (q*32w) s` >>
   qabbrev_tac `s1 = r with vs_inst_idx := SUC s.vs_inst_idx` >>
   `step_inst_base (mk_inst mid MUL [counter;Lit 32w] [scaled]) s = OK r` by
-    simp[Abbr `r`, step_inst_base_def, mk_inst_def, exec_pure2_def,
+    simp[Abbr `r`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
          eval_operand_def] >>
   `step_inst_base (mk_inst aid ADD [bop;Var scaled] [addr]) s1 =
      OK (update_var addr (d+q*32w) s1)` by
-    simp[Abbr `s1`, Abbr `r`, step_inst_base_def, mk_inst_def,
+    simp[Abbr `s1`, Abbr `r`, step_inst_base_opcode_eqs, mk_inst_def,
       exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
       FLOOKUP_UPDATE, slot_copy_operand_update] >>
   qabbrev_tac `G1 = step_prov PG G (mk_inst mid MUL [counter;Lit 32w] [scaled]) r` >>
@@ -119,7 +119,8 @@ Proof
        tn1 = tn with t_var := tn.t_var |+ (scaled,{})` by
         (simp[Abbr `G1`, Abbr `tn1`] >> conj_tac
          >- simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def] >>
-         irule (cj 2 typed_copy_loop_arith_ghost) >> simp[update_var_def]) >>
+         irule (cj 2 typed_copy_loop_arith_ghost_clean) >>
+         gvs[update_var_def, DISJ_IMP_THM, op_taint_def]) >>
       `op_prov G1 bop = SOME (b,n)` by
         (Cases_on `bop` >> gvs[op_prov_def, FLOOKUP_DRESTRICT]) >>
       `step_prov PG G1 (mk_inst aid ADD [bop;Var scaled] [addr])
@@ -132,7 +133,7 @@ Proof
       simp[ptr_covers_def, op_taint_def, lookup_var_def, update_var_def,
         FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
   simp[run_inst_seq_def] >>
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def, Abbr `r`,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, Abbr `r`,
     eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
     slot_copy_operand_update]
 QED
@@ -159,7 +160,7 @@ Proof
   qabbrev_tac `r = update_var next (w+1w) s` >>
   qabbrev_tac `s1 = r with vs_inst_idx := SUC s.vs_inst_idx` >>
   `step_inst_base (mk_inst aid ADD [Var ctr;Lit 1w] [next]) s = OK r` by
-    simp[Abbr `r`, step_inst_base_def, mk_inst_def, exec_pure2_def,
+    simp[Abbr `r`, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
          eval_operand_def] >>
   qabbrev_tac `G1 = step_prov PG G (mk_inst aid ADD [Var ctr;Lit 1w] [next]) r` >>
   qabbrev_tac `tn1 = step_taint (mk_inst aid ADD [Var ctr;Lit 1w] [next]) s r tn` >>
@@ -185,7 +186,7 @@ Proof
       simp[assign_result_prov, scalar_step_old_prov, op_prov_def,
         step_prov_def, out_prov_def, first_prov_def, set_prov_def, mk_inst_def,
         op_taint_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, Abbr `r`,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, Abbr `r`,
     eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
@@ -205,7 +206,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MSTORE [Var addr;value] []) s =
      OK (mstore (w2n d) w s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var addr;value] []) s` by
     (irule ifexp_materialize_mstore_check >> simp[]) >>
   qexistsl_tac [`mstore (w2n d) w s`,

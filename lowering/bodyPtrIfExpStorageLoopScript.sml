@@ -87,13 +87,17 @@ Proof
     (irule typed_copy_loop_test_check >> simp[update_var_def] >>
      rpt strip_tac >> gvs[op_taint_def]) >>
   `tn1 = tn with t_var := tn.t_var |+ (scaled,{})` by
-    (gvs[] >> irule (cj 2 typed_copy_loop_arith_ghost) >> simp[update_var_def]) >>
+    (gvs[] >> irule (cj 2 typed_copy_loop_arith_ghost_clean) >>
+     gvs[update_var_def, DISJ_IMP_THM, op_taint_def]) >>
   qpat_x_assum `tn1 = step_taint _ _ _ _` kall_tac >>
   `op_taint tn1 bop = {} /\ op_taint tn1 (Var scaled) = {}` by
     (Cases_on `bop` >> gvs[op_taint_def, FLOOKUP_UPDATE]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1
      (mk_inst aid ADD [bop;Var scaled] [addr]) s1` by
     (irule append_scalar_inst_check >> simp[update_var_def] >> metis_tac[]) >>
+  `out_taint tn (mk_inst mid MUL [counter;Lit 32w] [scaled]) s = {}` by
+    (simp[ptrDisciplineTheory.out_taint_def, mk_inst_def] >>
+     rpt (BasicProvers.TOP_CASE_TAC >> gvs[op_taint_def])) >>
   simp[inst_seq_ptr_def] >>
   gvs[typed_copy_loop_arith_ghost, update_var_def]
 QED
@@ -143,7 +147,7 @@ Proof
        mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
        contextCodegenRelTheory.source_memory_read_ranges_def, allocas_from_def] >>
   simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-  simp[mk_inst_def, step_inst_base_def, exec_pure1_def, update_var_def]
+  simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure1_def, update_var_def]
 QED
 
 Theorem ifexp_copy_increment_checks:
@@ -175,6 +179,6 @@ Proof
     (irule ifexp_copy_assign_check >> simp[] >> metis_tac[]) >>
   `step_inst_base (mk_inst sid ASSIGN [Var next] [ctr]) s1 =
      OK (update_var ctr w s1)` by
-    simp[step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[inst_seq_ptr_def] >> gvs[]
 QED

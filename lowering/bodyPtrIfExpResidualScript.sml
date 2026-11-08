@@ -42,6 +42,7 @@ Theorem ifexp_allocating_arm_exceptions:
   ~same_memory_layout ce (lowered_value_type ce arm) ty ==>
   (?n s. arm = Literal (BaseT (StringT n)) (StringL s)) \/
   (?n bs. arm = Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) \/
+  (?t n args. arm = Builtin t (Concat n) args) \/
   (?ann ensure method_id tys args.
     arm = TypeBuiltin ann (AbiEncode ensure method_id) tys args) \/
   (?ann fid args dret pvs. arm = Call ann (IntCall fid) args dret /\
@@ -101,6 +102,15 @@ Proof
   PairCases_on `result` >> gvs[as_ptr_val_def, mk_ptr_def]
 QED
 
+(* LOCAL STUB for the owner's rebase onto the Concat clause of
+   lowered_value_type_def: prove this (or restate it) before finishing. *)
+Theorem ifexp_concat_memory_result:
+  compile_expr ce ret_ty (Builtin t (Concat n) args) sa = (vv,sb) ==>
+  ?tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory
+Proof
+  cheat
+QED
+
 Theorem ifexp_allocating_noop_representation:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
@@ -119,6 +129,7 @@ Proof
   drule_all ifexp_allocating_arm_exceptions >> strip_tac >> gvs[] >>
   FIRST [drule ifexp_string_literal_memory_result,
          drule ifexp_bytes_literal_memory_result,
+         drule ifexp_concat_memory_result,
          drule ifexp_abi_encode_memory_result,
          drule_all ifexp_zero_call_result] >> metis_tac[]
 QED

@@ -58,7 +58,7 @@ Theorem ifexp_storage_load_step:
   step_inst_base (mk_inst id opc [src] [out]) s =
     OK (update_var out (if opc = SLOAD then sload p s else tload p s) s)
 Proof
-  strip_tac >> gvs[venomExecSemanticsTheory.step_inst_base_def,
+  strip_tac >> gvs[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
     venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]
 QED
 
