@@ -548,11 +548,20 @@ Proof
       drule place_type_value_state >> strip_tac >> gvs[] >>
       `!tail. place_type_value cx p (ee with gas_obs := tail) =
          (pr,ee with gas_obs := tail)` by
-        (Cases_on `p` >>
-         gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-             get_address_immutables_def, bind_def, return_def,
-             lift_option_type_def, raise_def, AllCaseEqs()] >>
-         rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+        (qpat_x_assum `place_type_value cx p ee = _` mp_tac >>
+         Cases_on `p` >>
+         simp[place_type_value_def, get_scopes_def, get_immutables_def,
+              get_address_immutables_def, bind_def, return_def]
+         >- (rename1 `lookup_scopes id ee.scopes` >>
+             Cases_on `lookup_scopes id ee.scopes` >> simp[] >>
+             rename1 `subscripts_type entry.type path` >>
+             Cases_on `subscripts_type entry.type path` >> simp[]) >>
+         rename1 `get_source_immutables src` >>
+         Cases_on `ALOOKUP ee.immutables cx.txn.target` >> simp[] >>
+         rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+         Cases_on `FLOOKUP (get_source_immutables src imms) id` >> simp[] >>
+         rename1 `subscripts_type (FST tva) path` >>
+         Cases_on `subscripts_type (FST tva) path` >> simp[]) >>
       simp[] >> Cases_on `pr` >> simp[] >>
       IF_CASES_TAC >> simp[return_def] >>
       Cases_on `read_place cx p ee` >>
