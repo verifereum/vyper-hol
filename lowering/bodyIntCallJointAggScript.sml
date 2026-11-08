@@ -10,6 +10,7 @@ Ancestors
   placeMemoryPrimitiveForward instIdxIndep exprSimProps exprSimUnwrap
   exprSimAggregateChildren bodyIntCallAggregateStoreFrame
   bodyIntCallCompletedModes intCallStep exprSimSend
+  bodyIntCallWidenedChildStore typedMemoryCopy
 
 (* The continuation uses the standard write-back frame, so its composition
    and old-allocation interface are shared with other expression proofs. *)
@@ -693,6 +694,150 @@ Proof
      qexistsl_tac [`sa`, `ee.scopes`, `u`] >>
      fs[intcall_joint_res_def, intcall_expr_cont_def]) >>
   metis_tac[]
+QED
+
+(* Dispatch a materialized child store at its actual endpoint.  Root
+   provenance supplies physical source separation and immutable clearance;
+   neither is inferred from write-region authorization. *)
+Theorem intcall_child_store_effect:
+  body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  intcall_joint_res fp ce env es sa s /\
+  compile_store_memory ce src dst dty sty sa = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  expr_val_rel fp.jc_cx sty v src s /\
+  expr_val_at ce fp.jc_cx sty si sa es v src s /\
+  type_widens_to (get_tenv fp.jc_cx) sty dty /\
+  evaluate_type (get_tenv fp.jc_cx) dty = SOME dtv /\
+  evaluate_type (get_tenv fp.jc_cx) sty = SOME stv /\
+  value_has_type dtv v /\ value_has_type stv v /\
+  type_memory_size dtv + 64 < dimword (:256) /\
+  eval_operand dst s = SOME dw /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,k) /\
+  inst.inst_id < si.cs_next_id /\
+  MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
+  b <= w2n dw /\ w2n dw + type_memory_size dtv <= b+k /\
+  b+k < dimword (:256) /\
+  (!name a n. local_region ce es.scopes s name a n ==>
+     a+n <= w2n dw \/ w2n dw + type_memory_size dtv <= a) /\
+  fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. typed_copy_effect fp.jc_ctx fp.jc_func sa sb s u
+        (w2n dw) (type_memory_size dtv) /\
+      val_in_memory dtv v (w2n dw) u.vs_memory /\
+      stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
+   local_ptrs_reserved ce sa /\ expr_sim_inv ce fp.jc_cx env es` by
+    fs[intcall_joint_res_def] >>
+  `!ty tv. evaluate_type (get_tenv fp.jc_cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `type_memory_bytes ce dty = type_memory_size dtv /\
+   type_memory_bytes ce sty = type_memory_size stv` by metis_tac[] >>
+  `ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables fp.jc_cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) (w2n dw) (type_memory_size dtv)` by
+    metis_tac[intcall_owned_destination_immutable_clear] >>
+  fs[expr_val_rel_def] >>
+  Cases_on `dty = sty \/ is_bytestring_type dty /\ is_bytestring_type sty`
+  >- (`!name a n. local_region ce es.scopes s name a n ==>
+         regions_disjoint a n (w2n dw) (type_memory_size dtv)` by
+        (fs[regions_disjoint_def] >> metis_tac[]) >>
+      drule_all intcall_compatible_store_effect >> simp[]) >>
+  `~is_word_type dty /\ ~is_word_type sty /\
+   ~is_bytestring_type dty /\ ~is_bytestring_type sty` by
+    metis_tac[type_widens_to_word, return_source_word_widens_eq,
+              typed_copy_bytestring_source, type_widens_from_bytestring] >>
+  `w2n w + type_memory_size stv < dimword (:256) /\
+   (w2n w + type_memory_size stv <= w2n dw \/
+    w2n dw + type_memory_size dtv <= w2n w)` by
+    (irule aggregate_physical_source_slot_bounds >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `val_wf dtv v /\ val_wf stv v` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `compile_store_memory_typed ce dst dty src sty sa = ((),sb)` by
+    fs[compile_store_memory_def] >>
+  `acyclic_struct_metadata ce.ce_struct_fields /\
+   sfields_tenv_consistent ce.ce_struct_fields (get_tenv fp.jc_cx) /\
+   (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type (get_tenv fp.jc_cx) fty = SOME tv ==>
+        sz = type_memory_size tv) fields)` by
+    (fs[bodySimTheory.body_inv_def, exprSimHypsDefsTheory.expr_sim_inv_def] >>
+     metis_tac[]) >>
+  `val_in_memory stv v (w2n w) s.vs_memory /\
+   w2n dw + type_memory_size dtv < dimword (:256)` by
+    (fs[] >> decide_tac) >>
+  drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)
+    intcall_widened_child_store_frame >>
+  disch_then (drule_at (Pat `eval_operand dst s = _`)) >>
+  disch_then (drule_at (Pat `eval_operand src s = _`)) >>
+  disch_then (drule_at (Pat `type_widens_to _ _ _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ sty = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ dty = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+(* A materialized child writes only its slice of the literal root.  Its
+   continuation is anchored before root allocation, not at child entry. *)
+Theorem intcall_child_store_landing:
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  intcall_expr_cont fp ce env es0 sa s0 es su s /\
+  compile_store_memory ce src dst dty sty su = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at su x) /\
+  (!x. dst = Var x ==> not_fresh_at su x) /\
+  expr_val_rel fp.jc_cx sty v src s /\
+  expr_val_at ce fp.jc_cx sty si su es v src s /\
+  type_widens_to (get_tenv fp.jc_cx) sty dty /\
+  evaluate_type (get_tenv fp.jc_cx) dty = SOME dtv /\
+  evaluate_type (get_tenv fp.jc_cx) sty = SOME stv /\
+  value_has_type dtv v /\ value_has_type stv v /\
+  type_memory_size dtv + 64 < dimword (:256) /\
+  eval_operand dst s = SOME dw /\ eval_operand buf s = SOME bw /\
+  (!x. buf = Var x ==> not_fresh_at su x) /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,k) /\
+  sa.cs_next_id <= inst.inst_id /\ inst.inst_id < si.cs_next_id /\
+  MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
+  sa.cs_next_var <= su.cs_next_var /\ su.cs_next_var <= sb.cs_next_var /\
+  fp.jc_lo <= b /\ b <= w2n dw /\
+  w2n dw + type_memory_size dtv <= b+k /\ b+k < dimword (:256) /\
+  (!name a n. local_region ce es.scopes s name a n ==>
+     a+n <= w2n dw \/ w2n dw + type_memory_size dtv <= a) /\
+  (!name a n. local_region ce es0.scopes s0 name a n ==>
+     a+n <= b \/ b+k <= a) /\
+  fn_has_code su sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    val_in_memory dtv v (w2n dw) u.vs_memory /\
+    intcall_expr_cont fp ce env es0 sa s0 es sb u /\
+    FLOOKUP u.vs_allocas inst.inst_id = SOME (b,k) /\
+    eval_operand buf u = SOME bw /\
+    (!a n. a+n <= w2n dw \/ w2n dw + type_memory_size dtv <= a ==>
+      mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory)
+Proof
+  rpt strip_tac >>
+  `intcall_joint_res fp ce env es su s /\ ~s.vs_halted /\
+   s.vs_current_bb = su.cs_current_bb /\
+   s.vs_inst_idx = LENGTH su.cs_current_insts` by fs[intcall_expr_cont_def] >>
+  drule_all intcall_child_store_effect >> strip_tac >>
+  `alloca_inv s` by fs[intcall_joint_res_def, stmt_state_rel_def] >>
+  `intcall_expr_cont fp ce env es0 sa s0 es sb u` by
+    (irule intcall_owned_store_cont >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  qexists_tac `u` >> simp[] >>
+  conj_tac >- metis_tac[typed_copy_effect_path] >>
+  conj_tac >- fs[typed_copy_effect_def] >>
+  conj_tac >- metis_tac[typed_copy_effect_operand_preserved] >>
+  fs[typed_copy_effect_def] >> metis_tac[]
 QED
 
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
