@@ -1,7 +1,7 @@
 (* Each local merging phase with its actual original-DFG provenance. *)
 Theory mmLocalScanProofs
 Ancestors
-  mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
+  mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner
   venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
 Libs
@@ -762,50 +762,14 @@ Proof
   strip_tac >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem mm_local_memzero_list_load_origin[local]:
-  !xs s ys t i other.
-  mm_flat_map_supply (apply_memzero_inst_supply ns rm) s xs = (ys,t) /\
-  MEM i ys /\ i.inst_opcode = mode_load_opcode other ==> MEM i xs
-Proof
-  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
-  rpt gen_tac >>
-  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
-  gvs[MEM_APPEND] >- (
-    qpat_x_assum `apply_memzero_inst_supply _ _ _ _ = _` mp_tac >>
-    simp[apply_memzero_inst_supply_def, AllCaseEqs()] >> strip_tac >>
-    Cases_on `other` >>
-    gvs[mk_nop_from_def, mk_zero_store_inst_def, mk_memzero_calldatacopy_def,
-        mode_load_opcode_def]) >>
-  metis_tac[]
-QED
-
-Theorem mm_local_mode_list_load_origin[local]:
-  !xs s ys t i other.
-  mm_flat_map_supply (apply_groups_inst_supply mode ns rm) s xs = (ys,t) /\
-  other <> mode /\ MEM i ys /\ i.inst_opcode = mode_load_opcode other ==>
-  MEM i xs
-Proof
-  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
-  rpt gen_tac >>
-  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
-  gvs[MEM_APPEND] >- (
-    qpat_x_assum `apply_groups_inst_supply _ _ _ _ _ = _` mp_tac >>
-    simp[apply_groups_inst_supply_def, AllCaseEqs()] >> strip_tac >>
-    Cases_on `mode` >> Cases_on `other` >>
-    gvs[mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
-        mk_mstore_from_load_def, mode_load_opcode_def, mode_copy_opcode_def]) >>
-  metis_tac[]
-QED
-
 Theorem mm_local_phase_other_load_origin[local]:
   mm_local_phase dfg phase (bb,s) = (cc,t) /\ phase <> SOME other /\
   MEM i cc.bb_instructions /\ i.inst_opcode = mode_load_opcode other ==>
   MEM i bb.bb_instructions
 Proof
-  Cases_on `phase` >>
-  simp[mm_local_phase_def, transform_block_memzero_supply_def,
-       transform_block_mode_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  metis_tac[mm_local_memzero_list_load_origin, mm_local_mode_list_load_origin]
+  Cases_on `phase` >> simp[mm_local_phase_def] >>
+  metis_tac[transform_block_memzero_supply_load_origin,
+    transform_block_mode_supply_other_load_origin]
 QED
 
 Theorem mm_local_memzero_list_use_origin[local]:
@@ -909,6 +873,189 @@ Proof
   gvs[] >>
   drule mm_local_phase_other_load_origin >>
   simp[] >> strip_tac >> metis_tac[merge_mode_distinct]
+QED
+
+Theorem mm_local_phase_ids[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) bb.bb_instructions /\
+  mm_local_phase dfg phase (bb,s) = (cc,t) ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id) cc.bb_instructions) /\
+  s.irs_next_inst <= t.irs_next_inst /\
+  EVERY (\i. i.inst_id < t.irs_next_inst) cc.bb_instructions /\
+  (!i. MEM i cc.bb_instructions ==>
+    MEM i.inst_id (MAP (\j. j.inst_id) bb.bb_instructions) \/
+    (s.irs_next_inst <= i.inst_id /\ i.inst_id < t.irs_next_inst))
+Proof
+  Cases_on `phase` >> simp[mm_local_phase_def] >>
+  metis_tac[transform_block_memzero_supply_ids, transform_block_mode_supply_ids]
+QED
+
+Theorem mm_local_prefix_ids[local]:
+  !fn0 supply index k bb sk.
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions) /\
+  EVERY (\i. i.inst_id < supply.irs_next_inst)
+    (EL index fn0.fn_blocks).bb_instructions ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  supply.irs_next_inst <= sk.irs_next_inst /\
+  EVERY (\i. i.inst_id < sk.irs_next_inst) bb.bb_instructions /\
+  (!i. MEM i bb.bb_instructions ==>
+    MEM i.inst_id (MAP (\j. j.inst_id) (EL index fn0.fn_blocks).bb_instructions) \/
+    (supply.irs_next_inst <= i.inst_id /\ i.inst_id < sk.irs_next_inst))
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- (simp[mm_local_prefix_zero] >> metis_tac[MEM_MAP]) >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) prev.bb_instructions) /\
+   supply.irs_next_inst <= sp.irs_next_inst /\
+   EVERY (\i. i.inst_id < sp.irs_next_inst) prev.bb_instructions /\
+   (!i. MEM i prev.bb_instructions ==>
+     MEM i.inst_id (MAP (\j. j.inst_id) (EL index fn0.fn_blocks).bb_instructions) \/
+     (supply.irs_next_inst <= i.inst_id /\ i.inst_id < sp.irs_next_inst))`
+    by (first_x_assum irule >> simp[]) >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  drule_all mm_local_phase_ids >> strip_tac >>
+  conj_tac >- simp[] >>
+  conj_tac >- metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+  conj_tac >- simp[] >>
+  rpt strip_tac >> irule inst_id_interval_compose >>
+  qexistsl [`sp.irs_next_inst`, `prev.bb_instructions`, `bb.bb_instructions`] >> simp[]
+QED
+
+Theorem mm_local_mode_old_output[local]:
+  apply_groups_inst_supply mode ns rm s i = (out,t) ==>
+  s.irs_next_inst <= t.irs_next_inst /\
+  (!j. MEM j out /\ j.inst_outputs <> [] /\ j.inst_id < s.irs_next_inst ==> j = i)
+Proof
+  simp[apply_groups_inst_supply_def] >>
+  Cases_on `MEM i.inst_id ns` >> simp[] >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  gvs[irSupplyTheory.fresh_inst_id_def, irSupplyTheory.fresh_ir_var_def, AllCaseEqs(),
+      mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
+      mk_mstore_from_load_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem mm_local_memzero_old_output[local]:
+  apply_memzero_inst_supply ns rm s i = (out,t) ==>
+  s.irs_next_inst <= t.irs_next_inst /\
+  (!j. MEM j out /\ j.inst_outputs <> [] /\ j.inst_id < s.irs_next_inst ==> j = i)
+Proof
+  simp[apply_memzero_inst_supply_def] >>
+  Cases_on `MEM i.inst_id ns` >> simp[] >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  gvs[irSupplyTheory.fresh_inst_id_def, irSupplyTheory.fresh_ir_var_def, AllCaseEqs(),
+      mk_nop_from_def, mk_zero_store_inst_def, mk_memzero_calldatacopy_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem mm_local_list_old_output[local]:
+  !f xs s ys t.
+  (!u i out v. f u i = (out,v) ==>
+    u.irs_next_inst <= v.irs_next_inst /\
+    (!j. MEM j out /\ j.inst_outputs <> [] /\ j.inst_id < u.irs_next_inst ==> j = i)) /\
+  mm_flat_map_supply f s xs = (ys,t) ==>
+  s.irs_next_inst <= t.irs_next_inst /\
+  (!j. MEM j ys /\ j.inst_outputs <> [] /\ j.inst_id < s.irs_next_inst ==> MEM j xs)
+Proof
+  gen_tac >> Induct >> simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  qpat_assum `!u i out v. _` drule >> strip_tac >>
+  qpat_x_assum `!s ys t. _` (qspecl_then [`s1`, `outs`, `t`] mp_tac) >>
+  (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> simp[])) >> strip_tac >>
+  simp[MEM_APPEND] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+    arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+Theorem mm_local_phase_old_output[local]:
+  mm_local_phase dfg phase (bb,s) = (cc,t) ==>
+  s.irs_next_inst <= t.irs_next_inst /\
+  (!j. MEM j cc.bb_instructions /\ j.inst_outputs <> [] /\
+       j.inst_id < s.irs_next_inst ==> MEM j bb.bb_instructions)
+Proof
+  Cases_on `phase` >>
+  simp[mm_local_phase_def, transform_block_memzero_supply_def,
+       transform_block_mode_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_at (Pat `mm_flat_map_supply _ _ _ = _`) mm_local_list_old_output >>
+  (impl_tac >- metis_tac[mm_local_memzero_old_output, mm_local_mode_old_output]) >>
+  simp[]
+QED
+
+Theorem mm_local_prefix_old_output[local]:
+  !fn0 supply index k bb sk.
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  supply.irs_next_inst <= sk.irs_next_inst /\
+  (!i. MEM i bb.bb_instructions /\ i.inst_outputs <> [] /\
+    i.inst_id < supply.irs_next_inst ==>
+    MEM i (EL index fn0.fn_blocks).bb_instructions)
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `supply.irs_next_inst <= sp.irs_next_inst /\
+   (!i. MEM i prev.bb_instructions /\ i.inst_outputs <> [] /\
+     i.inst_id < supply.irs_next_inst ==>
+     MEM i (EL index fn0.fn_blocks).bb_instructions)`
+    by (first_x_assum irule >> simp[]) >>
+  drule mm_local_phase_old_output >> strip_tac >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+Theorem mm_local_prefix_id_distinct[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions) /\
+  EVERY (\i. i.inst_id < supply.irs_next_inst) (EL index fn0.fn_blocks).bb_instructions ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
+Proof
+  metis_tac[mm_local_prefix_ids]
+QED
+
+Theorem mm_local_prefix_id_mono[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  supply.irs_next_inst <= sk.irs_next_inst
+Proof
+  metis_tac[mm_local_prefix_old_output]
+QED
+
+Theorem mm_local_prefix_id_bound[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions) /\
+  EVERY (\i. i.inst_id < supply.irs_next_inst) (EL index fn0.fn_blocks).bb_instructions ==>
+  EVERY (\i. i.inst_id < sk.irs_next_inst) bb.bb_instructions
+Proof
+  metis_tac[mm_local_prefix_ids]
+QED
+
+Theorem mm_local_prefix_id_origin[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions) /\
+  EVERY (\i. i.inst_id < supply.irs_next_inst) (EL index fn0.fn_blocks).bb_instructions /\
+  MEM i bb.bb_instructions ==>
+  MEM i.inst_id (MAP (\j. j.inst_id) (EL index fn0.fn_blocks).bb_instructions) \/
+  (supply.irs_next_inst <= i.inst_id /\ i.inst_id < sk.irs_next_inst)
+Proof
+  metis_tac[mm_local_prefix_ids]
+QED
+
+Theorem mm_local_prefix_output_origin[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM i bb.bb_instructions /\ i.inst_outputs <> [] /\
+  i.inst_id < supply.irs_next_inst ==>
+  MEM i (EL index fn0.fn_blocks).bb_instructions
+Proof
+  metis_tac[mm_local_prefix_old_output]
 QED
 
 Theorem mm_local_stage_correct:
