@@ -8,7 +8,8 @@ Ancestors
   exprLoweringProps venomExecSemantics venomInst venomMemProps
   bodyIntCallStorePost bodyIntCallProtectedAlloc exprSimAlloc
   placeMemoryPrimitiveForward instIdxIndep exprSimProps exprSimUnwrap
-  exprSimAggregateChildren
+  exprSimAggregateChildren bodyIntCallAggregateStoreFrame
+  bodyIntCallCompletedModes
 
 (* The continuation uses the standard write-back frame, so its composition
    and old-allocation interface are shared with other expression proofs. *)
@@ -111,6 +112,62 @@ Proof
   goal_assum (drule_at Any) >> fs[intcall_joint_res_def] >> metis_tac[]
 QED
 
+(* Compatible copies share the same counted effect interface as widened copies. *)
+Theorem intcall_compatible_store_effect:
+  compile_store_memory ce src dst dty sty sa = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  evaluate_type tenv dty = SOME dtv /\ evaluate_type tenv sty = SOME stv /\
+  (dty = sty \/ is_bytestring_type dty /\ is_bytestring_type sty) /\
+  value_has_type dtv v /\ value_has_type stv v /\
+  type_memory_bytes ce dty = type_memory_size dtv /\
+  (if is_word_type sty then sw = typed_val_to_w256 stv v
+   else val_in_memory stv v (w2n sw) s.vs_memory) /\
+  type_memory_size dtv + 64 < dimword (:256) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  (!name b sz. local_region ce es.scopes s name b sz ==>
+    regions_disjoint b sz (w2n dw) (type_memory_size dtv)) /\
+  (ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) (w2n dw) (type_memory_size dtv)) ==>
+  ?u. typed_copy_effect ctx func sa sb s u (w2n dw) (type_memory_size dtv) /\
+    val_in_memory dtv v (w2n dw) u.vs_memory /\
+    stmt_state_rel ctx func ce cx es u
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST
+    [`P` |-> `\b n. regions_disjoint b n (w2n dw) (type_memory_size dtv)`,
+     `reserved` |-> `\op. F`]
+    (SPEC_ALL protected_compatible_store_state_landing)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qexists_tac `u` >> simp[typed_copy_effect_def] >>
+  fs[regions_disjoint_def]
+QED
+
+(* A subregion of an owned allocation is clear of constructor immutables. *)
+Theorem intcall_owned_destination_immutable_clear:
+  stmt_state_rel ctx func ce cx es s /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,k) /\
+  b <= d /\ d + n <= b + k ==>
+  (ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) d n)
+Proof
+  rpt strip_tac >>
+  `immutable_alloca_sep func ce cx es s` by fs[stmt_state_rel_def] >>
+  drule_all owned_alloca_immutable_separation >>
+  simp[regions_disjoint_def] >> decide_tac
+QED
+
 (* Allocation fields do not require fresh_vars_wrt: ALLOCA overwrites only
    its own output even when stale temporary variables remain in the state. *)
 Theorem intcall_alloc_run_frame:
@@ -156,6 +213,30 @@ Proof
     (drule typed_copy_effect_record >>
      simp[venom_state_component_equality]) >>
   fs[intcall_expr_cont_frame, typed_copy_effect_def]
+QED
+
+(* Stores contained in a fresh root preserve the outer continuation. *)
+Theorem intcall_owned_store_cont:
+  intcall_frame_ok fp /\
+  intcall_expr_cont fp ce env es0 sa s0 es si s /\
+  typed_copy_effect fp.jc_ctx fp.jc_func si sb s u dst len /\
+  stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u /\
+  alloca_inv s /\
+  FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid /\
+  sa.cs_next_var <= si.cs_next_var /\ si.cs_next_var <= sb.cs_next_var /\
+  fp.jc_lo <= b /\ b <= dst /\ dst + len <= b + sz /\
+  (!n lb lsz. local_region ce es0.scopes s0 n lb lsz ==>
+             lb + lsz <= b \/ b + sz <= lb) ==>
+  intcall_expr_cont fp ce env es0 sa s0 es sb u
+Proof
+  rpt strip_tac >>
+  `intcall_joint_res fp ce env es si s` by fs[intcall_expr_cont_def] >>
+  `!a k. fp.jc_prot a k ==> regions_disjoint a k dst len` by
+    (fs[intcall_frame_ok_def, regions_disjoint_def] >> rpt strip_tac >>
+     disj1_tac >> first_x_assum drule >> decide_tac) >>
+  `intcall_joint_res fp ce env es sb u` by
+    (drule_all intcall_joint_res_copy >> simp[]) >>
+  drule_all intcall_expr_cont_copy >> simp[]
 QED
 
 (* Project the resource invariant onto the supplied allocation run. *)
