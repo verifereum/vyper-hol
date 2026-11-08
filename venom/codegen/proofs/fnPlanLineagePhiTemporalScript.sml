@@ -1719,3 +1719,47 @@ Proof
       goal_assum (drule_at Any) >> metis_tac[]) >>
   simp[]
 QED
+
+(* Physical PHI execution is independent of scratch allocator/bookkeeping.
+   Emitted scratch offsets need not agree for this resource-only boundary. *)
+Theorem popmany_singleton_physical_stack:
+  !ret ps. (SND (popmany_plan [ret] ps)).ps_stack =
+    case stack_get_depth ret ps.ps_stack of
+      NONE => ps.ps_stack
+    | SOME d => stack_pop 1 (stack_swap d ps.ps_stack)
+Proof
+  rpt gen_tac >> Cases_on `stack_get_depth ret ps.ps_stack`
+  >- simp[popmany_plan_def, popmany_individual_def, is_contiguous_top_def,
+           QSORT_DEF, PARTITION_DEF, PART_DEF] >>
+  simp[popmany_singleton_stack_projection]
+QED
+
+Theorem generate_phi_plan_physical_cong:
+  !inst live halt ps qs.
+    ps.ps_stack = qs.ps_stack /\ ps.ps_spilled = qs.ps_spilled ==>
+    (SND (generate_phi_plan inst live halt ps)).ps_stack =
+      (SND (generate_phi_plan inst live halt qs)).ps_stack /\
+    (SND (generate_phi_plan inst live halt ps)).ps_spilled =
+      (SND (generate_phi_plan inst live halt qs)).ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!rs. (SND (generate_phi_plan inst live halt rs)).ps_spilled = rs.ps_spilled` by
+    (gen_tac >> qspecl_then [`inst`, `live`, `halt`, `rs`] mp_tac generate_phi_plan_state_frame >>
+     simp[stackPlanTypesTheory.plan_state_component_equality]) >>
+  reverse conj_tac >- simp[] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) qs.ps_stack`
+  >- simp[generate_phi_plan_def] >>
+  `x < LENGTH ps.ps_stack /\ x < LENGTH qs.ps_stack` by
+    (gvs[stack_get_phi_depth_def] >>
+     drule planWfTheory.stack_find_bound >> simp[]) >>
+  simp[generate_phi_plan_def] >>
+  Cases_on `MEM (operand_to_string (stack_peek x ps.ps_stack)) live` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `halt` >> Cases_on `MEM (HD inst.inst_outputs) live` >> gvs[] >>
+  rpt (qpat_x_assum `popmany_plan _ _ = _`
+    (mp_tac o AP_TERM ``\r : stack_op list # plan_state. (SND r).ps_stack``)) >>
+  simp[popmany_singleton_physical_stack] >>
+  rpt (qpat_x_assum `do_dup _ _ = _`
+    (mp_tac o AP_TERM ``\r : stack_op list # plan_state. (SND r).ps_stack``)) >>
+  simp[do_dup_stack_exact] >> rpt strip_tac >> gvs[]
+QED

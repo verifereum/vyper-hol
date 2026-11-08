@@ -838,6 +838,42 @@ Proof
   simp[is_terminator_def] >> decide_tac
 QED
 
+Theorem native_phi_prefix_physical_transport:
+  !k lv dfg cfg fn lbl halt n len xs ps qs incoming.
+    native_inst_prefix lv dfg cfg fn lbl halt n len xs ps k qs /\
+    EVERY (\inst. inst.inst_opcode = PHI) (TAKE k xs) /\
+    incoming.ps_stack = ps.ps_stack /\ incoming.ps_spilled = ps.ps_spilled ==>
+    ?result. native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k result /\
+      result.ps_stack = qs.ps_stack /\ result.ps_spilled = qs.ps_spilled
+Proof
+  Induct >- (simp[native_inst_prefix_zero] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ (SUC _) _` mp_tac >>
+  simp[Once native_inst_prefix_cases] >> strip_tac >>
+  `k < LENGTH xs /\ inst = EL k xs` by
+    (`k < LENGTH xs` by
+       (qpat_x_assum `DROP k xs = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[] >> decide_tac) >>
+     qpat_x_assum `DROP k xs = _` mp_tac >> simp[DROP_CONS_EL]) >>
+  `EVERY (\inst. inst.inst_opcode = PHI) (TAKE k xs) /\ inst.inst_opcode = PHI` by
+    (qpat_x_assum `EVERY _ (TAKE (SUC k) xs)` mp_tac >>
+     simp[rich_listTheory.TAKE_SUC_BY_TAKE, EVERY_SNOC]) >>
+  `?mid. native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k mid /\
+      mid.ps_stack = ps'.ps_stack /\ mid.ps_spilled = ps'.ps_spilled` by
+    (first_x_assum irule >> metis_tac[]) >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def] >> strip_tac >>
+  Cases_on `generate_phi_plan inst
+    (if rest = [] then live_vars_at lv lbl len else live_vars_at lv lbl (k+n+1)) halt mid` >>
+  qexists_tac `r` >> reverse conj_tac
+  >- (drule_all fnPlanLineagePhiTemporalTheory.generate_phi_plan_physical_cong >>
+      disch_then (qspecl_then [`inst`,
+        `if rest = [] then live_vars_at lv lbl len else live_vars_at lv lbl (k+n+1)`, `halt`] mp_tac) >>
+      gvs[]) >>
+  irule (cj 2 native_inst_prefix_rules) >>
+  goal_assum (drule_at Any) >> simp[generate_inst_plan_def, is_pre_codegen_opcode_def] >>
+  gvs[]
+QED
+
 Theorem incoming_join_native_ordinary_prefix:
   !fn entry lbl bb pred pb dfg ps0 ops ps visited k qs.
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
