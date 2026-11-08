@@ -180,7 +180,8 @@ Theorem checked_compile_saved_log_statement:
   LENGTH (Lit (n2w sig_hash)::ops) < dimword(:256) /\
   log_statement_resources cenv es.scopes eval_cut topic_cut packed_cut encoder_start encoder_end
     data_capacity capacity lo top (TupleTV (select_log_args F flags ftvs)) ss /\
-  ss.vs_current_bb = eval_cut.cs_current_bb /\ ss.vs_inst_idx = LENGTH eval_cut.cs_current_insts /\ ~ss.vs_halted ==>
+  ss.vs_current_bb = eval_cut.cs_current_bb /\ ss.vs_inst_idx = LENGTH eval_cut.cs_current_insts /\ ~ss.vs_halted/\
+  ~ss.vs_call_ctx.cc_static ==>
   ?out ev.
     encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
     out.vs_logs = ss.vs_logs ++ [ev] /\
@@ -359,7 +360,7 @@ Theorem checked_compile_log_data_execution:
   cenv.ce_struct_fields = make_struct_fields_map tops /\
   cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
-  ~cx.txn.is_static /\
+  ~cx.txn.is_static /\ ~before.vs_call_ctx.cc_static /\
   type_stmt env ret (Log event_id exprs) = SOME env' /\
   cenv.ce_event_info (nsid_to_string event_id) = SOME (sig_hash,fts,flags) /\
   compile_log_eval_all cenv exprs begin = (args,eval_cut) /\
@@ -444,6 +445,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
   `env_consistent env cx es'` by fs[runtime_consistent_def] >>
   `~saved.vs_halted` by fs[] >>
+  `~saved.vs_call_ctx.cc_static` by (qpat_assum `fragment_path ctx func before saved` (mp_tac o MATCH_MP fragment_path_call_ctx) >> fs[]) >>
   drule_all checked_compile_saved_log_statement >>
   disch_then (qspec_then `ctx` (qx_choose_then `out` (qx_choose_then `ev` strip_assume_tac))) >>
   `eval_stmt cx (Log event_id exprs) es = (INL (),es' with logs := es'.logs ++ [ev])` by

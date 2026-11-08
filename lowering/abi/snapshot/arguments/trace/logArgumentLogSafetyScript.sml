@@ -6,7 +6,7 @@ Ancestors
   logArgumentListContract logArgumentOrigins logArgumentOriginSafety logArgumentSourceWindows logArgumentBacking
   logArgumentWriters sourceAllocationPrivacy sourceMemoryFrames nameLoweringProps
   abiRequestCredit abiRequestProfile abiAllocationBudgetBounds abiAllocatedWindows abiMemoryFrame abiFieldOperands typedLogArgs
-  memoryValueSnapshot compileAllocaProvenance compileEnv venomMemDefs venomState
+  memoryValueSnapshot compileAllocaProvenance compileEnv exprLowering venomMemDefs venomState
   list pair words arithmetic
 
 Theorem source_window_log_buffer_range[local]:

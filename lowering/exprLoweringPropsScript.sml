@@ -5007,7 +5007,7 @@ Proof
   metis_tac[step_inst_base_ok_jump_ctxs]
 QED
 
-Theorem step_inst_base_preserves_call_ctx[local]:
+Theorem step_inst_base_preserves_call_ctx:
   !inst s s'.
     step_inst_base inst s = OK s' ==>
     s'.vs_call_ctx = s.vs_call_ctx

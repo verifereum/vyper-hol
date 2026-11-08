@@ -24,7 +24,8 @@ Theorem compile_saved_log_empty_path:
     log_args_rel eval_ops atvs vs ss /\ log_args_safe eval_ops atvs ss dst byte_count /\
     EVERY (\arg. abi_operand_before eval_cut.cs_next_var (FST arg)) eval_ops /\
     LENGTH (Lit (n2w sig_hash)::topic_ops) < dimword(:256) /\
-    ss.vs_current_bb = eval_cut.cs_current_bb /\ ss.vs_inst_idx = LENGTH eval_cut.cs_current_insts /\ ~ss.vs_halted ==>
+    ss.vs_current_bb = eval_cut.cs_current_bb /\ ss.vs_inst_idx = LENGTH eval_cut.cs_current_insts /\ ~ss.vs_halted /\
+    ~ss.vs_call_ctx.cc_static ==>
     ?out topics.
       encode_vyper_event_metadata tenv (w2w ss.vs_call_ctx.cc_address) (sig_hash,arg_types,flags) vs =
         SOME <|logger := w2w ss.vs_call_ctx.cc_address; topics := n2w sig_hash::topics; data := []|> /\
@@ -44,6 +45,9 @@ Proof
   disch_then (qx_choose_then `middle` (qx_choose_then `topics` strip_assume_tac)) >>
   mp_tac (Q.SPECL [`topic_cut.cs_next_var`, `topic_ops`, `middle`, `topics`, `sig_hash`] log_topic_header) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> strip_tac >>
+  `~middle.vs_call_ctx.cc_static` by
+    (mp_tac (Q.SPECL [`ss`, `middle`] abi_state_frame_observables) >>
+     impl_tac >- first_assum MATCH_ACCEPT_TAC >> simp[]) >>
   drule_all_then (qspec_then `ctx` (qx_choose_then `out` strip_assume_tac)) compile_log_empty_data_path >>
   `log_non_indexed_types flags arg_types = []` by (drule_all split_log_data_compatible >> simp[]) >>
   mp_tac (Q.SPECL [`tenv`, `w2w ss.vs_call_ctx.cc_address`, `sig_hash`, `flags`, `arg_types`, `vs`, `topics`]

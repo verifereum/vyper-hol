@@ -26,7 +26,8 @@ Theorem checked_compile_saved_log_empty:
     fn_has_code eval_cut topic_cut func /\ fn_has_code topic_cut cs' func /\
     LIST_REL (\arg tv. evaluate_type (type_env tops) (SND arg) = SOME tv) args atvs /\
     log_prefix_ready env cx cenv func ids reserved requests final_cut [] eval_cut es ss credit args atvs values /\
-    LENGTH (Lit (n2w sig_hash)::topic_ops) < dimword(:256) /\ ~ss.vs_halted ==>
+    LENGTH (Lit (n2w sig_hash)::topic_ops) < dimword(:256) /\ ~ss.vs_halted /\
+    ~ss.vs_call_ctx.cc_static ==>
     ?out ev.
       encode_source_event (get_tenv cx) cx.sources cx.txn.target event_id values = SOME ev /\
       fragment_path ctx func ss out /\
