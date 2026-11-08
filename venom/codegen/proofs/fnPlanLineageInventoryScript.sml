@@ -6492,6 +6492,23 @@ Proof
   simp[MEM_FILTER, stack_get_depth_is_some, below_all_live_suffix_covered_hit]
 QED
 
+(* Marking observes only membership in the original suffix, even after
+   deletion has transported it to a smaller inventory. *)
+Theorem cleanup_mark_transported_covered:
+  !inputs requests prefix core transported.
+    EVERY (\v. MEM (Var v) core) inputs /\
+    EVERY (\x. MEM x core) transported ==>
+    mark_dead_stack (FILTER (\x. IS_SOME (stack_get_depth x (prefix ++ core)) /\
+      below_all_live x inputs (prefix ++ core)) requests) transported =
+    mark_dead_stack (FILTER (\x. IS_SOME (stack_get_depth x core) /\
+      below_all_live x inputs core) requests) transported
+Proof
+  rpt strip_tac >> simp[mark_dead_stack_def] >> irule MAP_CONG >> simp[] >>
+  rpt strip_tac >>
+  `MEM x core` by gvs[EVERY_MEM] >>
+  metis_tac[cleanup_retained_suffix_covered]
+QED
+
 Theorem cleanup_mark_suffix_covered:
   !inputs requests prefix core.
     EVERY (\v. MEM (Var v) core) inputs ==>
@@ -6500,8 +6517,7 @@ Theorem cleanup_mark_suffix_covered:
     mark_dead_stack (FILTER (\x. IS_SOME (stack_get_depth x core) /\
       below_all_live x inputs core) requests) core
 Proof
-  rpt strip_tac >> simp[mark_dead_stack_def] >> irule MAP_CONG >> simp[] >>
-  rpt strip_tac >> metis_tac[cleanup_retained_suffix_covered]
+  rpt strip_tac >> irule cleanup_mark_transported_covered >> simp[EVERY_MEM]
 QED
 
 (* The nested selector is exactly clean_stack_plan's physical-minus-retained. *)
@@ -6522,4 +6538,31 @@ Proof
     metis_tac[cleanup_delete_suffix_covered_predicate] >>
   Cases_on `stack_get_depth x (prefix ++ core)` >>
   Cases_on `stack_get_depth x core` >> gvs[]
+QED
+
+(* Membership and coverage views of the stronger input-count boundary.
+   Cleanup height and promise are unrestricted, including failed elision. *)
+Theorem clean_stack_plan_input_mem:
+  !lv cfg fn bb pred ps ops qs v.
+    cfg_preds_of cfg bb.bb_label = [pred] /\
+    MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)) /\
+    MEM (Var v) ps.ps_stack /\
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all clean_stack_plan_input_elem_count >>
+  metis_tac[LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem clean_stack_plan_input_coverage:
+  !lv cfg fn bb pred ps ops qs.
+    cfg_preds_of cfg bb.bb_label = [pred] /\
+    EVERY (\v. MEM (Var v) ps.ps_stack)
+      (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)) /\
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    EVERY (\v. MEM (Var v) qs.ps_stack)
+      (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))
+Proof
+  simp[EVERY_MEM] >> metis_tac[clean_stack_plan_input_mem]
 QED
