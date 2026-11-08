@@ -1,0 +1,58 @@
+Theory bodyPtrSubscriptSeamArrayMemoryBounds
+Ancestors
+  bodyPtrSubscriptSeamArrayMemoryNumeric bodyPtrSubscriptBoundsRun
+  bodyPtrSubscriptReadOnly bodyPtrSubscriptNumeric
+  emitHelperProps exprLoweringProps freshWrites fragExec fragGasPathPtr
+  emitHelper compileEnv ptrDiscipline bodyPtrDefs venomState venomInst
+  venomExecSemantics finite_map words loweringPosts
+
+Theorem literal_lt_iszero_counted:
+  emit_op LT [idx;Lit len] sa = (Var lt,sm) /\
+  emit_op ISZERO [Var lt] sm = (Var out,sb) /\ fn_has_code sa sb func /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand idx s = SOME a /\ op_taint tn idx = {} ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    lookup_var out sf = SOME (bool_to_word (~(w2n a < w2n len))) /\
+    op_taint tnf (Var out) = {} /\ op_prov Gf (Var out) = NONE /\
+    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel ctx func cenv cx es sf)
+Proof
+  strip_tac >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[ci_mono_def, fn_has_code_split] >>
+  `!dst. step_inst_base (mk_inst sa.cs_next_id LT [idx;Lit len] [dst]) s =
+     OK (update_var dst (bool_to_word (w2n a < w2n len)) s)` by
+    (gen_tac >> irule step_LT >> simp[eval_operand_def]) >>
+  drule_all (literal_numeric_counted_read_only |> Q.INST [`opc` |-> `LT`] |>
+    SIMP_RULE (srw_ss()) []) >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] mp_tac) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`, `s1`] strip_assume_tac) >>
+  `eval_operand (Var lt) s1 = SOME (bool_to_word (w2n a < w2n len))` by
+    simp[eval_operand_def] >>
+  drule_all iszero_counted_read_only >>
+  disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
+  simp[bool_to_word_def] >>
+  disch_then (qx_choosel_then [`G2`, `tn2`, `s2`] strip_assume_tac) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> simp[bool_to_word_def] >> conj_tac
+  >- (drule_all gas_path_ptr_then >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> `not_fresh_at sm p` by
+        metis_tac[ci_mono_def, not_fresh_at_mono] >> metis_tac[]) >>
+  rpt strip_tac >> `local_ptrs_reserved cenv sm` by
+    metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >> metis_tac[]
+QED
