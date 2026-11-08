@@ -254,3 +254,43 @@ Resume tuple_witness_state_rel[fmp_room]:
 QED
 
 Finalise tuple_witness_state_rel
+
+Theorem tuple_witness_lookup:
+  venomInst$lookup_function tuple_witness_name tuple_witness_ctx.ctx_functions =
+    SOME (tuple_target_function tuple_witness_name)
+Proof
+  EVAL_TAC
+QED
+
+Theorem tuple_witness_cases:
+  exprs_case F tuple_witness_ctx tuple_witness_fn tuple_witness_ce
+    tuple_witness_cx [tuple_call]
+Proof
+  irule tuple_universal_cases_in_context >>
+  simp[tuple_witness_metadata, GSYM tuple_witness_name_def, tuple_witness_context,
+    tuple_witness_lookup]
+QED
+
+Theorem tuple_witness_all_premises:
+  exprs_case F tuple_witness_ctx tuple_witness_fn tuple_witness_ce
+    tuple_witness_cx [tuple_call] /\
+  expr_body_pre tuple_witness_ce tuple_witness_cx tuple_witness_env
+    (TypeBuiltin (BaseT (BytesT (Dynamic 320))) (AbiEncode T NONE)
+      (TupleT [tuple_wide]) [tuple_call]) tuple_witness_es /\
+  (F ==> int_calls_expr (TypeBuiltin (BaseT (BytesT (Dynamic 320))) (AbiEncode T NONE)
+      (TupleT [tuple_wide]) [tuple_call]) = []) /\
+  compile_abi_encode_args compile_expr tuple_witness_ce [tuple_call] tuple_witness_sa =
+    (FST tuple_witness_compiled, SND tuple_witness_compiled) /\
+  fn_has_code tuple_witness_sa (SND tuple_witness_compiled) tuple_witness_fn /\
+  fn_inst_ids_distinct tuple_witness_fn /\
+  local_ptrs_reserved tuple_witness_ce tuple_witness_sa /\
+  stmt_state_rel tuple_witness_ctx tuple_witness_fn tuple_witness_ce
+    tuple_witness_cx tuple_witness_es tuple_witness_s /\
+  ~tuple_witness_s.vs_halted /\
+  tuple_witness_s.vs_current_bb = tuple_witness_sa.cs_current_bb /\
+  tuple_witness_s.vs_inst_idx = LENGTH tuple_witness_sa.cs_current_insts
+Proof
+  simp[tuple_witness_cases, GSYM exprSimAbiEncodeArgsTupleProbeTheory.tuple_abi_def, tuple_witness_body_pre,
+    tuple_witness_code, tuple_witness_state_rel, tuple_witness_compiled_def] >>
+  EVAL_TAC
+QED

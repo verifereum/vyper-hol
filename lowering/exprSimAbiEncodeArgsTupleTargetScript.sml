@@ -309,3 +309,92 @@ Proof
   simp[]
 QED
 
+
+Theorem tuple_target_invoke_in_context:
+  lookup_function name ctx.ctx_functions = SOME (tuple_target_function name) /\
+  eval_operand op s = SOME p ==>
+  step_inst 1 ctx (mk_inst id INVOKE [Label name; op] []) s =
+    OK (s with vs_memory := (tuple_target_writes p s).vs_memory) /\
+  gas_count_step 1 ctx (mk_inst id INVOKE [Label name; op] []) s = 0
+Proof
+  strip_tac >>
+  `?cs. setup_callee (tuple_target_function name) [p] s = SOME cs` by
+    simp[setup_callee_def, tuple_target_function_def, mk_raw_function_def] >>
+  drule tuple_target_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule tuple_target_count >> strip_tac >>
+  fs[Once step_inst_def, gas_count_step_def, mk_inst_def, decode_invoke_def,
+     eval_operands_def, bind_outputs_def, adopt_return_fmp_def]
+QED
+
+Theorem tuple_target_invoke_path_in_context:
+  lookup_function name ctx.ctx_functions = SOME (tuple_target_function name) /\
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id INVOKE [Label name; op] []) /\
+  eval_operand op s = SOME p ==>
+  gas_marked_path F ctx fn s 0
+    (OK (s with <|vs_memory := (tuple_target_writes p s).vs_memory;
+                  vs_inst_idx := SUC s.vs_inst_idx|>))
+Proof
+  strip_tac >>
+  drule_all tuple_target_invoke_in_context >> strip_tac >>
+  `gas_path_edge ctx fn s 0
+    (OK (s with <|vs_memory := (tuple_target_writes p s).vs_memory;
+                  vs_inst_idx := SUC s.vs_inst_idx|>))` by
+    (simp[gas_path_edge_def] >> qexists_tac `1` >>
+     simp[is_terminator_def]) >>
+  simp[gas_marked_path_def] >>
+  drule (cj 2 gas_path_rules) >>
+  disch_then (qspec_then `0` mp_tac) >> simp[cj 1 gas_path_rules]
+QED
+
+Theorem tuple_target_allocated_path_in_context:
+  lookup_function name ctx.ctx_functions = SOME (tuple_target_function name) /\
+  compile_alloc_buffer 128 sa = (buf,sm) /\
+  emit_void INVOKE [Label name; buf.buf_operand] sm = ((),sb) /\
+  stmt_state_rel ctx fn ce cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved ce sa /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r p. gas_marked_path F ctx fn s 0
+    (OK (r with <|vs_memory := (tuple_target_writes p r).vs_memory;
+                  vs_inst_idx := LENGTH sb.cs_current_insts|>)) /\
+    stmt_state_rel ctx fn ce cx es r /\
+    sa.cs_next_id < sm.cs_next_id /\
+    ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+    r.vs_inst_idx = LENGTH sm.cs_current_insts /\
+    eval_operand buf.buf_operand r = SOME p /\
+    FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n p,128) /\
+    w2n p + 128 < dimword (:256) /\ r.vs_memory = s.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s) /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+       FLOOKUP r.vs_allocas aid = SOME e) /\
+    (!local b len. local_region ce es.scopes r local b len ==>
+       regions_disjoint (w2n p) 128 b len)
+Proof
+  rpt strip_tac >>
+  `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
+  `cs_extends sm sb` by
+    gvs[emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+        comp_return_def, emit_def, fresh_id_def, cs_extends_def] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `128 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all compile_alloc_buffer_forward >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `sb.cs_current_bb = sm.cs_current_bb` by
+    gvs[emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+        comp_return_def, emit_def, fresh_id_def] >>
+  drule_all fn_has_code_same_block >> simp[] >> strip_tac >>
+  `gas_marked_path F ctx fn r 0
+     (OK (r with <|vs_memory := (tuple_target_writes tw r).vs_memory;
+                   vs_inst_idx := LENGTH sb.cs_current_insts|>))` by
+    (`gas_marked_path F ctx fn r 0
+        (OK (r with <|vs_memory := (tuple_target_writes tw r).vs_memory;
+                      vs_inst_idx := SUC r.vs_inst_idx|>))` by
+       (irule tuple_target_invoke_path_in_context >> metis_tac[]) >>
+     fs[arithmeticTheory.ADD1] >> metis_tac[]) >>
+  qexistsl_tac [`r`, `tw`] >> simp[] >>
+  drule_all gas_marked_path_then >> simp[] >> metis_tac[]
+QED

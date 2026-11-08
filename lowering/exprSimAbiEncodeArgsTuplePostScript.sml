@@ -206,3 +206,59 @@ Proof
       vyperStateTheory.read_result_def, vyperStateTheory.return_def, tuple_narrow_def,
       is_word_type_def] >> metis_tac[]
 QED
+
+Theorem tuple_target_allocated_posts_in_context:
+  lookup_function name ctx.ctx_functions = SOME (tuple_target_function name) /\
+  compile_alloc_buffer 128 sa = (buf,sm) /\
+  emit_void INVOKE [Label name; buf.buf_operand] sm = ((),sb) /\
+  stmt_state_rel ctx fn ce cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved ce sa /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx fn s 0 (OK t) /\
+    stmt_state_rel ctx fn ce cx es t /\
+    wb_frame ce es es sa s t /\
+    expr_val_rel cx tuple_narrow
+      (ArrayV (TupleV [BytesV [170w]; BytesV [187w]])) buf.buf_operand t /\
+    expr_val_at ce cx tuple_narrow sa sb es
+      (ArrayV (TupleV [BytesV [170w]; BytesV [187w]])) buf.buf_operand t /\
+    expr_val_own ce cx tuple_narrow sa sb es
+      (ArrayV (TupleV [BytesV [170w]; BytesV [187w]])) buf.buf_operand t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >>
+  drule_all tuple_target_allocated_path_in_context >> strip_tac >>
+  `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
+  `cs_extends sm sb` by
+    gvs[emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+        comp_return_def, emit_def, fresh_id_def, cs_extends_def] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  `stmt_state_rel ctx fn ce cx es (tuple_target_writes p r)` by
+    (irule tuple_target_writes_state_rel >> simp[] >>
+     (conj_tac >- metis_tac[]) >>
+     qexists_tac `mk_inst sa.cs_next_id ALLOCA [Lit (n2w 128)]
+       [STRING #"%" (toString sa.cs_next_var)]` >> simp[mk_inst_def]) >>
+  `wb_frame ce es es sa s (tuple_target_writes p r)` by
+    (irule tuple_target_original_frame >> metis_tac[]) >>
+  `sa.cs_next_id < sb.cs_next_id` by
+    (gvs[emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+         comp_return_def, emit_def, fresh_id_def] >> decide_tac) >>
+  drule_all tuple_target_return_value >> strip_tac >>
+  qexists_tac `tuple_target_writes p r with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  conj_tac
+  >- (qpat_x_assum `gas_marked_path _ _ _ _ _ _` mp_tac >>
+      pure_once_rewrite_tac[GSYM venom_state_fupdcanon] >>
+      rewrite_tac[tuple_target_writes_memory_only]) >>
+  first_x_assum (qspec_then `cx` strip_assume_tac) >>
+  gvs[stmt_state_rel_inst_idx, wb_frame_def, expr_val_rel_def,
+       expr_val_at_def, expr_val_own_def, local_region_def, lookup_var_def,
+       locals_kept_def, popped_kept_def] >>
+  gvs[emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+      comp_return_def, emit_def, fresh_id_def] >>
+  gvs[tuple_target_writes_def] >>
+  reverse conj_tac >- ntac 4 (simp[Once mstore_with_memory]) >>
+  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+QED
