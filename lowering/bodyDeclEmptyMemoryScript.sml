@@ -6,6 +6,7 @@ Theory bodyDeclEmptyMemory
 Ancestors
   bodyDeclWordMemory bodyDeclMemoryCompose bodyDeclMemoryCounted
   bodyDeclMemoryCore stmtSimDeclCompose stmtSimDeclSource stmtSimDeclStore
+  memoryValueEncoding
   stmtSimDeclMem stmtSimDeclEmpty stmtSimDecl exprSimMemDefs
   exprSimMemorySource bodyMemoryDefs fragGasMode fragGasPathMem fragGasPath gasSummary
   gasSummaryCompose gasOutcome gasExemptCert loweringPosts exprSimDefs
