@@ -2042,12 +2042,11 @@ Proof
   rw[icf_collect_aliases_def] >>
   `icf_aliases_step dfg {root} = (F, {root})` by
     (simp[icf_aliases_step_def] >>
-     `IMAGE (\inst. if inst.inst_opcode = ASSIGN then
-                      case inst.inst_outputs of [out] => out | _ => ""
-                    else "") (set (dfg_get_uses dfg root)) DIFF {root} DIFF {""} = {}` by
-       (fs[EXTENSION, EVERY_MEM] >> gen_tac >>
-        Cases_on `x = ""` >> simp[] >> disj1_tac >>
-        rw[] >> spose_not_then assume_tac >> res_tac >> gvs[]) >>
+     `BIGUNION (IMAGE (\inst. if inst.inst_opcode = ASSIGN then
+                      case inst.inst_outputs of [out] => {out} | _ => {}
+                    else {}) (set (dfg_get_uses dfg root))) DIFF {root} = {}` by
+       (fs[EXTENSION, EVERY_MEM, PULL_EXISTS] >> rw[] >>
+        res_tac >> simp[]) >>
      simp[]) >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> simp[] >>
   ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> simp[]

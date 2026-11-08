@@ -126,16 +126,15 @@ Definition icf_aliases_step_def:
                    (aliases : string set) =
     let new_vars =
       BIGUNION (IMAGE (\v.
-        let uses = dfg_get_uses dfg v in
-        IMAGE (\inst.
+        BIGUNION (IMAGE (\inst.
           if inst.inst_opcode = ASSIGN then
             case inst.inst_outputs of
-              [out] => out
-            | _ => ""
-          else "")
-          (set uses))
+              [out] => {out}
+            | _ => {}
+          else {})
+          (set (dfg_get_uses dfg v))))
         aliases) in
-    let added = new_vars DIFF aliases DIFF {""} in
+    let added = new_vars DIFF aliases in
     (added <> {}, aliases UNION added)
 End
 
