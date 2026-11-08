@@ -2,7 +2,8 @@ Theory bodyPtrPopTargetSimIndexFrame
 Ancestors
   bodyPtrPopTargetDefs bodyPtrDefs targetPlaceSimCasesBase
   loweringPosts exprSimProps compileEnv venomState ptrDiscipline
-  augAssignPtrRhsFrame finite_map
+  augAssignPtrRhsFrame finite_map exprLowering compileEnv
+  stmtSimAugAssignPlace targetPlaceSim
 
 (* Slot-place classification is independent of runtime registers.  Only the
    saved operand's value and ghost classification need an index frame. *)
@@ -31,4 +32,17 @@ Proof
   rename1 `FST rb = Var p` >>
   drule ghost_kept_old_operand >>
   disch_then (qspec_then `p` mp_tac) >> simp[op_taint_def]
+QED
+
+Theorem target_toplevel_compiled_not_label_ptr:
+  compile_get_target_ptr cfn cenv bt sa = (rb,sb) /\
+  target_root bt = TopLevelNameTarget nsid ==>
+  !lbl. FST rb <> Label lbl
+Proof
+  Cases_on `bt` >> simp[target_root_def] >> rpt strip_tac
+  >- (gvs[compile_get_target_ptr_def] >>
+      Cases_on `FLOOKUP cenv.ce_module_vars nsid` >>
+      gvs[comp_return_def] >> Cases_on `x` >> gvs[comp_return_def])
+  >- metis_tac[aug_place_target_ptr_not_label] >>
+  metis_tac[aug_place_target_ptr_not_label]
 QED
