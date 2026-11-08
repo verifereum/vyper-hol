@@ -95,8 +95,107 @@ QED
 
 (* ===== Deployment establishes runtime immutable readiness ===== *)
 
+Theorem evaluate_all_constants_preserves_sources[local]:
+  evaluate_all_constants cx am addr mods = SOME am_c ==>
+  am_c.sources = am.sources
+Proof
+  simp[evaluate_all_constants_def] >>
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
+  qspec_tac (`constants_order mods`, `mods`) >> Induct
+  >- rw[evaluate_module_constants_def] >>
+  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_module_constants_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[merge_constants_def]
+QED
+
+Theorem call_external_function_result_preserves_sources[local]:
+  srcs = am.sources /\
+  (\(res,am_out,rqs). (res,am_out,rqs))
+    (case body_res of
+       (INL (), st) =>
+         (case unlock st of
+            (INL u, st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st', st'.requests)
+          | (INR e, st') => (INR e, am, st'.requests))
+     | (INR (ReturnException v_ret), st) =>
+         (case unlock st of
+            (INL u, st') =>
+              (case evaluate_type tenv ret of
+                 NONE => (INR (Error (TypeError "eval ret")), am, st'.requests)
+               | SOME tv =>
+                   case safe_cast tv v_ret of
+                     NONE => (INR (Error (TypeError "ext cast ret")), am, st'.requests)
+                   | SOME v_cast =>
+                       (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
+          | (INR e, st') => (INR e, am, st'.requests))
+     | (INR HaltException, st) =>
+         (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
+     | (INR e, st) => (INR e, am, st.requests)) = (result, am_out, rqs) ==>
+  am_out.sources = am.sources
+Proof
+  rewrite_tac[triple_identity] >>
+  namedCases_on `body_res` ["tag st_body"] >>
+  Cases_on `tag`
+  >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
+      Cases_on `res` >> rpt strip_tac >>
+      gvs[abstract_machine_from_state_def]) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  simp[abstract_machine_from_state_def] >> rpt strip_tac >>
+  gvs[] >>
+  rename1 `safe_cast _ v_ret` >>
+  namedCases_on `unlock st_body` ["res st_unlocked"] >>
+  Cases_on `res` >> gvs[abstract_machine_from_state_def] >>
+  Cases_on `evaluate_type tenv ret` >> gvs[] >>
+  rename1 `safe_cast tv v_ret` >>
+  Cases_on `safe_cast tv v_ret` >> rpt strip_tac >>
+  gvs[abstract_machine_from_state_def]
+QED
+
+Theorem call_external_function_preserves_sources:
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    (outcome,am_out,rqs) ==>
+  am_out.sources = am.sources
+Proof
+  rw[call_external_function_def] >>
+  gvs[AllCaseEqs()] >>
+  drule_at (Pos (el 2)) call_external_function_result_preserves_sources >>
+  (impl_tac >- metis_tac[evaluate_all_constants_preserves_sources]) >>
+  simp[]
+QED
+
+(* Successful deployment either installs sources after a normal return or
+   commits a halted constructor without installing runtime code. *)
 Theorem load_contract_success_cases:
   load_contract orc gobs am tx mods exps = INL (am_deployed,rqs) ==>
+  ?imms ts mut nr args dflts ret body am_ctor.
+    initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+    ts = (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) /\
+    lookup_function NONE tx.function_name Deploy ts =
+      SOME (mut,nr,args,dflts,ret,body) /\
+    ((?v.
+       call_external_function orc gobs
+         (am with <|immutables updated_by CONS (tx.target,imms);
+                    exports updated_by CONS (tx.target,exps)|>)
+         ((initial_evaluation_context ((tx.target,mods)::am.sources)
+             am.layouts (tx with created_in_tx := T) NONE) with in_deploy := T)
+         nr mut ts mods args dflts tx.args body ret = (INL v,am_ctor,rqs) /\
+       am_deployed = finalize_pending_deletions
+         (am_ctor with sources updated_by CONS (tx.target,mods))) \/
+     (call_external_function orc gobs
+        (am with <|immutables updated_by CONS (tx.target,imms);
+                   exports updated_by CONS (tx.target,exps)|>)
+        ((initial_evaluation_context ((tx.target,mods)::am.sources)
+            am.layouts (tx with created_in_tx := T) NONE) with in_deploy := T)
+        nr mut ts mods args dflts tx.args body ret = (INR HaltException,am_ctor,rqs) /\
+      am_deployed = finalize_pending_deletions am_ctor))
+Proof
+  rw[load_contract_def] >> gvs[AllCaseEqs()]
+QED
+
+(* A change to the source list distinguishes the normal installation branch.
+   Readiness consumers require this branch; machine preservation covers both. *)
+Theorem load_contract_return_cases:
+  load_contract orc gobs am tx mods exps = INL (am_deployed,rqs) /\
+  am_deployed.sources <> am.sources ==>
   ?imms ts mut nr args dflts ret body v am_ctor.
     initial_immutables (type_env_all_modules mods) mods = SOME imms /\
     ts = (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) /\
@@ -106,30 +205,24 @@ Theorem load_contract_success_cases:
       (am with <| immutables updated_by CONS (tx.target,imms);
                  exports updated_by CONS (tx.target,exps) |>)
       ((initial_evaluation_context ((tx.target,mods)::am.sources)
-          am.layouts tx NONE) with in_deploy := T)
+          am.layouts (tx with created_in_tx := T) NONE) with in_deploy := T)
       nr mut ts mods args dflts tx.args body ret = (INL v, am_ctor, rqs) /\
     am_deployed = finalize_pending_deletions
       (am_ctor with sources updated_by CONS (tx.target,mods))
 Proof
-  rw[load_contract_def] >>
-  Cases_on `initial_immutables (type_env_all_modules mods) mods` >> gvs[] >>
-  Cases_on `lookup_function NONE tx.function_name Deploy
-              (case ALOOKUP mods NONE of SOME ts => ts | NONE => [])` >> gvs[] >>
-  Cases_on `x'` >> gvs[] >>
-  Cases_on `r` >> gvs[] >>
-  Cases_on `r''` >> gvs[] >>
-  Cases_on `r` >> gvs[] >>
-  Cases_on `r''` >> gvs[] >>
-  Cases_on `call_external_function orc gobs
-      (am with <|immutables updated_by CONS (tx.target,x);
-                exports updated_by CONS (tx.target,exps)|>)
-      ((initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx NONE)
-         with in_deploy := T)
-      q' q (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) mods q'' q''' tx.args r q''''` >>
-  gvs[] >>
-  Cases_on `q'''''` >> gvs[] >>
-  rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INL value, machine_requests)` >>
-  Cases_on `machine_requests` >> gvs[]
+  strip_tac >> drule load_contract_success_cases >> strip_tac >> gvs[] >>
+  imp_res_tac call_external_function_preserves_sources >> gvs[]
+QED
+
+Theorem send_call_value_error:
+  send_call_value mut cx st = (INR exc,st') ==>
+  (exc = Error (RuntimeError "not Payable") \/
+   exc = Error (RuntimeError "transfer_value amount") \/
+   exc = Error (RuntimeError "transfer_value recipient overflow")) /\ st' = st
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def, assert_def,
+     return_def, raise_def] >> gvs[AllCaseEqs()] >>
+  imp_res_tac vyperCallFrameTheory.concrete_send_error >> gvs[]
 QED
 
 Theorem call_external_function_deploy_success_evaluate_all_constants[local]:
@@ -1035,6 +1128,8 @@ Theorem call_external_function_success_result_cases[local]:
                    | SOME v_cast =>
                        (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
           | (INR e, st') => (INR e, am, st'.requests))
+     | (INR HaltException, st) =>
+         (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
      | (INR e, st) => (INR e, am, st.requests)) = (INL v, am_out, rqs) ==>
   ((?st_body st_unlocked u.
       body_res = (INL (), st_body) /\
@@ -1047,10 +1142,59 @@ Theorem call_external_function_success_result_cases[local]:
       safe_cast tv v_ret = SOME v_cast /\
       am_out = abstract_machine_from_state srcs exps layouts st_unlocked))
 Proof
-  PairCases_on `body_res` >>
-  Cases_on `body_res0` >> gvs[] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
-  metis_tac[]
+  namedCases_on `body_res` ["tag st_body"] >>
+  Cases_on `tag`
+  >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
+      Cases_on `res` >> gvs[]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> simp[] >>
+  rename1 `safe_cast _ v_ret` >>
+  namedCases_on `unlock st_body` ["res st_unlocked"] >>
+  Cases_on `res` >> simp[] >>
+  Cases_on `evaluate_type tenv ret` >> simp[] >>
+  rename1 `safe_cast tv v_ret` >>
+  Cases_on `safe_cast tv v_ret` >> gvs[]
+QED
+
+Theorem call_external_function_result_preserves_exports[local]:
+  exps = am.exports /\
+  (\(res,am_out,rqs). (res,am_out,rqs))
+    (case body_res of
+       (INL (), st) =>
+         (case unlock st of
+            (INL u, st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st', st'.requests)
+          | (INR e, st') => (INR e, am, st'.requests))
+     | (INR (ReturnException v_ret), st) =>
+         (case unlock st of
+            (INL u, st') =>
+              (case evaluate_type tenv ret of
+                 NONE => (INR (Error (TypeError "eval ret")), am, st'.requests)
+               | SOME tv =>
+                   case safe_cast tv v_ret of
+                     NONE => (INR (Error (TypeError "ext cast ret")), am, st'.requests)
+                   | SOME v_cast =>
+                       (INL v_cast, abstract_machine_from_state srcs exps layouts st', st'.requests))
+          | (INR e, st') => (INR e, am, st'.requests))
+     | (INR HaltException, st) =>
+         (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
+     | (INR e, st) => (INR e, am, st.requests)) = (result, am_out, rqs) ==>
+  am_out.exports = am.exports
+Proof
+  rewrite_tac[triple_identity] >>
+  namedCases_on `body_res` ["tag st_body"] >>
+  Cases_on `tag`
+  >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
+      Cases_on `res` >> rpt strip_tac >>
+      gvs[abstract_machine_from_state_def]) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  simp[abstract_machine_from_state_def] >> rpt strip_tac >>
+  gvs[] >>
+  rename1 `safe_cast _ v_ret` >>
+  namedCases_on `unlock st_body` ["res st_unlocked"] >>
+  Cases_on `res` >> gvs[abstract_machine_from_state_def] >>
+  Cases_on `evaluate_type tenv ret` >> gvs[] >>
+  rename1 `safe_cast tv v_ret` >>
+  Cases_on `safe_cast tv v_ret` >> rpt strip_tac >>
+  gvs[abstract_machine_from_state_def]
 QED
 
 Theorem call_external_function_deploy_success_cases:
@@ -1374,10 +1518,17 @@ Proof
      drule_at (Pos last) call_entry_eval_no_loop_control_c53 >> simp[]) >>
   Cases_on `entry` >> Cases_on `q` >> gvs[] >>
   qpat_x_assum `ignore_bind _ _ _ = _` kall_tac >>
+  qabbrev_tac `unlock = (if nr /\ mut <> View /\ mut <> Pure then
+    case cx.nonreentrant_slot of NONE => return ()
+    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+    else return ())` >>
+  `!e s s'. unlock s = (INR e,s') ==> no_control_exc e` by
+    (simp[Abbr `unlock`] >> rpt strip_tac >>
+     drule unlock_action_no_control_c53 >> simp[]) >>
   qpat_x_assum `(\(res,am_out,rqs). _) _ = _` mp_tac >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac unlock_action_no_control_c53 >> gvs[no_control_exc_def]
+  rewrite_tac[triple_identity] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  res_tac >> gvs[no_control_exc_def]
 QED
 
 
@@ -2004,7 +2155,7 @@ Theorem deploy_context_constants_bare_globals_type_ready[local]:
   check_contract F am.layouts deploy_tx.target mods = SOME call_art /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE)
        with in_deploy := T)
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
@@ -2024,7 +2175,7 @@ Proof
   drule deploy_constants_setup_bare_globals_ready >>
   strip_tac >>
   first_x_assum (qspecl_then [`deploy_tx`, `(deploy_tx.target,mods)::am.sources`, `imms`,
-    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE with in_deploy := T)`,
+    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE with in_deploy := T)`,
     `am_c`, `((am:abstract_machine) with exports updated_by CONS (deploy_tx.target,exps))`] mp_tac) >>
   gvs[get_tenv_def, initial_evaluation_context_def, alistTheory.ALOOKUP_def] >>
   strip_tac >>
@@ -2096,7 +2247,8 @@ Proof
 QED
 
 Theorem load_contract_success_constructor_constants_context:
-  load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) ==>
+  load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) /\
+  am_deployed.sources <> am.sources ==>
   ?imms ts mut nr args dflts ret body v am_ctor am_c.
     initial_immutables (type_env_all_modules mods) mods = SOME imms /\
     ts = (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) /\
@@ -2104,10 +2256,10 @@ Theorem load_contract_success_constructor_constants_context:
     call_external_function orc gobs
       (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                  exports updated_by CONS (deploy_tx.target,exps)|>)
-      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE) with in_deploy := T)
+      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE) with in_deploy := T)
       nr mut ts mods args dflts deploy_tx.args body ret = (INL v, am_ctor, rqs) /\
     evaluate_all_constants
-      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE) with in_deploy := T)
+      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE) with in_deploy := T)
       (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                  exports updated_by CONS (deploy_tx.target,exps)|>)
       deploy_tx.target mods = SOME am_c /\
@@ -2116,12 +2268,12 @@ Theorem load_contract_success_constructor_constants_context:
       (am_ctor with sources updated_by CONS (deploy_tx.target,mods))
 Proof
   rw[] >>
-  drule load_contract_success_cases >> strip_tac >> gvs[] >>
+  drule_all load_contract_return_cases >> strip_tac >> gvs[] >>
   qspecl_then
     [`orc`, `rqs`, `am with <|immutables updated_by CONS (deploy_tx.target,imms);
                 exports updated_by CONS (deploy_tx.target,exps)|>`,
      `((initial_evaluation_context ((deploy_tx.target,mods)::am.sources)
-          am.layouts deploy_tx NONE) with in_deploy := T)`,
+          am.layouts (deploy_tx with created_in_tx := T) NONE) with in_deploy := T)`,
      `nr`, `mut`, `(case ALOOKUP mods NONE of SOME ts => ts | NONE => [])`,
      `mods`, `args`, `dflts`, `deploy_tx.args`, `body`, `ret`, `v`, `am_ctor`]
     mp_tac call_external_function_deploy_success_evaluate_all_constants >>
@@ -2131,7 +2283,7 @@ Proof
   qspecl_then
     [`orc`, `rqs`, `am with <|immutables updated_by CONS (deploy_tx.target,imms);
                 exports updated_by CONS (deploy_tx.target,exps)|>`,
-     `<|stk := [(NONE,deploy_tx.function_name)]; txn := deploy_tx;
+     `<|stk := [(NONE,deploy_tx.function_name)]; txn := deploy_tx with created_in_tx := T;
         sources := (deploy_tx.target,mods)::am.sources; layouts := am.layouts;
         in_deploy := T;
         nonreentrant_slot := lookup_nonreentrant_slot am.layouts deploy_tx.target|>`,
@@ -2147,12 +2299,12 @@ Theorem load_contract_constructor_context_bare_global_type_from_constants[local]
   call_external_function orc gobs
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE)
        with in_deploy := T)
     nr mut (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) mods args dflts
     deploy_tx.args body ret = (INL v',am_ctor,rqs) /\
   evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE)
        with in_deploy := T)
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
@@ -2165,7 +2317,7 @@ Theorem load_contract_constructor_context_bare_global_type_from_constants[local]
 Proof
   rw[] >>
   qabbrev_tac
-    `cx0 = ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
+    `cx0 = ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE)
        with in_deploy := T)` >>
   `cx0.in_deploy` by simp[Abbr `cx0`] >>
   `cx0.txn.target = deploy_tx.target` by
@@ -2196,6 +2348,7 @@ QED
 
 Theorem load_contract_deployed_bare_globals_immutables_ready_clause[local]:
   load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) /\
+  am_deployed.sources <> am.sources /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target ==>
   !src id ty tv v.
@@ -2222,6 +2375,7 @@ QED
 
 Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
   load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) /\
+  am_deployed.sources <> am.sources /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target /\
   (!src id ty tv v.
@@ -2253,7 +2407,7 @@ Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
          ty = SOME tv)
 Proof
   rw[] >>
-  drule load_contract_success_cases >> strip_tac >> gvs[] >>
+  drule_all load_contract_return_cases >> strip_tac >> gvs[] >>
   `ALOOKUP ((deploy_tx.target,mods)::am_ctor.sources) call_tx.target = SOME mods` by
     simp[] >>
   `(!src id vt.
@@ -2327,7 +2481,7 @@ Theorem deploy_context_constants_bare_globals_lookup_exists[local]:
   check_contract F am.layouts deploy_tx.target mods = SOME call_art /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE)
        with in_deploy := T)
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
@@ -2343,7 +2497,7 @@ Proof
   drule deploy_constants_setup_bare_globals_ready >>
   simp[get_tenv_def, initial_evaluation_context_def, IS_SOME_EXISTS, EXISTS_PROD] >>
   disch_then (qspecl_then [`deploy_tx`, `(deploy_tx.target,mods)::am.sources`,
-    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE with in_deploy := T)`,
+    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE with in_deploy := T)`,
     `am_c`, `am with exports updated_by CONS (deploy_tx.target,exps)`] mp_tac) >>
   simp[get_tenv_def, initial_evaluation_context_def, IS_SOME_EXISTS, EXISTS_PROD] >>
   impl_tac >- gvs[initial_evaluation_context_def] >>
@@ -2371,6 +2525,7 @@ QED
 
 Theorem load_contract_deployed_bare_globals_immutables_ready_exists_clause[local]:
   load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) /\
+  am_deployed.sources <> am.sources /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target ==>
   !src id ty.
@@ -2383,7 +2538,7 @@ Proof
   drule load_contract_success_constructor_constants_context >>
   strip_tac >>
   gvs[] >>
-  qspecl_then [`orc`, `rqs`, `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE with in_deploy := T)`,
+  qspecl_then [`orc`, `rqs`, `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts (deploy_tx with created_in_tx := T) NONE with in_deploy := T)`,
     `am with <|exports updated_by CONS (deploy_tx.target,exps);
               immutables updated_by CONS (deploy_tx.target,imms)|>`,
     `nr`, `mut`, `case ALOOKUP mods NONE of NONE => [] | SOME ts => ts`, `mods`,
@@ -2401,6 +2556,7 @@ QED
 
 Theorem load_contract_establishes_immutables_ready:
   load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) /\
+  am_deployed.sources <> am.sources /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target ==>
   immutables_ready call_art.cta_bare_globals call_art.cta_toplevel_vtypes
@@ -2484,25 +2640,37 @@ Proof
   gvs[abstract_machine_from_state_def]
 QED
 
+Theorem call_external_function_preserves_exports[local]:
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    (result, am_out, rqs) ==>
+  am_out.exports = am.exports
+Proof
+  rw[call_external_function_def] >>
+  gvs[AllCaseEqs()] >>
+  drule_at (Pos (el 2)) call_external_function_result_preserves_exports >>
+  (impl_tac >- metis_tac[evaluate_all_constants_preserves_exports]) >>
+  simp[]
+QED
+
 Theorem load_contract_deployed_exports:
   load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) ==>
   ALOOKUP am_deployed.exports deploy_tx.target = SOME exps
 Proof
   strip_tac >>
   drule load_contract_success_cases >> strip_tac >>
-  drule_at (Pos (el 2)) call_external_function_deploy_success_preserves_exports >>
-  simp[]
+  drule call_external_function_preserves_exports >> simp[]
 QED
 
 Theorem load_contract_establishes_checked_contract_runtime_ready:
   load_contract orc gobs am deploy_tx mods exps = INL (am_deployed,rqs) /\
+  am_deployed.sources <> am.sources /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME art /\
   exports_ok am_deployed.layouts call_tx.target mods exps /\
   call_tx.target = deploy_tx.target ==>
   checked_contract_runtime_ready art mods am_deployed call_tx
 Proof
   rw[checked_contract_runtime_ready_def]
-  >- (drule load_contract_success_cases >> strip_tac >> gvs[])
+  >- (drule_all load_contract_return_cases >> strip_tac >> gvs[])
   >- (drule load_contract_deployed_exports >> gvs[])
   >> irule load_contract_establishes_immutables_ready
   >> qexistsl [`am`, `deploy_tx`, `exps`, `gobs`, `mods`, `orc`, `rqs`]
@@ -3554,6 +3722,17 @@ QED
 
 (* ===== Checked external call no-TypeError ===== *)
 
+(* Close a goal about call_external_function's result with a selected-entry
+   no_type_error lemma. *)
+fun result_no_type_error_by lemma =
+  qpat_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _`
+    (fn th =>
+      SUBGOAL_THEN
+        (mk_icomb (``no_type_error_result``,
+          fst (pairSyntax.dest_pair (rhs (concl th))))) assume_tac
+      >- metis_tac[lemma]) >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def];
+
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -3588,12 +3767,13 @@ Proof
    SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
   `checked_contract_runtime_ready art all_mods am tx` by
-    simp[checked_contract_runtime_ready_def] >>
-  `no_type_error_result ((INR v7):value + vyperState$exception)` by
-    (FIRST
-       [metis_tac[call_external_function_selected_explicit_raw_args_no_type_error_c53],
-        metis_tac[call_external_function_selected_getter_raw_args_no_type_error_c53]]) >>
-  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+    simp[checked_contract_runtime_ready_def]
+  (* getter goals carry is_public_getter_decl; the rest are explicit *)
+  >>~- ([`is_public_getter_decl _ _`],
+          result_no_type_error_by
+            call_external_function_selected_getter_raw_args_no_type_error_c53) >>
+  result_no_type_error_by
+    call_external_function_selected_explicit_raw_args_no_type_error_c53
 QED
 
 
@@ -3630,19 +3810,15 @@ Proof
       external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
         SOME (mut,nr,args,dflts,ret,body'))` by
     (irule lookup_exported_function_checked_cases_current >> simp[] >> metis_tac[]) >>
-  gvs[]
-  >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
-      metis_tac[call_external_function_no_loop_control_c53,
-                checked_explicit_external_body_no_control_escape_selected])
-  >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
-      metis_tac[call_external_function_no_loop_control_c53,
-                checked_public_getter_body_no_control_escape_selected])
-  >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
-      metis_tac[call_external_function_no_loop_control_c53,
-                checked_explicit_external_body_no_control_escape_selected]) >>
-  gvs[get_module_code_def, initial_evaluation_context_def] >>
-  metis_tac[call_external_function_no_loop_control_c53,
-            checked_public_getter_body_no_control_escape_selected]
+  gvs[get_module_code_def, initial_evaluation_context_def]
+  (* getter goals carry is_public_getter_decl; the rest are explicit *)
+  >>~- ([`is_public_getter_decl _ _`],
+          `stmts_no_control_escape body'` by
+            metis_tac[checked_public_getter_body_no_control_escape_selected] >>
+          drule_all call_external_function_no_loop_control_c53 >> simp[]) >>
+  `stmts_no_control_escape body'` by
+    metis_tac[checked_explicit_external_body_no_control_escape_selected] >>
+  drule_all call_external_function_no_loop_control_c53 >> simp[]
 QED
 
 (* Deployment and checked-entry proofs must be closed kernel theorems. *)
