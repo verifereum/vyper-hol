@@ -224,3 +224,83 @@ Proof
   simp[expr_sim_pre_body, local_probe_body_pre,
        vyperTypeCallGraphTheory.int_calls_expr_def]
 QED
+
+Definition local_probe_entry_def:
+  local_probe_entry = local_probe_backing_state
+    ((init_venom_state "__deploy") with
+      <|vs_memory := REPLICATE 31 0w ++ [1w] ++ REPLICATE 128 0w;
+        vs_inst_idx := 3; vs_labels := FEMPTY |+ ("runtime_begin",0w);
+        vs_block_ctx := empty_block_context with bc_number := 1w|>)
+End
+
+
+Theorem local_probe_one_bytes:
+  byte$word_to_bytes_aux 32 (1w : bytes32) T =
+    REPLICATE 31 (0w : word8) ++ [1w]
+Proof
+  simp[byteTheory.word_to_bytes_aux_compute, byteTheory.get_byte_def,
+       byteTheory.byte_index_def, fcpLib.INDEX_CONV ``dimindex(:256)``,
+       wordsTheory.dimword_def] >>
+  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
+QED
+
+Theorem local_probe_entry_state_rel:
+  state_rel local_probe_fn local_probe_empty_ce local_probe_cx
+    local_probe_es local_probe_entry
+Proof
+  rewrite_tac[compileEnvTheory.state_rel_def] >>
+  conj_tac
+  >- (simp[local_probe_es_def, immutableDeployEmptySourceTheory.empty_immutable_es_def,
+           local_probe_entry_def] >>
+      irule local_probe_empty_local_ptrs >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (simp[local_probe_empty_ce_def, local_probe_real_ce_shape] >>
+    EVAL_TAC >> rpt strip_tac >> gvs[AllCaseEqs()] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (simp[local_probe_empty_ce_def, local_probe_real_ce_shape] >>
+    EVAL_TAC >> rpt strip_tac >> gvs[AllCaseEqs()] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- (simp[local_probe_empty_ce_def, local_probe_real_ce_shape] >>
+    EVAL_TAC >> rpt strip_tac >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+    simp[local_probe_one_bytes] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem local_probe_no_calls:
+  !g. ~TC (fn_directly_calls local_probe_unit.cu_context) local_probe_fn.fn_name g
+Proof
+  `!g. ~fn_directly_calls local_probe_unit.cu_context local_probe_fn.fn_name g` by
+    (simp[fcgDefsTheory.fn_directly_calls_def, local_probe_fn_member] >>
+     rewrite_tac[local_probe_fn_shape] >> EVAL_TAC >>
+     rpt strip_tac >> gvs[] >> rpt strip_tac >> gvs[]) >>
+  metis_tac[relationTheory.TC_CASES1]
+QED
+
+Theorem local_probe_entry_stmt_state_rel:
+  stmt_state_rel local_probe_unit.cu_context local_probe_fn local_probe_empty_ce
+    local_probe_cx local_probe_es local_probe_entry
+Proof
+  simp[exprLoweringPropsTheory.stmt_state_rel_def, local_probe_entry_state_rel] >>
+  conj_tac >- (EVAL_TAC >> rpt strip_tac >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (simp[exprLoweringPropsTheory.alloca_room_def,
+    local_probe_fn_member, local_probe_no_calls] >> EVAL_TAC >>
+    simp[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]) >>
+  conj_tac >- (simp[exprLoweringPropsTheory.fmp_room_def, local_probe_no_calls,
+    local_probe_fn_shape] >> EVAL_TAC) >>
+  conj_tac >- (simp[local_probe_empty_ce_def, local_probe_real_ce_shape] >>
+    EVAL_TAC >> rpt strip_tac >>
+    gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >> EVAL_TAC >>
+    simp[compileEnvTheory.regions_disjoint_def,
+         valueEncodingTheory.type_memory_size_def] >>
+    rpt strip_tac >>
+    gvs[vyperValueTheory.evaluate_type_def,
+        immutableDeployEmptyProbeTheory.empty_struct_evaluated_probe,
+        finite_mapTheory.FLOOKUP_UPDATE] >> EVAL_TAC >> simp[]) >>
+  conj_tac >- (simp[local_probe_empty_ce_def, local_probe_real_ce_shape] >>
+    EVAL_TAC >> simp[venomStateTheory.eval_operand_def,
+      venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rewrite_tac[local_probe_fn_shape] >> EVAL_TAC >> rpt strip_tac >> gvs[]
+QED
