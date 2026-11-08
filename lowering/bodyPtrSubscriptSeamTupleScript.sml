@@ -9,7 +9,7 @@ Theory bodyPtrSubscriptSeamTuple
 Ancestors
   bodyPtrSubscriptTupleSource bodyPtrSubscriptTupleSuffix
   bodyPtrSubscriptTupleDispatch bodyPtrDefs exprSimHypsDefs loweringPosts
-  exprLowering vyperAST
+  exprLowering vyperAST bodyPtrSubscriptSeamTupleSummary
 
 (* A tuple element: the index is a literal (bodyPtrSubscriptTupleDispatch's
    tuple_subscript_pre), and compile_subscript adds the element's constant
@@ -34,5 +34,5 @@ Theorem subscript_tuple_vv_sim_ptr:
     expr_vv_sim_ptr d ctx PG func cenv cx ty obj es ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Subscript ann obj idx) es
 Proof
-  cheat
+  metis_tac[tuple_vv_sim_ptr_compose]
 QED
