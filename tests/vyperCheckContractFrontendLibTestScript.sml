@@ -442,6 +442,8 @@ val _ = check_fixture false "imported_flag/main.json";
 val _ = check_fixture false "imported_constants/main.json";
 val _ = check_fixture true "imported_constants/main.json";
 val _ = check_fixture false "imported_interface/main.json";
+(* A .vyi stub's defaults (`= []`, `= ""`) are never analysed, so untyped. *)
+val _ = check_fixture false "interface_defaults/main.json";
 val _ = check_fixture false "duplicate_interface/main/c.json";
 val _ = check_fixture false "multimodule_storage/main.json";
 val _ = check_fixture false "defaults_control/main.json";
