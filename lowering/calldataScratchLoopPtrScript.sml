@@ -712,8 +712,16 @@ Proof
     (fs[abi_decoder_older_vars_def] >> rpt strip_tac >> fs[] >>
      metis_tac[DECIDE ``next <= header_var ==> next <= header_var + (n:num)``]) >>
   `ptr_covers H u root h (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))` by
-    (irule ptr_covers_frame >> qexistsl_tac [`G`,`s`,`tn`] >> simp[] >>
-     fs[abi_decoder_operand_live_def] >> metis_tac[pred_setTheory.SPECIFICATION]) >>
+    (irule ptr_covers_frame >> qexistsl_tac [`G`,`s`,`tn`] >>
+     qpat_assum `!x. abi_decoder_older_vars next x ==> _` (qspec_then `root` mp_tac) >>
+     impl_tac
+     >- (qpat_assum `abi_decoder_operand_live next (Var root)` mp_tac >>
+         simp_tac bool_ss [abi_decoder_operand_live_def,
+           venomStateTheory.operand_case_def, pred_setTheory.SPECIFICATION]) >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `!x. x <> _ /\ x <> _ /\ x <> _ /\ x <> _ ==> _`
+       (qspec_then `root` mp_tac) >>
+     simp[]) >>
   `allocas_from lower h` by (fs[allocas_from_def] >> metis_tac[]) >>
   qexistsl_tac [`h`,`H`,`u`] >> asm_simp_tac bool_ss [] >>
   suspend "exit_frames"
