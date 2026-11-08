@@ -231,6 +231,56 @@ Proof
   gvs[exprExtRequestHistoryTheory.extrequest_history_frame_def]
 QED
 
+(* The two fixed ADDs following a nonempty encoded payload. *)
+Theorem extrequest_payload_suffix_endpoint:
+  emit_op ADD [out;Lit 4w] en = (len,sl) /\
+  emit_op ADD [buf;Lit 28w] sl = (offset,sp) /\
+  fn_has_code en sl func /\ fn_has_code sl sp func /\
+  stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce en /\
+  eval_operand out s = SOME (n2w n) /\
+  eval_operand buf s = SOME (n2w b) /\ safe_operand en buf /\
+  read_memory (b+28) (4+n) s = calldata /\
+  b+28 < dimword (:256) /\ 4+n < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = en.cs_current_bb /\
+  s.vs_inst_idx = LENGTH en.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func ce cx ee t /\
+    extrequest_history_frame ce cx ee en s ee sp t /\
+    eval_operand len t = SOME (n2w (4+n)) /\
+    eval_operand offset t = SOME (n2w (b+28)) /\
+    read_memory (b+28) (4+n) t = calldata /\
+    ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sp.cs_current_insts /\
+    local_ptrs_reserved ce sp /\ safe_operand sp offset /\
+    safe_operand sp len /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `eval_operand (Lit 4w) s = SOME 4w` by simp[eval_operand_def] >>
+  drule_all extrequest_add_endpoint >> strip_tac >>
+  rename1 `gas_marked_path F ctx func s 0 (OK u)` >>
+  `eval_operand buf u = SOME (n2w b)` by
+    (drule_all extrequest_history_operand >> simp[]) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `(u with <|vs_vars := _; vs_inst_idx := _|>) = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `eval_operand len u = SOME (n2w (4+n))` by
+    simp[wordsTheory.word_add_n2w, ADD_COMM] >>
+  `read_memory (b+28) (4+n) u = calldata` by fs[read_memory_def] >>
+  drule_all extrequest_offset_endpoint >> strip_tac >>
+  `extrequest_history_frame ce cx ee en s ee sp t` by
+    (drule_all extrequest_history_frame_trans >> simp[]) >>
+  `safe_operand sp len` by
+    (irule safe_operand_mono >> qexists_tac `sl` >>
+     drule emitted_insts_emit_op >> simp[ci_mono_def]) >>
+  `gas_marked_path F ctx func s 0 (OK t)` by
+    (qpat_assum `gas_marked_path F ctx func s 0 (OK u)`
+       (mp_then Any mp_tac gas_marked_path_then) >>
+     disch_then (qspecl_then [`OK t`, `0`] mp_tac) >> simp[]) >>
+  qexists_tac `t` >> gvs[]
+QED
+
 (* Nonempty payload: allocate and fill the tuple, then enter the encoder at
    the actual destination ADD.  The destination row predates the captures. *)
 Theorem extrequest_tuple_payload_endpoint:
@@ -250,6 +300,9 @@ Theorem extrequest_tuple_payload_endpoint:
     (MAP (\(e,r,vv,ty,tv,v). (vv,ty)) cells) src.buf_operand 0 sm = ((),sn) /\
   emit_op ADD [buf;Lit 32w] sn = (dst,st) /\
   compile_abi_encode_to_buf dst src.buf_operand ei st = (out,en) /\
+  emit_op ADD [out;Lit 4w] en = (len,sl) /\
+  emit_op ADD [buf;Lit 28w] sl = (offset,sp) /\
+  fn_has_code en sl func /\ fn_has_code sl sp func /\
   fn_has_code sa sm func /\ fn_has_code sm sn func /\
   fn_has_code sn st func /\ fn_has_code st en func /\ fn_inst_ids_distinct func /\
   stmt_state_rel ctx func ce cx ee s /\ expr_sim_inv ce cx env ee /\
@@ -271,15 +324,21 @@ Theorem extrequest_tuple_payload_endpoint:
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
     stmt_state_rel ctx func ce cx ee t /\
-    ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
-    t.vs_inst_idx = LENGTH en.cs_current_insts /\
-    eval_operand out t = SOME
-      (n2w (LENGTH (enc (vyper_to_abi_type (get_tenv cx) (TupleT tys)) av))) /\
+    ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sp.cs_current_insts /\
+    eval_operand len t = SOME
+      (n2w (4+LENGTH (enc (vyper_to_abi_type (get_tenv cx) (TupleT tys)) av))) /\
+    eval_operand offset t = SOME (n2w (b+28)) /\
+    safe_operand sp len /\ safe_operand sp offset /\ 
     read_memory (b+28)
       (4+LENGTH (enc (vyper_to_abi_type (get_tenv cx) (TupleT tys)) av)) t =
       function_selector fname (vyper_to_abi_types (get_tenv cx) ats) ++
         enc (vyper_to_abi_type (get_tenv cx) (TupleT tys)) av /\
-    FLOOKUP t.vs_allocas live = SOME (b,cap)
+    FLOOKUP t.vs_allocas live = SOME (b,cap) /\
+    local_ptrs_reserved ce sp /\
+    eval_operand buf t = SOME (n2w b) /\ 
+    (!x z. not_fresh_at sa x /\ lookup_var x s = SOME z ==>
+       lookup_var x t = SOME z)
 Proof
   strip_tac >> drule_all extrequest_allocate_tuple_endpoint >> strip_tac >>
   rename1 `gas_marked_path F ctx func s 0 (OK q)` >>
@@ -314,12 +373,15 @@ Resume extrequest_tuple_payload_endpoint[entry]:
     (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
   `sa.cs_next_id < st.cs_next_id` by
     (drule compile_alloc_buffer_parts >>
-     drule emitted_insts_emit_op >> gvs[ci_mono_def] >> decide_tac) >>
+     qpat_assum `emit_op ADD [buf;Lit 32w] sn = (dst,st)`
+       (mp_then Any mp_tac emitted_insts_emit_op) >>
+     gvs[ci_mono_def] >> decide_tac) >>
   `live < st.cs_next_id /\ sa.cs_next_id <> live` by decide_tac >>
   `eval_operand dst u = SOME (n2w (b+32))` by
     simp[wordsTheory.word_add_n2w] >>
   `!x. src.buf_operand = Var x \/ dst = Var x ==> not_fresh_at st x` by
-    (drule emitted_insts_emit_op >> strip_tac >>
+    (qpat_assum `emit_op ADD [buf;Lit 32w] sn = (dst,st)`
+       (mp_then Any mp_tac emitted_insts_emit_op) >> strip_tac >>
      `safe_operand st src.buf_operand` by
        (irule safe_operand_mono >> qexists_tac `sn` >> simp[]) >>
      fs[safe_operand_def] >> metis_tac[]) >>
@@ -362,7 +424,48 @@ Resume extrequest_tuple_payload_endpoint[encoder]:
     (qpat_assum `gas_marked_path F ctx func s 0 (OK u)`
       (mp_then Any mp_tac gas_marked_path_then) >>
      disch_then (qspecl_then [`OK t`, `0`] mp_tac) >> simp[]) >>
-  qexists_tac `t` >> gvs[]
+  `ci_mono st en` by
+    (mp_tac (cj 2 ci_mono_compile_abi_encode) >>
+     disch_then (qspecl_then [`dst`, `src.buf_operand`, `ei`, `st`] mp_tac) >>
+     simp[]) >>
+  `local_ptrs_reserved ce en` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
+     fs[ci_mono_def]) >>
+  `!x z. not_fresh_at sa x /\ lookup_var x s = SOME z ==>
+      lookup_var x t = SOME z` by
+    (rpt strip_tac >>
+     `lookup_var x u = SOME z` by
+       (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+     `not_fresh_at st x` by
+       (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >>
+        metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+     metis_tac[]) >>
+  `eval_operand buf t = SOME (n2w b)` by
+    (Cases_on `buf` >> gvs[eval_operand_def, safe_operand_def] >> metis_tac[]) >>
+  `safe_operand en buf` by
+    (irule safe_operand_mono >> qexists_tac `st` >>
+     fs[ci_mono_def] >>
+     irule safe_operand_mono >> qexists_tac `sa` >>
+     fs[exprExtRequestHistoryTheory.extrequest_history_frame_def]) >>
+  `b+28 < dimword (:256) /\ 4+LENGTH (enc at rv) < dimword (:256)` by decide_tac >>
+  drule_all extrequest_payload_suffix_endpoint >> strip_tac >>
+  rename1 `gas_marked_path F ctx func t 0 (OK r)` >>
+  `gas_marked_path F ctx func s 0 (OK r)` by
+    (qpat_assum `gas_marked_path F ctx func s 0 (OK t)`
+       (mp_then Any mp_tac gas_marked_path_then) >>
+     disch_then (qspecl_then [`OK r`, `0`] mp_tac) >> simp[]) >>
+  `eval_operand buf r = SOME (n2w b)` by
+    (drule_all extrequest_history_operand >> simp[]) >>
+  `!x z. not_fresh_at sa x /\ lookup_var x s = SOME z ==>
+      lookup_var x r = SOME z` by
+    (rpt strip_tac >>
+     `lookup_var x t = SOME z` by metis_tac[] >>
+     `not_fresh_at en x` by
+       (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def, ci_mono_def] >>
+        metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+     fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  qexists_tac `r` >> gvs[]
 QED
 
 Finalise extrequest_tuple_payload_endpoint
+
