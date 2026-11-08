@@ -1,6 +1,6 @@
 (* Compiler decomposition for the supported storage assignment fragment. *)
 Theory assignBasePtrStorageFragment
-Ancestors assignBasePtrStorageCopyCallResidual assignBasePtrStorageTypes assignBasePtrStorageContinuation assignBasePtrStorageSemantic
+Ancestors bodyMemAssignTopCopyFacts assignBasePtrStorageTypes assignBasePtrStorageContinuation assignBasePtrStorageSemantic
   assignBasePtrStorageGhost stmtSimAssignStorage bodyPtrDefs stmtFragPtr
   stmtLowering exprLowering context compileEnv loweringPosts finite_map
   exprSimProps stmtSimProps stmtLoweringMono stmtSimForced gasSummaryComposePtr
@@ -314,12 +314,13 @@ Theorem compile_assign_storage_copy_stmt_frag_ptr:
     (stmt_env cenv lctx ret (Assign (BaseTarget (TopLevelNameTarget nid)) e))
     (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nid)) e)) es
 Proof
-  strip_tac >> Cases_on `post_value_type cenv e = expr_type e`
-  >- (mp_tac (SPEC_ALL compile_assign_storage_copy_eq_frag_ptr) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-      disch_then ACCEPT_TAC) >>
-  mp_tac (SPEC_ALL
-    assignBasePtrStorageCopyCallResidualTheory.assign_storage_copy_call_frag_ptr) >>
+  strip_tac >>
+  `lowered_value_type cenv e = expr_type e` by
+    (irule bodyMemAssignTopCopyFactsTheory.topcopy_rhs_lowered_type >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  mp_tac (SPEC_ALL compile_assign_storage_copy_eq_frag_ptr) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then ACCEPT_TAC
 QED
