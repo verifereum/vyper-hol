@@ -20,13 +20,14 @@ Theorem not_local_ptr_consistent_scopes:
     env_scopes_consistent env cx es /\ env_scopes_consistent env cx es1 /\
     not_local_ptr cenv es.scopes q ==> not_local_ptr cenv es1.scopes q
 Proof
-  rpt gen_tac >> strip_tac >> simp_tac bool_ss [not_local_ptr_def] >>
-  MAP_EVERY qx_gen_tac [`name`, `entry`, `region_size`] >> DISCH_TAC >>
-  qspecl_then [`env`, `cx`, `es`, `es1`, `name`, `entry`] mp_tac consistent_scopes_lookup_type >>
-  impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  disch_then (qx_choose_then `old` strip_assume_tac) >>
-  qpat_x_assum `not_local_ptr _ _ _` (mp_tac o REWRITE_RULE [not_local_ptr_def]) >>
-  disch_then (qspecl_then [`name`, `old`, `region_size`] mp_tac) >> simp[]
+  rpt gen_tac >> strip_tac >> simp_tac bool_ss [not_local_ptr_def] >> conj_tac
+  >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `region_size`] >> DISCH_TAC >>
+      qspecl_then [`env`, `cx`, `es`, `es1`, `name`, `entry`] mp_tac consistent_scopes_lookup_type >>
+      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+      disch_then (qx_choose_then `old` strip_assume_tac) >>
+      qpat_x_assum `not_local_ptr _ _ _` (mp_tac o REWRITE_RULE [not_local_ptr_def]) >>
+      disch_then (qspecl_then [`name`, `old`, `region_size`] mp_tac o CONJUNCT1) >> simp[]) >>
+  qpat_x_assum `not_local_ptr _ _ _` (mp_tac o REWRITE_RULE [not_local_ptr_def]) >> simp[]
 QED
 
 Theorem log_argument_writers_transport:
