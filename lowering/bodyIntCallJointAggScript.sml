@@ -7,7 +7,8 @@ Ancestors
   venomState intCallFrame context emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomMemProps
   bodyIntCallStorePost bodyIntCallProtectedAlloc exprSimAlloc
-  placeMemoryPrimitiveForward instIdxIndep exprSimProps
+  placeMemoryPrimitiveForward instIdxIndep exprSimProps exprSimUnwrap
+  exprSimAggregateChildren
 
 (* The continuation uses the standard write-back frame, so its composition
    and old-allocation interface are shared with other expression proofs. *)
@@ -291,6 +292,114 @@ Theorem intcall_map_producer_other:
 Proof
   rw[intcall_map_producer_def, exprSimMapDefsTheory.expr_map_pre_def] >>
   Cases_on `e` >> gvs[vyperTypeSystemTheory.well_typed_expr_def]
+QED
+
+(* ADD's run and resource landing are the same counted endpoint. *)
+Theorem intcall_add_landing:
+  intcall_frame_ok fp /\
+  intcall_expr_cont fp ce env es0 sa s0 ee sm s /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  local_ptrs_reserved ce si /\ si.cs_next_var <= sm.cs_next_var /\
+  emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
+  fn_has_code sm sn fp.jc_func /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es si sm t0 ee tv vv s /\
+  eval_operand buf s = SOME w ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    intcall_expr_cont fp ce env es0 sa s0 ee sn u /\
+    vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es si sn t0 ee tv vv u /\
+    eval_operand dst u = SOME (w + n2w off) /\
+    u.vs_memory = s.vs_memory /\
+    (!x. dst = Var x ==> not_fresh_at sn x)
+Proof
+  rpt strip_tac >>
+  drule_all buffer_emit_add_vv_post >> strip_tac >>
+  rename1 `run_inst_seq _ s = OK q` >>
+  `sn.cs_current_bb = sm.cs_current_bb /\
+   sn.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sn /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sm sn) /\
+   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sm sn) /\
+   sm.cs_next_var <= sn.cs_next_var` by
+    (qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+     simp[emit_op_def, comp_bind_def, comp_return_def,
+          fresh_id_def, fresh_var_def, emit_def, comp_ignore_bind_def,
+          emitted_insts_def, rich_listTheory.DROP_APPEND, mk_inst_def,
+          is_terminator_def] >> strip_tac >> gvs[] >>
+     simp[rich_listTheory.DROP_APPEND, mk_inst_def, is_terminator_def]) >>
+  `!x. dst = Var x ==> not_fresh_at sn x` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh] >>
+  `~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+   s.vs_inst_idx = LENGTH sm.cs_current_insts` by fs[intcall_expr_cont_def] >>
+  drule_all straight_line_zero_gas_path >> strip_tac >>
+  `q.vs_memory = s.vs_memory /\ ~q.vs_halted /\
+   q.vs_current_bb = sn.cs_current_bb` by
+    fs[venom_state_component_equality] >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee q` by fs[vv_post_def] >>
+  qexists_tac `q with vs_inst_idx := LENGTH sn.cs_current_insts` >>
+  simp[exprSimVVFrameTheory.vv_post_inst_idx, eval_op_inst_idx] >>
+  irule intcall_expr_cont_readonly >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
+  qexistsl_tac [`s`, `sm`] >>
+  fs[venom_state_component_equality, lookup_var_def]
+QED
+
+(* Materialization uses the child's allocation frontier, even after ADD has
+   advanced the variable frontier.  Win includes every old allocation. *)
+Theorem intcall_unwrap_landing:
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  unwrap_value ce vv sa = (op,sb) /\
+  vv_holds ce fp.jc_cx ty r vv es s /\
+  read_result fp.jc_cx r es = (INL v,es) /\
+  evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\
+  type_memory_bytes ce ty = type_memory_size tv /\ type_memory_size tv < 2**64 /\
+  fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
+  (ty <> NoneT /\ ~is_word_type ty /\ ~is_bytestring_type ty /\
+   (case vv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   ?w a k. eval_operand (vv_operand vv) s = SOME w /\
+     a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+     (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    intcall_expr_cont fp ce env es sa s es sb u /\
+    expr_val_rel fp.jc_cx ty v op u /\
+    (!sv. sv.cs_next_id <= sa.cs_next_id /\
+      vv_at ce fp.jc_cx ty sv sa es r vv s ==>
+      expr_val_at ce fp.jc_cx ty sv sb es v op u) /\
+    (!sv. sv.cs_next_id <= sa.cs_next_id /\
+      vv_own ce fp.jc_cx ty sv sa es r vv s ==>
+      expr_val_own ce fp.jc_cx ty sv sb es v op u) /\
+    (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+      mem_bytes_at b k u.vs_memory = mem_bytes_at b k s.vs_memory)
+Proof
+  rpt strip_tac >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
+   local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo s` by
+    fs[intcall_joint_res_def] >>
+  drule (Q.INST
+    [`reserved` |-> `fp.jc_reserved`, `P` |-> `fp.jc_prot`,
+     `Win` |-> `\p k. ?aid. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k)`,
+     `scopes` |-> `es.scopes`, `staged` |-> `fp.jc_staged`]
+    bodyIntCallWindowForcingTheory.protected_value_window_forcing) >>
+  disch_then (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `allocas_above _ _`)) >>
+  disch_then (qspecl_then [`tv`, `fp`] mp_tac) >>
+  (impl_tac >-
+    (simp[] >> conj_tac
+     >- fs[intcall_frame_ok_def, intcall_joint_res_def] >>
+     conj_tac >- (fs[intcall_frame_ok_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+     rpt strip_tac >> qexistsl_tac [`aid`, `p`, `k`] >> simp[arithmeticTheory.ADD_COMM])) >>
+  strip_tac >>
+  `sa.cs_next_var <= sb.cs_next_var` by
+    (qspec_then `ce` (qspec_then `vv` (qspec_then `sa` mp_tac)) ci_mono_unwrap_value >>
+     simp[ci_mono_def]) >>
+  `intcall_joint_res fp ce env es sb u` by
+    (irule intcall_joint_res_frame >> simp[] >> qexistsl_tac [`s`, `sa`] >> simp[]) >>
+  qexists_tac `u` >> simp[intcall_expr_cont_def] >> metis_tac[]
 QED
 
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
