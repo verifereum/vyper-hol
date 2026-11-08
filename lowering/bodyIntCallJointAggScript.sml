@@ -9,7 +9,7 @@ Ancestors
   bodyIntCallStorePost bodyIntCallProtectedAlloc exprSimAlloc
   placeMemoryPrimitiveForward instIdxIndep exprSimProps exprSimUnwrap
   exprSimAggregateChildren bodyIntCallAggregateStoreFrame
-  bodyIntCallCompletedModes
+  bodyIntCallCompletedModes intCallStep exprSimSend
 
 (* The continuation uses the standard write-back frame, so its composition
    and old-allocation interface are shared with other expression proofs. *)
@@ -568,6 +568,102 @@ Proof
   qpat_x_assum `t.vs_memory = _` SUBST_ALL_TAC >>
   qpat_x_assum `!aid b k. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >>
   fs[intcall_expr_cont_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+(* Identity materialization needs no allocation-size bound. *)
+Theorem intcall_identity_unwrap_post:
+  unwrap_value ce vv sa = (op,sb) /\
+  ((?t q. vv = StackValue t q) \/
+   (?t p. vv = LocatedValue t p /\ ~is_word_type t /\
+          p.ptr_location = LocMemory)) /\
+  vv_post ctx func ce cx e es si sa s0 ee raw vv s /\
+  read_result cx raw ee = (INL v,ee) ==>
+  sb = sa /\ expr_post ctx func ce cx e es si sa s0 ee v op s
+Proof
+  strip_tac >>
+  `vv_post ctx func ce cx e es si sa s0 ee (Value v) vv s` by
+    metis_tac[exprSimUnwrapPropsTheory.vv_post_read_result] >>
+  gvs[exprLoweringTheory.unwrap_value_def, comp_return_def]
+  >- (drule exprSimUnwrapTheory.expr_post_of_vv_post_stack >> simp[]) >>
+  drule_all exprSimUnwrapPropsTheory.expr_post_of_vv_post_memory >> simp[]
+QED
+
+Theorem intcall_add_unwrap_landing_conditional:
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env ee sm s /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  local_ptrs_reserved ce si /\
+  si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id /\
+  emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,su) /\
+  fn_has_code sm sn fp.jc_func /\ fn_has_code sn su fp.jc_func /\
+  fn_inst_ids_distinct fp.jc_func /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es si sm t0 ee raw vv s /\
+  read_result fp.jc_cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME tv /\
+  type_memory_bytes ce (post_value_type ce e) = type_memory_size tv /\
+  (type_memory_size tv < 2**64 \/ (?t q. vv = StackValue t q) \/
+   (?t p. vv = LocatedValue t p /\ ~is_word_type t /\
+          p.ptr_location = LocMemory)) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+   ~is_bytestring_type (post_value_type ce e) /\
+   (case vv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   ?w a k. eval_operand (vv_operand vv) s = SOME w /\
+     a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+     (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
+  eval_operand buf s = SOME bw /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    intcall_expr_cont fp ce env ee sm s ee su u /\
+    expr_val_rel fp.jc_cx (post_value_type ce e) v op u /\
+    expr_val_at ce fp.jc_cx (post_value_type ce e) si su ee v op u /\
+    (post_value_type ce e <> expr_type e ==>
+      expr_val_own ce fp.jc_cx (post_value_type ce e) si su ee v op u) /\
+    eval_operand dst u = SOME (bw + n2w off) /\
+    (!x. dst = Var x ==> not_fresh_at su x) /\
+    (!aid b k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+      mem_bytes_at b k u.vs_memory = mem_bytes_at b k s.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_memory_size tv < 2**64`
+  >- (drule_all intcall_add_unwrap_landing >> simp[]) >>
+  `intcall_expr_cont fp ce env ee sm s ee sm s` by
+    simp[intcall_expr_cont_def] >>
+  `sm.cs_next_var <= sm.cs_next_var` by simp[] >>
+  drule_all intcall_add_landing >> strip_tac >>
+  drule_at (Pat `unwrap_value _ _ _ = _`) intcall_identity_unwrap_post >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> fs[expr_post_def]
+QED
+
+Theorem intcall_child_unwrap_condition:
+  expr_body_pre ce cx env e es /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv ==>
+  type_memory_size tv < 2**64 \/ (?t q. vv = StackValue t q) \/
+  (?t p. vv = LocatedValue t p /\ ~is_word_type t /\
+         p.ptr_location = LocMemory)
+Proof
+  rpt strip_tac >>
+  Cases_on `is_word_type (post_value_type ce e)`
+  >- (drule_all exprSimPropsTheory.word_tv_memory_size >> simp[]) >>
+  Cases_on `post_value_type ce e = expr_type e`
+  >- metis_tac[exprSimHypsTheory.expr_body_pre_copy_ok] >>
+  `?ann fid args drv. e = Call ann (IntCall fid) args drv` by
+    (Cases_on `e` >> gvs[post_value_type_def] >>
+     rename1 `Call ann tgt args drv` >> Cases_on `tgt` >>
+     gvs[post_value_type_def] >> metis_tac[]) >>
+  gvs[post_value_type_def, exprLoweringTheory.lowered_value_type_def,
+      exprSimSendTheory.compile_expr_call, vyperASTTheory.expr_type_def] >>
+  Cases_on `is_word_type ann \/ is_bytestring_type ann` >> gvs[] >>
+  Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
+  rename1 `ce.ce_func_info (nsid_to_string fid) = (nret,meta)` >> Cases_on `meta` >>
+  drule_all intCallStepTheory.compile_call_intcall_shape >> strip_tac >>
+  Cases_on `0 < nret` >> gvs[contextTheory.base_ptr_def] >>
+  Cases_on `ce.ce_func_return_type (nsid_to_string fid) = NoneT` >> gvs[]
 QED
 
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
