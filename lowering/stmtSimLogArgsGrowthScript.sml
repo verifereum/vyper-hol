@@ -1,7 +1,7 @@
 (* Compiler growth, independent of argument readiness and operand safety. *)
 Theory stmtSimLogArgsGrowth
 Ancestors
-  stmtSimLogArgs exprLoweringProps loweringSlice compileEnv
+  stmtSimLogArgs exprLoweringProps loweringSlice compileEnv exprLowering
 
 Theorem compile_log_eval_all_grows:
   !args sa xs sb.

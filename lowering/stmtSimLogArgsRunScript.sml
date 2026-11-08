@@ -1,6 +1,6 @@
 Theory stmtSimLogArgsRun
 Ancestors
-  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimProps exprLowering
   stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar vyperTypeSystem
   exprSimWordArgs supportedTypes  exprSimOps
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext

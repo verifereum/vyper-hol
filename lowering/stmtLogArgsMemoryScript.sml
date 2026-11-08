@@ -4,7 +4,7 @@
    never lowering the allocation frontier. *)
 Theory stmtLogArgsMemory
 Ancestors
-  exprSimMemDefs exprSimDefs exprSimProps loweringPosts stmtSimProps
+  exprSimMemDefs exprSimDefs exprSimProps loweringPosts stmtSimProps exprLowering
   stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar
   exprSimWordArgs supportedTypes
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
