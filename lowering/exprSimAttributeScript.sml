@@ -514,12 +514,35 @@ Proof
            bind_def, lift_option_type_def, return_def, raise_def,
            pairTheory.UNCURRY] >>
       rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[return_def, raise_def, pairTheory.UNCURRY])) >>
+           gvs[return_def, raise_def, pairTheory.UNCURRY]))
+  >~ [`MemoryPlace id path`]
+  >- (simp[select_result_def, extend_place_def, place_type_value_def,
+           read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+           lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+      Cases_on `lookup_scopes id ee.scopes` >> simp[return_def, raise_def] >>
+      rename1 `subscripts_type entry.type path` >>
+      Cases_on `subscripts_type entry.type path` >>
+      simp[return_def, raise_def] >>
+      Cases_on `read_memory_path entry path` >> simp[return_def, raise_def] >>
+      rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      simp[return_def, raise_def]) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
-       read_place_def, get_scopes_def, get_immutables_def,
-       get_address_immutables_def, bind_def, ignore_bind_def,
-       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+       read_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
+  simp[return_def, raise_def] >>
+  rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+  Cases_on `FLOOKUP (get_source_immutables src imms) id` >>
+  simp[return_def, raise_def] >>
+  rename1 `subscripts_type (FST tva) path` >>
+  Cases_on `subscripts_type (FST tva) path` >> simp[return_def, raise_def] >>
+  Cases_on `evaluate_subscripts (FST tva) (SND tva) path` >>
+  simp[return_def, raise_def] >>
+  rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+  Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+  simp[return_def, raise_def]
 QED
 
 Theorem attr_operand_admissible[local]:

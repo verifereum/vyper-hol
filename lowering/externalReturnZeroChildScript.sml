@@ -183,7 +183,11 @@ Proof
   `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
   drule_all window_structural_members_inv_output_bounds >> strip_tac >>
   `SUM (MAP abi_member_head_size (TAKE k ats)) + LENGTH (enc (EL k ats) (EL k avs)) <=
-    LENGTH (enc at (ListV avs))` by (gvs[] >> decide_tac) >>
+    LENGTH (enc at (ListV avs))` by
+    (qpat_x_assum `~is_dynamic _ ==> _`
+       (fn th => qpat_assum `~is_dynamic _` (mp_tac o MATCH_MP th)) >>
+     qpat_x_assum `window_member_head_size _ <= _` mp_tac >>
+     rpt (pop_assum kall_tac) >> decide_tac) >>
   `EXISTS (\(_,_,_,dyn). dyn) infos ==>
     mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs (SUC k))` by
     (strip_tac >>

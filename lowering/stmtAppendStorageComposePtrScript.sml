@@ -1,7 +1,7 @@
 (* Expression/suffix composition for pointer-safe storage append. *)
 Theory stmtAppendStorageComposePtr
 Ancestors
-  appendStorageComposeFactsPtr appendStorageSourcePtr appendStorageSuccessPostPtr
+  appendStorageComposeFactsPtr appendStorageSuccessPostPtr
   bodyPtrDefs stmtFragPtr stmtAbortPtr gasSummaryComposePtr stmtSimForced
   stmtSimAppendStorageCompose exprSimProps exprOperandVar exprLoweringProps
   compileEnv loweringPosts stmtSimDefs stmtSimProps finite_map words
