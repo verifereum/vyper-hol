@@ -1696,10 +1696,8 @@ Theorem external_halt_success_unlock_helper[local]:
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).tStorage
       ss.vs_transient /\
-    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
-      (finalize_pending_deletions
-         (abstract_machine_from_state srcs exps layouts es')).logs
-      ss.vs_logs /\
+    (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).logs = ss.vs_logs /\
     LIST_REL (request_agree cx) es'.requests ss.vs_requests
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1725,12 +1723,9 @@ Proof
      (process_deletions es.pending_deletions es.accounts)
      (process_deletions es.pending_deletions s.vs_accounts)` by
     (irule accounts_agree_process_deletions >> simp[]) >>
-  `log_entry_equiv cenv cx.txn.target = $= /\
-   log_entry_corresponds (compiled_event_info tops) (type_env tops)
-     tx.target = $=` by
-    simp[FUN_EQ_THM, log_entry_equiv_def,
-         log_entry_corresponds_concrete_event] >>
-  gvs[state_rel_def, logs_rel_def, logs_correspond_def, LIST_REL_eq,
+  `log_entry_equiv cenv cx.txn.target = $=` by
+    simp[FUN_EQ_THM, log_entry_equiv_def] >>
+  gvs[state_rel_def, logs_rel_def, LIST_REL_eq,
       finalize_pending_deletions_def, abstract_machine_from_state_def]
 QED
 
@@ -1756,10 +1751,8 @@ Theorem external_halt_success_unlock:
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es')).tStorage
       ss.vs_transient /\
-    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
-      (finalize_pending_deletions
-         (abstract_machine_from_state srcs exps layouts es')).logs
-      ss.vs_logs /\
+    (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es')).logs = ss.vs_logs /\
     LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
       es'.requests ss.vs_requests
 Proof
@@ -1795,10 +1788,8 @@ Theorem external_halt_success:
       (finalize_pending_deletions
          (abstract_machine_from_state srcs exps layouts es)).tStorage
       ss.vs_transient /\
-    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
-      (finalize_pending_deletions
-         (abstract_machine_from_state srcs exps layouts es)).logs
-      ss.vs_logs /\
+    (finalize_pending_deletions
+         (abstract_machine_from_state srcs exps layouts es)).logs = ss.vs_logs /\
     LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
       es.requests ss.vs_requests
 Proof

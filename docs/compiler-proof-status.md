@@ -39,6 +39,15 @@ Notes:
 
 ## Gas observations
 
+The semantic result boundary factors source execution into `gas_readings_rel`,
+`call_success_rel`, and `exception_outcome_rel`. The gas relation fixes a
+single source result across all fillings of unrecorded reading slots and
+all appended suffixes. Recorded slots consume distinct EVM readings, allowing
+permutation. Success compares concrete event lists directly, alongside return
+data, accounts, transient storage, and requests. Deployment reuses the gas and
+exception relations. These definitions alone do not establish the stronger
+compiler theorem: its gas-certificate composition is still open.
+
 `vyper_call_correct` and `e2e_deploy_correctness` tie source
 `msg.gas` observations to the EVM frame's recorded GAS readings. Their
 preconditions and resource-starvation alternative are unchanged.

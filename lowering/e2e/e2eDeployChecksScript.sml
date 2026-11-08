@@ -178,9 +178,9 @@ QED
 Theorem deploy_success_observables:
   deploy_result_rel tops runtime_bc tx es r es' (INL (am',rqs)) <=>
   let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-  ?section lgs.
+  ?section.
     immutables_section_rel tops (account_immutables am' tx.target) section /\
-    frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+    frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
     (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
     (!a. a <> tx.target ==>
       lookup_account a es'.rollback.accounts = lookup_account a am'.accounts) /\
@@ -192,11 +192,9 @@ Theorem deploy_success_observables:
       (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
       (lookup_account tx.target am'.accounts).storage
       (lookup_account tx.target es'.rollback.accounts).storage /\
-    transient_agree cx am'.tStorage es'.rollback.tStorage /\
-    logs_correspond (compiled_event_info tops) (type_env tops)
-      tx.target am'.logs lgs
+    transient_agree cx am'.tStorage es'.rollback.tStorage
 Proof
-  simp[deploy_result_rel_def]
+  simp[deploy_result_rel_def, exception_outcome_rel_def]
 QED
 
 Theorem deploy_return_without_installation_rejected:
@@ -213,7 +211,7 @@ Theorem deploy_assert_case:
   ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                 (exc = Reverted \/ s = "UNREACHABLE")
 Proof
-  simp[deploy_result_rel_def]
+  simp[deploy_result_rel_def, exception_outcome_rel_def]
 QED
 
 Theorem deploy_error_case:
@@ -221,7 +219,7 @@ Theorem deploy_error_case:
   unspecified_behaviour_exempt tops e \/
   ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
 Proof
-  simp[deploy_result_rel_def]
+  simp[deploy_result_rel_def, exception_outcome_rel_def]
 QED
 
 Theorem deploy_failure_not_success:
@@ -230,7 +228,7 @@ Theorem deploy_failure_not_success:
   (deploy_result_rel tops bc tx es (INR NONE) es' (INR (Error e)) <=>
    unspecified_behaviour_exempt tops e)
 Proof
-  simp[deploy_result_rel_def, frame_outcome_def]
+  simp[deploy_result_rel_def, exception_outcome_rel_def, frame_outcome_def]
 QED
 
 Theorem deploy_no_control_escape:
@@ -238,7 +236,7 @@ Theorem deploy_no_control_escape:
   ~deploy_result_rel tops bc tx es r es' (INR ContinueException) /\
   ~deploy_result_rel tops bc tx es r es' (INR (ReturnException v))
 Proof
-  simp[deploy_result_rel_def]
+  simp[deploy_result_rel_def, exception_outcome_rel_def]
 QED
 
 Theorem deploy_exemption_exact:

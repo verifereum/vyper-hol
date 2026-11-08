@@ -80,9 +80,9 @@ Theorem e2e_deploy_correctness:
        case load_contract NONE (gas_explicit marks gs) am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-            ?section lgs.
+            ?section.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
-              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+              frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
               (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
              (!a. a <> tx.target ==>
                   lookup_account a es'.rollback.accounts =
@@ -95,9 +95,7 @@ Theorem e2e_deploy_correctness:
                (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
                (lookup_account tx.target am'.accounts).storage
                (lookup_account tx.target es'.rollback.accounts).storage /\
-             transient_agree cx am'.tStorage es'.rollback.tStorage /\
-             logs_correspond (compiled_event_info tops) (type_env tops)
-               tx.target am'.logs lgs
+             transient_agree cx am'.tStorage es'.rollback.tStorage
        | INR (AssertException s) =>
            ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                          (exc = Reverted \/ s = "UNREACHABLE")
@@ -181,7 +179,7 @@ Proof
   disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
   qexistsl_tac [`r`, `es'`] >> fs[] >>
   disj2_tac >> qexistsl_tac [`marks`, `vs_in.vs_gas_readings`] >> simp[] >>
-  fs[deploy_result_rel_def]
+  fs[deploy_result_rel_def, exception_outcome_rel_def]
 QED
 
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds
@@ -204,7 +202,8 @@ val _ =
          ?marks gs. deploy_gas_replay policy tops deploy_bc runtime_bc es gs /\
            deploy_result_rel tops runtime_bc tx es r es'
              (load_contract NONE (gas_explicit marks gs) am tx [(NONE,tops)] []))``;
-    val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
+    val expanded = concl (REWRITE_RULE
+      [deploy_result_rel_def, exception_outcome_rel_def] (ASSUME expected));
   in
     if aconv expanded (concl savedDeploymentAdmission) andalso
        null (Thm.hyp savedDeploymentAdmission) then ()

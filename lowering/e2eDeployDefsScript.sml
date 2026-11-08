@@ -138,9 +138,9 @@ Definition deploy_result_rel_def:
     case src of
       INL (am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-        ?section lgs.
+        ?section.
           immutables_section_rel tops (account_immutables am' tx.target) section /\
-          frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+          frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
           (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
           (!a. a <> tx.target ==>
                lookup_account a es'.rollback.accounts =
@@ -153,18 +153,16 @@ Definition deploy_result_rel_def:
             (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
             (lookup_account tx.target am'.accounts).storage
             (lookup_account tx.target es'.rollback.accounts).storage /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
-          logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs lgs
-    | INR (AssertException s) =>
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (exc = Reverted \/ s = "UNREACHABLE")
-    | INR (Error e) =>
-        unspecified_behaviour_exempt tops e \/
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
-    | INR BreakException => F
-    | INR ContinueException => F
-    | INR (ReturnException _) => F
+          transient_agree cx am'.tStorage es'.rollback.tStorage
+    | INR exc => exception_outcome_rel tops exc es r es'
+End
+
+Definition deploy_call_result_rel_def:
+  deploy_call_result_rel tops runtime_bc am tx es r es' <=>
+    ?src.
+      gas_readings_rel (gas_readings es)
+        (\gobs. load_contract NONE gobs am tx [(NONE, tops)] []) src /\
+      deploy_result_rel tops runtime_bc tx es r es' src
 End
 
 (* Current-owner kernel gate: definitions are total saved objects, not stage

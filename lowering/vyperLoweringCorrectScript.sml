@@ -190,8 +190,7 @@ Definition external_call_result_rel_def:
         accounts_agree cx am'.accounts
           (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree cx am'.tStorage ss.vs_transient /\
-        logs_correspond (compiled_event_info tops) (type_env tops)
-          tx.target am'.logs ss.vs_logs /\
+        am'.logs = ss.vs_logs /\
         LIST_REL (request_agree cx) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")

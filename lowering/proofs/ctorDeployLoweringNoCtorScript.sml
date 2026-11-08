@@ -2652,7 +2652,6 @@ Proof
   qexists `[]` >>
   simp[no_ctor_gas_marks, deploy_venom_result_rel_def] >>
   gvs[compileEnvTheory.storage_agree_def, compileEnvTheory.transient_agree_def,
-      e2eDefsTheory.logs_correspond_def,
       vfmStateTheory.account_state_component_equality]
 QED
 

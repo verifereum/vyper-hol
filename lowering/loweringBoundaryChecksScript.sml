@@ -163,8 +163,7 @@ Theorem lowering_success_boundary:
     am.accounts (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
   transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
     am.tStorage ss.vs_transient /\
-  logs_correspond (compiled_event_info tops) (type_env tops)
-    tx.target am.logs ss.vs_logs /\
+  am.logs = ss.vs_logs /\
   LIST_REL
     (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
     rqs ss.vs_requests
@@ -183,8 +182,7 @@ Theorem lowering_wrapped_return:
      am.accounts (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
    transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
      am.tStorage ss.vs_transient /\
-   logs_correspond (compiled_event_info tops) (type_env tops)
-     tx.target am.logs ss.vs_logs /\
+   am.logs = ss.vs_logs /\
    LIST_REL
      (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
      rqs ss.vs_requests)
@@ -203,8 +201,8 @@ Theorem lowering_none_return_witness:
 Proof
   strip_tac >>
   simp[lowering_success_boundary, tx_return_bytes_def, return_bytes_def,
-       logs_correspond_def, vfmExecutionTheory.process_deletions_def] >>
-  rpt conj_tac >> irule LIST_REL_refl >> simp[log_entry_corresponds_def]
+       vfmExecutionTheory.process_deletions_def] >>
+  irule LIST_REL_refl >> simp[]
 QED
 
 Theorem lowering_success_requests_exact:

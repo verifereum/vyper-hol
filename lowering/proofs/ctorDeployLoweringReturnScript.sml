@@ -622,8 +622,7 @@ Theorem deploy_snapshot_observations[local]:
     (lookup_account tx.target st.accounts).storage
     (lookup_account tx.target before.vs_accounts).storage /\
   transient_agree (deploy_evaluation_context tops am tx) st.tStorage before.vs_transient /\
-  logs_correspond (compiled_event_info tops) (type_env tops)
-    tx.target st.logs before.vs_logs
+  st.logs = before.vs_logs
 Proof
   strip_tac >>
   drule accountsRelPropsTheory.state_rel_accounts >>
@@ -634,10 +633,7 @@ Proof
   `st.logs = before.vs_logs` by
     (qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
      simp[state_rel_def, logs_rel_def, LIST_REL_eq] >> metis_tac[]) >>
-  `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
-    simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
-  simp[vfmStateTheory.lookup_account_def, e2eDefsTheory.logs_correspond_def,
-       e2eDefsTheory.log_entry_corresponds_concrete_event, LIST_REL_eq] >>
+  simp[vfmStateTheory.lookup_account_def] >>
   simp[e2eDeployDefsTheory.deploy_evaluation_context_def, initial_evaluation_context_def] >>
   qpat_x_assum `_ with storage := _ = _` (mp_tac o GSYM) >>
   disch_then (fn th => once_rewrite_tac[th]) >> simp[]

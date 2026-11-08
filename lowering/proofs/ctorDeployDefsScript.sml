@@ -157,8 +157,7 @@ Definition deploy_venom_result_rel_def:
             (lookup_account tx.target am'.accounts).storage
             (lookup_account tx.target ss.vs_accounts).storage /\
           transient_agree cx am'.tStorage ss.vs_transient /\
-          logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs ss.vs_logs
+          am'.logs = ss.vs_logs
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error e), Abort _ _) => T

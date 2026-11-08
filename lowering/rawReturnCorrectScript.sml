@@ -32,9 +32,8 @@ Proof
    transient_agree (initial_evaluation_context srcs layouts tx NONE)
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).tStorage ss.vs_transient /\
-   logs_correspond (compiled_event_info tops) (type_env tops) tx.target
-     (finalize_pending_deletions
-        (abstract_machine_from_state srcs exps layouts es')).logs ss.vs_logs /\
+   (finalize_pending_deletions
+        (abstract_machine_from_state srcs exps layouts es')).logs = ss.vs_logs /\
    LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
      es'.requests ss.vs_requests` by
     metis_tac[external_halt_success_unlock] >>

@@ -120,13 +120,13 @@ Proof
           strip_tac >> gvs[]
           >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
               metis_tac[]) >>
-          disj2_tac >> simp[deploy_result_rel_def] >>
-          qexistsl [`section`,`ss.vs_logs`] >>
+          disj2_tac >> simp[deploy_result_rel_def, exception_outcome_rel_def] >>
+          qexists `section` >>
           gvs[lookup_account_def, update_account_def,
               combinTheory.APPLY_UPDATE_THM] >>
           irule frame_outcome_single_transfer_none >> metis_tac[]) >>
       Cases_on `y` >>
-      gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
+      gvs[deploy_venom_result_rel_def, deploy_result_rel_def, exception_outcome_rel_def] >>
       Cases_on `handle_step NONE mid` >> gvs[])
   >~ [`Abort ab vs'`]
   >- (Cases_on `src`
@@ -136,7 +136,7 @@ Proof
       drule_all deploy_frame_exception >> strip_tac >>
       first_assum (irule_at (Pos hd)) >>
       Cases_on `y` >>
-      gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
+      gvs[deploy_venom_result_rel_def, deploy_result_rel_def, exception_outcome_rel_def] >>
       metis_tac[]) >>
   drule deploy_venom_result_rel_terminates >> simp[terminates_def]
 QED
