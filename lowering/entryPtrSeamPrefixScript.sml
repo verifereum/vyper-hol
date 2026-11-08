@@ -18,10 +18,12 @@
  *)
 Theory entryPtrSeamPrefix
 Ancestors
-  selectedEntryPrefixCode
+  selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
+  entryChecksProps loweringShapeProps loweringShapeSource o1PipelineCorrect
+  supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
   rawEntryCode entryCheckIntervals sourceEntrySelection actualRegistrationCode
-  entryLocals
+  entryLocals actualEntryAllocationFrame
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
@@ -95,5 +97,119 @@ Theorem external_entry_reaches_registration_ptr:
                    (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                                vs_inst_idx := 0 |>)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
+  qpat_x_assum `source_storage_ok _ _ _` kall_tac >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  qpat_x_assum `call_outcomes_ok _ _ _` kall_tac >>
+  `o1_source_unit_ok unit` by
+    (irule lower_vyper_runtime_unit_source_unit_ok_shape >>
+     goal_assum (drule_at Any) >> conj_tac
+     >- (irule supported_names_internal_names_distinct >>
+         fs[supported_program_def, supported_declaration_names_def]) >>
+     metis_tac[supported_program_runtime_bodies_shape_ok]) >>
+  `~ctx_has_dalloca unit.cu_context` by metis_tac[o1_source_unit_ok_no_dalloca] >>
+  qabbrev_tac `pkg = set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut, F, lookup_raw_return_or_F (NONE : num option)
+        tx.function_name External tops, tx.function_name, args, [], ret, fbody))` >>
+  PairCases_on `pkg` >>
+  `pkg0 = "fn_" ++ tx.function_name /\ pkg4 = (mut = Payable) /\
+   pkg5 = F /\ pkg9 = fbody` by
+    (qpat_x_assum `Abbrev _` mp_tac >>
+     simp[markerTheory.Abbrev_def, set_external_package_target_def,
+          package_external_fn_def] >> strip_tac >> gvs[]) >>
+  fs[] >>
+  `set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+       tx.function_name,args,([] : expr list),ret,fbody)) =
+    ("fn_" ++ tx.function_name,pkg1,pkg2,pkg3,mut = Payable,F,pkg6,pkg7,pkg8,fbody,pkg10)` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[package_external_fn_def]) >>
+  drule_all source_selected_entry_prefix_structure >> strip_tac >>
+  suspend "dispatch"
+QED
+
+Resume external_entry_reaches_registration_ptr[dispatch]:
+  drule_all initial_entry_dispatch_scalars >>
+  disch_then (qspecl_then [`0`, `elbl`, `ds`] strip_assume_tac) >>
+  qabbrev_tac `ss = vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>` >>
+  qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
+    assume_tac entryDispatchPropsTheory.linear_selectors_lt >>
+  drule compile_selector_dispatch_linear_ptr_endpoint >>
+  disch_then (qspecl_then [`entry_taint`, `ss`, `0`, `efn`, `unit.cu_context`,
+    `[]`, `FEMPTY`] mp_tac) >>
+  (impl_tac >- simp[Abbr `ss`]) >> strip_tac >>
+  rename1 `vars_pc_only ss tt` >> rename1 `tn1.t_mem = entry_taint.t_mem` >>
+  rename1 `ptr_safe_blocks _ _ _ _ _ _ G1 tn1 tt` >>
+  drule_all source_valid_linear_dispatch_target >> strip_tac >>
+  `tt.vs_current_bb = opened.cs_current_bb /\
+   tt.vs_call_ctx = vs.vs_call_ctx /\ fresh_vars_wrt opened tt` by
+    (imp_res_tac vars_pc_only_fields >> fs[Abbr `ss`] >>
+     irule emitHelperPropsTheory.fresh_vars_wrt_mono >>
+     qexists_tac `de` >> simp[]) >>
+  suspend "checks"
+QED
+
+Resume external_entry_reaches_registration_ptr[checks]:
+  qabbrev_tac `raw = package_external_fn tops F (assign_nkeys tops 0)
+    (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
+     tx.function_name,args,([] : expr list),ret,fbody)` >>
+  PairCases_on `raw` >>
+  qpat_x_assum `Abbrev ((raw0,_) = _)`
+    (assume_tac o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  `raw3 = pkg3` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     asm_rewrite_tac[set_external_package_target_def] >> simp[]) >>
+  `pkg3 <= LENGTH vs.vs_call_ctx.cc_calldata` by
+    (drule_all valid_vyper_call_min_calldata_size >> simp[]) >>
+  `mut = Payable \/ tt.vs_call_ctx.cc_callvalue = 0w` by
+    (drule send_call_value_success_condition >>
+     simp[initial_evaluation_context_def] >> strip_tac >> simp[] >>
+     fs[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def]) >>
+  `allocas_from 0 tt` by
+    (drule vars_pc_only_allocas >> fs[allocas_from_def] >> metis_tac[]) >>
+  drule compile_entry_checks_ptr_endpoint >>
+  disch_then (qspecl_then [`tn1`, `tt`, `0`, `efn`, `unit.cu_context`, `[]`, `G1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `vars_pc_only tt u` >> rename1 `tn2.t_mem = tn1.t_mem` >>
+  rename1 `ptr_safe_run _ _ _ _ _ _ G2 tn2 u` >>
+  qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `u`, `G2`, `tn2`] >>
+  simp[entry_taint_def] >>
+  (conj_tac >- metis_tac[vars_pc_only_trans]) >>
+  all_tac >>
+  `cs_extends opened st` by
+    (qspec_then `pkg3` (qspec_then `mut = Payable` mp_tac) compile_entry_checks_shape >>
+     pure_rewrite_tac[shape_step_def] >>
+     disch_then (qspecl_then [`opened`, `()`, `st`] mp_tac) >>
+     simp[shape_extends_def]) >>
+  drule_all fn_has_code_start >> strip_tac >>
+  `MEM efn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `!b. lookup_block b efn.fn_blocks <> NONE ==>
+       !i. MEM i (THE (lookup_block b efn.fn_blocks)).bb_instructions ==>
+           i.inst_opcode <> PHI` by
+    (rpt strip_tac >> Cases_on `lookup_block b efn.fn_blocks` >> fs[] >>
+     drule lookup_block_fn_insts >> disch_then drule >>
+     qpat_x_assum `o1_source_unit_ok unit` mp_tac >>
+     simp[o1_source_unit_ok_def, EVERY_MEM, raw_opcode_ok_def] >>
+     metis_tac[]) >>
+  `phi_prefix_length bb.bb_instructions = 0` by
+    (irule no_phis_phi_prefix_length_zero >> simp[EVERY_MEM] >>
+     first_x_assum (qspec_then `opened.cs_current_bb` mp_tac) >> simp[]) >>
+  gen_tac >> disch_tac >>
+  drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
+  rename1 `get_instruction entrybb (LENGTH ds.cs_current_insts) =
+    SOME (mk_inst ds.cs_next_id CALLDATASIZE [] _)` >>
+  irule ptr_safe_blocks_nonphi_run >>
+  (reverse conj_tac >-
+    (simp[Abbr `ss`] >>
+     qexistsl_tac [`entrybb`, `mk_inst ds.cs_next_id CALLDATASIZE []
+       [STRING #"%" (toString ds.cs_next_var)]`] >> gvs[mk_inst_def])) >>
+  rewrite_tac[GSYM entry_taint_def] >>
+  `!fuel. ptr_safe_blocks D 0 fuel unit.cu_context efn [] G1 tn1 tt` suffices_by
+    metis_tac[] >>
+  irule ptr_safe_blocks_from_phi_free_run >>
+  simp[] >>
+  qexists_tac `bb` >> gvs[]
 QED
