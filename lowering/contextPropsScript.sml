@@ -661,6 +661,6 @@ Theorem compile_fixed_region_zero_correct:
 Proof
   rpt strip_tac >> drule compile_fixed_region_as_assign >> strip_tac >>
   drule (Q.SPECL [`ASSIGN`, `\x:bytes32. x`] emit_op_pure1_correct) >>
-  simp[eval_operand_def, step_inst_base_def, venomInstTheory.mk_inst_def] >>
+  simp[eval_operand_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def] >>
   disch_then drule >> strip_tac >> goal_assum drule >> simp[]
 QED

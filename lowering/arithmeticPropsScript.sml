@@ -3065,8 +3065,11 @@ Proof
       forward_all_evals >>
       imp_res_tac emit_void_extends >>
       drule_all_then strip_assume_tac assert_chain
-      >>~- ([`(_ && _) <> 0w`],
-        qpat_x_assum `(_ && _) <> 0w` mp_tac >> simp[]) >>
+      >> TRY (
+        qpat_x_assum `(_ && _) <> 0w` mp_tac >>
+        TRY (qpat_x_assum `safe_sdiv _ _ <> _` mp_tac) >>
+        TRY (qpat_x_assum `b <> 0w` mp_tac) >>
+        POP_ASSUM_LIST (K all_tac) >> simp[] >> NO_TAC) >>
       first_assum (irule_at Any)) >>
   Cases_on `is_signed` >> gvs[]
   >- mul_check_plain_tac emit_op_SDIV_correct `emit_op SDIV _ _ = _` >>
@@ -3157,7 +3160,11 @@ Proof
         `rr = 0` by
           (`w2i (i2w rr : bytes32) = rr` by
              (irule integer_wordTheory.w2i_i2w >> simp[int_min_256, int_max_256] >>
-              fs[integerTheory.INT_ABS] >> rw[] >> fs[] >> intLib.ARITH_TAC) >>
+              qpat_x_assum `ABS rr < ABS B` mp_tac >>
+              qpat_x_assum `_ <= B` mp_tac >>
+              qpat_x_assum `B <= _` mp_tac >>
+              POP_ASSUM_LIST (K ALL_TAC) >>
+              simp[integerTheory.INT_ABS] >> rw[] >> intLib.ARITH_TAC) >>
            qpat_x_assum `w2i _ = rr` (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
            qpat_x_assum `i2w rr = _`
              (fn th => REWRITE_TAC [th, integer_wordTheory.word_0_w2i])) >>
@@ -3168,7 +3175,12 @@ Proof
     `B = 1 ∨ B = -1` by
       (qpat_x_assum `ABS (qq * B) ≤ ABS P` mp_tac >>
        qpat_x_assum `P = _` (fn th => rewrite_tac[th]) >>
-       fs[integerTheory.INT_ABS] >> rw[] >> intLib.ARITH_TAC)
+       qpat_x_assum `qq = _` mp_tac >>
+       qpat_x_assum `_ ≤ qq * B + rr` mp_tac >>
+       qpat_x_assum `qq * B + rr ≤ _` mp_tac >>
+       qpat_x_assum `B ≠ 0` mp_tac >>
+       POP_ASSUM_LIST (K ALL_TAC) >>
+       simp[integerTheory.INT_ABS] >> rw[] >> intLib.ARITH_TAC)
     >- (gvs[integerTheory.INT_ABS] >> rw[] >> fs[] >> intLib.ARITH_TAC) >>
     `b = i2w (-1)` by
       (qpat_x_assum `Abbrev (B = _)` mp_tac >> rw[markerTheory.Abbrev_def] >>
