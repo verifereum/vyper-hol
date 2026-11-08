@@ -2,6 +2,7 @@ Theory bodyPtrBytestringBuiltinsZeroCheck
 Ancestors
   bodyPtrBytestringBuiltinsBounds venomExecSemantics venomState venomInst
   fragGasPathPtr ptrDiscipline ptrSafeRun finite_map list
+  fragExec emitHelperProps compileEnv emitHelper arithmetic
 
 Theorem zero_check_iszero_step:
   eval_operand y s = SOME w ==>
@@ -84,4 +85,52 @@ Proof
      irule (Q.INST [`n` |-> `0`, `m` |-> `0`] (SPEC_ALL (cj 2 gas_path_ptr_rules)) |> SIMP_RULE (srw_ss()) []) >>
      qexistsl_tac [`G2`,`s2`,`tn2`] >> simp[]) >>
   gvs[Abbr `G2`, Abbr `tn2`, Abbr `G1`, Abbr `tn1`]
+QED
+
+Theorem zero_check_emit_layout:
+  emit_op ISZERO [y] sa = (Var z,sb) /\
+  emit_op ISZERO [Var z] sb = (Var nz,sc) /\
+  emit_void ASSERT [Var nz] sc = ((),sd) /\ fn_has_code sa sd fn ==>
+  ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts) =
+      SOME (mk_inst sa.cs_next_id ISZERO [y] [z]) /\
+    get_instruction bb (SUC (LENGTH sa.cs_current_insts)) =
+      SOME (mk_inst (sa.cs_next_id+1) ISZERO [Var z] [nz]) /\
+    get_instruction bb (SUC (SUC (LENGTH sa.cs_current_insts))) =
+      SOME (mk_inst (sa.cs_next_id+2) ASSERT [Var nz] [])
+Proof
+  strip_tac >>
+  `sd.cs_current_bb = sa.cs_current_bb /\
+   sd.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst sa.cs_next_id ISZERO [y] [z];
+     mk_inst (sa.cs_next_id+1) ISZERO [Var z] [nz];
+     mk_inst (sa.cs_next_id+2) ASSERT [Var nz] []]` by
+    (fs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >> gvs[]) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  qexists_tac `bb` >> simp[] >>
+  first_assum (qspec_then `0` mp_tac) >>
+  first_assum (qspec_then `1` mp_tac) >>
+  first_x_assum (qspec_then `2` mp_tac) >> simp[ADD1]
+QED
+
+Theorem zero_check_emit_abort_counted:
+  emit_op ISZERO [y] sa = (Var z,sb) /\
+  emit_op ISZERO [Var z] sb = (Var nz,sc) /\
+  emit_void ASSERT [Var nz] sc = ((),sd) /\ fn_has_code sa sd fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand y s = SOME 0w /\ op_taint tn y = {} /\ op_prov G y = NONE ==>
+  ?s1 s2.
+    s1 = (update_var z 1w s) with vs_inst_idx := SUC s.vs_inst_idx /\
+    s2 = (update_var nz 0w s1) with vs_inst_idx := SUC s1.vs_inst_idx /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0
+      (DRESTRICT (DRESTRICT G (COMPL {z})) (COMPL {nz}))
+      ((tn with t_var := tn.t_var |+ (z,{})) with
+        t_var := (tn.t_var |+ (z,{})) |+ (nz,{}))
+      (Abort Revert_abort (revert_state (set_returndata [] s2)))
+Proof
+  strip_tac >> drule_all zero_check_emit_layout >> strip_tac >>
+  irule zero_check_abort_counted >> metis_tac[]
 QED
