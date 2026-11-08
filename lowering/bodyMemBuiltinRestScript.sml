@@ -1,14 +1,14 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): the
    builtins with no other case: not the binary operators, array literals,
-   ecadd and ecmul, msg.data length (bodyCalldataMemory), or neg, abs and not
-   on one operand. The environment reads are here: bodyEnvMemory's
+   ecadd and ecmul, msg.data length (bodyCalldataMemory), slice (bodyMemBiSlice),
+   or neg, abs and not on one operand. The environment reads are here: bodyEnvMemory's
    body_env_mem_case predates the gas-counted expr_sim_mem and needs porting. *)
 Theory bodyMemBuiltinRest
 Ancestors
   bodyMemBiEnv bodyMemBiLen bodyMemBiCalldataSlice bodyMemBiKeccak
   bodyMemBiSha256 bodyMemBiWord bodyMemBiCeil bodyMemBiBlockHash
   bodyMemBiBlobHash bodyMemBiAcc bodyMemBiMethodId bodyMemBiECRecover
-  bodyMemBiConcat bodyMemBiSlice bodyMemBiUint2Str
+  bodyMemBiConcat bodyMemBiUint2Str
   bodyMemoryPreds vyperTypeBuiltins vyperTypeSystem vyperContext vyperState
   vyperAST
 
@@ -27,7 +27,7 @@ QED
 Theorem body_builtin_rest_mem_case:
   !cx ty bt es.
     (!bop. bt <> Bop bop) /\ (!t n. bt <> MakeArray t n) /\
-    bt <> ECAdd /\ bt <> ECMul /\ bt <> CalldataLen /\
+    bt <> ECAdd /\ bt <> ECMul /\ bt <> CalldataLen /\ (!n. bt <> Slice n) /\
     (!e. es = [e] ==> bt <> Neg /\ bt <> Abs /\ bt <> Not) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -53,7 +53,7 @@ Proof
       body_builtin_blockhash_mem, body_builtin_blobhash_mem,
       body_builtin_acc_mem, body_builtin_method_id_mem,
       body_builtin_ecrecover_mem, body_builtin_concat_mem,
-      body_builtin_slice_mem, body_builtin_uint2str_mem] >>
+      body_builtin_uint2str_mem] >>
   (* neg, abs and not on other than one operand *)
   gvs[builtin_args_length_ok_def, listTheory.LENGTH_EQ_NUM_compute]
 QED

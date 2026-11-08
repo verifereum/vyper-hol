@@ -27,7 +27,8 @@ Ancestors
   bodyMemAugAssign bodyMemIf bodyMemFor bodyMemName bodyMemToplevel
   bodyMemIfExp bodyMemLiteralOther bodyMemStructLit bodyMemSubscript
   bodyMemAttribute bodyMemBop bodyMemBopInLiteral bodyMemMakeArray
-  bodyMemEcArith bodyMemBuiltinUnary bodyMemBuiltinRest bodyMemPopName
+  bodyMemEcArith bodyMemBuiltinUnary bodyMemBuiltinRest bodyMemBiSlice
+  bodyMemPopName
   bodyMemPopNested bodyMemTypeBuiltin bodyMemSend bodyMemExtCall
   bodyMemIntCall bodyMemRawCall bodyMemRawCallCalldata bodyMemRawLog
   bodyMemRawRevert bodyMemSelfDestruct bodyMemCreate
@@ -74,6 +75,9 @@ Theorem body_builtin_mem_ok:
     body_expr_mem_ok cx (Builtin ty bt es)
 Proof
   rpt gen_tac >> strip_tac >>
+  Cases_on `?n. bt = Slice n`
+  >- (gvs[] >> irule body_builtin_slice_mem >> rpt conj_tac >> rpt strip_tac >>
+      first_x_assum irule >> simp[type_check_def, assert_def] >> metis_tac[]) >>
   (* A code slice reads x.code without evaluating it; the operand list as a
      whole is still memory-safe, since a bare x.code is (body_acc_code_mem). *)
   `!s'' x t.
