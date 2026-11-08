@@ -387,3 +387,34 @@ Proof
   simp[vyperValueTheory.evaluate_type_def] >>
   Cases_on `convert_result cx (BaseT (UintT 256)) (FlagT name) (IntV i)` >> gvs[]
 QED
+
+Theorem scalar_integer_address_actual_outcome:
+  -&(2**255) <= i /\ i < &(2**256) /\
+  compile_type_convert x ConvToAddress sa = (out,sb) /\
+  fresh_vars_wrt sa s /\ eval_operand x s = SOME (i2w i) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx src (BaseT AddressT) (IntV i) = INL vout /\
+    expr_val_rel cx (BaseT AddressT) vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx src (BaseT AddressT) (IntV i)) (Abort err t))
+Proof
+  strip_tac >> Cases_on `within_int_bound (Unsigned 160) i`
+  >- (drule_all scalar_int_address_run_ok >> strip_tac >>
+      disj1_tac >> qexistsl_tac [`ss'`, `AddressV (n2w (Num i))`] >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        convertScalarBytesTheory.scalar_typed_address_word] >>
+      `0 <= i /\ i < &(2**160)` by fs[within_int_bound_ineq] >>
+      `i = &Num i` by intLib.ARITH_TAC >>
+      `Num i < 2**160` by (fs[] >> intLib.ARITH_TAC) >>
+      qpat_x_assum `i = &Num i` SUBST1_TAC >>
+      simp[integer_wordTheory.i2w_pos, wordsTheory.w2w_def,
+        wordsTheory.w2n_n2w, wordsTheory.dimword_def,
+        fcpLib.INDEX_CONV ``dimindex(:160)``] >> fs[]) >>
+  drule_all scalar_int_address_run_abort >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`Revert_abort`, `ss'`] >>
+  simp[expr_exit_def, convert_result_def,
+    vyperValueOperationTheory.evaluate_convert_from_def,
+    vyperValueOperationTheory.evaluate_convert_def]
+QED
