@@ -6416,3 +6416,110 @@ Theorem lineage_inventory_common_exhaustive_suffix:
 Proof
   metis_tac[lineage_inventory_exhaustive_suffix]
 QED
+
+(* Cleanup observes only suffix depths when all its live inputs are there.
+   Physical prefix-only requests may differ, but they are always retained. *)
+Theorem below_all_live_suffix_covered_hit:
+  !inputs prefix core op.
+    EVERY (\v. MEM (Var v) core) inputs /\ MEM op core ==>
+    below_all_live op inputs (prefix ++ core) = below_all_live op inputs core
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!x. MEM x core ==> stack_get_depth x (prefix ++ core) = stack_get_depth x core` by
+    (rpt strip_tac >>
+     `IS_SOME (stack_get_depth x core)` by simp[stack_get_depth_is_some] >>
+     Cases_on `stack_get_depth x core` >> gvs[] >>
+     metis_tac[stack_get_depth_suffix_hit]) >>
+  simp[below_all_live_def] >>
+  Cases_on `stack_get_depth op core` >> simp[EVERY_MEM] >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem below_all_live_suffix_covered_miss:
+  !inputs prefix core op.
+    EVERY (\v. MEM (Var v) core) inputs /\ ~MEM op core ==>
+    (below_all_live op inputs (prefix ++ core) <=> MEM op prefix)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stack_get_depth op (prefix ++ core) =
+    OPTION_MAP (\d. LENGTH core + d) (stack_get_depth op prefix)` by
+    (qspecl_then [`REVERSE core`, `REVERSE prefix`, `\x. x = op`]
+       mp_tac stack_find_append_miss >>
+     simp[stack_get_depth_def, REVERSE_APPEND, EVERY_MEM, MEM_REVERSE,
+       arithmeticTheory.ADD_COMM]) >>
+  simp[below_all_live_def] >>
+  Cases_on `stack_get_depth op prefix` >>
+  gvs[GSYM stack_get_depth_is_some, EVERY_MEM] >>
+  rpt strip_tac >>
+  `MEM (Var v) core` by metis_tac[stack_get_depth_is_some] >>
+  drule stack_get_depth_core >> disch_then (qspec_then `prefix` strip_assume_tac) >>
+  simp[]
+QED
+
+Theorem cleanup_delete_suffix_covered_predicate:
+  !inputs prefix core op.
+    EVERY (\v. MEM (Var v) core) inputs ==>
+    (IS_SOME (stack_get_depth op (prefix ++ core)) /\
+       ~below_all_live op inputs (prefix ++ core) <=>
+     IS_SOME (stack_get_depth op core) /\ ~below_all_live op inputs core)
+Proof
+  rpt strip_tac >> Cases_on `MEM op core`
+  >- simp[stack_get_depth_is_some, below_all_live_suffix_covered_hit] >>
+  simp[stack_get_depth_is_some, below_all_live_suffix_covered_miss]
+QED
+
+Theorem cleanup_delete_suffix_covered:
+  !inputs requests prefix core.
+    EVERY (\v. MEM (Var v) core) inputs ==>
+    FILTER (\op. IS_SOME (stack_get_depth op (prefix ++ core)) /\
+      ~below_all_live op inputs (prefix ++ core)) requests =
+    FILTER (\op. IS_SOME (stack_get_depth op core) /\
+      ~below_all_live op inputs core) requests
+Proof
+  rpt strip_tac >> simp[FILTER_EQ] >>
+  metis_tac[cleanup_delete_suffix_covered_predicate]
+QED
+
+Theorem cleanup_retained_suffix_covered:
+  !inputs requests prefix core op.
+    EVERY (\v. MEM (Var v) core) inputs /\ MEM op core ==>
+    (MEM op (FILTER (\x. IS_SOME (stack_get_depth x (prefix ++ core)) /\
+       below_all_live x inputs (prefix ++ core)) requests) <=>
+     MEM op (FILTER (\x. IS_SOME (stack_get_depth x core) /\
+       below_all_live x inputs core) requests))
+Proof
+  rpt strip_tac >>
+  simp[MEM_FILTER, stack_get_depth_is_some, below_all_live_suffix_covered_hit]
+QED
+
+Theorem cleanup_mark_suffix_covered:
+  !inputs requests prefix core.
+    EVERY (\v. MEM (Var v) core) inputs ==>
+    mark_dead_stack (FILTER (\x. IS_SOME (stack_get_depth x (prefix ++ core)) /\
+      below_all_live x inputs (prefix ++ core)) requests) core =
+    mark_dead_stack (FILTER (\x. IS_SOME (stack_get_depth x core) /\
+      below_all_live x inputs core) requests) core
+Proof
+  rpt strip_tac >> simp[mark_dead_stack_def] >> irule MAP_CONG >> simp[] >>
+  rpt strip_tac >> metis_tac[cleanup_retained_suffix_covered]
+QED
+
+(* The nested selector is exactly clean_stack_plan's physical-minus-retained. *)
+Theorem cleanup_nested_delete_suffix_covered:
+  !inputs requests prefix core.
+    EVERY (\v. MEM (Var v) core) inputs ==>
+    FILTER (\op. ~MEM op (FILTER (\x. below_all_live x inputs (prefix ++ core))
+      (FILTER (\x. IS_SOME (stack_get_depth x (prefix ++ core))) requests)))
+      (FILTER (\x. IS_SOME (stack_get_depth x (prefix ++ core))) requests) =
+    FILTER (\op. ~MEM op (FILTER (\x. below_all_live x inputs core)
+      (FILTER (\x. IS_SOME (stack_get_depth x core)) requests)))
+      (FILTER (\x. IS_SOME (stack_get_depth x core)) requests)
+Proof
+  rpt strip_tac >> simp[FILTER_FILTER, FILTER_EQ, MEM_FILTER] >> rpt strip_tac >>
+  `IS_SOME (stack_get_depth x (prefix ++ core)) /\
+     ~below_all_live x inputs (prefix ++ core) <=>
+   IS_SOME (stack_get_depth x core) /\ ~below_all_live x inputs core` by
+    metis_tac[cleanup_delete_suffix_covered_predicate] >>
+  Cases_on `stack_get_depth x (prefix ++ core)` >>
+  Cases_on `stack_get_depth x core` >> gvs[]
+QED
