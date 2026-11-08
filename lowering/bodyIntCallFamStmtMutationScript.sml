@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: declarations and mutations. *)
 Theory bodyIntCallFamStmtMutation
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodyIntCallFamStmtMutationResource
 
 Theorem intcall_mutation_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
