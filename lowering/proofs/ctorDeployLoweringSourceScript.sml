@@ -474,6 +474,23 @@ Proof
   BasicProvers.CASE_TAC >> simp[return_def]
 QED
 
+Theorem outcomes_replace_array_iterator_results:
+  !s oc. array_iterator_results cx ty res (s with outcomes := oc) =
+    (FST (array_iterator_results cx ty res s),
+     SND (array_iterator_results cx ty res s) with outcomes := oc)
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd`))) >>
+  simp_tac (srw_ss()) [array_iterator_results_def] >>
+  rpt (FIRST [irule outcomes_replace_bind, irule outcomes_replace_ignore_bind,
+              gen_tac, conj_tac] >>
+       simp[outcomes_replace_read_result, outcomes_replace_lifts,
+            outcomes_replace_basic, outcomes_replace_result_array_length,
+            return_def, LET_THM])
+QED
+
 Theorem outcomes_replace_switch_BoolV:
   (!s oc. f (s with outcomes := oc) =
     (FST (f s), SND (f s) with outcomes := oc)) /\
@@ -857,6 +874,9 @@ Proof
     return_def, raise_def] >>
   rpt (FIRST [first_assum ACCEPT_TAC,
       goal_assum (drule_at Any),
+      first_assum (fn th => irule th >> rpt conj_tac >>
+        FIRST [goal_assum (drule_at Any) >> NO_TAC,
+               gvs[] >> NO_TAC]),
       (first_assum irule >> goal_assum (drule_at Any)),
       irule outcomes_replace_bind_guarded,
       irule outcomes_replace_ignore_bind_guarded,
@@ -874,46 +894,31 @@ Proof
       outcomes_replace_extend_place, outcomes_replace_get_place,
       outcomes_replace_result_array_length, outcomes_replace_conditional_result,
       outcomes_replace_next_gas_reading, return_def, raise_def])
-  >- (Cases_on `err` >> simp[] >>
-      rpt BasicProvers.TOP_CASE_TAC >> simp[raise_def] >>
-      drule vyperASTTheory.order_custom_error_args_perm >> strip_tac >>
-      rename1 `order_custom_error_args params (CustomError id pos kws) = SOME es` >>
-      `~supported_exprs_exists constructor_call_root es` by
-        (simp[supported_exprs_exists_every] >>
-         metis_tac[sortingTheory.PERM_EVERY]) >>
-      gvs[] >>
-      `!s oc. eval_exprs cx es (s with outcomes := oc) =
-        (FST (eval_exprs cx es s), SND (eval_exprs cx es s) with outcomes := oc)` by
-        metis_tac[] >>
-      map_every qid_spec_tac [`oc`, `s`] >>
-      irule outcomes_replace_bind >> simp[] >> gen_tac >>
-      irule outcomes_replace_bind >> simp[outcomes_replace_lifts, raise_def])
-  >- (Cases_on `err` >> simp[] >>
-      rpt BasicProvers.TOP_CASE_TAC >> simp[raise_def] >>
-      drule vyperASTTheory.order_custom_error_args_perm >> strip_tac >>
-      rename1 `order_custom_error_args params (CustomError id pos kws) = SOME es` >>
-      `~supported_exprs_exists constructor_call_root es` by
-        (simp[supported_exprs_exists_every] >>
-         metis_tac[sortingTheory.PERM_EVERY]) >>
-      gvs[] >>
-      `!s oc. eval_exprs cx es (s with outcomes := oc) =
-        (FST (eval_exprs cx es s), SND (eval_exprs cx es s) with outcomes := oc)` by
-        metis_tac[] >>
-      map_every qid_spec_tac [`oc`, `s`] >>
-      irule outcomes_replace_bind >> simp[] >> gen_tac >>
-      irule outcomes_replace_bind >> simp[outcomes_replace_lifts, raise_def])
-  >- (metis_tac[])
-  >- (metis_tac[])
-  >- (metis_tac[])
-  >- (metis_tac[])
-  >- (gvs[supported_fields_exists_every, supported_exprs_exists_every,
-          listTheory.EVERY_MAP] >> metis_tac[])
-  >- (Cases_on `es` >>
+  >> EVERY (map (fn tac => TRY (tac >> NO_TAC)) [
+    (Cases_on `err` >> simp[] >>
+        rpt BasicProvers.TOP_CASE_TAC >> simp[raise_def] >>
+        drule vyperASTTheory.order_custom_error_args_perm >> strip_tac >>
+        rename1 `order_custom_error_args params (CustomError id pos kws) = SOME es` >>
+        `~supported_exprs_exists constructor_call_root es` by
+          (simp[supported_exprs_exists_every] >>
+           metis_tac[sortingTheory.PERM_EVERY]) >>
+        gvs[] >>
+        `!s oc. eval_exprs cx es (s with outcomes := oc) =
+          (FST (eval_exprs cx es s), SND (eval_exprs cx es s) with outcomes := oc)` by
+          metis_tac[] >>
+        map_every qid_spec_tac [`oc`, `s`] >>
+        irule outcomes_replace_bind >> simp[] >> gen_tac >>
+        irule outcomes_replace_bind >> simp[outcomes_replace_lifts, raise_def]),
+    Cases_on `v` >> simp[raise_def] >>
+      Cases_on `a` >> gvs[raise_def],
+    Cases_on `es` >>
       gvs[type_check_def, assert_def, raise_def,
           vyperContextTheory.builtin_args_length_ok_def,
-          supported_exprs_exists_every]) >>
-  Cases_on `v` >> simp[raise_def] >>
-  Cases_on `a` >> gvs[raise_def]
+          supported_exprs_exists_every],
+    gvs[supported_fields_exists_every, supported_exprs_exists_every,
+        listTheory.EVERY_MAP] >>
+      metis_tac[outcomes_replace_array_iterator_results],
+    metis_tac[outcomes_replace_array_iterator_results]])
 QED
 
 Theorem deploy_ctor_source_run:

@@ -108,9 +108,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bodies_shape_ok tops` by
     metis_tac[supported_program_runtime_bodies_shape_ok] >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    fs[supported_program_def, supportedNamesTheory.supported_declaration_names_def] >>
-  drule supported_names_internal_names_distinct >> strip_tac >>
+  drule supported_program_internal_names >> strip_tac >>
+  drule classified_internal_names_distinct >> strip_tac >>
   drule internal_descriptors_ok >>
   disch_then (qspec_then `is_ctor` strip_assume_tac) >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
