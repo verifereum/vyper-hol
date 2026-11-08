@@ -194,3 +194,62 @@ Proof
   simp[augAssignNestedPremiseProbeTheory.nested_premise_supported_program] >>
   gen_tac >> disch_then kall_tac >> EVAL_TAC >> simp[]
 QED
+
+Theorem nested_valid_rhs_case:
+  expr_sim_case F nested_premise_unit.cu_context nested_observation_function
+    nested_premise_cenv nested_valid_cx
+    (Literal (BaseT (UintT 256)) (IntL 1))
+Proof
+  rewrite_tac[exprSimHypsDefsTheory.expr_sim_case_def] >> rpt strip_tac >>
+  irule exprSimLiteralWordTheory.compile_literal_word_sim >>
+  simp[compileEnvTheory.is_word_type_def]
+QED
+
+Theorem nested_valid_rhs_pre:
+  expr_body_pre nested_premise_cenv nested_valid_cx nested_premise_env
+    (Literal (BaseT (UintT 256)) (IntL 1)) nested_premise_es
+Proof
+  simp[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``expr_sim_inv``, ``nested_valid_cx``, ``call_evaluation_safe``,
+    ``nested_premise_cenv``, ``nested_premise_env``, ``nested_premise_es``]) >>
+  simp[nested_valid_expr_inv] >>
+  `call_evaluation_safe nested_valid_cx []` by
+    (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
+     qexists `[(NONE,"f")]` >> simp[nested_valid_call_safe]) >> simp[] >> EVAL_TAC >> simp[]
+QED
+
+Definition nested_valid_start_def:
+  nested_valid_start = nested_observation_start with
+    vs_block_ctx := empty_block_context with bc_number := 1w
+End
+
+Theorem nested_valid_call_context:
+  call_ctx_rel nested_valid_cx.txn nested_valid_start.vs_call_ctx
+    nested_valid_start.vs_tx_ctx nested_valid_start.vs_block_ctx
+Proof
+  simp[compileEnvTheory.call_ctx_rel_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem nested_valid_entry_state:
+  state_rel nested_observation_function nested_premise_cenv nested_valid_cx
+    nested_premise_es nested_valid_start
+Proof
+  rewrite_tac[compileEnvTheory.state_rel_def] >>
+  simp[nested_valid_call_context] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``nested_premise_unit``,
+    ``storage_agree``, ``accounts_agree``, ``transient_agree``]) >>
+  simp[combinTheory.UPDATE_def,
+    vyperStateTheory.find_var_decl_by_name_def,
+    accountsRelPropsTheory.storage_agree_refl,
+    accountsRelPropsTheory.accounts_agree_refl,
+    accountsRelPropsTheory.transient_agree_refl]
+QED
+
+Theorem nested_valid_entry_alloca_excluded:
+  !ss. ~stmt_state_rel nested_premise_unit.cu_context nested_observation_function
+    nested_premise_cenv nested_valid_cx nested_premise_es ss
+Proof
+  simp[exprLoweringPropsTheory.stmt_state_rel_def,
+    exprLoweringPropsTheory.alloca_room_def] >>
+  EVAL_TAC >> simp[]
+QED
