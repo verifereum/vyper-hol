@@ -6,7 +6,7 @@ Ancestors
   bodyPtrBytestringBuiltinsAllocationSeparation
   bodyPtrBytestringBuiltinsBufferOrigins
   bodyPtrBytestringBuiltinsCompilerSeams
-  exprSafeOperand builtinSimple context loweringShapeDefs emitHelper compileEnv list venomInst
+  exprSafeOperand emitHelperProps builtinSimple context loweringShapeDefs emitHelper compileEnv list venomInst
 
 Theorem zero_words_allocation_free_delta:
   !n pop sa sb.
@@ -73,4 +73,36 @@ Proof
   drule empty_complex_allocation_delta >> strip_tac >>
   qexists_tac `delta` >> simp[] >> rpt strip_tac >>
   metis_tac[alloca_output_ne_safe_operand]
+QED
+
+(* Only the cut after the header's first record is excluded here. The old
+   parent is obtained by allocation, not by assuming an environment age. *)
+Theorem empty_saved_parent_header_cut:
+  compile_alloc_buffer parent_bytes sa = (parent,sb) /\
+  compile_builtin_empty_complex bytes flag sb = (child,sc) /\
+  emit_op ADD [parent.buf_operand; Lit 32w] sc = (dst,sd) ==>
+  ?delta. state_insts sc = state_insts sb ++ delta /\
+    (!p i tail q j0 j1 j2 j3 cap b d off.
+      delta = p ++ [i] ==>
+      [i] ++ emitted_insts sc sd ++ tail <>
+        [mk_inst j0 ALLOCA [Lit (n2w cap)] [b];
+         mk_inst j1 ADD [Var b; Lit 32w] [d];
+         mk_inst j2 ALLOCA [Lit 64w] [off];
+         mk_inst j3 MSTORE [Var off; Lit 0w] []] ++ q)
+Proof
+  rpt strip_tac >> drule_all empty_child_ne_saved_allocation >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qexists_tac `delta` >> simp[] >> rpt strip_tac >> gvs[] >>
+  first_x_assum (qspec_then `mk_inst j0 ALLOCA [Lit (n2w cap)] [b]` mp_tac) >>
+  simp[MEM_APPEND, mk_inst_def] >> gvs[mk_inst_def]
+QED
+
+(* A zero-sized non-bytestring child really can end in its allocation:
+   no post-allocation store may be assumed when proving the cut above. *)
+Theorem empty_zero_nonbytes_is_alloc:
+  compile_builtin_empty_complex 0 F = compile_alloc_buffer 0
+Proof
+  simp[FUN_EQ_THM, compile_builtin_empty_complex_def, compile_zero_words_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  gen_tac >> pairarg_tac >> simp[]
 QED
