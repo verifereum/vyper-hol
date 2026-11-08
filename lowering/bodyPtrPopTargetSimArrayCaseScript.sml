@@ -1,7 +1,7 @@
 Theory bodyPtrPopTargetSimArrayCase
 Ancestors
   bodyPtrPopTargetSimArrayRun bodyPtrPopTargetSimArrayGuard exprSimArrayIndex
-  bodyPtrPopMemoryHeader stmtReasonLitFragMemory
+  bodyPtrPopMemoryHeader stmtReasonLitFragMemory bodyPtrPopTargetSimArrayEndpoint
   bodyPtrBopScalarCompile bodyPtrBopScalarSeq bodyPtrBopInLiteralSuffix
   exprSimWordBuiltins bodyPtrHashBuiltinsShaAlloc entrySinkExtraction
   emitHelperProps exprLoweringProps compileEnv emitHelper venomState venomInst
@@ -46,9 +46,15 @@ Theorem target_array_guarded_path_ptr:
     un.t_mem = tn.t_mem /\ un.t_stor = tn.t_stor /\
     un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
-                              op_taint un (Var x) = op_taint tn (Var x))
+                              op_taint un (Var x) = op_taint tn (Var x)) /\
+    fresh_vars_wrt sb t /\ copy_old_operand sb dst /\
+    t = s with <|vs_vars := t.vs_vars;
+                 vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)|> /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
-  strip_tac >> drule hash_code_prefix_split >> strip_tac >>
+  strip_tac >> drule_all target_array_suffix_runtime >>
+  disch_then (qx_choose_then `raw` strip_assume_tac) >>
+  drule hash_code_prefix_split >> strip_tac >>
   drule_all target_bounds_check_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   drule_all array_bounds_check_ok >> strip_tac >> gvs[] >>
@@ -77,16 +83,41 @@ Proof
 QED
 
 Resume target_array_guarded_path_ptr[finish]:
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> fs[copy_runtime_frame_def]) >>
+  `run_inst_seq (emitted_insts sm sb) t = OK raw` by
+    (drule_all run_inst_seq_append >>
+     disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> fs[]) >>
+  `t' = raw with vs_inst_idx := u.vs_inst_idx` by
+    (drule target_array_elem_opcodes >> strip_tac >>
+     `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+       gvs[listTheory.EVERY_CONJ] >>
+     fs[copy_runtime_frame_def, Abbr `u`,
+        fragExecTheory.run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def]) >>
   qexistsl_tac [`t' with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts sm sb)`,
                 `H'`, `un'`] >>
   simp[] >> conj_tac
   >- (`gas_path_ptr D 0 ctx fn PG G tn s (0+0) H' un'
         (OK (t' with vs_inst_idx := u.vs_inst_idx + LENGTH (emitted_insts sm sb)))` by
        (irule gas_path_ptr_then >> qexistsl_tac [`H`, `u`, `un`] >>
-        simp[Abbr `u`]) >> fs[]) >>
+        simp[Abbr `u`]) >> gvs[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
     (gvs[not_fresh_at_def] >> metis_tac[]) >>
-  gvs[op_taint_def] >> metis_tac[]
+  `!k. raw with vs_inst_idx := k =
+       s with <|vs_vars := raw.vs_vars; vs_inst_idx := k|>` by
+    (gen_tac >> qpat_x_assum `raw = s with vs_vars := _`
+       (fn th => once_rewrite_tac[th]) >> simp[NoAsms]) >>
+  qpat_x_assum `raw = s with vs_vars := _` kall_tac >>
+  gvs[op_taint_def] >> conj_tac
+  >- (qpat_x_assum `!k. raw with vs_inst_idx := k = _`
+        (qspec_then `LENGTH (emitted_insts sm sb) + u.vs_inst_idx`
+          (fn th => rewrite_tac[GSYM th])) >> fs[fresh_vars_wrt_def]) >>
+  conj_tac
+  >- (`LENGTH (emitted_insts sm sb) + u.vs_inst_idx =
+        LENGTH (emitted_insts sa sm) + (LENGTH (emitted_insts sm sb) + s.vs_inst_idx)` by
+        (simp[NoAsms, Abbr `u`] >> decide_tac) >>
+      asm_rewrite_tac[]) >>
+  fs[lookup_var_def]
 QED
 
 Finalise target_array_guarded_path_ptr
@@ -121,7 +152,11 @@ Theorem target_fixed_array_path_ptr:
     un.t_mem = tn.t_mem /\ un.t_stor = tn.t_stor /\
     un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
-                              op_taint un (Var x) = op_taint tn (Var x))
+                              op_taint un (Var x) = op_taint tn (Var x)) /\
+    fresh_vars_wrt sb t /\ copy_old_operand sb dst /\
+    t = s with <|vs_vars := t.vs_vars;
+                 vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)|> /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -212,7 +247,9 @@ Theorem target_memory_header_path_ptr:
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
                               op_taint un (Var x) = op_taint tn (Var x)) /\
     r.vs_current_bb = sl.cs_current_bb /\ r.vs_inst_idx = LENGTH sl.cs_current_insts /\
-    ~r.vs_halted
+    ~r.vs_halted /\
+    r = s with <|vs_vars := r.vs_vars; vs_inst_idx := LENGTH sl.cs_current_insts|> /\
+    (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s)
 Proof
   strip_tac >> drule_all pop_memory_header_load >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >> gvs[] >>
@@ -223,7 +260,8 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
        fresh_vars_wrt_def, same_blocks_def] >>
-  fs[op_taint_def, fresh_vars_wrt_def, same_blocks_def] >> metis_tac[]
+  fs[op_taint_def, fresh_vars_wrt_def, same_blocks_def, arithmeticTheory.ADD1] >>
+  metis_tac[]
 QED
 
 Theorem target_dynamic_memory_array_path_ptr:
@@ -245,7 +283,10 @@ Theorem target_dynamic_memory_array_path_ptr:
     un.t_mem = tn.t_mem /\ un.t_stor = tn.t_stor /\
     un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
-                              op_taint un (Var x) = op_taint tn (Var x))
+                              op_taint un (Var x) = op_taint tn (Var x)) /\
+    fresh_vars_wrt sb t /\ copy_old_operand sb dst /\
+    t = s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|> /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >> drule_all target_memory_header_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -273,6 +314,17 @@ Proof
 QED
 
 Resume target_dynamic_memory_array_path_ptr[finish]:
+  `emitted_insts sl sb = emitted_insts sl sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `r.vs_inst_idx + LENGTH (emitted_insts sl sb) = LENGTH sb.cs_current_insts` by
+    (gs[] >> decide_tac) >>
+  `t = s with <|vs_vars := t.vs_vars; vs_inst_idx := LENGTH sb.cs_current_insts|>` by
+    (qpat_x_assum `t = r with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+     qpat_x_assum `r = s with <|vs_vars := _; vs_inst_idx := _|>` (fn th => once_rewrite_tac[th]) >>
+     simp[NoAsms] >> asm_rewrite_tac[] >> simp[NoAsms]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     fs[not_fresh_at_def] >> metis_tac[]) >>
   qexistsl_tac [`t`, `H'`, `un'`] >> simp[] >> conj_tac
   >- (`gas_path_ptr D 0 ctx fn PG G tn s (0+0) H' un' (OK t)` by
         (irule gas_path_ptr_then >> qexistsl_tac [`H`, `r`, `un`] >> simp[]) >> fs[]) >>
