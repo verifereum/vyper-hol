@@ -4,6 +4,7 @@ Ancestors
   externalReturnDirectMem externalReturnNormalizeRun externalNormalizePremises
   externalReturnSelectedMetadata externalReturnEncoderSuffixMem
   stmtSimReturnWiden typedStoreEndpoint externalReturnPrefix returnValueTyped
+  incompatibleReturnLayout
   vyperTypeSystem stmtLowering exprLoweringProps loweringPosts
   exprSimDefs vyperTypeArgFits compileEnv loweringStateRelDefs typedNormalizeEntryBoundary
   stmtLoweringMono fragExec exprOperandVar externalReturnRegisteredWindowMem
@@ -12,6 +13,43 @@ Ancestors
   valueEncodingProofs vyperABI vyperTypeABI loweringHalt
 
 val _ = Parse.hide "body";
+
+(* A returned value read at its physical (lowered) type: typed there, and
+   widening to the return type. *)
+Theorem return_value_physical_typed:
+  expr_sim_inv cenv cx env es /\
+  IS_SOME (type_stmt env ret (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := g) =
+    (INL v, es') /\
+  post_value_type cenv e = lowered_value_type cenv e ==>
+  type_widens_to (get_tenv cx) (lowered_value_type cenv e) ret /\
+  ?stv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
+        value_has_type stv v
+Proof
+  strip_tac >>
+  `well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ret` by
+    (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def, AllCaseEqs()]) >>
+  `env.type_defs = get_tenv cx` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+       vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  drule_all exprSimHypsTheory.post_value_type_widens >> strip_tac >>
+  conj_tac >- metis_tac[vyperTypeArgFitsTheory.type_widens_to_trans] >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- (gvs[] >>
+      `(do r <- eval_expr cx (Call ty (IntCall fid) args drv);
+           read_result cx r od) (es with gas_obs := g) = (INL v, es')` by
+        (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
+      `expr_sim_inv cenv cx env (es with gas_obs := g)` by simp[] >>
+      drule_all externalReturnSiteSemanticsTheory.return_intcall_physical_typed >>
+      simp[]) >>
+  `lowered_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_not_int_call] >>
+  drule_all return_value_typed >> simp[]
+QED
 
 Theorem external_frame_ret_value_normalized_run_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env0 lbl cenv0 pos_args
@@ -38,10 +76,6 @@ Theorem external_frame_ret_value_normalized_run_mem:
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa0) ==>
     !cenv' env lctx e es sa sb cenv'' s0 op s1 ee v t.
        same_frame cenv cenv' /\
-       (lowered_value_type cenv' e = expr_type e \/
-        is_bytestring_type (expr_type e) /\
-        is_bytestring_type (lowered_value_type cenv' e) /\
-        arg_type_fits (lowered_value_type cenv' e) (expr_type e)) /\
        expr_sim_inv cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
        stmt_exprs_ok cenv' (Return (SOME e)) /\
@@ -83,23 +117,22 @@ Proof
   drule_all external_package_frame_exit >> strip_tac >>
   qmatch_asmsub_abbrev_tac `expr_post ctx func cenv' cx` >>
   qpat_x_assum `?gs ee'. _` strip_assume_tac >>
-  drule_all return_value_typed >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
-     simp[exprSimHypsDefsTheory.expr_sim_inv_def,
-       vyperTypeInvariantsTheory.env_consistent_def,
-       vyperTypeInvariantsTheory.env_context_consistent_def]) >>
-  `type_widens_to (get_tenv cx) (expr_type e) ret` by
-    (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
-     simp[type_stmt_def, AllCaseEqs()]) >>
-  `lowered_value_type cenv' e = expr_type e` by
-    (qpat_x_assum `_ = expr_type e \/ _` strip_assume_tac >> simp[] >>
-     `expr_type e <> ret` by metis_tac[] >>
-     `~(is_bytestring_type ret /\ is_bytestring_type (expr_type e))` by
-       metis_tac[] >>
-     drule_all normalize_return_source_kinds >> simp[]) >>
-  `expr_type e <> ret /\
-   ~(is_bytestring_type ret /\ is_bytestring_type (expr_type e))` by metis_tac[] >>
+  `post_value_type cenv' e = lowered_value_type cenv' e` by
+    (`well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ret` by
+       (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+        simp[type_stmt_def, AllCaseEqs()]) >>
+     Cases_on `lowered_value_type cenv' e = expr_type e \/
+       is_bytestring_type (expr_type e) /\
+       is_bytestring_type (lowered_value_type cenv' e) /\
+       arg_type_fits (lowered_value_type cenv' e) (expr_type e)`
+     >- (pop_assum strip_assume_tac
+         >- metis_tac[post_value_type_lowered] >>
+         metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring]) >>
+     drule_all incompatible_return_layout_intcall >> strip_tac >>
+     simp[post_value_type_def]) >>
+  drule_all return_value_physical_typed >> strip_tac >>
+  `~(is_bytestring_type ret /\
+     is_bytestring_type (lowered_value_type cenv' e))` by metis_tac[] >>
   drule_all normalize_return_source_kinds >> strip_tac >>
   suspend "compile"
 QED
@@ -110,7 +143,8 @@ Resume external_frame_ret_value_normalized_run_mem[compile]:
     comp_bind_def, comp_ignore_bind_def, comp_return_def, pairTheory.UNCURRY] >>
   Cases_on `compile_alloc_buffer (type_memory_bytes cenv' ret) s1` >>
   rename1 `compile_alloc_buffer _ s1 = (nbuf,s2)` >>
-  Cases_on `compile_store_memory_typed cenv' nbuf.buf_operand ret op (expr_type e) s2` >>
+  Cases_on `compile_store_memory_typed cenv' nbuf.buf_operand ret op
+    (lowered_value_type cenv' e) s2` >>
   rename1 `compile_store_memory_typed _ _ _ _ _ _ = (u,s3)` >>
   Cases_on `u` >> simp[] >> strip_tac >>
   `compile_external_return (SOME nbuf.buf_operand) F cenv'.ce_raw_return
@@ -166,12 +200,9 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
      simp[package_external_fn_def]) >>
   drule_all normalize_external_frame_resources >>
   simp[GSYM (markerTheory.Abbrev_def)] >> strip_tac >>
-  `post_value_type cenv' e = expr_type e` by
-    (irule loweringPostsTheory.post_value_type_lowered >>
-     first_assum ACCEPT_TAC) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (fn th => strip_assume_tac
-       (REWRITE_RULE [expr_post_def, ASSUME ``post_value_type cenv' e = expr_type e``] th)) >>
+  qpat_assum `post_value_type cenv' e = _` (fn th =>
+    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [expr_post_def, th])) >>
   `sfields_tenv_consistent cenv'.ce_struct_fields (get_tenv cx) /\
    (!name fields. FLOOKUP cenv'.ce_struct_fields name = SOME fields ==>
       ALL_DISTINCT (MAP FST fields) /\
@@ -189,7 +220,7 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
   disch_then (drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand op t = _`)) >>
-  disch_then (qspec_then `tv` mp_tac) >>
+  disch_then (qspec_then `stv` mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >>
   strip_tac >> suspend "suffix"
 QED

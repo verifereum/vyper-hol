@@ -4,7 +4,7 @@ Ancestors
   internalReturnMetadata intCallStep externalNormalizePremises compileEnv
   valueEncoding exprLowering vyperTypeSystem vyperTypeArgFits vyperValue
   abiTypeBoundProps vyperABI exprSimSource exprSafeOperand
-  exprSimHypsDefs exprSimHyps vyperTypeInvariants vyperAST
+  exprSimHypsDefs exprSimHyps externalReturnSiteSemantics vyperTypeInvariants vyperAST
 
 Theorem nonzero_internal_call_located:
   !cfn ce ret ty fid args dret sa vv sb ret_count rbs pvs.
@@ -84,24 +84,21 @@ Proof
   simp[well_formed_type_def]
 QED
 
-Theorem incompatible_return_layout_located:
-  !tops am tx ce env es ret e ty sa vv sm.
-  supported_program tops /\ source_typing_ok tops am tx /\
-  expr_sim_inv ce
-    (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
-  IS_SOME (type_stmt env ret (Return (SOME e))) /\
-  ce.ce_func_info = build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
-  ce.ce_func_return_type = build_func_return_type tops /\
-  ce.ce_struct_fields = make_struct_fields_map tops /\
+(* A well-typed expression whose value is not laid out at its annotation
+   (nor a fitting bytestring) is an internal call whose annotation is neither a
+   word nor a bytestring, and widened from the callee's declared type. *)
+Theorem incompatible_return_layout_intcall:
+  !ce cx env es e.
+  expr_sim_inv ce cx env es /\ well_typed_expr env e /\
   ~(lowered_value_type ce e = expr_type e \/
     is_bytestring_type (expr_type e) /\
     is_bytestring_type (lowered_value_type ce e) /\
-    arg_type_fits (lowered_value_type ce e) (expr_type e)) /\
-  compile_expr ce ty e sa = (vv,sm) ==>
-  ?declared p. vv = LocatedValue declared p /\ declared <> expr_type e
+    arg_type_fits (lowered_value_type ce e) (expr_type e)) ==>
+  ?ann fid xs drv. e = Call ann (IntCall fid) xs drv /\
+    ~is_word_type ann /\ ~is_bytestring_type ann /\
+    type_widens_to (get_tenv cx) (lowered_value_type ce e) ann
 Proof
   rpt gen_tac >> strip_tac >>
-  `well_typed_expr env e` by gvs[type_stmt_def, AllCaseEqs()] >>
   Cases_on `e` >> gvs[lowered_value_type_def, expr_type_def]
   >>~- ([`Literal ann lit`],
       Cases_on `lit` >> Cases_on `ann` >>
@@ -133,6 +130,38 @@ Proof
   rename1 `Call ann target xs drv` >>
   Cases_on `target` >> gvs[lowered_value_type_def, expr_type_def] >>
   rename1 `IntCall fid` >>
+  drule_all externalReturnSiteSemanticsTheory.return_intcall_lowered_widens >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  gvs[lowered_value_type_def] >>
+  `~is_word_type ann` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_word_widening] >>
+  simp[] >> strip_tac >>
+  `is_bytestring_type (ce.ce_func_return_type (nsid_to_string fid))` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source] >>
+  gvs[type_widens_to_def]
+QED
+
+Theorem incompatible_return_layout_located:
+  !tops am tx ce env es ret e ty sa vv sm.
+  supported_program tops /\ source_typing_ok tops am tx /\
+  expr_sim_inv ce
+    (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
+  IS_SOME (type_stmt env ret (Return (SOME e))) /\
+  ce.ce_func_info = build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
+  ce.ce_func_return_type = build_func_return_type tops /\
+  ce.ce_struct_fields = make_struct_fields_map tops /\
+  ~(lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\
+    is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e)) /\
+  compile_expr ce ty e sa = (vv,sm) ==>
+  ?declared p. vv = LocatedValue declared p /\ declared <> expr_type e
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_typed_expr env e` by gvs[type_stmt_def, AllCaseEqs()] >>
+  drule_all incompatible_return_layout_intcall >> strip_tac >>
+  gvs[lowered_value_type_def, expr_type_def] >>
   namedCases_on `ce.ce_func_info (nsid_to_string fid)` ["ret_count rbs pvs"] >>
   `ce.ce_func_return_type (nsid_to_string fid) <> ann` by metis_tac[] >>
   drule_all typed_widened_internal_convention >> strip_tac >>
