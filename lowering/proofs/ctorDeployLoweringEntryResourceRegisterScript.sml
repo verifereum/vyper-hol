@@ -388,6 +388,22 @@ Proof
   simp covered_simps
 QED
 
+(* The bytestring decoder's copy is one emit_void whichever source it
+   reads; stating it so avoids splitting on every opcode under coverage. *)
+Theorem decode_bytes_copy_emit_void[local]:
+  !opc args.
+    (case opc of
+       CALLDATALOAD => emit_void CALLDATACOPY args
+     | DLOAD => emit_void DLOADBYTES args
+     | _ => emit_void MCOPY args) =
+    emit_void (case opc of
+                 CALLDATALOAD => CALLDATACOPY
+               | DLOAD => DLOADBYTES
+               | _ => MCOPY) args
+Proof
+  Cases >> simp[]
+QED
+
 Theorem deploy_ctor_covered_decoder_mutual:
   (!dst src opc hi info. opc <> ALLOCA ==>
     !st. cs_extends st (SND (compile_abi_decode_to_buf dst src opc hi info st)) /\
@@ -436,7 +452,7 @@ Resume deploy_ctor_covered_decoder_mutual[bytes]:
   ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp covered_simps >>
       ntac 4 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
-  Cases_on `opc` >> simp covered_simps
+  simp (decode_bytes_copy_emit_void :: covered_simps)
 QED
 Resume deploy_ctor_covered_decoder_mutual[array]:
   once_rewrite_tac[compile_abi_decode_to_buf_def] >>
