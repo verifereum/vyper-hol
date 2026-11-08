@@ -131,7 +131,8 @@ Proof
   drule run_lowering_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
@@ -184,7 +185,8 @@ Proof
   drule lowering_context_ok_static_integrity >> strip_tac >>
   drule lowering_context_ok_alloca_budget >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
@@ -242,7 +244,8 @@ Proof
   drule run_lowering_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
@@ -306,7 +309,8 @@ Proof
   drule lowering_context_ok_static_integrity >> strip_tac >>
   drule lowering_context_ok_dload_budget >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
-    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+    (imp_res_tac lookup_function_MEM >>
+     imp_res_tac lookup_function_result_name >> simp[]) >>
   `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
   `?lbl. fn_entry_label fn = SOME lbl` by
     (Cases_on `fn.fn_blocks` >>
