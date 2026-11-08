@@ -431,7 +431,7 @@ Proof
   rw[observer_region_closed_def, abi_observer_step_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
   gvs[is_terminator_def] >>
-  gvs[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def] >>
   gvs[jump_to_def, listTheory.FIND_thm] >>
   gvs[eval_phis_def, eval_one_phi_def, resolve_phi_def,
       eval_operand_def, update_var_def, phi_prefix_length_def]
