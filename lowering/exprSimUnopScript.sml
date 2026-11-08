@@ -466,7 +466,10 @@ Proof
   (conj_tac >- simp[is_word_type_def]) >>
   disch_then kall_tac >> disj1_tac >>
   Cases_on `v1` >>
-  gvs[value_has_type_def, unop_result_def, evaluate_builtin_def,
+  gvs[value_has_type_def, unop_result_def] >>
+  gvs[SIMP_RULE (srw_ss()) []
+      (Q.SPECL [`cx`, `acc`, `ann`, `Not`, `tys`, `vs`]
+        evaluate_builtin_def),
       vyperASTTheory.type_to_int_bound_def, typed_val_to_w256_def,
       val_to_w256_def, compile_invert_def, vyperValueTheory.evaluate_type_def]
   >~ [`emit_op ISZERO`]
@@ -552,7 +555,10 @@ Proof
   rename1 `within_int_bound _ i` >>
   drule int256_abs_bound >> strip_tac >>
   drule_all abs_i2w >> strip_tac >>
-  simp[unop_result_def, evaluate_builtin_def,
+  simp[unop_result_def] >>
+  simp[SIMP_RULE (srw_ss()) []
+       (Q.SPECL [`cx`, `acc`, `ann`, `Abs`, `tys`, `vs`]
+         evaluate_builtin_def),
        vyperASTTheory.type_to_int_bound_def, bounded_int_op_def,
        typed_val_to_w256_def, val_to_w256_def] >>
   Cases_on `i = INT_MIN (:256)`
