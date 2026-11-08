@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem joint_name_result_slot:
-  intcall_joint_res fp ce env es sa s /\
+  intcall_joint_res fp ce env es sc s /\
   well_typed_expr env (Name ann name) /\
   compile_expr ce ty (Name ann name) sa = (vv,sb) /\
   evaluate_type (get_tenv fp.jc_cx) ann = SOME tv ==>
@@ -295,4 +295,148 @@ Proof
   strip_tac >>
   drule_all supported_type_builtin_complex_result >> strip_tac >>
   drule_all joint_supported_result_slot >> simp[]
+QED
+
+Theorem supported_builtin_complex_result:
+  supportedExprForms$supported_builtin_form tops ty blt args /\
+  well_typed_expr env (Builtin ty blt args) /\
+  (!elem bd. blt <> MakeArray elem bd) /\
+  ~is_word_type ty /\ ~is_bytestring_type ty ==>
+  ty = ArrayT (BaseT (UintT 256)) (Fixed 2)
+Proof
+  Cases_on `blt` >> strip_tac >>
+  gvs[well_typed_expr_def, well_typed_builtin_app_def,
+      supportedExprFormsTheory.supported_builtin_form_def,
+      is_word_type_def, is_bytestring_type_def,
+      is_bool_type_def, is_uint256_type_def, is_bytes32_type_def,
+      is_flag_type_def, AllCaseEqs()]
+  >~ [`supported_signed_type t`] >-
+    (Cases_on `t` >> gvs[supportedExprFormsTheory.supported_signed_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[supportedExprFormsTheory.supported_signed_type_def, is_word_type_def])
+  >~ [`env_item_type item`] >-
+    (Cases_on `item` >> gvs[env_item_type_def, is_word_type_def,
+                           is_bytestring_type_def])
+  >~ [`account_item_type item`] >-
+    (Cases_on `item` >> gvs[account_item_type_def, is_word_type_def,
+                           is_bytestring_type_def]) >>
+  Cases_on `args` >> gvs[is_word_type_def] >>
+  rename1 `LENGTH tail = 1` >> Cases_on `tail` >> gvs[] >>
+  rename1 `well_typed_binop ty bop t1 t2` >> Cases_on `bop` >>
+  gvs[well_typed_binop_def, is_word_type_def,
+      is_bool_type_def, is_flag_type_def] >>
+  rename1 `~is_word_type t` >> Cases_on `t` >> gvs[is_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def]
+QED
+
+Theorem joint_builtin_result_slot:
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  intcall_joint_res fp ce env es sc s /\
+  supportedExprForms$supported_builtin_form fp.jc_tops ty blt args /\
+  well_typed_expr env (Builtin ty blt args) /\
+  (!elem bd. blt <> MakeArray elem bd) /\
+  vv_at ce fp.jc_cx ty sa sb es r vv s /\
+  read_result fp.jc_cx r es = (INL v,es) /\
+  evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\
+  ~is_word_type ty /\ ~is_bytestring_type ty /\
+  (case vv of StackValue _ _ => T
+            | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+  ?w a k. eval_operand (vv_operand vv) s = SOME w /\
+    a <= w2n w /\ w2n w + type_memory_size tv <= a + k /\
+    a + k < dimword (:256) /\
+    (fp.jc_lo <= a \/
+     ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)
+Proof
+  strip_tac >> drule_all supported_builtin_complex_result >> strip_tac >>
+  `supportedTypes$supported_value_type fp.jc_tops ty` by
+    gvs[supportedTypesTheory.supported_value_type_def,
+        supportedTypesTheory.supported_scalar_type_def,
+        supportedTypesTheory.supported_word_type_def,
+        supportedTypesTheory.supported_int_width_def] >>
+  drule_all joint_supported_result_slot >> simp[]
+QED
+
+Theorem well_typed_literal_word_or_bytes:
+  well_typed_literal ty lit /\ evaluate_type tenv ty = SOME tv ==>
+  is_word_type ty \/ is_bytestring_type ty
+Proof
+  Cases_on `ty` >> simp[well_typed_literal_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[well_typed_literal_def, is_word_type_def, is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  Cases_on `lit` >> simp[well_typed_literal_def, is_word_type_def,
+                         is_bytestring_type_def, vyperValueTheory.evaluate_type_def,
+                         AllCaseEqs()]
+QED
+
+Theorem supported_toplevel_result_nonmemory:
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
+  stmt_state_rel ctx func ce cx es s /\
+  supportedExprs$supported_pure_expr tops (TopLevelName ann nsid) /\
+  eval_expr cx (TopLevelName ann nsid) es = (INL r,ee) /\
+  compile_expr ce ty (TopLevelName ann nsid) sa = (vv,sb) ==>
+  ?vt p. vv = LocatedValue vt p /\ p.ptr_location <> LocMemory
+Proof
+  strip_tac >>
+  Cases_on `supportedDecls$supported_immutable_type tops nsid = SOME ann`
+  >- (drule_all exprOpenMainTheory.supported_immutable_bound >> strip_tac >>
+      gvs[compile_expr_def, mk_ptr_def]) >>
+  PairCases_on `nsid` >>
+  `supported_storage_value tops (nsid0,nsid1) ann` by
+    gvs[supportedExprsTheory.supported_pure_expr_def] >>
+  drule exprOpenCasesTheory.supported_storage_value_runtime_lookup >>
+  strip_tac >> gvs[] >>
+  `storage_vars_rel ce cx /\ transient_vars_rel ce cx /\
+   get_module_code cx NONE = SOME tops` by
+    fs[bodySimTheory.body_inv_def, stmt_state_rel_def, state_rel_def] >>
+  drule_all exprOpenCasesTheory.eval_toplevel_decl_bound >> strip_tac >>
+  gvs[compile_expr_def, mk_ptr_def]
+QED
+
+(* Slot boundary for the nonconditional, nonaggregate pure constructors.
+   Name deliberately uses local provenance even when its type has size zero. *)
+Theorem joint_nonconditional_result_slot:
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  intcall_joint_res fp ce env es sa s /\
+  intcall_joint_res fp ce env ee sb u /\
+  well_typed_expr env e /\ supportedExprs$supported_pure_expr fp.jc_tops e /\
+  (!ann elem bd args. e <> Builtin ann (MakeArray elem bd) args) /\
+  (!ann c a b. e <> IfExp ann c a b) /\
+  (!ann id fields. e <> StructLit ann id fields) /\
+  (!ann obj fld. e <> Attribute ann obj fld) /\
+  (!ann obj idx. e <> Subscript ann obj idx) /\
+  compile_expr ce ty e sa = (vv,sb) /\
+  eval_expr fp.jc_cx e es = (INL r,ee) /\
+  vv_at ce fp.jc_cx (post_value_type ce e) sa sb ee r vv u /\
+  read_result fp.jc_cx r ee = (INL v,ee) /\
+  post_value_type ce e <> NoneT /\
+  ~is_word_type (post_value_type ce e) /\
+  ~is_bytestring_type (post_value_type ce e) /\
+  evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME tv /\
+  (case vv of StackValue _ _ => T
+            | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+  ?w a k. eval_operand (vv_operand vv) u = SOME w /\
+    a <= w2n w /\ w2n w + type_memory_size tv <= a + k /\
+    a + k < dimword (:256) /\
+    (fp.jc_lo <= a \/
+     ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)
+Proof
+  Cases_on `e` >> simp[loweringPostsTheory.post_value_type_def] >> strip_tac >>
+  gvs[supportedExprsTheory.supported_pure_expr_def, vyperASTTheory.expr_type_def]
+  >~ [`well_typed_expr env (Name ann name)`] >-
+    (drule_all joint_name_result_slot >> simp[])
+  >~ [`well_typed_expr env (Literal ann lit)`] >-
+    (fs[well_typed_expr_def] >>
+     drule_all well_typed_literal_word_or_bytes >> simp[])
+  >>~- ([`well_typed_expr env (TopLevelName ann nsid)`],
+    `expr_sim_inv ce fp.jc_cx env es /\
+      stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s` by
+       fs[intcall_joint_res_def] >>
+     `supportedExprs$supported_pure_expr fp.jc_tops (TopLevelName ann nsid)` by
+       simp[supportedExprsTheory.supported_pure_expr_def] >>
+     drule_all supported_toplevel_result_nonmemory >> strip_tac >> gvs[])
+  >~ [`well_typed_expr env (Builtin ann blt args)`] >-
+    (drule_all joint_builtin_result_slot >> simp[])
+  >~ [`well_typed_expr env (TypeBuiltin ann tb target args)`] >-
+    (drule_all joint_type_builtin_result_slot >> simp[])
 QED
