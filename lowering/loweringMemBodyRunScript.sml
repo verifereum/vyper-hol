@@ -346,7 +346,7 @@ Theorem lower_vyper_runtime_unit_body_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    metis_tac[gas_explicit_nil] >>
+    first_assum (ACCEPT_TAC o REWRITE_RULE [gasSummaryTheory.gas_explicit_nil] o Q.SPEC `[]`) >>
   drule_all external_entry_reaches_body_mem >> strip_tac >>
   drule_all external_body_frame >> strip_tac >>
   drule_all external_frame_ret_ok_mem >>
@@ -369,9 +369,9 @@ Proof
   impl_tac
   >- (simp[ret_pc_ok_def, return_buf_frame_def] >> rpt conj_tac
       >~ [`gas_admissible _ _ _`]
-      >- (irule external_body_source_ok_gas_mem >> metis_tac[])
+      >- (drule_all external_body_source_ok_gas_mem >> simp[])
       >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]
-      >- (irule external_body_no_exempt_cert >> metis_tac[]) >>
+      >- (drule_all external_body_no_exempt_cert >> simp[]) >>
       rpt strip_tac >> gvs[stmt_lands_def] >>
       drule compile_guarded_body_end_mem_safe >>
       disch_then (qspecl_then [`unit.cu_context`, `sb`, `func`, `s`]
