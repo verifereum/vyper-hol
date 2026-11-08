@@ -12,14 +12,14 @@ Ancestors calldataTypedRobustPtr abiScratchDecoderTuple abiScratchLeafEffect
 
 Theorem calldata_scratch_word_decoder_ptr:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-    CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -54,12 +54,12 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_scratch_decoder_word_pre >> strip_tac >>
   drule abi_decoder_primitive_source >> strip_tac >>
-  `compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) start = ((),end_st)` by metis_tac[] >>
   `ptr_covers G tn root initial 32` by metis_tac[] >>
   drule_all calldata_primitive_reentry_ptr_endpoint >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `mem_bytes_at _ _ _ = _` kall_tac >>
   `abi_scratch_effect first last start.cs_next_id end_st.cs_next_id
     start.cs_next_var limit_st d 32 b cap initial actual` by
@@ -67,7 +67,7 @@ Proof
   `!x. not_fresh_at start x ==> lookup_var x actual = lookup_var x initial` by
     (rpt strip_tac >> irule ctor_actual_sequence_var_frame >>
      qexists `emitted_insts start end_st` >> simp[] >>
-     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ (DecPrimWord _) _ = _` mp_tac >>
+     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ (DecPrimWord _) _ = _` mp_tac >>
      qpat_x_assum `not_fresh_at start x` mp_tac >>
      rpt (pop_assum kall_tac) >>
      Cases_on `clamp` >>

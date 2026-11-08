@@ -22,11 +22,11 @@ Proof
 QED
 
 Theorem calldata_scratch_array_constructor_entry_ptr:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) start = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w)
-    sb d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   loop_st.cs_next_id <= last /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ fn_has_code start loop_st func /\
@@ -35,7 +35,7 @@ Theorem calldata_scratch_array_constructor_entry_ptr:
   ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   allocas_from lower initial /\ lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) (FST setup) (SND setup) loop_st = ((),final) /\
   fn_has_code loop_st final func /\
@@ -47,8 +47,8 @@ Theorem calldata_scratch_array_constructor_entry_ptr:
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) ==>
   ?actual slot H u q labels st ops middle end_st.
     abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-      bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w)
-      sb d first last b cap actual /\
+      bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+      0 sb d first last b cap actual /\
     abi_scratch_effect first last start.cs_next_id loop_st.cs_next_id start.cs_next_var
       limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\
     abi_scratch_effect first last start.cs_next_id loop_st.cs_next_id start.cs_next_var
@@ -57,17 +57,17 @@ Theorem calldata_scratch_array_constructor_entry_ptr:
     FLOOKUP actual.vs_allocas (loop_st.cs_next_id-2) = SOME (slot,32) /\
     eval_operand (FST setup) actual = SOME (n2w slot) /\ mload slot actual = 0w /\
     eval_operand (SND setup) actual = SOME (n2w (LENGTH vs)) /\ FST setup = Var q /\
-    abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-      (Var q) src (Var root) sb d slot first last b cap loop_st.cs_next_var actual /\
-    abi_decode_loop_prefix (Var q) src CALLDATALOAD loop_st = (labels,st) /\
-    abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w)
+    abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+      (Var q) src (Var root) 0 sb d slot first last b cap loop_st.cs_next_var actual /\
+    abi_decode_loop_prefix (Var q) src CALLDATALOAD (Lit 0w) loop_st = (labels,st) /\
+    abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decode_loop_suffix (Var q) (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
     abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q)
-      src (Var root) CALLDATALOAD (Lit 0w) (FST labels) (SND (SND labels))
+      src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) (FST labels) (SND (SND labels))
       (loop_st.cs_next_id+1) loop_st.cs_next_var first last lo hi loop_st.cs_next_var
       limit_st (loop_st.cs_next_id-2) /\
     abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
@@ -100,7 +100,7 @@ Proof
     (drule_at (Pat `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`)
        scratch_effect_allocas_from >> simp[]) >>
   `first <= loop_st.cs_next_id-2 /\ loop_st.cs_next_id-2 < last` by decide_tac >>
-  drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ loop_st _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ loop_st _ _ _ _ _ _ _ _ _ _ _ _ _`)
     abi_scratch_decoder_loop_input >>
   disch_then drule_all >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>

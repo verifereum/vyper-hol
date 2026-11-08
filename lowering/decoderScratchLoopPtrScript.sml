@@ -138,7 +138,7 @@ Theorem decoder_scratch_child_backedge_ptr:
   first <= site /\ site < last /\ (site < child_lo \/ child_hi <= site) /\
   d + 32 + j * type_memory_size tv + type_memory_size tv <= d + outsz /\
   first <= lo /\ hi <= last /\
-  abi_scratch_decoder_ranges CALLDATALOAD hi_op src dst sb (LENGTH bs) d outsz first last b cap s /\
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) hi_op src dst 0 sb (LENGTH bs) d outsz first last b cap s /\
   not_fresh_at start q /\ not_fresh_at start iv /\
   (!x. not_fresh_at start x ==>
     lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
@@ -182,7 +182,7 @@ Proof
   `first <= child_lo /\ child_hi <= last` by decide_tac >>
   `abi_footprint_disjoint (d + 32 + j * type_memory_size tv) (type_memory_size tv)
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
-    (qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_ranges_def]) >>
      irule abi_footprint_disjoint_subwindow >>
      qexistsl_tac [`d`, `outsz`] >> asm_simp_tac bool_ss [] >> decide_tac) >>

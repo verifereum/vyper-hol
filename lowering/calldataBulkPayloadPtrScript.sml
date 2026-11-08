@@ -101,7 +101,7 @@ QED
 
 
 Theorem calldata_bulk_payload_endpoint_ptr:
-  abi_decode_bulk_payload (Var root) src cnt mem_sz CALLDATALOAD sa = ((),sb) /\
+  abi_decode_bulk_payload (Var root) src cnt mem_sz CALLDATALOAD (Lit 0w) sa = ((),sb) /\
   lookup_var root s = SOME (n2w d) /\ eval_operand src s = SOME a /\
   eval_operand cnt s = SOME (n2w n) /\
   not_fresh_at sa root /\ (!x. src = Var x ==> not_fresh_at sa x) /\

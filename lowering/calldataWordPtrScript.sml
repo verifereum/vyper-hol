@@ -7,7 +7,7 @@ Ancestors calldataOverwritePtr calldataWordStepsPtr calldataClampPtr calldataDec
   fragExecPtr ghostPcTransportPtr finite_map pred_set codegenRel instIdxIndep ptrSafetyTransport
 
 Theorem calldata_unclamped_word_instructions:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) sa = ((),sb) ==>
   emitted_insts sa sb =
     [mk_inst sa.cs_next_id CALLDATALOAD [src]
@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem calldata_clamped_word_prefix_framed:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) sa = ((),sb) /\
   abi_decoder_clamp_valid clamp (abi_decode_load CALLDATALOAD sw s) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -52,7 +52,7 @@ Theorem calldata_clamped_word_prefix_framed:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
@@ -148,7 +148,7 @@ QED
 Finalise calldata_clamped_word_prefix_framed
 
 Theorem calldata_unclamped_word_prefix_framed:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) sa = ((),sb) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
   fresh_vars_wrt sa s /\ ptr_covers G tn p s 32 /\
@@ -180,7 +180,7 @@ Proof
 QED
 
 Theorem calldata_word_overwrite_prefix:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) sa = ((),sb) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
   not_fresh_at sa p /\ (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -208,7 +208,7 @@ Theorem calldata_word_overwrite_prefix:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `run_inst_seq _ _ = OK actual` (mk_asm "actual_run") >>
   simp_tac (srw_ss()) [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>

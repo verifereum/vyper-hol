@@ -105,7 +105,7 @@ Proof
 QED
 
 Theorem calldata_dynamic_element_source_structure:
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz st = (out,ready) ==>
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) abi_sz st = (out,ready) ==>
   inst_extends st ready /\ same_blocks st ready /\
   st.cs_next_var <= ready.cs_next_var /\
   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready) /\
@@ -309,7 +309,7 @@ QED
 
 Theorem calldata_dynamic_element_source_endpoint_ptr_core:
   !head data abi_sz st out ready s a b tn G t cx ctx PG R.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz st = (out,ready) /\
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) abi_sz st = (out,ready) /\
   eval_operand head s = SOME a /\ eval_operand data s = SOME b /\
   (!x. head = Var x ==> not_fresh_at st x) /\
   (!x. data = Var x ==> not_fresh_at st x) /\
@@ -429,7 +429,7 @@ QED
 
 Theorem calldata_dynamic_element_source_endpoint_ptr:
   !head data abi_sz st out ready s a b tn G t cx ctx PG R.
-  compile_abi_decode_dyn_elem_ptr CALLDATALOAD head data (Lit 0w) abi_sz st = (out,ready) /\
+  compile_abi_decode_dyn_elem_ptr CALLDATALOAD (Lit 0w) head data (Lit 0w) abi_sz st = (out,ready) /\
   eval_operand head s = SOME a /\ eval_operand data s = SOME b /\
   (!x. head = Var x ==> not_fresh_at st x) /\
   (!x. data = Var x ==> not_fresh_at st x) /\
@@ -676,7 +676,7 @@ QED
 
 Theorem calldata_array_element_setup_endpoint_ptr_core:
   !q src root di abi_sz mem_sz st ops ready initial slot j sb G tn d total t cx ctx PG R.
-  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
+  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
   lookup_var q initial = SOME (n2w slot) /\ slot + 32 < dimword (:256) /\
   mload slot initial = n2w j /\ j < dimword (:256) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -937,7 +937,7 @@ Finalise calldata_array_element_setup_endpoint_ptr_core
 
 Theorem calldata_array_element_setup_endpoint_ptr:
   !q src root di abi_sz mem_sz st ops ready initial slot j sb G tn d total t cx ctx PG R.
-  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
+  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
   lookup_var q initial = SOME (n2w slot) /\ slot + 32 < dimword (:256) /\
   mload slot initial = n2w j /\ j < dimword (:256) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -971,7 +971,7 @@ QED
 
 Theorem calldata_array_element_setup_original_pc_ptr:
   !q src root di abi_sz mem_sz st ops ready initial slot j sb G tn d total t cx ctx PG R D lower ctx' func.
-  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
+  abi_decode_array_element_setup (Var q) src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) di abi_sz mem_sz st = (ops,ready) /\
   lookup_var q initial = SOME (n2w slot) /\ slot + 32 < dimword (:256) /\
   mload slot initial = n2w j /\ j < dimword (:256) /\
   eval_operand src initial = SOME (n2w sb) /\

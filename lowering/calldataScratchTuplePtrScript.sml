@@ -18,7 +18,7 @@ Ancestors calldataScratchBytesPtr decoderMemberPrefixPtr abiScratchDecoderTuple 
 (* The empty suffix executes no instructions, even after an arbitrary prefix.
    Keep the entire root allocation and arbitrary protected memory in the interface. *)
 Theorem calldata_scratch_members_nil_ptr:
-  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) []
+  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) []
     ao vo start = ((),end_st) /\
   abi_decoder_budget first last b cap initial /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -56,7 +56,7 @@ QED
 
 (* Keep the physical sequence witness when passing to continuation semantics. *)
 Theorem calldata_member_setup_run_sim[local]:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) dyn ao vo st = (ops,ready) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,ready) /\
   fn_has_code st ready func /\
   run_inst_seq (emitted_insts st ready) initial = OK prepared /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -85,7 +85,7 @@ Theorem calldata_member_input_at_endpoint[local]:
   abi_to_vyper env ty (dec (vyper_to_abi_type env ty)
     (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
       (DROP (SUM (MAP abi_member_head_size pre)) bs))) = SOME v /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
     d outsz first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
@@ -101,8 +101,8 @@ Theorem calldata_member_input_at_endpoint[local]:
   abi_scratch_decoder_input ce env sf ty tv
     (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
       (DROP (SUM (MAP abi_member_head_size pre)) bs)) v ready childsrc childdst
-    CALLDATALOAD (Lit 0w)
-    (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
+    CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
       (SUM (MAP abi_member_head_size pre))) (d + vo) first last b cap prepared
 Proof
   strip_tac >>
@@ -111,17 +111,17 @@ Proof
   drule_all abi_valid_decoded_metadata >> strip_tac >>
   `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
     simp[abi_decoder_operand_live_def] >>
-  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
      d outsz first last b cap prepared` by
-    (qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `abi_decoder_address_frame _ _ _` mp_tac >>
      qpat_x_assum `abi_decoder_operand_live _ src` mp_tac >>
      qpat_x_assum `abi_decoder_operand_live _ dst` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[abi_scratch_decoder_ranges_def, abi_decoder_address_frame_def] >>
      rpt strip_tac >> gvs[abi_decoder_child_scratch_def] >> metis_tac[]) >>
-  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) childsrc childdst
-     (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
+  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) childsrc childdst
+     0 (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
        (SUM (MAP abi_member_head_size pre)))
      (LENGTH (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
        (DROP (SUM (MAP abi_member_head_size pre)) bs)))
@@ -138,9 +138,9 @@ Proof
 QED
 
 Theorem calldata_member_input_pc[local]:
-  abi_scratch_decoder_input ce env sf ty tv bs v st src dst opc hi sb d first last b cap
+  abi_scratch_decoder_input ce env sf ty tv bs v st src dst opc (Lit 0w) hi 0 sb d first last b cap
     (s with vs_inst_idx := idx) =
-  abi_scratch_decoder_input ce env sf ty tv bs v st src dst opc hi sb d first last b cap s
+  abi_scratch_decoder_input ce env sf ty tv bs v st src dst opc (Lit 0w) hi 0 sb d first last b cap s
 Proof
   simp[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def,
     abi_decoder_child_scratch_def, abi_decode_source_def, eval_op_inst_idx]
@@ -154,7 +154,7 @@ Proof
 QED
 
 Theorem calldata_scratch_member_setup_ptr[local]:
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_dynamic (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size pre)) vo st = (ops,ready) /\
   fn_has_code st ready func /\
@@ -165,7 +165,7 @@ Theorem calldata_scratch_member_setup_ptr[local]:
   abi_to_vyper env ty (dec (vyper_to_abi_type env ty)
     (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
       (DROP (SUM (MAP abi_member_head_size pre)) bs))) = SOME v /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
     d outsz first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
@@ -181,8 +181,8 @@ Theorem calldata_scratch_member_setup_ptr[local]:
     abi_scratch_decoder_input ce env sf ty tv
       (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
         (DROP (SUM (MAP abi_member_head_size pre)) bs)) v ready (FST ops) (Var q)
-      CALLDATALOAD (Lit 0w)
-      (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
+      CALLDATALOAD (Lit 0w) (Lit 0w)
+      0 (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
         (SUM (MAP abi_member_head_size pre))) (d + vo) first last b cap prepared /\
     ptr_covers H u q prepared (type_memory_bytes ce ty) /\
     op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
@@ -232,7 +232,7 @@ Proof
     ptr_covers_def, fresh_vars_wrt_def, allocas_from_def, lookup_var_def] >>
   `initial with vs_inst_idx := LENGTH st.cs_current_insts = initial` by
     simp[venom_state_component_equality] >>
-  qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `fresh_vars_wrt limit_st t` mp_tac >>
   qpat_x_assum `allocas_from lower initial` mp_tac >>
   qpat_x_assum `!x. not_fresh_at st x ==> _` mp_tac >>
@@ -245,14 +245,14 @@ QED
 Theorem calldata_scratch_member_body_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
     G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -284,10 +284,10 @@ Theorem calldata_scratch_member_body_guarded_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size pre)) vo st = (ops,ready) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (ready.cs_blocks = end_st.cs_blocks \/
@@ -298,7 +298,7 @@ Theorem calldata_scratch_member_body_guarded_ptr:
   abi_to_vyper env ty (dec (vyper_to_abi_type env ty)
     (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
       (DROP (SUM (MAP abi_member_head_size pre)) bs))) = SOME v /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
     d outsz first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
@@ -402,7 +402,7 @@ Resume calldata_scratch_member_body_guarded_ptr[empty]:
   qpat_x_assum `!start end_st func ctx src root bs v sb d first last b cap limit_st initial G tn P D PG. _` kall_tac >>
   drule_all abi_decoder_empty_descriptor_value >> strip_tac >>
   `end_st = ready` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_empty_complex_phases, abi_decode_complex_head_guard_def,
        comp_return_def]) >>
   gvs[] >>
@@ -452,14 +452,14 @@ Finalise calldata_scratch_member_body_guarded_ptr
 Theorem calldata_scratch_member_body_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
     G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -490,10 +490,10 @@ Theorem calldata_scratch_member_body_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size pre)) vo st = (ops,ready) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),end_st) /\
   fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
   (ready.cs_blocks = end_st.cs_blocks \/
@@ -504,7 +504,7 @@ Theorem calldata_scratch_member_body_ptr:
   abi_to_vyper env ty (dec (vyper_to_abi_type env ty)
     (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
       (DROP (SUM (MAP abi_member_head_size pre)) bs))) = SOME v /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
     d outsz first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
@@ -557,14 +557,14 @@ Theorem calldata_scratch_members_guarded_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (tys,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -596,7 +596,7 @@ Theorem calldata_scratch_members_guarded_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),final) /\
@@ -608,7 +608,7 @@ Theorem calldata_scratch_members_guarded_ptr:
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs
       (DROP (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))) bs)) vs /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ tys)) bs bs /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ tys))) first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -739,7 +739,7 @@ Proof
      goal_assum (drule_at Any) >>
      simp_tac bool_ss [abi_scratch_disjoint_cons] >>
      conj_tac >- (disj1_tac >> decide_tac) >>
-     qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ after_head` mp_tac >>
+     qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ after_head` mp_tac >>
      qpat_assum `val_footprint tv v <= _` mp_tac >>
      qpat_assum `type_memory_size tv = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -794,14 +794,14 @@ Theorem calldata_scratch_members_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (tys,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -832,7 +832,7 @@ Theorem calldata_scratch_members_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),final) /\
@@ -844,7 +844,7 @@ Theorem calldata_scratch_members_ptr:
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs
       (DROP (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys))) bs)) vs /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (pretys ++ tys)) bs bs /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) (pretys ++ tys))) first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -901,14 +901,14 @@ Theorem calldata_scratch_complex_decoder_guarded_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (tys,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -940,7 +940,7 @@ Theorem calldata_scratch_complex_decoder_guarded_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex dyn (abi_decoder_member_infos sf ce tys)) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
@@ -949,7 +949,7 @@ Theorem calldata_scratch_complex_decoder_guarded_ptr:
   abi_decoder_members ce env sf tys tvs
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) tys)) first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   abi_decoder_operand_live start.cs_next_var src /\
@@ -987,7 +987,7 @@ Theorem calldata_scratch_complex_decoder_guarded_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decode_complex_phases,
       abi_decode_complex_head_guard_def, comp_ignore_bind_def,
       comp_bind_def, comp_return_def]) >>
@@ -1005,14 +1005,14 @@ Theorem calldata_scratch_complex_decoder_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (tys,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1043,7 +1043,7 @@ Theorem calldata_scratch_complex_decoder_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex dyn (abi_decoder_member_infos sf ce tys)) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
@@ -1052,7 +1052,7 @@ Theorem calldata_scratch_complex_decoder_ptr:
   abi_decoder_members ce env sf tys tvs
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
-  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) tys)) first last b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   abi_decoder_operand_live start.cs_next_var src /\
@@ -1107,14 +1107,14 @@ Theorem calldata_scratch_tuple_decoder_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (tys,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1145,14 +1145,14 @@ Theorem calldata_scratch_tuple_decoder_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (TupleT tys)) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (TupleT tys) (TupleTV tvs) bs v start src (Var root)
-    CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1187,7 +1187,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule abi_scratch_decoder_tuple_inputs >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   drule_all calldata_scratch_complex_decoder_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
@@ -1200,14 +1200,14 @@ QED
 Theorem calldata_scratch_fixed_array_decoder_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1240,14 +1240,14 @@ Theorem calldata_scratch_fixed_array_decoder_ptr:
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   (0 < n /\ is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Fixed n))) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
-    bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    bs v start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1283,7 +1283,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   mp_tac (Q.INST [`tys` |-> `REPLICATE (LENGTH vs) ty`,
     `tvs` |-> `REPLICATE (LENGTH vs) tv`,
@@ -1309,14 +1309,14 @@ Theorem calldata_scratch_struct_decoder_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (MAP SND args,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info (sf \\ nsid_to_string nsid) ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce (env \\ nsid) (sf \\ nsid_to_string nsid) ty tv
-      bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      bs v start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1347,14 +1347,14 @@ Theorem calldata_scratch_struct_decoder_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (StructT nsid)) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
-    bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    bs v start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1390,7 +1390,7 @@ Proof
   drule_all abi_scratch_decoder_struct_inputs >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   drule abi_decoder_struct_infos >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST [`env` |-> `env \\ nsid`,
     `sf` |-> `sf \\ nsid_to_string nsid`,
@@ -1416,14 +1416,14 @@ Theorem calldata_scratch_tuple_decoder_guarded_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (tys,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1455,14 +1455,14 @@ Theorem calldata_scratch_tuple_decoder_guarded_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (TupleT tys)) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (TupleT tys) (TupleTV tvs) bs v start src (Var root)
-    CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1498,7 +1498,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule abi_scratch_decoder_tuple_inputs >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   drule_all calldata_scratch_complex_decoder_guarded_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
@@ -1510,14 +1510,14 @@ QED
 Theorem calldata_scratch_fixed_array_decoder_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1551,14 +1551,14 @@ Theorem calldata_scratch_fixed_array_decoder_guarded_ptr:
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   (0 < n /\ is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Fixed n))) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
-    bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    bs v start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1595,7 +1595,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   mp_tac (Q.INST [`tys` |-> `REPLICATE (LENGTH vs) ty`,
     `tvs` |-> `REPLICATE (LENGTH vs) tv`,
@@ -1620,14 +1620,14 @@ Theorem calldata_scratch_struct_decoder_guarded_ptr:
   (!ty tv. MEM (ty,tv) (ZIP (MAP SND args,tvs)) ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info (sf \\ nsid_to_string nsid) ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce (env \\ nsid) (sf \\ nsid_to_string nsid) ty tv
-      bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      bs v start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1659,14 +1659,14 @@ Theorem calldata_scratch_struct_decoder_guarded_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (StructT nsid)) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
-    bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    bs v start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -1703,7 +1703,7 @@ Proof
   drule_all abi_scratch_decoder_struct_inputs >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   drule abi_decoder_struct_infos >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST [`env` |-> `env \\ nsid`,
     `sf` |-> `sf \\ nsid_to_string nsid`,

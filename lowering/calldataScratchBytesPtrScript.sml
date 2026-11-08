@@ -12,14 +12,14 @@ Ancestors calldataScratchWordPtr calldataDecodePtr abiValidBytesReentry abiDecod
 
 Theorem calldata_scratch_bytestring_decoder_ptr:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-    CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -54,7 +54,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_scratch_decoder_input_point >> strip_tac >>
   drule_all abi_decoder_valid_bytes_input >> strip_tac >>
-  `compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring n) start = ((),end_st)` by metis_tac[] >>
   drule_all abi_decoder_valid_bytes_reentry >> strip_tac >>
   drule abi_decoder_valid_bytes_facts >>
@@ -62,13 +62,13 @@ Proof
   `n < dimword (:256) /\ LENGTH payload <= n /\
    eval_operand src initial = SOME (n2w sb) /\
    eval_operand (Var root) initial = SOME (n2w d)` by
-    (qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def,
        abi_decoder_valid_bytes_pre_def] >> metis_tac[]) >>
   `not_fresh_at start root /\ (!q. src = Var q ==> not_fresh_at start q)` by
-    (qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[abi_scratch_decoder_input_def, abi_decoder_operand_live_def,
        abi_decoder_older_vars_def, not_fresh_at_def] >>

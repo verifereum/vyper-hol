@@ -497,7 +497,7 @@ Proof
 QED
 
 Theorem calldata_array_init_endpoint_ptr_core:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz sa = (setup,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -649,7 +649,7 @@ Resume calldata_array_init_endpoint_ptr_core[joint_finish]:
     (suspend "joint_continuation") >>
   rpt (qpat_x_assum `run_inst_seq _ _ = _` kall_tac) >>
   rpt (qpat_x_assum `abi_decoder_budget _ _ _ _ _` kall_tac) >>
-  rpt (qpat_x_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _` kall_tac) >>
+  rpt (qpat_x_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _` kall_tac) >>
   rpt (qpat_x_assum `abi_decode_array_header _ _ _ _ = _` kall_tac) >>
   rpt (qpat_x_assum `abi_decode_count_guard _ _ _ _ _ = _` kall_tac) >>
   rpt (qpat_x_assum `abi_decode_index_init _ = _` kall_tac) >>
@@ -702,7 +702,7 @@ QED
 Finalise calldata_array_init_endpoint_ptr_core
 
 Theorem calldata_array_init_endpoint_ptr:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz sa = (setup,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -738,7 +738,7 @@ QED
 
 
 Theorem calldata_array_init_sequence_ptr:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz sa = (setup,sb) /\
   eval_operand src s = SOME (n2w srcpos) /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -781,7 +781,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `eval_operand (Var root) s = SOME (n2w d)` by simp[eval_operand_def] >>
   drule_at (Pat `abi_decoder_budget _ _ _ _ _`) abi_decode_array_loop_init_sequence >>
-  disch_then (drule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand src s = _`)) >>
   simp[abi_decode_source_opcode_def] >>
   disch_then (qspecl_then [`srcpos`,`n`] mp_tac) >>
@@ -801,7 +801,7 @@ QED
 
 (* Actual dynamic-array compiler phase split, retaining the residual loop. *)
 Theorem calldata_array_loop_entry_ptr:
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz elem_dyn maxn) sa = ((),sc) /\
   (elem_dyn \/ dec_info_needs_clamp ei) /\
   eval_operand src s = SOME (n2w srcpos) /\
@@ -815,9 +815,9 @@ Theorem calldata_array_loop_entry_ptr:
   not_fresh_at sa root /\ (!x. src = Var x ==> not_fresh_at sa x) /\
   op_taint tn src = {} ==>
   ?setup sb t p H u q.
-    abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+    abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       maxn abi_sz sa = (setup,sb) /\
-    compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       ei abi_sz mem_sz (FST setup) (SND setup) sb = ((),sc) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand (FST setup) t = SOME (n2w p) /\
@@ -847,7 +847,7 @@ Theorem calldata_array_loop_entry_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_loop_array_trace >> strip_tac >>
-  rename1 `abi_decode_array_loop_init _ _ _ _ _ _ sa = (setup,sb)` >>
+  rename1 `abi_decode_array_loop_init _ _ _ _ _ _ _ sa = (setup,sb)` >>
   `sb.cs_next_id <= sc.cs_next_id` by
     (mp_tac (cj 3 ci_mono_compile_abi_decode) >>
      disch_then (qspecl_then [`Var root`,`src`,`CALLDATALOAD`,`Lit 0w`,

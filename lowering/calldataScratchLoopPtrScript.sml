@@ -12,14 +12,14 @@ Ancestors
 Theorem calldata_scratch_loop_iteration_prefix_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -52,9 +52,9 @@ Theorem calldata_scratch_loop_iteration_prefix_guarded_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\
@@ -132,15 +132,15 @@ Proof
     (Cases_on `src` >> fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
   `allocas_from lower h /\ DISJOINT P u.t_mem` by
     (fs[allocas_from_def] >> metis_tac[]) >>
-  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
      d (32 + maxn * type_memory_bytes ce ty) first last b cap initial` by
     gvs[] >>
   drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ h`)
     abi_scratch_decoder_body_inputs >>
-  disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`Var q`,`st.cs_next_var`] mp_tac) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
-  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) src (Var root) sb (LENGTH bs)
+  `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src (Var root) 0 sb (LENGTH bs)
      d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap h` by gvs[] >>
   `mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD h) = bs` by
     fs[abi_decoder_valid_array_memory_def] >>
@@ -155,9 +155,9 @@ Proof
     (qpat_assum `h = _` (fn th => pure_rewrite_tac [th]) >>
      simp[jump_to_def, abi_decode_header_state_def, update_var_def]) >>
   drule calldata_scratch_array_body_guarded_ptr >>
-  disch_then (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ h`)) >>
+  disch_then (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ h`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ root h _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ q h _`)) >>
   disch_then (drule_at (Pat `allocas_from _ h`)) >>
@@ -188,7 +188,7 @@ Proof
   drule_at (Pat `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`)
     abi_scratch_decoder_child_advance >>
   disch_then (drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   (impl_tac >- (asm_simp_tac bool_ss [] >>
     qpat_assum `type_memory_size tv = type_memory_bytes ce ty`
       (fn th => pure_rewrite_tac [GSYM th]) >> decide_tac)) >> strip_tac >>
@@ -387,7 +387,7 @@ Resume calldata_scratch_loop_iteration_prefix_guarded_ptr[prefix_child]:
   qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ h actual`
     (mp_then Any mp_tac abi_scratch_effect_frame) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> disch_tac >>
-  qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
+  qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
   qpat_assum `!k. k < n ==> _` mp_tac >>
   qpat_assum `h.vs_memory = s.vs_memory` mp_tac >>
   qpat_assum `u.t_mem = tn.t_mem` mp_tac >>
@@ -418,7 +418,7 @@ Resume calldata_scratch_loop_iteration_prefix_guarded_ptr[prefix_child]:
      conj_tac >- (disj1_tac >>
        qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
        pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
-     qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
+     qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
      simp_tac bool_ss [abi_scratch_decoder_ranges_def, abi_footprint_disjoint_def] >>
      rpt strip_tac >> first_x_assum drule >>
      qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
@@ -437,14 +437,14 @@ Finalise calldata_scratch_loop_iteration_prefix_guarded_ptr
 Theorem calldata_scratch_loop_iteration_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -477,9 +477,9 @@ Theorem calldata_scratch_loop_iteration_guarded_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\
@@ -522,14 +522,14 @@ QED
 Theorem calldata_scratch_loop_finite_prefix_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -562,9 +562,9 @@ Theorem calldata_scratch_loop_finite_prefix_guarded_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\
@@ -647,9 +647,9 @@ Finalise calldata_scratch_loop_finite_prefix_guarded_ptr
 
 Theorem calldata_scratch_loop_exit_ptr:
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr (LENGTH vs) s /\
@@ -742,14 +742,14 @@ Finalise calldata_scratch_loop_exit_ptr
 Theorem calldata_scratch_loop_iteration_prefix_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -781,9 +781,9 @@ Theorem calldata_scratch_loop_iteration_prefix_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\
@@ -832,14 +832,14 @@ QED
 Theorem calldata_scratch_loop_iteration_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -871,9 +871,9 @@ Theorem calldata_scratch_loop_iteration_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\
@@ -914,14 +914,14 @@ QED
 Theorem calldata_scratch_loop_finite_prefix_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -953,9 +953,9 @@ Theorem calldata_scratch_loop_finite_prefix_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr j s /\

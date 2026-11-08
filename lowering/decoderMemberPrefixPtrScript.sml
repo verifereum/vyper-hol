@@ -332,7 +332,7 @@ Proof
 QED
 
 Theorem member_navigation_source_endpoint:
-  compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) sa = (ep,sb) /\
+  compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) sa = (ep,sb) /\
   (!q. src = Var q ==> not_fresh_at sa q) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -434,7 +434,7 @@ QED
 Finalise member_navigation_source_endpoint
 
 Theorem calldata_member_setup_endpoint_ptr:
-  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) dyn ao vo sa = (ops,sb) /\
+  abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo sa = (ops,sb) /\
   lookup_var root s = SOME a /\ not_fresh_at sa root /\
   (!q. src = Var q ==> not_fresh_at sa q) /\
   ptr_covers G tn root s cap /\ op_taint tn src = {} /\ op_prov G src = NONE /\
@@ -453,14 +453,14 @@ Theorem calldata_member_setup_endpoint_ptr:
    !fuel. ptr_safe_run D lower fuel ctx func PG G tn (s with vs_inst_idx := LENGTH sa.cs_current_insts))
 Proof
   strip_tac >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_member_setup_def, comp_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) sa = (ep,mid)` >>
+  rename1 `compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) sa = (ep,mid)` >>
   rename1 `emit_op ADD [Var root; Lit (n2w vo)] mid = (dst,sb)` >>
   `inst_extends sa mid /\ same_blocks sa mid` by
     (Cases_on `dyn` >>
-     qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
      (conj_tac >- metis_tac[inst_extends_emit_op, inst_extends_trans]) >>

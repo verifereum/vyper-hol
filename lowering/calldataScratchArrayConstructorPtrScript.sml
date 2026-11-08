@@ -8,14 +8,14 @@ Ancestors
 Theorem calldata_scratch_array_constructor_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -47,11 +47,11 @@ Theorem calldata_scratch_array_constructor_guarded_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) start = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w)
-    sb d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   loop_st.cs_next_id <= last /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ fn_has_code start loop_st func /\
@@ -60,7 +60,7 @@ Theorem calldata_scratch_array_constructor_guarded_ptr:
   ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   allocas_from lower initial /\ lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) (FST setup) (SND setup) loop_st = ((),final) /\
   fn_has_code loop_st final func /\
@@ -173,7 +173,7 @@ QED
 Finalise calldata_scratch_array_constructor_guarded_ptr
 
 Theorem abi_decode_array_loop_init_resource_bounds:
-  abi_decode_array_loop_init dst src opc hi maxn abi_sz start = (setup,loop_st) /\
+  abi_decode_array_loop_init dst src opc (Lit 0w) hi maxn abi_sz start = (setup,loop_st) /\
   abi_decode_source_opcode opc ==>
   start.cs_next_id <= loop_st.cs_next_id-2 /\ loop_st.cs_next_id-2 < loop_st.cs_next_id /\
   start.cs_next_var <= loop_st.cs_next_var
@@ -190,14 +190,14 @@ QED
 Theorem calldata_scratch_array_constructor_canonical_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -229,11 +229,11 @@ Theorem calldata_scratch_array_constructor_canonical_guarded_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) start = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w)
-    sb d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   loop_st.cs_next_id <= last /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ fn_has_code start loop_st func /\
@@ -242,7 +242,7 @@ Theorem calldata_scratch_array_constructor_canonical_guarded_ptr:
   ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   allocas_from lower initial /\ lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) (FST setup) (SND setup) loop_st = ((),final) /\
   fn_has_code loop_st final func /\
@@ -290,14 +290,14 @@ QED
 Theorem calldata_scratch_array_constructor_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -328,11 +328,11 @@ Theorem calldata_scratch_array_constructor_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) start = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w)
-    sb d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   loop_st.cs_next_id <= last /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ fn_has_code start loop_st func /\
@@ -341,7 +341,7 @@ Theorem calldata_scratch_array_constructor_ptr:
   ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   allocas_from lower initial /\ lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) (FST setup) (SND setup) loop_st = ((),final) /\
   fn_has_code loop_st final func /\
@@ -391,14 +391,14 @@ QED
 Theorem calldata_scratch_array_constructor_canonical_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -429,11 +429,11 @@ Theorem calldata_scratch_array_constructor_canonical_ptr:
         mload slot actual = mload slot initial) /\
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) start = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w)
-    sb d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   loop_st.cs_next_id <= last /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ fn_has_code start loop_st func /\
@@ -442,7 +442,7 @@ Theorem calldata_scratch_array_constructor_canonical_ptr:
   ptr_covers G tn root initial (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
   op_taint tn src = {} /\ op_prov G src = NONE /\
   allocas_from lower initial /\ lower <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) (FST setup) (SND setup) loop_st = ((),final) /\
   fn_has_code loop_st final func /\

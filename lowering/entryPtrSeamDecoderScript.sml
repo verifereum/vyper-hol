@@ -23,14 +23,14 @@ Ancestors
 Theorem calldata_scratch_dynamic_array_decoder_ptr[local]:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -64,14 +64,14 @@ Theorem calldata_scratch_dynamic_array_decoder_ptr[local]:
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) start = ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs v start src (Var root) CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    bs v start src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -117,16 +117,16 @@ Resume calldata_scratch_dynamic_array_decoder_ptr[loop]:
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiScratchDecoderContractTheory.abi_scratch_decoder_input_def]) >>
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [cj 3 type_to_abi_dec_info_def]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     abi_decoder_recursive_array_adds_blocks >>
   disch_then (qspec_then `func` mp_tac) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> disch_tac >>
   `!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     abi_decoder_recursive_array_code >>
   disch_then (qspec_then `func` mp_tac) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
@@ -165,14 +165,14 @@ Theorem calldata_scratch_decoder_ptr:
     abi_decoder_coherent ce env sf ty tv ==>
     !start end_st func ctx src root bs v sb d first last b cap limit_st initial
      G tn lower P D PG.
-      compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+      compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
         (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
       fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
       (start.cs_blocks = end_st.cs_blocks \/
         !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
           phi_prefix_length bb.bb_instructions = 0) /\
       abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-        CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+        CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
       abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
       end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
       fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -225,7 +225,7 @@ Resume calldata_scratch_decoder_ptr[base]:
      (impl_tac >- asm_simp_tac bool_ss []) >> disch_then ACCEPT_TAC) >>
   irule calldata_scratch_word_decoder_ptr >>
   asm_simp_tac bool_ss [] >>
-  goal_assum (drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[type_to_abi_dec_info_def, type_to_abi_clamp_def]
 QED
 
@@ -233,7 +233,7 @@ Resume calldata_scratch_decoder_ptr[bytes]:
   Cases_on `bound`
   >- (irule calldata_scratch_word_decoder_ptr >>
       asm_simp_tac bool_ss [] >>
-      goal_assum (drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[type_to_abi_dec_info_def, type_to_abi_clamp_def]) >>
   mp_tac (SPEC_ALL (Q.INST [`ty` |-> `BaseT (BytesT (Dynamic n))`,
     `tv` |-> `BaseTV (BytesT (Dynamic n))`] calldata_scratch_bytestring_decoder_ptr)) >>
@@ -245,7 +245,7 @@ Resume calldata_scratch_decoder_ptr[flag]:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule calldata_scratch_word_decoder_ptr >>
   asm_simp_tac bool_ss [] >>
-  goal_assum (drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[type_to_abi_dec_info_def]
 QED
 

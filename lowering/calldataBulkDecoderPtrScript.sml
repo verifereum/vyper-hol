@@ -8,7 +8,7 @@ Ancestors decoderHeaderRawPtr calldataBulkPayloadPtr decoderArrayInitPtr calldat
   venomInst venomState venomExecSemantics instIdxIndep finite_map pred_set
 
 Theorem calldata_bulk_decoder_endpoint_ptr:
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) sa = ((),sb) /\
   ~dec_info_needs_clamp ei /\ lookup_var root s = SOME (n2w d) /\
   eval_operand src s = SOME a /\ abi_decode_load CALLDATALOAD a s = n2w n /\
@@ -31,7 +31,7 @@ Theorem calldata_bulk_decoder_endpoint_ptr:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_bulk_phases, abi_decode_dynarray_prefix_def,
     abi_decode_dynarray_end_guard_def, abi_decode_bulk_body_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
@@ -42,7 +42,7 @@ Proof
   `inst_extends sa c1 /\ inst_extends c1 c2 /\ inst_extends c2 sb` by
     (imp_res_tac abi_decode_count_guard_shape >>
      qpat_x_assum `abi_decode_array_header _ _ _ _ = _` mp_tac >>
-     qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_bulk_payload_def, abi_decode_array_header_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
@@ -112,7 +112,7 @@ Proof
   `cs_extends sa c1 /\ cs_extends c1 c2` by
     (fs[cs_extends_def, same_blocks_def, inst_extends_def]) >>
   `cs_extends c2 sb` by
-    (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_bulk_payload_def, comp_bind_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
      imp_res_tac emit_op_same_blocks >> imp_res_tac emit_void_same_blocks >>

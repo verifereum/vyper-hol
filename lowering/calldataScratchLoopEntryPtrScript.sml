@@ -9,7 +9,7 @@ Ancestors
   abiScratchDecoderLoopControl abiDecoderValidArrayMemory
 
 Theorem calldata_scratch_loop_entry_ptr:
-  compile_abi_decode_dyn_loop dst src opc hi di asz msz ip cnt start = ((),final) /\
+  compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi di asz msz ip cnt start = ((),final) /\
   fn_has_code start final func /\ abi_decode_source_opcode opc /\
   ~s.vs_halted /\ s.vs_current_bb = start.cs_current_bb /\
   s.vs_inst_idx = LENGTH start.cs_current_insts /\
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem abi_decoder_compiled_dyn_loop_layout:
-  compile_abi_decode_dyn_loop dst src opc hi_op (type_to_abi_dec_info sf ce ty)
+  compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     ip cnt start = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code start final func /\
@@ -67,14 +67,14 @@ Theorem abi_decoder_compiled_dyn_loop_layout:
   final.cs_next_id <= hi /\ hi <= last /\ next <= start.cs_next_var /\
   final.cs_next_var <= limit_st.cs_next_var ==>
   ?labels st ops middle end_st.
-    abi_decode_loop_prefix ip src opc start = (labels,st) /\
-    abi_decode_array_element_setup ip src dst opc hi_op (type_to_abi_dec_info sf ce ty)
+    abi_decode_loop_prefix ip src opc (Lit 0w) start = (labels,st) /\
+    abi_decode_array_element_setup ip src dst opc (Lit 0w) hi_op (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi_op
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc (Lit 0w) hi_op
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
-    abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+    abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc (Lit 0w) hi_op
       (FST labels) (SND (SND labels)) (start.cs_next_id+1) start.cs_next_var
       first last lo hi next limit_st site
 Proof
@@ -168,10 +168,10 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_ranges_jump:
-  abi_scratch_decoder_ranges opc hi_op src dst sb len d outsz first last b cap s /\
+  abi_scratch_decoder_ranges opc (Lit 0w) hi_op src dst 0 sb len d outsz first last b cap s /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
   abi_decoder_operand_live next hi_op ==>
-  abi_scratch_decoder_ranges opc hi_op src dst sb len d outsz first last b cap
+  abi_scratch_decoder_ranges opc (Lit 0w) hi_op src dst 0 sb len d outsz first last b cap
     (jump_to lbl s)
 Proof
   strip_tac >>
@@ -184,10 +184,10 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_loop_data_jump:
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc hi_op ip src dst
-    sb d slot first last b cap next s ==>
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc hi_op ip src dst
-    sb d slot first last b cap next (jump_to lbl s)
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc (Lit 0w) hi_op ip src dst
+    0 sb d slot first last b cap next s ==>
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc (Lit 0w) hi_op ip src dst
+    0 sb d slot first last b cap next (jump_to lbl s)
 Proof
   simp_tac bool_ss [abi_scratch_decoder_loop_data_def] >> strip_tac >>
   asm_rewrite_tac[] >> conj_tac
@@ -197,7 +197,7 @@ Proof
 QED
 
 Theorem calldata_scratch_compiled_loop_entry_ptr:
-  compile_abi_decode_dyn_loop dst src opc hi_op (type_to_abi_dec_info sf ce ty)
+  compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     ip cnt start = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code start final func /\
@@ -213,14 +213,14 @@ Theorem calldata_scratch_compiled_loop_entry_ptr:
   s.vs_inst_idx = LENGTH start.cs_current_insts /\
   allocas_from lower s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?labels st ops middle end_st.
-    abi_decode_loop_prefix ip src opc start = (labels,st) /\
-    abi_decode_array_element_setup ip src dst opc hi_op (type_to_abi_dec_info sf ce ty)
+    abi_decode_loop_prefix ip src opc (Lit 0w) start = (labels,st) /\
+    abi_decode_array_element_setup ip src dst opc (Lit 0w) hi_op (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi_op
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc (Lit 0w) hi_op
       (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
     abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
-    abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+    abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc (Lit 0w) hi_op
       (FST labels) (SND (SND labels)) (start.cs_next_id+1) start.cs_next_var
       first last lo hi next limit_st site /\
     abi_scratch_decoder_loop_inv opc bs tv vs sb d outsz slot site
@@ -236,7 +236,7 @@ Proof
   drule_all calldata_scratch_loop_entry_ptr >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   `FST labels = fresh_label_output "dec_dyn_hdr" start.cs_next_label` by
-    (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
      simp_tac bool_ss [abi_decode_loop_prefix_shape, pairTheory.PAIR_EQ] >>
      strip_tac >> gvs[]) >>
   qexistsl_tac [`labels`,`st`,`ops`,`middle`,`end_st`] >>

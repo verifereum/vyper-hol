@@ -31,7 +31,7 @@ Ancestors
 Theorem calldata_scratch_array_copy_decoder_ptr:
   ~is_abi_dynamic ce.ce_struct_fields ty /\
   ~dec_info_needs_clamp (type_to_abi_dec_info sf ce ty) /\
-  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) start =
     ((),end_st) /\
   fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
@@ -40,7 +40,7 @@ Theorem calldata_scratch_array_copy_decoder_ptr:
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn))
     (ArrayTV tv (Dynamic maxn)) bs v start src (Var root)
-    CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -87,13 +87,13 @@ Proof
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
   (qpat_assum `~is_abi_dynamic ce.ce_struct_fields ty` (fn static =>
-    qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def, static])) >>
-  `compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) F maxn)
     start = ((),end_st)` by
-    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+    (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
        (mp_tac o SIMP_RULE bool_ss [Once (cj 3 type_to_abi_dec_info_def)]) >>
      simp[]) >>
   drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>
@@ -108,7 +108,7 @@ Proof
   `32 + LENGTH vs * type_memory_bytes ce ty <=
      type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
    d+32 < dimword (:256) /\ LENGTH vs * type_memory_bytes ce ty < dimword (:256)` by
-    (qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [abi_scratch_decoder_ranges_def] >> strip_tac >>
      `d + (32 + maxn * type_memory_bytes ce ty) < dimword (:256)` by metis_tac[] >>
      simp[] >> irule LESS_EQ_LESS_TRANS >> qexists `maxn * type_memory_bytes ce ty` >> simp[]) >>

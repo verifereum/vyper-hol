@@ -39,7 +39,7 @@ Proof
     [irule compile_abi_clamp_basetype_open >>
        goal_assum $ drule_at (Pat `compile_abi_clamp_basetype _ _ _ = _`) >> simp[],
      irule compile_abi_decode_to_buf_open >>
-       goal_assum $ drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`) >> simp[]]
+       goal_assum $ drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) >> simp[]]
 QED
 
 Theorem compile_register_positional_args_open:

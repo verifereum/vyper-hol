@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem calldata_bytestring_decoder_instructions:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring m) sa =
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring m) sa =
     ((),sb) ==>
   sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++
@@ -140,7 +140,7 @@ Proof
 QED
 
 Theorem calldata_bytestring_overwrite_endpoint_core[local]:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\
@@ -499,7 +499,7 @@ Proof
 QED
 
 Theorem calldata_bytestring_overwrite_prefix:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\
@@ -540,7 +540,7 @@ Proof
 QED
 
 Theorem calldata_bytestring_decoder_prefix_framed:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\
@@ -605,7 +605,7 @@ Proof
 QED
 
 Theorem calldata_bytestring_decoder_prefix:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\

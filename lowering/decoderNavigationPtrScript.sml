@@ -524,7 +524,7 @@ QED
 
 Theorem calldata_ep_source_frag_ptr:
   !src dyn ao sa ep sb s t p G tn cx ctx PG R.
-    compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) sa = (ep,sb) /\
+    compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) sa = (ep,sb) /\
     eval_operand src s = SOME p /\
     (!q. src = Var q ==> not_fresh_at sa q) /\
     op_taint tn src = {} /\ op_prov G src = NONE /\ ~s.vs_halted /\
@@ -751,7 +751,7 @@ QED
 
 Theorem calldata_member_setup_frag_ptr:
   !root src dyn ao vo sa ops sb s t a p G tn total n cx ctx PG R.
-    abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) dyn ao vo sa = (ops,sb) /\
+    abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo sa = (ops,sb) /\
     eval_operand (Var root) s = SOME a /\ eval_operand src s = SOME p /\
     not_fresh_at sa root /\ (!q. src = Var q ==> not_fresh_at sa q) /\
     ptr_covers G tn root s total /\ op_taint tn src = {} /\ op_prov G src = NONE /\
@@ -770,15 +770,15 @@ Theorem calldata_member_setup_frag_ptr:
         FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_member_setup_def, comp_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) sa = (ep,mid)` >>
+  rename1 `compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) sa = (ep,mid)` >>
   rename1 `emit_op ADD [Var root; Lit (n2w vo)] mid = (dst,sb)` >>
   `inst_extends sa mid /\ inst_extends mid sb` by
     (conj_tac >-
       (Cases_on `dyn` >>
-       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ = _` mp_tac >>
+       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
        simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
          comp_return_def] >> rpt (pairarg_tac >> gvs[]) >>
        strip_tac >> gvs[] >>
@@ -817,7 +817,7 @@ Proof
   `same_blocks sa mid /\ same_blocks mid sb` by
     (conj_tac >-
       (Cases_on `dyn` >>
-       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ = _` mp_tac >>
+       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
        simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
          comp_return_def] >> rpt (pairarg_tac >> gvs[]) >>
        metis_tac[emit_op_same_blocks, same_blocks_trans]) >>

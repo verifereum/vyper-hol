@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem calldata_bytestring_decoder_typed_robust:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\
@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem calldata_canonical_bytestring_typed_robust:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\
@@ -140,11 +140,11 @@ Proof
 QED
 
 Theorem calldata_typed_clamped_word_robust:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) sa = ((),sb) /\
   abi_decoder_clamp_valid clamp (abi_decode_load CALLDATALOAD sw s) /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    sa last src (Var p) CALLDATALOAD (Lit 0w) sbpos d b cap s /\
+    sa last src (Var p) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sbpos d b cap s /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
   fresh_vars_wrt sa s /\ ptr_covers G tn p s 32 /\
   op_taint tn src = {} /\ fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
@@ -177,7 +177,7 @@ Proof
   `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     abi_decoder_post tv v sb d 32 b cap s t` by
     (`sw = n2w sbpos` by
-       (qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
         simp_tac (srw_ss()) [abi_decoder_recursive_pre_def, abi_decoder_pre_def,
           abi_decoder_ranges_def] >> metis_tac[optionTheory.SOME_11]) >>
      gvs[] >> irule abi_decoder_typed_clamped_word_sequence >> simp[] >>
@@ -189,7 +189,7 @@ Proof
   `abi_decoder_post tv v sb d 32 b cap s s'` by
     (gvs[] >> metis_tac[abi_decoder_post_inst_idx]) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[] >>
-  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE
       [abi_decoder_recursive_pre_def, abi_decoder_pre_def, abi_decoder_metadata_def]) >>
   `type_to_abi_dec_info sf ce ty = DecPrimWord clamp` by metis_tac[] >>
@@ -197,7 +197,7 @@ Proof
   `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
   `val_footprint tv v <= 32` by metis_tac[val_footprint_le] >>
   `d = w2n dw` by
-    (qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac (srw_ss()) [abi_decoder_ranges_def] >> strip_tac >>
      `d < dimword (:256)` by decide_tac >>
      `dw = n2w d` by
@@ -213,10 +213,10 @@ Proof
 QED
 
 Theorem calldata_typed_unclamped_word_robust:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) sa = ((),sb) /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord NoClamp) av v
-    sa last src (Var p) CALLDATALOAD (Lit 0w) sbpos d b cap s /\
+    sa last src (Var p) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sbpos d b cap s /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
   fresh_vars_wrt sa s /\ ptr_covers G tn p s 32 /\
   op_taint tn src = {} /\ fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
@@ -253,10 +253,10 @@ QED
 (* Ordinary reentry and ghost execution share the original, unpruned state.
    The second endpoint differs only in its instruction index. *)
 Theorem calldata_primitive_reentry_ptr_endpoint:
-  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src (Var p) CALLDATALOAD (Lit 0w) sb d b cap
+    st last src (Var p) CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b cap
     (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ptr_covers G tn p initial 32 /\ op_taint tn src = {} /\

@@ -8,14 +8,14 @@ Ancestors
 Theorem calldata_scratch_array_loop_complete_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -48,9 +48,9 @@ Theorem calldata_scratch_array_loop_complete_guarded_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr 0 s /\
@@ -141,14 +141,14 @@ Finalise calldata_scratch_array_loop_complete_guarded_ptr
 Theorem calldata_scratch_array_loop_complete_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn lower P D PG.
-    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
     fn_has_code start end_st func /\ fn_inst_ids_distinct func /\
     (start.cs_blocks = end_st.cs_blocks \/
       !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
         phi_prefix_length bb.bb_instructions = 0) /\
     abi_scratch_decoder_input ce env sf ty tv bs v start src (Var root)
-      CALLDATALOAD (Lit 0w) sb d first last b cap initial /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d first last b cap initial /\
     abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\
     end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
     fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
@@ -180,9 +180,9 @@ Theorem calldata_scratch_array_loop_complete_ptr:
       ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
         !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)) /\
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var q) src (Var root)
-    CALLDATALOAD (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w)
-    (Var q) src (Var root) sb d slot first last b cap next initial /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last lo hi next limit_st site /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs CALLDATALOAD (Lit 0w) (Lit 0w)
+    (Var q) src (Var root) 0 sb d slot first last b cap next initial /\
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial hdr 0 s /\

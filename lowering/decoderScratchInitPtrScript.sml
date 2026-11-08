@@ -12,7 +12,7 @@ Ancestors
 (* Physical ownership and the ghost follow the same original-state execution.
    In particular generated names may already be bound at loop reentry. *)
 Theorem calldata_scratch_array_init_reentry_ptr:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     maxn abi_sz st = (setup,loop_st) /\
   eval_operand src initial = SOME (n2w source_base) /\
   eval_operand (Var root) initial = SOME (n2w d) /\ d < dimword (:256) /\
@@ -88,11 +88,11 @@ QED
 
 (* Source-valid caller of the joint physical/ghost initializer. *)
 Theorem calldata_scratch_array_initialize_clean_ptr:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) st = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w)
-    source_base d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 source_base d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   fn_has_code st loop_st func /\ ~initial.vs_halted /\
@@ -102,8 +102,8 @@ Theorem calldata_scratch_array_initialize_clean_ptr:
   ~ctx_has_dalloca ctx ==>
   ?actual slot H u q.
     abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-      bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w)
-      source_base d first last b cap actual /\
+      bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+      0 source_base d first last b cap actual /\
     abi_decoder_valid_array_memory CALLDATALOAD bs tv vs source_base d 0 actual /\
     abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
       limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\
@@ -140,13 +140,13 @@ Proof
     (irule abi_scratch_effect_widen >>
      qexistsl_tac [`d`, `loop_st.cs_next_id`, `st.cs_next_id`, `st.cs_next_var`, `32`] >> simp[]) >>
   `abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w)
-    source_base d first last b cap actual` by
+    bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 source_base d first last b cap actual` by
     (irule abi_scratch_decoder_input_effect >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[]) >>
   `abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w)
-    source_base d first last b cap actual` by
+    bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 source_base d first last b cap actual` by
     (irule abi_scratch_decoder_input_mono >> qexists_tac `st` >> fs[inst_extends_def]) >>
   `mem_bytes_at source_base (LENGTH bs) (abi_decode_source CALLDATALOAD actual) = bs` by
     fs[abi_scratch_decoder_input_def] >>
@@ -170,11 +170,11 @@ QED
 
 (* Compatibility projection: initialization has one operational proof. *)
 Theorem calldata_scratch_array_initialize_ptr:
-  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) st = (setup,loop_st) /\
   abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w)
-    source_base d first last b cap initial /\
+    bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 source_base d first last b cap initial /\
   abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ loop_st.cs_next_id <= last /\
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   fn_has_code st loop_st func /\ ~initial.vs_halted /\
@@ -184,8 +184,8 @@ Theorem calldata_scratch_array_initialize_ptr:
   ~ctx_has_dalloca ctx ==>
   ?actual slot H u q.
     abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-      bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w)
-      source_base d first last b cap actual /\
+      bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
+      0 source_base d first last b cap actual /\
     abi_decoder_valid_array_memory CALLDATALOAD bs tv vs source_base d 0 actual /\
     abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
       limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\

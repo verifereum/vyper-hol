@@ -63,14 +63,14 @@ Proof
 QED
 
 Theorem calldata_bulk_payload_run_pc:
-  abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD sa = ((),sb) /\
+  abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD (Lit 0w) sa = ((),sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   !k. run_inst_seq (emitted_insts sa sb) (s with vs_inst_idx := k) =
     OK (t with vs_inst_idx := k)
 Proof
   strip_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_bulk_payload_def, comp_bind_def] >>
      pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
      rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] sa = (sz,c1)` >>

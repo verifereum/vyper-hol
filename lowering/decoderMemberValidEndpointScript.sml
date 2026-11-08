@@ -12,7 +12,7 @@ Ancestors
 (* This is ordinary observation transport only: no ghost is transported through
    pruning. The supplied sequence fixes the original-state endpoint. *)
 Theorem member_pointer_endpoint_observations[local]:
-  compile_getelemptr_abi src dyn off opc hi st = (member_op,st') /\
+  compile_getelemptr_abi src dyn off opc (Lit 0w) hi st = (member_op,st') /\
   abi_decode_source_opcode opc /\ eval_operand src initial = SOME (n2w sb) /\
   (dyn ==> abi_decode_load opc (n2w (sb + off):bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
@@ -78,7 +78,7 @@ Proof
 QED
 
 Theorem member_setup_endpoint_observations[local]:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) dyn ao vo st = (ops,ready) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,ready) /\
   eval_operand src initial = SOME (n2w sb) /\
   eval_operand dst initial = SOME (n2w d) /\
   (dyn ==> abi_decode_load CALLDATALOAD (n2w (sb + ao):bytes32) initial = n2w off /\
@@ -91,15 +91,15 @@ Theorem member_setup_endpoint_observations[local]:
   abi_decoder_address_frame st.cs_next_var initial actual /\ inst_extends st ready
 Proof
   strip_tac >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_member_setup_def, comp_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) st = (ep,mid)` >>
+  rename1 `compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w) st = (ep,mid)` >>
   rename1 `emit_op ADD [dst; Lit (n2w vo)] mid = (childdst,ready)` >>
   `inst_extends st mid /\ inst_extends mid ready` by
     (conj_tac >-
       (Cases_on `dyn` >>
-       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ = _` mp_tac >>
+       qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
        simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
        rpt (pairarg_tac >> gvs[]) >>
        metis_tac[inst_extends_emit_op, inst_extends_trans]) >>
@@ -134,7 +134,7 @@ Proof
 QED
 
 Theorem calldata_member_valid_pre_endpoint:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_dynamic (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size pre)) vo st = (ops,ready) /\
   abi_decoder_coherent ce env sf ty tv /\
@@ -145,7 +145,7 @@ Theorem calldata_member_valid_pre_endpoint:
     (dec (vyper_to_abi_type env ty)
       (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
         (DROP (SUM (MAP abi_member_head_size pre)) bs))) = SOME v /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b cap initial /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -156,19 +156,19 @@ Theorem calldata_member_valid_pre_endpoint:
   abi_decoder_valid_pre ce env sf ty tv
     (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
       (DROP (SUM (MAP abi_member_head_size pre)) bs)) v ready
-    (FST ops) (SND ops) CALLDATALOAD (Lit 0w)
-    (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
+    (FST ops) (SND ops) CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
       (SUM (MAP abi_member_head_size pre))) (d + vo) b cap
     (actual with vs_inst_idx := LENGTH ready.cs_current_insts)
 Proof
   strip_tac >>
   drule abi_decoder_coherent_dynamic >> strip_tac >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   drule_all abi_valid_member_window >> simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all abi_valid_decoded_metadata >> strip_tac >>
   drule_all abi_decoder_valid_member_readable >> strip_tac >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   `is_dynamic (vyper_to_abi_type env ty) ==>
     abi_decode_load CALLDATALOAD (n2w (sb + SUM (MAP abi_member_head_size pre)):bytes32) initial =
@@ -191,7 +191,7 @@ Proof
   drule abi_decode_member_setup_counters >> strip_tac >>
   simp[abi_decoder_valid_pre_def, abi_decoder_operand_live_def] >>
   conj_tac
-  >- (qpat_x_assum `abi_decoder_ranges _ _ (FST ops) _ _ _ _ _ _ _ actual` mp_tac >>
+  >- (qpat_x_assum `abi_decoder_ranges _ _ _ (FST ops) _ _ _ _ _ _ _ _ actual` mp_tac >>
       simp[abi_decoder_ranges_def, eval_op_inst_idx,
         arithmeticTheory.ADD_COMM]) >>
   simp[abi_decode_source_def, arithmeticTheory.ADD_COMM] >>
