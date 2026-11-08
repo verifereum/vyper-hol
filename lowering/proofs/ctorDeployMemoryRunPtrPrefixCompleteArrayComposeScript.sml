@@ -246,7 +246,7 @@ Proof
         simp[abi_decode_source_opcode_def] >> strip_tac >>
         drule abi_decode_array_header_shape >>
         simp[abi_decode_source_opcode_def] >> strip_tac >>
-        drule abi_decode_index_init_shape >> strip_tac >> fs[]) >>
+        drule abi_decode_index_init_shape >> strip_tac >> simp[]) >>
      `abi_decoder_older_vars loop_st.cs_next_var x` by
        (fs[abi_decoder_older_vars_def] >> metis_tac[LESS_EQ_TRANS]) >>
      metis_tac[]) >>
