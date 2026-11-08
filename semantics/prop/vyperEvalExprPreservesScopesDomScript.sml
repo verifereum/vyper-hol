@@ -64,7 +64,8 @@ Theorem eval_mutual_preserves_scopes_dom[local]:
   (!cx es st res st'. eval_expr_results cx es st = (res,st') ==>
     MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[]
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  simp_tac pure_ss [FORALL_SIMP, IMP_CLAUSES, AND_CLAUSES] >> simp[]
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
           type_check_def, assert_def,
