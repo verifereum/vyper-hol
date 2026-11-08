@@ -23,7 +23,8 @@ Proof
   `!i j. i < type_slot_size tv /\ j < 32 /\ b+32*i+j IN tainted ==>
     j IN key_taint keys (a+n2w i)` by
     (rpt strip_tac >> `i = 0` by decide_tac >> gvs[WORD_ADD_0]) >>
-  metis_tac[copied_storage_range_robust_decode]
+  rpt strip_tac >>
+  drule_all copied_storage_range_robust_decode >> simp[]
 QED
 
 Theorem external_one_slot_robust_ptr_endpoint:
