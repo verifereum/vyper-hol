@@ -1193,3 +1193,5 @@ Resume intcall_counted_child_store[read_store]:
   qpat_x_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _` irule >>
   fs[] >> decide_tac
 QED
+
+Finalise intcall_counted_child_store
