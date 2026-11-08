@@ -2681,3 +2681,20 @@ Proof
   qexists_tac `marks` >> disj2_tac >> qexists_tac `fuel` >>
   asm_rewrite_tac[]
 QED
+
+Theorem deploy_no_ctor_source_readings:
+  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
+  classify_functions tops = (exts,ints,fb,NONE) ==>
+  !gs gs'. load_contract NONE gs am tx [(NONE,tops)] [] =
+    load_contract NONE gs' am tx [(NONE,tops)] []
+Proof
+  strip_tac >>
+  `tx.args = []` by
+    (gvs[deploy_state_rel_def] >> drule_all no_ctor_args >> simp[]) >>
+  `deploy_typing_ok tops am tx /\ tx.function_name = "__init__" /\
+    value_transfer_ok tx am.accounts` by
+    gvs[deploy_source_ok_def, deploy_state_rel_def] >>
+  drule no_ctor_constants_ready >> strip_tac >>
+  metis_tac[no_ctor_source_success]
+QED

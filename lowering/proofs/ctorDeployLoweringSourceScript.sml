@@ -811,6 +811,19 @@ Proof
     return_def, abstract_machine_from_state_def]
 QED
 
+Theorem deploy_ctor_finish_gas_obs:
+  deploy_ctor_finish tops tx cx nr mut am_c res (st with gas_obs := gs) =
+  deploy_ctor_finish tops tx cx nr mut am_c res st
+Proof
+  Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
+  simp[deploy_ctor_finish_def, unlock_if_nr_def,
+    release_nonreentrant_lock_def, update_transient_def,
+    return_def, raise_def, abstract_machine_from_state_def] >>
+  Cases_on `mut` >>
+  simp[bind_def, get_transient_storage_def, update_transient_def,
+    return_def, abstract_machine_from_state_def]
+QED
+
 Theorem outcomes_replace_evaluate_call_free:
   (!cx stmt. ~supported_stmt_expr_exists constructor_call_root stmt ==>
     !s oc. eval_stmt cx stmt (s with outcomes := oc) =
@@ -943,4 +956,26 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
   gvs[deploy_ctor_finish_outcomes]
+QED
+
+Theorem deploy_ctor_source_suffix:
+  !tops am tx mut nr body am_c es0 gx oc res ee.
+  deploy_source_ok tops am tx /\ tx.function_name = "__init__" /\
+  deploy_ctor_start tops am tx (mut, nr, body, am_c, es0) /\
+  (!tail. eval_stmts (deploy_evaluation_context tops am tx) body
+    (es0 with <|gas_obs := gx ++ tail; outcomes := oc|>) =
+      (res, ee with gas_obs := tail)) ==>
+  !tail. load_contract NONE (gx ++ tail) am tx [(NONE,tops)] [] =
+    load_contract NONE gx am tx [(NONE,tops)] []
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  `!tail. load_contract NONE (gx ++ tail) am tx [(NONE,tops)] [] =
+    deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx)
+      nr mut am_c res ee` by
+    (gen_tac >>
+     qpat_assum `!tail. eval_stmts _ _ _ = _`
+       (qspec_then `tail` assume_tac) >>
+     drule_all deploy_ctor_source_run >>
+     simp[deploy_ctor_finish_gas_obs]) >>
+  metis_tac[listTheory.APPEND_NIL]
 QED
