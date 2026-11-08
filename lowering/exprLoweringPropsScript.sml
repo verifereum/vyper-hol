@@ -1041,7 +1041,16 @@ Theorem assert_true_correct:
     eval_operand op ss = SOME v ∧ v ≠ 0w ⇒
     step_inst_base (mk_inst inst_id ASSERT [op] []) ss = OK ss
 Proof
-  simp[step_inst_base_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  let
+    val eq = valOf (List.find (fn th =>
+      let val (guard, _) = dest_imp (snd (strip_forall (concl th)))
+      in aconv (rhs guard) (Parse.Term `ASSERT`) end)
+      (CONJUNCTS step_inst_base_opcode_eqs))
+  in
+    rpt strip_tac >>
+    simp[eq, venomInstTheory.mk_inst_def, comp_return_def,
+         comp_bind_def, comp_ignore_bind_def]
+  end
 QED
 
 Theorem assert_false_correct:
@@ -1050,10 +1059,16 @@ Theorem assert_false_correct:
     step_inst_base (mk_inst inst_id ASSERT [op] []) ss =
       Abort Revert_abort (revert_state (set_returndata [] ss))
 Proof
-  rpt strip_tac >>
-  simp[venomInstTheory.mk_inst_def] >>
-  simp[Once step_inst_base_def] >>
-  simp[comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  let
+    val eq = valOf (List.find (fn th =>
+      let val (guard, _) = dest_imp (snd (strip_forall (concl th)))
+      in aconv (rhs guard) (Parse.Term `ASSERT`) end)
+      (CONJUNCTS step_inst_base_opcode_eqs))
+  in
+    rpt strip_tac >>
+    simp[eq, venomInstTheory.mk_inst_def, comp_return_def,
+         comp_bind_def, comp_ignore_bind_def]
+  end
 QED
 
 (* emit_void ASSERT: emits one ASSERT instruction *)
@@ -4610,7 +4625,7 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  ASM_SIMP_TAC bool_ss [step_inst_base_opcode_eqs] >>
   simp_tac(srw_ss())[] >>
   gvs[pack_dret_dynamic_IntRet_not_OK, AllCaseEqs()]
 QED
@@ -4624,7 +4639,7 @@ Theorem step_inst_base_ok_jmp_ctxs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  ASM_SIMP_TAC bool_ss [step_inst_base_opcode_eqs] >>
   CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
   gvs[jump_to_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
@@ -4638,7 +4653,7 @@ Theorem step_inst_base_ok_jnz_ctxs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  ASM_SIMP_TAC bool_ss [step_inst_base_opcode_eqs] >>
   CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
   gvs[jump_to_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
@@ -4652,7 +4667,7 @@ Theorem step_inst_base_ok_djmp_ctxs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  ASM_SIMP_TAC bool_ss [step_inst_base_opcode_eqs] >>
   CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
   gvs[jump_to_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
@@ -4691,7 +4706,7 @@ Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
   >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
-  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_opcode_eqs] >>
   qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
     step_preserves_call_ctx >>
   ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
@@ -4705,7 +4720,7 @@ Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
   >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
-  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_opcode_eqs] >>
   qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
     step_preserves_tx_ctx >>
   ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
@@ -4719,7 +4734,7 @@ Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
   >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
-  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_opcode_eqs] >>
   qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
     step_preserves_block_ctx >>
   ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
