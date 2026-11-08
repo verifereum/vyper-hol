@@ -31,6 +31,8 @@ Theorem extrequest_stack_joint_read:
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -60,6 +62,8 @@ Theorem extrequest_memory_joint_read:
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -194,6 +198,8 @@ Theorem extrequest_emit_read_joint:
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -244,6 +250,8 @@ Theorem extrequest_storage_joint_word:
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -263,6 +271,8 @@ Proof
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u` by
     (irule extrequest_emit_read_joint >>
      goal_assum (drule_at Any) >> simp[] >>
@@ -302,6 +312,8 @@ Theorem extrequest_runtime_joint_word:
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -321,6 +333,8 @@ Proof
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u` by
     (irule extrequest_emit_read_joint >>
      goal_assum (drule_at Any) >> simp[] >>
@@ -348,6 +362,8 @@ Theorem extrequest_ctor_joint_word:
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -454,6 +470,8 @@ Theorem extrequest_storage_joint_copy:
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -565,11 +583,18 @@ Proof
      simp[venomInstTheory.mk_inst_def]) >>
   `gas_marked_path F ctx func t (0 + 0) (OK z)` by
     (irule gas_marked_path_then >> qexists_tac `u` >> simp[]) >>
+  `!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+     mem_bytes_at p k z.vs_memory = mem_bytes_at p k t.vs_memory` by
+    (map_every qx_gen_tac [`aid`, `old_base`, `old_size`] >> strip_tac >>
+     `compileEnv$regions_disjoint (w2n w) (type_memory_size tv) old_base old_size` by metis_tac[] >>
+     metis_tac[]) >>
   qexistsl_tac [`v`, `z`] >> simp[] >>
   simp[gas_marked_exec_def] >>
-  (conj_tac >- (irule read_result_gas_obs >> simp[])) >>
+  `!tail. read_result cx r (ee with gas_obs := tail) =
+      (INL v,ee with gas_obs := tail)` by
+    (irule read_result_gas_obs >> simp[]) >>
   qpat_x_assum `gas_marked_path F ctx func t (0 + 0) (OK z)` mp_tac >>
-  simp[]
+  simp[] >> metis_tac[]
 QED
 
 Theorem extrequest_runtime_copy_envelope:
@@ -634,7 +659,9 @@ Theorem extrequest_allocated_copy_joint:
   ?z. gas_marked_path F ctx func t 0 (OK z) /\
     expr_post ctx func cenv cx e ee sa sb t ee v buf.buf_operand z /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    extrequest_history_frame cenv cx ee sn t ee sb z
+    extrequest_history_frame cenv cx ee sn t ee sb z /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k z.vs_memory = mem_bytes_at p k t.vs_memory)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
@@ -677,10 +704,15 @@ Proof
        qexists_tac `aid` >> simp[]) >>
      `z.vs_allocas = u.vs_allocas` by metis_tac[copy_static_fields] >>
      simp[] >> qpat_x_assum `cenv.ce_is_ctor ==> _` ACCEPT_TAC) >>
+  `!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+     mem_bytes_at p k z.vs_memory = mem_bytes_at p k t.vs_memory` by
+    (map_every qx_gen_tac [`aid`, `old_base`, `old_size`] >> strip_tac >>
+     `compileEnv$regions_disjoint (w2n w) sz old_base old_size` by metis_tac[] >>
+     metis_tac[]) >>
   qexists_tac `z` >> simp[] >>
   `gas_marked_path F ctx func t (0 + 0) (OK z)` by
     (irule gas_marked_path_then >> qexists_tac `u` >> simp[]) >>
-  pop_assum mp_tac >> simp[]
+  pop_assum mp_tac >> simp[] >> metis_tac[]
 QED
 
 Theorem extrequest_copy_frame_path:
@@ -813,6 +845,8 @@ Theorem extrequest_code_joint_copy:
       [] (INL v) ee (OK u) /\
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
@@ -846,7 +880,9 @@ Proof
   `?z. gas_marked_path F ctx func t 0 (OK z) /\
     expr_post ctx func cenv cx e ee sa se t ee v buf.buf_operand z /\
     z.vs_current_bb = se.cs_current_bb /\ z.vs_inst_idx = LENGTH se.cs_current_insts /\
-    extrequest_history_frame cenv cx ee sn t ee se z` by
+    extrequest_history_frame cenv cx ee sn t ee se z /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k z.vs_memory = mem_bytes_at p k t.vs_memory)` by
     (irule extrequest_allocated_copy_joint >> goal_assum (drule_at Any) >> simp[] >>
      (reverse conj_tac >- (qexists_tac `LocatedValue (expr_type e) p` >> simp[])) >>
      qexistsl_tac [`mid`, `type_memory_size tv`] >> simp[] >>
@@ -885,7 +921,8 @@ Proof
      simp[] >> disch_then drule_all >>
      strip_tac >> qexists_tac `z` >> gvs[]) >>
   qexistsl_tac [`v`, `z`] >> simp[gas_marked_exec_def] >>
-  irule read_result_gas_obs >> simp[]
+  conj_tac >- (irule read_result_gas_obs >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem extrequest_joint_unwrap_read:
@@ -914,6 +951,8 @@ Theorem extrequest_joint_unwrap_read:
       [] (INL v) ee (OK u) /\
     expr_post ctx func cenv cx e ee sa sb t ee v op u /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid p k. aid < sn.cs_next_id /\ FLOOKUP t.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k t.vs_memory) /\
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
