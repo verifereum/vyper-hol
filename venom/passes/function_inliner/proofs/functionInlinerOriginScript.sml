@@ -574,3 +574,68 @@ Theorem qualified_origin_returns:
 Proof
   metis_tac[qualified_origin_erasure, inliner_fn_origin_returns]
 QED
+
+(* Nonempty paths in the fixed original call graph. *)
+Definition inliner_call_path_def:
+  inliner_call_path ctx =
+    TC (\caller callee. MEM callee (fcg_get_callees (fcg_analyze ctx) caller))
+End
+
+Theorem inliner_call_path_trans:
+  !ctx a b c. inliner_call_path ctx a b /\ inliner_call_path ctx b c ==>
+    inliner_call_path ctx a c
+Proof
+  metis_tac[inliner_call_path_def, relationTheory.TC_TRANSITIVE,
+            relationTheory.transitive_def]
+QED
+
+Theorem inliner_call_path_rank:
+  !ctx (rank : string -> num).
+    (!caller callee.
+      MEM callee (fcg_get_callees (fcg_analyze ctx) caller) ==>
+      rank callee < rank caller) ==>
+    !caller callee. inliner_call_path ctx caller callee ==>
+      rank callee < rank caller
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[inliner_call_path_def] >>
+  ho_match_mp_tac relationTheory.TC_INDUCT >>
+  metis_tac[arithmeticTheory.LESS_TRANS]
+QED
+
+Theorem inliner_reachable_call_path:
+  !ctx fn inst target args.
+    inliner_input_ok ctx /\ MEM fn ctx.ctx_functions /\
+    fcg_is_reachable (fcg_analyze ctx) fn.fn_name /\
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label target::args ==>
+    inliner_call_path ctx fn.fn_name target
+Proof
+  rpt strip_tac >> rewrite_tac[inliner_call_path_def] >>
+  irule relationTheory.TC_SUBSET >>
+  `ctx_wf ctx` by gvs[inliner_input_ok_def] >>
+  `lookup_function fn.fn_name ctx.ctx_functions = SOME fn` by
+    (irule fmp_lookup_function_self >>
+     gvs[venomWfTheory.ctx_wf_def, venomWfTheory.ctx_distinct_fn_names_def,
+         ctx_fn_names_def]) >>
+  `fn_directly_calls ctx fn.fn_name target` by
+    (simp[fcgDefsTheory.fn_directly_calls_def] >> metis_tac[]) >>
+  metis_tac[fcg_analyze_callees_complete]
+QED
+
+Theorem inliner_reachable_clone_call_signature:
+  !ctx fn inst target args p.
+    inliner_input_ok ctx /\ MEM fn ctx.ctx_functions /\
+    fcg_is_reachable (fcg_analyze ctx) fn.fn_name /\
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label target::args ==>
+    (clone_instruction p (fn_labels fn) inst).inst_operands =
+      Label target::MAP (clone_operand p (fn_labels fn)) args /\
+    LENGTH (clone_instruction p (fn_labels fn) inst).inst_outputs =
+      LENGTH inst.inst_outputs /\
+    (clone_instruction p (fn_labels fn) inst).inst_opcode = INVOKE
+Proof
+  rpt strip_tac >>
+  `~MEM target (fn_labels fn)` by
+    (irule inliner_reachable_call_target_external >> metis_tac[]) >>
+  metis_tac[clone_instruction_call_signature]
+QED
