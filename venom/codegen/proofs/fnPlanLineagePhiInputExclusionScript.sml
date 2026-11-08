@@ -1,6 +1,6 @@
 Theory fnPlanLineagePhiInputExclusion
 Ancestors
-  fnPlanLineagePhiActivation fnPlanLineageEntryProduction fnPlanLineageLiveness
+  fnPlanLineagePhiActivation fnPlanLineageLiveness
   removeUnusedSsaProofs phiBlock venomExecProofs cfgAnalysisProps
   stackPlanGen livenessDefs venomInst list rich_list
 
