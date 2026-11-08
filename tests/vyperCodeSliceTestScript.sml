@@ -46,3 +46,34 @@ Theorem code_slice_cps_start_before_address:
 Proof
   simp[GSYM eval_expr_eq_cont_cps, code_slice_start_before_address]
 QED
+
+Definition self_code_slice_expr_def:
+  self_code_slice_expr =
+    Builtin (BaseT (BytesT (Dynamic 2))) (Slice 2)
+      [Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+        [Builtin (BaseT AddressT) (Env SelfAddr) []];
+       Literal (BaseT (UintT 256)) (IntL 1);
+       Literal (BaseT (UintT 256)) (IntL 2)]
+End
+
+(* During deployment (installed account code = []), slice(self.code, 1, 2)
+   reads the active frame's cx.txn.code. *)
+Theorem self_code_slice_reads_txn_code:
+  FST (eval_expr
+    (empty_evaluation_context with
+       txn := empty_call_txn with code := [0x11w; 0x22w; 0x33w])
+    self_code_slice_expr empty_state) =
+  INL (Value (BytesV [0x22w; 0x33w]))
+Proof
+  EVAL_TAC >> simp[return_def] >> EVAL_TAC
+QED
+
+Theorem self_code_slice_cps_reads_txn_code:
+  FST (fromtvk (cont (eval_expr_cps
+    (empty_evaluation_context with
+       txn := empty_call_txn with code := [0x11w; 0x22w; 0x33w])
+    self_code_slice_expr empty_state DoneK))) =
+  INL (Value (BytesV [0x22w; 0x33w]))
+Proof
+  simp[GSYM eval_expr_eq_cont_cps, self_code_slice_reads_txn_code]
+QED

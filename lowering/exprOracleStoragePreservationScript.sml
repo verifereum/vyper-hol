@@ -444,8 +444,8 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
     reverse (Cases_on `addr_res`) >> simp_tac(srw_ss())[]
     >- (strip_tac >> gvs[]) >>
     rename1 `eval_exprs cx [addr] tail_st = (INL avs,addr_st)` >>
-    Cases_on `evaluate_builtin cx addr_st.accounts code_ty (Acc Code)
-                [expr_type addr] avs` >>
+    Cases_on `evaluate_code_source cx addr_st.accounts (is_self_addr addr)
+                code_ty (expr_type addr) avs` >>
     simp_tac(srw_ss())[return_def, raise_def] >> strip_tac >> gvs[]) >>
   rpt (qpat_x_assum `!x. _` kall_tac) >>
   Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,

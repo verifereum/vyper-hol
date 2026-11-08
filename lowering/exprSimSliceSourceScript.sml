@@ -106,8 +106,8 @@ Theorem slice_eval_extcode:
   do tail_vs <- eval_exprs cx [start; len];
      addr_vs <- eval_exprs cx [a];
      code_acc <- get_accounts;
-     code_v <- lift_sum (evaluate_builtin cx code_acc ct (Acc Code)
-                          [expr_type a] addr_vs);
+     code_v <- lift_sum (evaluate_code_source cx code_acc (is_self_addr a)
+                          ct (expr_type a) addr_vs);
      acc <- get_accounts;
      v <- lift_sum (evaluate_builtin cx acc ann (Slice n)
                     (MAP expr_type [Builtin ct (Acc Code) [a]; start; len])

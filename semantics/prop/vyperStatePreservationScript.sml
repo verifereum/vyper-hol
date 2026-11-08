@@ -108,8 +108,9 @@ Theorem builtin_operands_preserve:
          tail_vs <- eval_exprs cx (TL es);
          addr_vs <- eval_exprs cx [addr];
          code_acc <- get_accounts;
-         code_v <- lift_sum (evaluate_builtin cx code_acc code_ty (Acc Code)
-                               [expr_type addr] addr_vs);
+         code_v <- lift_sum (evaluate_code_source cx code_acc
+                               (is_self_addr addr) code_ty (expr_type addr)
+                               addr_vs);
          return (code_v::tail_vs)
        od) st = (res,st') ==>
     R st st'
@@ -132,8 +133,9 @@ Theorem builtin_operands_cases:
          tail_vs <- eval_exprs cx (TL es);
          addr_vs <- eval_exprs cx [addr];
          code_acc <- get_accounts;
-         code_v <- lift_sum (evaluate_builtin cx code_acc code_ty (Acc Code)
-                               [expr_type addr] addr_vs);
+         code_v <- lift_sum (evaluate_code_source cx code_acc
+                               (is_self_addr addr) code_ty (expr_type addr)
+                               addr_vs);
          return (code_v::tail_vs)
        od) st = (res,st') ==>
     (code_slice_source bt es = NONE /\ eval_exprs cx es st = (res,st')) \/
@@ -146,8 +148,8 @@ Theorem builtin_operands_cases:
          ((?e. r2 = INR e /\ res = INR e) \/
           ?addr_vs r3.
             r2 = INL addr_vs /\
-            lift_sum (evaluate_builtin cx st'.accounts code_ty (Acc Code)
-                        [expr_type addr] addr_vs) st' = (r3,st') /\
+            lift_sum (evaluate_code_source cx st'.accounts (is_self_addr addr)
+                        code_ty (expr_type addr) addr_vs) st' = (r3,st') /\
             ((?e. r3 = INR e /\ res = INR e) \/
              ?code_v. r3 = INL code_v /\ res = INL (code_v::tail_vs))))
 Proof

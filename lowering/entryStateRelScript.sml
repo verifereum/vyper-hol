@@ -326,6 +326,7 @@ Theorem body_entry_state_rel:
     ss.vs_tx_ctx = vs.vs_tx_ctx /\ ss.vs_block_ctx = vs.vs_block_ctx /\
     ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
     ss.vs_pending_deletions = vs.vs_pending_deletions /\
+    ss.vs_code = vs.vs_code /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     (!n off. FLOOKUP cenv.ce_module_vars n <> SOME (ImmutableLoc off)) ==>
@@ -352,6 +353,7 @@ Theorem body_entry_state_rel_runtime[local]:
     ss.vs_tx_ctx = vs.vs_tx_ctx /\ ss.vs_block_ctx = vs.vs_block_ctx /\
     ss.vs_outcomes = vs.vs_outcomes /\ ss.vs_requests = vs.vs_requests /\
     ss.vs_pending_deletions = vs.vs_pending_deletions /\
+    ss.vs_code = vs.vs_code /\
     local_ptrs_rel func cenv [env] ss /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
@@ -652,7 +654,7 @@ Theorem external_body_entry_state_rel:
     s0.vs_outcomes = vs.vs_outcomes /\ s0.vs_requests = vs.vs_requests /\
     s0.vs_pending_deletions = vs.vs_pending_deletions /\
     s0.vs_allocas = vs.vs_allocas /\ s0.vs_alloca_next = vs.vs_alloca_next /\
-    s0.vs_data_section = vs.vs_data_section /\
+    s0.vs_data_section = vs.vs_data_section /\ s0.vs_code = vs.vs_code /\
     fresh_vars_wrt st s0 /\ fn_has_code st st' func /\ ~s0.vs_halted /\
     s0.vs_current_bb = st.cs_current_bb /\
     s0.vs_inst_idx = LENGTH st.cs_current_insts ==>

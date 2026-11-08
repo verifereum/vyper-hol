@@ -1151,7 +1151,8 @@ Definition transient_rel_def:
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address agree.
+(* The accounts and the transient storage of every address agree, and
+   Venom's active frame code (ss.vs_code) equals cx.txn.code.
    Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
@@ -1160,7 +1161,8 @@ End
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
     accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient
+    transient_agree cx vs.tStorage ss.vs_transient ∧
+    ss.vs_code = cx.txn.code
 End
 
 (* ===== Immutables Relation ===== *)

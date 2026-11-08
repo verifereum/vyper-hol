@@ -125,13 +125,14 @@ End
 (* ===== PLAN 5.7 oracle-mode boundary ===== *)
 
 (* No gas-reading/oracle equality is invented here: cc_gas, outcomes,
-   code/labels and frame-pointer fields are deliberately free at entry. *)
+   labels and frame-pointer fields are deliberately free at entry. *)
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
     ~tx.is_static /\
-    vs.vs_prev_hashes = tx.block_hashes
+    vs.vs_prev_hashes = tx.block_hashes /\
+    vs.vs_code = tx.code
 End
 
 (* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it

@@ -38,6 +38,7 @@ Proof
 QED
 
 Theorem slice_extcode_actions:
+  ~is_self_code (Builtin ct (Acc Code) [a]) ==>
   eval_expr cx (Builtin ann (Slice n) [Builtin ct (Acc Code) [a]; start; len]) =
   do st <- bind (eval_expr cx start) (read_result cx);
      ln <- bind (eval_expr cx len) (read_result cx);
@@ -50,8 +51,16 @@ Theorem slice_extcode_actions:
      return (Value v)
   od
 Proof
+  strip_tac >>
+  `~is_self_addr a` by
+    (Cases_on `a` >> simp[vyperContextTheory.is_self_addr_def] >>
+     rename1 `Builtin _ bt xs` >> Cases_on `bt` >> Cases_on `xs` >>
+     simp[vyperContextTheory.is_self_addr_def] >>
+     rename1 `Env eb` >> Cases_on `eb` >>
+     gvs[vyperContextTheory.is_self_addr_def, is_self_code_def]) >>
   rewrite_tac[slice_eval_extcode] >>
-  simp[eval_exprs_cons_action, bind_assoc] >>
+  simp[vyperContextTheory.evaluate_code_source_def,
+       eval_exprs_cons_action, bind_assoc] >>
   `eval_exprs cx [] = return []` by
     simp[FUN_EQ_THM, eval_exprs_nil, return_def] >>
   simp[bind_return, bind_assoc]
@@ -97,13 +106,13 @@ Resume slice_extcode_typed_entry[reads]:
   qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` kall_tac >>
   qpat_x_assum `gas_admissible _ _ _` kall_tac >>
   qpat_x_assum `!xs. ~names_builtin _ xs` kall_tac >>
+  drule slice_extcode_actions >> disch_then (fn th => rewrite_tac[th]) >>
   qpat_x_assum `~is_self_code _` kall_tac >>
   `expr_sim ctx func cenv cx ty start es` by
     (irule expr_sim_case_apply >> simp[] >> conj_tac >- (qexists_tac `env` >> simp[]) >>
      qexists_tac `nocalls` >> fs[exprs_case_def]) >>
   `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
-  rewrite_tac[slice_extcode_actions] >>
   irule slice_read_outcome_bind >> simp[] >>
   qexistsl_tac [`cenv`, `start_op`, `sa`, `st1`, `ty`] >> simp[] >>
   rpt gen_tac >> strip_tac >> suspend "length"

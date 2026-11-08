@@ -626,8 +626,9 @@ Proof
           do tail_vs <- eval_exprs cx (TL es);
              addr_vs <- eval_exprs cx [addr];
              code_acc <- get_accounts;
-             code_v <- lift_sum (evaluate_builtin cx code_acc code_ty (Acc Code)
-                                   [expr_type addr] addr_vs);
+             code_v <- lift_sum (evaluate_code_source cx code_acc
+                                   (is_self_addr addr) code_ty
+                                   (expr_type addr) addr_vs);
              return (code_v::tail_vs)
           od) st = (args_res,args_st) /\
      contract_storage_well_formed cx args_st` by (

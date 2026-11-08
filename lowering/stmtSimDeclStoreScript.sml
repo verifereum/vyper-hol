@@ -48,6 +48,7 @@ Theorem stmt_state_rel_declare_memory:
     t.vs_immutables = s.vs_immutables /\
     t.vs_pending_deletions = s.vs_pending_deletions /\
     t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
+    t.vs_code = s.vs_code /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\

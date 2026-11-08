@@ -19,6 +19,8 @@ Datatype:
   (* Original call input, including the selector; never ABI-decoder padding.
      Creation frames have empty calldata (constructor arguments are code data). *)
   ; calldata: word8 list
+  (* Active frame bytecode (runtime code on calls, initcode ++ args on creation). *)
+  ; code: word8 list
   ; value: num
   ; time_stamp: num
   ; block_number: num
@@ -48,6 +50,7 @@ Definition empty_call_txn_def:
     function_name := "";
     args := [];
     calldata := [];
+    code := [];
     value := 0;
     time_stamp := 0;
     block_number := 0;
@@ -599,6 +602,24 @@ Theorem evaluate_builtin_pre[cv_pre]:
 Proof
   rw[evaluate_builtin_pre_def]
 QED
+
+Definition is_self_addr_def[simp]:
+  is_self_addr (Builtin _ (Env SelfAddr) []) = T ∧
+  is_self_addr _ = F
+End
+
+val () = cv_auto_trans is_self_addr_def;
+
+Definition evaluate_code_source_def:
+  evaluate_code_source cx acc is_self code_ty addr_ty addr_vs =
+    if is_self then
+      case addr_vs of
+      | [BytesV _] => INL (BytesV cx.txn.code)
+      | _ => INR (TypeError "builtin")
+    else evaluate_builtin cx acc code_ty (Acc Code) [addr_ty] addr_vs
+End
+
+val () = cv_auto_trans evaluate_code_source_def;
 
 Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Empty n = (n = 0n) ∧

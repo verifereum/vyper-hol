@@ -96,6 +96,7 @@ Definition deploy_state_rel_def:
       ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
       ctxt.msgParams.outputTo = Code tx.target /\
       ctxt.msgParams.code = deploy_bc ++ args_bytes /\
+      tx.code = ctxt.msgParams.code /\
       ctxt.msgParams.parsed = parse_code 0 FEMPTY (deploy_bc ++ args_bytes) /\
       buffer_to_list ctxt.msgParams.data = [] /\
       tx.calldata = [] /\

@@ -822,7 +822,8 @@ Theorem state_rel_frame:
     s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
     s'.vs_pending_deletions = s.vs_pending_deletions /\
     s'.vs_immutables = s.vs_immutables /\
-    s'.vs_data_section = s.vs_data_section ==>
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_code = s.vs_code ==>
     state_rel func cenv cx es' s'
 Proof
   rpt strip_tac >>

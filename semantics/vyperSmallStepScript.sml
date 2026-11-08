@@ -55,7 +55,7 @@ Datatype:
   | SubscriptK1 type eval_result eval_continuation
   | AttributeK type identifier eval_continuation
   | BuiltinK type builtin (type list) eval_continuation
-  | CodeSliceK type num type type (type list) eval_continuation
+  | CodeSliceK type num bool type type (type list) eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type (type list) eval_continuation
   | CallSendK bool eval_continuation
@@ -174,8 +174,8 @@ Definition eval_expr_cps_def:
                        else (case (bt, es) of
                          (Slice n, [Builtin code_ty (Acc Code) [addr]; start; len]) =>
                            eval_exprs_cps cx8 [start; len; addr] st
-                             (CodeSliceK ty n code_ty (expr_type addr)
-                                (MAP expr_type es) k)
+                             (CodeSliceK ty n (is_self_addr addr) code_ty
+                                (expr_type addr) (MAP expr_type es) k)
                        | _ => eval_exprs_cps cx8 es st
                                 (BuiltinK ty bt (MAP expr_type es) k))) ∧
   eval_expr_cps cx8 (Pop _ bt) st k =
@@ -451,7 +451,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (AttributeK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (CodeSliceK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CodeSliceK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK _ k) = AK cx (ApplyExc ex) st k ∧
@@ -691,11 +691,11 @@ Definition apply_vals_def:
       return $ Value v
     od st) k ∧
   apply_vals cx [start_v; len_v; addr_v] st
-             (CodeSliceK ty n code_ty addr_ty tys k) =
+             (CodeSliceK ty n is_self code_ty addr_ty tys k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
-      code_v <- lift_sum $ evaluate_builtin cx acc code_ty (Acc Code)
-                             [addr_ty] [addr_v];
+      code_v <- lift_sum $ evaluate_code_source cx acc is_self code_ty
+                             addr_ty [addr_v];
       v <- lift_sum $ evaluate_builtin cx acc ty (Slice n) tys
         [code_v; start_v; len_v];
       return $ Value v
@@ -1037,24 +1037,24 @@ Proof
 QED
 
 Theorem cont_codeslicek_vals[local]:
-  cont (AK cx (ApplyVals [a;b;c]) st (CodeSliceK ty n cty aty tys k)) =
+  cont (AK cx (ApplyVals [a;b;c]) st (CodeSliceK ty n is_self cty aty tys k)) =
   cont (liftk cx ApplyTv (do
     acc <- get_accounts;
-    code_v <- lift_sum $ evaluate_builtin cx acc cty (Acc Code) [aty] [c];
+    code_v <- lift_sum $ evaluate_code_source cx acc is_self cty aty [c];
     v <- lift_sum $ evaluate_builtin cx acc ty (Slice n) tys [code_v;a;b];
     return $ Value v
   od st) k)
 Proof
-  qspec_then `AK cx (ApplyVals [a;b;c]) st (CodeSliceK ty n cty aty tys k)`
+  qspec_then `AK cx (ApplyVals [a;b;c]) st (CodeSliceK ty n is_self cty aty tys k)`
     mp_tac cont_step >>
   simp[stepk_def, apply_vals_def]
 QED
 
 Theorem cont_codeslicek_exc[local]:
-  cont (AK cx (ApplyExc ex) st (CodeSliceK ty n cty aty tys k)) =
+  cont (AK cx (ApplyExc ex) st (CodeSliceK ty n is_self cty aty tys k)) =
   cont (AK cx (ApplyExc ex) st k)
 Proof
-  qspec_then `AK cx (ApplyExc ex) st (CodeSliceK ty n cty aty tys k)`
+  qspec_then `AK cx (ApplyExc ex) st (CodeSliceK ty n is_self cty aty tys k)`
     mp_tac cont_step >>
   simp[stepk_def, apply_exc_def]
 QED
@@ -1786,28 +1786,28 @@ Proof
             >- (drule eval_exprs_length >> simp[LENGTH_EQ_NUM_compute] >>
                 strip_tac >> gvs[] >>
                 rename1 `eval_exprs cx [addr] r = (INL [addr_v],addr_st)` >>
-                qmatch_goalsub_abbrev_tac `CodeSliceK ty n cty aty tys k` >>
-                qspec_then `AK cx (ApplyVals [addr_v]) addr_st (ExprsK1 h' (ExprsK1 h (CodeSliceK ty n cty aty tys k)))`
+                qmatch_goalsub_abbrev_tac `CodeSliceK ty n is_self cty aty tys k` >>
+                qspec_then `AK cx (ApplyVals [addr_v]) addr_st (ExprsK1 h' (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k)))`
                   mp_tac cont_step >>
                 simp[stepk_def, apply_vals_def, cont_apply_vals] >>
                 disch_then SUBST1_TAC >>
-                qspec_then `AK cx (ApplyVals [h';addr_v]) addr_st (ExprsK1 h (CodeSliceK ty n cty aty tys k))`
+                qspec_then `AK cx (ApplyVals [h';addr_v]) addr_st (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k))`
                   mp_tac cont_step >>
                 simp[stepk_def, apply_vals_def, cont_apply_vals,
                      cont_codeslicek_vals, liftk1, bind_def, return_def,
                      get_accounts_def] >>
                 disch_then kall_tac >> unabbrev_all_tac >>
-                Cases_on `evaluate_builtin cx addr_st.accounts code_ty (Acc Code)
-                            [expr_type addr] [addr_v]` >>
+                Cases_on `evaluate_code_source cx addr_st.accounts
+                            (is_self_addr addr) code_ty (expr_type addr) [addr_v]` >>
                 simp[lift_sum_def, return_def, raise_def, liftk1, bind_def,
                      ignore_bind_def, precompile_call_success_def] >>
                 rpt (CASE_TAC >> simp[return_def, raise_def])) >>
             rename1 `eval_exprs cx [addr] r = (INR addr_ex,addr_st)` >>
-            qmatch_goalsub_abbrev_tac `CodeSliceK ty n cty aty tys k` >>
-            qspec_then `AK cx (ApplyExc addr_ex) addr_st (ExprsK1 h' (ExprsK1 h (CodeSliceK ty n cty aty tys k)))`
+            qmatch_goalsub_abbrev_tac `CodeSliceK ty n is_self cty aty tys k` >>
+            qspec_then `AK cx (ApplyExc addr_ex) addr_st (ExprsK1 h' (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k)))`
               mp_tac cont_step >> simp[stepk_def, apply_exc_def] >>
             disch_then SUBST1_TAC >>
-            qspec_then `AK cx (ApplyExc addr_ex) addr_st (ExprsK1 h (CodeSliceK ty n cty aty tys k))`
+            qspec_then `AK cx (ApplyExc addr_ex) addr_st (ExprsK1 h (CodeSliceK ty n is_self cty aty tys k))`
               mp_tac cont_step >>
             simp[stepk_def, apply_exc_def, cont_codeslicek_exc]) >>
         simp[cont_codeslicek_exc]) >>
