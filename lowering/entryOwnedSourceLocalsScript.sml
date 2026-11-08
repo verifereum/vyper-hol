@@ -63,7 +63,7 @@ Finalise owned_source_scope_lookup
 
 Theorem owned_source_arguments_local_ptrs:
   set_external_package_target target
-    (package_external_fn tops locks keys (mut,nr,rr,name,args,dflts,ret,fbody)) =
+    (package_external_fn tops locks keys (mut,nr,rr,name,args,(dflts : expr list),ret,fbody)) =
     (lbl,ce,pa,mc,pay,nr',key,locks',view,fbody',rt) /\
   compile_register_positional_args ce pa 4 st = (cer,registered) /\
   bind_arguments (type_env tops) args (MAP (\(ty,tv,v,at,av). v) values) = SOME env /\
