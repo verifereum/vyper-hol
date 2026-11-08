@@ -7,7 +7,7 @@ Ancestors
   entryStateRel e2eDefs vyperContext vyperState vyperInterpreter
   venomInst venomState supportedProgram entrySourceOwnedEndpoint
   entryParameterAdmissibility entryPrefixAllocationResources vyperTypeContract
-  entryDecoderStateFrame moduleLoweringProps fragExec
+  entryDecoderStateFrame moduleLoweringProps fragExec immutableLocationProps
 
 Theorem owned_runtime_stmt_resources[local]:
   state_rel fn ce cx es out /\ alloca_inv out /\
@@ -38,7 +38,7 @@ Proof
   Cases_on `ret = NoneT` >>
   gvs[set_external_package_target_def, package_external_fn_def,
     update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
-    build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
+    build_compile_env_module_vars] >> rpt (pairarg_tac >> gvs[])
 QED
 
 Theorem owned_runtime_body_state:

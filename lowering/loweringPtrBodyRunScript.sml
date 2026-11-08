@@ -48,7 +48,9 @@ Proof
   `step_inst_base (mk_inst id op [] []) s =
      if op = STOP then Halt (halt_state (s with vs_returndata := []))
      else Abort ExHalt_abort (halt_state (set_returndata [] s))` by
-    (gvs[] >> simp_tac (srw_ss()) [Once step_inst_base_def, mk_inst_def]) >>
+    (gvs[] >> simp_tac std_ss [Once step_inst_base_def, mk_inst_def,
+       venomInstTheory.instruction_accfupds, venomInstTheory.instruction_accessors,
+       venomInstTheory.opcode_case_def]) >>
   gvs[] >> gen_tac >>
   simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
        ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,

@@ -812,7 +812,8 @@ Resume calldata_owned_header_successor_endpoint[empty]:
     simp[dec_info_needs_offset_def] >>
   `abi_decoder_operand_live st0.cs_next_var src /\
    abi_decoder_operand_live st0.cs_next_var dst` by
-    metis_tac[abi_decoder_operand_live_mono] >>
+    (conj_tac >> irule abi_decoder_operand_live_mono >>
+     qexists_tac `next` >> asm_rewrite_tac[]) >>
   `eval_operand src head = SOME (n2w sb) /\
    eval_operand dst head = SOME (n2w d)` by fs[abi_decoder_ranges_def] >>
   `FLOOKUP head.vs_allocas iid = SOME (p,32) /\ alloca_inv head` by
