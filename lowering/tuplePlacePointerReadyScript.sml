@@ -267,3 +267,67 @@ Proof
   conj_tac >- metis_tac[listTheory.EL_MEM] >>
   qexistsl [`path`, `l`, `entry.type`] >> simp[]
 QED
+
+(* Reassemble the value relation after pointer evaluation, at its actual endpoint. *)
+Theorem tuple_place_pointer_value_rel:
+  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  evaluate_type (get_tenv cx) (EL i ltys) = SOME (EL i ltvs) /\
+  i < LENGTH ltys ==>
+  expr_val_rel cx (EL i ltys) (EL i vs) (EL i elems) s
+Proof
+  strip_tac >>
+  `?v. eval_operand (EL i elems) s = SOME v /\
+    if is_word_type (EL i ltys) then
+      v = typed_val_to_w256 (EL i ltvs) (EL i vs)
+    else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i ltvs))` by
+    (irule tuple_place_head_pointer_operands >>
+     qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[] >> goal_assum (drule_at Any)) >>
+  simp[loweringPostsTheory.expr_val_rel_def] >>
+  Cases_on `is_word_type (EL i ltys)` >- gvs[] >>
+  gvs[] >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule tuple_place_pointer_pending_memory >>
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem tuple_place_pointer_source_facts:
+  target_pre cenv cx env bt es /\ supported_target_pure tops bt /\
+  eval_base_place cx bt es = (INL (PlaceR p),ee) ==>
+  expr_sim_inv cenv cx env ee /\ storage_place_region cx p /\
+  (!id path entry t0. p = MemoryPlace id path /\
+    lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
+    evaluate_type (get_tenv cx) t0 = SOME entry.type)
+Proof
+  strip_tac >>
+  `expr_sim_inv cenv cx env ee` by
+    (irule targetPlaceSimCasesBaseTheory.eval_base_place_sim_inv >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `storage_place_region cx p` by
+    (drule tuple_place_base_target_transition >>
+     metis_tac[vyperStoragePlaceProvenanceTheory.eval_target_place_region]) >>
+  simp[] >> rpt strip_tac >>
+  irule bodySimAugPlaceLoadTheory.aug_place_entry_type_agrees >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem tuple_place_pointer_element_facts:
+  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  i < LENGTH ltys ==>
+  value_has_type (EL i ltvs) (EL i vs) /\
+  (!x. EL i elems = Var x ==> not_fresh_at sa x)
+Proof
+  strip_tac >>
+  `ci_mono sp sa` by
+    (qspec_then `bt` mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     disch_then (qspecl_then [`cenv`, `sp`] mp_tac) >> simp[]) >>
+  fs[tuple_place_head_def, vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+     listTheory.LIST_REL_EL_EQN] >>
+  rpt strip_tac >> irule exprOperandVarTheory.compiler_ci_mono_not_fresh >>
+  goal_assum (drule_at Any) >>
+  `MEM (EL i elems) elems` by (irule listTheory.EL_MEM >> simp[]) >> metis_tac[]
+QED
