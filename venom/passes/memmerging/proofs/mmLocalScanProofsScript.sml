@@ -1179,6 +1179,43 @@ Proof
   gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem mm_local_prefix_original_consumer[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ir_supply_covers_fn supply fn0 /\ MEM v (irSupply$fn_ir_vars fn0) /\
+  index < LENGTH fn0.fn_blocks /\
+  MEM i bb.bb_instructions /\ MEM v (venomInst$inst_uses i) ==>
+  MEM i (fn_insts fn0)
+Proof
+  rpt strip_tac >>
+  drule_all mm_local_prefix_original_use_origin >> strip_tac >>
+  irule mmWfProofsTheory.fn_insts_mem_block >>
+  qexists_tac `EL index fn0.fn_blocks` >> simp[EL_MEM]
+QED
+
+Theorem mm_local_operand_vars_eq[local]:
+  !ops. dfgDefs$operand_vars ops = venomInst$operand_vars ops
+Proof
+  Induct >> simp[dfgDefsTheory.operand_vars_def,
+                 venomInstTheory.operand_vars_def] >>
+  Cases_on `h` >>
+  simp[dfgDefsTheory.operand_vars_def, venomInstTheory.operand_vars_def,
+       dfgDefsTheory.operand_var_def, venomInstTheory.operand_var_def]
+QED
+
+Theorem mm_local_prefix_original_uses[local]:
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ir_supply_covers_fn supply fn0 /\ MEM v (irSupply$fn_ir_vars fn0) /\
+  index < LENGTH fn0.fn_blocks /\
+  MEM i bb.bb_instructions /\ MEM v (venomInst$inst_uses i) ==>
+  MEM i (dfg_get_uses (dfg_build_function fn0) v)
+Proof
+  rpt strip_tac >>
+  irule dfgAnalysisPropsTheory.dfg_build_function_uses_complete >>
+  conj_tac
+  >- (drule_all mm_local_prefix_original_consumer >> simp[]) >>
+  gvs[mm_local_operand_vars_eq, venomInstTheory.inst_uses_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
