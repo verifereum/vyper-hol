@@ -460,7 +460,7 @@ Proof
   rpt strip_tac >> Cases_on `EL i t` >> simp[] >> metis_tac[]
 QED
 
-Theorem data_discipline_cons[local]:
+Theorem data_discipline_cons:
   (asm_data_at_end (h::t) /\
    (!i. i < LENGTH (h::t) /\ is_data_inst (EL i (h::t)) ==>
       ?j l. j <= i /\ EL j (h::t) = AsmDataHeader l)) <=>

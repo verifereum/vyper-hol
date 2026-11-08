@@ -37,6 +37,7 @@ Ancestors
   vyperLoweringCorrect
   configuredE2ECorrectness
   asmSymBridge
+  asmDataEnv
   asmOptFinalizerCorrect
   evalCompilerInternalImmutables
   evalAssignmentOrder
