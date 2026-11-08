@@ -130,6 +130,10 @@ Proof
   strip_tac >>
   `MAP expr_type (if sh then MAP gas_shadow_expr args else args) = MAP expr_type args`
     by (Cases_on `sh` >> simp[MAP_MAP_o, combinTheory.o_DEF, ETA_THM]) >>
+  `MAP (lowered_value_type cenv) (if sh then MAP gas_shadow_expr args else args) =
+   MAP (lowered_value_type cenv) args`
+    by (Cases_on `sh` >> simp[MAP_MAP_o, combinTheory.o_DEF] >>
+        CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
   `LENGTH (if sh then MAP gas_shadow_expr args else args) = LENGTH args`
     by (Cases_on `sh` >> simp[]) >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)

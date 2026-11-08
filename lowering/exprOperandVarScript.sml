@@ -1473,7 +1473,7 @@ Proof
     (irule compiler_ci_mono_reserved >> qexists `sa` >>
      metis_tac[pairTheory.SND]) >>
   Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate ce args` >> simp[]
-  >- (Cases_on `compile_materialize_vv ce (expr_type h) vv sb` >> simp[] >>
+  >- (Cases_on `compile_materialize_vv ce (lowered_value_type ce h) vv sb` >> simp[] >>
       `local_ptrs_reserved ce r` by
         (irule compiler_ci_mono_reserved >> qexists `sb` >>
          metis_tac[ci_mono_compile_materialize_vv, pairTheory.SND]) >>

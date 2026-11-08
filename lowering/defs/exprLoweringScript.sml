@@ -192,6 +192,8 @@ End
 (* Bytelike literals, concatenations and ABI encoding results carry their produced bound,
    independently of the annotated destination bound; an internal call's
    value is its callee's return buffer, at the declared return type.
+   ABI encoding reads each argument at this type, the layout of the buffer
+   its lowering produced.
    Mirrors Python: vv.typ (_lower_bytelike, _lower_internal_call). *)
 Definition lowered_value_type_def:
   lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
@@ -201,14 +203,18 @@ Definition lowered_value_type_def:
   lowered_value_type cenv (Builtin ty (Concat _) args) =
     concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args)) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
-    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
-                  else TupleT (MAP expr_type args) in
+    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then lowered_value_type cenv (HD args)
+                  else TupleT (MAP (lowered_value_type cenv) args) in
      BaseT (BytesT (Dynamic
        (abi_size_bound cenv.ce_struct_fields enc_ty +
         if IS_SOME method_id then 4 else 0)))) ∧
   lowered_value_type cenv (Call _ (IntCall func_id) _ _) =
     cenv.ce_func_return_type (nsid_to_string func_id) ∧
   lowered_value_type cenv e = expr_type e
+Termination
+  WF_REL_TAC `measure (expr_size o SND)` >> rw[]
+  >- (Cases_on `args` >> gvs[expr_size_def])
+  >> drule expr_list_member_bound >> simp[expr_size_def, ETA_AX]
 End
 
 (* ===== Array Location Inference ===== *)
@@ -2520,7 +2526,7 @@ Definition compile_abi_encode_args_def:
   compile_abi_encode_args cfn cenv (e::es) =
     do vv <- cfn cenv (expr_type e) e;
        op <- (if ~is_word_type (expr_type e) ∧ exprs_can_mutate cenv es then
-                compile_materialize_vv cenv (expr_type e) vv
+                compile_materialize_vv cenv (lowered_value_type cenv e) vv
               else unwrap_value cenv vv);
        ops <- compile_abi_encode_args cfn cenv es;
        return (op::ops)
@@ -3506,7 +3512,7 @@ Definition compile_type_builtin_dispatch_body_def:
           if LENGTH args = 1 ∧ ¬ensure then
           let e1 = HD args in
           let src_ty = expr_type e1 in
-          let enc_ty = src_ty in
+          let enc_ty = lowered_value_type cenv e1 in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
           if is_word_type src_ty then
@@ -3523,7 +3529,7 @@ Definition compile_type_builtin_dispatch_body_def:
             as_ptr_val vv_ty LocMemory
               (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
           else
-          let arg_tys = MAP expr_type args in
+          let arg_tys = MAP (lowered_value_type cenv) args in
           let enc_ty = TupleT arg_tys in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in

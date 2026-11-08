@@ -9,8 +9,8 @@ Definition abi_args_post_def:
     stmt_state_rel ctx func ce cx es' s /\
     LENGTH args = LENGTH vs /\
     LIST_REL (\op ev.
-      expr_val_rel cx (expr_type (FST ev)) (SND ev) op s /\
-      expr_val_at ce cx (expr_type (FST ev)) sa sb es' (SND ev) op s)
+      expr_val_rel cx (lowered_value_type ce (FST ev)) (SND ev) op s /\
+      expr_val_at ce cx (lowered_value_type ce (FST ev)) sa sb es' (SND ev) op s)
       ops (ZIP (args,vs)) /\
     wb_frame ce es es' sa s0 s
 End
