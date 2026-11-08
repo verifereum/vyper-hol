@@ -203,7 +203,6 @@ index 54af5494..9d623b53 100644
              if inst.is_bb_terminator:
                  for var in self.order:
                      dep = self.dfg.get_producing_instruction(var)
-||||||| b667f3b94
 diff --git a/vyper/venom/passes/dft.py b/vyper/venom/passes/dft.py
 --- a/vyper/venom/passes/dft.py
 +++ b/vyper/venom/passes/dft.py
