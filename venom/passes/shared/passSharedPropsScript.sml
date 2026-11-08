@@ -121,28 +121,28 @@ QED
 
 (* FILTER/TAKE helpers for index correspondence *)
 
-Triviality filter_take_el:
+Theorem filter_take_el:
   !l (P:'a -> bool) i. i < LENGTH l /\ P (EL i l) ==>
     EL (LENGTH (FILTER P (TAKE i l))) (FILTER P l) = EL i l
 Proof
   Induct >> simp[] >> rw[] >> Cases_on `i` >> gvs[]
 QED
 
-Triviality filter_take_nop:
+Theorem filter_take_nop:
   !l (P:'a -> bool) i. i < LENGTH l /\ ~P (EL i l) ==>
     LENGTH (FILTER P (TAKE (SUC i) l)) = LENGTH (FILTER P (TAKE i l))
 Proof
   Induct >> simp[] >> rw[] >> Cases_on `i` >> gvs[]
 QED
 
-Triviality filter_take_keep:
+Theorem filter_take_keep:
   !l (P:'a -> bool) i. i < LENGTH l /\ P (EL i l) ==>
     LENGTH (FILTER P (TAKE (SUC i) l)) = SUC (LENGTH (FILTER P (TAKE i l)))
 Proof
   Induct >> simp[] >> rw[] >> Cases_on `i` >> gvs[]
 QED
 
-Triviality filter_take_lt:
+Theorem filter_take_lt:
   !l (P:'a -> bool) i. i < LENGTH l /\ P (EL i l) ==>
     LENGTH (FILTER P (TAKE i l)) < LENGTH (FILTER P l)
 Proof
@@ -294,7 +294,7 @@ QED
    - OK results: state shifted by idx
    - Non-OK results: execution_equiv {} (ignores idx)
    This is what clear_nops_block_gen needs. *)
-Triviality step_inst_non_term_idx:
+Theorem step_inst_non_term_idx:
   !fuel ctx inst s j.
     ~is_terminator inst.inst_opcode ==>
     (case step_inst fuel ctx inst s of
@@ -474,7 +474,7 @@ Proof
   simp[]
 QED
 
-Triviality lookup_block_clear_nops:
+Theorem lookup_block_clear_nops:
   !lbl bbs. lookup_block lbl (MAP clear_nops_block bbs) =
             OPTION_MAP clear_nops_block (lookup_block lbl bbs)
 Proof
@@ -524,7 +524,7 @@ QED
 
 (* NOP is not PHI, so FILTER removing NOPs preserves phi_prefix_length
    when PHIs form a prefix (which bb_well_formed guarantees). *)
-Triviality phi_prefix_length_filter_nop:
+Theorem phi_prefix_length_filter_nop:
   !l. (!i j. i < j /\ j < LENGTH l /\
         (EL j l).inst_opcode = PHI ==>
         (EL i l).inst_opcode = PHI) ==>
@@ -589,7 +589,7 @@ Proof
 QED
 
 (* With PHI-prefix well-formedness, FILTER out NOPs preserves eval_phis *)
-Triviality eval_phis_filter_nop_wf:
+Theorem eval_phis_filter_nop_wf:
   !s l.
     (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
            (EL i l).inst_opcode = PHI) ==>
@@ -616,7 +616,7 @@ Proof
   simp[eval_phis_def]
 QED
 
-Triviality filter_take_phi_prefix_length:
+Theorem filter_take_phi_prefix_length:
   !l.
     LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
               (TAKE (phi_prefix_length l) l)) = phi_prefix_length l
@@ -815,7 +815,7 @@ Proof
 QED
 
 (* clear_nops_block preserves bb_succs *)
-Triviality clear_nops_succs:
+Theorem clear_nops_succs:
   !bb. bb_well_formed bb ==> bb_succs (clear_nops_block bb) = bb_succs bb
 Proof
   rpt strip_tac >>

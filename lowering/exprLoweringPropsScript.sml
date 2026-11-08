@@ -56,7 +56,7 @@ Theory exprLoweringProps
 Ancestors
   exprLowering emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
   builtinCreate context
-  venomExecSemantics venomState venomInst venomInstProps
+  venomExecSemantics venomExecProofs venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
@@ -4701,42 +4701,6 @@ Proof
 QED
 
 (* ===== Structural Properties ===== *)
-
-(* The DRET continuation only destructs the opaque packing result and returns
-   IntRet, so it can never equal an OK result. *)
-Theorem pack_dret_dynamic_IntRet_not_OK[local]:
-  !cursor pairs s ordinary vals out.
-    (\(ptrs,final_cursor,st).
-       IntRet
-         <|iret_values := TAKE ordinary (DROP 1 vals) ++ ptrs;
-           iret_adopt_fmp := SOME final_cursor|>
-         (st with vs_fmp := final_cursor))
-      (pack_dret_dynamic cursor pairs s) <> OK out
-Proof
-  rpt strip_tac >>
-  Cases_on `pack_dret_dynamic cursor pairs s` >>
-  Cases_on `r` >>
-  pairarg_tac >>
-  gvs[]
-QED
-
-(* Helper: step_inst_base preserves call/tx/block context for ANY instruction
-   that returns OK. Unlike step_inst_base_preserves_inst_idx, we don't need
-   ~is_terminator because jump_to only modifies vs_prev_bb/vs_current_bb/vs_inst_idx. *)
-Theorem step_inst_base_ok_terminator_jump[local]:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-    inst.inst_opcode = DJMP
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp_tac(srw_ss())[] >>
-  gvs[pack_dret_dynamic_IntRet_not_OK, AllCaseEqs()]
-QED
 
 Theorem step_inst_base_ok_jmp_ctxs[local]:
   !inst s s'.

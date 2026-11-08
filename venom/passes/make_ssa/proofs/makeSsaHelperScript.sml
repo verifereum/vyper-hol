@@ -408,50 +408,6 @@ Proof
   simp[IN_UNION]
 QED
 
-(* Only expose result constructors: return values, memory slices and DRET's
-   packed state are irrelevant to the impossibility of an OK result. *)
-val make_ssa_term_result_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
-  [AllCaseEqs(), exec_result_distinct, LET_THM, pairTheory.ELIM_UNCURRY];
-
-val make_ssa_term_ok_jump_tac =
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  qpat_assum `inst.inst_opcode = _` (fn eq =>
-    PURE_ONCE_REWRITE_TAC
-      [MATCH_MP (opcode_clause (rhs (concl eq))) eq]) >>
-  simp_tac make_ssa_term_result_ss [];
-
-Theorem step_inst_base_DRET_not_OK_local[local]:
-  !inst s r. inst.inst_opcode = DRET ==>
-    step_inst_base inst s <> OK r
-Proof
-  rpt strip_tac >> make_ssa_term_ok_jump_tac
-QED
-
-Theorem step_inst_base_RETFMP_not_OK_local[local]:
-  !inst s r. inst.inst_opcode = RETFMP ==>
-    step_inst_base inst s <> OK r
-Proof
-  rpt strip_tac >> make_ssa_term_ok_jump_tac
-QED
-
-val make_ssa_term_class_ss = bool_ss ++
-  simpLib.type_ssfrag ``:opcode`` ++ rewrites [is_terminator_def];
-
-Theorem step_inst_base_ok_terminator_jump_local[local]:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-    inst.inst_opcode = DJMP
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  (* Filter the terminator assumption before touching the execution result. *)
-  qpat_x_assum `is_terminator _` mp_tac >>
-  asm_simp_tac make_ssa_term_class_ss [] >>
-  make_ssa_term_ok_jump_tac
-QED
-
 Theorem step_inst_base_as_step_inst_local[local]:
   !inst s s'.
     step_inst_base inst s = OK s' /\
@@ -474,7 +430,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   rw[SUBSET_DEF] >> rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
-  >- (drule_all step_inst_base_ok_terminator_jump_local >>
+  >- (drule_all step_inst_base_ok_terminator_jump >>
       strip_tac >>
       gvs[step_inst_base_def, jump_to_def, AllCaseEqs()]) >>
   Cases_on `MEM x inst.inst_outputs`
