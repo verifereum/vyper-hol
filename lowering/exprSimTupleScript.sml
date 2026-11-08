@@ -990,7 +990,17 @@ Proof
            assert_def, ignore_bind_def, get_storage_backend_def,
            get_accounts_def, get_transient_storage_def, bind_def,
            lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
-           LET_THM] >>
+           LET_THM]
+      >~ [`oEL (Num i) l`]
+      >- (Cases_on `0 <= i /\ Num i < LENGTH l` >> simp[] >>
+          Cases_on `oEL (Num i) l` >> simp[return_def, raise_def])
+      >~ [`oEL (Num i) l`]
+      >- (Cases_on `0 <= i /\ Num i < LENGTH l` >> simp[] >>
+          Cases_on `oEL (Num i) l` >> simp[return_def, raise_def]) >>
+      Cases_on `b` >>
+      simp[assert_def, ignore_bind_def, get_transient_storage_def,
+           get_storage_backend_def, get_accounts_def, bind_def,
+           return_def, raise_def] >>
       rpt (BasicProvers.FULL_CASE_TAC >>
            gvs[check_def, assert_def, ignore_bind_def,
                get_storage_backend_def, get_accounts_def,
