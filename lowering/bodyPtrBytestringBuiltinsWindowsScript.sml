@@ -25,7 +25,7 @@ Proof
           qexists_tac `[]` >> simp[]) >>
       gvs[] >> disj1_tac >> qexists_tac `[]` >> simp[]) >>
   first_x_assum (qspec_then `ys` mp_tac) >>
-  disch_then (qspecl_then [`a`; `b`; `c`; `d`] mp_tac) >>
+  disch_then (qspecl_then [`a`, `b`, `c`, `d`] mp_tac) >>
   (impl_tac >- metis_tac[]) >>
   strip_tac >> gvs[] >> metis_tac[APPEND]
 QED
