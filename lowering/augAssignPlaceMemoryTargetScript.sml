@@ -6,7 +6,8 @@ Ancestors
   compileEnv exprSimProps exprLoweringProps bodyMemAugAssignAttrLocal
   fragGasMode stmtSimAugAssignPlace bodyAugPlaceTarget bodySimAugPlaceLive
   bodyMemEmitOpFrame venomExecSemantics venomInst venomState
-  stmtSimAugAssignPlaceStorage
+  stmtSimAugAssignPlaceStorage gasContext targetPlaceSimCases stmtSimDefs
+  vyperExprNoControl vyperInterpreter vyperState
 
 Theorem aug_place_memory_word_frontier:
   stmt_state_rel ctx func cenv cx es s /\
@@ -151,4 +152,44 @@ Proof
   drule_all aug_place_storage_load_ready >> strip_tac >>
   drule_all aug_place_storage_access_path >> strip_tac >>
   metis_tac[]
+QED
+
+Theorem aug_place_target_admissible_mem:
+  gas_admissible (eval_stmt cx (AugAssign ty bt bop e)) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_target_place cx bt) target_place_res_ok es
+Proof
+  rw[gas_admissible_def] >> Cases_on `res`
+  >- simp[target_place_res_ok_def] >>
+  rename1 `eval_target_place cx bt _ = (INR ex,ee)` >>
+  `no_control_exc ex` by metis_tac[eval_target_place_no_control] >>
+  `eval_stmt cx (AugAssign ty bt bop e) (es with gas_obs := gs) =
+   (INR ex,ee)` by (simp[Once evaluate_def, bind_def]) >>
+  `stmt_res_ok lctx (INR ex)` by metis_tac[] >>
+  gvs[stmt_res_ok_def, target_place_res_ok_def, no_control_exc_def]
+QED
+
+Theorem aug_place_memory_source_ready:
+  expr_sim_inv cenv cx env es /\ body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty bt bop e) /\
+  ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
+  type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
+  eval_target_place cx bt es = (INL (MemoryPlace id path),st) /\
+  expr_sim_inv cenv cx env st /\
+  target_post ctx func cenv cx es sa sp s0 st
+    (PlaceR (MemoryPlace id path)) (Type ty) r s ==>
+  ?cur tv.
+    read_place cx (MemoryPlace id path) st = (INL cur,st) /\
+    place_type_value cx (MemoryPlace id path) st = (INL tv,st) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all aug_place_supported_stmt_target_info >> strip_tac >>
+  drule_all aug_place_target_memory_live >> strip_tac >>
+  `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[target_post_def, place_readable_def] >> strip_tac >>
+  drule_all aug_place_memory_type_read >> strip_tac >>
+  `is_word_type ty` by
+    (drule aug_place_typing >> metis_tac[exprSimSourceTheory.word_value_type_word]) >>
+  drule_all aug_place_memory_read_typed >> simp[]
 QED
