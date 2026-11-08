@@ -126,7 +126,7 @@ Proof
        arg_type_fits (lowered_value_type cenv' e) (expr_type e)`
      >- (pop_assum strip_assume_tac
          >- metis_tac[post_value_type_lowered] >>
-         metis_tac[type_widens_from_bytestring]) >>
+         metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring]) >>
      drule_all incompatible_return_layout_intcall >> strip_tac >>
      simp[post_value_type_def]) >>
   drule_all return_value_physical_typed >> strip_tac >>
