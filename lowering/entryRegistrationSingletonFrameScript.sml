@@ -5,6 +5,7 @@ Ancestors
   actualRegistrationCode calldataRegistration moduleLowering abiDecoderCounters loweringHalt abiDecoderAppend entryDecoderStateFrame
   abiDecoderReentryAddress abiDecoderReentry fragExec compileEnv emitHelper
   exprLoweringProps venomState venomExecSemantics finite_map words list arithmetic
+  abiAllocationHistory calldataRegistration
 
 Theorem entry_registration_singleton_prefix_frame:
   compile_register_positional_args ce [(name,prim,dyn,sz,info)] off st =
@@ -24,6 +25,9 @@ Theorem entry_registration_singleton_prefix_frame:
   fresh_vars_wrt limit_st initial /\ final.cs_next_var <= limit_st.cs_next_var ==>
   ?dst src first ready p.
     FLOOKUP cef.ce_vars name = SOME (PtrVar dst n) /\
+    (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
+      ins.inst_id = st.cs_next_id) /\
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first =
       ((),final) /\ fn_has_code first final fn /\
     st.cs_next_id < first.cs_next_id /\
@@ -54,6 +58,7 @@ Theorem entry_registration_singleton_prefix_frame:
       ?fuel'. run_from fuel' ctx fn initial = r /\
         (mem_safe_run fuel ctx fn ready ==> mem_safe_run fuel' ctx fn initial)) /\
     entry_decoder_obs initial ready /\ alloca_history fn ready /\
+    (abi_alloca_history (fn_insts fn) initial ==> abi_alloca_history (fn_insts fn) ready) /\
     fresh_vars_wrt limit_st ready /\
     ((!fuel. mem_safe_run fuel ctx fn ready) ==>
       !fuel. mem_safe_run fuel ctx fn initial)
@@ -87,9 +92,20 @@ Proof
   qpat_x_assum `alloca_inv initial` kall_tac >>
   qpat_x_assum `alloca_frontier_inv _ _ _ initial` kall_tac >>
   drule_all entry_registration_address_frame >> strip_tac >>
+  `?vname ins. buf.buf_operand = Var vname /\ MEM ins (fn_insts fn) /\
+    ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
+    ins.inst_id = st.cs_next_id` by
+    (drule_all actualAllocExecTheory.actual_alloc_buffer_site >>
+     strip_tac >> qexistsl [`STRING #"%" (toString st.cs_next_var)`,
+       `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+         [STRING #"%" (toString st.cs_next_var)]`] >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  `abi_alloca_history (fn_insts fn) initial ==>
+    abi_alloca_history (fn_insts fn) t` by
+    (strip_tac >> irule abi_alloca_history_frame >> qexists_tac `v` >> simp[]) >>
   qexistsl [`buf.buf_operand`,`src`,`first`,`t`,`p`] >>
   simp[abiDecoderContractTheory.abi_decode_load_def,
-    abiDecoderContractTheory.abi_decode_source_def] >>
+    abiDecoderContractTheory.abi_decode_source_def, SF SFY_ss] >>
   suspend "package"
 QED
 

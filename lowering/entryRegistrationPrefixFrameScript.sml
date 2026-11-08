@@ -1,7 +1,7 @@
 (* Same-witness machine frames for positional registration prefixes. *)
 Theory entryRegistrationPrefixFrame
 Ancestors
-  actualAllocExec entryDecoderStateFrame entryDecoderHistoryFrame
+  actualAllocExec entryDecoderStateFrame entryDecoderHistoryFrame abiAllocationHistory
   emitHelperProps abiDecoderVarSequence
   successfulSequenceEndpoint abiDecoderLoopRegisters fragExecMem loweringHalt
   abiDecoderReentry unitTransformDefs contextCodegenRel codegenRel
@@ -39,6 +39,7 @@ Theorem entry_registration_alloc_buffer_frame:
       ?fuel'. run_from fuel' ctx fn initial = r /\
         (mem_safe_run fuel ctx fn v ==> mem_safe_run fuel' ctx fn initial)) /\
     entry_decoder_obs initial v /\ alloca_history fn v /\
+    (abi_alloca_history (fn_insts fn) initial ==> abi_alloca_history (fn_insts fn) v) /\
     fresh_vars_wrt limit_st v /\
     ((!fuel. mem_safe_run fuel ctx fn v) ==> !fuel. mem_safe_run fuel ctx fn initial)
 Proof
@@ -89,6 +90,10 @@ Resume entry_registration_alloc_buffer_frame[fresh]:
      simp[exec_alloca_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
      irule abi_decoder_generated_update_fresh >>
      gvs[fresh_vars_wrt_def]) >>
+  `abi_alloca_history (fn_insts fn) initial ==>
+    abi_alloca_history (fn_insts fn) t` by
+    (strip_tac >> irule abi_alloca_history_alloca >>
+     goal_assum (drule_at (Pat `exec_alloca _ _ _ = OK _`)) >> simp[]) >>
   qpat_x_assum `!entry. FLOOKUP initial.vs_allocas st.cs_next_id = SOME entry ==> _` kall_tac >>
   qpat_x_assum `!entry. FLOOKUP initial.vs_allocas ins.inst_id = SOME entry ==> _` kall_tac >>
   qpat_x_assum `MEM ins _` kall_tac >>
@@ -107,7 +112,8 @@ Resume entry_registration_alloc_buffer_frame[package]:
   `fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH last.cs_current_insts)` by
     gvs[fresh_vars_wrt_def] >>
   qexistsl [`t with vs_inst_idx := LENGTH last.cs_current_insts`, `p`] >>
-  simp[eval_operand_def]
+  simp[eval_operand_def] >> strip_tac >>
+  irule abi_alloca_history_frame >> qexists_tac `t` >> simp[]
 QED
 
 Finalise entry_registration_alloc_buffer_frame

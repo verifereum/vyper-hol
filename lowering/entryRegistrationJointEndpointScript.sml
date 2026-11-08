@@ -3,7 +3,7 @@ Theory entryRegistrationJointEndpoint
 Ancestors
   entryCheckEndpointMem entrySourceRegistrationFold entryCompletedExitPhi
   entryDispatchMem actualRegistrationCode fragExec guardedBodyFirstEmission
-  exprLoweringProps venomState compileEnv
+  exprLoweringProps venomState compileEnv moduleLoweringProps abiAllocationHistory
 
 Theorem selected_entry_registration_endpoint:
   compile_selector_dispatch_linear sels fl sf = ((),sd) /\
@@ -52,7 +52,8 @@ Theorem selected_entry_registration_endpoint:
     ~t.vs_halted /\ t.vs_current_bb = st.cs_current_bb /\
     t.vs_inst_idx = LENGTH st.cs_current_insts /\ alloca_history fn t /\
     alloca_inv out /\ alloca_frontier_inv ctx fn site out /\
-    alloca_history fn out /\ fresh_vars_wrt limit_st out /\
+    alloca_history fn out /\ abi_alloca_history (fn_insts fn) out /\
+    fresh_vars_wrt limit_st out /\
     (!id. registered.cs_next_id <= id ==> FLOOKUP out.vs_allocas id = NONE) /\
     ~out.vs_halted /\ out.vs_current_bb = registered.cs_current_bb /\
     out.vs_inst_idx = LENGTH registered.cs_current_insts /\
@@ -63,6 +64,8 @@ Theorem selected_entry_registration_endpoint:
         (mem_safe_run fuel ctx fn out ==> mem_safe_run fuel' ctx fn t)) /\
     LIST_REL (\(name,tv,v) (dst,p,id).
       FLOOKUP cer.ce_vars name = SOME (PtrVar dst (type_memory_size tv)) /\
+      (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
+        ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\ ins.inst_id = id) /\
       id < registered.cs_next_id /\ abi_decoder_operand_live registered.cs_next_var dst /\
       FLOOKUP out.vs_allocas id = SOME (p,type_memory_size tv) /\
       eval_operand dst out = SOME (n2w p) /\
@@ -79,6 +82,9 @@ Proof
   qpat_x_assum `!t. vars_pc_only s t /\ _ ==> _`
     (qspec_then `t` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
   drule_all entry_registration_source_endpoint >> strip_tac >>
+  `t.vs_allocas = FEMPTY` by fs[vars_pc_only_def, venom_state_component_equality] >>
+  `abi_alloca_history (fn_insts fn) t` by simp[abi_alloca_history_empty] >>
+  `abi_alloca_history (fn_insts fn) out` by metis_tac[] >>
   qexistsl_tac [`t`,`out`,`outputs`] >> simp[] >>
   suspend "safety"
 QED

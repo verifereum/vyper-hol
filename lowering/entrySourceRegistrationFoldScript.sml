@@ -150,6 +150,9 @@ Theorem entry_registration_singleton_anchored[local]:
   ~block_is_terminated registered /\ fn_has_code final completed fn ==>
   ?dst src first ready p out scratch.
     FLOOKUP cef.ce_vars name = SOME (PtrVar dst (type_memory_size tv)) /\
+    (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
+      ins.inst_id = st.cs_next_id) /\
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),final) /\
     fn_has_code first final fn /\ st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\
@@ -176,11 +179,13 @@ Theorem entry_registration_singleton_anchored[local]:
       ?fuel'. run_from fuel' ctx fn initial = r /\
         (mem_safe_run fuel ctx fn ready ==> mem_safe_run fuel' ctx fn initial)) /\
     entry_decoder_obs initial ready /\ alloca_history fn ready /\
+    (abi_alloca_history (fn_insts fn) initial ==> abi_alloca_history (fn_insts fn) ready) /\
     fresh_vars_wrt limit_st ready /\
     ((!fuel. mem_safe_run fuel ctx fn ready) ==> !fuel. mem_safe_run fuel ctx fn initial) /\
     calldata_member_success ctx fn site limit_st first final p (type_memory_size tv)
       tv v ready out scratch /\
     entry_decoder_obs initial out /\ alloca_history fn out /\
+    (abi_alloca_history (fn_insts fn) initial ==> abi_alloca_history (fn_insts fn) out) /\
     (!id. final.cs_next_id <= id ==> FLOOKUP out.vs_allocas id = NONE)
 Proof
   rpt strip_tac >> irule entry_registration_singleton_source_endpoint >>
@@ -217,6 +222,8 @@ Theorem entry_registration_source_accumulator[local]:
       Owned = (\ce st s named outs. LIST_REL
        (\(name,tv,v) (dst,p,id).
          FLOOKUP ce.ce_vars name = SOME (PtrVar dst (type_memory_size tv)) /\
+         (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
+           ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\ ins.inst_id = id) /\
          id < st.cs_next_id /\ abi_decoder_operand_live st.cs_next_var dst /\
          FLOOKUP s.vs_allocas id = SOME (p,type_memory_size tv) /\
          eval_operand dst s = SOME (n2w p) /\
@@ -225,7 +232,8 @@ Theorem entry_registration_source_accumulator[local]:
          ((!fuel. mem_safe_run fuel ctx fn t) ==> !fuel. mem_safe_run fuel ctx fn s) /\
          (!fuel r. run_from fuel ctx fn t = r /\ (!err. r <> Error err) ==>
            ?fuel'. run_from fuel' ctx fn s = r /\
-             (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)))
+             (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)) /\
+         (abi_alloca_history (fn_insts fn) s ==> abi_alloca_history (fn_insts fn) t))
   in
   !specs values ce st initial prior old pre pvs off.
     compile_register_positional_args ce specs off st = (cer,registered) /\
@@ -382,7 +390,11 @@ Resume entry_registration_source_accumulator[extend]:
      BETA_TAC >> qpat_x_assum `Abbrev (Own = _)` kall_tac >>
      pure_rewrite_tac[LIST_REL_def, pairTheory.pair_case_thm] >>
      CONV_TAC (DEPTH_CONV pairLib.GEN_BETA_CONV) >>
-     rewrite_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     rewrite_tac[] >> conj_tac >- (first_assum ACCEPT_TAC) >>
+     conj_tac
+     >- (qexists_tac `vname` >>
+         goal_assum (drule_at (Pat `MEM _ (fn_insts fn)`)) >> asm_rewrite_tac[]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "tail"
 QED
 
@@ -490,7 +502,8 @@ Resume entry_registration_source_accumulator[compose]:
       BETA_TAC >> disch_then ACCEPT_TAC) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND, MAP_APPEND, MAP]) >>
-  asm_simp_tac bool_ss [MAP]
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV)) >>
+  asm_simp_tac (srw_ss()) [MAP]
 QED
 
 Finalise entry_registration_source_accumulator
@@ -532,12 +545,15 @@ Theorem entry_registration_source_endpoint:
     ~out.vs_halted /\ out.vs_current_bb = registered.cs_current_bb /\
     out.vs_inst_idx = LENGTH registered.cs_current_insts /\
     entry_decoder_obs initial out /\
+    (abi_alloca_history (fn_insts fn) initial ==> abi_alloca_history (fn_insts fn) out) /\
     ((!fuel. mem_safe_run fuel ctx fn out) ==> !fuel. mem_safe_run fuel ctx fn initial) /\
     (!fuel r. run_from fuel ctx fn out = r /\ (!err. r <> Error err) ==>
       ?fuel'. run_from fuel' ctx fn initial = r /\
         (mem_safe_run fuel ctx fn out ==> mem_safe_run fuel' ctx fn initial)) /\
     LIST_REL (\(name,tv,v) (dst,p,id).
       FLOOKUP cer.ce_vars name = SOME (PtrVar dst (type_memory_size tv)) /\
+      (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
+        ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\ ins.inst_id = id) /\
       id < registered.cs_next_id /\ abi_decoder_operand_live registered.cs_next_var dst /\
       FLOOKUP out.vs_allocas id = SOME (p,type_memory_size tv) /\
       eval_operand dst out = SOME (n2w p) /\

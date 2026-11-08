@@ -51,7 +51,8 @@ Theorem source_selected_owned_endpoint:
     fresh_vars_wrt sk t /\ ~t.vs_halted /\ t.vs_current_bb = sk.cs_current_bb /\
     t.vs_inst_idx = LENGTH sk.cs_current_insts /\ alloca_history efn t /\
     alloca_inv out /\ alloca_frontier_inv unit.cu_context efn site out /\
-    alloca_history efn out /\ fresh_vars_wrt registered out /\
+    alloca_history efn out /\ abi_alloca_history (fn_insts efn) out /\
+    fresh_vars_wrt registered out /\
     (!id. registered.cs_next_id <= id ==> FLOOKUP out.vs_allocas id = NONE) /\
     ~out.vs_halted /\ out.vs_current_bb = registered.cs_current_bb /\
     out.vs_inst_idx = LENGTH registered.cs_current_insts /\ entry_decoder_obs t out /\
@@ -63,6 +64,8 @@ Theorem source_selected_owned_endpoint:
          mem_safe_run fuel' unit.cu_context efn t)) /\
     LIST_REL (\(name,tv,v) (dst,p,id).
       FLOOKUP cer.ce_vars name = SOME (PtrVar dst (type_memory_size tv)) /\
+      (?vname ins. dst = Var vname /\ MEM ins (fn_insts efn) /\
+        ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\ ins.inst_id = id) /\
       id < registered.cs_next_id /\ abi_decoder_operand_live registered.cs_next_var dst /\
       FLOOKUP out.vs_allocas id = SOME (p,type_memory_size tv) /\
       eval_operand dst out = SOME (n2w p) /\

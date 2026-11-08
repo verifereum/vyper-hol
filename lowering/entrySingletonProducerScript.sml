@@ -4,6 +4,7 @@ Ancestors
   entryRegistrationSingletonFrame entryCanonicalValidPre entryCanonicalReadyPre
   entrySourceMemoryConsumer entryFutureAllocation entryCompletedExitPhi
   entryZeroReservePre entryCanonicalMemberDecode entryDecoderStateFrame
+  entryOwnedLiteralHistory abiAllocationHistory
   calldataSourceMemberFold calldataMemberResourceFrame abiDecoderAppend abiDecoderCode fragExec compileEnv
   abiDecoderContract abiValidMember words list arithmetic
 
@@ -63,6 +64,9 @@ Theorem entry_registration_singleton_source_endpoint:
   ~block_is_terminated registered /\ fn_has_code final completed fn ==>
   ?dst src first ready p out scratch.
     FLOOKUP cef.ce_vars name = SOME (PtrVar dst n) /\
+    (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
+      ins.inst_id = st.cs_next_id) /\
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),final) /\
     fn_has_code first final fn /\ st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\
@@ -88,18 +92,20 @@ Theorem entry_registration_singleton_source_endpoint:
       ?fuel'. run_from fuel' ctx fn initial = r /\
         (mem_safe_run fuel ctx fn ready ==> mem_safe_run fuel' ctx fn initial)) /\
     entry_decoder_obs initial ready /\ alloca_history fn ready /\
+    (abi_alloca_history (fn_insts fn) initial ==> abi_alloca_history (fn_insts fn) ready) /\
     fresh_vars_wrt limit_st ready /\
     ((!fuel. mem_safe_run fuel ctx fn ready) ==> !fuel. mem_safe_run fuel ctx fn initial) /\
     calldata_member_success ctx fn site limit_st first final p (type_memory_size tv)
       tv v ready out scratch /\
     entry_decoder_obs initial out /\ alloca_history fn out /\
+    (abi_alloca_history (fn_insts fn) initial ==> abi_alloca_history (fn_insts fn) out) /\
     (!id. final.cs_next_id <= id ==> FLOOKUP out.vs_allocas id = NONE)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all entry_registration_singleton_prefix_frame >> strip_tac >>
   drule_all entry_canonical_registration_address >> strip_tac >>
   qexistsl [`dst`,`src`,`first`,`ready`,`p`] >>
-  asm_rewrite_tac[] >> suspend "endpoint"
+  simp[SF SFY_ss] >> suspend "endpoint"
 QED
 
 Resume entry_registration_singleton_source_endpoint[endpoint]:
@@ -155,6 +161,11 @@ Resume entry_registration_singleton_source_endpoint[original]:
   `vyper_to_abi env ty v = SOME (dec (vyper_to_abi_type env ty) bytes)` by
     metis_tac[] >>
   drule_all entry_member_success_original_value >> strip_tac >>
+  `abi_alloca_history (fn_insts fn) initial ==>
+    abi_alloca_history (fn_insts fn) out` by
+    (strip_tac >> fs[calldata_member_success_def] >>
+     drule_at (Pat `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ _ _ _`)
+       owned_member_literal_history >> simp[]) >>
   qexistsl [`out`,`scratch`] >> asm_rewrite_tac[] >>
   conj_tac >- metis_tac[entry_decoder_obs_trans] >>
   suspend "future"
