@@ -8,6 +8,10 @@ Ancestors
   exprSimAbiEncodeBoundaryProbe exprSimAbiEncodeTranslatedNoBlock
   abiEncoderCounters abiBuiltinEncodeSetup abiDecoderReentry localPtrsProps
   abiTupleValueEncoding venomWf exprSimAbiEncodeSourceRoom
+  exprSimAbiEncodeTranslatedPhases exprSimAbiEncodeCallerSuffix
+  exprSimAbiEncodeExecFrame exprSimAbiEncodeStateTransport
+  exprSimAbiEncodeNoBlockBoundary exprSimAbiEncodeNoBlockSafety
+  exprSimAbiEncodeOblivious exprSimAbiGasBridge
 
 Theorem abi_encode_word_staging_path:
   compile_alloc_buffer 32 sa = (buf,sm) /\
@@ -168,4 +172,236 @@ Proof
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [arithmeticTheory.ADD_ASSOC]) >>
   asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >>
   rpt strip_tac >> metis_tac[]
+QED
+
+Theorem abi_encode_word_no_block_phases:
+  is_word_type ty /\
+  abi_builtin_encode_setup mid 32 st = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) src (type_to_abi_enc_info sf ce ty)
+    ready = (len,body_end) /\
+  abi_builtin_encode_finish (FST ops) len
+    (case mid of NONE => 0 | SOME _ => 4) body_end = ((),final) /\
+  fn_has_code st ready func /\ fn_has_code ready body_end func /\
+  fn_has_code body_end final func /\ fn_inst_ids_distinct func /\
+  st.cs_blocks = final.cs_blocks /\
+  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
+  abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
+  LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
+  (!x. src = Var x ==> not_fresh_at st x) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?p raw. run_inst_seq (emitted_insts st final) initial = OK raw /\
+    let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    abi_encode_exec_frame func initial actual /\
+    abi_encode_staged_observation ctx func ce cx es st (FST ops) mid
+      (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_word_allocation_geometry >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_encode_translated_operand_liveness >> strip_tac >>
+  `abi_encoder_admissible (type_to_abi_enc_info sf ce ty)` by
+    (`type_to_abi_enc_info sf ce ty = AbiCopy 32` by
+       (irule (cj 2 abi_builtin_encode_word_info) >> first_assum ACCEPT_TAC) >>
+     asm_rewrite_tac [] >> simp[abiEncoderAdmissibleTheory.abi_encoder_admissible_def]) >>
+  `!inst. MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids ready body_end ==>
+    inst.inst_opcode <> ALLOCA` by metis_tac[abi_encode_word_body_no_alloca] >>
+  `?raw. run_inst_seq (emitted_insts st final) initial = OK raw /\
+    let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
+    eval_operand (FST ops) actual = SOME(n2w p) /\
+    mload p actual = n2w (LENGTH(enc at av)+(case mid of NONE => 0 | SOME _ => 4)) /\
+    mem_bytes_at (p+32+(case mid of NONE => 0 | SOME _ => 4)) (LENGTH(enc at av)) actual.vs_memory = enc at av /\
+    (case mid of NONE => T | SOME selector => mem_bytes_at (p+32) 4 actual.vs_memory = abi_builtin_encode_method_bytes selector) /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_exec_frame func initial actual /\
+    ?prepared body_state.
+      abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
+        (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p
+        (case mid of NONE => 0 | SOME _ => 32) initial prepared /\
+      window_strong_result ctx func ready body_end len at av
+        (p+32+(case mid of NONE => 0 | SOME _ => 4)) prepared body_state /\
+      abi_encoder_registered_effect {} [(p,32)] body_state actual /\
+      actual.vs_allocas = body_state.vs_allocas /\
+      actual.vs_alloca_next = body_state.vs_alloca_next /\
+      (!op v. abi_decoder_operand_live body_end.cs_next_var op /\
+        eval_operand op body_state = SOME v ==> eval_operand op actual = SOME v) /\
+      prepared.vs_accounts = initial.vs_accounts /\ prepared.vs_transient = initial.vs_transient /\
+      prepared.vs_logs = initial.vs_logs /\ prepared.vs_requests = initial.vs_requests /\
+      prepared.vs_pending_deletions = initial.vs_pending_deletions /\ actual.vs_labels = initial.vs_labels` by
+    (irule abi_encode_translated_concrete_phases >>
+     qpat_assum `abi_builtin_encode_setup _ _ _ = _` (irule_at Any) >>
+     qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `abi_builtin_encode_finish _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `abi_encoder_window_input _ _ _ _ _ _` (irule_at Any) >>
+     RULE_ASSUM_TAC (PURE_REWRITE_RULE [arithmeticTheory.ADD_ASSOC]) >>
+     `32 <> 0 /\ 0 < (32:num)` by decide_tac >>
+     asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> rpt strip_tac >>
+     metis_tac[arithmeticTheory.ADD_ASSOC]) >>
+  qpat_x_assum `let actual = _ in _`
+    (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]) >>
+  qmatch_asmsub_abbrev_tac `abi_encode_exec_frame func initial actual` >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_encoder_counters >> strip_tac >>
+  `st.cs_next_var <= ready.cs_next_var /\ st.cs_next_var <= body_end.cs_next_var` by
+    (qpat_assum `ready.cs_next_var = _` mp_tac >> Cases_on `mid` >> simp[] >> decide_tac) >>
+  drule_all abi_encode_caller_phase_allocations >> strip_tac >>
+  `stmt_state_rel ctx func ce cx es actual /\
+   (!name b n. local_region ce es.scopes initial name b n ==>
+     mem_bytes_at b n actual.vs_memory = mem_bytes_at b n initial.vs_memory) /\
+   FLOOKUP actual.vs_allocas st.cs_next_id =
+     SOME(p,32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) /\
+   p+(32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) <= actual.vs_alloca_next /\
+   actual.vs_alloca_next < dimword (:256)` by
+    (irule abi_encode_phases_caller_state >>
+     qpat_assum `abi_builtin_encode_setup _ _ _ = _` (irule_at Any) >>
+     qpat_assum `compile_abi_encode_to_buf _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     RULE_ASSUM_TAC (PURE_REWRITE_RULE [arithmeticTheory.ADD_ASSOC]) >>
+     asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> rpt strip_tac >>
+     metis_tac[arithmeticTheory.ADD_ASSOC]) >>
+  `alloca_inv actual` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+     simp_tac bool_ss [stmt_state_rel_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  `st.cs_next_id <= ready.cs_next_id` by
+    (qpat_assum `ready.cs_next_id = _` (fn th => rewrite_tac[th]) >>
+     Cases_on `mid` >> simp[]) >>
+  `!aid off sz. FLOOKUP initial.vs_allocas aid = SOME(off,sz) /\ aid < st.cs_next_id ==>
+    mem_bytes_at off sz actual.vs_memory = mem_bytes_at off sz initial.vs_memory` by
+    (rpt gen_tac >> strip_tac >> irule abi_encode_caller_phase_old_rows >>
+     qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qexists_tac `aid` >>
+     RULE_ASSUM_TAC (PURE_REWRITE_RULE [arithmeticTheory.ADD_ASSOC]) >>
+     asm_rewrite_tac [arithmeticTheory.ADD_ASSOC] >> metis_tac[arithmeticTheory.ADD_ASSOC]) >>
+  `!x v. not_fresh_at st x /\ lookup_var x initial = SOME v ==>
+    lookup_var x actual = SOME v` by
+    (rpt gen_tac >> strip_tac >>
+     `abi_decoder_operand_live st.cs_next_var (Var x)` by
+       (qpat_assum `not_fresh_at st x` mp_tac >>
+        simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def, IN_DEF]) >>
+     irule abi_encode_caller_phase_registers >>
+     qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_assum `abi_encode_exec_frame func initial actual` mp_tac >>
+  simp_tac bool_ss [abi_encode_exec_frame_def] >> strip_tac >>
+  qexistsl_tac [`p`, `raw`] >>
+  simp_tac bool_ss [LET_THM] >>
+  qpat_x_assum `Abbrev (actual = _)`
+    (fn th => rewrite_tac[GSYM (PURE_REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+  rewrite_tac [abi_encode_staged_observation_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem abi_encode_word_no_block_run:
+  is_word_type ty /\
+  lower_abi_encode F mid src (type_to_abi_enc_info sf ce ty) 32 st = (out,final) /\
+  fn_has_code st final func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
+  abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
+  LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
+  (!x. src = Var x ==> not_fresh_at st x) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?p raw. run_inst_seq (emitted_insts st final) initial = OK raw /\
+    let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    abi_encode_exec_frame func initial actual /\
+    abi_encode_staged_observation ctx func ce cx es st out mid
+      (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
+Proof
+  strip_tac >>
+  drule_all abi_encode_word_encoder_no_blocks >> strip_tac >>
+  drule lower_abi_encode_trace >> strip_tac >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_builtin_encode_finish_shape >> strip_tac >>
+  `cs_extends st ready` by
+    (irule cs_extends_same_block >> fs[inst_extends_def]) >>
+  `cs_extends ready body_end` by metis_tac[abiEncoderAppendTheory.cs_extends_abi_encode] >>
+  `cs_extends body_end final` by
+    (irule cs_extends_same_block >> fs[inst_extends_def]) >>
+  `fn_has_code st ready func /\ fn_has_code ready body_end func /\
+   fn_has_code body_end final func` by
+    metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans] >>
+  `st.cs_blocks = final.cs_blocks` by metis_tac[] >>
+  drule_all abi_encode_word_no_block_phases >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  qexistsl_tac [`p`, `raw`] >> simp_tac bool_ss [LET_THM] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem abi_encode_word_no_block_observer:
+  is_word_type ty /\
+  lower_abi_encode F mid src (type_to_abi_enc_info sf ce ty) 32 st = (out,final) /\
+  fn_has_code st final func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
+  abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
+  LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
+  (!x. src = Var x ==> not_fresh_at st x) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\ fn_has_code st final observer ==>
+  ?p actual. abi_decode_sim ctx observer initial actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_exec_frame func initial actual /\
+    abi_encode_staged_observation ctx func ce cx es st out mid
+      (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
+Proof
+  strip_tac >> drule_all abi_encode_word_no_block_run >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_encode_word_encoder_no_blocks >> strip_tac >>
+  `st.cs_blocks = final.cs_blocks` by metis_tac[] >>
+  drule_all lower_abi_encode_no_blocks_safe >> strip_tac >>
+  drule_all lower_abi_encode_no_block_run_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl_tac [`p`, `raw with vs_inst_idx := LENGTH final.cs_current_insts`] >>
+  gvs[]
+QED
+
+Theorem abi_encode_word_counted_encoder:
+  is_word_type ty /\
+  lower_abi_encode F mid src (type_to_abi_enc_info sf ce ty) 32 st = (out,final) /\
+  fn_has_code st final func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es initial /\ local_ptrs_reserved ce st /\
+  FLOOKUP initial.vs_allocas source_id = SOME(sb,32) /\ source_id <> st.cs_next_id /\
+  abi_encoder_window_input (type_to_abi_enc_info sf ce ty) at av sb 32 initial.vs_memory /\
+  LENGTH (enc at av) = 32 /\ eval_operand src initial = SOME(n2w sb) /\
+  (!l. src <> Label l) /\ (!x. src = Var x ==> not_fresh_at st x) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?p actual. gas_marked_path F ctx func initial 0 (OK actual) /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_staged_observation ctx func ce cx es st out mid
+      (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all lower_abi_encode_frag_facts >> strip_tac >>
+  drule_all abi_encode_word_encoder_no_blocks >> strip_tac >>
+  qabbrev_tac `Q = \actual. ?p.
+    abi_encode_staged_observation ctx func ce cx es st out mid
+      (32+32*word_size(32+(case mid of NONE => 0 | SOME _ => 4))) p at av initial actual` >>
+  `!t rd. Q t ==> Q (t with vs_returndata := rd)` by
+    simp[Abbr `Q`] >>
+  `?t. gas_marked_path F ctx func initial 0 (OK t) /\ Q t /\ ~t.vs_halted /\
+    t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts`
+    suffices_by
+    (strip_tac >> qpat_x_assum `Q t` mp_tac >>
+     simp_tac bool_ss [Abbr `Q`] >> strip_tac >>
+     qexistsl_tac [`p`, `t`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  irule exprSimAbiGasBridgeTheory.abi_decode_sim_gas_path >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `st` >> reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_word_no_block_observer >> strip_tac >>
+  qexists_tac `actual` >> asm_rewrite_tac[] >>
+  simp_tac bool_ss [Abbr `Q`] >> qexists_tac `p` >> first_assum ACCEPT_TAC
 QED
