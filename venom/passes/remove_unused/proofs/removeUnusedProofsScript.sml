@@ -1110,3 +1110,15 @@ Proof
        stateEquivTheory.execution_equiv_def]
 QED
 
+
+(* fn_cfg_edge implies cfg_succs_of membership under wf_function *)
+Theorem fn_cfg_edge_cfg_succs:
+  !fn a b.
+    wf_function fn /\ fn_cfg_edge fn a b ==>
+    MEM b (cfg_succs_of (cfg_analyze fn) a)
+Proof
+  rw[fn_cfg_edge_def] >>
+  irule (SIMP_RULE (srw_ss()) [LET_THM]
+    cfgHelpersTheory.bb_succs_in_cfg_succs) >>
+  fs[wf_function_def]
+QED
