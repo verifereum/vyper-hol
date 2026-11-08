@@ -4,7 +4,7 @@ Ancestors
   exprSimSource exprSimHypsDefs exprSimDefs exprSimProps exprSimMemDefs bodyMemoryDefs
   exprSimMemoryValues exprSimMemoryStack fragGasSeqMem fragGasPathMem
   gasNormalPrefix gasSummary gasContext gasCount fragGasMode loweringPosts
-  exprSimNameWord exprSimNameValue loweringSlice exprLowering exprLoweringProps
+  exprSimNameWord exprSimNameValue memoryValueEncoding loweringSlice exprLowering exprLoweringProps
   fragExec fragExecMem allocaHistoryFragment instMemFrontier
   emitHelperProps emitHelper compileEnv context venomInst venomState
   venomExecSemantics venomMemDefs vyperInterpreter vyperState vyperAST
@@ -76,7 +76,8 @@ Proof
        val_wf entry.type entry.value /\
        val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-     first_x_assum drule_all >> metis_tac[]) >>
+     first_x_assum drule_all >> strip_tac >> qexists_tac `w` >>
+     simp[] >> irule memory_value_rel_val_in_memory >> simp[]) >>
   `local_region ce es.scopes s id (w2n w) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
   drule_all body_local_region_frontier >> strip_tac >>
