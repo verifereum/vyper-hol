@@ -284,3 +284,21 @@ Proof
        expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def,
        convertScalarEncodingTheory.scalar_address_to_fixed]
 QED
+
+Theorem scalar_flag_bytes_actual_outcome:
+  compile_type_convert x (ConvIntToBytesM F 256 32) sa = (out,sb) /\
+  fresh_vars_wrt sa s /\ eval_operand x s = SOME (typed_val_to_w256 (FlagTV k) (FlagV m)) ==>
+  ?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (FlagT name) (BaseT (BytesT (Fixed 32))) (FlagV m) = INL vout /\
+    expr_val_rel cx (BaseT (BytesT (Fixed 32))) vout out t
+Proof
+  strip_tac >>
+  drule_all (SRULE [] (Q.SPECL [`x`, `F`, `256`, `32`] scalar_int_bytes_run)) >> strip_tac >>
+  qexistsl_tac [`ss'`, `BytesV (word_to_bytes_be (n2w m:bytes32))`] >>
+  simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+       vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+       vyperValueTheory.evaluate_type_def, is_word_type_def,
+       convertScalarEncodingTheory.scalar_flag_to_bytes32] >>
+  `!w:bytes32. w << 0 = w` by wordsLib.WORD_DECIDE_TAC >>
+  gvs[GSYM typed_val_to_w256_def, convertScalarEncodingTheory.scalar_flag_to_bytes32]
+QED
