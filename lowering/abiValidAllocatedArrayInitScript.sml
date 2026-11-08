@@ -11,7 +11,9 @@ Ancestors
   compileEnv context venomState venomMemDefs venomInst
   abiValidAllocatedContract abiMalformedSiteFrame abiDecoderArrayHeader
   exprSimAlloc venomExecSemantics venomMemProps
-  abiDecoderLoop fragExec abiMalformedMemberSetup instIdxIndep
+  abiDecoderLoop fragExec abiMalformedMemberSetup instIdxIndep abiDecoderArrayInit
+  abiDecoderRecursiveLoopEntry abiDecoderPrimitiveLoopEntry abiMalformedTraversal
+  abiDecoderRecursiveArray
   finite_map pred_set words list arithmetic
 
 Theorem abi_valid_allocated_array_init_fresh_run:
@@ -397,4 +399,135 @@ Proof
   fs[abi_valid_allocated_effect_def, abi_valid_allocated_frame_def,
      abi_malformed_site_range_def, abi_decoder_prune_vars_def] >>
   metis_tac[]
+QED
+
+Theorem abi_valid_allocated_array_init_fragment:
+  abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = (setup,en) /\
+  abi_malformed_entry ctx func cenv cx es st sites dstid live
+    base_op hi src dst B L xs p d outsz incoming /\
+  fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
+  en.cs_next_var <= ceiling.cs_next_var /\
+  maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
+  n = abi_head_word (DROP p xs) /\ n <= maxn /\ p+32+n*stride <= L /\
+  MEM (mk_inst (en.cs_next_id-2) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (en.cs_next_var-1))]) (fn_insts func) /\
+  en.cs_next_id-2 IN sites ==>
+  frag_exec ctx st en (\s. s = incoming)
+    (\t. ?slot.
+      abi_valid_allocated_effect ctx func cenv cx es st.cs_next_var
+        sites dstid d outsz incoming t /\
+      mem_word_at d t.vs_memory = n2w n /\ fresh_vars_wrt ceiling t /\
+      eval_operand (FST setup) t = SOME (n2w slot) /\
+      eval_operand (SND setup) t = SOME (n2w n) /\ mload slot t = 0w /\
+      slot+32 < dimword (:256) /\
+      FLOOKUP t.vs_allocas (en.cs_next_id-2) = SOME (slot,32)) (K F)
+Proof
+  strip_tac >> drule_all abi_valid_allocated_array_init_effect >> strip_tac >>
+  drule abi_malformed_init_shape >> strip_tac >>
+  irule frag_exec_run_inst_seq >> fs[inst_extends_def] >>
+  rpt strip_tac >> gvs[] >>
+  fs[abi_valid_allocated_effect_def, abi_malformed_resource_post_inst_idx,
+     abi_valid_allocated_frame_def, abi_malformed_site_range_def,
+     fresh_vars_wrt_def, eval_operand_def, lookup_var_def, mload_def] >>
+  metis_tac[]
+QED
+
+Theorem abi_valid_allocated_array_init_reach:
+  abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = ((ip,cnt),en) /\
+  abi_malformed_entry ctx func cenv cx es st sites dstid live
+    base_op hi src dst B L xs p d outsz incoming /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
+  en.cs_next_var <= ceiling.cs_next_var /\
+  ~incoming.vs_halted /\ incoming.vs_current_bb = st.cs_current_bb /\
+  incoming.vs_inst_idx = LENGTH st.cs_current_insts /\
+  maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
+  LENGTH vs = abi_head_word (DROP p xs) /\ LENGTH vs <= maxn /\
+  p+32+LENGTH vs*stride <= L /\
+  MEM (mk_inst (en.cs_next_id-2) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (en.cs_next_var-1))]) (fn_insts func) /\
+  en.cs_next_id-2 IN sites ==>
+  ?t slot.
+    abi_decode_sim ctx func incoming t /\
+    ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\
+    t.vs_inst_idx = LENGTH en.cs_current_insts /\
+    abi_malformed_entry ctx func cenv cx es st sites dstid live
+      base_op hi src dst B L xs p d outsz t /\
+    abi_valid_allocated_array_prefix tv vs 0 d t /\
+    abi_valid_allocated_effect ctx func cenv cx es st.cs_next_var
+      sites dstid d outsz incoming t /\ fresh_vars_wrt ceiling t /\
+    eval_operand ip t = SOME (n2w slot) /\ eval_operand cnt t = SOME (n2w (LENGTH vs)) /\
+    mload slot t = 0w /\ slot+32 < dimword (:256) /\
+    FLOOKUP t.vs_allocas (en.cs_next_id-2) = SOME (slot,32)
+Proof
+  strip_tac >> drule_all abi_valid_allocated_array_init_fragment >> strip_tac >>
+  drule abi_decode_sim_from_fragment >>
+  disch_then (qspecl_then [`incoming`, `func`] mp_tac) >> simp[] >> strip_tac >>
+  qexistsl_tac [`t`, `slot`] >> simp[abi_valid_allocated_array_prefix_zero] >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var
+    sites dstid incoming t` by fs[abi_valid_allocated_effect_def] >>
+  `abi_malformed_allocated_window live B L xs incoming /\ live NOTIN sites /\
+   live <> dstid /\ abi_malformed_destination func cenv es.scopes dstid d outsz incoming` by
+    fs[abi_malformed_entry_def] >>
+  drule_all abi_malformed_resource_window >> strip_tac >>
+  drule_all abi_malformed_resource_destination >> strip_tac >>
+  fs[abi_malformed_entry_def, abi_malformed_resource_post_def, EVERY_DEF]
+QED
+
+Theorem abi_valid_allocated_array_init_loop_entry:
+  abi_decode_array_loop_init dst src MLOAD base_op hi maxn stride st = ((ip,cnt),loop_st) /\
+  compile_abi_decode_dyn_loop dst src MLOAD base_op hi di stride memsz ip cnt loop_st = ((),en) /\
+  abi_malformed_entry ctx func cenv cx es st sites dstid live
+    base_op hi src dst B L xs p d outsz incoming /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling incoming /\
+  en.cs_next_var <= ceiling.cs_next_var /\
+  ~incoming.vs_halted /\ incoming.vs_current_bb = st.cs_current_bb /\
+  incoming.vs_inst_idx = LENGTH st.cs_current_insts /\
+  maxn < dimword (:256) /\ maxn*stride < dimword (:256) /\ 32 <= outsz /\
+  LENGTH vs = abi_head_word (DROP p xs) /\ LENGTH vs <= maxn /\
+  p+32+LENGTH vs*stride <= L /\
+  MEM (mk_inst (loop_st.cs_next_id-2) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (loop_st.cs_next_var-1))]) (fn_insts func) /\
+  loop_st.cs_next_id-2 IN sites ==>
+  ?u slot.
+    abi_decode_sim ctx func incoming u /\
+    eval_operand cnt u = SOME (n2w (LENGTH vs)) /\
+    abi_valid_allocated_array_inv ctx func cenv cx es st ceiling
+      sites dstid live base_op hi src dst B L xs p d outsz
+      ip slot (mk_inst (loop_st.cs_next_id-2) ALLOCA [Lit 32w]
+        [STRING #"%" (toString (loop_st.cs_next_var-1))])
+      (STRING #"%" (toString (loop_st.cs_next_var-1)))
+      (fresh_label_output "dec_dyn_hdr" loop_st.cs_next_label) tv vs incoming 0 u
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_loop_init_shape >> strip_tac >>
+  drule_all abi_decoder_recursive_loop_end >> strip_tac >>
+  `cs_extends st loop_st` by (irule cs_extends_same_block >> simp[]) >>
+  `fn_has_code st loop_st func /\ fn_has_code loop_st en func` by
+    metis_tac[fn_has_code_split] >>
+  `loop_st.cs_next_var <= ceiling.cs_next_var` by decide_tac >>
+  drule_all abi_valid_allocated_array_init_reach >>
+  disch_then (qspec_then `tv` strip_assume_tac) >>
+  drule_all abi_decoder_recursive_entry_code >> strip_tac >>
+  `abi_decode_sim ctx func t
+     (jump_to (fresh_label_output "dec_dyn_hdr" loop_st.cs_next_label) t)` by
+    (irule abi_decoder_loop_entry_sim >> simp[] >> metis_tac[]) >>
+  `not_local_ptr cenv es.scopes (STRING #"%" (toString (loop_st.cs_next_var-1)))` by
+    (drule abi_decode_array_loop_init_trace >> strip_tac >>
+     drule_all abi_decode_dynarray_position_prefix_shape >> strip_tac >>
+     drule_all abi_decode_array_header_shape >> strip_tac >>
+     drule abi_decode_index_init_shape >> strip_tac >>
+     irule local_ptrs_reserved_fresh >> qexists_tac `header_st` >> simp[] >>
+     irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
+     fs[abi_malformed_entry_def] >> decide_tac) >>
+  qexistsl_tac [`jump_to (fresh_label_output "dec_dyn_hdr" loop_st.cs_next_label) t`, `slot`] >>
+  conj_tac >- metis_tac[abi_decode_sim_trans] >>
+  fs[abi_valid_allocated_array_inv_def, abi_valid_allocated_array_prefix_def,
+     abi_valid_allocated_effect_def, abi_malformed_resource_jump,
+     abi_valid_allocated_frame_def, abi_malformed_site_range_def,
+     abi_malformed_entry_def, abi_malformed_allocated_window_def,
+     abi_malformed_destination_def, stmt_state_rel_jump_to,
+     jump_to_def, fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
+     mload_def, mk_inst_def] >> metis_tac[]
 QED
