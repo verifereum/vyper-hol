@@ -24,3 +24,13 @@ Proof
     metis_tac[body_expr_mem_ok_def] >>
   metis_tac[compile_acc_sim_mem, compile_acc_vv_sim_mem]
 QED
+
+(* A bare x.code never reaches the body: the allocation check rejects it, so
+   the slice of x.code (which the semantics reads without evaluating x.code)
+   needs no memory judgment for it. *)
+Theorem body_acc_code_mem:
+  !cx ty es. body_expr_mem_ok cx (Builtin ty (Acc Code) es)
+Proof
+  rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >> rw[] >>
+  drule body_acc_mem_admissible >> simp[]
+QED
