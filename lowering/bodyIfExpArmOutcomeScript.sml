@@ -57,7 +57,10 @@ Resume ifexp_selected_arm_path_mem[same]:
   qpat_x_assum `vt = t` SUBST_ALL_TAC >>
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
    p.ptr_location = LocCode` by
-    (Cases_on `p.ptr_location` >> fs[vv_post_def, vv_holds_def]) >>
+    (Cases_on `p.ptr_location` >> fs[] >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+     qpat_assum `p.ptr_location = LocCalldata` (fn th =>
+       simp_tac (srw_ss()) [vv_post_def, vv_holds_def, th])) >>
   (`unwrap_value ce (LocatedValue t p) sm = (op,sb)` by
     fs[compile_ifexp_arm_def] >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_copy_capacity_path_mem >>
@@ -78,14 +81,14 @@ Resume ifexp_selected_arm_path_mem[stack]:
 QED
 
 Resume ifexp_selected_arm_path_mem[memory]:
-  `vt = t \/ is_bytestring_type vt` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value v) _ _` mp_tac >>
+  `~is_word_type vt` by
+    (`vt = t \/ is_bytestring_type vt` suffices_by
+       metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value v) _ _` mp_tac >>
      qpat_assum `post_value_type ce e = _`
        (fn th => rewrite_tac[vv_post_def, vv_holds_def, th]) >>
      qpat_assum `expr_type e = _` (fn th => rewrite_tac[th]) >>
      strip_tac >> simp[]) >>
-  `~is_word_type vt` by
-    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   `vv_store_bound cx t t ee raw (LocatedValue vt p) s` by
     (irule ifexp_arm_store_bound >> metis_tac[]) >>
   gvs[compile_ifexp_arm_def, unwrap_value_def, compileEnvTheory.comp_return_def] >>
