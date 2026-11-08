@@ -258,7 +258,7 @@ Proof
      exec_ext_call inst s (THE (eval_operand gas_op s)) aw vw 0w 0w
        (0w:bytes32) (0w:bytes32) F` by
     (Cases_on `eval_operand gas_op s` >> fs[] >>
-     simp[step_inst_base_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, eval_operand_def]) >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
   qpat_x_assum `~cx.txn.is_static` (fn th =>
     simp[eval_send_def, frame_call_value_def, th, bind_def, ignore_bind_def,

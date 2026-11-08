@@ -76,7 +76,7 @@ Proof
                 simp[gas_prefix_suc, gas_prefix_zero]) >>
             qpat_x_assum `1 = SUC 0` kall_tac >>
         simp[step_inst_non_invoke, mk_inst_def] >>
-            simp[step_inst_base_def, exec_gas_def] >>
+            simp[step_inst_base_opcode_eqs, exec_gas_def] >>
             gvs[update_var_def, venom_state_component_equality]) >>
         rename1 `s.vs_gas_readings = w::ws` >>
         qexists_tac `w` >> conj_tac
@@ -84,7 +84,7 @@ Proof
             simp[gas_prefix_suc, gas_prefix_zero]) >>
         qpat_x_assum `1 = SUC 0` kall_tac >>
         simp[step_inst_non_invoke, mk_inst_def] >>
-        simp[step_inst_base_def, exec_gas_def]) >>
+        simp[step_inst_base_opcode_eqs, exec_gas_def]) >>
   qpat_x_assum `1 = SUC 0` kall_tac >>
   qexists_tac `w` >> simp[] >>
   rewrite_tac[gas_path_edge_def] >> simp[] >>

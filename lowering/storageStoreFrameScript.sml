@@ -41,7 +41,7 @@ Proof
            simp[stmt_state_rel_def, compileEnvTheory.state_rel_def,
                 tstore_def, sstore_def, LET_THM]) >>
         Cases_on `tr` >>
-        gvs[step_inst_base_def, exec_write2_def, mk_inst_def]) >>
+        gvs[step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def]) >>
      Cases_on `tr` >> gvs[] >>
      simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
      gvs[lookup_var_def, sstore_def, tstore_def, LET_THM]) >>
