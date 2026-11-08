@@ -96,7 +96,7 @@ Proof
   Induct >> rw[ALL_DISTINCT_APPEND] >> metis_tac[]
 QED
 
-Theorem fn_insts_blocks_inst_ids[local]:
+Theorem fn_insts_blocks_inst_ids:
   !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
         FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)
 Proof
