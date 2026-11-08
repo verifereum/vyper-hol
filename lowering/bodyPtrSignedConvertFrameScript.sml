@@ -1,7 +1,7 @@
 (* The semantic placement post, not arbitrary ghost coverage, rules out
    payload ADD wrap.  Reuse the general footprint bound at its owner. *)
 Theory bodyPtrSignedConvertFrame
-Ancestors stmtSimReturn words arithmetic
+Ancestors stmtSimReturn exprSimTypedAlloc words arithmetic
 
 Theorem expr_val_at_payload_nonwrap:
   stmt_state_rel ctx func cenv cx es s /\
