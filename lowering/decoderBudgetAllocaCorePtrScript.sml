@@ -24,7 +24,7 @@ Proof
   strip_tac >>
   `exec_alloca (mk_inst id ALLOCA [Lit 32w] [out]) s (32w:bytes32) = OK t` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   drule abi_decoder_alloca32 >>
   disch_then (qspecl_then [`out`, `mk_inst id ALLOCA [Lit 32w] [out]`] mp_tac) >>
   simp[mk_inst_def] >> strip_tac >> gvs[] >>

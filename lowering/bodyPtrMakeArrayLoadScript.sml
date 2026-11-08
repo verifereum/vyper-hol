@@ -31,7 +31,7 @@ Proof
                      `u` |-> `update_var tmp (mload (w2n (a:256 word)) s) s`]
                     straight_line_ptr_edge) >>
      gvs[] >> simp[mk_inst_def, is_terminator_def, ptr_inst_ok_mload,
-                  Once step_inst_base_def, exec_read1_def]) >>
+                  step_inst_base_opcode_eqs, exec_read1_def]) >>
   drule (cj 2 gas_path_ptr_rules) >>
   disch_then (qspec_then `0` mp_tac) >>
   simp[gas_path_ptr_rules] >> disch_then irule >>

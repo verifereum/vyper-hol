@@ -215,7 +215,7 @@ Theorem storage_body_load_execution:
     OK (update_var out (if opc = SLOAD then sload key s else tload key s) s)
 Proof
   strip_tac >> gvs[] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_read1_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]
 QED
 
 Theorem storage_body_source_load_frame:
@@ -275,7 +275,7 @@ Theorem storage_body_assign_clean_path:
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id ASSIGN [src] [out]) s = OK (update_var out w s)` by
-    simp[Once step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSIGN [src] [out]) s` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
       mk_inst_def, source_memory_write_ranges_def,

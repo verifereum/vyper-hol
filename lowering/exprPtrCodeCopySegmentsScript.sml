@@ -79,7 +79,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id DLOAD [arg] [out]) s =
     OK (update_var out (immutable_copy_read F a s) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_read1_def, immutable_copy_read_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, immutable_copy_read_def] >>
   gvs[run_inst_seq_def] >>
   qexistsl [`step_prov PG G (mk_inst id DLOAD [arg] [out])
     (update_var out (immutable_copy_read F a s) s)`,

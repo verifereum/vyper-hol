@@ -706,7 +706,9 @@ Theorem expr_val_at_allocation_frame:
     local_region cenv es.scopes s name b sz) ==>
   expr_val_at cenv cx ty sa sb es v op t
 Proof
-  simp[expr_val_at_def] >> metis_tac[]
+  rw[expr_val_at_def] >>
+  first_x_assum (drule_all_then strip_assume_tac) >> gvs[] >>
+  metis_tac[]
 QED
 
 Theorem alloca_step_expr_val_at:

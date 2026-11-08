@@ -15,7 +15,7 @@ Proof
   strip_tac >> fs[MEM] >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [mk_inst_def] >>
-  simp_tac bool_ss [Once step_inst_base_def, instruction_accessors,
+  simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, exec_read1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> simp[venom_state_component_equality]
@@ -183,7 +183,7 @@ Proof
   simp[step_prov_other_output, step_taint_other_output, mk_inst_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >> fs[MEM] >>
   simp_tac (srw_ss()) [mk_inst_def] >>
-  simp_tac bool_ss [Once step_inst_base_def, instruction_accessors,
+  simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, exec_read1_def, AllCaseEqs(), update_var_def,
     lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
@@ -223,7 +223,7 @@ Proof
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
   `t = update_var x (a + n2w off) s` by
     (drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def]) >>
   qexistsl_tac [`x`,
     `step_prov PG G (mk_inst sa.cs_next_id ADD [Var root; offset] [x]) t`,

@@ -106,7 +106,7 @@ Theorem bytes_writer_step_ambient:
   u.vs_transient = s.vs_transient
 Proof
   strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   gvs[exec_read1_def, exec_pure2_def, AllCaseEqs(), update_var_def,
       mcopy_def, write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
   strip_tac >> gvs[]

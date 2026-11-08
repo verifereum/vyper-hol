@@ -44,7 +44,7 @@ Proof
   >- gvs[alloca_frontier_inv_def, remaining_alloca_budget_def,
          mstore_def, write_memory_with_expansion_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
   gvs[AllCaseEqs(), update_var_def, mstore_def,
       write_memory_with_expansion_def, FLOOKUP_UPDATE] >>
@@ -187,7 +187,7 @@ Theorem calldata_index_init_live_frame:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
   gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
   simp[mstore_def, write_memory_with_expansion_def] >>
@@ -208,10 +208,10 @@ Proof
   `LENGTH st.cs_current_insts - (LENGTH st.cs_current_insts + 1) = 0` by decide_tac >>
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_read1_def, eval_operands_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operands_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def, eval_operands_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operands_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   simp[eval_operand_mstore, calldata_update_protected]
 QED
@@ -237,18 +237,18 @@ Proof
      gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_read1_def, eval_operands_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operands_def] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   qpat_x_assum `step_inst_base _ (update_var _ _ s) = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operands_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operands_def,
        eval_operand_def, lookup_var_update_var] >>
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ (update_var _ _ _) = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_pure1_def, eval_operands_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def, eval_operands_def,
        eval_operand_def, lookup_var_update_var] >>
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, eval_operands_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def,
        eval_operand_def, lookup_var_update_var] >>
   strip_tac >> gvs[AllCaseEqs()] >>
   simp[calldata_update_protected]
@@ -3645,7 +3645,7 @@ Proof
   `abi_decode_frame p 32 allocated (mstore p 0w allocated)` by
     irule abi_decode_mstore_frame >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
   gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
   fs[abi_decode_frame_def, update_var_def] >> first_assum ACCEPT_TAC

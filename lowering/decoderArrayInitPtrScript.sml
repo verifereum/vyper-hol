@@ -178,7 +178,7 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
   `?b. eval_operand cnt s1 = SOME b` by
     (qpat_assum `emit_op GT _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
      qpat_x_assum `run_inst_seq (emitted_insts c1 c2) s1 = _` mp_tac >>
-     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, AllCaseEqs()] >> metis_tac[]) >>
   `run_inst_seq (emitted_insts c1 c2)
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) =
@@ -371,12 +371,12 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   `?w. eval_operand cnt s1 = SOME w` by
     (qpat_x_assum `run_inst_seq (emitted_insts sm sb) _ = _` mp_tac >>
-     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_write2_def, eval_operand_def, AllCaseEqs()] >> metis_tac[]) >>
   `t = mstore d w s1` by
     (qpat_x_assum `s1 = s with vs_vars := _` kall_tac >>
      qpat_x_assum `run_inst_seq (emitted_insts sm sb) _ = _` mp_tac >>
-     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_write2_def, eval_operand_def, w2n_n2w] >>
      Cases_on `cnt` >> fs[eval_operand_def]) >>
   `w2n (n2w d : bytes32) = d` by simp[] >>
@@ -464,7 +464,7 @@ Resume calldata_array_header_endpoint_ptr_core[header_continuation]:
     `sm`, `sb`, `t with vs_inst_idx := SUC s.vs_inst_idx`, `u2`] >>
   simp[mk_inst_def, is_terminator_def] >>
   conj_tac >- gvs[ADD1] >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
     eval_operand_def, mstore_def, write_memory_with_expansion_def] >>
   Cases_on `cnt` >> gvs[eval_operand_def, lookup_var_def, mstore_def,
     write_memory_with_expansion_def, w2n_n2w]

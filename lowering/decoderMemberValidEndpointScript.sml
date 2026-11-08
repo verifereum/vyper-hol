@@ -67,7 +67,7 @@ Theorem add_endpoint_observations[local]:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-  simp[run_inst_seq_def, mk_inst_def, Once step_inst_base_def, exec_pure2_def] >>
+  simp[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def] >>
   strip_tac >> gvs[] >>
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
     abi_decoder_address_frame_def] >>

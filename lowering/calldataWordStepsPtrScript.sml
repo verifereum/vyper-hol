@@ -74,7 +74,7 @@ Proof
   `t.vs_vars = s.vs_vars` by
     (drule emitted_insts_emit_void >> strip_tac >>
      qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-     simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def,
        mk_inst_def, AllCaseEqs()] >>
      disch_then (mp_tac o Q.AP_TERM `\z. z.vs_vars`) >> simp[mstore_def]) >>
   `fresh_vars_wrt sb t` by

@@ -41,10 +41,10 @@ Proof
      simp[Abbr `out`] >> POP_ASSUM_LIST (K all_tac) >>
      strip_tac >>
      simp[run_inst_seq_def] >>
-     simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
           eval_operand_def] >> rpt strip_tac >> gvs[]) >>
   `step_inst_base inst s = OK t` by
-    (simp[Abbr `inst`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `inst`, step_inst_base_opcode_eqs, mk_inst_def,
       exec_pure2_def] >> Cases_on `src` >> gvs[eval_operand_def]) >>
   `!D lower fuel ctx' fn. allocas_from lower s /\ ~ctx_has_dalloca ctx' ==>
     ptr_inst_ok D lower fuel ctx' fn G tn inst s` by

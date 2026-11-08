@@ -8,7 +8,7 @@ Theorem alloca_step_endpoint_frame:
   (!aid. aid <> id ==> FLOOKUP t.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
   t.vs_halted = s.vs_halted /\ t.vs_current_bb = s.vs_current_bb
 Proof
-  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+  simp[Once venomExecSemanticsTheory.step_inst_base_opcode_eqs,
     venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def,
     venomExecSemanticsTheory.exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >>
@@ -204,7 +204,7 @@ Resume compile_alloc_buffer_protected_source_exterior_ptr[stor]:
     ptrDisciplineTheory.set_var_taint_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+  simp[Once venomExecSemanticsTheory.step_inst_base_opcode_eqs,
     venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def,
     venomExecSemanticsTheory.exec_alloca_def,
     ptrDisciplineTheory.adopt_reset_def, ptrDisciplineTheory.store_taint_def,

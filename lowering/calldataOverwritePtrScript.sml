@@ -32,7 +32,7 @@ Proof
   qabbrev_tac `inst = mk_inst sa.cs_next_id MSTORE [Var p;v] []` >>
   qabbrev_tac `t = mstore (w2n dw) w s` >>
   `step_inst_base inst s = OK t` by
-    simp[Abbr `inst`, Abbr `t`, step_inst_base_def, exec_write2_def] >>
+    simp[Abbr `inst`, Abbr `t`, step_inst_base_opcode_eqs, exec_write2_def] >>
   `emitted_insts sa sb = [inst]` by simp[Abbr `inst`] >>
   `run_inst_seq (emitted_insts sa sb) s = OK t` by
     simp[run_inst_seq_def] >>
@@ -141,7 +141,7 @@ Proof
   qabbrev_tac `inst = mk_inst sa.cs_next_id CALLDATALOAD [src] [out]` >>
   qabbrev_tac `t = update_var out (abi_decode_load CALLDATALOAD sw s) s` >>
   `step_inst_base inst s = OK t` by
-    simp[Abbr `inst`, Abbr `t`, step_inst_base_def, exec_read1_def,
+    simp[Abbr `inst`, Abbr `t`, step_inst_base_opcode_eqs, exec_read1_def,
       abi_decode_load_def, abi_decode_source_def] >>
   `emitted_insts sa sb = [inst]` by simp[Abbr `inst`, Abbr `out`] >>
   `run_inst_seq (emitted_insts sa sb) s = OK t` by simp[run_inst_seq_def] >>

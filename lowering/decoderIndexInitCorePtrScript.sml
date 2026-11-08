@@ -46,7 +46,7 @@ Proof
   disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
   `t = mstore p 0w v` by
     (qpat_x_assum `run_inst_seq (emitted_insts allocation_st sb) v = OK t` mp_tac >>
-     simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
           exec_write2_def, eval_operand_def, w2n_n2w] >>
      gvs[eval_operand_def] >> simp[w2n_n2w]) >>
   `sb.cs_current_bb = allocation_st.cs_current_bb` by
@@ -105,7 +105,7 @@ Proof
      qexistsl_tac [`32w:bytes32`, `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
        [STRING #"%" (toString sa.cs_next_var)]`, `s`] >>
      simp[] >> qpat_x_assum `step_inst_base _ s = OK v` mp_tac >>
-     simp[Once step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   `v.vs_current_bb = s.vs_current_bb` by
     (drule_all budget_alloca_observations >>
      disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >> simp[]) >>
@@ -127,7 +127,7 @@ Proof
      gen_tac >> irule ptr_inst_ok_lower_bound_transport >> simp[] >>
      qexists_tac `0` >> simp[] >>
      irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
-  simp[Abbr `v1`, Once step_inst_base_def, mk_inst_def,
+  simp[Abbr `v1`, step_inst_base_opcode_eqs, mk_inst_def,
        exec_write2_def, eval_operand_def, lookup_var_def, w2n_n2w] >>
   gvs[lookup_var_def, mstore_def]
 QED

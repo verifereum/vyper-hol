@@ -21,7 +21,7 @@ Proof
   gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
   gen_tac >>
   simp[inst_seq_ptr_def, ptr_inst_ok_external_load,
-       Once step_inst_base_def, mk_inst_def, exec_read1_def,
+       step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
        update_var_def, allocas_from_def, step_prov_def, out_prov_def,
        lookup_var_def] >>
   conj_tac
@@ -42,10 +42,10 @@ Theorem immutable_runtime_store_checks_uniform:
         (s with vs_inst_idx := j) Gf tnf
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
-  gvs[inst_seq_ptr_def, Once step_inst_base_def, mk_inst_def,
+  gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
       exec_write2_def, eval_operand_def] >>
   gen_tac >>
-  simp[inst_seq_ptr_def, Once step_inst_base_def, mk_inst_def,
+  simp[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_write2_def, eval_operand_def, lookup_var_def] >>
   conj_tac
   >- (irule (REWRITE_RULE [mk_inst_def] ptr_inst_ok_mstore_raw) >> simp[]) >>
@@ -71,10 +71,10 @@ Proof
   gvs[eval_operand_def, compile_lit_byte_offset_def, comp_return_def]
   >- gvs[emitted_insts_def, inst_seq_ptr_def] >>
   drule emitted_insts_emit_op >> strip_tac >>
-  gvs[inst_seq_ptr_def, Once step_inst_base_def, mk_inst_def,
+  gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
       exec_pure2_def, eval_operand_def] >>
   gen_tac >>
-  simp[inst_seq_ptr_def, Once step_inst_base_def, mk_inst_def,
+  simp[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, eval_operand_def, lookup_var_def,
        REWRITE_RULE [mk_inst_def] ptr_inst_ok_copy_len_binop, op_taint_def] >>
   simp[update_var_def, step_prov_def, out_prov_def,
