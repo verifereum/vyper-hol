@@ -13,17 +13,41 @@ Theory entryPtrSeamDead
 Ancestors
   bodyPtrDefs vyperLoweringCorrect vyperInterpreter
 
-(* SEAM (cheated; proved by its own alan run).
-   Hint: unfold call_external, call_external_function and
-   finalize_pending_deletions; every branch returns am itself or
-   abstract_machine_from_state am.sources _ am.layouts _ (the
-   evaluate_all_constants branch needs cx.in_deploy, which
-   initial_evaluation_context sets to F).  Then unfold external_call_dead
-   and cx_dead. *)
+(* Runtime calls reconstruct machine metadata from the original machine,
+   independently of the evaluation result and its requests. *)
+Theorem call_external_function_runtime_metadata:
+  !orc gobs am cx nr mut ts all_mods args dflts vals body ret res am' rqs.
+    ~cx.in_deploy /\
+    call_external_function orc gobs am cx nr mut ts all_mods
+      args dflts vals body ret = (res, am', rqs) ==>
+    am'.sources = am.sources /\ am'.layouts = am.layouts
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[call_external_function_def, AllCaseEqs(),
+      abstract_machine_from_state_def] >>
+  pairarg_tac >> gvs[] >>
+  gvs[AllCaseEqs(), abstract_machine_from_state_def]
+QED
+
+Theorem call_external_metadata:
+  !orc gobs am tx res am' rqs.
+    call_external orc gobs am tx = (res, am', rqs) ==>
+    am'.sources = am.sources /\ am'.layouts = am.layouts
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[call_external_def, AllCaseEqs()] >>
+  drule_at Any call_external_function_runtime_metadata >>
+  simp[initial_evaluation_context_def]
+QED
+
 Theorem external_call_dead_initial_cx:
   !orc am tx.
     external_call_dead tx (call_external orc [] am tx) =
     cx_dead (initial_evaluation_context am.sources am.layouts tx NONE)
 Proof
-  cheat
+  rpt gen_tac >>
+  Cases_on `call_external orc [] am tx` >>
+  PairCases_on `r` >>
+  drule call_external_metadata >> strip_tac >>
+  simp[external_call_dead_def, cx_dead_def, initial_evaluation_context_def]
 QED
