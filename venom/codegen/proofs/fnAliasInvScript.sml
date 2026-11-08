@@ -116,6 +116,13 @@ Proof
   `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
   gvs[] >>
   `MEM bb fn.fn_blocks` by metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+    metis_tac[fnPlanLineageJoinTheory.lineage_state_reachable] >>
+  `fn_reachable fn bb.bb_label` by
+    metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
   drule_all regional_canonical_body_layout >> strip_tac >>
   Cases_on `bb = HD fn.fn_blocks`
   >- (qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
@@ -143,6 +150,61 @@ Proof
          operand_val (frame_view fn ra u) lo at =
          operand_val (frame_view fn ra u) lo (normalize_operand (dfg_build_function fn) [] at))` by
         (irule lineage_entry_params_alias >> metis_tac[]) >>
-      cheat) >>
+      `lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks)` by metis_tac[] >>
+      drule_all ready_body_suffix_layout >> simp[] >> strip_tac >>
+      qpat_x_assum `(HD fn.fn_blocks).bb_label = _`
+        (fn th => rule_assum_tac (REWRITE_RULE [GSYM th])) >>
+      gen_tac >> disch_tac >>
+      drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+        regional_body_alias_suffix >>
+      disch_then irule >> simp[] >>
+      metis_tac[]) >>
+  `get_params bb.bb_instructions = []` by metis_tac[] >>
+  qpat_x_assum `bb.bb_label = _`
+    (fn th => rule_assum_tac (REWRITE_RULE [GSYM th])) >>
+  `?edge. lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) edge bb.bb_label ps` by
+    (drule lineage_state_entry_cases >> strip_tac >-
+      (gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def, AllCaseEqs()] >>
+       metis_tac[phiTransformTheory.lookup_block_at_hd, listTheory.NULL_EQ]) >> metis_tac[]) >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss() ++ boolSimps.LET_ss) [generate_block_plan_def] >>
+  asm_rewrite_tac[] >> pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  simp_tac std_ss [AllCaseEqs()] >> strip_tac >> gvs[] >>
+  Cases_on `collect_phis bb.bb_instructions = []`
+  >- (`regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+         spill_base bb 0 ps2 /\
+       (!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+         operand_val (frame_view fn ra vs) lo at =
+         operand_val (frame_view fn ra vs) lo (normalize_operand (dfg_build_function fn) [] at))` by
+        (irule lineage_no_phi_preparation_alias >> metis_tac[]) >>
+      drule_all ready_body_suffix_layout >> simp[] >> strip_tac >>
+      `eval_phis vs bb.bb_instructions = OK vs` by
+        metis_tac[phi_eval_collect, eval_phis_def] >>
+      `phi_prefix_length bb.bb_instructions = 0` by
+        metis_tac[listTheory.LENGTH, regional_collect_phis_length] >>
+      fs[run_block_def] >>
+      gen_tac >> disch_tac >>
+      drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+        regional_body_alias_suffix >> disch_then irule >> simp[] >>
+      reverse conj_tac >- metis_tac[] >>
+      qexistsl_tac [`ctx`, `fuel`, `vs with vs_inst_idx := 0`] >>
+      simp[frame_view_def] >> gen_tac >> disch_tac >>
+      qpat_x_assum `!at. MEM at ps2.ps_stack \/ _ ==> _` (drule_then mp_tac) >>
+      Cases_on `normalize_operand (dfg_build_function fn) [] at'` >>
+      Cases_on `at'` >>
+      simp[frame_view_def, operand_val_def]) >>
+  drule_all regional_phi_preparation_identity >>
+  disch_then (qspecl_then [`liveness_analyze fn`,
+    `ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`] mp_tac) >>
+  strip_tac >> gvs[] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    metis_tac[livenessProofsTheory.current_collect_phis_length] >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qspec_then `LENGTH (collect_phis bb.bb_instructions)` mp_tac generate_block_insts_plan_split >>
+  disch_then (drule_then (fn th => rewrite_tac[th])) >> strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  simp_tac std_ss [run_block_def, AllCaseEqs()] >> strip_tac >>
   cheat
 QED
