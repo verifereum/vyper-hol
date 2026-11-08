@@ -202,17 +202,19 @@ Proof
   simp[dead_result_rel_def] >> rpt strip_tac >>
   TRY (drule_all external_call_result_rel_abort_transport >> simp[] >>
        NO_TAC) >>
-  Cases_on `src0` >> gvs[external_call_result_rel_def, AllCaseEqs()] >>
+  Cases_on `src0` >> TRY (Cases_on `y`) >>
+  gvs[external_call_result_rel_def, AllCaseEqs()] >>
   qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
   `v'.vs_returndata = v.vs_returndata` by
     (irule LIST_EQ >> gvs[external_call_dead_def]) >>
-  rpt conj_tac
-  >- gvs[]
-  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
-      metis_tac[accounts_agree_except_process_deletions])
-  >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
-  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
-  irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]
+  (* The halt case has no return-bytes conjunct, so the trivial conjuncts
+     are closed first and the rest come in the same order in both cases. *)
+  (rpt conj_tac >> TRY (gvs[] >> NO_TAC)
+   >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
+       metis_tac[accounts_agree_except_process_deletions])
+   >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
+   gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+   irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
 QED
 
 Theorem external_call_result_rel_terminal:
