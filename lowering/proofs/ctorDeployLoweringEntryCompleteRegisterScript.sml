@@ -260,7 +260,7 @@ Theorem deploy_ctor_register_alloc_state_complete[local]:
  fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
  (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
  (!name b sz. local_region ce scopes a name b sz ==>
-   compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+   loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
  (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
    lookup_var x a = SOME w) /\
  abi_encoder_registered_effect (frag_ids st sa) [] initial a
@@ -375,7 +375,7 @@ Theorem deploy_ctor_register_alloc_actual_complete:
    fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
    (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
    (!name b sz. local_region ce scopes a name b sz ==>
-     compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+     loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
    a.vs_memory = initial.vs_memory /\
    a.vs_data_section = initial.vs_data_section /\
    a.vs_call_ctx = initial.vs_call_ctx /\ a.vs_labels = initial.vs_labels /\

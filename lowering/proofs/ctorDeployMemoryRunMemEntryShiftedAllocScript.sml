@@ -143,7 +143,7 @@ Theorem ctor_checked_alloc_buffer_actual_from:
    fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
    (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
    (!name b sz. local_region ce scopes a name b sz ==>
-     compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+     loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
    a.vs_memory = initial.vs_memory /\
    a.vs_data_section = initial.vs_data_section /\
    a.vs_call_ctx = initial.vs_call_ctx /\ a.vs_labels = initial.vs_labels /\
