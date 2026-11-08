@@ -3,8 +3,8 @@
 Reference: VYPER_PIN cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c;
 source snapshot `.agent-files/vyper-reference/vyper` supplied by the lead.
 This document records source comparison, not a theorem of Python/HOL equivalence.
-`fmpReclaimProbeTheory` supplies executable HOL reference cases, not production
-reclaim correctness. No executable production definitions changed in C1.1.
+The deleted `fmpReclaimProbe` theory supplied executable HOL reference cases, not
+production reclaim correctness. No executable production definitions changed in C1.1.
 
 ## Exact Python boundaries
 
@@ -68,17 +68,16 @@ reclaim correctness. No executable production definitions changed in C1.1.
 
 ## Probe coverage and limits
 
-`fmpReclaimProbeScript.sml` uses eligibility/veto parameters to isolate stack
-and instruction-effect behavior. Checked EVAL cases cover partial pop in both
-live/dead orders, unknown blocker, lowest target, capture veto, push-after-pop,
-GETFMP, SETFMP, needs/publishes/unresolved INVOKE summaries, all three branches,
-RET (no endpoint), unreachable and reclaim-disabled states, join orientation
-and capture union. A loop-order capture derivation requires re-iteration;
-a live derived variable vetoes pop. Separate checked probes demonstrate old
-MLOAD capture over-pinning, old CALL allocation pinning, occurrence counts,
-and original dataflow boundary indexing. They do NOT test production capture
-escape or exact base-pointer equivalence, which still require the interfaces
-above. All probe theorems have their tags audited at theory end (DISK_THM only).
+The `fmpReclaimProbe` theory used eligibility/veto parameters to isolate stack
+and instruction-effect behavior. It has been deleted, so none of the cases
+below is checked now. They covered partial pop in both live/dead orders,
+unknown blocker, lowest target, capture veto, push-after-pop, GETFMP, SETFMP,
+needs/publishes/unresolved INVOKE summaries, all three branches, RET (no
+endpoint), unreachable and reclaim-disabled states, join orientation and
+capture union, as well as old MLOAD capture over-pinning, old CALL allocation
+pinning, occurrence counts and original dataflow boundary indexing. They did
+not test production capture escape or exact base-pointer equivalence, which
+still require the interfaces above.
 
 ## Existing proof coverage and BUMP-dependent build closure
 
