@@ -49,3 +49,19 @@ Proof
   disch_then (qspec_then `i` assume_tac) >>
   gvs[well_typed_atarget_def, well_typed_target_def]
 QED
+
+Definition alias_swap_targets_def:
+  alias_swap_targets =
+    [BaseTarget (SubscriptTarget (NameTarget "x") (Literal (BaseT (UintT 256)) (IntL 1)));
+     BaseTarget (SubscriptTarget (NameTarget "x") (Literal (BaseT (UintT 256)) (IntL 0)))]
+End
+
+Theorem alias_swap_root_premise_rejected:
+  !env tys.
+    type_place_target env (NameTarget "x") = SOME (Type alias_pair_ty) ==>
+    ~LIST_REL (\g t. well_typed_atarget env g t) alias_swap_targets tys
+Proof
+  rpt strip_tac >>
+  Cases_on `tys` >> gvs[alias_swap_targets_def] >>
+  drule alias_tuple_atarget_rejected >> simp[] >> metis_tac[]
+QED
