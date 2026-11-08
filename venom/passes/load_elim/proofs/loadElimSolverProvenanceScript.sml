@@ -189,6 +189,35 @@ Proof
   metis_tac[]
 QED
 
+Theorem le_analyze_multivalue_prefix:
+  wf_function fn /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  m <= n /\ n <= LENGTH bb.bb_instructions /\
+  FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) lbl n)) k = SOME vs /\
+  1 < LENGTH vs ==>
+  FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) lbl m)) k = SOME vs
+Proof
+  rpt strip_tac >>
+  `m <= LENGTH bb.bb_instructions` by decide_tac >>
+  `df_at NONE (load_analyze ctx fn) lbl m =
+   FOLDL (\ll i. load_transfer ctx i ll)
+     (df_at NONE (load_analyze ctx fn) lbl 0) (TAKE m bb.bb_instructions)` by
+    (irule le_analyze_prefix_fold >> simp[]) >>
+  `df_at NONE (load_analyze ctx fn) lbl n =
+   FOLDL (\ll i. load_transfer ctx i ll)
+     (df_at NONE (load_analyze ctx fn) lbl 0) (TAKE n bb.bb_instructions)` by
+    (irule le_analyze_prefix_fold >> simp[]) >>
+  `TAKE n bb.bb_instructions = TAKE m bb.bb_instructions ++
+     DROP m (TAKE n bb.bb_instructions)` by
+    metis_tac[TAKE_DROP, TAKE_TAKE_T] >>
+  gvs[] >> irule le_transfer_fold_multivalue_prefix >> metis_tac[]
+QED
+
 Theorem le_analyze_multivalue_origin:
   wf_function fn /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
@@ -202,8 +231,7 @@ Theorem le_analyze_multivalue_origin:
   1 < LENGTH vs ==>
   FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) lbl 0)) k = SOME vs
 Proof
-  rpt strip_tac >> drule_all le_analyze_prefix_fold >> strip_tac >>
-  gvs[] >> drule le_transfer_fold_multivalue_origin >> simp[]
+  strip_tac >> irule le_analyze_multivalue_prefix >> simp[] >> metis_tac[]
 QED
 
 Theorem le_analyze_singleton_origin:
