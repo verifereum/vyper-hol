@@ -31,6 +31,36 @@ Proof
   disch_then (qspecl_then [`Var v`,`Var (HD inst.inst_outputs)`] mp_tac) >> simp[]
 QED
 
+Theorem generate_phi_plan_live_count:
+  !inst live halt ps ops qs out dist v.
+    inst.inst_outputs = [out] /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME dist /\
+    MEM v live /\ generate_phi_plan inst live halt ps = (ops,qs) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack + (if Var v IN FDOM qs.ps_spilled then 1 else 0) =
+    LIST_ELEM_COUNT (Var v) ps.ps_stack + (if Var v IN FDOM ps.ps_spilled then 1 else 0) +
+      (if v = out then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `dist < LENGTH ps.ps_stack` by
+    (fs[stack_get_phi_depth_def] >> drule planAlignTheory.stack_find_bound >> simp[]) >>
+  drule generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`live`,`halt`] mp_tac) >>
+  Cases_on `phi_write_phase inst live dist ps` >>
+  rename1 `phi_write_phase inst live dist ps = (writes,written)` >>
+  simp[] >> strip_tac >>
+  drule_at (Pat `phi_write_phase _ _ _ _ = _`) phi_write_live_count >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `~halt /\ ~MEM out live` >> gvs[]
+  >- (pairarg_tac >> gvs[] >>
+      drule_at (Pat `popmany_plan _ _ = _`) popmany_plan_other_elem_count >>
+      disch_then (qspec_then `Var v` mp_tac) >>
+      `v <> out` by metis_tac[] >> simp[] >> strip_tac >>
+      qpat_x_assum `popmany_plan _ _ = _`
+        (mp_tac o Q.AP_TERM `\r. (SND r).ps_spilled`) >>
+      simp[popmany_plan_spilled_unchanged]) >>
+  simp[] >> decide_tac
+QED
+
 Theorem generate_phi_plan_live_budget:
   !inst live halt ps ops qs out dist.
     inst.inst_outputs = [out] /\
@@ -47,29 +77,11 @@ Theorem generate_phi_plan_live_budget:
       (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1)
 Proof
   rpt gen_tac >> strip_tac >>
-  `dist < LENGTH ps.ps_stack` by
-    (fs[stack_get_phi_depth_def] >> drule planAlignTheory.stack_find_bound >> simp[]) >>
-  drule generate_phi_plan_write_phase >>
-  disch_then (qspecl_then [`live`,`halt`] mp_tac) >>
-  Cases_on `phi_write_phase inst live dist ps` >>
-  rename1 `phi_write_phase inst live dist ps = (writes,written)` >>
-  simp[] >> strip_tac >>
   `!v. MEM v live ==>
     LIST_ELEM_COUNT (Var v) qs.ps_stack + (if Var v IN FDOM qs.ps_spilled then 1 else 0) =
     LIST_ELEM_COUNT (Var v) ps.ps_stack + (if Var v IN FDOM ps.ps_spilled then 1 else 0) +
       (if v = out then 1 else 0)` by
-    (gen_tac >> strip_tac >>
-     drule_at (Pat `phi_write_phase _ _ _ _ = _`) phi_write_live_count >>
-     disch_then (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
-     Cases_on `~halt /\ ~MEM out live` >> gvs[]
-     >- (pairarg_tac >> gvs[] >>
-         drule_at (Pat `popmany_plan _ _ = _`) popmany_plan_other_elem_count >>
-         disch_then (qspec_then `Var v` mp_tac) >>
-         `v <> out` by metis_tac[] >> simp[] >> strip_tac >>
-         qpat_x_assum `popmany_plan _ _ = _`
-           (mp_tac o Q.AP_TERM `\r. (SND r).ps_spilled`) >>
-         simp[popmany_plan_spilled_unchanged]) >>
-     simp[] >> decide_tac) >>
+    (gen_tac >> strip_tac >> drule_all generate_phi_plan_live_count >> simp[]) >>
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!v. MEM v live ==> _` (qspec_then `v` mp_tac) >> simp[] >>

@@ -276,3 +276,44 @@ Proof
        GSYM venomInstTheory.inst_uses_def] >>
   metis_tac[phi_uses_disjoint_later]
 QED
+
+Theorem analyzed_phi_protected_demand:
+  !fn bb k v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    k <= LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (collect_phis bb.bb_instructions))) /\
+    EVERY (\inst. ~MEM v (inst_defs inst)) (DROP k (collect_phis bb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label k)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn` by gvs[stackPlanGenTheory.codegen_ready_fn_def] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    metis_tac[removeUnusedProofsTheory.wf_lookup_block] >>
+  qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qpat_assum `bb.bb_instructions = _`
+       (mp_tac o Q.AP_TERM `LENGTH`) >> simp[listTheory.LENGTH_APPEND]) >>
+  irule (SRULE [LET_THM] livenessAnalysisPropsTheory.live_vars_at_propagate_range) >>
+  simp[] >> qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >> simp[] >>
+  rpt strip_tac >>
+  `MEM (EL k' (collect_phis bb.bb_instructions))
+       (DROP k (collect_phis bb.bb_instructions))` by
+    (simp[listTheory.MEM_DROP] >> qexists_tac `k' - k` >> simp[]) >>
+  `EL k' bb.bb_instructions = EL k' (collect_phis bb.bb_instructions)` by
+    (qpat_x_assum `bb.bb_instructions = _` (fn th =>
+       CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     simp[listTheory.EL_APPEND_EQN]) >>
+  gvs[listTheory.EVERY_MEM]
+QED
+
+Theorem phi_protected_demand_step:
+  !phis k v. k < LENGTH phis ==>
+    (EVERY (\inst. ~MEM v (inst_defs inst)) (DROP k phis) <=>
+     ~MEM v (inst_defs (EL k phis)) /\
+     EVERY (\inst. ~MEM v (inst_defs inst)) (DROP (SUC k) phis))
+Proof
+  rpt strip_tac >> drule rich_listTheory.DROP_CONS_EL >> simp[]
+QED
