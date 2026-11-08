@@ -99,7 +99,13 @@ Resume typed_dynarray_prefix_path_mem[path]:
 QED
 Resume typed_dynarray_prefix_path_mem[finish]:
   qexists_tac `q with vs_inst_idx := LENGTH sm.cs_current_insts` >>
-  gvs[venom_state_component_equality, eval_operand_def, lookup_var_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `~q.vs_halted /\ q.vs_current_bb = sa.cs_current_bb /\
+   (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+     vs_inst_idx := s.vs_inst_idx|>) = s` by
+    (qpat_x_assum `q with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  gvs[eval_operand_def, lookup_var_def] >>
   (conj_tac >- first_assum ACCEPT_TAC) >> rpt strip_tac >>
   `x <> "%" ++ toString sa.cs_next_var /\
    x <> "%" ++ toString (sa.cs_next_var+1) /\
