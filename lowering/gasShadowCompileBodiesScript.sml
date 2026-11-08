@@ -1047,6 +1047,40 @@ Proof
    irule gas_shadow_compiles_slice_data)
 QED
 
+Theorem gas_shadow_bytestring_literal_hash[local]:
+  bytestring_literal_hash (gas_shadow_expr e) = bytestring_literal_hash e
+Proof
+  Cases_on `e` >> simp[gas_shadow_expr_def, bytestring_literal_hash_def]
+QED
+
+Theorem gas_shadow_compiles_bytestring_operand[local]:
+  gas_shadow_compiles (lower_value f cenv ty e) (lower_value g cenv ty e2) /\
+  bytestring_literal_hash e2 = bytestring_literal_hash e ==>
+  gas_shadow_compiles
+    (\st. case bytestring_literal_hash e of
+            NONE => comp_bind (lower_value f cenv ty e) compile_bytestring_hash st
+          | SOME h => (Lit h, st))
+    (\st. case bytestring_literal_hash e2 of
+            NONE => comp_bind (lower_value g cenv ty e2) compile_bytestring_hash st
+          | SOME h => (Lit h, st))
+Proof
+  strip_tac >> pop_assum SUBST1_TAC >> CASE_TAC
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule gas_shadow_compiles_bind >>
+      simp[gasShadowCompileMembershipTheory.gas_shadow_compiles_bytestring_hash]) >>
+  simp[gas_shadow_compiles_def]
+QED
+
+Theorem bytestring_operand_case_app[local]:
+  (case bytestring_literal_hash e of
+     NONE => comp_bind m k x
+   | SOME h => (Lit h, x)) =
+  (\st. case bytestring_literal_hash e of
+          NONE => comp_bind m k st
+        | SOME h => (Lit h, st)) x
+Proof
+  simp[]
+QED
+
 Theorem gas_shadow_compiles_builtin_body_bop[local]:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
@@ -1096,11 +1130,20 @@ Proof
              gasShadowCompileMembershipTheory.gas_shadow_compiles_list_membership_notin,
              gasShadowCompileMembershipTheory.gas_shadow_compiles_var_array_membership])) >>
    Cases_on `is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq)` >> simp[]
-   >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
+   >- (`!t e. gas_shadow_compiles (lower_value f cenv t e)
+              (lower_value g cenv t (gas_shadow_expr e))` by
+         (rpt gen_tac >> qpat_assum `!t e mode. _` (qspecl_then [`t`, `e`, `T`] mp_tac) >>
+          simp_tac bool_ss []) >>
+       `!t e. gas_shadow_compiles (lower_value f cenv t e) (lower_value g cenv t e)` by
+         (rpt gen_tac >> qpat_assum `!t e mode. _` (qspecl_then [`t`, `e`, `F`] mp_tac) >>
+          simp_tac bool_ss []) >>
+       ONCE_REWRITE_TAC [bytestring_operand_case_app] >>
+       PURE_REWRITE_TAC [comp_bind_uncurry] >>
+       CONV_TAC (DEPTH_CONV ETA_CONV) >>
        ntac 2 (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-         >- metis_tac[COND_CLAUSES] >> gen_tac >> BETA_TAC) >>
-       ntac 2 (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-         >- irule gasShadowCompileMembershipTheory.gas_shadow_compiles_bytestring_hash >>
+         >- (irule gas_shadow_compiles_bytestring_operand >> rpt conj_tac >>
+             FIRST [simp[gas_shadow_bytestring_literal_hash] >> NO_TAC,
+                    first_assum MATCH_ACCEPT_TAC]) >>
          gen_tac >> BETA_TAC) >>
        (Cases_on `op = Eq` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV)
         >- (irule gas_shadow_compiles_as_stack_val >> simp[gas_shadow_compiles_emit_op]) >>
