@@ -10,7 +10,9 @@ Ancestors
   exprSimAbiEncodeRelabelResources exprSimAbiEncodeRelabelBoundary
   exprSimAbiEncodeObliviousSimulation exprSimAbiEncodeObliviousContext
   abiEncoderWindowContract abiBuiltinAllocation venomInst
-  exprSimAbiGasBridge exprSimAbiEncodeSourceRoom
+  exprSimAbiGasBridge exprSimAbiEncodeSourceRoom exprSimAbiEncodeOblivious
+  exprSimAbiEncodeNoBlockBoundary exprSimAbiEncodeNoBlockSafety
+  exprSimAbiEncodeNonwordCase
 
 Theorem abi_encode_tuple_staged_observer:
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
@@ -351,3 +353,129 @@ Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   qexistsl [`p`, `raw`] >> asm_rewrite_tac []
 QED
+
+Theorem abi_encode_tuple_no_block_observer:
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
+  eval_exprs cx args es = (INL vs,es') /\
+  vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
+  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+  s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+  eval_operand buf.buf_operand s = SOME (n2w sb) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
+  lower_abi_encode ensure mid buf.buf_operand ei
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+  fn_has_code st allocated func /\ fn_has_code staged final func /\ fn_inst_ids_distinct func /\
+  staged.cs_blocks = final.cs_blocks /\ fn_has_code staged final obs /\
+  local_ptrs_reserved ce st /\ local_ptrs_reserved ce staged /\
+  stmt_state_rel ctx func ce cx es' s /\ abi_encoder_admissible ei /\
+  (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
+  ~s.vs_halted /\ s.vs_current_bb = staged.cs_current_bb /\
+  s.vs_inst_idx = LENGTH staged.cs_current_insts ==>
+  ?p actual. abi_decode_sim ctx obs s actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_exec_frame func s actual /\
+    abi_encode_staged_observation ctx func ce cx es' staged out mid
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+        (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `fn_has_code staged final obs` mp_tac >>
+  drule_all abi_encode_lower_phase_code >>
+  disch_then (fn th => disch_tac >> mp_tac th) >>
+  disch_then (qx_choose_then `ops` (qx_choose_then `ready`
+    (qx_choose_then `len` (qx_choose_then `body_end`
+      (MAP_EVERY assume_tac o CONJUNCTS))))) >>
+  drule_all abi_encode_tuple_raw_phases >> simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all lower_abi_encode_no_blocks_safe >> strip_tac >>
+  drule_all lower_abi_encode_no_block_run_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl [`p`, `raw with vs_inst_idx := LENGTH final.cs_current_insts`] >>
+  gvs[]
+QED
+
+Theorem abi_encode_tuple_counted_encoder:
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
+  eval_exprs cx args es = (INL vs,es') /\
+  vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
+  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+  s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+  eval_operand buf.buf_operand s = SOME (n2w sb) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
+  lower_abi_encode ensure mid buf.buf_operand ei
+    (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+  fn_has_code st allocated func /\ fn_has_code staged final func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce st /\ local_ptrs_reserved ce staged /\
+  stmt_state_rel ctx func ce cx es' s /\ abi_encoder_admissible ei /\
+  (!l. buf.buf_operand <> Label l) /\
+  (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
+  fresh_vars_wrt final s /\ ~s.vs_halted /\ s.vs_current_bb = staged.cs_current_bb /\
+  s.vs_inst_idx = LENGTH staged.cs_current_insts ==>
+  ?p actual. gas_marked_path F ctx func s 0 (OK actual) /\
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_staged_observation ctx func ce cx es' staged out mid
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+        (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all lower_abi_encode_frag_facts >> strip_tac >>
+  qabbrev_tac `Q = \actual. ?p.
+    abi_encode_staged_observation ctx func ce cx es' staged out mid
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+        (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual` >>
+  `(!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
+   (!t prev. Q t ==> Q (t with vs_prev_bb := prev))` by simp[Abbr `Q`] >>
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
+    t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts`
+    suffices_by
+    (strip_tac >> qpat_x_assum `Q t` mp_tac >>
+     simp_tac bool_ss [Abbr `Q`] >> strip_tac >>
+     qexistsl [`p`, `t`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  Cases_on `staged.cs_blocks = final.cs_blocks` >- suspend "no_blocks" >> suspend "blocks"
+QED
+
+Resume abi_encode_tuple_counted_encoder[no_blocks]:
+  irule abi_decode_sim_gas_path >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists `staged` >> reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_tuple_no_block_observer >> strip_tac >>
+  qexists `actual` >> asm_rewrite_tac [] >>
+  simp_tac bool_ss [Abbr `Q`] >> qexists `p` >> first_assum ACCEPT_TAC
+QED
+
+Resume abi_encode_tuple_counted_encoder[blocks]:
+  irule abi_decode_sim_gas_path_relabel >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[abi_encode_endpoint_nonempty] >>
+  qexists `staged` >> reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_tuple_relabel_observer >> strip_tac >>
+  qexists `actual` >> asm_rewrite_tac [] >>
+  simp_tac bool_ss [Abbr `Q`] >> qexists `p` >> first_assum ACCEPT_TAC
+QED
+
+Finalise abi_encode_tuple_counted_encoder
