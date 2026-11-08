@@ -10,6 +10,17 @@ Ancestors calldataDecodePtr calldataWordPtr robustCopyTransportPtr exprSimMemory
   valueEncodingTyping abiDecoderReentryPointer abiDecoderPreObservations abiDecoderReentry
   decoderNavigationPtr
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem clean_footprint_val_in_memory_robust:
   !tv v p mem tainted.
     val_wf tv v /\ val_in_memory tv v p mem /\
@@ -124,7 +135,8 @@ Proof
      asm_simp_tac bool_ss [abi_decode_source_def]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   `abi_decode_bytes_copy_size m < dimword (:256)` by metis_tac[] >>
-  drule_all abi_decode_bytes_sentinel_sequence >> strip_tac >>
+  drule_all (SRULE [wordsTheory.n2w_w2n, wordsTheory.w2n_lt]
+    (Q.INST [`d` |-> `w2n (dw:bytes32)`] abi_decode_bytes_sentinel_sequence)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sb) s = OK ordinary` >>
   `val_in_memory (BaseTV (BytesT (Dynamic m))) (vyperValue$BytesV bs)
     (w2n dw) ordinary.vs_memory` by
@@ -180,7 +192,7 @@ Proof
        (qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
         simp_tac (srw_ss()) [abi_decoder_recursive_pre_def, abi_decoder_pre_def,
           abi_decoder_ranges_def] >> metis_tac[optionTheory.SOME_11]) >>
-     gvs[] >> irule abi_decoder_typed_clamped_word_sequence >> simp[] >>
+     gvs[] >> irule (calldata_pos abi_decoder_typed_clamped_word_sequence) >> simp[] >>
      metis_tac[]) >>
   drule_all calldata_clamped_word_prefix_framed >>
   disch_then (qspecl_then [`PG`, `D`]
@@ -190,8 +202,7 @@ Proof
     (gvs[] >> metis_tac[abi_decoder_post_inst_idx]) >>
   qexistsl_tac [`s'`, `G'`, `tn'`] >> simp[] >>
   qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o PURE_REWRITE_RULE
-      [abi_decoder_recursive_pre_def, abi_decoder_pre_def, abi_decoder_metadata_def]) >>
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def, cj 1 arithmeticTheory.ADD_CLAUSES, abi_decoder_pre_def, abi_decoder_metadata_def]) >>
   `type_to_abi_dec_info sf ce ty = DecPrimWord clamp` by metis_tac[] >>
   drule_all (cj 2 abi_decoder_primitive_cases) >> strip_tac >>
   `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
@@ -285,8 +296,8 @@ Theorem calldata_primitive_reentry_ptr_endpoint:
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' endpoint) ==>
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn initial)
 Proof
-  strip_tac >> drule_all abi_decoder_primitive_reentry_sequence >> strip_tac >>
-  drule abi_decoder_pre_observations >> strip_tac >>
+  strip_tac >> drule_all (calldata_pos abi_decoder_primitive_reentry_sequence) >> strip_tac >>
+  drule (calldata_pos abi_decoder_pre_observations) >> strip_tac >>
   `eval_operand (Var p) initial = SOME (n2w d) /\
    eval_operand src initial = SOME (n2w sb) /\ d < dimword (:256)` by
     (fs[abi_decoder_ranges_def] >> decide_tac) >>

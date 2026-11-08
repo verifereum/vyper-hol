@@ -5,6 +5,17 @@ Ancestors
   abiScratchDecoderLoopInvariant abiDecoderLoopEmit abiDecoderRecursiveLoopContext
   abiDecoderContract abiDecoderLoop abiDecoderExecution abiDecoderReentry abiDecoderFrame compileEnv venomState bodyPtrDefs ptrDiscipline pred_set finite_map list
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem calldata_scratch_array_constructor_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
@@ -178,10 +189,10 @@ Theorem abi_decode_array_loop_init_resource_bounds:
   start.cs_next_id <= loop_st.cs_next_id-2 /\ loop_st.cs_next_id-2 < loop_st.cs_next_id /\
   start.cs_next_var <= loop_st.cs_next_var
 Proof
-  strip_tac >> drule_all abi_decode_array_loop_init_site_bounds >> strip_tac >>
+  strip_tac >> drule_all (calldata_pos abi_decode_array_loop_init_site_bounds) >> strip_tac >>
   asm_simp_tac bool_ss [] >>
-  drule abi_decode_array_loop_init_trace >> strip_tac >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule (calldata_pos abi_decode_array_loop_init_trace) >> strip_tac >>
+  drule_all abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >> decide_tac
 QED

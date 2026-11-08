@@ -10,6 +10,17 @@ Ancestors calldataTypedRobustPtr abiScratchDecoderTuple abiScratchLeafEffect
   valueEncodingProps abiDecoderTypedContract abiDecoderReentry bodyPtrDefs loweringPosts exprSimDefs exprSimProps
   abiDecoderLoop list
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem calldata_scratch_word_decoder_ptr:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -52,8 +63,8 @@ Theorem calldata_scratch_word_decoder_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_scratch_decoder_word_pre >> strip_tac >>
-  drule abi_decoder_primitive_source >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_word_pre) >> strip_tac >>
+  drule (calldata_pos abi_decoder_primitive_source) >> strip_tac >>
   `compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) start = ((),end_st)` by metis_tac[] >>
   `ptr_covers G tn root initial 32` by metis_tac[] >>
@@ -108,7 +119,7 @@ QED
 Resume calldata_scratch_word_decoder_ptr[execution]:
   rpt strip_tac >> gvs[] >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_clamped_word_shape >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_clamped_word_shape) >> strip_tac >>
   `frag_exec ctx start end_st (\s. s = initial)
     (\t. t = actual with vs_inst_idx := LENGTH end_st.cs_current_insts) (K F)` by
     (qpat_x_assum `run_inst_seq _ initial = OK actual` mp_tac >>

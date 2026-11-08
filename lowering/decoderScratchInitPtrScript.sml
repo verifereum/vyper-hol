@@ -9,6 +9,17 @@ Ancestors
   abiScratchDecoderLoopInput abiDecoderArrayInitExec exprLowering emitHelperProps fragExec
   abiScratchFootprint abiDecoderFootprint pred_set
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 (* Physical ownership and the ghost follow the same original-state execution.
    In particular generated names may already be bound at loop reentry. *)
 Theorem calldata_scratch_array_init_reentry_ptr:
@@ -63,12 +74,12 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD /\
    abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
     simp[abi_decode_source_opcode_def, abi_decoder_operand_live_def] >>
-  drule_all (abi_scratch_decoder_init_reentry |> Q.INST [`hi` |-> `Lit 0w`] |> SRULE []) >> strip_tac >>
+  drule_all ((calldata_pos abi_scratch_decoder_init_reentry) |> Q.INST [`hi` |-> `Lit 0w`] |> SRULE []) >> strip_tac >>
   `abi_decoder_array_init_post setup st.cs_next_var limit_st (loop_st.cs_next_id - 2)
     first last b cap d n initial actual` by
     (simp_tac bool_ss [abi_decoder_array_init_post_def] >> qexists_tac `slot` >>
      asm_simp_tac bool_ss []) >>
-  drule_all abi_decode_array_loop_init_site_bounds >> strip_tac >>
+  drule_all (calldata_pos abi_decode_array_loop_init_site_bounds) >> strip_tac >>
   `abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
     limit_st d 32 b cap initial actual` by
     (irule abi_scratch_decoder_init_effect >> conj_tac >- metis_tac[] >>
@@ -128,13 +139,13 @@ Theorem calldata_scratch_array_initialize_clean_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_scratch_decoder_array_init_inputs >> simp[] >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_array_init_inputs) >> simp[] >> strip_tac >>
   `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
     simp[Once type_memory_bytes_def] >>
   drule_all calldata_scratch_array_init_reentry_ptr >>
   disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
   qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  drule_all abi_decode_array_loop_init_shape >> strip_tac >>
+  drule_all (calldata_pos abi_decode_array_loop_init_shape) >> strip_tac >>
   `abi_scratch_effect first last st.cs_next_id loop_st.cs_next_id st.cs_next_var
     limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual` by
     (irule abi_scratch_effect_widen >>
@@ -142,12 +153,12 @@ Proof
   `abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     bs (ArrayV (DynArrayV vs)) st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
     0 source_base d first last b cap actual` by
-    (irule abi_scratch_decoder_input_effect >> goal_assum (drule_at Any) >>
+    (irule (calldata_pos abi_scratch_decoder_input_effect) >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[]) >>
   `abi_scratch_decoder_input ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     bs (ArrayV (DynArrayV vs)) loop_st src (Var root) CALLDATALOAD (Lit 0w) (Lit 0w)
     0 source_base d first last b cap actual` by
-    (irule abi_scratch_decoder_input_mono >> qexists_tac `st` >> fs[inst_extends_def]) >>
+    (irule (calldata_pos abi_scratch_decoder_input_mono) >> qexists_tac `st` >> fs[inst_extends_def]) >>
   `mem_bytes_at source_base (LENGTH bs) (abi_decode_source CALLDATALOAD actual) = bs` by
     fs[abi_scratch_decoder_input_def] >>
   `abi_decoder_valid_array_memory CALLDATALOAD bs tv vs source_base d 0 actual` by
@@ -159,7 +170,7 @@ Proof
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>
   `LENGTH (emitted_insts st loop_st) + initial.vs_inst_idx = LENGTH loop_st.cs_current_insts` by
     (fs[inst_extends_def] >> simp[ADD_COMM]) >>
-  drule abi_decode_array_loop_index_live >> strip_tac >>
+  drule (calldata_pos abi_decode_array_loop_index_live) >> strip_tac >>
   qexistsl_tac [`actual with vs_inst_idx := LENGTH loop_st.cs_current_insts`, `slot`, `H`, `u`] >>
   gvs[abi_decoder_array_init_post_def, abi_scratch_decoder_input_def,
     abi_scratch_decoder_ranges_def, abi_decoder_valid_array_memory_def,

@@ -7,6 +7,17 @@ Ancestors decoderNavigationPtr calldataOverwritePtr calldataClampPtr entryDispat
   emitHelperProps exprLoweringProps abiDecoderLoop ghostPcTransportPtr exprLowering abiEncoder decoderArraySetupPtr
   abiDecoderMemberSetup abiDecoderReentryPointer abiDecoderReentry
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem member_navigation_state_frame[local]:
   MEM opc [ADD; CALLDATALOAD] /\
   step_inst_base (mk_inst id opc ops outs) s = OK t ==>
@@ -489,10 +500,10 @@ Proof
   drule_all member_navigation_emit_pointer_pc >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `!x. not_fresh_at sa x ==> not_fresh_at mid x` by
-    (drule abi_decoder_member_pointer_counters >> strip_tac >>
+    (drule (calldata_pos abi_decoder_member_pointer_counters) >> strip_tac >>
      Cases_on `dyn` >> gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
   `!x. ep = Var x ==> not_fresh_at mid x` by
-    (drule abi_decoder_member_pointer_counters >> strip_tac >>
+    (drule (calldata_pos abi_decoder_member_pointer_counters) >> strip_tac >>
      Cases_on `ep` >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
   `op_taint u ep = {} /\ op_prov H ep = NONE` by
     (Cases_on `ep` >> gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>

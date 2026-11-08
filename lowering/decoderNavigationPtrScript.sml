@@ -7,6 +7,17 @@ Ancestors wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr typedCopyPtr b
   compileEnv emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
   abiDecoderMemberSetup decoderMemberValidEndpoint memLocDefs venomInstProofs contextCodegenRel
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem emitted_ptr_scalar_offset_frag_ptr_core[local]:
   !cx ctx PG sa sb id root offset out off s a G tn total n R.
     sb.cs_current_bb = sa.cs_current_bb /\
@@ -836,10 +847,10 @@ Proof
      qpat_x_assum `frag_exec_ptr _ _ _ mid sb _ _ _` mp_tac >>
      simp_tac (srw_ss()) []) >>
   `!x. not_fresh_at sa x ==> not_fresh_at mid x` by
-    (drule abiDecoderReentryPointerTheory.abi_decoder_member_pointer_counters >> strip_tac >>
+    (drule (calldata_pos abiDecoderReentryPointerTheory.abi_decoder_member_pointer_counters) >> strip_tac >>
      Cases_on `dyn` >> gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_ADD]) >>
   `!x. ep = Var x ==> not_fresh_at mid x` by
-    (drule abiDecoderReentryPointerTheory.abi_decoder_member_pointer_counters >> strip_tac >>
+    (drule (calldata_pos abiDecoderReentryPointerTheory.abi_decoder_member_pointer_counters) >> strip_tac >>
      Cases_on `ep` >> gvs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
   `op_taint u ep = {} /\ op_prov H ep = NONE` by
     (Cases_on `ep` >> gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>

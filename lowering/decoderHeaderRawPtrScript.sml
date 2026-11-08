@@ -71,7 +71,7 @@ Proof
   strip_tac >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_bulk_payload_def, comp_bind_def] >>
+     simp[abi_decode_bulk_payload_def, compile_abi_dec_addr_def, comp_bind_def] >>
      pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
      rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] sa = (sz,c1)` >>
      rename1 `emit_op ADD [src; Lit 32w] c1 = (sd,c2)` >>

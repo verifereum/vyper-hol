@@ -8,6 +8,17 @@ Ancestors
   compileEnv abiScratchDecoderContract abiScratchEffect abiDecoderReentry
   abiScratchDecoderLoopControl abiDecoderValidArrayMemory
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem calldata_scratch_loop_entry_ptr:
   compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi di asz msz ip cnt start = ((),final) /\
   fn_has_code start final func /\ abi_decode_source_opcode opc /\
@@ -21,7 +32,7 @@ Theorem calldata_scratch_loop_entry_ptr:
    !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_decoder_recursive_entry_code >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_recursive_entry_code) >> strip_tac >>
   conj_tac
   >- (irule abi_decoder_loop_entry_sim >> goal_assum (drule_at Any) >>
       asm_simp_tac bool_ss [] >> metis_tac[]) >>
@@ -79,9 +90,9 @@ Theorem abi_decoder_compiled_dyn_loop_layout:
       first last lo hi next limit_st site
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_decode_dyn_loop_trace >> strip_tac >>
+  drule (calldata_pos abi_decode_dyn_loop_trace) >> strip_tac >>
   qexistsl_tac [`labels`, `st0`, `ops`, `middle`, `st1`] >>
-  asm_rewrite_tac[] >> irule abi_decoder_recursive_loop_layout >>
+  asm_rewrite_tac[] >> irule (calldata_pos abi_decoder_recursive_loop_layout) >>
   goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
   qexists_tac `final` >> asm_rewrite_tac[]
 QED
@@ -189,7 +200,7 @@ Theorem abi_scratch_decoder_loop_data_jump:
   abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc (Lit 0w) hi_op ip src dst
     0 sb d slot first last b cap next (jump_to lbl s)
 Proof
-  simp_tac bool_ss [abi_scratch_decoder_loop_data_def] >> strip_tac >>
+  simp_tac bool_ss [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
   asm_rewrite_tac[] >> conj_tac
   >- (irule abi_scratch_decoder_ranges_jump >> goal_assum (drule_at Any) >>
       qexists_tac `next` >> asm_rewrite_tac[]) >>
@@ -237,7 +248,7 @@ Proof
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
   `FST labels = fresh_label_output "dec_dyn_hdr" start.cs_next_label` by
     (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
-     simp_tac bool_ss [abi_decode_loop_prefix_shape, pairTheory.PAIR_EQ] >>
+     simp_tac bool_ss [(calldata_pos abi_decode_loop_prefix_shape), pairTheory.PAIR_EQ] >>
      strip_tac >> gvs[]) >>
   qexistsl_tac [`labels`,`st`,`ops`,`middle`,`end_st`] >>
   asm_rewrite_tac[] >> irule abi_scratch_decoder_loop_inv_entry_jump >>

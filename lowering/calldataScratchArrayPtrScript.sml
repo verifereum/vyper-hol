@@ -12,6 +12,17 @@ Ancestors
   decoderGhostFramePtr abiDecoderAllocation abiScratchEffect
   abiScratchDecoderLoopInput abiScratchDecoderLoopInvariant
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem calldata_scratch_array_body_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
@@ -120,13 +131,13 @@ Theorem calldata_scratch_array_body_guarded_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_array_body_code >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_array_body_code) >> strip_tac >>
   `first <= middle.cs_next_id /\ middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   `abi_decoder_operand_live st.cs_next_var (Lit 0w) /\
    eval_operand (Var q) initial = SOME (n2w slot) /\
    mload (w2n (n2w slot:bytes32)) initial = n2w j` by
     simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def, eval_operand_def] >>
-  drule_all abi_scratch_decoder_array_setup_sequence >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_array_setup_sequence) >> strip_tac >>
   `eval_operand src initial = SOME (n2w sb) /\
    lookup_var root initial = SOME (n2w d) /\
    d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256)` by
@@ -161,30 +172,30 @@ Proof
   `abi_decode_sim ctx func initial prepared` by
     (`frag_exec ctx st middle (\s. s = initial) (\v. v = prepared) (K F)` by
        (irule frag_exec_run_inst_seq >> simp[Abbr `prepared`] >>
-        drule_all abi_decode_array_element_setup_shape >> strip_tac >>
+        drule_all (calldata_pos abi_decode_array_element_setup_shape) >> strip_tac >>
         fs[EVERY_CONJ] >> metis_tac[]) >>
      drule abi_decode_sim_from_fragment >> disch_then drule >> simp[]) >>
   `prepared.vs_current_bb = middle.cs_current_bb /\
    prepared.vs_inst_idx = LENGTH middle.cs_current_insts /\ ~prepared.vs_halted` by
-    (drule_all abi_decode_array_element_setup_shape >> strip_tac >>
+    (drule_all (calldata_pos abi_decode_array_element_setup_shape) >> strip_tac >>
      drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
      simp[Abbr `prepared`]) >>
   suspend "child"
 QED
 
 Resume calldata_scratch_array_body_guarded_ptr[child]:
-  drule abi_decode_array_element_setup_operands >> strip_tac >>
+  drule (calldata_pos abi_decode_array_element_setup_operands) >> strip_tac >>
   mp_tac (Q.INST [`next` |-> `st.cs_next_var`, `new_next` |-> `middle.cs_next_var`,
     `len` |-> `LENGTH (bs:word8 list)`,
     `sz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`, `hi_op` |-> `Lit 0w`,
     `dst` |-> `Var root`, `opc` |-> `CALLDATALOAD`]
-    abi_scratch_decoder_address_observations) >>
+    (calldata_pos abi_scratch_decoder_address_observations)) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
   mp_tac (SIMP_RULE bool_ss [LET_THM] (Q.INST [`st` |-> `middle`,
     `s` |-> `prepared:venom_state`, `childsrc` |-> `FST (SND (ops:operand # operand # operand))`,
     `childdst` |-> `SND (SND (ops:operand # operand # operand))`,
     `dst` |-> `Var root`, `opc` |-> `CALLDATALOAD`, `hi` |-> `Lit 0w`]
-    abi_scratch_decoder_array_child_input)) >>
+    (calldata_pos abi_scratch_decoder_array_child_input))) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
   `abi_decoder_budget first last b cap prepared` by
     (qpat_assum `abi_decoder_address_frame _ _ _`
@@ -288,7 +299,7 @@ Theorem calldata_scratch_initialized_loop_inputs:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   conj_tac
-  >- (irule abi_scratch_decoder_loop_input >> goal_assum (drule_at Any) >>
+  >- (irule (calldata_pos abi_scratch_decoder_loop_input) >> goal_assum (drule_at Any) >>
       asm_rewrite_tac[] >> qexists_tac `site` >> asm_rewrite_tac[]) >>
   irule abi_scratch_decoder_loop_inv_init >> asm_rewrite_tac[]
 QED

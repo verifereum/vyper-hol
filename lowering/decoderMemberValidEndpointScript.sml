@@ -9,6 +9,17 @@ Ancestors
   compileEnv emitHelper emitHelperProps exprLoweringProps
   venomExecSemantics venomState venomInst instIdxIndep finite_map words list arithmetic
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 (* This is ordinary observation transport only: no ghost is transported through
    pruning. The supplied sequence fixes the original-state endpoint. *)
 Theorem member_pointer_endpoint_observations[local]:
@@ -30,12 +41,10 @@ Proof
     fs[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def, mload_def] >>
   `fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var initial)` by
     irule abi_decoder_prune_fresh >>
-  drule_all (SRULE [cj 1 eval_operand_def]
-    (Q.INST [`src_base` |-> `0`, `base_op` |-> `Lit 0w`]
-      abi_decoder_member_pointer_sequence)) >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_member_pointer_sequence) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st')
     (abi_decoder_prune_vars st.cs_next_var initial) = OK clean` >>
-  drule_all abi_decoder_member_pointer_code >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_member_pointer_code) >> strip_tac >>
   `abi_decoder_vars_extend initial.vs_vars
      (abi_decoder_prune_vars st.cs_next_var initial) initial` by
     irule abi_decoder_prune_extension >>
@@ -55,7 +64,7 @@ Proof
           drule >> simp[]) >>
      drule_all abi_decoder_vars_extend_eval >> simp[]) >>
   `dyn ==> abi_decode_source_opcode opc` by simp[] >>
-  drule_all abi_decode_member_pointer_allocation_shape >> strip_tac >>
+  drule_all (calldata_pos abi_decode_member_pointer_allocation_shape) >> strip_tac >>
   drule_all abi_decode_sequence_allocation_frame >> strip_tac >>
   fs[abi_decoder_prune_vars_def, abi_decoder_address_frame_def]
 QED
@@ -124,7 +133,7 @@ Proof
     (fs[abi_decoder_address_frame_def] >> metis_tac[]) >>
   `eval_operand (Lit (n2w vo)) prepared = SOME (n2w vo)` by simp[eval_operand_def] >>
   drule_all add_endpoint_observations >> strip_tac >>
-  drule abi_decoder_member_pointer_counters >> strip_tac >>
+  drule (calldata_pos abi_decoder_member_pointer_counters) >> strip_tac >>
   `st.cs_next_var <= mid.cs_next_var` by (Cases_on `dyn` >> gvs[]) >>
   `eval_operand ep actual = SOME (n2w (sb + if dyn then off else ao))` by
     (qpat_x_assum `abi_decoder_address_frame _ prepared actual` mp_tac >>
@@ -166,7 +175,7 @@ Proof
   strip_tac >>
   drule abi_decoder_coherent_dynamic >> strip_tac >>
   qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
   drule_all abi_valid_member_window >> simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all abi_valid_decoded_metadata >> strip_tac >>
   drule_all abi_decoder_valid_member_readable >> strip_tac >>
@@ -187,10 +196,10 @@ Proof
     (Cases_on `is_dynamic (vyper_to_abi_type env ty)` >>
      fs[Abbr `off`, abi_decode_member_offset_def]) >>
   `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by simp[abi_decoder_operand_live_def] >>
-  drule_all abi_valid_member_child_ranges >> strip_tac >>
+  drule_all (calldata_pos abi_valid_member_child_ranges) >> strip_tac >>
   drule_all abi_decoder_address_frame_source >>
   disch_then (qspec_then `CALLDATALOAD` assume_tac) >>
-  drule abi_decode_member_setup_counters >> strip_tac >>
+  drule (calldata_pos abi_decode_member_setup_counters) >> strip_tac >>
   simp[abi_decoder_valid_pre_def, abi_decoder_operand_live_def] >>
   conj_tac
   >- (qpat_x_assum `abi_decoder_ranges _ _ _ (FST ops) _ _ _ _ _ _ _ _ actual` mp_tac >>

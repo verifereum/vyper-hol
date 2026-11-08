@@ -3,6 +3,17 @@ Theory argumentRegistrationOpen
 Ancestors exprOpenTerminals exprOpenPrimitives moduleLowering abiEncoder
   compileEnv venomInst list vyperMisc
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem compile_abi_clamp_basetype_open:
   !cl op sa u sb.
     ~block_is_terminated sa /\
@@ -38,7 +49,7 @@ Proof
   FIRST
     [irule compile_abi_clamp_basetype_open >>
        goal_assum $ drule_at (Pat `compile_abi_clamp_basetype _ _ _ = _`) >> simp[],
-     irule compile_abi_decode_to_buf_open >>
+     irule (calldata_pos compile_abi_decode_to_buf_open) >>
        goal_assum $ drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) >> simp[]]
 QED
 

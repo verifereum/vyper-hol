@@ -25,6 +25,17 @@ Ancestors
   calldataScratchBytesPtr calldataScratchWordPtr decoderArrayInitPtr
   calldataDecodePtr abiScratchDecoderRecursive abiScratchDecoderArray
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 (* The ordinary reentry sequence and the ghost endpoint share one witness.
    Robustness uses only the count and live element strides; unused array
    capacity need not be cleared. *)
@@ -79,10 +90,10 @@ Proof
     fs[abi_scratch_decoder_input_def, abi_decoder_coherent_array_iff] >>
   drule abi_decoder_coherent_header >> strip_tac >>
   `~is_dynamic (vyper_to_abi_type env ty)` by fs[abi_decoder_header_def] >>
-  drule_all abi_scratch_decoder_static_array_pre >> strip_tac >>
-  drule_all abi_scratch_decoder_input_point >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_static_array_pre) >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_input_point) >> strip_tac >>
   qhdtm_assum `abi_scratch_decoder_input`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_input_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_input_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
   RULE_ASSUM_TAC (SIMP_RULE bool_ss [Once vyper_to_abi_type_def]) >>
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
@@ -96,8 +107,8 @@ Proof
     (qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
        (mp_tac o SIMP_RULE bool_ss [Once (cj 3 type_to_abi_dec_info_def)]) >>
      simp[]) >>
-  drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>
-  drule_all abi_scratch_decoder_array_init_inputs >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_bulk_reentry_sequence) >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_array_init_inputs) >> strip_tac >>
   `not_fresh_at start root /\ (!x. src = Var x ==> not_fresh_at start x)` by
     (fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
      Cases_on `src` >> fs[]) >>
@@ -109,7 +120,7 @@ Proof
      type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
    d+32 < dimword (:256) /\ LENGTH vs * type_memory_bytes ce ty < dimword (:256)` by
     (qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [abi_scratch_decoder_ranges_def] >> strip_tac >>
+     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
      `d + (32 + maxn * type_memory_bytes ce ty) < dimword (:256)` by metis_tac[] >>
      simp[] >> irule LESS_EQ_LESS_TRANS >> qexists `maxn * type_memory_bytes ce ty` >> simp[]) >>
   drule_all calldata_bulk_decoder_endpoint_ptr >>
@@ -118,7 +129,7 @@ Proof
      start.cs_next_var limit_st d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
      b cap initial actual` by
     (irule abi_scratch_leaf_effect >> asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
-  drule_all abi_decoder_bulk_shape >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_bulk_shape) >> strip_tac >>
   `frag_exec ctx start end_st (\s. s = initial)
      (\t. t = actual with vs_inst_idx := LENGTH end_st.cs_current_insts) (K F)` by
     (qpat_x_assum `run_inst_seq _ initial = OK actual` mp_tac >>

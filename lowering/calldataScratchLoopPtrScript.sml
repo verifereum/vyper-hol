@@ -9,6 +9,17 @@ Ancestors
   abiDecoderFrame abiScratchEffect abiScratchFootprint
   compileEnv ptrDiscipline venomState words list arithmetic
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem calldata_scratch_loop_iteration_prefix_guarded_ptr:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
@@ -92,13 +103,13 @@ Theorem calldata_scratch_loop_iteration_prefix_guarded_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_scratch_decoder_loop_data_facts >> strip_tac >>
+  drule (calldata_pos abi_scratch_decoder_loop_data_facts) >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_recursive_compiled_facts) >> strip_tac >>
   qhdtm_assum `abi_decoder_recursive_loop_compiled`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
   qhdtm_assum `abi_scratch_decoder_loop_data`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
   `abi_decoder_budget first last b cap s /\ FLOOKUP s.vs_allocas site = SOME (slot,32)` by
     fs[abi_scratch_decoder_loop_inv_def, abi_scratch_effect_def, Excl "enc_def"] >>
   `site IN abi_decoder_ids first last` by (simp[abi_decoder_ids_def] >> decide_tac) >>
@@ -136,7 +147,7 @@ Proof
      d (32 + maxn * type_memory_bytes ce ty) first last b cap initial` by
     gvs[] >>
   drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ h`)
-    abi_scratch_decoder_body_inputs >>
+    (calldata_pos abi_scratch_decoder_body_inputs) >>
   disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`Var q`,`st.cs_next_var`] mp_tac) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
@@ -186,7 +197,7 @@ Proof
      val_in_memory tv (EL k vs) (d+32+k*type_memory_size tv) mem` by
     suspend "prefix_child" >>
   drule_at (Pat `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ _ _`)
-    abi_scratch_decoder_child_advance >>
+    (calldata_pos abi_scratch_decoder_child_advance) >>
   disch_then (drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   (impl_tac >- (asm_simp_tac bool_ss [] >>
@@ -194,7 +205,7 @@ Proof
       (fn th => pure_rewrite_tac [GSYM th]) >> decide_tac)) >> strip_tac >>
   `abi_decoder_budget first last b cap actual` by
     fs[abi_scratch_effect_def, Excl "enc_def"] >>
-  drule abi_scratch_decoder_loop_slot_separation >>
+  drule (calldata_pos abi_scratch_decoder_loop_slot_separation) >>
   disch_then (qspec_then `site` mp_tac) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then (qspecl_then [`lo`,`limit_st`,`hi`] mp_tac) >>
@@ -419,7 +430,7 @@ Resume calldata_scratch_loop_iteration_prefix_guarded_ptr[prefix_child]:
        qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
        pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
      qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
-     simp_tac bool_ss [abi_scratch_decoder_ranges_def, abi_footprint_disjoint_def] >>
+     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES, abi_footprint_disjoint_def] >>
      rpt strip_tac >> first_x_assum drule >>
      qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
      qpat_assum `j*type_memory_size tv <= maxn*type_memory_size tv` mp_tac >>
@@ -680,13 +691,13 @@ Theorem calldata_scratch_loop_exit_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_scratch_decoder_loop_data_facts >> strip_tac >>
+  drule (calldata_pos abi_scratch_decoder_loop_data_facts) >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_recursive_compiled_facts) >> strip_tac >>
   qhdtm_assum `abi_decoder_recursive_loop_compiled`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
   qhdtm_assum `abi_scratch_decoder_loop_data`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
   `abi_decoder_budget first last b cap s /\ FLOOKUP s.vs_allocas site = SOME (slot,32)` by
     fs[abi_scratch_decoder_loop_inv_def, abi_scratch_effect_def, Excl "enc_def"] >>
   `site IN abi_decoder_ids first last` by (simp[abi_decoder_ids_def] >> decide_tac) >>

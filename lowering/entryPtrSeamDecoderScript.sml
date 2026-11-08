@@ -20,6 +20,17 @@ Ancestors
   abiDecoderRecursiveArray exprLowering abiDecoderContract abiEncoder abiDecoderOffsetHead
   list rich_list
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem calldata_scratch_dynamic_array_decoder_ptr[local]:
   (!start end_st func ctx src root bs v sb d first last b cap limit_st initial
       G tn P D PG.
@@ -114,20 +125,20 @@ QED
 
 Resume calldata_scratch_dynamic_array_decoder_ptr[loop]:
   qhdtm_assum `abi_scratch_decoder_input`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiScratchDecoderContractTheory.abi_scratch_decoder_input_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiScratchDecoderContractTheory.abi_scratch_decoder_input_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [cj 3 type_to_abi_dec_info_def]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
-    abi_decoder_recursive_array_adds_blocks >>
+    (calldata_pos abi_decoder_recursive_array_adds_blocks) >>
   disch_then (qspec_then `func` mp_tac) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> disch_tac >>
   `!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
-    abi_decoder_recursive_array_code >>
+    (calldata_pos abi_decoder_recursive_array_code) >>
   disch_then (qspec_then `func` mp_tac) >>
   (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
   mp_tac (SPEC_ALL (SIMP_RULE bool_ss []

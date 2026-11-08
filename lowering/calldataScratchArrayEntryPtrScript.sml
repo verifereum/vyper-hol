@@ -5,6 +5,17 @@ Ancestors
   abiScratchEffect abiDecoderFrame abiDecoderReentry bodyPtrDefs ptrDiscipline
   abiScratchFootprint abiScratchEncoderContract abiDecoderContract abiDecoderAllocation pred_set finite_map
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem scratch_effect_allocas_from[local]:
   abi_scratch_effect first last lo hi next limit_st d sz b cap s t /\
   first <= lo /\ hi <= last /\ allocas_from lower s /\ lower <= s.vs_alloca_next ==>
@@ -101,7 +112,7 @@ Proof
        scratch_effect_allocas_from >> simp[]) >>
   `first <= loop_st.cs_next_id-2 /\ loop_st.cs_next_id-2 < last` by decide_tac >>
   drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ loop_st _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    abi_scratch_decoder_loop_input >>
+    (calldata_pos abi_scratch_decoder_loop_input) >>
   disch_then drule_all >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   `loop_st.cs_next_var <= loop_st.cs_next_var /\

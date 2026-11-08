@@ -126,7 +126,7 @@ Theorem calldata_bulk_payload_endpoint_ptr:
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s)
 Proof
-  simp[abi_decode_bulk_payload_def, comp_bind_def] >>
+  simp[abi_decode_bulk_payload_def, abiEncoderTheory.compile_abi_dec_addr_def, comp_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op MUL [cnt; Lit (n2w mem_sz)] sa = (sz,c1)` >>

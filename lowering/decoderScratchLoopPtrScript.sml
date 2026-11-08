@@ -6,6 +6,17 @@ Ancestors decoderScratchLoopCorePtr decoderLoopControlPtr decoderGhostFramePtr p
   abiDecoderValidArrayBackedge abiDecoderContract abiScratchDecoderContract
   abiEncoderArrayFrame abiDecoderAllocation abiDecoderLoop venomState words arithmetic
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem decoder_scratch_header_ptr:
   abi_scratch_decoder_loop_inv CALLDATALOAD bs tv vs sb d outsz slot site
     first last lo hi next limit_st b cap initial hdr j s /\
@@ -175,7 +186,7 @@ Theorem decoder_scratch_child_backedge_ptr:
       !fuel. ptr_safe_run D lower fuel ctx fn PG G tn s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_scratch_decoder_child_advance >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_child_advance) >> strip_tac >>
   `abi_decoder_budget first last b cap s /\
    FLOOKUP s.vs_allocas site = SOME (slot,32) /\ mload slot s = n2w j` by
     fs[abi_scratch_decoder_loop_inv_def, abi_scratch_effect_def, Excl "enc_def"] >>
@@ -183,7 +194,7 @@ Proof
   `abi_footprint_disjoint (d + 32 + j * type_memory_size tv) (type_memory_size tv)
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
     (qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-      (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_ranges_def]) >>
+      (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
      irule abi_footprint_disjoint_subwindow >>
      qexistsl_tac [`d`, `outsz`] >> asm_simp_tac bool_ss [] >> decide_tac) >>
   `site IN abi_decoder_ids first last /\ ~(site IN abi_decoder_ids child_lo child_hi)` by

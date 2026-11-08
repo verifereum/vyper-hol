@@ -9,6 +9,17 @@ Ancestors wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafety
   abiDecoderReentry calldataDynOwned abiDecoderArrayLoopInit abiDecoderDynarrayPrefix
   abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderIndexInit abiDecoderAllocation
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 Theorem calldata_count_guard_layout[local]:
   abi_decode_count_guard CALLDATALOAD src maxn st = (cnt,st') ==>
   cnt = Var ("%" ++ toString st.cs_next_var) /\
@@ -534,10 +545,11 @@ Theorem calldata_array_init_endpoint_ptr_core:
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_decode_array_loop_init_trace >> strip_tac >>
+  drule (calldata_pos abi_decode_array_loop_init_trace) >> strip_tac >>
   gnvs[] >>
-  qpat_x_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _` mp_tac >>
-  simp[abi_decode_dynarray_prefix_def, abi_decode_dynarray_end_guard_def,
+  qpat_x_assum `abi_decode_dynarray_position_prefix _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_dynarray_position_prefix_def, abiEncoderTheory.compile_abi_dec_addr_def,
+    abiDecoderBytesBoundTheory.abi_decode_bytes_head_def, abiDecoderDynarrayBoundTheory.abi_decode_dynarray_payload_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >> pairarg_tac >> simp[] >> strip_tac >> gnvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn sa = (guard_cnt,guard_st)` >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
@@ -780,7 +792,7 @@ Theorem calldata_array_init_sequence_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `eval_operand (Var root) s = SOME (n2w d)` by simp[eval_operand_def] >>
-  drule_at (Pat `abi_decoder_budget _ _ _ _ _`) abi_decode_array_loop_init_sequence >>
+  drule_at (Pat `abi_decoder_budget _ _ _ _ _`) (calldata_pos abi_decode_array_loop_init_sequence) >>
   disch_then (drule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand src s = _`)) >>
   simp[abi_decode_source_opcode_def] >>
@@ -846,10 +858,10 @@ Theorem calldata_array_loop_entry_ptr:
       FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_decode_loop_array_trace >> strip_tac >>
+  drule_all (calldata_pos abi_decode_loop_array_trace) >> strip_tac >>
   rename1 `abi_decode_array_loop_init _ _ _ _ _ _ _ sa = (setup,sb)` >>
   `sb.cs_next_id <= sc.cs_next_id` by
-    (mp_tac (cj 3 ci_mono_compile_abi_decode) >>
+    (mp_tac (cj 3 (calldata_pos ci_mono_compile_abi_decode)) >>
      disch_then (qspecl_then [`Var root`,`src`,`CALLDATALOAD`,`Lit 0w`,
        `ei`,`abi_sz`,`mem_sz`,`FST setup`,`SND setup`,`sb`] mp_tac) >>
      simp[ci_mono_def, cs_extends_def]) >>

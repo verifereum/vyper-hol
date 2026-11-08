@@ -15,6 +15,17 @@ Ancestors calldataScratchBytesPtr decoderMemberPrefixPtr abiScratchDecoderTuple 
   venomState venomExecSemantics bodyPtrDefs ptrDiscipline list arithmetic
   abiScratchDecoderRecursive abiDecoderFixedMemory rich_list abiStaticDynarrayLayout
 
+(* The calldata instance of trunk's position-form decoder lemmas: the source
+   base operand is Lit 0w and the numeric base is 0. *)
+val calldata_pos_live_lit = prove(
+  ``!n w. abiDecoderReentry$abi_decoder_operand_live n (Lit w)``,
+  simp[abiDecoderReentryTheory.abi_decoder_operand_live_def]);
+fun calldata_pos th =
+  SIMP_RULE bool_ss
+    [cj 1 venomStateTheory.eval_operand_def, cj 1 arithmeticTheory.ADD_CLAUSES,
+     cj 2 arithmeticTheory.ADD_CLAUSES, calldata_pos_live_lit]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0:num`, `src_base` |-> `0:num`] th);
+
 (* The empty suffix executes no instructions, even after an arbitrary prefix.
    Keep the entire root allocation and arbitrary protected memory in the interface. *)
 Theorem calldata_scratch_members_nil_ptr:
@@ -67,7 +78,7 @@ Theorem calldata_member_setup_run_sim[local]:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_member_setup_shape >> strip_tac >>
+  drule_all (calldata_pos abi_decode_member_setup_shape) >> strip_tac >>
   `frag_exec ctx st ready (\s. s = initial)
      (\t. t = prepared with vs_inst_idx := LENGTH ready.cs_current_insts) (K F)` by
     (irule frag_exec_run_inst_seq >> simp[] >>
@@ -126,7 +137,7 @@ Proof
      (LENGTH (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
        (DROP (SUM (MAP abi_member_head_size pre)) bs)))
      (d + vo) (type_memory_bytes ce ty) first last b cap prepared` by
-    (irule abi_scratch_decoder_subwindow_ranges >> asm_simp_tac bool_ss [] >>
+    (irule (calldata_pos abi_scratch_decoder_subwindow_ranges) >> asm_simp_tac bool_ss [] >>
      qexistsl_tac [`d`, `dst`, `LENGTH (bs:word8 list)`, `outsz`, `sb`, `src`] >>
      asm_simp_tac arith_ss []) >>
   `abi_decode_source CALLDATALOAD prepared = abi_decode_source CALLDATALOAD initial` by
@@ -215,7 +226,7 @@ Proof
   `abi_decoder_dynamic (type_to_abi_dec_info sf ce ty) ==>
      abi_decode_load CALLDATALOAD (n2w (sb + ao):bytes32) initial = n2w off /\
      sb + off < dimword (:256)` by simp[] >>
-  drule_all abi_decode_member_setup_reentry >> strip_tac >>
+  drule_all (calldata_pos abi_decode_member_setup_reentry) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st ready) initial = OK t` >>
   `w2n (n2w d:bytes32) + vo < dimword (:256)` by
     (simp[] >> decide_tac) >>
@@ -348,7 +359,7 @@ Proof
     simp[abi_decoder_needs_offset_iff] >>
   qpat_x_assum `dec_info_needs_offset _ = _`
     (fn eq => RULE_ASSUM_TAC (PURE_REWRITE_RULE [eq])) >>
-  drule_all abi_decoder_member_body_code >> strip_tac >>
+  drule_all (calldata_pos abi_decoder_member_body_code) >> strip_tac >>
   `first <= ready.cs_next_id /\ ready.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all calldata_scratch_member_setup_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
@@ -403,7 +414,7 @@ Resume calldata_scratch_member_body_guarded_ptr[empty]:
   drule_all abi_decoder_empty_descriptor_value >> strip_tac >>
   `end_st = ready` by
     (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[abi_decode_empty_complex_phases, abi_decode_complex_head_guard_def,
+     simp[(calldata_pos abi_decode_empty_complex_phases), abi_decode_complex_head_guard_def,
        comp_return_def]) >>
   gvs[] >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
@@ -416,7 +427,7 @@ Resume calldata_scratch_member_body_guarded_ptr[empty]:
     (fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def] >>
      Cases_on `src` >> fs[]) >>
   fs[dec_info_needs_offset_def] >>
-  drule_all (SRULE [] (Q.INST [`dyn` |-> `F`] abi_decode_member_setup_reentry)) >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`dyn` |-> `F`] (calldata_pos abi_decode_member_setup_reentry))) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st ready) initial = OK t` >>
   `w2n (n2w d:bytes32) + vo < dimword (:256)` by
     (simp[] >> decide_tac) >>
@@ -664,7 +675,7 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD /\
    abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
     simp[abi_decode_source_opcode_def, abi_decoder_operand_live_def] >>
-  drule_all abi_decoder_members_cons_code >>
+  drule_all (calldata_pos abi_decoder_members_cons_code) >>
   disch_then (qx_choose_then `ops` (qx_choose_then `middle` (qx_choose_then `end_st`
     (map_every assume_tac o CONJUNCTS)))) >>
   `end_st.cs_next_id <= last /\ first <= end_st.cs_next_id /\
@@ -689,7 +700,7 @@ Proof
   `(bounded ==> lower <= after_head.vs_alloca_next)` by
     (drule_all abi_scratch_effect_alloca_next_mono >>
      strip_tac >> strip_tac >> fs[]) >>
-  drule_all abi_scratch_decoder_member_after_head >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_member_after_head) >> strip_tac >>
   `not_fresh_at st root /\
    (!q. src = Var q ==> not_fresh_at st q)` by
     (qpat_assum `abi_decoder_operand_live st.cs_next_var src` mp_tac >>
@@ -743,7 +754,7 @@ Proof
      qpat_assum `val_footprint tv v <= _` mp_tac >>
      qpat_assum `type_memory_size tv = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac bool_ss [abi_scratch_decoder_ranges_def, abi_footprint_disjoint_def] >>
+     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES, abi_footprint_disjoint_def] >>
      rpt strip_tac >> first_x_assum drule >> decide_tac) >>
   `!mem. mem_agree_outside u'.t_mem actual.vs_memory mem ==>
      val_in_memory tv v (d + SUM (MAP (type_memory_bytes ce) pretys)) mem` by
@@ -988,7 +999,7 @@ Theorem calldata_scratch_complex_decoder_guarded_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
-    (assume_tac o PURE_REWRITE_RULE [abi_decode_complex_phases,
+    (assume_tac o PURE_REWRITE_RULE [(calldata_pos abi_decode_complex_phases),
       abi_decode_complex_head_guard_def, comp_ignore_bind_def,
       comp_bind_def, comp_return_def]) >>
   gnvs[LET_THM, comp_return_def] >>
@@ -1185,7 +1196,7 @@ Theorem calldata_scratch_tuple_decoder_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_scratch_decoder_tuple_inputs >> strip_tac >>
+  drule (calldata_pos abi_scratch_decoder_tuple_inputs) >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
@@ -1281,7 +1292,7 @@ Theorem calldata_scratch_fixed_array_decoder_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >>
+  drule (calldata_pos abi_scratch_decoder_fixed_array_inputs) >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
@@ -1387,7 +1398,7 @@ Theorem calldata_scratch_struct_decoder_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_scratch_decoder_struct_inputs >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_struct_inputs) >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   drule abi_decoder_struct_infos >> strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
@@ -1496,7 +1507,7 @@ Theorem calldata_scratch_tuple_decoder_guarded_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_scratch_decoder_tuple_inputs >> strip_tac >>
+  drule (calldata_pos abi_scratch_decoder_tuple_inputs) >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
@@ -1593,7 +1604,7 @@ Theorem calldata_scratch_fixed_array_decoder_guarded_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >>
+  drule (calldata_pos abi_scratch_decoder_fixed_array_inputs) >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
@@ -1700,7 +1711,7 @@ Theorem calldata_scratch_struct_decoder_guarded_ptr:
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all abi_scratch_decoder_struct_inputs >> strip_tac >>
+  drule_all (calldata_pos abi_scratch_decoder_struct_inputs) >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   drule abi_decoder_struct_infos >> strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
