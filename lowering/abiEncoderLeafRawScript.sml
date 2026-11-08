@@ -73,7 +73,7 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_extends >> strip_tac >>
-  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+  simp[run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
     eval_operand_def, fresh_vars_wrt_def, mcopy_def, write_memory_with_expansion_def] >>
   rpt gen_tac >> strip_tac >> Cases_on `old` >> gvs[eval_operand_def, lookup_var_def]
 QED

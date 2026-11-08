@@ -3897,9 +3897,15 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       asm_x "body_ih" irule >>
       asm_x "actual_ih" kall_tac >> asm_x "default_ih" kall_tac >>
       asm "bind_call_env" assume_tac >>
-      gvs[type_check_def, assert_def, get_scopes_def, set_scopes_def,
-          lift_option_type_def, push_function_def, return_def,
-          protected_storage_creates_preserve_stk, AllCaseEqs()] >>
+      (* The expanded caller suffix is irrelevant to the body IH. *)
+      qpat_x_assum `_ = (res,st')` kall_tac >>
+      qpat_x_assum `type_check _ "recursion" _ = _` mp_tac >>
+      simp[type_check_def, assert_def, return_def, raise_def,
+           AllCaseEqs()] >> strip_tac >>
+      simp[NoAsms, type_check_def, assert_def, get_scopes_def,
+           set_scopes_def, lift_option_type_def, push_function_def,
+           return_def, protected_storage_creates_preserve_stk,
+           AllCaseEqs()] >>
       rpt (goal_assum (drule_at Any)) >>
       simp[return_def] >> metis_tac[]) >>
     (qpat_assum `_ = (res,st')` (mk_asm "suffix_eq") >>
