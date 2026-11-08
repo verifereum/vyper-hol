@@ -18,7 +18,7 @@ Theorem regional_body_alias_step:
     operand_val (frame_view fn ra vs) lo at =
     operand_val (frame_view fn ra vs) lo
       (normalize_operand (dfg_build_function fn) [] at)) /\
-  generate_inst_plan (liveness_analyze fn) (dfg_build_function fn) cfg fn inst
+  generate_inst_plan (liveness_analyze fn) (dfg_build_function fn) (cfg:cfg_analysis) fn inst
     nl halting next_term bb.bb_label ps = SOME (ops,qs) /\
   step_inst fuel ctx inst vs = OK vs1 ==>
   !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
@@ -60,7 +60,7 @@ Proof
     (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
     ~MEM v inst.inst_outputs` by
     metis_tac[regional_body_lower_inv_output_roots] >>
-  gen_tac >> disch_tac >> irule alias_step_preserve >> simp[] >>
+  gen_tac >> disch_tac >> irule (INST_TYPE [alpha |-> ``:cfg_analysis``] alias_step_preserve) >> simp[] >>
   goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED
@@ -82,7 +82,7 @@ Theorem regional_body_alias_suffix:
     operand_val (frame_view fn ra vs) lo at =
     operand_val (frame_view fn ra vs) lo
       (normalize_operand (dfg_build_function fn) [] at)) /\
-  generate_block_insts_plan (liveness_analyze fn) (dfg_build_function fn) cfg fn
+  generate_block_insts_plan (liveness_analyze fn) (dfg_build_function fn) (cfg:cfg_analysis) fn
     bb.bb_label halting np (LENGTH bb.bb_instructions) i insts ps = SOME (ops,qs) /\
   exec_block fuel ctx bb vs = OK vs1 ==>
   !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
@@ -119,6 +119,36 @@ Proof
       (normalize_operand (dfg_build_function fn) [] at)` by
     (qpat_x_assum `!i np ps ops qs vs vs1 fuel ctx lo fn ra bb sb cfg halting. _` kall_tac >>
      gen_tac >> disch_tac >> irule regional_body_alias_step >> simp[] >>
-     metis_tac[]) >>
-  cheat
+     metis_tac[])
+  >- (qpat_x_assum `!i np ps ops qs vs vs1 fuel ctx lo fn ra bb sb cfg halting. _` kall_tac >>
+      `i + np = PRE (LENGTH bb.bb_instructions)` by
+        (fs[bb_well_formed_def] >> metis_tac[]) >>
+      `SUC (i + np) = LENGTH bb.bb_instructions` by decide_tac >>
+      `insts = []` by (qpat_x_assum `DROP (SUC _) _ = _` (SUBST1_TAC o SYM) >> simp[DROP_EQ_NIL]) >>
+      gvs[generate_block_insts_plan_def]) >>
+  `regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+      sb bb (SUC (i+np)) ps'` by
+    (qpat_x_assum `!i np ps ops qs vs vs1 fuel ctx lo fn ra bb sb cfg halting. _` kall_tac >>
+     `h.inst_opcode <> JMP` by (strip_tac >> fs[is_terminator_def]) >>
+     `insts = [] ==> SUC (i+np) = LENGTH bb.bb_instructions` by
+       (strip_tac >> fs[DROP_EQ_NIL] >> decide_tac) >>
+     irule regional_body_lower_inv_step >>
+     Cases_on `insts = []` >> fs[arithmeticTheory.ADD_CLAUSES]
+     >- metis_tac[] >>
+     metis_tac[arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES]) >>
+  `s''.vs_labels = vs.vs_labels` by
+    metis_tac[step_inst_preserves_labels_always] >>
+  gen_tac >> disch_tac >>
+  first_x_assum (drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then irule >>
+  simp[GSYM arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES] >>
+  reverse conj_tac >- metis_tac[] >>
+  qexistsl_tac [`ctx`, `fuel`, `s'' with vs_inst_idx := SUC (i+np)`] >>
+  simp[frameRelTheory.frame_view_def] >>
+  qx_gen_tac `a` >> disch_tac >>
+  qpat_x_assum `!at. MEM at ps'.ps_stack \/ _ ==> _` (qspec_then `a` mp_tac) >>
+  simp[] >>
+  Cases_on `normalize_operand (dfg_build_function fn) [] a` >>
+  Cases_on `a` >>
+  simp[frameRelTheory.frame_view_def, codegenRelTheory.operand_val_def]
 QED
