@@ -20,8 +20,13 @@ Theorem evaluate_binop_add:
     evaluate_binop u tv Add (IntV x) (IntV y) =
     INL (IntV (x + y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def,
-       vyperValueOperationTheory.bounded_int_op_def]
+  let
+    val eq = Q.INST [`bop` |-> `Add`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq, vyperValueOperationTheory.bounded_int_op_def]
+  end
 QED
 
 Theorem evaluate_binop_sub:
@@ -88,7 +93,14 @@ Theorem evaluate_binop_div_unsigned:
 Proof
   rpt strip_tac >>
   gvs[vyperValueTheory.within_int_bound_def] >>
-  simp[vyperValueOperationTheory.evaluate_binop_def, vyperValueOperationTheory.bounded_int_op_def, vyperValueTheory.within_int_bound_def] >>
+  (let
+     val eq = Q.INST [`bop` |-> `Div`]
+       (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+     val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+   in
+     simp[eq, vyperValueOperationTheory.bounded_int_op_def,
+          vyperValueTheory.within_int_bound_def]
+   end) >>
   `x = &Num x` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `y = &Num y` by simp[Once $ GSYM integerTheory.INT_OF_NUM] >>
   `0 < Num y` by (CCONTR_TAC >> fs[]) >>
@@ -126,7 +138,13 @@ Theorem evaluate_binop_div_signed:
     INL (IntV (x quot y))
 Proof
   rpt strip_tac >>
-  simp[vyperValueOperationTheory.evaluate_binop_def, vyperValueOperationTheory.bounded_int_op_def] >>
+  (let
+     val eq = Q.INST [`bop` |-> `Div`]
+       (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+     val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+   in
+     simp[eq, vyperValueOperationTheory.bounded_int_op_def]
+   end) >>
   `w2i ((i2w x):bytes32) = x` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `w2i ((i2w y):bytes32) = y` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `(i2w y):bytes32 ≠ 0w` by (
@@ -147,7 +165,13 @@ Theorem evaluate_binop_mod_signed:
     INL (IntV (x rem y))
 Proof
   rpt strip_tac >>
-  simp[vyperValueOperationTheory.evaluate_binop_def, vyperValueOperationTheory.bounded_int_op_def] >>
+  (let
+     val eq = Q.INST [`bop` |-> `Mod`]
+       (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+     val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+   in
+     simp[eq, vyperValueOperationTheory.bounded_int_op_def]
+   end) >>
   `w2i ((i2w x):bytes32) = x` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `w2i ((i2w y):bytes32) = y` by (irule w2i_i2w_within_signed >> metis_tac[]) >>
   `(i2w y):bytes32 ≠ 0w` by (
@@ -194,8 +218,13 @@ Theorem evaluate_binop_or_int:
     evaluate_binop u tv Or (IntV x) (IntV y) =
     INL (IntV (int_or x y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def,
-       vyperValueOperationTheory.bounded_int_op_def]
+  let
+    val eq = Q.INST [`bop` |-> `Or`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq, vyperValueOperationTheory.bounded_int_op_def]
+  end
 QED
 
 Theorem evaluate_binop_xor_int:
@@ -204,8 +233,14 @@ Theorem evaluate_binop_xor_int:
     evaluate_binop u tv XOr (IntV x) (IntV y) =
     INL (IntV (int_xor x y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def,
-       vyperValueOperationTheory.bounded_int_op_def]
+  let
+    val eq = Q.INST [`bop` |-> `XOr`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq,
+         vyperValueOperationTheory.bounded_int_op_def]
+  end
 QED
 
 (* ========= Bitwise (BoolV) ========== *)
@@ -214,21 +249,45 @@ Theorem evaluate_binop_and_bool:
   ∀u tv a b.
     evaluate_binop u tv And (BoolV a) (BoolV b) = INL (BoolV (a ∧ b))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `And`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+    val eq = Q.INST [`v1` |-> `BoolV a`, `v2` |-> `BoolV b`] eq
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_or_bool:
   ∀u tv a b.
     evaluate_binop u tv Or (BoolV a) (BoolV b) = INL (BoolV (a ∨ b))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `Or`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+    val eq = Q.INST [`v1` |-> `BoolV a`, `v2` |-> `BoolV b`] eq
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_xor_bool:
   ∀u tv a b.
     evaluate_binop u tv XOr (BoolV a) (BoolV b) = INL (BoolV (a ≠ b))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `XOr`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+    val eq = Q.INST [`v1` |-> `BoolV a`, `v2` |-> `BoolV b`] eq
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 (* ========= Wrapped arithmetic (UnsafeAdd, UnsafeSub, UnsafeMul, UnsafeDiv) ========== *)
@@ -239,8 +298,14 @@ Theorem evaluate_binop_uadd:
     INL (IntV (if is_Unsigned u then (x + y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x + y)))
 Proof
-  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
-                vyperValueOperationTheory.wrapped_int_op_def]
+  let
+    val eq = Q.INST [`bop` |-> `UnsafeAdd`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    Cases >> simp[eq,
+                  vyperValueOperationTheory.wrapped_int_op_def]
+  end
 QED
 
 Theorem evaluate_binop_usub:
@@ -249,8 +314,14 @@ Theorem evaluate_binop_usub:
     INL (IntV (if is_Unsigned u then (x − y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x − y)))
 Proof
-  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
-                vyperValueOperationTheory.wrapped_int_op_def]
+  let
+    val eq = Q.INST [`bop` |-> `UnsafeSub`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    Cases >> simp[eq,
+                  vyperValueOperationTheory.wrapped_int_op_def]
+  end
 QED
 
 Theorem evaluate_binop_umul:
@@ -259,8 +330,14 @@ Theorem evaluate_binop_umul:
     INL (IntV (if is_Unsigned u then (x * y) % &(2 ** int_bound_bits u)
                  else signed_int_mod (int_bound_bits u) (x * y)))
 Proof
-  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
-                vyperValueOperationTheory.wrapped_int_op_def]
+  let
+    val eq = Q.INST [`bop` |-> `UnsafeMul`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    Cases >> simp[eq,
+                  vyperValueOperationTheory.wrapped_int_op_def]
+  end
 QED
 
 Theorem evaluate_binop_udiv:
@@ -272,12 +349,18 @@ Theorem evaluate_binop_udiv:
                else signed_int_mod (int_bound_bits u)
                      (w2i (word_quot ((i2w x):bytes32) ((i2w y):bytes32)))))
 Proof
-  Cases >> simp[vyperValueOperationTheory.evaluate_binop_def,
-                vyperValueOperationTheory.wrapped_int_op_def] >>
-  rpt strip_tac >>
-  `(i2w y):bytes32 ≠ 0w` by (
-    CCONTR_TAC >> fs[] >> fs[integer_wordTheory.word_0_w2i]) >>
-  simp[]
+  let
+    val eq = Q.INST [`bop` |-> `UnsafeDiv`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    Cases >> simp[eq,
+                  vyperValueOperationTheory.wrapped_int_op_def] >>
+    rpt strip_tac >>
+    `(i2w y):bytes32 ≠ 0w` by (
+      CCONTR_TAC >> fs[] >> fs[integer_wordTheory.word_0_w2i]) >>
+    simp[]
+  end
 QED
 
 (* ========= Shifts ========== *)
@@ -290,10 +373,16 @@ Theorem evaluate_binop_shl:
                int_mod (int_shift_left (Num y) x) &(2 ** int_bound_bits u) else
                signed_int_mod (int_bound_bits u) (int_shift_left (Num y) x)))
 Proof
-  rpt strip_tac >>
-  `¬(y < 0)` by intLib.ARITH_TAC >>
-  simp[vyperValueOperationTheory.evaluate_binop_def] >>
-  rw[]
+  let
+    val eq = Q.INST [`bop` |-> `ShL`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    rpt strip_tac >>
+    `¬(y < 0)` by intLib.ARITH_TAC >>
+    simp[eq] >>
+    rw[]
+  end
 QED
 
 Theorem evaluate_binop_shr:
@@ -302,9 +391,15 @@ Theorem evaluate_binop_shr:
     evaluate_binop u tv ShR (IntV x) (IntV y) =
     INL (IntV (int_shift_right (Num y) x))
 Proof
-  rpt strip_tac >>
-  `¬(y < 0)` by intLib.ARITH_TAC >>
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `ShR`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    rpt strip_tac >>
+    `¬(y < 0)` by intLib.ARITH_TAC >>
+    simp[eq]
+  end
 QED
 
 (* ========= ExpMod ========== *)
@@ -314,7 +409,13 @@ Theorem evaluate_binop_expmod:
     evaluate_binop (Unsigned 256) tv ExpMod (IntV x) (IntV y) =
     INL (IntV (&(w2n (word_exp ((i2w x):bytes32) (i2w y)))))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `ExpMod`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 (* ========= Min / Max ========== *)
@@ -324,7 +425,13 @@ Theorem evaluate_binop_min:
     evaluate_binop u tv Min (IntV x) (IntV y) =
     INL (IntV (if x < y then x else y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `Min`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_max:
@@ -332,7 +439,13 @@ Theorem evaluate_binop_max:
     evaluate_binop u tv Max (IntV x) (IntV y) =
     INL (IntV (if x < y then y else x))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `Max`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 (* ========= Comparisons ========== *)
@@ -341,58 +454,112 @@ Theorem evaluate_binop_eq_int:
   ∀u tv x y.
     evaluate_binop u tv Eq (IntV x) (IntV y) = INL (BoolV (x = y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `Eq`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_lt:
   ∀u tv x y.
     evaluate_binop u tv Lt (IntV x) (IntV y) = INL (BoolV (x < y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `Lt`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_lte:
   ∀u tv x y.
     evaluate_binop u tv LtE (IntV x) (IntV y) = INL (BoolV (x ≤ y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `LtE`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_gt:
   ∀u tv x y.
     evaluate_binop u tv Gt (IntV x) (IntV y) = INL (BoolV (x > y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `Gt`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_gte:
   ∀u tv x y.
     evaluate_binop u tv GtE (IntV x) (IntV y) = INL (BoolV (x ≥ y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `GtE`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_noteq_int:
   ∀u tv x y.
     evaluate_binop u tv NotEq (IntV x) (IntV y) = INL (BoolV (x ≠ y))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def,
-       vyperValueOperationTheory.binop_negate_def]
+  let
+    val eq = Q.INST [`bop` |-> `NotEq`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE
+      (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of (type_of ``Eq``)])) eq
+  in
+    simp[eq, evaluate_binop_eq_int,
+         vyperValueOperationTheory.binop_negate_def]
+  end
 QED
 
 Theorem evaluate_binop_eq_bool:
   ∀u tv a b.
     evaluate_binop u tv Eq (BoolV a) (BoolV b) = INL (BoolV (a = b))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def]
+  let
+    val eq = Q.INST [`bop` |-> `Eq`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+    val eq = Q.INST [`v1` |-> `BoolV a`, `v2` |-> `BoolV b`] eq
+    val eq = CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) [])) eq
+  in
+    simp[eq]
+  end
 QED
 
 Theorem evaluate_binop_noteq_bool:
   ∀u tv a b.
     evaluate_binop u tv NotEq (BoolV a) (BoolV b) = INL (BoolV (a ≠ b))
 Proof
-  simp[vyperValueOperationTheory.evaluate_binop_def,
-       vyperValueOperationTheory.binop_negate_def]
+  let
+    val eq = Q.INST [`bop` |-> `NotEq`]
+      (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+    val eq = CONV_RULE
+      (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of (type_of ``Eq``)])) eq
+  in
+    simp[eq, evaluate_binop_eq_bool,
+         vyperValueOperationTheory.binop_negate_def]
+  end
 QED
 
 (* ========= Checked Division/Modulo: success implies nonzero divisor ========= *)
@@ -410,7 +577,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bop = Div`
   >- (gvs[] >>
-      gvs[vyperValueOperationTheory.evaluate_binop_def, AllCaseEqs(),
+      (let
+         val eq = Q.INST [`bop` |-> `Div`]
+           (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+         val eq = CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+           [TypeBase.case_def_of (type_of ``Div``)])) eq
+       in
+         fs[eq]
+       end) >>
+      gvs[AllCaseEqs(),
           vyperValueOperationTheory.bounded_int_op_def,
           vyperValueOperationTheory.bounded_decimal_op_def,
           vyperValueOperationTheory.wrapped_int_op_def] >>
@@ -418,17 +593,33 @@ Proof
       Cases_on `v2` >> gvs[AllCaseEqs()]) >>
   Cases_on `bop = UnsafeDiv`
   >- (gvs[] >>
-      gvs[vyperValueOperationTheory.evaluate_binop_def, AllCaseEqs(),
+      (let
+         val eq = Q.INST [`bop` |-> `UnsafeDiv`]
+           (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+         val eq = CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+           [TypeBase.case_def_of (type_of ``Div``)])) eq
+       in
+         fs[eq]
+       end) >>
+      gvs[AllCaseEqs(),
           vyperValueOperationTheory.bounded_int_op_def,
           vyperValueOperationTheory.bounded_decimal_op_def,
           vyperValueOperationTheory.wrapped_int_op_def] >>
       Cases_on `v1` >> gvs[AllCaseEqs()] >>
       Cases_on `v2` >> gvs[AllCaseEqs()]) >>
   gvs[] >>
-  gvs[vyperValueOperationTheory.evaluate_binop_def, AllCaseEqs(),
-      vyperValueOperationTheory.bounded_int_op_def,
-      vyperValueOperationTheory.bounded_decimal_op_def,
-      vyperValueOperationTheory.wrapped_int_op_def] >>
+  (let
+         val eq = Q.INST [`bop` |-> `Mod`]
+           (SPEC_ALL vyperValueOperationTheory.evaluate_binop_def)
+         val eq = CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+           [TypeBase.case_def_of (type_of ``Div``)])) eq
+       in
+         fs[eq]
+       end) >>
+      gvs[AllCaseEqs(),
+          vyperValueOperationTheory.bounded_int_op_def,
+          vyperValueOperationTheory.bounded_decimal_op_def,
+          vyperValueOperationTheory.wrapped_int_op_def] >>
   Cases_on `v1` >> gvs[AllCaseEqs()] >>
   Cases_on `v2` >> gvs[AllCaseEqs()]
 QED
