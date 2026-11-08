@@ -1,6 +1,6 @@
 Theory makeSsaCurrentExternalExclusion
 Ancestors
-  makeSsaCurrentWfSsa venomExecProps list rich_list removeUnusedSsaProofs makeSsaSsaForm
+  makeSsaCurrentWfSsa venomExecProps list rich_list venomWfProps makeSsaSsaForm
 Theorem current_wf_external_output_disjoint:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\ lookup_block h renamed = SOME new /\
