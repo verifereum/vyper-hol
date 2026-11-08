@@ -50,6 +50,8 @@ Ancestors
   (* contracts of the lowering's interfaces on concrete inputs *)
   e2eBoundaryTest e2eEntryChecks e2eProducerChecks groupedDispatchProps
   targetPlaceTest
+  (* raw RETURN's copy, and the old opaque-callback expression package *)
+  rawReturnCopy exprRecursionRegression
   (* compiled creation code and events *)
   vyperCreateMemoryTest vyperCtorAliasTest createImmutableBytecodeTest
   vyperEventForwardStruct vyperEventArgumentLifetime
