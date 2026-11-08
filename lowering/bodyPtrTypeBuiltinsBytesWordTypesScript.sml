@@ -21,3 +21,17 @@ Proof
   rpt (FIRST [Cases_on `b''`, Cases_on `b`] >>
        gvs[is_bytestring_type_def, valid_conversion_def])
 QED
+
+Theorem bytestring_scalar_unsigned_convert_op:
+  is_bytestring_type src /\ ~is_bytestring_type dst /\ valid_conversion src dst /\
+  ~((?b. dst = BaseT (IntT b)) \/ dst = BaseT DecimalT) /\
+  well_formed_type tenv dst ==>
+  is_word_type dst /\
+  (mk_convert_op src dst = ConvBytestringToBool \/
+   (?m. mk_convert_op src dst = ConvBytestringToBytesM m) \/
+   (?b n. mk_convert_op src dst = ConvBytestringToInt F b n))
+Proof
+  strip_tac >> drule_all bytestring_scalar_type_partition >> strip_tac >>
+  gvs[mk_convert_op_def, is_bytestring_type_def, is_word_type_def,
+      well_formed_type_def, evaluate_type_def]
+QED
