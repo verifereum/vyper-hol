@@ -3936,8 +3936,6 @@ Proof
   >- (irule ctor_ci_mono_appends >> simp[ci_mono_compile_alloc_buffer]) >>
   gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac
   >- simp[cs_appends_return] >>
-  gen_tac >> ho_match_mp_tac cs_appends_bind >> conj_tac
-  >- simp[cs_appends_emit_helpers] >>
   gen_tac >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
   >- (irule ctor_ci_mono_appends >> simp[CONJUNCT1 ci_mono_compile_abi_decode]) >>
   simp[cs_appends_return]
