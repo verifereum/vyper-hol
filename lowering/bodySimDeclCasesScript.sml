@@ -770,8 +770,9 @@ Proof
   simp_tac (srw_ss()) [pairTheory.FORALL_PROD] >>
   map_every qx_gen_tac [`cx`, `id`, `typ`, `e1`, `e2`, `bound`, `stmts`, `tyv`] >>
   rpt gen_tac >> strip_tac >>
+  `hi <> lo` by (strip_tac >> gvs[]) >>
   `eval_iterator cx (Range e1 e2) es0 =
-   (INL (GENLIST (\j. IntV (lo + &j)) (Num (hi - lo))), es2)` by
+   (INL (GENLIST (\j. Value (IntV (lo + &j))) (Num (hi - lo))), es2)` by
     (gvs[bind_def, AllCaseEqs()] >>
      simp[Once evaluate_def, bind_def, get_range_limits_def,
           lift_sum_def, return_def]) >>
@@ -779,7 +780,7 @@ Proof
       compatible_bound_def] >>
   first_x_assum drule >>
   simp[body_for_ok_def, GENLIST_EQ_NIL] >>
-  Cases_on `hi = lo` >> gvs[]
+  Cases_on `Num (hi - lo)` >> gvs[GENLIST_CONS, read_result_def, return_def]
 QED
 
 (* The enclosing For carries both traversal and allocation safety for its body. *)

@@ -107,6 +107,9 @@ QED
 Theorem eval_iterator_scope_pop_effect[local]:
   !cx it. scope_pop_effect (eval_iterator cx it)
 Proof
+  `!cx ty tv. scope_pop_effect (array_iterator_results cx ty tv)` by
+    (rpt gen_tac >> irule scope_pop_effect_identity >>
+     metis_tac[array_iterator_results_state]) >>
   rpt gen_tac >> Cases_on `it` >> simp[Once evaluate_def] >>
   rpt (gen_tac ORELSE
        (irule scope_pop_effect_bind >> conj_tac >>
@@ -189,7 +192,7 @@ Proof
   `(!(cx:evaluation_context) (s:stmt). T) /\
    (!(cx:evaluation_context) (ss:stmt list). T) /\
    (!(cx:evaluation_context) (it:iterator). T) /\
-   (!(cx:evaluation_context) (ty:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+   (!(cx:evaluation_context) (ty:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
    (!(cx:evaluation_context) (e:expr). T) /\
    (!(cx:evaluation_context) (es:expr list). T) /\
    (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
@@ -459,15 +462,16 @@ Theorem typed_loop_bracket_runtime[local]:
   runtime_consistent env cx after
 Proof
   rpt strip_tac >>
-  `eval_for cx tyv id body' [v] st =
+  `eval_for cx tyv id body' [Value v] st =
     ((case r of INL b => INL () | INR ex => INR ex),after)` by
     (fs[ignore_bind_def] >>
-     simp[Once evaluate_def, bind_def] >>
+     simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
      Cases_on `r` >- (rename1 `INL b` >> Cases_on `b` >>
        simp[Once evaluate_def, return_def, bind_def, ignore_bind_def]) >>
      simp[ignore_bind_def, bind_def]) >>
   fs[runtime_consistent_def] >>
-  `EVERY (value_has_type tyv) [v]` by simp[] >>
+  `EVERY (iterator_result_typed tyv) [Value v]` by
+    simp[iterator_result_typed_def] >>
   drule_all (cj 4 eval_scc_type_sound_mutual) >> simp[]
 QED
 
@@ -486,7 +490,8 @@ Theorem eval_statement_loop_popped_keys_mutual[local]:
      popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
   (!cx tyv id body vs env ret_ty ty env_after st res st'.
-    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
+    evaluate_type env.type_defs ty = SOME tyv /\
+    EVERY (iterator_result_typed tyv) vs /\
     id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     runtime_consistent env cx st /\ functions_well_typed cx /\
@@ -635,19 +640,27 @@ Resume eval_statement_loop_popped_keys_mutual[for]:
 QED
 Resume eval_statement_loop_popped_keys_mutual[loop]:
   rpt strip_tac >> fs[EVERY_DEF] >>
+  Cases_on `read_result cx r st` >> rename1 `read_result cx r st = (rd,s_rd)` >>
+  drule_all iterator_result_read_typed >> strip_tac >> gvs[] >>
+  reverse (Cases_on `rd`)
+  >- (drule eval_for_cons_read_error >> strip_tac >> gvs[]) >>
+  gvs[] >> rename1 `read_result cx r st = (INL v,st)` >>
+  rpt (first_x_assum (drule_then assume_tac)) >>
   qabbrev_tac `pushed = st with scopes updated_by
     CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>))` >>
   `push_scope_with_var id tyv v st = (INL (),pushed)` by
     simp[push_scope_with_var_def, return_def, Abbr `pushed`] >>
   qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  drule eval_for_cons_read >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[bind_def, ignore_bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   `runtime_consistent (extend_local env id ty F) cx pushed` by
     (irule typed_loop_push_runtime >> metis_tac[]) >>
   `popped_keys_indexed pushed.scopes` by
     metis_tac[push_scope_with_var_popped_keys_indexed] >>
-  qpat_x_assum `!s x t. _` drule >> strip_tac >>
-  qpat_x_assum `!s t. push_scope_with_var _ _ _ _ = _ ==> _` drule >> strip_tac >>
+  qpat_x_assum `!s t env ret env' st res st'.
+                  push_scope_with_var _ _ _ _ = _ /\ _ ==> _`
+    (drule_then assume_tac) >>
   drule_all (SRULE[ignore_bind_def] typed_loop_bracket_runtime) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `finally _ pop_scope pushed = (bracket_res,after)` >>
   `popped_keys_indexed after.scopes` by
