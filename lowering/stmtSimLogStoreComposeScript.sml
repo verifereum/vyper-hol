@@ -36,7 +36,7 @@ Proof
   rpt strip_tac >> simp[log_scalar_embedded_bound]
 QED
 
-Theorem log_stored_tuple_encoding_bound[local]:
+Theorem log_stored_tuple_encoding_bound:
   EVERY supported_scalar_type tys /\
   LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
                         value_has_type tv v) tys vs /\
@@ -55,7 +55,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem log_tuple_encoder_shape[local]:
+Theorem log_tuple_encoder_shape:
   EVERY supported_scalar_type tys /\
   SUM (MAP (type_memory_bytes ce) tys) < dimword (:256) ==>
   ((?n. type_to_abi_enc_info sf ce (TupleT tys) = AbiCopy n /\ n < dimword (:256)) \/
