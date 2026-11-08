@@ -431,11 +431,9 @@ Definition call_result_rel_at_def:
     | (INR (ReturnException _), _, _) => F
 End
 
-(* OPEN ITEM, must land before main: the top-level gas observations gobs
-   are not yet tied to the EVM's gas readings (gas_readings es).
-   run_venom_pipeline_correct only gives ?vs_in. gas_variant vs_in vs, so
-   the source-side readings are unconstrained here; tying them needs the
-   O1 contract to relate vs_in's readings to vs's. *)
+(* Unindexed projection for generic clients. The O1 call theorem with GAS
+   provenance uses call_result_rel_at at the explicit readings of its
+   certified runtime_gas_replay witness (e2eProducers). *)
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
     ?gobs. call_result_rel_at gobs tops ret am tx es r es'

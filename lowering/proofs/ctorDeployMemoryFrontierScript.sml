@@ -267,7 +267,8 @@ QED
    the pointer parameters ptr_ok_check (in lowering_context_ok) finds. *)
 Theorem lowered_unit_ptr_taint:
   !D lo ctx name fn lbl vs.
-    lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
+    lowering_context_ok ctx /\ ~ctx_has_dalloca ctx /\
+    ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\ lo <= vs.vs_alloca_next /\
     (!fuel. ptr_safe_blocks D lo fuel ctx fn [] FEMPTY entry_taint
