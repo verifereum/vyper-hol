@@ -19,7 +19,8 @@ Ancestors
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
   fnLineageInv fnLiveDefDom fnLineageStatic fnBlockPlanStaticRegion
   fnBlockPlanStaticBodyPrefix fnBlockPlanStatic fnFrameStepsPhi fnEntryParams
-  fnAliasStep
+  fnAliasStep fnAliasInvBridges fnAliasInvBody fnAliasInvPrefix fnAliasInvPhi
+  fnPlanLineageJoin fnPlanPrefix cfgHelpers cfgAnalysisProps
 
 (* Used at each jump of the block induction, for the successor's alias
    premise.  The invariant reads only ps_stack and ps_spilled, so the
@@ -111,5 +112,37 @@ Theorem lineage_alias_successor:
       operand_val (frame_view fn ra vs') lo at =
       operand_val (frame_view fn ra vs') lo (normalize_operand dfg [] at)
 Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  gvs[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
+  drule_all regional_canonical_body_layout >> strip_tac >>
+  Cases_on `bb = HD fn.fn_blocks`
+  >- (qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+      simp_tac (srw_ss() ++ boolSimps.LET_ss) [generate_block_plan_def] >>
+      asm_rewrite_tac[] >>
+      pairarg_tac >> gvs[] >>
+      pairarg_tac >> gvs[] >>
+      simp_tac std_ss [AllCaseEqs()] >> strip_tac >> gvs[] >>
+      `cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []` by
+        metis_tac[regional_entry_no_preds] >>
+      `collect_phis (HD fn.fn_blocks).bb_instructions = []` by
+        metis_tac[regional_entry_structure] >>
+      drule entry_run_block >> disch_then (qspecl_then [`fuel`, `ctx`, `vs`] mp_tac) >>
+      strip_tac >>
+      `exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) = OK vs'` by metis_tac[] >>
+      drule ready_entry_param_execution_layout >>
+      disch_then (qspec_then `HD fn.fn_blocks` mp_tac) >> simp[] >> strip_tac >>
+      drule_at (Pat `exec_block _ _ _ _ = _`) exec_block_param_prefix_success >>
+      disch_then (qspecl_then [`LENGTH (get_params (HD fn.fn_blocks).bb_instructions)`, `0`] mp_tac) >>
+      simp[] >> strip_tac >>
+      `regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+         spill_base (HD fn.fn_blocks)
+         (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps2 /\
+       (!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+         operand_val (frame_view fn ra u) lo at =
+         operand_val (frame_view fn ra u) lo (normalize_operand (dfg_build_function fn) [] at))` by
+        (irule lineage_entry_params_alias >> metis_tac[]) >>
+      cheat) >>
   cheat
 QED
