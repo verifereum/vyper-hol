@@ -19,12 +19,20 @@ Theorem body_ifexp_mem_ok:
 Proof
   rpt gen_tac >> strip_tac >> simp[Once body_expr_mem_ok_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
-             ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)`
+  Cases_on `?e. (e = e2 \/ e = e3) /\
+             ~((int_calls_expr e = [] \/
+                same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+               post_value_type cenv e = expr_type e)`
   >- (qspecl_then [`cx`, `v5`, `e1`, `e2`, `e3`] mp_tac
         body_ifexp_widened_call_arm_mem >>
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       disch_then irule >> metis_tac[]) >>
+  `!e. (e = e2 \/ e = e3) ==> post_value_type cenv e = expr_type e` by
+    metis_tac[] >>
+  `~?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
+        ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
+    metis_tac[] >>
+  qpat_x_assum `~?e. _ /\ ~(_ /\ _)` kall_tac >>
   drule expr_body_pre_ifexp >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `expr_sim_mem ctx func cenv cx (BaseT BoolT) e1 es` by
