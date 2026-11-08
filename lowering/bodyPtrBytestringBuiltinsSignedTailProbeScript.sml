@@ -3,6 +3,7 @@ Ancestors
   bodyPtrBytestringBuiltinsSliceGuardFixture exprLowering compileEnv
   exprSimConvert representationCleanPtr valueEncodingProofs
   ptrDiscipline venomState words list finite_map bodyPtrDefs valueEncoding
+  fragExec venomExecSemantics ptrSafeRun venomInst
 
 (* Source abbreviations keep the selected nested conversion visible. *)
 Definition signed_tail_def:
@@ -141,4 +142,74 @@ Proof
   strip_tac >> irule signed_mask_rejects_taint >> simp[] >>
   drule_all signed_payload_load_taint >>
   simp[signed_iszero_preserves_data_taint]
+QED
+
+(* Compiler-derived fixture, not a hand-selected unsafe instruction list. *)
+Definition signed_probe_cs_def:
+  signed_probe_cs = (ARB:compile_state) with
+    <|cs_next_id := 0; cs_next_var := 0; cs_current_insts := []|>
+End
+
+Definition signed_probe_insts_def:
+  signed_probe_insts = (SND
+    (compile_type_convert (Var "b") (ConvBytestringToInt T 256 1)
+      signed_probe_cs)).cs_current_insts
+End
+
+Theorem signed_probe_insts_prefix:
+  TAKE 6 signed_probe_insts =
+    [mk_inst 0 MLOAD [Var "b"] ["%0"];
+     mk_inst 1 ADD [Var "b"; Lit 32w] ["%1"];
+     mk_inst 2 MLOAD [Var "%1"] ["%2"];
+     mk_inst 3 ISZERO [Var "%0"] ["%3"];
+     mk_inst 4 ISZERO [Var "%3"] ["%4"];
+     mk_inst 5 MUL [Var "%2"; Var "%4"] ["%5"]]
+Proof
+  EVAL_TAC
+QED
+
+(* Runtime abbreviation for the local loader probe only. *)
+Definition signed_probe_state_def:
+  signed_probe_state = (ARB:venom_state) with
+    <|vs_vars := FEMPTY |+ ("b",0w); vs_memory := REPLICATE 64 0w;
+      vs_allocas := FEMPTY |+ (99,(0,64)); vs_fmp := 64w;
+      vs_halted := F|>
+End
+
+Theorem signed_probe_runtime_prefix:
+  run_inst_seq (TAKE 5 signed_probe_insts) signed_probe_state =
+    OK (signed_probe_state with vs_vars :=
+      FEMPTY |+ ("b",0w) |+ ("%0",0w) |+ ("%1",32w) |+
+        ("%2",0w) |+ ("%3",1w) |+ ("%4",0w))
+Proof
+  EVAL_TAC >> simp[dimword_def, WORD_ADD_0] >> EVAL_TAC >> simp[]
+QED
+
+(* Prefix states and ghost folding are executable fixture abbreviations;
+   they link the check to the emitted prefix rather than detached operands. *)
+Definition signed_probe_after_def:
+  signed_probe_after n =
+    case run_inst_seq (TAKE n signed_probe_insts) signed_probe_state of
+      OK s => s | _ => signed_probe_state
+End
+
+Definition signed_probe_taint_def:
+  signed_probe_taint = entry_taint with t_mem := {32}
+End
+
+Definition signed_probe_ghost_def:
+  signed_probe_ghost fuel ctx PG =
+    FOLDL (\gt j. ghost_step fuel ctx PG (FST gt) (SND gt)
+      (EL j signed_probe_insts) (signed_probe_after j))
+      (FEMPTY |+ ("b",(0,64)), signed_probe_taint) [0;1;2;3;4]
+End
+
+Theorem signed_probe_executed_mask_rejected:
+  !fuel ctx PG fn.
+  ~taint_ok fn (SND (signed_probe_ghost fuel ctx PG))
+    (EL 5 signed_probe_insts) (signed_probe_after 5)
+Proof
+  rpt gen_tac >> EVAL_TAC >> simp[dimword_def, WORD_ADD_0] >>
+  EVAL_TAC >> simp[dimword_def, WORD_ADD_0] >> EVAL_TAC >> simp[] >>
+  qexists_tac `Var "%2"` >> simp[pred_setTheory.EXTENSION]
 QED
