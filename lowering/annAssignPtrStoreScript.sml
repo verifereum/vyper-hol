@@ -8,7 +8,7 @@ Ancestors
   representationCleanPtr valueEncodingProps valueEncoding list pred_set
   venomMemProofs valueEncodingProofs ptrSafeRun ptrDiscipline
   robustCopyTransportPtr localPtrsProps exprLoweringProps exprSimProps
-  loweringPosts compileEnv venomMemDefs emitHelper arithmetic
+  loweringPosts compileEnv loweringStateRelDefs venomMemDefs emitHelper arithmetic
 
 Theorem annassign_ghost_scope_update_ptr:
  !d cenv cx es G tn s sc rest id entry p sz.

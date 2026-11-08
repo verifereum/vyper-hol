@@ -2,7 +2,7 @@
 Theory annAssignPtrDestinationFrame
 Ancestors
  annAssignPtrDestination annAssignPtrExterior annAssignPtrScratch
- exprSimProps exprLoweringProps localPtrsProps compileEnv venomState
+ exprSimProps exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs venomState
  valueEncodingProps robustCopyTransportPtr ptrDiscipline finite_map pred_set
  list venomMemProofs valueEncodingProofs loweringPosts venomMemDefs
 

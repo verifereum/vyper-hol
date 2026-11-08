@@ -2,7 +2,7 @@
 Theory bodyPtrHashBuiltinsShaAlloc
 Ancestors bodyPtrHashBuiltinsShaAllocPath bodyPtrHashBuiltinsShaEmit
   ghostPcTransportPtr arithmetic arithmeticProps exprSimAlloc rich_list list
-  venomExecSemantics emitHelper context compileEnv exprLoweringProps
+  venomExecSemantics emitHelper context compileEnv loweringStateRelDefs exprLoweringProps
   emitHelperProps venomInst venomState loweringHalt exprSimHash
   fragExec instIdxIndep fragGasPathPtr words bodyPtrHashBuiltinsShaAllocInput
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsGhostFrame bodyPtrDefs

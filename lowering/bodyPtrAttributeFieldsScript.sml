@@ -2,7 +2,7 @@
 Theory bodyPtrAttributeFields
 Ancestors
   bodyPtrDefs exprSimFieldLayout accountsRelProps vyperStoragePlaceRegion
-  compileEnv valueEncodingProps vyperState list arithmetic
+  compileEnv loweringStateRelDefs valueEncodingProps vyperState list arithmetic
 
 (* The equivalence also supplies the converse embedding into the parent. *)
 Theorem struct_field_dead_bytes_iff:

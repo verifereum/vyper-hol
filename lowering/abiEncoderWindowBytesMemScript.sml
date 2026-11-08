@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowBytes abiEncoderWindowLeaves windowSequenceMem allocaFootprint
   abiEncoderBytesCode abiEncoderWindowSequence fragExecMem instMemFrontier
   abiEncoderRounding abiEncoderMemory emitHelperProps exprLoweringProps
-  compileEnv emitHelper freshWrites venomState venomExecSemantics venomInst
+  compileEnv loweringStateRelDefs emitHelper freshWrites venomState venomExecSemantics venomInst
   words list rich_list arithmetic
 
 Theorem window_seq_mem_checks_chain[local]:

@@ -2,7 +2,7 @@ Theory slotCopyExecution
 Ancestors
   copyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
   exprLoweringProps venomExecSemantics venomMemProps
-  compileEnv emitHelper venomInst venomState list rich_list words
+  compileEnv loweringStateRelDefs emitHelper venomInst venomState list rich_list words
 Libs
   wordsLib
 

@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowArrayLoop abiEncoderWindowArrayBody abiEncoderWindowChild
   abiEncoderWindowArrayInvariant abiEncoderWindowArrayLayout abiEncoderRegisteredEffect
   abiEncoderArrayLoopCode abiEncoderArrayBodyCode abiEncoderWindowContract
-  compileEnv freshWrites venomState finite_map pred_set list arithmetic
+  compileEnv loweringStateRelDefs freshWrites venomState finite_map pred_set list arithmetic
 
 Theorem window_array_root_owner_mono:
   window_array_root ctx func owner ids ei asz msz active ty avs src dst sb cap d s /\

@@ -2,7 +2,7 @@
 Theory externalReturnCopyArrayLoop
 Ancestors
   externalReturnCopyTransport externalReturnCopyFrame loweringPosts
-  valueEncoding valueEncodingProps venomState compileEnv arithmetic
+  valueEncoding valueEncodingDefs valueEncodingProps venomState compileEnv loweringStateRelDefs arithmetic
   fragExec emitHelper emitHelperProps context venomExecSemantics venomInst
   words finite_map exprLoweringProps pair
 

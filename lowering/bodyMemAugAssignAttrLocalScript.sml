@@ -20,7 +20,7 @@ Ancestors
   allocaFootprint fragGasSeqMem stmtSimProps localPtrsProps
   exprLoweringProps emitHelper emitHelperProps loweringSlice exprSimOps
   venomExecSemantics venomInst venomState
-  fragExec fragExecMem allocLimits valueEncoding freshWrites
+  fragExec fragExecMem allocLimits valueEncoding valueEncodingDefs freshWrites
   vyperLookup vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperAST
 Libs

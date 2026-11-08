@@ -1,6 +1,6 @@
 Theory placeStoreStatePatch
 Ancestors
-  exprLoweringProps accountsRelProps compileEnv vyperStorageBackend
+  exprLoweringProps accountsRelProps compileEnv loweringStateRelDefs vyperStorageBackend
   vfmState venomState venomMemDefs
 
 Theorem stmt_state_selected_storage_agree:

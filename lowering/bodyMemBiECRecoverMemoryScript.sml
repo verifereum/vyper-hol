@@ -3,7 +3,7 @@ Theory bodyMemBiECRecoverMemory
 Ancestors
   exprSimPrecompiles exprSimDefs exprSimProps exprLowering exprLoweringProps
   exprSimWordArgs exprSimHypsDefs vyperTyping vyperAST vyperTypeSystem
-  compileEnv list rich_list builtinMisc loweringPosts exprBopLowering
+  compileEnv loweringStateRelDefs list rich_list builtinMisc loweringPosts exprBopLowering
   vyperInterpreter vyperState vyperContext vyperValue vyperTypeInvariants
   valueEncoding integer_word words byte exprSimAlloc exprSimLiteralBuffer
   exprSimOps emitHelper emitHelperProps fragExec venomExecSemantics

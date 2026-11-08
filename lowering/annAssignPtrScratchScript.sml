@@ -2,8 +2,8 @@
 Theory annAssignPtrScratch
 Ancestors
  annAssignPtrCopy annAssignPtrSetup robustCopyTransportPtr valueEncodingProps
- valueEncoding venomMemProofs ptrDiscipline pred_set arithmetic
- bodyPtrDefs stmtSimProps exprSimProps localPtrsProps compileEnv venomState
+ valueEncoding valueEncodingDefs venomMemProofs ptrDiscipline pred_set arithmetic
+ bodyPtrDefs stmtSimProps exprSimProps localPtrsProps compileEnv loweringStateRelDefs venomState
  finite_map loweringPosts exprLoweringProps exprSimBufferStore venomExecSemantics venomMemDefs
  allocationPtr annAssignPtrAllocGhost
 

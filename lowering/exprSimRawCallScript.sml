@@ -31,7 +31,7 @@ Ancestors
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   exprSimRawCallCalldata rawCallFragPath valueCopy valueTypingMemoryProps
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper emitHelperProps compileEnv localPtrsProps valueEncoding
+  exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
   vyperAST vyperInterpreter vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperTypeExtCallSoundness vyperTypeEvalSoundness exprSimECArith exprSimUnwrap

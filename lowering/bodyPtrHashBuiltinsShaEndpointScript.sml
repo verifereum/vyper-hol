@@ -3,7 +3,7 @@ Theory bodyPtrHashBuiltinsShaEndpoint
 Ancestors bodyPtrHashBuiltinsShaPrefix bodyPtrHashBuiltinsGhostFrame
   ghostPcTransportPtr exprSimProps ptrDiscipline venomState venomInst
   bodyPtrHashBuiltinsGhostCompose
-  words arithmetic finite_map pred_set compileEnv exprLoweringProps freshWrites bodyPtrDefs
+  words arithmetic finite_map pred_set compileEnv loweringStateRelDefs exprLoweringProps freshWrites bodyPtrDefs
 
 Theorem hash_bytes_prepare_endpoint:
   !D ctx fn PG G tn s bb x sa len_op sl data_op sm b base cap n d cenv cx es.

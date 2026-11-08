@@ -1,6 +1,6 @@
 Theory placeDynExecutionLayout
 Ancestors
-  placeDynCompile fragExec loweringSlice compileEnv emitHelper exprLoweringProps
+  placeDynCompile fragExec loweringSlice compileEnv loweringStateRelDefs emitHelper exprLoweringProps
   list rich_list arithmetic emitHelperProps
 
 Theorem place_dyn_closed_slice[local]:

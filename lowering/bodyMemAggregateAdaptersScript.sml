@@ -3,7 +3,7 @@ Theory bodyMemAggregateAdapters
 Ancestors
   bodyMemAggregateLoops exprSimAggregateLayout exprSimAggregateLoops
   gasOutcome gasSummary valueEncoding vyperTypeABI bodyDeclWordMemory
-  exprLowering compileEnv exprLoweringProps emitHelperProps loweringSlice
+  exprLowering compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps loweringSlice
   localPtrsProps venomState venomMemDefs stmtSimProps stmtSimDefs
   stmtSimDeclCompose gasSummaryCompose fragGasMode fragGasPathMem fragExec
   exprSimDefs loweringPosts abiStaticAggregateProps exprBopSimProps
