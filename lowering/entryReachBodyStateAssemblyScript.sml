@@ -3,6 +3,9 @@ Theory entryReachBodyStateAssembly
 Ancestors
   entryReachBodyRegistrationIteration entryReachBodyRuntimeState
   entryReachBodyAllocationRoom entryReachBodyFmp
+  registeredArgumentScopeRel runtimeRegisteredFrameMetadata
+  externalBodyFrame entryReachBodyCallerResources abiAllocationHistory
+  entryReachBodyExactArrayLoop
   exprLoweringProps compileEnv compileVyper moduleLowering
   e2eDefs supportedProgram vyperInterpreter vyperState venomState
 
@@ -46,5 +49,27 @@ Theorem entry_body_state_assembly:
   stmt_state_rel unit.cu_context fn cef
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 t
 Proof
-  cheat
+  strip_tac >>
+  drule_all external_selected_args_distinct >> strip_tac >>
+  drule_all external_target_registered_reserved >> strip_tac >>
+  `local_ptrs_rel fn cef [env] t` by
+    (irule registered_arguments_local_ptrs >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_all external_registered_frame_metadata >>
+  disch_then (qspec_then `t` strip_assume_tac) >>
+  simp[stmt_state_rel_def] >> conj_tac
+  >- (irule entry_runtime_state_rel >>
+      goal_assum (drule_at Any) >> gvs[entry_loop_fields_def] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (irule entry_frontier_alloca_room >> conj_tac
+      >- (drule caller_runtime_allocation_budget >> simp[]) >>
+      qexists_tac `site` >> simp[]) >>
+  conj_tac
+  >- (irule entry_runtime_fmp_room >> goal_assum (drule_at Any) >>
+      qexistsl_tac [`rpolicy`, `tops`] >> simp[]) >>
+  conj_tac
+  >- simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
+  rpt strip_tac >> irule abi_alloca_history_function_size >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
