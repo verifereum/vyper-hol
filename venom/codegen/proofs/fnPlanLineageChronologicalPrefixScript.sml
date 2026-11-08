@@ -781,3 +781,183 @@ Proof
   `k + (n + p) + 1 = k + (n + (p + 1))` by decide_tac >>
   simp[rich_listTheory.DROP_DROP_T]
 QED
+
+Theorem collect_phis_prefix_index:
+  !xs i. i < LENGTH xs /\
+    (!j. j <= i ==> (EL j xs).inst_opcode = PHI) ==>
+    i < LENGTH (collect_phis xs)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  `h.inst_opcode = PHI` by
+    (qpat_x_assum `!j. j <= i ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  Cases_on `i` >> simp[livenessDefsTheory.collect_phis_def] >>
+  first_x_assum irule >> gvs[] >> rpt strip_tac >>
+  qpat_x_assum `!j. j <= SUC n ==> _` (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+
+Theorem well_formed_phi_worker_shape:
+  !bb. bb_well_formed bb ==>
+    LENGTH (collect_phis bb.bb_instructions) <= PRE (LENGTH bb.bb_instructions) /\
+    (!i. LENGTH (collect_phis bb.bb_instructions) <= i /\
+      i < LENGTH bb.bb_instructions ==>
+      (EL i bb.bb_instructions).inst_opcode <> PHI) /\
+    (LAST bb.bb_instructions).inst_opcode <> PHI /\
+    (!i. i < PRE (LENGTH bb.bb_instructions) ==>
+      (EL i bb.bb_instructions).inst_opcode <> JMP)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. i < LENGTH bb.bb_instructions /\
+      (EL i bb.bb_instructions).inst_opcode = PHI ==>
+      i < LENGTH (collect_phis bb.bb_instructions)` by
+    (rpt strip_tac >> irule collect_phis_prefix_index >> simp[] >>
+     rpt strip_tac >> Cases_on `j = i` >- simp[] >>
+     gvs[bb_well_formed_def] >> metis_tac[arithmeticTheory.LESS_OR_EQ]) >>
+  `bb.bb_instructions <> [] /\
+    (LAST bb.bb_instructions).inst_opcode <> PHI` by
+    (gvs[bb_well_formed_def] >> CCONTR_TAC >>
+     gvs[is_terminator_def]) >>
+  `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions /\
+    EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[LAST_EL]) >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qspec_then `bb.bb_instructions` (qx_choose_then `rest` assume_tac) collect_phis_prefix >>
+     pop_assum (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `LENGTH (collect_phis bb.bb_instructions) <> LENGTH bb.bb_instructions` by
+    (strip_tac >>
+     qspec_then `bb.bb_instructions` (qx_choose_then `rest` assume_tac) collect_phis_prefix >>
+     `rest = []` by
+       (qpat_x_assum `bb.bb_instructions = _ ++ rest`
+          (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+     `MEM (LAST bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+       metis_tac[APPEND_NIL, rich_listTheory.LAST_MEM] >>
+     metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  conj_tac >- decide_tac >> conj_tac >- metis_tac[arithmeticTheory.NOT_LESS] >>
+  simp[] >> rpt strip_tac >> CCONTR_TAC >>
+  gvs[bb_well_formed_def] >>
+  qpat_x_assum `!i. _ /\ is_terminator _ ==> _` (qspec_then `i` mp_tac) >>
+  simp[is_terminator_def] >> decide_tac
+QED
+
+Theorem incoming_join_native_ordinary_prefix:
+  !fn entry lbl bb pred pb dfg ps0 ops ps visited k qs.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    fn_reachable fn lbl /\ lbl <> entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,ps) /\
+    chronological_support fn visited ps /\ ~MEM bb.bb_label visited /\
+    native_live_boundary fn pb (LENGTH pb.bb_instructions) ps /\
+    LENGTH (collect_phis bb.bb_instructions) <= k /\
+    k <= PRE (LENGTH bb.bb_instructions) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) ps k qs ==>
+    (!v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE k bb.bb_instructions) /\ MEM v di.inst_outputs)) /\
+    native_live_boundary fn bb k qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_label = lbl /\ MEM bb fn.fn_blocks` by
+    metis_tac[venomExecPropsTheory.lookup_block_label, venomExecPropsTheory.lookup_block_MEM] >>
+  `bb <> HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def] >> metis_tac[]) >>
+  `canonical_param_prefix fn /\ bb_well_formed bb` by
+    (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  drule_all nonentry_block_no_params >> strip_tac >>
+  drule well_formed_phi_worker_shape >> strip_tac >>
+  `no_param_insts bb.bb_instructions` by
+    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
+  qabbrev_tac `p = LENGTH (collect_phis bb.bb_instructions)` >>
+  `k = p + (k-p)` by decide_tac >>
+  `?mid. native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions ps p mid /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) p (LENGTH bb.bb_instructions) (DROP p bb.bb_instructions) mid (k-p) qs` by
+    (qspecl_then [`k-p`, `p`] mp_tac
+       (INST_TYPE [alpha |-> ``:cfg_analysis``] native_inst_prefix_split) >>
+     simp[] >> disch_then drule >> simp[]) >>
+  `native_live_boundary fn bb p mid` by
+    (simp[Abbr `p`] >> irule incoming_join_native_phi_boundary >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+     simp[] >>
+     goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     metis_tac[]) >>
+  `!v. MEM (Var v) mid.ps_stack \/ Var v IN FDOM mid.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE p bb.bb_instructions) /\ MEM v di.inst_outputs)` by
+    (rpt strip_tac >>
+     irule (INST_TYPE [alpha |-> ``:cfg_analysis``] native_phi_worker_chronological_origins) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     simp[] >> goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[Abbr `p`] >> gvs[chronological_support_def] >> metis_tac[]) >>
+  qspec_then `k-p` mp_tac
+    (INST_TYPE [alpha |-> ``:cfg_analysis``] native_chronological_prefix) >>
+  disch_then (qspecl_then [`fn`, `visited`, `bb`, `p`] mp_tac) >>
+  simp[] >> disch_then irule >> conj_tac
+  >- (gvs[no_param_insts_def, EVERY_MEM] >> rpt strip_tac >>
+      `j < LENGTH bb.bb_instructions` by decide_tac >> metis_tac[EL_MEM]) >>
+  goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem incoming_join_native_worker_exit:
+  !fn entry lbl bb pred pb dfg ps0 ops ps visited chunks qs.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    fn_reachable fn lbl /\ lbl <> entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,ps) /\
+    chronological_support fn visited ps /\ ~MEM bb.bb_label visited /\
+    native_live_boundary fn pb (LENGTH pb.bb_instructions) ps /\
+    generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps = SOME (chunks,qs) ==>
+    chronological_support fn (bb.bb_label::visited) qs /\
+    native_live_boundary fn bb (LENGTH bb.bb_instructions) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_label = lbl /\ MEM bb fn.fn_blocks` by
+    metis_tac[venomExecPropsTheory.lookup_block_label, venomExecPropsTheory.lookup_block_MEM] >>
+  `bb <> HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def] >> metis_tac[]) >>
+  `canonical_param_prefix fn /\ bb_well_formed bb` by
+    (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
+  drule_all nonentry_block_no_params >> strip_tac >>
+  drule well_formed_phi_worker_shape >> strip_tac >>
+  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  `no_param_insts bb.bb_instructions` by
+    (Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def, EVERY_MEM]) >>
+  `native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (non_param_insts bb) ps 0 ps` by
+    metis_tac[native_inst_prefix_rules] >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+    native_worker_terminal_prefix >>
+  disch_then (qspecl_then [`non_param_insts bb`, `ps`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[DROP_0, arithmeticTheory.ADD_CLAUSES]) >> strip_tac >> gvs[] >>
+  `(!v. MEM (Var v) before.ps_stack \/ Var v IN FDOM before.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions) /\
+        MEM v di.inst_outputs)) /\
+    native_live_boundary fn bb (PRE (LENGTH bb.bb_instructions)) before` by
+    (irule incoming_join_native_ordinary_prefix >> simp[] >>
+     goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     metis_tac[]) >>
+  `~is_param_opcode (LAST bb.bb_instructions).inst_opcode` by
+    (gvs[no_param_insts_def, EVERY_MEM] >> metis_tac[rich_listTheory.LAST_MEM]) >>
+  irule native_chronological_terminal_step >> simp[] >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
