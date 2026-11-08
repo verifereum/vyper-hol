@@ -2,6 +2,7 @@ Theory loadElimJoinPlacement
 Ancestors
   loadElimDefs loadElimStaticGeneration loadElimOccurrenceCoverage
   loadElimReachableBoundary loadElimTransferProvenance
+  loadElimGeneratedSupport loadElimSolverProvenance loadElimBoundaryProvenance
   cfgDefs venomWf list rich_list pred_set finite_map
 
 (* Finite paths oriented from entry to consumer, using predecessor edges. *)
@@ -172,4 +173,77 @@ Theorem le_two_distinct_find_join:
 Proof
   strip_tac >> drule_all le_two_distinct_find_join_aux >>
   disch_then (qspec_then `{}` mp_tac) >> simp[]
+QED
+
+Theorem le_entry_sole_pred_boundary:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  fn_entry_label fn <> SOME lbl /\ cfg_preds_of (cfg_analyze fn) lbl = [p] ==>
+  df_at NONE (load_analyze ctx fn) lbl 0 =
+    df_boundary NONE (load_analyze ctx fn) p
+Proof
+  strip_tac >> drule_all le_analyze_entry_join >>
+  simp[le_joined_sole_pred]
+QED
+
+Theorem le_two_distinct_entry_find_join:
+  !xs. wf_function fn /\ xs <> [] /\ le_pred_path (cfg_analyze fn) xs /\
+  EVERY (\l. ?b. MEM b fn.fn_blocks /\ b.bb_label = l) xs /\
+  fn_entry_label fn = SOME (HD xs) /\
+  MEM (LAST xs) (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block (LAST xs) fn.fn_blocks = SOME bb /\
+  FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) (LAST xs) 0)) k = SOME ops /\
+  MEM a ops /\ MEM b ops /\ a <> b ==>
+  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs
+Proof
+  Induct using SNOC_INDUCT >- simp[] >> rpt strip_tac >>
+  `fn_entry_label fn <> SOME x` by metis_tac[loadElimActualGenerationTheory.le_analyze_entry_no_lookup,
+      LAST_SNOC, optionTheory.NOT_NONE_SOME] >>
+  Cases_on `xs = []` >- gvs[SNOC] >>
+  gvs[le_pred_path_snoc, EVERY_SNOC] >>
+  rename1 `MEM (LAST xs) (cfg_preds_of (cfg_analyze fn) lbl)` >>
+  `HD (SNOC lbl xs) = HD xs` by (Cases_on `xs` >> gvs[SNOC]) >>
+  Cases_on `?p. cfg_preds_of (cfg_analyze fn) lbl = [p]`
+  >- (pop_assum strip_assume_tac >>
+      `p = LAST xs` by gvs[] >> gvs[] >>
+      `df_at NONE (load_analyze ctx fn) lbl 0 =
+       df_boundary NONE (load_analyze ctx fn) (LAST xs)` by
+        simp[le_entry_sole_pred_boundary] >>
+      `MEM (find_join_block (cfg_analyze fn) {lbl} (LAST xs)) xs \/
+       find_join_block (cfg_analyze fn) {lbl} (LAST xs) IN {lbl}` by
+        (irule le_two_distinct_find_join_aux >> metis_tac[]) >>
+      `find_join_block (cfg_analyze fn) {} lbl =
+       find_join_block (cfg_analyze fn) {lbl} (LAST xs)` by
+        simp[Once find_join_block_def] >>
+      asm_rewrite_tac[] >> fs[] >> metis_tac[]) >>
+  simp[Once find_join_block_def] >>
+  Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> simp[] >>
+  Cases_on `t` >> gvs[]
+QED
+
+Theorem le_multivalue_point_find_join:
+  wf_function fn /\ xs <> [] /\ le_pred_path (cfg_analyze fn) xs /\
+  EVERY (\l. ?b. MEM b fn.fn_blocks /\ b.bb_label = l) xs /\
+  fn_entry_label fn = SOME (HD xs) /\
+  MEM (LAST xs) (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block (LAST xs) fn.fn_blocks = SOME bb /\
+  n <= LENGTH bb.bb_instructions /\
+  FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) (LAST xs) n)) k = SOME ops /\
+  1 < LENGTH ops ==>
+  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs
+Proof
+  strip_tac >>
+  `is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn)` by
+    metis_tac[loadElimConvergenceTheory.le_load_analyze_fixpoint,
+      loadElimSolverHelpersTheory.le_solver_process_def] >>
+  `ALL_DISTINCT ops` by
+    (drule_all le_analyze_point_supported >>
+     simp[loadElimSupportHelpersTheory.le_lattice_supported_def] >> metis_tac[]) >>
+  drule_all le_analyze_multivalue_origin >> strip_tac >>
+  `?a b. MEM a ops /\ MEM b ops /\ a <> b` by
+    (Cases_on `ops` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]) >>
+  irule le_two_distinct_entry_find_join >> metis_tac[]
 QED
