@@ -138,6 +138,20 @@ Proof
   metis_tac[]
 QED
 
+(* Input pruning changes no resources and preserves every live operand. *)
+Theorem abi_malformed_resource_input_unprune:
+  abi_malformed_resource_post ctx func cenv cx es next sites dstid
+    (abi_decoder_prune_vars next s) t ==>
+  abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
+Proof
+  simp[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
+  strip_tac >> simp[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      qexistsl_tac [`aid`, `cap`] >> simp[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  simp[GSYM abi_decoder_prune_vars_def, abi_decoder_prune_eval]
+QED
+
 (* Compiler ids select actual ALLOCA instructions, never address intervals. *)
 Definition abi_malformed_scratch_sites_def:
   abi_malformed_scratch_sites st en func =
