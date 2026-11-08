@@ -1242,6 +1242,9 @@ Resume compile_augassign_attr_local_mem[operator]:
   `word_value fv` by metis_tac[word_value_type_typed] >>
   `eval_operand (Var out) t = SOME (val_to_w256 fv)` by
     simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     metis_tac[word_value_type_word]) >>
   `eval_operand rhs u = SOME (val_to_w256 v)` by
     (irule expr_val_rel_word >> fs[expr_post_def] >>
      goal_assum (drule_at Any) >> simp[word_value_type_word]) >>

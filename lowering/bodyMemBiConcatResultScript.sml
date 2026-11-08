@@ -239,7 +239,8 @@ Resume concat_result_vv_sim_mem[frame]:
   qpat_assum `Abbrev (tf = _)`
     (fn th => pure_rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
   pure_rewrite_tac[vyperASTTheory.expr_type_def] >>
-  irule (BETA_RULE (REWRITE_RULE[LET_THM, vyperASTTheory.expr_type_def]
+  irule (BETA_RULE (REWRITE_RULE[LET_THM, vyperASTTheory.expr_type_def,
+                                 loweringPostsTheory.post_value_type_def]
     (Q.INST [`e` |-> `Builtin ann (Concat n) args`] (SPEC_ALL concat_suffix_post)))) >>
   asm_rewrite_tac[] >> suspend "suffix_conditions"
 QED

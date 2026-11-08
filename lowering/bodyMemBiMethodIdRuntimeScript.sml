@@ -122,7 +122,7 @@ Theorem method_id_literal_dynamic_vv_sim_mem:
 Proof
   simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   irule literal_buffer_vv_sim_mem >>
-  conj_tac >- simp[expr_type_def, is_word_type_def] >>
+  rpt conj_tac >> TRY (simp[expr_type_def, is_word_type_def] >> NO_TAC) >>
   qexistsl_tac [`TAKE 4 (Keccak_256_w64 x)`,
     `BaseTV (BytesT (Dynamic 4))`, `BytesV (TAKE 4 (Keccak_256_w64 x))`] >>
   `LENGTH (TAKE 4 (Keccak_256_w64 x)) = 4` by

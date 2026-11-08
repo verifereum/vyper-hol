@@ -22,9 +22,11 @@ Proof
   `expr_vv_sim_mem ctx func cenv cx ty' (Builtin ty (Concat n) es) es'` by
     (irule concat_result_vv_sim_mem >> metis_tac[]) >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
-  irule body_expr_sim_mem_of_vv_sim_mem >>
-  conj_tac
-  >- (rpt strip_tac >> drule concat_compile_shape >> simp[]) >>
-  conj_tac >- (qexists_tac `env` >> first_assum ACCEPT_TAC) >>
-  first_assum ACCEPT_TAC
+  match_mp_tac body_expr_sim_mem_of_vv_sim_mem >>
+  qexists_tac `env` >>
+  rpt conj_tac
+  >- simp[]
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >> drule concat_compile_shape >> simp[]
 QED

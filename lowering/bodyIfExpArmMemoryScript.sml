@@ -4,6 +4,7 @@ Ancestors
   exprSimHash exprSimBufferStore exprSimUnwrapProps exprSimMemDefs valueCopy
 
 Theorem ifexp_copy_endpoint:
+  post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
   read_result cx raw ee = (INL v,ee) /\

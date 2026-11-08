@@ -327,7 +327,7 @@ Proof
   gvs[read_slot_def]
 QED
 
-Theorem sized_type_widens_source[local]:
+Theorem sized_type_widens_source:
   type_widens_to tenv pt t /\ is_sized_type t ==> is_sized_type pt
 Proof
   strip_tac >> gvs[type_widens_to_def] >>
@@ -449,7 +449,7 @@ Proof
       vfmStateTheory.lookup_account_def]
 QED
 
-Theorem vv_holds_len_header_widens[local]:
+Theorem vv_holds_len_header_widens:
   !env func cenv cx es s pt t pvt tvt tv vv n ctx.
     stmt_state_rel ctx func cenv cx es s /\ vv_holds cenv cx pt tv vv es s /\
     type_widens_to env.type_defs pt t /\
@@ -517,7 +517,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem vv_holds_sized_length_success_widens[local]:
+Theorem vv_holds_sized_length_success_widens:
   !env cenv cx pt t r vv es s tvt.
     vv_holds cenv cx pt r vv es s /\ is_sized_type t /\
     evaluate_type (get_tenv cx) t = SOME tvt /\

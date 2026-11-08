@@ -10,7 +10,8 @@ Ancestors
 
 Theorem raw_log_dynamic_data_endpoint_mem[local]:
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
-  expr_type data = BaseT (BytesT (Dynamic cap)) /\ expr_type call = NoneT /\
+  expr_type data = BaseT (BytesT (Dynamic cap)) /\
+  post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
   gas_marked_exec T (ctx,func) (eval_exprs cx topics) (es,s0) marks (INL vs) mid (OK t) /\
   wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t /\
   gas_marked_exec T (ctx,func) (bind (eval_expr cx data) (read_result cx))
@@ -137,7 +138,8 @@ QED
 
 Theorem raw_log_fixed_data_endpoint_mem[local]:
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
-  expr_type data = BaseT (BytesT (Fixed 32)) /\ expr_type call = NoneT /\
+  expr_type data = BaseT (BytesT (Fixed 32)) /\
+  post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
   gas_marked_exec T (ctx,func) (eval_exprs cx topics) (es,s0) marks (INL vs) mid (OK t0) /\
   wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t /\
   gas_marked_exec T (ctx,func) (bind (eval_expr cx data) (read_result cx))
@@ -204,7 +206,8 @@ Theorem raw_log_fixed_allocated_mem[local]:
   expr_sim_mem ctx func cenv cx (expr_type data) data (mid with gas_obs := []) /\
   (!s. expr_sim_inv cenv cx env s ==> expr_body_pre cenv cx env data s) /\
   expr_sim_inv cenv cx env (mid with gas_obs := []) /\
-  expr_type data = BaseT (BytesT (Fixed 32)) /\ expr_type call = NoneT /\
+  expr_type data = BaseT (BytesT (Fixed 32)) /\
+  post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
   gas_marked_exec T (ctx,func) (eval_exprs cx topics) (es,s0) marks (INL vs) mid (OK t0) /\
   wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t /\
   compile_alloc_buffer 32 sm = (buf,sk) /\ buf.buf_operand = Var pvar /\

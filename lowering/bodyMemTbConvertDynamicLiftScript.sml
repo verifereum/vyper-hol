@@ -154,6 +154,8 @@ Theorem dynamic_vv_convert_summary[local]:
     (\res fin out. expr_exit res out)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
      simp[]) >>

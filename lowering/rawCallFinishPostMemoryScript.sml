@@ -16,7 +16,10 @@ Theorem raw_call_zero_finish_post_mem:
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es'
     (Value (if rev then NoneV else BoolV success)) (StackValue ann result) u
 Proof
-  strip_tac >> Cases_on `rev` >> gvs[]
+  strip_tac >>
+  qpat_assum `lowered_value_type _ _ = _`
+    (assume_tac o MATCH_MP post_value_type_lowered) >>
+  Cases_on `rev` >> gvs[]
   >- (conj_tac >- (irule raw_call_none_post >> simp[]) >>
       simp[vv_store_bound_def, is_word_type_def, expr_store_bound_def,
         read_result_def, return_def, vyperValueTheory.evaluate_type_def,
@@ -48,6 +51,8 @@ Theorem raw_call_bytes_finish_post_mem:
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) u
 Proof
   strip_tac >>
+  qpat_assum `lowered_value_type _ _ = _`
+    (assume_tac o MATCH_MP post_value_type_lowered) >>
   `vv_post ctx func ce cx e es sa sb s0 es' (Value (BytesV (TAKE cap bytes)))
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) u` by
     (irule raw_call_bytes_post >> simp[] >>

@@ -26,7 +26,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   conj_asm2_tac
   >- (irule body_expr_sim_mem_of_vv_sim_mem >>
-      reverse conj_tac >- (simp[] >> qexists_tac `env` >> simp[]) >>
+      first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
       rpt strip_tac >> drule compile_struct_literal_inv >> simp[]) >>
   rw[expr_vv_sim_mem_def] >>
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
@@ -143,7 +143,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   conj_asm2_tac
   >- (irule body_expr_sim_mem_of_vv_sim_mem >>
-      reverse conj_tac >- (simp[] >> qexists_tac `env` >> simp[]) >>
+      first_assum (irule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
       rpt strip_tac >> Cases_on `t`
       >- (drule compile_tuple_literal_inv >> simp[]) >>
       drule compile_array_literal_inv >> simp[]) >>

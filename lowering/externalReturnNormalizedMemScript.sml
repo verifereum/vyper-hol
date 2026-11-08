@@ -157,8 +157,11 @@ Resume external_frame_ret_value_normalized_run_mem[resources]:
   qpat_x_assum `cenv' = cenv''` (SUBST_ALL_TAC o SYM) >>
   drule_all normalize_external_frame_resources >>
   simp[GSYM (markerTheory.Abbrev_def)] >> strip_tac >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_assum `lowered_value_type cenv' e = expr_type e`
+    (assume_tac o MATCH_MP post_value_type_lowered) >>
+  qpat_assum `post_value_type cenv' e = _` (fn th =>
+    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [expr_post_def, th])) >>
   `sfields_tenv_consistent cenv'.ce_struct_fields (get_tenv cx) /\
    (!name fields. FLOOKUP cenv'.ce_struct_fields name = SOME fields ==>
       ALL_DISTINCT (MAP FST fields) /\

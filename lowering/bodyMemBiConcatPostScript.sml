@@ -137,6 +137,7 @@ Proof
 QED
 
 Theorem concat_suffix_post:
+  post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ val_wf tv v /\
   val_footprint tv v = 32 + LENGTH bytes /\

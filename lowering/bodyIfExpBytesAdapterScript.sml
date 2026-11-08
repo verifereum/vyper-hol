@@ -67,7 +67,10 @@ Theorem ifexp_bytestring_adapter_path_mem:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
 Proof
-  strip_tac >> drule_all ifexp_bytestring_adapter_parts >> strip_tac >>
+  strip_tac >>
+  `post_value_type ce e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_bytestring] >>
+  drule_all ifexp_bytestring_adapter_parts >> strip_tac >>
   `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by
     metis_tac[ci_mono_compile_alloc_buffer, ci_mono_unwrap_value,
               ci_mono_compile_store_bytestring, pairTheory.SND] >>
@@ -84,7 +87,8 @@ QED
 
 Resume ifexp_bytestring_adapter_path_mem[copy]:
   `expr_val_rel cx t v src u /\ stmt_state_rel ctx func ce cx ee u` by
-    (fs[expr_post_def] >> metis_tac[]) >>
+    (qpat_assum `post_value_type ce e = _` (fn th => fs[expr_post_def, th]) >>
+     metis_tac[]) >>
   drule_all ifexp_copy_source_bounds >> strip_tac >>
   `!z. src = Var z ==> not_fresh_at sn z` by
     (drule compiler_unwrap_value_var >>
@@ -148,6 +152,7 @@ QED
 Resume ifexp_bytestring_adapter_path_mem[canonical]:
   `evaluate_type (get_tenv cx) (expr_type e) = SOME tvt` by simp[] >>
   drule_at (Pat `wb_frame _ _ _ _ _`) ifexp_copy_endpoint >>
+  disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>

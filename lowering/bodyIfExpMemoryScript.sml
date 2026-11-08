@@ -216,6 +216,7 @@ QED
 
 
 Theorem ifexp_vv_post_of_expr_post_read[local]:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
   read_result cx tv es' = (INL v, es') ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv
@@ -229,6 +230,7 @@ Proof
 QED
 
 Theorem ifexp_finish_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\
@@ -244,7 +246,7 @@ Theorem ifexp_finish_post[local]:
     (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   strip_tac >>
-  irule (SRULE [vyperASTTheory.expr_type_def]
+  irule (SRULE [vyperASTTheory.expr_type_def, loweringPostsTheory.post_value_type_def]
     (Q.INST [`e` |-> `IfExp t c a b`] ifexp_vv_post_of_expr_post_read)) >>
   goal_assum (drule_at Any) >>
   irule expr_post_ifexp >>
@@ -253,6 +255,7 @@ Proof
 QED
 
 Theorem ifexp_arm_finish_mem[local]:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
@@ -329,7 +332,9 @@ Proof
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
   qexists_tac `v` >> simp[] >> conj_tac
-  >- (irule expr_post_ifexp >> metis_tac[]) >>
+  >- (`post_value_type cenv e = expr_type e` by
+        simp[loweringPostsTheory.post_value_type_word] >>
+      irule expr_post_ifexp >> metis_tac[]) >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   `alloca_history func ((update_var rv w u) with
       vs_inst_idx := LENGTH sy.cs_current_insts)` by
@@ -690,6 +695,8 @@ Resume compile_ifexp_word_vv_sim_mem[selected_raw_arm]:
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
      strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
      drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  `post_value_type cenv (if sel then a else b) = expr_type (if sel then a else b)` by
+    (Cases_on `sel` >> simp[]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
@@ -736,6 +743,7 @@ Theorem compile_ifexp_nonword_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     ~is_word_type t /\
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e) /\
     (is_word_type t ==> ?tvt. evaluate_type (get_tenv cx) t = SOME tvt) /\
     (~is_word_type t ==>
      !e. (e = a \/ e = b) ==>
@@ -865,6 +873,8 @@ Resume compile_ifexp_nonword_vv_sim_mem[converted_endpoint]:
      simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
      drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
   `expr_type (if sel then a else b) = expr_type a` by (Cases_on `sel` >> simp[]) >>
+  `post_value_type cenv (if sel then a else b) = expr_type (if sel then a else b)` by
+    (Cases_on `sel` >> simp[]) >>
   `MAP FDOM mid.scopes = MAP FDOM ee.scopes` by
     (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>

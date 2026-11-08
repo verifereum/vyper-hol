@@ -6,6 +6,7 @@ Ancestors
   exprSimUnwrapProps exprSimUnwrap exprLoweringProps fragGasPathMem
 
 Theorem ifexp_selected_arm_path_mem:
+  post_value_type ce e = expr_type e /\
   expr_type e = t /\ at = lowered_value_type ce e /\ ~is_word_type t /\
   (~same_memory_layout ce at t ==> is_bytestring_type t) /\
   compile_ifexp_arm ce t at vv sm = (op,sb) /\
@@ -45,15 +46,21 @@ Resume ifexp_selected_arm_path_mem[same]:
     metis_tac[vv_post_read_result] >>
   Cases_on `vv` >- suspend "stack" >>
   rename1 `LocatedValue vt p` >>
-  `vt = t` by fs[vv_post_def, vv_holds_def] >>
-  qpat_x_assum `vt = t` SUBST_ALL_TAC >>
   Cases_on `p.ptr_location = LocMemory` >- suspend "memory" >>
+  `vt = t` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value v) _ _` mp_tac >>
+     qpat_assum `post_value_type ce e = _`
+       (fn th => rewrite_tac[vv_post_def, vv_holds_def, th]) >>
+     qpat_assum `expr_type e = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `~(p.ptr_location = LocMemory)` (fn th => rewrite_tac[th]) >>
+     strip_tac >> simp[]) >>
+  qpat_x_assum `vt = t` SUBST_ALL_TAC >>
   `p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
    p.ptr_location = LocCode` by
     (Cases_on `p.ptr_location` >> fs[vv_post_def, vv_holds_def]) >>
   (`unwrap_value ce (LocatedValue t p) sm = (op,sb)` by
     fs[compile_ifexp_arm_def] >>
-  drule unwrap_copy_capacity_path_mem >>
+  drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_copy_capacity_path_mem >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[vv_operand_def] >> strip_tac >>
   qexists_tac `u` >> simp[] >>
@@ -71,7 +78,15 @@ Resume ifexp_selected_arm_path_mem[stack]:
 QED
 
 Resume ifexp_selected_arm_path_mem[memory]:
-  `vv_store_bound cx t t ee raw (LocatedValue t p) s` by
+  `vt = t \/ is_bytestring_type vt` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value v) _ _` mp_tac >>
+     qpat_assum `post_value_type ce e = _`
+       (fn th => rewrite_tac[vv_post_def, vv_holds_def, th]) >>
+     qpat_assum `expr_type e = _` (fn th => rewrite_tac[th]) >>
+     strip_tac >> simp[]) >>
+  `~is_word_type vt` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  `vv_store_bound cx t t ee raw (LocatedValue vt p) s` by
     (irule ifexp_arm_store_bound >> metis_tac[]) >>
   gvs[compile_ifexp_arm_def, unwrap_value_def, compileEnvTheory.comp_return_def] >>
   qexists_tac `s` >> simp[] >> conj_tac
@@ -105,6 +120,7 @@ Proof
 QED
 
 Theorem ifexp_selected_arm_outcome_mem:
+  post_value_type ce e = expr_type e /\
   expr_type e = t /\ ~is_word_type t /\
   (~same_memory_layout ce (lowered_value_type ce e) t ==> is_bytestring_type t) /\
   compile_ifexp_arm ce t (lowered_value_type ce e) vv sm = (op,sb) /\

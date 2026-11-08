@@ -144,7 +144,7 @@ Theorem convert_widen_copy_owned_mem:
   alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next /\
-  ~is_word_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n p) s.vs_memory /\
   val_footprint tv v <= k /\ ~s.vs_halted /\
@@ -172,9 +172,10 @@ Proof
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[same_blocks_def] >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       stmt_state_rel_inst_idx, lookup_var_def, local_region_def,
-       locals_kept_def, eval_operand_def] >>
+  qpat_assum `post_value_type _ _ = _` (fn th =>
+    simp[th, expr_post_def, expr_val_rel_def, expr_val_at_def,
+         stmt_state_rel_inst_idx, lookup_var_def, local_region_def,
+         locals_kept_def, eval_operand_def]) >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -213,6 +214,10 @@ Proof
   strip_tac >>
   drule_all convert_bytestring_lowered_widen_success >> strip_tac >>
   drule_all convert_bytestring_wf >> strip_tac >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   `?p. eval_operand x s = SOME p /\
        val_in_memory tv1 v (w2n p) s.vs_memory` by
     (gvs[expr_post_def, expr_val_rel_def] >>

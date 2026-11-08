@@ -291,8 +291,15 @@ Resume raw_call_prefix_sim_mem[data]:
   `(!x. addr = Var x ==> not_fresh_at s1 x) /\ (!l. addr <> Label l)` by
     fs[safe_operand_def] >>
   drule_all expr_post_operand_word >> strip_tac >>
+  `post_value_type cenv a = BaseT AddressT` by
+    (qpat_assum `expr_type a = _` (fn th => simp[th, is_word_type_def])) >>
+  `expr_val_rel cx (BaseT AddressT) av addr tA` by
+    (qpat_x_assum `expr_post _ _ _ _ a _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type cenv a = _`
+       (fn th => rewrite_tac[expr_post_def, th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   `expr_val_rel cx (BaseT AddressT) av addr tD` by
-    (fs[expr_post_def, expr_val_rel_def] >>
+    (fs[expr_val_rel_def] >>
      gvs[is_word_type_def, vyperValueTheory.evaluate_type_def]) >>
   `expr_body_pre cenv cx env d esD` by
     (irule expr_body_pre_raw_call_arg >>

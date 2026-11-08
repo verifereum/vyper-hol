@@ -189,6 +189,8 @@ Theorem aggregate_store_rebased_slice_mem_cursor:
     alloca_history func q /\ q.vs_alloca_next = s.vs_alloca_next
 Proof
   strip_tac >> (
+  `post_value_type ce e = expr_type e` by
+    simp[exprSimHypsTheory.post_value_type_no_calls, post_value_type_lowered] >>
   `compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb)` by
     metis_tac[aggregate_mem_store_lowered_elem] >>
   `eval_operand (Var x) s = SOME w` by
@@ -196,7 +198,11 @@ Proof
   `!z. op = Var z \/ Var x = Var z ==> not_fresh_at su z` by
     (rpt strip_tac >> gvs[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   drule_all aggregate_store_rebased_slice_run >> strip_tac >>
-  `expr_val_rel cx (expr_type e) v op s` by gvs[expr_post_def] >>
+  `expr_val_rel cx (expr_type e) v op s` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type ce e = _`
+       (fn th => rewrite_tac[expr_post_def, th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   `gas_path_mem ctx func s 0
      (OK (q with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
    alloca_history func (q with vs_inst_idx := LENGTH sb.cs_current_insts) /\

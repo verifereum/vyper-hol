@@ -51,7 +51,10 @@ Theorem aggregate_allocated_result_store_bound_mem:
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tv
     (LocatedValue (expr_type e) p) t
 Proof
-  strip_tac >> simp[] >> drule vv_store_bound_capacity >>
+  strip_tac >>
+  `post_value_type ce e = expr_type e` by
+    (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  simp[] >> drule vv_store_bound_capacity >>
   disch_then irule >> simp[] >> disj2_tac >>
   fs[alloca_inv_def, alloca_next_valid_def] >>
   `b + sz <= t.vs_alloca_next` by metis_tac[] >> decide_tac

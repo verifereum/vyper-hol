@@ -197,6 +197,9 @@ Resume compile_extract32_sim_mem[offset_normal]:
 QED
 Resume compile_extract32_sim_mem[suffix_entry]:
   `~(i < 0)` by intLib.ARITH_TAC >>
+  `post_value_type cenv off = expr_type off` by
+    (irule post_value_type_word >>
+     qpat_assum `expr_type off = BaseT _` (fn th => simp[th, is_word_type_def])) >>
   `eval_operand off_op t' = SOME (n2w (Num i))` by
     (qpat_assum `expr_post _ _ _ _ off _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>

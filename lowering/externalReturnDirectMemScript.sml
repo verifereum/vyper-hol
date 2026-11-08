@@ -118,8 +118,13 @@ Resume external_frame_ret_value_direct_run_mem[dispatch]:
     (drule return_value_code_prefix >> disch_then drule >> strip_tac >>
      drule (cj 2 compile_expr_grows) >> strip_tac >>
      drule_all fn_has_code_split >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `post_value_type cenv' e = expr_type e` by
+    (qpat_assum `lowered_value_type cenv' e = expr_type e \/ _` strip_assume_tac
+     >- (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+     irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
+  qpat_assum `post_value_type cenv' e = _` (fn th =>
+    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [expr_post_def, th])) >>
   Cases_on `cenv'.ce_raw_return`
   >- suspend "raw" >>
   Cases_on `is_word_type ret`

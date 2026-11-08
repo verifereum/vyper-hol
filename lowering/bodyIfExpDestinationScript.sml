@@ -71,6 +71,7 @@ Proof
 QED
 
 Theorem ifexp_unwrap_destination[local]:
+  post_value_type ce e = expr_type e /\
   unwrap_value ce vv sm = (src,sn) /\ fn_has_code sm sn func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sm /\
   origin.cs_next_id <= sm.cs_next_id /\
@@ -125,6 +126,7 @@ Proof
 QED
 
 Theorem ifexp_allocate_unwrap_path:
+  post_value_type ce e = expr_type e /\
   compile_alloc_buffer cap sa = (buf,sm) /\ fn_has_code sa sm func /\
   unwrap_value ce vv sm = (src,sn) /\ fn_has_code sm sn func /\
   vv_post ctx func ce cx e es origin sa s0 ee raw vv s /\

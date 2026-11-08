@@ -23,7 +23,8 @@ QED
 Theorem return_located_mismatch_mem:
   expr_vv_sim_mem ctx func cenv cx ret e es /\
   (!sa vv sm. compile_expr cenv ret e sa = (vv,sm) ==>
-    ?declared p. vv = LocatedValue declared p /\ declared <> expr_type e) ==>
+    ?declared p. vv = LocatedValue declared p /\
+      declared <> post_value_type cenv e /\ ~is_bytestring_type declared) ==>
   stmt_frag_mem d ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ret (Return (SOME e)))
     (eval_stmt cx (Return (SOME e))) es
