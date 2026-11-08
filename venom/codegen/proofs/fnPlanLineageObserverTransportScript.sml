@@ -1296,6 +1296,25 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[]
 QED
 
+Theorem native_inst_prefix_between:
+  !lv dfg cfg fn lbl halt n len xs incoming a seed k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt n len xs incoming a seed /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt n len xs incoming k qs /\ a <= k ==>
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt (n+a) len (DROP a xs) seed (k-a) qs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k = a + (k-a)` by decide_tac >>
+  `?mid. fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt n len xs incoming a mid /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt (n+a) len (DROP a xs) mid (k-a) qs` by
+    (irule fnPlanLineageEntryProductionTheory.native_inst_prefix_split >> simp[]) >>
+  metis_tac[fnPlanLineageEntryProductionTheory.native_inst_prefix_deterministic]
+QED
+
 Theorem native_seeded_ordinary_dead_stack:
   !fn bb dfg a k incoming seed qs v.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
@@ -1318,18 +1337,7 @@ Theorem native_seeded_ordinary_dead_stack:
       (LENGTH (get_params bb.bb_instructions)+k))
 Proof
   rpt gen_tac >> strip_tac >>
-  `k = a + (k-a)` by decide_tac >>
-  `?mid. fnPlanLineageEntryProduction$native_inst_prefix
-      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
-      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming a mid /\
-    fnPlanLineageEntryProduction$native_inst_prefix
-      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
-      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions)+a)
-      (LENGTH bb.bb_instructions) (DROP a (non_param_insts bb)) mid (k-a) qs` by
-    (irule fnPlanLineageEntryProductionTheory.native_inst_prefix_split >> simp[]) >>
-  `mid = seed` by metis_tac[fnPlanLineageEntryProductionTheory.native_inst_prefix_deterministic] >>
-  gvs[] >>
+  drule_all native_inst_prefix_between >> strip_tac >>
   `!j. j < k-a ==> (EL j (DROP a (non_param_insts bb))).inst_opcode <> PHI /\
       ~MEM v (EL j (DROP a (non_param_insts bb))).inst_outputs` by
     (rpt strip_tac >>
@@ -1341,3 +1349,142 @@ Proof
   drule native_ordinary_interval_dead_stack >>
   disch_then (qspecl_then [`bb`,`a`,`v`] mp_tac) >> simp[]
 QED
+
+Theorem native_seeded_phi_stack_absent:
+  !lv dfg cfg fn lbl halt n len xs incoming a seed k qs v.
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt n len xs incoming a seed /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt n len xs incoming k qs /\ a <= k /\
+    ~MEM (Var v) seed.ps_stack /\
+    (!j. a <= j /\ j < k ==> (EL j xs).inst_opcode = PHI /\
+      (EL j xs).inst_outputs <> [] /\ ~MEM v (EL j xs).inst_outputs) ==>
+    ~MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k <= LENGTH xs` by
+    metis_tac[fnPlanLineageEntryProductionTheory.native_inst_prefix_bound] >>
+  drule_all native_inst_prefix_between >> strip_tac >>
+  drule native_phi_interval_stack_absent >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >>
+  impl_tac >- (rpt strip_tac >>
+    `i < LENGTH (DROP a xs)` by (simp[] >> decide_tac) >>
+    gvs[EL_DROP] >> first_x_assum irule >> decide_tac) >> simp[]
+QED
+
+Theorem native_seeded_phi_body_dead_stack:
+  !fn bb dfg a k incoming seed qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ a <= k /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming a seed /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k qs /\
+    ~MEM (Var v) seed.ps_stack /\
+    (LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (MAX (LENGTH (get_params bb.bb_instructions)+a)
+          (LENGTH (collect_phis bb.bb_instructions))))) /\
+    (!j. a <= j /\ j < k ==> ~MEM v (EL j (non_param_insts bb)).inst_outputs) ==>
+    ~MEM (Var v) qs.ps_stack /\
+    (LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k <= LENGTH (non_param_insts bb)` by
+    metis_tac[fnPlanLineageEntryProductionTheory.native_inst_prefix_bound] >>
+  Cases_on `LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+a`
+  >- suspend "ordinary" >>
+  `collect_phis bb.bb_instructions <> []` by (strip_tac >> gvs[]) >>
+  `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
+    metis_tac[fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix] >>
+  gvs[] >>
+  `!j. j < LENGTH (collect_phis bb.bb_instructions) ==>
+    (EL j bb.bb_instructions).inst_opcode = PHI /\
+    (EL j bb.bb_instructions).inst_outputs <> []` by
+    suspend "phi_shape" >>
+  Cases_on `k <= LENGTH (collect_phis bb.bb_instructions)`
+  >- suspend "phi_only" >>
+  suspend "crossing"
+QED
+
+Resume native_seeded_phi_body_dead_stack[ordinary]:
+  `MAX (LENGTH (get_params bb.bb_instructions)+a)
+    (LENGTH (collect_phis bb.bb_instructions)) = LENGTH (get_params bb.bb_instructions)+a` by simp[arithmeticTheory.MAX_DEF] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k` by decide_tac >>
+  gvs[] >>
+  irule (SRULE [arithmeticTheory.ADD_COMM] native_seeded_ordinary_dead_stack) >>
+  simp[] >> qexistsl [`a`,`dfg`,`incoming`,`seed`] >> simp[] >>
+  rpt strip_tac >>
+  qspecl_then [`fn`,`bb`,`a`] mp_tac
+    fnPlanLineageEntryProductionTheory.ready_block_ordinary_suffix_layout >>
+  simp[] >> qexists `j` >> simp[] >> decide_tac
+QED
+
+Resume native_seeded_phi_body_dead_stack[phi_shape]:
+  qspec_then `bb.bb_instructions` (qx_choose_then `tail` assume_tac)
+    fnPlanLineageLivenessTheory.collect_phis_prefix >>
+  rpt gen_tac >> strip_tac >>
+  `EL j bb.bb_instructions = EL j (collect_phis bb.bb_instructions)` by (qpat_assum `bb.bb_instructions = _ ++ _`
+      (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+      simp[EL_APPEND1]) >>
+  `(EL j bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[livenessTransferProofsTheory.collect_phis_mem, EL_MEM] >>
+  `j < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `bb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst_wf (EL j bb.bb_instructions)` by
+    metis_tac[fnPlanLineageQuarantineTheory.ready_member_instruction_shape, EL_MEM] >>
+  gvs[venomWfTheory.inst_wf_def] >> Cases_on `(EL j bb.bb_instructions).inst_outputs` >> gvs[]
+QED
+
+Resume native_seeded_phi_body_dead_stack[phi_only]:
+  reverse conj_tac >-
+    (strip_tac >> `k = LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+     gvs[arithmeticTheory.MAX_DEF]) >>
+  `!j. a <= j /\ j < k ==> (EL j bb.bb_instructions).inst_opcode = PHI /\
+    (EL j bb.bb_instructions).inst_outputs <> [] /\
+    ~MEM v (EL j bb.bb_instructions).inst_outputs` by
+    (rpt strip_tac >>
+     `j < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >> metis_tac[]) >>
+  drule_all native_seeded_phi_stack_absent >> simp[]
+QED
+
+Resume native_seeded_phi_body_dead_stack[crossing]:
+  qabbrev_tac `p = LENGTH (collect_phis bb.bb_instructions)` >>
+  `a <= p /\ p <= k /\ k = p + (k-p)` by (simp[Abbr `p`] >> decide_tac) >>
+  `?mid. fnPlanLineageEntryProduction$native_inst_prefix
+    (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+    0 (LENGTH bb.bb_instructions) bb.bb_instructions incoming p mid` by
+    (`fnPlanLineageEntryProduction$native_inst_prefix
+       (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+       0 (LENGTH bb.bb_instructions) bb.bb_instructions incoming (p+(k-p)) qs` by
+       metis_tac[] >>
+     drule fnPlanLineageEntryProductionTheory.native_inst_prefix_split >>
+     metis_tac[]) >>
+  `!j. a <= j /\ j < p ==> (EL j bb.bb_instructions).inst_opcode = PHI /\
+    (EL j bb.bb_instructions).inst_outputs <> [] /\
+    ~MEM v (EL j bb.bb_instructions).inst_outputs` by
+    (rpt strip_tac >> `j < k` by decide_tac >> metis_tac[]) >>
+  `~MEM (Var v) mid.ps_stack` by
+    (drule_all native_seeded_phi_stack_absent >> simp[]) >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label p)` by
+    gvs[arithmeticTheory.MAX_DEF] >>
+  `!j. p <= j /\ j < k ==> (EL j bb.bb_instructions).inst_opcode <> PHI /\
+    ~MEM v (EL j bb.bb_instructions).inst_outputs` by
+    (rpt gen_tac >> strip_tac >> reverse conj_tac >- metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
+     qspecl_then [`fn`,`bb`,`p`] mp_tac
+       fnPlanLineageEntryProductionTheory.ready_block_ordinary_suffix_layout >>
+     simp[]) >>
+  simp[] >>
+  qspecl_then [`fn`,`bb`] mp_tac native_seeded_ordinary_dead_stack >>
+  simp[] >> disch_then drule >>
+  metis_tac[]
+QED
+
+Finalise native_seeded_phi_body_dead_stack
