@@ -27,8 +27,11 @@ and no bytecode metadata. The generator requires a clean Vyper checkout, clones
 only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
-Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports two upstream fixes that the HOL lowering follows:
+Before installing, the generator applies `patches/*.patch` to the pinned
+revision in C-locale filename order, using `git apply` for each file. A failed
+patch stops generation; an empty series leaves the pin unchanged. Each file
+backports one upstream PR so independent fixes can be added separately and
+removed when a new pin includes them. The current series contains:
 
 - vyperlang/vyper#5127: an external call sends the selector and the encoded
   arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
@@ -39,6 +42,18 @@ revision. It backports two upstream fixes that the HOL lowering follows:
 
 Only fixtures with external calls that take arguments change. The
 provenance's `vyper_commit` names the unpatched base revision.
+
+Name a new patch `<upstream-pr>-<slug>.patch`, and start it with the upstream
+PR URL and its merge status (including the merge commit when merged). Keep
+only that PR's backport in the file, adapted to apply after earlier filenames.
+When migrating a branch with extra hunks in the old `vyper-pin.patch`, move
+those hunks into their own PR files and remove the old file; do not duplicate
+patches already in the series. Compare the old and new patched compiler trees
+at `VYPER_PIN` to check that this migration preserves the oracle inputs.
+
+On a repin, remove patches whose fixes the new pin contains, then check that
+the remaining series applies and regenerate the oracles. A PR having merged
+upstream does not by itself mean its fix is in `VYPER_PIN`.
 
 HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with
 `evm_version="prague"` (`ORACLE_EVM_VERSION`), the newest version the pinned
