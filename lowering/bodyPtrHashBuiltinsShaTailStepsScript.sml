@@ -56,8 +56,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
     source_memory_read_ranges_def, source_memory_write_ranges_def,
     allocas_from_def, step_inst_non_invoke, mk_inst_def] >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  simp[] >> Cases_on `eval_operand op s` >> simp[] >>
+  simp[step_inst_base_opcode_eqs, ] >> Cases_on `eval_operand op s` >> simp[] >>
   rename1 `eval_operand op s = SOME w` >>
   Cases_on `w = 0w` >> simp[]
 QED

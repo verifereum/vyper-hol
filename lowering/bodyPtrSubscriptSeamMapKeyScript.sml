@@ -32,8 +32,7 @@ Proof
   `b < dimword (:256)` by decide_tac >>
   `step_inst_base (mk_inst ia ADD [Var x;Lit 32w] [p]) s =
     OK (update_var p (n2w b+32w) s)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   simp[hash_add_ghost] >>
@@ -63,8 +62,7 @@ Resume mapping_key_hash_triple[load]:
     gvs[Abbr `s1`, update_var_def, GSYM mem_word_at_eq_mload] >>
   `step_inst_base (mk_inst il MLOAD [Var x] [l]) s1 =
     OK (update_var l (n2w n) s1)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule ptr_inst_ok_mload >> simp[]) >>
   simp[hash_mload_ghost] >>

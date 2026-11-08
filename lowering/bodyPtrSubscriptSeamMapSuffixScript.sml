@@ -85,8 +85,7 @@ Proof
     (simp[ptr_covers_def] >> qexists `n2w b` >> simp[] >> decide_tac) >>
   `step_inst_base (mk_inst is MSTORE [Var p;slot] []) s =
     OK (mstore b w0 s)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule ptr_inst_ok_mstore_taint_transparent >> simp[]) >>
   `step_prov PG G (mk_inst is MSTORE [Var p;slot] []) (mstore b w0 s) = G /\
@@ -107,8 +106,7 @@ Resume mapping_slot_hash_tail[add]:
         op_taint_def] >>
   `step_inst_base (mk_inst ip ADD [Var p;Lit 32w] [q]) s1 =
      OK (update_var q (n2w b+32w) s1)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   simp[hash_add_ghost] >>
@@ -134,8 +132,7 @@ Resume mapping_slot_hash_tail[store]:
     (simp[ptr_covers_def] >> qexists `n2w (b+32)` >> simp[] >> decide_tac) >>
   `step_inst_base (mk_inst ik MSTORE [Var q;key] []) s2 =
      OK (mstore (b+32) w1 s2)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   conj_tac >- (irule ptr_inst_ok_mstore_taint_transparent >> simp[]) >>
   `step_prov PG G2 (mk_inst ik MSTORE [Var q;key] []) (mstore (b+32) w1 s2) = G2 /\

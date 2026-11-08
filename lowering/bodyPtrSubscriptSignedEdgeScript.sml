@@ -12,8 +12,7 @@ Theorem slt_step:
   step_inst_base (mk_inst id SLT [left;right] [out]) s =
     OK (update_var out (bool_to_word (word_lt a b)) s)
 Proof
-  strip_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
-  simp[mk_inst_def, exec_pure2_def]
+  strip_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]
 QED
 
 Theorem slt_inst_check:
