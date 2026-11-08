@@ -3,7 +3,7 @@ Theory mmLocalScanProofs
 Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner allocaRemapSSA
-  venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
+  cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
 Libs
   wordsLib finite_mapLib
 
@@ -2001,7 +2001,7 @@ QED
 
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
-  fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
+  fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k < 4 /\
   FOLDL (\(b,t) phase. case phase of
       NONE => transform_block_memzero_supply (dfg_build_function fn0) t b
@@ -2013,7 +2013,7 @@ Theorem mm_local_stage_correct:
       NONE => transform_block_memzero_supply (dfg_build_function fn0) sk bb
     | SOME m => transform_block_mode_supply (dfg_build_function fn0) m sk bb) = (bb',sk') /\
   fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks ==>
-  fn_inst_wf fn' /\ wf_function fn' /\ wf_ssa fn' /\
+  fn_inst_wf fn' /\ wf_function fn' /\ wf_ssa fn' /\ all_reachable fn' /\
   ir_supply_covers_fn sk' fn' /\
   fn_entry_label fn' = fn_entry_label fn0 /\
   (!fuel ctx eom s.
