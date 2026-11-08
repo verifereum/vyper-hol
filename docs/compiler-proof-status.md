@@ -55,5 +55,9 @@ fuel agrees with the same oracle. The other O1 stages retain the list.
 `runtime_gas_replay` and `deploy_gas_replay` fix the corresponding
 compiler phases and EVM entry state. The conclusions existentially choose
 a mask `marks` and run the source with `gas_explicit marks gs` from that
-certified list `gs`. These results
-compose the existing stage proofs; they do not remove their admissions.
+certified list `gs`. The mask is existential and has no exported length
+bound: `gas_prefix` pads exhausted readings with zero, so additional zero
+observations remain permitted. These results compose the existing stage
+proofs; they do not remove their admissions. The configured correctness
+owner imports both call and deployment correctness, so the existing
+`vyperLoweringHol` rollup reaches the constructor proof dependencies too.

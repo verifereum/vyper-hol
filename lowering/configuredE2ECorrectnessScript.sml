@@ -10,7 +10,7 @@
 
 Theory configuredE2ECorrectness
 Ancestors
-  e2eCorrectness compilePhasesProps
+  e2eCorrectness e2eDeployCorrectness compilePhasesProps
 
 (* Structural phase proofs now live below the semantic composition layer.
    These public re-exports preserve their original statements. *)
