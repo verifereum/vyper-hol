@@ -36,14 +36,14 @@ git -C "$generator/vyper-src" checkout --detach FETCH_HEAD
 git -C "$generator/vyper-src" config core.abbrev 8
 uv tool run --from uv==0.10.11 uv venv --managed-python --python 3.11.11 \
   "$generator/venv"
-UV_CONSTRAINT="$PWD/lowering/defs/bytecode/python-o1-oracle-constraints.txt" \
-UV_BUILD_CONSTRAINT="$PWD/lowering/defs/bytecode/python-o1-oracle-constraints.txt" \
+UV_CONSTRAINT="$PWD/bytecode/python-o1-oracle-constraints.txt" \
+UV_BUILD_CONSTRAINT="$PWD/bytecode/python-o1-oracle-constraints.txt" \
 SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+9362e36b \
   uv tool run --from uv==0.10.11 uv pip install \
     --python "$generator/venv/bin/python" "$generator/vyper-src"
 env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
   "$generator/venv/bin/python" -I \
-  lowering/defs/bytecode/python_o1_bytecode_oracle.py \
+  bytecode/python_o1_bytecode_oracle.py \
   --expected-commit "$(cat VYPER_PIN)" --expected-python 3.11.11 \
   --generator-uv 0.10.11 --expected-install-root "$generator/venv" \
   --sources tests/fixtures/load_timing/sources \
