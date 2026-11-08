@@ -78,14 +78,14 @@ Resume ifexp_selected_arm_path_mem[stack]:
 QED
 
 Resume ifexp_selected_arm_path_mem[memory]:
-  `vt = t \/ is_bytestring_type vt` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value v) _ _` mp_tac >>
+  `~is_word_type vt` by
+    (`vt = t \/ is_bytestring_type vt` suffices_by
+       metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value v) _ _` mp_tac >>
      qpat_assum `post_value_type ce e = _`
        (fn th => rewrite_tac[vv_post_def, vv_holds_def, th]) >>
      qpat_assum `expr_type e = _` (fn th => rewrite_tac[th]) >>
      strip_tac >> simp[]) >>
-  `~is_word_type vt` by
-    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
   `vv_store_bound cx t t ee raw (LocatedValue vt p) s` by
     (irule ifexp_arm_store_bound >> metis_tac[]) >>
   gvs[compile_ifexp_arm_def, unwrap_value_def, compileEnvTheory.comp_return_def] >>
