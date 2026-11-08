@@ -5396,17 +5396,34 @@ Proof
   simp[stack_pop_def, release_dead_spills_stack]
 QED
 
-Theorem emit_reorder_pop_next_live_upper:
-  !opc operands selected nl dfg ps iops ps1 rops ps2.
+Theorem emit_input_plan_unselected_resource_nonincrease:
+  !operands opc nl ps ops qs x.
+    ~MEM x operands /\ emit_input_plan opc operands nl ps = (ops,qs) ==>
+    LIST_ELEM_COUNT x qs.ps_stack + (if x IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT x ps.ps_stack + (if x IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  Induct >> rpt gen_tac >- simp[emit_input_plan_def] >>
+  strip_tac >>
+  namedCases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` ["step_ops mid"] >>
+  namedCases_on `emit_input_plan opc operands nl mid` ["rest_ops after"] >>
+  gvs[emit_input_plan_cons] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qspecl_then [`opc`, `operand_vars operands ++ nl`, `h`, `ps`, `x`]
+    mp_tac emit_one_input_inventory_upper >> simp[] >>
+  strip_tac >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem emit_reorder_pop_observer_live_upper:
+  !opc operands selected nl dfg ps iops ps1 rops ps2 v.
     LENGTH operands <= 16 /\ PERM operands selected /\
-    (!v. MEM v (operand_vars operands ++ nl) ==>
-      LIST_ELEM_COUNT (Var v) ps.ps_stack +
+    MEM v nl /\
+    (LIST_ELEM_COUNT (Var v) ps.ps_stack +
         (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) /\
     (!v. MEM (Var v) operands ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
     emit_input_plan opc operands nl ps = (iops,ps1) /\
     reorder_plan dfg selected ps1 = (rops,ps2) ==>
-    !v. MEM v nl ==>
       LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) +
         (if Var v IN FDOM ps2.ps_spilled then 1 else 0) <= 1
 Proof
@@ -5422,7 +5439,6 @@ Proof
   `!x. MEM x selected ==>
     LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x ps1.ps_stack` by metis_tac[] >>
   drule_all reorder_plan_bounded_materialised_suffix >> strip_tac >>
-  gen_tac >> strip_tac >>
   `LIST_ELEM_COUNT (Var v) ps1.ps_stack +
     (if Var v IN FDOM ps1.ps_spilled then 1 else 0) <=
     LIST_ELEM_COUNT (Var v) selected + 1` by
@@ -5450,6 +5466,24 @@ Proof
     qpat_x_assum `LIST_ELEM_COUNT (Var v) ps2.ps_stack + _ <= _`
       (mp_tac o ONCE_REWRITE_RULE [th])) >>
   simp[elem_count_append]
+QED
+
+Theorem emit_reorder_pop_next_live_upper:
+  !opc operands selected nl dfg ps iops ps1 rops ps2.
+    LENGTH operands <= 16 /\ PERM operands selected /\
+    (!v. MEM v (operand_vars operands ++ nl) ==>
+      LIST_ELEM_COUNT (Var v) ps.ps_stack +
+        (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1) /\
+    (!v. MEM (Var v) operands ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    !v. MEM v nl ==>
+      LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) +
+        (if Var v IN FDOM ps2.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt strip_tac >> irule emit_reorder_pop_observer_live_upper >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM_APPEND]
 QED
 
 Theorem stack_pop_elem_count_le:
@@ -5694,6 +5728,44 @@ Proof
   irule selected_suffix_resource_extinction >> simp[] >>
   qexists_tac `stack_pop (LENGTH selected) ps2.ps_stack` >>
   metis_tac[emit_reorder_plan_bounded_core_suffix]
+QED
+
+Theorem emit_reorder_pop_observer_upper:
+  !opc operands selected nl dfg ps iops ps1 rops ps2 v.
+    LENGTH operands <= 16 /\ PERM operands selected /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 /\
+    (!w. MEM (Var w) operands ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    emit_input_plan opc operands nl ps = (iops,ps1) /\
+    reorder_plan dfg selected ps1 = (rops,ps2) ==>
+    LIST_ELEM_COUNT (Var v) (stack_pop (LENGTH selected) ps2.ps_stack) +
+      (if Var v IN FDOM ps2.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM v nl`
+  >- (irule emit_reorder_pop_observer_live_upper >>
+      goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >> simp[]) >>
+  Cases_on `MEM (Var v) operands`
+  >- (drule_all emit_reorder_pop_last_use_extinction >> simp[]) >>
+  `!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
+  drule_all available_input_plan_length >> strip_tac >>
+  drule sortingTheory.PERM_LENGTH >> strip_tac >>
+  `LENGTH selected <= LENGTH ps1.ps_stack` by simp[] >>
+  drule_all reorder_plan_resource_nonincrease >>
+  disch_then (qspec_then `Var v` assume_tac) >>
+  drule_all emit_input_plan_unselected_resource_nonincrease >> strip_tac >>
+  qspecl_then [`LENGTH selected`, `ps2.ps_stack`, `Var v`]
+    mp_tac stack_pop_elem_count_le >>
+  strip_tac >>
+  qpat_x_assum `LIST_ELEM_COUNT (Var v) ps.ps_stack + _ <= 1` mp_tac >>
+  qpat_x_assum `LIST_ELEM_COUNT (Var v) ps1.ps_stack + _ <= _` mp_tac >>
+  qpat_x_assum `LIST_ELEM_COUNT (Var v) ps2.ps_stack + _ <= _` mp_tac >>
+  qpat_x_assum `LIST_ELEM_COUNT (Var v) (stack_pop _ _) <= _` mp_tac >>
+  decide_tac
 QED
 
 (* Exact copy of reorderSim.elem_count_snoc (local there). *)
