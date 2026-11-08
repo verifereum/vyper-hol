@@ -3,6 +3,8 @@ Theory bodyIntCallJointStmtBoundary
 Ancestors
   bodyIntCallJointContract exprLoweringProps loweringPosts compileEnv intCallFrame
   stmtSimProps bodyMemoryDefs freshWrites exprSimHyps allocLimits
+  bodyIntCallAggregateStoreLanding bodyIntCallSharpReturn valueCopyBytes
+  fragGasPath fragGasMode
 
 Theorem intcall_return_buffer_bound:
   intcall_joint_res fp ce env es sa s /\ fp.jc_rb = SOME (bw,cap) ==>
@@ -102,4 +104,68 @@ Proof
   strip_tac >>
   `p = a` by metis_tac[type_widens_to_antisym] >> gvs[] >>
   drule_all intcall_type_alloc_headroom >> simp[]
+QED
+
+(* The physical compiler source may differ from both typed bytestring views.
+   Only the small view needs headroom; the write window fits the declared one. *)
+Theorem protected_bytestring_store_ret_path:
+  compile_store_memory ce src dst declared physical sa = ((),sm) /\
+  is_bytestring_type declared /\ is_bytestring_type a /\
+  evaluate_type tenv a = SOME av /\
+  evaluate_type tenv declared = SOME dv /\
+  value_has_type av v /\ value_has_type dv v /\
+  val_in_memory av v (w2n sw) s.vs_memory /\
+  type_memory_bytes ce a = type_memory_size av /\
+  type_memory_size av + 64 < dimword (:256) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME bw /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. rpc = Var x ==> not_fresh_at sa x) /\
+  (!b sz. P b sz ==>
+     regions_disjoint b sz (w2n bw) (type_memory_size dv)) /\
+  (!op x. reserved op /\ op = Var x ==> not_fresh_at sa x) /\
+  emit_inst RET [rpc] [] sm = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (?pc. eval_operand rpc s = SOME pc) ==>
+  ?n ir u. gas_path ctx func s n (IntRet ir u) /\
+    (!b sz. P b sz ==>
+      mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    (!op. reserved op ==> eval_operand op u = eval_operand op s) /\
+    u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `~is_word_type declared /\ ~is_word_type a` by
+    metis_tac[is_bytestring_word_type] >>
+  `compile_store_memory ce src dst a declared sa = ((),sm)` by
+    gvs[contextTheory.compile_store_memory_def] >>
+  `val_in_memory dv v (w2n sw) s.vs_memory` by
+    (irule bytestring_val_in_memory_transfer >> metis_tac[]) >>
+  `!b sz. P b sz ==> regions_disjoint b sz (w2n bw)
+     (MIN (type_memory_size dv) (type_memory_size av))` by
+    (gvs[compileEnvTheory.regions_disjoint_def] >> rpt strip_tac >>
+     first_x_assum drule >> strip_tac >> simp[arithmeticTheory.MIN_DEF]) >>
+  `!x. reserved (Var x) \/ Var x = rpc ==> not_fresh_at sa x` by
+    metis_tac[] >>
+  SUBGOAL_THEN ``a = declared \/
+    is_bytestring_type a /\ is_bytestring_type declared`` assume_tac
+  >- simp[] >>
+  `(if is_word_type declared then sw = typed_val_to_w256 dv v
+    else val_in_memory dv v (w2n sw) s.vs_memory)` by simp[] >>
+  drule_all (SRULE [] (Q.INST
+    [`reserved` |-> `\op. reserved op \/ op = rpc`]
+    protected_compatible_store_landing)) >>
+  disch_then (qspecl_then [`[]`, `ctx`] strip_assume_tac) >>
+  `eval_operand rpc u = SOME pc` by metis_tac[] >>
+  `gas_path ctx func u 0
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u)` by
+    (irule emitted_memory_ret_path >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `gas_path ctx func s 0
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u)` by
+    (drule gas_marked_path_exec >> strip_tac >>
+     drule_all gas_path_then >> simp[]) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
