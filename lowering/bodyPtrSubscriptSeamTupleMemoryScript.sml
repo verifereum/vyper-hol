@@ -5,7 +5,7 @@ Ancestors
   loweringPosts exprSimHyps valueEncoding valueEncodingProofs
   tupleMemoryLayout vyperInterpreter vyperValueOperation context
   exprSimDefs exprLowering compileEnv venomState vyperAST exprSimAttributeProps exprSimProps exprSimAttributeFields
-  list rich_list
+  list rich_list bodyPtrAttributeFields typedCopyLayoutPtr bodyPtrDefs
 
 Theorem tuple_child_sub_layout:
   sub_layout itv iv start (TupleTV tvs) (ArrayV (TupleV vs)) /\
@@ -120,4 +120,58 @@ Proof
        w2n w + SUM (TAKE k (MAP type_memory_size tvs)) - b` by decide_tac >>
       simp[local_path_at_val_at] >> decide_tac) >>
   disj2_tac >> disj2_tac >> decide_tac
+QED
+
+(* Extract robust contents for either a stack aggregate or a memory place. *)
+Theorem nonword_memory_ptr_contents:
+  ~is_word_type ty /\ ptr_vv_ok cx ty tv vv ee G tn s /\
+  read_result cx tv ee = (INL v,ee) /\ vv_loc vv = LocMemory ==>
+  ptr_mem_ok cx ty v (vv_operand vv) G tn s
+Proof
+  Cases_on `vv` >>
+  simp[ptr_vv_ok_def, ptr_val_ok_def, vv_operand_def,
+       vv_loc_def, vv_location_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem tuple_memory_selected_ptr:
+  ptr_vv_ok cx (TupleT tys) tv vv ee G tn s /\ vv_loc vv = LocMemory /\
+  ptr_buf_ok cenv obj (vv_operand vv) G s /\
+  read_result cx tv ee = (INL (ArrayV (TupleV vs)),ee) /\
+  read_result cx tv' ee = (INL (EL k vs),ee) /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
+  evaluate_type (get_tenv cx) ct = SOME (EL k tvs) /\
+  LENGTH vs = LENGTH tvs /\ k < LENGTH tvs /\ tuple_val_wf vs tvs /\
+  type_memory_bytes cenv (lowered_value_type cenv obj) = type_memory_size_list tvs /\
+  type_memory_bytes cenv (lowered_value_type cenv child) = type_memory_size (EL k tvs) /\
+  off = SUM (MAP type_memory_size (TAKE k tvs)) /\
+  eval_operand (vv_operand vv) s = SOME w /\
+  eval_operand dst t = SOME (w + n2w off) /\
+  w2n (w + n2w off) = w2n w + off /\
+  t.vs_memory = s.vs_memory /\ tn'.t_mem = tn.t_mem /\ op_taint tn' dst = {} /\
+  (!x b sz. vv_operand vv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
+    ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
+  ptr_vv_ok cx ct tv' (LocatedValue ann (mk_ptr dst LocMemory)) ee H tn' t /\
+  ptr_buf_ok cenv child dst H t
+Proof
+  strip_tac >>
+  `ptr_mem_ok cx (TupleT tys) (ArrayV (TupleV vs)) (vv_operand vv) G tn s` by
+    (irule nonword_memory_ptr_contents >> simp[is_word_type_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `off + type_memory_size (EL k tvs) <= type_memory_size_list tvs` by
+    (drule tuple_element_interval >> simp[type_memory_size_list_sum] >> gvs[]) >>
+  `ptr_buf_ok cenv child dst H t` by
+    (irule ptr_buf_ok_offset >>
+     qexistsl_tac [`G`, `obj`, `off`, `s`, `vv_operand vv`, `w`] >>
+     simp[] >> rpt strip_tac >> gvs[]) >>
+  `val_wf (EL k tvs) (EL k vs)` by
+    (irule tuple_child_wf >> simp[]) >>
+  simp[] >> irule ptr_vv_ok_memory >> simp[mk_ptr_def] >>
+  irule ptr_mem_ok_of_buffer >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`cenv`, `child`] >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ptr_mem_ok_def] >>
+  disch_then (qspecl_then [`TupleTV tvs`, `w`] mp_tac) >>
+  simp[valueEncodingTheory.val_in_memory_def] >> strip_tac >>
+  drule_all tuple_in_memory_robust_element >> simp[]
 QED
