@@ -129,7 +129,7 @@ val () = both "nm_dup_local_types" true
      Return (SOME ^zero)]``] base_dom1);
 
 (* Public getter/function name collision, with the getter declared first. *)
-val public_x = subst [stored |-> ``VariableDecl Public Storage "x"
+val public_x = subst [stored |-> ``VariableDecl (Public F) Storage "x"
   ^uint256 (SOME 0)``] base_dom1;
 val () = both "public_x_function_collision" false
   (subst [burn |-> header 4 ``"x"`` burn] public_x);
