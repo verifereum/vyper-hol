@@ -71,7 +71,7 @@ Ancestors
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
-  bodyAugAssignOther
+  bodyAugAssignOther placeRelayoutBody bodyPlacePremises
 Libs
   monadsyntax
 
@@ -1299,7 +1299,13 @@ Theorem body_assign_place_widened_aggregate_call:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `immutable_root cx t`
+  >- (drule_all body_assignment_place_premises >>
+      disch_then (qspec_then `func` strip_assume_tac) >>
+      gvs[] >> irule stmtSimAssignPlaceTheory.immutable_deploy_assign_case >>
+      metis_tac[]) >>
+  irule body_assign_nonimmutable_widened_place >> metis_tac[]
 QED
 
 (* The other base targets, by bodyAssignPlace's general place root (the
