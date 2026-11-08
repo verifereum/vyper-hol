@@ -380,6 +380,143 @@ QED
    as resource fields of a reachability constructor would merely assume it.
 *)
 
+(* Backward consumer slice (C3.exclusion.history.close.consumer).
+   This is a hypothesis ledger, NOT a new invariant or a proof of replay.
+   P ++ C and Q ++ C below have common planner fields except stack and
+   cleanup bookkeeping. C is a physical suffix, not a filtered live list.
+
+   Static arities: codegen_ready_fn_def supplies EVERY codegen_ready_inst,
+   fn_inst_wf and ssa_form. codegen_ready_inst_def gives <=16 COMPUTED
+   operands for non-PHI instructions, not <=16 JMP targets. inst_wf_def
+   gives BUMP two outputs and INVOKE unrestricted output arity. Thus a
+   singleton-only consumer cannot cover this task. ssa_form_def makes the
+   flattened output list distinct, hence each instruction's outputs distinct;
+   it does not prohibit old copies of those names on a returning stack.
+
+   1. Entry/dispatch. generate_block_plan tests bb = HD fn.fn_blocks, then
+   prepares parameters; otherwise it leaves the state alone. Entry has no
+   predecessors under block_entries_ready, so a lineage entry is the initial
+   state, not an arbitrary returning suffix. PARAM/FMP_PARAM/RETPC_PARAM and
+   NOP dispatch are no-ops; OFFSET pushes its output, observing only literal
+   and label operands. No stack query or output-freshness premise is needed
+   for OFFSET. Pre-codegen and malformed INVOKE branches fail bilaterally.
+
+   2. Cleanup. clean_stack_plan queries depth of every MAP Var to_pop,
+   where to_pop = FILTER (not in inputs) predecessor-live-out. It then uses
+   below_all_live: each physical candidate's depth is compared with depths
+   of ALL inputs (a missing input passes this comparison). Matching ordinary
+   operand queries alone therefore does not imply matching cleanup. It also
+   tests cleanup_elision_safe at LENGTH stack - LENGTH to_cleanup. Equal
+   heights must NOT be assumed. Inventory.clean_stack_plan_arbitrary_core_replay
+   solves these observations for REPLICATE m marker ++ C versus REPLICATE n
+   marker ++ C: choose h = NONE and promised = reference ok (the disjunction
+   of its promise and height test). With NONE the candidate height test is
+   false, so the candidate follows precisely reference ok. The output promise
+   need not equal the reference promise. Its empty-input branch marks the
+   WHOLE stack; its other elision branch popmany's to_cleanup then marks all
+   occurrences of retained names. Spills never change in any branch.
+   RelationalTail.lineage_block_setup_nonentry_core_replay packages this with
+   equal alloc/spilled. For arbitrary P,Q this interface does not apply:
+   core-hit or bilateral-miss is needed for every cleanup lookup, all pops
+   must remain inside C, and retained-name marking transforms P,Q as well.
+   The cleanup branch choice can be aligned with the same h/promise recipe;
+   it cannot align unequal physical/deletion observations. Producer: MISSING
+   for residual prefixes, established for marker prefixes only.
+
+   3. PHI prefix. stack_get_phi_depth searches FILTER is_var_operand over
+   ALL alternatives; shielding only the edge-selected variable is insufficient
+   unless the slot/class schedule proves that it is the first class hit.
+   The chosen stack_peek decides retain/dup from next-live membership. Dead
+   result deletion queries the result AFTER phi_write_phase. Temporal's
+   generate_phi_plan_observation_frame requires equal distances, in-bounds
+   accesses, equal alloc, equal selected-live truth values, and equal result
+   deletion depths. It concludes code/alloc equality, not a suffix invariant.
+   PhiSchedule.successful_join_edges_phi_state_replay supplies the stronger
+   slot-based simulation from TWO successful native predecessor calls, with
+   rebased stacks and equal alloc. It preserves arbitrary prefixes; no prefix
+   uniqueness is required. successful_join_edges_phi_common_suffix_rebased
+   supplies an equal suffix covering post-PHI live values exactly once. Its
+   updates touch only stack/alloc, hence preserve input spill equality. This
+   is an available paired-native producer at a join, NOT yet an induction
+   over arbitrary lineage histories. PHIs occur only at joins (phis_at_joins).
+
+   4. Ordinary preparation, excluding JMP. Setup.lineage_regular_prepare_bottom_frame
+   permits any prefix when each computed variable operand is in C or the
+   common spill map, and computed arity <=16. Input restoration consults the
+   spill map before looking for stack copies; equality of maps is essential.
+   Emission materializes the operand window; the commutative dry runs then
+   have equal costs and choose the same reorder. Inventory's shielded and
+   materialised reorder frames confine unfixed-depth searches, peeks and
+   swaps to the core. Selective spilling scans offsets up to
+   MIN 16 (MIN (target_dist-1) (LENGTH stack-1)), excludes forbidden targets
+   and finalized windows, and tests is_var_operand at each peek. Equal
+   successful operand hits alone is not a general bound for this scan.
+   The <=16 materialised frame supplies that bound for ordinary preparation.
+   Bulk do_swap/do_dup allocate/free temporary slots but do not write spilled;
+   a distance outside the shared suffix would still break code/alloc replay.
+   Producer: ordinary positive availability is checked, but its localization
+   to a shared C rather than a residual prefix still needs a history proof.
+
+   5. Output/deletion/optimistic tail. Fresh pushes shield old output copies.
+   Setup.popmany_plan_output_suffix_bottom_frame covers MULTIPLE distinct
+   dead outputs, including BUMP and INVOKE: requests lie in the just-pushed
+   output suffix. No whole-state output freshness is necessary. The current
+   legacy native_regular_singleton_bottom_frame's exclusion of every nl name
+   is used by the live-output optimistic branch, not preparation or the dead
+   singleton pop. RelationalTail.native_regular_conditional_shared_core_replay
+   already factors this into paired preparation, confined deletion, and one
+   enabled observation: nl=[] OR LAST nl hits the post-deletion C OR misses
+   both P,Q. The query is skipped when term, no outputs, no live outputs, or
+   operand_equiv of LAST outputs and LAST nl. Setup's shielded optimistic
+   frame handles the remaining hit/miss case and its bounded do_swap.
+   lineage_regular_preoptimistic_live_coverage gives stack OR spill coverage;
+   a spill-only LAST nl does NOT give a core hit or bilateral prefix miss.
+   This is a precise remaining producer gap even after removing freshness.
+   release_dead_spills folds only over common map and next-live, so equal
+   input map/allocator gives equal release effects, independently of P,Q.
+
+   6. Terminal JMP. compute_operands is empty and inst_wf gives no outputs.
+   join_target_ops reads successor input_vars_from; restore_spilled_plan has
+   an unconditional bottom frame for equal map/alloc. Reorder then queries
+   unfixed occurrences and selective-spill candidates, as above. A successful
+   reference join_reached proves a FINAL target suffix only; it does not
+   constrain earlier queries in the other stack. reorder_plan_bottom_frame
+   needs target exclusion from prefixes plus target length <= core height;
+   reorder_plan_materialised_bottom_frame instead needs target multiplicity
+   coverage AND <=16 targets. Neither bound on target count follows from
+   codegen_ready_inst's empty JMP operands. Thus arbitrary residual-prefix
+   replay of large joins remains a distinct window/shielding obligation.
+   Revert-block spill rejection finally depends on emitted code only; equal
+   chunks imply equal rejection, with no extra resource invariant.
+
+   Proposed LOCAL simulation contract (not asserted here): given two states
+   p,q with equal alloc/spilled and stacks P++C,Q++C, a non-JMP non-PHI
+   instruction with <=16 computed operands, distinct outputs, and each
+   computed variable in C or the common spill map; let t be its preparation
+   followed by enabled dead-output deletion on the core state. If the enabled
+   optimistic query LAST nl hits t.stack or misses both P and Q, then there
+   exist ops, C', al', sp' such that the two regular calls return
+   (ops,p with <|stack=P++C'; alloc=al'; spilled=sp'|>) and
+   (ops,q with <|stack=Q++C'; alloc=al'; spilled=sp'|>) respectively
+   (field names here omit the ps_ prefix). Other fields are preserved on
+   their own side, not asserted equal. Both alloc AND spilled outputs agree.
+   Preparation and
+   deletion premises can be discharged by the existing frames above; this
+   contract still needs integration, not a new replay-readiness relation.
+   PHI has the separate class-slot contract in item 3; cleanup and JMP cannot
+   be hidden inside this local ordinary contract.
+
+   Smallest outstanding implication for that ordinary contract: at the
+   actual preoptimistic phase, if LAST nl has no common-core stack hit, no
+   residual-only occurrence may be observed on either side. Equal spills and
+   positive availability allow a spill-only value and do not prove this.
+   The broader block producer must additionally localize cleanup observations
+   and large-JMP access windows. Exact history continuity and the first-return
+   demand cut supply none of these physical facts. No decreasing-history
+   producer is justified by this audit; return to the strategy checkpoint
+   before proving more conditional machinery or starting the frozen theorem.
+*)
+
 (* Entry and joins root single-predecessor regions, including cyclic CFGs.
    P is label-parametric: no physical state or transfer is assumed here. *)
 Theorem ready_reachable_region_induction:
