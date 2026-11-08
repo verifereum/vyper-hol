@@ -172,3 +172,97 @@ Resume place_static_dyn_single_exit[fault]:
 QED
 
 Finalise place_static_dyn_single_exit
+
+Theorem place_static_dyn_multi_path[local]:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  emit_op MUL [Var ctr;Lit (n2w ems)] stb = (mulop,b1) /\
+  emit_op ADD [Lit 32w;mulop] b1 = (off,b2) /\
+  emit_op ADD [src;off] b2 = (sp,b3) /\
+  emit_op MUL [Var ctr;Lit (n2w ew)] b3 = (smul,b4) /\
+  emit_op ADD [Lit 1w;smul] b4 = (slot,b5) /\
+  emit_op ADD [dst;slot] b5 = (dp,b6) /\
+  compile_word_copy_loop sp dp ew LocMemory loc F b6 = (oldcopy,ste) /\
+  fn_has_code b6 ste func /\ fn_has_code stb ste func /\
+  ew < dimword (:256) /\ not_fresh_at stb ctr /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at stb x) /\
+  eval_operand src q = SOME b /\ eval_operand dst q = SOME k /\
+  eval_operand (Var ctr) q = SOME (n2w j) /\
+  ~q.vs_halted /\ q.vs_call_ctx.cc_static /\
+  q.vs_current_bb = stb.cs_current_bb /\
+  q.vs_inst_idx = LENGTH stb.cs_current_insts ==>
+  if ew = 0 then
+    ?r. gas_marked_path F ctx func q 0 (OK r) /\
+        store_copy_frame stb loc (b+32w+n2w j*n2w ems)
+          (k+1w+n2w j*n2w ew) q 0 r /\
+        ~r.vs_halted /\ r.vs_current_bb = ste.cs_current_bb /\
+        r.vs_inst_idx = LENGTH ste.cs_current_insts
+  else
+    ?r. gas_marked_path F ctx func q 0 r /\ exit_result r /\
+        stmt_exit RetQ ee (INR (Error (RuntimeError "write in static context"))) r
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all place_dyn_multi_address_layout >> strip_tac >>
+  `cs_extends b6 ste` by
+    (qspec_then `b6` mp_tac (ci_mono_compile_word_copy_loop |>
+       Q.SPECL [`sp`, `dp`, `ew`, `LocMemory`, `loc`, `F`]) >>
+     simp[ci_mono_def]) >>
+  `cs_extends stb b6` by
+    (fs[same_blocks_def, compileEnvTheory.cs_extends_def] >> qexists_tac `[]` >> simp[]) >>
+  `fn_has_code stb b6 func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  `?bb. lookup_block q.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts stb b6) (DROP q.vs_inst_idx bb.bb_instructions)` by
+    (fs[fn_has_code_def, same_blocks_def, Excl "isPREFIX"] >>
+     gvs[IS_PREFIX_APPEND, Excl "isPREFIX"] >>
+     qpat_x_assum `emitted_insts _ _ = _` mp_tac >>
+     simp[emitted_insts_def, DROP_APPEND, DROP_LENGTH_APPEND,
+       IS_PREFIX_APPEND] >> metis_tac[]) >>
+  qpat_assum `emitted_insts stb b6 = _`
+    (fn th => qpat_x_assum `isPREFIX (emitted_insts _ _) _`
+      (assume_tac o PURE_ONCE_REWRITE_RULE [th])) >>
+  drule_all place_dyn_address_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `!x. not_fresh_at stb x ==> not_fresh_at b6 x` by
+    (fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS, DECIDE ``n <= n+6``]) >>
+  `!x. sp = Var x \/ dp = Var x ==> not_fresh_at b6 x` by
+    (imp_res_tac typedMemoryCopyTheory.typed_copy_emit_op_fresh >>
+     imp_res_tac typedMemoryCopyTheory.typed_copy_emit_op_mono >>
+     fs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `t.vs_call_ctx.cc_static` by
+    (qpat_assum `store_copy_normalize q t = q`
+       (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx`) >>
+     simp_tac (srw_ss()) [store_copy_normalize_def] >>
+     metis_tac[]) >>
+  `t.vs_current_bb = b6.cs_current_bb /\
+   t.vs_inst_idx = LENGTH b6.cs_current_insts` by
+    (fs[same_blocks_def, IS_PREFIX_APPEND, Excl "isPREFIX"] >>
+     qpat_x_assum `emitted_insts _ _ = _` mp_tac >>
+     simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
+     disch_then (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+  `eval_operand sp t = SOME (b+32w+n2w j*n2w ems) /\
+   eval_operand dp t = SOME (k+1w+n2w j*n2w ew)` by metis_tac[] >>
+  Cases_on `ew = 0`
+  >- suspend "zero" >>
+  `0 < ew` by decide_tac >>
+  drule_all place_static_copy_exit >>
+  disch_then (qspecl_then [`ee`, `ctx`, `RetQ`] strip_assume_tac) >>
+  simp[] >> qexists_tac `r` >> simp[] >>
+  metis_tac[gas_marked_path_then, ADD_CLAUSES]
+QED
+
+Resume place_static_dyn_multi_path[zero]:
+  qpat_x_assum `ew = 0` SUBST_ALL_TAC >>
+  pure_rewrite_tac[REFL_CLAUSE, COND_CLAUSES] >>
+  drule_all place_zero_word_copy_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t'` >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  simp[] >>
+  drule place_store_frame_normalize >>
+  disch_then (qspec_then `q` assume_tac) >>
+  simp[store_copy_frame_def] >>
+  qpat_x_assum `store_copy_frame b6 _ _ _ _ _ _` mp_tac >>
+  simp[store_copy_frame_def] >> metis_tac[]
+QED
+
+Finalise place_static_dyn_multi_path
