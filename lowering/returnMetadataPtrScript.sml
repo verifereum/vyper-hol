@@ -317,11 +317,14 @@ Proof
   strip_tac >>
   `next.ce_struct_fields = make_struct_fields_map tops` by
     (drule_all external_frame_struct_fields >> simp[]) >>
-  `next.ce_event_info = build_event_info (type_env tops) tops (K NONE)` by
-    (drule external_package_event_info >> strip_tac >>
-     drule_all register_same_frame_metadata >>
-     simp[compile_env_component_equality]) >>
-  drule_all fn_allocs_ok_body >> simp[]
+  qspecl_then [`tops`,`mut`,`nr`,`rr`,`name`,`args`,`defaults`,`ret`,`body`,
+    `build_compile_env tops Internal mut name args ret body F`]
+    mp_tac fn_allocs_ok_body >>
+  simp[alloc_env_agree_def] >> strip_tac >>
+  `type_memory_bytes next =
+   type_memory_bytes (build_compile_env tops Internal mut name args ret body F)` by
+    (irule type_memory_bytes_frame >> simp[build_compile_env_ce_struct_fields]) >>
+  simp[]
 QED
 
 Theorem selected_runtime_external_allocs_ok:
