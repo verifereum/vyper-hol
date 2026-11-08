@@ -695,7 +695,7 @@ Proof
        exec_pure2_def, eval_operand_def, wordsTheory.WORD_ADD_COMM]
 QED
 
-Theorem augassign_field_read_path_mem[local]:
+Theorem augassign_field_read_path_mem:
   emit_op MLOAD [dst] sa = (cur,sb) /\
   eval_operand dst s0 = SOME addr /\ w2n addr + 32 <= s0.vs_alloca_next /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
