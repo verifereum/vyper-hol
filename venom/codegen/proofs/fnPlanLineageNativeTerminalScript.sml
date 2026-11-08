@@ -9,7 +9,9 @@ Theorem native_terminal_jmp_target_available:
   !fn bb ps targets.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
     bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
-    native_live_boundary fn bb (PRE (LENGTH bb.bb_instructions)) ps /\
+    (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
+      (PRE (LENGTH bb.bb_instructions))) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
     join_target_ops (liveness_analyze fn) fn bb.bb_label
       (LAST bb.bb_instructions) = SOME targets ==>
     !at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
@@ -34,7 +36,7 @@ Proof
     (irule analyzed_computed_operand_demand >> simp[] >> disj2_tac >>
      `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions` by decide_tac >>
      asm_rewrite_tac[]) >>
-  metis_tac[native_live_boundary_coverage]
+  metis_tac[]
 QED
 
 Theorem native_terminal_jmp_variable_origins:
@@ -60,8 +62,9 @@ Proof
       metis_tac[release_dead_spills_inventory_subset]) >>
   rename1 `join_target_ops _ _ _ _ = SOME targets` >>
   `!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
-    (drule_at (Pat `join_target_ops _ _ _ _ = _`) native_terminal_jmp_target_available >>
-     simp[]) >>
+    (rpt strip_tac >> irule native_terminal_jmp_target_available >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`bb`,`fn`] >> gvs[native_live_boundary_def]) >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
     generate_inst_plan_jmp_inventory_subset >> simp[] >>
   disch_tac >> metis_tac[]

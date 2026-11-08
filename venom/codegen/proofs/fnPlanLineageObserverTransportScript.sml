@@ -147,7 +147,9 @@ Theorem native_terminal_jmp_observer_upper:
   !fn bb dfg ps ops qs v.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
     bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
-    native_live_boundary fn bb (PRE (LENGTH bb.bb_instructions)) ps /\
+    (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
+      (PRE (LENGTH bb.bb_instructions))) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
     generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
       (LAST bb.bb_instructions)
       (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))

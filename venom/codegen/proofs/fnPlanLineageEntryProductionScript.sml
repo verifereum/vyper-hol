@@ -1987,6 +1987,13 @@ Theorem native_ready_seeded_worker_available:
         (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k ps /\
       MEM (Var v) (compute_operands
         (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!k ps v. a <= k /\ k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k ps /\
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+k)) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1997,7 +2004,7 @@ Proof
     (qspecl_then [`fn`,`bb`,`a`] mp_tac ready_block_ordinary_suffix_layout >> simp[]) >>
   conj_tac
   >- metis_tac[native_seeded_worker_exit_available] >>
-  rpt strip_tac >> metis_tac[native_seeded_suffix_prefix_available]
+  conj_tac >> rpt strip_tac >> metis_tac[native_seeded_suffix_prefix_available]
 QED
 
 (* Parameter positivity depends only on the empty input stack, not on
@@ -2034,6 +2041,13 @@ Theorem initialized_entry_block_available:
       MEM (Var v) (compute_operands
         (EL (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+k)
           (HD fn.fn_blocks).bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!k ps v. k < LENGTH (non_param_insts (HD fn.fn_blocks)) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn (HD fn.fn_blocks).bb_label
+        (bb_is_halting (HD fn.fn_blocks)) (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+        (LENGTH (HD fn.fn_blocks).bb_instructions) (non_param_insts (HD fn.fn_blocks)) incoming k ps /\
+      MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+k)) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -2081,6 +2095,13 @@ Theorem incoming_singleton_block_available:
         (LENGTH bb.bb_instructions) (non_param_insts bb) cleaned k ps /\
       MEM (Var v) (compute_operands
         (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!k ps v. k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) cleaned k ps /\
+      MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (get_params bb.bb_instructions)+k)) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -2130,6 +2151,14 @@ Theorem incoming_join_block_available:
         (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k ps /\
       MEM (Var v) (compute_operands
         (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!k ps v. LENGTH (collect_phis bb.bb_instructions) <= k /\
+      k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k ps /\
+      MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (get_params bb.bb_instructions)+k)) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -2197,6 +2226,14 @@ Theorem incoming_edge_block_available:
         (LENGTH bb.bb_instructions) (non_param_insts bb) start k ps /\
       MEM (Var v) (compute_operands
         (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!k ps v. LENGTH (collect_phis bb.bb_instructions) <= k /\
+      k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) start k ps /\
+      MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (get_params bb.bb_instructions)+k)) ==>
       MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>

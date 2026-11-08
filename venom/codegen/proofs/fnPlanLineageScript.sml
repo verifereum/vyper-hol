@@ -1173,6 +1173,14 @@ Theorem lineage_state_successful_run_available:
         (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
       MEM (Var v) (compute_operands
         (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) /\
+    (!k qs v. LENGTH (collect_phis bb.bb_instructions) <= k /\
+      k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
+      MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (get_params bb.bb_instructions)+k)) ==>
       MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1256,6 +1264,37 @@ Theorem lineage_state_ordinary_prefix_available:
       (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
     MEM (Var v) (compute_operands
       (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+    MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `lineage_state _ _ _ _ _ _ _`) lineage_state_successful_run_available >>
+  disch_then (qspecl_then [`entry`,`h`,`promised`,`bb`,`ops`,`after`,`setup_ops`,`start`] mp_tac) >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem lineage_state_ordinary_prefix_live_available:
+  !fn dfg ch growth spill_base lbl_ctr entry lbl ps h promised bb ops after setup_ops start k qs v.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    (if bb = HD fn.fn_blocks then
+       prepare_params_plan (liveness_analyze fn) fn
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+      (setup_ops,start) /\
+    LENGTH (collect_phis bb.bb_instructions) <= k /\ k < LENGTH (non_param_insts bb) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (get_params bb.bb_instructions)+k)) ==>
     MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
 Proof
   rpt gen_tac >> strip_tac >>
