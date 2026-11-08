@@ -4,6 +4,7 @@ Ancestors
   bodyPtrDefs bodyPtrPopTargetDefs ptrDiscipline compileEnv
   loweringPosts exprSimProps exprSimHypsDefs vyperTypeInvariants
   venomState words finite_map vyperState stmtSimAugAssign
+  stmtSimAugAssignPlaceMemory augAssignPtrRhsFrame
 
 (* Use an address bound, not a bound on the ghost site's end: a site's
    capacity may exceed the compiler local's reserved extent. *)
@@ -66,4 +67,86 @@ Proof
     (gvs[target_ptr_ok_def] >> metis_tac[]) >>
   drule_all target_local_header_coverage_ptr >> strip_tac >>
   qexistsl_tac [`src`, `vs`] >> gvs[]
+QED
+
+(* Transport only the saved address and its site.  The current source value
+   is deliberately absent: index evaluation may have changed it. *)
+Theorem target_memory_index_frame_ptr:
+  target_post ctx func cenv cx es sa sm s0 ee
+    (PlaceR (MemoryPlace id path)) vt rb s /\
+  target_ptr_ok cenv (PlaceR (MemoryPlace id path)) rb G tn s /\
+  expr_post ctx func cenv cx e ee sm sb s ef v x u /\
+  ghost_kept cenv ee sm G tn s H un /\ local_ptrs_reserved cenv sm /\
+  ghost_inv d cenv cx ee G tn s ==>
+  (?w. eval_operand (FST rb) u = SOME w /\
+       place_ptr_rel cenv cx u (PlaceR (MemoryPlace id path)) w
+         (FST (SND rb)) vt) /\
+  target_ptr_ok cenv (PlaceR (MemoryPlace id path)) rb H un u
+Proof
+  strip_tac >>
+  `!z w. not_fresh_at sm z /\ lookup_var z s = SOME w ==>
+          lookup_var z u = SOME w` by (gvs[expr_post_def] >> metis_tac[]) >>
+  `?w. eval_operand (FST rb) s = SOME w /\
+       place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+         (FST (SND rb)) vt` by (gvs[target_post_def] >> metis_tac[]) >>
+  `!z. FST rb = Var z ==> not_fresh_at sm z` by
+    (gvs[target_post_def] >> metis_tac[]) >>
+  `?src. FST rb = Var src` by
+    (`?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+       (gvs[place_ptr_rel_def] >> metis_tac[]) >>
+     `?entry. lookup_scopes id ee.scopes = SOME entry` by
+       (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp[target_post_def, place_readable_def, read_place_def,
+             get_scopes_def, bind_def, lift_option_type_def,
+             return_def, raise_def] >>
+        Cases_on `lookup_scopes id ee.scopes` >> simp[vyperStateTheory.raise_def]) >>
+     `ptr_covers G tn p s sz` by (gvs[ghost_inv_def] >> metis_tac[]) >>
+     Cases_on `FST rb` >> gvs[target_ptr_ok_def, op_prov_def, ptr_covers_def] >>
+     metis_tac[]) >>
+  conj_tac
+  >- (qexists_tac `w` >> conj_tac
+      >- (Cases_on `FST rb` >> gvs[eval_operand_def] >> metis_tac[]) >>
+      irule stmtSimAugAssignPlaceMemoryTheory.aug_place_memory_ptr_frame >>
+      metis_tac[]) >>
+  gvs[target_ptr_ok_def] >> conj_tac
+  >- (drule_all augAssignPtrRhsFrameTheory.ghost_kept_old_operand >>
+      strip_tac >> gvs[]) >>
+  rpt strip_tac >>
+  `not_fresh_at sm p` by (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  Cases_on `FST rb` >> gvs[op_prov_def] >>
+  metis_tac[augAssignPtrRhsFrameTheory.ghost_kept_old_operand]
+QED
+
+Theorem target_index_dynamic_header_ptr:
+  target_post ctx func cenv cx es sa sm s0 ee
+    (PlaceR (MemoryPlace id path)) (Type aty) rb s /\
+  target_ptr_ok cenv (PlaceR (MemoryPlace id path)) rb G tn s /\
+  ghost_inv d cenv cx ee G tn s /\
+  expr_post ctx func cenv cx e ee sm sb s ef v x u /\
+  ghost_kept cenv ee sm G tn s H un /\ local_ptrs_reserved cenv sm /\
+  expr_sim_inv cenv cx env ef /\ FLOOKUP env.var_types id = SOME ty /\
+  evaluate_type (get_tenv cx) aty = SOME (ArrayTV etv (Dynamic cap)) /\
+  ghost_inv d cenv cx ef H un u /\
+  (!entry. lookup_scopes id ef.scopes = SOME entry ==>
+     ISL (evaluate_subscripts entry.type entry.value path)) ==>
+  ?src a vs. FST rb = Var src /\ ptr_covers H un src u 32 /\
+    lookup_var src u = SOME a /\
+    (!mem. mem_agree_outside un.t_mem u.vs_memory mem ==>
+      val_in_memory (ArrayTV etv (Dynamic cap)) (ArrayV (DynArrayV vs))
+        (w2n a) mem)
+Proof
+  strip_tac >> drule_all target_memory_index_frame_ptr >> strip_tac >>
+  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by (gvs[expr_sim_inv_def] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx ef u` by (gvs[expr_post_def] >> metis_tac[]) >>
+  `local_ptrs_rel func cenv ef.scopes u /\ u.vs_alloca_next < dimword(:256)` by
+    (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
+         compileEnvTheory.state_rel_def, venomMemDefsTheory.alloca_inv_def,
+         venomMemDefsTheory.alloca_next_valid_def,
+         exprLoweringPropsTheory.alloca_room_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `place_ptr_rel _ _ _ _ _ _ _` mp_tac >>
+  simp[place_ptr_rel_def] >> strip_tac >> gvs[] >>
+  drule_all target_current_dynamic_header_ptr >> strip_tac >>
+  metis_tac[]
 QED
