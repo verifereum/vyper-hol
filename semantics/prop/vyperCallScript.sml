@@ -281,8 +281,10 @@ Theorem eval_expr_intcall_empty_defaults:
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
       lock_if_nr cx nr (is_view_mut mut);
       cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv) od)
 Proof
@@ -303,8 +305,10 @@ Theorem eval_expr_intcall_args_factor:
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
       lock_if_nr cx nr (is_view_mut mut);
       cxf <- push_function (src,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      rv <- finally_unless_halt
+        (finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+          (pop_function prev))
+        (unlock_if_nr cx nr (is_view_mut mut));
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv) od)
 Proof
