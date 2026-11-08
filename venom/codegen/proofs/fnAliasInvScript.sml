@@ -14845,6 +14845,218 @@ Definition alias_occ_regular_targets_def:
     else operands
 End
 
+Theorem alias_occ_regular_selected_reorder:
+  (if is_commutative opc /\ 2 <= LENGTH operands then
+     case reorder_plan dfg operands ps of (oa,pa) =>
+     case reorder_plan dfg
+       (TAKE (LENGTH operands - 2) operands ++
+        [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]) ps of
+       (ob,pb) => if reorder_cost oa < reorder_cost ob then (oa,pa) else (ob,pb)
+   else reorder_plan dfg operands ps) =
+  reorder_plan dfg (alias_occ_regular_targets dfg opc operands ps) ps
+Proof
+  Cases_on `is_commutative opc /\ 2 <= LENGTH operands` >>
+  simp[alias_occ_regular_targets_def] >>
+  Cases_on `reorder_plan dfg operands ps` >>
+  Cases_on `reorder_plan dfg
+    (TAKE (LENGTH operands - 2) operands ++
+     [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]) ps` >>
+  simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem alias_occ_regular_pair_projection:
+  emit_input_plan inst.inst_opcode (compute_operands inst) live ps = (iops,prepared) /\
+  (if inst.inst_opcode = JMP then
+     case join_target_ops liveness fn lbl inst of NONE => ([],prepared)
+     | SOME targets =>
+       (\(rops,p1). (\(sops,p2). (rops ++ sops,p2)) (reorder_plan dfg targets p1))
+         (restore_spilled_plan targets prepared)
+   else ([],prepared)) = (jops,joined) /\
+  (if is_commutative inst.inst_opcode /\ LENGTH (compute_operands inst) >= 2 then
+     (\(oa,pa). (\(ob,pb).
+       if reorder_cost oa < reorder_cost ob then (oa,pa) else (ob,pb))
+       (reorder_plan dfg
+         (TAKE (LENGTH (compute_operands inst) - 2) (compute_operands inst) ++
+          [EL (LENGTH (compute_operands inst) - 1) (compute_operands inst);
+           EL (LENGTH (compute_operands inst) - 2) (compute_operands inst)]) joined))
+       (reorder_plan dfg (compute_operands inst) joined)
+   else reorder_plan dfg (compute_operands inst) joined) = (rops,arranged) /\
+  generate_emit_ops inst
+    (case inst.inst_opcode of LOG =>
+       (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0)
+    (FOLDL (\p out. p with ps_stack := stack_push (Var out) p.ps_stack)
+      (arranged with ps_stack := stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)
+      inst.inst_outputs) = (eops,emitted) /\
+  (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out live) inst.inst_outputs)) emitted
+   else ([],emitted)) = (pops,popped) /\
+  (if FILTER (\out. MEM out live) inst.inst_outputs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst live term popped) = (oops,optimized) ==>
+  SND (generate_regular_inst_plan liveness dfg cfg fn inst live halting term lbl ps) =
+    if inst.inst_outputs = [] then release_dead_spills live emitted
+    else release_dead_spills live optimized
+Proof
+  strip_tac >>
+  asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss)
+    [generate_regular_inst_plan_def, LET_THM] >>
+  Cases_on `inst.inst_outputs = []` >>
+  asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) []
+QED
+
+Theorem alias_occ_regular_state_projection:
+  SND (emit_input_plan inst.inst_opcode (compute_operands inst) live ps) = prepared /\
+  SND (alias_occ_regular_join_plan liveness dfg fn lbl inst prepared) = joined /\
+  SND (reorder_plan dfg
+    (alias_occ_regular_targets dfg inst.inst_opcode (compute_operands inst) joined)
+    joined) = arranged /\
+  SND (generate_emit_ops inst
+    (case inst.inst_opcode of LOG =>
+       (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0)
+    (FOLDL (\p out. p with ps_stack := stack_push (Var out) p.ps_stack)
+      (arranged with ps_stack := stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)
+      inst.inst_outputs)) = emitted /\
+  (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+     SND (popmany_plan (MAP Var (FILTER (\out. ~MEM out live) inst.inst_outputs)) emitted)
+   else emitted) = popped /\
+  (if FILTER (\out. MEM out live) inst.inst_outputs = [] then popped
+   else SND (optimistic_swap_plan dfg inst live term popped)) = optimized ==>
+  SND (generate_regular_inst_plan liveness dfg cfg fn inst live halting term lbl ps) =
+    if inst.inst_outputs = [] then release_dead_spills live emitted
+    else release_dead_spills live optimized
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan inst.inst_opcode (compute_operands inst) live ps` >>
+  Cases_on `alias_occ_regular_join_plan liveness dfg fn lbl inst prepared` >>
+  Cases_on `reorder_plan dfg
+    (alias_occ_regular_targets dfg inst.inst_opcode (compute_operands inst) joined) joined` >>
+  Cases_on `generate_emit_ops inst
+    (case inst.inst_opcode of LOG =>
+       (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0)
+    (FOLDL (\p out. p with ps_stack := stack_push (Var out) p.ps_stack)
+      (arranged with ps_stack := stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack)
+      inst.inst_outputs)` >>
+  Cases_on `if ~halting \/ LENGTH inst.inst_outputs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out live) inst.inst_outputs)) emitted
+   else ([],emitted)` >>
+  rename1 `_ = (popops,popstate)` >>
+  Cases_on `if FILTER (\out. MEM out live) inst.inst_outputs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst live term popped` >>
+  rename1 `_ = (optops,optstate)` >>
+  full_simp_tac bool_ss [pairTheory.SND] >>
+  `popstate = popped` by
+    (Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >>
+     full_simp_tac bool_ss [pairTheory.SND] >> metis_tac[pairTheory.SND]) >>
+  `optstate = optimized` by
+    (Cases_on `FILTER (\out. MEM out live) inst.inst_outputs = []` >>
+     full_simp_tac bool_ss [pairTheory.SND] >> metis_tac[pairTheory.SND]) >>
+  irule alias_occ_regular_pair_projection >>
+  asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss)
+    [SRULE [pairTheory.pair_CASE_UNCURRY, combinTheory.C_DEF]
+       alias_occ_regular_selected_reorder,
+     GSYM (SRULE [pairTheory.pair_CASE_UNCURRY, combinTheory.C_DEF]
+       alias_occ_regular_join_plan_def), arithmeticTheory.GREATER_EQ] >>
+  metis_tac[]
+QED
+
+Definition alias_occ_regular_tail_plan_def:
+  alias_occ_regular_tail_plan dfg inst live halting term emitted =
+    if inst.inst_outputs = [] then release_dead_spills live emitted else
+    let popped = if ~halting \/ LENGTH inst.inst_outputs > 1 then
+      SND (popmany_plan (MAP Var (FILTER (\out. ~MEM out live) inst.inst_outputs)) emitted)
+      else emitted in
+    let optimized = if FILTER (\out. MEM out live) inst.inst_outputs = [] then popped
+      else SND (optimistic_swap_plan dfg inst live term popped) in
+    release_dead_spills live optimized
+End
+
+Definition alias_occ_regular_tail_events_def:
+  alias_occ_regular_tail_events dfg inst live halting term emitted =
+    if inst.inst_outputs = [] then [AliasOccPrimitive (AliasOccRelease live)] else
+    let popped = if ~halting \/ LENGTH inst.inst_outputs > 1 then
+      SND (popmany_plan (MAP Var (FILTER (\out. ~MEM out live) inst.inst_outputs)) emitted)
+      else emitted in
+    (if ~halting \/ LENGTH inst.inst_outputs > 1 then
+       alias_occ_popmany_events (MAP Var (FILTER (\out. ~MEM out live) inst.inst_outputs)) emitted
+     else []) ++
+    (if FILTER (\out. MEM out live) inst.inst_outputs = [] then []
+     else MAP AliasOccPrimitive (alias_occ_optimistic_commands dfg inst live term popped)) ++
+    [AliasOccPrimitive (AliasOccRelease live)]
+End
+
+Theorem alias_occ_regular_tail_align:
+  alias_occ_align s emitted ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_regular_tail_events dfg inst live halting term emitted) s)
+    (alias_occ_regular_tail_plan dfg inst live halting term emitted)
+Proof
+  Cases_on `inst.inst_outputs = []` >>
+  simp[alias_occ_regular_tail_events_def, alias_occ_regular_tail_plan_def,
+    alias_occ_events_append, alias_occ_events_shadow_def, alias_occ_event_shadow_def] >>
+  strip_tac >> rewrite_tac[alias_occ_command_shadow_def] >>
+  irule alias_occ_release_align >>
+  Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >>
+  Cases_on `FILTER (\out. MEM out live) inst.inst_outputs = []` >>
+  simp[alias_occ_events_shadow_def, alias_occ_popmany_align, alias_occ_optimistic_align]
+QED
+
+Definition alias_occ_regular_events_def:
+  alias_occ_regular_events site liveness dfg fn lbl inst live halting term ps =
+    let prepared = SND (emit_input_plan inst.inst_opcode (compute_operands inst) live ps) in
+    let joined = SND (alias_occ_regular_join_plan liveness dfg fn lbl inst prepared) in
+    let targets = alias_occ_regular_targets dfg inst.inst_opcode (compute_operands inst) joined in
+    let arranged = SND (reorder_plan dfg targets joined) in
+    let consumed = arranged with ps_stack :=
+      stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack in
+    let output_state = FOLDL (\p out. p with ps_stack := stack_push (Var out) p.ps_stack)
+      consumed inst.inst_outputs in
+    let emitted = SND (generate_emit_ops inst
+      (case inst.inst_opcode of LOG =>
+        (case HD inst.inst_operands of Lit v => w2n v | _ => 0) | _ => 0) output_state) in
+    alias_occ_emit_input_events site inst.inst_opcode (compute_operands inst) live ps ++
+    alias_occ_regular_join_events liveness dfg fn lbl inst prepared ++
+    alias_occ_reorder_events dfg targets joined ++
+    [AliasOccPrimitive (AliasOccPop (LENGTH (compute_operands inst)))] ++
+    alias_occ_output_events site inst.inst_outputs ++
+    alias_occ_regular_tail_events dfg inst live halting term emitted
+End
+
+Theorem alias_occ_regular_events_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow
+      (alias_occ_regular_events site liveness dfg fn lbl inst live halting term ps) s)
+    (SND (generate_regular_inst_plan liveness dfg cfg fn inst live halting term lbl ps))
+Proof
+  strip_tac >>
+  pure_rewrite_tac[alias_occ_regular_events_def] >>
+  rpt BasicProvers.LET_ELIM_TAC >>
+  `SND (generate_regular_inst_plan liveness dfg cfg fn inst live halting term lbl ps) =
+   alias_occ_regular_tail_plan dfg inst live halting term emitted` by
+    (simp_tac bool_ss [alias_occ_regular_tail_plan_def, LET_THM] >>
+     irule alias_occ_regular_state_projection >>
+     simp[Abbr `prepared`, Abbr `joined`, Abbr `targets`, Abbr `arranged`,
+       Abbr `consumed`, Abbr `output_state`, Abbr `emitted`]) >>
+  asm_rewrite_tac[alias_occ_events_append] >>
+  irule alias_occ_regular_tail_align >>
+  `!t. alias_occ_align t output_state ==> alias_occ_align t emitted` by
+    (gen_tac >> simp[Abbr `emitted`, alias_occ_generate_emit_align]) >>
+  first_x_assum irule >>
+  simp[Abbr `output_state`] >>
+  irule alias_occ_output_events_align >>
+  simp[alias_occ_events_shadow_def, alias_occ_event_shadow_def,
+    alias_occ_command_shadow_def, Abbr `consumed`] >>
+  qpat_x_assum `Abbrev (emitted = _)` kall_tac >>
+  qpat_x_assum `SND (generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _) = _` kall_tac >>
+  irule (SRULE [alias_occ_command_shadow_def, alias_occ_command_real_def]
+    (Q.INST [`cmd` |-> `AliasOccPop n`] (SPEC_ALL alias_occ_command_align))) >>
+  simp[Abbr `arranged`] >>
+  irule alias_occ_reorder_align >>
+  simp[Abbr `joined`] >>
+  irule alias_occ_regular_join_align >>
+  simp[Abbr `prepared`] >>
+  irule alias_occ_emit_input_align >> simp[]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
