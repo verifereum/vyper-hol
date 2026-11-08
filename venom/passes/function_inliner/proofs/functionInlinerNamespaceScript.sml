@@ -210,3 +210,132 @@ Proof
   pop_assum (mp_tac o AP_TERM ``EVERY I``) >>
   simp[EVERY_MAP, combinTheory.o_DEF, SF ETA_ss]
 QED
+
+Theorem find_invoke_idx_signature:
+  !insts name n i. find_invoke_idx name insts n = SOME i ==>
+    ?args. (EL (i-n) insts).inst_operands = Label name::args
+Proof
+  Induct >> simp[Once find_invoke_idx_def] >> rpt gen_tac >>
+  IF_CASES_TAC
+  >- (strip_tac >> Cases_on `h.inst_operands` >> gvs[] >>
+      Cases_on `h'` >> gvs[]) >>
+  strip_tac >> drule find_invoke_idx_bounds >> strip_tac >>
+  `i - n = SUC (i - (n + 1))` by decide_tac >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
+
+Theorem find_invoke_site_signature:
+  !bbs name lbl i. find_invoke_site name bbs = SOME (lbl,i) ==>
+    ?bb args. MEM bb bbs /\ bb.bb_label = lbl /\
+      i < LENGTH bb.bb_instructions /\
+      (EL i bb.bb_instructions).inst_opcode = INVOKE /\
+      (EL i bb.bb_instructions).inst_operands = Label name::args
+Proof
+  Induct >> simp[Once find_invoke_site_def] >> rpt gen_tac >>
+  Cases_on `find_invoke_idx name h.bb_instructions 0`
+  >- (simp[] >> metis_tac[]) >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule find_invoke_idx_bounds >> drule find_invoke_idx_signature >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem find_invoke_site_lookup_signature:
+  !fn name lbl i.
+    ALL_DISTINCT (fn_labels fn) /\
+    find_invoke_site name fn.fn_blocks = SOME (lbl,i) ==>
+    ?bb args. lookup_block lbl fn.fn_blocks = SOME bb /\
+      i < LENGTH bb.bb_instructions /\
+      (EL i bb.bb_instructions).inst_opcode = INVOKE /\
+      (EL i bb.bb_instructions).inst_operands = Label name::args
+Proof
+  rpt strip_tac >> drule find_invoke_site_signature >> strip_tac >>
+  gvs[fn_labels_def] >> metis_tac[MEM_lookup_block]
+QED
+
+Theorem qualified_inline_one_site_vars_in:
+  !ctx n caller callee ist caller' ist' P.
+    qualified_origin ctx n caller /\ qualified_origin ctx n callee /\
+    EVERY (inline_inst_vars_in P) (fn_insts caller) /\
+    (!v. P (STRCAT (inline_prefix n) v)) /\
+    ist.is_inline_count = n /\
+    inline_one_site caller callee ist = SOME (caller',ist') ==>
+    EVERY (inline_inst_vars_in P) (fn_insts caller')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function caller` by
+    metis_tac[qualified_origin_erasure, inliner_fn_origin_structure] >>
+  `ALL_DISTINCT (fn_labels caller)` by
+    gvs[venomWfTheory.wf_function_def] >>
+  qpat_x_assum `inline_one_site _ _ _ = _` mp_tac >>
+  rewrite_tac[inline_one_site_def] >>
+  Cases_on `find_invoke_site callee.fn_name caller.fn_blocks` >- simp[] >>
+  PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
+  drule_all find_invoke_site_lookup_signature >> strip_tac >>
+  `MEM (EL x1 bb.bb_instructions) (fn_insts caller)` by
+    (simp[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     qexists `bb` >> metis_tac[lookup_block_MEM, EL_MEM]) >>
+  `EVERY (inline_inst_vars_in P)
+    (fn_insts (inline_call_site (inline_prefix ist.is_inline_count)
+      (return_block_label (inline_prefix ist.is_inline_count) ist.is_label_counter)
+      caller callee x0 x1))` by
+    (irule inline_call_site_vars_in >> goal_assum (drule_at Any) >>
+     simp[] >> rpt strip_tac >>
+     irule qualified_origin_call_return_arity >>
+     goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  simp[renumber_fn_vars_in] >> CASE_TAC >>
+  simp[renumber_fn_vars_in, fix_inline_phis_vars_in]
+QED
+
+Theorem inline_one_site_counter:
+  inline_one_site caller callee ist = SOME (caller',ist') ==>
+  ist'.is_inline_count = SUC ist.is_inline_count
+Proof
+  simp[inline_one_site_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem qualified_origin_vars_bound:
+  !ctx n fn. qualified_origin ctx n fn ==>
+    !v. MEM v (cfgTransform$fn_all_vars fn) ==>
+      ~isPREFIX "inl" v \/
+      ?k. k < n /\ isPREFIX (inline_prefix k) v
+Proof
+  ho_match_mp_tac qualified_origin_strongind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `inliner_input_ok ctx` mp_tac >>
+      simp[inliner_input_ok_def, EVERY_MEM,
+        Excl "isPREFIX", Excl "isPREFIX_def"] >> strip_tac >>
+      qpat_x_assum `!fn'. MEM fn' ctx.ctx_functions ==> _`
+        (qspec_then `fn` mp_tac) >> simp[] >> strip_tac >>
+      ho_match_mp_tac (iffRL inline_fn_vars_in) >>
+      simp[inline_inst_vars_in_def, EVERY_MEM,
+        Excl "isPREFIX", Excl "isPREFIX_def"] >> metis_tac[])
+  >- (rpt strip_tac >> metis_tac[inline_label_bound_mono]) >>
+  rpt gen_tac >> strip_tac >>
+  drule inline_one_site_counter >> strip_tac >>
+  ho_match_mp_tac (iffRL inline_fn_vars_in) >>
+  irule qualified_inline_one_site_vars_in >>
+  goal_assum (drule_at (Pat `inline_one_site _ _ _ = _`)) >>
+  simp[inline_label_bound_clone, Excl "isPREFIX", Excl "isPREFIX_def"] >>
+  qexists `ctx` >> simp[Excl "isPREFIX", Excl "isPREFIX_def"] >>
+  ho_match_mp_tac (iffLR inline_fn_vars_in) >>
+  rpt strip_tac >>
+  irule inline_label_bound_mono >> qexists `n` >> simp[] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem qualified_origin_vars_fresh:
+  !ctx n fn v. qualified_origin ctx n fn /\
+    MEM v (cfgTransform$fn_all_vars fn) ==>
+    ~isPREFIX (inline_prefix n) v
+Proof
+  metis_tac[qualified_origin_vars_bound, inline_label_bound_fresh]
+QED
+
+Theorem qualified_origin_clone_disjoint:
+  !ctx n fn v. qualified_origin ctx n fn ==>
+    ~MEM (STRCAT (inline_prefix n) v) (cfgTransform$fn_all_vars fn)
+Proof
+  rpt strip_tac >> drule_all qualified_origin_vars_fresh >>
+  simp[stringTheory.isPREFIX_STRCAT]
+QED
