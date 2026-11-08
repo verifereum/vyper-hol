@@ -177,3 +177,18 @@ Proof
   CONV_TAC (RESTR_EVAL_CONV [``build_compile_env``]) >> REFL_TAC
 QED
 
+
+Theorem nested_external_internal_env_compare[local]:
+  build_compile_env nested_external_tops Internal Nonpayable "f" []
+    (BaseT (UintT 256)) nested_reach_body F =
+  nested_external_slice_cenv with
+    <|ce_returns_count := 1; ce_return_pc := SOME (MemLoc 0 32);
+      ce_is_external := F|>
+Proof
+  rewrite_tac[nested_external_slice_cenv_def, build_compile_env_def] >>
+  simp[LET_THM, compileEnvTheory.returns_stack_count_def, compileEnvTheory.is_word_type_def,
+       allocate_args_def, allocate_internal_special_vars_def] >>
+  Cases_on `build_flag_info nested_external_tops (K (K 0)) (K 0)` >>
+  simp[collect_locals_def, augAssignNestedReachProbeTheory.nested_reach_body_def]
+QED
+
