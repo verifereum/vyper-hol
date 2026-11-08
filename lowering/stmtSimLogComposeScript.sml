@@ -133,7 +133,7 @@ Theorem log_wb_alloca_frame:
   stmt_state_rel ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes /\
-  wb_frame cenv es sa s0 t ==>
+  wb_frame cenv es es1 sa s0 t ==>
   alloca_frame cenv es sa s0 cenv ee t
 Proof
   strip_tac >> irule alloca_frame_of_mem_frame >>
