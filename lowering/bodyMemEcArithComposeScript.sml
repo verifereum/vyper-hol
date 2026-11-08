@@ -162,6 +162,12 @@ Resume ec_mem_operands_then[second_success]:
     metis_tac[expr_post_operand_word] >>
   `!w. eval_operand p t = SOME w ==> eval_operand p u = SOME w` by
     metis_tac[optionTheory.SOME_11] >>
+  `post_value_type cenv a = expr_type a` by
+    (irule post_value_type_ec_point >>
+     qexistsl_tac [`cx`,`env`,`es`] >>
+     qpat_assum `expr_type a = _` (fn th => simp[th]) >>
+     qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def]) >>
   `expr_val_rel cx (expr_type a) v1 p u /\
    expr_val_at cenv cx (expr_type a) sa sm es2 v1 p u` by
     metis_tac[ec_point_operand_kept] >>
