@@ -250,7 +250,7 @@ Theorem prefix_canonical_support_window:
   (!k. k < n ==> p+k IN B) ==>
   mem_bytes_at p n mem = mem_bytes_at p n mem'
 Proof
-  strip_tac >> irule ctor_actual_pointwise_window >> rpt strip_tac >>
+  strip_tac >> irule abiEncoderZeroFrameTheory.abi_encoder_mem_bytes_singletons >> rpt strip_tac >>
   first_x_assum irule >>
   `p + (a-p) IN B` by (first_x_assum irule >> decide_tac) >>
   gvs[]
