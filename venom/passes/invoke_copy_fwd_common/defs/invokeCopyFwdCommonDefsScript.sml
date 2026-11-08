@@ -37,7 +37,7 @@
 Theory invokeCopyFwdCommonDefs
 Ancestors
   readonlyMemoryArgsDefs dfgDefs basePtrDefs memAliasDefs dominatorDefs
-  passSharedDefs venomEffects cfgDefs passResidualFrame
+  passSharedDefs venomEffects cfgDefs passResidualFrame stateEquiv
 
 (* ===== Analysis Context ===== *)
 
@@ -340,4 +340,104 @@ Definition icf_equiv_def:
     (* Memory, four FMP components and the bump pointer were unconstrained;
        all control components and the allocation map remain compared. *)
     icf_frame s1 = icf_frame s2
+End
+
+Theorem icf_equiv_refl[simp]:
+  !s. icf_equiv s s
+Proof
+  simp[icf_equiv_def]
+QED
+
+Theorem icf_equiv_sym:
+  !s1 s2. icf_equiv s1 s2 ==> icf_equiv s2 s1
+Proof
+  rw[icf_equiv_def]
+QED
+
+Theorem icf_equiv_trans:
+  !s1 s2 s3. icf_equiv s1 s2 /\ icf_equiv s2 s3 ==> icf_equiv s1 s3
+Proof
+  rw[icf_equiv_def]
+QED
+
+Theorem icf_frame_observable_equiv:
+  !s1 s2. icf_frame s1 = icf_frame s2 ==> observable_equiv s1 s2
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `icf_frame s1 = icf_frame s2`
+    (mp_tac o REWRITE_RULE [icf_frame_eq_reconstruct]) >>
+  disch_then (SUBST1_TAC o SYM) >>
+  simp[observable_equiv_def]
+QED
+
+Theorem icf_equiv_observable_equiv:
+  !s1 s2. icf_equiv s1 s2 ==> observable_equiv s1 s2
+Proof
+  rw[icf_equiv_def] >> irule icf_frame_observable_equiv >> simp[]
+QED
+
+(* ===== Pass Soundness Preconditions ===== *)
+
+(* For ircf: no instruction other than the MCOPY itself writes to memory
+   or invokes a function using an alias of dst. *)
+Definition ircf_no_dst_write_alias_def:
+  ircf_no_dst_write_alias (fn : ir_function) : bool <=>
+    let dfg = dfg_build_function fn in
+    !bb copy_inst dst src sz.
+      MEM bb fn.fn_blocks /\
+      MEM copy_inst bb.bb_instructions /\
+      copy_inst.inst_opcode = MCOPY /\
+      copy_inst.inst_operands = [Var dst; Var src; Lit sz] ==>
+      let dst_root = icf_assign_root dfg {} dst in
+      let dst_aliases = icf_collect_aliases dfg dst_root in
+      !bb2 use_inst v.
+        MEM bb2 fn.fn_blocks /\
+        MEM use_inst bb2.bb_instructions /\
+        use_inst.inst_id <> copy_inst.inst_id /\
+        v IN dst_aliases /\
+        MEM (Var v) use_inst.inst_operands ==>
+        mem_write_ops use_inst = NONE /\
+        use_inst.inst_opcode <> INVOKE
+End
+
+(* For ricf: every MCOPY into or from an alloca-backed buffer copies the full
+   alloca size as a literal operand. *)
+Definition ricf_full_alloca_copies_def:
+  ricf_full_alloca_copies (fn : ir_function) : bool <=>
+    let dfg = dfg_build_function fn in
+    !bb copy_inst dst src_op size_op.
+      MEM bb fn.fn_blocks /\
+      MEM copy_inst bb.bb_instructions /\
+      copy_inst.inst_opcode = MCOPY /\
+      copy_inst.inst_operands = [Var dst; src_op; size_op] ==>
+      (!dst_inst.
+         dfg_get_def dfg (icf_assign_root dfg {} dst) = SOME dst_inst /\
+         icf_is_alloca dst_inst ==>
+         ?s. size_op = Lit s /\ icf_matches_alloca_size dst_inst s) /\
+      (!sv src_inst.
+         icf_assign_root_op dfg src_op = Var sv /\
+         dfg_get_def dfg sv = SOME src_inst /\
+         icf_is_alloca src_inst ==>
+         ?s. size_op = Lit s /\ icf_matches_alloca_size src_inst s)
+End
+
+(* For ricf: no instruction other than the MCOPY itself uses a strict derived
+   alias (v <> dst) of dst as an operand. *)
+Definition ricf_no_derived_mutable_sibling_def:
+  ricf_no_derived_mutable_sibling (fn : ir_function) : bool <=>
+    let dfg = dfg_build_function fn in
+    !bb copy_inst dst src_op size_op.
+      MEM bb fn.fn_blocks /\
+      MEM copy_inst bb.bb_instructions /\
+      copy_inst.inst_opcode = MCOPY /\
+      copy_inst.inst_operands = [Var dst; src_op; size_op] ==>
+      let root = icf_assign_root dfg {} dst in
+      let aliases = icf_collect_aliases dfg root in
+      !bb2 use_inst v.
+        MEM bb2 fn.fn_blocks /\
+        MEM use_inst bb2.bb_instructions /\
+        use_inst.inst_id <> copy_inst.inst_id /\
+        v IN aliases /\
+        v <> dst ==>
+        ~MEM (Var v) use_inst.inst_operands
 End
