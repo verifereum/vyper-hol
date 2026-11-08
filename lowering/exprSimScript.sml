@@ -877,7 +877,10 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
        builtin_args_length_ok_def, read_result_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
-  Cases_on `item` >> fs[evaluate_builtin_def, return_def, raise_def] >>
+  Cases_on `item` >>
+  fs[CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) []))
+       (Q.INST [`bt` |-> `Env item`] (SPEC_ALL evaluate_builtin_def)),
+     return_def, raise_def] >>
   rw[] >> gvs[expr_res_ok_def, read_result_def, return_def]
 QED
 
@@ -912,7 +915,9 @@ Proof
    !tv. evaluate_type (get_tenv cx) (env_item_type item) = SOME tv ==>
         typed_val_to_w256 tv v = val_to_w256 v` by
     (Cases_on `item` >>
-     gvs[evaluate_builtin_def, env_item_type_def, is_word_type_def,
+     gvs[CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) []))
+           (Q.INST [`bt` |-> `Env item`] (SPEC_ALL evaluate_builtin_def)),
+         env_item_type_def, is_word_type_def,
          vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
          val_to_w256_def] >>
      simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []) >>
@@ -930,7 +935,9 @@ Proof
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, locals_kept_mem] >>
   Cases_on `item` >>
-  gvs[compile_env_var_def, evaluate_builtin_def] >>
+  gvs[compile_env_var_def,
+      CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) []))
+        (Q.INST [`bt` |-> `Env item`] (SPEC_ALL evaluate_builtin_def))] >>
   drule emit_op_frag >> disch_then irule >>
   simp[is_terminator_def] >> rpt strip_tac >>
   simp[step_inst_base_opcode_eqs, exec_read0_def, venomInstTheory.mk_inst_def] >>
