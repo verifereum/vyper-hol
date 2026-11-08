@@ -44,19 +44,19 @@ QED
 
 (* ===== inst_wf preservation ===== *)
 
-Theorem inst_wf_mk_nop_from[local,simp]:
+Theorem inst_wf_mk_nop_from[simp]:
   !inst. inst_wf (mk_nop_from inst)
 Proof
   simp[EVAL ``inst_wf (mk_nop_from inst)``]
 QED
 
-Theorem inst_wf_mk_dloadbytes_inst[local,simp]:
+Theorem inst_wf_mk_dloadbytes_inst[simp]:
   !inst src dst. inst_wf (mk_dloadbytes_inst inst src dst)
 Proof
   simp[EVAL ``inst_wf (mk_dloadbytes_inst inst src dst)``]
 QED
 
-Theorem inst_wf_mk_bulk_copy_inst[local,simp]:
+Theorem inst_wf_mk_bulk_copy_inst[simp]:
   !mode inst cg. inst_wf (mk_bulk_copy_inst mode inst cg)
 Proof
   Cases_on `mode` >> simp[EVAL ``inst_wf (mk_bulk_copy_inst CalldataMerge inst cg)``,
@@ -64,7 +64,7 @@ Proof
                           EVAL ``inst_wf (mk_bulk_copy_inst Mem2Mem inst cg)``]
 QED
 
-Theorem inst_wf_mk_load_inst[local,simp]:
+Theorem inst_wf_mk_load_inst[simp]:
   !mode inst src out. inst_wf (mk_load_inst mode inst src out)
 Proof
   Cases_on `mode` >> simp[EVAL ``inst_wf (mk_load_inst CalldataMerge inst src out)``,
@@ -72,7 +72,7 @@ Proof
                           EVAL ``inst_wf (mk_load_inst Mem2Mem inst src out)``]
 QED
 
-Theorem inst_wf_mk_mstore_from_load[local,simp]:
+Theorem inst_wf_mk_mstore_from_load[simp]:
   !inst dst load_var. inst_wf (mk_mstore_from_load inst dst load_var)
 Proof
   simp[EVAL ``inst_wf (mk_mstore_from_load inst dst load_var)``]
@@ -89,19 +89,19 @@ Proof
   CASE_TAC >> simp[] >> metis_tac[]
 QED
 
-Theorem inst_wf_mk_zero_store_inst[local,simp]:
+Theorem inst_wf_mk_zero_store_inst[simp]:
   !inst dst. inst_wf (mk_zero_store_inst inst dst)
 Proof
   simp[EVAL ``inst_wf (mk_zero_store_inst inst dst)``]
 QED
 
-Theorem inst_wf_mk_calldatasize_inst[local,simp]:
+Theorem inst_wf_mk_calldatasize_inst[simp]:
   !id. inst_wf (mk_calldatasize_inst id)
 Proof
   rw[mk_calldatasize_inst_def, inst_wf_def]
 QED
 
-Theorem inst_wf_mk_memzero_calldatacopy[local,simp]:
+Theorem inst_wf_mk_memzero_calldatacopy[simp]:
   !inst cg cds_var. inst_wf (mk_memzero_calldatacopy inst cg cds_var)
 Proof
   rw[mk_memzero_calldatacopy_def, inst_wf_def]
@@ -3013,7 +3013,7 @@ Proof
   simp[rich_listTheory.sublist_refl]
 QED
 
-Theorem block_outputs_projection[local]:
+Theorem block_outputs_projection:
   !bbs. FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)) =
     FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs)
 Proof
