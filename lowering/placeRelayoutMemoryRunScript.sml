@@ -7,6 +7,7 @@ Ancestors
   emitHelperProps allocaSiteResource stmtFragPtr loweringHalt fragExec
   placeMemoryLiveRegion exprSimOperands venomInst targetPlaceSimCasesBase
   venomExecSemantics venomState fragGasMode stmtSimAugAssignPlaceMemory
+  stmtSimDefs localMemoryStorePath vyperScopePreservation venomMemDefs
 Libs monadsyntax
 
 Theorem place_relayout_memory_run:
@@ -40,7 +41,8 @@ Theorem place_relayout_memory_run:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      alloca_frame cenv ee sa s cenv ff t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
@@ -73,13 +75,14 @@ Proof
     (irule memory_place_write_copy_effect >>
      goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
      metis_tac[]) >>
+  `alloca_frame cenv ee sa s cenv ff t` by suspend "direct_frame" >>
   qexists_tac `t` >> simp[] >>
   metis_tac[typed_copy_effect_endpoint, typed_copy_effect_lookup,
             typed_copy_effect_allocas, typed_copy_effect_path]
 QED
 
 Resume place_relayout_memory_run[staged]:
-  markerLib.RESUME_TAC >> rpt strip_tac >>
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
   qpat_x_assum `src_loc = SOME LocMemory` SUBST_ALL_TAC >>
   drule_all assign_memory_relayout_code >>
   disch_then (qx_choosel_then [`buf`,`sm`,`ss`] strip_assume_tac) >>
@@ -101,6 +104,31 @@ Resume place_relayout_memory_run[staged]:
    val_footprint stv v <= type_memory_bytes cenv sty` by simp[] >>
   drule_all alloc_copy_memory_framed_capacity_path >>
   disch_then (qx_choosel_then [`u`,`uw`] strip_assume_tac) >>
+  `venomMemDefs$allocas_non_overlapping u` by
+    fs[stmt_state_rel_def, state_rel_def, alloca_inv_def] >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+         lookup_var x u = SOME w` by
+    (rpt strip_tac >> `x <> q` by metis_tac[] >>
+     qpat_x_assum `!x. x <> q ==> _` drule >> simp[]) >>
+  `alloca_frame cenv ee sa s cenv ee u` by
+    (`stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+             lookup_var x u = SOME w) /\
+      venomMemDefs$allocas_non_overlapping u /\
+      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+                   FLOOKUP u.vs_allocas aid = SOME entry) /\
+      FLOOKUP u.vs_allocas sx.cs_next_id =
+        SOME (w2n uw,type_memory_bytes cenv sty) /\
+      sa.cs_next_id <= sx.cs_next_id /\
+      (!ad len. ad + len <= w2n uw \/
+                w2n uw + type_memory_bytes cenv sty <= ad ==>
+        mem_bytes_at ad len u.vs_memory = mem_bytes_at ad len s.vs_memory)`
+       suffices_by
+       (rpt (pop_assum kall_tac) >> strip_tac >>
+        drule_all alloca_frame_owned_copy >> simp[]) >>
+     gvs[] >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >>
+     decide_tac) >>
   drule_all memory_place_live_region >>
   disch_then (qx_choosel_then [`name`,`b`,`len`] strip_assume_tac) >>
   `local_region cenv ee.scopes u name b len` by
@@ -158,8 +186,44 @@ Resume place_relayout_memory_run[staged]:
   `!x. not_fresh_at ss x ==> lookup_var x t = lookup_var x u` by
     metis_tac[typed_copy_effect_lookup] >>
   `t.vs_allocas = u.vs_allocas` by metis_tac[typed_copy_effect_allocas] >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> not_fresh_at ss x /\ x <> q` drule >>
+     strip_tac >> simp[]) >>
+  `alloca_frame cenv ee sa s cenv ff t` by
+    (irule alloca_frame_of_mem_frame >>
+     conj_tac >- (rpt strip_tac >> simp[]) >>
+     conj_tac >- (
+     map_every qx_gen_tac [`aid`, `off`, `sz`] >> strip_tac >>
+     `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory` by
+       (qpat_x_assum `alloca_frame _ _ _ _ _ _ u` mp_tac >>
+        rewrite_tac[alloca_frame_def] >>
+        disch_then (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+        (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> simp[]) >>
+     `mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz u.vs_memory` suffices_by simp[] >>
+     irule typed_copy_effect_bytes >> goal_assum (drule_at Any) >>
+     qpat_x_assum `!n b sz'. local_region _ _ _ _ _ _ ==> _` drule >>
+     simp[] >> decide_tac) >>
+     conj_tac
+     >- metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+     metis_tac[]) >>
   qexists_tac `t` >> fs[] >>
-  rpt strip_tac >> first_x_assum drule >> simp[]
+  rpt strip_tac >> first_x_assum drule >> simp[])
+QED
+
+Resume place_relayout_memory_run[direct_frame]:
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
+  drule_all memory_place_live_region >> strip_tac >>
+  irule alloca_frame_of_mem_frame >>
+  simp[] >> conj_tac >- metis_tac[typed_copy_effect_lookup] >>
+  reverse conj_tac
+  >- (conj_tac
+      >- metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule typed_copy_effect_bytes >> goal_assum (drule_at Any) >>
+  qpat_x_assum `!n b sz'. local_region _ _ _ _ _ _ ==> _` drule >>
+  simp[] >> decide_tac)
 QED
 
 Finalise place_relayout_memory_run
