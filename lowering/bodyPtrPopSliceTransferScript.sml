@@ -8,8 +8,9 @@ Theorem pop_root_load_step[local]:
   step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [x0]) s =
   OK (update_var x0 (if tr then tload slot s else sload slot s) s)
 Proof
-  Cases_on `tr` >> simp[step_inst_base_def, mk_inst_def, exec_read1_def,
-                        eval_operands_def, eval_operand_def]
+  Cases_on `tr` >> simp_tac std_ss [] >>
+  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[exec_read1_def, eval_operand_def]
 QED
 
 Theorem pop_root_prefix_run:
