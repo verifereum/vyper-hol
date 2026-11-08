@@ -376,12 +376,66 @@ Resume abi_decode_bytes_member_abort_ptr[tail_success]:
      conj_tac >- (disj2_tac >> qexists_tac `h` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
      first_assum ACCEPT_TAC)) >> strip_tac >>
   rename1 `fresh_vars_wrt c5 v5` >>
-  `v5 = sp` by gvs[] >> qpat_x_assum `v5 = sp` SUBST_ALL_TAC >>
+  `v5 = sp` by
+    (qpat_assum `run_inst_seq (emitted_insts c4 c5) s4 = OK v5` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts c4 c5) s4 = OK sp` mp_tac >> simp[]) >> qpat_x_assum `v5 = sp` SUBST_ALL_TAC >>
   suspend "tail_operands"
 QED
 
 Resume abi_decode_bytes_member_abort_ptr[tail_operands]:
-  cheat
+  `not_fresh_at c1 dst` by metis_tac[] >>
+  `eval_operand (Var dst) t = SOME d` by
+    (qpat_assum `!x. not_fresh_at c1 x ==> lookup_var x t = _ /\ _`
+       (qspec_then `dst` mp_tac) >>
+     qpat_assum `!op. (!x. op = Var x ==> x IN {x | not_fresh_at sa x}) ==> _`
+       (qspec_then `Var dst` mp_tac) >>
+     simp[eval_operand_def]) >>
+  suspend "tail_address"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[tail_address]:
+  rename1 `addr = Var ap` >>
+  `eval_operand addr t = SOME (b+n2w p)` by
+    fs[abi_decode_ptr_window_def, eval_operand_def] >>
+  `eval_operand (Var dst) sp = SOME d /\
+   eval_operand addr sp = SOME (b+n2w p) /\
+   eval_operand cnt sp = SOME (mload (w2n b+p) s)` by
+    (qpat_assum `!op w. eval_operand op s4 = SOME w ==> _` mp_tac >>
+     qpat_assum `!op w. eval_operand op t = SOME w ==> eval_operand op s4 = SOME w` mp_tac >>
+     metis_tac[]) >>
+  suspend "tail_run"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[tail_run]:
+  `eval_operand (Var dst) sp = SOME (n2w (w2n d)) /\
+   eval_operand addr sp = SOME (n2w (w2n b+p)) /\
+   eval_operand cnt sp = SOME (n2w (w2n (mload (w2n b+p) s)))` by
+    (pure_rewrite_tac[GSYM word_add_n2w, n2w_w2n] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `w2n (mload (w2n b+p) s)+31 < dimword(:256) /\
+   32+w2n (mload (w2n b+p) s) < dimword(:256) /\
+   w2n b+p < dimword(:256)` by decide_tac >>
+  suspend "tail_round_bound"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[tail_round_bound]:
+  `contractABI$ceil32 (w2n (mload (w2n b+p) s)) <= contractABI$ceil32 n` by
+    (irule vyperTypeABITheory.ceil32_mono >> first_assum ACCEPT_TAC) >>
+  `w2n d+32*((w2n (mload (w2n b+p) s)+31) DIV 32) < dimword(:256)` by
+    (fs[contractABITheory.ceil32_def] >> decide_tac) >>
+  `w2n d < dimword(:256)` by simp[] >>
+  drule_all abi_decode_bytes_runtime_tail_sequence >> strip_tac >>
+  suspend "tail_contradiction"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[tail_contradiction]:
+  qpat_assum `run_inst_seq (emitted_insts c4 sb) s4 = Abort _ _` mp_tac >>
+  qpat_assum `run_inst_seq (emitted_insts c4 c5) s4 = OK sp` mp_tac >>
+  qpat_assum `run_inst_seq (emitted_insts c5 sb) sp = OK _` mp_tac >>
+  qpat_assum `emitted_insts c4 sb = emitted_insts c4 c5 ++ emitted_insts c5 sb` (fn th => rewrite_tac[th]) >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt strip_tac >> drule run_inst_seq_append >>
+  disch_then (qspec_then `emitted_insts c5 sb` mp_tac) >> simp[]
 QED
 
 Resume abi_decode_bytes_member_abort_ptr[payload_abort_join]:
