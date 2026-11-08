@@ -87,7 +87,7 @@ Proof
   strip_tac >> simp[] >> metis_tac[]
 QED
 
-Theorem raw_call_kwargs_sim_mem:
+Theorem raw_call_kwargs_sim_mem[local]:
   EVERY (\k. k = EKValue \/ k = EKGas) ks /\ LENGTH es = LENGTH ks /\
   typed_args_ready_mem ctx func cenv cx (K (BaseT (UintT 256))) Inv es /\ Inv st /\
   (!ee gs. Inv ee ==> Inv (ee with gas_obs := gs)) /\

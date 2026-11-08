@@ -21,7 +21,7 @@ Proof
   simp[mk_inst_def, is_terminator_def]
 QED
 
-Theorem raw_call_outbuf_counted_mem:
+Theorem raw_call_outbuf_counted_mem[local]:
   compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
@@ -44,7 +44,7 @@ Proof
   drule_all run_inst_seq_preserves_entry_control >> simp[]
 QED
 
-Theorem raw_call_emit_counted_mem:
+Theorem raw_call_emit_counted_mem[local]:
   emit_op (if stat then STATICCALL else CALL) ops sa = (ok,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   inst_mem_below_frontier

@@ -8,7 +8,7 @@ Ancestors
   exprOperandVar exprSafeOperand exprSimPrecompiles list
   vyperEvalExprPreservesScopesDom
 
-Theorem raw_call_addr_data_sim_mem:
+Theorem raw_call_addr_data_sim_mem[local]:
   body_inv tops ctx cenv cx /\ body_exprs_mem_ok cx (a::d::kws) /\
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
   lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\

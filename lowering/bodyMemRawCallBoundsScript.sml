@@ -44,24 +44,6 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem raw_call_output_allocated_bounds:
-  alloca_inv s /\
-  FLOOKUP s.vs_allocas aid = SOME (b, ((cap + 31) DIV 32) * 32 + 32) /\
-  b + (((cap + 31) DIV 32) * 32 + 32) < dimword (:256) ==>
-  b + 32 <= s.vs_alloca_next /\
-  b + 32 + cap <= s.vs_alloca_next /\
-  w2n (n2w b + 32w : bytes32) = b + 32 /\
-  w2n (n2w b + 32w : bytes32) + cap <= s.vs_alloca_next
-Proof
-  strip_tac >>
-  `b + (((cap + 31) DIV 32) * 32 + 32) <= s.vs_alloca_next` by
-    (fs[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
-  qspec_then `cap` mp_tac le_word_size_mul >>
-  simp[vfmConstantsTheory.word_size_def] >> strip_tac >>
-  `b + 32 < dimword (:256)` by decide_tac >>
-  simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w] >> decide_tac
-QED
-
 Theorem raw_call_outbuf_mem_ok:
   compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
@@ -76,31 +58,6 @@ Proof
   simp[emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
   simp[below_frontier_no_ranges, inst_dload_in_section_other, mk_inst_def]
-QED
-
-Theorem raw_call_outbuf_history:
-  compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  alloca_history func s /\ alloca_inv s /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)
-Proof
-  strip_tac >>
-  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
-    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
-    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (Cases_on `0 < cap` >>
-     qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
-     simp[compile_raw_call_outbuf_def, compile_alloc_buffer_def,
-       emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, fresh_var_def, emit_def] >>
-     strip_tac >> gvs[fn_has_code_def, IS_PREFIX_APPEND, emitted_insts_def] >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
-     simp[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
-  drule_all alloca_history_run_inst_seq >> simp[]
 QED
 
 Theorem raw_call_outbuf_frontier:
