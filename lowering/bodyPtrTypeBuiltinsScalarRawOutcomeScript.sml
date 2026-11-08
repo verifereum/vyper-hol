@@ -267,3 +267,20 @@ Proof
        vyperValueTheory.evaluate_type_def, is_word_type_def,
        convertScalarEncodingTheory.scalar_word_to_fixed]
 QED
+
+Theorem scalar_address_bytes_actual_outcome:
+  LENGTH bs = 20 /\ 20 <= m /\ m <= 32 /\
+  compile_type_convert x (ConvIntToBytesM F 160 m) sa = (out,sb) /\
+  fresh_vars_wrt sa s /\
+  eval_operand x s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) ==>
+  ?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (BaseT AddressT) (BaseT (BytesT (Fixed m))) (BytesV bs) = INL vout /\
+    expr_val_rel cx (BaseT (BytesT (Fixed m))) vout out t
+Proof
+  strip_tac >> `160 <= 8*m` by decide_tac >>
+  drule_all scalar_int_bytes_run >> strip_tac >>
+  qexistsl_tac [`ss'`, `BytesV (PAD_LEFT 0w m bs)`] >>
+  simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+       expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def,
+       convertScalarEncodingTheory.scalar_address_to_fixed]
+QED
