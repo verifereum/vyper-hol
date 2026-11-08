@@ -378,6 +378,7 @@ Definition functions_well_typed_def:
           env_body.toplevel_vtypes = toplevel_vtypes /\
           env_body.flag_members = flag_members /\
           evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+          (ret <> NoneT ==> assignable_type (get_tenv cx) ret) /\
           type_stmts env_body ret body = SOME env_after /\
           (ret = NoneT \/ stmts_no_fallthrough body) /\
           stmts_no_control_escape body /\
