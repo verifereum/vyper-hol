@@ -2455,13 +2455,9 @@ Theorem phi_run_final_alias:
     operand_val (frame_view fn ra final) lo (normalize_operand dfg [] at)
 Proof
   rpt gen_tac >> strip_tac >>
-  qspecl_then [`base`, `fn`, `bb`, `pred`, `entry`, `source`, `final`, `ra`,
-               `lo`, `last`, `dfg`] mp_tac phi_provenance_final_alias >>
-  impl_tac
-  >- (qpat_x_assum `phi_run_config _ _ _ _ _ _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [phi_run_config_def]) >>
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_then ACCEPT_TAC
+  qpat_x_assum `phi_run_config _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [phi_run_config_def]) >>
+  drule_all phi_provenance_final_alias >> disch_then ACCEPT_TAC
 QED
 
 Theorem phi_local_frame_transport:
