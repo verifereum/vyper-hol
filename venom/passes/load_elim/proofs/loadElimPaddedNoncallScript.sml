@@ -833,3 +833,207 @@ Proof
   disch_then (qspec_then `venom_create_request t value off sz salt` mp_tac) >>
   simp[] >> strip_tac >> gvs[lift_result_def, le_padded_control_update_var]
 QED
+
+Theorem le_padded_delegate_state:
+  le_padded_control V s t ==>
+  make_venom_delegatecall_state s target gas data code static =
+  make_venom_delegatecall_state t target gas data code static
+Proof
+  simp[make_venom_delegatecall_state_def, venom_to_tx_params_def,
+       le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+       venom_state_component_equality] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem le_padded_extract_result:
+  le_padded_control V s t ==>
+  OPTREL (\p q. FST p = FST q /\ le_padded_control V (SND p) (SND q))
+    (extract_venom_result s ov ro rz rr) (extract_venom_result t ov ro rz rr)
+Proof
+  strip_tac >>
+  `!bytes i. read_memory i 1 (write_memory_with_expansion ro bytes s) =
+              read_memory i 1 (write_memory_with_expansion ro bytes t)` by
+    metis_tac[le_padded_control_write_memory, le_padded_control_def,
+              padded_exec_equiv_read_memory] >>
+  Cases_on `rr` >> simp[extract_venom_result_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `x1.contexts` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  PairCases_on `h` >> simp[] >>
+  Cases_on `x0` >> simp[]
+  >- (gvs[le_padded_control_def, padded_exec_equiv_def, lookup_var_def,
+           read_memory_def, execution_frame_def, venom_state_component_equality,
+           ] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `y` >> simp[] >>
+  gvs[le_padded_control_def, padded_exec_equiv_def, lookup_var_def,
+      read_memory_def, execution_frame_def, venom_state_component_equality] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem le_padded_exec_delegatecall:
+  le_padded_control V s t ==>
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (exec_delegatecall i s gas addr ao az ro rz)
+    (exec_delegatecall i t gas addr ao az ro rz)
+Proof
+  strip_tac >>
+  `read_memory (w2n ao) (w2n az) s = read_memory (w2n ao) (w2n az) t` by
+    metis_tac[le_padded_control_def, padded_exec_equiv_read_memory] >>
+  `s.vs_accounts = t.vs_accounts /\ s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  `!target gas data code static.
+     make_venom_delegatecall_state s target gas data code static =
+     make_venom_delegatecall_state t target gas data code static` by
+    metis_tac[le_padded_delegate_state] >>
+  simp[exec_delegatecall_def] >>
+  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w (w2n ro) (w2n rz) rr` >>
+  `OPTREL (\p q. FST p = FST q /\ le_padded_control V (SND p) (SND q))
+     (extract_venom_result s 1w (w2n ro) (w2n rz) rr)
+     (extract_venom_result t 1w (w2n ro) (w2n rz) rr)` by
+    (irule le_padded_extract_result >> simp[]) >>
+  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) rr` >>
+  Cases_on `extract_venom_result t 1w (w2n ro) (w2n rz) rr` >>
+  gvs[lift_result_def] >>
+  PairCases_on `x` >> PairCases_on `x'` >> gvs[] >>
+  namedCases_on `i.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
+  Cases_on `outs` >> simp[lift_result_def, le_padded_control_update_var]
+QED
+
+Theorem le_padded_call:
+  i.inst_opcode = CALL /\ le_padded_control V s t /\
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) ==>
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst_base i s) (step_inst_base i t)
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def,
+        venom_state_component_equality] >>
+  simp[step_inst_base_opcode_eqs] >>
+  namedCases_on `i.inst_operands` ["", "gas r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "addr r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "value r3"] >> simp[lift_result_def] >>
+  namedCases_on `r3` ["", "ao r4"] >> simp[lift_result_def] >>
+  namedCases_on `r4` ["", "az r5"] >> simp[lift_result_def] >>
+  namedCases_on `r5` ["", "ro r6"] >> simp[lift_result_def] >>
+  namedCases_on `r6` ["", "rz r7"] >> simp[lift_result_def] >>
+  Cases_on `r7` >> simp[lift_result_def] >>
+  `eval_operand gas s = eval_operand gas t /\
+   eval_operand addr s = eval_operand addr t /\
+   eval_operand value s = eval_operand value t /\
+   eval_operand ao s = eval_operand ao t /\
+   eval_operand az s = eval_operand az t /\
+   eval_operand ro s = eval_operand ro t /\
+   eval_operand rz s = eval_operand rz t` by simp[] >>
+  Cases_on `eval_operand gas t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand addr t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand value t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand ao t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand az t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand ro t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand rz t` >> gvs[lift_result_def] >>
+  simp[le_padded_exec_ext_call]
+QED
+
+Theorem le_padded_static_delegate:
+  MEM i.inst_opcode [STATICCALL; DELEGATECALL] /\ le_padded_control V s t /\
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) ==>
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst_base i s) (step_inst_base i t)
+Proof
+  strip_tac >> Cases_on `i.inst_opcode` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs] >>
+  namedCases_on `i.inst_operands` ["", "gas r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "addr r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "ao r3"] >> simp[lift_result_def] >>
+  namedCases_on `r3` ["", "az r4"] >> simp[lift_result_def] >>
+  namedCases_on `r4` ["", "ro r5"] >> simp[lift_result_def] >>
+  namedCases_on `r5` ["", "rz r6"] >> simp[lift_result_def] >>
+  Cases_on `r6` >> simp[lift_result_def] >>
+  `eval_operand gas s = eval_operand gas t /\
+   eval_operand addr s = eval_operand addr t /\
+   eval_operand ao s = eval_operand ao t /\
+   eval_operand az s = eval_operand az t /\
+   eval_operand ro s = eval_operand ro t /\
+   eval_operand rz s = eval_operand rz t` by simp[] >>
+  Cases_on `eval_operand gas t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand addr t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand ao t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand az t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand ro t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand rz t` >> gvs[lift_result_def] >>
+  simp[le_padded_exec_ext_call, le_padded_exec_delegatecall]
+QED
+
+Theorem le_padded_create:
+  i.inst_opcode = CREATE /\ le_padded_control V s t /\
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) ==>
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst_base i s) (step_inst_base i t)
+Proof
+  strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  namedCases_on `i.inst_operands` ["", "value r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "off r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "sz r3"] >> simp[lift_result_def] >>
+  Cases_on `r3` >> simp[lift_result_def] >>
+  `eval_operand value s = eval_operand value t /\
+   eval_operand off s = eval_operand off t /\
+   eval_operand sz s = eval_operand sz t` by simp[] >>
+  Cases_on `eval_operand value t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand off t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand sz t` >> gvs[lift_result_def] >>
+  simp[le_padded_exec_create]
+QED
+
+Theorem le_padded_create2:
+  i.inst_opcode = CREATE2 /\ le_padded_control V s t /\
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) ==>
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst_base i s) (step_inst_base i t)
+Proof
+  strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  namedCases_on `i.inst_operands` ["", "value r1"] >> simp[lift_result_def] >>
+  namedCases_on `r1` ["", "off r2"] >> simp[lift_result_def] >>
+  namedCases_on `r2` ["", "sz r3"] >> simp[lift_result_def] >>
+  namedCases_on `r3` ["", "salt r4"] >> simp[lift_result_def] >>
+  Cases_on `r4` >> simp[lift_result_def] >>
+  `eval_operand value s = eval_operand value t /\
+   eval_operand off s = eval_operand off t /\
+   eval_operand sz s = eval_operand sz t /\
+   eval_operand salt s = eval_operand salt t` by simp[] >>
+  Cases_on `eval_operand value t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand off t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand sz t` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand salt t` >> gvs[lift_result_def] >>
+  simp[le_padded_exec_create]
+QED
+
+Theorem le_padded_noncall_step:
+  le_padded_control V s t /\
+  (!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t) /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> MEMTOP ==>
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst_base i s) (step_inst_base i t)
+Proof
+  strip_tac >>
+  `padded_exec_equiv V s t` by gvs[le_padded_control_def] >>
+  `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule le_padded_operand_agreement >> metis_tac[]) >>
+  `!ops. EVERY (\op. MEM op i.inst_operands) ops ==>
+     eval_operands ops s = eval_operands ops t` by
+    (rpt strip_tac >> irule le_padded_operands_agreement >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  `eval_operands i.inst_operands s = eval_operands i.inst_operands t` by
+    (irule le_padded_operands_agreement >> metis_tac[]) >>
+  Cases_on `i.inst_opcode` >> gvs[] >>
+  FIRST_PROVE (map (fn th => irule th >> simp[])
+    [le_padded_arithmetic, le_padded_context_reads, le_padded_store_ops,
+     le_padded_mcopy_op, le_padded_istore_op, le_padded_return_revert,
+     le_padded_sha3, le_padded_simple_terminal, le_padded_assertions,
+     le_padded_jmp, le_padded_djmp, le_padded_jnz, le_padded_internal_return,
+     le_padded_assign, le_padded_context_copy, le_padded_extcodecopy,
+     le_padded_fmp_reads, le_padded_fmp_write, le_padded_params,
+     le_padded_bump, le_padded_alloca, le_padded_selfdestruct,
+     le_padded_invalid, le_padded_dret, le_padded_log, le_padded_call,
+     le_padded_static_delegate, le_padded_create, le_padded_create2])
+QED
