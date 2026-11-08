@@ -98,7 +98,7 @@ Proof
   gvs[step_inst_inst_idx_indep, mk_inst_def, is_terminator_def,
       exec_result_map_def] >>
   qpat_x_assum `step_inst_base _ ss' = OK t` mp_tac >>
-  simp[Once step_inst_base_def, exec_write2_def, eval_operand_def,
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def,
        AllCaseEqs()] >> strip_tac >>
   `FLOOKUP ss'.vs_allocas sa.cs_next_id = SOME (p,32)` by gvs[mstore_def] >>
   `!tt. (step_taint
@@ -150,7 +150,7 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   qpat_x_assum `step_inst_base _ t' = OK t` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def, AllCaseEqs()] >>
   strip_tac >> gvs[fresh_vars_wrt_def, mstore_def]
 QED

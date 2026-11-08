@@ -42,7 +42,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
        source_memory_read_ranges_def, source_memory_write_ranges_def,
        mem_read_ops_def, mem_write_ops_def, step_inst_non_invoke,
-       step_inst_base_def] >>
+       step_inst_base_opcode_eqs] >>
   Cases_on `eval_operand op s` >> simp[] >>
   rename1 `eval_operand op s = SOME w` >> Cases_on `w = 0w` >> simp[]
 QED

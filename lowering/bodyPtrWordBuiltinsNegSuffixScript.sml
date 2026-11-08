@@ -27,7 +27,7 @@ Theorem word_neg_sgt_step:
   step_inst_base (mk_inst id SGT [v; Lit bound] [x]) s =
     OK (update_var x (bool_to_word (w > bound)) s)
 Proof
-  strip_tac >> simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+  strip_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
                     eval_operands_def, eval_operand_def]
 QED
 
@@ -36,7 +36,7 @@ Theorem word_neg_assert_step:
   step_inst_base (mk_inst id ASSERT [v] []) s =
     if w = 0w then Abort Revert_abort (revert_state (set_returndata [] s)) else OK s
 Proof
-  strip_tac >> simp[step_inst_base_def, mk_inst_def, eval_operands_def]
+  strip_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def]
 QED
 
 Theorem word_neg_ghost_step:
@@ -300,6 +300,6 @@ Theorem word_neg_sub_step:
   step_inst_base (mk_inst id SUB [Lit 0w; v] [y]) s =
     OK (update_var y (0w - w) s)
 Proof
-  strip_tac >> simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+  strip_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
                     eval_operands_def, eval_operand_def]
 QED

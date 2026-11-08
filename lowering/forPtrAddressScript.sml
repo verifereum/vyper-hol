@@ -18,8 +18,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MUL [Var idx; Lit b] [out]) s =
     OK (update_var out (a*b) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn
     (mk_inst id MUL [Var idx; Lit b] [out]) s` by
     (irule typed_copy_loop_test_check >> simp[update_var_def] >>
@@ -77,8 +76,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [Var p; Var off] [q]) s =
     OK (update_var q (a+b) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0
     (step_prov PG G (mk_inst id ADD [Var p; Var off] [q])
       (update_var q (a+b) s))

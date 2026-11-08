@@ -37,8 +37,7 @@ Proof
      rpt strip_tac >> gvs[] >> simp[mem_write_ops_def] >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> gvs[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
   simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -139,8 +138,7 @@ Theorem payload_load_runtime_frame:
 Proof
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
                    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def] >>
   Cases_on `eval_operand a s` >> simp[] >> strip_tac >>
@@ -153,8 +151,7 @@ Theorem mstore_payload_runtime_frame:
   t.vs_alloca_next = s.vs_alloca_next /\ t.vs_requests = s.vs_requests /\
   (!x. lookup_var x t = lookup_var x s)
 Proof
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_write2_def, AllCaseEqs(), mstore_def, lookup_var_def] >>
   rpt strip_tac >> gvs[]

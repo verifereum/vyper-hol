@@ -39,8 +39,7 @@ Theorem alloca_runtime_frames:
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   (!p. p <> out ==> lookup_var p t = lookup_var p s)
 Proof
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id`
   >- (strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>

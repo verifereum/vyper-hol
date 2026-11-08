@@ -44,8 +44,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, update_var_def]
 QED
@@ -70,7 +69,7 @@ Proof
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id DLOAD [a] [out]) s` by
     (irule ptr_inst_ok_code_load >> simp[]) >>
   drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`) straight_line_ptr_edge >>
-  gvs[mk_inst_def, is_terminator_def, step_inst_base_def, exec_read1_def]
+  gvs[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs, exec_read1_def]
 QED
 
 Theorem runtime_code_copy_singleton:

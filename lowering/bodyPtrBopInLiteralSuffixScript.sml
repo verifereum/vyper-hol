@@ -111,8 +111,7 @@ Theorem membership_binary_step:
     OK (update_var out (f a b) s)
 Proof
   strip_tac >> gvs[] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def]
 QED
@@ -122,8 +121,7 @@ Theorem membership_iszero_step:
   step_inst_base (mk_inst id ISZERO [arg] [out]) s =
     OK (update_var out (bool_to_word (a = 0w)) s)
 Proof
-  strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  strip_tac >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure1_def]
 QED
@@ -177,8 +175,7 @@ Theorem membership_scalar_update:
 Proof
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   strip_tac >> gvs[exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
   metis_tac[]

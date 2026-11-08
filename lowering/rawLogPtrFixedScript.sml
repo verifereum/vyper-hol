@@ -52,7 +52,7 @@ Proof
   qabbrev_tac `si = mk_inst sid MSTORE [Var p;value] []` >>
   qabbrev_tac `tn1 = step_taint si s st tn` >>
   `step_inst_base si s = OK st` by
-    (simp[Abbr `si`, Abbr `st`, Once step_inst_base_def,
+    (simp[Abbr `si`, Abbr `st`, step_inst_base_opcode_eqs,
       mk_inst_def, exec_write2_def, eval_operand_def]) >>
   `step_prov PG G si st = G /\ tn1.t_var = tn.t_var /\
    tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\

@@ -88,8 +88,7 @@ Proof
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, fixed_source_write_range_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                     combinTheory.K_THM, opcode_case_def] >>
   simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
   rpt strip_tac >> gvs[]
@@ -122,8 +121,7 @@ Proof
    (if tr then TSTORE else SSTORE) <> INVOKE` by
     (Cases_on `tr` >> simp[is_terminator_def]) >> simp[] >>
   conj_tac
-  >- (Cases_on `tr` >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      gvs[mk_inst_def, exec_write2_def]) >>
+  >- (Cases_on `tr` >> gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]) >>
   conj_tac
   >- (qexists `st'` >> Cases_on `tr` >>
       gvs[compile_store_at_loc_def, emit_void_def, emit_inst_def]) >>

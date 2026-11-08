@@ -99,8 +99,7 @@ Proof
   qabbrev_tac `u = update_var out (f a b) s` >>
   `step_inst_base (mk_inst id opc [left;right] [out]) s = OK u` by
     (gvs[Abbr `u`] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
        instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
      simp[exec_pure2_def]) >>
   qexistsl_tac

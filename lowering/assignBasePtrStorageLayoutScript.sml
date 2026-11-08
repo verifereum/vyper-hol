@@ -85,8 +85,7 @@ Theorem assign_base_storage_literal_counted:
 Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst id ASSIGN [Lit w] [out]) s = OK (update_var out w s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
        K_THM, opcode_case_def] >> simp[eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSIGN [Lit w] [out]) s` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,

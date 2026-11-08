@@ -47,8 +47,7 @@ Proof
   `step_inst_base
      (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] []) s =
      OK (mcopy (w2n d) (w2n a) n s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] []) s` by
     (irule ptr_inst_ok_mcopy_operand >> simp[eval_operand_def, op_taint_def]) >>

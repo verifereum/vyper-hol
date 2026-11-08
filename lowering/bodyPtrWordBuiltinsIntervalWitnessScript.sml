@@ -71,8 +71,7 @@ Proof
     by metis_tac[ptr_inst_ok_mload] >>
   `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s =
     OK (update_var tmp (mload (w2n a) s) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]) >>
   `(mk_inst id MLOAD [Var src] [tmp]).inst_opcode <> INVOKE /\
     ~is_terminator (mk_inst id MLOAD [Var src] [tmp]).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
@@ -145,8 +144,7 @@ Theorem word_interval_assign_edge:
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id ASSIGN [Lit w] [tmp]) s = OK (update_var tmp w s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSIGN [Lit w] [tmp]) s` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
           source_memory_write_ranges_def, source_memory_read_ranges_def,

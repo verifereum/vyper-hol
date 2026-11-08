@@ -39,8 +39,7 @@ QED
 
 Resume fixed_hash_store_certificate[checks]:
   `step_inst_base (mk_inst id MSTORE [Var p; value] []) s = OK u` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >> conj_tac
   >- (irule ptr_inst_ok_mstore >> simp[]) >>
   simp[mk_inst_def, is_terminator_def, inst_seq_ptr_def] >> gvs[]
@@ -75,8 +74,7 @@ Proof
    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn1.t_mem)` by
     (irule fixed_hash_store_certificate >> simp[Abbr `u`, Abbr `tn1`] >> metis_tac[]) >>
   `step_inst_base (mk_inst sid MSTORE [Var p; value] []) s = OK u` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, Abbr `u`]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def, Abbr `u`]) >>
   `step_inst_base (mk_inst hid SHA3 [Var p; Lit (n2w m)] [out]) u = OK t` by
     (qpat_x_assum `run_inst_seq _ _ = _` mp_tac >> simp[run_inst_seq_def, AllCaseEqs()]) >>
   qexistsl_tac [`step_prov PG G (mk_inst hid SHA3 [Var p; Lit (n2w m)] [out]) t`,
@@ -85,8 +83,7 @@ Proof
   conj_tac >- irule hash_output_clean >>
   `?w. t = update_var out w u` by
     (qpat_x_assum `step_inst_base (mk_inst hid _ _ _) _ = _` mp_tac >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, AllCaseEqs()] >> metis_tac[]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >> metis_tac[]) >>
   gvs[] >> irule hash_update_ghosts >> simp[]
 QED
 

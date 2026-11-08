@@ -15,8 +15,7 @@ Theorem bop_scalar_state_frame:
 Proof
   strip_tac >> gvs[MEM] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
                    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[mk_inst_def, exec_pure1_def, exec_pure2_def, exec_pure3_def] >>
   rpt strip_tac >> gvs[AllCaseEqs(), update_var_def]

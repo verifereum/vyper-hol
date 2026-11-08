@@ -10,7 +10,7 @@ Theorem word_neg_pure2_normal_update:
   ?w. t = update_var x w s
 Proof
   simp[MEM] >> strip_tac >>
-  gvs[step_inst_base_def, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
   metis_tac[]
 QED
 
@@ -56,7 +56,7 @@ Theorem word_neg_assert_sub_normal_post:
 Proof
   strip_tac >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        AllCaseEqs()] >> strip_tac >>
   gvs[GSYM mk_inst_def] >>
   drule word_neg_assert_step >> strip_tac >>

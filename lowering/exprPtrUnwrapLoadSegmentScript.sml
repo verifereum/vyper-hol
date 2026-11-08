@@ -32,7 +32,7 @@ Proof
     `update_var out (slot_copy_word load s key) s`] >>
   `step_inst_base (mk_inst id load [arg] [out]) s =
     OK (update_var out (slot_copy_word load s key) s)` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_read1_def,
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
                    slot_copy_word_def]) >>
   simp[run_inst_seq_def, inst_seq_ptr_def, ptr_inst_ok_slot_load,
        slot_load_output_taint, slot_load_ghost_frame] >>

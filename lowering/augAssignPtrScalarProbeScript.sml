@@ -107,8 +107,7 @@ Proof
        source_memory_read_ranges_def] >>
   conj_tac >- metis_tac[] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                   combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]

@@ -112,7 +112,7 @@ QED
 Resume emit_alloca_endpoint_ptr[post]:
   `exec_alloca (mk_inst sx.cs_next_id ALLOCA [Lit (n2w n)] [p]) s (n2w n : bytes32) = OK s1` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def, eval_operands_def, eval_operand_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def, eval_operand_def] >>
      strip_tac >> first_assum ACCEPT_TAC) >>
   `stmt_state_rel ctx func cenv cx es s1` by
     (drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>

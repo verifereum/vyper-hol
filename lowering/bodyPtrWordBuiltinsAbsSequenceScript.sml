@@ -31,7 +31,7 @@ Theorem word_abs_arithmetic_normal:
 Proof
   simp[MEM] >> strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
@@ -78,7 +78,7 @@ Proof
   strip_tac >>
   `t = s` by
     (qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
-     pure_once_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
+     asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >> asm_rewrite_tac[] >>
      pure_rewrite_tac[opcode_case_def] >>
      simp[eval_operands_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
   gvs[] >>

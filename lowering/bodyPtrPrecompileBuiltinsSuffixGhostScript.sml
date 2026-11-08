@@ -24,11 +24,11 @@ Proof
   simp[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
   qpat_x_assum `ai = _` SUBST_ALL_TAC >>
   Cases_on `eval_operand (Var cv) v`
-  >- (simp[Once step_inst_base_def, mk_inst_def, exec_result_map_def] >>
+  >- (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_result_map_def] >>
       metis_tac[]) >>
   rename1 `eval_operand (Var cv) v = SOME w` >>
   Cases_on `w = 0w` >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_result_map_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_result_map_def] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   simp[assert_step_ghost] >> metis_tac[]
 QED

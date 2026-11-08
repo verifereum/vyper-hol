@@ -105,8 +105,7 @@ Theorem raw_call_returndatasize_step_base:
   step_inst_base (mk_inst iid RETURNDATASIZE [] [out]) s =
     OK (update_var out (n2w (LENGTH s.vs_returndata)) s)
 Proof
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
     venomExecSemanticsTheory.bind_outputs_def]
 QED
 
@@ -120,8 +119,7 @@ Proof
     venomInstTheory.mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
     contextCodegenRelTheory.source_memory_read_ranges_def] >>
   simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read0_def,
     venomExecSemanticsTheory.bind_outputs_def, venomStateTheory.update_var_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -322,8 +320,7 @@ Proof
   conj_tac >- (rpt strip_tac >>
     gvs[ptrDisciplineTheory.op_prov_def, finite_mapTheory.FLOOKUP_DEF]) >>
   simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-  pure_rewrite_tac[venomInstTheory.instruction_accessors,
+  asm_simp_tac bool_ss [venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors,
     venomInstTheory.instruction_accfupds, combinTheory.K_THM,
     venomInstTheory.opcode_case_def] >>
   simp[venomExecSemanticsTheory.exec_pure2_def, AllCaseEqs(),
@@ -338,8 +335,7 @@ Theorem raw_call_length_binop_step_base:
     OK (update_var out (f a b) s)
 Proof
   strip_tac >> gvs[] >>
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-  pure_rewrite_tac[venomInstTheory.mk_inst_def,
+  asm_simp_tac bool_ss [venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
     venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds,
     combinTheory.K_THM, venomInstTheory.opcode_case_def] >>
   simp[venomExecSemanticsTheory.exec_pure2_def]
@@ -1028,8 +1024,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst iid MSTORE [Var dst;value] []) s =
     OK (mstore (w2n a) w s)` by
-    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_write2_def,
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_write2_def,
        venomStateTheory.eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx func G tn (mk_inst iid MSTORE [Var dst;value] []) s` by
     (irule fragExecPtrTheory.ptr_inst_ok_mstore >> simp[]) >>
@@ -1426,8 +1421,7 @@ Proof
   qabbrev_tac `t = revert_state (set_returndata s.vs_returndata
     (u with vs_inst_idx := SUC s.vs_inst_idx))` >>
   `step_inst_base (mk_inst sa.cs_next_id RETURNDATACOPY [p;Lit 0w;rds] []) s = OK u` by
-    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def,
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD, Abbr `u`]) >>
   suspend "revert"
 QED
@@ -1444,8 +1438,7 @@ Resume raw_call_forward_suffix_stage[revert]:
     simp[Abbr `u`, exprSimHashTheory.hash_write_memory_read_self] >>
   `step_inst_base (mk_inst sm.cs_next_id REVERT [p;rds] [])
       (u with vs_inst_idx := SUC s.vs_inst_idx) = Abort Revert_abort t` by
-    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomInstTheory.mk_inst_def, wordsTheory.w2n_n2w,
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, wordsTheory.w2n_n2w,
        arithmeticTheory.LESS_MOD, Abbr `t`] >>
      fs[valueEncodingTheory.mem_bytes_at_def]) >>
   `gas_path_ptr D 0 ctx func PG G tn s 0
@@ -1520,8 +1513,7 @@ Resume raw_call_failure_block_stage[allocate]:
   `u.vs_returndata = t.vs_returndata /\ u.vs_current_bb = t.vs_current_bb /\
    u.vs_halted = t.vs_halted` by
     (qpat_x_assum `step_inst_base _ _ = OK u` mp_tac >>
-     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
+     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
      Cases_on `FLOOKUP t.vs_allocas s1.cs_next_id` >> simp[]
      >- (strip_tac >> gvs[venomStateTheory.update_var_def]) >>
      rename1 `SOME site` >> PairCases_on `site` >>
@@ -1577,8 +1569,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst iid MCOPY [Var dst;Var src;count_op] []) s =
     OK (mcopy (w2n dw) (w2n aw) (w2n nw) s)` by
-    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def]) >>
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx func G tn (mk_inst iid MCOPY [Var dst;Var src;count_op] []) s` by
     (irule fragExecPtrTheory.ptr_inst_ok_mcopy_operand >>
      simp[venomStateTheory.eval_operand_def] >> metis_tac[]) >>

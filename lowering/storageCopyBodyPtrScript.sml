@@ -14,8 +14,7 @@ Theorem storage_copy_load_step:
     OK (update_var out (if tr then tload slot s else sload slot s) s)
 Proof
   strip_tac >> Cases_on `tr` >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def]
 QED
@@ -71,8 +70,7 @@ Theorem storage_copy_store_step:
     OK (mstore (w2n addr) value s)
 Proof
   strip_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_write2_def]
 QED
@@ -133,8 +131,7 @@ Theorem storage_copy_add_step:
     OK (update_var out (a+b) s)
 Proof
   strip_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def]
 QED
@@ -175,8 +172,7 @@ Theorem storage_copy_mul_step:
     OK (update_var out (a*b) s)
 Proof
   strip_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def]
 QED
@@ -950,8 +946,7 @@ Proof
   strip_tac >>
   `gas_path_ptr D 0 ctx fn PG G' tn' t 0 G' tn' (OK (jump_to hdr t))` by
     (irule copy_loop_jump_path_ptr >> simp[mk_inst_def, op_taint_def] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                      combinTheory.K_THM, opcode_case_def] >> simp[]) >>
   conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
   simp[copy_prefix_jump, ptr_covers_def, copy_static_def, jump_to_def,

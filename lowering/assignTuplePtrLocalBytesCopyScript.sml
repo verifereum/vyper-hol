@@ -44,7 +44,7 @@ Proof
   qabbrev_tac `i = mk_inst id MLOAD [Var src] [out]` >>
   qabbrev_tac `t = update_var out (mload (w2n a) s) s` >>
   `step_inst_base i s = OK t` by
-    simp[Abbr `i`, Abbr `t`, step_inst_base_def, mk_inst_def,
+    simp[Abbr `i`, Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def,
          exec_read1_def, eval_operand_def] >>
   qexistsl_tac [`step_prov PG G i t`, `step_taint i s t tn`, `t`] >>
   simp[run_inst_seq_def, inst_seq_ptr_def] >>
@@ -89,7 +89,7 @@ Proof
   qabbrev_tac `t = update_var out (f a b) s` >>
   `step_inst_base i s = OK t` by
     (gvs[Abbr `i`, Abbr `t`] >>
-     simp[step_inst_base_def, mk_inst_def, exec_pure2_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]) >>
   qexistsl_tac [`step_prov PG G i t`, `step_taint i s t tn`, `t`] >>
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>

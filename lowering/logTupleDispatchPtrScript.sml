@@ -30,7 +30,7 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   `t = mcopy b a n s` by
     (qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-     simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        eval_operand_def, w2n_n2w]) >>
   `abi_decode_footprint_frame [(b,n)] s (mcopy b a n s)` by
     (rewrite_tac[abi_decode_footprint_frame_def] >> conj_tac

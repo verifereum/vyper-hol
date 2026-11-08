@@ -21,6 +21,5 @@ Proof
     (rpt strip_tac >> gvs[mem_read_ops_def] >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED

@@ -194,7 +194,7 @@ Proof
   drule_at (Pat `exec_alloca _ _ _ = _`) exec_alloca_frames >>
   simp[mk_inst_def] >> strip_tac >>
   qexistsl_tac [`u`, `a`] >> simp[] >>
-  simp[step_inst_base_def, mk_inst_def] >> simp[GSYM mk_inst_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >> simp[GSYM mk_inst_def]
 QED
 
 Theorem for_range_alloca_entry_path_ptr:

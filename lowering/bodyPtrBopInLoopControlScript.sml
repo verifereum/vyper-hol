@@ -14,7 +14,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
        allocas_from_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, mk_inst_def, op_taint_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, eval_operand_def,
        update_var_def]
 QED
 
@@ -33,7 +33,7 @@ Proof
     simp[membership_assign_literal_check] >>
   `step_inst_base (mk_inst id ASSIGN [Lit w] [dst]) s =
      OK (update_var dst w s)` by
-    simp[step_inst_base_def, mk_inst_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
   `(mk_inst id ASSIGN [Lit w] [dst]).inst_opcode <> INVOKE /\
     ~is_terminator (mk_inst id ASSIGN [Lit w] [dst]).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
@@ -68,7 +68,7 @@ Theorem membership_jump_path:
 Proof
   strip_tac >>
   `step_inst 0 ctx (mk_inst id JMP [Label lbl] []) s = OK (jump_to lbl s)` by
-    simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def] >>
   `ptr_safe_step D 0 0 ctx fn PG G tn (mk_inst id JMP [Label lbl] []) s` by
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           allocas_from_def, source_memory_write_ranges_def,
@@ -210,7 +210,7 @@ Proof
   conj_tac >- metis_tac[] >>
   `step_inst 0 ctx (mk_inst id EQ [a;b] [dst]) s =
     OK (update_var dst (bool_to_word (aw = bw)) s)` by
-    simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_pure2_def,
          eval_operands_def] >>
   fs[mk_inst_def, update_var_def]
 QED

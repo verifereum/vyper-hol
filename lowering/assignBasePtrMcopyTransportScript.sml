@@ -13,8 +13,7 @@ Theorem assign_base_mcopy_endpoint:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED
 
 Theorem assign_base_mcopy_taint_window:

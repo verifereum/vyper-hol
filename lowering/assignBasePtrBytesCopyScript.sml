@@ -70,8 +70,7 @@ Proof
   rpt strip_tac >>
   `step_inst_base (mk_inst id MCOPY [Var dst;Var src;out] []) s =
     OK (mcopy (w2n d) (w2n a) n s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   `ptr_covers G tn dst s (w2n (n2w n : bytes32)) /\
    ptr_covers G tn src s (w2n (n2w n : bytes32))` by simp[] >>
   drule_all assign_base_mcopy_operand_edge_ptr >>

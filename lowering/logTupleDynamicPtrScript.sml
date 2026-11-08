@@ -29,7 +29,7 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   qpat_x_assum `step_inst_base _ u = OK t` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def] >> strip_tac >>
   `abi_decode_frame p 32 u (mstore p w u)` by irule abi_decode_mstore_frame >>
   gvs[abi_builtin_allocation_frame_def, abi_decode_frame_def,

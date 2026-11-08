@@ -49,8 +49,7 @@ Proof
      [Var (slot_copy_var cs 2)] [slot_copy_var cs 3]) w =
      OK (update_var (slot_copy_var cs 3) (slot_copy_word load s (a+k)) w)` by
     (qpat_x_assum `load = SLOAD \/ load = TLOAD` strip_assume_tac >>
-     gvs[] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[mk_inst_def, instruction_accessors, instruction_accfupds,
+     gvs[] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       combinTheory.K_THM, opcode_case_def] >>
      simp[exec_read1_def, slot_copy_word_def, update_var_def, sload_def,
           tload_def, contract_storage_def, contract_transient_def]) >>
@@ -112,8 +111,7 @@ Proof
    OK (update_var (slot_copy_var cs 2) (a+k) s)` by
     (irule emitHelperPropsTheory.step_ADD >> simp[]) >>
   simp[run_inst_seq_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  PURE_REWRITE_TAC[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, slot_copy_word_def, eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE, sload_def, tload_def,

@@ -23,8 +23,7 @@ Theorem emit_mcopy_zero_path_ptr:
 Proof
   strip_tac >> irule emit_inst_zero_path_ptr >>
   simp[is_terminator_def] >> conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      simp[mk_inst_def, eval_operand_def]) >>
+  >- (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   irule ptr_inst_ok_mcopy_operand >> simp[]
 QED
 

@@ -29,7 +29,7 @@ Theorem bop_scalar_inst_protected_frame:
 Proof
   strip_tac >> Cases_on `i.inst_opcode = ASSIGN`
   >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      simp[Once step_inst_base_def] >>
+      simp[step_inst_base_opcode_eqs] >>
       Cases_on `i.inst_operands` >> simp[] >>
       Cases_on `t'` >> simp[] >>
       Cases_on `eval_operand h s` >> simp[] >>

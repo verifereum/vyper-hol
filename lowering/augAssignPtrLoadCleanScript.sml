@@ -105,7 +105,7 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id (if tr then TLOAD else SLOAD) [Lit slot] [out]) s =
      OK (update_var out (if tr then tload slot s else sload slot s) s)` by
     (Cases_on `tr` >>
-     simp[step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all storage_load_path_ptr >> strip_tac >>
   qexistsl_tac [

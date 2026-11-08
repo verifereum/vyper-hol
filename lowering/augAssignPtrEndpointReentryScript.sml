@@ -41,7 +41,7 @@ Proof
   qabbrev_tac `H = step_prov PG G i v` >>
   qabbrev_tac `tm = step_taint i s v tn` >>
   `step_inst_base i s = OK v` by
-    simp[Abbr `i`, Abbr `v`, step_inst_base_def, mk_inst_def, eval_operand_def] >>
+    simp[Abbr `i`, Abbr `v`, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 H tm (OK s1)` by
     (unabbrev_all_tac >>
      `1 = SUC s.vs_inst_idx` by simp[] >> pop_assum SUBST1_TAC >>

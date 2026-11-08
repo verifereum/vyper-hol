@@ -92,8 +92,7 @@ Theorem reason_mcopy_path_ptr:
 Proof
   strip_tac >> irule reason_encoder_emit_path_ptr >>
   simp[GSYM emit_void_def, is_terminator_def] >> conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      gvs[mk_inst_def, eval_operand_def]) >>
+  >- (gvs[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   conj_tac
   >- (qexists_tac `sb` >> fs[emit_void_def, emit_inst_def]) >>
   irule ptr_inst_ok_mcopy_operand >> simp[] >> metis_tac[]
@@ -119,8 +118,7 @@ Proof
   simp[is_terminator_def] >> conj_tac >>
   all_tac
   >>~- ([`step_inst_base _ _ = _`],
-    PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    simp[mk_inst_def, exec_pure2_def]) >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]) >>
   irule typedCopyPtrTheory.ptr_inst_ok_copy_len_binop >> simp[]
 QED
 
@@ -140,8 +138,7 @@ Theorem reason_copy_mload_path_ptr:
 Proof
   strip_tac >> irule reason_encoder_emit_path_ptr >>
   simp[is_terminator_def] >> conj_tac
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+  >- (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   irule ptr_inst_ok_mload >> simp[]
 QED
 

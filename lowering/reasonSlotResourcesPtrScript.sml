@@ -151,8 +151,7 @@ Resume reason_slot_initialize_resources_ptr[cursor]:
   `t.vs_current_bb = s.vs_current_bb /\
    t.vs_inst_idx = s.vs_inst_idx /\ ~t.vs_halted` by
     (qpat_x_assum `step_inst_base _ _ = OK t` mp_tac >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_alloca_def] >> gvs[AllCaseEqs()] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >> gvs[AllCaseEqs()] >>
      rpt strip_tac >> gvs[update_var_def]) >>
   `c1.cs_current_bb = sa.cs_current_bb /\
    LENGTH c1.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by

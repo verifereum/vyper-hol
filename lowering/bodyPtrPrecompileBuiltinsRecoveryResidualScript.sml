@@ -17,7 +17,7 @@ Theorem emitted_allocation_memory:
   t.vs_memory = s.vs_memory
 Proof
   strip_tac >> drule_all emitted_allocation_step >>
-  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   metis_tac[exec_alloca_memory]
 QED
 
@@ -273,7 +273,7 @@ Proof
   qexists `code` >> simp[] >> rpt strip_tac >>
   qpat_x_assum `EVERY _ code` mp_tac >> simp[listTheory.EVERY_MEM] >>
   disch_then drule >> strip_tac >>
-  gvs[] >> gvs[step_inst_base_def] >>
+  gvs[] >> gvs[step_inst_base_opcode_eqs] >>
   gvs[exec_alloca_def, exec_pure2_def,
       exec_read1_def, exec_write2_def, AllCaseEqs()] >>
   gvs[update_var_def, mstore_def]

@@ -190,7 +190,7 @@ Proof
   qmatch_asmsub_abbrev_tac `step_inst_base inst s = OK u` >>
   `exec_alloca inst s (64w:bytes32) = OK u` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[Abbr `inst`, step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+     simp[Abbr `inst`, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   `inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit (64w:bytes32)] /\
    inst.inst_outputs = [STRING #"%" (toString sa.cs_next_var)]` by
     simp[Abbr `inst`, mk_inst_def] >>

@@ -44,7 +44,7 @@ Proof
     (irule for_alloca_outer_local_disjoint >> simp[] >> metis_tac[]) >>
   `u.vs_memory = s.vs_memory` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[Once step_inst_base_def, mk_inst_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def] >>
      simp[GSYM mk_inst_def] >> strip_tac >>
      drule exec_alloca_memory >> simp[]) >>
   rpt strip_tac >> irule robust_val_in_memory_exterior_frame >> simp[] >>

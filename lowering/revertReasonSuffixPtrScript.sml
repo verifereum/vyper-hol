@@ -142,8 +142,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [Var src; Lit 0w] [dst]) s =
      OK (update_var dst a s)` by
-    (simp[mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def, WORD_ADD_0]) >>
   `op_taint tn (Var src) = {}` by fs[ptr_covers_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn
@@ -171,8 +170,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MLOAD [Var src] [dst]) s =
      OK (update_var dst (mload (w2n a) s) s)` by
-    (simp[mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_read1_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MLOAD [Var src] [dst]) s` by
     (irule ptr_inst_ok_mload >> simp[]) >>
@@ -200,8 +198,8 @@ Theorem alias_pair_load_run:
 Proof
   strip_tac >> fs[lookup_var_def] >>
   simp[run_inst_seq_def, mk_inst_def] >>
-  PURE_REWRITE_TAC[step_inst_base_def, instruction_accfupds,
-    combinTheory.K_THM, opcode_case_def] >>
+  asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, instruction_accfupds,
+    combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
   simp[exec_pure2_def, exec_read1_def, eval_operand_def,
     lookup_var_def, update_var_def, FLOOKUP_UPDATE, mload_def, WORD_ADD_0]
 QED
@@ -244,8 +242,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base i s = OK (update_var aq Q s)` by
-    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def, WORD_ADD_0]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
@@ -267,8 +264,7 @@ Resume alias_pair_load_checks[second]:
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK (update_var ap P s1)` by
-    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def, WORD_ADD_0]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
@@ -284,8 +280,7 @@ Resume alias_pair_load_checks[second]:
   `ptr_inst_ok D 0 0 ctx fn g2 t2 k s2` by
     (simp[Abbr `k`] >> irule ptr_inst_ok_mload >> simp[]) >>
   `step_inst_base k s2 = OK (update_var dst (mload (w2n A) s2) s2)` by
-    (simp[Abbr `k`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `k`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_read1_def, eval_operand_def]) >>
   simp[inst_seq_ptr_def, Abbr `k`] >> conj_tac
   >- (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]) >>
@@ -446,8 +441,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base i s = OK (update_var retptr (a+28w) s)` by
-    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
@@ -467,8 +461,7 @@ Resume revert_abi_tail_checks[length]:
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base j s1 = OK (update_var retlen (n2w (k+4)) s1)` by
-    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def, GSYM word_add_n2w, WORD_ADD_COMM]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
@@ -540,8 +533,7 @@ Resume zero_pad_copy_checks[checks]:
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
   `step_inst_base i s = OK (update_var endvar (a+n2w R) s)` by
-    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
@@ -593,8 +585,7 @@ Resume zero_pad_copy_checks[copy]:
   `ptr_inst_ok D 0 0 ctx fn g2 t2 k s2` by
     (simp[Abbr `k`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base k s2 = OK (update_var countvar (n2w (32+L)) s2)` by
-    (simp[Abbr `k`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `k`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def, GSYM word_add_n2w, WORD_ADD_COMM]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g3 t3 _ s3 _ _` >>
@@ -647,8 +638,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `step_inst_base i s = OK (update_var tmp (n2w L+31w) s)` by
-    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
@@ -664,8 +654,7 @@ Proof
     (once_rewrite_tac[WORD_AND_COMM] >> rewrite_tac[Once WORD_ADD_COMM] >>
      irule abi_encoder_round_ceil32 >> simp[]) >>
   `step_inst_base j s1 = OK (update_var out (n2w (contractABI$ceil32 L)) s1)` by
-    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def]) >>
   simp[inst_seq_ptr_def, Abbr `j`, copy_len_binop_ghost_frame] >>
   suspend "endpoint"
@@ -677,8 +666,7 @@ Resume round_ceil32_checks[endpoint]:
   `step_inst_base j (update_var tmp (n2w L+31w) s) =
      OK (update_var out (n2w (contractABI$ceil32 L))
        (update_var tmp (n2w L+31w) s))` by
-    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE]) >>
   qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
@@ -746,8 +734,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_mload >> simp[]) >>
   `step_inst_base j s1 = OK (update_var dst (mload (w2n a) s1) s1)` by
-    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_read1_def, eval_operand_def]) >>
   simp[inst_seq_ptr_def, Abbr `j`] >>
   conj_tac >- (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]) >>
@@ -761,8 +748,7 @@ Resume store_load_clean_checks[endpoint]:
     simp[mstore_def, lookup_var_def] >>
   `step_inst_base j (mstore (w2n a) w s) =
      OK (update_var dst w (mstore (w2n a) w s))` by
-    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_read1_def, eval_operand_def, mload_mstore_same]) >>
   `t = update_var dst w (mstore (w2n a) w s)` by
     (qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
@@ -822,8 +808,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
   `step_inst_base i s = OK (update_var out (a+b) s)` by
-    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def]) >>
   simp[inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `op_taint tf (Var out)` >>

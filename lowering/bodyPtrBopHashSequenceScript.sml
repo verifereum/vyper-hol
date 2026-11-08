@@ -36,8 +36,7 @@ Theorem bop_hash_add_state:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[mk_inst_def, venomExecSemanticsTheory.exec_pure2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, venomExecSemanticsTheory.exec_pure2_def,
        eval_operand_def]
 QED
 
@@ -66,8 +65,7 @@ Theorem bop_hash_mload_state:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_read1_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]
 QED
 
 Theorem bop_hash_sha3_state_frame:
@@ -76,8 +74,7 @@ Theorem bop_hash_sha3_state_frame:
   u.vs_fmp = s.vs_fmp /\
   (!x. x <> h ==> lookup_var x u = lookup_var x s)
 Proof
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   Cases_on `eval_operand a s` >> simp[] >>
   Cases_on `eval_operand n s` >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>

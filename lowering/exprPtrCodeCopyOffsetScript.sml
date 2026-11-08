@@ -69,7 +69,7 @@ Proof
     (mk_inst sa.cs_next_id ADD [Var root; Lit (n2w off)]
       [STRING #"%" (toString sa.cs_next_var)]) s =
     OK (update_var (STRING #"%" (toString sa.cs_next_var)) (a+n2w off) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   gvs[copy_runtime_frame_def, inst_seq_ptr_def, run_inst_seq_def] >>
   irule typed_copy_loop_dynamic_offset_covers >>
   simp[eval_operand_def] >> goal_assum (drule_at Any) >> simp[]

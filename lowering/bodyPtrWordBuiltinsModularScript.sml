@@ -203,8 +203,7 @@ Proof
   simp[MEM] >> strip_tac >>
   gvs[mk_inst_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accfupds, instruction_accessors, combinTheory.K_THM, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, instruction_accessors, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, exec_pure3_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >> metis_tac[]
 QED

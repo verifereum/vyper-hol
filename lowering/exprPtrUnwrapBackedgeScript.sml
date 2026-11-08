@@ -16,7 +16,7 @@ Proof
   strip_tac >>
   `step_inst 0 ctx (mk_inst id JMP [Label target] []) s =
     OK (jump_to target s)` by
-    simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def] >>
   `ptr_safe_step D lo 0 ctx fn PG G tn
     (mk_inst id JMP [Label target] []) s` by
     simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,

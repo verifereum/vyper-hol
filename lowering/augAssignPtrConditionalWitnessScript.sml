@@ -30,7 +30,11 @@ Theorem uint256_convert_post:
     (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256)) [e])
     es sa sb s0 ee v op t
 Proof
-  strip_tac >> gvs[expr_post_def, expr_type_def] >> metis_tac[]
+  strip_tac >>
+  `post_value_type cenv e = BaseT (UintT 256)` by
+    simp[post_value_type_word, is_word_type_def] >>
+  gvs[expr_post_def, expr_type_def] >>
+  qpat_x_assum `!aid off sz. _` ACCEPT_TAC
 QED
 
 Theorem bool_literal_selected_value:
@@ -324,7 +328,7 @@ Theorem scalar_join_complete_path:
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id ASSIGN [arg] [out]) s = OK (update_var out w s)` by
-    simp[step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   qexistsl_tac [`DRESTRICT G (COMPL {out})`,
     `tn with t_var := tn.t_var |+ (out,{})`,
     `jump_to lbl (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx)`] >>

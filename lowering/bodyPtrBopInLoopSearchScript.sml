@@ -219,7 +219,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [Var idx;Lit 1w] [tmp]) s =
     OK (update_var tmp (v+1w) s)` by
-    (simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
       eval_operand_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 (DRESTRICT G (COMPL {tmp}))
     (tn with t_var := tn.t_var |+ (tmp,{}))
@@ -253,7 +253,7 @@ Resume membership_increment_path[assign]:
     op_taint_def, FLOOKUP_UPDATE] >>
   qexistsl_tac [`Var tmp`, `id+1`] >>
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-    Once step_inst_base_def, mk_inst_def]
+    step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Finalise membership_increment_path

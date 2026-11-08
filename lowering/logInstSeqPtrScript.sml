@@ -77,8 +77,7 @@ Proof
   qabbrev_tac `i = mk_inst sa.cs_next_id opc [left;right] [out]` >>
   `step_inst_base i s = OK t` by
     (gvs[Abbr `i`, Abbr `t`] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def] >> simp[exec_pure2_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def] >> simp[exec_pure2_def]) >>
   qexistsl_tac [`step_prov PG G i t`, `step_taint i s t tn`, `t`] >>
   conj_tac >- simp[run_inst_seq_def] >>
   conj_tac >-
@@ -122,7 +121,7 @@ Proof
   qabbrev_tac `t = update_var out (mload (w2n a) s) s` >>
   qabbrev_tac `i = mk_inst sa.cs_next_id MLOAD [Var src] [out]` >>
   `step_inst_base i s = OK t` by
-    (simp[Abbr `i`, Abbr `t`, Once step_inst_base_def,
+    (simp[Abbr `i`, Abbr `t`, step_inst_base_opcode_eqs,
           mk_inst_def, exec_read1_def, eval_operand_def]) >>
   qexistsl_tac [`step_prov PG G i t`, `step_taint i s t tn`, `t`] >>
   conj_tac >- simp[run_inst_seq_def] >>
@@ -164,7 +163,7 @@ Proof
   qabbrev_tac `t = mstore (w2n a) w s` >>
   qabbrev_tac `i = mk_inst sa.cs_next_id MSTORE [Var dst;value] []` >>
   `step_inst_base i s = OK t` by
-    simp[Abbr `i`, Abbr `t`, Once step_inst_base_def,
+    simp[Abbr `i`, Abbr `t`, step_inst_base_opcode_eqs,
          mk_inst_def, exec_write2_def, eval_operand_def] >>
   `step_prov PG G i t = G /\
    (step_taint i s t tn).t_var = tn.t_var /\
@@ -201,7 +200,7 @@ Proof
   qabbrev_tac `t = mcopy (w2n b) (w2n a) (w2n n) s` >>
   qabbrev_tac `i = mk_inst sa.cs_next_id MCOPY [Var dst;Var src;count_op] []` >>
   `step_inst_base i s = OK t` by
-    simp[Abbr `i`, Abbr `t`, Once step_inst_base_def,
+    simp[Abbr `i`, Abbr `t`, step_inst_base_opcode_eqs,
          mk_inst_def, eval_operand_def] >>
   `step_prov PG G i t = G /\
    (step_taint i s t tn).t_var = tn.t_var /\

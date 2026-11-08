@@ -40,7 +40,7 @@ Proof
   qabbrev_tac `u = update_var out (if tr then tload a s else sload a s) s` >>
   `step_inst_base i s = OK u` by
     (Cases_on `tr` >>
-     simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def, exec_read1_def]) >>
+     simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule append_scalar_inst_check >>
      simp[Abbr `u`, update_var_def] >> Cases_on `tr` >> simp[]) >>

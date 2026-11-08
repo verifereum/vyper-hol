@@ -23,12 +23,10 @@ Proof
   strip_tac >>
   qabbrev_tac `u = update_var sel (w >>> 224) s` >>
   `step_inst_base (mk_inst ir SHR [Lit 224w; hash] [sel]) s = OK u` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, Abbr `u`, eval_operand_def, dimword_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, Abbr `u`, eval_operand_def, dimword_def]) >>
   `step_inst_base (mk_inst il SHL [Lit 224w; Var sel] [out]) u =
     OK (update_var out ((w >>> 224) << 224) u)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, Abbr `u`, eval_operand_def,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, Abbr `u`, eval_operand_def,
           lookup_var_def, update_var_def, FLOOKUP_UPDATE, dimword_def]) >>
   `t = update_var out ((w >>> 224) << 224) u` by gvs[run_inst_seq_def] >>
   qabbrev_tac `G1 = step_prov PG G (mk_inst ir SHR [Lit 224w; hash] [sel]) u` >>

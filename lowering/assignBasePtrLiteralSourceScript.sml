@@ -145,8 +145,7 @@ Proof
   `step_inst_base h s = OK u /\ step_inst_base ad u = OK v /\
    step_inst_base st v = OK t` by
     (simp[Abbr `h`, Abbr `ad`, Abbr `st`] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                        combinTheory.K_THM, opcode_case_def] >>
      simp[exec_write2_def, exec_pure2_def, eval_operand_def] >>
      simp[Abbr `u`, Abbr `v`, Abbr `t`]) >>

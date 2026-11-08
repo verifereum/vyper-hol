@@ -91,8 +91,7 @@ Proof
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
   simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_pure2_def, AllCaseEqs(), update_var_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF] >> metis_tac[]
 QED
 
@@ -122,8 +121,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, op_taint_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, eval_operand_def, update_var_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, update_var_def]
 QED
 
 Theorem assign_literal_zero_path_ptr:
@@ -139,8 +137,7 @@ Proof
   strip_tac >> irule straight_line_zero_path_ptr >>
   simp[GSYM mk_inst_def, is_terminator_def] >> reverse conj_tac
   >- (irule ptr_inst_ok_assign_literal >> simp[]) >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED
 
 Theorem assign_literal_scalar_ghost:

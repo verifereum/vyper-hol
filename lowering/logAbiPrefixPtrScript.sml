@@ -124,7 +124,7 @@ Proof
   qabbrev_tac `t = update_var out (a + n2w off) s` >>
   qabbrev_tac `i = mk_inst sa.cs_next_id ADD [Var dst;offset] [out]` >>
   `step_inst_base i s = OK t` by
-    simp[Abbr `i`, Abbr `t`, Once step_inst_base_def, mk_inst_def,
+    simp[Abbr `i`, Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def,
          exec_pure2_def, eval_operand_def] >>
   `FLOOKUP (step_prov PG G i t) out = FLOOKUP G dst` by
     simp[Abbr `i`, step_prov_def, set_prov_def, out_prov_def,

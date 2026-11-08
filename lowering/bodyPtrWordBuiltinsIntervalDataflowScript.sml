@@ -133,15 +133,15 @@ Proof
   `MEM inst bb.bb_instructions` by
     (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
   drule_all word_interval_terminator_fetch >> strip_tac
-  >- (gvs[step_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  >- (gvs[step_inst_def, step_inst_base_opcode_eqs, AllCaseEqs()] >>
       metis_tac[]) 
   >- (drule_at (Pat `lookup_block _ _ = _`) word_interval_branch_fetch >>
       simp[] >> disch_then drule >> strip_tac >>
-      gvs[step_inst_def, step_inst_base_def, is_terminator_def])
+      gvs[step_inst_def, step_inst_base_opcode_eqs, is_terminator_def])
   >- (drule_at (Pat `lookup_block _ _ = _`) word_interval_branch_fetch >>
       simp[] >> disch_then drule >> strip_tac >>
-      gvs[step_inst_def, step_inst_base_def, is_terminator_def]) >>
-  gvs[step_inst_def, step_inst_base_def]
+      gvs[step_inst_def, step_inst_base_opcode_eqs, is_terminator_def]) >>
+  gvs[step_inst_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem word_interval_no_phis:

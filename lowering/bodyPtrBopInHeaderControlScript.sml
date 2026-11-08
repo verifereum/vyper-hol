@@ -11,8 +11,7 @@ Theorem membership_gt_step:
   step_inst_base (mk_inst id GT [left;right] [out]) s =
     OK (update_var out (bool_to_word (w2n a > w2n b)) s)
 Proof
-  strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  strip_tac >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def]
 QED

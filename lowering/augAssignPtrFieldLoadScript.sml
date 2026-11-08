@@ -18,8 +18,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
        op_taint_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   gvs[exec_pure2_def, eval_operand_def, update_var_def, op_taint_def] >>
   gen_tac >> Cases_on `op` >> gvs[] >> metis_tac[]
@@ -40,7 +39,7 @@ Proof
     (irule ptr_inst_ok_add_literal >> simp[]) >>
   `step_inst_base (mk_inst id ADD [Var src; Lit off] [out]) s =
     OK (update_var out (a + off) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   mp_tac (Q.INST [`lo` |-> `0`, `u` |-> `update_var out (a + off) s`,
     `i` |-> `mk_inst id ADD [Var src; Lit off] [out]`] straight_line_ptr_edge) >>
   gvs[mk_inst_def, is_terminator_def] >> strip_tac >>

@@ -30,7 +30,7 @@ Proof
   gvs[] >> qexistsl [`Gf`, `tnf`, `mstore (w2n addr) value s`] >> simp[] >>
   `step_inst_base (mk_inst sa.cs_next_id MSTORE [Var root;v] []) s =
     OK (mstore (w2n addr) value s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
   gvs[inst_seq_ptr_def] >> gen_tac >>
   simp[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
        mk_inst_def, is_terminator_def] >>

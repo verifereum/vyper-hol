@@ -111,8 +111,7 @@ Proof
      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `step_inst_base (mk_inst id EQ [Var ctr;bound] [out]) s =
     OK (update_var out (if w = z then 1w else 0w) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
      Cases_on `w = z` >> simp[bool_to_word_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0
     (DRESTRICT G (COMPL {out}))
@@ -193,10 +192,8 @@ Proof
           codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def,
           op_taint_def, step_inst_non_invoke] >>
-         PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-         simp[mk_inst_def, eval_operand_def, update_var_def]) >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def]) >> gvs[]
+         simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, update_var_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >> gvs[]
 QED
 
 Theorem for_add_scalar_path_ptr[local]:
@@ -213,8 +210,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [Var root; Lit lit] [out]) s =
     OK (update_var out (w + lit) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0
     (step_prov PG G (mk_inst id ADD [Var root; Lit lit] [out])
       (update_var out (w + lit) s))

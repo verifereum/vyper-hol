@@ -61,9 +61,9 @@ Theorem alloca_store_add_data_frame:
   t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >- metis_tac[alloca_step_data_frame] >-
-    (fs[step_inst_base_def, mk_inst_def, exec_write2_def, AllCaseEqs()] >>
+    (fs[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, AllCaseEqs()] >>
      gvs[mstore_def]) >>
-  fs[step_inst_base_def, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
+  fs[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
   gvs[update_var_def]
 QED
 
@@ -86,14 +86,14 @@ Theorem alloca_store_add_lookup_frame:
 Proof
   strip_tac >-
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
      Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >-
        (strip_tac >> gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
      PairCases_on `x'` >> simp[] >> strip_tac >>
      gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >-
-    (fs[step_inst_base_def, mk_inst_def, exec_write2_def, AllCaseEqs()] >>
+    (fs[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, AllCaseEqs()] >>
      gvs[lookup_var_def, mstore_def]) >>
-  fs[step_inst_base_def, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
+  fs[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
@@ -128,7 +128,7 @@ Proof
      simp[] >> disch_then (qspec_then `out` assume_tac) >>
      gvs[update_var_def, FLOOKUP_UPDATE]) >>
   rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
-  fs[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  fs[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   gvs[update_var_def, FLOOKUP_UPDATE] >>
   drule reused_alloca_memory_taint >>
   disch_then (qspecl_then [`out`, `tn`] mp_tac) >>
@@ -140,7 +140,7 @@ Theorem mstore_literal_memory_taint_bound:
   (step_taint (mk_inst id MSTORE [Var dst; Lit value] []) s t tn).t_mem
     SUBSET tn.t_mem
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   `eval_operand (Lit value) s = SOME value /\ op_taint tn (Lit value) = {}` by
     simp[eval_operand_def, op_taint_def] >>
@@ -151,7 +151,7 @@ Theorem add_step_memory_taint_frame:
   step_inst_base (mk_inst id ADD [left; right] [out]) s = OK t ==>
   (step_taint (mk_inst id ADD [left; right] [out]) s t tn).t_mem = tn.t_mem
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   simp[step_taint_def, mem_taint_def, step_writes_def,
        codegenRelTheory.source_memory_write_ranges_def, written_taint_def,
@@ -264,7 +264,7 @@ Proof
     (drule_all store_offset_endpoint >> strip_tac >>
      `s3.vs_allocas = s1.vs_allocas` by simp[update_var_def, mstore_def] >>
      qpat_x_assum `step_inst_base _ s3 = OK t` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
      strip_tac >> simp[update_var_def, FLOOKUP_UPDATE] >>
      gvs[update_var_def, FLOOKUP_UPDATE]) >>
   qexistsl_tac [`b`, `c`] >> simp[] >> conj_tac >-

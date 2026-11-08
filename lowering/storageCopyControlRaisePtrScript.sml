@@ -147,8 +147,7 @@ Proof
   strip_tac >>
   `k < dimword(:256)` by decide_tac >>
   conj_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
                   instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, eval_operand_def,
        wordsTheory.n2w_11, arithmeticTheory.LESS_MOD, bool_to_word_def]
@@ -166,8 +165,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ASSIGN [Lit 0w] [cv]) s =
      OK (update_var cv 0w s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure1_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def, eval_operand_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0
      (DRESTRICT G (COMPL {cv})) (tn with t_var := tn.t_var |+ (cv,{}))
      (OK (update_var cv 0w s with vs_inst_idx := SUC s.vs_inst_idx))` by

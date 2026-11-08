@@ -38,7 +38,7 @@ Proof
   disch_then (drule_at (Pat `MEM (mk_inst _ _ _ _) (fn_insts _)`)) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `step_inst_base (mk_inst id ALLOCA [Lit (n2w cap)] [root]) s = OK t` by
-    fs[step_inst_base_def, mk_inst_def] >>
+    fs[step_inst_base_opcode_eqs, mk_inst_def] >>
   `FLOOKUP t.vs_allocas id = SOME (b,cap)` by fs[mk_inst_def] >>
   `b+cap < dimword(:256)` by
     (drule_all alloca_site_registered_below >>
@@ -156,7 +156,7 @@ QED
 Resume compile_alloc_buffer_path_resources_ptr[endpoint]:
   `~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def, exec_alloca_def,
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def,
        AllCaseEqs(), update_var_def] >> rpt strip_tac >> gvs[]) >>
   `p = STRING #"%" (toString sa.cs_next_var)` by metis_tac[operand_11] >>
   `alloca_inv (t with vs_inst_idx := s.vs_inst_idx+1)` by
@@ -168,7 +168,7 @@ Resume compile_alloc_buffer_path_resources_ptr[endpoint]:
    t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
    t.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def, exec_alloca_def,
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def,
        AllCaseEqs(), update_var_def] >> rpt strip_tac >> gvs[]) >>
   `tn1.t_stor = tn.t_stor /\ tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm` by
     simp[Abbr `tn1`, step_taint_def, out_taint_def, mk_inst_def,

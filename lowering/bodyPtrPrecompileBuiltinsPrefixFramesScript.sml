@@ -51,7 +51,7 @@ Theorem staging_step_runtime_fields:
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient
 Proof
-  strip_tac >> gvs[] >> gvs[step_inst_base_def] >>
+  strip_tac >> gvs[] >> gvs[step_inst_base_opcode_eqs] >>
   gvs[exec_alloca_def, exec_pure2_def, exec_read1_def, exec_write2_def,
     AllCaseEqs()] >>
   gvs[update_var_def, mstore_def]
@@ -80,7 +80,7 @@ Theorem staging_alloca_footprint_above_frontier:
   i IN new_site_bytes s t ==>
   s.vs_alloca_next <= i
 Proof
-  strip_tac >> gvs[step_inst_base_def] >>
+  strip_tac >> gvs[step_inst_base_opcode_eqs] >>
   gvs[exec_alloca_def, AllCaseEqs()] >>
   gvs[new_site_bytes_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
       finite_mapTheory.FLOOKUP_DEF] >>

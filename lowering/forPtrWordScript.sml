@@ -17,8 +17,7 @@ Theorem for_word_copy_steps:
       (update_var tmp (mload (w2n a) s) s))
 Proof
   strip_tac >> conj_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_read1_def, exec_write2_def, eval_operand_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_write2_def, eval_operand_def,
        update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   gvs[lookup_var_def]
 QED
@@ -53,8 +52,7 @@ Proof
       (u with vs_inst_idx := SUC s.vs_inst_idx) =
     OK ((mstore (w2n b) (mload (w2n a) s) u) with
       vs_inst_idx := SUC s.vs_inst_idx)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, Abbr `u`,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def, Abbr `u`,
           update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
      gvs[lookup_var_def] >> simp[mstore_def]) >>
   simp[inst_seq_ptr_def] >>

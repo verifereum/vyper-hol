@@ -111,8 +111,7 @@ Proof
   `step_inst_base (mk_inst id (if tr then TSTORE else SSTORE)
      [addr; value] []) s =
      OK (if tr then tstore k w s else sstore k w s)` by
-    (Cases_on `tr` >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def]) >>
+    (Cases_on `tr` >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]) >>
   gvs[] >>
   irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`]
     (SPEC_ALL (cj 2 gas_path_ptr_rules)))) >>

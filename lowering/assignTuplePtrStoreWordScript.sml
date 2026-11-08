@@ -71,7 +71,7 @@ Theorem emit_mstore_zero_path_ptr:
 Proof
   strip_tac >> irule emit_inst_zero_path_ptr >>
   simp[is_terminator_def] >> conj_tac
-  >- simp[step_inst_base_def, mk_inst_def, exec_write2_def, eval_operand_def] >>
+  >- simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def] >>
   irule ptr_inst_ok_mstore >> simp[]
 QED
 

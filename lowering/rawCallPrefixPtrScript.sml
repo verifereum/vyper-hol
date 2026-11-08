@@ -22,8 +22,7 @@ Proof
     mk_inst_def, codegenRelTheory.source_memory_write_ranges_def,
     contextCodegenRelTheory.source_memory_read_ranges_def] >>
   simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[mk_inst_def, venomExecSemanticsTheory.exec_gas_def, AllCaseEqs(),
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, venomExecSemanticsTheory.exec_gas_def, AllCaseEqs(),
     venomStateTheory.update_var_def] >> rpt strip_tac >> gvs[]
 QED
 
@@ -32,7 +31,7 @@ Theorem raw_call_gas_step_base:
     OK (update_var out (case s.vs_gas_readings of [] => 0w | r::rs => r)
       (s with vs_gas_readings := TL s.vs_gas_readings))
 Proof
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   Cases_on `s.vs_gas_readings` >>
   simp[mk_inst_def, venomExecSemanticsTheory.exec_gas_def] >>
   fs[venomStateTheory.update_var_def] >>

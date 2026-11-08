@@ -30,7 +30,7 @@ Proof
       (mstore (w2n addr) value s) tn`, `mstore (w2n addr) value s`] >>
   `step_inst_base (mk_inst id MSTORE [Var root;v] []) s =
     OK (mstore (w2n addr) value s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
   simp[run_inst_seq_def, inst_seq_ptr_def, ptr_inst_ok_mstore_tainted,
        mstore_transferred_taint, copy_step_immutable_taint, mk_inst_def] >>
   simp[step_prov_def, set_prov_def, step_taint_def, set_var_taint_def,

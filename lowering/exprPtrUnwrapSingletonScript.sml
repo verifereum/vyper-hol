@@ -18,13 +18,13 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id load [src] [out]) s =
      OK (update_var out (slot_copy_word load s key) s)` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_read1_def,
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
                    slot_copy_word_def]) >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var root;Var out] [])
      (update_var out (slot_copy_word load s key) s) =
      OK (mstore (w2n addr) (slot_copy_word load s key)
        (update_var out (slot_copy_word load s key) s))` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def, eval_operand_def,
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def,
          lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   gvs[] >> simp[run_inst_seq_def]
 QED
@@ -57,11 +57,11 @@ Proof
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id load [src] [out]) s` by
     (irule ptr_inst_ok_slot_load >> simp[]) >>
   `step_inst_base (mk_inst id load [src] [out]) s = OK u` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_read1_def,
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
                    slot_copy_word_def]) >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var root; Var out] []) w =
      OK (mstore (w2n addr) (slot_copy_word load s key) w)` by
-    (simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
      gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   gvs[] >> simp[inst_seq_ptr_def]
 QED

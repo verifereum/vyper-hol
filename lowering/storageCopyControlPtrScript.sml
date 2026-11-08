@@ -37,8 +37,7 @@ Theorem copy_loop_eq_step:
     OK (update_var tv (bool_to_word (k = n)) s)
 Proof
   strip_tac >> `k < dimword(:256)` by decide_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, wordsTheory.n2w_11]
 QED
@@ -114,8 +113,7 @@ Theorem copy_loop_branch_path_ptr:
 Proof
   strip_tac >> irule copy_loop_jump_path_ptr >> simp[] >>
   conj_tac >- (rpt strip_tac >> gvs[op_taint_def]) >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[eval_operand_def, bool_to_word_def] >> Cases_on `done` >> simp[]
 QED
@@ -157,8 +155,7 @@ Theorem copy_loop_scalar_assign_step:
   eval_operand a s = SOME w ==>
   step_inst_base (mk_inst id ASSIGN [a] [cv]) s = OK (update_var cv w s)
 Proof
-  strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  strip_tac >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >> simp[]
 QED
 
@@ -273,8 +270,7 @@ Proof
     (irule copy_loop_jump_path_ptr >>
      simp[update_var_def, get_instruction_def, EL_APPEND_EQN, ADD1] >>
      simp[mk_inst_def, op_taint_def] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+     asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                      combinTheory.K_THM, opcode_case_def] >>
      simp[]) >>
   gvs[jump_to_def] >> metis_tac[gas_path_ptr_then, ADD_CLAUSES]
