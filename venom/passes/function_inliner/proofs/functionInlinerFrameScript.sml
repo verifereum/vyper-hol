@@ -3,7 +3,7 @@ Theory functionInlinerFrame
 Ancestors
   functionInlinerReturnBoundary stateFrame venomExecProofs venomState finite_map pred_set
   o1FrameLockstep venomExecSemantics passSharedProps functionInlinerDefs
-  fnFrameBoundaryGenRet
+  fnFrameBoundaryGenRet functionInlinerOpacity
 
 (* Ignore only frame-local call bookkeeping, in addition to execution control.
    In particular fmp, memory, oracle streams and observable effects remain. *)
@@ -474,4 +474,65 @@ Proof
   rpt strip_tac >> drule_all inline_opaque_frame_selected_phi >> strip_tac >>
   qexists `b` >> simp[] >>
   irule inline_opaque_frame_write_establish >> metis_tac[]
+QED
+
+(* Static ancestry discharges only opacity; coverage and label agreement
+   remain explicit dynamic-frame premises. *)
+Theorem inline_opacity_frame_ordinary_operands:
+  inline_opacity_ok fn opaque /\ MEM inst (fn_insts fn) /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET] /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  EVERY (\op. (!v. op = Var v ==> v IN V) /\
+    (!l. op = Label l ==> FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (lab l)))
+    inst.inst_operands ==>
+  eval_operands (MAP (inline_rename_operand ren lab) inst.inst_operands) t =
+    eval_operands inst.inst_operands s
+Proof
+  rpt strip_tac >> irule inline_opaque_frame_eval_operands >>
+  goal_assum (drule_at Any) >>
+  gvs[listTheory.EVERY_MEM] >> rpt strip_tac >> gvs[] >>
+  drule_all inline_opacity_use >> simp[unitShapeDefsTheory.retpc_use_ok_def]
+QED
+
+Theorem inline_opacity_frame_return:
+  inline_opacity_ok fn opaque /\ MEM inst (fn_insts fn) /\
+  MEM inst.inst_opcode [RET; RETFMP] /\ inst.inst_operands = ops ++ [Var v] /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  EVERY (\op. (!x. op = Var x ==> x IN V) /\
+    (!l. op = Label l ==> FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (lab l))) ops /\
+  v IN V /\ lookup_var v s = SOME a /\ eval_operands ops s = SOME ws ==>
+  ?b. eval_operands inst.inst_operands s = SOME (ws ++ [a]) /\
+    eval_operands (MAP (inline_rename_operand ren lab) inst.inst_operands) t =
+      SOME (ws ++ [b]) /\
+    FRONT (ws ++ [a]) = FRONT (ws ++ [b]) /\ s.vs_fmp = t.vs_fmp
+Proof
+  rpt strip_tac >>
+  qpat_assum `inst.inst_operands = _` (fn th => rewrite_tac[th]) >>
+  irule inline_opaque_frame_return_suffix >> simp[] >>
+  goal_assum (drule_at (Pat `inline_opaque_frame_rel _ _ _ _ _ _ _`)) >>
+  simp[] >> gvs[listTheory.EVERY_MEM] >> rpt strip_tac >> gvs[] >>
+  `MEM (Var v') (TAKE (LENGTH inst.inst_operands - 1) inst.inst_operands)` by
+    simp[rich_listTheory.TAKE_APPEND] >>
+  drule_at (Pat `MEM i (fn_insts fn)`) inline_opacity_return_front >>
+  simp[rich_listTheory.TAKE_APPEND] >> metis_tac[]
+QED
+
+Theorem inline_opacity_frame_phi_write:
+  inline_opacity_ok fn opaque /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  s.vs_prev_bb = SOME prev /\ t.vs_prev_bb = SOME (lab prev) /\
+  (!l. lab l = lab prev <=> l = prev) /\
+  inst.inst_outputs = [x] /\ resolve_phi prev inst.inst_operands = SOME (Var v) /\
+  v IN V /\ v IN opaque /\
+  (!u. u IN V ==> (ren u = ren x <=> u = x)) /\ ren x NOTIN P /\
+  eval_one_phi s inst = SOME (x,a) ==>
+  ?b. eval_one_phi t (inline_rename_inst ren lab inst) = SOME (ren x,b) /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P
+      (update_var x a s) (update_var (ren x) b t)
+Proof
+  rpt strip_tac >> irule inline_opaque_frame_phi_write >>
+  goal_assum (drule_at Any) >> simp[] >>
+  irule inline_opacity_phi >> goal_assum (drule_at Any) >>
+  simp[] >> qexistsl [`fn`, `inst`] >>
+  simp[] >> metis_tac[dftCommutationTheory.resolve_phi_MEM]
 QED

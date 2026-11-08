@@ -402,3 +402,40 @@ Proof
   gvs[inline_opacity_renumber, AllCaseEqs()] >>
   CASE_TAC >> simp[inline_opacity_fix_phis]
 QED
+
+Theorem retpc_var_output_member:
+  !fn x. retpc_var fn x ==> ?i. MEM i (fn_insts fn) /\ MEM x i.inst_outputs
+Proof
+  simp[retpc_var_def] >> rpt strip_tac >>
+  drule (iffLR copy_phi_var_cases) >> metis_tac[]
+QED
+
+Theorem qualified_origin_opacity:
+  !ctx n fn. qualified_origin ctx n fn ==>
+    ?opaque. inline_opacity_ok fn opaque /\
+      (!x. x IN opaque ==> ~isPREFIX "inl" x \/
+        ?k. k < n /\ isPREFIX (inline_prefix k) x)
+Proof
+  ho_match_mp_tac qualified_origin_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> qexists_tac `{x | retpc_var fn x}` >>
+      conj_tac >- metis_tac[inliner_input_opacity] >>
+      simp[] >> rpt strip_tac >>
+      drule retpc_var_output_member >> strip_tac >>
+      gvs[functionInlinerContractTheory.inliner_input_ok_def, EVERY_MEM] >>
+      metis_tac[])
+  >- (rpt strip_tac >> qexists_tac `opaque` >>
+      metis_tac[functionInlinerWfTheory.inline_label_bound_mono]) >>
+  rpt strip_tac >>
+  qexists_tac `opaque UNION IMAGE (STRCAT (inline_prefix n)) opaque'` >>
+  conj_tac
+  >- (irule inline_one_site_opacity >> conj_tac
+      >- metis_tac[functionInlinerWfTheory.inline_label_bound_fresh] >>
+      goal_assum (drule_at (Pat `inline_one_site _ _ _ = _`)) >>
+      simp[] >> qexists_tac `ctx` >> simp[]) >>
+  drule inline_one_site_counter >> strip_tac >>
+  simp[IN_UNION, IN_IMAGE, Excl "isPREFIX", Excl "isPREFIX_def"] >> rpt strip_tac
+  >- (irule functionInlinerWfTheory.inline_label_bound_mono >>
+      qexists_tac `n` >> simp[]) >>
+  gvs[Excl "isPREFIX", Excl "isPREFIX_def"] >>
+  metis_tac[functionInlinerWfTheory.inline_label_bound_clone]
+QED
