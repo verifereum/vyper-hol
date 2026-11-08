@@ -3,7 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarSemantic bodyPtrTypeBuiltinsCheckedArithmetic
   bodyPtrSignedConvertBool fragGasPathPtr exprLowering compileEnv
   exprLoweringProps venomExecSemantics bodyPtrTypeBuiltinsScalarArithmetic
-  bodyPtrTypeBuiltinsScalarChecks arithmetic
+  bodyPtrTypeBuiltinsScalarChecks arithmetic venomInst
 
 Theorem scalar_convert_counted_success:
   valid_conversion src dst /\ ~is_bytestring_type src /\
@@ -57,4 +57,51 @@ Proof
   >~ [`compile_type_convert x (ConvToFlag _) sa = _`]
   >- (drule_all convert_flag_counted_certificate >> metis_tac[ADD_COMM]) >>
   drule_all convert_bytesm_counted_certificate >> metis_tac[ADD_COMM]
+QED
+
+Theorem scalar_convert_counted_abort:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  conv = (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) /\
+  compile_type_convert x conv sa = (out,sb) /\
+  op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
+  run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?H th steps j.
+    gas_path_ptr D 0 ctx fn PG G tn s steps H th
+      (Abort err (t with vs_inst_idx := j))
+Proof
+  strip_tac >> drule_all scalar_source_dispatch_partition >>
+  disch_then (qspec_then `cenv` mp_tac) >>
+  qpat_x_assum `conv = _` (assume_tac o SYM) >> simp[] >> strip_tac >>
+  Cases_on `conv` >> gvs[]
+  >~ [`compile_type_convert x ConvIdentity sa = _`]
+  >- gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl, run_inst_seq_def]
+  >~ [`compile_type_convert x ConvToBool sa = _`]
+  >- (drule convert_bool_code >> strip_tac >>
+      fs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
+         AllCaseEqs()])
+  >~ [`compile_type_convert x (ConvIntToInt _ _ _ _) sa = _`]
+  >- (drule_all convert_int_abort_counted_certificate >> metis_tac[])
+  >~ [`compile_type_convert x (ConvBytesToInt _ _ _) sa = _`]
+  >- (drule_all convert_bytes_int_abort_counted_certificate >> metis_tac[])
+  >~ [`compile_type_convert x (ConvIntToBytesM _ _ _) sa = _`]
+  >- (drule_all convert_int_bytes_abort_counted_certificate >> metis_tac[])
+  >~ [`compile_type_convert x (ConvIntToDecimal _ _ _ _ _) sa = _`]
+  >- (drule_at (Pos (el 2)) convert_decimal_abort_counted_certificate >> simp[] >> metis_tac[])
+  >~ [`compile_type_convert x (ConvDecimalToInt _ _ _ _ _ _) sa = _`]
+  >- (drule_at (Pos (el 2)) convert_decimal_abort_counted_certificate >> simp[] >> metis_tac[])
+  >~ [`compile_type_convert x (ConvBoolToDecimal _) sa = _`]
+  >- metis_tac[convert_bool_decimal_no_abort]
+  >~ [`compile_type_convert x (ConvBytesMToDecimal _ _ _ _) sa = _`]
+  >- (drule_all convert_bytes_decimal_abort_counted_certificate >> metis_tac[])
+  >~ [`compile_type_convert x ConvToAddress sa = _`]
+  >- (drule_all convert_address_abort_counted_certificate >> metis_tac[])
+  >~ [`compile_type_convert x (ConvBytesToAddress _) sa = _`]
+  >- (fs[convert_bytes_address_eq] >> drule_all convert_bytes_int_abort_counted_certificate >> metis_tac[])
+  >~ [`compile_type_convert x (ConvToFlag _) sa = _`]
+  >- (drule_all convert_flag_abort_counted_certificate >> metis_tac[]) >>
+  drule_all convert_bytesm_abort_counted_certificate >> metis_tac[]
 QED
