@@ -17,7 +17,7 @@ Theorem prefix_loop_slot_reuse_ghost:
        (G |+ (ip,(p,32)),step_taint i s a tn)
 Proof
   strip_tac >>
-  simp[step_inst_base_def, mk_inst_def, exec_alloca_def, eval_operand_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, eval_operand_def,
     ghost_step_def, step_inst_non_invoke, step_prov_def, set_prov_def,
     out_prov_def, update_var_def, FLOOKUP_UPDATE]
 QED
@@ -131,7 +131,7 @@ Proof
       rpt strip_tac >> gvs[] >>
       fs[allocas_from_def, AllCaseEqs()] >> metis_tac[]) >>
   PairCases_on `x` >>
-  gvs[step_inst_base_def, mk_inst_def, exec_alloca_def, eval_operand_def,
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, eval_operand_def,
     update_var_def, FLOOKUP_UPDATE] >>
   pure_rewrite_tac[GSYM update_var_def, GSYM mk_inst_def] >>
   simp[SRULE [LET_THM] prefix_loop_slot_reuse_taint] >>
@@ -221,14 +221,14 @@ QED
 
 Resume prefix_loop_index_slot_pair[allocation_lookup]:
   qpat_x_assum `step_inst_base (mk_inst _ MSTORE _ _) _ = _` mp_tac >>
-  simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
     eval_operand_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[mstore_def, write_memory_def] >>
   Cases_on `FLOOKUP s.vs_allocas aid`
   >- gvs[prefix_alloca_step, update_var_def, FLOOKUP_UPDATE,
           eval_operand_def, lookup_var_def] >>
   PairCases_on `x` >>
-  gvs[step_inst_base_def, mk_inst_def, exec_alloca_def, eval_operand_def,
+  gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, eval_operand_def,
     update_var_def, FLOOKUP_UPDATE, lookup_var_def]
 QED
 
@@ -255,7 +255,7 @@ Resume prefix_loop_index_slot_pair[continuation]:
      simp[]) >>
   conj_tac >-
     (qpat_x_assum `step_inst_base (mk_inst _ ALLOCA _ _) _ = _` mp_tac >>
-     simp[step_inst_base_def,mk_inst_def,exec_alloca_def,eval_operand_def] >>
+     simp[step_inst_base_opcode_eqs,mk_inst_def,exec_alloca_def,eval_operand_def] >>
      Cases_on `FLOOKUP s.vs_allocas aid`
      >- (simp[update_var_def,mstore_def,write_memory_def] >> strip_tac >> gvs[]) >>
      PairCases_on `x` >> simp[update_var_def,mstore_def,write_memory_def] >>
