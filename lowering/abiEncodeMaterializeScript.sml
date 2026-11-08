@@ -206,7 +206,14 @@ Theorem materialize_alloc_vv_sim:
        regions_disjoint (w2n w) (type_memory_bytes ce (expr_type e)) b len) /\
     (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
 Proof
-  cheat
+  strip_tac >> drule materialize_vv_post_operand >> strip_tac >>
+  `stmt_state_rel ctx func ce cx es' r` by gvs[vv_post_def] >>
+  drule_all alloc_buffer_source_frag >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  `vv_post ctx func ce cx e es sa mid s0 es' tv vv u` by
+    (irule materialize_vv_post_alloc_storage_frame >> simp[] >>
+     qexistsl [`r`, `sm`] >> simp[]) >>
+  qexistsl [`u`, `w'`] >> simp[] >> metis_tac[]
 QED
 
 Theorem materialize_compile_trace:
