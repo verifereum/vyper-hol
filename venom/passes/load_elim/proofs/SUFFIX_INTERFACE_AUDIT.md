@@ -156,18 +156,47 @@ empty write sets. Derive zero epoch and use history lookup persistence.
 
 ## 5. Target rest-PHI success is not automatic
 
-`execEquivParamBase.eval_phis_agreement` requires
-`valid_state_rel R_ok R_term`, `R_ok s1 s2`, equal prev_bb, and agreement
-on every Var operand of every PHI in rest. With source eval_phis success it
-constructs target rest success. Source freshness and prefix-excluded lookup
-agreement discharge the operand condition for original instructions;
-transformed PHIs also require the preserved-PHI shape interface (configured
-lc_load/lc_store are not PHI). A valid padded-memory state relation must be
-available; variable agreement alone does not discharge valid_state_rel.
-Then `le_occ_prefix_all_entries_phis_success` extends to the prepended batch.
-Its selected-input availability comes from ReachedSourceAgreement, not from
-assuming success of the augmented batch. DynamicCapture's rest-success
-premise must NOT be dropped until this application is checked.
+`execEquivParamBase.eval_phis_agreement` is NOT an appropriate interface
+for the frozen padded-memory relations: `valid_state_rel_def` requires exact
+`vsr_frame` equality, including memory. Differing trailing zero bytes violate
+that requirement. Do not attempt to discharge it with variable agreement.
+
+The checked replacement is `loadElimPhiTransportTheory`:
+
+- `le_snapshot_batch_transport` transports successful snapshot batches and
+  relates their results under any relation closed under paired identical
+  `update_var` operations. Reads always use the original incoming snapshots.
+- `le_eval_phis_transport` specializes this to the leading PHI prefix.
+- `le_eval_phis_prefix_eq` gives exact result equality for equal leading
+  prefixes, including errors, reusing `abiEncoderObserver.eval_phis_prefix`.
+- `le_eval_one_phi_agreement` derives incoming read agreement from equal
+  `vs_prev_bb`, equal `vs_labels`, and lookup agreement on Var operands.
+  Label operands require label-map agreement; no memory agreement is used.
+- `le_configured_rest_phis_transport` combines these with .21's
+  `le_configured_transformed_phi_prefix` for arbitrary indexed input lattices.
+  From successful source PHIs and incoming agreement it constructs successful
+  transformed rest PHIs and relates their results. It does not assume target
+  rest success or require an exact-memory relation.
+
+Source freshness and prefix-excluded lookup agreement must still discharge
+this consumer's Var condition. Its explicit paired-update closure must be
+proved for the relation used by coupling; the frozen equivalences are not
+imported or redefined by the helper theory.
+
+`le_occ_prefix_all_entries_phis_success` can then extend rest success to the
+prepended batch. Its selected-input availability comes from
+ReachedSourceAgreement, not from assuming success of the augmented batch.
+The new transport theorem only relates the ORIGINAL/rest PHI results: the
+inserted prefix writes fresh outputs on the target side alone. A separate
+captured-prefix framing argument must extend that relation while recording
+the selected generated output and its key read. Paired identical updates
+must NOT be imposed on that inserted prefix. DynamicCapture's rest-success
+premise is now constructible through the checked consumer, but its selected
+input and full-batch capture/framing obligations remain at actual use sites.
+Neither this interface nor source retention supplies local step simulation
+for .13: singleton loads, multivalue loads using captured values, redundant
+stores with padded memory, calls, and invariant closure still need checked
+pass-specific boundaries before constructing actual target suffix execution.
 
 ## 6. Noncircular coupling signature and dependency order
 
