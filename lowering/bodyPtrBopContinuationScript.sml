@@ -104,7 +104,7 @@ Proof
   irule bop_compare_bytes_run >> simp[] >>
   qexistsl_tac [`if bop = Exp then expr_int_literal e1 else NONE`,
     `if bop = Exp then expr_int_literal e2 else NONE`, `tv1`, `expr_type e1`, `x`, `y`] >>
-  simp[] >> metis_tac[]
+  simp[oEL_def] >> metis_tac[]
 QED
 
 Theorem bop_scalar_parent_outcome:

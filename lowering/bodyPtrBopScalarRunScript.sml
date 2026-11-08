@@ -394,6 +394,7 @@ QED
 Theorem bop_compare_bytes_run:
   (bop = Eq \/ bop = NotEq) /\
   (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
+  (!t. oEL 1 tys = SOME t ==> evaluate_type (get_tenv cx) t = SOME tv) /\
   value_has_type tv (BytesV b1) /\ value_has_type tv (BytesV b2) /\
   compile_binop bop x y ty bl el sa = (op,sb) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
@@ -414,7 +415,12 @@ Proof
   irule bop_compare_words_run >>
   goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >> gvs[] >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      binop_negate_def, eval_compare_def]
+      binop_negate_def, eval_compare_def] >>
+  Cases_on `tys` >> gvs[] >>
+  rename1 `oEL 1 (head::tail)` >>
+  Cases_on `tail` >> gvs[] >>
+  rename1 `oEL 1 (head::rhs::rest)` >>
+  Cases_on `rest` >> gvs[oEL_def]
 QED
 
 Theorem bop_minmax_fresh_run:
