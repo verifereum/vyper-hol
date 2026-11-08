@@ -42,3 +42,64 @@ Proof
     metis_tac[phi_codegen_inst_shape, phi_run_context_def] >>
   metis_tac[phi_output_normalize_self]
 QED
+
+Theorem phi_provenance_prefix:
+  !base fn bb pred entry source final dfg cfg halt i j ps ops qs.
+    phi_run_context fn bb pred entry source final /\
+    i+j <= LENGTH (collect_phis bb.bb_instructions) /\
+    phi_stack_provenance base pred entry
+      (TAKE i (collect_phis bb.bb_instructions))
+      (DROP i (collect_phis bb.bb_instructions)) ps /\
+    generate_block_insts_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label
+      halt 0 (LENGTH bb.bb_instructions) i j (DROP i bb.bb_instructions) ps =
+      SOME (ops,qs) ==>
+    phi_stack_provenance base pred entry
+      (TAKE (i+j) (collect_phis bb.bb_instructions))
+      (DROP (i+j) (collect_phis bb.bb_instructions)) qs
+Proof
+  Induct_on `j`
+  >- simp[generate_block_insts_prefix_def] >>
+  rpt gen_tac >> strip_tac >>
+  `i < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  `i < LENGTH bb.bb_instructions` by
+    (mp_tac (Q.SPEC `bb.bb_instructions` livenessProofsTheory.current_collect_phis_length) >>
+     decide_tac) >>
+  `DROP i bb.bb_instructions = EL i bb.bb_instructions :: DROP (i+1) bb.bb_instructions` by
+    metis_tac[rich_listTheory.DROP_CONS_EL, arithmeticTheory.ADD1] >>
+  `(EL i bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[fnBlockPlanStaticOffsetLiveTheory.collect_phis_index] >>
+  `LENGTH bb.bb_instructions = SUC i + LENGTH (DROP (i+1) bb.bb_instructions)` by
+    simp[listTheory.LENGTH_DROP] >>
+  qpat_x_assum `generate_block_insts_prefix _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [phi_prefix_cons_plan] >>
+  Cases_on `generate_phi_plan (EL i bb.bb_instructions)
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) halt ps` >>
+  simp_tac bool_ss [LET_THM, pairTheory.pair_case_thm, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `LENGTH bb.bb_instructions = _` (fn th =>
+    rule_assum_tac (REWRITE_RULE [GSYM th])) >>
+  gvs[AllCaseEqs()] >>
+  rename1 `generate_phi_plan _ _ _ ps = (step_ops, mid)` >>
+  `i < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  `EL i (collect_phis bb.bb_instructions) = EL i bb.bb_instructions` by
+    simp[fnBlockPlanStaticOffsetLiveTheory.collect_phis_index] >>
+  `DROP i (collect_phis bb.bb_instructions) =
+    EL i bb.bb_instructions :: DROP (SUC i) (collect_phis bb.bb_instructions)` by
+    (drule rich_listTheory.DROP_CONS_EL >> simp[]) >>
+  `TAKE (SUC i) (collect_phis bb.bb_instructions) =
+    TAKE i (collect_phis bb.bb_instructions) ++ [EL i bb.bb_instructions]` by
+    metis_tac[rich_listTheory.TAKE_SUC_BY_TAKE, listTheory.SNOC_APPEND,
+      fnBlockPlanStaticOffsetLiveTheory.collect_phis_index] >>
+  `phi_stack_provenance base' pred entry
+    (TAKE (SUC i) (collect_phis bb.bb_instructions))
+    (DROP (SUC i) (collect_phis bb.bb_instructions)) mid` by
+    (asm_simp_tac bool_ss [] >>
+     irule phi_provenance_advance >>
+     qexistsl_tac [`bb`, `fn`] >>
+     simp[listTheory.LENGTH_TAKE] >>
+     goal_assum (drule_at Any) >>
+     gvs[phi_run_context_def] >>
+     metis_tac[listTheory.TAKE_DROP]) >>
+  `i + SUC j = SUC i + j` by decide_tac >>
+  pop_assum SUBST1_TAC >> first_x_assum irule >>
+  metis_tac[arithmeticTheory.ADD1, arithmeticTheory.ADD_CLAUSES]
+QED
