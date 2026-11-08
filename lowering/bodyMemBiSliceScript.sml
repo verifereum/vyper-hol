@@ -1,11 +1,10 @@
 (* Memory case of the body induction: slice (bodyMemory's
-   body_builtin_mem_ok splits it off). A slice of x.code evaluates start and
-   len before the address x (code_slice_source), so its premises are the
-   induction's code-slice ones: the tail's judgment, and the address's after
-   the tail evaluates; any other slice takes its operands' judgment. *)
+   body_builtin_mem_ok splits it off), with the induction's code-slice
+   premises.  A slice of self.code is bodyMemBiSliceSelfCode's (held with
+   S1's residual); every other slice is bodyMemBiSliceNonSelf's. *)
 Theory bodyMemBiSlice
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemBiSliceSelfCode bodyMemBiSliceNonSelf
 
 Theorem body_builtin_slice_mem:
   !cx ty n es.
@@ -23,5 +22,10 @@ Theorem body_builtin_slice_mem:
      body_exprs_mem_ok cx es) ==>
     body_expr_mem_ok cx (Builtin ty (Slice n) es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_self_code (HD es)`
+  >- (irule body_builtin_slice_self_code_mem >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
+  irule body_builtin_slice_nonself_mem >> rpt conj_tac >>
+  first_assum ACCEPT_TAC
 QED
