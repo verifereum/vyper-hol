@@ -255,42 +255,28 @@ Definition transform_block_memzero_def:
       FLAT (MAP (apply_memzero_inst nop_set rep_map) bb.bb_instructions)
 End
 
-(* Both ends consult the function-wide DFG: the single use may be in
-   another block, which Python's InstUpdater updates in place. *)
+(* Apply the pairs discovered in the block currently being visited.
+   The caller applies this update to every block, including visited ones. *)
 Definition transform_dload_inst_def:
-  transform_dload_inst dfg inst =
-    case find_dload_mstore_pair dfg inst of
-      SOME dp => mk_nop_from inst
-    | NONE =>
-        if inst.inst_opcode = MSTORE then
-          (case inst.inst_operands of
-             [_; Var v] =>
-               (case dfg_get_def dfg v of
-                  SOME load_inst =>
-                    (case find_dload_mstore_pair dfg load_inst of
-                       SOME dp =>
-                         if dp.dp_mstore_id = inst.inst_id then
-                           mk_dloadbytes_inst inst dp.dp_src dp.dp_dst
-                         else inst
-                     | NONE => inst)
-                | NONE => inst)
-           | _ => inst)
-        else inst
+  transform_dload_inst pairs inst =
+    if EXISTS (\dp. dp.dp_dload_id = inst.inst_id) pairs then
+      mk_nop_from inst
+    else case FIND (\dp. dp.dp_mstore_id = inst.inst_id) pairs of
+      SOME dp => mk_dloadbytes_inst inst dp.dp_src dp.dp_dst
+    | NONE => inst
 End
 
 Definition transform_block_dload_def:
-  transform_block_dload dfg bb =
-    bb with bb_instructions := MAP (transform_dload_inst dfg) bb.bb_instructions
+  transform_block_dload pairs bb =
+    bb with bb_instructions := MAP (transform_dload_inst pairs) bb.bb_instructions
 End
 
 (* ===== Full transform: all sub-passes composed ===== *)
 
-(* Apply all memmerging sub-passes to a block.
-   Python: MemMergePass.run_pass *)
+(* The block-local sub-passes follow the function-wide DLOAD update. *)
 Definition transform_block_def:
   transform_block dfg bb =
-    let bb1 = transform_block_dload dfg bb in
-    let bb2 = transform_block_memzero dfg bb1 in
+    let bb2 = transform_block_memzero dfg bb in
     let bb3 = transform_block_mode dfg CalldataMerge bb2 in
     let bb4 = transform_block_mode dfg DloadMerge bb3 in
     transform_block_mode dfg Mem2Mem bb4
@@ -298,8 +284,29 @@ End
 
 (* ===== Function-level transform ===== *)
 
+(* Python visits blocks in stored order. A DLOAD can update a store in
+   an earlier block; that block is not rescanned. Share this traversal
+   between the plain transform and the supply-threaded transform. *)
+Definition transform_function_with_def:
+  transform_function_with block_transform state fn =
+    FOLDL (\(current, st) index.
+      if index < LENGTH current.fn_blocks then
+          let bb = EL index current.fn_blocks in
+          let pairs = find_dload_pairs (dfg_build_function current)
+                        bb.bb_instructions in
+          let updated = current with fn_blocks :=
+            MAP (transform_block_dload pairs) current.fn_blocks in
+          case block_transform (dfg_build_function updated) st
+                 (transform_block_dload pairs bb) of
+            (bb', st') =>
+              (updated with fn_blocks :=
+                 LUPDATE bb' index updated.fn_blocks, st')
+      else (current, st))
+      (fn, state) (COUNT_LIST (LENGTH fn.fn_blocks))
+End
+
 Definition transform_function_def:
   transform_function fn =
-    let dfg = dfg_build_function fn in
-    function_map_transform (transform_block dfg) fn
+    FST (transform_function_with
+      (\dfg st bb. (transform_block dfg bb, st)) () fn)
 End

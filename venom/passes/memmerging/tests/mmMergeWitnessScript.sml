@@ -62,6 +62,42 @@ Proof
   EVAL_TAC
 QED
 
+(* The store block is visited before its producer. Python updates it
+   later, without rerunning the merge scan over its two adjacent copies. *)
+Definition mm_backward_update_function_def:
+  mm_backward_update_function = mk_raw_function "f"
+    [<| bb_label := "entry"; bb_instructions :=
+       [mk_inst 1 JMP [Label "load"] []] |>;
+     <| bb_label := "store"; bb_instructions :=
+       [mk_inst 2 MSTORE [Lit 0w; Var "value"] [];
+        mk_inst 3 DLOADBYTES [Lit 32w; Lit 32w; Lit 32w] [];
+        mk_inst 4 STOP [] []] |>;
+     <| bb_label := "load"; bb_instructions :=
+       [mk_inst 5 DLOAD [Lit 0w] ["value"];
+        mk_inst 6 JMP [Label "store"] []] |>]
+End
+
+Theorem mm_dload_backward_update_witness:
+  MAP (\bb. MAP (\inst. (inst.inst_opcode, inst.inst_operands))
+                 bb.bb_instructions)
+    (transform_function mm_backward_update_function).fn_blocks =
+    [[(JMP, [Label "load"])];
+     [(DLOADBYTES, [Lit 0w; Lit 0w; Lit 32w]);
+      (DLOADBYTES, [Lit 32w; Lit 32w; Lit 32w]); (STOP, [])];
+     [(NOP, []); (JMP, [Label "store"])]]
+Proof
+  EVAL_TAC
+QED
+
+Theorem mm_supply_cross_block_witness:
+  transform_function_supply supply mm_cross_block_function =
+    (transform_function mm_cross_block_function, supply) /\
+  transform_function_supply supply mm_backward_update_function =
+    (transform_function mm_backward_update_function, supply)
+Proof
+  EVAL_TAC
+QED
+
 Theorem mm_copy_read_after_write_witness:
   MAP (\cg. cg.cg_length)
     (scan_block dfg Mem2Mem
