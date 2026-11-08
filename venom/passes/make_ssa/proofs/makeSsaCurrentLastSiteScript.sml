@@ -1,5 +1,6 @@
 Theory makeSsaCurrentLastSite
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentGraphCut makeSsaCurrentLiveTransport makeSsaCurrentFrontier
   makeSsaCurrentTokens dominatorAnalysisProps
   makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaDefs
