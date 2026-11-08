@@ -1527,3 +1527,67 @@ Proof
   simp[inline_ordinary_result_def] >> rpt strip_tac >>
   drule inline_opaque_frame_observations >> simp[]
 QED
+
+Theorem inline_gas_clone_result:
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [x] /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `s.vs_gas_readings = t.vs_gas_readings` by
+    metis_tac[inline_opaque_frame_gas_readings] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, clone_instruction_def] >>
+  Cases_on `t.vs_gas_readings` >> simp[exec_gas_def] >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  irule inline_opaque_frame_write_establish >> simp[] >>
+  metis_tac[inline_opaque_frame_gas_readings]
+QED
+
+Theorem inline_sha3_eval_list:
+  inst.inst_opcode = SHA3 /\ LENGTH inst.inst_operands = 2 /\
+  LENGTH inst.inst_outputs = 1 ==>
+  step_inst_base inst s =
+    case eval_operands inst.inst_operands s of
+      NONE => Error "undefined operand"
+    | SOME ws => OK (update_var (HD inst.inst_outputs)
+        (word_of_bytes T (0w:bytes32)
+          (Keccak_256_w64 (TAKE (w2n (EL 1 ws))
+            (DROP (w2n (EL 0 ws)) s.vs_memory ++ REPLICATE (w2n (EL 1 ws)) 0w)))) s)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  rename1 `inst.inst_operands = [a; b]` >>
+  simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand a s` >> simp[] >>
+  Cases_on `eval_operand b s` >> simp[]
+QED
+
+Theorem inline_sha3_clone_result:
+  inst.inst_opcode = SHA3 /\ LENGTH inst.inst_operands = 2 /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = SHA3 /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 2 /\
+    (clone_instruction p labels inst).inst_outputs = [STRCAT p x]` by
+    simp[clone_instruction_def] >>
+  `s.vs_memory = t.vs_memory` by metis_tac[inline_opaque_frame_observations] >>
+  simp[step_inst_non_invoke, inline_sha3_eval_list] >>
+  simp[clone_instruction_def] >>
+  Cases_on `eval_operands inst.inst_operands s` >> simp[] >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  irule inline_opaque_frame_write_establish >> simp[]
+QED
