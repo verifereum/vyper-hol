@@ -5,7 +5,7 @@ Ancestors
   instSeqComposePtr fragExec instIdxIndep rich_list assignTuplePtrCopyLen stateFrame
   abiDecodePtrRead abiDecodePtrMemberFrame
   bodyPtrBopScalarSeq bodyPtrBopScalarOutcome
-  abiDecoderBytesBound abiDecoderContract
+  abiDecoderBytesBound abiDecoderContract abiDecoderGuard abiDecoderBytesRuntime
   assignTuplePtrLocalBytesCopy emitHelperProps exprLoweringProps
   abiEncoder compileEnv context bodyPtrDefs ptrDiscipline
   venomExecSemantics venomState venomInst words arithmetic list finite_map pred_set
@@ -220,7 +220,204 @@ Resume abi_decode_bytes_member_abort_ptr[payload_guard]:
 QED
 
 Resume abi_decode_bytes_member_abort_ptr[payload_clean]:
+  `!x. head = Var x ==> not_fresh_at c1 x` by
+    (gen_tac >> disch_tac >>
+     `abiDecoderReentry$abi_decoder_operand_live c1.cs_next_var head` by
+       (irule abiDecoderReentryTheory.abi_decoder_operand_live_fresh >>
+        qexistsl_tac [`sh`, `n2w (p+32)`] >> asm_rewrite_tac[]) >>
+     pop_assum mp_tac >>
+     asm_simp_tac (srw_ss()) [abiDecoderReentryTheory.abi_decoder_operand_live_def,
+       abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `!x. hi = Var x ==> not_fresh_at c1 x` by
+    (gen_tac >> disch_tac >>
+     `abiDecoderReentry$abi_decoder_operand_live c1.cs_next_var hi` by
+       (irule abiDecoderReentryTheory.abi_decoder_operand_live_fresh >>
+        qexistsl_tac [`sh`, `n2w h`] >> conj_tac
+        >- (qpat_assum `!op w. eval_operand op s = SOME w ==> _` irule >>
+            first_assum MATCH_ACCEPT_TAC) >>
+        first_assum MATCH_ACCEPT_TAC) >>
+     pop_assum mp_tac >>
+     asm_simp_tac (srw_ss()) [abiDecoderReentryTheory.abi_decoder_operand_live_def,
+       abiDecoderReentryTheory.abi_decoder_older_vars_def, not_fresh_at_def]) >>
+  `t.vs_labels = s1.vs_labels` by
+    (qpat_assum `state_frame t = _` mp_tac >>
+     simp_tac (srw_ss()) [state_frame_def, venom_state_component_equality]) >>
+  `!op. (!x. op = Var x ==> not_fresh_at c1 x) ==>
+    eval_operand op t = eval_operand op s1 /\
+    op_prov G' op = op_prov H op /\ op_taint tn' op = op_taint tm op` by
+    (gen_tac >> disch_tac >> irule abi_decode_scalar_protected_operand >>
+     simp[] >> qexists_tac `{x | not_fresh_at c1 x}` >> simp[]) >>
+  suspend "payload_transport"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_transport]:
+  `op_prov G' head = NONE /\ op_taint tn' head = {} /\
+   op_prov G' hi = NONE /\ op_taint tn' hi = {}` by
+    (qpat_assum `!op. (!x. op = Var x ==> not_fresh_at c1 x) ==> _`
+       (qspec_then `head` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `!op. (!x. op = Var x ==> not_fresh_at c1 x) ==> _`
+       (qspec_then `hi` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     rpt conj_tac >> metis_tac[SUBSET_DEF, IN_UNION, IN_INSERT]) >>
+  `!op. op IN {head;cnt;hi} ==> op_prov G' op = NONE /\ op_taint tn' op = {}` by
+    (simp_tac (srw_ss()) [IN_INSERT, NOT_IN_EMPTY] >> metis_tac[]) >>
+  `!op. op IN {head;cnt;hi} ==> !x. op = Var x ==> not_fresh_at c3 x` by
+    (qpat_assum `!x. head = Var x ==> _` mp_tac >>
+     qpat_assum `!x. hi = Var x ==> _` mp_tac >>
+     qpat_assum `!x. not_fresh_at c1 x ==> not_fresh_at c3 x` mp_tac >>
+     qpat_assum `cnt = Var out` mp_tac >>
+     qpat_assum `not_fresh_at c3 out` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac (srw_ss()) [IN_INSERT, NOT_IN_EMPTY] >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `!op. op IN {head;cnt;hi} ==> op_prov H' op = NONE /\ op_taint tm' op = {}` by
+    (ho_match_mp_tac (abi_decode_scalar_clean_set_transport |> Q.INST
+       [`G` |-> `G'`, `tn` |-> `tn'`, `R` |-> `{x | not_fresh_at c3 x}`]) >>
+     conj_tac >- first_assum MATCH_ACCEPT_TAC >>
+     conj_tac >-
+       (qpat_assum `!op. op IN {head;cnt;hi} ==> !x. _` mp_tac >>
+        simp_tac (srw_ss()) [IN_GSPEC]) >>
+     gen_tac >> disch_tac >>
+     qpat_assum `!op. (!x. op = Var x ==> x IN {x | not_fresh_at c3 x}) ==> _`
+       (qspec_then `op` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp[]) >>
+  suspend "payload_split"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_split]:
+  `inst_extends c5 sb /\ inst_extends c4 sb` by metis_tac[inst_extends_trans] >>
+  `emitted_insts c4 sb = emitted_insts c4 c5 ++ emitted_insts c5 sb` by
+    (irule emitted_insts_append >> asm_rewrite_tac[GSYM inst_extends_def]) >>
+  Cases_on `?v. run_inst_seq (emitted_insts c4 c5) s4 = OK v`
+  >- suspend "payload_success" >>
+  `run_inst_seq (emitted_insts c4 c5) s4 =
+    Abort a (u with vs_inst_idx := s4.vs_inst_idx)` by
+    (qpat_x_assum `run_inst_seq (emitted_insts c4 sb) s4 = _` mp_tac >>
+     qpat_assum `emitted_insts c4 sb = _` (fn th => pure_once_rewrite_tac[th]) >>
+     `!v. run_inst_seq (emitted_insts c4 c5) s4 <> OK v` by
+       (qpat_x_assum `~(?v. run_inst_seq (emitted_insts c4 c5) s4 = OK v)` mp_tac >>
+        pure_rewrite_tac[NOT_EXISTS_THM] >> simp_tac bool_ss []) >>
+     drule run_inst_seq_append_err >>
+     disch_then (qspec_then `emitted_insts c5 sb` (fn th => pure_rewrite_tac[th])) >>
+     simp_tac bool_ss []) >>
+  drule_all scalar_seq_abort_replay_ptr >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  drule_all scalar_seq_abort_runtime_frame >> strip_tac >>
+  suspend "payload_abort_join"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_success]:
+  `eval_operand head s1 = SOME (n2w (p+32)) /\
+   eval_operand hi s1 = SOME (n2w h)` by
+    (`eval_operand hi sh = SOME (n2w h)` by
+       (qpat_assum `!op w. eval_operand op s = SOME w ==> _` irule >>
+        first_assum MATCH_ACCEPT_TAC) >>
+     simp_tac (srw_ss()) [Abbr `s1`, eval_operand_def, lookup_var_def] >>
+     qpat_assum `eval_operand head sh = _` mp_tac >>
+     qpat_assum `eval_operand hi sh = _` mp_tac >>
+     simp_tac (srw_ss()) [eval_operand_def, lookup_var_def]) >>
+  `eval_operand head t = SOME (n2w (p+32)) /\
+   eval_operand hi t = SOME (n2w h)` by
+    (qpat_assum `!op. (!x. op = Var x ==> not_fresh_at c1 x) ==> _`
+       (qspec_then `head` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     qpat_assum `!op. (!x. op = Var x ==> not_fresh_at c1 x) ==> _`
+       (qspec_then `hi` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     conj_tac >> metis_tac[]) >>
+  `eval_operand cnt t = SOME (mload (w2n b+p) s)` by
+    (`w2n (b+n2w p) = w2n b+p` by
+       (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
+     fs[eval_operand_def, Abbr `s1`, mload_def]) >>
+  `w2n (mload (w2n b+p) s) <= n` by
+    (`eval_operand (Lit (n2w n)) t = SOME (n2w n)` by simp[eval_operand_def] >>
+     drule_all abi_decode_le_guard_success_bound >> simp[w2n_n2w]) >>
+  `eval_operand (Lit (n2w n)) t = SOME (n2w n)` by simp[eval_operand_def] >>
+  `w2n (mload (w2n b+p) s) <= w2n (n2w n:bytes32)` by fs[w2n_n2w] >>
+  drule_all abi_decode_le_guard_sequence >> strip_tac >>
+  suspend "payload_success_values"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_success_values]:
+  rename1 `fresh_vars_wrt c4 v4` >>
+  `v4 = sl` by
+    (qpat_assum `run_inst_seq (emitted_insts c3 c4) t = OK v4` mp_tac >>
+     qpat_assum `run_inst_seq (emitted_insts c3 c4) t = OK sl` mp_tac >>
+     simp[]) >> qpat_x_assum `v4 = sl` SUBST_ALL_TAC >>
+  `fresh_vars_wrt c4 s4` by
+    (qpat_assum `fresh_vars_wrt c4 sl` mp_tac >>
+     simp_tac (srw_ss()) [Abbr `s4`, fresh_vars_wrt_def]) >>
+  `!op w. eval_operand op t = SOME w ==> eval_operand op s4 = SOME w` by
+    (rpt gen_tac >> disch_tac >>
+     `eval_operand op sl = SOME w` by
+       (qpat_assum `!op w. eval_operand op t = SOME w ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     simp_tac (srw_ss()) [Abbr `s4`, eval_operand_def, lookup_var_def] >>
+     pop_assum mp_tac >> simp_tac (srw_ss()) [eval_operand_def, lookup_var_def]) >>
+  `eval_operand head s4 = SOME (n2w (p+32)) /\
+   eval_operand cnt s4 = SOME (mload (w2n b+p) s) /\
+   eval_operand hi s4 = SOME (n2w h)` by metis_tac[] >>
+  qpat_x_assum `?v. run_inst_seq (emitted_insts c4 c5) s4 = OK v`
+    (qx_choose_then `sp` assume_tac) >>
+  `p+32+w2n (mload (w2n b+p) s) <= h` by
+    (drule_all abi_decode_bytes_payload_success_bound >> simp[w2n_n2w]) >>
+  suspend "tail_success"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[tail_success]:
+  `eval_operand cnt s4 = SOME (n2w (w2n (mload (w2n b+p) s)))` by
+    simp[n2w_w2n] >>
+  drule abi_decode_bytes_payload_guard_sequence >>
+  disch_then (qspecl_then [`s4`, `p+32`, `w2n (mload (w2n b+p) s)`] mp_tac) >>
+  (impl_tac >-
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (disj2_tac >> qexists_tac `h` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC)) >> strip_tac >>
+  rename1 `fresh_vars_wrt c5 v5` >>
+  `v5 = sp` by gvs[] >> qpat_x_assum `v5 = sp` SUBST_ALL_TAC >>
+  suspend "tail_operands"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[tail_operands]:
   cheat
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_abort_join]:
+  `c5.cs_current_insts = c4.cs_current_insts ++ emitted_insts c4 c5 /\
+   sb.cs_current_insts = c5.cs_current_insts ++ emitted_insts c5 sb` by
+    asm_rewrite_tac[GSYM inst_extends_def] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts c4 c5)` by
+    metis_tac[EVERY_APPEND] >>
+  drule_all abi_decode_compile_abort_suffix_ptr >> strip_tac >>
+  `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G'' tn''` by
+    (irule (cj 2 abi_decode_compile_continue_abort_ptr) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`H'`, `a`, `c4`, `s4`, `tm'`,
+       `u with vs_inst_idx := s4.vs_inst_idx`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "payload_abort_frame"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_abort_frame]:
+  qexistsl_tac [`G''`, `tn''`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (qpat_assum `state_frame t = _` mp_tac >>
+     qpat_assum `(u with <|vs_vars := _; vs_halted := _; vs_returndata := _; vs_inst_idx := _|>) = s4` mp_tac >>
+     qpat_assum `sh = s with vs_vars := _` mp_tac >>
+     qpat_assum `sl = t with vs_vars := _` mp_tac >>
+     qpat_assum `Abbrev (s1 = _)` mp_tac >>
+     qpat_assum `Abbrev (s4 = _)` mp_tac >>
+     qpat_assum `s.vs_inst_idx = _` mp_tac >>
+     qpat_assum `~s.vs_halted` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[markerTheory.Abbrev_def, state_frame_def, venom_state_component_equality]) >>
+  reverse conj_tac >- metis_tac[] >>
+  gen_tac >> strip_tac >>
+  `not_fresh_at c1 x /\ not_fresh_at c3 x /\ not_fresh_at c4 x` by metis_tac[] >>
+  fs[IN_GSPEC_IFF, lookup_var_def, op_taint_def] >> metis_tac[]
 QED
 
 Resume abi_decode_bytes_member_abort_ptr[count_abort]:
