@@ -265,7 +265,7 @@ Proof
   simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   drule emitted_insts_emit_op >> strip_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_alloca_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_alloca_def,
        venomInstTheory.mk_inst_def, venomStateTheory.update_var_def,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, wordsTheory.w2n_n2w]
