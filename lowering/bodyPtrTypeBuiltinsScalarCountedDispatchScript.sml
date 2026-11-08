@@ -105,3 +105,44 @@ Proof
   >- (drule_all convert_flag_abort_counted_certificate >> metis_tac[]) >>
   drule_all convert_bytesm_abort_counted_certificate >> metis_tac[]
 QED
+
+Theorem scalar_convert_runtime_frame:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  conv = (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) /\
+  compile_type_convert x conv sa = (out,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  (t with vs_vars := s.vs_vars) = s /\
+  (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s)
+Proof
+  strip_tac >> drule_all scalar_source_dispatch_partition >>
+  disch_then (qspec_then `cenv` mp_tac) >>
+  qpat_x_assum `conv = _` (assume_tac o SYM) >> simp[] >> strip_tac >>
+  Cases_on `conv` >> gvs[]
+  >~ [`compile_type_convert x ConvIdentity sa = _`]
+  >- gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl, run_inst_seq_def]
+  >~ [`compile_type_convert x ConvToBool sa = _`]
+  >- metis_tac[convert_bool_runtime_frame]
+  >~ [`compile_type_convert x (ConvIntToInt _ _ _ _) sa = _`]
+  >- metis_tac[convert_int_runtime_frame]
+  >~ [`compile_type_convert x (ConvBytesToInt _ _ _) sa = _`]
+  >- metis_tac[convert_bytes_int_runtime_frame]
+  >~ [`compile_type_convert x (ConvIntToBytesM _ _ _) sa = _`]
+  >- metis_tac[convert_int_bytes_runtime_frame]
+  >~ [`compile_type_convert x (ConvIntToDecimal _ _ _ _ _) sa = _`]
+  >- (drule_at (Pos (el 2)) convert_decimal_runtime_frame >> simp[])
+  >~ [`compile_type_convert x (ConvDecimalToInt _ _ _ _ _ _) sa = _`]
+  >- (drule_at (Pos (el 2)) convert_decimal_runtime_frame >> simp[])
+  >~ [`compile_type_convert x (ConvBoolToDecimal _) sa = _`]
+  >- metis_tac[convert_bool_decimal_runtime_frame]
+  >~ [`compile_type_convert x (ConvBytesMToDecimal _ _ _ _) sa = _`]
+  >- metis_tac[convert_bytes_decimal_runtime_frame]
+  >~ [`compile_type_convert x ConvToAddress sa = _`]
+  >- metis_tac[convert_address_runtime_frame]
+  >~ [`compile_type_convert x (ConvBytesToAddress _) sa = _`]
+  >- (fs[convert_bytes_address_eq] >> metis_tac[convert_bytes_int_runtime_frame])
+  >~ [`compile_type_convert x (ConvToFlag _) sa = _`]
+  >- metis_tac[convert_flag_runtime_frame] >>
+  metis_tac[convert_bytesm_runtime_frame]
+QED
