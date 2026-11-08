@@ -84,6 +84,8 @@ Definition intcall_frame_ok_def:
     (!x. fp.jc_root_ce.ce_imm_alloca = SOME x ==> fp.jc_reserved x) /\
     (!bw cap. fp.jc_rb = SOME (bw,cap) ==>
        cap = type_memory_size fp.jc_ret_tv /\
+       w2n bw + cap <= fp.jc_lo /\
+       (!b z. fp.jc_staged b z ==> regions_disjoint (w2n bw) cap b z) /\
        !a k. fp.jc_prot a k ==> regions_disjoint a k (w2n bw) cap)
 End
 
@@ -92,13 +94,13 @@ End
 (* I(ce,env,es,sa,s) of E0014 section 1, at the current compile env,
    typing, source state, compile state and Venom state.  The write-region
    authorization W(p,k) is written out: lo <= p, or [p,p+k) inside a staged
-   allocation.  fresh_vars_wrt is E0076's addition (forcing needs it). *)
+   allocation. *)
 Definition intcall_joint_res_def:
   intcall_joint_res fp ce env es sa s <=>
     stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
     expr_sim_inv ce fp.jc_cx env es /\
     ce_locals_declared ce env /\ locals_alloc_ok ce env /\
-    local_ptrs_reserved ce sa /\ fresh_vars_wrt sa s /\
+    local_ptrs_reserved ce sa /\
     allocas_above fp.jc_lo s /\
     (!a k. fp.jc_prot a k ==>
            mem_bytes_at a k s.vs_memory = mem_bytes_at a k fp.jc_morig.vs_memory) /\
@@ -141,7 +143,8 @@ Definition intcall_expr_cont_def:
        FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
        (!n b sz'. local_region ce es.scopes s n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory)
+       mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory) /\
+    locals_kept ce es s u
 End
 
 (* ===== Expression producers ===== *)
@@ -168,9 +171,13 @@ Definition intcall_expr_producer_def:
         (eval_expr fp.jc_cx e) (es,s)
         (\res ee u. ?tv. res = INL tv /\
            vv_holds ce fp.jc_cx (post_value_type ce e) tv vv ee u /\
+           vv_at ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u /\
+           (post_value_type ce e <> expr_type e ==>
+            vv_own ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u) /\
            (~expr_has_effect e ==> vv_storage_live fp.jc_cx vv ee u) /\
            (!x. vv_operand vv = Var x ==> not_fresh_at sb x) /\
-           (~is_word_type (post_value_type ce e) /\
+           (post_value_type ce e <> NoneT /\
+            ~is_word_type (post_value_type ce e) /\
             ~is_bytestring_type (post_value_type ce e) /\
             (case vv of StackValue _ _ => T
                       | LocatedValue _ p => p.ptr_location = LocMemory) ==>
@@ -205,8 +212,12 @@ Definition intcall_forced_producer_def:
         (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) (es,s)
         (\res ee u. ?v. res = INL v /\
            expr_val_rel fp.jc_cx (post_value_type ce e) v op u /\
+           expr_val_at ce fp.jc_cx (post_value_type ce e) sa sb ee v op u /\
+           (post_value_type ce e <> expr_type e ==>
+            expr_val_own ce fp.jc_cx (post_value_type ce e) sa sb ee v op u) /\
            (!x. op = Var x ==> not_fresh_at sb x) /\
-           (~is_word_type (post_value_type ce e) /\
+           (post_value_type ce e <> NoneT /\
+            ~is_word_type (post_value_type ce e) /\
             ~is_bytestring_type (post_value_type ce e) ==>
             !tv'. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) =
                     SOME tv' ==>
@@ -241,6 +252,7 @@ Definition intcall_map_producer_def:
            storage_mapping_region fp.jc_cx tr slot (HashMapT kt vt) /\
            vv = LocatedValue tp p /\ p.ptr_location = slot_loc tr /\
            eval_operand p.ptr_operand u = SOME slot /\
+           (!x. p.ptr_operand = Var x ==> not_fresh_at sb x) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 End

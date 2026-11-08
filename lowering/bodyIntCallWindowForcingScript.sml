@@ -12,13 +12,13 @@ Theorem protected_value_window_forcing:
   type_memory_bytes ce ty = type_memory_size tv /\ type_memory_size tv < 2**64 /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
-  fresh_vars_wrt sa s /\ allocas_above lo s /\
+  allocas_above lo s /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sa x) /\
   (!q x. reserved q /\ q = Var x ==> not_fresh_at sa x) /\
   (!p k. P p k ==> p+k <= lo) /\
   (!p k. Win p k ==> ?aid b len. aid < sa.cs_next_id /\
     FLOOKUP s.vs_allocas aid = SOME (b,len) /\ b <= p /\ p+k <= b+len) /\
-  (~is_word_type ty /\ ~is_bytestring_type ty /\
+  (ty <> NoneT /\ ~is_word_type ty /\ ~is_bytestring_type ty /\
     (case vv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
     ?w a k. eval_operand (vv_operand vv) s = SOME w /\
       a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
@@ -32,8 +32,10 @@ Theorem protected_value_window_forcing:
     (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
     (!p k. Win p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
     (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+           lookup_var x u = SOME w) /\
     (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
-    (~is_word_type ty /\ ~is_bytestring_type ty ==>
+    (ty <> NoneT /\ ~is_word_type ty /\ ~is_bytestring_type ty ==>
       ?w a k. eval_operand op u = SOME w /\ a <= w2n w /\
         w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
         (lo <= a \/ ?b z. staged b z /\ b <= a /\ a+k <= b+z)) /\
