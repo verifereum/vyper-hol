@@ -919,3 +919,28 @@ Proof
     (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 0` by gvs[] >>
   fs[resource_zero_iff_absent] >> metis_tac[]
 QED
+
+(* Every regular instruction has a release cut, irrespective of incoming
+   spill debt or transient resources created by its planning operations. *)
+Theorem generate_regular_inst_plan_spill_support:
+  !lv dfg cfg fn inst next halt term lbl ps ops qs v.
+    generate_regular_inst_plan lv dfg cfg fn inst next halt term lbl ps = (ops,qs) ==>
+    (Var v IN FDOM qs.ps_spilled ==> MEM v next)
+Proof
+  rpt gen_tac >>
+  simp[generate_regular_inst_plan_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[] >>
+  simp[fnPlanLineageInventoryTheory.release_dead_spills_domain, MEM_MAP]
+QED
+
+Theorem generate_regular_inst_plan_dead_stack_absence_total:
+  !lv dfg cfg fn inst next halt term lbl ps ops qs v.
+    generate_regular_inst_plan lv dfg cfg fn inst next halt term lbl ps = (ops,qs) /\
+    ~MEM v next /\ ~MEM (Var v) qs.ps_stack ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule generate_regular_inst_plan_spill_support >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED
