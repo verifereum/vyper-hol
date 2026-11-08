@@ -338,6 +338,21 @@ Proof
       gvs[immutable_root_def, target_root_def])
 QED
 
+(* An expression with no internal call is body_expr_ok: a subscript by
+   body_subscript_case on its parts, anything else by body_expr_ok_intro,
+   whose internal-call premise is then vacuous. *)
+Theorem tuple_places_no_calls_body_expr_ok[local]:
+  !e. int_calls_expr e = [] ==> body_expr_ok cx e
+Proof
+  measureInduct_on `expr_size e` >> rpt strip_tac >>
+  Cases_on `?ty e1 e2. e = Subscript ty e1 e2`
+  >- (gvs[] >> irule body_subscript_case >>
+      gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+      conj_tac >> rpt strip_tac >> qpat_assum `!y. _` irule >>
+      gvs[vyperASTTheory.expr_size_def]) >>
+  irule body_expr_ok_intro >> gvs[] >> metis_tac[]
+QED
+
 Theorem tuple_places_target_case[local]:
   body_inv tops ctx cenv cx /\ supported_target tops bindings bt /\
   supported_target_pure tops bt ==>
@@ -349,7 +364,7 @@ Proof
   >- (Cases_on `t` >> gvs[target_idx_case_def, supported_target_pure_def] >>
       rpt strip_tac >>
       `int_calls_expr key = []` by metis_tac[supported_pure_int_calls] >>
-      `body_expr_ok cx key` by (irule body_expr_ok_intro >> simp[]) >>
+      `body_expr_ok cx key` by metis_tac[tuple_places_no_calls_body_expr_ok] >>
       metis_tac[body_expr_ok_case])
   >~ [`AttributeTarget t fld`]
   >- (Cases_on `t` >> gvs[target_idx_case_def])
@@ -389,6 +404,7 @@ Proof
   irule stmt_expr_body_pre >> simp[] >>
   conj_tac >- gvs[body_inv_def] >>
   conj_tac >- metis_tac[tuple_places_key_occurs] >>
+  conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
   qexists_tac `calls` >> simp[]
 QED
 
@@ -413,6 +429,23 @@ Proof
       metis_tac[tuple_places_key_pre])
   >~ [`AttributeTarget t fld`]
   >- (Cases_on `t` >> gvs[target_indices_pre_def])
+QED
+
+Theorem tuple_other_arg_type_fits_refl[local]:
+  !t. arg_type_fits t t
+Proof
+  Induct >> simp[arg_type_fits_def]
+  >- (Cases >> simp[arg_type_fits_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >> simp[arg_type_fits_def])
+  >- (Induct_on `l` >> simp[arg_type_fits_def]) >>
+  Cases >> simp[arg_type_fits_def]
+QED
+
+Theorem tuple_other_arg_types_fit_refl[local]:
+  !ts. arg_types_fit ts ts
+Proof
+  gen_tac >> mp_tac (Q.SPEC `TupleT ts` tuple_other_arg_type_fits_refl) >>
+  simp[arg_type_fits_def]
 QED
 
 (* body_assign_tuple_other for an RHS lowered at its own type: the two
@@ -470,6 +503,7 @@ Proof
      >- metis_tac[tuple_places_target_case] >>
      metis_tac[tuple_places_indices_pre]) >>
   irule compile_assign_tuple_places_stmt_frag >>
-  simp[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
+  simp[tuple_other_arg_types_fit_refl] >>
+  qexistsl_tac [`env`, `tops`] >> simp[] >>
   metis_tac[tuple_places_component_bound]
 QED
