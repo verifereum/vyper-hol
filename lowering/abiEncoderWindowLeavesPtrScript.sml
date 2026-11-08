@@ -7,6 +7,7 @@ Ancestors abiEncoderRobustWindowPtr abiEncoderBytesPtr representationCleanPtr
   emitHelper compileEnv emitHelperProps exprLoweringProps rich_list abiDecodeStaticProps
   abiEncoderWindowBytes localPtrsProps abiEncoderRounding valueEncodingProps
   typedCopyPtr fragExecPtr ptrSafeRun ptrDiscipline venomInst venomState venomExecSemantics
+  abiEncoderLeaves words
 
 Theorem abi_encoder_robust_word_read_clean:
   (!m. mem_agree_outside ta mem m ==>
@@ -238,4 +239,112 @@ Proof
     abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_refl,
     abiDecoderLoopTheory.abi_decode_sim_refl,
     venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_taint_def]
+QED
+
+(* Zero copies evaluate clean operands but do not need provenance coverage. *)
+Theorem abi_encode_copy_exact_frag_ptr:
+  compile_abi_encode_to_buf (Var dst) (Var src) (AbiCopy n) sa = (out,sb) /\
+  lookup_var src s = SOME (n2w p) /\ lookup_var dst s = SOME (n2w d) /\
+  p < dimword(:256) /\ d < dimword(:256) /\ n < dimword(:256) /\
+  op_taint tn (Var src) = {} /\ op_taint tn (Var dst) = {} /\
+  (0 < n ==> ptr_covers G tn src s n /\ ptr_covers G tn dst s n) ==>
+  ?inst. out = Lit (n2w n) /\
+    inst = mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] [] /\
+    frag_exec_ptr cx ctx PG sa sb (\g z v. g=G /\ z=tn /\ v=s)
+      (\g z v.
+        g = step_prov PG G inst (mcopy d p n s) /\
+        z = step_taint inst s (mcopy d p n s) tn /\
+        v = (mcopy d p n s) with vs_inst_idx := SUC s.vs_inst_idx) R
+Proof
+  strip_tac >> drule abi_encode_copy_code >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] []]` by
+    (gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def]) >>
+  qexists_tac `mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] []` >>
+  asm_rewrite_tac[] >> irule ptr_fragment_step >>
+  simp[is_terminator_def] >> rpt strip_tac >> gvs[] >>
+  qexists_tac `mcopy d p n s` >>
+  conj_tac >- (pure_once_rewrite_tac[step_inst_base_def] >>
+    simp[mk_inst_def, eval_operand_def, w2n_n2w]) >>
+  simp[mcopy_def, write_memory_with_expansion_def] >> rpt strip_tac >>
+  Cases_on `n=0`
+  >- (gvs[] >> irule ptr_inst_ok_mcopy_zero >>
+      simp[eval_operand_def] >> metis_tac[]) >>
+  irule ptr_inst_ok_mcopy >> simp[w2n_n2w]
+QED
+
+Theorem abi_encoder_copy_window_frag_ptr:
+  compile_abi_encode_to_buf (Var dst) (Var src) (AbiCopy n) sa = (out,sb) /\
+  abi_encoder_window_pre ctx fn sa sb (Var dst) (Var src)
+    (AbiCopy n) at av p cap d s /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    abi_encoder_window_input (AbiCopy n) at av p cap m) /\
+  op_taint tn (Var src) = {} /\ op_taint tn (Var dst) = {} /\
+  (0 < n ==> ptr_covers G tn src s n /\ ptr_covers G tn dst s n) /\
+  ~ctx_has_dalloca ctx ==>
+  ?u t.
+    frag_exec_ptr cx ctx PG sa sb (\g z v. g=G /\ z=tn /\ v=s)
+      (\g z v. g=G /\ z=u /\ v=t) R /\
+    abi_encoder_window_result ctx fn sa sb out at av d s t /\
+    op_taint u out = {} /\
+    u.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d+LENGTH (enc at av)} /\
+    u.t_var = tn.t_var /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
+    t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\
+    (!x. lookup_var x t = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_encoder_robust_copy_read_clean >> disch_tac >>
+  qpat_x_assum `!m. mem_agree_outside _ _ m ==> _` kall_tac >>
+  qpat_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [abi_encoder_window_pre_def]) >>
+  `n <= cap /\ mem_bytes_at p n s.vs_memory = enc at av` by
+    fs[abi_encoder_window_copy_iff] >>
+  `LENGTH (enc at av) = n` by metis_tac[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
+  `s.vs_alloca_next < dimword(:256)` by metis_tac[alloca_room_next_lt] >>
+  `p < dimword(:256) /\ d < dimword(:256) /\ n < dimword(:256)` by decide_tac >>
+  `lookup_var src s = SOME (n2w p) /\ lookup_var dst s = SOME (n2w d)` by
+    metis_tac[eval_operand_def] >>
+  qpat_x_assum `!inst b sz. _ ==> _` kall_tac >>
+  drule_all abi_encode_copy_exact_frag_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`\gt r. F`,`PG`] mp_tac) >>
+  strip_tac >>
+  qpat_x_assum `inst = _` SUBST_ALL_TAC >>
+  qpat_x_assum `out = _` SUBST_ALL_TAC >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] []` >>
+  qabbrev_tac `u = step_taint inst s (mcopy d p n s) tn` >>
+  qabbrev_tac `t = (mcopy d p n s) with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `step_prov PG G inst (mcopy d p n s) = G /\ u.t_var = tn.t_var /\
+   u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+   u.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d+n}` by
+    (mp_tac (Q.SPECL [`PG`,`G`,`tn`,`s`,`sa.cs_next_id`,`Var dst`,`Var src`,
+      `Lit (n2w n)`,`n2w p`,`n2w d`,`n2w n`] mcopy_operand_ghost_frame) >>
+     simp[Abbr `u`, Abbr `inst`, eval_operand_def, w2n_n2w] >>
+     strip_tac >> asm_rewrite_tac[] >>
+     `!i. i < n ==> p+i NOTIN tn.t_mem` by (rpt strip_tac >> qpat_x_assum `!a. p <= a /\ _ ==> _` (qspec_then `p+i` mp_tac) >> simp[]) >>
+     `!i. i < n ==> i+p NOTIN tn.t_mem` by metis_tac[ADD_COMM] >>
+     simp[pred_setTheory.EXTENSION, SF CONJ_ss]) >>
+  `u.t_imm = tn.t_imm` by
+    simp[Abbr `u`, Abbr `inst`, step_taint_def, imm_taint_def, mk_inst_def,
+      step_writes_def, mcopy_def, write_memory_with_expansion_def] >>
+  fs[] >>
+  drule_all frag_exec_ptr_singleton_control >> strip_tac >>
+  `alloca_inv t /\ alloca_room ctx fn t` by
+    (metis_tac[window_copy_state_resources]) >>
+  `abi_encoder_registered_effect (frag_ids sa sb) [(d,n)] s t` by
+    (irule abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_trans >>
+     qexists_tac `mcopy d p n s` >>
+     simp[Abbr `t`, abiEncoderPrimitiveEffectTheory.abi_encoder_registered_output_copy,
+       abiEncoderPrimitiveEffectTheory.abi_encoder_registered_inst_idx]) >>
+  qexistsl_tac [`u`,`t`] >>
+  conj_tac >- (irule frag_exec_ptr_false_exit_weaken >> first_assum ACCEPT_TAC) >>
+  simp[abi_encoder_window_result_def, op_taint_def] >>
+  simp[Abbr `t`, mcopy_mem_bytes_at_same, eval_operand_def] >>
+  simp[mcopy_def, write_memory_with_expansion_def, lookup_var_def]
 QED
