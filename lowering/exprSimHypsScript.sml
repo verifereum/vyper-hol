@@ -890,7 +890,7 @@ Proof
 QED
 
 (* A concat result fits the buffer the lowering allocates for it. *)
-Theorem concat_read_buffer_typed[local]:
+Theorem concat_read_buffer_typed:
   !cenv cx env ty n args es v es'.
     expr_body_pre cenv cx env (Builtin ty (Concat n) args) es /\
     (do r <- eval_expr cx (Builtin ty (Concat n) args); read_result cx r od) es =
