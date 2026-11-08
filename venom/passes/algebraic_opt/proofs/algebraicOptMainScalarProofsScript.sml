@@ -206,3 +206,46 @@ Proof
       qexists_tac `V` >> asm_rewrite_tac[]) >>
   gvs[ao_resolve_iszero_op_def, eval_operand_def]
 QED
+
+Theorem ao_main_iszero_transform_chunk:
+  !ctx fn trace h s inst bb V r t fr fuel.
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+  ao_source_trace ctx fn trace /\ LAST trace = (h,F,s) /\
+  (!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs ==>
+    lookup_var x (SND (SND (HD trace))) = NONE) /\
+  MEM inst (fn_insts fn) /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = ISZERO /\ step_inst_base inst s = OK t /\
+  ao_main_observations fn V s r /\ s.vs_labels = r.vs_labels /\
+  (!i x. MEM i (fn_insts fn) /\
+    (MEM (Var x) i.inst_operands \/ MEM x i.inst_outputs) ==> x IN V) ==>
+  ?u. ao_cmp_exec_chunk fuel ctx
+        (ao_transform_inst (dfg_build_function fn) (range_analyze fn)
+          s.vs_current_bb s.vs_inst_idx (ao_compute_fn_iszero_targets fn) fr inst) r = OK u /\
+      ao_main_observations fn V t u /\
+      (u with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+      u.vs_inst_idx = r.vs_inst_idx + 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?op out w. inst.inst_operands = [op] /\ inst.inst_outputs = [out] /\
+     eval_operand op s = SOME w /\ t = update_var out (bool_to_word (w = 0w)) s` by
+    (qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
+     simp[step_inst_base_ISZERO, exec_pure1_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  `inst.inst_opcode <> PHI /\ is_truthy_inst inst.inst_opcode /\
+   MEM op inst.inst_operands` by simp[is_truthy_inst_def] >>
+  drule_all ao_source_resolved_operand_truth >> strip_tac >>
+  gvs[algebraicOptIszeroPreservationProofsTheory.ao_resolve_iszero_self] >>
+  `ao_main_observations fn V
+     (update_var out (bool_to_word (w = 0w)) s)
+     (update_var out (bool_to_word (w = 0w)) r)` by
+    (irule ao_main_observations_update >> simp[ao_main_lookup_def] >>
+     metis_tac[]) >>
+  `step_inst fuel ctx inst r = OK (update_var out (bool_to_word (w = 0w)) r)` by
+    simp[step_inst_def, step_inst_base_ISZERO, exec_pure1_def] >>
+  simp[algebraicOptIszeroPreservationProofsTheory.ao_transform_iszero,
+       algebraicOptCmpChunkProofsTheory.ao_cmp_exec_chunk_single] >>
+  reverse conj_tac >- simp[update_var_def] >>
+  qpat_x_assum `ao_main_observations fn V (update_var _ _ _) _` mp_tac >>
+  simp[ao_main_observations_def, lookup_var_def, update_var_def]
+QED

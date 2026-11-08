@@ -1002,3 +1002,23 @@ Proof
   simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
   simp[ao_flip_inst_labels] >> metis_tac[SUBSET_TRANS]
 QED
+
+Theorem ao_transform_inst_residual_singleton:
+  !inst dfg ra lbl idx targets fr.
+  ~MEM inst.inst_opcode
+    [SHL; SHR; SAR; SIGNEXTEND; Exp; ADD; SUB; XOR; AND; MUL;
+     Div; SDIV; Mod; SMOD; OR; EQ; GT; LT; SGT; SLT; ISZERO; BALANCE; EXTCODESIZE] ==>
+  ao_transform_inst dfg ra lbl idx targets fr inst =
+    [ao_resolve_iszero_inst targets inst]
+Proof
+  rpt gen_tac >> Cases_on `inst.inst_opcode` >> simp[MEM] >>
+  simp[ao_transform_inst_def, ao_resolve_iszero_inst_fields,
+       ao_opt_producer_def, ao_pre_flip_inst_shape,
+       ao_peephole_inst_def, ao_post_flip_inst_shape] >>
+  Cases_on `(ao_resolve_iszero_inst targets inst).inst_operands` >>
+  simp[ao_pre_flip_inst_def, ao_post_flip_inst_def, ao_resolve_iszero_inst_fields] >>
+  Cases_on `t` >>
+  simp[ao_pre_flip_inst_def, ao_post_flip_inst_def, ao_resolve_iszero_inst_fields] >>
+  Cases_on `t'` >>
+  simp[ao_pre_flip_inst_def, ao_post_flip_inst_def, ao_resolve_iszero_inst_fields]
+QED
