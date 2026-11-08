@@ -1838,3 +1838,87 @@ Proof
      simp[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM]) >>
   simp[MEM_APPEND]
 QED
+
+Theorem native_incoming_phi_body_stack_support:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  cfg_reachable_of (cfg_analyze fn) pred /\ fn_reachable fn lbl /\ lbl <> entry /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block pred fn.fn_blocks = SOME pb /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,after) /\
+  incoming.ps_stack = after.ps_stack /\ incoming.ps_spilled = after.ps_spilled /\
+  (MEM (Var v) after.ps_stack ==>
+    MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))) /\
+  LIST_ELEM_COUNT (Var v) after.ps_stack +
+    (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1 /\
+  (if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming
+   else ([],incoming)) = (setup_ops,start) /\
+  fnPlanLineageEntryProduction$native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn)
+    fn lbl (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions start
+      (LENGTH (collect_phis bb.bb_instructions)) endpoint /\
+  EVERY (\inst. ~MEM v inst.inst_outputs) (collect_phis bb.bb_instructions) ==>
+  MEM (Var v) endpoint.ps_stack ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `LIST_ELEM_COUNT (Var v) incoming.ps_stack <= 1` by
+    (Cases_on `Var v IN FDOM after.ps_spilled` >> gvs[] >> decide_tac) >>
+  `MEM (Var v) incoming.ps_stack ==>
+    MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by metis_tac[] >>
+  `MEM (Var v) start.ps_stack ==> MEM v
+    (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0))` by
+    metis_tac[analyzed_edge_setup_stack_support] >>
+  Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1`
+  >- (`NULL (collect_phis bb.bb_instructions)` by
+        (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+         first_x_assum (qspec_then `bb` mp_tac) >> simp[]) >>
+      gvs[NULL_EQ, fnPlanLineageEntryProductionTheory.native_inst_prefix_zero,
+        livenessDefsTheory.input_vars_from_def]) >>
+  gvs[] >>
+  Cases_on `collect_phis bb.bb_instructions = []`
+  >- gvs[fnPlanLineageEntryProductionTheory.native_inst_prefix_zero,
+       livenessDefsTheory.input_vars_from_def] >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  spose_not_then strip_assume_tac >>
+  Cases_on `MEM (Var v) incoming.ps_stack`
+  >- (`MEM v (input_vars_from pred bb.bb_instructions
+         (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by metis_tac[] >>
+      `LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+        (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1` by simp[] >>
+      fs[EVERY_MEM] >> drule_all native_join_phi_input_extinction >> simp[]) >>
+  `!i. i < LENGTH (collect_phis bb.bb_instructions) ==>
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL i bb.bb_instructions).inst_outputs <> [] /\
+    ~MEM v (EL i bb.bb_instructions).inst_outputs` by
+    suspend "phi_shape" >>
+  drule native_phi_interval_stack_absent >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED
+
+Resume native_incoming_phi_body_stack_support[phi_shape]:
+  qspec_then `bb.bb_instructions` (qx_choose_then `tail` assume_tac)
+    fnPlanLineageLivenessTheory.collect_phis_prefix >>
+  rpt gen_tac >> strip_tac >>
+  `EL i bb.bb_instructions = EL i (collect_phis bb.bb_instructions)` by
+    (qpat_assum `bb.bb_instructions = _ ++ _`
+      (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     simp[EL_APPEND1]) >>
+  `MEM (EL i (collect_phis bb.bb_instructions)) (collect_phis bb.bb_instructions)` by
+    simp[EL_MEM] >>
+  `(EL i bb.bb_instructions).inst_opcode = PHI /\
+   MEM (EL i bb.bb_instructions) bb.bb_instructions` by
+    metis_tac[livenessTransferProofsTheory.collect_phis_mem] >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    metis_tac[fnPlanLineageQuarantineTheory.ready_member_instruction_shape] >>
+  fs[EVERY_MEM] >>
+  gvs[venomWfTheory.inst_wf_def] >> Cases_on `(EL i bb.bb_instructions).inst_outputs` >> gvs[]
+QED
+
+Finalise native_incoming_phi_body_stack_support
