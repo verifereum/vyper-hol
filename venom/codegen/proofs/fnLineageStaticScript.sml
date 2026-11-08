@@ -220,7 +220,7 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[] >> metis_tac[]
 QED
 
-Theorem normalize_strict_dominating_def[local]:
+Theorem normalize_strict_dominating_def:
   codegen_ready_fn fn /\
   MEM db fn.fn_blocks /\ MEM inst db.bb_instructions /\ MEM u inst.inst_outputs /\
   fn_dominates fn db.bb_label target /\ db.bb_label <> target /\
@@ -901,7 +901,7 @@ Proof
        live_vars_at_def, list_union_mem]
 QED
 
-Theorem lineage_entry_small_fresh[local]:
+Theorem lineage_entry_small_fresh:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\
@@ -930,7 +930,7 @@ Proof
   drule_all dominating_def_excludes_outputs >> simp[]
 QED
 
-Theorem lineage_entry_non_phi_fresh[local]:
+Theorem lineage_entry_non_phi_fresh:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred lbl ps /\

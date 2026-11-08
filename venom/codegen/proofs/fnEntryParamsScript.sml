@@ -231,7 +231,7 @@ Proof
   gvs[Abbr `f`, Abbr `initial`] >> metis_tac[]
 QED
 
-Theorem entry_params_inventory[local]:
+Theorem entry_params_inventory:
   !ps0 ch growth spill_base lbl_ctr liveness fn ops ps1.
     ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
     prepare_params_plan liveness fn ps0 = (ops, ps1) ==>
@@ -267,7 +267,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem entry_param_normalize[local]:
+Theorem entry_param_normalize:
   codegen_ready_fn fn /\
   MEM at (MAP (\i. Var (HD i.inst_outputs))
     (get_params (HD fn.fn_blocks).bb_instructions)) ==>
