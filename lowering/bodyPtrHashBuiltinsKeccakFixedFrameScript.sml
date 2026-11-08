@@ -58,7 +58,9 @@ Proof
   `step_inst_base (mk_inst (sa.cs_next_id+1) MSTORE [Var (STRING #"%" (toString sa.cs_next_var));value] []) t =
     OK (mstore (w2n a) w t)` by
     (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                      combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_write2_def, eval_operand_def]) >>
   qabbrev_tac `s2 = mstore (w2n a) w t` >>
   `step_inst_base (mk_inst (sa.cs_next_id+2) SHA3
       [Var (STRING #"%" (toString sa.cs_next_var));Lit (n2w (LENGTH bs))] [STRING #"%" (toString (sa.cs_next_var+1))]) s2 = OK u` by

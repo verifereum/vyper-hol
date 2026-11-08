@@ -644,7 +644,10 @@ Proof
      qexistsl [`mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
        [STRING #"%" (toString st.cs_next_var)]`, `initial`, `site`] >>
      drule_all entry_alloc_buffer_inst >>
-     fs[mk_inst_def, step_inst_base_def]) >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                      combinTheory.K_THM, opcode_case_def] >>
+     fs[mk_inst_def]) >>
   `frag_exec ctx st sa (\u. u = initial)
      (\u. u = raw with vs_inst_idx := LENGTH sa.cs_current_insts) (\r. F)` by
     (irule compile_alloc_buffer_fresh_frag >> qexistsl [`buf`, `n`] >>
