@@ -3,7 +3,7 @@ Ancestors
   algebraicOptComposeProofs algebraicOptDemandProofs
   algebraicOptChainAvailabilityProofs algebraicOptChainObservationProofs
   algebraicOptDefs algebraicOptShapeProofs venomWf venomInst venomState
-  venomExecSemantics
+  venomExecSemantics algebraicOptRelationProofs
 Libs
   listTheory
 
@@ -80,7 +80,12 @@ Proof
   qpat_x_assum `MEM inst.inst_opcode _` mp_tac >>
   pure_rewrite_tac[MEM] >> strip_tac >>
   gvs[ao_resolve_iszero_inst_def, step_inst_base_opcode_eqs] >>
-  gvs[exec_pure2_def, AllCaseEqs()] >> metis_tac[]
+  gvs[exec_pure2_def, AllCaseEqs()] >>
+  qpat_assum `!a w. _ ==> eval_operand (_ a) r = SOME w`
+    (qspec_then `op1` assume_tac) >>
+  qpat_x_assum `!a w. _ ==> eval_operand (_ a) r = SOME w`
+    (qspec_then `op2` assume_tac) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem ao_main_scalar_transform_chunk:
@@ -147,4 +152,57 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[]
+QED
+
+Theorem ao_source_resolved_operand_truth:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+  ao_source_trace ctx fn trace /\ LAST trace = (h,F,s) /\
+  (!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs ==>
+    lookup_var x (SND (SND (HD trace))) = NONE) /\
+  MEM inst (fn_insts fn) /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_opcode <> PHI /\
+  is_truthy_inst inst.inst_opcode /\
+  MEM a inst.inst_operands /\ eval_operand a s = SOME w /\
+  ao_main_observations fn V s r /\ s.vs_labels = r.vs_labels /\
+  (!i x. MEM i (fn_insts fn) /\
+     (MEM (Var x) i.inst_operands \/ MEM x i.inst_outputs) ==> x IN V) ==>
+  ?w'. eval_operand (ao_resolve_iszero_op (ao_compute_fn_iszero_targets fn)
+                     inst.inst_opcode a) r = SOME w' /\ (w' = 0w <=> w = 0w)
+Proof
+  strip_tac >> Cases_on `a`
+  >- (gvs[ao_resolve_iszero_op_def, eval_operand_def])
+  >- (rename1 `MEM (Var v) inst.inst_operands` >>
+      `?z. lookup_var v r = SOME z /\ (z = 0w <=> w = 0w)` by
+        (`v IN V` by metis_tac[] >>
+         qpat_x_assum `ao_main_observations fn V s r` mp_tac >>
+         simp[ao_main_observations_def] >>
+         disch_then (qspec_then `v` mp_tac) >>
+         gvs[eval_operand_def, ao_main_lookup_def] >>
+         Cases_on `ao_main_exact fn v` >> gvs[] >> metis_tac[]) >>
+      Cases_on `inst.inst_opcode = ISZERO`
+      >- gvs[algebraicOptIszeroPreservationProofsTheory.ao_resolve_iszero_self,
+             eval_operand_def] >>
+      Cases_on `ALOOKUP (ao_compute_fn_iszero_targets fn) v`
+      >- gvs[ao_resolve_iszero_op_def, eval_operand_def] >>
+      rename1 `ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chn` >>
+      `def_available_at fn bb (SOME inst) v` by
+        (gvs[wf_ssa_def, def_dominates_uses_def] >>
+         `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+         `MEM inst bb.bb_instructions` by
+           (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+         metis_tac[]) >>
+      `1 < LENGTH chn /\ LAST chn = Var v /\ ao_chain_edges (fn_insts fn) chn /\
+       ?ws. LENGTH ws = LENGTH chn /\ ao_word_chain ws /\ LAST ws = w /\
+         (!j. j < LENGTH chn ==> eval_operand (EL j chn) s = SOME (EL j ws))` by
+        (irule ao_source_computed_chain_values >> simp[] >>
+         conj_tac >- (qexistsl [`ctx`, `h`, `trace`] >> asm_rewrite_tac[]) >>
+         qexists_tac `SOME inst` >> simp[]) >>
+      `inst.inst_opcode = JNZ \/ inst.inst_opcode = ASSERT \/
+       inst.inst_opcode = ASSERT_UNREACHABLE` by gvs[is_truthy_inst_def] >>
+      qpat_x_assum `LAST ws = w` (SUBST1_TAC o SYM) >>
+      irule ao_main_resolve_chain_truth >> asm_rewrite_tac[] >>
+      goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
+      goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
+      qexists_tac `V` >> asm_rewrite_tac[]) >>
+  gvs[ao_resolve_iszero_op_def, eval_operand_def]
 QED
