@@ -9,6 +9,7 @@ Ancestors
   bodyStoragePreservation vyperTypeExprSoundness vyperTypeStoragePreservation
   vyperEvalOutcomeSuffix stmtSimProps loweringPosts bodySim
   fragGasPath emitHelperProps venomState venomInst compileVyper
+  stmtSimIfProps gasOutcome gasSummary gasSummaryCompose
 
 Theorem intcall_joint_res_push_scope:
   intcall_joint_res fp ce env es sa s ==>
@@ -138,6 +139,54 @@ Proof
   qexists `t` >> simp[] >>
   conj_tac >- metis_tac[gas_path_rules] >>
   fs[stmt_lands_def]
+QED
+
+(* A scope wrapper with an execution-aware post transformer: unlike the
+   ordinary If rule, this interface does not discard resource information. *)
+Theorem gas_outcome_scoped_stmts:
+  gas_outcome memory tops (ctx,func) (eval_stmts cx ss)
+    (es with scopes := FEMPTY :: es.scopes,s0) Q R /\
+  es.gas_obs = [] /\ ~s0.vs_halted /\
+  (!marks res ee t sc rest.
+     gas_marked_exec memory (ctx,func) (eval_stmts cx ss)
+       (es with scopes := FEMPTY :: es.scopes,s0) marks res ee (OK t) /\
+     Q res (ee with gas_obs := []) t /\ ee.scopes = sc :: rest /\
+     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+     Q' res ((ee with scopes := rest) with gas_obs := []) t) /\
+  (!res ee r rest. R res ee r ==> R' res (ee with scopes := rest) r) ==>
+  gas_outcome memory tops (ctx,func)
+    (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope))
+    (es,s0) Q' R'
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      drule if_branch_marked_scopes >> strip_tac >>
+      qexists `marks` >> disj1_tac >>
+      qexistsl [`res`, `ee with scopes := rest`, `r`] >>
+      conj_tac
+      >- (irule if_branch_marked_cleanup >> simp[] >> metis_tac[]) >>
+      disj1_tac >> qexists `t` >> simp[] >>
+      `ee with <|scopes := rest; gas_obs := []|> =
+       ee with <|gas_obs := []; scopes := rest|>` by
+        simp[evaluation_state_component_equality] >>
+      asm_rewrite_tac[] >>
+      first_x_assum irule >> metis_tac[])
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      drule if_branch_marked_scopes >> strip_tac >>
+      qexists `marks` >> disj1_tac >>
+      qexistsl [`res`, `ee with scopes := rest`, `r`] >>
+      conj_tac
+      >- (irule if_branch_marked_cleanup >> simp[] >> metis_tac[]) >>
+      disj2_tac >> simp[] >> first_x_assum irule >> simp[]) >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
+  drule if_branch_cert_scopes >> strip_tac >>
+  qexists `marks` >> disj2_tac >>
+  qexistsl [`err`, `ee with scopes := rest`, `leaf`, `fin`] >>
+  irule eval_stmt_if_scoped_cert >> simp[if_push_scope_marked] >>
+  `es with <|scopes := FEMPTY :: es.scopes; gas_obs := []|> =
+   es with scopes := FEMPTY :: es.scopes` by
+    simp[evaluation_state_component_equality] >>
+  asm_rewrite_tac[]
 QED
 
 Theorem intcall_if_stmt_step:
