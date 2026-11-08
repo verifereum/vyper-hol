@@ -747,3 +747,51 @@ Proof
     write_memory_with_expansion_def] >>
   pairarg_tac >> simp[]
 QED
+
+Theorem inline_extract_result_transport:
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  extract_venom_result s out ro rz rr = SOME (w,s') ==>
+  ?t'. extract_venom_result t out ro rz rr = SOME (w,t') /\
+    inline_opaque_frame_rel ren V opaque saved P s' t'
+Proof
+  rpt strip_tac >>
+  `inline_shared_frame s = inline_shared_frame t` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `extract_venom_result (inline_shared_frame t) out ro rz rr =
+    SOME (w,inline_shared_frame s')` by
+    (qpat_assum `inline_shared_frame s = inline_shared_frame t`
+       (fn th => rewrite_tac[GSYM th]) >>
+     simp[inline_extract_result_frame]) >>
+  gvs[inline_extract_result_frame, AllCaseEqs()] >>
+  PairCases_on `z` >> gvs[] >>
+  irule inline_opaque_frame_shared_effect >>
+  metis_tac[venomExecProofsTheory.extract_venom_result_preserves_vars]
+QED
+
+Theorem inline_delegatecall_clone_frame:
+  inst.inst_outputs = [x] /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x /\
+  exec_delegatecall inst s gas addr ao az ro rz = OK s' ==>
+  ?t'. exec_delegatecall (clone_instruction p labels inst) t
+      gas addr ao az ro rz = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  rpt strip_tac >>
+  `inline_shared_frame s = inline_shared_frame t` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_accounts = t.vs_accounts /\
+    read_memory (w2n ao) (w2n az) s = read_memory (w2n ao) (w2n az) t` by
+    (gvs[inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality, read_memory_def]) >>
+  `!target gas data code static.
+    make_venom_delegatecall_state s target gas data code static =
+      make_venom_delegatecall_state t target gas data code static` by
+    metis_tac[inline_shared_frame_delegate_state] >>
+  gvs[exec_delegatecall_def, AllCaseEqs()] >>
+  drule_all inline_extract_result_transport >> strip_tac >>
+  simp[exec_delegatecall_def, clone_instruction_def] >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  irule inline_opaque_frame_write_establish >> simp[]
+QED

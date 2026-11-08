@@ -1509,7 +1509,7 @@ Proof
 QED
 
 (* extract_venom_result preserves vs_vars *)
-Triviality extract_venom_result_preserves_vars[local]:
+Theorem extract_venom_result_preserves_vars:
   !s out ro rs r output s'.
     extract_venom_result s out ro rs r = SOME (output, s') ==>
     s'.vs_vars = s.vs_vars
