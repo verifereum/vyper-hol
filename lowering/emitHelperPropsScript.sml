@@ -297,7 +297,7 @@ Theorem step_MLOAD:
     step_inst_base (mk_inst id MLOAD [op1] [out]) ss =
       OK (update_var out (mload (w2n v1) ss) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def]
 QED
 
 Theorem step_MSTORE:
@@ -307,12 +307,7 @@ Theorem step_MSTORE:
     step_inst_base (mk_inst id MSTORE [op1; op2] []) ss =
       OK (mstore (w2n v1) v2 ss)
 Proof
-  rpt strip_tac >>
-  `(mk_inst id MSTORE [op1; op2] []).inst_opcode = MSTORE`
-    by simp[venomInstTheory.mk_inst_def] >>
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  pop_assum (fn th => pure_rewrite_tac[th]) >>
-  simp[venomInstTheory.mk_inst_def, exec_write2_def]
+  rw[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]
 QED
 
 (* ===== ASSERT ===== *)
@@ -323,12 +318,7 @@ Theorem assert_ok:
     eval_operand op1 ss = SOME v ∧ v ≠ 0w ⇒
     step_inst_base (mk_inst id ASSERT [op1] []) ss = OK ss
 Proof
-  rpt strip_tac >>
-  `(mk_inst id ASSERT [op1] []).inst_opcode = ASSERT`
-    by simp[venomInstTheory.mk_inst_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
-  simp[venomInstTheory.mk_inst_def]
+  rw[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]
 QED
 
 (* ASSERT with zero condition: Abort Revert *)
@@ -337,12 +327,7 @@ Theorem assert_revert:
     eval_operand op1 ss = SOME 0w ∧ rs = revert_state (set_returndata [] ss) ⇒
     step_inst_base (mk_inst id ASSERT [op1] []) ss = Abort Revert_abort rs
 Proof
-  rpt strip_tac >>
-  `(mk_inst id ASSERT [op1] []).inst_opcode = ASSERT`
-    by simp[venomInstTheory.mk_inst_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
-  simp[venomInstTheory.mk_inst_def]
+  rw[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]
 QED
 
 (* ASSERT either succeeds or reverts (disjunctive form) *)
@@ -352,13 +337,7 @@ Theorem assert_ok_or_revert:
     step_inst_base (mk_inst id ASSERT [op1] []) ss = OK ss ∨
     step_inst_base (mk_inst id ASSERT [op1] []) ss = Abort Revert_abort rs
 Proof
-  rpt strip_tac >>
-  `(mk_inst id ASSERT [op1] []).inst_opcode = ASSERT`
-    by simp[venomInstTheory.mk_inst_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
-  simp[venomInstTheory.mk_inst_def] >>
-  Cases_on `v = 0w` >> simp[]
+  rw[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]
 QED
 
 (* ===== eval_operand after update_var ===== *)
@@ -780,7 +759,7 @@ Proof
   disch_then kall_tac >>
   simp[Once exec_block_def] >>
   simp[Once step_inst_def] >>
-  simp[step_inst_base_def, is_terminator_def, jump_to_def]
+  simp[step_inst_base_opcode_eqs, is_terminator_def, jump_to_def]
 QED
 
 (* Full single-block execution ending with JNZ *)
@@ -805,7 +784,7 @@ Proof
   disch_then kall_tac >>
   simp[Once exec_block_def] >>
   simp[Once step_inst_def] >>
-  simp[step_inst_base_def, is_terminator_def, jump_to_def] >>
+  simp[step_inst_base_opcode_eqs, is_terminator_def, jump_to_def] >>
   simp[eval_op_inst_idx] >> rw[]
 QED
 
@@ -1405,7 +1384,7 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
   `step_inst_base (mk_inst st.cs_next_id MCOPY [op_dst; op_src; op_sz] []) ss =
      OK (mcopy (w2n dst_v) (w2n src_v) (w2n sz_v) ss)`
-    by simp[step_inst_base_def] >>
+    by simp[step_inst_base_opcode_eqs] >>
   simp[run_inst_seq_def] >>
   drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
   conj_tac >- (
@@ -1425,7 +1404,7 @@ Theorem step_SLOAD:
     step_inst_base (mk_inst id SLOAD [op1] [out]) ss =
       OK (update_var out (sload v1 ss) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def]
 QED
 
 Theorem step_CALLDATALOAD:
@@ -1436,7 +1415,7 @@ Theorem step_CALLDATALOAD:
         (let data = ss.vs_call_ctx.cc_calldata in
          word_of_bytes T (0w:bytes32) (TAKE 32 (DROP (w2n v1) data ++ REPLICATE 32 0w))) ss)
 Proof
-  rpt strip_tac >> simp[Once step_inst_base_def, mk_inst_def] >>
+  rpt strip_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[exec_read1_def]
 QED
 
@@ -1447,7 +1426,7 @@ Theorem step_SSTORE:
     step_inst_base (mk_inst id SSTORE [op1; op2] []) ss =
       OK (sstore v1 v2 ss)
 Proof
-  rw[step_inst_base_def, exec_write2_def]
+  rw[step_inst_base_opcode_eqs, exec_write2_def]
 QED
 
 Theorem step_ASSERT_ok:
@@ -1455,7 +1434,7 @@ Theorem step_ASSERT_ok:
     eval_operand op1 ss = SOME v ∧ v ≠ 0w ⇒
     step_inst_base (mk_inst id ASSERT [op1] []) ss = OK ss
 Proof
-  rw[step_inst_base_def, mk_inst_def] >> gvs[]
+  rw[step_inst_base_opcode_eqs, mk_inst_def] >> gvs[]
 QED
 
 Theorem step_ASSERT_revert:
@@ -1464,7 +1443,7 @@ Theorem step_ASSERT_revert:
     step_inst_base (mk_inst id ASSERT [op1] []) ss =
       Abort Revert_abort (revert_state (set_returndata [] ss))
 Proof
-  rw[step_inst_base_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 (* ===== sload / sstore / update_var independence ===== *)
@@ -1886,7 +1865,7 @@ Proof
   qspecl_then [`CALLVALUE`, `λs. s.vs_call_ctx.cc_callvalue`,
                `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
   simp[] >> disch_then irule >>
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def]
 QED
 
 (* Instantiation: CALLDATASIZE *)
@@ -1910,7 +1889,7 @@ Proof
                `λs. n2w (LENGTH s.vs_call_ctx.cc_calldata)`,
                `st`, `v`, `st'`, `ss`] mp_tac emit_op_read0_correct >>
   simp[] >> disch_then irule >>
-  rw[step_inst_base_def, exec_read0_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def]
 QED
 
 (* ===== Generic: emit_op for 1-operand pure opcode ===== *)
@@ -2094,7 +2073,7 @@ Theorem step_CODECOPY:
             (TAKE (w2n sz) (DROP (w2n src) ss.vs_code ++ REPLICATE (w2n sz) 0w))
             ss)
 Proof
-  rw[step_inst_base_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 (* ALLOCA lemmas removed — ALLOCA now takes 1 literal operand,
@@ -2110,7 +2089,7 @@ Theorem step_RETURN:
       Halt (halt_state (set_returndata
         (TAKE (w2n v2) (DROP (w2n v1) ss.vs_memory ++ REPLICATE (w2n v2) 0w)) ss))
 Proof
-  rw[step_inst_base_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 (* ===== emit_inst structural lemma ===== *)
@@ -2147,7 +2126,7 @@ Theorem emit_void_CODECOPY_correct:
 Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs] >>
   drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
   conj_tac >- (
     gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
@@ -2178,7 +2157,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
   drule emit_op_same_blocks >> strip_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP ss.vs_allocas st.cs_next_id` >> simp[]
   >- suspend "none_case"
   >> suspend "some_case"
@@ -2242,7 +2221,7 @@ Theorem emit_inst_RETURN_halt:
 Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_inst >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def]
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs]
 QED
 
 (* ===== Instruction extension predicate and composition ===== *)

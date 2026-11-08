@@ -765,7 +765,7 @@ Theorem step_inst_base_phi[local]:
     inst.inst_opcode = PHI ==>
     step_inst_base inst s = Error "phi outside prefix"
 Proof
-  rw[step_inst_base_def]
+  rw[step_inst_base_opcode_eqs]
 QED
 
 (* Every non-Error result after a jump is the result before it, one unit of
@@ -984,7 +984,7 @@ Proof
   rpt strip_tac >> irule frag_outcome_jump >>
   conj_tac >- simp[] >>
   qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
-  simp[mk_inst_def, is_terminator_def, Once step_inst_base_def]
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs]
 QED
 
 Theorem frag_outcome_jnz[local]:

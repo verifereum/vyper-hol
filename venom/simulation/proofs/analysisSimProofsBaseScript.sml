@@ -69,7 +69,14 @@ QED
 Triviality step_inst_base_phi_error[local]:
   !inst s. inst.inst_opcode = PHI ==> step_inst_base inst s = Error "phi outside prefix"
 Proof
-  rpt strip_tac >> simp[step_inst_base_def]
+  let
+    val eq = valOf (List.find (fn th =>
+      let val (guard, _) = dest_imp (snd (strip_forall (concl th)))
+      in aconv (rhs guard) (Parse.Term `PHI`) end)
+      (CONJUNCTS step_inst_base_opcode_eqs))
+  in
+    rpt strip_tac >> simp[eq]
+  end
 QED
 
 Triviality step_inst_phi_error[local]:
@@ -1141,8 +1148,18 @@ Proof
   Cases_on `inst.inst_opcode = INVOKE` >> fs[step_inst_non_invoke]
   >- (
     fs[step_inst_def, eval_ops_inst_idx, setup_callee_def] >>
-    rpt BasicProvers.FULL_CASE_TAC >> fs[] >>
-    gvs[bind_outputs_def]
+    Cases_on `decode_invoke inst` >> gvs[] >>
+    PairCases_on `x` >> gvs[] >>
+    rename1 `lookup_function name ctx.ctx_functions` >>
+    Cases_on `lookup_function name ctx.ctx_functions` >> gvs[] >>
+    rename1 `eval_operands ops s` >>
+    Cases_on `eval_operands ops s` >> gvs[] >>
+    rename1 `NULL callee.fn_blocks` >>
+    Cases_on `NULL callee.fn_blocks` >> gvs[] >>
+    qmatch_asmsub_abbrev_tac `run_blocks fuel ctx callee cs` >>
+    Cases_on `run_blocks fuel ctx callee cs` >> gvs[bind_outputs_def] >>
+    rename1 `LENGTH inst.inst_outputs = LENGTH ret.iret_values` >>
+    Cases_on `LENGTH inst.inst_outputs = LENGTH ret.iret_values` >> gvs[]
   ) >>
   (* non-INVOKE: step_inst = step_inst_base *)
   Cases_on `is_terminator inst.inst_opcode`
