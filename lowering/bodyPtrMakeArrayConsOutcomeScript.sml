@@ -101,6 +101,8 @@ Proof
   `val_footprint tv v = 0` by
     (drule_all literal_annotation_slot >> strip_tac >>
      `val_footprint tv v <= 0` by metis_tac[] >> decide_tac) >>
+  `post_value_type ce e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   `?a mem. val_in_memory tv v a mem` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   qexistsl [`z`, `H`, `tm`] >> simp[] >>
@@ -141,6 +143,8 @@ Theorem literal_cons_flat_endpoint:
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type ce e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all literal_cons_compiler_stages >> strip_tac >>
   drule literal_loop_frame_allocation >> strip_tac >>
   `stmt_state_rel ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
@@ -206,6 +210,8 @@ Theorem literal_cons_bytes_endpoint:
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type ce e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   drule_all literal_cons_compiler_stages >> strip_tac >> drule literal_loop_frame_allocation >> strip_tac >>
   drule_all literal_annotation_slot >> strip_tac >> drule_all literal_bytes_runtime_slot >> strip_tac >>
   qmatch_asmsub_abbrev_tac `val_store_size tv v = n` >>
@@ -395,6 +401,11 @@ Theorem literal_cons_outcome_ptr:
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type ce e = expr_type e` by
+    (qpat_assum `int_calls_expr e = [] \/ _` strip_assume_tac
+     >- (irule exprSimHypsTheory.post_value_type_no_calls >>
+         first_assum ACCEPT_TAC) >>
+     irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all literal_cons_compiler_stages >> strip_tac >>
   drule literal_loop_frame_runtime >> strip_tac >>
   qpat_x_assum `expr_vv_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>

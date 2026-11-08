@@ -670,8 +670,15 @@ Proof
   `32 + k <= bsz` by decide_tac >>
   `expr_post ctx func cenv cx e es sa s1 s0 es1 v op t` by first_assum ACCEPT_TAC >>
   drule_all concat_args_pre >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (qpat_x_assum `is_bytestring_type (expr_type e) \/ _` mp_tac >>
+     qpat_x_assum `evaluate_type _ (expr_type e) = SOME _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[evaluate_type_def, is_word_type_def]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_x_assum `post_value_type cenv e = expr_type e`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `mload (w2n ow) t = n2w k` by metis_tac[] >>
   `eval_operand (Var dv) t = SOME (n2w (B + 32)) /\
    eval_operand (Var ov) t = SOME ow` by
@@ -1027,11 +1034,11 @@ Resume concat_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `(\res ee r. expr_exit res r) _ _ _`
-    (assume_tac o BETA_RULE) >>
-  disj2_tac >> simp[] >>
-  qpat_x_assum `expr_exit _ r` mp_tac >>
-  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
+  disj2_tac >>
+  qpat_x_assum `(\res ee r. expr_exit res r) _ _ _` (mp_tac o BETA_RULE) >>
+  qpat_x_assum `exit_result r` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def, exit_result_def] >>
   TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
 QED
 

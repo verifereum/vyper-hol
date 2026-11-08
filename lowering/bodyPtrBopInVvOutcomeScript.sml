@@ -5,6 +5,7 @@ Ancestors bodyPtrBopPairOutcome bodyPtrDefs gasSummaryComposePtr
 (* Raw value/place evaluation: unlike bop_operand_outcome_ptr this does not
    insert read_result into the compiled haystack evaluation. *)
 Theorem membership_vv_operand_outcome_ptr:
+  post_value_type cenv e = expr_type e ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty e es /\
   compile_expr cenv ty e sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -55,7 +56,7 @@ Theorem membership_vv_operand_outcome_ptr:
     (bind (eval_expr cx e) next) (es,s0,G0,tn0)
     Q (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >>
+  strip_tac >> strip_tac >>
   irule gas_outcome_ptr_bind >> simp[] >>
   conj_tac >- metis_tac[] >>
   irule gas_outcome_ptr_conseq >>

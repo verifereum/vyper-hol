@@ -81,7 +81,7 @@ Resume compile_assign_tuple_targets_stmt_frag_ptr[summary]:
 QED
 
 Resume compile_assign_tuple_targets_stmt_frag_ptr[normal]:
-  gvs[] >>
+  gvs[post_value_type_lowered] >>
   drule gas_marked_exec_ptr_exec >> strip_tac >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>

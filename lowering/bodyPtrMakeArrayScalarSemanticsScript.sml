@@ -3,7 +3,7 @@ Theory bodyPtrMakeArrayScalarSemantics
 Ancestors
   bodyPtrMakeArrayScalarDispatch bodyPtrMakeArrayEmission exprSimUnwrap
   exprSimUnwrapProps exprSimProps loweringPosts venomExecSemantics venomInst
-  venomState valueEncodingProps vyperState vyperInterpreter context compileEnv
+  venomState valueEncodingProps vyperState vyperInterpreter context compileEnv valueCopyBytes
 
 Theorem scalar_located_load_step:
   vv_post ctx fn ce cx e es sa sm s0 es' tv (LocatedValue t p) s /\
@@ -57,7 +57,11 @@ Theorem scalar_unwrap_typed_instruction:
     (!x. not_fresh_at sm x ==> x <> tmp)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `post_value_type ce e = expr_type e` by
+    (irule post_value_type_word >> first_assum ACCEPT_TAC) >>
+  `t = expr_type e` by
+    (gvs[vv_post_def, vv_holds_def] >>
+     imp_res_tac valueCopyBytesTheory.is_bytestring_word_type >> gvs[]) >>
   `is_word_type t` by simp[] >>
   drule_all scalar_unwrap_emits_load >> strip_tac >>
   `emit_op opc [p.ptr_operand] sm = (op,sb)` by metis_tac[] >>

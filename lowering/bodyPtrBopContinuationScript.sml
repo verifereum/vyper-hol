@@ -89,7 +89,7 @@ Proof
   >- (fs[] >> `word_value v1 /\ word_value v2` by metis_tac[word_value_type_typed] >>
       `eval_operand x t1 = SOME (val_to_w256 v1) /\
        eval_operand y t2 = SOME (val_to_w256 v2)` by
-        (gvs[bop_operand_post_def, expr_post_def] >>
+        (gvs[bop_operand_post_def, expr_post_def, post_value_type_word] >>
          metis_tac[expr_val_rel_word, optionTheory.IS_SOME_EXISTS]) >>
       irule bop_scalar_typed_run >> simp[] >>
       reverse conj_tac >- metis_tac[] >> qexistsl_tac [`x`, `y`] >> simp[]) >>

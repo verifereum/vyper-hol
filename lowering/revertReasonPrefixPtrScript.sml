@@ -597,7 +597,8 @@ Theorem ptr_vv_ok_nonmemory_frame:
   (t.vs_accounts t.vs_call_ctx.cc_address).storage =
     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
   t.vs_transient t.vs_call_ctx.cc_address =
-    s.vs_transient s.vs_call_ctx.cc_address ==>
+    s.vs_transient s.vs_call_ctx.cc_address /\
+  op_prov Gf p.ptr_operand = op_prov G p.ptr_operand ==>
   ptr_vv_ok cx ty tv (LocatedValue ty' p) es Gf tnf t
 Proof
   simp[ptr_vv_ok_def]
@@ -651,14 +652,24 @@ Theorem alloca_step_ptr_vv_nonmemory:
     (step_prov PG G (mk_inst id ALLOCA [Lit sz] [out]) t)
     (step_taint (mk_inst id ALLOCA [Lit sz] [out]) s t tn) t
 Proof
-  strip_tac >> irule ptr_vv_ok_nonmemory_frame >>
-  conj_tac >- simp[] >> qexistsl_tac [`G`, `s`, `tn`] >>
+  strip_tac >>
   drule alloca_step_data_frame >> strip_tac >>
-  simp[step_taint_nonmemory_frame, mk_inst_def] >> conj_tac >-
+  `op_taint (step_taint (mk_inst id ALLOCA [Lit sz] [out]) s t tn)
+     p.ptr_operand = op_taint tn p.ptr_operand` by
     (Cases_on `p.ptr_operand` >> gvs[op_taint_def, step_taint_other_output,
       mk_inst_def]) >>
-  irule alloca_step_operand_preserved >>
-  qexistsl_tac [`id`, `w2n sz`, `out`] >> simp[] >> metis_tac[]
+  `eval_operand p.ptr_operand t = eval_operand p.ptr_operand s` by
+    (irule alloca_step_operand_preserved >>
+     qexistsl_tac [`id`, `w2n sz`, `out`] >> simp[] >> metis_tac[]) >>
+  `op_prov (step_prov PG G (mk_inst id ALLOCA [Lit sz] [out]) t)
+     p.ptr_operand = op_prov G p.ptr_operand` by
+    (Cases_on `p.ptr_operand` >>
+     gvs[op_prov_def, step_prov_def, set_prov_def, mk_inst_def] >>
+     rpt CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
+  `(step_taint (mk_inst id ALLOCA [Lit sz] [out]) s t tn).t_stor = tn.t_stor /\
+   (step_taint (mk_inst id ALLOCA [Lit sz] [out]) s t tn).t_trans =
+     tn.t_trans` by simp[step_taint_nonmemory_frame, mk_inst_def] >>
+  drule_then irule ptr_vv_ok_nonmemory_frame >> fs[]
 QED
 
 Theorem local_region_update_nonlocal:

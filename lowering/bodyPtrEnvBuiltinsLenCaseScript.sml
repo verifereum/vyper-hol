@@ -1,7 +1,7 @@
 (* Composition at the raw value/place boundary, without pointer internals. *)
 Theory bodyPtrEnvBuiltinsLenCase
 Ancestors
-  bodyPtrEnvBuiltinsLenSuffix bodyPtrEnvBuiltinsLenSource bodyPtrDefs
+  bodyPtrEnvBuiltinsLenCallResidual bodyPtrEnvBuiltinsLenSuffix bodyPtrEnvBuiltinsLenSource bodyPtrDefs
   gasSummaryComposePtr fragGasPathPtr exprSimDefs exprSimHyps exprSimHypsDefs
   exprLowering exprLoweringProps compileEnv context loweringPosts
   exprSimSource fragGasPath fragGasMode gasSummary exprSimProps
@@ -100,8 +100,9 @@ Proof
   simp[] >> qexists_tac `cenv` >> simp[]
 QED
 
-Theorem compile_len_singleton_sim_ptr:
+Theorem compile_len_singleton_eq_sim_ptr:
   !d ctx PG func cenv cx env ty e es.
+    post_value_type cenv e = expr_type e /\
     expr_body_pre cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
     expr_vv_sim_ptr d ctx PG func cenv cx ty e es ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty
@@ -138,8 +139,25 @@ Proof
   drule_all len_marked_operand_typed >> strip_tac >>
   `compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand evv)
      (case vv_location evv of SOME l => l | NONE => LocMemory) sm = (q,r)` by simp[] >>
+  qpat_assum `post_value_type cenv e = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   drule_all len_vv_path_ptr >> disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`n`, `t'`, `G'`, `tn'`] >> simp[expr_type_def, is_word_type_def]
+QED
+
+Theorem compile_len_singleton_sim_ptr:
+  !d ctx PG func cenv cx env ty e es.
+    expr_body_pre cenv cx env (Builtin (BaseT (UintT 256)) Len [e]) es /\
+    expr_vv_sim_ptr d ctx PG func cenv cx ty e es ==>
+    expr_vv_sim_ptr d ctx PG func cenv cx ty
+      (Builtin (BaseT (UintT 256)) Len [e]) es
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `post_value_type cenv e = expr_type e`
+  >- (irule compile_len_singleton_eq_sim_ptr >> rpt conj_tac >>
+      TRY (first_assum ACCEPT_TAC) >> qexists_tac `env` >> first_assum ACCEPT_TAC) >>
+  irule bodyPtrEnvBuiltinsLenCallResidualTheory.compile_len_singleton_call_sim_ptr >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexists_tac `env` >> first_assum ACCEPT_TAC
 QED
 
 Theorem len_builtin_body_ptr_ok:

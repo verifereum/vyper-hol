@@ -15,6 +15,7 @@ Proof
   strip_tac >> drule_all membership_loop_frame_operand >> strip_tac >>
   simp[ptr_vv_ok_def] >>
   conj_tac >- fs[ptr_vv_ok_def] >>
+  conj_tac >- fs[ptr_vv_ok_def] >>
   conj_tac
   >- (strip_tac >>
       `?v. read_result cx tvv es = (INL v,es) /\

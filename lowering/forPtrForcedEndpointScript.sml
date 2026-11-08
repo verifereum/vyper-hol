@@ -60,8 +60,8 @@ Theorem forced_endpoint_bind_outcome_ptr:
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv d cenv cx mid G tn t /\
-    ptr_val_ok cx (expr_type e) v op G tn t /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+    ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := []) ==>
     gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG (next v)

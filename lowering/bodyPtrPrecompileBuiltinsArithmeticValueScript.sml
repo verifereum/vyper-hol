@@ -184,6 +184,7 @@ Proof
 QED
 
 Theorem ec_result_pointer_post:
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es sa s0 t /\
   eval_operand pop t = SOME w /\
@@ -196,13 +197,16 @@ Theorem ec_result_pointer_post:
   vv_post ctx fn cenv cx e es sa sb s0 es' (Value (mk_ec_result (x,y)))
     (FST (as_ptr_val (expr_type e) LocMemory (pop,sb))) t
 Proof
-  strip_tac >> drule ec_result_word_contents >> strip_tac >>
+  strip_tac >>
+  `post_value_type cenv e = ArrayT (BaseT (UintT 256)) (Fixed 2)` by gvs[] >>
+  drule ec_result_word_contents >> strip_tac >>
   drule_all ec_result_memory >> strip_tac >>
-  simp[as_ptr_val_def, contextTheory.mk_ptr_def,
+  qpat_x_assum `post_value_type _ _ = ArrayT _ _` (fn pth =>
+  simp[pth, as_ptr_val_def, contextTheory.mk_ptr_def,
        vv_post_def, vv_holds_def, vv_at_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def,
        evaluate_type_def, is_word_type_def, ec_result_val_wf,
-       type_slot_size_def, wordsTheory.dimword_def, ec_result_sizes] >>
+       type_slot_size_def, wordsTheory.dimword_def, ec_result_sizes]) >>
   conj_tac
   >- (disj1_tac >> qexistsl [`aid`, `w2n w`, `64`] >>
       simp[] >> gvs[regions_disjoint_def]) >>
@@ -291,7 +295,7 @@ Proof
   conj_tac >- (irule ec_result_buffer_ok >> simp[ec_builtin_buffer_size] >>
                qexists `tn` >> first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (irule (SRULE [expr_type_def] (Q.INST
+  >- (irule (SRULE [expr_type_def, loweringPostsTheory.post_value_type_def] (Q.INST
         [`e` |-> `Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) bt args`]
         ec_result_pointer_post)) >>
       conj_tac >- (qexistsl [`aid`,`w`] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>

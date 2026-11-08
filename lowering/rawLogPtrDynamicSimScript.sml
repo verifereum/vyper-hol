@@ -200,6 +200,12 @@ Resume raw_log_dynamic_frag_ptr[tail]:
      qpat_assum `expr_type data = _` (fn th => pure_rewrite_tac[th]) >>
      disch_then ACCEPT_TAC) >>
   `~is_word_type (BaseT (BytesT (Dynamic cap)))` by simp[is_word_type_def] >>
+  `post_value_type cenv data = expr_type data` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     qpat_assum `expr_type data = _`
+       (fn th => simp[th, compileEnvTheory.is_bytestring_type_def])) >>
+  qpat_x_assum `post_value_type cenv data = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_all bodyPtrHashBuiltinsCasesTheory.hash_dynamic_bytes_operand >> strip_tac >>
   gvs[] >>
   fs[ptr_covers_def] >>
@@ -239,6 +245,7 @@ Resume raw_log_dynamic_frag_ptr[tail_ready]:
   disch_then (qspecl_then [`cx_dead cx`, `PG`,
     `ee.logs ++ [encode_raw_event_values cx.txn.target vs bs]`] strip_assume_tac) >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `sa.cs_next_var <= sn.cs_next_var` by decide_tac >>
   `!x. Var p = Var x ==> not_fresh_at sn x` by simp[] >>
   drule_all (SRULE [APPEND] raw_log_dynamic_counted_post_ptr) >>

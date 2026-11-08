@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringReturn
 Ancestors
-  ctorDeployLoweringDefs ctorDeployDefs o1PassContract ctorReturnFrame
+  ctorDeployLoweringDefs ctorDeployDefs immSectionDead o1PassContract ctorReturnFrame
   vyperInterpreter supportedDecls symbolResolve ctorDeployInitcodeAsm
   codegenEncodingWf ctorDeployShape o1PipelineCorrect asmToBytecodeProofs list rich_list venomPipelineData unitLabelMap venomFnScheduleRunner
   venomPipelineRunner venomPipelineDriver vyperCompiler compileVyper asmIR

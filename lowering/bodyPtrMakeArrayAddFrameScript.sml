@@ -131,6 +131,9 @@ Proof
   gvs[ptr_vv_ok_def, vv_operand_def] >>
   (conj_tac >- metis_tac[binop_source_op_taint] >>
   conj_tac
+  >- (strip_tac >> Cases_on `p.ptr_operand` >>
+      gvs[op_prov_def, typedCopyPtrTheory.copy_len_binop_ghost_frame]) >>
+  conj_tac
   >- (strip_tac >> gvs[] >>
       irule binop_source_ptr_mem_ok >> simp[]) >>
   Cases_on `p.ptr_operand` >>

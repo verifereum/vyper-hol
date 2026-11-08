@@ -7,8 +7,8 @@ Ancestors
 
 Theorem unwrap_storage_endpoint_post:
   vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
-  storage_holds cx tr (expr_type e) tv w ee s /\
-  ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
+  storage_holds cx tr (post_value_type cenv e) tv w ee s /\
+  ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand s = SOME w /\
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
   stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
@@ -20,8 +20,8 @@ Theorem unwrap_storage_endpoint_post:
   u = update_var root d (buffer_allocation_fields s sm.cs_next_id nb) /\
   step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
   a = u with vs_inst_idx := k /\ slot_copy_runtime_frame mid d n a z /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
+  ~is_word_type (post_value_type cenv e) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty /\
   n = type_slot_size ty /\ type_memory_size ty <= nb /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= nb /\
   eval_operand (Var root) z = SOME d /\ ptr_covers H tf root z nb /\
@@ -46,7 +46,7 @@ Theorem unwrap_storage_endpoint_post:
   ?v. read_result cx tv ee = (INL v,ee) /\
     expr_post ctx func cenv cx e es sa sb s0 ee v (Var root) z /\
     ghost_inv ret cenv cx ee H tf z /\
-    ptr_val_ok cx (expr_type e) v (Var root) H tf z /\
+    ptr_val_ok cx (post_value_type cenv e) v (Var root) H tf z /\
     ptr_buf_ok cenv e (Var root) H z /\
     ghost_kept cenv es sa Gi ti s0 H tf
 Proof

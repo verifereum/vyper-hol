@@ -89,11 +89,12 @@ Theorem reason_expr_post_inst_idx[simp]:
   expr_post ctx func ce cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, local_region_def, lookup_var_def]
+       expr_val_at_def, expr_val_own_def, local_region_def, lookup_var_def]
 QED
 
 Theorem reason_encoder_prefix_path_ptr:
   !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 c3 c4 buf payload tuple n m tv ow PG G tn D.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\

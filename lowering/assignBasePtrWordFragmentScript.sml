@@ -62,6 +62,8 @@ QED
 
 Resume compile_assign_local_stmt_frag_ptr[normal]:
   gvs[] >> drule gas_marked_exec_ptr_exec >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_word] >>
   `!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
       (INL v,es_end with gas_obs := tail)` by fs[gas_marked_exec_ptr_def] >>

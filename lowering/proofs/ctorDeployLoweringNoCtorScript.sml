@@ -4,7 +4,7 @@ Theory ctorDeployLoweringNoCtor
 Ancestors
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract gasSummary
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
-  immutableDeployExecution ctorDeployDefs e2eEntry venomState vyperCompiler
+  immutableDeployExecution ctorDeployDefs immSectionDead e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
   valueEncoding vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel

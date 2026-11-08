@@ -9,7 +9,7 @@ Ancestors
 Theorem vv_post_storage_source:
   vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   p.ptr_location = slot_loc tr ==>
-  t = expr_type e /\ ?v a.
+  t = post_value_type cenv e /\ ?v a.
     read_result cx tv ee = (INL v,ee) /\
     eval_operand p.ptr_operand s = SOME a /\
     storage_holds cx tr t (Value v) a ee s
@@ -22,10 +22,10 @@ QED
 Theorem unwrap_storage_word_input:
   vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   p.ptr_location = slot_loc tr /\ is_word_type t /\
-  ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty ==>
+  ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty ==>
   ?v a.
-    t = expr_type e /\ read_result cx tv ee = (INL v,ee) /\
+    t = post_value_type cenv e /\ read_result cx tv ee = (INL v,ee) /\
     eval_operand p.ptr_operand s = SOME a /\
     op_taint tn p.ptr_operand = {} /\
     key_taint (if tr then tn.t_trans else tn.t_stor) a = {} /\
@@ -63,11 +63,11 @@ Proof
         with vs_inst_idx := SUC s.vs_inst_idx)` by
     (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >> simp[]) >>
   drule vv_post_read_result >> strip_tac >> gvs[] >>
-  irule expr_post_of_vv_post_load >>
+  irule expr_post_of_vv_post_load_physical >>
   simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   conj_tac
   >- (rpt strip_tac >> drule_all storage_holds_load >> simp[]) >>
-  qexistsl [`p`, `s`, `sm`, `expr_type e`] >> simp[update_var_def] >>
+  qexistsl [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[update_var_def] >>
   rpt strip_tac >> `x <> STRING #"%" (toString sm.cs_next_var)` by
     (gvs[compileEnvTheory.not_fresh_at_def]) >>
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
@@ -84,9 +84,9 @@ Theorem unwrap_storage_word_marked_read_ptr:
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ghost_inv d cenv cx ee G tn s /\
-  ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
+  ptr_vv_ok cx (post_value_type cenv e) tv (LocatedValue t p) ee G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME ty ==>
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ty ==>
   ?v Gf tnf u.
     gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (read_result cx tv)
       (ee,s,G,tn) [] (INL v) ee Gf tnf (OK u) /\
@@ -94,8 +94,8 @@ Theorem unwrap_storage_word_marked_read_ptr:
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv d cenv cx ee Gf tnf u /\
-    ptr_val_ok cx (expr_type e) v op Gf tnf u /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op Gf u) /\
+    ptr_val_ok cx (post_value_type cenv e) v op Gf tnf u /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op Gf u) /\
     ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
   strip_tac >> drule_all unwrap_storage_word_input >> strip_tac >>

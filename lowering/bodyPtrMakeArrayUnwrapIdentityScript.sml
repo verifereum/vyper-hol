@@ -2,7 +2,7 @@
 Theory bodyPtrMakeArrayUnwrapIdentity
 Ancestors
   bodyPtrDefs exprSimUnwrap exprLowering loweringPosts context
-  fragGasPathPtr compileEnv
+  fragGasPathPtr compileEnv valueCopyBytes
 
 Theorem unwrap_stack_ptr_path:
   unwrap_value cenv (StackValue t op) sm = (result,sb) /\
@@ -16,7 +16,7 @@ Theorem unwrap_stack_ptr_path:
   ptr_val_ok cx (expr_type e) v result G tn s
 Proof
   strip_tac >> gvs[unwrap_value_def, comp_return_def, ptr_vv_ok_def,
-      vv_post_def, vv_holds_def, vv_at_def] >>
+      vv_post_def, vv_holds_def, vv_at_def, vv_own_def] >>
   simp[cj 1 gas_path_ptr_rules, expr_post_def] >> metis_tac[]
 QED
 
@@ -33,7 +33,10 @@ Theorem unwrap_memory_ptr_path:
   ptr_val_ok cx (expr_type e) v result G tn s
 Proof
   strip_tac >> gvs[unwrap_value_def, comp_return_def, ptr_vv_ok_def,
-      vv_post_def, vv_holds_def, vv_at_def] >>
+      vv_post_def, vv_holds_def, vv_at_def, vv_own_def] >>
   simp[cj 1 gas_path_ptr_rules, expr_post_def, ptr_val_ok_def,
-       expr_val_rel_def, expr_val_at_def] >> metis_tac[]
+       expr_val_rel_def, expr_val_at_def, expr_val_own_def] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  strip_tac >> gvs[post_value_type_word] >>
+  imp_res_tac valueCopyBytesTheory.is_bytestring_word_type >> gvs[]
 QED

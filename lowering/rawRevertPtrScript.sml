@@ -68,6 +68,9 @@ Resume raw_revert_vv_sim_ptr[normal]:
     SOME (BaseTV (BytesT (Dynamic cap)))` by
     (drule_at Any expr_body_pre_type_evaluates >>
      simp[evaluate_type_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     fs[compileEnvTheory.is_bytestring_type_def]) >>
   `lower_value compile_expr cenv (expr_type e) e sa = (data,sm) /\
    ptr_val_ok cx (expr_type e) (BytesV bs) data G tn t` by metis_tac[] >>
   drule_all raw_revert_post_path_ptr >>

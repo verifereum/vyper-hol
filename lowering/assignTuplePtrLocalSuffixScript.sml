@@ -101,6 +101,7 @@ Resume assign_tuple_locals_suffix_open_ptr[prefix]:
     metis_tac[] >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op sv /\
    expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op sv` by
     metis_tac[] >>

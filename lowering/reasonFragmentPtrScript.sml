@@ -14,7 +14,7 @@ Theorem raise_reason_endpoint_string:
   gas_admissible (eval_stmt cx (Raise (RaiseReason r))) (stmt_res_ok lctx) es /\
   (!tail. eval_expr cx r (es with gas_obs := xs ++ tail) =
     (INL tv,ee with gas_obs := tail)) /\
-  vv_holds cenv cx (expr_type r) tv vv (ee with gas_obs := []) t ==>
+  vv_holds cenv cx (post_value_type cenv r) tv vv (ee with gas_obs := []) t ==>
   ?str.
     (!tail. read_result cx tv (ee with gas_obs := tail) =
       (INL (StringV str),ee with gas_obs := tail)) /\
@@ -50,7 +50,7 @@ Theorem compile_raise_reason_path_frag_ptr:
        local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
        vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\
        ghost_inv d cenv cx ee G tn t /\
-       ptr_vv_ok cx (expr_type r) tv vv ee G tn t /\
+       ptr_vv_ok cx (post_value_type cenv r) tv vv ee G tn t /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\
        read_result cx tv ee = (INL (StringV str),ee) ==>
@@ -85,7 +85,7 @@ QED
 
 Resume compile_raise_reason_path_frag_ptr[normal]:
   `~t.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
-  `vv_holds cenv cx (expr_type r) tv vv (es_end with gas_obs := []) t` by
+  `vv_holds cenv cx (post_value_type cenv r) tv vv (es_end with gas_obs := []) t` by
     fs[vv_post_def] >>
   drule_all raise_reason_endpoint_string >> strip_tac >>
   qpat_assum `!tail. read_result _ _ _ = _` (qspec_then `[]` assume_tac) >> fs[] >>

@@ -23,8 +23,8 @@ Proof
  rpt gen_tac >> strip_tac >>
  `step_inst_base (mk_inst id MLOAD [Var src] [out]) s =
     OK (update_var out (mload (w2n a) s) s)` by
-   (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+   simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
+        exec_read1_def, eval_operand_def] >>
  `gas_path_ptr_edge D 0 ctx func PG G tn s 0
    (step_prov PG G (mk_inst id MLOAD [Var src] [out])
      (update_var out (mload (w2n a) s) s))

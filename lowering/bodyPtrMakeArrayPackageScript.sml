@@ -78,7 +78,7 @@ Theorem literal_loop_vv_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ val_wf tv v /\
   val_footprint tv v <= capacity /\ addr < dimword(:256) /\
-  val_in_memory tv v addr s.vs_memory ==>
+  val_in_memory tv v addr s.vs_memory /\ post_value_type ce e = expr_type e ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value v)
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s
 Proof
@@ -218,7 +218,8 @@ Theorem literal_tuple_endpoint_posts:
   evaluate_type (get_tenv cx) (expr_type e) = SOME (TupleTV tvs) /\
   type_memory_bytes ce (lowered_value_type ce e) <= type_memory_size_list tvs /\
   addr < dimword(:256) /\ LIST_REL value_has_type tvs vs /\
-  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> tuple_in_memory vs tvs addr m) ==>
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> tuple_in_memory vs tvs addr m) /\
+  post_value_type ce e = expr_type e ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value (ArrayV (TupleV vs)))
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s /\
   ptr_vv_ok cx (expr_type e) (Value (ArrayV (TupleV vs)))
@@ -506,7 +507,8 @@ Theorem literal_array_endpoint_posts:
        [(BaseTV (UintT 256),IntV (&(n MOD dimword(:256))),addr,32)] else []) ++ added) tn s /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     tuple_in_memory vs (REPLICATE n tv)
-      (addr+(if (case bnd of Dynamic _ => T | _ => F) then 32 else 0)) m) ==>
+      (addr+(if (case bnd of Dynamic _ => T | _ => F) then 32 else 0)) m) /\
+  post_value_type ce e = expr_type e ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value (ArrayV (make_array_value tv bnd vs)))
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s /\
   ptr_vv_ok cx (expr_type e) (Value (ArrayV (make_array_value tv bnd vs)))

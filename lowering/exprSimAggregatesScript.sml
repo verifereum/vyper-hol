@@ -474,6 +474,8 @@ Theorem compile_struct_lit_case:
     expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (StructLit ann nsid fields) = expr_type (StructLit ann nsid fields)` by simp[] >>
   metis_tac[compile_struct_lit_vv_case, expr_sim_case_of_vv]
 QED
 
@@ -487,6 +489,8 @@ Theorem compile_make_array_case:
     expr_vv_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args)
 Proof
+  rpt strip_tac >>
+  `post_value_type cenv (Builtin ann (MakeArray topt bnd) args) = expr_type (Builtin ann (MakeArray topt bnd) args)` by simp[] >>
   metis_tac[compile_make_array_vv_case, expr_sim_case_of_vv]
 QED
 

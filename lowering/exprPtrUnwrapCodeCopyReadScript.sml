@@ -25,7 +25,7 @@ Theorem unwrap_code_ensure_marked_read_ptr:
   evaluate_type (get_tenv cx) t = SOME ty /\ val_wf ty v /\
   nb = type_memory_size ty /\ 32*((nb+31) DIV 32) = nb /\ nb < dimword (:256) /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= nb /\
-  ptr_vv_ok cx (expr_type e) (Value v) (LocatedValue t p) ee G tn s /\
+  ptr_vv_ok cx (post_value_type cenv e) (Value v) (LocatedValue t p) ee G tn s /\
   ghost_inv ret cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
@@ -35,7 +35,7 @@ Theorem unwrap_code_ensure_marked_read_ptr:
     expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv ret cenv cx ee H tf z /\
-    ptr_val_ok cx (expr_type e) v op H tf z /\ ptr_buf_ok cenv e op H z /\
+    ptr_val_ok cx (post_value_type cenv e) v op H tf z /\ ptr_buf_ok cenv e op H z /\
     ghost_kept cenv es sa Gi ti s0 H tf
 Proof
   strip_tac >> drule_all vv_post_code_source >> strip_tac >>
@@ -69,7 +69,7 @@ Proof
   disch_then (qspec_then `tn` strip_assume_tac) >>
   `tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm` by
     metis_tac[] >>
-  `ptr_val_ok cx (expr_type e) v op H tf z /\ ptr_buf_ok cenv e op H z` by
+  `ptr_val_ok cx (post_value_type cenv e) v op H tf z /\ ptr_buf_ok cenv e op H z` by
     suspend "pointer" >>
   qexistsl [`H`, `tf`, `z with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   rpt conj_tac
@@ -88,7 +88,7 @@ Resume unwrap_code_ensure_marked_read_ptr[semantic]:
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-    expr_val_at_def, lookup_var_def, local_region_def, locals_kept_def] >>
+    expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def, locals_kept_def] >>
   tautLib.TAUT_TAC
 QED
 

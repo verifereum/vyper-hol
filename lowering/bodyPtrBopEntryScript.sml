@@ -47,6 +47,7 @@ Theorem bop_pair_word_inputs:
   !w. eval_operand x t1 = SOME w ==> eval_operand x t2 = SOME w
 Proof
   simp[bop_operand_post_def] >> strip_tac >>
+  fs[loweringPostsTheory.post_value_type_word] >>
   `op_prov G2 x = op_prov G1 x /\ op_taint tn2 x = op_taint tn1 x` by
     (Cases_on `x` >> gvs[ptrDisciplineTheory.op_prov_def,
        ptrDisciplineTheory.op_taint_def, ghost_kept_def]) >>

@@ -122,6 +122,7 @@ Proof
 QED
 
 Theorem body_base_operand_outcome_ptr:
+  post_value_type cenv e = expr_type e /\
   body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (e::args) /\
   expr_body_pre cenv cx env e es /\ expr_type e = BaseT bt /\
   gas_admissible (eval_exprs cx (e::args))
@@ -167,6 +168,8 @@ Proof
   impl_tac >- (simp[] >> metis_tac[]) >>
   disch_then assume_tac >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ (\res ee G tn t. ?v. _) _` kall_tac >>
+  qpat_x_assum `post_value_type cenv e = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
   POP_ASSUM_LIST (K all_tac) >> simp[] >> rpt strip_tac >> gvs[] >>
   goal_assum (drule_at Any) >> simp[]
@@ -217,6 +220,9 @@ Proof
   `expr_body_pre cenv cx env a es` by
     (irule expr_body_pre_raw_call_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `post_value_type cenv a = expr_type a` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     fs[compileEnvTheory.is_word_type_def]) >>
   drule_all body_base_operand_outcome_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
   irule gas_outcome_ptr_bind >> rpt conj_tac
@@ -262,6 +268,9 @@ Resume raw_call_addr_data_sim_ptr[data]:
     (irule expr_body_pre_raw_call_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
   qpat_x_assum `body_exprs_ptr_ok cx (a::d::kws)` kall_tac >>
+  `post_value_type cenv d = expr_type d` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     fs[compileEnvTheory.is_bytestring_type_def]) >>
   drule_all body_base_operand_outcome_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
   irule operandOutcomePtrTheory.gas_outcome_ptr_map_return >>
@@ -396,6 +405,9 @@ Proof
   `expr_body_pre cenv cx env a es` by
     (irule expr_body_pre_raw_call_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `post_value_type cenv a = expr_type a` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     fs[compileEnvTheory.is_word_type_def]) >>
   drule_all body_base_operand_outcome_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
   irule gas_outcome_ptr_bind >> rpt conj_tac
@@ -441,6 +453,9 @@ Resume raw_call_addr_data_header_sim_ptr[data]:
     (irule expr_body_pre_raw_call_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
   qpat_x_assum `body_exprs_ptr_ok cx (a::d::kws)` kall_tac >>
+  `post_value_type cenv d = expr_type d` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     fs[compileEnvTheory.is_bytestring_type_def]) >>
   drule_all body_base_operand_outcome_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
   suspend "header_bind"

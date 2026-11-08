@@ -90,6 +90,10 @@ Resume for_range_callback_finish_ptr[next]:
     (SPEC_ALL (SRULE [] for_range_backedge_restore_ptr)))) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn land 0 gf tf (OK fin)` >>
+  `!y. lookup_var y fin =
+       lookup_var y (update_var cv (i2w (n1 + &(k + 1)))
+                       (update_var nv (i2w (n1 + &(k + 1))) land))`
+    by simp[Abbr `fin`] >>
   qexistsl_tac [`sc`, `rest`, `fin`, `gf`, `tf`] >> simp[] >>
   conj_tac
   >- (drule_all gas_path_ptr_then >> simp[]) >>

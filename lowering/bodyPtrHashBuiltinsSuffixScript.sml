@@ -76,8 +76,8 @@ Theorem hash_expr_sim_ptr_suffix:
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts /\
      ghost_inv d cenv cx ee G tn t /\
-     ptr_val_ok cx (expr_type e) v op G tn t /\
-     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+     ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
+     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
      ghost_kept cenv es sa G0 tn0 s0 G tn ==>
      ?right. gas_summary_ptr_at (cx_dead cx) (ctx, func) PG right (k v)
        (ee, t, G, tn) Q R) ==>
@@ -97,8 +97,8 @@ Proof
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     ghost_inv d cenv cx ee G tn t /\
-    ptr_val_ok cx (expr_type e) v op G tn t /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
+    ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
+    (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn` >>
   simp[] >> metis_tac[]
 QED

@@ -18,7 +18,8 @@ Theorem exempt_source_actual_run:
 Proof
   strip_tac >> qspec_then `es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
-  drule source_exempt_call_result_rel >> simp[]
+  drule source_exempt_call_result_rel >>
+  metis_tac[call_result_rel_at_imp]
 QED
 
 Theorem source_nonterminal_results_rejected:
@@ -94,14 +95,14 @@ QED
  * assumptions, environment requirements, or extra source boundary premise.
  * This comparison checks the SAVED theorem, including quantifier order. *)
 val expected_composition = ``
-  !tops ret am tx ctx ctx' vs es.
+  !gobs tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
     (?fuel. external_call_result_rel tops ret tx
-              (call_external (SOME vs.vs_outcomes) [] am tx)
+              (call_external (SOME vs.vs_outcomes) gobs am tx)
               (run_context fuel ctx vs)) /\
-    (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
+    (~source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) ==>
        ctx_sim (external_call_dead tx
-                  (call_external (SOME vs.vs_outcomes) [] am tx))
+                  (call_external (SOME vs.vs_outcomes) gobs am tx))
          ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
@@ -110,7 +111,7 @@ val expected_composition = ``
     ==>
     ?r es'. run_call es = SOME (r, es') /\
             (frame_resource_starved es r es' \/
-             call_result_rel tops ret am tx es r es')``;
+             call_result_rel_at gobs tops ret am tx es r es')``;
 val saved_composition = DB.fetch "e2eCorrectness" "e2e_vyper_to_evm";
 val () = if Term.aconv expected_composition (Thm.concl saved_composition)
          then print "TASK054 EXACT §8.1 schema: PASS; explicit stages 1/2/3\n"

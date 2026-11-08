@@ -19,6 +19,15 @@ Proof
   gvs[ptr_vv_ok_def]
 QED
 
+Theorem reason_bytestring_not_word[local]:
+  !t. is_bytestring_type t ==> ~is_word_type t
+Proof
+  Cases >> simp[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  simp[is_bytestring_type_def, is_word_type_def]
+QED
+
 Theorem reason_memory_read_post_ptr:
   vv_post ctx func cenv cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue ty p) ee G tn s /\
@@ -27,7 +36,15 @@ Theorem reason_memory_read_post_ptr:
   expr_post ctx func cenv cx e es sa sb s0 ee v p.ptr_operand s /\
   ptr_val_ok cx (expr_type e) v p.ptr_operand G tn s
 Proof
-  strip_tac >> drule vv_post_read_result >> strip_tac >>
+  strip_tac >>
+  `~is_word_type (expr_type e)` by
+    (strip_tac >>
+     `post_value_type cenv e = expr_type e` by
+       metis_tac[loweringPostsTheory.post_value_type_word] >>
+     `ty = expr_type e \/ is_bytestring_type (expr_type e)` by
+       (fs[vv_post_def, vv_holds_def] >> metis_tac[]) >>
+     metis_tac[reason_bytestring_not_word]) >>
+  drule vv_post_read_result >> strip_tac >>
   conj_tac
   >- (irule expr_post_of_vv_post_memory >> metis_tac[]) >>
   gvs[vv_post_def, vv_holds_def, ptr_vv_ok_def, ptr_val_ok_def]
@@ -116,6 +133,8 @@ Proof
   `well_typed_expr env r /\ alloc_limits_expr cenv r` by
     fs[expr_body_pre_def] >>
   drule_all reason_supported_string_type >> strip_tac >>
+  `post_value_type cenv r = expr_type r` by
+    (irule post_value_type_bytestring >> fs[is_bytestring_type_def]) >>
   drule_all reason_identity_read_post_ptr >> strip_tac >>
   `evaluate_type (get_tenv cx) (BaseT (StringT cap)) =
     SOME (BaseTV (StringT cap))` by
@@ -159,5 +178,11 @@ Proof
   strip_tac >> irule compile_raise_reason_path_frag_ptr >>
   asm_rewrite_tac[] >> rpt strip_tac >>
   `reason_vv_ok vv` by metis_tac[] >>
+  `well_typed_expr env r /\ alloc_limits_expr cenv r` by fs[expr_body_pre_def] >>
+  drule_all reason_supported_string_type >> strip_tac >>
+  `post_value_type cenv r = expr_type r` by
+    (irule post_value_type_bytestring >> fs[is_bytestring_type_def]) >>
+  qpat_x_assum `post_value_type cenv r = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule reason_memory_success_path_ptr >> metis_tac[]
 QED

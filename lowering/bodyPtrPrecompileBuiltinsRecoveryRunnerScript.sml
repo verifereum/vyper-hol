@@ -110,8 +110,12 @@ fun recovery_start () = (
   `gas_admissible (bind (eval_expr cx ah) (read_result cx)) expr_res_ok es` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
   simp[recovery_eval_source_bind] >>
-  irule precompile_operand_bind_ptr >> simp[] >>
-  qexistsl [`cenv`,`d`,`env`,`h`,`sa`,`s1`,`ty`] >>
+  `post_value_type cenv ah = expr_type ah` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     fs[is_word_type_def]) >>
+  qpat_assum `post_value_type cenv ah = _`
+    (irule o MATCH_MP precompile_operand_bind_ptr) >> simp[] >>
+  qexistsl [`d`,`env`,`h`,`sa`,`s1`,`ty`] >>
   simp[] >> rpt strip_tac);
 
 fun recovery_hash () = (
@@ -136,8 +140,12 @@ fun recovery_hash () = (
      not_fresh_at s1 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `gas_admissible (bind (eval_expr cx av) (read_result cx)) expr_res_ok ee` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
-  irule precompile_operand_bind_ptr >> simp[] >>
-  qexistsl [`cenv`,`d`,`env`,`v`,`s1`,`s2`,`ty`] >>
+  `post_value_type cenv av = expr_type av` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     fs[is_word_type_def]) >>
+  qpat_assum `post_value_type cenv av = _`
+    (irule o MATCH_MP precompile_operand_bind_ptr) >> simp[] >>
+  qexistsl [`d`,`env`,`v`,`s1`,`s2`,`ty`] >>
   simp[] >> rpt strip_tac);
 
 fun recovery_v () = (
@@ -160,8 +168,12 @@ fun recovery_v () = (
      not_fresh_at s2 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `gas_admissible (bind (eval_expr cx ar) (read_result cx)) expr_res_ok ee'` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
-  irule precompile_operand_bind_ptr >> simp[] >>
-  qexistsl [`cenv`,`d`,`env`,`r`,`s2`,`s3`,`ty`] >>
+  `post_value_type cenv ar = expr_type ar` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     fs[is_word_type_def]) >>
+  qpat_assum `post_value_type cenv ar = _`
+    (irule o MATCH_MP precompile_operand_bind_ptr) >> simp[] >>
+  qexistsl [`d`,`env`,`r`,`s2`,`s3`,`ty`] >>
   simp[] >> rpt strip_tac);
 
 fun recovery_r () = (
@@ -183,8 +195,12 @@ fun recovery_r () = (
      not_fresh_at s3 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `gas_admissible (bind (eval_expr cx aq) (read_result cx)) expr_res_ok ee''` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
-  irule precompile_operand_bind_ptr >> simp[] >>
-  qexistsl [`cenv`,`d`,`env`,`q`,`s3`,`sm`,`ty`] >>
+  `post_value_type cenv aq = expr_type aq` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     fs[is_word_type_def]) >>
+  qpat_assum `post_value_type cenv aq = _`
+    (irule o MATCH_MP precompile_operand_bind_ptr) >> simp[] >>
+  qexistsl [`d`,`env`,`q`,`s3`,`sm`,`ty`] >>
   simp[] >> rpt strip_tac);
 
 fun recovery_frame () = (

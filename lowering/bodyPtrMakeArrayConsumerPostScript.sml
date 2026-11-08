@@ -47,7 +47,8 @@ QED
    source provenance or global storage-liveness assumptions. *)
 Theorem make_array_storage_consumer_read:
   vv_post ctx fn cenv cx e es sa sb s0 es' tv (LocatedValue ty p) s /\
-  p.ptr_location = (if tr then LocTransient else LocStorage) ==>
+  p.ptr_location = (if tr then LocTransient else LocStorage) /\
+  post_value_type cenv e = expr_type e ==>
   ?a tvt v.
     eval_operand p.ptr_operand s = SOME a /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\

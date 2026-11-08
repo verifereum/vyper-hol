@@ -5,6 +5,7 @@ Ancestors
   finite_map list
 
 Theorem copy_buffer_read_post_transport:
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sm s0 es' raw vv s /\
   read_result cx raw es' = (INL v,es') /\
   local_ptrs_reserved cenv sa /\

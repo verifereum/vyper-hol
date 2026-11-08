@@ -36,6 +36,15 @@ Proof
   gvs[oneline as_ptr_val_def, AllCaseEqs(), mk_ptr_def]
 QED
 
+Theorem external_located_post_type:
+  compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
+  p.ptr_location <> LocMemory ==>
+  post_value_type cenv e = expr_type e
+Proof
+  strip_tac >> drule_all external_located_lowered_type >>
+  disch_then (ACCEPT_TAC o MATCH_MP loweringPostsTheory.post_value_type_lowered)
+QED
+
 Theorem external_located_buffer_size:
   compile_expr cenv ty e sa = (LocatedValue t p,sb) /\
   p.ptr_location <> LocMemory /\
@@ -52,7 +61,8 @@ Theorem external_storage_value_bounds:
   vv_post ctx fn cenv cx e es sa sb s0 es' raw (LocatedValue ty p) s /\
   p.ptr_location = (if tr then LocTransient else LocStorage) /\
   read_result cx raw es' = (INL v,es') /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  post_value_type cenv e = expr_type e ==>
   val_wf tv v /\ val_footprint tv v <= type_memory_size tv
 Proof
   strip_tac >> drule_all make_array_storage_consumer_read >> strip_tac >>
@@ -107,7 +117,9 @@ Theorem external_located_unwrap_sizes:
   type_memory_bytes cenv t < dimword(:256)
 Proof
   strip_tac >>
-  `t = expr_type e` by fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
   drule_all external_located_lowered_type >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  `t = expr_type e` by fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
   drule_all external_unwrap_source_size >> strip_tac >> gvs[]
 QED

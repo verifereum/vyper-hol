@@ -177,7 +177,7 @@ Proof
   `sub_layout (ArrayTV etv bd) (ArrayV av) 0 (ArrayTV etv bd) (ArrayV av)` by
     simp[sub_layout_def] >>
   drule_all sub_layout_array_element >> simp[] >> strip_tac >>
-  gvs[vv_holds_def, contextTheory.mk_ptr_def]
+  gvs[vv_holds_def, contextTheory.mk_ptr_def, is_bytestring_type_def]
   >~ [`p.ptr_location = LocCode`]
   >- (drule_all immutable_holds_array_element >> simp[]) >>
   conj_asm1_tac
@@ -671,7 +671,7 @@ QED
 
 Theorem vv_post_array_element:
   vv_post ctx func cenv cx obj es sa sb s0 es' r (LocatedValue ann p) s /\
-  expr_type obj = ArrayT et bd /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
   (p.ptr_location = LocMemory ==> ?n. bd = Fixed n) /\
   eval_operand p.ptr_operand s = SOME w /\
@@ -705,6 +705,6 @@ Proof
                 AllCaseEqs()]) >>
          drule_all vv_at_fixed_array_element >> simp[]) >>
      simp[vv_at_def, contextTheory.mk_ptr_def]) >>
-  gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
+  gvs[vv_post_def, vyperASTTheory.expr_type_def, contextTheory.mk_ptr_def] >>
   first_assum ACCEPT_TAC
 QED

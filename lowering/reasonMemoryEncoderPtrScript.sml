@@ -47,7 +47,8 @@ Theorem reason_memory_encoder_path_ptr:
   local_ptrs_reserved cenv cc /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= cc.cs_next_var /\ sa.cs_next_id <= cc.cs_next_id /\
-  sb.cs_next_id <= cc.cs_next_id /\ not_fresh_at cc src ==>
+  sb.cs_next_id <= cc.cs_next_id /\ not_fresh_at cc src /\
+  post_value_type cenv e = expr_type e ==>
   ?Gf tnf sf. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (Abort Revert_abort sf)
 Proof
   strip_tac >> drule compile_revert_reason_finish_split >> strip_tac >>

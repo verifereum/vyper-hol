@@ -9,7 +9,7 @@ Ancestors
   exprLoweringProps vyperInterpreter vyperState
   bodyLiteralMemory bodyLiteralForceMemory bodyAllocMemory bodyFieldMemory vyperTypeCallGraph
   bodyUnopMemory bodyNegMemory bodyCalldataMemory bodyEnvMemory bodyFlagMemberMemory
-  vyperTyping vyperValue vyperAST vyperTypeSystem
+  vyperTyping vyperValue vyperAST vyperTypeSystem loweringPosts
 
 Theorem body_ifexp_word_mem_case:
   !cx t c a b. is_word_type t /\
@@ -41,7 +41,7 @@ Proof
     vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' tv vv s) /\
     s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s` >>
   qexists_tac `expr_exit res` >> simp[] >>
-  irule compile_ifexp_vv_sim_mem >> simp[] >>
+  irule compile_ifexp_vv_sim_mem >> simp[post_value_type_word] >>
   conj_tac >- metis_tac[compile_expr_grows] >> qexists_tac `ty` >>
   simp[] >> metis_tac[compile_expr_grows]
 QED
