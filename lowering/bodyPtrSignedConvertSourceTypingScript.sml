@@ -211,7 +211,8 @@ Proof
   disch_then (qspec_then `env` mp_tac) >>
   gvs[expr_body_pre_def, expr_sim_inv_def,
       vyperTypeCallGraphTheory.int_calls_expr_def, vyperASTTheory.expr_type_def,
-      lowered_value_type_def]
+      lowered_value_type_def] >>
+  metis_tac[]
 QED
 
 Theorem body_source_read_lowered_typed:

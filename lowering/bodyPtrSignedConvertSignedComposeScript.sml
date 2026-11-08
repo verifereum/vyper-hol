@@ -419,6 +419,8 @@ Proof
    op_taint tn (Var src) = {}` by fs[ptr_val_ok_def] >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
    ~is_word_type (expr_type e)` by simp[] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   drule_all hash_post_footprint_bound >>
   simp[val_footprint_def] >> strip_tac >>
   drule_at (Pat `ptr_mem_ok _ _ _ _ _ _ _`) unsigned_bytes_value_source_facts >>
