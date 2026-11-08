@@ -2,7 +2,7 @@
 Theory functionInlinerFrame
 Ancestors
   functionInlinerReturnBoundary stateFrame venomExecProofs venomState finite_map pred_set
-  o1FrameLockstep venomExecSemantics passSharedProps
+  o1FrameLockstep venomExecSemantics passSharedProps functionInlinerDefs
 
 (* Ignore only frame-local call bookkeeping, in addition to execution control.
    In particular fmp, memory, oracle streams and observable effects remain. *)
@@ -294,4 +294,27 @@ Proof
   gvs[] >> irule inline_frame_writes_caller >> simp[] >>
   gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
   imp_res_tac listTheory.MEM_ZIP >> gvs[] >> metis_tac[listTheory.EL_MEM]
+QED
+
+(* Actual cloning is the abstract frame renaming, with external labels fixed. *)
+Theorem clone_operand_inline_rename:
+  !p labels op.
+    clone_operand p labels op =
+      inline_rename_operand (STRCAT p)
+        (\l. if MEM l labels then STRCAT p l else l) op
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp[clone_operand_def, inline_rename_operand_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem clone_instruction_inline_rename:
+  clone_instruction p labels inst =
+    inline_rename_inst (STRCAT p)
+      (\l. if MEM l labels then STRCAT p l else l) inst
+Proof
+  `clone_operand p labels = inline_rename_operand (STRCAT p)
+     (\l. if MEM l labels then STRCAT p l else l)` by
+    simp[FUN_EQ_THM, clone_operand_inline_rename] >>
+  simp[clone_instruction_def, inline_rename_inst_def, SF ETA_ss]
 QED
