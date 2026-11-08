@@ -869,3 +869,53 @@ Proof
     (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 0` by gvs[] >>
   fs[resource_zero_iff_absent]
 QED
+
+(* Active branch cleanup erases unsupported unique stack cells, but leaves
+   spill debt unchanged. This is an exact boundary, not spill extinction. *)
+Theorem clean_stack_plan_unsupported_spill_debt:
+  !lv cfg fn bb pred pred_bb v ps ops qs.
+    cfg_preds_of cfg bb.bb_label = [pred] /\
+    1 < LENGTH (cfg_succs_of cfg pred) /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions)) /\
+    ~MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)) /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack <= 1 /\
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) <=>
+      Var v IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnPlanLineageInventoryTheory.clean_stack_plan_branch_unique_absent >>
+  strip_tac >>
+  drule fnPlanLineageInventoryTheory.clean_stack_plan_spilled_unchanged >> simp[]
+QED
+
+Theorem clean_stack_plan_observer_support_iff_spill_support:
+  !lv cfg fn bb pred pred_bb v ps ops qs.
+    cfg_preds_of cfg bb.bb_label = [pred] /\
+    1 < LENGTH (cfg_succs_of cfg pred) /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack <= 1 /\
+    ((MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+      MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))) /\
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+    (((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+       MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))) <=>
+     (Var v IN FDOM ps.ps_spilled ==>
+       MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM v (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))`
+  >- simp[] >>
+  Cases_on `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled`
+  >- (`MEM v (live_vars_at lv pred (LENGTH pred_bb.bb_instructions))` by metis_tac[] >>
+      drule_all clean_stack_plan_unsupported_spill_debt >> simp[] >> metis_tac[]) >>
+  `LIST_ELEM_COUNT (Var v) ps.ps_stack +
+    (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 0` by
+    (simp[resource_zero_iff_absent] >> metis_tac[]) >>
+  drule clean_stack_plan_resource_nonincrease >> disch_then (qspec_then `v` mp_tac) >>
+  strip_tac >>
+  `LIST_ELEM_COUNT (Var v) qs.ps_stack +
+    (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 0` by gvs[] >>
+  fs[resource_zero_iff_absent] >> metis_tac[]
+QED
