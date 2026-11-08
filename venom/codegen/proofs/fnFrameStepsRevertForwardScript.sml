@@ -1,7 +1,7 @@
 (* Structural boundaries for revert forwarding. *)
 Theory fnFrameStepsRevertForward
 Ancestors
-  contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
+  singleInputSim contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
   stackPlanGen venomExecProofs removeUnusedSsaProofs frameRel
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
