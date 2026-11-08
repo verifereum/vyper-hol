@@ -4,8 +4,11 @@ Ancestors
   bodyIntCallForcingCodeRun bodyIntCallLiteralLanding bodyIntCallMaterializeLanding
   exprSimCopy exprSimStorageCopy exprSimProps exprLoweringProps loweringPosts
   context compileEnv valueEncodingProps valueEncoding intCallFrame exprSimAlloc
-  loweringHalt fragGasPath fragGasMode
+  loweringHalt fragGasPath fragGasMode exprLowering exprSimFieldLayout
+  emitHelperProps fragExec
   venomState venomInst finite_map list words vyperInterpreter vyperState
+Libs
+  pairLib
 
 Theorem immutable_value_copy_landing:
   compile_imm_copy_to_memory ce.ce_is_ctor ce.ce_imm_alloca src dst
@@ -130,4 +133,62 @@ Proof
   `addr + len <= lo` by (qpat_x_assum `!p k. P p k ==> _` drule >> simp[]) >>
   `regions_disjoint addr len (w2n w) (type_memory_size tv)` by
     (simp[regions_disjoint_def] >> decide_tac) >> metis_tac[]
+QED
+
+Theorem protected_code_value_forcing:
+  unwrap_value ce (LocatedValue ty p) sa = (op,sb) /\ p.ptr_location = LocCode /\
+  vv_holds ce cx ty (Value v) (LocatedValue ty p) es s /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  type_memory_bytes ce ty = type_memory_size tv /\ type_memory_size tv < 2**64 /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  fresh_vars_wrt sa s /\ allocas_above lo s /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sa x) /\
+  (!q x. reserved q /\ q = Var x ==> not_fresh_at sa x) /\
+  (!p k. P p k ==> p+k <= lo) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u w. gas_marked_path F ctx func s 0 (OK u) /\
+    expr_val_rel cx ty v op u /\ stmt_state_rel ctx func ce cx es u /\
+    eval_operand op u = SOME w /\ val_in_memory tv v (w2n w) u.vs_memory /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size tv) /\
+    lo <= w2n w /\ w2n w + type_memory_size tv < dimword (:256) /\
+    allocas_above lo u /\ s.vs_alloca_next <= u.vs_alloca_next /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
+    (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `?aw. eval_operand p.ptr_operand s = SOME aw /\
+    immutable_holds ce cx ty (Value v) aw es s` by (Cases_on `p.ptr_location` >> gvs[vv_holds_def]) >>
+  `?buf sm. compile_alloc_buffer (type_memory_size tv) sa = (buf,sm) /\
+    compile_imm_copy_to_memory ce.ce_is_ctor ce.ce_imm_alloca p.ptr_operand
+      buf.buf_operand (type_slot_size tv) 0 sm = ((),sb) /\ op = buf.buf_operand` by
+    (fs[unwrap_value_def, compile_ensure_in_memory_def, slot_count_of_memory_size,
+        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     pairarg_tac >> fs[] >> pairarg_tac >> fs[]) >>
+  `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
+  `same_blocks sm sb /\ ?code. sb.cs_current_insts = sm.cs_current_insts ++ code` by
+    (Cases_on `ce.ce_is_ctor` >> fs[] >>
+     metis_tac[code_ctor_copy_insts, code_copy_insts]) >>
+  `cs_extends sm sb` by
+    (fs[same_blocks_def, cs_extends_def] >> qexists_tac `[]` >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split] >>
+  `type_memory_size tv < dimword (:256)` by
+    (fs[dimword_def] >> decide_tac) >>
+  `copy_old_operand sa p.ptr_operand` by fs[copy_old_operand_def] >>
+  mp_tac (Q.INST [`src` |-> `p.ptr_operand`,
+    `reserved` |-> `\q. reserved q \/ ?x. q = Var x /\ not_fresh_at sa x`]
+    (SPEC_ALL immutable_value_alloc_landing)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  `!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz` by
+    (irule local_region_reserved_operands >>
+     qexists_tac `\q. reserved q \/ ?x. q = Var x /\ not_fresh_at sa x` >>
+     simp[] >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  qexistsl_tac [`u`, `w`] >> simp[expr_val_rel_def]
 QED
