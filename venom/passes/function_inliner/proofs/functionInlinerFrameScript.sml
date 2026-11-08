@@ -653,3 +653,39 @@ Proof
   simp[eval_phis_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[update_var_def] >> metis_tac[]
 QED
+
+Theorem inline_opaque_frame_write_caller:
+  inline_opaque_frame_rel ren V opaque caller.vs_vars P s t /\
+  (!v. v IN V ==> ren v <> x) ==>
+  inline_opaque_frame_rel ren V opaque (update_var x w caller).vs_vars P
+    s (update_var x w t)
+Proof
+  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
+    lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem inline_opaque_frame_writes_caller:
+  !pairs ren V opaque caller P s t.
+    inline_opaque_frame_rel ren V opaque caller.vs_vars P s t /\
+    EVERY (\p. !v. v IN V ==> ren v <> FST p) pairs ==>
+    inline_opaque_frame_rel ren V opaque
+      (FOLDL (\c (x,w). update_var x w c) caller pairs).vs_vars P s
+      (FOLDL (\t (x,w). update_var x w t) t pairs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `h` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  irule inline_opaque_frame_write_caller >> metis_tac[]
+QED
+
+Theorem inline_opaque_frame_bind_return_outputs:
+  inline_opaque_frame_rel ren V opaque caller.vs_vars P s t /\
+  (!x v. MEM x outs /\ v IN V ==> ren v <> x) /\
+  bind_outputs outs vals caller = SOME caller' /\
+  bind_outputs outs vals t = SOME t' ==>
+  inline_opaque_frame_rel ren V opaque caller'.vs_vars P s t'
+Proof
+  simp[bind_outputs_def] >> rpt strip_tac >>
+  gvs[] >> irule inline_opaque_frame_writes_caller >> simp[] >>
+  gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  imp_res_tac listTheory.MEM_ZIP >> gvs[] >> metis_tac[listTheory.EL_MEM]
+QED

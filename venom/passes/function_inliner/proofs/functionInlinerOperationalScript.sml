@@ -1591,3 +1591,129 @@ Proof
   qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
   irule inline_opaque_frame_write_establish >> simp[]
 QED
+
+Theorem inline_selfdestruct_eval_list:
+  inst.inst_opcode = SELFDESTRUCT /\ LENGTH inst.inst_operands = 1 ==>
+  step_inst_base inst s =
+    case eval_operands inst.inst_operands s of
+      NONE => Error "selfdestruct: undefined operand"
+    | SOME ws =>
+        if s.vs_call_ctx.cc_static then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else
+          let self = s.vs_call_ctx.cc_address;
+              accts = s.vs_accounts;
+              ben = w2w (HD ws);
+              sa = lookup_account self accts;
+              ba = lookup_account ben accts in
+          Halt (halt_state (set_returndata [] (s with vs_accounts :=
+            (\a. if a = self then sa with balance := 0
+                 else if a = ben then ba with balance := ba.balance + sa.balance
+                 else accts a))))
+Proof
+  strip_tac >> Cases_on `inst.inst_operands` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand h s` >> simp[]
+QED
+
+Theorem inline_opaque_frame_accounts:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_opaque_frame_rel ren V opaque saved P
+    (s with vs_accounts := accts) (t with vs_accounts := accts)
+Proof
+  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    lookup_var_def, venom_state_component_equality]
+QED
+
+Theorem inline_selfdestruct_clone_result:
+  inst.inst_opcode = SELFDESTRUCT /\ LENGTH inst.inst_operands = 1 /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = SELFDESTRUCT /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 1` by
+    simp[clone_instruction_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_accounts = t.vs_accounts` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  simp[step_inst_non_invoke, inline_selfdestruct_eval_list] >>
+  simp[clone_instruction_def] >>
+  Cases_on `eval_operands inst.inst_operands s` >> simp[] >>
+  IF_CASES_TAC >> simp[inline_opaque_frame_exceptional_halt,
+    inline_opaque_frame_accounts]
+QED
+
+Theorem inline_log_eval_list:
+  inst.inst_opcode = LOG /\
+  (?tc rest. inst.inst_operands = Lit tc :: rest /\ LENGTH rest = w2n tc + 2) ==>
+  step_inst_base inst s =
+    if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+    then Abort ExHalt_abort (halt_state (set_returndata [] s))
+    else case eval_operands (REVERSE (TL inst.inst_operands)) s of
+      NONE => Error "log: undefined operand"
+    | SOME ws => OK (s with vs_logs := s.vs_logs ++
+        [<| logger := w2w s.vs_call_ctx.cc_address;
+            topics := DROP 2 ws;
+            data := TAKE (w2n (EL 1 ws))
+              (DROP (w2n (EL 0 ws)) s.vs_memory ++ REPLICATE (w2n (EL 1 ws)) 0w) |>])
+Proof
+  strip_tac >>
+  `2 <= LENGTH (REVERSE rest)` by simp[] >>
+  Cases_on `REVERSE rest` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operand h' s` >> simp[] >>
+  Cases_on `eval_operands t' s` >> simp[]
+QED
+
+Theorem inline_opaque_frame_logs:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_opaque_frame_rel ren V opaque saved P
+    (s with vs_logs := logs) (t with vs_logs := logs)
+Proof
+  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    lookup_var_def, venom_state_component_equality]
+QED
+
+Theorem inline_log_clone_result:
+  inst.inst_opcode = LOG /\
+  (?tc rest. inst.inst_operands = Lit tc :: rest /\ LENGTH rest = w2n tc + 2) /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  eval_operands (MAP (clone_operand p labels) (REVERSE (TL inst.inst_operands))) t =
+    eval_operands (REVERSE (TL inst.inst_operands)) s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = LOG /\
+    (?tc rest. (clone_instruction p labels inst).inst_operands = Lit tc :: rest /\
+      LENGTH rest = w2n tc + 2)` by
+    (simp[clone_instruction_def, clone_operand_def] >> metis_tac[]) >>
+  qpat_x_assum `(clone_instruction p labels inst).inst_operands = _` mp_tac >>
+  simp[clone_instruction_def, clone_operand_def] >> strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_memory = t.vs_memory /\
+    s.vs_logs = t.vs_logs` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  simp[step_inst_non_invoke, inline_log_eval_list] >>
+  `REVERSE (TL (clone_instruction p labels inst).inst_operands) =
+    MAP (clone_operand p labels) (REVERSE (TL inst.inst_operands))` by
+    simp[clone_instruction_def, listTheory.MAP_REVERSE] >>
+  gvs[clone_instruction_def, clone_operand_def, listTheory.MAP_REVERSE] >>
+  IF_CASES_TAC >- simp[inline_opaque_frame_exceptional_halt] >>
+  Cases_on `eval_operands (REVERSE rest) s` >>
+  simp[inline_opaque_frame_logs]
+QED
