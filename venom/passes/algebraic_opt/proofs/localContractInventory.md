@@ -58,3 +58,22 @@ Keep peephole composition separate from producer/resolver correctness. For an in
 ## Admissions and ownership
 
 Source audit of proofs/*.sml finds no cheat in LocalProofs, RangeLocalProofs, SequenceLocalProofs or RelationProofs. The remaining frozen `ao_transform_function_correct_proof` cheat (algebraicOptProofsScript.sml:30) belongs to required C1 and its pending simulation/integration work, including C1.L.COMPOSE and C1.M; this inventory does not discharge it. Separate existing `ao_transform_function_wf_proof` / `ao_transform_function_ssa_proof` admissions in WfProofs/SsaProofs are not imported by these checked local theories and are excluded from the semantic proof dependency path by C1 guidance. Do not use them to close semantic prerequisites. No new uncovered local cheat or broken proof was discovered. Missing semantic wrappers above are identified interfaces under existing COMPOSE/M ownership, not newly asserted facts.
+
+## Conditional composition interface
+
+`algebraicOptComposeProofsTheory.ao_scalar_cross_state_chunk` transports
+successful source scalar operands exactly to the target entry state, pre-flips,
+applies the checked peephole family at that target state, and post-flips the
+resulting chunk. It gives the original single output write, chunk success,
+target-frame restoration, exact index advancement, and lookup equality outside
+the two explicit temporaries. OR alone has the documented truthification
+exception. `ao_scalar_chunk_observations` consumes those lookup/exception
+conclusions plus original observations, temporary exclusion from V, and an
+explicit OR demand implication to obtain output observations.
+
+The caller must still establish exact transported input reads, range containment
+at the actual pre-flipped target operands and recorded ra/lbl/idx, fresh-name
+avoidance/distinctness, and the OR demand implication. These theorems establish
+none of those facts from arbitrary DFG/range analysis values or reachability.
+They do not cover resolver/producer rewrites, PHIs, control, or effects. Frame
+restoration is to the target entry, never an assertion equating entry frames.
