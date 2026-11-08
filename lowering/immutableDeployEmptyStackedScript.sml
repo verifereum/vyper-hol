@@ -176,3 +176,14 @@ Theorem empty_immutable_stacked_body_pre:
 Proof
   simp[empty_immutable_stacked_pre_boundary, empty_immutable_stacked_sim_inv]
 QED
+
+Theorem empty_immutable_stacked_vv_sim:
+  !ctx func ty.
+    expr_vv_sim ctx func empty_immutable_ce empty_immutable_stacked_cx ty
+      empty_immutable_expr empty_immutable_es
+Proof
+  rpt gen_tac >>
+  mp_tac empty_immutable_stacked_body_pre >>
+  simp[empty_immutable_expr_def] >>
+  metis_tac[immutableDeployEmptyFixtureTheory.empty_struct_vv_sim]
+QED
