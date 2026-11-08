@@ -531,35 +531,6 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
-Theorem selected_arg_fits_trans_mutual[local]:
-  (!a b. !c. arg_type_fits a b /\ arg_type_fits b c ==> arg_type_fits a c) /\
-  (!as_ bs. !cs. arg_types_fit as_ bs /\ arg_types_fit bs cs ==>
-    arg_types_fit as_ cs)
-Proof
-  ho_match_mp_tac arg_type_fits_ind >>
-  rw[arg_type_fits_def]
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (BaseT bt)` >> Cases_on `bt` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (BaseT (BytesT bd))` >> Cases_on `bd` >> gvs[arg_type_fits_def])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
-      metis_tac[arithmeticTheory.LESS_EQ_TRANS])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >>
-      rename1 `arg_type_fits _ (ArrayT ct bd)` >> Cases_on `bd` >> gvs[arg_type_fits_def] >>
-      metis_tac[])
-  >- (Cases_on `c` >> gvs[arg_type_fits_def] >> metis_tac[])
-  >> Cases_on `cs` >> gvs[arg_type_fits_def] >> metis_tac[]
-QED
-
-Theorem selected_widens_trans[local]:
-  type_widens_to tenv a b /\ type_widens_to tenv b c ==>
-  type_widens_to tenv a c
-Proof
-  simp[type_widens_to_def] >> metis_tac[selected_arg_fits_trans_mutual]
-QED
-
 Theorem return_selected_bufferless_normalize_path:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   source_typing_ok tops am tx /\
@@ -609,7 +580,7 @@ Proof
     >- metis_tac[]) >>
   drule_all return_bufferless_site_zero_semantics >> strip_tac >>
   `type_widens_to (get_tenv cx) phy ret` by
-    metis_tac[selected_widens_trans] >>
+    metis_tac[typedCopyCompatibilityTheory.type_widens_to_trans] >>
   `compile_alloc_buffer (type_memory_size dtv) sa = (buf,sm)` by metis_tac[] >>
   drule_all return_alloc_zero_value_run >> strip_tac >>
   drule_all return_selected_allocated_path >> strip_tac >>

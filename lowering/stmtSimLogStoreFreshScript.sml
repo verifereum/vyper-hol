@@ -75,7 +75,7 @@ QED
 
 Theorem log_store_data_outputs[local]:
   !xs buf off sa sb nv. EVERY (supported_scalar_type o SND) xs /\
-    compile_log_store_data ce xs buf off sa = ((),sb) /\ sb.cs_next_var <= nv ==>
+    compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\ sb.cs_next_var <= nv ==>
     EVERY (\i. MEM i.inst_opcode [ADD; AND; MLOAD; MSTORE; MCOPY] /\
       EVERY (\x. ?n. x = STRING #"%" (toString n) /\ n < nv)
         i.inst_outputs) (emitted_insts sa sb)
@@ -83,7 +83,7 @@ Proof
   Induct_on `xs`
   >- simp[compile_log_store_data_def, comp_return_def, emitted_insts_def] >>
   gen_tac >> PairCases_on `h` >> simp[] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_log_store_data_split >> strip_tac >>
+  drule_all compile_log_store_data_scalar_split >> strip_tac >>
   drule_all compile_log_store_data_shape >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
   drule buffer_store_memory_shape >> strip_tac >>
@@ -104,7 +104,7 @@ QED
 
 Theorem log_store_data_fresh:
   EVERY (supported_scalar_type o SND) xs /\
-  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   fresh_vars_wrt limit_st t

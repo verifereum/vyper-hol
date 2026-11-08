@@ -4,7 +4,7 @@ Ancestors
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   exprSimOps exprSimOperands compileEnv venomState stmtLowering
-  exprSimWordArgs exprSimHyps exprSimAttributeFields
+  exprSimWordArgs exprSimHyps exprSimAttributeFields logArgumentCompile exprLowering
 
 (* A captured value in a live local survives a later expression whenever
    its footprint avoids the local's dynamic array length words, the only
@@ -123,44 +123,40 @@ Proof
   simp[compile_log_eval_all_def, comp_return_def]
 QED
 
-Theorem compile_log_eval_all_cons:
-  compile_log_eval_all cenv (e::args) sa = (xs, sb) <=>
-  ?x sm ys.
-    lower_value compile_expr cenv (expr_type e) e sa = (x, sm) /\
-    compile_log_eval_all cenv args sm = (ys, sb) /\
-    xs = (x, expr_type e)::ys
+(* With no later argument able to mutate memory, no argument is saved. *)
+Theorem compile_log_eval_all_unsaved_cons:
+  ~exprs_can_mutate cenv args ==>
+  (compile_log_eval_all cenv (e::args) sa = (xs, sb) <=>
+   ?x sm ys.
+     lower_value compile_expr cenv (expr_type e) e sa = (x, sm) /\
+     compile_log_eval_all cenv args sm = (ys, sb) /\
+     xs = (x, lowered_value_type cenv e)::ys)
 Proof
-  simp[Once compile_log_eval_all_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
-QED
-
-Theorem compile_log_eval_all_types:
-  !args sa xs sb.
-    compile_log_eval_all cenv args sa = (xs, sb) ==>
-    MAP SND xs = MAP expr_type args
-Proof
-  Induct_on `args` >> simp[compile_log_eval_all_nil,
-                           compile_log_eval_all_cons] >>
-  rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]
+  strip_tac >>
+  simp[logArgumentCompileTheory.compile_log_eval_all_cons,
+       compile_log_save_arg_def, comp_return_def]
 QED
 
 (* lower_word_args itself is type-polymorphic; only its simulation theorem
    is word-specific. Reuse its compile-state shape interface. *)
 Theorem compile_log_eval_all_operands:
   !args sa xs sb.
+    ~exprs_can_mutate cenv args /\
     compile_log_eval_all cenv args sa = (xs, sb) ==>
     lower_word_args cenv expr_type args sa = (MAP FST xs, sb)
 Proof
-  Induct_on `args` >> simp[compile_log_eval_all_nil, lower_word_args_nil,
-                           compile_log_eval_all_cons] >>
-  rpt strip_tac >> gvs[] >>
+  Induct_on `args` >> simp[compile_log_eval_all_nil, lower_word_args_nil] >>
+  rpt gen_tac >> simp[expr_can_mutate_def] >> strip_tac >>
+  qpat_x_assum `compile_log_eval_all _ _ _ = _` mp_tac >>
+  simp[compile_log_eval_all_unsaved_cons] >> strip_tac >> gvs[] >>
   simp[lower_word_args_cons] >>
   goal_assum (drule_at Any) >>
-  first_x_assum drule >> simp[]
+  first_x_assum drule_all >> simp[]
 QED
 
 Theorem compile_log_eval_all_shape:
   !args cenv.
+    ~exprs_can_mutate cenv args /\
     (!e sa sb x. MEM e args /\
        lower_value compile_expr cenv (expr_type e) e sa = (x, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -173,7 +169,7 @@ Theorem compile_log_eval_all_shape:
                  (!l. FST x <> Label l)) xs
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  drule compile_log_eval_all_operands >> strip_tac >>
+  drule_all compile_log_eval_all_operands >> strip_tac >>
   drule_all lower_word_args_shape >> simp[listTheory.EVERY_MAP]
 QED
 

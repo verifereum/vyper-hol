@@ -48,7 +48,7 @@ Theorem checked_compile_log_save_arg_frame:
     lowered_value_rel ty tv v src ss /\ abi_operand_before cs.cs_next_var src /\
     alloca_inv ss /\ log_args_rel args atvs values ss /\
     EVERY (\arg. abi_operand_before cs.cs_next_var (FST arg)) args /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
       abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
       log_args_safe args atvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)) /\
@@ -60,10 +60,10 @@ Theorem checked_compile_log_save_arg_frame:
       log_args_rel args atvs values out /\ (fresh_vars_wrt cs ss ==> fresh_vars_wrt cs' out) /\ alloca_inv out /\
       array_copy_frame tv 1 (w2n (memory_snapshot_addr cs.cs_next_id ss)) ss.vs_memory out.vs_memory /\
       abi_state_frame ss out /\ allocation_growth ss out /\
-      (is_word_type ty \/ EVERY pure_expr suffix ==> out = ss) /\ cs.cs_next_var <= cs'.cs_next_var /\
+      (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = ss) /\ cs.cs_next_var <= cs'.cs_next_var /\
       abi_operand_before cs'.cs_next_var op /\
       (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss) /\
-      (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+      (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
         eval_operand op out = SOME (memory_snapshot_addr cs.cs_next_id ss) /\
         abi_allocated_window out cs.cs_next_id (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv) /\
         out.vs_allocas = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) ss).vs_allocas /\
@@ -73,12 +73,12 @@ Theorem checked_compile_log_save_arg_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   `?src_addr. eval_operand src ss = SOME src_addr` by fs[lowered_value_rel_def] >>
-  Cases_on `is_word_type ty \/ EVERY pure_expr suffix`
-  >- (`~(~is_word_type ty /\ ~EVERY pure_expr suffix)` by fs[] >>
+  Cases_on `is_word_type ty \/ ~exprs_can_mutate cenv suffix`
+  >- (`~(~is_word_type ty /\ exprs_can_mutate cenv suffix)` by fs[] >>
       qpat_x_assum `compile_log_save_arg _ _ _ _ _ = _` mp_tac >>
       asm_simp_tac bool_ss [compile_log_save_arg_def, comp_return_def, PAIR_EQ] >> strip_tac >>
       asm_simp_tac bool_ss [fragment_path_refl, abi_state_frame_refl, LESS_EQ_REFL] >> gvs[]) >>
-  `~is_word_type ty /\ ~EVERY pure_expr suffix` by fs[] >>
+  `~is_word_type ty /\ exprs_can_mutate cenv suffix` by fs[] >>
   `ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
     abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
     log_args_safe args atvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)` by
@@ -124,7 +124,7 @@ Theorem checked_compile_log_save_arg_fresh:
     compile_log_save_arg cenv ty src suffix cs = (op,cs') /\
     lowered_value_rel ty tv v src ss /\
     fresh_vars_wrt cs ss /\ alloca_inv ss /\ log_args_rel args atvs values ss /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
       abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
       log_args_safe args atvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)) /\
@@ -136,10 +136,10 @@ Theorem checked_compile_log_save_arg_fresh:
       log_args_rel args atvs values out /\ fresh_vars_wrt cs' out /\ alloca_inv out /\
       array_copy_frame tv 1 (w2n (memory_snapshot_addr cs.cs_next_id ss)) ss.vs_memory out.vs_memory /\
       abi_state_frame ss out /\ allocation_growth ss out /\
-      (is_word_type ty \/ EVERY pure_expr suffix ==> out = ss) /\ cs.cs_next_var <= cs'.cs_next_var /\
+      (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = ss) /\ cs.cs_next_var <= cs'.cs_next_var /\
       abi_operand_before cs'.cs_next_var op /\
       (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss) /\
-      (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+      (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
         eval_operand op out = SOME (memory_snapshot_addr cs.cs_next_id ss) /\
         abi_allocated_window out cs.cs_next_id (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv) /\
         out.vs_allocas = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) ss).vs_allocas /\

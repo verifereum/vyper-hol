@@ -3,6 +3,7 @@ Theory gasShadowCompileStmtHelpers
 Ancestors
   gasShadowCompileStmtOps gasShadowCompileStmtBase gasShadowCompile
   gasShadowCompileHelpers gasShadowCompileLiteral gasShadowCompileContext gasShadow gasShadowState
+  gasShadowCompilePure gasShadowCompileConvert
   stmtLowering exprLowering compileEnv vyperAST list
 
 Theorem gas_shadow_stmt_compile_expr:
@@ -38,8 +39,13 @@ Theorem gas_shadow_compile_log_eval_all:
   !es. gas_shadow_compiles (compile_log_eval_all cenv es)
     (compile_log_eval_all cenv (MAP gas_shadow_expr es))
 Proof
-  Induct >> simp[compile_log_eval_all_def, gas_shadow_compiles_bind,
-    gas_shadow_compiles_return, gas_shadow_stmt_lower_value]
+  Induct >> simp[compile_log_eval_all_def, gas_shadow_compiles_return] >>
+  rpt strip_tac >> irule gas_shadow_compiles_bind >>
+  simp[gas_shadow_stmt_lower_value] >> rpt gen_tac >>
+  irule gas_shadow_compiles_bind >>
+  simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
+       compile_log_save_arg_def, gas_shadow_expr_can_mutate] >>
+  rw[gas_shadow_compiles_return, gas_shadow_compiles_materialize_vv]
 QED
 
 Theorem gas_shadow_stmt_compile_expr_same[local]:

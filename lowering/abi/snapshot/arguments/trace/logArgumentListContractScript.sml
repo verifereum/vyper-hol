@@ -20,10 +20,11 @@ Definition log_prefix_ready_def:
     local_ptrs_rel func cenv es.scopes ss /\ source_alloca_floor cenv es.scopes ids ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     log_argument_writers func cenv es.scopes ids (compiler_alloca_ids cs final_cut) /\
     alloca_inv ss /\ log_args_rel prefix ptvs pvs ss /\
     EVERY (\arg. abi_operand_before cs.cs_next_var (FST arg)) prefix /\
-    log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) (EVERY pure_expr suffix) prefix ptvs /\
+    log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) (~exprs_can_mutate cenv suffix) prefix ptvs /\
     abi_request_credit reserved requests credit ss /\ compiler_id_history cs /\
     ss.vs_current_bb = cs.cs_current_bb /\ ss.vs_inst_idx = LENGTH cs.cs_current_insts
 End
@@ -40,10 +41,10 @@ Definition log_argument_load_certificate_def:
     alloca_inv loaded /\ allocation_growth before loaded /\ cs.cs_next_var <= load_cut.cs_next_var /\
     (fresh_vars_wrt cs before ==> fresh_vars_wrt load_cut loaded) /\ compiler_id_history load_cut /\
     (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op loaded = eval_operand arg_op before) /\
-    source_writes_contained cenv es.scopes before writes /\ (EVERY pure_expr (e::suffix) ==> writes = []) /\
+    source_writes_contained cenv es.scopes before writes /\ (~exprs_can_mutate cenv (e::suffix) ==> writes = []) /\
     abi_memory_frame (writes ++ abi_allocation_windows (compiler_alloca_ids cs final_cut) loaded ++
       [(before.vs_alloca_next,loaded.vs_alloca_next - before.vs_alloca_next)]) before loaded /\
-    (~is_word_type (lowered_value_type cenv e) /\ EVERY pure_expr suffix ==> !src_addr.
+    (~is_word_type (lowered_value_type cenv e) /\ ~exprs_can_mutate cenv suffix ==> !src_addr.
       eval_operand src loaded = SOME src_addr ==>
       argument_origin cenv es1.scopes loaded (compiler_alloca_ids save_cut final_cut) T
         (w2n src_addr) (type_memory_size tv)) /\
@@ -77,7 +78,7 @@ Definition log_argument_plan_def:
       (!request. MEM request (compiler_alloca_requests cs load_cut) ==> MEM request requests) /\
       cs_extends cs load_cut /\ cs_extends save_cut final_cut /\
       fn_has_code cs load_cut func /\ fn_has_code load_cut save_cut func /\ fn_has_code save_cut final_cut func /\
-      (~is_word_type (lowered_value_type cenv e) /\ ~EVERY pure_expr suffix ==>
+      (~is_word_type (lowered_value_type cenv e) /\ exprs_can_mutate cenv suffix ==>
         MEM (load_cut.cs_next_id,type_memory_size tv) requests /\ MEM load_cut.cs_next_id ids) /\
       log_argument_plan tops cenv func ids requests final_cut suffix save_cut cut)
 End

@@ -26,6 +26,7 @@ Theorem checked_log_compiler_metadata:
     check_contract dep layouts addr [(NONE,tops)] = SOME art /\
     env.event_fields = art.cta_event_fields /\
     env_consistent env cx es /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     type_stmt env ret (Log event_id exprs) = SOME env' /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     cenv.ce_event_info (nsid_to_string event_id) = SOME (sig_hash,fts,flags) /\

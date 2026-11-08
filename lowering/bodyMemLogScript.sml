@@ -125,12 +125,18 @@ Proof
     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
         int_calls_stmt_def, AllCaseEqs()] >>
   qabbrev_tac `RR = \tail s. body_exprs_mem_ok cx tail /\ expr_sim_inv cenv cx env s /\ supported_pure_exprs tops tail /\ well_typed_exprs env tail /\ ~supported_exprs_exists (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) tail /\ call_evaluation_safe cx (int_calls_exprs tail) /\ (!target. supported_exprs_exists (expr_abi_decode_target_root target) tail ==> occurs_abi_decode_target target tops)` >>
+  `~exprs_can_mutate cenv es` by metis_tac[supported_pure_expr_no_mutate] >>
+  `EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+              is_bytestring_type (expr_type e)) es` by
+    metis_tac[supported_pure_exprs_bytestring_iff] >>
   irule compile_log_ready_stmt_frag_mem >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
     qexists_tac `RR` >> simp[Abbr `RR`] >>
     rpt gen_tac >> strip_tac >>
     irule (SIMP_RULE std_ss [DE_MORGAN_THM] log_mem_args_step) >>
     simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
     qexistsl_tac [`MAP SND fields`, `h`, `MAP (SND o FST) fields`] >>
     simp[] >>
