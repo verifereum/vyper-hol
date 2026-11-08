@@ -353,6 +353,101 @@ Proof
   rpt strip_tac >> first_x_assum drule_all >> simp[] >> metis_tac[]
 QED
 
+Theorem intcall_storage_holds_frame:
+  storage_holds cx tr ty r w es s /\
+  get_storage cx ee tr = get_storage cx es tr /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    storage_range_agree (get_storage cx ee tr)
+      (if tr then contract_transient u else contract_storage u) w tv) ==>
+  storage_holds cx tr ty r w ee u
+Proof
+  simp[loweringPostsTheory.storage_holds_def,
+       vyperStorageBackendTheory.read_storage_slot_eq] >>
+  rpt strip_tac >> goal_assum (drule_at Any) >> gvs[AllCaseEqs()]
+QED
+
+Theorem intcall_vv_storage_live_frame:
+  vv_storage_live cx vv es s /\
+  (!tr. get_storage cx ee tr = get_storage cx es tr) /\
+  eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s ==>
+  vv_storage_live cx vv ee u
+Proof
+  Cases_on `vv` >>
+  simp[loweringPostsTheory.vv_storage_live_def,
+       contextTheory.vv_operand_def] >> metis_tac[]
+QED
+
+Theorem intcall_storage_holds_live_frame:
+  storage_holds cx tr ty r w es s /\
+  get_storage cx ee tr = get_storage cx es tr /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+        storage_read_live cx tr (get_storage cx es tr) w tv) /\
+  stmt_state_rel ctx func ce cx ee u ==>
+  storage_holds cx tr ty r w ee u
+Proof
+  strip_tac >> irule intcall_storage_holds_frame >>
+  reverse conj_tac >- (qexistsl [`es`, `s`] >> simp[]) >>
+  rpt strip_tac >>
+  irule accountsRelPropsTheory.storage_range_agree_of_live >>
+  conj_tac
+  >- fs[loweringPostsTheory.storage_holds_def,
+        accountsRelPropsTheory.storage_range_agree_def] >>
+  qexistsl [`cx`, `tr`] >> reverse conj_tac >- metis_tac[] >>
+  Cases_on `tr` >>
+  fs[exprLoweringPropsTheory.stmt_state_rel_def,
+     compileEnvTheory.state_rel_def, compileEnvTheory.storage_rel_def,
+     compileEnvTheory.transient_rel_def, vyperStorageBackendTheory.get_storage_def] >>
+  gvs[vfmStateTheory.lookup_account_def]
+QED
+
+Theorem intcall_storage_vv_holds_frame:
+  vv_holds ce cx ty r (LocatedValue ann p) es s /\
+  vv_storage_live cx (LocatedValue ann p) es s /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  (!tr. get_storage cx ee tr = get_storage cx es tr) /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  eval_operand p.ptr_operand u = eval_operand p.ptr_operand s /\
+  stmt_state_rel ctx func ce cx ee u ==>
+  vv_holds ce cx ty r (LocatedValue ann p) ee u
+Proof
+  strip_tac >>
+  fs[loweringPostsTheory.vv_holds_def,
+     loweringPostsTheory.vv_storage_live_def] >>
+  irule intcall_storage_holds_live_frame >> metis_tac[]
+QED
+
+Theorem intcall_immutable_holds_frame:
+  immutable_holds ce cx ty r w es s /\
+  ee.immutables = es.immutables /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  (ce.ce_is_ctor ==>
+   !name off itv iv.
+     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+              | SOME imms => get_source_immutables ce.ce_module imms) name =
+       SOME (itv,iv) ==>
+     mem_bytes_at off (type_memory_size itv) s.vs_memory =
+     mem_bytes_at off (type_memory_size itv) u.vs_memory) ==>
+  immutable_holds ce cx ty r w ee u
+Proof
+  simp[loweringPostsTheory.immutable_holds_def] >> strip_tac >>
+  qexistsl [`name`, `off`, `itv`, `iv`, `k`, `tvt`, `v`] >> simp[] >>
+  disj2_tac >> simp[] >>
+  irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  conj_tac >- metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  qexistsl [`type_memory_size tvt`, `s.vs_memory`] >> simp[] >>
+  `mem_bytes_at off (type_memory_size itv) s.vs_memory =
+   mem_bytes_at off (type_memory_size itv) u.vs_memory` by metis_tac[] >>
+  drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+  strip_tac >> sym_tac >> first_x_assum irule >> simp[]
+QED
+
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
    (callable_graph_descent), the statement producer of every frame whose
