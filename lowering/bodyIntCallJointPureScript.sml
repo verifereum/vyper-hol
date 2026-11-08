@@ -1,7 +1,7 @@
 (* Seam 2 joint induction step: every other non-call expression form. *)
 Theory bodyIntCallJointPure
 Ancestors
-  bodyIntCallJointContract bodyIntCallJointPurePath
+  bodyIntCallJointContract bodyIntCallJointPurePath bodyIntCallJointPureSource
 
 (* L-pure (C1.3.14.3), the same step for every other non-call form: names,
    literals, top-level names, flag members, ternaries, the other builtins
