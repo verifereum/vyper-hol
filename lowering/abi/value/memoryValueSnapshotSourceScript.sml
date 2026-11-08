@@ -46,7 +46,7 @@ Theorem compile_log_save_arg_nonbytes_correct:
     evaluate_type (type_env tops) ty = SOME tv /\ ~is_bytestring_type ty /\
     compile_log_save_arg cenv ty src es cs = (op,cs') /\
     lowered_value_rel ty tv v src ss /\
-    (~is_word_type ty /\ ~EVERY pure_expr es ==>
+    (~is_word_type ty /\ exprs_can_mutate cenv es ==>
       type_memory_size tv < dimword(:256) /\
       src <> Var (STRING #"%" (toString cs.cs_next_var))) /\
     fn_has_code cs cs' func /\ ss.vs_current_bb = cs.cs_current_bb /\
@@ -57,9 +57,9 @@ Theorem compile_log_save_arg_nonbytes_correct:
       (!arg_op. arg_op <> op ==> eval_operand arg_op out = eval_operand arg_op ss)
 Proof
   rpt gen_tac >> DISCH_TAC >>
-  Cases_on `is_word_type ty \/ EVERY pure_expr es`
+  Cases_on `is_word_type ty \/ ~exprs_can_mutate cenv es`
   >- (gvs[compile_log_save_arg_def, comp_return_def] >> qexists_tac `ss` >> simp[]) >>
-  `~is_word_type ty /\ ~EVERY pure_expr es` by fs[] >>
+  `~is_word_type ty /\ exprs_can_mutate cenv es` by fs[] >>
   `?src_addr. eval_operand src ss = SOME src_addr` by fs[lowered_value_rel_def] >>
   gvs[compile_log_save_arg_def, EVERY_NOT_EXISTS] >>
   mp_tac (Q.SPECL [`tops`, `in_deploy`, `layouts`, `addr`, `art`, `ctx`, `func`, `cenv`,
@@ -128,7 +128,7 @@ Theorem compile_log_save_arg_correct:
     evaluate_type (type_env tops) ty = SOME tv /\
     compile_log_save_arg cenv ty src es cs = (op,cs') /\
     lowered_value_rel ty tv v src ss /\
-    (~is_word_type ty /\ ~EVERY pure_expr es ==>
+    (~is_word_type ty /\ exprs_can_mutate cenv es ==>
       type_memory_size tv < dimword(:256) /\
       EVERY (\name. src <> Var name)
         (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1))) /\
@@ -141,9 +141,9 @@ Theorem compile_log_save_arg_correct:
         (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1)) ==>
         eval_operand arg_op out = eval_operand arg_op ss)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `is_word_type ty \/ EVERY pure_expr es`
+  rpt gen_tac >> strip_tac >> Cases_on `is_word_type ty \/ ~exprs_can_mutate cenv es`
   >- (gvs[compile_log_save_arg_def, comp_return_def] >> qexists_tac `ss` >> simp[]) >>
-  `~is_word_type ty /\ ~EVERY pure_expr es` by fs[] >>
+  `~is_word_type ty /\ exprs_can_mutate cenv es` by fs[] >>
   `type_memory_size tv < dimword(:256) /\
     EVERY (\name. src <> Var name)
       (compiler_var_names cs.cs_next_var (if is_bytestring_type ty then 5 else 1))` by

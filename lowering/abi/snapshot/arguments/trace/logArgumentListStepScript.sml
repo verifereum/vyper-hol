@@ -28,7 +28,7 @@ Theorem log_argument_prefix_advance:
     (!request. MEM request (compiler_alloca_requests cs load_cut) ==> MEM request requests) /\
     cs_extends cs load_cut /\ cs_extends save_cut final_cut /\
     fn_has_code cs load_cut func /\ fn_has_code load_cut save_cut func /\ fn_has_code save_cut final_cut func /\
-    (~is_word_type (lowered_value_type cenv e) /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type (lowered_value_type cenv e) /\ exprs_can_mutate cenv suffix ==>
       MEM (load_cut.cs_next_id,type_memory_size tv) requests /\ MEM load_cut.cs_next_id ids) ==>
     ?out. fragment_path ctx func before out /\ out.vs_halted = before.vs_halted /\
       allocation_growth before out /\ cs.cs_next_var <= save_cut.cs_next_var /\

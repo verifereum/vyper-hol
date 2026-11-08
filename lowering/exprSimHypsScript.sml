@@ -1187,3 +1187,16 @@ Proof
   simp[lowered_value_type_def, is_bytestring_type_def,
        concat_buffer_type_bytestring]
 QED
+
+(* Outside calls, a well-typed expression is lowered at a bytestring type
+   exactly when its source type is one. *)
+Theorem lowered_value_type_bytestring_iff:
+  !cenv e.
+    well_typed_expr env e /\ (!a f args d. e <> Call a f args d) ==>
+    (is_bytestring_type (lowered_value_type cenv e) <=> is_bytestring_type (expr_type e))
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  rw[lowered_value_type_def, expr_type_def, is_bytestring_type_def, LET_THM] >>
+  gvs[well_typed_expr_def, well_typed_builtin_app_def, type_builtin_result_ok_def,
+      concat_buffer_type_def, is_bytestring_type_def]
+QED

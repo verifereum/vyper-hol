@@ -36,18 +36,18 @@ Theorem checked_log_argument_reserved_step:
     (fresh_vars_wrt cs before ==> fresh_vars_wrt load_cut loaded) /\
     (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op loaded = eval_operand arg_op before) /\
     log_args_rel prefix ptvs pvs before /\ EVERY (\arg. abi_operand_before cs.cs_next_var (FST arg)) prefix /\
-    log_args_origins cenv es.scopes before (compiler_alloca_ids cs final_cut) (EVERY pure_expr (e::suffix)) prefix ptvs /\
+    log_args_origins cenv es.scopes before (compiler_alloca_ids cs final_cut) (~exprs_can_mutate cenv (e::suffix)) prefix ptvs /\
     source_writes_contained cenv es.scopes before semantic_writes /\
-    (EVERY pure_expr (e::suffix) ==> semantic_writes = []) /\
+    (~exprs_can_mutate cenv (e::suffix) ==> semantic_writes = []) /\
     source_writes_separated cenv es.scopes before (abi_allocation_windows (compiler_alloca_ids cs final_cut) loaded) /\
     abi_memory_frame (semantic_writes ++ abi_allocation_windows (compiler_alloca_ids cs final_cut) loaded ++
       [(before.vs_alloca_next,loaded.vs_alloca_next - before.vs_alloca_next)]) before loaded /\
-    (~is_word_type (lowered_value_type cenv e) /\ EVERY pure_expr suffix ==> !src_addr.
+    (~is_word_type (lowered_value_type cenv e) /\ ~exprs_can_mutate cenv suffix ==> !src_addr.
       eval_operand src loaded = SOME src_addr ==>
       argument_origin cenv es1.scopes loaded (compiler_alloca_ids save_cut final_cut) T
         (w2n src_addr) (type_memory_size tv)) /\
     abi_request_credit reserved requests remaining_credit loaded /\
-    (~is_word_type (lowered_value_type cenv e) /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type (lowered_value_type cenv e) /\ exprs_can_mutate cenv suffix ==>
       MEM (load_cut.cs_next_id,type_memory_size tv) requests /\ MEM load_cut.cs_next_id ids) ==>
     ?out.
       comp_bind (lower_value compile_expr cenv (expr_type e) e)
@@ -59,7 +59,7 @@ Theorem checked_log_argument_reserved_step:
       source_alloca_floor cenv es1.scopes ids out /\
       log_args_rel (prefix ++ [(saved,lowered_value_type cenv e)]) (ptvs ++ [tv]) (pvs ++ [v]) out /\
       EVERY (\arg. abi_operand_before save_cut.cs_next_var (FST arg)) (prefix ++ [(saved,lowered_value_type cenv e)]) /\
-      log_args_origins cenv es1.scopes out (compiler_alloca_ids save_cut final_cut) (EVERY pure_expr suffix)
+      log_args_origins cenv es1.scopes out (compiler_alloca_ids save_cut final_cut) (~exprs_can_mutate cenv suffix)
         (prefix ++ [(saved,lowered_value_type cenv e)]) (ptvs ++ [tv]) /\
       abi_request_credit reserved requests remaining_credit out /\
       (fresh_vars_wrt cs before ==> fresh_vars_wrt save_cut out) /\ alloca_inv out /\
@@ -74,8 +74,8 @@ Proof
      simp[cs_extends_refl, SUBSET_DEF]) >>
   `allocas_non_overlapping loaded` by fs[alloca_inv_def] >>
   qspecl_then [`env`, `cx`, `es`, `es1`, `cenv`, `func`, `ids`, `prefix`, `ptvs`, `pvs`, `before`, `loaded`,
-    `compiler_alloca_ids cs final_cut`, `compiler_alloca_ids load_cut final_cut`, `EVERY pure_expr (e::suffix)`,
-    `EVERY pure_expr suffix`, `cs.cs_next_var`, `load_cut.cs_next_var`, `semantic_writes`]
+    `compiler_alloca_ids cs final_cut`, `compiler_alloca_ids load_cut final_cut`, `~exprs_can_mutate cenv (e::suffix)`,
+    `~exprs_can_mutate cenv suffix`, `cs.cs_next_var`, `load_cut.cs_next_var`, `semantic_writes`]
     mp_tac log_argument_load_origins_state >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[EVERY_DEF]]) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>

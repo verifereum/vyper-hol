@@ -7,7 +7,7 @@ Ancestors
 
 Theorem compile_log_save_arg_identity:
   !cenv src_ty op args cs.
-    is_word_type src_ty \/ EVERY pure_expr args ==>
+    is_word_type src_ty \/ ~exprs_can_mutate cenv args ==>
     compile_log_save_arg cenv src_ty op args cs = (op,cs)
 Proof
   simp[compile_log_save_arg_def, comp_return_def]
@@ -55,10 +55,10 @@ Proof
   disch_then (mp_tac o AP_TERM ``LENGTH : type list -> num``) >> simp[]
 QED
 
-(* A pure suffix cannot introduce additional snapshots into the prefix. *)
+(* A suffix that cannot mutate memory cannot introduce additional snapshots into the prefix. *)
 Theorem compile_log_eval_all_append:
   !cenv prefix suffix cs.
-    EVERY pure_expr suffix ==>
+    ~exprs_can_mutate cenv suffix ==>
     compile_log_eval_all cenv (prefix ++ suffix) cs =
     (let (left,mid) = compile_log_eval_all cenv prefix cs in
      let (right,final) = compile_log_eval_all cenv suffix mid in
@@ -66,7 +66,8 @@ Theorem compile_log_eval_all_append:
 Proof
   Induct_on `prefix` >> rpt strip_tac >>
   simp[compile_log_eval_all_def, comp_bind_def, comp_return_def,
-    compile_log_save_arg_def, EVERY_APPEND, LET_THM, pairTheory.UNCURRY]
+    compile_log_save_arg_def, exprs_can_mutate_append, LET_THM,
+    pairTheory.UNCURRY]
 QED
 
 Theorem compile_log_eval_all_extends_insts:

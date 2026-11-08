@@ -66,6 +66,13 @@ Libs
 
 
 
+Theorem exprs_can_mutate_append:
+  !l1 l2. exprs_can_mutate cenv (l1 ++ l2) <=>
+          exprs_can_mutate cenv l1 \/ exprs_can_mutate cenv l2
+Proof
+  Induct >> simp[expr_can_mutate_def, DISJ_ASSOC]
+QED
+
 Theorem lower_value_nonword_memory:
   compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
   p.ptr_location = LocMemory /\ ~is_word_type t ==>

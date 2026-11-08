@@ -73,7 +73,7 @@ QED
    and after the last one every value is where log_args_post puts it, the
    allocation history holds and the frontier has not dropped. *)
 Theorem compile_log_eval_all_gas_mem:
-  !args ctx func cenv cx R es sa xs sb s0 env env0 es0.
+  !args ctx func cenv cx R es sa xs sb s0 env env0 es0 ops.
     (!e tail es. R (e::tail) es ==>
        expr_sim_mem ctx func cenv cx (expr_type e) e es /\
        !v es1. bind (eval_expr cx e) (read_result cx) es = (INL v, es1) ==>
@@ -82,7 +82,8 @@ Theorem compile_log_eval_all_gas_mem:
               value_has_type tv v) /\
     (!tail es gs. R tail es ==> R tail (es with gas_obs := gs)) /\
     R args es /\ EVERY supported_scalar_type (MAP expr_type args) /\
-    compile_log_eval_all cenv args sa = (xs,sb) /\
+    ~exprs_can_mutate cenv args /\ compile_log_eval_all cenv args sa = (ops,sb) /\
+    xs = ZIP (MAP FST ops, MAP expr_type args) /\
     gas_admissible (eval_exprs cx args)
       (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -116,8 +117,9 @@ Proof
       simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
            return_def, log_args_post_def, wb_frame_refl,
            log_mem_state_rel_gas_obs]) >>
-  rpt gen_tac >> strip_tac >>
-  gvs[compile_log_eval_all_cons] >>
+  rpt gen_tac >> strip_tac >> gvs[expr_can_mutate_def] >>
+  qpat_x_assum `compile_log_eval_all _ (_::_) _ = _` mp_tac >>
+  simp[compile_log_eval_all_unsaved_cons] >> strip_tac >> gvs[] >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x,sm)` >>
   rename1 `compile_log_eval_all cenv args sm = (ys,sb)` >>
   `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -127,7 +129,7 @@ Proof
      simp[] >> metis_tac[compile_lower_value_var]) >>
   `cs_extends sm sb /\ sm.cs_next_var <= sb.cs_next_var /\
    sm.cs_next_id <= sb.cs_next_id` by
-    (drule compile_log_eval_all_grows >> simp[]) >>
+    (drule_all compile_log_eval_all_grows >> simp[]) >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e es` by metis_tac[] >>
@@ -194,7 +196,8 @@ Resume compile_log_eval_all_gas_mem[head_value]:
      drule forced_eval_expr_preserves_scopes_dom >> simp[]) >>
   qpat_x_assum `!ctx func cenv cx R. _`
     (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `R`, `es_end with gas_obs := []`,
-                  `sm`, `ys`, `sb`, `t`, `env`, `env0`, `es0`] mp_tac) >>
+                  `sm`, `ZIP (MAP FST ys, MAP expr_type args)`, `sb`, `t`, `env`,
+                  `env0`, `es0`, `ys`] mp_tac) >>
   impl_tac >- (fs[] >> metis_tac[]) >>
   simp[gas_outcome_def] >> strip_tac
   >- suspend "tail_summary" >>

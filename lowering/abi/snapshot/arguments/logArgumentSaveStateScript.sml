@@ -25,7 +25,7 @@ Theorem checked_log_argument_save_state:
       abi_operand_before cs.cs_next_var (Var p)) /\
     alloca_inv ss /\ log_args_rel prefix ptvs pvs ss /\
     EVERY (\arg. abi_operand_before cs.cs_next_var (FST arg)) prefix /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
       abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
       log_args_safe prefix ptvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv) /\
@@ -41,9 +41,9 @@ Theorem checked_log_argument_save_state:
       EVERY (\arg. abi_operand_before cs'.cs_next_var (FST arg)) (prefix ++ [(op,ty)]) /\
       (fresh_vars_wrt cs ss ==> fresh_vars_wrt cs' out) /\ alloca_inv out /\
       abi_state_frame ss out /\ allocation_growth ss out /\
-      (is_word_type ty \/ EVERY pure_expr suffix ==> out = ss) /\ cs.cs_next_var <= cs'.cs_next_var /\
+      (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = ss) /\ cs.cs_next_var <= cs'.cs_next_var /\
       (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op out = eval_operand arg_op ss) /\
-      (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+      (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
         eval_operand op out = SOME (memory_snapshot_addr cs.cs_next_id ss) /\
         abi_allocated_window out cs.cs_next_id (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv) /\
         out.vs_allocas = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) ss).vs_allocas /\
@@ -51,7 +51,7 @@ Theorem checked_log_argument_save_state:
         ss.vs_alloca_next <= out.vs_alloca_next /\ out.vs_alloca_next <= ss.vs_alloca_next + type_memory_size tv)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
-  `~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+  `~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
     !name entry offset region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset region_size) ==>
       offset + type_memory_size entry.type <= w2n (memory_snapshot_addr cs.cs_next_id ss)` by
@@ -61,7 +61,7 @@ Proof
      `ss.vs_alloca_next < dimword(:256)` by decide_tac >>
      qspecl_then [`cenv`, `es.scopes`, `ids`, `ss`, `cs.cs_next_id`] mp_tac source_alloca_floor_snapshot >>
      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
-  `~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+  `~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
     ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
     abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
     log_args_safe prefix ptvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)` by

@@ -15,7 +15,7 @@ Theorem compile_log_save_arg_remaining_profile:
     compiler_id_history cs /\ cs_extends cut final_cut ==>
     cs_extends cs cut /\
     (!id. MEM id (compiler_alloca_ids cut final_cut) ==> MEM id (compiler_alloca_ids cs final_cut)) /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==> MEM cs.cs_next_id (compiler_alloca_ids cs final_cut))
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==> MEM cs.cs_next_id (compiler_alloca_ids cs final_cut))
 Proof
   rpt gen_tac >> strip_tac >>
   `cs_extends cs cut` by
@@ -37,15 +37,15 @@ Proof
 QED
 
 Theorem log_argument_save_request_trace:
-  !requests ty tv suffix cs loaded out.
-    (is_word_type ty \/ EVERY pure_expr suffix ==> out = loaded) /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+  !requests ty tv suffix cs loaded out cenv.
+    (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = loaded) /\
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       MEM (cs.cs_next_id,type_memory_size tv) requests /\
       out.vs_allocas = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) loaded).vs_allocas /\
       out.vs_alloca_next = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) loaded).vs_alloca_next) ==>
     abi_request_trace requests loaded out
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `is_word_type ty \/ EVERY pure_expr suffix`
+  rpt gen_tac >> strip_tac >> Cases_on `is_word_type ty \/ ~exprs_can_mutate cenv suffix`
   >- (`out = loaded` by fs[] >> simp[abi_request_trace_identity]) >>
   `MEM (cs.cs_next_id,type_memory_size tv) requests /\
     out.vs_allocas = (memory_snapshot_alloc_frame cs.cs_next_id (type_memory_size tv) loaded).vs_allocas /\
@@ -56,11 +56,11 @@ QED
 
 Theorem log_argument_reserved_snapshot_safe:
   !prefix ptvs cenv scopes ss writers ty tv suffix cs reserved requests credit.
-    log_args_origins cenv scopes ss writers (EVERY pure_expr suffix) prefix ptvs /\
+    log_args_origins cenv scopes ss writers (~exprs_can_mutate cenv suffix) prefix ptvs /\
     alloca_inv ss /\ abi_request_credit reserved requests credit ss /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       MEM cs.cs_next_id writers /\ MEM (cs.cs_next_id,type_memory_size tv) requests) ==>
-    ~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+    ~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       ss.vs_alloca_next + type_memory_size tv < dimword(:256) /\
       abi_alloca_request_ok cs.cs_next_id (type_memory_size tv) ss /\
       log_args_safe prefix ptvs ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)
@@ -87,26 +87,26 @@ Theorem compile_log_save_arg_value_origin:
     source_alloca_floor cenv scopes ids out /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
-    (is_word_type ty \/ EVERY pure_expr suffix ==> out = loaded) /\
-    (~is_word_type ty /\ ~EVERY pure_expr suffix ==>
+    (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = loaded) /\
+    (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       MEM cs.cs_next_id ids /\ ?ptr_addr. eval_operand saved out = SOME ptr_addr /\
         abi_allocated_window out cs.cs_next_id (w2n ptr_addr) byte_count) /\
-    (~is_word_type ty /\ EVERY pure_expr suffix ==> !src_addr. eval_operand src loaded = SOME src_addr ==>
+    (~is_word_type ty /\ ~exprs_can_mutate cenv suffix ==> !src_addr. eval_operand src loaded = SOME src_addr ==>
       argument_origin cenv scopes loaded (compiler_alloca_ids cut final_cut) T (w2n src_addr) byte_count) ==>
     ~is_word_type ty ==> !saved_addr. eval_operand saved out = SOME saved_addr ==>
       argument_origin cenv scopes out (compiler_alloca_ids cut final_cut)
-        (EVERY pure_expr suffix) (w2n saved_addr) byte_count
+        (~exprs_can_mutate cenv suffix) (w2n saved_addr) byte_count
 Proof
   rpt gen_tac >> strip_tac >> DISCH_TAC >> qx_gen_tac `saved_addr` >> DISCH_TAC >>
-  Cases_on `EVERY pure_expr suffix`
+  Cases_on `~exprs_can_mutate cenv suffix`
   >- (`out = loaded` by fs[] >>
       `saved = src` by
         (qpat_x_assum `compile_log_save_arg _ _ _ _ _ = _` mp_tac >>
          asm_simp_tac (srw_ss()) [compile_log_save_arg_def, comp_return_def]) >>
-      qpat_x_assum `~is_word_type ty /\ EVERY pure_expr suffix ==> _` mp_tac >>
+      qpat_x_assum `~is_word_type ty /\ ~exprs_can_mutate cenv suffix ==> _` mp_tac >>
       asm_simp_tac bool_ss [] >> disch_then (qspec_then `saved_addr` mp_tac) >> gvs[]) >>
   `MEM cs.cs_next_id ids /\ abi_allocated_window out cs.cs_next_id (w2n saved_addr) byte_count` by
-    (qpat_x_assum `~is_word_type ty /\ ~EVERY pure_expr suffix ==> _` mp_tac >>
+    (qpat_x_assum `~is_word_type ty /\ exprs_can_mutate cenv suffix ==> _` mp_tac >>
      asm_simp_tac bool_ss [] >> strip_tac >> gvs[]) >>
   `private_value_window cenv scopes out (compiler_alloca_ids cut final_cut) (w2n saved_addr) byte_count` by
     (qspecl_then [`func`, `cenv`, `scopes`, `ty`, `src`, `suffix`, `cs`, `saved`, `cut`, `final_cut`, `out`,

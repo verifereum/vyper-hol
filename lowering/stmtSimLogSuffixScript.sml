@@ -123,20 +123,9 @@ Proof
   drule_all log_frame_operand >> simp[]
 QED
 
-Theorem log_split_data_every:
-  !xs flags. LENGTH flags = LENGTH xs /\ EVERY P xs ==>
-    EVERY P (SND (split_log_ops xs flags))
-Proof
-  Induct >- (Cases_on `flags` >> simp[split_log_ops_def]) >>
-  gen_tac >> PairCases_on `h` >> Cases_on `flags` >> simp[] >>
-  rename1 `split_log_ops _ (flag::flags)` >> Cases_on `flag` >>
-  simp[split_log_ops_def] >> rpt strip_tac >> pairarg_tac >> gvs[] >>
-  first_x_assum drule_all >> simp[]
-QED
-
 Theorem log_success_empty_run[local]:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   SND (split_log_ops xs flags) = [] /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
@@ -174,7 +163,7 @@ Theorem log_data_prepare_run[local]:
   ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs)) /\
   compile_alloc_buffer srccap source_st = (srcbuf,start) /\
   fn_has_code source_st start func /\
-  compile_log_store_data ce xs srcbuf.buf_operand 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) srcbuf.buf_operand 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
@@ -255,7 +244,7 @@ Theorem log_data_emit_run[local]:
   ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs)) /\
   compile_alloc_buffer srccap source_st = (srcbuf,start) /\
   fn_has_code source_st start func /\
-  compile_log_store_data ce xs srcbuf.buf_operand 0 start = ((),stored_st) /\
+  compile_log_store_data ce xs (MAP SND xs) srcbuf.buf_operand 0 start = ((),stored_st) /\
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
@@ -330,7 +319,7 @@ QED
 Theorem log_data_stage_code[local]:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
   EVERY (supported_scalar_type o SND) xs /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
@@ -387,8 +376,8 @@ Proof
 QED
 
 Theorem log_success_suffix_run:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
@@ -417,6 +406,8 @@ Proof
   drule_all log_selected_frontier >> disch_then (qspec_then `h` strip_assume_tac) >>
   Cases_on `SND (split_log_ops xs flags) = []`
   >- suspend "empty" >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    (gvs[LIST_REL_EL_EQN, EVERY_EL] >> metis_tac[]) >>
   drule_all (SRULE [] (Q.INST [`data_ops` |-> `SND (split_log_ops xs flags)`]
     compile_log_data_trace)) >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[Excl "enc_def"] >>
@@ -459,7 +450,7 @@ Resume log_success_suffix_run[data]:
   `LENGTH (Lit (n2w h)::ops) < dimword (:256)` by
     (drule_all log_emitted_topic_count_exact >> simp[dimword_def, Excl "enc_def"]) >>
   qpat_x_assum `ce.ce_event_info _ = _` kall_tac >>
-  qpat_x_assum `compile_log_eval_all _ _ _ = _` kall_tac >>
+  qpat_x_assum `log_eval_view _ _ _ _ _` kall_tac >>
   qpat_x_assum `LIST_REL (\arg v. _ /\ _) xs vs` kall_tac >>
   qpat_x_assum `EVERY supported_scalar_type (MAP SND xs)` kall_tac >>
   qpat_x_assum `encode_indexed_event_topics _ _ _ = _` kall_tac >>

@@ -12,16 +12,14 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_log_store_data:
-  !ops buf off. gas_shadow_compiles (compile_log_store_data cenv ops buf off)
-    (compile_log_store_data cenv ops buf off)
+  !ops tys buf off. gas_shadow_compiles (compile_log_store_data cenv ops tys buf off)
+    (compile_log_store_data cenv ops tys buf off)
 Proof
-  Induct >> rpt gen_tac >>
+  Induct >> Cases_on `tys` >> rpt gen_tac >>
   simp[compile_log_store_data_def, comp_ignore_bind_def,
-       gas_shadow_compiles_return] >>
-  irule gas_shadow_compiles_bind >> simp[] >> gen_tac >>
-  irule gas_shadow_compiles_bind >> simp[] >>
-  rpt IF_CASES_TAC >>
-  simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_store_bytestring]
+       gas_shadow_compiles_return, gas_shadow_compiles_emit_void] >>
+  irule gas_shadow_compiles_bind >> simp[gas_shadow_compiles_emit_op] >> gen_tac >>
+  irule gas_shadow_compiles_bind >> simp[gas_shadow_compiles_store_memory]
 QED
 
 Theorem gas_shadow_compiles_revert_with_reason:
@@ -63,6 +61,13 @@ Proof
   Cases_on `is_view` >> Cases_on `use_transient` >>
   simp[compile_nonreentrant_unlock_def, gas_shadow_compiles_return,
        gas_shadow_compiles_emit_void]
+QED
+
+Theorem gas_shadow_compiles_return_unlock:
+  gas_shadow_compiles (compile_return_unlock cenv) (compile_return_unlock cenv)
+Proof
+  simp[compile_return_unlock_def] >> pairarg_tac >>
+  rw[gas_shadow_compiles_nonreentrant_unlock, gas_shadow_compiles_return]
 QED
 
 Theorem gas_shadow_compiles_external_return:
@@ -191,7 +196,9 @@ Theorem gas_shadow_compiles_internal_return_from_env:
   gas_shadow_compiles (compile_internal_return_from_env cenv ty sty v rpc)
     (compile_internal_return_from_env cenv ty sty v rpc)
 Proof
-  simp[compile_internal_return_from_env_def] >>
+  simp[compile_internal_return_from_env_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac gas_shadow_compiles_bind >>
+  simp[gas_shadow_compiles_return_unlock] >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- (Cases_on `cenv.ce_return_buf` >>
       simp[gas_shadow_compiles_return] >>
