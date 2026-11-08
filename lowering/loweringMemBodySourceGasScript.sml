@@ -18,23 +18,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* With no public variables, an external function lookup_function selects
-   is a declared function, not a getter.  (Same as entryStateRel's local
-   lookup_function_external_decl.) *)
-Theorem lookup_function_external_decl_gas_mem[local]:
-  !tops tops0 name mut nr args dflts ret fbody.
-    EVERY (supported_declaration_header tops0) tops /\
-    lookup_function NONE name External tops =
-      SOME (mut, nr, args, dflts, ret, fbody) ==>
-    ?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops
-Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
-
 (* The checked typing of the selected external body (PR #1081's
    external_selected_body_typing). *)
 Theorem external_body_typing_gas_mem[local]:
@@ -68,7 +51,7 @@ Proof
   strip_tac >>
   `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret
                 fbody) tops` by
-    (irule lookup_function_external_decl_gas_mem >> simp[] >>
+    (irule entryStateRelTheory.lookup_function_external_decl >> simp[] >>
      qexists `tops` >>
      gvs[supported_program_def, supported_declaration_headers_def]) >>
   gvs[source_typing_ok_def, source_deployment_rel_def] >>
