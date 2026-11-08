@@ -6,6 +6,8 @@
  *)
 Theory bodyPtrTypeBuiltinsSeamExtract32
 Ancestors
+  bodyPtrTypeBuiltinsExtract32Sim exprSimExtract32Source
+  vyperTypeSystem exprSimHypsDefs
   bodyPtrTypeBuiltinsIndexEntry bodyPtrTypeBuiltinsSavedOperand
   bodyPtrTypeBuiltinsBounds bodyPtrTypeBuiltinsTransport
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
@@ -27,5 +29,17 @@ Theorem extract32_body_expr_ptr_ok:
      body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (TypeBuiltin ann Extract32 typ es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule extract32_body_pre_shape >> strip_tac >> gvs[] >>
+  `body_exprs_ptr_ok cx [src;off]` by
+    (first_x_assum irule >> simp[type_builtin_args_length_ok_def]) >>
+  `?m. expr_type src = BaseT (BytesT (Dynamic m)) /\ is_uint_type (expr_type off)` by
+    (qpat_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[NoAsms, expr_body_pre_def, well_typed_expr_def, well_typed_type_builtin_args_def] >>
+     strip_tac >> gvs[]) >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx ty
+     (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off]) es'` by
+    (irule extract32_ready_expr_vv_sim_ptr >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  simp[] >> irule expr_sim_ptr_of_vv >> metis_tac[]
 QED
