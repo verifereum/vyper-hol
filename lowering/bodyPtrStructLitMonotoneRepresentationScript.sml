@@ -1,0 +1,65 @@
+Theory bodyPtrStructLitMonotoneRepresentation
+Ancestors robustCopyTransportPtr representationCleanPtr exprSimMemoryTransport
+  valueEncoding valueEncodingProofs valueEncodingProps bodyPtrDefs
+  venomMemProofs list arithmetic
+
+(* Shrinking taint only strengthens the adversary's agreement obligation. *)
+Theorem copied_window_agree_witness_mono:
+  !tn tn' mem mem' src dst n m.
+    mem_bytes_at dst n mem' = mem_bytes_at src n mem /\
+    (!i. i < n ==> (dst+i IN tn' ==> src+i IN tn)) /\
+    mem_agree_outside tn' mem' m ==>
+    ?mix. mem_agree_outside tn mem mix /\
+          mem_bytes_at src n mix = mem_bytes_at dst n m
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `s = (ARB:venom_state) with vs_memory := mem` >>
+  qabbrev_tac `mix =
+    (write_memory_with_expansion src (mem_bytes_at dst n m) s).vs_memory` >>
+  `mem_bytes_at src n mix = mem_bytes_at dst n m` by
+    (qspecl_then [`src`, `mem_bytes_at dst n m`, `s`] mp_tac
+       write_memory_mem_bytes_at_same >> simp[Abbr `mix`]) >>
+  qexists `mix` >> simp[] >>
+  simp[mem_agree_outside_def] >> rpt strip_tac >>
+  Cases_on `src <= i /\ i < src+n`
+  >- (`i-src < n /\ src+(i-src) = i` by decide_tac >>
+      `dst+(i-src) NOTIN tn'` by metis_tac[] >>
+      `EL (i-src) (mem_bytes_at src n mix) =
+       EL (i-src) (mem_bytes_at dst n m)` by simp[] >>
+      `EL (i-src) (mem_bytes_at dst n mem') =
+       EL (i-src) (mem_bytes_at src n mem)` by simp[] >>
+      `mem_bytes_at (dst+(i-src)) 1 mem' =
+       mem_bytes_at (dst+(i-src)) 1 m` by
+        metis_tac[mem_agree_outside_def] >>
+      `EL 0 (mem_bytes_at (dst+(i-src)) 1 mem') =
+       EL 0 (mem_bytes_at (dst+(i-src)) 1 m)` by simp[] >>
+      `i-src < n` by decide_tac >>
+      gvs[EL_mem_bytes_at] >>
+      irule LIST_EQ >> simp[EL_mem_bytes_at] >> metis_tac[]) >>
+  sym_tac >> simp[Abbr `mix`] >>
+  irule EQ_TRANS >> qexists `mem_bytes_at i 1 s.vs_memory` >>
+  conj_tac
+  >- (irule write_memory_mem_bytes_at_disjoint >> simp[] >> decide_tac) >>
+  simp[Abbr `s`]
+QED
+
+Theorem robust_val_in_memory_copy_transport_mono:
+  !tv v src dst n tn tn' mem mem'.
+    val_wf tv v /\ val_footprint tv v <= n /\
+    mem_bytes_at dst n mem' = mem_bytes_at src n mem /\
+    (!i. i < n ==> (dst+i IN tn' ==> src+i IN tn)) /\
+    (!m. mem_agree_outside tn mem m ==> val_in_memory tv v src m) ==>
+    !m. mem_agree_outside tn' mem' m ==> val_in_memory tv v dst m
+Proof
+  rpt strip_tac >> drule_all copied_window_agree_witness_mono >>
+  disch_then (qx_choose_then `mix` strip_assume_tac) >>
+  `val_in_memory tv v src mix` by metis_tac[] >>
+  irule val_in_memory_relocate_footprint >>
+  conj_tac >- simp[] >>
+  qexistsl [`mix`, `src`] >> simp[] >>
+  irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  rename1 `i < val_footprint tv v` >>
+  `i < n` by decide_tac >>
+  `EL i (mem_bytes_at src n mix) = EL i (mem_bytes_at dst n m)` by simp[] >>
+  gvs[EL_mem_bytes_at]
+QED
