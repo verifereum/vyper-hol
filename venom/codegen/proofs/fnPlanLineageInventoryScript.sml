@@ -2590,6 +2590,22 @@ Proof
   simp[stack_push_def, SNOC_APPEND, APPEND_ASSOC] >> strip_tac >> gvs[]
 QED
 
+Theorem restore_spilled_plan_bottom_frame:
+  !targets ps prefix ops qs.
+    restore_spilled_plan targets ps = (ops,qs) ==>
+    restore_spilled_plan targets (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[restore_spilled_plan_def] >> strip_tac >> gvs[]) >>
+  simp[restore_spilled_plan_def] >>
+  Cases_on `do_restore h ps` >>
+  Cases_on `restore_spilled_plan targets r` >> simp[] >> strip_tac >> gvs[] >>
+  drule do_restore_bottom_frame >> disch_then (qspec_then `prefix` assume_tac) >>
+  first_x_assum drule >> disch_then (qspec_then `prefix` assume_tac) >>
+  simp[]
+QED
+
 Theorem do_spill_at_bottom_frame:
   !d ps prefix ops qs.
     d < LENGTH ps.ps_stack /\ d <= 16 /\ do_spill_at d ps = (ops,qs) ==>
