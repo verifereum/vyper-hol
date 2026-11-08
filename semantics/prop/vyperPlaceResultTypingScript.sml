@@ -1556,7 +1556,14 @@ QED
 fun POP_EFFECT_GUARD_TAC (asl,w) =
   let
     val normalize = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def]
-    val facts = List.concat (map (CONJUNCTS o normalize o ASSUME) asl)
+    fun relevant tm =
+      if is_forall tm then
+        let val (_, body) = strip_forall tm
+            val (_, goal) = strip_imp body
+        in can (match_term goal) w end
+      else true
+    val facts = List.concat
+      (map (CONJUNCTS o normalize o ASSUME) (List.filter relevant asl))
     val atoms = List.filter (not o is_forall o concl) facts
     val eqs = List.filter (fn th => is_eq (concl th) andalso
       is_var (lhs (concl th))) atoms
