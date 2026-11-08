@@ -4,6 +4,7 @@ Ancestors
   bodyIntCallJointContract supportedExprs bodyIntCallSemanticEntry
   bodySimAugPlaceScopes stmtSimAugAssignPlaceStorage bodyIntCallJointCallSource
   exprSimExtCallCase stmtSimAugAssignPlaceMemory abiStaticAggregateProps
+  gasSummary gasSummaryCompose gasExemptCert vyperState
 
 Theorem internal_prologue_module_pins:
   compile_internal_prologue ce params has_rb ret sa = ((ce',pc),sb) /\
@@ -735,6 +736,103 @@ Proof
   conj_tac
   >- metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   gvs[]
+QED
+
+(* All typing and support clauses of expr_body_pre are state independent. *)
+Theorem expr_body_pre_state_transport:
+  expr_body_pre ce cx env e es /\ expr_sim_inv ce cx env ee ==>
+  expr_body_pre ce cx env e ee
+Proof
+  simp[exprSimHypsDefsTheory.expr_body_pre_def]
+QED
+
+Theorem intcall_gas_outcome_map_results:
+  gas_outcome memory tops (ctx,func)
+    (a : evaluation_state -> eval_result list evaluation_result) (es,s)
+    (\res ee t. ?rs. res = INL rs /\ Q (INL (f rs)) ee t)
+    (\res ee r. ?ex. res = INR ex /\ X ex ee r) ==>
+  gas_outcome memory tops (ctx,func) (bind a (\rs. return (f rs))) (es,s)
+    Q (\res ee r. ?ex. res = INR ex /\ X ex ee r)
+Proof
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
+  >- (rewrite_tac[gas_summary_at_def] >>
+      disch_then (qx_choose_then `res` (qx_choose_then `mid`
+        (qx_choose_then `r` strip_assume_tac)))
+      >- (gvs[] >> qexists `marks` >> disj1_tac >>
+          rewrite_tac[gas_summary_at_def] >>
+          qexistsl [`INL (f rs)`, `mid`, `OK t`] >>
+          fs[gas_marked_exec_def, bind_def, return_def]) >>
+      gvs[] >> qexists `marks` >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl [`INR ex`, `mid`, `r`] >>
+      fs[gas_marked_exec_def, bind_def]) >>
+  strip_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ef) (callee,tf)` >>
+  qexists `marks` >> disj2_tac >> qexistsl [`err`, `ef`, `callee`, `tf`] >>
+  rewrite_tac[ignore_bind_def, bind_assoc] >>
+  irule gas_exempt_cert_error_results >> simp[]
+QED
+
+Theorem intcall_gas_outcome_return:
+  ~s.vs_halted /\ Q (INL v) (es with gas_obs := []) s ==>
+  gas_outcome memory tops (ctx,func) (return v) (es,s) Q R
+Proof
+  strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists `[]` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INL v`, `es`, `OK s`] >>
+  simp[gas_marked_exec_def, return_def] >>
+  irule fragGasModeTheory.gas_marked_path_from_mem >>
+  simp[fragGasPathMemTheory.gas_path_mem_rules]
+QED
+
+Theorem intcall_compile_multi_vvs_prefix:
+  !todo doneE doneV doneR es c s vvs d.
+  (!de dv dr ee b u. P de dv dr ee b u ==>
+     ~u.vs_halted /\ P de dv dr (ee with gas_obs := []) b u) /\
+  (!e de dv dr ee b u vv b'.
+     MEM e todo /\ P de dv dr ee b u /\
+     cfn ce (expr_type e) e b = (vv,b') ==>
+     gas_outcome memory tops (ctx,func) (eval_expr cx e) (ee,u)
+       (\res ef t. ?r. res = INL r /\
+         P (de ++ [e]) (dv ++ [vv]) (dr ++ [r]) ef b' t)
+       (\res ef r. ?ex. res = INR ex /\ X ex ef r)) /\
+  P doneE doneV doneR es c s /\
+  compile_multi_vvs cfn ce todo c = (vvs,d) ==>
+  gas_outcome memory tops (ctx,func) (eval_expr_results cx todo) (es,s)
+    (\res ee u. ?rs. res = INL rs /\
+       P (doneE ++ todo) (doneV ++ vvs) (doneR ++ rs) ee d u)
+    (\res ee r. ?ex. res = INR ex /\ X ex ee r)
+Proof
+  Induct_on `todo`
+  >- (rpt strip_tac >>
+      gvs[exprLoweringTheory.compile_multi_vvs_def,
+          compileEnvTheory.comp_return_def] >>
+      simp[Once vyperInterpreterTheory.evaluate_def] >>
+      irule intcall_gas_outcome_return >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[exprLoweringTheory.compile_multi_vvs_def,
+      compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+      AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `cfn ce (expr_type h) h c = (hv,b)` >>
+  rename1 `compile_multi_vvs cfn ce todo b = (tvs,d)` >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  irule exprSimSubscriptMapTheory.gas_outcome_bind_result_exec >>
+  qexistsl [`\res ee r. ?ex. res = INR ex /\ X ex ee r`,
+    `\res ee u. ?r. res = INL r /\
+       P (doneE ++ [h]) (doneV ++ [hv]) (doneR ++ [r]) ee b u`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      irule intcall_gas_outcome_map_results >>
+      simp[] >>
+      qpat_x_assum `!doneE' doneV' doneR' es' c' s'' vvs' d'. _`
+        (qspecl_then [`doneE ++ [h]`, `doneV ++ [hv]`, `doneR ++ [v]`]
+          (irule o PURE_REWRITE_RULE [GSYM listTheory.APPEND_ASSOC,
+             listTheory.APPEND])) >>
+      simp[] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> simp[]) >>
+  first_x_assum irule >> simp[] >> qexists `c` >> simp[]
 QED
 
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
