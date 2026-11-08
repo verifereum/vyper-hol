@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem extrequest_history_memory_window:
-  vv_at cenv cx ty sa sc ec r (LocatedValue ty p) tc /\
+  vv_at cenv cx ty sa sc ec r (LocatedValue tag p) tc /\
   p.ptr_location = LocMemory /\
   extrequest_history_frame cenv cx ec sc tc ee sn t /\
   read_result cx r ec = (INL v,ec) /\
@@ -109,16 +109,17 @@ Proof
 QED
 
 Theorem extrequest_history_memory_holds:
-  vv_at cenv cx ty sa sc ec r (LocatedValue ty p) tc /\
-  vv_holds cenv cx ty r (LocatedValue ty p) ec tc /\
+  vv_at cenv cx ty sa sc ec r (LocatedValue tag p) tc /\
+  vv_holds cenv cx ty r (LocatedValue tag p) ec tc /\
   p.ptr_location = LocMemory /\
   extrequest_history_frame cenv cx ec sc tc ee sn t /\
   safe_operand sc p.ptr_operand ==>
-  vv_holds cenv cx ty r (LocatedValue ty p) ee t
+  vv_holds cenv cx ty r (LocatedValue tag p) ee t
 Proof
   strip_tac >>
   qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>
-  simp[vv_holds_def] >> strip_tac >>
+  simp[vv_holds_def] >>
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
   `eval_operand p.ptr_operand t = SOME w` by
     (drule_all extrequest_history_operand >> simp[]) >>
   `read_result cx r ee = (INL v,ee)` by
@@ -164,6 +165,7 @@ QED
 
 Theorem extrequest_history_holds:
   vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
+  post_value_type cenv e = expr_type e /\
   extrequest_history_frame cenv cx ec sc tc ee sn t /\
   stmt_state_rel ctx func cenv cx ee t /\
   (case vv of StackValue ty op => safe_operand sc op
@@ -184,7 +186,6 @@ Proof
       simp[] >> irule extrequest_history_expr_value >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[] >>
-  `t' = expr_type e` by gvs[vv_post_def, vv_holds_def] >> gvs[] >>
   Cases_on `p.ptr_location`
   >- (irule extrequest_history_memory_holds >>
       goal_assum (drule_at Any) >> gvs[vv_post_def] >> metis_tac[]) >>

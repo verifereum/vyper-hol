@@ -49,6 +49,7 @@ Proof
 QED
 
 Theorem extrequest_endpoint_post:
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
   extrequest_history_frame cenv cx ec sc tc ee sn t /\
   stmt_state_rel ctx func cenv cx ee t /\
@@ -68,12 +69,28 @@ Proof
     (irule extrequest_history_placement >>
      qpat_assum `extrequest_history_frame _ _ _ _ _ _ _ _` (irule_at Any) >>
      gvs[vv_post_def] >> metis_tac[]) >>
-  simp[vv_post_def, locals_kept_def]
+  simp[vv_post_def, locals_kept_def] >>
+  strip_tac >> Cases_on `vv` >> simp[] >>
+  rpt strip_tac >>
+  `eval_operand p.ptr_operand t = eval_operand p.ptr_operand tc` by
+    (Cases_on `eval_operand p.ptr_operand tc` >>
+     gvs[vv_post_def, vv_holds_def] >>
+     drule_all extrequest_history_operand >> simp[]) >>
+  gvs[slot_loc_def] >>
+  `get_storage cx ec F = get_storage cx ee F /\
+   get_storage cx ec T = get_storage cx ee T` by
+    gvs[extrequest_history_frame_def, extrequest_read_frame_def,
+        vyperStorageBackendTheory.get_storage_def,
+        vfmStateTheory.lookup_account_def,
+        vfmExecutionTheory.lookup_transient_storage_def] >>
+  `t' = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  metis_tac[]
 QED
 
 (* Producer-start facts remain explicit; this theorem does not move the producer. *)
 Theorem extrequest_history_unwrap_read:
   unwrap_value cenv vv sn = (op, sb) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
   extrequest_history_frame cenv cx ec sc tc ee sn t /\
   stmt_state_rel ctx func cenv cx ee t /\

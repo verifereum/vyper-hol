@@ -8,6 +8,7 @@ Ancestors
 Definition extrequest_strong_capture_def:
   extrequest_strong_capture ctx func cenv cx e r vv ee sn t <=>
     ?es sa sc s0 ec tc.
+      post_value_type cenv e = expr_type e /\
       vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
       local_ptrs_reserved cenv sa /\
       sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
@@ -22,6 +23,7 @@ Definition extrequest_strong_capture_def:
 End
 
 Theorem extrequest_strong_capture_intro:
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sc s0 ee r vv t /\
   local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
@@ -40,8 +42,9 @@ Proof
   strip_tac >> simp[extrequest_strong_capture_def] >>
   qexistsl_tac [`es`, `sa`, `sc`, `s0`, `ee`, `t`] >>
   simp[extrequest_history_frame_refl] >> rpt strip_tac >>
+  Cases_on `tr` >> gvs[slot_loc_def] >>
   `ty = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
-  Cases_on `tr` >> gvs[slot_loc_def] >> metis_tac[]
+  metis_tac[]
 QED
 
 Theorem extrequest_strong_capture_projection:

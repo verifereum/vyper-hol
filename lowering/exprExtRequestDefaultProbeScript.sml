@@ -76,7 +76,16 @@ Proof
            gvs[lowered_value_type_def, expr_type_def, type_memory_bytes_def,
                is_word_type_def]) >>
       gvs[vfmConstantsTheory.word_size_def])
-  >- (Cases_on `t0` >>
+  >- (rename1 `Builtin rt bi es` >> Cases_on `bi` >>
+      gvs[lowered_value_type_def, expr_type_def] >>
+      gvs[concat_buffer_type_def, AllCaseEqs(), type_memory_bytes_def,
+        concat_alloc_size_def, vfmConstantsTheory.word_size_def,
+        listTheory.MAP_MAP_o] >>
+      Cases_on `rt` >> gvs[type_memory_bytes_def,
+        vfmConstantsTheory.word_size_def] >>
+      Cases_on `b` >> gvs[type_memory_bytes_def,
+        vfmConstantsTheory.word_size_def])
+  >- (rename1 `TypeBuiltin rt tb at es` >> Cases_on `tb` >>
       gvs[lowered_value_type_def, expr_type_def, alloc_limits_expr_def,
           type_alloc_ok_def] >> Cases_on `o'` >>
       gvs[type_memory_bytes_def, vfmConstantsTheory.word_size_def]) >>

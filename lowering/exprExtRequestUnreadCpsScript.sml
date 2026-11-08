@@ -280,6 +280,9 @@ Proof
     (`(case head_vv of StackValue ty op => safe_operand sm op
         | LocatedValue ty p => safe_operand sm p.ptr_operand)` by
        (Cases_on `head_vv` >> gvs[vv_operand_def]) >>
+     `post_value_type cenv h = expr_type h` by
+       (irule post_value_type_not_int_call >>
+        metis_tac[expr_has_effect_thm]) >>
      irule extrequest_strong_capture_intro >>
      qpat_assum `vv_post _ _ _ _ h _ _ _ _ _ _ _ _` (irule_at Any) >>
      fs[ci_mono_def] >> rpt strip_tac >> gvs[] >>

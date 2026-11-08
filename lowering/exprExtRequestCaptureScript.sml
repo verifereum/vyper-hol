@@ -7,6 +7,7 @@ Ancestors
 Definition extrequest_capture_def:
   extrequest_capture ctx func cenv cx e r vv ee t <=>
     ?es0 sa sb s0 ec tc.
+      post_value_type cenv e = expr_type e /\
       vv_post ctx func cenv cx e es0 sa sb s0 ec r vv tc /\
       extrequest_read_frame cx ec ee /\
       vv_holds cenv cx (expr_type e) r vv ee t /\
@@ -23,6 +24,7 @@ Definition extrequest_captures_def:
 End
 
 Theorem extrequest_capture_intro:
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sb s0 ee r vv t ==>
   extrequest_capture ctx func cenv cx e r vv ee t
 Proof

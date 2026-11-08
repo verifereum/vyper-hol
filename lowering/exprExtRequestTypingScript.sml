@@ -27,7 +27,14 @@ Proof
       gvs[lowered_value_type_def, is_bytestring_type_def, expr_type_def] >>
       qmatch_goalsub_rename_tac `BytesT bd` >> Cases_on `bd` >>
       simp[lowered_value_type_def, is_bytestring_type_def, expr_type_def])
-  >- (Cases_on `t0` >>
+  >- (rename1 `Builtin t b l` >> Cases_on `b` >>
+      gvs[lowered_value_type_def, well_typed_builtin_app_def,
+          concat_buffer_type_def, type_builtin_result_ok_def,
+          is_bytestring_type_def, expr_type_def] >>
+      Cases_on `t` >> gvs[is_bytestring_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[is_bytestring_type_def])
+  >- (rename1 `TypeBuiltin rt tb at es` >> Cases_on `tb` >>
       gvs[lowered_value_type_def, type_builtin_result_ok_def,
           is_bytestring_type_def, expr_type_def])
   >> metis_tac[extrequest_effect_free_not_call]
