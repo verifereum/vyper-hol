@@ -4,7 +4,7 @@ Ancestors
   abiDecodePtrMember abiDecodePtrMemberFrame abiEncoder compileEnv context
   bodyPtrDefs ptrDiscipline contractABI vyperTypeABI emitHelper
   venomExecSemantics venomState venomInst finite_map words arithmetic list
-  pred_set exprLoweringProps stateFrame freshWrites
+  pred_set exprLoweringProps stateFrame freshWrites bodyPtrBopHashFrame localPtrsProps
 
 Definition abi_decode_member_code_def:
   abi_decode_member_code dst pos src hi ei off q sa sb <=>
@@ -186,3 +186,50 @@ Proof
   rpt gen_tac >> strip_tac >> fs[abi_decode_member_frame_def] >>
   first_x_assum irule >> decide_tac
 QED
+
+(* Restore original iteration operands after a framed member step. *)
+Theorem abi_decode_member_live_transport:
+  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s /\
+  abi_decode_member_frame sa G tn s H tf t a k /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  w2n d <= a /\ a+k <= w2n d+cap /\
+  ghost_inv ret cenv cx es H tf t /\ stmt_state_rel ctx func cenv cx es t /\
+  fresh_vars_wrt sb t /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  t.vs_current_bb = sb.cs_current_bb ==>
+  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tf t
+Proof
+  strip_tac >>
+  `abi_decode_ptr_window H tf t src b h /\ ptr_covers H tf dst t cap` by
+    (conj_tac
+     >- (irule abi_decode_member_frame_window >>
+         goal_assum (drule_at (Pat `abi_decode_member_frame _ _ _ _ _ _ _ _ _`)) >>
+         fs[abi_decode_member_live_def] >> decide_tac) >>
+     irule abi_decode_member_frame_covers >>
+     goal_assum (drule_at (Pat `abi_decode_member_frame _ _ _ _ _ _ _ _ _`)) >>
+     fs[abi_decode_member_live_def]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sb x` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  `!name b n. local_region cenv es.scopes t name b n <=>
+               local_region cenv es.scopes s name b n` by
+    (rpt gen_tac >> irule bodyPtrBopHashFrameTheory.bop_local_region_readonly_frame >>
+     qexists_tac `sa` >> fs[abi_decode_member_live_def, abi_decode_member_frame_def]) >>
+  fs[abi_decode_member_live_def, abi_decode_member_frame_def] >>
+  suspend "operands"
+QED
+
+Resume abi_decode_member_live_transport[operands]:
+  markerLib.RESUME_TAC >>
+  `t.vs_halted = s.vs_halted /\ t.vs_labels = s.vs_labels` by
+    (qpat_x_assum `(t with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `eval_operand pos t = SOME z /\ eval_operand hi t = SOME (n2w h)` by
+    (Cases_on `pos` >> Cases_on `hi` >>
+     fs[eval_operand_def] >> metis_tac[]) >>
+  `op_prov H pos = NONE /\ op_prov H hi = NONE /\
+   op_taint tf pos = {} /\ op_taint tf hi = {}` by
+    (Cases_on `pos` >> Cases_on `hi` >>
+     fs[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>
+  simp[] >> metis_tac[local_ptrs_reserved_next_var]
+QED
+
+Finalise abi_decode_member_live_transport
