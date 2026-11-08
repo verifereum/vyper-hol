@@ -131,7 +131,6 @@ Proof
     metis_tac[supported_pure_exprs_bytestring_iff] >>
   irule compile_log_ready_stmt_frag_mem >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
     qexists_tac `RR` >> simp[Abbr `RR`] >>
     rpt gen_tac >> strip_tac >>
