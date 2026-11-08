@@ -40,7 +40,7 @@ Theorem abi_decoder_loop_entry_control:
 Proof
   strip_tac >>
   simp[Once exec_block_def, get_instruction_def, EL_APPEND_EQN] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def, is_terminator_def, jump_to_def]
+  simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def, jump_to_def]
 QED
 
 Theorem abi_decoder_loop_entry_sim:

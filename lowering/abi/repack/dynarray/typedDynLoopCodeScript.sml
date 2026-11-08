@@ -62,6 +62,6 @@ Proof
     typed_array_loop_counter_def, dyn_copy_prefix_insts_def, compiler_var_names_EL, compiler_var_name_def,
     emit_op_def, emit_inst_def, emit_void_def, fresh_id_def, fresh_var_def, fresh_label_def,
     new_block_def, emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
-  PURE_REWRITE_TAC [GSYM APPEND_ASSOC] >> simp[pairTheory.UNCURRY, compile_state_component_equality] >>
+  PURE_REWRITE_TAC [GSYM APPEND_ASSOC] >> simp_tac bool_ss [pairTheory.UNCURRY, compile_state_component_equality] >>
   simp_tac bool_ss [GSYM APPEND_ASSOC, APPEND]
 QED
