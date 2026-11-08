@@ -3,7 +3,7 @@ Theory mmLocalScanProofs
 Ancestors
   mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner
-  venomWf stateEquiv rich_list mmTransform mmScan mmCopy list
+  venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
 Libs
   wordsLib finite_mapLib
 
@@ -331,6 +331,47 @@ Proof
      simp[mm_local_zero_every_def, empty_memzero_state_def, EVERY_MEM,
           Abbr `P`] >> metis_tac[]) >>
   gvs[mm_local_zero_every_def, EVERY_MEM, Abbr `P`] >> metis_tac[]
+QED
+
+Definition mm_local_group_ids_def:
+  mm_local_group_ids cs = FLAT (MAP (\cg. cg.cg_inst_ids) cs)
+End
+
+Theorem mm_local_group_ids_append[local]:
+  mm_local_group_ids (a ++ b) = mm_local_group_ids a ++ mm_local_group_ids b
+Proof
+  simp[mm_local_group_ids_def, MAP_APPEND, FLAT_APPEND]
+QED
+
+Theorem mm_local_merge_ids_exact[local]:
+  !cs. mm_local_group_ids (merge_adjacent cs) = mm_local_group_ids cs
+Proof
+  recInduct merge_adjacent_ind >>
+  simp[merge_adjacent_def, mm_local_group_ids_def] >>
+  rpt strip_tac >> Cases_on `copy_can_merge c1 c2` >>
+  gvs[copy_merge_def, APPEND_ASSOC]
+QED
+
+Theorem mm_local_insert_ids_perm[local]:
+  !cs cg. PERM (mm_local_group_ids (insert_sorted cs cg))
+              (cg.cg_inst_ids ++ mm_local_group_ids cs)
+Proof
+  Induct_on `cs` >> simp[insert_sorted_def, mm_local_group_ids_def] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
+  irule PERM_TRANS >>
+  qexists `h.cg_inst_ids ++ cg.cg_inst_ids ++
+    FLAT (MAP (\cg. cg.cg_inst_ids) cs)` >>
+  conj_tac >- (
+    pure_rewrite_tac[GSYM APPEND_ASSOC, PERM_APPEND_IFF] >>
+    gvs[mm_local_group_ids_def]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, PERM_SWAP_L_AT_FRONT] >> simp[]
+QED
+
+Theorem mm_local_add_ids_perm[local]:
+  PERM (mm_local_group_ids (add_copy cs cg))
+       (cg.cg_inst_ids ++ mm_local_group_ids cs)
+Proof
+  simp[add_copy_def, mm_local_merge_ids_exact, mm_local_insert_ids_perm]
 QED
 
 Theorem mm_local_deleted_unpinned[local]:
