@@ -36,6 +36,43 @@ Proof
   simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
+(* Located annotations describe the semantic layout, not necessarily the
+   expression annotation used as the staging destination. *)
+Theorem intcall_located_layout:
+  vv_holds ce cx ty r (LocatedValue ann p) es s ==>
+  ann = ty \/ (is_bytestring_type ty /\ is_bytestring_type ann)
+Proof
+  simp[loweringPostsTheory.vv_holds_def] >> metis_tac[]
+QED
+
+(* A genuine aggregate widening is not a bytestring-compatible store.
+   This tests the type boundary only, not reachability of a complete run. *)
+Theorem intcall_aggregate_layout_probe:
+  ce.ce_func_return_type (nsid_to_string fid) =
+    ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) ==>
+  post_value_type ce
+    (Call (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2))
+      (IntCall fid) args drv) =
+    ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) /\
+  type_widens_to tenv
+    (ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2))
+    (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2)) /\
+  ~(ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2) =
+      ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) \/
+    (is_bytestring_type (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2)) /\
+     is_bytestring_type (ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2))))
+Proof
+  simp[loweringPostsTheory.post_value_type_def,
+       exprLoweringTheory.lowered_value_type_def,
+       compileEnvTheory.is_word_type_def,
+       compileEnvTheory.is_bytestring_type_def,
+       vyperTypeSystemTheory.type_widens_to_def,
+       vyperTypeSystemTheory.arg_type_fits_def,
+       vyperTypeSystemTheory.well_formed_type_def,
+       vyperValueTheory.evaluate_type_def,
+       wordsTheory.dimword_def, EVAL ``dimindex(:256)``] >> EVAL_TAC
+QED
+
 Theorem intcall_intcall_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
