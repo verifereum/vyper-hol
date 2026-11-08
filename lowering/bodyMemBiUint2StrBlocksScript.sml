@@ -205,7 +205,7 @@ Proof
   Induct >> simp[]
 QED
 
-Theorem u2s_memory_block_path[local]:
+Theorem u2s_memory_block_path:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = pre ++ code ++ [j] /\
   s.vs_inst_idx = LENGTH pre /\ ~s.vs_halted /\
