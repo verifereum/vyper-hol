@@ -136,6 +136,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     irule (SIMP_RULE std_ss [DE_MORGAN_THM] log_mem_args_step) >>
     simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
     qexistsl_tac [`MAP SND fields`, `h`, `MAP (SND o FST) fields`] >>
     simp[] >>
