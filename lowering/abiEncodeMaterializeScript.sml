@@ -84,9 +84,9 @@ Theorem materialize_unwrap_owned_sim:
   vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-  (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
-         ~is_word_type (expr_type e) ==>
-         type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
          type_memory_size tvt < 2 ** 64) /\
   not_fresh_at sm p /\ lookup_var p r = SOME w /\
   FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) ==>
@@ -96,7 +96,16 @@ Theorem materialize_unwrap_owned_sim:
          lookup_var p s = SOME w /\
          FLOOKUP s.vs_allocas aid = SOME (w2n w,sz)) R
 Proof
-  cheat
+  strip_tac >> irule frag_exec_conseq >>
+  qexistsl
+    [`\s. s = r`,
+     `\s. expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op s`, `R`] >>
+  simp[] >> conj_tac
+  >- (gen_tac >> strip_tac >> conj_tac
+      >- (drule_all expr_post_rebased_lookup >> simp[]) >>
+      gvs[expr_post_def] >> metis_tac[]) >>
+  irule unwrap_value_rebased_physical_sim >> simp[] >> metis_tac[]
 QED
 
 (* The final store preserves the expression-state invariant because its
@@ -184,26 +193,25 @@ Proof
 QED
 
 Theorem materialize_alloc_vv_sim:
-  compile_alloc_buffer (type_memory_bytes ce (expr_type e)) sm = (buf,mid) /\
+  compile_alloc_buffer n sm = (buf,mid) /\
   fn_has_code sm mid func /\ fn_inst_ids_distinct func /\
   vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
   local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= mid.cs_next_id /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
-  type_memory_bytes ce (expr_type e) < dimword (:256) ==>
+  n < dimword (:256) ==>
   ?u w. frag_exec ctx sm mid (\z. z = r) (\z. z = u) R /\
     vv_post ctx func ce cx e es sa mid s0 es' tv vv u /\
     eval_operand buf.buf_operand u = SOME w /\
-    FLOOKUP u.vs_allocas sm.cs_next_id =
-      SOME (w2n w,type_memory_bytes ce (expr_type e)) /\
-    w2n w + type_memory_bytes ce (expr_type e) < dimword (:256) /\
+    FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,n) /\
+    w2n w + n < dimword (:256) /\
     u.vs_memory = r.vs_memory /\ sm.cs_next_id < mid.cs_next_id /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x r) /\
     (!aid entry. FLOOKUP r.vs_allocas aid = SOME entry ==>
        FLOOKUP u.vs_allocas aid = SOME entry) /\
     (!name b len. local_region ce es'.scopes u name b len ==>
-       regions_disjoint (w2n w) (type_memory_bytes ce (expr_type e)) b len) /\
+       regions_disjoint (w2n w) n b len) /\
     (?p. buf.buf_operand = Var p /\ not_fresh_at mid p)
 Proof
   strip_tac >> drule materialize_vv_post_operand >> strip_tac >>
