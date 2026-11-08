@@ -58,12 +58,43 @@ Datatype:
   |>
 End
 
+(* The caller's compile env agrees with every function's
+   build_compile_env for tops on the module-level fields the callee's
+   package env takes from tops: the module, module-variable types and
+   locations (immutables included), flag metadata and method ids.  body_inv pins the other module-level
+   fields this way. *)
+Definition cenv_module_pins_def:
+  cenv_module_pins tops cenv <=>
+    cenv.ce_module = NONE /\
+    cenv.ce_module_var_type = build_var_type_map tops /\
+    cenv.ce_module_vars =
+      add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+        tops 0 (add_module_var_locations tops FEMPTY) /\
+    cenv.ce_flag_member_id = FST (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_method_id =
+      (\s tys. w2n (calldata_method_id
+                     (function_selector s (vyper_to_abi_types (type_env tops) tys))))
+End
+
+Theorem build_compile_env_module_pins:
+  cenv_module_pins tops
+    (build_compile_env tops vis mut fname args ret fbody use_trans)
+Proof
+  simp[cenv_module_pins_def, compileVyperTheory.build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
 (* The hypotheses on the fixed parameters alone: P lies below lo and clear
    of every staged allocation; the graph witnesses of call_evaluation_safe
    for owner; the return PC, the root return buffer's pointer and the
    immutable base are reserved, and the return PC holds pc at the operand
    origin; the return buffer's capacity is the return value's size and P
-   misses it; the source return type evaluates to ret_tv. *)
+   misses it; the source return type evaluates to ret_tv.  The root env
+   returns internally (RET to the return PC, as the prologue sets it), with
+   the stack-return count of the declared return type, and a return buffer
+   exactly when that count is 0 and the type isn't void; its module-level
+   fields are the ones build_compile_env takes from tops. *)
 Definition intcall_frame_ok_def:
   intcall_frame_ok fp <=>
     (!a k. fp.jc_prot a k ==> a + k <= fp.jc_lo) /\
@@ -76,6 +107,15 @@ Definition intcall_frame_ok_def:
     evaluate_type (get_tenv fp.jc_cx) fp.jc_ret_ty = SOME fp.jc_ret_tv /\
     fp.jc_reserved fp.jc_rpc /\
     eval_operand fp.jc_rpc fp.jc_oorig = SOME fp.jc_pc /\
+    fp.jc_root_ce.ce_return_pc = SOME (PtrVar fp.jc_rpc 0) /\
+    cenv_module_pins fp.jc_tops fp.jc_root_ce /\
+    fp.jc_root_ce.ce_returns_count =
+      returns_stack_count
+        (\name. MAP (FST o SND)
+                 (get_struct_fields fp.jc_root_ce.ce_struct_fields name))
+        fp.jc_ret_ty /\
+    (IS_SOME fp.jc_rb <=>
+       fp.jc_root_ce.ce_returns_count = 0 /\ fp.jc_ret_ty <> NoneT) /\
     (!x sz. fp.jc_root_ce.ce_return_buf = SOME (PtrVar x sz) ==>
             fp.jc_reserved x) /\
     (!x. fp.jc_root_ce.ce_imm_alloca = SOME x ==> fp.jc_reserved x) /\
