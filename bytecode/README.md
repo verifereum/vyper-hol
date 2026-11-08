@@ -28,7 +28,7 @@ only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
 Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports two upstream fixes that the HOL lowering follows:
+revision. It backports three upstream fixes that the HOL lowering follows:
 
 - vyperlang/vyper#5127: an external call sends the selector and the encoded
   arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
@@ -36,9 +36,18 @@ revision. It backports two upstream fixes that the HOL lowering follows:
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5350: an array subscript whose base is a `pop()` result is
+  rejected (`CompilerPanic("risky overlap")`) when the index can write a
+  variable the base reads, or makes a risky call.
 
-Only fixtures with external calls that take arguments change. The
-provenance's `vyper_commit` names the unpatched base revision.
+The pin has no subscript overlap check at all, so the patch brings
+`_subscript_read_write_overlap` and its helpers over from a later upstream
+revision (577d2534), unchanged, and uses them only for this rejection: the
+pin still copies no subscript base.
+
+Only fixtures with external calls that take arguments change; the rejection
+changes none. The provenance's `vyper_commit` names the unpatched base
+revision.
 
 HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with
 `evm_version="prague"` (`ORACLE_EVM_VERSION`), the newest version the pinned
