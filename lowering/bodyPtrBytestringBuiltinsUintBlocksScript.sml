@@ -108,14 +108,14 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id JNZ [op; Label yes; Label no] []) s =
     OK (jump_to (if b then yes else no) s)` by
-    (Cases_on `b` >> simp[mk_inst_def, step_inst_base_def]) >>
+    (Cases_on `b` >> simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
   `ptr_safe_step D 0 0 ctx fn PG G tn
      (mk_inst id JNZ [op; Label yes; Label no] []) s` by
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           allocas_from_def, mk_inst_def, source_memory_write_ranges_def,
           source_memory_read_ranges_def, op_taint_def] >>
      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
-     simp[mk_inst_def, step_inst_base_def, step_jnz_behavior, jump_to_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, step_jnz_behavior, jump_to_def] >>
      Cases_on `b` >> gvs[op_taint_def] >>
      gen_tac >> Cases_on `op' = op` >> gvs[] >>
      Cases_on `op' = Label yes` >> gvs[] >>
