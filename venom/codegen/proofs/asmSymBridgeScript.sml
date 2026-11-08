@@ -540,6 +540,10 @@ Proof
       simp[asm_step_op_create, asm_exec_create_def, asm_op_mem_writes_def,
            mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
            finite_mapTheory.DRESTRICT_UNIV] >>
+      (* an oversized initcode faults before the create on both sides *)
+      IF_CASES_TAC
+      >- (gvs[asm_sym_rel_def] >>
+          simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
       irule related_create_completion >> simp[]) >>
   rename1 `cs.as_stack = value :: off :: sz :: tail0` >>
   Cases_on `tail0` >- gvs[] >> gvs[] >>
@@ -552,6 +556,10 @@ Proof
   simp[asm_step_op_create, asm_exec_create2_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
+  (* an oversized initcode faults before the create on both sides *)
+  IF_CASES_TAC
+  >- (gvs[asm_sym_rel_def] >>
+      simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
   irule related_create_completion >> simp[]
 QED
 
