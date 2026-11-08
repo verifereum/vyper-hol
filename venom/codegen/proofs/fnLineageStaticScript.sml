@@ -20,8 +20,9 @@ Ancestors
   stackPlanGen stackPlanTypes livenessDefs dfgDefs
   codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
   relation list finite_map dominatorProofs cfgAnalysisProps
-  removeUnusedSsaProofs cfgNormBase livenessProofs livenessTransferProofs
+  cfgNormBase livenessProofs livenessTransferProofs
   fnFrameStepsRevertForward dominatorAnalysisProps dfgAnalysisProps
+  venomWfProps
 
 Theorem lineage_state_entry_cases[local]:
   lineage_state liveness dfg cfg fn ps0 lbl ps ==>

@@ -15,7 +15,7 @@ Ancestors
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
   makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
-  makeSsaCurrentAvailability venomExecProofs allocaRemapSSA removeUnusedSsaProofs
+  makeSsaCurrentAvailability venomExecProofs allocaRemapSSA
   makeSsaCurrentCleanupShape sorting venomFnScheduleRunner
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace makeSsaCurrentFinalSlots
   makeSsaCurrentSimDefs
@@ -28,6 +28,7 @@ Ancestors
   makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
   makeSsaCurrentInduct makeSsaDefs makeSsaCurrentSelectedLive cfgDefs cfgHelpers finite_map
   ssaPipeline codegenReadyCompute makeSsaCurrentCfg
+  venomWfProps
 Libs
   rich_listTheory
 

@@ -123,8 +123,8 @@ Proof
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
       `gas_path_mem dunit.cu_context func s0 (LENGTH marks) r` by
-        fs[gas_marked_exec_def, gas_marked_path_def] >>
-      drule gas_path_mem_exec >> strip_tac >> fs[exit_result_def]
+        FIRST [fs[gas_marked_exec_def, gas_marked_path_def]] >>
+      drule gas_path_mem_exec >> strip_tac >> FIRST [fs[exit_result_def]]
       >- ((* the body falls off its end *)
           gvs[stmt_lands_def] >>
           drule_all deploy_ctor_fallthrough_mem_safe >> strip_tac >>

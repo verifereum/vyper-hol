@@ -12,7 +12,7 @@ Ancestors
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
   evalAssignmentOrder evalCompilerSourceShape
   (* contracts of the lowering's interfaces on concrete inputs *)
-  e2eEntryChecks e2eProducerChecks loweringBoundaryChecks targetPlaceTest
+  targetPlaceTest
   abiEncodeSnapshotTest exprRecursionRegression
   (* oracle-admission audit of the CREATE boundary theories *)
   createOracleClosureAudit

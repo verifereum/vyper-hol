@@ -16,7 +16,7 @@
 
 Theory removeUnusedStructProofs
 Ancestors
-  removeUnusedSsaProofs
+  removeUnusedSsaProofs venomWfProps
   removeUnusedProofs removeUnusedDefs
   passSimulationDefs
   venomWf
