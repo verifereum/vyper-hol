@@ -446,3 +446,36 @@ Proof
     vyperValueOperationTheory.evaluate_convert_def,
     vyperValueOperationTheory.bounded_decimal_op_def]
 QED
+
+Theorem scalar_decimal_signed_actual_outcome:
+  0 < bits /\ bits <= 256 /\ within_int_bound decimal_bound i /\
+  compile_type_convert x (ConvDecimalToInt 10000000000 (-&(2**167)) (&(2**167)-1)
+    (-&(2**(bits-1))) (&(2**(bits-1))-1) T) sa = (out,sb) /\
+  fresh_vars_wrt sa s /\ eval_operand x s = SOME (i2w i) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (BaseT DecimalT) (BaseT (IntT bits)) (DecimalV i) = INL vout /\
+    expr_val_rel cx (BaseT (IntT bits)) vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx (BaseT DecimalT) (BaseT (IntT bits)) (DecimalV i)) (Abort err t))
+Proof
+  strip_tac >>
+  `-&(2**(bits-1)):int <= 0` by simp[] >>
+  `0 <= (&(2**(bits-1)):int)-1` by simp[integerTheory.INT_SUB_LE, integerTheory.INT_OF_NUM_LE] >>
+  Cases_on `-&(2**(bits-1)) * decimal_scale <= i /\ i <= (&(2**(bits-1))-1) * decimal_scale`
+  >- (drule_at (Pat `compile_type_convert _ _ _ = _`) scalar_decimal_to_int_ok >>
+      disch_then (qspecl_then [`i`, `s`] mp_tac) >> simp[] >> strip_tac >>
+      disj1_tac >> qexistsl_tac [`ss'`, `IntV (i quot decimal_scale)`] >>
+      qspecl_then [`bits`, `i`] mp_tac (GEN_ALL vyperDecimalBoundsTheory.decimal_truncate_signed_bound) >>
+      simp[] >> strip_tac >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_not_address_bytes,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def,
+        vyperDecimalBoundsTheory.decimal_truncate_eq_quot,
+        vyperValueTheory.decimal_scale_def]) >>
+  drule_all scalar_decimal_to_int_abort >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`Revert_abort`, `ss'`] >>
+  simp[expr_exit_def, convert_result_def,
+    vyperValueOperationTheory.evaluate_convert_from_not_address_bytes,
+    vyperValueOperationTheory.evaluate_convert_def]
+QED
