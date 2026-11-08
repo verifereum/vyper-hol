@@ -133,7 +133,8 @@ Proof
          (es0 with <| gas_obs := gx; outcomes := SOME vs.vs_outcomes |>) =
          (res, es_end with gas_obs := []) /\
        gas_path dunit.cu_context func s0 (LENGTH marks) r` by
-        (fs[gas_marked_exec_def] >>
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
          conj_tac
          >- (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
                (qspec_then `[]` mp_tac) >> simp[]) >>
