@@ -5,7 +5,7 @@ Ancestors
   exprSimFieldLayout exprSimAttributeProps bodyFieldMemoryProps
   loweringPosts exprSimVVFrame exprLoweringProps emitHelperProps
   compileEnv moduleLoweringProps venomState fragGasMode typedMemoryCopy instIdxIndep
-  emitHelper
+  emitHelper exprSimAttribute exprSimDefs exprSimHypsDefs context
 
 Theorem attribute_add_landing:
   intcall_frame_ok fp /\
@@ -69,6 +69,62 @@ Proof
      qexistsl_tac [`type_memory_size ftv`, `type_memory_size_fields fs`] >>
      simp[]) >>
   simp[]
+QED
+
+Theorem attribute_selection_landing:
+  intcall_frame_ok fp /\
+  expr_body_pre ce fp.jc_cx env (Attribute ann obj fld) es /\
+  compile_expr ce ty obj sa = (bvv,sm) /\
+  local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  emit_op ADD [vv_operand bvv;
+    Lit (n2w (attr_offset ce (expr_type obj) (vv_loc bvv) fld))]
+    sm = (dst,sn) /\ fn_has_code sm sn fp.jc_func /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sm s0 ee tv bvv t /\
+  intcall_expr_cont fp ce env es sa s0 ee sm t /\
+  (!tvb. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce obj) = SOME tvb /\
+     vv_loc bvv = LocMemory ==>
+     ?w a k. eval_operand (vv_operand bvv) t = SOME w /\
+       a <= w2n w /\ w2n w + type_memory_size tvb <= a + k /\
+       a + k < dimword (:256) /\
+       (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+  eval_expr fp.jc_cx obj (es with gas_obs := gs) = (INL tv,ee) ==>
+  ?tv' u w.
+    (!tail. select_result fp.jc_cx (expr_type obj) tv (AttrSubscript fld)
+      (ee with gas_obs := tail) = (INL tv',ee with gas_obs := tail)) /\
+    gas_marked_path F fp.jc_ctx fp.jc_func t 0 (OK u) /\
+    intcall_expr_cont fp ce env es sa s0 ee sn u /\
+    vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Attribute ann obj fld)
+      es sa sn s0 ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
+    eval_operand (vv_operand bvv) t = SOME w /\
+    eval_operand dst u = SOME
+      (w + n2w (attr_offset ce (expr_type obj) (vv_loc bvv) fld)) /\
+    (!x. dst = Var x ==> not_fresh_at sn x) /\
+    (!ftv. evaluate_type (get_tenv fp.jc_cx) ann = SOME ftv /\
+       vv_loc bvv = LocMemory ==>
+       ?fw a k. eval_operand dst u = SOME fw /\
+         a <= w2n fw /\ w2n fw + type_memory_size ftv <= a + k /\
+         a + k < dimword (:256) /\
+         (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z))
+Proof
+  strip_tac >> drule attr_pre_base >> strip_tac >>
+  drule_all attr_select_field >> strip_tac >>
+  `?w. eval_operand (vv_operand bvv) t = SOME w` by
+    (fs[vv_post_def] >> Cases_on `bvv` >>
+     gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
+  drule_all attribute_add_landing >> strip_tac >>
+  `post_value_type ce obj = expr_type obj` by
+    (irule attr_post_value_type >> metis_tac[]) >>
+  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Attribute ann obj fld)
+      es sa sn s0 ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
+    (irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
+  qexistsl_tac [`tv'`, `u`, `w`] >> gvs[] >>
+  rpt strip_tac >> gvs[] >>
+  fs[valueEncodingTheory.type_memory_size_def] >>
+  drule attribute_field_window >>
+  disch_then (qspecl_then [`w`, `k`, `ftv`, `fld`, `a`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  simp[attr_offset_def] >>
+  qexistsl_tac [`a`, `k`] >> simp[] >> metis_tac[]
 QED
 
 Theorem intcall_attribute_step:
