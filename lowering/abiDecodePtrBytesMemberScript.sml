@@ -408,7 +408,8 @@ Theorem abi_decode_bytes_member_prefix_ptr:
     s5.vs_memory = s.vs_memory /\ tn5.t_mem = tn.t_mem /\
     (!x. not_fresh_at sa x ==> lookup_var x s5 = lookup_var x s /\
       FLOOKUP G5 x = FLOOKUP G x /\ op_taint tn5 (Var x) = op_taint tn (Var x)) /\
-    tn5.t_stor = tn.t_stor /\ tn5.t_trans = tn.t_trans /\ tn5.t_imm = tn.t_imm
+    tn5.t_stor = tn.t_stor /\ tn5.t_trans = tn.t_trans /\ tn5.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==> not_fresh_at c5 x)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `h < dimword(:256) /\ n < dimword(:256)` by decide_tac >>
@@ -931,6 +932,14 @@ Resume abi_decode_bytes_member_prefix_ptr[frame]:
         `tr.t_mem = tm.t_mem`, `tm.t_mem = tn.t_mem`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  `!x. not_fresh_at sa x ==> not_fresh_at c5 x` by
+    (map_every (fn q => qpat_assum q mp_tac)
+       [`!x. not_fresh_at sa x ==> not_fresh_at c1 x`,
+        `!x. not_fresh_at c1 x ==> not_fresh_at c3 x`,
+        `!x. not_fresh_at c3 x ==> not_fresh_at c4 x`,
+        `!x. not_fresh_at c4 x ==> not_fresh_at c5 x`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  pop_assum mp_tac >>
   map_every (fn q => qpat_assum q mp_tac)
     [`tp.t_stor = tl.t_stor`, `tl.t_stor = tr.t_stor`,
      `tr.t_stor = tm.t_stor`, `tm.t_stor = tn.t_stor`,
