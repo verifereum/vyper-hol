@@ -972,35 +972,40 @@ Theorem tuple_select_gas_obs[local]:
     !tail. select_result cx ty tv (ValueSubscript (IntV i))
              (ee with gas_obs := tail) = (r, ee with gas_obs := tail)
 Proof
-  rpt gen_tac >> Cases_on `tv`
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  `!s. select_result cx ty tv (ValueSubscript (IntV i)) (s with gas_obs := tail) =
+       (FST (select_result cx ty tv (ValueSubscript (IntV i)) s),
+        s with gas_obs := tail)` suffices_by
+    (disch_then (qspec_then `ee` mp_tac) >> simp[]) >>
+  gen_tac >> Cases_on `tv`
   >~ [`Value v`]
   >- (simp[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
            return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]))
+      rpt (CASE_TAC >> simp[return_def, raise_def]))
   >~ [`HashMapRef tr slot kt vt`]
-  >- (Cases_on `vt` >>
-      simp[select_result_def, extend_place_def, bind_def,
+  >- (simp[select_result_def, extend_place_def, bind_def,
            lift_option_type_def, return_def, raise_def, LET_THM] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+      rpt (CASE_TAC >> simp[bind_def, return_def, raise_def])) >>
   rename1 `PlaceR pl` >> Cases_on `pl`
   >~ [`StoragePlace tr slot ptv`]
   >- (Cases_on `ptv` >> Cases_on `tr` >>
       simp[select_result_def, extend_place_def, extend_storage_place_def,
-           resolve_array_element_def, vyperStoragePlaceProvenanceTheory.resolve_array_element_empty, check_def,
-           assert_def, ignore_bind_def, get_storage_backend_def,
-           get_accounts_def, get_transient_storage_def, bind_def,
-           lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
-           LET_THM] >>
-      rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[check_def, assert_def, ignore_bind_def,
-               get_storage_backend_def, get_accounts_def,
-               get_transient_storage_def, bind_def, return_def, raise_def,
-               pairTheory.UNCURRY])) >>
+           resolve_array_element_def,
+           vyperStoragePlaceProvenanceTheory.resolve_array_element_empty,
+           check_def, assert_def, ignore_bind_def,
+           get_storage_backend_def, get_accounts_def,
+           get_transient_storage_def, bind_def, lift_option_type_def,
+           return_def, raise_def, pairTheory.UNCURRY, LET_THM] >>
+      rpt (CASE_TAC >>
+           simp[check_def, assert_def, ignore_bind_def,
+                get_storage_backend_def, get_accounts_def,
+                get_transient_storage_def, bind_def, return_def, raise_def,
+                pairTheory.UNCURRY])) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_scopes_def, get_immutables_def,
        get_address_immutables_def, bind_def, ignore_bind_def,
        lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+  rpt (CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def])
 QED
 
 Theorem tuple_source[local]:
