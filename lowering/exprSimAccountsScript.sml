@@ -104,50 +104,93 @@ Proof
   qpat_x_assum `comp_bind _ _ _ = _` mp_tac >> simp[comp_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   rename1 `emit_op opc [x] sa = (c, s1)` >>
-  reverse (Cases_on `eval_operand x s0 = SOME w1`)
-  >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
-        simp[frag_exec_false_pre] >>
-      pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
-      simp[]) >>
+  `opc <> GAS` by
+    (strip_tac >> gvs[] >>
+     `stmt_state_rel ctx func cenv cx es0
+        (s0 with <|vs_gas_readings := [1w]; vs_inst_idx := s0.vs_inst_idx|>)` by
+       (first_assum (mp_then Any
+          (qspecl_then [`[1w]`, `s0.vs_inst_idx`, `es0.gas_obs`] mp_tac)
+          msg_gas_state_frame) >>
+        simp[]) >>
+     first_x_assum (qspecl_then [`x`,
+        `s0 with <|vs_gas_readings := [1w]; vs_inst_idx := s0.vs_inst_idx|>`,
+        `0`, `"o"`] mp_tac) >>
+     `!ss. step_inst_base (mk_inst 0 GAS [x] ["o"]) ss =
+           exec_gas (mk_inst 0 GAS [x] ["o"]) ss` by
+       (gen_tac >> simp[Once venomExecSemanticsTheory.step_inst_base_def, mk_inst_def]) >>
+     pop_assum (fn th => REWRITE_TAC [th]) >>
+     `eval_operand x
+        (s0 with <|vs_gas_readings := [1w]; vs_inst_idx := s0.vs_inst_idx|>) = SOME w1` by
+       (Cases_on `x` >> gvs[eval_operand_def, lookup_var_def]) >>
+     strip_tac >> first_x_assum (drule_then mp_tac) >> simp[] >>
+     simp[venomExecSemanticsTheory.exec_gas_def, mk_inst_def,
+          venomStateTheory.update_var_def,
+          venomStateTheory.venom_state_component_equality]) >>
   `sa.cs_next_var <= s1.cs_next_var /\ cs_extends sa s1 /\
    (!z. c = Var z ==> not_fresh_at s1 z)` by
     (drule emit_op_extends_next_var >> drule emitted_insts_emit_op >>
      rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11]) >>
   `cs_extends s1 sb /\ s1.cs_next_var <= sb.cs_next_var` by
     metis_tac[straight_fresh_cs_extends] >>
+  `fn_has_code s1 sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  `!z. not_fresh_at sa z ==> z <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `not_local_ptr cenv es0.scopes out` by
+    (qunabbrev_tac `out` >> irule local_ptrs_reserved_fresh >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `c = Var out /\ s1.cs_current_bb = sa.cs_current_bb /\
+   LENGTH s1.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
+    gvs[Abbr `out`, emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  `fn_has_code sa s1 func` by metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  `gas_path ctx func s0 0
+     (OK ((update_var out r s0) with vs_inst_idx := SUC s0.vs_inst_idx))` by
+    (qunabbrev_tac `out` >> irule emitHelperPropsTheory.emit_op_zero_path >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qexistsl_tac [`[x]`, `c`, `opc`, `s1`] >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  qabbrev_tac `u = (update_var out r s0) with vs_inst_idx := SUC s0.vs_inst_idx` >>
+  `stmt_state_rel ctx func cenv cx es0 u` by
+    (simp[Abbr `u`, stmt_state_rel_inst_idx] >>
+     irule stmt_state_rel_update_var >> simp[]) >>
+  `eval_operand c u = SOME r` by
+    simp[Abbr `u`, eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  `~u.vs_halted /\ u.vs_current_bb = s1.cs_current_bb /\
+   u.vs_inst_idx = LENGTH s1.cs_current_insts` by
+    simp[Abbr `u`, update_var_def] >>
   `local_ptrs_reserved cenv s1` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
+  `eval_operand c (drop_fresh s1 u) = SOME r` by
+    (qspecl_then [`c`, `s1`, `u`] mp_tac eval_operand_drop_fresh >>
+     asm_simp_tac bool_ss []) >>
+  qpat_x_assum `!c sa sb op ss. _`
+    (qspecl_then [`c`, `s1`, `sb`, `op`, `drop_fresh s1 u`] mp_tac) >>
+  asm_simp_tac bool_ss [fresh_vars_wrt_drop_fresh] >> strip_tac >>
+  `straight_fresh (g c)` by simp[] >>
+  drule_all fragGasFreshTheory.straight_fresh_clean_success_path >> strip_tac >>
+  first_x_assum (qspec_then `ctx` strip_assume_tac) >>
+  drule_all fragGasFreshTheory.straight_fresh_run_post >> strip_tac >>
   `!z. not_fresh_at sa z ==> not_fresh_at s1 z` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
-  `(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
-        eval_operand x s = SOME w1) =
-   (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s)` by
-    (rw[FUN_EQ_THM] >> eq_tac >> rw[] >> gvs[]) >>
-  pop_assum SUBST1_TAC >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `opc`, `[x]`, `sa`, `c`,
-               `s1`, `s0`, `r`]
-    mp_tac emit_op_frag >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> strip_tac >> gen_tac >>
-      qpat_x_assum `!x ss n out. _` irule >> asm_rewrite_tac[]) >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_then (SPEC_ALL th))) >>
-  asm_rewrite_tac[] >> BETA_TAC >> rpt strip_tac >>
-  rename1 `eval_operand c u = SOME r` >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `g c`, `s1`, `sb`, `op`,
-               `w`, `\ss. eval_operand c ss = SOME r`, `\a. F`,
-               `expr_exit (INL v)`, `u`]
-    mp_tac frag_exec_straight_fresh >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> BETA_TAC >> rpt conj_tac >> rpt strip_tac
-      >- (qspecl_then [`c`, `s1`, `ss`] mp_tac eval_operand_drop_fresh >>
-          asm_simp_tac bool_ss []) >>
-      qpat_x_assum `!c sa sb op ss. _`
-        (qspecl_then [`c`, `s1`, `sb`, `op`, `ss`] mp_tac) >>
-      asm_rewrite_tac[]) >>
-  disch_then (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
-  rpt conj_tac >> rpt strip_tac >> gvs[expr_val_rel_def]
+  qexists_tac `OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
+  conj_tac
+  >- (`gas_marked_path F ctx func s0 (0 + 0)
+         (OK (t' with vs_inst_idx := LENGTH sb.cs_current_insts))` suffices_by simp[] >>
+      irule fragGasModeTheory.gas_marked_path_then >> qexists_tac `u` >>
+      simp[fragGasModeTheory.gas_marked_path_def]) >>
+  simp[] >> conj_tac >- (simp[expr_val_rel_def] >> metis_tac[]) >>
+  rpt conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> res_tac >> simp[] >>
+      gvs[Abbr `u`, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE])
+  >- (rpt strip_tac >> first_x_assum drule >>
+      gvs[Abbr `u`, update_var_def])
+  >- gvs[Abbr `u`, update_var_def] >>
+  gvs[Abbr `u`, update_var_def]
 QED
 
 Theorem comp_bind_comp_return:
@@ -357,12 +400,14 @@ Proof
         metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS])
     >- simp[] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
-      expr_body_pre_word_value >>
+    `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es with gas_obs := gs1`, `v1`,
+                 `es1`] mp_tac expr_body_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def] >>
     Cases_on `v1` >> gvs[value_has_type_def] >>
     irule compile_acc_frag >> simp[] >>
+    `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
     drule_all expr_body_pre_eval >> simp[expr_sim_inv_def]) >>
   simp[]
 QED

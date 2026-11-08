@@ -365,11 +365,14 @@ Definition o1_fn_shape_def:
        EVERY (\inst. ~MEM inst.inst_opcode [STOP; RETURN]) (fn_insts fn))
 End
 
-(* venom_wf without global instruction-id distinctness, which is the IR
-   supply's concern and not a pass's. *)
+(* Instruction ids are distinct across the context, as Python's global
+   counter makes them: ConcretizeMemLoc keys imported callee allocations
+   by ALLOCA id.  A pass keeps ids distinct within its function
+   (wf_function); across functions the IR supply keeps them apart. *)
 Definition o1_ctx_shape_def:
   o1_ctx_shape ctx <=>
-    ctx_wf ctx /\ EVERY (o1_fn_shape ctx) ctx.ctx_functions
+    ctx_wf ctx /\ ctx_inst_ids_distinct ctx /\
+    EVERY (o1_fn_shape ctx) ctx.ctx_functions
 End
 
 (* ===== Step contract: structural, per run ===== *)
@@ -406,26 +409,108 @@ Definition o1_step_contract_def:
       ir_supply_inst_ok out.fpo_supply
 End
 
+(* What MakeSSA needs of a function it is run on: every block reachable,
+   definitions reaching their uses, and the PHIs already present (none on
+   the first run) single-defined, covering their predecessors along CFG
+   edges, and non-degenerate. *)
+Definition make_ssa_input_ok_def:
+  make_ssa_input_ok fn <=>
+    all_reachable fn /\ fn_defs_reach_uses fn /\
+    fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn /\
+    fn_phi_outputs_single_def fn /\ fn_phis_non_degenerate fn /\
+    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       inst.inst_opcode = PHI ==>
+       ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+       !l v. MEM (l,v) (phi_pairs inst.inst_operands) ==>
+         fn_cfg_edge fn l bb.bb_label)
+End
+
+(* make_ssa_input_ok reads only the blocks, so sealing a function's fmp
+   signature keeps it. *)
+Theorem make_ssa_input_ok_fmp_signature[simp]:
+  make_ssa_input_ok (fn with fn_fmp_signature := x) <=> make_ssa_input_ok fn
+Proof
+  `!f p. is_fn_path (f with fn_fmp_signature := x) p = is_fn_path f p` by
+    (recInduct is_fn_path_ind >> simp[is_fn_path_def, fn_cfg_edge_def]) >>
+  `fn_cfg_edge (fn with fn_fmp_signature := x) = fn_cfg_edge fn` by
+    simp[FUN_EQ_THM, fn_cfg_edge_def] >>
+  `fn_entry_label (fn with fn_fmp_signature := x) = fn_entry_label fn` by
+    simp[fn_entry_label_def, entry_block_def] >>
+  simp[make_ssa_input_ok_def, all_reachable_def, fn_reachable_def,
+       fn_defs_reach_uses_def, def_on_all_paths_def,
+       fn_phi_operands_single_def_def, fn_phis_cover_preds_def,
+       fn_phi_outputs_single_def_def, fn_phis_non_degenerate_def, fn_insts_def]
+QED
+
+(* A function's FMP convention, if set, has no hidden FMP parameter.  The
+   lowering leaves every convention unset, the other passes keep it
+   (fn_pass_step_fmp_sig_no_param), and FmpLowering seals a function
+   without raw FMP operations whose callees have no such parameter
+   without one: it then leaves the blocks as they are. *)
+Definition fmp_sig_no_param_def:
+  fmp_sig_no_param fn <=>
+    !sig. fn.fn_fmp_signature = SOME sig ==> ~sig.fms_has_fmp_param
+End
+
+(* Every pass but FmpLowering keeps the FMP convention, so it keeps
+   fmp_sig_no_param. *)
+Theorem fn_pass_step_fmp_sig_no_param:
+  fn_pass_step rpolicy pass observed s fn out /\
+  fn_pass_tag pass <> VP_FmpLowering /\
+  fmp_sig_no_param fn ==>
+  fmp_sig_no_param out.fpo_function
+Proof
+  rw[fn_pass_step_def, fn_pass_effects_hold_def, fn_abi_effect_holds_def,
+     fn_fmp_convention_eq_def, fmp_sig_no_param_def] >>
+  Cases_on `fn_pass_tag pass` >> gvs[fn_pass_abi_effect_def]
+QED
+
 (* The per-function stage rows: what a run may assume of the function it
    is given and must establish of the one it returns, where the stage
    table o1_inv below cannot reach, since the walk runs each pass on one
    function at a time in a mixed context.  Row k holds of a function that
    has been through the first k walk passes; from row 3 on (after
    ConcretizeMemLoc) the function has no ALLOCA, which SingleUseExpansion
-   needs, since it would expand the literal operand of one. *)
+   needs, since it would expand the literal operand of one.  From row 4
+   (after FmpLowering, which puts the parameters first) to row 7 every
+   block's pseudo-instructions come first, and only the entry block has
+   parameter instructions: DFT keeps the pseudo-instructions in front of
+   the instructions it reschedules, so a PHI it found after another
+   instruction would move, and MakeSSA and SimplifyCFG keep the prefix
+   only because the blocks they rewrite or merge have no parameters.
+   From row 5 (after MakeSSA's second run) to row 7 the function is in
+   SSA form, as the stage rows 5 to 7 say of every function: off SSA, DFT
+   can schedule a use after a redefinition of its variable, which breaks
+   the call-check shape it owes.  Row 8 is DFT's output, and
+   CFGNormalization needs none of these of it.  Row 6 also has every block reachable,
+   as stage row 6 does: SingleUseExpansion keeps SSA only then.  Up to
+   row 4 (MakeSSA's second run) the function is a valid MakeSSA input,
+   and up to row 3 (FmpLowering) it has no raw FMP operation; with
+   fmp_sig_no_param of every function, at every row, FmpLowering's run
+   leaves the blocks as they are, so it keeps make_ssa_input_ok. *)
 Definition o1_fn_row_def:
   o1_fn_row (k : num) fn <=>
-    3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)
+    (3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)) /\
+    (4 <= k /\ k <= 7 ==>
+       fn_pseudos_prefix fn /\
+       EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)) /\
+    (5 <= k /\ k <= 7 ==> wf_ssa fn) /\
+    (k = 6 ==> all_reachable fn) /\
+    (k <= 4 ==> make_ssa_input_ok fn) /\
+    (k <= 3 ==> no_raw_fmp_ops fn) /\
+    fmp_sig_no_param fn
 End
 
 (* The step contract of the k-th walk run: the step contract, with row k
    of the function rows assumed of the input and row k+1 owed of the
-   output. *)
+   output.  Every function of the observed unit is at some row, so has
+   fmp_sig_no_param, which FmpLowering reads of the callees. *)
 Definition o1_step_contract_at_def:
   o1_step_contract_at k rpolicy pass <=>
     !observed s fn out.
       fn_pass_step rpolicy pass observed s fn out /\
       o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+      EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
       o1_fn_row k fn ==>
       o1_fn_shape observed.cu_context out.fpo_function /\
       fresh_names_ok s fn out.fpo_function /\
@@ -442,15 +527,6 @@ Definition o1_step_contracts_from_def:
      o1_step_contracts_from rpolicy (SUC k) passes)
 End
 
-(* Before row 3 the rows say nothing, so the step contract is the plain
-   one. *)
-Theorem o1_step_contract_at_plain:
-  k < 2 ==>
-  (o1_step_contract_at k rpolicy pass <=> o1_step_contract rpolicy pass)
-Proof
-  simp[o1_step_contract_at_def, o1_step_contract_def, o1_fn_row_def]
-QED
-
 (* A pass with the plain step contract that takes row k to row k+1 has
    the k-th step contract. *)
 Theorem o1_step_contract_at_preserve:
@@ -458,6 +534,7 @@ Theorem o1_step_contract_at_preserve:
   (!observed s fn out.
      fn_pass_step rpolicy pass observed s fn out /\
      o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
+     EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
      o1_fn_row k fn ==>
      o1_fn_row (SUC k) out.fpo_function) ==>
   o1_step_contract_at k rpolicy pass
@@ -472,11 +549,14 @@ QED
    as the entry state has it (FmpLowering seeds its pointer variable from
    vs_initial_fmp), and "code_end" bound to the code/data boundary
    (code_layout_valid), which LowerDload's ADD [_; Label "code_end"]
-   reads. *)
+   reads.  The call is not static, as the entry state's call is
+   (call_state_rel): under a static call SSTORE and the other state
+   writes abort, and DFT, which does not order them against the reads
+   after them, could then run a read the original run never reaches. *)
 Definition o1_run_state_ok_def:
   o1_run_state_ok vs <=>
     o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
-    code_layout_valid vs
+    code_layout_valid vs /\ ~vs.vs_call_ctx.cc_static
 End
 
 (* The lowered-phase fact with the frame pointer read off the state: the
@@ -592,39 +672,6 @@ End
 (* The walk's input (row 0), SimplifyCFG's pre-walk output: every block
    reachable, definite assignment, and no PHI reading a variable written
    twice (vacuous here, with no PHI yet), which MakeSSA needs. *)
-(* What MakeSSA needs of a function it is run on: every block reachable,
-   definitions reaching their uses, and the PHIs already present (none on
-   the first run) single-defined, covering their predecessors along CFG
-   edges, and non-degenerate. *)
-Definition make_ssa_input_ok_def:
-  make_ssa_input_ok fn <=>
-    all_reachable fn /\ fn_defs_reach_uses fn /\
-    fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn /\
-    fn_phi_outputs_single_def fn /\ fn_phis_non_degenerate fn /\
-    (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       inst.inst_opcode = PHI ==>
-       ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
-       !l v. MEM (l,v) (phi_pairs inst.inst_operands) ==>
-         fn_cfg_edge fn l bb.bb_label)
-End
-
-(* make_ssa_input_ok reads only the blocks, so sealing a function's fmp
-   signature keeps it. *)
-Theorem make_ssa_input_ok_fmp_signature[simp]:
-  make_ssa_input_ok (fn with fn_fmp_signature := x) <=> make_ssa_input_ok fn
-Proof
-  `!f p. is_fn_path (f with fn_fmp_signature := x) p = is_fn_path f p` by
-    (recInduct is_fn_path_ind >> simp[is_fn_path_def, fn_cfg_edge_def]) >>
-  `fn_cfg_edge (fn with fn_fmp_signature := x) = fn_cfg_edge fn` by
-    simp[FUN_EQ_THM, fn_cfg_edge_def] >>
-  `fn_entry_label (fn with fn_fmp_signature := x) = fn_entry_label fn` by
-    simp[fn_entry_label_def, entry_block_def] >>
-  simp[make_ssa_input_ok_def, all_reachable_def, fn_reachable_def,
-       fn_defs_reach_uses_def, def_on_all_paths_def,
-       fn_phi_operands_single_def_def, fn_phis_cover_preds_def,
-       fn_phi_outputs_single_def_def, fn_phis_non_degenerate_def, fn_insts_def]
-QED
-
 Definition o1_walk_src_inv_def:
   o1_walk_src_inv D C vs <=>
     o1_src_inv D C vs /\
@@ -666,13 +713,16 @@ End
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
    the runs are matched up to.  Up to FmpLowering, which seals a
    function after its callees, the functions are in a callee-first
-   order. *)
+   order.  Rows 1 and 2 are in SSA form (MakeSSA's first run establishes
+   it, LowerDload's fresh variables keep it), which ConcretizeMemLoc's
+   pointer provenance needs. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
     if k = 0 then
       (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k <= 2 then
       (\C vs. o1_src_inv D C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\
+               EVERY ssa_form C.ctx_functions /\
                ?names. callee_first names C.ctx_functions)
     else if k = 3 then
       (\C vs. o1_static_inv C vs /\ EVERY make_ssa_input_ok C.ctx_functions /\

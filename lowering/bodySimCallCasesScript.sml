@@ -4,7 +4,9 @@
  * The cases of evaluate_ind for internal and external calls, raw calls,
  * raw_log, raw_revert, selfdestruct and create, split from
  * bodySimExprCases so they can be worked on apart from the other
- * expression cases.  Each still reduces to body_expr_ok_intro.
+ * expression cases.  Each but create and selfdestruct is its piece in a
+ * leaf theory bodySimCall*; those two hold vacuously (expr_body_pre
+ * excludes them).
  *)
 
 Theory bodySimCallCases
@@ -12,9 +14,9 @@ Ancestors
   bodySimExprCases
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
+  bodySimCallExtcall bodySimCallIntcall bodySimCallRawCall
+  bodySimCallRawCallCalldata bodySimCallRawLog bodySimCallRawRevert
 
-(* GAP (#636 operands with internal calls): external calls.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_extcall_case:
   !cx v14 is_static skip_check sig opts es v15.
     (!s'' target t nargs s'3' results t'.
@@ -29,42 +31,9 @@ Theorem body_extcall_case:
     body_exprs_ok cx (TAKE 1 es) ==>
     body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  ACCEPT_TAC extcall_body_expr_ok
 QED
 
-(* GAP (#638 the call step): the INVOKE of an internal call.  The IHs
-   give the arguments' judgments (body_results_ok), the defaults' at the
-   callee's stack (body_exprs_ok), and the callee body's (body_stmts_ok
-   at cxf, the callee's context after push_function).  The step:
-   - compile_call: intCallStep's compile_call_intcall_shape, the INVOKE
-     label by intCallLookup's compile_call_intcall_label (body_inv gives
-     its premises), and the callee's code in ctx by
-     lower_vyper_runtime_unit_internal_lookup;
-   - the arguments: the IH, then intCallArgs' stage_mem_arg_frag for
-     the staged memory arguments;
-   - the callee's entry: intCallCallee's compile_internal_prologue_entry
-     gives stmt_state_rel at the callee's start, at
-     vs with scopes := [env];
-   - the callee's body: the IH at the callee's compile env, with RetQ
-     intret_q (stack returns) or intret_mem_q (memory returns), whose
-     frame_ret_ok stmtSimReturn's compile_return_word_int_frag and
-     compile_return_tuple_int_frag and intCallReturnMem's
-     compile_internal_return_memory_frag give;
-   - the return: intCallStep's frag_exec_invoke_intret, intCallReturn's
-     eval_expr_intcall_return (source) and invoke_intret_state_rel
-     (Venom), with intCallFrame's callee_writes_above for the caller's
-     live regions, and intCallResult's store_multi_results_frag for
-     stack results.
-   Left (the push transfer): the callee body's premises at its entry:
-   body_inv (whose target conjunct needs the callee's compile env at the
-   unit's policy target, as set_*_package_target installs it) and
-   expr_sim_inv for the callee's compile env and env at cxf, and
-   frame_ret_ok for the internal return; and that the callee
-   body's code in ctx is stmts_env's in that compile env.
-   ce_locals_declared there is bodySimEntry's internal_entry_declared and
-   ce_locals_declared_params, for an env that has the parameters; the
-   body's locals_alloc_ok and stmt_exprs_ok's alloc_limits_stmt come from
-   fn_allocs_ok_body. *)
 Theorem body_intcall_case:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
@@ -134,59 +103,50 @@ Theorem body_intcall_case:
        body_results_ok cx es) ==>
     body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  ACCEPT_TAC intcall_body_expr_ok
 QED
 
-(* GAP (#636 operands with internal calls): raw_call.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_call_case:
   !cx ty flags es v18.
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  ACCEPT_TAC raw_call_body_expr_ok
 QED
 
-(* GAP (#636 operands with internal calls): raw_call with calldata.  Its
-   case lemma is still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_call_calldata_case:
   !cx ty flags es v19.
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  ACCEPT_TAC raw_call_calldata_body_expr_ok
 QED
 
-(* GAP (#636 operands with internal calls): raw_log.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_log_case:
   !cx v20 es v21.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  ACCEPT_TAC raw_log_body_expr_ok
 QED
 
-(* GAP (#636 operands with internal calls): raw_revert.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_revert_case:
   !cx v22 es v23.
     body_exprs_ok cx es ==> body_expr_ok cx (Call v22 RawRevert es v23)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  ACCEPT_TAC raw_revert_body_expr_ok
 QED
 
-(* GAP (#636 operands with internal calls): selfdestruct.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_selfdestruct_case:
   !cx v24 es v25.
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_intro >>
+  rw[exprSimHypsDefsTheory.expr_body_pre_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
+     supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
-(* GAP (#636 operands with internal calls): create.  Its case lemma is
-   still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_create_case:
   !cx ty kind has_salt rof kw_order es v26.
     (!raw_args s'' prefix t s'3' code_size t'.
@@ -214,5 +174,8 @@ Theorem body_create_case:
     (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
     body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_intro >>
+  rw[exprSimHypsDefsTheory.expr_body_pre_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
+     supportedExprTraverseTheory.expr_evm_run_root_def]
 QED

@@ -1492,7 +1492,7 @@ Proof
   gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
   `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
-       immutable_holds cenv cx t (Value v) a es'` by
+       immutable_holds cenv cx t (Value v) a es' s` by
     gvs[vv_post_def, vv_holds_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[immutable_holds_def] >> metis_tac[]) >>

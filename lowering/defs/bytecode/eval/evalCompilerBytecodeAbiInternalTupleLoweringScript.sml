@@ -69,6 +69,10 @@ val internal_tuple_call_allocs_ok_eval = save_thm
    EQT_ELIM (EVAL ``EVERY (fn_allocs_ok ^internal_tuple_call_tops)
       (^internal_tuple_call_external_sources ++ ^internal_tuple_call_internal_sources ++
        (case ^internal_tuple_call_fallback_source of NONE => [] | SOME f => [f]))``))
+(* lower_vyper_runtime_unit's immutable-section bound. *)
+val internal_tuple_call_immutables_ok_eval =
+  EQT_ELIM (EVAL ``compute_immutables_len
+      (get_struct_fields (make_struct_fields_map ^internal_tuple_call_tops)) ^internal_tuple_call_tops < 0x6000``)
 val internal_tuple_call_internal_fns_eval = save_thm
   ("internal_tuple_call_internal_fns_eval",
    weak_eval
@@ -1396,6 +1400,7 @@ val internal_tuple_call_lower_runtime_eval = save_thm
       internal_tuple_call_entry_info_eval,
       internal_tuple_call_run_lowering_eval,
       internal_tuple_call_return_buffers_ok_eval, internal_tuple_call_allocs_ok_eval,
+      internal_tuple_call_immutables_ok_eval,
       boolTheory.AND_CLAUSES, boolTheory.COND_CLAUSES,
       LET_THM, pairTheory.FST, pairTheory.SND,
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]

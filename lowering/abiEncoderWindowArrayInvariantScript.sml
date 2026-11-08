@@ -3,7 +3,7 @@ Theory abiEncoderWindowArrayInvariant
 Ancestors
   abiEncoderWindowArrayLayout abiEncoderWindowPhase abiEncoderWindowChild
   abiEncoderWindowContract abiEncoderRegisteredEffect abiEncoderExtendSim
-  exprLoweringProps venomState finite_map pred_set list
+  exprLoweringProps venomState finite_map pred_set list abiEncoderArrayPrefix
 
 Definition window_sizes32_def:
   window_sizes32 ids (s:venom_state) <=>
@@ -185,7 +185,7 @@ Theorem window_array_inv_init:
   window_array_inv ctx func owner ids ei asz msz active ty avs src dst
     ip isite islot dp dsite dslot count_op label sb cap d 0 s
 Proof
-  simp[window_array_inv_def, window_array_prefix_zero]
+  simp[window_array_inv_def, abi_encoder_array_prefix_empty]
 QED
 
 Theorem window_array_root_live_pre:

@@ -265,8 +265,8 @@ Theorem entry_param_step:
     OK (entry_bind_pairs (entry_param_pairs s [inst]) s)
 Proof
   rw[entry_param_shape_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def,
-       entry_param_pairs_def, update_var_def]
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
+  simp[entry_param_pairs_def, update_var_def]
 QED
 
 Theorem entry_param_run_insts:
@@ -305,14 +305,14 @@ Proof
   gvs[is_terminator_def]
 QED
 
-(* One single-operand NOP per parameter keeps every parameter live after
+(* One MSTORE consumer per parameter keeps every parameter live after
    the prefix, so preparing the parameters emits no code.  The return PC is
    copied by an ASSIGN before them, so it is the last live variable there and
-   the optimistic swap is a no-op.  Every instruction has at most one stack
-   operand, so the family meets the codegen arity bound for every n. *)
+   the optimistic swap is a no-op.  Every instruction has at most two stack
+   operands, so the family meets the codegen arity bound for every n. *)
 Definition entry_ret_nops_def:
   entry_ret_nops n =
-    GENLIST (\i. mk_inst (n+2+i) NOP [Var (entry_probe_name i)] []) n
+    GENLIST (\i. mk_inst (n+2+i) MSTORE [Lit 0w; Var (entry_probe_name i)] []) n
 End
 
 Definition entry_ret_family_def:
@@ -342,7 +342,8 @@ Proof
        mk_inst_def, is_pre_codegen_opcode_def,
        is_unlowered_fmp_opcode_def, is_raw_fmp_opcode_def,
        is_unlowered_internal_call_opcode_def, dead_stack_marker_def,
-       compute_operands_def, python_stack_operands_def]
+       compute_operands_def, python_stack_operands_def,
+       ir_specific_operand_order_def, get_label_def]
 QED
 
 Theorem entry_ret_family_single[local]:
@@ -369,7 +370,7 @@ Theorem entry_ret_family_mem[local]:
     inst = mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"] \/
     inst = mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"] \/
     (?i. i < n /\
-         inst = mk_inst (n+2+i) NOP [Var (entry_probe_name i)] []) \/
+         inst = mk_inst (n+2+i) MSTORE [Lit 0w; Var (entry_probe_name i)] []) \/
     inst = mk_inst (2*n+2) RET [Var "rpc"] []
 Proof
   simp[entry_ret_family_def, entry_probe_params_def, entry_ret_nops_def,
@@ -405,7 +406,7 @@ QED
 Theorem entry_ret_family_el_nop[local]:
   !k. n + 2 <= k /\ k < 2 * n + 2 ==>
     EL k (HD (entry_ret_family n).fn_blocks).bb_instructions =
-    mk_inst k NOP [Var (entry_probe_name (k - (n + 2)))] []
+    mk_inst k MSTORE [Lit 0w; Var (entry_probe_name (k - (n + 2)))] []
 Proof
   rpt strip_tac >>
   simp[entry_ret_family_def, entry_probe_params_def, entry_ret_nops_def,
@@ -434,7 +435,7 @@ Theorem entry_ret_family_small:
     [mk_inst 0 PARAM [Lit 0w] [""];
      mk_inst 1 RETPC_PARAM [Lit 1w] ["retpc"];
      mk_inst 2 ASSIGN [Var "retpc"] ["rpc"];
-     mk_inst 3 NOP [Var ""] [];
+     mk_inst 3 MSTORE [Lit 0w; Var ""] [];
      mk_inst 4 RET [Var "rpc"] []]
 Proof
   EVAL_TAC
@@ -708,7 +709,8 @@ Proof
   Cases_on `u < 2 * n + 2`
   >- (qspecl_then [`u - (n + 2)`, `u`, `entry_probe_name (u - (n + 2))`]
         mp_tac entry_ret_family_avail >>
-      simp[entry_ret_family_el_param, entry_ret_family_el_nop, mk_inst_def]) >>
+      simp[entry_ret_family_el_param, entry_ret_family_el_nop, mk_inst_def,
+           GSYM MEM_EL]) >>
   `u = 2 * n + 2` by decide_tac >> gvs[] >>
   qspecl_then [`n + 1`, `2 * n + 2`, `"rpc"`] mp_tac entry_ret_family_avail >>
   simp[entry_ret_family_el_assign, entry_ret_family_el_ret, mk_inst_def]
@@ -1016,7 +1018,8 @@ Proof
   impl_tac >- decide_tac >>
   disch_then SUBST1_TAC >> pop_assum SUBST1_TAC >>
   simp[livenessDefsTheory.liveness_transfer_def,
-       livenessDefsTheory.live_update_def, entry_ret_family_el_assign,
+       livenessDefsTheory.live_update_def,
+       livenessDefsTheory.MEM_FOLDL_append_unseen, entry_ret_family_el_assign,
        mk_inst_def, inst_defs_def, livenessDefsTheory.ordered_inst_uses_def,
        python_stack_operands_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_var_def, MEM_FILTER]
@@ -1179,64 +1182,127 @@ Proof
   BETA_TAC >> rewrite_tac[]
 QED
 
-Theorem entry_ret_family_nop_skip[local]:
-  !d k s. k + d = 2 * n + 2 /\ n + 2 <= k ==>
-    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
-      (s with vs_inst_idx := k) =
-    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
-      (s with vs_inst_idx := 2 * n + 2)
+Theorem entry_keeper_step[local]:
+  step_inst_base (mk_inst id MSTORE [Lit 0w; Var x] []) s =
+    case FLOOKUP s.vs_vars x of
+      NONE => Error "undefined operand"
+    | SOME v => OK (mstore 0 v s)
 Proof
-  Induct
-  >- (rpt strip_tac >> `k = 2 * n + 2` by decide_tac >> simp[]) >>
-  rpt strip_tac >>
-  `k < 2 * n + 2 /\ k < 2 * n + 3` by decide_tac >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[get_instruction_def, entry_ret_family_blocks, entry_ret_family_el_nop,
-       step_inst_non_invoke, mk_inst_def, step_inst_base_def,
-       is_terminator_def] >>
-  first_x_assum irule >> decide_tac
+  simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+       eval_operand_def, lookup_var_def]
 QED
 
-(* From the index after the parameters, the block copies retpc into rpc,
-   skips the NOPs and returns its whole state. *)
-Theorem entry_ret_family_tail_exec[local]:
-  !fuel ctx t. t.vs_inst_idx = n + 1 ==>
-    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) t =
-    case FLOOKUP t.vs_vars "retpc" of
-      NONE => Error "undefined operand"
-    | SOME r => IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-        ((update_var "rpc" r t) with vs_inst_idx := 2 * n + 2)
+Theorem entry_keeper_vars[local,simp]:
+  (mstore off v s).vs_vars = s.vs_vars
 Proof
-  rpt strip_tac >>
-  `n + 1 < 2 * n + 3` by decide_tac >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[mstore_def]
+QED
+
+Theorem entry_ret_family_nop_skip[local]:
+  !d k s rv u. k + d = 2 * n + 2 /\ n + 2 <= k /\
+    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+      (s with vs_inst_idx := k) = IntRet rv u ==>
+    u.vs_vars = s.vs_vars
+Proof
+  Induct
+  >- (rpt strip_tac >> gvs[] >>
+      qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+      once_rewrite_tac[exec_block_def] >>
+      simp[get_instruction_def, entry_ret_family_blocks,
+           entry_ret_family_el_ret, step_inst_non_invoke, mk_inst_def,
+           step_inst_base_def, eval_operands_def, eval_operand_def,
+           lookup_var_def] >>
+      Cases_on `FLOOKUP s.vs_vars "rpc"` >> simp[FRONT_DEF] >>
+      rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  `k < 2 * n + 2 /\ k < 2 * n + 3` by decide_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def, entry_ret_family_blocks, entry_ret_family_el_nop,
+       step_inst_non_invoke, SRULE [mk_inst_def] entry_keeper_step,
+       is_terminator_def, mk_inst_def] >>
+  Cases_on `FLOOKUP s.vs_vars (entry_probe_name (k - (n + 2)))` >> simp[] >>
+  rename1 `FLOOKUP s.vs_vars _ = SOME v` >> strip_tac >>
+  qpat_x_assum `!k s rv u. _`
+    (qspecl_then [`SUC k`, `mstore 0 v (s with vs_inst_idx := k)`] mp_tac) >>
+  simp[] >> disch_then irule >> decide_tac
+QED
+
+Theorem entry_ret_family_suffix_exists[local]:
+  !d k s r. k + d = 2 * n + 2 /\ n + 2 <= k /\
+    FLOOKUP s.vs_vars "rpc" = SOME r /\
+    (!i. k - (n + 2) <= i /\ i < n ==>
+         ?v. FLOOKUP s.vs_vars (entry_probe_name i) = SOME v) ==>
+    ?u. exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+          (s with vs_inst_idx := k) =
+          IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u /\
+        u.vs_vars = s.vs_vars
+Proof
+  Induct
+  >- (rpt strip_tac >> gvs[] >>
+      once_rewrite_tac[exec_block_def] >>
+      simp[get_instruction_def, entry_ret_family_blocks,
+           entry_ret_family_el_ret, step_inst_non_invoke, mk_inst_def,
+           step_inst_base_def, eval_operands_def, eval_operand_def,
+           lookup_var_def, FRONT_DEF]) >>
+  rpt gen_tac >> strip_tac >>
+  `k < 2 * n + 2 /\ k < 2 * n + 3` by decide_tac >>
+  `?v. FLOOKUP s.vs_vars (entry_probe_name (k - (n + 2))) = SOME v` by
+    (first_x_assum irule >> decide_tac) >>
+  once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def, entry_ret_family_blocks, entry_ret_family_el_nop,
+       step_inst_non_invoke, SRULE [mk_inst_def] entry_keeper_step,
+       is_terminator_def, mk_inst_def] >>
+  qpat_x_assum `!k s r. _`
+    (qspecl_then [`SUC k`, `mstore 0 v (s with vs_inst_idx := k)`, `r`] mp_tac) >>
+  simp[]
+QED
+
+(* Successful execution of the stores preserves variables, not memory. *)
+Theorem entry_ret_family_tail_exec[local]:
+  !fuel ctx t rv u. t.vs_inst_idx = n + 1 /\
+    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) t = IntRet rv u ==>
+    ?r. FLOOKUP t.vs_vars "retpc" = SOME r /\
+        u.vs_vars = (update_var "rpc" r t).vs_vars
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[exec_block_def] >>
   simp[get_instruction_def, entry_ret_family_blocks,
        entry_ret_family_el_assign, step_inst_non_invoke, mk_inst_def,
        step_inst_base_def, eval_operand_def, lookup_var_def,
        is_terminator_def] >>
   Cases_on `FLOOKUP t.vs_vars "retpc"` >> simp[] >>
-  irule EQ_TRANS >>
-  qexists_tac `exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
-    ((update_var "rpc" x t) with vs_inst_idx := 2 * n + 2)` >>
-  conj_tac
-  >- (irule entry_ret_family_nop_skip >>
-      conj_tac >- decide_tac >> qexists_tac `n` >> decide_tac) >>
-  `2 * n + 2 < 2 * n + 3` by decide_tac >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[get_instruction_def, entry_ret_family_blocks, entry_ret_family_el_ret,
-       step_inst_non_invoke, mk_inst_def, step_inst_base_def,
-       eval_operands_def, eval_operand_def, lookup_var_def, update_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE, FRONT_DEF]
+  rename1 `FLOOKUP t.vs_vars "retpc" = SOME r` >> strip_tac >>
+  irule entry_ret_family_nop_skip >>
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `n` >> simp[]
+QED
+
+Theorem entry_ret_family_tail_exists[local]:
+  t.vs_inst_idx = n + 1 /\ FLOOKUP t.vs_vars "retpc" = SOME r /\
+  (!i. i < n ==> ?v. FLOOKUP t.vs_vars (entry_probe_name i) = SOME v) ==>
+  ?u. exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) t =
+        IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u /\
+      u.vs_vars = (update_var "rpc" r t).vs_vars
+Proof
+  strip_tac >> once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def, entry_ret_family_blocks,
+       entry_ret_family_el_assign, step_inst_non_invoke, mk_inst_def,
+       step_inst_base_def, eval_operand_def, lookup_var_def,
+       is_terminator_def] >>
+  irule entry_ret_family_suffix_exists >>
+  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  qexists_tac `n` >> simp[]
 QED
 
 Theorem entry_ret_family_exec[local]:
   EVERY (entry_param_shape s)
     (get_params (HD (entry_ret_family n).fn_blocks).bb_instructions) ==>
-  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+  ?u. exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
     (s with vs_inst_idx := 0) =
-  IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-    ((update_var "rpc" s.vs_return_pc_token (entry_ret_prefix_state n s))
-       with vs_inst_idx := 2 * n + 2)
+      IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u /\
+    u.vs_vars = (update_var "rpc" s.vs_return_pc_token
+                  (entry_ret_prefix_state n s)).vs_vars
 Proof
   strip_tac >>
   `?suffix. (HD (entry_ret_family n).fn_blocks).bb_instructions =
@@ -1255,20 +1321,18 @@ Proof
   rewrite_tac[GSYM entry_ret_prefix_state_def] >>
   `(entry_ret_prefix_state n s).vs_inst_idx = n + 1` by
     simp[entry_ret_prefix_state_def] >>
-  drule entry_ret_family_tail_exec >>
-  disch_then (fn th => rewrite_tac[th]) >>
-  simp[entry_ret_prefix_retpc_lookup]
+  irule entry_ret_family_tail_exists >>
+  simp[entry_ret_prefix_retpc_lookup, entry_ret_prefix_lookup]
 QED
 
 Theorem entry_ret_family_wrap_exec:
   s.vs_params = entry_wrap_inputs ==>
-  exec_block fuel ctx
+  ?u. exec_block fuel ctx
     (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
     (s with vs_inst_idx := 0) =
-  IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-    ((update_var "rpc" s.vs_return_pc_token
-       (entry_ret_prefix_state (SUC (dimword (:256))) s))
-       with vs_inst_idx := 2 * SUC (dimword (:256)) + 2)
+      IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u /\
+    u.vs_vars = (update_var "rpc" s.vs_return_pc_token
+       (entry_ret_prefix_state (SUC (dimword (:256))) s)).vs_vars
 Proof
   strip_tac >> irule entry_ret_family_exec >>
   irule entry_ret_family_wrap_param_shape >> first_assum ACCEPT_TAC
@@ -1287,15 +1351,16 @@ Theorem entry_ret_family_witness_lookup[local]:
     FLOOKUP t.vs_vars x = FLOOKUP (entry_ret_prefix_state n s).vs_vars x
 Proof
   strip_tac >> gen_tac >> strip_tac >>
-  `"rpc" <> x` by (strip_tac >> gvs[]) >>
-  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-  drule_then (fn th => rewrite_tac[th]) entry_ret_family_exec >>
-  drule_then (fn th => rewrite_tac[th]) entry_ret_family_tail_exec >>
-  Cases_on `FLOOKUP t.vs_vars "retpc"` >- simp[] >>
-  rewrite_tac[optionTheory.option_case_def] >>
-  disch_then (mp_tac o Q.AP_TERM
-    `\r. case r of IntRet v st => FLOOKUP st.vs_vars x | _ => NONE`) >>
-  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+  drule entry_ret_family_exec >>
+  disch_then (qspecl_then [`fuel`, `ctx`]
+    (qx_choose_then `u` strip_assume_tac)) >>
+  `exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) t =
+     IntRet <|iret_values := []; iret_adopt_fmp := NONE|> u` by metis_tac[] >>
+  drule_all entry_ret_family_tail_exec >> strip_tac >>
+  qpat_x_assum `u.vs_vars = _` mp_tac >>
+  simp[update_var_def] >>
+  disch_then (mp_tac o Q.AP_TERM `\vars. FLOOKUP vars x`) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem entry_ret_family_wrap_witness:

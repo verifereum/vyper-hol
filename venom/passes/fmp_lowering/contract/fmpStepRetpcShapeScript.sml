@@ -609,7 +609,7 @@ Proof
   gvs[fmpLowerDefsTheory.fmp_seal_def]
   >- (first_x_assum drule >> simp[] >> metis_tac[]) >>
   Cases_on `root_layout` >> gvs[] >>
-  drule_all fmpStepSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
+  drule_all irSupplyTheory.fresh_ir_var_inst_ok >> strip_tac >>
   drule (cj 1 fresh_ir_var_contract) >> strip_tac >>
   drule (cj 2 fresh_ir_var_contract) >> strip_tac >>
   drule_all fmp_make_root_layout_inst_ok >> strip_tac >>
