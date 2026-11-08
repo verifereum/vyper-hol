@@ -1029,7 +1029,7 @@ Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >> simp[]
 QED
 
-Theorem gas_outcome_exec_conseq[local]:
+Theorem gas_outcome_exec_conseq:
   gas_outcome memory tops (ctx,func) source (es,s) Q R /\
   (!marks res mid t.
      gas_marked_exec memory (ctx,func) source (es,s) marks res mid (OK t) /\
