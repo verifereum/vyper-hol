@@ -66,7 +66,7 @@ Ancestors
   codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
-  frameOutcome callTrace unitShapeDefs vfmExecutionProp
+  frameOutcome callTrace unitShapeDefs vfmExecutionProp gasCount
 Libs
   BasicProvers
 
@@ -299,6 +299,26 @@ Proof
   >- (res_tac >> gvs[venom_asm_terminal_rel_def]) >>
   rename1 `Abort a _` >> Cases_on `a` >>
   res_tac >> gvs[venom_asm_terminal_rel_def] >> metis_tac[]
+QED
+
+(* A fixed replay count cannot consume zero padding beyond the EVM's
+   recorded readings. Fresh codegen invariants are supplied per input list. *)
+Theorem codegen_gas_replay_count_bound:
+  !fuel rpolicy unit cplan prog vs es r es' n vf.
+    generate_context_plan unit.cu_context = SOME cplan /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    initial_ctx_rel cplan prog unit.cu_context vs es /\
+    (!gs. ?Inv.
+      codegen_context_obligations Inv unit.cu_context cplan /\
+      codegen_reachability_package Inv unit.cu_context
+        (vs with vs_gas_readings := gs)) /\
+    run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
+    gas_replay_at n (run_context fuel unit.cu_context) vs /\
+    (run_context fuel unit.cu_context vs = Halt vf \/
+     ?a. run_context fuel unit.cu_context vs = Abort a vf)
+    ==> n <= LENGTH (gas_readings es)
+Proof
+  rpt strip_tac
 QED
 
 (* TASK056 RETIRED SOURCE ARCHIVE. Replaced by initial_ctx_rel and S7 above;
