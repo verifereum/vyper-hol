@@ -795,3 +795,379 @@ Proof
   qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
   irule inline_opaque_frame_write_establish >> simp[]
 QED
+
+Theorem inline_write2_clone_result:
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  (!a b s t. inline_shared_frame s = inline_shared_frame t ==>
+    inline_shared_frame (f a b s) = inline_shared_frame (f a b t)) /\
+  (!a b s. (f a b s).vs_vars = s.vs_vars) /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (exec_write2 f inst s) (exec_write2 f (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >> Cases_on `exec_write2 f inst s`
+  >- (simp[] >> irule inline_write2_clone_frame >> metis_tac[])
+  >- gvs[exec_write2_def, AllCaseEqs()]
+  >- gvs[exec_write2_def, AllCaseEqs()]
+  >- gvs[exec_write2_def, AllCaseEqs()] >>
+  gvs[exec_write2_def, AllCaseEqs()] >>
+  gvs[eval_operands_def, AllCaseEqs(), clone_instruction_def, exec_write2_def]
+QED
+
+Theorem inline_write2_opcode_dispatch:
+  MEM inst.inst_opcode [MSTORE; MSTORE8] ==>
+  ?f. (!s. step_inst_base inst s = exec_write2 f inst s) /\
+    (!s. step_inst_base (clone_instruction p labels inst) s =
+      exec_write2 f (clone_instruction p labels inst) s) /\
+    (!a b s. inline_shared_frame (f a b s) = f a b (inline_shared_frame s)) /\
+    (!a b s. (f a b s).vs_vars = s.vs_vars)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs]
+  >- (qexists `\a b s. mstore (w2n a) b s` >>
+      simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def, mstore_def]) >>
+  qexists `\a b s. mstore8 (w2n a) b s` >>
+  simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def, mstore8_def]
+QED
+
+Theorem inline_write2_opcode_clone_result:
+  MEM inst.inst_opcode [MSTORE; MSTORE8] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  drule inline_write2_opcode_dispatch >>
+  disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+  simp[step_inst_non_invoke] >>
+  irule inline_write2_clone_result >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_pure1_clone_result:
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (exec_pure1 f inst s) (exec_pure1 f (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >> Cases_on `exec_pure1 f inst s`
+  >- (simp[] >> irule inline_pure1_clone_frame >> simp[] >> qexists `s` >> simp[])
+  >- gvs[exec_pure1_def, AllCaseEqs()]
+  >- gvs[exec_pure1_def, AllCaseEqs()]
+  >- gvs[exec_pure1_def, AllCaseEqs()] >>
+  gvs[exec_pure1_def, AllCaseEqs()] >>
+  gvs[eval_operands_def, AllCaseEqs(), clone_instruction_def, exec_pure1_def]
+QED
+
+Theorem inline_pure3_clone_result:
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (exec_pure3 f inst s) (exec_pure3 f (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >> Cases_on `exec_pure3 f inst s`
+  >- (simp[] >> irule inline_pure3_clone_frame >> simp[] >> qexists `s` >> simp[])
+  >- gvs[exec_pure3_def, AllCaseEqs()]
+  >- gvs[exec_pure3_def, AllCaseEqs()]
+  >- gvs[exec_pure3_def, AllCaseEqs()] >>
+  gvs[exec_pure3_def, AllCaseEqs()] >>
+  gvs[clone_instruction_def] >>
+  gvs[eval_operands_def, AllCaseEqs()]
+QED
+
+Theorem inline_read0_clone_result:
+  inst.inst_outputs = [x] /\
+  (!s t. inline_shared_frame s = inline_shared_frame t ==> f s = f t) /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (exec_read0 f inst s) (exec_read0 f (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >> Cases_on `exec_read0 f inst s`
+  >- (simp[] >> irule inline_read0_clone_frame >> metis_tac[])
+  >- gvs[exec_read0_def]
+  >- gvs[exec_read0_def]
+  >- gvs[exec_read0_def] >>
+  gvs[exec_read0_def]
+QED
+
+Theorem inline_read1_clone_result:
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  (!w s t. inline_shared_frame s = inline_shared_frame t ==> f w s = f w t) /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (exec_read1 f inst s) (exec_read1 f (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >> Cases_on `exec_read1 f inst s`
+  >- (simp[] >> irule inline_read1_clone_frame >> metis_tac[])
+  >- gvs[exec_read1_def, AllCaseEqs()]
+  >- gvs[exec_read1_def, AllCaseEqs()]
+  >- gvs[exec_read1_def, AllCaseEqs()] >>
+  gvs[exec_read1_def, AllCaseEqs()] >>
+  gvs[clone_instruction_def] >> gvs[eval_operands_def, AllCaseEqs()]
+QED
+
+Theorem inline_pure13_opcode_clone_result:
+  (inline_pure1_opcode inst.inst_opcode \/ inline_pure3_opcode inst.inst_opcode) /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    gvs[inline_pure1_opcode_def, inline_pure3_opcode_def] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `inline_pure1_opcode inst.inst_opcode`
+  >- (drule inline_pure1_opcode_dispatch >>
+      disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+      simp[] >> irule inline_pure1_clone_result >> simp[]) >>
+  gvs[] >> drule inline_pure3_opcode_dispatch >>
+  disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+  simp[] >> irule inline_pure3_clone_result >> simp[]
+QED
+
+Theorem inline_read_opcode_clone_result:
+  (inline_read0_opcode inst.inst_opcode \/ inline_read1_opcode inst.inst_opcode) /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    gvs[inline_read0_opcode_def, inline_read1_opcode_def] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `inline_read0_opcode inst.inst_opcode`
+  >- (drule inline_read0_opcode_dispatch >>
+      disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+      simp[] >> irule inline_read0_clone_result >> simp[] >> metis_tac[]) >>
+  gvs[] >> drule inline_read1_opcode_dispatch >>
+  disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+  simp[] >> irule inline_read1_clone_result >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_opaque_frame_exceptional_halt:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_opaque_frame_rel ren V opaque saved P
+    (halt_state (set_returndata [] s)) (halt_state (set_returndata [] t))
+Proof
+  rpt strip_tac >> irule inline_opaque_frame_shared_effect >>
+  simp[halt_state_def, set_returndata_def] >> conj_tac
+  >- gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+       inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+       venom_state_component_equality] >>
+  qexistsl [`s`, `t`] >> simp[]
+QED
+
+Theorem inline_storage_opcode_dispatch:
+  MEM inst.inst_opcode [SSTORE; TSTORE] ==>
+  ?f. (!s. step_inst_base inst s =
+       if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)
+       then Abort ExHalt_abort (halt_state (set_returndata [] s))
+       else exec_write2 f inst s) /\
+    (!s. step_inst_base (clone_instruction p labels inst) s =
+       if s.vs_call_ctx.cc_static /\
+          IS_SOME (eval_operands (MAP (clone_operand p labels) inst.inst_operands) s)
+       then Abort ExHalt_abort (halt_state (set_returndata [] s))
+       else exec_write2 f (clone_instruction p labels inst) s) /\
+    (!a b s. inline_shared_frame (f a b s) = f a b (inline_shared_frame s)) /\
+    (!a b s. (f a b s).vs_vars = s.vs_vars)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs]
+  >- (qexists `\a b s. sstore a b s` >>
+      simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def, sstore_def,
+        contract_storage_def]) >>
+  qexists `\a b s. tstore a b s` >>
+  simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def, tstore_def,
+    contract_transient_def]
+QED
+
+Theorem inline_storage_opcode_clone_result:
+  MEM inst.inst_opcode [SSTORE; TSTORE] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  drule inline_storage_opcode_dispatch >>
+  disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `t.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)`
+  >- simp[inline_opaque_frame_exceptional_halt] >>
+  simp[] >> irule inline_write2_clone_result >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_simple_opcode_clone_result:
+  MEM inst.inst_opcode [NOP; STOP; SINK; INVALID] /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >>
+  gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      halt_state_def, set_returndata_def, lookup_var_def, venom_state_component_equality]
+QED
+
+Theorem inline_fmp_read_clone_result:
+  MEM inst.inst_opcode [GETFMP; INITIAL_FMP] /\
+  inst.inst_operands = [] /\ inst.inst_outputs = [x] /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `s.vs_fmp = t.vs_fmp /\ s.vs_initial_fmp = t.vs_initial_fmp` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  irule inline_opaque_frame_write_establish >> simp[]
+QED
+
+Theorem inline_bump_clone_result:
+  inst.inst_opcode = BUMP /\ inst.inst_operands = [a;b] /\
+  inst.inst_outputs = [x;y] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!u v. u IN V UNION {x;y} /\ v IN V UNION {x;y} ==>
+    (ren u = ren v <=> u = v)) /\
+  ren x NOTIN P /\ ren y NOTIN P /\
+  ren x = STRCAT p x /\ ren y = STRCAT p y ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (V UNION {x;y}) opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  Cases_on `eval_operand a s` >> Cases_on `eval_operand b s` >>
+  gvs[eval_operands_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke, clone_instruction_def, step_inst_base_opcode_eqs] >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_assum `ren y = STRCAT p y` (fn th => rewrite_tac[GSYM th]) >>
+  `V UNION {x;y} = y INSERT (x INSERT V)` by SET_TAC[] >>
+  pop_assum SUBST1_TAC >>
+  irule inline_opaque_frame_write_establish >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  metis_tac[inline_opaque_frame_write_establish]
+QED
+
+Theorem inline_assert_clone_result:
+  MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE] /\
+  inst.inst_operands = [c] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  Cases_on `eval_operand c s` >> gvs[eval_operands_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >>
+  Cases_on `x = 0w` >> simp[] >>
+  gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    halt_state_def, revert_state_def, set_returndata_def, lookup_var_def,
+    venom_state_component_equality]
+QED
+
+Theorem inline_return_revert_clone_result:
+  MEM inst.inst_opcode [RETURN; REVERT] /\
+  inst.inst_operands = [a;b] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  Cases_on `eval_operand a s` >> Cases_on `eval_operand b s` >>
+  gvs[eval_operands_def, AllCaseEqs()] >>
+  simp[step_inst_non_invoke] >>
+  Cases_on `inst.inst_opcode` >> gvs[] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >>
+  gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    halt_state_def, revert_state_def, set_returndata_def, lookup_var_def,
+    venom_state_component_equality]
+QED
+
