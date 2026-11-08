@@ -31,7 +31,7 @@ Proof
   Cases_on `i < ncount` >> simp[bool_to_word_def]
 QED
 
-Theorem typed_sa_header_control[local]:
+Theorem typed_sa_header_control:
   ~s.vs_halted /\ s.vs_inst_idx = 0 /\
   eval_operand (Var ctr) s = SOME (n2w i) /\
   i <= ncount /\ ncount < dimword(:256) ==>
@@ -58,7 +58,7 @@ Proof
 
 QED
 
-Theorem typed_sa_header_mem_safe[local]:
+Theorem typed_sa_header_mem_safe:
   s.vs_inst_idx = 0 ==>
   mem_safe_block fuel ctx
     <|bb_label := hdr; bb_instructions :=
