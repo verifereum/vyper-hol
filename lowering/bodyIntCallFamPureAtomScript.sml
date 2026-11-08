@@ -6,7 +6,8 @@ Ancestors
   exprSimDefs exprSimAggregateSource exprLoweringProps exprOperandVar
   gasOutcome gasSummary fragGasMode exprSimNameValue exprSimTopLevel
   exprSimFlagWord exprSimLeaves exprSimHyps exprLowering supportedExprTraverse
-  supportedExprs exprSimSource
+  supportedExprs exprSimSource exprSimSubscriptMap vyperTypeSystem
+  vyperStoragePlaceProvenance exprSimMapDefs vyperState context
 
 Theorem joint_res_gas_obs[simp]:
   intcall_joint_res fp ce env (es with gas_obs := gs) sa s <=>
@@ -103,6 +104,49 @@ Proof
   metis_tac[compile_literal_case_sim, expr_ok_def]
 QED
 
+Theorem intcall_toplevel_map_producer:
+  intcall_map_producer fp (TopLevelName ann (src,id))
+Proof
+  rw[intcall_map_producer_def] >>
+  `env_consistent env fp.jc_cx es /\
+   ?kt vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt)` by
+    gvs[expr_map_pre_def, expr_sim_inv_def, well_typed_expr_def, AllCaseEqs()] >>
+  drule_all vyperTypeEnvTheory.env_consistent_toplevel_hashmap_static >> strip_tac >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  rename1 `lookup_var_slot_from_layout fp.jc_cx tr src id_str = SOME slot` >>
+  drule_all lookup_global_mapping >> strip_tac >>
+  `storage_mapping_region fp.jc_cx tr (n2w slot) (HashMapT kt vt)` by
+    (irule lookup_global_mapping_region >> qexistsl [`src`, `es`, `es`, `id`] >> simp[]) >>
+  `storage_vars_rel ce fp.jc_cx /\ transient_vars_rel ce fp.jc_cx` by
+    gvs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def] >>
+  drule_at (Pat `find_var_decl_by_name _ _ = _`) toplevel_storage_ce_vars_decl >>
+  simp[var_decl_transient_def] >> disch_then drule_all >> strip_tac >>
+  `compile_expr ce ty (TopLevelName ann (src,id)) sa =
+     (LocatedValue ann (mk_ptr (Lit (n2w slot))
+        (if tr then LocTransient else LocStorage)),sa)` by
+    (Cases_on `tr` >> gvs[compile_expr_def, vyperASTTheory.expr_type_def]) >>
+  gvs[] >> rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INL (HashMapRef tr (n2w slot) kt vt)`, `es`, `OK s`] >>
+  conj_tac >- (irule toplevel_mapping_marked_exec >> simp[]) >>
+  disj1_tac >> simp_tac std_ss [] >> qexists `s` >> simp_tac std_ss [] >>
+  qexistsl [`tr`, `n2w slot`, `kt`, `vt`] >>
+  simp[slot_loc_def, mk_ptr_def, venomStateTheory.eval_operand_def] >>
+  simp[intcall_expr_cont_def, locals_kept_def]
+QED
+
+Theorem intcall_pure_atom_map:
+  intcall_map_producer fp (Name ann x) /\
+  intcall_map_producer fp (TopLevelName ann id) /\
+  intcall_map_producer fp (FlagMember ann id mid) /\
+  intcall_map_producer fp (Literal ann lit)
+Proof
+  rpt conj_tac
+  >- simp[intcall_map_producer_def, expr_map_pre_def, well_typed_expr_def]
+  >- (Cases_on `id` >> simp[intcall_toplevel_map_producer])
+  >> simp[intcall_map_producer_def, expr_map_pre_def, well_typed_expr_def]
+QED
+
 Theorem intcall_pure_atom_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
@@ -111,5 +155,6 @@ Theorem intcall_pure_atom_step:
    (?ty n m. e = FlagMember ty n m) \/ (?ty l. e = Literal ty l)) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  cheat
+  strip_tac >> gvs[] >>
+  metis_tac[intcall_pure_atom_expr, intcall_pure_atom_map]
 QED
