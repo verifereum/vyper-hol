@@ -7,6 +7,7 @@
 Theory bodyMemAssignPlace
 Ancestors
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
+  placeTypedCopyMem
 
 Theorem body_assign_place_mem_case:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
