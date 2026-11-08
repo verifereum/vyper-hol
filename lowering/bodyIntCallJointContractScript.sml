@@ -85,6 +85,18 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
+(* A supported program declares no memberless struct: the interim
+   condition trunk's supported_program carries until the checker's
+   rejection of memberless structs (what Vyper rejects) reaches it.  Held
+   here; it is proved once supported_declaration_headers' StructDecl clause
+   requires fields <> []. *)
+Theorem supported_program_struct_fields_nonempty:
+  supported_program tops /\ supported_struct_fields tops id = SOME fs ==>
+  fs <> []
+Proof
+  cheat
+QED
+
 (* The hypotheses on the fixed parameters alone: P lies below lo and clear
    of every staged allocation; the graph witnesses of call_evaluation_safe
    for owner; the return PC, the root return buffer's pointer and the
