@@ -1,6 +1,6 @@
 Theory abiArgsLabelBoundary
 Ancestors compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver
-  fragExec venomExecProofs venomExecSemantics
+  fragExec venomExecProofs venomExecSemantics exprSimAbiEncodeArgsCountedLabels
 
 (* Operational steps include returning INVOKE: the caller label map survives. *)
 Theorem abi_args_step_labels:
@@ -59,7 +59,19 @@ Theorem abi_args_state_rel_label_transport:
   (stmt_state_rel ctx func ce cx es (s with vs_labels := labels) <=>
    stmt_state_rel ctx func ce cx es s)
 Proof
-  cheat
+  strip_tac >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+       local_ptrs_rel_def, local_region_def, local_backed_def,
+       venomStateTheory.lookup_var_def, storage_rel_def, transient_rel_def,
+       accounts_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       exprLoweringPropsTheory.alloca_room_def,
+       exprLoweringPropsTheory.pending_alloca_size_def,
+       exprLoweringPropsTheory.immutable_alloca_sep_def,
+       exprLoweringPropsTheory.fmp_room_def]
 QED
 
 Theorem abi_args_delete_unprotected_label:
@@ -68,7 +80,13 @@ Theorem abi_args_delete_unprotected_label:
   immutable_base_zero ce (s with vs_labels := s.vs_labels \\ l) =
   immutable_base_zero ce s
 Proof
-  cheat
+  namedCases_on `ce.ce_imm_alloca` ["", "immop"]
+  >- (simp[immutable_base_zero_def, finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+      metis_tac[]) >>
+  Cases_on `immop` >>
+  simp[immutable_base_zero_def, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.DOMSUB_FLOOKUP_THM] >>
+  metis_tac[]
 QED
 
 Theorem abi_args_success_label_classification:
@@ -89,7 +107,7 @@ Theorem abi_args_empty_tuple_footprint:
   value_has_type (TupleTV []) (ArrayV (TupleV [])) /\
   (!p mem. val_in_memory (TupleTV []) (ArrayV (TupleV [])) p mem)
 Proof
-  cheat
+  EVAL_TAC >> simp[]
 QED
 
 Theorem abi_args_runtime_empty_tuple_location:
@@ -97,7 +115,9 @@ Theorem abi_args_runtime_empty_tuple_location:
   expr_val_rel cx (TupleT []) (ArrayV (TupleV [])) (Label "runtime_begin") s /\
   expr_val_at ce cx (TupleT []) sa sb es (ArrayV (TupleV [])) (Label "runtime_begin") s
 Proof
-  cheat
+  simp[expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def,
+       vyperValueTheory.evaluate_type_def, is_word_type_def,
+       abi_args_empty_tuple_footprint, valueEncodingTheory.val_in_memory_def]
 QED
 
 Theorem abi_args_update_runtime_label:
@@ -106,7 +126,12 @@ Theorem abi_args_update_runtime_label:
   immutable_base_zero ce
     (s with vs_labels := s.vs_labels |+ ("runtime_begin",w))
 Proof
-  cheat
+  namedCases_on `ce.ce_imm_alloca` ["", "immop"]
+  >- simp[immutable_base_zero_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `immop` >>
+  simp[immutable_base_zero_def, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
 QED
 
 Theorem abi_args_state_rel_update_runtime:
@@ -115,7 +140,13 @@ Theorem abi_args_state_rel_update_runtime:
   stmt_state_rel ctx func ce cx es
     (s with vs_labels := s.vs_labels |+ ("runtime_begin",w))
 Proof
-  cheat
+  strip_tac >>
+  `immutable_base_zero ce s` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `immutable_base_zero ce
+     (s with vs_labels := s.vs_labels |+ ("runtime_begin",w))` by
+    metis_tac[abi_args_update_runtime_label] >>
+  metis_tac[abi_args_state_rel_label_transport]
 QED
 
 Theorem abi_args_runtime_word_observed:
@@ -148,14 +179,19 @@ QED
 Theorem abi_args_zero_footprint_size:
   val_footprint tv v = 0 ==> type_memory_size tv = 0
 Proof
-  cheat
+  Cases_on `v` >> simp[val_footprint_def] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem abi_args_zero_footprint_relocate:
   val_in_memory tv v src mem /\ val_wf tv v /\ val_footprint tv v = 0 ==>
   val_in_memory tv v dst mem'
 Proof
-  cheat
+  strip_tac >>
+  `type_memory_size tv = 0` by metis_tac[abi_args_zero_footprint_size] >>
+  irule valueEncodingPropsTheory.val_in_memory_relocate >>
+  simp[] >> qexistsl_tac [`mem`, `0`, `src`] >>
+  simp[valueEncodingTheory.mem_bytes_at_def]
 QED
 
 Theorem abi_args_runtime_zero_transport:
@@ -167,7 +203,12 @@ Theorem abi_args_runtime_zero_transport:
   expr_val_rel cx ty v (Label "runtime_begin") u /\
   expr_val_at ce cx ty sa sb es' v (Label "runtime_begin") u
 Proof
-  cheat
+  strip_tac >>
+  `IS_SOME (FLOOKUP u.vs_labels "runtime_begin")` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_def] >>
+  Cases_on `FLOOKUP u.vs_labels "runtime_begin"` >> gvs[] >>
+  gvs[expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def] >>
+  metis_tac[abi_args_zero_footprint_relocate]
 QED
 
 Theorem abi_args_local_region_frontier:
@@ -175,7 +216,9 @@ Theorem abi_args_local_region_frontier:
   local_region ce es.scopes s name b sz ==>
   b + sz <= s.vs_alloca_next
 Proof
-  cheat
+  simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+       local_ptrs_rel_def, local_region_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >> gvs[]
 QED
 
 Theorem abi_args_value_at_frontier:
@@ -185,7 +228,14 @@ Theorem abi_args_value_at_frontier:
   eval_operand op s = SOME w /\ 0 < val_footprint tv v ==>
   w2n w + val_footprint tv v <= s.vs_alloca_next
 Proof
-  cheat
+  strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  >- (fs[exprLoweringPropsTheory.stmt_state_rel_def,
+          venomMemDefsTheory.alloca_inv_def,
+          venomMemDefsTheory.alloca_next_valid_def] >>
+      first_x_assum drule >> decide_tac) >>
+  drule_all abi_args_local_region_frontier >> decide_tac
 QED
 
 Theorem abi_args_runtime_footprint_observed:
