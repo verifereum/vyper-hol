@@ -216,7 +216,7 @@ Proof
   `(!(cx:evaluation_context) (s:stmt). T) /\
    (!(cx:evaluation_context) (ss:stmt list). T) /\
    (!(cx:evaluation_context) (it:iterator). T) /\
-   (!(cx:evaluation_context) (ty:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+   (!(cx:evaluation_context) (ty:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
    (!(cx:evaluation_context) (e:expr). T) /\
    (!(cx:evaluation_context) (es:expr list). T) /\
    (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
@@ -565,23 +565,35 @@ Proof
 QED
 
 Theorem case_eval_for_cons_dom[local]:
-  ∀cx nm tyv body v vs.
-    (* IH for eval_for: conditional on push_scope_with_var succeeding and finally succeeding with broke=F *)
-    (∀s'' x t s'³' broke t'.
+  ∀cx nm tyv body r vs.
+    (* IH for eval_for: conditional on the element read, push_scope_with_var and finally succeeding with broke=F *)
+    (∀s0 v s1 s'' x t s'³' broke t'.
+       read_result cx r s0 = (INL v, s1) ∧
        push_scope_with_var nm tyv v s'' = (INL x, t) ∧
        finally (try (do eval_stmts cx body; return F od) handle_loop_exception) pop_scope s'³' = (INL broke, t') ∧
        ¬broke ⇒
        ∀st res st'. eval_for cx tyv nm body vs st = (res, st') ⇒ preserves_scopes_dom st st') ∧
-    (* IH for eval_stmts: conditional on push_scope_with_var succeeding *)
-    (∀s'' x t. push_scope_with_var nm tyv v s'' = (INL x, t) ⇒
+    (* IH for eval_stmts: conditional on the element read and push_scope_with_var succeeding *)
+    (∀s0 v s1 s'' x t. read_result cx r s0 = (INL v, s1) ∧
+       push_scope_with_var nm tyv v s'' = (INL x, t) ⇒
        ∀st res st'. eval_stmts cx body st = (res, st') ⇒ preserves_scopes_dom st st') ⇒
     ∀st res st'.
-      eval_for cx tyv nm body (v::vs) st = (res, st') ⇒ preserves_scopes_dom st st'
+      eval_for cx tyv nm body (r::vs) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
   rpt strip_tac >>
-  rename1 `eval_for cx tyv nm loop_body (v::vs) st = (res,st')` >>
-  qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, ignore_bind_def, push_scope_with_var_def, return_def, AllCaseEqs()] >>
+  rename1 `eval_for cx tyv nm loop_body (r::vs) st = (res,st')` >>
+  Cases_on `read_result cx r st` >> rename1 `read_result cx r st = (rd, s_rd)` >>
+  `s_rd = st` by metis_tac[read_result_state] >>
+  qpat_x_assum `s_rd = st` SUBST_ALL_TAC >>
+  Cases_on `rd`
+  >~ [`read_result cx r st = (INR e, st)`]
+  >- (drule eval_for_cons_read_error >> strip_tac >> gvs[] >>
+      Cases_on `st.scopes` >> simp[preserves_scopes_dom_def]) >>
+  rename1 `read_result cx r st = (INL v, st)` >>
+  rpt (first_x_assum (drule_then assume_tac)) >>
+  qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
+  drule eval_for_cons_read >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[bind_def, ignore_bind_def, push_scope_with_var_def, return_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   (* Handle error case from finally: unfold and use try_body_preserves_tl_dom *)
   TRY (
@@ -607,7 +619,7 @@ Proof
   (* broke = T: return () *)
   (Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]) >>
   (* broke = F: use recursive IH *)
-  qpat_x_assum `∀s'⁴' t s'⁵' t'. _ ⇒ _` (qspecl_then [`st`, `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v; popped := [] |>))`,
+  qpat_x_assum `∀a b c d e f g. _ ⇒ _` (qspecl_then [`st`, `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v; popped := [] |>))`,
                                                        `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v; popped := [] |>))`,
                                                        `s'³' with scopes := tl`] mp_tac) >>
   simp[push_scope_with_var_def, return_def] >>
@@ -629,9 +641,17 @@ Proof
   (* [] case *)
   >- (rpt strip_tac >> gvs[evaluate_def, return_def]) >>
   rpt strip_tac >>
-  (* v::vs case *)
+  (* r::vs case *)
+  rename1 `eval_for cx tyv nm body (r::vs) st = (res,st')` >>
+  Cases_on `read_result cx r st` >> rename1 `read_result cx r st = (rd, s_rd)` >>
+  `s_rd = st` by metis_tac[read_result_state] >>
+  qpat_x_assum `s_rd = st` SUBST_ALL_TAC >>
+  Cases_on `rd`
+  >~ [`read_result cx r st = (INR e, st)`]
+  >- (drule eval_for_cons_read_error >> strip_tac >> gvs[]) >>
   qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, push_scope_with_var_def,
+  drule eval_for_cons_read >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[bind_def, ignore_bind_def, push_scope_with_var_def,
        return_def, AllCaseEqs()] >>
   strip_tac >> gvs[]
   (* common: establish try_body preserves TL *)
@@ -659,9 +679,7 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
-  imp_res_tac read_result_scopes >> imp_res_tac read_result_scopes >>
-  imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >>
-  imp_res_tac return_scopes >> first_x_assum drule >> gvs[]
+  imp_res_tac array_iterator_results_state >> first_x_assum drule >> gvs[]
 QED
 
 Theorem case_Range_iterator_dom[local]:
@@ -1805,8 +1823,7 @@ Proof
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     gvs[Once evaluate_def, bind_apply, AllCaseEqs()] >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac read_result_state >> gvs[return_def] >>
+    imp_res_tac array_iterator_results_state >> gvs[] >>
     first_x_assum drule >> rw[]) >>
   (* Range iterator *)
   conj_tac >- (
@@ -1820,22 +1837,32 @@ Proof
     irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
   (* eval_for [] *)
   conj_tac >- rw[evaluate_def, return_def] >>
-  (* eval_for v::vs *)
+  (* eval_for r::vs *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    pop_assum mp_tac >>
-    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
+    rename1 `eval_for cx tyv nm body (r::vs) st = _` >>
+    Cases_on `read_result cx r st` >> rename1 `read_result cx r st = (rd,s_rd)` >>
+    `s_rd = st` by metis_tac[read_result_state] >> gvs[] >>
+    reverse (Cases_on `rd`)
+    >- (drule eval_for_cons_read_error >> strip_tac >> gvs[]) >>
+    rpt (first_x_assum (drule_then assume_tac)) >>
+    qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
+    drule eval_for_cons_read >> disch_then (fn th => rewrite_tac[th]) >>
+    simp_tac std_ss [bind_apply, ignore_bind_apply] >>
     (* push_scope_with_var *)
     BasicProvers.TOP_CASE_TAC >>
     reverse BasicProvers.TOP_CASE_TAC >- (
       rw[] >> gvs[push_scope_with_var_def, return_def]) >>
+    rename1 `push_scope_with_var _ _ _ _ = (INL u,_)` >> Cases_on `u` >>
     first_x_assum drule >> strip_tac >>
     first_x_assum drule >> strip_tac >>
     CASE_TAC >>
     CASE_TAC >- (
-      first_x_assum drule >>
-      reverse $ rw[return_def]
+      rename1 `finally _ _ _ = (INL brk,_)` >>
+      Cases_on `brk` >> simp[return_def]
+      >~ [`eval_for _ _ _ _ _ _ = _ ==> _`]
       >- (
+        first_x_assum drule >> rw[] >>
         first_x_assum drule >>
         gvs[finally_def, try_def, ignore_bind_apply] >>
         gvs[AllCaseEqs(), return_def, raise_def, pop_scope_def,
@@ -1853,7 +1880,7 @@ Proof
         imp_res_tac handle_loop_exception_state >> gvs[] >>
         drule eval_stmts_scope_bracket_gen_preserves_tv >> gvs[])) >>
     rw[] >>
-    first_x_assum(qspec_then`ARB`kall_tac) >>
+    qpat_x_assum `!s t st res st'. _ /\ eval_for _ _ _ _ _ _ = _ ==> _` kall_tac >>
     gvs[finally_def, try_def, AllCaseEqs(), ignore_bind_apply,
         return_def, pop_scope_def, raise_def] >>
     imp_res_tac eval_stmts_preserves_scopes_len >>

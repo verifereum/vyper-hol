@@ -1107,19 +1107,12 @@ Theorem body_eval_array_iterator_storage:
   contract_storage_well_formed cx st'
 Proof
   strip_tac >> qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def] >>
+  simp_tac (srw_ss()) [Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (expr_res,expr_st)` >>
   `contract_storage_well_formed cx expr_st` by metis_tac[] >>
-  Cases_on `expr_res` >> gvs[bind_def, return_def]
-  >- (rename1 `eval_expr cx e st = (INL tv,expr_st)` >>
-      Cases_on `read_result cx tv expr_st` >>
-      rename1 `read_result cx tv expr_st = (read_res,read_st)` >>
-      imp_res_tac read_result_state >> gvs[] >>
-      Cases_on `read_res` >> gvs[bind_def, return_def] >>
-      strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac lift_option_type_state >> gvs[]) >>
-  rpt strip_tac >> gvs[]
+  Cases_on `expr_res` >> simp[] >> strip_tac >>
+  imp_res_tac array_iterator_results_state >> gvs[]
 QED
 
 Theorem body_eval_range_iterator_storage:
@@ -2412,7 +2405,7 @@ Theorem body_iterator_success_entry:
   eval_iterator cx it st = (INL vs,st') ==>
   runtime_storage_consistent env cx st' /\ IS_SOME st'.outcomes /\
   oracle_storage_ok cx st' /\
-  ?tyv. evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs
+  ?tyv. evaluate_type env.type_defs ty = SOME tyv /\ EVERY (iterator_result_typed tyv) vs
 Proof
   strip_tac >>
   `runtime_consistent env cx st` by metis_tac[runtime_storage_consistent_runtime] >>
@@ -2433,7 +2426,7 @@ Theorem body_for_entry_consumer:
     eval_iterator cx it s1 = (INL vs,t1) /\
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s2 = (INL x,t2) ==>
     !tops env ret_ty ty env_after st res st'.
-      evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
+      evaluate_type env.type_defs ty = SOME tyv /\ EVERY (iterator_result_typed tyv) vs /\
       id NOTIN FDOM env.var_types /\
       type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
@@ -2532,12 +2525,13 @@ Proof
 QED
 
 Theorem body_loop_iteration_storage:
+  read_result cx r st = (INL v,st) /\
   push_scope_with_var id tyv v st = (INL (),stp) /\
   finally (try (do eval_stmts cx body_stmts; return F od) handle_loop_exception)
     pop_scope stp = (loop_res,sa) /\
-  (!r s. eval_stmts cx body_stmts stp = (r,s) ==> contract_storage_well_formed cx s) ==>
+  (!rr s. eval_stmts cx body_stmts stp = (rr,s) ==> contract_storage_well_formed cx s) ==>
   contract_storage_well_formed cx sa /\
-  eval_for cx tyv id body_stmts [v] st =
+  eval_for cx tyv id body_stmts [r] st =
     ((case loop_res of INL b => INL () | INR ex => INR ex),sa)
 Proof
   strip_tac >> conj_tac
@@ -2554,12 +2548,13 @@ Proof
       Cases_on `ex = ContinueException` >> simp[return_def] >>
       Cases_on `ex = BreakException` >> simp[return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>
-  simp[Once evaluate_def, ignore_bind_apply] >>
+  drule eval_for_cons_read >>
+  disch_then (fn th => simp[th, ignore_bind_apply]) >>
   Cases_on `loop_res` >> simp[bind_def, return_def, Once evaluate_def]
 QED
 
 Theorem body_for_restored_entry:
-  evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
+  evaluate_type env.type_defs ty = SOME tyv /\ EVERY (iterator_result_typed tyv) vs /\
   id NOTIN FDOM env.var_types /\
   type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
   runtime_storage_consistent env cx st /\ functions_well_typed cx /\
@@ -2580,12 +2575,13 @@ Proof
 QED
 
 Theorem body_for_cons_consumer:
-  (!s0 x t s1 broke t1.
-    push_scope_with_var id tyv v s0 = (INL x,t) /\
+  (!s0 v s1 s2 x t s3 broke t1.
+    read_result cx r s0 = (INL v,s1) /\
+    push_scope_with_var id tyv v s2 = (INL x,t) /\
     finally (try (do eval_stmts cx body_stmts; return F od) handle_loop_exception)
-      pop_scope s1 = (INL broke,t1) /\ ~broke ==>
+      pop_scope s3 = (INL broke,t1) /\ ~broke ==>
     !tops env ret_ty ty env_after st res st'.
-      evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
+      evaluate_type env.type_defs ty = SOME tyv /\ EVERY (iterator_result_typed tyv) vs /\
       id NOTIN FDOM env.var_types /\
       type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
@@ -2595,7 +2591,8 @@ Theorem body_for_cons_consumer:
       call_evaluation_safe cx (int_calls_stmts body_stmts) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_for cx tyv id body_stmts vs st = (res,st') ==> contract_storage_well_formed cx st') /\
-  (!s0 x t. push_scope_with_var id tyv v s0 = (INL x,t) ==>
+  (!s0 v s1 s2 x t.
+    read_result cx r s0 = (INL v,s1) /\ push_scope_with_var id tyv v s2 = (INL x,t) ==>
     !tops env ret_ty env_after st res st'.
       type_stmts env ret_ty body_stmts = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
@@ -2606,7 +2603,7 @@ Theorem body_for_cons_consumer:
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_stmts cx body_stmts st = (res,st') ==> contract_storage_well_formed cx st') ==>
   !tops env ret_ty ty env_after st res st'.
-    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) (v::vs) /\
+    evaluate_type env.type_defs ty = SOME tyv /\ EVERY (iterator_result_typed tyv) (r::vs) /\
     id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
@@ -2615,12 +2612,30 @@ Theorem body_for_cons_consumer:
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body_stmts) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-    eval_for cx tyv id body_stmts (v::vs) st = (res,st') ==>
+    eval_for cx tyv id body_stmts (r::vs) st = (res,st') ==>
     contract_storage_well_formed cx st'
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >> gvs[EVERY_DEF] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `EVERY _ (_::_)` (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  Cases_on `read_result cx r st` >>
+  rename1 `read_result cx r st = (rd_res,rd_st)` >>
+  `rd_st = st /\ (!v. rd_res = INL v ==> value_has_type tyv v)` by
+    (drule_all vyperTypeEvalSoundnessTheory.iterator_result_read_typed >> Cases_on `rd_res` >> simp[]) >>
+  qpat_x_assum `rd_st = st` SUBST_ALL_TAC >>
+  reverse (Cases_on `rd_res`)
+  >- (qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
+      drule eval_for_cons_read_error >> disch_then (fn th => rewrite_tac[th]) >>
+      rw[] >> metis_tac[runtime_storage_consistent_storage]) >>
+  rename1 `read_result cx r st = (INL v,st)` >>
+  qpat_assum `read_result cx r st = (INL v,st)` (fn rd =>
+    qpat_x_assum `!s0 v s1 s2 x t s3 broke t1. _`
+      (assume_tac o REWRITE_RULE [rd] o Q.SPECL [`st`, `v`, `st`]) >>
+    qpat_x_assum `!s0 v s1 s2 x t. read_result _ _ _ = _ /\ _ ==> _`
+      (assume_tac o REWRITE_RULE [rd] o Q.SPECL [`st`, `v`, `st`])) >>
+  `value_has_type tyv v` by fs[] >>
   qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
-  simp_tac (srw_ss()) [Once evaluate_def, bind_def, ignore_bind_def,
+  drule eval_for_cons_read >> disch_then (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [bind_def, ignore_bind_def,
     push_scope_with_var_def, return_def] >>
   qmatch_goalsub_abbrev_tac `finally loop_body pop_scope stp` >>
   Cases_on `finally loop_body pop_scope stp` >>
@@ -2630,15 +2645,15 @@ Proof
   drule_all body_push_loop_var_entry >> strip_tac >>
   `!r s. eval_stmts cx body_stmts stp = (r,s) ==> contract_storage_well_formed cx s` by
     (rpt strip_tac >>
-     qpat_x_assum `!s0 t. push_scope_with_var _ _ _ _ = _ ==> _` drule >>
+     qpat_x_assum `!s0 x t. push_scope_with_var _ _ _ _ = _ ==> _` drule >>
      disch_then irule >> simp[] >> metis_tac[]) >>
   gvs[Abbr `loop_body`, ignore_bind_def] >>
   drule_all (SRULE [ignore_bind_def] body_loop_iteration_storage) >> strip_tac >>
-  `EVERY (value_has_type tyv) [v]` by simp[] >>
+  `EVERY (iterator_result_typed tyv) [r]` by simp[] >>
   drule_all body_for_restored_entry >> strip_tac >>
   Cases_on `loop_res` >> gvs[bind_def, return_def] >>
   rename1 `finally _ _ stp = (INL broke,sa)` >> Cases_on `broke` >> gvs[return_def] >>
-  qpat_x_assum `!s0 t s1 t1. push_scope_with_var _ _ _ _ = _ /\ _ ==> _` drule >>
+  qpat_x_assum `!s2 t s3 t1. push_scope_with_var _ _ _ _ = _ /\ _ ==> _` drule >>
   simp[] >> disch_then irule >> simp[] >> metis_tac[]
 QED
 

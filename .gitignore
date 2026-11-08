@@ -45,4 +45,5 @@ lowering/defs/bytecode/raw-system/hol/
 # Generated native bytecode parity runner
 lowering/defs/bytecode/native/compilerNativeML.sml
 lowering/defs/bytecode/native/bytecode_parity_native.exe
+lowering/defs/bytecode/native/bytecode_parity_json.exe
 lowering/defs/bytecode/native/bytecode_parity_native.mlton

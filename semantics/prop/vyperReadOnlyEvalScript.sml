@@ -321,11 +321,7 @@ Resume evaluate_read_only[iterator_array]:
 QED
 
 Resume evaluate_read_only[iterator_array_value]:
-  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_read_result] >> rpt strip_tac >>
-  irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives] >>
-  rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-  simp[machine_frame_def, machine_frame_primitives]
+  rpt strip_tac >> simp[machine_frame_array_iterator_results]
 QED
 
 Resume evaluate_read_only[annassign]:

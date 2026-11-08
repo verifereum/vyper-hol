@@ -467,6 +467,21 @@ Proof
   first_x_assum drule_all >> simp[]
 QED
 
+(* The result and state after raw_call's revert/output post-processing, from
+   a runtime-consistent state, for either call outcome. *)
+val RAW_CALL_FINISH_TAC =
+  rpt strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
+    expr_runtime_typed_def, value_result_typed_def, value_has_type_def,
+    raw_call_return_type_def, evaluate_type_def, is_HashMapRef_def] >>
+  (mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
+   impl_tac >- simp[] >> TRY strip_tac >>
+   gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
+       raw_call_return_type_def] >>
+    FIRST [decide_tac,
+      gvs[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
+          env_immutables_consistent_def, state_well_typed_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC]);
+
 (* Shared execution is independent of how the input bytes were obtained. *)
 Theorem eval_raw_call_result_sound:
   runtime_consistent env cx st /\
@@ -479,36 +494,59 @@ Theorem eval_raw_call_result_sound:
     expr_result_typed env e tv)
 Proof
   strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
-  fs[eval_raw_call_def, type_check_def, assert_def, bind_def, ignore_bind_def,
-       return_def, get_accounts_def, get_transient_storage_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def] >>
-  TRY (strip_tac >> gvs[no_type_error_result_def] >> NO_TAC) >>
-  PairCases_on `x` >> simp[] >>
-  `accounts_well_typed x2` by (
-    fs[runtime_consistent_def] >> drule_all run_raw_call_accounts_well_typed >> simp[]) >>
-  `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
-    (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
-  `runtime_consistent env cx
-    ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by (
-    qspecl_then [`env`, `cx`, `st with <|accounts := x2; tStorage := x3|>`, `x4`]
-      mp_tac runtime_consistent_logs_append >> simp[]) >>
-  Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  rpt strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
-    expr_runtime_typed_def, value_result_typed_def, value_has_type_def,
-    raw_call_return_type_def, evaluate_type_def, is_HashMapRef_def] >>
-  mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
-  impl_tac >- simp[] >> TRY strip_tac >>
-  gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
-      raw_call_return_type_def] >>
-  FIRST [decide_tac,
-    gvs[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
-        env_immutables_consistent_def, state_well_typed_def] >>
-    rpt conj_tac >> first_assum ACCEPT_TAC]
+  simp[eval_raw_call_def, type_check_def, assert_def, bind_def,
+       ignore_bind_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def, UNCURRY, COND_RATOR,
+       option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  Cases_on `flags.rcf_is_delegate` >> Cases_on `IS_SOME st.outcomes` >>
+  simp[]
+  >>~- ([`take_call_outcome _ _ _ _`],
+    (Cases_on `take_call_outcome target_addr calldata
+        (if flags.rcf_is_static then NONE else SOME amount) st` >>
+      rename1 `take_call_outcome _ _ _ _ = (taken,mid)` >>
+      `runtime_consistent env cx mid` by
+        (drule_all take_call_outcome_runtime_consistent >> simp[]) >>
+      Cases_on `taken` >> simp[]
+      >- (rename1 `take_call_outcome _ _ _ _ = (INL ro,_)` >> PairCases_on `ro` >>
+          Cases_on `adopt_call_outcome ro0 ro1 mid` >>
+          rename1 `adopt_call_outcome ro0 ro1 mid = (adopted,final)` >>
+          drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
+          strip_tac >> gvs[] >>
+          `runtime_consistent env cx final` by
+            (drule_all take_adopt_call_outcome_runtime_consistent >> simp[]) >>
+          Cases_on `ro1.co_success` >> Cases_on `flags.rcf_revert_on_failure` >>
+          Cases_on `flags.rcf_max_outsize = 0` >>
+          simp[] >> RAW_CALL_FINISH_TAC) >>
+      strip_tac >> drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
+      strip_tac >> gvs[no_type_error_result_def])) >>
+  (Cases_on `run_raw_call cx flags target_addr calldata amount gas
+      st.accounts st.tStorage` >>
+    simp[]
+    >- (strip_tac >> gvs[no_type_error_result_def]) >>
+    PairCases_on `x` >> simp[] >>
+    `accounts_well_typed x2` by (
+      fs[runtime_consistent_def] >> drule_all run_raw_call_accounts_well_typed >> simp[]) >>
+    `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
+      (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
+    `runtime_consistent env cx
+      ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by (
+      qspecl_then [`env`, `cx`, `st with <|accounts := x2; tStorage := x3|>`, `x4`]
+        mp_tac runtime_consistent_logs_append >> simp[]) >>
+    `runtime_consistent env cx
+      (st with <|logs := st.logs ++ x4; accounts := x2; tStorage := x3;
+                 pending_deletions updated_by APPEND x5|>)` by (
+      `st with <|logs := st.logs ++ x4; accounts := x2; tStorage := x3;
+                 pending_deletions updated_by APPEND x5|> =
+       (st with <|logs := st.logs ++ x4; accounts := x2; tStorage := x3|>)
+         with pending_deletions updated_by APPEND x5` by
+        simp[evaluation_state_component_equality] >>
+      pop_assum SUBST1_TAC >>
+      PURE_REWRITE_TAC[CONJUNCT1 runtime_consistent_observation_updates] >>
+      first_assum ACCEPT_TAC) >>
+    Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
+    Cases_on `flags.rcf_max_outsize = 0` >>
+    simp[] >> RAW_CALL_FINISH_TAC)
 QED
 
 Theorem raw_log_args_runtime_typed_dest:

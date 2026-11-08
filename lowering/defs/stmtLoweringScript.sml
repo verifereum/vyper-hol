@@ -1263,11 +1263,11 @@ Definition compile_stmt_def:
      elem_size: size of element in location units
      load_opc: MLOAD/SLOAD/TLOAD/CALLDATALOAD/DLOADN
      is_slot_addressed: T for storage/transient
-     SEMANTIC DIFFERENCE: The Vyper interpreter materializes the entire array
-     to a value list before iterating (eval_iterator → read_result → extract_elements).
-     The lowering reads elements from source on each iteration. If the loop body
-     modifies the source array, the interpreter sees original values but the lowering
-     sees modified values. Vyper's type checker forbids mutation of the iterated
+     For a storage or transient array the interpreter also reads element i from
+     its slot at the start of iteration i (length fixed at loop entry). For other
+     locations it copies the array before iterating, while the lowering reads
+     elements from source on each iteration. If the loop body modifies the source
+     array, the two disagree. Vyper's type checker forbids mutation of the iterated
      array during the loop, so this is correct for well-typed programs.
      Correctness theorem needs precondition: loop body does not modify arr_e.
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_iter_loop *)

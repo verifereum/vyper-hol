@@ -1006,27 +1006,41 @@ End
 val () = cv_auto_trans ext_call_precheck_ok_def;
 
 (* Shared execution after raw_call operands have been evaluated and decoded.
-   Both input forms retain the same static/revert/output and state effects. *)
+   Both input forms retain the same static/revert/output and state effects.
+   A call or staticcall takes its outcome from the external-call oracle when
+   st.outcomes is SOME, as extcall does (eval_ext_call_effects); a delegate
+   call, and any call without the oracle, runs the callee. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount gas = do
     type_check
       (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
        ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
       "raw_call flags/value";
-    accounts <- get_accounts;
-    tStorage <- get_transient_storage;
-    result <- lift_option
-      (run_raw_call cx flags target_addr calldata amount gas accounts tStorage)
-      "raw_call run failed";
-    success <<- FST result; result1 <<- SND result;
-    returnData <<- FST result1; result2 <<- SND result1;
-    accounts' <<- FST result2; result3 <<- SND result2;
-    tStorage' <<- FST result3; result4 <<- SND result3;
-    emitted_logs <<- FST result4; deletions <<- SND result4;
-    update_accounts (K accounts');
-    update_transient (K tStorage');
-    append_logs emitted_logs;
-    update_pending_deletions (APPEND deletions);
+    outcomes <- (λst. return st.outcomes st);
+    (success, returnData) <-
+      if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
+        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
+          (if flags.rcf_is_static then NONE else SOME amount);
+        vyperCallOutcome$adopt_call_outcome rq outcome;
+        return (call_outcome_success outcome, call_outcome_return_data outcome)
+      od else do
+        accounts <- get_accounts;
+        tStorage <- get_transient_storage;
+        result <- lift_option
+          (run_raw_call cx flags target_addr calldata amount gas accounts
+             tStorage)
+          "raw_call run failed";
+        success <<- FST result; result1 <<- SND result;
+        returnData <<- FST result1; result2 <<- SND result1;
+        accounts' <<- FST result2; result3 <<- SND result2;
+        tStorage' <<- FST result3; result4 <<- SND result3;
+        emitted_logs <<- FST result4; deletions <<- SND result4;
+        update_accounts (K accounts');
+        update_transient (K tStorage');
+        append_logs emitted_logs;
+        update_pending_deletions (APPEND deletions);
+        return (success, returnData)
+      od;
     if flags.rcf_revert_on_failure then do
       (* Vyper re-raises the callee's whole returndata (lower_raw_call) *)
       if success then return () else raise $ Error $ RevertData returnData;
@@ -1040,7 +1054,7 @@ Definition eval_raw_call_def:
 End
 
 val () = eval_raw_call_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY,
             COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
             option_CASE_rator, type_check_def, assert_def, update_pending_deletions_def]
   |> cv_auto_trans;
@@ -1049,21 +1063,15 @@ Theorem eval_raw_call_preserves_non_accounts:
   eval_raw_call cx flags target_addr calldata amount gas st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  Cases_on `¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
-    ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0)` >>
-  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-     assert_def, return_def, raise_def, get_accounts_def,
-     get_transient_storage_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
-  PairCases_on `call_result` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def, update_pending_deletions_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  rpt strip_tac >> gvs[]
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
+       UNCURRY, COND_RATOR,
+       option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
+  gvs[evaluation_state_component_equality]
 QED
 
 (* ===== extcall / staticcall / send after operand evaluation ===== *)
@@ -1402,6 +1410,79 @@ val () = unlock_if_nr_def
 (* Unfolded by simp, so proofs about evaluate_def see the lock code inline. *)
 val () = export_rewrites ["lock_if_nr_def", "unlock_if_nr_def"];
 
+(* A storage or transient array is iterated in place, as the compiler does:
+   its length is read once at loop entry, and each element is a location
+   read at the start of its own iteration. Other iterables are copied. *)
+Definition array_iterator_results_def:
+  array_iterator_results cx arr_typ res =
+    case res of
+    | PlaceR (StoragePlace tr slot (ArrayTV etv bd)) => do
+        len <- result_array_length cx res;
+        check (compatible_bound bd len) "For storage array length";
+        first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+        return (GENLIST (λi. PlaceR (StoragePlace tr
+                  (first + n2w (i * type_slot_size etv)) etv)) len)
+      od
+    | _ => do
+        v <- read_result cx res;
+        arr_tv <- lift_option_type (evaluate_type (get_tenv cx) arr_typ)
+                    "For array type";
+        vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+        return (MAP Value vs)
+      od
+End
+
+val () = array_iterator_results_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            eval_result_CASE_rator, place_CASE_rator, type_value_CASE_rator,
+            bound_CASE_rator]
+  |> cv_auto_trans;
+
+Theorem array_iterator_results_storage:
+  array_iterator_results cx ty (PlaceR (StoragePlace tr slot (ArrayTV etv bd))) =
+  do
+    len <- result_array_length cx (PlaceR (StoragePlace tr slot (ArrayTV etv bd)));
+    check (compatible_bound bd len) "For storage array length";
+    first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+    return (GENLIST (λi. PlaceR (StoragePlace tr
+              (first + n2w (i * type_slot_size etv)) etv)) len)
+  od
+Proof
+  simp[array_iterator_results_def]
+QED
+
+Theorem array_iterator_results_copy:
+  (!tr slot etv bd. res <> PlaceR (StoragePlace tr slot (ArrayTV etv bd))) ==>
+  array_iterator_results cx ty res =
+  do
+    v <- read_result cx res;
+    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "For array type";
+    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+    return (MAP Value vs)
+  od
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv`)) >>
+  simp[array_iterator_results_def]
+QED
+
+(* Building the iteration list reads but never writes. *)
+Theorem array_iterator_results_state:
+  array_iterator_results cx ty res st = (r,st') ==> st' = st
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd` >> Cases_on `tr`))) >>
+  simp[array_iterator_results_def, bind_def, ignore_bind_def,
+       result_array_length_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def, lift_option_type_def, option_CASE_rator,
+       LET_THM, AllCaseEqs()] >>
+  rw[] >> imp_res_tac read_result_state >> gvs[]
+QED
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -1556,10 +1637,7 @@ Definition evaluate_def:
   od ∧
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
-    v <- read_result cx tv;
-    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
-    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
-    return vs
+    array_iterator_results cx (expr_type e) tv
   od ∧
   eval_iterator cx (Range e1 e2) = do
     tv1 <- eval_expr cx e1;
@@ -1568,15 +1646,16 @@ Definition evaluate_def:
     v2 <- read_result cx tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
     n1 <<- FST rl; n2 <<- SND rl;
-    return $ GENLIST (λn. IntV (n1 + &n)) n2
+    return $ GENLIST (λn. Value (IntV (n1 + &n))) n2
   od ∧
   eval_for cx tyv nm body [] = return () ∧
-  eval_for cx tyv nm body (v::vs) = do
+  eval_for cx tyv nm body (r::rs) = do
+    v <- read_result cx r;
     push_scope_with_var nm tyv v;
     broke <- finally
       (try (do eval_stmts cx body; return F od) handle_loop_exception)
       pop_scope ;
-    if broke then return () else eval_for cx tyv nm body vs
+    if broke then return () else eval_for cx tyv nm body rs
   od ∧
   eval_expr cx (Name _ id) = do
     sc <- get_scopes;
@@ -1932,6 +2011,29 @@ Proof
   Induct >> rw[evaluate_def, return_def, bind_def] >>
   gvs[CaseEq "prod", CaseEq "sum"] >> first_x_assum irule >>
   goal_assum drule
+QED
+
+(* An iteration reads its element before binding the loop variable. *)
+Theorem eval_for_cons_read:
+  read_result cx r st = (INL v,st') ==>
+  eval_for cx tyv nm body (r::rs) st =
+  do
+    push_scope_with_var nm tyv v;
+    broke <- finally
+      (try (do eval_stmts cx body; return F od) handle_loop_exception)
+      pop_scope ;
+    if broke then return () else eval_for cx tyv nm body rs
+  od st
+Proof
+  strip_tac >> imp_res_tac read_result_state >> gvs[] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def]
+QED
+
+Theorem eval_for_cons_read_error:
+  read_result cx r st = (INR e,st') ==>
+  eval_for cx tyv nm body (r::rs) st = (INR e,st')
+Proof
+  simp[Once evaluate_def, bind_def]
 QED
 
 (* Semantics of initial state of a contract after deployment *)

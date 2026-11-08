@@ -3,7 +3,7 @@ Ancestors
   jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperTypeContract
   jsonNominalSources
 Libs
-  vyperCheckContractFrontendLib
+  vyperCheckContractFrontendLib vyperConstEvalLib
 
 (* Declare fixtures relative to this source file so holbuild stages them at
    the same relative path and includes their contents in the cache key. *)
@@ -557,3 +557,28 @@ val _ =
    handle Fail message =>
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
+
+(* Without bound=, range endpoints are folded to literals; with it, they stay
+   the translated expressions. *)
+Theorem range_static_folded_endpoints:
+  !ctx.
+    translate_iter ctx (BaseT (IntT 8))
+      (JIter_Range
+         [JE_BinOp (JE_Int (-5) (JT_Integer 8 T)) JBop_Add
+            (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
+          JE_Int 127 (JT_Integer 8 T)] NONE) =
+    Range (Literal (BaseT (IntT 8)) (IntL (-3)))
+          (Literal (BaseT (IntT 8)) (IntL 127)) /\
+    translate_iter ctx (BaseT (IntT 8))
+      (JIter_Range
+         [JE_BinOp (JE_Int (-5) (JT_Integer 8 T)) JBop_Add
+            (JE_Int 2 (JT_Integer 8 T)) (JT_Integer 8 T);
+          JE_Int 127 (JT_Integer 8 T)]
+         (SOME (JE_Int 1 (JT_Integer 256 F)))) =
+    Range (Builtin (BaseT (IntT 8)) (Bop Add)
+             [Literal (BaseT (IntT 8)) (IntL (-5));
+              Literal (BaseT (IntT 8)) (IntL 2)])
+          (Literal (BaseT (IntT 8)) (IntL 127))
+Proof
+  gen_tac >> CONV_TAC EVAL
+QED

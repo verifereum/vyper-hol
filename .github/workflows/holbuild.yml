@@ -106,6 +106,17 @@ jobs:
           echo "Building: $targets"
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
 
+      - name: Build native bytecode parity runner
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps compilerNativeEmitTheory
+          holbuild -j"$(nproc)" executable bytecode_parity_native
+
+      - name: Check native bytecode parity
+        working-directory: lowering/defs/bytecode
+        run: ./native/bytecode_parity_native.exe python-o1-no-asm-opt
+
   witnesses:
     if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: compiler

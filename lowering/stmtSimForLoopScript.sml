@@ -570,7 +570,7 @@ Theorem for_loop_alloca:
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
-    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m) esk =
+    eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m) esk =
       (res, es') /\
     stmt_res_ok lctx res /\ P esk /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
@@ -619,9 +619,9 @@ Proof
   qpat_assum `for_code _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [for_code_def]) >>
   `k < Num (n2 - n1)` by decide_tac >>
-  `GENLIST (\j. (IntV (n1 + &(k + j)) : value)) (SUC m) =
-   (IntV (n1 + &k) : value) ::
-   GENLIST (\j. (IntV (n1 + &(k + 1 + j)) : value)) m` by
+  `GENLIST (\j. Value (IntV (n1 + &(k + j)))) (SUC m) =
+   Value (IntV (n1 + &k)) ::
+   GENLIST (\j. Value (IntV (n1 + &(k + 1 + j)))) m` by
     (simp[GENLIST_CONS, combinTheory.o_DEF] >>
      simp[GENLIST_FUN_EQ] >> rpt strip_tac >>
      `k + SUC x = x + (k + 1)` by decide_tac >> simp[]) >>
@@ -664,7 +664,7 @@ Proof
     qpat_x_assum `res = _` SUBST_ALL_TAC >>
     qpat_x_assum `es' = _` SUBST_ALL_TAC >>
     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + 1 + j))) m)
+  `eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + 1 + j)))) m)
      (es2 with scopes := rest) = (res, es')` by
     (qpat_x_assum `_ /\ eval_for _ _ _ _ _ _ = _ \/ _` mp_tac >>
      qpat_x_assum `r2 = _ \/ _` strip_assume_tac >>
@@ -731,7 +731,7 @@ Theorem for_loop:
        P (es2 with scopes := rest)) /\
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     k + m = Num (n2 - n1) /\
-    eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m) esk =
+    eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m) esk =
       (res, es') /\
     stmt_res_ok lctx res /\ P esk /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\

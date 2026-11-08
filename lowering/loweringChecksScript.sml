@@ -52,7 +52,7 @@ Ancestors
   rawReturnCopy exprRecursionRegression
   (* compiled creation code and events *)
   vyperCreateMemoryTest vyperCtorAliasTest createImmutableBytecodeTest
-  vyperEventForwardStruct
+  vyperEventForwardStruct vyperEventArgumentLifetime
   (* admission audits: listed theorems use only the oracle tags each allows *)
   createLoweringAudit createOracleClosureAudit conversionProofAudit
   eventEndpointAudit

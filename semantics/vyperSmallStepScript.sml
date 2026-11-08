@@ -42,7 +42,7 @@ Datatype:
   | IfK1 eval_result (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
   | ForK identifier type_value num (stmt list) eval_continuation
-  | ForK1 type_value identifier (stmt list) (value list) eval_continuation
+  | ForK1 type_value identifier (stmt list) (eval_result list) eval_continuation
   | ExprK eval_continuation
   | StmtsK (stmt list) eval_continuation
   | ArrayK type eval_continuation
@@ -359,10 +359,13 @@ val () = cv_auto_trans eval_stmts_cps_def;
 
 Definition eval_for_cps_def:
   eval_for_cps cx tyv nm body [] st k = AK cx Apply st k ∧
-  eval_for_cps cx tyv nm body (v::vs) st k =
-  (case push_scope_with_var nm tyv v st of
+  eval_for_cps cx tyv nm body (r::rs) st k =
+  (case read_result cx r st of
+     (INR ex, st) => AK cx (ApplyExc ex) st k
+   | (INL v, st) =>
+     (case push_scope_with_var nm tyv v st of
         (INR ex, st) => AK cx (ApplyExc ex) st k
-      | (INL (), st) => eval_stmts_cps cx body st (ForK1 tyv nm body vs k))
+      | (INL (), st) => eval_stmts_cps cx body st (ForK1 tyv nm body rs k)))
 End
 
 val () = cv_auto_trans eval_for_cps_def;
@@ -556,7 +559,7 @@ Definition apply_tv_def:
     liftk cx ApplyVal (read_result cx tv st) (AppendK1 btv k) ∧
 
   apply_tv cx tv st (ArrayK arr_typ k) =
-    liftk cx ApplyVal (read_result cx tv st) (ArrayK arr_typ k) ∧
+    liftk cx ApplyResults (array_iterator_results cx arr_typ tv st) k ∧
   apply_tv cx tv st (ExprsK es k) =
     liftk cx ApplyVal (read_result cx tv st) (ExprsK es k) ∧
   apply_tv cx tv st DoneK = AK cx (ApplyTv tv) st DoneK ∧
@@ -570,26 +573,14 @@ val () = apply_tv_def
 
 (* ===== apply_val helpers: extracted complex do-block clauses so each
         translates cheaply on its own (cv_trans speed) ===== *)
-Definition apply_val_array_def:
-  apply_val_array cx arr_typ v st k =
-    (case evaluate_type (get_tenv cx) arr_typ of
-     | SOME arr_tv =>
-         liftk cx ApplyVals
-           (lift_option_type (extract_elements arr_tv v) "For not ArrayV" st) k
-     | NONE => AK cx (ApplyExc (Error (TypeError "For array type"))) st k)
-End
-val () = apply_val_array_def
-  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
-            lift_option_type_def]
-  |> cv_auto_trans;
 Definition apply_val_range2_def:
   apply_val_range2 cx v1 v2 st k =
     (case do rl <- lift_sum $ get_range_limits v1 v2;
              n1 <<- FST rl; n2 <<- SND rl;
-             return $ GENLIST (λn. IntV (n1 + &n)) n2
+             return $ GENLIST (λn. Value (IntV (n1 + &n))) n2
      od st
        of (INR ex, st) => apply_exc cx ex st k
-        | (INL vs, st) => AK cx (ApplyVals vs) st k)
+        | (INL rs, st) => AK cx (ApplyResults rs) st k)
 End
 val () = apply_val_range2_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
@@ -647,7 +638,6 @@ Definition apply_val_def:
       write_place cx p res od st) k ∧
   apply_val cx v st (AppendK1 p k) =
     liftk cx (K Apply) (append_place cx p v st) k ∧
-  apply_val cx v st (ArrayK arr_typ k) = apply_val_array cx arr_typ v st k ∧
   apply_val cx v st (RangeK1 e k) = eval_expr_cps cx e st (RangeK2 v k) ∧
   apply_val cx v2 st (RangeK2 v1 k) = apply_val_range2 cx v1 v2 st k ∧
   apply_val cx v st (IfExpK e2 e3 k) =
@@ -673,11 +663,6 @@ val () = apply_val_def
 Definition apply_vals_def:
   apply_vals cx vs st (ExprsK1 v k) =
     apply_vals cx (v::vs) st k ∧
-  apply_vals cx vs st (ForK id tyv n body k) =
-    (case do check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
-             return vs od st
-     of (INR ex, st) => apply_exc cx ex st k
-      | (INL vs, st) => eval_for_cps cx tyv id body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
   apply_vals cx vs st (MembershipK ty neg k) =
@@ -901,6 +886,11 @@ Definition apply_results_def:
         eval_exprs_cps (cx with stk updated_by CONS src_fn)
           (DROP (LENGTH dflts - (LENGTH args - LENGTH results)) dflts) st
           (IntCallK1 all_tenv src_fn args results prev ret body nr mut k)) ∧
+  apply_results cx results st (ForK id tyv n body k) =
+    (case do check (compatible_bound (Dynamic n) (LENGTH results)) "For too long";
+             return results od st
+     of (INR ex, st) => apply_exc cx ex st k
+      | (INL rs, st) => eval_for_cps cx tyv id body rs st k) ∧
   apply_results cx results st DoneK = AK cx (ApplyResults results) st DoneK ∧
   apply_results cx results st _ =
     AK cx (ApplyExc (Error (TypeError "apply_results k"))) st DoneK
@@ -1059,7 +1049,7 @@ Theorem eval_cps_mutual:
  (∀cx ss st k. cont (eval_stmts_cps cx ss st k) =
    cont (liftk cx (K Apply) (eval_stmts cx ss st) k)) /\
  (∀cx it st k. cont (eval_iterator_cps cx it st k) =
-   cont (liftk cx ApplyVals (eval_iterator cx it st) k)) /\
+   cont (liftk cx ApplyResults (eval_iterator cx it st) k)) /\
  (∀cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
    cont (liftk cx (K Apply) (eval_for cx tyv nm body vs st) k)) /\
  (∀cx e st k. cont (eval_expr_cps cx e st k) =
@@ -1316,7 +1306,7 @@ Proof
     \\ gvs[return_def, raise_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, ignore_bind_def, bind_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_results_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- (
       rw[Once OWHILE_THM, stepk_def, apply_exc_def, SimpRHS]
@@ -1351,14 +1341,7 @@ Proof
     rw[eval_iterator_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_val_def, apply_val_array_def,
-          liftk1, lift_option_type_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[return_def, raise_def]
-    \\ gvs[raise_def] )
+    \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1] )
   \\ conj_tac >- ( (* eval_iterator (Range e1 e2) *)
     rw[eval_iterator_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -1387,8 +1370,16 @@ Proof
       \\ gvs[apply_exc_def]
       \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] ))
   \\ conj_tac >- rw[eval_for_cps_def, evaluate_def, return_def] (* eval_for [] *)
-  \\ conj_tac >- ( (* eval_for (v::vs) *)
+  \\ conj_tac >- ( (* eval_for (r::rs) *)
     rw[eval_for_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ Cases_on `read_result cx r st` \\ Cases_on `q` \\ gvs[cont_def]
+    \\ rename1 `read_result cx r st = (INL v, st1)`
+    \\ `st1 = st` by metis_tac[read_result_state] \\ gvs[]
+    \\ qpat_x_assum `read_result cx r st = (INL v,st)` (fn rd =>
+         rpt (last_x_assum (fn ih => assume_tac (REWRITE_RULE [rd]
+           (SPECL [``st:evaluation_state``, ``v:value``, ``st:evaluation_state``] ih))))
+         \\ assume_tac rd)
+    \\ pure_rewrite_tac[GSYM cont_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC \\ gvs[]
     \\ first_assum drule \\ simp_tac std_ss [] \\ disch_then kall_tac
     \\ rw[finally_def, finally_unless_halt_def, try_def, bind_def]
@@ -1931,7 +1922,7 @@ Theorem eval_cps_eq:
     cont ((case eval_stmts cx ss st of (INL (),st1) => AK cx Apply st1
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
   (!cx it st k. cont (eval_iterator_cps cx it st k) =
-    cont ((case eval_iterator cx it st of (INL vs,st1) => AK cx (ApplyVals vs) st1
+    cont ((case eval_iterator cx it st of (INL vs,st1) => AK cx (ApplyResults vs) st1
       | (INR ex,st1) => AK cx (ApplyExc ex) st1) k)) /\
   (!cx tyv nm body vs st k. cont (eval_for_cps cx tyv nm body vs st k) =
     cont ((case eval_for cx tyv nm body vs st of (INL (),st1) => AK cx Apply st1
