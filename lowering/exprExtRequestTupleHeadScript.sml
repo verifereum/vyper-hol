@@ -130,6 +130,7 @@ Finalise extrequest_tuple_word_head
 Theorem extrequest_tuple_head_read:
   emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value cenv vv sn = (op,sb) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
   extrequest_history_frame cenv cx ec sc tc ee sm s /\
   stmt_state_rel ctx func cenv cx ec tc /\

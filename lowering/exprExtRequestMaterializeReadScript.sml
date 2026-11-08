@@ -32,6 +32,7 @@ QED
 Theorem extrequest_materialize_read:
   compile_materialize_vv cenv dty vv sn = (dst,sb) /\
   fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
   extrequest_history_frame cenv cx ec sc tc ee sn t /\
   stmt_state_rel ctx func cenv cx ee t /\

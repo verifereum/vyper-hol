@@ -21,6 +21,7 @@ Theorem extrequest_tuple_captured_head:
    else if is_bytestring_type ty then compile_store_bytestring op dst
    else emit_void MCOPY [dst;op;Lit (n2w (type_memory_bytes cenv ty))])
       su = ((),sb) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
   extrequest_history_frame cenv cx ec sc tc ee sm s /\
   stmt_state_rel ctx func cenv cx ec tc /\
@@ -91,7 +92,8 @@ Proof
      fs[vyperStateTheory.evaluation_state_component_equality]) >>
   qpat_x_assum `v' = v` SUBST_ALL_TAC >>
   `stmt_state_rel ctx func cenv cx ee u /\
-   expr_val_rel cx (expr_type e) v op u` by fs[expr_post_def] >>
+   expr_val_rel cx (expr_type e) v op u` by
+    (fs[expr_post_def] >> metis_tac[]) >>
   `expr_val_rel cx ty v op u` by
     (qpat_x_assum `ty = expr_type e \/ _` DISJ_CASES_TAC >- gvs[] >>
      `~is_word_type ty /\ ~is_word_type (expr_type e)` by

@@ -21,6 +21,7 @@ QED
 
 Theorem extrequest_stack_joint_read:
   unwrap_value cenv (StackValue ty a) sn = (op,sb) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee r (StackValue ty a) t /\
   local_ptrs_reserved cenv sn /\ ~t.vs_halted /\
   t.vs_current_bb = sn.cs_current_bb /\
@@ -50,6 +51,7 @@ Theorem extrequest_memory_joint_read:
   unwrap_value cenv (LocatedValue ty p) sn = (op,sb) /\
   p.ptr_location = LocMemory /\ fn_has_code sn sb func /\
   local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee r (LocatedValue ty p) t /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
@@ -61,7 +63,7 @@ Theorem extrequest_memory_joint_read:
     extrequest_history_frame cenv cx ee sn t ee sb u
 Proof
   strip_tac >>
-  `ty = expr_type e /\ ?w v. eval_operand p.ptr_operand t = SOME w /\
+  `?w v. eval_operand p.ptr_operand t = SOME w /\
      read_result cx r ee = (INL v,ee) /\
      (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
        val_in_memory tv v (w2n w) t.vs_memory /\
@@ -74,7 +76,12 @@ Proof
        gas_marked_exec F (ctx,func) (read_result cx r) (ee,t) [] (INL v) ee (OK u)` by
     (simp[gas_marked_exec_def] >> metis_tac[read_result_gas_obs]) >>
   Cases_on `is_word_type ty`
-  >- (qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  >- (`ty = expr_type e` by
+        (gvs[vv_post_def, vv_holds_def] >>
+         Cases_on `ty` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+         Cases_on `b` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+         Cases_on `b'` >> gvs[is_bytestring_type_def, is_word_type_def]) >>
+      qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
       simp[unwrap_memory_compile] >> strip_tac >>
       qabbrev_tac `u = (update_var (STRING #"%" (toString sn.cs_next_var))
          (mload (w2n w) t) t) with vs_inst_idx := SUC t.vs_inst_idx` >>
@@ -106,7 +113,7 @@ Proof
       irule (cj 1 gas_path_rules) >> simp[]) >>
   reverse conj_tac >- (irule extrequest_history_frame_refl >> simp[]) >>
   irule expr_post_of_vv_post_memory >> goal_assum drule >> simp[] >>
-  qexists_tac `expr_type e` >> simp[]
+  qexists_tac `ty` >> simp[]
 QED
 Resume extrequest_memory_joint_read[word_history]:
   simp[] >> irule extrequest_unchanged_memory_history >> simp[] >>
@@ -175,6 +182,7 @@ Theorem extrequest_emit_read_joint:
   opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
   (!out. step_inst_base (mk_inst sn.cs_next_id opc args [out]) t =
      OK (update_var out w t)) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee (Value v) (LocatedValue ty p) t /\
   is_word_type (expr_type e) /\ sa.cs_next_var <= sn.cs_next_var /\
   (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
@@ -227,6 +235,7 @@ Theorem extrequest_storage_joint_word:
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   is_word_type ty /\ fn_has_code sn sb func /\
   local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee r (LocatedValue ty p) t /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
@@ -284,6 +293,7 @@ Theorem extrequest_runtime_joint_word:
   p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\
   is_word_type ty /\ fn_has_code sn sb func /\
   local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee r (LocatedValue ty p) t /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
@@ -329,6 +339,7 @@ Theorem extrequest_ctor_joint_word:
   p.ptr_location = LocCode /\ cenv.ce_is_ctor /\
   is_word_type ty /\ fn_has_code sn sb func /\
   local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee r (LocatedValue ty p) t /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
@@ -434,6 +445,7 @@ Theorem extrequest_storage_joint_copy:
   (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
      type_memory_bytes cenv ty = type_memory_size tv /\ type_memory_size tv < 2**64) /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sn x) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee r (LocatedValue ty p) t /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
@@ -586,6 +598,7 @@ QED
 Theorem extrequest_allocated_copy_joint:
   compile_alloc_buffer sz sn = (buf,mid) /\
   fn_has_code sn mid func /\ fn_inst_ids_distinct func /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee (Value v) vv t /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sn /\
   sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id /\
@@ -792,6 +805,7 @@ Theorem extrequest_code_joint_copy:
   (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
     type_memory_bytes cenv ty = type_memory_size tv /\ type_memory_size tv < 2**64) /\
   (!x. p.ptr_operand = Var x ==> not_fresh_at sn x) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e ee sa sn t ee r (LocatedValue ty p) t /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
@@ -876,6 +890,7 @@ QED
 
 Theorem extrequest_joint_unwrap_read:
   unwrap_value cenv vv sn = (op,sb) /\
+  post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sc s0 ec r vv tc /\
   extrequest_history_frame cenv cx ec sc tc ee sn t /\
   stmt_state_rel ctx func cenv cx ee t /\
@@ -911,11 +926,11 @@ Proof
   Cases_on `vv`
   >- (drule_all extrequest_stack_joint_read >> simp[]) >>
   rename1 `LocatedValue ty p` >>
-  `ty = expr_type e` by fs[vv_post_def, vv_holds_def] >>
   `!x. p.ptr_operand = Var x ==> not_fresh_at sn x` by
     (fs[exprSafeOperandTheory.safe_operand_def] >> metis_tac[not_fresh_at_mono]) >>
   Cases_on `p.ptr_location = LocMemory`
   >- (drule_all extrequest_memory_joint_read >> simp[]) >>
+  `ty = expr_type e` by fs[vv_post_def, vv_holds_def] >>
   Cases_on `is_word_type ty`
   >- (Cases_on `p.ptr_location = LocCode`
       >- (Cases_on `cenv.ce_is_ctor`

@@ -94,6 +94,8 @@ Theorem extrequest_kwarg_retained_cps:
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_not_int_call >> metis_tac[expr_has_effect_thm]) >>
   `?vv sm.
     compile_expr cenv (expr_type e) e sa = (vv,sm) /\
     (if kw = EKDefault /\ ~is_word_type ret then
@@ -201,11 +203,9 @@ Proof
      evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
      storage_read_live cx tr (get_storage cx (mid with gas_obs := []) tr) w tv` by
     (rpt strip_tac >>
-     `ty = expr_type e` by
-       (qpat_assum `vv_post _ _ _ _ e es _ _ _ _ _ _ _` mp_tac >>
-        simp[NoAsms, vv_post_def] >>
-        qpat_assum `vv = LocatedValue ty p` (fn th => rewrite_tac[th]) >>
-        simp[NoAsms, vv_holds_def]) >>
+     `p.ptr_location <> LocMemory` by
+       (Cases_on `tr` >> fs[slot_loc_def]) >>
+     `ty = expr_type e` by fs[vv_post_def, vv_holds_def] >>
      `vv_post ctx func cenv cx e es sa sm s0
         (mid with gas_obs := []) r (LocatedValue ty p) t` by metis_tac[] >>
      qpat_assum `!e ee sm sn t ef r u ty p w tv. _`
@@ -231,8 +231,9 @@ Proof
         Cases_on `kw` >> gvs[]) >>
       `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id`
         by fs[ci_mono_def] >>
-      drule extrequest_joint_unwrap_read >>
-      disch_then drule >> disch_then drule >>
+      drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+        extrequest_joint_unwrap_read >> simp[] >>
+      disch_then (qspecl_then [`t`, `sm`, `sb`, `op`, `mid with gas_obs := []`] mp_tac) >>
       simp[] >> strip_tac >>
       `dty = ret` by
         (qpat_assum `compile_ext_call_kwarg _ _ _ _ _ _ = _` mp_tac >>
@@ -285,9 +286,10 @@ Proof
       conj_tac
       >- (irule unwrap_value_safe_operand >> goal_assum (drule_at Any) >>
           Cases_on `vv` >> fs[word_result_ok_def] >>
-          qpat_assum `vv_post _ _ _ _ e es _ _ _ _ _ _ _` mp_tac >>
-          simp[NoAsms, vv_post_def, vv_holds_def] >>
-          rpt strip_tac >> fs[]) >>
+          rename1 `LocatedValue tag p` >>
+          Cases_on `p.ptr_location = LocMemory` >- simp[] >>
+          `tag = expr_type e` by fs[vv_post_def, vv_holds_def] >>
+          gvs[]) >>
       conj_tac >- fs[extrequest_read_frame_def] >>
       conj_tac >- (fs[expr_post_def] >> metis_tac[]) >>
       conj_tac >- (fs[expr_post_def] >> metis_tac[]) >>
@@ -429,8 +431,10 @@ Resume extrequest_kwarg_retained_cps[word_history]:
   `safe_operand sb op` by
     (irule unwrap_value_safe_operand >> goal_assum (drule_at Any) >>
      Cases_on `vv` >> fs[word_result_ok_def] >>
-     qpat_assum `vv_post _ _ _ _ e es _ _ _ _ _ _ _` mp_tac >>
-     simp[NoAsms, vv_post_def, vv_holds_def] >> rpt strip_tac >> fs[]) >>
+     rename1 `LocatedValue tag p` >>
+     Cases_on `p.ptr_location = LocMemory` >- simp[] >>
+     `tag = expr_type e` by fs[vv_post_def, vv_holds_def] >>
+     gvs[]) >>
   simp[extrequest_retained_value_def] >>
   conj_tac >- (gvs[expr_post_def]) >>
   qexists `tv` >> gvs[]
