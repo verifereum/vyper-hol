@@ -458,6 +458,147 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[] >> gvs[codegen_ready_inst_def]
 QED
 
+Theorem ordinary_inst_uses_compute_operands:
+  !inst v. inst_wf inst /\ MEM v (inst_uses inst) ==>
+    MEM (Var v) (compute_operands inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compute_operands_def, venomInstTheory.inst_uses_def,
+      passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+  IF_CASES_TAC
+  >- simp[asmIRTheory.get_non_label_operands_def, MEM_FILTER] >>
+  IF_CASES_TAC
+  >- (gvs[venomWfTheory.inst_wf_def] >>
+      Cases_on `inst.inst_operands` >> gvs[]) >>
+  simp[]
+QED
+
+Theorem analyzed_live_loss_compute_operand:
+  !fn bb i v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\
+    MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) /\
+    ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i)) ==>
+    MEM (Var v) (compute_operands (EL i bb.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >>
+     metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze]) >>
+  `live_vars_at (liveness_analyze fn) bb.bb_label i =
+    liveness_transfer fn.fn_blocks (EL i bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
+    (drule livenessProofsTheory.live_vars_at_transfer >>
+     disch_then (qspecl_then [`bb.bb_label`,`bb`,`i`] mp_tac) >> simp[]) >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >>
+     metis_tac[EL_MEM]) >>
+  irule ordinary_inst_uses_compute_operands >> simp[] >>
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem,
+      livenessDefsTheory.MEM_ordered_inst_uses]
+QED
+
+Theorem native_indexed_ordinary_step_demand_support:
+  !fn bb dfg k before inst rest ops after v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    DROP k (non_param_insts bb) = inst::rest /\
+    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+    ~is_param_opcode inst.inst_opcode /\ ~MEM v inst.inst_outputs /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+    LIST_ELEM_COUNT (Var v) before.ps_stack +
+      (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) before.ps_stack \/ Var v IN FDOM before.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+k))) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn inst
+      (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (k + LENGTH (get_params bb.bb_instructions) + 1))
+      (bb_is_halting bb)
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      bb.bb_label before = SOME (ops,after) ==>
+    ((MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) ==>
+      MEM v (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (k + LENGTH (get_params bb.bb_instructions) + 1)))
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  drule_all native_indexed_step_layout >> strip_tac >>
+  `LENGTH (compute_operands inst) <= 16 /\
+   ((inst.inst_opcode = PHI \/ inst.inst_opcode = OFFSET) ==> inst.inst_outputs <> [])` by
+    (conj_tac >- fs[codegen_ready_inst_def] >>
+     strip_tac >> gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  `MEM (Var v) before.ps_stack \/ Var v IN FDOM before.ps_spilled` by
+    (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+       fnPlanLineageNativeOriginsTheory.native_inst_variable_origins >>
+     disch_then (qspec_then `v` mp_tac) >> simp[]) >>
+  `LENGTH (get_params bb.bb_instructions)+k < LENGTH bb.bb_instructions` by
+    (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `LENGTH bb.bb_instructions = LENGTH (get_params bb.bb_instructions) +
+      k + SUC (LENGTH rest)` by
+    (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     qpat_x_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  ` (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (k + LENGTH (get_params bb.bb_instructions) + 1)) =
+      live_vars_at (liveness_analyze fn) bb.bb_label
+        (SUC (LENGTH (get_params bb.bb_instructions)+k))` by
+    (Cases_on `rest` >> simp[NoAsms] >> AP_TERM_TAC >> gvs[NoAsms] >> decide_tac) >>
+  gvs[] >> spose_not_then assume_tac >>
+  `MEM (Var v) (compute_operands (EL (k + LENGTH (get_params bb.bb_instructions)) bb.bb_instructions))` by
+    (irule analyzed_live_loss_compute_operand >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    fnPlanLineageSetupTheory.native_inst_last_use_extinction >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED
+
+Theorem native_indexed_ordinary_step_dead_absent:
+  !fn bb dfg k before inst rest ops after v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    DROP k (non_param_insts bb) = inst::rest /\
+    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+    ~is_param_opcode inst.inst_opcode /\ ~MEM v inst.inst_outputs /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+    LIST_ELEM_COUNT (Var v) before.ps_stack +
+      (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) before.ps_stack \/ Var v IN FDOM before.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH (get_params bb.bb_instructions)+k))) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn inst
+      (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (k + LENGTH (get_params bb.bb_instructions) + 1))
+      (bb_is_halting bb)
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      bb.bb_label before = SOME (ops,after) /\
+    ~MEM v (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (k + LENGTH (get_params bb.bb_instructions) + 1)) ==>
+    ~MEM (Var v) after.ps_stack /\ Var v NOTIN FDOM after.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    native_indexed_ordinary_step_demand_support >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
 Theorem native_indexed_step_fresh_output_resource_bound:
   !fn bb dfg k before inst rest ops after v.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
