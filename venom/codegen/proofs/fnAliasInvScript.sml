@@ -15551,6 +15551,134 @@ Proof
   first_x_assum irule >> simp[alias_occ_event_wf]
 QED
 
+Theorem alias_probe_loop_not_normalized:
+  ~cfg_is_normalized (cfg_analyze alias_probe_loop_fn) alias_probe_loop_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_root_loop_fn_def:
+  alias_root_loop_fn = mk_raw_function "root_loop_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 1 CALLDATASIZE [] ["r"];
+          mk_inst 2 JMP [Label "body"] []] |>;
+     <| bb_label := "body"; bb_instructions :=
+         [mk_inst 3 ASSIGN [Var "r"] ["a"];
+          mk_inst 4 ISZERO [Var "a"] ["z"];
+          mk_inst 5 JNZ [Var "z"; Label "backedge"; Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions := [mk_inst 6 STOP [] []] |>;
+     <| bb_label := "backedge"; bb_instructions :=
+         [mk_inst 7 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_root_loop_ready:
+  codegen_ready_fn alias_root_loop_fn /\
+  normalize_operand (dfg_build_function alias_root_loop_fn) [] (Var "a") = Var "r"
+Proof
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_root_loop_plan_def:
+  alias_root_loop_plan n ps = generate_block_plan
+    (liveness_analyze alias_root_loop_fn) (dfg_build_function alias_root_loop_fn)
+    (cfg_analyze alias_root_loop_fn) alias_root_loop_fn
+    (EL n alias_root_loop_fn.fn_blocks) ps
+End
+
+Definition alias_root_loop_entry_def:
+  alias_root_loop_entry = THE (alias_root_loop_plan 0 (init_cleanup_plan_state NONE [] 0 0))
+End
+Definition alias_root_loop_header_def:
+  alias_root_loop_header = THE (alias_root_loop_plan 1 (SND alias_root_loop_entry))
+End
+Definition alias_root_loop_body_def:
+  alias_root_loop_body = THE (alias_root_loop_plan 2 (SND alias_root_loop_header))
+End
+Definition alias_root_loop_backedge_def:
+  alias_root_loop_backedge = THE (alias_root_loop_plan 4 (SND alias_root_loop_body))
+End
+Definition alias_root_loop_reentry_def:
+  alias_root_loop_reentry = (SND alias_root_loop_entry) with
+    <| ps_stack := (SND alias_root_loop_backedge).ps_stack;
+       ps_spilled := (SND alias_root_loop_backedge).ps_spilled |>
+End
+
+Theorem alias_root_loop_plans_success:
+  IS_SOME (alias_root_loop_plan 0 (init_cleanup_plan_state NONE [] 0 0)) /\
+  IS_SOME (alias_root_loop_plan 1 (SND alias_root_loop_entry)) /\
+  IS_SOME (alias_root_loop_plan 2 (SND alias_root_loop_header)) /\
+  IS_SOME (alias_root_loop_plan 4 (SND alias_root_loop_body)) /\
+  IS_SOME (alias_root_loop_plan 1 alias_root_loop_reentry)
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem alias_root_loop_inventory:
+  (SND alias_root_loop_entry).ps_stack = [] /\
+  (SND alias_root_loop_header).ps_stack = [Var "r"] /\
+  (SND alias_root_loop_body).ps_stack = [] /\
+  (SND alias_root_loop_backedge).ps_stack = [] /\
+  alias_root_loop_reentry.ps_stack = [] /\
+  alias_root_loop_reentry.ps_spilled = FEMPTY /\
+  ~plan_holds (SND alias_root_loop_body) (Var "a") /\
+  ~plan_holds alias_root_loop_reentry (Var "a")
+Proof
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> conj_tac >- EVAL_TAC >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+
+Definition alias_root_pressure_fn_def:
+  alias_root_pressure_fn = alias_root_loop_fn with fn_blocks :=
+    LUPDATE (<| bb_label := "body"; bb_instructions :=
+      MAPi (\i v. if v = "x16" then mk_inst (10+i) ASSIGN [Var "r"] ["a"]
+        else mk_inst (10+i) CALLDATASIZE [] [v]) alias_spill_probe_names ++
+      [mk_inst 30 ADD [Var "x0"; Var "x1"] ["c"]] ++
+      MAPi (\i v. mk_inst (31+i) MSTORE [Lit (n2w (32*i)); Var v] [])
+        (FILTER (\v. v <> "x16") (DROP 2 alias_spill_probe_names) ++ ["a"]) ++
+      [mk_inst 49 JNZ [Var "c"; Label "backedge"; Label "exit"] []] |>)
+      2 alias_root_loop_fn.fn_blocks
+End
+
+Theorem alias_root_pressure_ready:
+  codegen_ready_fn alias_root_pressure_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_root_pressure_plan_def:
+  alias_root_pressure_plan n ps = generate_block_plan
+    (liveness_analyze alias_root_pressure_fn) (dfg_build_function alias_root_pressure_fn)
+    (cfg_analyze alias_root_pressure_fn) alias_root_pressure_fn
+    (EL n alias_root_pressure_fn.fn_blocks) ps
+End
+Definition alias_root_pressure_entry_def:
+  alias_root_pressure_entry = THE (alias_root_pressure_plan 0 (init_cleanup_plan_state NONE [] 0 0))
+End
+Definition alias_root_pressure_header_def:
+  alias_root_pressure_header = THE (alias_root_pressure_plan 1 (SND alias_root_pressure_entry))
+End
+Definition alias_root_pressure_cut_def:
+  alias_root_pressure_cut n = generate_block_insts_plan
+    (liveness_analyze alias_root_pressure_fn) (dfg_build_function alias_root_pressure_fn)
+    (cfg_analyze alias_root_pressure_fn) alias_root_pressure_fn "body" F 0 n 0
+    (TAKE n (EL 2 alias_root_pressure_fn.fn_blocks).bb_instructions)
+    (SND (clean_stack_plan (liveness_analyze alias_root_pressure_fn)
+      (cfg_analyze alias_root_pressure_fn) alias_root_pressure_fn
+      (EL 2 alias_root_pressure_fn.fn_blocks) (SND alias_root_pressure_header)))
+End
+
+Theorem alias_root_pressure_actual_spill:
+  IS_SOME (alias_root_pressure_cut 21) /\
+  Var "a" IN FDOM (SND (THE (alias_root_pressure_cut 21))).ps_spilled
+Proof
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
