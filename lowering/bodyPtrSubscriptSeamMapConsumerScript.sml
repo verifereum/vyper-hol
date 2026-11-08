@@ -44,3 +44,56 @@ Proof
   >- simp[gas_marked_exec_ptr_def] >>
   disj1_tac >> qexists `u` >> simp[] >> gvs[]
 QED
+
+Theorem mapping_subscript_leaf_type:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  place_type cenv obj = MapPT kt vt ==>
+  vt = Type ann
+Proof
+  strip_tac >> drule_all exprSimSubscriptMapTheory.expr_body_pre_map_subscript_base >> strip_tac >>
+  drule_all exprSimSubscriptMapTheory.expr_map_pre_checked_type >> strip_tac >>
+  `~well_typed_expr env obj` by
+    metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place] >>
+  qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
+  simp[exprSimHypsDefsTheory.expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def] >>
+  Cases_on `vt` >> simp[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]
+QED
+
+Theorem mapping_marked_source_leaf:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  place_type cenv obj = MapPT kt vt /\
+  gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx obj)
+    (es,s0,G0,tn0) left (INL (HashMapRef tr base_slot kt vt)) mid G1 tn1 (OK t) /\
+  gas_marked_exec_ptr D (ctx,fn) PG (bind (eval_expr cx idx) (read_result cx))
+    (mid with gas_obs := [],t,G1,tn1) right (INL kv) fin Gi tni (OK it) ==>
+  vt = Type ann /\ expr_type idx = kt /\ hashmap_key_type kt /\
+  (?key_ty. evaluate_type (get_tenv cx) kt = SOME key_ty /\ value_has_type key_ty kv) /\
+  contract_storage_well_formed cx (fin with gas_obs := []) /\ storage_layout_safe cx /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\ MAP FDOM mid.scopes = MAP FDOM fin.scopes /\
+  ?tv. evaluate_type (get_tenv cx) ann = SOME tv /\
+    !tail. select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt)
+      (ValueSubscript kv) (fin with gas_obs := tail) =
+      (INL (PlaceR (StoragePlace tr
+        (hashmap_slot base_slot (encode_hashmap_key kt kv)) tv)),fin with gas_obs := tail)
+Proof
+  strip_tac >> drule_all mapping_subscript_leaf_type >> strip_tac >>
+  `gas_marked_exec F (ctx,fn) (eval_expr cx obj) (es,s0) left
+     (INL (HashMapRef tr base_slot kt vt)) mid (OK t)` by
+    (irule gas_marked_exec_ptr_exec >> goal_assum (drule_at Any)) >>
+  `gas_marked_exec F (ctx,fn) (bind (eval_expr cx idx) (read_result cx))
+     (mid with gas_obs := [],t) right (INL kv) fin (OK it)` by
+    (irule gas_marked_exec_ptr_exec >> goal_assum (drule_at Any)) >>
+  `expr_sim_inv cenv cx env (fin with gas_obs := []) /\
+   expr_type idx = kt /\ hashmap_key_type kt /\
+   (?key_ty. evaluate_type (get_tenv cx) kt = SOME key_ty /\ value_has_type key_ty kv) /\
+   MAP FDOM es.scopes = MAP FDOM mid.scopes /\ MAP FDOM mid.scopes = MAP FDOM fin.scopes` by
+    (irule exprSimSubscriptMapTheory.mapping_subscript_marked_success >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `?tv. evaluate_type (get_tenv cx) ann = SOME tv` by
+    (drule exprSimHypsTheory.expr_body_pre_type_evaluates >>
+     simp[vyperASTTheory.expr_type_def, optionTheory.IS_SOME_EXISTS]) >>
+  `contract_storage_well_formed cx (fin with gas_obs := []) /\ storage_layout_safe cx` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     pure_rewrite_tac[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+  gvs[] >> irule select_result_hashmap_leaf >> simp[]
+QED
