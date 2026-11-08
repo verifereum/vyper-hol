@@ -196,7 +196,7 @@ Proof
      (mk_inst sm.cs_next_id ADD [Lit kb; Lit ko]
        [STRING #"%" (toString sm.cs_next_var)]) s =
      OK (update_var (STRING #"%" (toString sm.cs_next_var)) (kb + ko) s)` by
-    simp[step_inst_base_def, venomInstTheory.mk_inst_def, exec_pure2_def,
+    simp[step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, exec_pure2_def,
          eval_operand_def, wordsTheory.WORD_ADD_COMM] >>
   drule_at (Pat `emit_op _ _ _ = _`) emit_op_word_path_frame_mem >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>

@@ -283,7 +283,7 @@ Proof
   `run_inst_seq (emitted_insts sa sb) s = OK u` by
     (`step_inst_base (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE)
         [dst;op] []) s = OK u` by
-      (Cases_on `tr` >> simp[Abbr `u`, step_inst_base_def, mk_inst_def, exec_write2_def]) >>
+      (Cases_on `tr` >> FIRST [simp[Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]]) >>
      simp[run_inst_seq_def]) >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (drule emit_void_mem_ok >> disch_then irule >> Cases_on `tr` >>
@@ -329,7 +329,7 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id ADD [Lit slot; Lit (n2w off)]
       [STRING #"%" (toString sa.cs_next_var)]) s =
     OK (update_var (STRING #"%" (toString sa.cs_next_var)) (slot + n2w off) s)` by
-    simp[mk_inst_def, step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+    simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
   drule emit_op_word_path_frame_mem >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
