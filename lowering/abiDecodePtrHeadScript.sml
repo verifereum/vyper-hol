@@ -5,7 +5,7 @@ Ancestors
   emitHelper emitHelperProps exprLoweringProps compileEnv list pred_set
   bodyPtrBopScalarSeq abiEncoder bodyPtrBopHashSuffix fragExec
   abiDecodePtrScalarReplay abiDecodePtrLoadReplay abiDecodePtrPosition
-  abiDecodePtrNormalized assignTuplePtrLocalBytesCopy
+  abiDecodePtrNormalized abiDecodePtrSelectionPrefix assignTuplePtrLocalBytesCopy
   stmtReasonLitFragMemory words arithmetic
   stateFrame fragExecPtr fragGasSeqPtr venomExecSemantics exprSimAccounts rich_list ptrDiscipline
   venomState finite_map abiDecodePtrMemberFrame bodyPtrDefs venomInst instIdxIndep
@@ -194,164 +194,72 @@ Resume abi_decode_getelemptr_success_ptr[phases]:
        (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
      fs[EVERY_MEM, is_terminator_def, mk_inst_def] >>
      rpt strip_tac >> gvs[is_terminator_def]) >>
-  `?s1. s1.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa c1) /\
-    run_inst_seq (emitted_insts sa c1) s = OK (s1 with vs_inst_idx := s.vs_inst_idx) /\
-    run_inst_seq (emitted_insts c1 c3 ++ emitted_insts c3 sb) s1 =
-      OK (u with vs_inst_idx := s1.vs_inst_idx)` by
+  `fn_has_code sa c3 func /\ fn_has_code c3 sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  drule_all abi_decode_selection_prefix_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `eval_operand offset s2 = SOME (mload (w2n b+p) s)` >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn
+    (emitted_insts sa c3) s H2 tm2` >>
+  `emitted_insts sa c3 = emitted_insts sa c1 ++ emitted_insts c1 c3` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa c3)` by
+    (qpat_x_assum `EVERY _ (emitted_insts c1 c3)` mp_tac >> simp[]) >>
+  `?r. r.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa c3) /\
+    run_inst_seq (emitted_insts sa c3) s = OK (r with vs_inst_idx := s.vs_inst_idx) /\
+    run_inst_seq (emitted_insts c3 sb) r = OK (u with vs_inst_idx := r.vs_inst_idx)` by
     (irule abi_decode_run_split_normalized >> simp[] >>
-     qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = _` mp_tac >> simp[]) >>
-  `?s2. s2.vs_inst_idx = s1.vs_inst_idx + LENGTH (emitted_insts c1 c3) /\
-    run_inst_seq (emitted_insts c1 c3) s1 = OK (s2 with vs_inst_idx := s1.vs_inst_idx) /\
-    run_inst_seq (emitted_insts c3 sb) s2 = OK (u with vs_inst_idx := s2.vs_inst_idx)` by
-    (drule_all abi_decode_run_split_normalized >> simp[]) >>
-  `s1.vs_inst_idx = LENGTH c1.cs_current_insts /\
-   s2.vs_inst_idx = LENGTH c3.cs_current_insts` by
-    (qpat_x_assum `inst_extends sa c1` mp_tac >>
-     qpat_x_assum `inst_extends c1 c3` mp_tac >>
-     qpat_x_assum `s1.vs_inst_idx = _` mp_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = _` mp_tac >> simp[APPEND_ASSOC]) >>
+  `r = s2` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa c3) s = OK (r with vs_inst_idx := _)` mp_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sa c3) s = OK (s2 with vs_inst_idx := _)` mp_tac >>
+     qpat_x_assum `r.vs_inst_idx = _` mp_tac >>
      qpat_x_assum `s2.vs_inst_idx = _` mp_tac >>
      qpat_x_assum `s.vs_inst_idx = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[inst_extends_def] >>
-     rpt strip_tac >> fs[]) >>
-  suspend "head_add"
-QED
-
-Resume abi_decode_getelemptr_success_ptr[head_add]:
-  `cs_extends c1 sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa c1 func` by metis_tac[fn_has_code_split] >>
-  `same_blocks sa c1` by metis_tac[emit_op_extends] >>
-  `!op. op IN {pos; Lit (n2w off)} ==>
-    op_prov G op = NONE /\ op_taint tn op = {}` by
-    (rpt strip_tac >> gvs[op_prov_def, op_taint_def]) >>
-  drule_all abi_decode_scalar_compile_replay_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn
-    (emitted_insts sa c1) s H tm` >>
-  `s1.vs_memory = s.vs_memory /\ s1.vs_halted = s.vs_halted /\
-   s1.vs_current_bb = s.vs_current_bb` by
-    (qpat_x_assum `s1 = s with <|vs_vars := _; vs_inst_idx := _|>` mp_tac >>
-     simp[venom_state_component_equality]) >>
-  `abi_decode_ptr_window H tm s1 src b h` by
-    (qpat_x_assum `!x. x IN {x | not_fresh_at sa x} ==> _`
-       (qspec_then `src` mp_tac) >>
-     simp[] >> strip_tac >>
-     gvs[abi_decode_ptr_window_def, ptr_covers_def, op_taint_def]) >>
-  `eval_operand head s1 = SOME (n2w p)` by
-    (drule_all buffer_emit_add_run >> strip_tac >>
-     qpat_assum `emit_op ADD [pos; Lit (n2w off)] sa = _`
-       (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-     qpat_x_assum `s with vs_vars := _ = s1 with vs_inst_idx := _` mp_tac >>
+     qpat_x_assum `inst_extends sa c1` mp_tac >>
+     qpat_x_assum `inst_extends c1 c3` mp_tac >>
+     qpat_x_assum `emitted_insts sa c3 = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[venom_state_component_equality] >> rpt strip_tac >>
-     qpat_x_assum `_ |+ _ = s1.vs_vars` (SUBST1_TAC o SYM) >> simp[FLOOKUP_UPDATE]) >>
-  suspend "load_replay"
-QED
-
-Resume abi_decode_getelemptr_success_ptr[load_replay]:
-  `fn_has_code c1 c3 func` by metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `~s1.vs_halted /\ s1.vs_current_bb = c1.cs_current_bb /\ op_taint tm head = {}` by
-    (fs[same_blocks_def] >> metis_tac[IN_INSERT]) >>
-  drule_all abi_decode_relative_load_success_replay_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  suspend "suffix"
-QED
-
-Resume abi_decode_getelemptr_success_ptr[suffix]:
-  `~s2.vs_halted /\ s2.vs_current_bb = c3.cs_current_bb /\
-   s2.vs_memory = s1.vs_memory /\
-   lookup_var out s2 = SOME (mload (w2n b+p) s1)` by
-    (fs[lookup_var_def]) >>
-  `op_prov H pos = NONE /\ op_taint tm pos = {}` by
-    (qpat_x_assum `!op. op IN {head; _; _} ==> _`
-       (qspec_then `pos` mp_tac) >> simp[NoAsms]) >>
-  `op_prov G'' pos = NONE /\ op_taint tn'' pos = {}` by
-    (Cases_on `pos` >> simp[op_prov_def, op_taint_def] >>
-     rename1 `FLOOKUP G'' var = NONE` >>
-     `not_fresh_at c1 var` by
-       (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-     qpat_x_assum `!x. not_fresh_at c1 x ==> _`
-       (qspec_then `var` mp_tac) >>
-     qpat_x_assum `op_prov H (Var var) = NONE` mp_tac >>
-     qpat_x_assum `op_taint tm (Var var) = {}` mp_tac >>
-     simp[NoAsms, op_prov_def, op_taint_def] >>
-     qpat_x_assum `not_fresh_at c1 var` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[]) >>
-  `!op. op IN {pos;offset} ==> op_prov G'' op = NONE /\ op_taint tn'' op = {}` by
+     simp[venom_state_component_equality, inst_extends_def] >> metis_tac[]) >>
+  qpat_x_assum `r = s2` SUBST_ALL_TAC >>
+  `!op. op IN {pos;offset} ==> op_prov H2 op = NONE /\ op_taint tm2 op = {}` by
     (simp[] >> metis_tac[]) >>
-  `fn_has_code c3 sb func /\ same_blocks c3 sb` by
-    (imp_res_tac emit_op_extends >>
-     metis_tac[fn_has_code_split, cs_extends_trans, same_blocks_trans]) >>
+  `same_blocks c3 sb` by
+    (imp_res_tac emit_op_extends >> metis_tac[same_blocks_trans]) >>
   qabbrev_tac `un = u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   `un.vs_inst_idx = LENGTH sb.cs_current_insts /\
    run_inst_seq (emitted_insts c3 sb) s2 = OK (un with vs_inst_idx := s2.vs_inst_idx)` by
     simp[Abbr `un`] >>
   drule_all abi_decode_scalar_compile_replay_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG H2 tm2
+    (emitted_insts c3 sb) s2 Hfinal tk` >>
   suspend "compose"
 QED
 
 Resume abi_decode_getelemptr_success_ptr[compose]:
-  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G'' tn''
-    (emitted_insts c3 sb) s2 Hfinal tk` >>
   `un.vs_inst_idx = s2.vs_inst_idx + LENGTH (emitted_insts c3 sb)` by
     (qpat_x_assum `inst_extends c3 sb` mp_tac >>
      qpat_x_assum `s2.vs_inst_idx = LENGTH _` mp_tac >>
      qpat_x_assum `un.vs_inst_idx = LENGTH _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[inst_extends_def] >>
      rpt strip_tac >> fs[]) >>
-  `inst_seq_ptr D 0 ctx func PG G tn
-     (emitted_insts sa c1 ++ emitted_insts c1 c3) s G'' tn'' /\
-   run_inst_seq (emitted_insts sa c1 ++ emitted_insts c1 c3) s =
-     OK (s2 with vs_inst_idx := s.vs_inst_idx) /\
-   s2.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa c1 ++ emitted_insts c1 c3)` by
-    (qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (emitted_insts c3 sb) _ _ _` kall_tac >>
-     drule_all inst_seq_ptr_append_normalized >> simp[] >> metis_tac[]) >>
-  `EVERY (\i. ~is_terminator i.inst_opcode)
-    (emitted_insts sa c1 ++ emitted_insts c1 c3)` by simp[] >>
+  `s2.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sa c3)` by
+    (qpat_x_assum `s2.vs_inst_idx = s.vs_inst_idx + _` mp_tac >> simp[]) >>
   `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s Hfinal tk` by
-    (qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (emitted_insts sa c1) _ _ _` kall_tac >>
-     qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (emitted_insts c1 c3) _ _ _` kall_tac >>
+    (qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (emitted_insts sa c3) _ _ _` mp_tac >>
+     disch_then assume_tac >>
      drule_all inst_seq_ptr_append_normalized >> strip_tac >>
      qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ (_ ++ _) _ _ _` mp_tac >> simp[APPEND_ASSOC]) >>
-  suspend "export"
-QED
-
-Resume abi_decode_getelemptr_success_ptr[export]:
-  `!x. not_fresh_at sa x ==> not_fresh_at c1 x /\ not_fresh_at c3 x` by
-    (fs[not_fresh_at_def] >> rpt strip_tac >>
-     first_x_assum drule >> simp[] >> decide_tac) >>
-  `eval_operand pos s2 = SOME z` by
-    (Cases_on `pos`
-     >- fs[eval_operand_def]
-     >- (rename1 `eval_operand (Var x) s = SOME z` >>
-         `not_fresh_at sa x /\ not_fresh_at c1 x` by metis_tac[] >>
-         qpat_x_assum `!x. x IN {x | not_fresh_at sa x} ==> _`
-           (qspec_then `x` mp_tac) >>
-         qpat_x_assum `!x. not_fresh_at c1 x ==> _`
-           (qspec_then `x` mp_tac) >>
-         qpat_x_assum `eval_operand (Var x) s = SOME z` mp_tac >>
-         qpat_x_assum `not_fresh_at sa x` mp_tac >>
-         qpat_x_assum `not_fresh_at c1 x` mp_tac >>
-         POP_ASSUM_LIST (K ALL_TAC) >>
-         simp[eval_operand_def, lookup_var_def]) >>
-     qpat_x_assum `s1 = s with <|vs_vars := _; vs_inst_idx := _|>` mp_tac >>
-     qpat_x_assum `state_frame (s2 with vs_inst_idx := _) = state_frame s1` mp_tac >>
-     qpat_x_assum `eval_operand _ s = SOME z` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[venom_state_component_equality, state_frame_def, eval_operand_def]) >>
-  `eval_operand offset s2 = SOME (mload (w2n b+p) s1)` by
-    simp[eval_operand_def] >>
   drule_all abi_decode_position_suffix_result >> strip_tac >>
   suspend "values"
 QED
 
 Resume abi_decode_getelemptr_success_ptr[values]:
-  qexistsl_tac [`out'`, `Hfinal`, `tk`] >>
-  `lookup_var out' u = SOME (z + mload (w2n b+p) s)` by
-    (qpat_x_assum `lookup_var out' (_ with vs_inst_idx := _) = _` mp_tac >>
-     qpat_x_assum `s1.vs_memory = s.vs_memory` mp_tac >>
-     simp[lookup_var_def, mload_def, Abbr `un`]) >>
+  qexistsl_tac [`out`, `Hfinal`, `tk`] >>
+  `lookup_var out u = SOME (z + mload (w2n b+p) s)` by
+    (qpat_x_assum `lookup_var out (_ with vs_inst_idx := _) = _` mp_tac >>
+     simp[lookup_var_def, Abbr `un`]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
     (qpat_x_assum `emitted_insts sa sb = _` (fn th => rewrite_tac[th]) >>
      asm_rewrite_tac[EVERY_APPEND]) >>
@@ -361,46 +269,43 @@ Resume abi_decode_getelemptr_success_ptr[values]:
      qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = OK u` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[exec_result_map_def, venom_state_component_equality]) >>
-  `u.vs_memory = s.vs_memory /\ state_frame u = state_frame s /\
+  `state_frame u = state_frame s /\
    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-   u.vs_allocas = s.vs_allocas /\ u.vs_accounts = s.vs_accounts /\
-   u.vs_transient = s.vs_transient /\ u.vs_call_ctx = s.vs_call_ctx` by
+   u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+   u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+   u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_x_assum `un = s2 with <|vs_vars := _; vs_inst_idx := _|>` mp_tac >>
-     qpat_x_assum `s1 = s with <|vs_vars := _; vs_inst_idx := _|>` mp_tac >>
-     qpat_x_assum `state_frame (s2 with vs_inst_idx := _) = state_frame s1` mp_tac >>
-     qpat_x_assum `s2.vs_current_bb = c3.cs_current_bb` mp_tac >>
+     qpat_x_assum `state_frame s2 = _` mp_tac >>
      qpat_x_assum `same_blocks c3 sb` mp_tac >>
+     qpat_x_assum `s2.vs_current_bb = c3.cs_current_bb` mp_tac >>
      qpat_x_assum `~s2.vs_halted` mp_tac >>
      qpat_x_assum `u.vs_inst_idx = s.vs_inst_idx` mp_tac >>
-     simp[Abbr `un`, NoAsms] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[ state_frame_def, same_blocks_def, venom_state_component_equality] >>
-     metis_tac[]) >>
-  simp[] >> suspend "finish_exports"
-QED
-
-Resume abi_decode_getelemptr_success_ptr[finish_exports]:
-  reverse conj_tac
+     simp[Abbr `un`, NoAsms] >> POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[state_frame_def, same_blocks_def, venom_state_component_equality] >> metis_tac[]) >>
+  simp[] >> reverse conj_tac
   >- (conj_tac
       >- (qpat_x_assum `state_frame u = state_frame s` mp_tac >>
           qpat_x_assum `u.vs_current_bb = sb.cs_current_bb` mp_tac >>
           qpat_x_assum `s.vs_current_bb = sa.cs_current_bb` mp_tac >>
           POP_ASSUM_LIST (K ALL_TAC) >> simp[state_frame_def] >> metis_tac[]) >>
       rpt strip_tac >>
-      `not_fresh_at c1 x /\ not_fresh_at c3 x` by metis_tac[] >>
-      qpat_x_assum `!x. x IN {x | not_fresh_at sa x} ==> _`
-        (qspec_then `x` mp_tac) >>
-      qpat_x_assum `!x. not_fresh_at c1 x ==> _`
-        (qspec_then `x` mp_tac) >>
-      qpat_x_assum `!x. x IN {x | not_fresh_at c3 x} ==> _`
-        (qspec_then `x` mp_tac) >>
+      `not_fresh_at c3 x` by
+        (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >>
+      qpat_x_assum `!x. x IN {x | not_fresh_at c3 x} ==> _` (qspec_then `x` mp_tac) >>
       simp[Abbr `un`, lookup_var_def, op_taint_def] >> metis_tac[]) >>
   suspend "gas_export"
 QED
 
 Resume abi_decode_getelemptr_success_ptr[gas_export]:
   `inst_extends sa sb /\ same_blocks sa sb` by
-    metis_tac[inst_extends_trans, same_blocks_trans, emit_op_extends] >>
+    (map_every (fn pat => qpat_x_assum pat mp_tac)
+       [`inst_extends sa c1`, `inst_extends c1 c3`, `inst_extends c3 sb`,
+        `same_blocks c3 sb`, `emit_op ADD [pos; Lit (n2w off)] sa = _`,
+        `emit_op ADD [Var src;head] c1 = _`, `emit_op MLOAD [addr] c2 = _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     imp_res_tac emit_op_extends >>
+     metis_tac[inst_extends_trans, same_blocks_trans]) >>
   `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
    sb.cs_current_bb = sa.cs_current_bb` by
     (qpat_x_assum `inst_extends sa sb` mp_tac >>
