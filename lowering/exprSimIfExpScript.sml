@@ -1441,7 +1441,7 @@ Proof
   simp[raise_def, vyperStateTheory.bind_def]
 QED
 
-Theorem ifexp_root_condition_admissible[local]:
+Theorem ifexp_root_condition_admissible:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es ==>
   gas_admissible (vyperState$bind (eval_expr cx c) (read_result cx)) expr_res_ok es
 Proof
@@ -1453,7 +1453,7 @@ Proof
   fs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]
 QED
 
-Theorem ifexp_root_branch_admissible[local]:
+Theorem ifexp_root_branch_admissible:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   (!tail. vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := xs ++ tail) = (INL (BoolV sel),mid with gas_obs := tail)) ==>
@@ -1483,7 +1483,7 @@ Proof
   simp[vyperStateTheory.bind_def, raise_def, expr_vv_res_ok_def]
 QED
 
-Theorem ifexp_root_condition_cert[local]:
+Theorem ifexp_root_condition_cert:
   gas_exempt_cert memory tops (ctx,func)
     (vyperState$ignore_bind
       (vyperState$bind (eval_expr cx c) (read_result cx)) (return ()))
@@ -2451,7 +2451,7 @@ Proof
   Cases_on `sel` >> fs[GSYM vyperStateTheory.ignore_bind_def]
 QED
 
-Theorem ifexp_root_condition_exit[local]:
+Theorem ifexp_root_condition_exit:
   gas_marked_exec F (ctx,func)
     (vyperState$bind (eval_expr cx c) (read_result cx))
     (es,s0) marks res mid r /\ expr_exit res r ==>
