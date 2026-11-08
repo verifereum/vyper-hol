@@ -1,6 +1,7 @@
 Theory exprSimAbiEncodeArgsCountedLabels
 Ancestors
   fragGasMode fragGasPath abiArgsObservation venomExecProofs gasOutcome gasSummary gasExemptCert exprSimDefs
+  exprSimAbiEncodeArgsLabelReplay exprSimWordArgs loweringPosts
 
 Theorem abi_args_gas_edge_labels[local]:
   gas_path_edge ctx func s n (OK t) ==> t.vs_labels = s.vs_labels
@@ -52,4 +53,46 @@ Proof
   drule gas_exempt_cert_execution >>
   simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def]
+QED
+
+Theorem abi_args_counted_label_success:
+  expr_sim ctx func ce cx ty e es /\
+  lower_value compile_expr ce ty e sa = (Label l,sb) /\
+  bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. expr_post ctx func ce cx e es sa sb s0 (ee with gas_obs := []) v (Label l) t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      t.vs_labels = s0.vs_labels
+Proof
+  strip_tac >>
+  drule_all expr_sim_apply >> strip_tac >>
+  drule_all abi_args_lower_label_replay >> strip_tac >>
+  drule_all abi_args_no_read_outcome_success >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem abi_args_counted_label_observe:
+  expr_sim ctx func ce cx ty e es /\
+  lower_value compile_expr ce ty e sa = (Label l,sb) /\
+  bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. stmt_state_rel ctx func ce cx ee t /\
+      expr_val_rel cx (post_value_type ce e) v (Label l) t /\
+      expr_val_at ce cx (post_value_type ce e) sa sb ee v (Label l) t /\
+      t.vs_labels = s0.vs_labels
+Proof
+  strip_tac >> drule_all abi_args_counted_label_success >>
+  simp[expr_post_def, expr_val_at_def] >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
 QED
