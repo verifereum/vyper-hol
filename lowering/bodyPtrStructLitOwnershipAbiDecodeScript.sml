@@ -102,7 +102,9 @@ Resume alloc_run_abi_decode_mutual[bytes]:
   simp[Once compile_abi_decode_to_buf_def, comp_ignore_bind_def, comp_bind_assoc] >>
   rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >> reverse conj_tac
     >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
-      SRULE [SF ETA_ss] alloc_run_emit_void_fresh, comp_return_def] >>
+      SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+      SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
+      SRULE [SF ETA_ss] alloc_run_compile_abi_decode_range_check, comp_return_def] >>
       simp[alloc_run_def, comp_return_def, alloc_frame_refl]) >> gen_tac >> simp[]) >>
   Cases_on `opc` >> simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
       SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
