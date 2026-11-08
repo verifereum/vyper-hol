@@ -56,7 +56,10 @@ Proof
  metis_tac[ctor_path_literal_sizes_empty]
 QED
 
+(* Declaration bounds are independent of initialized values (ResourcesProbe). *)
 Theorem ctor_landing_immutable_separation:
+ immutable_decl_sep ce cx es.scopes actual.vs_vars actual.vs_allocas
+   actual.vs_alloca_next /\
  (!name tv v off.
    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
@@ -99,6 +102,8 @@ Proof
 QED
 
 Theorem ctor_task_immutable_separation:
+ immutable_decl_sep ce cx es0.scopes actual.vs_vars actual.vs_allocas
+   actual.vs_alloca_next /\
  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
  deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
  immutable_section_layout ce tops /\ ce.ce_module = NONE /\ cx.txn = tx /\
@@ -110,6 +115,7 @@ Theorem ctor_task_immutable_separation:
  immutable_alloca_sep func ce cx (es0 with outcomes := SOME os) actual
 Proof
  strip_tac >> irule ctor_landing_immutable_separation >>
+ reverse conj_tac >- simp[] >>
  qexists `imm_len tops` >> simp[] >>
  conj_tac >- metis_tac[] >>
  reverse conj_tac >- metis_tac[] >>

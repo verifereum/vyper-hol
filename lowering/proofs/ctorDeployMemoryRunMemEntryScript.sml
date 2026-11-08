@@ -11,7 +11,7 @@ Theory ctorDeployMemoryRunMemEntry
 Ancestors
   ctorDeployLoweringDefs o1PassContract stmtSimDefs gasSummary memSafeRun
   allocaHistory venomInst ctorDeployShape o1PipelineCorrect ptrDiscipline
-  exprLoweringProps compileVyper
+  exprLoweringProps compileVyper ctorDeployLoweringEntryBodyResources
   ctorDeployMemoryRunMemEntryLanding ctorDeployMemoryRunMemEntryProvenanceComplete
   ctorDeployMemoryRunMemEntryBoundary ctorDeployMemoryRunMemEntryTaskInputs
   ctorDeployLoweringFrame ctorDeployMemoryRunMemEntryResources
@@ -107,6 +107,10 @@ Proof
      simp[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def]) >>
   drule_all ctor_task_landing_state_rel >> strip_tac >>
   drule ctor_checked_code_return_buf >> simp[] >> strip_tac >>
+  `immutable_alloca_sep fn (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
+    (deploy_evaluation_context tops am tx) es0 actual` by
+    (irule (cj 2 deploy_ctor_entry_immutable_resources) >>
+     simp[ctor_landing_env_exit_label] >> metis_tac[deploy_source_ok_def]) >>
   qexists `actual` >> simp[] >>
   conj_tac
   >- (simp[stmt_state_rel_def] >>
@@ -114,11 +118,7 @@ Proof
       >- (`supported_program tops` by gvs[deploy_source_ok_def] >>
           drule_all deploy_unit_fmp_room >> simp[]) >>
       conj_tac
-      >- (drule deploy_ctor_module_locations >> strip_tac >>
-          drule ctor_landing_immutable_layout >> strip_tac >>
-          irule ctor_task_immutable_separation >>
-          simp[deploy_evaluation_context_def, vyperInterpreterTheory.initial_evaluation_context_def,
-               ctor_landing_env_exit_label] >> metis_tac[]) >>
+      >- (gvs[immutable_alloca_sep_def] >> metis_tac[]) >>
       conj_tac
       >- (drule ctorDeployMemoryRunMemEntryRegisterEnvTheory.ctor_register_constructor_env_fields >>
           strip_tac >> simp[] >>

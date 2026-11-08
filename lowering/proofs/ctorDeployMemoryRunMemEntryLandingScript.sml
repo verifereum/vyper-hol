@@ -26,6 +26,14 @@ Proof
   transient_vars_rel (cenv with ce_module_vars := add_module_var_locations tops FEMPTY) cx` by
    (irule entry_storage_vars_rel >> simp[] >>
     qexistsl [`am`, `tops`, `tx`] >> simp[]) >>
+ `!key loc vis name ty slot.
+   FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME loc /\
+   MEM (VariableDecl vis Immutable name ty slot) tops ==> (NONE,name) <> key` by
+   (rpt strip_tac >> gvs[] >>
+    drule entryStateRelTheory.add_module_var_locations_mem >>
+    disch_then (qspecl_then [`FEMPTY`, `VariableDecl vis Immutable name ty slot`, `name`] mp_tac) >>
+    simp[toplevel_vtype_keys_toplevel_def] >>
+    Cases_on `slot` >> simp[add_module_var_locations_def]) >>
  `!key slot.
    (FLOOKUP (add_immutable_locations
      (get_struct_fields (make_struct_fields_map tops)) tops 0
@@ -37,9 +45,11 @@ Proof
     FLOOKUP (add_module_var_locations tops FEMPTY) key = SOME (TransientLoc slot))` by
    (rpt gen_tac >> conj_tac >> eq_tac >> strip_tac
     >- (drule add_immutable_locations_FLOOKUP >> simp[])
-    >- (irule ctorDeployLoweringEntryStateRelTheory.deploy_ctor_module_lookup_immutable_frame >> simp[])
+    >- (`!vis name ty sl. MEM (VariableDecl vis Immutable name ty sl) tops ==> (NONE,name) <> key` by metis_tac[] >>
+         drule add_immutable_locations_lookup_unchanged >> simp[])
     >- (drule add_immutable_locations_FLOOKUP >> simp[])
-    >- (irule ctorDeployLoweringEntryStateRelTheory.deploy_ctor_module_lookup_immutable_frame >> simp[])) >>
+    >- (`!vis name ty sl. MEM (VariableDecl vis Immutable name ty sl) tops ==> (NONE,name) <> key` by metis_tac[] >>
+         drule add_immutable_locations_lookup_unchanged >> simp[])) >>
  `!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops` by
    (gvs[source_deployment_rel_def, get_module_code_def] >> Cases >> simp[]) >>
  gvs[storage_vars_rel_def, transient_vars_rel_def] >>
