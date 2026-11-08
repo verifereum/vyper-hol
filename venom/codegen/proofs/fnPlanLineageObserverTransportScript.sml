@@ -1964,3 +1964,111 @@ Proof
   mp_tac (Q.SPECL [`[Var v]`,`ws`]
     fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged) >> gvs[]
 QED
+
+(* Deadness at every executed PHI boundary suffices; in the defining case
+   use fresh-output support, and otherwise the resource noncreation bound. *)
+Theorem native_phi_prefix_dead_absent[local]:
+  !lv dfg cfg fn lbl halt n len xs ps k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix
+      lv dfg cfg fn lbl halt n len xs ps k qs ==>
+    !v. k < LENGTH xs /\ ~halt /\ ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+      (!i. i < k ==> (EL i xs).inst_opcode = PHI /\
+        ~MEM v (live_vars_at lv lbl (n + SUC i))) ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_ind >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `k < LENGTH xs` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst = EL k xs` by metis_tac[HD_DROP, HD] >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ mid = SOME (ops,final)` >>
+  `~MEM (Var v) mid.ps_stack /\ Var v NOTIN FDOM mid.ps_spilled` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     `i < SUC k` by decide_tac >> metis_tac[]) >>
+  qpat_x_assum `!i. i < SUC k ==> _` (qspec_then `k` mp_tac) >>
+  simp[] >> strip_tac >>
+  `rest <> []` by
+    (strip_tac >> gvs[] >>
+     qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def,
+      arithmeticTheory.ADD_CLAUSES, GSYM arithmeticTheory.ADD_ASSOC] >>
+  Cases_on `v = HD (EL k xs).inst_outputs`
+  >- (drule_at (Pat `generate_phi_plan _ _ _ _ = _`)
+        native_phi_fresh_output_demand_support >>
+      gvs[arithmeticTheory.ADD1]) >>
+  drule generate_phi_plan_resource_bound >>
+  disch_then (qspec_then `v` mp_tac) >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >>
+  Cases_on `Var v IN FDOM final.ps_spilled` >> simp[] >> decide_tac
+QED
+
+Theorem native_defined_phi_body_demand_support:
+  codegen_ready_fn fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ ~halt /\
+  MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis bb.bb_instructions))) /\
+  ~MEM (Var v) incoming.ps_stack /\ Var v NOTIN FDOM incoming.ps_spilled /\
+  fnPlanLineageEntryProduction$native_inst_prefix (liveness_analyze fn) dfg cfg fn lbl halt 0 len
+    bb.bb_instructions incoming (LENGTH (collect_phis bb.bb_instructions)) endpoint ==>
+  (MEM (Var v) endpoint.ps_stack \/ Var v IN FDOM endpoint.ps_spilled) ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `collect_phis bb.bb_instructions <> []` by (strip_tac >> gvs[]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `bb <> HD fn.fn_blocks` by
+    (strip_tac >>
+     `fn.fn_blocks <> []` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+     drule_all fnPlanLineageEntryProductionTheory.ready_entry_static_boundary >>
+     gvs[]) >>
+  drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> strip_tac >>
+  `!i. i < LENGTH (collect_phis bb.bb_instructions) ==>
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    ~MEM v (inst_uses (EL i bb.bb_instructions))` by
+    suspend "no_reads" >>
+  Cases_on `MEM v (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions)))` >- simp[] >>
+  `!i. i < LENGTH (collect_phis bb.bb_instructions) ==>
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    ~MEM v (live_vars_at (liveness_analyze fn) lbl (0 + SUC i))` by
+    suspend "dead_boundaries" >>
+  drule native_phi_prefix_dead_absent >>
+  disch_then (qspec_then `v` mp_tac) >>
+  simp[] >>
+  `LENGTH (collect_phis bb.bb_instructions) < LENGTH bb.bb_instructions` by
+    (qpat_assum `bb.bb_instructions = _ ++ _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     Cases_on `rest` >> gvs[]) >>
+  simp[]
+QED
+
+Resume native_defined_phi_body_demand_support[no_reads]:
+  rpt gen_tac >> disch_tac >>
+  `EL i bb.bb_instructions = EL i (collect_phis bb.bb_instructions)` by
+    (qpat_assum `bb.bb_instructions = _ ++ _`
+      (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     simp[EL_APPEND1]) >>
+  `MEM (EL i (collect_phis bb.bb_instructions)) (collect_phis bb.bb_instructions)` by
+    simp[EL_MEM] >>
+  conj_tac >- metis_tac[livenessTransferProofsTheory.collect_phis_mem] >>
+  `?outphi. MEM outphi (collect_phis bb.bb_instructions) /\ MEM v outphi.inst_outputs` by
+    (gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  `~MEM (Var v) (EL i (collect_phis bb.bb_instructions)).inst_operands` by
+    metis_tac[fnPlanLineagePhiInputExclusionTheory.phi_prefix_output_not_operand] >>
+  gvs[venomInstTheory.inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]
+QED
+
+Resume native_defined_phi_body_demand_support[dead_boundaries]:
+  rpt gen_tac >> disch_tac >> conj_tac >- metis_tac[] >>
+  irule fnPlanLineageLivenessTheory.analyzed_dead_before_use_free_interval >>
+  conj_tac >- gvs[codegen_ready_fn_def] >> simp[] >>
+  qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
+  simp[] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qpat_assum `bb.bb_instructions = _ ++ _`
+      (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  simp[]
+QED
+
+Finalise native_defined_phi_body_demand_support
