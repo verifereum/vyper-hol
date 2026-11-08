@@ -58,18 +58,10 @@ Theorem annassign_copied_declaration_path_ptr:
  sf.vs_allocas = s.vs_allocas
 Proof
  rpt gen_tac >> strip_tac >> (
- drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
-   annassign_allocated_store_memory_path_ptr >>
- disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
- disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
- disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
- disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
- disch_then (drule_at (Pat `if _ then _ else _`)) >>
- disch_then (drule_at (Pat `val_wf _ _`)) >>
- disch_then (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
- disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
- disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
- disch_then (qspecl_then [`PG`,`sz`] mp_tac) >>
+ qspecl_then [`ctx`, `func`, `PG`, `cenv`, `cx`, `es`, `d`, `G`, `tn`, `s`,
+   `st`, `sb`, `ty`, `sty`, `src`, `dst`, `a`, `b`, `len`, `k`,
+   `entry.type`, `entry.value`, `sa`, `G0`, `tn0`, `s0`, `inst`, `sz`]
+   mp_tac annassign_allocated_store_memory_path_ptr >>
  (impl_tac >- (asm_rewrite_tac[] >> simp[])) >> strip_tac >>
  `lookup_var dst sf = SOME b /\ FLOOKUP Gf dst = FLOOKUP G dst /\
   op_taint tnf (Var dst) = op_taint tn (Var dst)` by metis_tac[] >>
