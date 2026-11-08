@@ -1,7 +1,7 @@
 (* Metadata-free execution core, shared by canonical and source callers. *)
 Theory entryReachBodyBulkCore
 Ancestors
-  abiDecoderBulk abiDecoderLayout abiDecoderContract abiDecoderCoherence
+  valueEncodingDefs loweringStateRelDefs abiDecoderBulk abiDecoderLayout abiDecoderContract abiDecoderCoherence
   abiDecoderTypedContract compileEnv exprLowering vyperABI vyperTyping
   valueEncoding vyperValue contractABI words list arithmetic byte venomState
   abiStaticDynarrayLayout abiStaticLayoutProps abiDecoderFrame abiDecoderFrameCompose

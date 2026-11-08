@@ -1,7 +1,7 @@
 (* Restore enclosing resources across an allocating nested decoder. *)
 Theory entryReachBodyEnclosingCounter
 Ancestors
-  entryReachBodyOwnedLoop entryReachBodyOwnedRegion
+  valueEncodingDefs entryReachBodyOwnedLoop entryReachBodyOwnedRegion
   entryReachBodyRegisteredChild abiEncoderRegisteredEffect
   venomMemDefs venomState valueEncoding finite_map pred_set arithmetic
 

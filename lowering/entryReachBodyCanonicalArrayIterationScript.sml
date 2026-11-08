@@ -1,7 +1,7 @@
 (* Persistent semantic frame for canonical finite array iteration. *)
 Theory entryReachBodyCanonicalArrayIteration
 Ancestors
-  entryReachBodyConditionalArrayChild entryReachBodyConditionalProducer
+  valueEncodingDefs loweringStateRelDefs entryReachBodyConditionalArrayChild entryReachBodyConditionalProducer
   entryReachBodyCanonicalArrayChild entryReachBodyOwnedLoop entryReachBodyExactArrayLoop
   entryReachBodyRegisteredChild entryReachBodyEnclosingCounter entryReachBodyActualOwnedLoop
   entryReachBodyScratchSet entryReachBodyOwnedRegion

@@ -1,7 +1,7 @@
 (* Resource-backed allocation/prelude/decoder composition. *)
 Theory entryReachBodyRegistrationSingleton
 Ancestors
-  entryReachBodyRegistrationAllocation entryReachBodyRegistrationWindows
+  valueEncodingDefs loweringStateRelDefs entryReachBodyRegistrationAllocation entryReachBodyRegistrationWindows
   entryReachBodySourceInstalledDecoder entryReachBodyScratchCapacity
   calldataRegistrationExec abiEncoderRegisteredEffect abiAllocationHistory
   ctorAbiActualMemory abiCallerAllocation venomMemDefs

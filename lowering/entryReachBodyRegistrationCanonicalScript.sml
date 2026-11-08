@@ -1,7 +1,7 @@
 (* Canonical call payload at any observation-preserving registration prefix. *)
 Theory entryReachBodyRegistrationCanonical
 Ancestors
-  entryReachBodyPayloadBound entryReachBodyExactArrayLoop
+  valueEncodingDefs entryReachBodyPayloadBound entryReachBodyExactArrayLoop
   entryReachBodyCallInputs vyperLoweringCorrect vyperABI contractABI list words
 
 Theorem entry_registration_canonical_payload:

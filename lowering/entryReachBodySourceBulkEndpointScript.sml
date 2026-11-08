@@ -1,7 +1,7 @@
 (* The bulk decoder needs source conversion, not aggregate ABI typing. *)
 Theory entryReachBodySourceBulkEndpoint
 Ancestors
-  entryReachBodyBulkCore entryReachBodySourceMemberEntry
+  valueEncodingDefs loweringStateRelDefs entryReachBodyBulkCore entryReachBodySourceMemberEntry
   abiDecoderBulk abiDecoderContract abiDecoderCoherence abiDecoderTypedContract
   compileEnv exprLowering vyperABI vyperTyping valueEncoding vyperValue contractABI
   words list arithmetic byte venomState abiStaticLayoutProps

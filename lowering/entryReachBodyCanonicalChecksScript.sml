@@ -1,6 +1,6 @@
 Theory entryReachBodyCanonicalChecks
 Ancestors
-  entryReachBodyCanonicalOccurrence entryReachBodySelectedCode
+  loweringStateRelDefs entryReachBodyCanonicalOccurrence entryReachBodySelectedCode
   externalEntryChecks moduleLoweringProps vyperCompiler venomInst
   loweringShapeDefs compileEnv selectedBodyCode venomWf moduleLowering
   loweringShapeProps compileVyper vyperLoweringCorrect entryDispatchProps

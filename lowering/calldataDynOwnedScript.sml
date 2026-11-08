@@ -1,7 +1,7 @@
 (* Allocator ownership for the actual dynamic calldata shell. *)
 Theory calldataDynOwned
 Ancestors
-  calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
+  valueEncodingDefs loweringStateRelDefs calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
   allocaFrontierBound allocaBudgetProps abiDecoderIndexInit abiDecoderContract
   compileEnv emitHelper venomState venomInst venomExecSemantics venomMemProps venomMemDefs
   valueEncodingProps finite_map words arithmetic list rich_list

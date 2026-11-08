@@ -1,7 +1,7 @@
 (* Concrete bytes child execution, with a physical owner independent of its destination. *)
 Theory entryReachBodyOwnedBytesChild
 Ancestors
-  entryReachBodySequenceObservations entryReachBodyOwnedLoop
+  valueEncodingDefs loweringStateRelDefs entryReachBodySequenceObservations entryReachBodyOwnedLoop
   entryReachBodyOwnedRegion entryReachBodyOperationalPath entryReachBodyExactArrayLoop
   abiEncoderRegisteredEffect allocaBudgetProps allocaFrontierBound abiAllocationHistory
   ctorAbiActualBytes abiDecoderCoherence abiDecoderTypedContract abiDecoderDynamicLoopSetup

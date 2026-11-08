@@ -1,7 +1,7 @@
 (* Canonical calldata bytes decoding without a scratch arena premise. *)
 Theory entryReachBodyCanonicalBytes
 Ancestors
-  calldataBytesLive abiDecoderBytesTyped abiCanonicalBytes
+  valueEncodingDefs calldataBytesLive abiDecoderBytesTyped abiCanonicalBytes
   abiDecoderContract abiDecoderFrame valueEncoding valueEncodingProps
   vyperValue vyperTyping contractABI words arithmetic
 

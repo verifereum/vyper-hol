@@ -1,7 +1,7 @@
 (* Typed aggregate packaging for the reentrant owned decoder. *)
 Theory calldataAggregateTyped
 Ancestors
-  abiDecoderMemberInfos abiDecoderCoherence calldataDynOwned calldataMembers calldataReconstruction exprLowering valueEncoding vyperTyping vyperValue list rich_list arithmetic abiEncoder
+  valueEncodingDefs abiDecoderMemberInfos abiDecoderCoherence calldataDynOwned calldataMembers calldataReconstruction exprLowering valueEncoding vyperTyping vyperValue list rich_list arithmetic abiEncoder
 
 Theorem calldata_tuple_indexed_pack[local]:
   !tvs vs d mem.

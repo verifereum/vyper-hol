@@ -1,7 +1,7 @@
 (* Exact heterogeneous tuple prefixes across registered decoder effects. *)
 Theory entryReachBodyMemberPrefix
 Ancestors
-  tupleMemoryLayout entryReachBodyOwnedRegion entryReachBodyRegisteredChild
+  valueEncodingDefs tupleMemoryLayout entryReachBodyOwnedRegion entryReachBodyRegisteredChild
   abiDecoderMemberInfos entryReachBodyCanonicalMemberEntry
   list rich_list arithmetic valueEncoding valueEncodingProps
 

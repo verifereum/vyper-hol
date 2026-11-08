@@ -1,7 +1,7 @@
 (* Source producer closure for scalars and dynamic arrays. *)
 Theory entryReachBodySourceLeafArrayClosure
 Ancestors
-  entryReachBodySourceProducer entryReachBodyDescendingScalarClosure
+  valueEncodingDefs entryReachBodySourceProducer entryReachBodyDescendingScalarClosure
   entryReachBodySourceMemberEntry
   entryReachBodySourceBulkEndpoint entryReachBodySourceNonbulkConstructor
   entryReachBodyConversionSupport supportedTypes abiDecoderCoherence

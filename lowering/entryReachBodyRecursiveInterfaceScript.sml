@@ -1,7 +1,7 @@
 (* Ambient scratch readiness at recursive decoder consumer boundaries. *)
 Theory entryReachBodyRecursiveInterface
 Ancestors
-  entryReachBodyScratchSet entryReachBodyScratchExecution entryReachBodyScratchCapacity
+  valueEncodingDefs loweringStateRelDefs entryReachBodyScratchSet entryReachBodyScratchExecution entryReachBodyScratchCapacity
   entryReachBodyNestedOwnedPath abiDecoderFootprint venomMemDefs
   abiDecoderTypedContract
   finite_map pred_set arithmetic

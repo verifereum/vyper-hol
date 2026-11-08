@@ -1,7 +1,7 @@
 (* Ownership of decoded intervals inside an enclosing argument allocation. *)
 Theory entryReachBodyOwnedRegion
 Ancestors
-  entryReachBodyRegisteredChild entryReachBodyReentryResources
+  valueEncodingDefs entryReachBodyRegisteredChild entryReachBodyReentryResources
   entryReachBodyExactArrayLoop abiEncoderRegisteredEffect valueEncodingProps
   venomMemDefs finite_map pred_set arithmetic list
 

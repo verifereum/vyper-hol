@@ -1,7 +1,7 @@
 (* Continuing scalar event encoder frame; allocation resources live below the runner. *)
 Theory stmtSimLogEncodeFrame
 Ancestors
-  stmtSimLogScalarEncode stmtSimLogAllocResource stmtSimLogEncodeFields
+  valueEncodingDefs stmtSimLogScalarEncode stmtSimLogAllocResource stmtSimLogEncodeFields
   stmtSimLogExecFields localPtrsProps loweringSlice abiDecoderFrame
   valueEncodingProps compileEnv loweringStateRelDefs exprLoweringProps venomState venomMemProps
   venomExecSemantics venomInst venomMemDefs abiBuiltinAllocation finite_map words list arithmetic

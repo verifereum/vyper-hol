@@ -1,7 +1,7 @@
 (* Safe arbitrary-calldata dynamic count guard and initialization adapters. *)
 Theory calldataDynInit
 Ancestors
-  actualAllocExec actualAllocCredit allocaFrontierBound unitTransformDefs
+  valueEncodingDefs loweringStateRelDefs actualAllocExec actualAllocCredit allocaFrontierBound unitTransformDefs
   fragExec memSafeRun contextCodegenRel codegenRel abiDecoderExecution
   calldataBytesLeaf calldataWordLeaf abiDecoderContract calldataChildFrame safeSequence fragExecMem
   abiDecoderGuards abiDecoderIndexInit abiDecoderArrayHeader abiDecoderReservation

@@ -1,7 +1,7 @@
 (* Operational entry boundary for conditional nonbulk array constructors. *)
 Theory entryReachBodyConditionalArrayConstructor
 Ancestors
-  entryReachBodyConditionalArray entryReachBodyOperationalHeader
+  valueEncodingDefs loweringStateRelDefs entryReachBodyConditionalArray entryReachBodyOperationalHeader
   entryReachBodyCanonicalArrayIteration entryReachBodyOwnedRegion
   entryReachBodyExactArrayLoop abiDecoderFrame entryReachBodyOperationalLoop
   entryReachBodyConditionalProducer entryReachBodyReentryResources

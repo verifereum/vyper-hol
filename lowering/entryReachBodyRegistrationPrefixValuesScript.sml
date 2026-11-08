@@ -1,6 +1,6 @@
 Theory entryReachBodyRegistrationPrefixValues
 Ancestors
-  entryReachBodyRegistrationSingleton entryReachBodyCanonicalArrayChild
+  valueEncodingDefs entryReachBodyRegistrationSingleton entryReachBodyCanonicalArrayChild
   abiDecoderReentry abiEncoderRegisteredEffect abiEncoderWindowContract
   abiDecoderAllocation compileEnv venomState finite_map pred_set arithmetic
 

@@ -1,7 +1,7 @@
 (* Typed reentrant finite decoder callbacks. *)
 Theory calldataFiniteTyped
 Ancestors
-  calldataFiniteTransport calldataWordLive calldataReconstruction abiCallerAllocation
+  valueEncodingDefs calldataFiniteTransport calldataWordLive calldataReconstruction abiCallerAllocation
   abiDecoderFrame abiDecoderCoherence exprLowering compileEnv contractABI
   calldataBytesLive abiDecoderBytes calldataBulkLive
 

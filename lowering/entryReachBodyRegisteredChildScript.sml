@@ -1,7 +1,7 @@
 (* Protection of completed source values across allocating decoder children. *)
 Theory entryReachBodyRegisteredChild
 Ancestors
-  ctorAbiActualMemory abiEncoderRegisteredEffect entryReachBodyExactChildOwnership
+  valueEncodingDefs loweringStateRelDefs ctorAbiActualMemory abiEncoderRegisteredEffect entryReachBodyExactChildOwnership
   entryReachBodyExactArrayLoop
   valueEncodingProps venomMemDefs finite_map pred_set arithmetic list
 

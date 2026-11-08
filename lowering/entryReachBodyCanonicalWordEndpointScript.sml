@@ -1,7 +1,7 @@
 (* Canonical primitive decoder endpoints, with actual execution observations. *)
 Theory entryReachBodyCanonicalWordEndpoint
 Ancestors
-  entryReachBodyRecursiveInterface entryReachBodyOperationalPath
+  valueEncodingDefs loweringStateRelDefs entryReachBodyRecursiveInterface entryReachBodyOperationalPath
   entryReachBodySequenceObservations entryReachBodyExactArrayLoop abiDecoderPrimitiveMemory
   abiDecoderClampedWord abiDecoderWordTyped abiEncoder ctorAbiActualAlloc abiDecoderContract
   abiEncoderRegisteredEffect entryReachBodyOwnedRegion entryReachBodyScratchSet

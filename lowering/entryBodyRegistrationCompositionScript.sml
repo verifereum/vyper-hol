@@ -1,6 +1,6 @@
 Theory entryBodyRegistrationComposition
 Ancestors
-  entryReachBodyCanonicalChecks entryReachBodyRegistrationIteration
+  loweringStateRelDefs entryReachBodyCanonicalChecks entryReachBodyRegistrationIteration
   entryChecksProps externalEntryChecks compileVyper compileEnv
   moduleLoweringProps vyperLoweringCorrect vyperInterpreter vyperState
   e2eDefs abiDecoderCorrect abiDecoderCounters

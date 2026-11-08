@@ -1,7 +1,7 @@
 (* Actual live navigation into a heterogeneous canonical tuple member. *)
 Theory entryReachBodyCanonicalMemberEntry
 Ancestors
-  entryReachBodyMemberSetup abiDecoderMemberBody abiDecoderOffset
+  valueEncodingDefs loweringStateRelDefs entryReachBodyMemberSetup abiDecoderMemberBody abiDecoderOffset
   abiDecoderArraySetupInputs
   abiDecoderMembers abiDecoderMemberSlice entryReachBodyOwnedRegion
   entryReachBodyScratchSet abiAllocationHistory allocaFrontierBound

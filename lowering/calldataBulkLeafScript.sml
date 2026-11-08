@@ -1,7 +1,7 @@
 (* Bulk calldata copy retains wrapped source address arithmetic. *)
 Theory calldataBulkLeaf
 Ancestors
-  fragExecMem safeSequence calldataWordLeaf abiDecoderReservation abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderFrameCompose calldataBytesLeaf abiDecoderBulk abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderComposition
+  valueEncodingDefs loweringStateRelDefs fragExecMem safeSequence calldataWordLeaf abiDecoderReservation abiDecoderDynarrayPrefix abiDecoderArrayHeader abiDecoderFrameCompose calldataBytesLeaf abiDecoderBulk abiDecoderDynarrayBound abiDecoderBytesBound abiDecoderComposition
   abiDecoderContract abiDecoderCopy abiDecoderGuards abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper valueEncoding venomExecSemantics
   venomState venomInst words arithmetic list rich_list

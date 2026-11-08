@@ -1,6 +1,6 @@
 Theory entryReachBodyExactChildOwnership
 Ancestors
-  entryReachBodyExactArrayLoop calldataChildFrame calldataMembers
+  valueEncodingDefs entryReachBodyExactArrayLoop calldataChildFrame calldataMembers
   abiDecoderFrame valueEncoding valueEncodingProps venomMemDefs
   venomState finite_map arithmetic list
 

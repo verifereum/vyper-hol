@@ -1,7 +1,7 @@
 (* Source-certified decoder endpoint across actual array element setup. *)
 Theory entryReachBodySourceArrayChild
 Ancestors
-  entryReachBodySourceProducer entryReachBodySourceArrayEntry
+  valueEncodingDefs loweringStateRelDefs entryReachBodySourceProducer entryReachBodySourceArrayEntry
   entryReachBodyCanonicalArrayChild entryReachBodyActiveCounter
   entryReachBodyOperationalPath entryReachBodyExactArrayLoop
   abiEncoderRegisteredEffect abiEncoderWindowContract abiDecoderContract

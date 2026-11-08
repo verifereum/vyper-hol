@@ -1,7 +1,7 @@
 (* Runtime frame metadata, independent of the registered argument values. *)
 Theory runtimeRegisteredFrameMetadata
 Ancestors
-  entryStateRel externalBodyFrame immutableLocationProps immutableRelation
+  loweringStateRelDefs entryStateRel externalBodyFrame immutableLocationProps immutableRelation
   intCallCallee compileVyper compileEnv e2eDefs supportedProgram vyperInterpreter
   vyperContext vyperState vyperTypeContract finite_map list
 

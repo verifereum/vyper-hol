@@ -2,7 +2,7 @@
    This is not a proof of recursive source decoder closure. *)
 Theory entryReachBodySourceMemberCoreProbe
 Ancestors
-  entryReachBodyMemberExecutionCore entryReachBodySourceAggregateInputs
+  valueEncodingDefs entryReachBodyMemberExecutionCore entryReachBodySourceAggregateInputs
   entryReachBodySourceMemberEntry entryReachBodyMemberSetup
   abiDecoderCoherence abiDecoderEmpty abiDecoderOffset abiDecoderDynamic
   abiDecoderComplexHead abiDecoderContract abiEncoder compileEnv

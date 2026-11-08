@@ -1,7 +1,7 @@
 (* Expression preconditions and induction judgments, before their proofs. *)
 Theory exprSimHypsDefs
 Ancestors
-  exprSimStack exprSimDefs gasContext list finite_map pair exprCallBounds exprBopLowering
+  loweringStateRelDefs exprSimStack exprSimDefs gasContext list finite_map pair exprCallBounds exprBopLowering
   exprLowering compileEnv vyperAST vyperInterpreter vyperState vyperTypeSystem
   vyperTypeCallGraph vyperTypeInvariants vyperRuntimeAccounts vyperPlaceInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation supportedExprTraverse

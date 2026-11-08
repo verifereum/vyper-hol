@@ -57,7 +57,7 @@
 
 Theory intCallCallee
 Ancestors
-  list rich_list finite_map
+  valueEncodingDefs list rich_list finite_map
   fragExec localPtrsProps exprLoweringProps
   compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv loweringStateRelDefs
   valueEncoding valueEncodingProps venomMemDefs

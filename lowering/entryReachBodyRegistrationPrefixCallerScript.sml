@@ -1,6 +1,6 @@
 Theory entryReachBodyRegistrationPrefixCaller
 Ancestors
-  entryReachBodyCallerResources entryReachBodyRuntimeResources
+  loweringStateRelDefs entryReachBodyCallerResources entryReachBodyRuntimeResources
   entryReachBodyRegistrationPrefixSupport entryReachBodyRegistrationPrefixValues
   fragExec compileVyper venomWf venomInst compileEnv finite_map words list arithmetic
 

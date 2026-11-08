@@ -1,7 +1,7 @@
 (* Actual array-element navigation, with canonical bounds independent of scratch. *)
 Theory entryReachBodyCanonicalArrayEntry
 Ancestors
-  entryReachBodyMemberSetup entryReachBodySequenceObservations entryReachBodyOwnedRegion
+  valueEncodingDefs loweringStateRelDefs entryReachBodyMemberSetup entryReachBodySequenceObservations entryReachBodyOwnedRegion
   entryReachBodyExactArrayLoop entryReachBodyOperationalPath entrySinkExtraction
   abiDecoderArraySetupInputs abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup
   abiDecoderContract abiDecoderReentry abiDecoderDynamic abiDecoderIndexedAddress abiDecoderLoopSetup

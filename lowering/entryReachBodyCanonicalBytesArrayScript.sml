@@ -1,7 +1,7 @@
 (* Actual-state bridges for canonical arrays with bytestring elements. *)
 Theory entryReachBodyCanonicalBytesArray
 Ancestors
-  entryReachBodyCanonicalBytes entryReachBodyCanonicalChildAddress
+  valueEncodingDefs loweringStateRelDefs entryReachBodyCanonicalBytes entryReachBodyCanonicalChildAddress
   entryReachBodyExactArrayLoop entryReachBodyExactChildOwnership entryReachBodyArrayInit calldataBytesLeaf calldataDynOwned
   abiEncoderSequence abiDecoderExecution abiDecoderLoop abiDecoderLoopRegisters abiDecoderReentryPointer ctorAbiActualBytes
   abiDecoderTypedContract abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose abiDecoderDynamicLoopSetup

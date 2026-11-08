@@ -1,6 +1,6 @@
 Theory entryReachBodyRegistrationWindows
 Ancestors
-  entryReachBodySourceWindows entryReachBodyMemberInputs
+  valueEncodingDefs entryReachBodySourceWindows entryReachBodyMemberInputs
   abiDecoderMemberSlice abiDecoderContract abiCanonicalWindows abiDecodeRanges
   abiEncoderOpenInput contractABI vyperABI vyperValue venomState words
   list rich_list arithmetic abiCanonicalHeadSize byte

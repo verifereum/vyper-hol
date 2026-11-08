@@ -1,7 +1,7 @@
 (* Liveness-only execution boundaries for positional calldata registration. *)
 Theory calldataRegistrationExec
 Ancestors
-  calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
+  valueEncodingDefs loweringStateRelDefs calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
   venomExecProofs emitHelperProps exprLoweringProps finite_map words
   abiDecoderReentry venomState venomExecSemantics abiDecoderContract
   compileEnv emitHelper venomInst arithmetic moduleLowering abiEncoder

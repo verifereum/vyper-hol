@@ -1,7 +1,7 @@
 (* Source-only nonbulk array compiler configuration. *)
 Theory entryReachBodySourceArrayConstructor
 Ancestors
-  entryReachBodySourceIterationCallback entryReachBodySourceIterationInputs
+  valueEncodingDefs entryReachBodySourceIterationCallback entryReachBodySourceIterationInputs
   entryReachBodySourceArrayInputs entryReachBodySourceMemberEntry
   entryReachBodySourceArrayBounds
   entryReachBodyConditionalArrayConstructor entryReachBodyCanonicalArrayIteration

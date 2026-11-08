@@ -2,7 +2,7 @@
    decoded destination.  All execution witnesses remain common endpoints. *)
 Theory entryReachBodyOwnedLoop
 Ancestors
-  entryReachBodyOwnedRegion entryReachBodyIndexedLoopInput
+  valueEncodingDefs entryReachBodyOwnedRegion entryReachBodyIndexedLoopInput
   entryReachBodyExactArrayLoop valueEncodingProps
   entryReachBodyOperationalLoop entryReachBodyOperationalPath
   abiAllocationHistory allocaFrontierBound allocaBudgetProps

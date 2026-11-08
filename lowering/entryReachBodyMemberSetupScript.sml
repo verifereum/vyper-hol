@@ -1,7 +1,7 @@
 (* Observed live member-address navigation, before decoding a child. *)
 Theory entryReachBodyMemberSetup
 Ancestors
-  abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderContract
+  loweringStateRelDefs abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderContract
   entryReachBodySequenceObservations entryReachBodyExactArrayLoop
   entryReachBodyOperationalPath entrySinkExtraction
   entryReachBodyScratchSet entryReachBodyOwnedRegion

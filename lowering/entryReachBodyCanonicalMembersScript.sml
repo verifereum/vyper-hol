@@ -1,7 +1,7 @@
 (* Canonical heterogeneous traversal: semantic prefix advancement. *)
 Theory entryReachBodyCanonicalMembers
 Ancestors
-  entryReachBodyMemberPrefix entryReachBodyCanonicalMemberEntry
+  valueEncodingDefs loweringStateRelDefs entryReachBodyMemberPrefix entryReachBodyCanonicalMemberEntry
   entryReachBodyEmptyMember entryReachBodyMemberIteration
   abiDecoderMembers abiDecoderMemberInfos valueEncodingTyping
   entryReachBodyOwnedRegion abiEncoderRegisteredEffect

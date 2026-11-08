@@ -1,7 +1,7 @@
 (* Recursive execution requires a certificate for an installed empty exit. *)
 Theory entryReachBodyConditionalProducer
 Ancestors
-  entryReachBodyCanonicalArrayChild venomExecSemantics
+  valueEncodingDefs loweringStateRelDefs entryReachBodyCanonicalArrayChild venomExecSemantics
 
 Definition entry_conditional_array_child_producer_def:
   entry_conditional_array_child_producer ce env ty tv av v ctx fn oid root extent ambient b cap site limit_st <=>

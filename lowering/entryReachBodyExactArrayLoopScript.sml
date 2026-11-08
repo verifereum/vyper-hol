@@ -1,7 +1,7 @@
 (* Exact-source-list array loop shell: observable fields and indexed memory. *)
 Theory entryReachBodyExactArrayLoop
 Ancestors
-  calldataDynOwned abiDecoderExecution abiDecoderFrameCompose
+  valueEncodingDefs calldataDynOwned abiDecoderExecution abiDecoderFrameCompose
   valueEncoding valueEncodingProps venomState venomExecSemantics words list
   arithmetic abiDecoderContract emitHelperProps venomMemProofs abiDecoderLoop venomInst
 

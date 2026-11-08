@@ -1,7 +1,7 @@
 (* Body-entry state relation at the end of positional argument registration. *)
 Theory entryReachBodyStateAssembly
 Ancestors
-  entryReachBodyRegistrationIteration entryReachBodyRuntimeState
+  loweringStateRelDefs entryReachBodyRegistrationIteration entryReachBodyRuntimeState
   entryReachBodyAllocationRoom entryReachBodyFmp
   registeredArgumentScopeRel runtimeRegisteredFrameMetadata
   externalBodyFrame entryReachBodyCallerResources abiAllocationHistory

@@ -2,7 +2,7 @@
    at one operational endpoint. *)
 Theory entryReachBodyCanonicalLocalMembers
 Ancestors
-  entryReachBodyCertifiedProducer
+  valueEncodingDefs loweringStateRelDefs entryReachBodyCertifiedProducer
   entryReachBodyCanonicalProducerBridge entryReachBodyCanonicalMemberEntry
   entryReachBodyCanonicalMembers entryReachBodyCanonicalArrayChild
   entryReachBodyEmptyMember entryReachBodyMemberPrefix entryReachBodyMemberSetup

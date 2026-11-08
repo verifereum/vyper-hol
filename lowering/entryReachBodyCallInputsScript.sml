@@ -1,6 +1,6 @@
 Theory entryReachBodyCallInputs
 Ancestors
-  e2eDefs selectorDispatch vyperABIRoundtrip vyperABI vyperInterpreter
+  valueEncodingDefs e2eDefs selectorDispatch vyperABIRoundtrip vyperABI vyperInterpreter
   vyperState list pair entryDispatchProps abiDecoderContract valueEncoding
   vyperLoweringCorrect words
 

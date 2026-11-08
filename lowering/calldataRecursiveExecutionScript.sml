@@ -1,7 +1,7 @@
 (* Universal owned execution, assembled over coherence rather than source types. *)
 Theory calldataRecursiveExecution
 Ancestors
-  calldataRecursiveProducers calldataFiniteTyped calldataAggregateTyped
+  valueEncodingDefs calldataRecursiveProducers calldataFiniteTyped calldataAggregateTyped
   abiDecoderCoherence compileEnv abiDecoderAppend fragExec
   abiDecoderMemberInfos valueEncodingProofs list rich_list
 

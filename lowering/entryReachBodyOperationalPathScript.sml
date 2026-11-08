@@ -1,6 +1,6 @@
 Theory entryReachBodyOperationalPath
 Ancestors
-  abiEncoderObserver abiAllocationHistory allocaFrontierBound
+  valueEncodingDefs abiEncoderObserver abiAllocationHistory allocaFrontierBound
   entryReachBodyArrayInit abiEncoderRegisteredEffect abiDecoderFrame
   abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderContract compileEnv emitHelperProps
   abiDecoderLoop contextCodegenRel venomExecProofs venomInst venomInstProofs1 venomInstProofs venomExecSemantics emitHelper phiTransform fragExec exprLoweringProps instIdxIndep rich_list relation

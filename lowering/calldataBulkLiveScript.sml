@@ -1,7 +1,7 @@
 (* Bulk decoder execution over reentrant register states. *)
 Theory calldataBulkLive
 Ancestors
-  safeSequence calldataWordLeaf calldataBytesLeaf calldataBytesLive calldataBulkLeaf calldataDynOwned abiDecoderReentry
+  valueEncodingDefs safeSequence calldataWordLeaf calldataBytesLeaf calldataBytesLive calldataBulkLeaf calldataDynOwned abiDecoderReentry
   abiDecoderFrameCompose abiDecoderBulk abiDecoderCopy abiDecoderComposition abiDecoderContract abiDecoderGuards abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding
   venomExecSemantics venomState venomInst words arithmetic list

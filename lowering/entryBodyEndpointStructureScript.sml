@@ -1,6 +1,6 @@
 Theory entryBodyEndpointStructure
 Ancestors
-  entryLocals moduleLowering compileEnv compileVyper intCallCallee
+  loweringStateRelDefs entryLocals moduleLowering compileEnv compileVyper intCallCallee
 
 Theorem targeted_external_entry_locals:
   !target tops use_trans keys mut nr rr fname fargs dflts ret fbody

@@ -1,7 +1,7 @@
 (* Initializer inputs for an array nested inside an enclosing allocation. *)
 Theory entryReachBodyNestedOwnedPath
 Ancestors
-  entryReachBodyOwnedBytesArray entryReachBodyCanonicalChildAddress
+  valueEncodingDefs loweringStateRelDefs entryReachBodyOwnedBytesArray entryReachBodyCanonicalChildAddress
   entryReachBodyReentryResources entryReachBodyOwnedLoop
   entryReachBodyOwnedRegion entryReachBodyCanonicalBytesArray
   abiDecoderArrayLoopInit abiDecoderDynamicLoopSetup

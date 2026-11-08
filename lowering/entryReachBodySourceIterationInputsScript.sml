@@ -1,7 +1,7 @@
 (* Source-only semantic inputs for the generic array iteration interface. *)
 Theory entryReachBodySourceIterationInputs
 Ancestors
-  entryReachBodyCanonicalArrayIteration entryReachBodySourceArrayInputs
+  valueEncodingDefs entryReachBodyCanonicalArrayIteration entryReachBodySourceArrayInputs
   entryReachBodySourceArrayEntry
   entryReachBodySourceArrayBounds entryReachBodySourceMemberEntry
   abiDecoderCoherence vyperTyping vyperABI valueEncodingTyping compileEnv

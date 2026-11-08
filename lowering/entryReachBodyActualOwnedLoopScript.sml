@@ -2,7 +2,7 @@
    name the same register. Ownership and operational endpoints are unchanged. *)
 Theory entryReachBodyActualOwnedLoop
 Ancestors
-  entryReachBodyOwnedLoop entryReachBodyOwnedRegion
+  valueEncodingDefs entryReachBodyOwnedLoop entryReachBodyOwnedRegion
   entryReachBodyIndexedLoopInput entryReachBodyExactArrayLoop
   entryReachBodyOperationalLoop entryReachBodyOperationalPath
   entryReachBodyCanonicalBytesArray

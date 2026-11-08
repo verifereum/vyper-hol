@@ -1,7 +1,7 @@
 (* Source-valued decoder execution installed before registration and body. *)
 Theory entryReachBodySourceInstalledDecoder
 Ancestors
-  entryReachBodySourceRecursiveExecution entryReachBodyFirstEmissionGuarded
+  valueEncodingDefs loweringStateRelDefs entryReachBodySourceRecursiveExecution entryReachBodyFirstEmissionGuarded
 
 Theorem entry_source_registration_decoder_endpoint:
   !ce env ty tv av v ctx fn oid root extent ambient b cap site limit_st

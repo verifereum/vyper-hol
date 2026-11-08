@@ -1,7 +1,7 @@
 (* Static recursive-call boundaries, independent of calldata and runtime freshness. *)
 Theory calldataRecursiveProducers
 Ancestors
-  calldataMembers calldataDynOwned abiDecoderLoopCode abiDecoderLoopEmit
+  valueEncodingDefs calldataMembers calldataDynOwned abiDecoderLoopCode abiDecoderLoopEmit
   abiDecoderCoherence exprLoweringProps abiDecoderContract abiCallerAllocation list
   abiDecoderRecursiveLoopLayout abiDecoderArraySetupCode abiDecoderArraySetupInputs abiDecoderPhi fragExec
   abiEncoder emitHelper emitHelperProps compileEnv abiDecoderAppend abiDecoderReentry

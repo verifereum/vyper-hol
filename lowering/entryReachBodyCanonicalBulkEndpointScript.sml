@@ -1,7 +1,7 @@
 (* Canonical static-element dynamic-array facts for actual bulk execution. *)
 Theory entryReachBodyCanonicalBulkEndpoint
 Ancestors
-  entryReachBodyBulkCore
+  valueEncodingDefs loweringStateRelDefs entryReachBodyBulkCore
   abiDecoderBulk abiDecoderLayout abiDecoderContract abiDecoderCoherence
   abiDecoderTypedContract compileEnv exprLowering vyperABI vyperTyping
   valueEncoding vyperValue contractABI words list arithmetic byte venomState

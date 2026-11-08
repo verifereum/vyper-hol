@@ -1,7 +1,7 @@
 (* A previous argument's three witnesses survive at the same decoder endpoint. *)
 Theory entryReachBodyRegistrationEndpointAudit
 Ancestors
-  entryReachBodyRegistrationPrefixValues entryReachBodyRegistrationPrefixSupport
+  valueEncodingDefs entryReachBodyRegistrationPrefixValues entryReachBodyRegistrationPrefixSupport
   entryReachBodyRegistrationIndexedShell entryReachBodyRegistrationSizeBoundary
   entryReachBodyRegistrationCanonical entryReachBodyRegistrationPrefixCaller
   entryReachBodyDecoderWindowCertificate abiDecoderReentry

@@ -1,7 +1,7 @@
 (* Safe execution of the actual dynamic calldata loop shell. *)
 Theory calldataDynStep
 Ancestors
-  calldataDynInit calldataChildFrame calldataWordLeaf safeSequence calldataSafeIteration
+  valueEncodingDefs loweringStateRelDefs calldataDynInit calldataChildFrame calldataWordLeaf safeSequence calldataSafeIteration
   abiDecoderExecution abiDecoderContract abiDecoderLoopEmit abiDecoderFrame
   fragExec fragExecMem memSafeRun unitTransformDefs contextCodegenRel codegenRel
   emitHelperProps exprLoweringProps venomExecSemantics venomState venomInst

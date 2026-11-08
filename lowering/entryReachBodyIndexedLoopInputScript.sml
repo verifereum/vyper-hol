@@ -3,7 +3,7 @@
    they do not assert an execution exists. *)
 Theory entryReachBodyIndexedLoopInput
 Ancestors
-  entryReachBodyOperationalLoop entryReachBodyOperationalHeader
+  valueEncodingDefs entryReachBodyOperationalLoop entryReachBodyOperationalHeader
   entryReachBodyRegisteredChild entryReachBodyExactArrayLoop abiDecoderLoop
   abiDecoderExecution abiDecoderContract abiEncoderRegisteredEffect
   venomExecSemantics venomState words list arithmetic pred_set

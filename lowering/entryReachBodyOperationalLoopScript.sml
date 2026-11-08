@@ -1,6 +1,6 @@
 Theory entryReachBodyOperationalLoop
 Ancestors
-  entryReachBodyOperationalPath entryReachBodyExactArrayLoop entryReachBodyRegisteredChild
+  valueEncodingDefs entryReachBodyOperationalPath entryReachBodyExactArrayLoop entryReachBodyRegisteredChild
   abiDecoderExecution abiEncoderObserver abiEncoderRegisteredEffect
   abiEncoderPrimitiveEffect abiAllocationHistory allocaFrontierBound allocaBudgetProps
   localPtrsProps venomMemDefs venomMemProofs finite_map pred_set

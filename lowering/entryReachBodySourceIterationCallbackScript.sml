@@ -1,7 +1,7 @@
 (* Source-certified semantic callback for the existing array iteration engine. *)
 Theory entryReachBodySourceIterationCallback
 Ancestors
-  entryReachBodySourceArrayChild entryReachBodySourceIterationInputs
+  valueEncodingDefs loweringStateRelDefs entryReachBodySourceArrayChild entryReachBodySourceIterationInputs
   entryReachBodyCanonicalArrayIteration entryReachBodyOwnedRegion
   entryReachBodySourceProducer entryReachBodyExactArrayLoop
   abiEncoderRegisteredEffect abiDecoderContract abiDecoderCoherence

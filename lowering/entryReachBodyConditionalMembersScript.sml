@@ -1,7 +1,7 @@
 (* Installed-exit certificates propagated through heterogeneous member tails. *)
 Theory entryReachBodyConditionalMembers
 Ancestors
-  entryReachBodyCanonicalLocalMembers entryReachBodyCertifiedProducer
+  valueEncodingDefs entryReachBodyCanonicalLocalMembers entryReachBodyCertifiedProducer
   entryReachBodyConditionalProducer calldataRecursiveProducers
   entryReachBodyCanonicalMembers abiDecoderMembers abiDecoderCoherence
   abiEncoderRegisteredEffect abiEncoderWindowContract venomExecSemantics

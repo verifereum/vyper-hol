@@ -1,7 +1,7 @@
 (* Source selection and counted suffix summaries for framed arrays. *)
 Theory exprSimSubscriptArraySuffix
 Ancestors
-  exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
+  loweringStateRelDefs exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
   exprSimSubscriptArraySource gasSummary exprSimDefs vyperState
   vyperPlaceTyping vyperValueOperation vyperArray integer_word words integer
   exprSimSource exprSimCopy exprSimLen valueEncodingProps valueEncoding valueEncodingDefs

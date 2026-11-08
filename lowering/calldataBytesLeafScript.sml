@@ -1,7 +1,7 @@
 (* Arbitrary-calldata fixed-buffer bytestring decoding. *)
 Theory calldataBytesLeaf
 Ancestors
-  safeSequence fragExecMem abiDecoderBytesTyped
+  valueEncodingDefs loweringStateRelDefs safeSequence fragExecMem abiDecoderBytesTyped
   abiCanonicalHeadSize calldataWordLeaf abiDecoderReservation abiDecoderBytes abiDecoderComposition abiDecoderCopy
   abiDecoderGuards abiDecoderAllocation abiDecoderContract abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding

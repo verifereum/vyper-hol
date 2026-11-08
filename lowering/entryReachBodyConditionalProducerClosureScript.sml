@@ -1,7 +1,7 @@
 (* Scalar and array closure of the conditional owned decoder producer. *)
 Theory entryReachBodyConditionalProducerClosure
 Ancestors
-  entryReachBodyConditionalProducer entryReachBodyCanonicalWordEndpoint
+  valueEncodingDefs entryReachBodyConditionalProducer entryReachBodyCanonicalWordEndpoint
   entryReachBodyCanonicalBytesEndpoint entryReachBodyConditionalMembers
   entryReachBodyConditionalArrayConstructor entryReachBodyCanonicalBulkEndpoint
   abiDecoderCoherence abiDecoderWordTyped abiDecoderLayout abiDecoderTypedContract

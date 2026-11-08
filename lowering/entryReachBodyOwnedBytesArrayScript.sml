@@ -1,7 +1,7 @@
 (* Canonical bytes-array execution inside an independently based owner. *)
 Theory entryReachBodyOwnedBytesArray
 Ancestors
-  entryReachBodyCanonicalBytesArray
+  valueEncodingDefs loweringStateRelDefs entryReachBodyCanonicalBytesArray
   entryReachBodyOwnedBytesChild entryReachBodyOwnedLoop
   entryReachBodyActualOwnedLoop
   entryReachBodyOwnedRegion entryReachBodyOperationalPath entryReachBodyOperationalHeader

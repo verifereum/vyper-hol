@@ -1,7 +1,7 @@
 (* Bytes/String metadata and actual canonical decoder endpoints. *)
 Theory entryReachBodyCanonicalBytesEndpoint
 Ancestors
-  entryReachBodyCanonicalBytes abiDecoderBytes abiDecoderBytestring abiDecoderString
+  valueEncodingDefs loweringStateRelDefs entryReachBodyCanonicalBytes abiDecoderBytes abiDecoderBytestring abiDecoderString
   abiDecoderCoherence abiDecoderTypedContract abiDecoderBytesTyped
   abiDecoderContract compileEnv exprLowering vyperABI vyperTyping
   valueEncoding vyperValue contractABI words list rich_list arithmetic

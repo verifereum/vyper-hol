@@ -1,6 +1,6 @@
 Theory entryReachBodyRegistrationAllocation
 Ancestors
-  actualAllocExec abiAllocationHistory entryReachBodyPreludeFrame
+  loweringStateRelDefs actualAllocExec abiAllocationHistory entryReachBodyPreludeFrame
   entryReachBodyExactArrayLoop fragExecMem fragExec emitHelperProps
   compileEnv emitHelper venomInst venomExecSemantics venomState
   abiDecoderReentry exprLoweringProps finite_map words arithmetic list loweringHalt

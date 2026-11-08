@@ -1,7 +1,7 @@
 (* Array callbacks from a recursive producer with a local effect footprint. *)
 Theory entryReachBodyCanonicalArrayChild
 Ancestors
-  entryReachBodyCanonicalArrayEntry entryReachBodyActiveCounter
+  valueEncodingDefs loweringStateRelDefs entryReachBodyCanonicalArrayEntry entryReachBodyActiveCounter
   entryReachBodyCanonicalMembers abiEncoderWindowContract abiDecoderAllocation
   abiEncoderRegisteredEffect abiDecoderContract abiDecoderReentry abiDecoderDynamicLoopSetup
   entryReachBodyOperationalPath entryReachBodyExactArrayLoop

@@ -1,7 +1,7 @@
 (* Operational member navigation for arbitrary calldata. *)
 Theory calldataMembers
 Ancestors
-  calldataChildFrame valueEncodingProps abiDecoderReentry calldataDynOwned safeSequence fragExecMem abiDecoderMemberBound abiDecoderReservation
+  valueEncodingDefs loweringStateRelDefs calldataChildFrame valueEncodingProps abiDecoderReentry calldataDynOwned safeSequence fragExecMem abiDecoderMemberBound abiDecoderReservation
   abiDecoderBytesBound abiDecoderGuards calldataWordLeaf abiDecoderClampedWord
   abiDecoderAppend fragExec abiDecoderFrameCompose
   abiDecoderComposition abiDecoderContract abiEncoder emitHelperProps

@@ -1,7 +1,7 @@
 (* Actual descriptor maps descend; resource and endpoint contracts stay fixed. *)
 Theory entryReachBodyDescendingProducer
 Ancestors
-  entryReachBodyDescendingMetadata entryReachBodyCertifiedProducer
+  valueEncodingDefs loweringStateRelDefs entryReachBodyDescendingMetadata entryReachBodyCertifiedProducer
   abiDecoderCoherence exprLowering
 
 Definition entry_descending_certified_child_producer_def:

@@ -1,7 +1,7 @@
 (* Source conversion inputs for the unchanged owned decoder endpoint. *)
 Theory entryReachBodySourceProducer
 Ancestors
-  entryReachBodySourceMemberEntry entryReachBodyDescendingProducer
+  valueEncodingDefs loweringStateRelDefs entryReachBodySourceMemberEntry entryReachBodyDescendingProducer
   entryReachBodyScalarConversion entryReachBodyDescendingMetadata
   abiDecoderCoherence exprLowering entryReachBodyConversionSupport supportedTypes
 

@@ -1,6 +1,6 @@
 Theory entryReachBodySourceArrayInputs
 Ancestors
-  entryReachBodySourceArrayBounds entryReachBodySourceMemberEntry
+  valueEncodingDefs entryReachBodySourceArrayBounds entryReachBodySourceMemberEntry
   entryReachBodySourceLayout entryReachBodyConversionSupport
   abiEncoderSourceTransport abiDecoderCoherence abiDecoderMembers
   vyperTyping vyperABI vyperValue vyperValueOperation

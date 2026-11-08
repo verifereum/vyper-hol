@@ -1,7 +1,7 @@
 (* Source-valued recursive execution with an installed no-PHI certificate. *)
 Theory entryReachBodySourceRecursiveExecution
 Ancestors
-  entryReachBodySourceLeafArrayClosure entryReachBodySourceAggregateClosure
+  valueEncodingDefs loweringStateRelDefs entryReachBodySourceLeafArrayClosure entryReachBodySourceAggregateClosure
   entryReachBodySourceProducer abiDecoderCoherence list
 
 Theorem source_certified_producer_induction[local]:

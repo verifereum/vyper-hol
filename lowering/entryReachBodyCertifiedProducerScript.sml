@@ -1,7 +1,7 @@
 (* Compiler-endpoint certificates parameterize recursive child execution. *)
 Theory entryReachBodyCertifiedProducer
 Ancestors
-  entryReachBodyConditionalProducer entryReachBodyCanonicalArrayChild
+  valueEncodingDefs loweringStateRelDefs entryReachBodyConditionalProducer entryReachBodyCanonicalArrayChild
 
 Definition entry_certified_child_producer_def:
   entry_certified_child_producer cert ce env ty tv av v ctx fn oid root extent ambient b cap site limit_st <=>

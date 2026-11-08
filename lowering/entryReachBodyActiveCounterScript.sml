@@ -1,7 +1,7 @@
 (* Active counter protection uses the child's effect sites, not ambient readiness. *)
 Theory entryReachBodyActiveCounter
 Ancestors
-  entryReachBodyRegisteredChild entryReachBodyOwnedRegion
+  valueEncodingDefs entryReachBodyRegisteredChild entryReachBodyOwnedRegion
   entryReachBodyExactArrayLoop abiEncoderRegisteredEffect abiDecoderContract
   venomMemDefs venomState valueEncoding finite_map pred_set arithmetic
 

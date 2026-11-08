@@ -1,7 +1,7 @@
 (* Conditional recursive producers at actual array backedge continuations. *)
 Theory entryReachBodyConditionalArrayChild
 Ancestors
-  entryReachBodyConditionalProducer entryReachBodyCanonicalArrayChild
+  valueEncodingDefs loweringStateRelDefs entryReachBodyConditionalProducer entryReachBodyCanonicalArrayChild
   calldataRecursiveProducers
   entryReachBodyActiveCounter abiDecoderExecution venomInst venomExecSemantics
   entryReachBodyCanonicalArrayEntry abiEncoderWindowContract abiDecoderContract

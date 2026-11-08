@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalEntryReachesBody
 Ancestors
-  entryReachBodyStateAssembly entryReachBodyRootChecks entryReachBodySelectedCode
+  loweringStateRelDefs entryReachBodyStateAssembly entryReachBodyRootChecks entryReachBodySelectedCode
   entryBodyRegistrationComposition entryLocals entryReachBodyExactArrayLoop
   stmtSimProps
   stmtSimDefs

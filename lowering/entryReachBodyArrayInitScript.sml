@@ -1,7 +1,7 @@
 (* Successful array initialization and its independent observable-field frame. *)
 Theory entryReachBodyArrayInit
 Ancestors
-  calldataDynOwned ctorAbiActualAlloc abiDecoderArrayInitExec
+  valueEncodingDefs calldataDynOwned ctorAbiActualAlloc abiDecoderArrayInitExec
   venomExecProofs venomExecSemantics venomState venomInst
   abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderArrayHeader
   abiDecoderIndexInit abiDecoderGuards abiDecoderContract

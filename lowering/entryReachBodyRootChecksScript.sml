@@ -1,6 +1,6 @@
 Theory entryReachBodyRootChecks
 Ancestors
-  externalEntryChecks entryReachBodyInitialResources externalEntryShape
+  loweringStateRelDefs externalEntryChecks entryReachBodyInitialResources externalEntryShape
   vyperLoweringCorrect moduleLoweringProps entryDispatchProps entryChecksProps
   compileVyper moduleLowering vyperCompiler venomInst venomState
   supportedProgram vyperState list pair fragExec

@@ -1,7 +1,7 @@
 (* Observations of successful allocation-free instruction sequences. *)
 Theory entryReachBodySequenceObservations
 Ancestors
-  entryReachBodyExactArrayLoop ctorAbiActualAlloc exprLoweringProps emitHelperProps compileEnv
+  loweringStateRelDefs entryReachBodyExactArrayLoop ctorAbiActualAlloc exprLoweringProps emitHelperProps compileEnv
   venomExecSemantics venomState venomInst fragExec finite_map words list arithmetic
 
 Theorem sequence_observer_step[local]:

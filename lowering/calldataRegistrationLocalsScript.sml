@@ -1,7 +1,7 @@
 (* Source scopes for evaluated arbitrary-calldata argument values. *)
 Theory calldataRegistrationLocals
 Ancestors
-  calldataRegistrationExec entryArgPtrs vyperInterpreter vyperTyping
+  valueEncodingDefs loweringStateRelDefs calldataRegistrationExec entryArgPtrs vyperInterpreter vyperTyping
   compileEnv venomMemDefs localPtrsProps entryLocals
 
 Theorem decoded_arguments_bind:

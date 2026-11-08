@@ -1,7 +1,7 @@
 (* Source semantic advancement for the shared member execution engine. *)
 Theory entryReachBodySourceMemberExecution
 Ancestors
-  entryReachBodySourceMemberCoreProbe entryReachBodyMemberExecutionCore
+  valueEncodingDefs loweringStateRelDefs entryReachBodySourceMemberCoreProbe entryReachBodyMemberExecutionCore
   entryReachBodySourceAggregateInputs entryReachBodySourceMemberEntry
   entryReachBodySourceProducer entryReachBodyCanonicalArrayChild
   entryReachBodyCanonicalMembers entryReachBodyOperationalPath abiDecoderDynamicLoopSetup

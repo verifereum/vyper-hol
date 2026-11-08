@@ -1,6 +1,6 @@
 Theory entryReachBodyInitialResources
 Ancestors
-  vyperLoweringCorrect actualEntryAllocationFrame abiAllocationHistory
+  loweringStateRelDefs vyperLoweringCorrect actualEntryAllocationFrame abiAllocationHistory
   venomMemProps allocaFrontierBound moduleLoweringProps entryChecksProps fragExec
   fcgCorrectnessProof fcgPostorder fcgDefs allocaBudgetProps venomInstProofs1
   venomWf contextCodegenRel relation pred_set venomInst venomExecProofs

@@ -1,7 +1,7 @@
 (* Operational calldata primitive-word decoding companions. *)
 Theory calldataWordLeaf
 Ancestors
-  safeSequence entryDecodeProps abiDecoderClampedWord abiDecoderReservation
+  valueEncodingDefs loweringStateRelDefs safeSequence entryDecodeProps abiDecoderClampedWord abiDecoderReservation
   abiDecoderGuards moduleLoweringProps
   abiDecoderAllocation abiDecoderContract abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps

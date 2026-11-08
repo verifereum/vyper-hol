@@ -1,7 +1,7 @@
 (* Conditional source-only dynamic-array endpoint. *)
 Theory entryReachBodySourceNonbulkConstructor
 Ancestors
-  entryReachBodySourceArrayConstructor entryReachBodySourceIterationCallback
+  valueEncodingDefs loweringStateRelDefs entryReachBodySourceArrayConstructor entryReachBodySourceIterationCallback
   entryReachBodySourceArrayBounds entryReachBodySourceArrayInputs
   entryReachBodySourceMemberEntry entryReachBodySourceProducer
   entryReachBodyConditionalArrayConstructor entryReachBodyCanonicalArrayIteration

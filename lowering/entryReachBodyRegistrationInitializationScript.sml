@@ -1,7 +1,7 @@
 (* Operational registration initialization after the selected entry checks. *)
 Theory entryReachBodyRegistrationInitialization
 Ancestors
-  entryReachBodyRegistrationPrefixCaller entryReachBodyRegistrationSlotWitness
+  loweringStateRelDefs entryReachBodyRegistrationPrefixCaller entryReachBodyRegistrationSlotWitness
   entryReachBodyExactArrayLoop stmtSimDecl moduleLoweringProps
   fragExec compileVyper compileEnv finite_map words list arithmetic
 

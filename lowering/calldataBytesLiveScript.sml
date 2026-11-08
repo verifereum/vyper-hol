@@ -1,7 +1,7 @@
 (* Reentrant count guards and zero-filled calldata copies. *)
 Theory calldataBytesLive
 Ancestors
-  calldataWordLive calldataWordLeaf calldataBytesLeaf calldataDynOwned abiDecoderReentry
+  valueEncodingDefs calldataWordLive calldataWordLeaf calldataBytesLeaf calldataDynOwned abiDecoderReentry
   abiDecoderBytes abiDecoderCopy abiDecoderGuards abiEncoder
   abiDecoderContract abiDecoderComposition valueEncoding safeSequence
   abiDecoderBytesTyped fragExecMem

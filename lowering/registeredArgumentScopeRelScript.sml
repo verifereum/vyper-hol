@@ -1,7 +1,7 @@
 (* Scope correspondence from the indexed registration certificate. *)
 Theory registeredArgumentScopeRel
 Ancestors
-  entryReachBodyRegistrationSlotWitness calldataRegistrationLocals
+  loweringStateRelDefs entryReachBodyRegistrationSlotWitness calldataRegistrationLocals
   externalBodyFrame entryLocals entryStateRel intCallCallee
   compileVyper compileEnv venomState list
 

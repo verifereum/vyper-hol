@@ -1,7 +1,7 @@
 (* Conditional recursive producers feed the shared callback-driven iterator. *)
 Theory entryReachBodyConditionalArray
 Ancestors
-  entryReachBodyCanonicalArrayIteration entryReachBodyConditionalArrayChild
+  valueEncodingDefs entryReachBodyCanonicalArrayIteration entryReachBodyConditionalArrayChild
 
 Theorem entry_conditional_dynamic_array_iteration:
   cfg = ((ce,env,ty,tv,maxn,parent_di,avs,xs),

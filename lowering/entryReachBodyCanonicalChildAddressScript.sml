@@ -1,7 +1,7 @@
 (* Indexed canonical child addresses and independent observable fields. *)
 Theory entryReachBodyCanonicalChildAddress
 Ancestors
-  entryReachBodyExactArrayLoop abiDecoderArraySetupInputs abiDecoderLoopSetup
+  valueEncodingDefs loweringStateRelDefs entryReachBodyExactArrayLoop abiDecoderArraySetupInputs abiDecoderLoopSetup
   abiDecoderArrayInvariant
   abiDecoderIndexedAddress abiDecoderDynamic abiDecoderContract abiDecoderFrame
   abiDecoderCoherence abiDecoderTypedContract abiDecodeRanges abiDecoderReentry

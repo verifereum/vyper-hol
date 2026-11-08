@@ -1,7 +1,7 @@
 (* The zero-sized dynamic descriptor follows its inline head, not an offset. *)
 Theory entryReachBodyEmptyMember
 Ancestors
-  entryReachBodyMemberSetup abiDecoderEmpty abiDecoderOffset abiDecoderDynamic
+  valueEncodingDefs loweringStateRelDefs entryReachBodyMemberSetup abiDecoderEmpty abiDecoderOffset abiDecoderDynamic
   abiDecoderCoherence abiDecoderComplexHead abiDecoderContract
   abiEncoder compileEnv valueEncoding words list arithmetic
 

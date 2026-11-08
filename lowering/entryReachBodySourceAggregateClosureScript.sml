@@ -1,7 +1,7 @@
 (* One member-result adapter for all source aggregate constructors. *)
 Theory entryReachBodySourceAggregateClosure
 Ancestors
-  entryReachBodySourceMemberExecution entryReachBodySourceAggregateInputs
+  valueEncodingDefs entryReachBodySourceMemberExecution entryReachBodySourceAggregateInputs
   entryReachBodySourceProducer entryReachBodySourceMemberEntry
   entryReachBodyCanonicalMembers entryReachBodyCanonicalArrayChild
   calldataRecursiveProducers abiDecoderMembers abiDecoderCoherence
