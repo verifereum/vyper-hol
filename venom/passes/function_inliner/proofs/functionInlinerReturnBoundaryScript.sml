@@ -1,5 +1,6 @@
-(* Successful source returns, rather than all syntactic returns, bound the
-   output indices introduced by inlining. *)
+(* Successful source returns provide a semantic output-write boundary.
+   The static namespace proof instead uses the call/return arity premise
+   of inliner_input_ok to bound all syntactic return rewrites. *)
 Theory functionInlinerReturnBoundary
 Ancestors
   functionInlinerOrigin functionInlinerDefs venomExecProofs
@@ -32,4 +33,35 @@ Proof
   gvs[rewrite_inline_inst_def, is_param_opcode_def, TAKE_APPEND, MEM_MAPi] >>
   `TAKE (LENGTH outs) rvs = rvs` by simp[TAKE_LENGTH_TOO_LONG] >>
   gvs[] >> metis_tac[EL_MEM]
+QED
+
+Theorem inline_return_static_arity_bound:
+  !inst outs.
+    (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) /\
+    raw_return_user_arity inst = SOME (LENGTH (outs:string list)) ==>
+    LENGTH (FILTER (\op. ~is_label_op op)
+      (TAKE (LENGTH inst.inst_operands - 1) inst.inst_operands)) <=
+    LENGTH outs
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[callLayoutDefsTheory.raw_return_user_arity_def, AllCaseEqs()] >>
+  irule arithmeticTheory.LESS_EQ_TRANS >>
+  qexists `LENGTH (TAKE (LENGTH outs) inst.inst_operands)` >>
+  simp[LENGTH_FILTER_LEQ, LENGTH_TAKE_EQ]
+QED
+
+Theorem inline_return_static_write_boundary:
+  !inst outs args ret pi ri x.
+    (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) /\
+    raw_return_user_arity inst = SOME (LENGTH outs) /\
+    MEM ri (FST (rewrite_inline_inst args outs ret inst pi)) /\
+    MEM x ri.inst_outputs ==>
+    MEM x outs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH (FILTER (\op. ~is_label_op op)
+     (TAKE (LENGTH inst.inst_operands - 1) inst.inst_operands)) <= LENGTH outs`
+    by metis_tac[inline_return_static_arity_bound] >>
+  gvs[rewrite_inline_inst_def, is_param_opcode_def, MEM_MAPi] >>
+  metis_tac[EL_MEM, arithmeticTheory.LESS_LESS_EQ_TRANS]
 QED

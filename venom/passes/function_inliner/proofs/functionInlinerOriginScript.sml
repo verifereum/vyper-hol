@@ -157,15 +157,3 @@ Theorem inliner_fn_origin_separation:
 Proof
   metis_tac[inliner_fn_origin_separation_aux]
 QED
-
-(* An arity-invalid call has no successful source return, but it still occurs
-   in the syntactic origin closure. Its rewritten output is unspecified. *)
-Theorem rewrite_inline_empty_outputs_probe[local]:
-  MAP (\i. i.inst_outputs)
-    (FST (rewrite_inline_inst [] [] "r"
-      <| inst_id := 0; inst_opcode := RET;
-         inst_operands := [Lit 7w; Lit 0w]; inst_outputs := [] |> 0)) =
-    [[HD ([] : string list)]; []]
-Proof
-  EVAL_TAC
-QED
