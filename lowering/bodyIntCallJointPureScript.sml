@@ -3,6 +3,14 @@ Theory bodyIntCallJointPure
 Ancestors
   bodyIntCallJointContract bodyIntCallJointPurePath bodyIntCallJointPureSourceInv
 
+(* Audit: non-NoneT representations need not occupy any bytes. *)
+Theorem pure_empty_tuple_type_probe[local]:
+  evaluate_type FEMPTY (TupleT []) = SOME (TupleTV []) /\
+  type_memory_size (TupleTV []) = 0
+Proof
+  EVAL_TAC
+QED
+
 (* L-pure (C1.3.14.3), the same step for every other non-call form: names,
    literals, top-level names, flag members, ternaries, the other builtins
    and type builtins.  Children that are internal calls are covered by the
