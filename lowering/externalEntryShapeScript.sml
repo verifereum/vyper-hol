@@ -3157,7 +3157,21 @@ Proof
       ho_match_mp_tac application_labels >> simp[lower_value_labels] >>
       rpt gen_tac >> ho_match_mp_tac application_labels >>
       simp[compile_raw_revert_labels, cs_extends_refl, added_labels_def,
-           DROP_LENGTH_TOO_LONG]) >>
+           DROP_LENGTH_TOO_LONG])
+  >~ [`SelfDestructTarget`]
+  >- (once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
+      Cases_on `args` >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      reverse (Cases_on `t`) >> simp[]
+      >- (ho_match_mp_tac application_labels >>
+          simp[emit_inst_labels, cs_extends_refl, added_labels_def,
+               DROP_LENGTH_TOO_LONG]) >>
+      ho_match_mp_tac application_labels >> simp[lower_value_labels] >>
+      rpt gen_tac >> ho_match_mp_tac application_labels >>
+      simp[builtinSystemTheory.compile_selfdestruct_def, emit_void_labels,
+           cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
   once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
   ho_match_mp_tac application_labels >>
   simp[emit_inst_labels, compile_create_call_labels, as_stack_val_labels,

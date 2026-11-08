@@ -260,13 +260,6 @@ Proof
   metis_tac[pairTheory.SND]
 QED
 
-(* rename_inst preserves opcode *)
-Theorem rename_inst_opcode_preserved:
-  !rs inst. (SND (rename_inst rs inst)).inst_opcode = inst.inst_opcode
-Proof
-  rw[rename_inst_def, LET_THM] >> pairarg_tac >> gvs[]
-QED
-
 (* rename_inst preserves inst_id *)
 Theorem rename_inst_id_preserved[local]:
   !rs inst. (SND (rename_inst rs inst)).inst_id = inst.inst_id
@@ -296,30 +289,6 @@ Proof
   pairarg_tac >> gvs[rename_operands_eq_map]
 QED
 
-(* rename_block_insts preserves length *)
-Theorem rename_block_insts_length:
-  !insts rs.
-    LENGTH (SND (rename_block_insts rs insts)) = LENGTH insts
-Proof
-  Induct >> rw[rename_block_insts_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  metis_tac[pairTheory.SND]
-QED
-
-(* rename_block_insts preserves opcodes *)
-Theorem rename_block_insts_opcodes[local]:
-  !insts rs j.
-    j < LENGTH insts ==>
-    (EL j (SND (rename_block_insts rs insts))).inst_opcode =
-      (EL j insts).inst_opcode
-Proof
-  Induct >> rw[rename_block_insts_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  Cases_on `j` >> gvs[]
-  >- metis_tac[rename_inst_opcode_preserved, pairTheory.SND]
-  >- metis_tac[pairTheory.SND]
-QED
-
 (* rename_block_insts preserves inst_ids *)
 Theorem rename_block_insts_ids[local]:
   !insts rs j.
@@ -332,37 +301,6 @@ Proof
   Cases_on `j` >> gvs[]
   >- metis_tac[rename_inst_id_preserved, pairTheory.SND]
   >- metis_tac[pairTheory.SND]
-QED
-
-(* ==========================================================================
-   Part 3b: Pipeline PHI properties
-
-   Key lemma: update_phi_for_pred + resolve_phi correspondence.
-   After update_phi_for_pred rs lbl ops, resolving for lbl gives the
-   renamed_operand (latest_version rs) applied to the original resolve result.
-   ========================================================================== *)
-
-(* resolve_phi after update_phi_for_pred: renaming for the matching label *)
-Theorem resolve_phi_update_phi_for_pred[local]:
-  !rs lbl ops.
-    resolve_phi lbl (update_phi_for_pred rs lbl ops) =
-    OPTION_MAP (renamed_operand (latest_version rs)) (resolve_phi lbl ops)
-Proof
-  ho_match_mp_tac update_phi_for_pred_ind >>
-  rw[resolve_phi_def, update_phi_for_pred_def, renamed_operand_def] >>
-  Cases_on `x` >> rw[resolve_phi_def, renamed_operand_def]
-QED
-
-(* resolve_phi after update_phi_for_pred for a DIFFERENT label: unchanged *)
-Theorem resolve_phi_update_phi_for_pred_other[local]:
-  !rs lbl ops lbl'.
-    lbl' <> lbl ==>
-    resolve_phi lbl' (update_phi_for_pred rs lbl ops) =
-    resolve_phi lbl' ops
-Proof
-  ho_match_mp_tac update_phi_for_pred_ind >>
-  rw[resolve_phi_def, update_phi_for_pred_def] >>
-  Cases_on `x` >> rw[resolve_phi_def]
 QED
 
 (* ==========================================================================
@@ -1232,46 +1170,8 @@ Proof
   simp[]
 QED
 
-(* rename_block_insts stepping: TAKE (SUC j) decomposes into
-   TAKE j processed followed by rename_inst on EL j *)
-Theorem rename_block_insts_step[local]:
-  !j insts rs. j < LENGTH insts ==>
-    FST (rename_block_insts rs (TAKE (SUC j) insts)) =
-    FST (rename_inst (FST (rename_block_insts rs (TAKE j insts))) (EL j insts))
-Proof
-  rpt strip_tac >>
-  `TAKE (SUC j) insts = TAKE j insts ++ [EL j insts]` by
-    simp[GSYM SNOC_APPEND, SNOC_EL_TAKE] >>
-  gvs[] >>
-  mp_tac (Q.SPECL [`TAKE j insts`, `[EL j insts]`, `rs`]
-           (SIMP_RULE std_ss [LET_THM] rename_block_insts_append)) >>
-  rw[LET_THM] >>
-  Cases_on `rename_block_insts rs (TAKE j insts)` >> gvs[] >>
-  Cases_on `rename_inst q (EL j insts)` >> gvs[] >>
-  gvs[rename_block_insts_def, LET_THM]
-QED
-
 (* rename_block_insts element-wise: the j-th output instruction is
    SND(rename_inst (FST(rename_block_insts rs (TAKE j insts))) (EL j insts)) *)
-Theorem rename_block_insts_el:
-  !insts rs j.
-    j < LENGTH insts ==>
-    EL j (SND (rename_block_insts rs insts)) =
-    SND (rename_inst (FST (rename_block_insts rs (TAKE j insts)))
-                     (EL j insts))
-Proof
-  Induct
-  >- simp[]
-  >> rpt gen_tac >> strip_tac >>
-  simp[rename_block_insts_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  Cases_on `j`
-  >- gvs[rename_block_insts_def]
-  >> gvs[] >>
-  first_x_assum (qspecl_then [`rs'`, `n`] mp_tac) >> simp[] >>
-  simp[rename_block_insts_def, LET_THM] >>
-  Cases_on `rename_block_insts rs' (TAKE n insts)` >> simp[]
-QED
 
 (* ---------- Helper: Peel n non-terminator non-INVOKE instructions --------
    Starting from vs_inst_idx = m, executes instructions m through m+n-1
@@ -1405,7 +1305,7 @@ Proof
 QED
 
 (* ssa_sim preservation through update_var with fresh output *)
-Theorem ssa_sim_update_fresh[local]:
+Theorem ssa_sim_update_fresh:
   !sigma s1 s2 base out w.
     ssa_sim sigma s1 s2 /\
     lookup_var base s1 = SOME w /\
@@ -1436,7 +1336,7 @@ QED
 (* Single PHI step: execute one PHI instruction, updating ssa_sim.
    The PHI reads via resolve_phi, evaluates in s2, writes to fresh output.
    After: ssa_sim sigma' s1 s2' where sigma'(bv) = out, rest unchanged. *)
-Theorem phi_step_sim[local]:
+Theorem phi_step_sim:
   !bb' fuel ctx s1 s2 sigma bv out w prev_bb.
     s2.vs_inst_idx < LENGTH bb'.bb_instructions /\
     s2.vs_prev_bb = SOME prev_bb /\
@@ -2694,14 +2594,6 @@ Proof
   metis_tac[rename_inst_empty_outputs_id]
 QED
 
-(* inst_wf + is_terminator ==> inst_outputs = [] *)
-Theorem inst_wf_terminator_no_outputs[local]:
-  !inst. inst_wf inst /\ is_terminator inst.inst_opcode ==>
-         inst.inst_outputs = []
-Proof
-  rw[inst_wf_def] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-QED
-
 (* For a well-formed terminated block, rename state at terminator = rename state
    at end of block (terminator doesn't change rs) *)
 Theorem rename_block_insts_terminator_end[local]:
@@ -3552,7 +3444,7 @@ Proof
   `j = PRE (LENGTH bb.bb_instructions)` by metis_tac[bb_well_formed_def] >>
   `inst_wf (EL j bb.bb_instructions)` by metis_tac[EVERY_EL] >>
   `(EL j bb.bb_instructions).inst_outputs = []` by
-    metis_tac[inst_wf_terminator_no_outputs] >>
+    metis_tac[terminator_no_outputs] >>
   `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> fs[]) >>
   `LAST bb.bb_instructions = EL j bb.bb_instructions` by simp[LAST_EL] >>
   metis_tac[rename_block_insts_terminator_end]
@@ -4003,7 +3895,7 @@ Proof
   rpt strip_tac
   >- (`j = LENGTH insts` by simp[] >> simp[TAKE_LENGTH_ID_rwt]) >>
   `j < LENGTH insts` by simp[] >>
-  qspecl_then [`j`, `insts`, `rs0`] mp_tac rename_block_insts_step >>
+  qspecl_then [`insts`, `rs0`, `j`] mp_tac rename_block_insts_step >>
   simp[] >> strip_tac >>
   qspecl_then [`FST (rename_block_insts rs0 (TAKE j insts))`,
                `EL j insts`, `x`] mp_tac rename_inst_non_output_stable >>
@@ -4193,7 +4085,7 @@ Resume lockstep_body_gen[gen_term_ok]:
     `inst_wf inst1` by (
       simp[Abbr `inst1`] >> metis_tac[EVERY_EL]) >>
     `inst1.inst_outputs = []` by
-      metis_tac[inst_wf_terminator_no_outputs] >>
+      metis_tac[terminator_no_outputs] >>
     rpt strip_tac >>
     `j' = j` by (
       `j = PRE (LENGTH bb.bb_instructions)` by
@@ -5611,14 +5503,6 @@ Proof
   simp[]
 QED
 
-(* FST of rename_inst depends only on inst_outputs *)
-Triviality rename_inst_fst:
-  !rs inst. FST (rename_inst rs inst) = FST (rename_outputs rs inst.inst_outputs)
-Proof
-  rw[rename_inst_def] >> Cases_on `inst.inst_opcode = PHI` >> simp[LET_THM] >>
-  pairarg_tac >> simp[]
-QED
-
 (* rename_block_insts FST depends only on outputs *)
 Theorem rename_block_insts_fst_outputs_only:
   !insts1 rs insts2.
@@ -5632,7 +5516,7 @@ Proof
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   `h.inst_outputs = h'.inst_outputs` by (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `FST (rename_inst rs h) = FST (rename_inst rs h')` by simp[rename_inst_fst] >>
+  `FST (rename_inst rs h) = FST (rename_inst rs h')` by simp[rename_inst_fst_early] >>
   gvs[] >>
   first_x_assum (qspecl_then [`rs'`, `t`] mp_tac) >>
   (impl_tac >- (
@@ -5694,7 +5578,7 @@ Proof
     >- (qpat_x_assum `!j. j < SUC _ ==> _.inst_outputs = _`
           (qspec_then `0` mp_tac) >> simp[]) >>
     sg `FST (rename_inst rs h) = FST (rename_inst rs h')`
-    >- simp[rename_inst_fst] >>
+    >- simp[rename_inst_fst_early] >>
     pop_assum (SUBST1_TAC o SYM) >>
     first_x_assum irule >>
     rpt conj_tac
@@ -6384,7 +6268,7 @@ Finalise block_rename_states_keys;
 
 (* Standalone helper: rename_blocks on dtree preserves outputs for labels
    outside the tree, yielding bbs_outputs_agree. *)
-Triviality rename_blocks_bbs_outputs_agree[local]:
+Theorem rename_blocks_bbs_outputs_agree:
   !dtree rs bbs succ_map labels.
     (!l. MEM l labels ==> ~MEM l (dom_tree_labels dtree)) /\
     (!l. MEM l labels ==> ?b. lookup_block l bbs = SOME b) ==>

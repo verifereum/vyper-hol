@@ -220,6 +220,18 @@ Definition generate_emit_ops_def:
         else ([], ps)
 End
 
+Theorem generate_emit_ops_some:
+  !inst ltc ps name.
+    venom_to_evm_name inst.inst_opcode = SOME name ==>
+    generate_emit_ops inst ltc ps = ([SOEmit name], ps)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INITIAL_FMP` >> gvs[asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `inst.inst_opcode = BUMP` >> gvs[asmIRTheory.venom_to_evm_name_def] >>
+  simp[generate_emit_ops_def, LET_THM]
+QED
+
+
 (* =========================================================================
    Compute Operands for an Instruction
    Which operands go to the stack (excludes labels for control flow ops)

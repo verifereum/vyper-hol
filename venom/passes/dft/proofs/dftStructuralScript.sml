@@ -54,6 +54,18 @@ Proof
   ASM_SIMP_TAC flip_opcode_ss []
 QED
 
+Theorem flip_operands_is_terminator:
+  !i. is_terminator (flip_operands i).inst_opcode = is_terminator i.inst_opcode
+Proof
+  rw[flip_operands_def] >>
+  Cases_on `i.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[LET_THM] >>
+  Cases_on `is_comparator i.inst_opcode` >> simp[] >>
+  Cases_on `i.inst_opcode` >>
+  gvs[is_comparator_def, flip_comparison_opcode_def, is_terminator_def]
+QED
+
 (* Flipping operands does not change barrier-ness *)
 Theorem flip_operands_is_barrier:
   !i. is_barrier (flip_operands i) = is_barrier i
@@ -922,13 +934,6 @@ Proof
   simp[dft_invoke_subset_def, listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem dft_FIND_MEM[local]:
-  FIND P xs = SOME x ==> MEM x xs
-Proof
-  qid_spec_tac `x` >> Induct_on `xs` >>
-  simp[listTheory.FIND_thm] >> rw[] >> metis_tac[]
-QED
-
 Theorem dft_map_update_invoke_subset[local]:
   MEM chosen blocks ==>
   dft_invoke_subset blocks
@@ -964,10 +969,10 @@ Proof
      Cases_on `FLOOKUP st.dls_last_order lbl` >> gvs[]
   >- (Cases_on `x = q` >> gvs[dft_invoke_subset_refl] >>
       irule dft_map_update_invoke_subset >>
-      gvs[lookup_block_def] >> metis_tac[dft_FIND_MEM])
+      gvs[lookup_block_def] >> metis_tac[FIND_MEM])
   >> Cases_on `x' = order` >> gvs[dft_invoke_subset_refl] >>
      irule dft_map_update_invoke_subset >>
-     gvs[lookup_block_def] >> metis_tac[dft_FIND_MEM]
+     gvs[lookup_block_def] >> metis_tac[FIND_MEM]
 QED
 
 Theorem dft_loop_step_invoke_subset:
@@ -1102,10 +1107,10 @@ Proof
   Cases_on `FLOOKUP st.dls_last_order lbl` >> gvs[]
   >- (Cases_on `x = q` >> gvs[] >>
       irule dft_map_update_no_raw >> simp[] >>
-      gvs[lookup_block_def] >> metis_tac[dft_FIND_MEM])
+      gvs[lookup_block_def] >> metis_tac[FIND_MEM])
   >> Cases_on `x' = order` >> gvs[] >>
      irule dft_map_update_no_raw >> simp[] >>
-     gvs[lookup_block_def] >> metis_tac[dft_FIND_MEM]
+     gvs[lookup_block_def] >> metis_tac[FIND_MEM]
 QED
 
 Theorem dft_loop_step_no_raw[local]:

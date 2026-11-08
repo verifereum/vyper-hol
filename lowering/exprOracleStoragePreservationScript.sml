@@ -439,7 +439,8 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_RawRevert]:
       first_x_assum drule_all >> strip_tac >>
       Cases_on `args_res` >> gvs[bind_def, ignore_bind_def, type_check_def,
         assert_def, return_def, raise_def]
-      >- (Cases_on `LENGTH x = 1` >> gvs[] >> rpt strip_tac >> gvs[]) >>
+      >- (strip_tac >> gvs[AllCaseEqs()] >>
+          imp_res_tac lift_option_type_state >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> gvs[Once well_typed_expr_def]
 QED

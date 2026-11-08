@@ -594,10 +594,11 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call cfn cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
-  >~ [`as_stack_val rt (compile_create_call cfn cenv ck salted rof args sa)`]
-    >- suspend "create"
   >~ [`raw_log_topic_exprs _`] >- suspend "log"
   >~ [`compile_raw_revert _ _`] >- suspend "revert"
+  >~ [`compile_selfdestruct _ _`] >- suspend "selfdestruct"
+  >~ [`as_stack_val rt (compile_create_call cfn cenv ck salted rof args sa)`]
+    >- suspend "create"
   >> suspend "send"
 QED
 
@@ -620,19 +621,6 @@ Resume compile_call_word_result_ok[external]:
   metis_tac[compile_external_call_zero_safe_operand]
 QED
 
-Resume compile_call_word_result_ok[create]:
-  irule as_stack_val_word_result_ok >>
-  metis_tac[compile_create_call_safe_operand]
-QED
-
-Resume compile_call_word_result_ok[send]:
-  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE args1 _ _` >>
-  Cases_on `args1` >> gvs[word_result_ok_def] >>
-  rename1 `LENGTH args2 = if flag then 1 else 0` >>
-  Cases_on `LENGTH args2 = if flag then 1 else 0` >> gvs[word_result_ok_def] >>
-  rpt (pairarg_tac >> gvs[word_result_ok_def])
-QED
-
 (* These system calls return a literal placeholder on every path, including
    invalid arities. Split their argument shapes before destructing the lets. *)
 Resume compile_call_word_result_ok[log]:
@@ -647,6 +635,25 @@ QED
 Resume compile_call_word_result_ok[revert]:
   Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE rest _ _` >>
   Cases_on `rest` >> gvs[word_result_ok_def] >>
+  rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
+Resume compile_call_word_result_ok[selfdestruct]:
+  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE rest _ _` >>
+  Cases_on `rest` >> gvs[word_result_ok_def] >>
+  rpt (pairarg_tac >> gvs[word_result_ok_def])
+QED
+
+Resume compile_call_word_result_ok[create]:
+  irule as_stack_val_word_result_ok >>
+  metis_tac[compile_create_call_safe_operand]
+QED
+
+Resume compile_call_word_result_ok[send]:
+  Cases_on `args` >> gvs[word_result_ok_def] >> rename1 `list_CASE args1 _ _` >>
+  Cases_on `args1` >> gvs[word_result_ok_def] >>
+  rename1 `LENGTH args2 = if flag then 1 else 0` >>
+  Cases_on `LENGTH args2 = if flag then 1 else 0` >> gvs[word_result_ok_def] >>
   rpt (pairarg_tac >> gvs[word_result_ok_def])
 QED
 

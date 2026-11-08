@@ -84,7 +84,7 @@ Definition stack_get_depth_def:
   stack_get_depth op stk = stack_find (λx. x = op) (REVERSE stk)
 End
 
-Theorem stack_find_props[local]:
+Theorem stack_find_props:
   ∀p xs d. stack_find p xs = SOME d ⇒ d < LENGTH xs ∧ p (EL d xs)
 Proof
   gen_tac >> Induct >> simp[stack_find_def] >>
@@ -130,12 +130,36 @@ Proof
   strip_tac >> drule stack_peek_eq_EL_REVERSE >> simp[]
 QED
 
+Theorem stack_find_bound:
+  ∀p xs d. stack_find p xs = SOME d ⇒ d < LENGTH xs
+Proof
+  metis_tac[stack_find_props]
+QED
+
+Theorem stack_find_el:
+  ∀p xs d. stack_find p xs = SOME d ⇒ p (EL d xs)
+Proof
+  metis_tac[stack_find_props]
+QED
+
+Theorem stack_get_depth_bound:
+  ∀op stk d. stack_get_depth op stk = SOME d ⇒ d < LENGTH stk
+Proof
+  metis_tac[stack_get_depth_props]
+QED
+
 Theorem stack_get_depth_NONE:
   stack_get_depth op stk = NONE ⇔
   ∀d. d < LENGTH stk ⇒ stack_peek d stk ≠ op
 Proof
   simp[stack_get_depth_def, stack_find_NONE, LENGTH_REVERSE] >>
   metis_tac[stack_peek_eq_EL_REVERSE]
+QED
+
+Theorem stack_get_depth_push:
+  !op stk. stack_get_depth op (stack_push op stk) = SOME 0
+Proof
+  simp[stack_get_depth_def, stack_push_def, REVERSE_SNOC, stack_find_def]
 QED
 
 (* Find the shallowest matching operand whose depth is not in the protected
@@ -228,3 +252,15 @@ QED
 Definition stack_get_phi_depth_def:
   stack_get_phi_depth phis stk = stack_find (λx. MEM x phis) (REVERSE stk)
 End
+
+Theorem all_distinct_elem_count_le_one:
+  !(xs : 'a list) x.
+    ALL_DISTINCT xs ==> LIST_ELEM_COUNT x xs <= 1
+Proof
+  Induct >> simp[LIST_ELEM_COUNT_THM] >> rpt strip_tac >>
+  Cases_on `h = x` >> gvs[LIST_ELEM_COUNT_THM]
+  >- (`~(LIST_ELEM_COUNT h xs > 0)` by
+        metis_tac[LIST_ELEM_COUNT_MEM] >> decide_tac)
+  >> first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+

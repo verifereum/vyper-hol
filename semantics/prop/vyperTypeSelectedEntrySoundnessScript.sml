@@ -64,6 +64,9 @@ Definition call_external_body_def:
                of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
                 | SOME v => (INL v, am_ret, st.requests))
             | (INR e, st) => (INR e, am, st.requests))
+       | (INR HaltException, st) =>
+           (INR HaltException, abstract_machine_from_state srcs exps layouts st,
+            st.requests)
        | (INR e, st) => (INR e, am, st.requests)) in
     (res, am_out, rqs)
 End
@@ -102,6 +105,8 @@ Theorem call_external_selected_entry_body:
   call_external orc gobs am tx =
     case call_external_body am cx nr mut (type_env_all_modules mods) st2 scope body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+     | (INR HaltException, am', rqs) =>
+         (INR HaltException, finalize_pending_deletions am', rqs)
     | failure => failure
 Proof
   strip_tac >>

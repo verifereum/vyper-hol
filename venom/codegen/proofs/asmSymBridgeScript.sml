@@ -29,7 +29,7 @@ Theory asmSymBridge
 Ancestors
   asmSymSem asmOptimizer asmToBytecodeProofs asmSem asmWf
   symbolResolve spillWordBounds vfmTypes list mem2varBlockSimHelpers spillSim
-  asmCallOracleProps
+  asmCallOracleProps asmOpSim
 
 (* ===== Relating the two semantics ===== *)
 

@@ -9,7 +9,7 @@
  *
  * TOP-LEVEL:
  *   expr_shape_root            — the source forms whose lowering breaks the
- *                                shape (raw_call, create
+ *                                shape (raw_call, selfdestruct, create
  *                                calls) and builtins with too few arguments
  *   cenv_shape_ok, cenv_static_ok, value_shape_ok, loop_ctx_shape_ok
  *   external_fn_shape_ok, fallback_shape_ok, internal_fn_shape_ok
@@ -68,11 +68,14 @@ End
 
 (* raw_call lowers to
    DELEGATECALL with is_delegate_call, and raw_call(t, msg.data) to DALLOCA;
-   create calls emit CREATE/CREATE2, outside inst_shape_ok; a builtin with too few arguments compiles HD []. *)
+   selfdestruct emits SELFDESTRUCT, excluded by the current instruction shape
+   policy; create calls emit CREATE/CREATE2, outside inst_shape_ok;
+   a builtin with too few arguments compiles HD []. *)
 Definition expr_shape_root_def:
   expr_shape_root e <=>
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
+    (?ty es d. e = Call ty SelfDestructTarget es d) \/
     (?ty kind salted rof order es d.
        e = Call ty (CreateTarget kind salted rof order) es d) \/
     (?ty bi es. e = Builtin ty bi es /\ LENGTH es < builtin_arity bi) \/
@@ -8934,7 +8937,7 @@ QED
 Resume compile_expr_body_shape[call]:
   CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_expr_body_def, expr_type_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  gvs[supported_expr_exists_def, expr_shape_root_def] >> Cases_on `target`
+  gvs[supported_expr_exists_def, expr_shape_root_def] >> Cases_on `target` >> gvs[]
   >~ [`compile_call _ _ _ _ (ExtCall _ _ sig opts)`]
   >- (PairCases_on `sig` >> irule compile_call_ext_shape >> simp[])
   >~ [`compile_call _ _ _ _ (IntCall name)`]
@@ -8945,9 +8948,6 @@ Resume compile_expr_body_shape[call]:
   >- (irule compile_call_raw_log_shape >> simp[])
   >~ [`compile_call _ _ _ _ RawRevert _ _`]
   >- (irule compile_call_raw_revert_shape >> simp[])
-  >~ [`compile_call _ _ _ _ (CreateTarget kind salted rof order)`]
-  >- gvs[] >>
-  gvs[] >> shape_send_invalid_tac
 QED
 
 Resume compile_expr_body_shape[pop]:
@@ -10582,6 +10582,31 @@ Resume compile_return_some_shape[external]:
             simp[stmt_shape_stable_plain, cj 1 compile_typed_copy_shape]) >>
          irule shape_step_return >> simp[]) >>
      irule shape_step_return >> simp[]) >>
+  (* Raw returns unlock, then copy into another fresh typed buffer. *)
+  IF_CASES_TAC
+  >- (stmt_sequence `\u st. plain_operand st ret_op`
+        (IF_CASES_TAC
+         >- (irule shape_step_conseq >>
+             qexistsl_tac [`compiler_label`, `\st. plain_operand st ret_op /\ T`,
+                           `\u st. plain_operand st ret_op /\ T`] >>
+             rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+             ho_match_mp_tac shape_step_frame >>
+             simp[compile_nonreentrant_unlock_shape, stmt_shape_stable_plain]) >>
+         irule shape_step_return >> simp[]) >>
+      stmt_bind `\buf st. plain_operand st buf.buf_operand /\ plain_operand st ret_op` `buf`
+        (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
+         simp[stmt_shape_stable_plain, compile_alloc_buffer_shape]) >>
+      stmt_sequence `\u st. plain_operand st buf.buf_operand`
+        (irule shape_step_conseq >>
+         qexistsl_tac [`compiler_label`,
+           `\st. plain_operand st buf.buf_operand /\
+              (plain_operand st buf.buf_operand /\ plain_operand st ret_op)`,
+           `\u st. plain_operand st buf.buf_operand /\ T`] >>
+         rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+         ho_match_mp_tac shape_step_frame >>
+         simp[stmt_shape_stable_plain, cj 1 compile_typed_copy_shape]) >>
+      irule (SRULE [] (Q.INST [`ret_val` |-> `SOME buf.buf_operand`]
+        (SPEC_ALL compile_external_return_shape)))) >>
   irule (SRULE [] (Q.INST [`ret_val` |-> `SOME ret_op`]
     (SPEC_ALL compile_external_return_shape)))
 QED
@@ -13530,8 +13555,10 @@ QED
 
 (* ===== Source side conditions from supported_program ===== *)
 
-(* supported_expr rejects every raw_call form and create calls,
-   and accepts builtins only at the arity their dispatcher reads. *)
+(* supported_pure_expr rejects all Calls; supported_effect_expr accepts
+   only IntCall, ExtCall, Send and Pop, so SelfDestructTarget is unsupported.
+   supported_expr also rejects every raw_call form and create calls, and
+   accepts builtins only at the arity their dispatcher reads. *)
 Theorem supported_builtin_form_shape_root[local]:
   supported_builtin_form tops ty bi es ==>
   ~expr_shape_root (Builtin ty bi es)
@@ -13583,10 +13610,7 @@ Proof
   ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
   rw[supportedExprsTheory.supported_effect_expr_def,
      supported_expr_exists_def, expr_shape_root_def] >>
-  imp_res_tac (cj 1 supported_pure_shape) >>
-  imp_res_tac (cj 2 supported_pure_shape) >>
-  imp_res_tac (cj 4 supported_pure_shape) >>
-  gvs[supported_expr_exists_def, expr_shape_root_def]
+  imp_res_tac supported_pure_shape >> res_tac >> fs[]
 QED
 
 Theorem supported_expr_shape[local]:

@@ -7,7 +7,7 @@
 
 Theory analysisSimProofsPrepend
 Ancestors
-  analysisSimProofsWiden analysisSimProofsSound analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
+  venomExecProofs analysisSimProofsWiden analysisSimProofsSound analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
   analysisSimDefs execEquivParamDefs dfAnalyzeProofs dfAnalyzeDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
@@ -292,11 +292,11 @@ Proof
       `run_block fuel run_ctx bt_bb s2 =
          exec_block fuel run_ctx bt_bb
            (s_phi with vs_inst_idx := pplen)` by
-        metis_tac[eval_phis_OK_run_block_eq] >>
+        metis_tac[run_block_OK_eq_exec_block] >>
       `run_block fuel run_ctx btp_bb s2 =
          exec_block fuel run_ctx btp_bb
            (s_phi with vs_inst_idx := pplen)` by
-        metis_tac[eval_phis_OK_run_block_eq] >>
+        metis_tac[run_block_OK_eq_exec_block] >>
       qabbrev_tac `pfx = prepend bb.bb_label` >>
       `s_phi.vs_inst_idx = 0` by
         metis_tac[venomExecProofsTheory.eval_phis_preserves_inst_idx] >>
@@ -380,10 +380,10 @@ Proof
   >- (* eval_phis Error case *)
      (first_x_assum (X_CHOOSE_THEN ``e:string`` STRIP_ASSUME_TAC) >>
       `run_block fuel run_ctx bt_bb s2 = Error e` by
-        metis_tac[run_block_eval_phis_Error] >>
+        metis_tac[run_block_Error_eq] >>
       `eval_phis s2 btp_bb.bb_instructions = Error e` by fs[] >>
       `run_block fuel run_ctx btp_bb s2 = Error e` by
-        metis_tac[run_block_eval_phis_Error] >>
+        metis_tac[run_block_Error_eq] >>
       gvs[lift_result_def])
 QED
 
@@ -744,7 +744,7 @@ Proof
        (fn th => assume_tac
          (MATCH_MP
            (Q.SPECL [`fuel`, `run_ctx`, `bb`, `s1`, `v1`]
-             analysisSimProofsTheory.run_block_OK_not_halted) th)) >>
+             venomExecProofsTheory.run_block_OK_not_halted) th)) >>
      qpat_x_assum
        `run_block fuel run_ctx
           (analysis_block_transform_prepend bottom result prepend f bb) s2 = OK v2`
@@ -752,7 +752,7 @@ Proof
          (MATCH_MP
            (Q.SPECL [`fuel`, `run_ctx`,
              `analysis_block_transform_prepend bottom result prepend f bb`,
-             `s2`, `v2`] analysisSimProofsTheory.run_block_OK_not_halted) th)) >>
+             `s2`, `v2`] venomExecProofsTheory.run_block_OK_not_halted) th)) >>
      simp[])) >>
   (ALL_TAC THEN_LT TRYALL
     (REWRITE_TAC [GSYM function_map_transform_def] >>

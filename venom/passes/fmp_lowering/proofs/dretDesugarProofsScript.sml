@@ -1,7 +1,7 @@
 (* Structural proofs for target-checked DRET desugaring. *)
 Theory dretDesugarProofs
 Ancestors
-  dretDesugarDefs irSupply fcgDefs venomInst
+  venomFnInstsProofs dretDesugarDefs irSupply fcgDefs venomInst
 Libs
   bossLib listTheory
 

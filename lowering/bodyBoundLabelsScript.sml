@@ -1281,7 +1281,16 @@ Proof
       irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >>
       rpt gen_tac >> strip_tac >> simp[] >> irule pair_let_snd_preserves >>
-      simp[bound_labels_raw_revert]) >>
+      simp[bound_labels_raw_revert])
+  >~ [`SelfDestructTarget`]
+  >- (simp[compile_call_def] >> Cases_on `args` >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      reverse (Cases_on `t`) >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_lower_value >> simp[]) >>
+      rpt gen_tac >> strip_tac >> simp[] >> irule pair_let_snd_preserves >>
+      simp[bound_labels_selfdestruct]) >>
   simp[compile_call_def] >> irule pair_let_snd_preserves >>
   simp[bound_labels_emit_inst]
 QED

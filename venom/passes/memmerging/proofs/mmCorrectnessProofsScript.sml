@@ -7,7 +7,7 @@
 
 Theory mmCorrectnessProofs
 Ancestors
-  mmTransform mmCopyEquiv passSimulationDefs passSimulationProofs
+  opcodeClass mmTransform mmCopyEquiv passSimulationDefs passSimulationProofs
   crossBlockSimProofs crossBlockSimDefs passSimulationProps stateEquivProps
   stateEquiv stateEquivProofs venomExecSemantics execEquivParamProofs
   analysisSimProofsBase analysisSimDefs venomInstProofs venomWf
@@ -454,21 +454,6 @@ Proof
   irule map_block_sim_err_ind >> simp[]
 QED
 
-(* run_insts on appended lists *)
-Theorem run_insts_append[local]:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-    case run_insts fuel ctx xs s of
-      OK s' => run_insts fuel ctx ys s'
-    | Halt s' => Halt s'
-    | Abort a s' => Abort a s'
-    | IntRet v s' => IntRet v s'
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
-
 (* Generic FLAT MAP instruction simulation combinator.
    Given a per-instruction simulation property (inst_sim), proves the
    list-level simulation for run_insts vs run_insts on FLAT MAP transform.
@@ -638,9 +623,9 @@ Theorem step_mem_write_only_memory[local]:
     step_inst fuel ctx inst s = OK s' ==>
     s' with vs_memory := s.vs_memory = s
 Proof
-  rpt strip_tac >> gvs[] >> gvs[inst_wf_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_def, is_terminator_def,
-      exec_write2_def, mstore_def, mcopy_def, LET_THM] >>
+  rpt strip_tac >> gvs[] >> gvs[inst_wf_def, step_inst_non_invoke, is_terminator_def] >>
+  stepInstBaseLib.with_opcode_clause (fn ths => gvs (ths @
+    [exec_write2_def, mstore_def, mcopy_def, LET_THM])) >>
   BasicProvers.every_case_tac >> gvs[wmexp_only_changes_memory] >>
   simp[venom_state_component_equality]
 QED
@@ -656,7 +641,8 @@ Theorem step_load_only_vars[local]:
 Proof
   rpt strip_tac >> gvs[inst_wf_def] >>
   Cases_on `inst.inst_opcode` >> gvs[] >>
-  fs[step_inst_non_invoke, step_inst_base_opcode_eqs, is_terminator_def] >>
+  stepInstBaseLib.with_opcode_clause (fn ths => fs (ths @
+    [step_inst_non_invoke, is_terminator_def])) >>
   Cases_on `inst.inst_operands` >> fs[] >> Cases_on `t` >> fs[] >>
   Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[] >>
   gvs[exec_read1_def] >>
@@ -1176,9 +1162,10 @@ Proof
   rpt gen_tac >>
   Cases_on `mode` >> (
     simp[mk_bulk_copy_inst_def, mode_copy_opcode_def] >>
-    simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
-         is_terminator_def, eval_operand_def,
-         mcopy_def, LET_THM] >>
+    simp (map stepInstBaseLib.opcode_clause
+            [``MCOPY``, ``CALLDATACOPY``, ``DLOADBYTES``] @
+          [step_inst_non_invoke, is_terminator_def, eval_operand_def,
+           mcopy_def, LET_THM]) >>
     simp[wmexp_only_changes_memory]
   )
 QED
@@ -2232,13 +2219,6 @@ Proof
   irule terminator_step_equiv >> simp[]
 QED
 
-(* execution_equiv is symmetric (not in shared Props, so proved locally) *)
-Theorem execution_equiv_sym[local]:
-  !vars s1 s2. execution_equiv vars s1 s2 ==> execution_equiv vars s2 s1
-Proof
-  simp[execution_equiv_def]
-QED
-
 (* Reusable: lift_result symmetry *)
 Theorem lift_result_sym[local]:
   !R_ok R_term R_abort r1 r2.
@@ -2690,64 +2670,9 @@ Proof
   (Cases_on `inst.inst_opcode` THENL mm_step_inst_base_no_abort_cases)
 QED
 
-(* Small result-shape facts keep consumers from unfolding the full executor. *)
-Triviality mm_exec_helpers_no_halt_intret[simp]:
-  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
-  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
-  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
-  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
-  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
-  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
-  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
-  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
-  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
-  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
-  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
-  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
-  (!inst s sz s'. exec_alloca inst s sz <> Halt s') /\
-  (!inst s sz vs s'. exec_alloca inst s sz <> IntRet vs s')
-Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def, exec_alloca_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Triviality mm_exec_call_helpers_no_halt_intret[simp]:
-  (!inst s g a v ao as_ ro rs is_s s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
-  (!inst s g a v ao as_ ro rs is_s vs s'.
-     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
-  (!inst s g a ao as_ ro rs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
-  (!inst s g a ao as_ ro rs vs s'.
-     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
-  (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt vs s'.
-     exec_create inst s v off sz salt <> IntRet vs s')
-Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
-Theorem step_inst_base_non_term_no_halt[local]:
-  !inst s s'. step_inst_base inst s = Halt s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule opcodeClassTheory.step_inst_base_halt_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
-
-Theorem step_inst_base_non_term_no_intret[local]:
-  !inst s vs s'. step_inst_base inst s = IntRet vs s' ==>
-    is_terminator inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
-  strip_tac >> gvs[is_terminator_def]
-QED
+val _ = augment_srw_ss [rewrites
+  [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret,
+   exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
 
 Theorem step_inst_base_non_term_only_ok_error_abort[local]:
   !inst s. ~is_terminator inst.inst_opcode ==>
@@ -2756,8 +2681,8 @@ Theorem step_inst_base_non_term_only_ok_error_abort[local]:
     (?a s'. step_inst_base inst s = Abort a s')
 Proof
   rpt strip_tac >> Cases_on `step_inst_base inst s` >>
-  metis_tac[step_inst_base_non_term_no_halt,
-            step_inst_base_non_term_no_intret]
+  metis_tac[step_inst_base_no_halt,
+            step_inst_base_no_intret]
 QED
 
 (* Non-terminator, non-INVOKE: step_inst can't produce Halt or IntRet *)

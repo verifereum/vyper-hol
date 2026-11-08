@@ -10,7 +10,7 @@
  *)
 Theory affineFoldingProofs
 Ancestors
-  affineFoldingDefs execEquivProps passSimulationDefs passSimulationProps
+  venomFnInstsProofs instIdxIndep affineFoldingDefs execEquivProps passSimulationDefs passSimulationProps
   passSharedDefs passSharedProps stateEquivProps venomExecProps
   venomExecSemantics venomInst venomInstProps venomState
 Libs
@@ -70,16 +70,10 @@ Definition vi_alist_sound_def:
     !v vi. ALOOKUP info v = SOME vi ==> vi_sound vi v s
 End
 
-Triviality eval_op_idx_indep:
-  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def]
-QED
-
 Triviality vi_sound_idx_indep:
   !vi v s n. vi_sound vi v (s with vs_inst_idx := n) = vi_sound vi v s
 Proof
-  Cases >> simp[vi_sound_def, eval_op_idx_indep]
+  Cases >> simp[vi_sound_def, eval_op_inst_idx]
 QED
 
 Triviality vi_alist_sound_idx_indep:
@@ -1113,23 +1107,6 @@ QED
 
 (* ===== Function-Level Assembly ===== *)
 
-(* Bridge lemma: instructions in blocks are instructions in the function *)
-Theorem fn_insts_blocks_MEM[local]:
-  !bbs bb inst.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def, listTheory.MEM_APPEND] >> metis_tac[]
-QED
-
-Theorem fn_insts_MEM[local]:
-  !fn bb inst.
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  rw[fn_insts_def] >> irule fn_insts_blocks_MEM >> metis_tac[]
-QED
-
 Theorem vi_alist_sound_update_output[local]:
   !vi s out val.
     vi_alist_sound vi s /\
@@ -1283,11 +1260,11 @@ Proof
   rpt conj_tac
   >- (rpt strip_tac >>
       irule eval_phis_preserves_vi_alist_sound >>
-      qexists_tac `fn` >> simp[Abbr `vi`] >> metis_tac[fn_insts_MEM])
-  >- (rpt strip_tac >> imp_res_tac fn_insts_MEM >>
+      qexists_tac `fn` >> simp[Abbr `vi`] >> metis_tac[MEM_fn_insts])
+  >- (rpt strip_tac >> imp_res_tac MEM_fn_insts >>
       irule af_transform_inst_step_eq >>
       simp[Abbr `vi`, Abbr `dfg`, eval_operand_def, lookup_var_def])
-  >> rpt strip_tac >> imp_res_tac fn_insts_MEM >>
+  >> rpt strip_tac >> imp_res_tac MEM_fn_insts >>
   drule_all vi_alist_sound_fn_step >> simp[Abbr `vi`]
 QED
 
@@ -1325,8 +1302,8 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       irule eval_phis_preserves_vi_alist_sound >>
-      qexists_tac `fn` >> simp[Abbr `vi`] >> metis_tac[fn_insts_MEM]) >>
-  rpt strip_tac >> imp_res_tac fn_insts_MEM >>
+      qexists_tac `fn` >> simp[Abbr `vi`] >> metis_tac[MEM_fn_insts]) >>
+  rpt strip_tac >> imp_res_tac MEM_fn_insts >>
   drule_all vi_alist_sound_fn_step >> simp[Abbr `vi`]
 QED
 

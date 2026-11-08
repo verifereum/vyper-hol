@@ -821,9 +821,6 @@ Proof
     suspend "rawcalldata"
   >~ [`compile_call _ _ _ _ (Send _) _ _ _`] >-
     suspend "send"
-  >~ [`compile_call _ _ _ _ (CreateTarget _ _ _ _) _ _ _`] >-
-    (simp[compile_call_def] >>
-     metis_tac[compiler_create_call_var])
   >~ [`compile_call _ _ _ _ RawLog _ _ _`] >-
     (namedCases_on `args` ["", "topics_e rest"] >-
        compiler_literal_call_result_tac >>
@@ -833,7 +830,14 @@ Proof
   >~ [`compile_call _ _ _ _ RawRevert _ _ _`] >-
     (namedCases_on `args` ["", "data_e rest"] >-
        compiler_literal_call_result_tac >>
-     Cases_on `rest` >> compiler_literal_call_result_tac) >>
+     Cases_on `rest` >> compiler_literal_call_result_tac)
+  >~ [`compile_call _ _ _ _ SelfDestructTarget _ _ _`] >-
+    (namedCases_on `args` ["", "to_e rest"] >-
+       compiler_literal_call_result_tac >>
+     Cases_on `rest` >> compiler_literal_call_result_tac)
+  >~ [`compile_call _ _ _ _ (CreateTarget _ _ _ _) _ _ _`] >-
+    (simp[compile_call_def] >>
+     metis_tac[compiler_create_call_var]) >>
   simp[compile_call_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[contextTheory.vv_operand_def]
@@ -1869,14 +1873,15 @@ Proof
   simp[compile_call_def]
 QED
 
-(* RawRevert's single callback is entered in the original reserved state. *)
-Theorem compiler_raw_revert_reserved_cong:
+(* The single callback is entered in the original reserved state. *)
+Theorem compiler_single_arg_call_reserved_cong:
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
-  local_ptrs_reserved ce sa ==>
-  compile_call f ce rt ty RawRevert args dr sa =
-  compile_call g ce rt ty RawRevert args dr sa
+  local_ptrs_reserved ce sa /\
+  (target = RawRevert \/ target = SelfDestructTarget) ==>
+  compile_call f ce rt ty target args dr sa =
+  compile_call g ce rt ty target args dr sa
 Proof
-  strip_tac >>
+  rw[] >>
   `!ty e. lower_value f ce ty e sa = lower_value g ce ty e sa` by
     (rpt gen_tac >> irule compiler_lower_value_reserved_cong >> simp[]) >>
   (namedCases_on `args` ["", "arg_e rest"] >- simp[compile_call_def] >>
@@ -2091,7 +2096,7 @@ Proof
          irule compiler_raw_call_reserved_cong >> simp[],
          irule compiler_raw_call_calldata_reserved_cong >> simp[],
          irule compiler_raw_log_reserved_cong >> simp[],
-         irule compiler_raw_revert_reserved_cong >> simp[],
+         irule compiler_single_arg_call_reserved_cong >> simp[] >> NO_TAC,
          rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
            irule compiler_extcall_reserved_cong >> simp[],
          (rename1 `CreateTarget ck salted rof kw_order` >>

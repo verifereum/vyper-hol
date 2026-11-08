@@ -166,19 +166,6 @@ Proof
   >- (rpt (CASE_TAC >> simp[is_terminator_def]))
 QED
 
-(* m2v_rewrite_inst on non-terminal gives non-terminal singleton *)
-Theorem m2v_rewrite_nonterm_opcode[local]:
-  !fn inst. ~is_terminator inst.inst_opcode ==>
-    ~is_terminator (HD (m2v_rewrite_inst fn inst)).inst_opcode
-Proof
-  rpt gen_tac >> simp[m2v_rewrite_inst_def] >>
-  Cases_on `FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
-                  (m2v_promo_list fn)` >> simp[] >>
-  PairCases_on `x` >> simp[m2v_promote_inst_def] >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  rpt (CASE_TAC >> simp[is_terminator_def])
-QED
-
 (* Length of FLAT MAP when FRONT maps to singletons *)
 Theorem flat_map_front_sing_length[local]:
   !f xs. xs <> [] /\ EVERY (\x. LENGTH (f x) = 1) (FRONT xs) ==>
@@ -231,7 +218,7 @@ Proof
   >- (drule_all FLAT_MAP_FRONT_SING_EL >>
       simp[m2v_bt_instructions] >> strip_tac >>
       drule wf_front_nonterm >> disch_then drule >> strip_tac >>
-      metis_tac[m2v_rewrite_nonterm_opcode])
+      metis_tac[m2v_rewrite_nonterm])
   >> `LENGTH bb.bb_instructions - 1 <= i` by decide_tac
   >> qabbrev_tac `j = i - (LENGTH bb.bb_instructions - 1)`
   >> `i = (LENGTH bb.bb_instructions - 1) + j` by simp[Abbr `j`]
@@ -435,20 +422,6 @@ Proof
   rpt strip_tac >> Cases_on `x'` >> gvs[Abbr `f`] >>
   gvs[pointer_use_step_step_def, LET_THM] >>
   CASE_TAC >> gvs[]
-QED
-
-(* alloca_roots is finite *)
-Theorem alloca_roots_finite[local]:
-  !fn. FINITE (alloca_roots fn)
-Proof
-  rpt strip_tac >> simp[alloca_roots_def] >>
-  irule SUBSET_FINITE >>
-  qexists `set (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))` >>
-  conj_tac >- simp[FINITE_LIST_TO_SET] >>
-  simp[SUBSET_DEF, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  rpt strip_tac >> qexists `inst` >> simp[] >>
-  Cases_on `inst.inst_outputs` >> gvs[inst_output_def] >>
-  Cases_on `t` >> gvs[inst_output_def]
 QED
 
 (* Output variables of instructions in a list appear in the flattened output list *)

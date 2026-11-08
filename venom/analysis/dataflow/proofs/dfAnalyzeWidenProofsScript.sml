@@ -1470,11 +1470,6 @@ Proof
        populate_widen_inst_preserves_fields]
 QED
 
-val find_some_mem = prove(
-  ``!P ls x. FIND P ls = SOME x ==> MEM x ls /\ P x``,
-  gen_tac >> Induct >> simp[listTheory.FIND_thm] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]);
-
 (* The inst_map for a label is a submap of the analyze result *)
 Triviality df_widen_analyze_inst_submap[local]:
   !dir (bottom:'a) join widen threshold transfer edge_transfer ctx
@@ -1517,7 +1512,7 @@ Proof
   fs[venomInstTheory.fn_labels_def,
      venomWfTheory.wf_function_def,
      venomInstTheory.lookup_block_def] >>
-  imp_res_tac find_some_mem >>
+  imp_res_tac venomInstTheory.FIND_MEM >> imp_res_tac venomInstTheory.FIND_P >>
   fs[listTheory.MEM_MAP] >> metis_tac[]
 QED
 

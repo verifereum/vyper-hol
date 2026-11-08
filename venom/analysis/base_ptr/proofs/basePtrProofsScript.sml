@@ -59,24 +59,6 @@ QED
    Local helpers for soundness proofs
    =================================================================== *)
 
-(* inst_wf + inst_output = SOME out ⇒ inst_outputs = [out] *)
-Theorem inst_wf_outputs_some[local]:
-  ∀inst out. inst_wf inst ∧ inst_output inst = SOME out ⇒
-    inst.inst_outputs = [out]
-Proof
-  rw[venomInstTheory.inst_output_def] >>
-  Cases_on `inst.inst_outputs` >> gvs[] >>
-  Cases_on `t` >> gvs[]
-QED
-
-(* is_terminator + inst_wf ⇒ inst_outputs = [] *)
-Theorem terminator_no_outputs[local]:
-  ∀inst. inst_wf inst ∧ is_terminator inst.inst_opcode ⇒
-    inst.inst_outputs = []
-Proof
-  ACCEPT_TAC venomExecProofsTheory.terminator_no_outputs
-QED
-
 (* FOLDL update_var preserves lookup for vars not in output list *)
 Theorem foldl_update_var_preserves_lookup[local]:
   ∀kvs s v. ¬MEM v (MAP FST kvs) ⇒

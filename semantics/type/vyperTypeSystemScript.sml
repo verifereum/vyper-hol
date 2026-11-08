@@ -984,11 +984,9 @@ End
    attribute path up to the first subscript, which is an analysis barrier.
    place_access tgt [] gives both.
 
-   Known gap: Vyper also counts the state variables an internal callee
-   writes, directly or through further internal calls (local.py, the
-   func_type.is_internal case of the call visitor).  Here a call counts
-   only its arguments, so a loop whose body writes the iterated array
-   through an internal call still type-checks. *)
+   Here a call counts only its arguments.  The state variables an internal
+   callee writes, which Vyper counts too, are checked with the whole
+   contract in sight: stmt_loop_calls_ok in vyperTypeContract. *)
 Definition place_access_def:
   place_access (NameTarget id) attrs = (NameTarget id, attrs) /\
   place_access (TopLevelNameTarget n) attrs = (TopLevelNameTarget n, attrs) /\
@@ -1195,11 +1193,17 @@ End
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through
  * normally; the semantic boundary lemma is proved in vyperTypeStmtSoundness. *)
+Definition expr_no_fallthrough_def:
+  expr_no_fallthrough (Call _ RawRevert _ _) = T /\
+  expr_no_fallthrough (Call _ SelfDestructTarget _ _) = T /\
+  expr_no_fallthrough _ = F
+End
+
 Definition stmt_no_fallthrough_def:
   stmt_no_fallthrough Pass = F /\
   stmt_no_fallthrough Continue = T /\
   stmt_no_fallthrough Break = T /\
-  stmt_no_fallthrough (Expr e) = F /\
+  stmt_no_fallthrough (Expr e) = expr_no_fallthrough e /\
   stmt_no_fallthrough (For id ty it n body) = F /\
   stmt_no_fallthrough (If e ss1 ss2) =
     (stmts_no_fallthrough ss1 /\ stmts_no_fallthrough ss2) /\

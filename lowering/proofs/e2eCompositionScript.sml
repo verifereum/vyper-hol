@@ -4,7 +4,7 @@
  *   external_call_dead_wf (external_call_dead is in vyperLoweringCorrect),
  *   external_call_result_rel_dead_transport — the source result's dead
  *   bytes, and the source relation's transport up to them.
- * Requests are compared only on success; abort kinds/data are not equated.
+ * Requests are compared on return and halt; abort transport retains revert kind.
  *)
 Theory e2eComposition
 Ancestors
@@ -278,7 +278,9 @@ Proof
   PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
   gvs[unit_result_rel_def, external_call_result_rel_def, AllCaseEqs(),
       observable_equiv_def] >>
-  rpt CASE_TAC >> rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >> Cases_on `src0` >> gvs[] >>
+  Cases_on `a` >> Cases_on `a'` >> gvs[] >>
+  Cases_on `y` >> TRY (rename1 `Error err` >> Cases_on `err`) >> gvs[]
 QED
 
 (* ===== Frame composition, separated by semantic outcome ===== *)
@@ -325,6 +327,19 @@ Proof
   simp[] >> Cases_on `a` >> gvs[external_call_result_rel_def]
 QED
 
+Theorem external_call_result_rel_frame_halt:
+  call_external (SOME (MAP SND (call_trace es))) gobs am tx =
+    (INR HaltException, am', rqs) /\
+  external_call_result_rel tops ret tx
+    (INR HaltException, am', rqs) (Halt ss) /\
+  venom_frame_rel es r es' (Halt ss) ==>
+  call_result_rel_at gobs tops ret am tx es r es'
+Proof
+  simp[external_call_result_rel_def, venom_frame_rel_def,
+       call_result_rel_at_def, LET_THM] >>
+  rpt strip_tac >> qexists_tac `ss.vs_logs` >> gvs[]
+QED
+
 Theorem external_call_result_rel_frame_runtime:
   call_external (SOME (MAP SND (call_trace es))) gobs am tx =
     (INR (Error (RuntimeError m)), am', rqs) /\
@@ -342,10 +357,11 @@ Theorem external_call_result_rel_frame_error:
   venom_frame_rel es r es' res ==>
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
-  rpt strip_tac >> Cases_on `res` >>
+  rpt strip_tac >> Cases_on `e` >> Cases_on `res` >>
   gvs[external_call_result_rel_def, call_result_rel_at_def, LET_THM,
       AllCaseEqs()] >>
-  drule venom_frame_rel_abort_failure >> simp[]
+  FIRST [gvs[venom_frame_rel_def] >> NO_TAC,
+         drule venom_frame_rel_abort_failure >> simp[]]
 QED
 
 (* Covers all source constructors; escaped control exceptions have no row.
@@ -369,5 +385,6 @@ Proof
   FIRST [drule_all external_call_result_rel_frame_error >> simp[],
          Cases_on `res` >>
          FIRST [drule_all external_call_result_rel_frame_assertion >> simp[],
+                drule_all external_call_result_rel_frame_halt >> simp[],
                 gvs[external_call_result_rel_def]]]
 QED

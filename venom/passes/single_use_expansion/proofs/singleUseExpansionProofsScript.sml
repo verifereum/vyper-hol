@@ -8,7 +8,7 @@
 
 Theory singleUseExpansionProofs
 Ancestors
-  singleUseExpansionDefs dretShapeDefs passSharedDefs passSharedProps
+  venomFnInstsProofs singleUseExpansionDefs dretShapeDefs passSharedDefs passSharedProps
   passSimulationDefs passSimulationProofs
   stateEquiv stateEquivProps execEquivParamProofs analysisSimProofsBase
   venomWf venomInstProps dfgAnalysisProps
@@ -36,20 +36,6 @@ QED
 (* ===== Helper: lookup/eval after update_var ===== *)
 
 (* ===== Helper: run_insts append ===== *)
-
-Theorem run_insts_append[local]:
-  !prefix rest fuel ctx s.
-    run_insts fuel ctx (prefix ++ rest) s =
-    case run_insts fuel ctx prefix s of
-      OK s' => run_insts fuel ctx rest s'
-    | Halt v => Halt v
-    | Abort a v => Abort a v
-    | IntRet v1 v2 => IntRet v1 v2
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> rw[]
-QED
 
 (* ===== sue_expand_ops structural properties ===== *)
 
@@ -563,7 +549,6 @@ Proof
     disch_then (qspec_then `n` mp_tac) >> gvs[]
   )
 QED
-
 
 (* DRET's leading dynamic-count literal is parser syntax and passes through. *)
 Theorem sue_expand_ops_dret_parse_preserved[local]:
@@ -1313,8 +1298,6 @@ Proof
   gvs[exec_result_map_def, venom_state_component_equality] >>
   metis_tac[analysisSimProofsBaseTheory.run_insts_preserves_idx]
 QED
-
-
 
 (* Helper: when assigns error, the expanded block also errors *)
 Triviality sue_assigns_error_lift[local]:
@@ -2136,23 +2119,6 @@ QED
    mod_inst has the original opcode. *)
 (* Already have sue_expand_inst_preserves_opcode — just re-export the key fact *)
 
-(* fn_insts_blocks = FLAT of MAP *)
-Triviality fn_insts_blocks_flat[local]:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
-(* MEM in fn_insts iff MEM in some block *)
-Triviality fn_insts_mem[local]:
-  !fn inst.
-    MEM inst (fn_insts fn) <=>
-    ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions
-Proof
-  rw[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
-QED
-
 (* MEM (Var v) ops ==> MEM v (operand_vars ops) — one direction suffices *)
 Triviality mem_var_operand_vars[local]:
   !ops v. MEM (Var v) ops ==> MEM v (operand_vars ops)
@@ -2197,7 +2163,8 @@ Triviality sue_fresh_var_in_fn_vars[local]:
     MEM inst (fn_insts fn) /\ j < LENGTH inst.inst_operands ==>
     sue_fresh_var inst.inst_id j IN sue_fresh_vars_fn fn
 Proof
-  rw[sue_fresh_vars_fn_def, fn_insts_mem] >>
+  rpt strip_tac >> drule fn_insts_mem_block >> strip_tac >>
+  rw[sue_fresh_vars_fn_def] >>
   simp[MEM_FLAT, MEM_MAP, MEM_MAPi, PULL_EXISTS] >>
   metis_tac[]
 QED
@@ -2216,7 +2183,7 @@ Triviality sue_original_neq_fresh[local]:
 Proof
   rpt strip_tac >>
   `v NOTIN sue_fresh_vars_fn fn` by (
-    fs[fn_insts_mem] >> metis_tac[]) >>
+    metis_tac[fn_insts_mem_block]) >>
   `sue_fresh_var inst2.inst_id j IN sue_fresh_vars_fn fn` by (
     irule sue_fresh_var_in_fn_vars >> simp[]) >>
   metis_tac[]

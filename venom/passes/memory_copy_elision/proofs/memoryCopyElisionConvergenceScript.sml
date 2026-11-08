@@ -585,13 +585,6 @@ Proof
   strip_tac >> simp[] >> metis_tac[]
 QED
 
-Triviality find_mem[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rpt gen_tac >>
-  IF_CASES_TAC >> simp[] >> metis_tac[]
-QED
-
 (* Helper: boundary FDOM preserved after join update *)
 Triviality cf_boundary_fdom_preserved[local]:
   !ctx fn st lbl fv.
@@ -643,7 +636,7 @@ Proof
     simp[EVERY_MEM] >> rpt strip_tac >>
     Cases_on `lookup_block lbl fn.fn_blocks` >> fs[] >>
     simp[fn_insts_def] >> irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
-    fs[lookup_block_def] >> imp_res_tac find_mem >> metis_tac[]) >>
+    fs[lookup_block_def] >> imp_res_tac FIND_MEM >> metis_tac[]) >>
   drule_all cf_fold_fdom >> strip_tac >>
   simp[cf_state_inv_def] >> rpt conj_tac
   >- metis_tac[cf_boundary_fdom_preserved]
@@ -745,7 +738,7 @@ Proof
       Cases_on `lookup_block lbl fn.fn_blocks` >> simp[EVERY_MEM] >>
       rpt strip_tac >> simp[fn_insts_def] >>
       irule venomFnInstsProofsTheory.mem_fn_insts_blocks >>
-      fs[lookup_block_def] >> metis_tac[find_mem]) >>
+      fs[lookup_block_def] >> metis_tac[FIND_MEM]) >>
     `cf_state_inv ctx.ce_bp fn st` by fs[cf_measure_inv_def] >>
     `case joined of NONE => T
      | SOME fmap => FDOM fmap SUBSET set (fn_copy_locs ctx.ce_bp fn)` by

@@ -296,7 +296,7 @@ Theorem entry_param_skip_prefix:
       vs_inst_idx := LENGTH insts)
 Proof
   strip_tac >>
-  qspec_then `insts` mp_tac phiBlockTheory.exec_block_skip_prefix_non_invoke >>
+  qspec_then `insts` mp_tac runInstsPropsTheory.exec_block_skip_prefix >>
   disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s`, `0`] mp_tac) >>
   simp[ADD_CLAUSES] >> disch_then irule >>
   simp[entry_param_run_insts, EL_APPEND_EQN] >>

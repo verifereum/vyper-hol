@@ -835,8 +835,8 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
-     immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
-     contract_transient_def] >>
+      immutables_rel_def, logs_rel_def, call_ctx_rel_def, contract_storage_def,
+      contract_transient_def] >>
   first_assum ACCEPT_TAC
 QED
 
@@ -4158,18 +4158,31 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
-(* Cache only the INVALID branch: never normalize the large IntCall /
-   ExtCall bodies while speculatively closing this primitive case. *)
-val ci_mono_invalid_call_tac =
-  let
-    val invalid_calls = map
-      (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
-      (map (fn n => cj n compile_call_def) [8])
-  in
-    CONV_TAC
-      (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
-    REWRITE_TAC [pairTheory.SND] >> irule ci_mono_emit_inst
-  end;
+Theorem compile_selfdestruct_terminated:
+  block_is_terminated (SND (compile_selfdestruct to_op st))
+Proof
+  simp[compile_selfdestruct_def, emit_void_def, comp_bind_def,
+       fresh_id_def, emit_def, LET_THM, pairTheory.UNCURRY,
+       block_is_terminated_def, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  Cases_on `st.cs_current_insts` >>
+  simp[listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS,
+       venomInstTheory.is_terminator_def]
+QED
+
+Theorem ci_mono_compile_selfdestruct[local]:
+  (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
+  ci_mono sa (SND (compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret sa))
+Proof
+  strip_tac >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `args` >> simp[ci_mono_emit_inst] >>
+  Cases_on `t` >>
+  simp[ci_mono_emit_inst, compile_selfdestruct_def, comp_bind_def,
+       LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
 
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
@@ -4177,13 +4190,13 @@ Theorem ci_mono_compile_call[local]:
     ci_mono sa (SND (compile_call cfn cenv ret_ty ty target args default_ret sa))
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
-  TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
   TRY (irule ci_mono_compile_create_target_call >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_send_call >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_target >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_log >> simp[] >> NO_TAC) >>
-  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC)
+  TRY (irule ci_mono_compile_raw_revert >> simp[] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_selfdestruct >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>

@@ -14,7 +14,7 @@ Theory spillSim
 Ancestors
   codegenRel stackOpSim stackOpAsmSim
   asmSem stackPlanTypes planExec stackModel
-  strongPrefixSim instSimHelpers blockSimHelpers
+  strongPrefixSim instSimHelpers blockSimHelpers asmOpSim
   asmToBytecodeProofs venomState
   list rich_list byte
 Libs BasicProvers
@@ -473,24 +473,6 @@ Proof
   rpt strip_tac >>
   qspec_then `n2w n : bytes32` mp_tac push_encode_256 >>
   simp[wordsTheory.w2n_n2w]
-QED
-
-(* =========================================================================
-   MSTORE dispatch chain: asm_step (AsmOp "MSTORE") evaluates to asm_mstore
-   ========================================================================= *)
-
-Theorem asm_step_op_mstore:
-  !o2pc st. asm_step_op o2pc "MSTORE" st = asm_mstore st
-Proof
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def]
-QED
-
-Theorem asm_step_op_mload[local]:
-  !o2pc st. asm_step_op o2pc "MLOAD" st = asm_mload st
-Proof
-  simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
-       asm_step_bitwise_def, asm_step_memory_def]
 QED
 
 (* =========================================================================

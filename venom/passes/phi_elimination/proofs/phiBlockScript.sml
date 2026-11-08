@@ -9,7 +9,7 @@
 
 Theory phiBlock
 Ancestors
-  phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSimDefs analysisSimProofsBase instIdxIndep finite_map list
+  venomInstProofs phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSimDefs analysisSimProofsBase instIdxIndep runInstsProps finite_map list
 Libs
   pairLib
 
@@ -198,7 +198,7 @@ Proof
   `step_inst 0 ARB inst s = step_inst_base inst s` by
     (irule step_inst_non_invoke >> simp[]) >>
   mp_tac (Q.SPECL [`0`, `ARB`, `inst`, `s`, `s'`]
-    step_inst_preserves_prev_bb) >>
+    step_preserves_prev_bb) >>
   ASM_REWRITE_TAC[]
 QED
 
@@ -222,12 +222,6 @@ QED
    Uses lift_result for direct integration with block_sim_function_pointwise_reachable.
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
-
-Triviality all_distinct_flat_mem:
-  !ls (l:'a list). ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
 
 Theorem ssa_form_block_outputs_distinct:
   !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
@@ -263,20 +257,6 @@ Proof
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))` by
     metis_tac[ssa_form_block_outputs_distinct] >>
   metis_tac[all_distinct_outputs_not_mem_other]
-QED
-
-Triviality run_insts_append:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-    case run_insts fuel ctx xs s of
-      OK s' => run_insts fuel ctx ys s'
-    | Halt s' => Halt s'
-    | Abort a s' => Abort a s'
-    | IntRet v s' => IntRet v s'
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
 QED
 
 Triviality param_insts_nonterm_noninvoke:
@@ -381,95 +361,6 @@ Proof
   simp[]
 QED
 
-Triviality step_inst_idx_ok_non_invoke:
-  !fuel ctx inst s j s'.
-    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-    step_inst fuel ctx inst s = OK s' ==>
-    step_inst fuel ctx inst (s with vs_inst_idx := j) =
-      OK (s' with vs_inst_idx := j)
-Proof
-  rpt strip_tac >>
-  `step_inst fuel ctx inst (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j) (step_inst fuel ctx inst s)` by
-    simp[step_inst_idx_indep] >>
-  gvs[instIdxIndepTheory.exec_result_map_def]
-QED
-
-Theorem exec_block_skip_prefix_non_invoke:
-  !prefix fuel ctx bb s j s'.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\inst. ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE) prefix /\
-    (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = OK s' ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) =
-    exec_block fuel ctx bb (s' with vs_inst_idx := j + LENGTH prefix)
-Proof
-  Induct >> rw[run_insts_def] >>
-  rename1 `h :: prefix` >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  Cases_on `step_inst fuel ctx h s` >> gvs[run_insts_def] >>
-  rename1 `step_inst _ _ h s = OK s1` >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-     OK (s1 with vs_inst_idx := j)` by
-    (irule step_inst_idx_ok_non_invoke >> simp[]) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
-  simp[get_instruction_def] >>
-  `bb.bb_instructions❲j❳ = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  asm_rewrite_tac[] >> simp[] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `SUC j`, `s'`] mp_tac) >>
-  simp[arithmeticTheory.ADD_CLAUSES] >>
-  impl_tac
-  >- (rw[] >> first_x_assum (qspec_then `SUC k` mp_tac) >>
-      simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[]
-QED
-
-Triviality exec_block_prefix_error:
-  !prefix fuel ctx bb s j e.
-    j + LENGTH prefix <= LENGTH bb.bb_instructions /\
-    EVERY (\inst. ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE) prefix /\
-    (!k. k < LENGTH prefix ==> EL (j + k) bb.bb_instructions = EL k prefix) /\
-    run_insts fuel ctx prefix s = Error e ==>
-    exec_block fuel ctx bb (s with vs_inst_idx := j) = Error e
-Proof
-  Induct >> simp[run_insts_def] >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `h :: prefix` >>
-  fs[EVERY_DEF] >>
-  `j < LENGTH bb.bb_instructions` by simp[] >>
-  `EL j bb.bb_instructions = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst fuel ctx h (s with vs_inst_idx := j) =
-   exec_result_map (\s'. s' with vs_inst_idx := j) (step_inst fuel ctx h s)` by
-    simp[step_inst_idx_indep] >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def] >>
-  `bb.bb_instructions❲j❳ = h` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  asm_rewrite_tac[] >>
-  Cases_on `step_inst fuel ctx h s` >>
-  gvs[instIdxIndepTheory.exec_result_map_def, Once run_insts_def] >>
-  rename1 `step_inst _ _ h s = OK s1` >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `SUC j`, `e`] mp_tac) >>
-  simp[arithmeticTheory.ADD_CLAUSES] >>
-  impl_tac
-  >- (rw[] >> first_x_assum (qspec_then `SUC k` mp_tac) >>
-      simp[arithmeticTheory.ADD_CLAUSES]) >>
-  simp[]
-QED
-
-Triviality step_param_ok_or_error:
-  !inst fuel ctx s.
-    is_param_opcode inst.inst_opcode ==>
-    (?s'. step_inst fuel ctx inst s = OK s') \/
-    (?e. step_inst fuel ctx inst s = Error e)
-Proof
-  metis_tac[step_inst_param_ok_or_error]
-QED
-
 Triviality run_insts_params_ok_or_error:
   !params fuel ctx s.
     EVERY (\inst. is_param_opcode inst.inst_opcode) params ==>
@@ -479,7 +370,7 @@ Proof
   Induct >> simp[run_insts_def] >> rpt strip_tac >>
   `(?s1. step_inst fuel ctx h s = OK s1) \/
    (?e. step_inst fuel ctx h s = Error e)` by
-    (irule step_param_ok_or_error >> gvs[]) >>
+    (irule step_inst_param_ok_or_error >> gvs[]) >>
   gvs[run_insts_def] >>
   first_x_assum (qspecl_then [`fuel`, `ctx`, `s1`] mp_tac) >> simp[]
 QED
@@ -709,7 +600,7 @@ Proof
      `EL k params = EL k (DROP p (TAKE q insts))` by simp[] >>
      pop_assum SUBST1_TAC >> simp[EL_DROP, EL_TAKE]) >>
   qspecl_then [`params`, `fuel`, `ctx`, `<| bb_label := lbl; bb_instructions := insts |>`,
-                `s`, `p`, `s'`] mp_tac exec_block_skip_prefix_non_invoke >>
+                `s`, `p`, `s'`] mp_tac exec_block_skip_prefix >>
   simp[param_insts_nonterm_noninvoke, Abbr `params`] >>
   impl_tac >-
     (rw[] >>
@@ -817,7 +708,7 @@ Proof
      qpat_x_assum `transform_insts dfg insts = _` (fn th => rewrite_tac[th]) >>
      simp[rich_listTheory.EL_APPEND1, rich_listTheory.EL_APPEND2]) >>
   qspecl_then [`params`, `fuel`, `ctx`, `<| bb_label := lbl; bb_instructions := transform_insts dfg insts |>`,
-                `s`, `LENGTH kept`, `s'`] mp_tac exec_block_skip_prefix_non_invoke >>
+                `s`, `LENGTH kept`, `s'`] mp_tac exec_block_skip_prefix >>
   impl_tac >-
     (simp[Abbr `params`, param_insts_nonterm_noninvoke] >>
      rpt strip_tac >>
@@ -914,7 +805,7 @@ Proof
      qpat_x_assum `transform_insts dfg insts = _` (fn th => rewrite_tac[th]) >>
      simp[rich_listTheory.EL_APPEND1, rich_listTheory.EL_APPEND2]) >>
   qspecl_then [`elim`, `fuel`, `ctx`, `<| bb_label := lbl; bb_instructions := transform_insts dfg insts |>`,
-                `s`, `LENGTH kept + LENGTH params`, `s'`] mp_tac exec_block_skip_prefix_non_invoke >>
+                `s`, `LENGTH kept + LENGTH params`, `s'`] mp_tac exec_block_skip_prefix >>
   impl_tac >-
     (simp[Abbr `elim`, Abbr `eliminated`, transformed_eliminated_phis_nonterm_noninvoke] >>
      rpt strip_tac >>

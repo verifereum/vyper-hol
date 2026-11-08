@@ -223,6 +223,8 @@ Theorem call_external_selected_body_gas:
              F mut (type_env tops) (es0 with gas_obs := gobs) env fbody ret
       of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
+      | (INR HaltException, am', rqs) =>
+          (INR HaltException, finalize_pending_deletions am', rqs)
       | failure => failure
 Proof
   rpt strip_tac >>

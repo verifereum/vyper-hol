@@ -159,6 +159,7 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, update_accounts_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
@@ -200,11 +201,18 @@ Proof
        vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
        append_logs_def, adopt_call_outcome_equation] >>
-  rpt strip_tac >> rpt CASE_TAC >>
-  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+  rpt strip_tac >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(), COND_RAND,
       vyperStateTheory.return_def, vyperStateTheory.raise_def,
-      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      log_extends_def, rich_listTheory.IS_PREFIX_APPEND3,
       rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem log_monad_update_pending_deletions[local]:
+  log_monad (update_pending_deletions deletions_upd)
+Proof
+  rw[log_monad_def, update_pending_deletions_def, vyperStateTheory.return_def,
+     log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 
 Theorem log_monad_take[local]:
@@ -233,6 +241,7 @@ val EXTCALL_LOG_MONAD_LEAF_TAC =
     val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
       (log_monad_take :: log_monad_frame_call_value ::
+       log_monad_update_pending_deletions ::
        CONJUNCTS log_monad_primitives)
   in
     fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
@@ -304,7 +313,7 @@ Proof
   simp[eval_raw_call_def, check_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
-       update_transient_def, append_logs_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
@@ -419,6 +428,7 @@ Theorem eval_expr_log_extends:
 Proof
   metis_tac[eval_mutual_log_extends]
 QED
+
 
 Theorem eval_exprs_log_extends:
   !cx es st res st'.
@@ -572,7 +582,49 @@ Proof
   gvs[machine_log_extends_def, vyperInterpreterTheory.finalize_pending_deletions_def]
 QED
 
+Theorem call_external_function_halt_log_extends:
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    (INR HaltException,am',rqs) ==>
+  machine_log_extends am am'
+Proof
+  strip_tac >> drule call_external_function_halt_cases >> strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac send_call_value_logs >>
+  imp_res_tac eval_external_defaults_log_extends >>
+  `am_c.logs = am.logs` by
+    (Cases_on `cx.in_deploy` >> gvs[] >>
+     imp_res_tac evaluate_all_constants_logs >> gvs[]) >>
+  gvs[machine_log_extends_def, log_extends_def,
+      vyperInterpreterTheory.initial_state_def,
+      vyperInterpreterTheory.abstract_machine_from_state_def]
+  >~ [`bind_arguments _ _ _`]
+  >- (qpat_x_assum `_ = (INR HaltException,st_body)` mp_tac >>
+      Cases_on `bind_arguments (type_env_all_modules all_mods) args (vals ++ dvs)` >>
+      simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+           vyperStateTheory.set_scopes_def, vyperStateTheory.return_def,
+           vyperStateTheory.raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac entry_lock_action_logs >>
+      imp_res_tac eval_stmts_log_extends >>
+      gvs[log_extends_def] >>
+      metis_tac[rich_listTheory.IS_PREFIX_TRANS]) >>
+  metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
+Theorem call_external_halt_log_extends:
+  call_external orc gobs am tx = (INR HaltException,am',rqs) ==>
+  machine_log_extends am am'
+Proof
+  rw[call_external_def] >> gvs[AllCaseEqs()] >>
+  imp_res_tac call_external_function_halt_log_extends >>
+  gvs[machine_log_extends_def, finalize_pending_deletions_def]
+QED
+
 Theorem call_external_function_error_logs_rollback:
+  e <> HaltException /\
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
     (INR e,am',rqs) ==>
   am'.logs = am.logs
@@ -581,6 +633,7 @@ Proof
 QED
 
 Theorem call_external_error_logs_rollback:
+  e <> HaltException /\
   call_external orc gobs am tx = (INR e,am',rqs) ==> am'.logs = am.logs
 Proof
   strip_tac >> imp_res_tac call_external_error_rollback >> gvs[]
@@ -591,6 +644,9 @@ Theorem call_external_log_extends:
 Proof
   Cases_on `res` >> strip_tac >-
     (imp_res_tac call_external_success_log_extends) >>
+  rename1 `call_external orc gobs am tx = (INR exc,am',rqs)` >>
+  Cases_on `exc = HaltException`
+  >- (gvs[] >> drule call_external_halt_log_extends >> simp[]) >>
   imp_res_tac call_external_error_logs_rollback >>
   simp[machine_log_extends_eq_logs]
 QED

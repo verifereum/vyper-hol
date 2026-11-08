@@ -16,10 +16,14 @@
  *
  * Unprovable as the definitions stand (for raw_call and the creates, once
  * expr_sim_pre's exclusion of them, below, is lifted):
- *   - compile_raw_log_sim and compile_selfdestruct_sim:
- *     compile_call lowers RawLog and SelfDestructTarget to
- *     INVALID, where
- *     the source can succeed.
+ *   - compile_selfdestruct_sim: Venom's SELFDESTRUCT predates EIP-6780.
+ *     It never adds a pending deletion, zeroes the balance even when the
+ *     beneficiary is the executing account, and keeps the return data,
+ *     where the source follows EIP-6780 (#1142).  It also adds the
+ *     balance unchecked, where the source's transfer_value fails when the
+ *     beneficiary's balance plus the transferred one reaches 2 ** 256, and
+ *     expr_sim_pre doesn't bound that sum; the simulation needs that bound
+ *     as a premise local to the lowering proof.
  *   - compile_raw_call_sim and compile_raw_call_calldata_sim with
  *     is_delegate_call: both sides run the EVM, but differently: the source
  *     (run_delegate_call) dispatches a precompile address to
@@ -36,8 +40,9 @@
  * A call or staticcall raw_call takes its outcome from the oracle, as the
  * lowered CALL/STATICCALL does.  expr_sim_pre excludes delegate raw_calls
  * and the creates (~expr_has_evm_run e), since the source runs them on the
- * EVM even with the outcome oracle, and selfdestruct, until the source's
- * selfdestruct halts; so those cases hold vacuously.
+ * EVM even with the outcome oracle, and selfdestruct, whose source halts
+ * (HaltException), which expr_exit does not cover; so those cases hold
+ * vacuously.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.

@@ -19,31 +19,9 @@
 
 Theory passSharedTransfer
 Ancestors
+  venomExecProofs
   passSharedDefs venomExecSemantics venomEffects venomState venomInst
   venomInstProps list rich_list
-
-(* Helper: eval_operands agreement from pointwise eval_operand agreement *)
-Theorem eval_operands_agree_lem[local]:
-  !ops s s'.
-    (!op. MEM op ops ==> eval_operand op s = eval_operand op s') ==>
-    eval_operands ops s = eval_operands ops s'
-Proof
-  Induct >> rw[eval_operands_def] >>
-  `eval_operand h s = eval_operand h s'` by gvs[] >>
-  `eval_operands ops s = eval_operands ops s'` by
-    (first_x_assum irule >> rw[]) >>
-  simp[]
-QED
-
-(* Helper: resolve_phi result is a member of the operand list *)
-Theorem resolve_phi_mem[local]:
-  !prev ops val_op.
-    resolve_phi prev ops = SOME val_op ==> MEM val_op ops
-Proof
-  recInduct resolve_phi_ind >>
-  rw[resolve_phi_def, AllCaseEqs()] >> gvs[] >>
-  res_tac >> gvs[]
-QED
 
 Theorem mem_drop_subset[local]:
   !n l x. MEM x (DROP n l) ==> MEM x l
@@ -69,7 +47,7 @@ Proof
     metis_tac[MEM_REVERSE] >>
   `eval_operands (DROP 2 (REVERSE rest)) s1 =
    eval_operands (DROP 2 (REVERSE rest)) s2` by
-    (irule eval_operands_agree_lem >>
+    (irule eval_operands_agree >>
      metis_tac[mem_drop_subset]) >>
   `MEM (HD (REVERSE rest)) (REVERSE rest)` by
     (Cases_on `REVERSE rest` >> fs[]) >>
@@ -88,11 +66,11 @@ val state_fn_defs = [mload_def, mstore_def, istore_def, mstore8_def, sload_def, 
 
 (* Shared tactic for output_determined: close goals after opcode case split.
    After Cases_on opcode and gvs, handles:
-   - PHI (resolve_phi_mem + operand agreement)
-   - LOG (eval_operands_agree_lem on sublists)
+   - PHI (resolve_phi_MEM_el + operand agreement)
+   - LOG (eval_operands_agree on sublists)
    - General cases (res_tac + update_var/lookup_var + state fn expansion) *)
 val transfer_close_tac =
-  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >>
+  TRY (imp_res_tac resolve_phi_MEM_el >> res_tac >> gvs[] >>
        gvs[update_var_def, lookup_var_def,
             finite_mapTheory.FLOOKUP_UPDATE] >> NO_TAC) >>
   TRY (gvs (update_var_def :: lookup_var_def ::
@@ -199,7 +177,7 @@ val ok_transfer_finish_tac =
   TRY (exec_ok_transfer_tac >> NO_TAC) >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >> NO_TAC) >>
+  TRY (imp_res_tac resolve_phi_MEM_el >> res_tac >> gvs[] >> NO_TAC) >>
   TRY (res_tac >> gvs[] >> NO_TAC) >>
   `2 <= LENGTH rest` by simp[] >>
   `!op. MEM op rest ==>
@@ -229,7 +207,7 @@ val output_vars_finish_tac =
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >>
+  TRY (imp_res_tac resolve_phi_MEM_el >> res_tac >> gvs[] >>
        gvs[update_var_def, lookup_var_def,
             finite_mapTheory.FLOOKUP_UPDATE] >> NO_TAC) >>
   TRY (gvs (update_var_def :: lookup_var_def ::
@@ -269,7 +247,7 @@ Proof
         eval_operand op s' = eval_operand op s` by
     (rpt strip_tac >> res_tac >> gvs[]) >>
   `eval_operands inst.inst_operands s' = eval_operands inst.inst_operands s`
-    by (irule eval_operands_agree_lem >> metis_tac[]) >>
+    by (irule eval_operands_agree >> metis_tac[]) >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
   >- ok_transfer_finish_tac

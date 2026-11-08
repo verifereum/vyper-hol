@@ -490,7 +490,7 @@ Proof
   simp[] >> irule sym_lift_step_pc_add >> simp[asm_step_pc_add]
 QED
 
-Theorem sym_lift_ok[local]:
+Theorem sym_lift_ok:
   sym_lift k labs ss r = SymOK ss' ⇒
   ∃s. r = AsmOK s ∧ ss'.sym_base.as_pc = s.as_pc ∧
       ss'.sym_base.as_stack = []

@@ -592,15 +592,6 @@ Proof
   metis_tac[MEM_EL]
 QED
 
-(* ===== SSA preservation by remove_unused_single_pass ===== *)
-
-(* Local copy — non-local version causes simpset pollution (L1708) *)
-Theorem fn_insts_blocks_flat_local[local]:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
 (* ===== alloca_pointer_confined preservation ===== *)
 
 (* ALLOCA, DALLOCA and SETFMP survive the pass unchanged. *)
@@ -624,7 +615,7 @@ QED
 Theorem rusp_alloca_roots_eq[local]:
   !fn. alloca_roots (remove_unused_single_pass fn) = alloca_roots fn
 Proof
-  rw[alloca_roots_def, pred_setTheory.EXTENSION, fn_insts_def, fn_insts_blocks_flat_local,
+  rw[alloca_roots_def, pred_setTheory.EXTENSION, fn_insts_def, fn_insts_blocks_flat,
      MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
   eq_tac >> rpt strip_tac >> gvs[]
   >- (drule_all rusp_mem_inst_original >> metis_tac[])
@@ -660,6 +651,8 @@ Proof
   rpt DISJ2_TAC >> simp[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
   irule pointer_use_vars_closed >> metis_tac[]
 QED
+
+(* ===== SSA preservation by remove_unused_single_pass ===== *)
 
 (* FILTER preserves relative order of surviving elements (forward direction). *)
 Theorem filter_preserves_el_order[local]:

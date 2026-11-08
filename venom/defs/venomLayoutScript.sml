@@ -28,11 +28,13 @@ Proof
   simp[]
 QED
 
-Theorem dimindex_256[local,simp]:
+Theorem dimindex_256:
   dimindex (:256) = 256
 Proof
   CONV_TAC fcpLib.INDEX_CONV
 QED
+
+val _ = augment_srw_ss [rewrites [dimindex_256]];
 
 Theorem ceil32_lt_dimword:
   n <= dimword (:256) - 32 ==> ceil32 n < dimword (:256)

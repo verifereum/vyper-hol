@@ -792,7 +792,9 @@ Proof
       >- metis_tac[expr_body_pre_type_evaluates]
       >- (rpt strip_tac >> drule_all expr_body_pre_word_result >> simp[]) >>
       rpt strip_tac >> drule_all expr_body_pre_word_result >> rw[]) >>
-  strip_tac >> first_x_assum irule >> metis_tac[]
+  strip_tac >> first_x_assum irule >> qexists_tac `nocalls` >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `_ ==> exprs_case _ _ _ _ _ _` irule >> metis_tac[]
 QED
 
 (* The same from expr_sim_ok of each operand, at compile_expr_sim's

@@ -285,21 +285,6 @@ Proof
   Induct >> simp[]
 QED
 
-Theorem stack_find_index_bound[local]:
-  !p l d. stack_find p l = SOME d ==> d < LENGTH l
-Proof
-  Induct_on `l` >> simp[stack_find_def] >> rpt strip_tac >>
-  Cases_on `p h` >> fs[] >>
-  Cases_on `stack_find p l` >> fs[] >> res_tac >> simp[]
-QED
-
-Theorem stack_get_depth_lt_length[local]:
-  !op stk d. stack_get_depth op stk = SOME d ==> d < LENGTH stk
-Proof
-  rpt strip_tac >> fs[stack_get_depth_def] >>
-  imp_res_tac stack_find_index_bound >> fs[]
-QED
-
 Theorem do_swap_slots_bounded:
   !base dist ps ops ps'.
     plan_slots_bounded base ps /\
