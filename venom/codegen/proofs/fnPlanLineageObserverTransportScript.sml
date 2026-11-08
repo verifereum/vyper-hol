@@ -1648,3 +1648,100 @@ Proof
   gvs[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   gvs[fnPlanLineageCallersTheory.ready_entry_no_clean]
 QED
+
+(* Stack support crosses an edge independently of spill debt. *)
+Theorem analyzed_edge_setup_stack_support:
+  !fn pred pb bb v ps ops qs.
+    codegen_ready_fn fn /\
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred) /\
+    (MEM (Var v) ps.ps_stack ==>
+      MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))) /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack <= 1 /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb ps
+     else ([],ps)) = (ops,qs) ==>
+    (MEM (Var v) qs.ps_stack ==>
+      MEM v (input_vars_from pred bb.bb_instructions
+        (live_vars_at (liveness_analyze fn) bb.bb_label 0)))
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) = 1`
+  >- (gvs[] >>
+      `MEM (Var v) ps.ps_stack` by metis_tac[clean_stack_plan_stack_absent] >>
+      `MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by
+        metis_tac[] >>
+      Cases_on `1 < LENGTH (cfg_succs_of (cfg_analyze fn) pred)`
+      >- (`cfg_preds_of (cfg_analyze fn) bb.bb_label = [pred]` by
+            (Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> gvs[] >>
+             Cases_on `t` >> gvs[]) >>
+          spose_not_then assume_tac >>
+          drule_all fnPlanLineageInventoryTheory.clean_stack_plan_branch_unique_absent >> simp[]) >>
+      `cfg_succs_of (cfg_analyze fn) pred = [bb.bb_label]` by
+        (Cases_on `cfg_succs_of (cfg_analyze fn) pred` >> gvs[] >>
+         Cases_on `t` >> gvs[]) >>
+      `wf_function fn` by fs[codegen_ready_fn_def] >>
+      drule_all fnPlanLineageLivenessTheory.analyzed_live_out_singleton >>
+      simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  gvs[] >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label)` by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  drule_all fnPlanLineageEdgeTheory.ready_join_edge_terminator >> strip_tac >>
+  metis_tac[fnPlanLineageLivenessTheory.analyzed_live_out_jmp]
+QED
+
+Theorem native_inst_prefix_phi_schedule:
+  !phis lv dfg cfg fn lbl halting np len rest ps qs.
+    EVERY (\inst. inst.inst_opcode = PHI) phis /\ rest <> [] /\
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting np len
+      (phis ++ rest) ps (LENGTH phis) qs ==>
+    ?ops. phi_schedule_run
+      (MAPi (\j inst. (inst, live_vars_at lv lbl (j + np + 1), halting)) phis) ps = (ops,qs)
+Proof
+  Induct >> simp[fnPlanLineageEntryProductionTheory.native_inst_prefix_zero,
+    fnPlanLineagePhiTemporalTheory.phi_schedule_run_def] >>
+  rpt gen_tac >> strip_tac >>
+  `1 + LENGTH phis = SUC (LENGTH phis)` by decide_tac >>
+  `?mid. fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting np len
+       ((h::phis) ++ rest) ps 1 mid /\
+     fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting (np+1) len
+       (phis ++ rest) mid (LENGTH phis) qs` by
+    (qpat_x_assum `1 + _ = _` (fn eq =>
+       drule (REWRITE_RULE [eq] (Q.SPECL [`LENGTH (phis : instruction list)`, `1`]
+         fnPlanLineageEntryProductionTheory.native_inst_prefix_split))) >> simp[]) >>
+  gvs[fnPlanLineageEntryProductionTheory.native_inst_prefix_one,
+    generate_inst_plan_def, is_pre_codegen_opcode_def] >>
+  first_x_assum (drule_at Any) >> strip_tac >>
+  gvs[combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES,
+    GSYM arithmeticTheory.ADD_ASSOC] >>
+  `(\j (inst:instruction). (inst,live_vars_at lv lbl (SUC (np + (j + 1))),halting)) =
+   (\j inst. (inst,live_vars_at lv lbl (j + (np + 2)),halting))` by
+    (simp_tac bool_ss [FUN_EQ_THM, pairTheory.PAIR_EQ] >> rpt gen_tac >>
+     AP_TERM_TAC >> decide_tac) >>
+  pop_assum SUBST1_TAC >>
+  qexists_tac `ops ++ ops'` >> simp[]
+QED
+
+Theorem ready_native_inst_prefix_phi_schedule:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  collect_phis bb.bb_instructions <> [] /\
+  fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting 0 len
+    bb.bb_instructions ps (LENGTH (collect_phis bb.bb_instructions)) qs ==>
+  ?ops. phi_schedule_run
+    (MAPi (\j inst. (inst,live_vars_at lv lbl (j+1),halting))
+      (collect_phis bb.bb_instructions)) ps = (ops,qs)
+Proof
+  strip_tac >>
+  drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> strip_tac >>
+  `EVERY (\inst. inst.inst_opcode = PHI) (collect_phis bb.bb_instructions)` by
+    (simp[EVERY_MEM] >> metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  `fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting 0 len
+    (collect_phis bb.bb_instructions ++ rest) ps
+    (LENGTH (collect_phis bb.bb_instructions)) qs` by metis_tac[] >>
+  drule_all native_inst_prefix_phi_schedule >> simp[]
+QED
