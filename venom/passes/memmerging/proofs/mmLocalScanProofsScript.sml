@@ -1888,6 +1888,117 @@ Proof
   simp[] >> drule_all mm_local_prefix_fresh_mode_unchanged >> simp[]
 QED
 
+(* Essential counterexample evidence: a variable-free unreachable block. *)
+Theorem mm_local_dead_input:
+  fn0 = mk_raw_function "f"
+    [<| bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []] |>;
+     <| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+        mk_inst 2 MSTORE [Lit 32w; Lit 0w] [];
+        mk_inst 3 STOP [] []] |>] /\
+  supply = <| irs_next_inst := 4; irs_next_var := 0; irs_next_label := 0;
+              irs_used_inst_ids := [0;1;2;3]; irs_used_vars := [];
+              irs_used_labels := ["f";"entry";"dead"] |> ==>
+  fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
+  ir_supply_covers_fn supply fn0 /\ 1 < LENGTH fn0.fn_blocks
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem mm_local_dead_transform:
+  transform_block_memzero_supply (dfg_build_function (mk_raw_function "f"
+    [<| bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []] |>;
+     <| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+        mk_inst 2 MSTORE [Lit 32w; Lit 0w] [];
+        mk_inst 3 STOP [] []] |>]))
+    <| irs_next_inst := 4; irs_next_var := 0; irs_next_label := 0;
+       irs_used_inst_ids := [0;1;2;3]; irs_used_vars := [];
+       irs_used_labels := ["f";"entry";"dead"] |>
+    <| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+        mk_inst 2 MSTORE [Lit 32w; Lit 0w] [];
+        mk_inst 3 STOP [] []] |> =
+  (<| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 NOP [] [];
+        mk_inst 4 CALLDATASIZE [] ["formal_var_0"];
+        mk_inst 2 CALLDATACOPY [Lit 0w; Var "formal_var_0"; Lit 64w] [];
+        mk_inst 3 STOP [] []] |>,
+   <| irs_next_inst := 5; irs_next_var := 1; irs_next_label := 0;
+      irs_used_inst_ids := [4;0;1;2;3]; irs_used_vars := ["formal_var_0"];
+      irs_used_labels := ["f";"entry";"dead"] |>)
+Proof
+  EVAL_TAC
+QED
+
+Theorem mm_local_dead_not_ssa:
+  ~wf_ssa (mk_raw_function "f"
+    [<| bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []] |>;
+     <| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 NOP [] [];
+        mk_inst 4 CALLDATASIZE [] ["formal_var_0"];
+        mk_inst 2 CALLDATACOPY [Lit 0w; Var "formal_var_0"; Lit 64w] [];
+        mk_inst 3 STOP [] []] |>])
+Proof
+  simp[wf_ssa_def, def_dominates_uses_def, venomInstTheory.mk_raw_function_def,
+       venomInstTheory.mk_inst_def, def_available_at_def, fn_dominates_def] >>
+  disj2_tac >>
+  qexistsl [`<| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 NOP [] [];
+        mk_inst 4 CALLDATASIZE [] ["formal_var_0"];
+        mk_inst 2 CALLDATACOPY [Lit 0w; Var "formal_var_0"; Lit 64w] [];
+        mk_inst 3 STOP [] []] |>`,
+    `mk_inst 2 CALLDATACOPY [Lit 0w; Var "formal_var_0"; Lit 64w] []`] >>
+  simp[venomInstTheory.mk_inst_def, fn_reachable_def] >>
+  once_rewrite_tac[relationTheory.RTC_CASES1] >>
+  simp[fn_cfg_edge_def, LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR,
+       EXISTS_OR_THM, venomInstTheory.bb_succs_def,
+       venomInstTheory.mk_inst_def] >> EVAL_TAC >> simp[]
+QED
+
+(* All outer premises of the frozen theorem, at index=1 and k=0,
+   are realizable, but its unconditional SSA conclusion is false. *)
+Theorem mm_local_stage_counterexample:
+  fn0 = mk_raw_function "f"
+    [<| bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []] |>;
+     <| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+        mk_inst 2 MSTORE [Lit 32w; Lit 0w] [];
+        mk_inst 3 STOP [] []] |>] /\
+  supply = <| irs_next_inst := 4; irs_next_var := 0; irs_next_label := 0;
+              irs_used_inst_ids := [0;1;2;3]; irs_used_vars := [];
+              irs_used_labels := ["f";"entry";"dead"] |> ==>
+  ?bb sk fn bb' sk' fn'.
+  fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
+  ir_supply_covers_fn supply fn0 /\ 1 < LENGTH fn0.fn_blocks /\ 0 < 4 /\
+  FOLDL (\(b,t) phase. case phase of
+      NONE => transform_block_memzero_supply (dfg_build_function fn0) t b
+    | SOME m => transform_block_mode_supply (dfg_build_function fn0) m t b)
+    (EL 1 fn0.fn_blocks,supply)
+    (TAKE 0 [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) = (bb,sk) /\
+  fn = fn0 with fn_blocks := LUPDATE bb 1 fn0.fn_blocks /\
+  (case EL 0 [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem] of
+      NONE => transform_block_memzero_supply (dfg_build_function fn0) sk bb
+    | SOME m => transform_block_mode_supply (dfg_build_function fn0) m sk bb) = (bb',sk') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' 1 fn0.fn_blocks /\
+  ~wf_ssa fn'
+Proof
+  strip_tac >> drule mm_local_dead_input >> strip_tac >>
+  simp[] >>
+  qexistsl [`<| bb_label := "dead"; bb_instructions :=
+       [mk_inst 1 NOP [] [];
+        mk_inst 4 CALLDATASIZE [] ["formal_var_0"];
+        mk_inst 2 CALLDATACOPY [Lit 0w; Var "formal_var_0"; Lit 64w] [];
+        mk_inst 3 STOP [] []] |>`,
+   `<| irs_next_inst := 5; irs_next_var := 1; irs_next_label := 0;
+      irs_used_inst_ids := [4;0;1;2;3]; irs_used_vars := ["formal_var_0"];
+      irs_used_labels := ["f";"entry";"dead"] |>`] >>
+  gvs[] >> mp_tac mm_local_dead_transform >>
+  mp_tac mm_local_dead_not_ssa >>
+  simp[venomInstTheory.mk_raw_function_def, listTheory.LUPDATE_DEF] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
