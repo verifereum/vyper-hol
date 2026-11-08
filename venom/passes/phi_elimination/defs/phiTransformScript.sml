@@ -410,12 +410,6 @@ Proof
       transform_inst_def, phi_single_origin_def, is_phi_inst_def]
 QED
 
-Triviality terminator_opcode_not_phi:
-  !op. is_terminator op ==> op <> PHI
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
 Theorem transform_insts_phi_prefix:
   !dfg insts lbl.
     bb_well_formed <| bb_label := lbl; bb_instructions := insts |> ==>
@@ -447,7 +441,7 @@ Proof
            EVERY_MEM, MEM_FILTER] >>
       conj_tac
       >- (rpt strip_tac >> gvs[is_pseudo_def, is_param_opcode_def]) >>
-      rpt strip_tac >> metis_tac[terminator_opcode_not_phi]) >>
+      rpt strip_tac >> metis_tac[is_terminator_not_phi]) >>
   gvs[APPEND_ASSOC] >>
   qspecl_then [`\inst. inst.inst_opcode = PHI`, `phis`,
                `params ++ regulars ++ terms`]
@@ -618,7 +612,7 @@ Proof
           EVERY_MEM, MEM_FILTER] >>
      conj_tac
      >- (rpt strip_tac >> gvs[is_pseudo_def, is_param_opcode_def]) >>
-     rpt strip_tac >> metis_tac[terminator_opcode_not_phi]) >>
+     rpt strip_tac >> metis_tac[is_terminator_not_phi]) >>
   rpt conj_tac
   >- (qpat_x_assum `transform_insts dfg insts = _` (fn th => rewrite_tac[th]) >>
       irule phi_prefix_length_append_no_phi >> simp[])
@@ -757,12 +751,6 @@ Proof
   Cases_on `P h` >> gvs[FILTER, LAST_DEF]
 QED
 
-Triviality terminator_not_phi:
-  !op. is_terminator op ==> op <> PHI
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
 Theorem transform_insts_last:
   !dfg insts.
     insts <> [] /\
@@ -782,7 +770,7 @@ Proof
     (irule filter_last_when_last_passes >> simp[]) >>
   `transform_inst dfg (LAST insts) = LAST insts` by
     (irule transform_inst_non_phi >>
-     fs[is_phi_inst_def] >> metis_tac[terminator_not_phi]) >>
+     fs[is_phi_inst_def] >> metis_tac[is_terminator_not_phi]) >>
   simp[LAST_APPEND_NOT_NIL]
 QED
 
@@ -848,7 +836,7 @@ Proof
      qspecl_then [`insts'`] mp_tac filter_terminator_singleton >> simp[] >>
      simp[Abbr `insts'`, LAST_MAP] >>
      `transform_inst dfg (LAST insts) = LAST insts` by
-       (irule transform_inst_non_phi >> fs[is_phi_inst_def] >> metis_tac[terminator_not_phi]) >>
+       (irule transform_inst_non_phi >> fs[is_phi_inst_def] >> metis_tac[is_terminator_not_phi]) >>
      simp[]) >>
   qabbrev_tac `prefix = pseudos ++ regulars` >>
   `pseudos ++ regulars ++ terms = prefix ++ [LAST insts]` by

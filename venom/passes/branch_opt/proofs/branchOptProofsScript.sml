@@ -10,7 +10,7 @@
 
 Theory branchOptProofs
 Ancestors
-  branchOptDefs passSimulationDefs passSimulationProps stateEquiv
+  venomFnInstsProofs execEquivProofs branchOptDefs passSimulationDefs passSimulationProps stateEquiv
   stateEquivProps execEquivParamProps venomInstProps venomExecProps
   dfgAnalysisProps venomState venomWf venomExecSemantics venomExecProofs
   pred_set arithmetic list rich_list finite_map
@@ -200,14 +200,6 @@ Proof
 QED
 
 (* Helper: dfg_get_def returns instructions that are inst_wf *)
-Theorem fn_insts_MEM[local]:
-  !bbs inst. MEM inst (fn_insts_blocks bbs) ==>
-    ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions
-Proof
-  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
-  rpt strip_tac >> fs[MEM_APPEND] >> metis_tac[]
-QED
-
 Theorem dfg_inst_wf[local]:
   !fn v inst.
     fn_inst_wf fn /\
@@ -217,7 +209,7 @@ Proof
   rpt strip_tac >>
   drule dfg_build_function_correct >> strip_tac >>
   fs[fn_inst_wf_def, venomInstTheory.fn_insts_def] >>
-  drule fn_insts_MEM >> strip_tac >>
+  drule mem_fn_insts_blocks_rev >> strip_tac >>
   metis_tac[]
 QED
 
@@ -267,14 +259,6 @@ QED
    Compose via lift_result_trans. *)
 
 (* ===== run_block bridge ===== *)
-
-Theorem state_equiv_set_inst_idx[local]:
-  !vars s1 s2 n.
-    state_equiv vars s1 s2 ==>
-    state_equiv vars (s1 with vs_inst_idx := n) (s2 with vs_inst_idx := n)
-Proof
-  rw[state_equiv_def, execution_equiv_def, lookup_var_def]
-QED
 
 Theorem exec_block_agree_prefix_from_idx[local]:
   !(R_ok : venom_state -> venom_state -> bool)
@@ -523,16 +507,6 @@ Proof
   simp[LAST_EL, PRE_SUB1, Abbr `N`, Abbr `new_term`, Abbr `iz`]
 QED
 
-Theorem phi_prefix_length_lt_last_non_phi[local]:
-  !l. l <> [] /\ (LAST l).inst_opcode <> PHI ==>
-      phi_prefix_length l < LENGTH l
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `l` >> gvs[phi_prefix_length_def] >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
-  res_tac >> simp[]
-QED
-
 Theorem phi_prefix_length_front_append1_non_phi[local]:
   !l x. l <> [] /\ (LAST l).inst_opcode <> PHI /\ x.inst_opcode <> PHI ==>
     phi_prefix_length (FRONT l ++ [x]) = phi_prefix_length l
@@ -752,7 +726,7 @@ Proof
       `s1_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
       `s2_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`] mp_tac) >>
     simp[] >>
-    impl_tac >- (irule state_equiv_set_inst_idx >> simp[]) >>
+    impl_tac >- (irule state_equiv_inst_idx >> simp[]) >>
     simp[]) >>
   qpat_x_assum `?e. eval_phis s1 bb.bb_instructions = Error e` strip_assume_tac >>
   DISJ_CASES_TAC (Q.SPECL [`s2`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)

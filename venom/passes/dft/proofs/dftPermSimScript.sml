@@ -7,7 +7,7 @@
  * then extends to arbitrary permutations via PERM induction.
  *
  * TOP-LEVEL: run_insts_perm_ok, run_insts_perm_ok_ext,
- *   run_insts_topo_equiv, run_insts_append, run_insts_bubble_to_front,
+ *   run_insts_topo_equiv, run_insts_bubble_to_front,
  *   run_insts_bubble_to_front_ext, flip_operands_step_inst,
  *   flip_operands_step_inst_base, step_inst_nofail_not_halt_abort
  * Helper: bi_independent, bi_independent_iff_ext, ext_bi_independent,
@@ -19,7 +19,7 @@
 
 Theory dftPermSim
 Ancestors
-  dftBlockSim dftCommutation dftDefs
+  passSharedFrame dftBlockSim dftCommutation dftDefs
   analysisSimDefs analysisSimProofsBase
   passSharedDefs passSharedProps passSharedTransfer passSharedField
   passSimulationDefs stateEquiv
@@ -39,20 +39,6 @@ QED
 
 
 (* ===== run_insts append decomposition ===== *)
-
-(* run_insts distributes over append: run the first list to get an
-   intermediate state, then continue with the second list. *)
-Theorem run_insts_append:
-  !fuel ctx l1 l2 s.
-    run_insts fuel ctx (l1 ++ l2) s =
-    case run_insts fuel ctx l1 s of
-      OK s' => run_insts fuel ctx l2 s'
-    | other => other
-Proof
-  Induct_on `l1` >> rpt strip_tac >>
-  simp[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
 
 (* ===== Bilateral independence ===== *)
 
@@ -137,15 +123,6 @@ QED
 
 (* ===== Helpers for adjacent swap ===== *)
 
-(* Var membership implies operand_vars membership *)
-Triviality var_mem_operand_vars:
-  !y ops. MEM (Var y) ops ==> MEM y (operand_vars ops)
-Proof
-  Induct_on `ops` >> simp[operand_vars_def] >>
-  rpt strip_tac >> gvs[operand_var_def] >>
-  Cases_on `operand_var h` >> simp[]
-QED
-
 (* ===== Adjacent swap: OK case ===== *)
 
 (* The 5 conditions for step_inst_base_ok_transfer follow from
@@ -168,7 +145,7 @@ val ok_transfer_field_tac =
            step_preserves_non_output_vars >> simp[] >>
          disch_then (qspec_then `n` mp_tac) >>
          impl_tac >- (gvs[DISJOINT_DEF, EXTENSION] >>
-           metis_tac[var_mem_operand_vars, MEM]) >>
+           metis_tac[mem_var_operand_vars, MEM]) >>
          simp[]),
         metis_tac[step_preserves_labels]
       ])
@@ -313,13 +290,6 @@ Proof
   PURE_REWRITE_TAC [all_effects_def, EXTENSION] >> Cases >> simp[]
 QED
 
-(* Filter by the call classifier before evaluating the five effect entries. *)
-Triviality empty_write_not_ext_call:
-  !op. write_effects op = {} ==> ~is_ext_call_op op
-Proof
-  Cases >> PURE_REWRITE_TAC [is_ext_call_op_def] >> simp[] >> EVAL_TAC
-QED
-
 (* effects_independent with INVOKE implies the other op has empty effects *)
 Triviality effects_independent_invoke_empty:
   !op. effects_independent INVOKE op ==>
@@ -404,7 +374,7 @@ Proof
         disch_then (qspec_then `n` mp_tac) >>
         impl_tac
         >- (gvs[DISJOINT_DEF, EXTENSION] >>
-            metis_tac[var_mem_operand_vars, MEM])
+            metis_tac[mem_var_operand_vars, MEM])
         >> simp[])
     >> (qspecl_then [`fuel`, `ctx`, `b`, `s`, `sb`] mp_tac
           step_preserves_labels >> simp[])) >>
@@ -456,7 +426,7 @@ Proof
             step_preserves_non_output_vars >> simp[] >>
           disch_then (qspec_then `n` mp_tac) >>
           impl_tac >- (gvs[DISJOINT_DEF, EXTENSION] >>
-            metis_tac[var_mem_operand_vars, MEM]) >>
+            metis_tac[mem_var_operand_vars, MEM]) >>
           simp[])
       >> (qspecl_then [`fuel`, `ctx`, `a`, `s`, `sa`] mp_tac
             step_preserves_labels >> simp[])) >>
@@ -504,7 +474,7 @@ Proof
   conj_tac
   >- (irule step_inst_ok_frame >> simp[] >>
       gvs[DISJOINT_DEF, EXTENSION, inst_defs_def] >>
-      metis_tac[var_mem_operand_vars, MEM]) >>
+      metis_tac[mem_var_operand_vars, MEM]) >>
   gvs[DISJOINT_DEF, EXTENSION]
 QED
 
@@ -654,7 +624,7 @@ Proof
     step_inst_invoke_frame >>
   (impl_tac
    >- (simp[] >> gvs[DISJOINT_DEF, EXTENSION] >>
-       metis_tac[var_mem_operand_vars, MEM])) >>
+       metis_tac[mem_var_operand_vars, MEM])) >>
   Cases_on `step_inst fuel ctx b s` >> gvs[] >>
   metis_tac[]
 QED

@@ -42,7 +42,7 @@
 
 Theory deadStoreElimProofs
 Ancestors
-  deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
+  venomFnInstsProofs deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
   venomMemProps venomMemProofs memAliasDefs passSharedField cfgAnalysisProps
   stateEquiv stateEquivProps venomState venomInst venomInstProps
   passSimulationDefs passSharedDefs execEquivParamDefs
@@ -402,22 +402,6 @@ Proof
   rw[dse_inst_def] >>
   simp[mk_nop_inst_def, is_terminator_def] >>
   metis_tac[memory_def_opcode_not_terminator]
-QED
-
-(* H6: NOP semantics *)
-Triviality step_inst_base_nop:
-  !inst s. step_inst_base (mk_nop_inst inst) s = OK s
-Proof
-  simp[step_inst_base_def, mk_nop_inst_def]
-QED
-
-(* H7: step_inst for NOP (non-INVOKE) *)
-Triviality step_inst_nop:
-  !fuel ctx inst s. step_inst fuel ctx (mk_nop_inst inst) s = OK s
-Proof
-  rpt gen_tac >>
-  `(mk_nop_inst inst).inst_opcode <> INVOKE` by simp[mk_nop_inst_def] >>
-  simp[step_inst_non_invoke, step_inst_base_nop]
 QED
 
 (* H8: run_blocks never returns OK *)
@@ -1015,12 +999,6 @@ Proof
   simp[R_dse_ok_def]
 QED
 
-Triviality R_dse_ok_implies_R_term:
-  !space s1 s2. R_dse_ok space s1 s2 ==> dse_equiv space s1 s2
-Proof
-  simp[R_dse_ok_def]
-QED
-
 Triviality R_dse_ok_trans:
   !space s1 s2 s3.
     R_dse_ok space s1 s2 /\ R_dse_ok space s2 s3 ==>
@@ -1334,23 +1312,6 @@ Proof
   metis_tac[]
 QED
 
-(* Helper: instruction in a block that is in fn.fn_blocks is in fn_insts fn *)
-Triviality fn_insts_blocks_MEM[local]:
-  !bbs bb inst.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def, listTheory.MEM_APPEND] >> metis_tac[]
-QED
-
-Triviality fn_insts_MEM[local]:
-  !fn bb inst.
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  rw[fn_insts_def] >> irule fn_insts_blocks_MEM >> metis_tac[]
-QED
-
 (* Helper: ALLOCA instruction that executes successfully (step_inst_base = OK v)
    and is in a function with alloca_roots fn = {} produces a contradiction.
    exec_alloca requires inst_outputs = [out], making out a member of alloca_roots. *)
@@ -1365,7 +1326,7 @@ Proof
   CCONTR_TAC >> fs[pred_setTheory.EXTENSION, pred_setTheory.NOT_IN_EMPTY] >>
   `?out. inst.inst_outputs = [out]` by metis_tac[alloca_step_ok_has_output] >>
   `inst_output inst = SOME out` by simp[inst_output_def] >>
-  `MEM inst (fn_insts fn)` by metis_tac[fn_insts_MEM] >>
+  `MEM inst (fn_insts fn)` by metis_tac[MEM_fn_insts] >>
   first_x_assum (qspec_then `out` mp_tac) >>
   simp[alloca_roots_def] >> metis_tac[]
 QED
@@ -1411,7 +1372,7 @@ Proof
   simp[cex2_alloca_roots_empty, step_preserves_safety_def] >>
   rpt gen_tac >> strip_tac >>
   `inst.inst_opcode = MSTORE \/ inst.inst_opcode = STOP` by
-    metis_tac[cex2_fn_only_mstore_and_stop, fn_insts_MEM] >>
+    metis_tac[cex2_fn_only_mstore_and_stop, MEM_fn_insts] >>
   (* STOP is a terminator, contradicting the hypothesis *)
   `inst.inst_opcode <> STOP` by (
     CCONTR_TAC >> `is_terminator STOP` by EVAL_TAC >> gvs[]) >>

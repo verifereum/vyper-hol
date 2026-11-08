@@ -6,12 +6,6 @@ Ancestors
   doDupSim doSwapSim stackOpSim stackOpAsmSim asmSem planExec
   stackPlanTypes list rich_list arithmetic
 
-Theorem execute_plan_singleton[local]:
-  execute_plan initial_fmp [op] = exec_stack_op initial_fmp op
-Proof
-  simp[execute_plan_def]
-QED
-
 Theorem spill_dup16_steps:
   !offsets lo o2pc prog st.
     LENGTH offsets + 15 < LENGTH st.as_stack /\

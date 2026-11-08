@@ -11,7 +11,7 @@
 
 Theory analysisSimProofsWiden
 Ancestors
-  analysisSimProofsSound analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
+  venomExecProofs analysisSimProofsSound analysisSimProofs analysisSimProofsBase analysisSimProofsCompare
   analysisSimDefs execEquivParamDefs dfAnalyzeProofs dfAnalyzeDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenDefs
   passSimulationDefs passSimulationProofs execEquivParamProofs
@@ -61,14 +61,6 @@ Proof
      function_map_transform_def] >>
   AP_THM_TAC >> AP_TERM_TAC >>
   rw[FUN_EQ_THM, listTheory.MAP_EQ_f, abt_widen_eq_abt]
-QED
-
-Triviality valid_state_rel_R_ok_halted[local]:
-  !R_ok R_term s1 s2.
-    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
-    s1.vs_halted = s2.vs_halted
-Proof
-  metis_tac[vsr_R_ok_fields]
 QED
 
 (* Specialize the function before the execution arguments: backward matching
@@ -298,7 +290,7 @@ Proof
           (irule run_block_OK_not_halted >> first_assum ACCEPT_TAC)))
   >> (ALL_TAC THEN_LT TRYALL
        (`v1.vs_halted = v2.vs_halted` by
-          (irule valid_state_rel_R_ok_halted >> simp[]) >>
+          (irule vsr_R_ok_halted >> simp[]) >>
         `~v2.vs_halted` by
           (qpat_x_assum `~v1.vs_halted` mp_tac >>
            qpat_x_assum `v1.vs_halted = v2.vs_halted` mp_tac >> simp[])))
@@ -334,10 +326,10 @@ Proof
           (fn th => assume_tac
             (MATCH_MP
               (Q.SPECL [`fuel`, `run_ctx`, `bb`, `s1`, `v1`]
-                analysisSimProofsTheory.run_block_OK_not_halted) th))))
+                venomExecProofsTheory.run_block_OK_not_halted) th))))
   >> (ALL_TAC THEN_LT TRYALL
        (qspecl_then [`R_ok`, `R_term`, `v1`, `v2`] mp_tac
-          valid_state_rel_R_ok_halted >>
+          vsr_R_ok_halted >>
         impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac))
   >> (ALL_TAC THEN_LT TRYALL
        (`~v2.vs_halted` by
@@ -557,10 +549,10 @@ Proof
        (fn th => assume_tac
          (MATCH_MP
            (Q.SPECL [`fuel`, `run_ctx`, `bb`, `s1`, `v1`]
-             analysisSimProofsTheory.run_block_OK_not_halted) th)))) >>
+             venomExecProofsTheory.run_block_OK_not_halted) th)))) >>
   (ALL_TAC THEN_LT TRYALL
     (qspecl_then [`R_ok`, `R_term`, `v1`, `v2`] mp_tac
-       valid_state_rel_R_ok_halted >>
+       vsr_R_ok_halted >>
      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac)) >>
   (ALL_TAC THEN_LT TRYALL
     (`~v2.vs_halted` by
@@ -761,10 +753,10 @@ Proof
        (fn th => assume_tac
          (MATCH_MP
            (Q.SPECL [`fuel`, `run_ctx`, `bb`, `s1`, `v1`]
-             analysisSimProofsTheory.run_block_OK_not_halted) th)))) >>
+             venomExecProofsTheory.run_block_OK_not_halted) th)))) >>
   (ALL_TAC THEN_LT TRYALL
     (qspecl_then [`R_ok`, `R_term`, `v1`, `v2`] mp_tac
-       valid_state_rel_R_ok_halted >>
+       vsr_R_ok_halted >>
      impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac)) >>
   (ALL_TAC THEN_LT TRYALL
     (`~v2.vs_halted` by

@@ -156,12 +156,6 @@ Proof
   asm_simp_tac (srw_ss()) [MAP_REVERSE, asm_state_component_equality, ADD_COMM]
 QED
 
-Theorem execute_plan_singleton[local]:
-  execute_plan initial_fmp [op] = exec_stack_op initial_fmp op
-Proof
-  simp[execute_plan_def]
-QED
-
 Theorem dup_restore_small_steps:
   !offsets vals lo o2pc prog st top rest.
     LENGTH offsets = LENGTH vals /\ 0 < LENGTH vals /\ LENGTH vals <= 16 /\

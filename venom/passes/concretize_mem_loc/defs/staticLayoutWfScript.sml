@@ -7,7 +7,7 @@
 
 Theory staticLayoutWf
 Ancestors
-  venomWf
+  venomLayout venomWf
   staticLayoutDefs
   concretizeMemLocDefs
 
@@ -174,11 +174,7 @@ Proof
   simp[concretized_static_layouts_wf_def, listTheory.EVERY_MEM]
 QED
 
-Theorem static_wf_dimindex_256[local,simp]:
-  dimindex (:256) = 256
-Proof
-  CONV_TAC fcpLib.INDEX_CONV
-QED
+val _ = augment_srw_ss [rewrites [dimindex_256]];
 
 
 Theorem static_position_wf_zero:

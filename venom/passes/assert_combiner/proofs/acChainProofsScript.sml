@@ -336,20 +336,6 @@ QED
 
 (* ===== run_insts infrastructure ===== *)
 
-Theorem run_insts_append:
-  !xs ys fuel ctx s.
-    run_insts fuel ctx (xs ++ ys) s =
-    case run_insts fuel ctx xs s of
-      OK s' => run_insts fuel ctx ys s'
-    | Halt s' => Halt s'
-    | Abort a s' => Abort a s'
-    | IntRet v s' => IntRet v s'
-    | Error e => Error e
-Proof
-  Induct >> rw[run_insts_def] >>
-  Cases_on `step_inst fuel ctx h s` >> simp[run_insts_def]
-QED
-
 (* Appending a NOP instruction to a successful run_insts is still OK *)
 Theorem run_insts_snoc_nop[local]:
   !insts nop fuel ctx s s'.
@@ -1547,37 +1533,6 @@ Proof
   metis_tac[]
 QED
 
-Triviality INDEX_FIND_P[local]:
-  !l i P n x. INDEX_FIND i P l = SOME (n, x) ==> P x
-Proof
-  Induct >> simp[INDEX_FIND_def] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[] >> metis_tac[]
-QED
-
-Theorem FIND_P:
-  !P l x. FIND P l = SOME x ==> P x
-Proof
-  rpt strip_tac >>
-  fs[FIND_def] >>
-  Cases_on `INDEX_FIND 0 P l` >> gvs[] >>
-  Cases_on `x'` >> gvs[] >> metis_tac[INDEX_FIND_P]
-QED
-
-Triviality INDEX_FIND_MEM[local]:
-  !l i P n x. INDEX_FIND i P l = SOME (n, x) ==> MEM x l
-Proof
-  Induct >> simp[INDEX_FIND_def] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[] >> metis_tac[]
-QED
-
-Theorem FIND_MEM:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  rpt strip_tac >> fs[FIND_def] >>
-  Cases_on `INDEX_FIND 0 P l` >> gvs[] >>
-  Cases_on `x'` >> gvs[] >> metis_tac[INDEX_FIND_MEM]
-QED
-
 (* If P holds for some member of l, then FIND P l returns SOME *)
 Triviality FIND_MEM_EXISTS[local]:
   !P l x. MEM x l /\ P x ==> ?y. FIND P l = SOME y
@@ -2403,29 +2358,6 @@ Proof
   gvs[]
 QED
 
-(* When FIND(h)=NONE, the chain_inv witness must be in rest, not h. *)
-Theorem ci_witness_in_rest[local]:
-  !cands h rest mp s pred_op v.
-    ac_chain_inv cands (h::rest) mp s pred_op v /\
-    FIND (\mc. mc.mc_second_id = h.inst_id) cands = NONE ==>
-    ?inst_s mc_s. MEM inst_s rest /\
-      FIND (\mc. mc.mc_second_id = inst_s.inst_id) cands = SOME mc_s /\
-      (case ALOOKUP mp mc_s.mc_first_id of
-         SOME p => p | NONE => mc_s.mc_first_pred) <> mc_s.mc_second_pred /\
-      (case ALOOKUP mp mc_s.mc_first_id of
-         SOME p => p | NONE => mc_s.mc_first_pred) = pred_op
-Proof
-  rpt strip_tac >>
-  `?inst_s mc_s. MEM inst_s (h::rest) /\
-     FIND (\mc. mc.mc_second_id = inst_s.inst_id) cands = SOME mc_s /\
-     (case ALOOKUP mp mc_s.mc_first_id of
-        SOME p => p | NONE => mc_s.mc_first_pred) <> mc_s.mc_second_pred /\
-     (case ALOOKUP mp mc_s.mc_first_id of
-        SOME p => p | NONE => mc_s.mc_first_pred) = pred_op` by
-    metis_tac[ac_chain_inv_def] >>
-  Cases_on `inst_s = h` >> gvs[MEM] >> metis_tac[]
-QED
-
 (*
  * Diff-preds transfer: common boilerplate for all diff-preds cases (5a,5b,6a).
  * Given the OR/IZ setup, transfers chain_inv to rest with mp' = (h.id, Var or_v)::mp.
@@ -2665,7 +2597,7 @@ Proof
     simp[pairTheory.LAMBDA_PROD] >>
     DISJ2_TAC >>
     simp[run_insts_def, step_nop_identity] >>
-    drule_all ci_witness_in_rest >> strip_tac >>
+    drule_all ac_chain_inv_witness_in_rest >> strip_tac >>
     exists_vars_tac ["pred_op", "v"] >>
     simp[revert_returndata_exec_equiv_UNIV, execution_equiv_refl] >>
     irule ac_chain_inv_identity_transfer >>
@@ -2688,7 +2620,7 @@ Proof
        FIND (\mc. mc.mc_second_id = inst_s.inst_id) cands = SOME mc_s /\
        (case ALOOKUP mp mc_s.mc_first_id of NONE => mc_s.mc_first_pred | SOME p => p) <> mc_s.mc_second_pred /\
        (case ALOOKUP mp mc_s.mc_first_id of NONE => mc_s.mc_first_pred | SOME p => p) = pred_op`
-      by metis_tac[ci_witness_in_rest] >>
+      by metis_tac[ac_chain_inv_witness_in_rest] >>
     Cases_on `ac_is_safe_between h`
     >- ((* safe_between case *)
       DISJ2_TAC >>
@@ -3470,7 +3402,7 @@ Proof
 QED
 
 (* Local copy — cannot import from acSimPrecondProofs (circular dependency) *)
-Triviality safe_assert_step_preserves_eval[local]:
+Theorem safe_assert_step_preserves_eval:
   !fuel ctx h s s' op.
     step_inst fuel ctx h s = OK s' /\
     (ac_is_safe_between h \/ h.inst_opcode = ASSERT) /\

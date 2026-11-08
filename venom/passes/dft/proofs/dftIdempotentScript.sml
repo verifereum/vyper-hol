@@ -94,18 +94,6 @@ Proof
   gvs[is_comparator_def, flip_comparison_opcode_def, read_effects_def]
 QED
 
-Triviality flip_operands_is_terminator:
-  !i. is_terminator (flip_operands i).inst_opcode = is_terminator i.inst_opcode
-Proof
-  rw[flip_operands_def] >>
-  Cases_on `i.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[LET_THM] >>
-  Cases_on `is_comparator i.inst_opcode` >> simp[] >>
-  Cases_on `i.inst_opcode` >>
-  gvs[is_comparator_def, flip_comparison_opcode_def, is_terminator_def]
-QED
-
 (* flip_operands_involution is now in dftStructuralTheory *)
 
 (* ===== dft_block structural decomposition ===== *)
@@ -125,7 +113,7 @@ Proof
 QED
 
 (* Non-pseudos of dft_block output = the scheduled part *)
-Triviality dft_block_non_pseudos:
+Theorem dft_block_non_pseudos:
   !order bb.
     FILTER (\i. ~is_pseudo i.inst_opcode)
       (dft_block order bb).bb_instructions =

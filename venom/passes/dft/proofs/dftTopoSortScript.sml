@@ -178,16 +178,6 @@ Proof
   BasicProvers.every_case_tac >> gvs[LET_THM]
 QED
 
-Triviality flip_not_terminator[local]:
-  !inst. is_terminator (flip_operands inst).inst_opcode =
-         is_terminator inst.inst_opcode
-Proof
-  gen_tac >> rw[flip_operands_def] >>
-  BasicProvers.every_case_tac >> simp[LET_THM] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_comparator_def, flip_comparison_opcode_def, is_terminator_def]
-QED
-
 Triviality map_the_filter_some_mono[local]:
   !l1 l2 f.
     (!x. MEM x l1 ==> MEM x l2) ==>
@@ -207,7 +197,7 @@ Triviality flip_operands_data_deps_subset[local]:
     MEM dep (inst_data_deps bi order inst)
 Proof
   rw[inst_data_deps_def, LET_THM, MEM_nub, MEM_APPEND,
-     flip_not_terminator]
+     flip_operands_is_terminator]
   >- simp[]
   >- (disj2_tac >> irule map_the_filter_some_mono >>
       qexists_tac `python_stack_operands (flip_operands inst).inst_opcode

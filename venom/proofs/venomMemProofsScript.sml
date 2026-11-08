@@ -21,7 +21,7 @@
 
 Theory venomMemProofs
 Ancestors
-  venomMemDefs venomExecSemantics venomState venomInst venomInstProofs
+  venomLayout venomMemDefs venomExecSemantics venomState venomInst venomInstProofs
   venomExecProofs stateEquiv opcodeClass finite_map list rich_list words byte arithmetic divides
 Libs
   wordsLib dep_rewrite
@@ -30,14 +30,7 @@ Libs
    Infrastructure: dimindex, word_to_bytes length
    =================================================================== *)
 
-Theorem dimindex_256[local]:
-  dimindex (:256) = 256
-Proof
-  rw[fcpTheory.index_bit0, fcpTheory.index_bit1, fcpTheory.index_one,
-     fcpTheory.finite_bit0, fcpTheory.finite_bit1, fcpTheory.finite_one]
-QED
-
-Theorem len_word_to_bytes_256[local]:
+Theorem len_word_to_bytes_256:
   LENGTH (word_to_bytes (w:bytes32) be) = 32
 Proof
   rw[byteTheory.LENGTH_word_to_bytes, dimindex_256]
@@ -119,7 +112,7 @@ Proof
 QED
 
 (* Padding-length-insensitive TAKE: only the payload matters, not how much padding *)
-Theorem take_append_pad[local]:
+Theorem take_append_pad:
   !n (l:'a list) a b x.
     n <= LENGTH l + a /\ n <= LENGTH l + b ==>
     TAKE n (l ++ REPLICATE a x) = TAKE n (l ++ REPLICATE b x)
@@ -1085,7 +1078,7 @@ Proof
 QED
 
 (* Setting vs_inst_idx preserves alloca_inv *)
-Theorem alloca_inv_set_inst_idx[local]:
+Theorem alloca_inv_set_inst_idx:
   !s n. alloca_inv s ==> alloca_inv (s with vs_inst_idx := n)
 Proof
   rw[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]

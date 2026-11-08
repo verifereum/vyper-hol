@@ -17,7 +17,7 @@
 
 Theory planWf
 Ancestors
-  prefixExec prefixSim stackPlanOps stackPlanGen stackModel stackPlanTypes codegenRel asmIR list rich_list arithmetic pair option
+  venomExecProofs prefixExec prefixSim stackPlanOps stackPlanGen stackModel stackPlanTypes codegenRel asmIR list rich_list arithmetic pair option
 Libs
   BasicProvers
 
@@ -128,24 +128,9 @@ QED
 
 (* ===== stack_find / stack_get_depth bounds ===== *)
 
-Theorem stack_find_bound:
-  !p xs d. stack_find p xs = SOME d ==> d < LENGTH xs
-Proof
-  Induct_on `xs` >> simp[stack_find_def] >>
-  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
-  Cases_on `stack_find p xs` >> simp[] >>
-  strip_tac >> gvs[] >> res_tac >> simp[]
-QED
-
-Theorem stack_get_depth_bound:
-  !op stk d.
-    stack_get_depth op stk = SOME d ==> d < LENGTH stk
-Proof
-  rpt strip_tac >>
-  fs[stack_get_depth_def] >>
-  imp_res_tac stack_find_bound >>
-  fs[LENGTH_REVERSE]
-QED
+(* Kept under this theory's name for the compiler-proof integration branch. *)
+Theorem stack_find_bound = stackModelTheory.stack_find_bound
+Theorem stack_get_depth_bound = stackModelTheory.stack_get_depth_bound
 
 (* ===== Bulk spill/restore prefix_wf ===== *)
 
@@ -688,15 +673,6 @@ QED
 
 (* ===== reduce_depth_plan: iterated spills ===== *)
 
-(* FIND P l = SOME x implies MEM x l *)
-Theorem find_mem[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l` >> simp[FIND_thm] >>
-  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
-  metis_tac[]
-QED
-
 (* select_spill_candidate returns a value ≤ 16 and < LENGTH stk *)
 Theorem select_spill_candidate_bound:
   !stk forbidden target_dist target_len cand.
@@ -706,7 +682,7 @@ Theorem select_spill_candidate_bound:
 Proof
   rpt gen_tac >> rpt disch_tac >>
   fs[select_spill_candidate_def, LET_THM] >>
-  imp_res_tac find_mem >>
+  imp_res_tac FIND_MEM >>
   fs[MEM_GENLIST] >>
   qpat_x_assum `FIND _ _ = _` kall_tac >>
   qabbrev_tac `mx = MIN 16 (MIN (target_dist - 1) (LENGTH stk - 1))` >>
@@ -872,7 +848,7 @@ Theorem select_spill_candidate_lt_dist[local]:
 Proof
   rpt gen_tac >> rpt disch_tac >>
   fs[select_spill_candidate_def, LET_THM] >>
-  imp_res_tac find_mem >>
+  imp_res_tac FIND_MEM >>
   fs[MEM_GENLIST] >>
   qabbrev_tac `mx = MIN 16 (MIN (target_dist - 1) (LENGTH stk - 1))` >>
   `mx <= target_dist - 1` by
@@ -1509,16 +1485,7 @@ QED
    but these should be derivable from generate_regular_inst_plan's structure
    (it's only called for non-INVOKE opcodes in generate_inst_plan). *)
 
-Theorem generate_emit_ops_some[local,simp]:
-  !inst ltc ps name.
-    venom_to_evm_name inst.inst_opcode = SOME name ==>
-    generate_emit_ops inst ltc ps = ([SOEmit name], ps)
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = INITIAL_FMP` >> gvs[venom_to_evm_name_def] >>
-  Cases_on `inst.inst_opcode = BUMP` >> gvs[venom_to_evm_name_def] >>
-  simp[generate_emit_ops_def, LET_THM]
-QED
+val _ = augment_srw_ss [rewrites [generate_emit_ops_some]];
 
 (* regular_plan_prefix_wf_gen below supersedes the old regular_plan_prefix_wf.
    It proves both prefix_wf and EVERY is_prefix_op for the general

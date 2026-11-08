@@ -414,6 +414,20 @@ Proof
   Induct_on `ops` >> simp[eval_operands_def]
 QED
 
+(* eval_operands agrees when each operand agrees *)
+Theorem eval_operands_agree:
+  !ops s1 s2.
+    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
+    eval_operands ops s1 = eval_operands ops s2
+Proof
+  Induct >> simp[eval_operands_def] >>
+  rpt strip_tac >>
+  `eval_operand h s1 = eval_operand h s2` by (res_tac >> gvs[]) >>
+  `eval_operands ops s1 = eval_operands ops s2` by
+    (first_x_assum irule >> metis_tac[]) >>
+  simp[]
+QED
+
 Theorem init_venom_state_fmp_fields[local]:
   ∀entry.
     (init_venom_state entry).vs_fmp = 0w ∧

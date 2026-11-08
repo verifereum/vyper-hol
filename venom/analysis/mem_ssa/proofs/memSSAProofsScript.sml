@@ -7,7 +7,7 @@
 
 Theory memSSAProofs
 Ancestors
-  memSSADefs
+  venomFnInstsProofs memSSADefs
   dominatorProofs
   cfgAnalysisProps
   cfgHelpers
@@ -559,31 +559,6 @@ Proof
   strip_tac >> gvs[] >> res_tac >> simp[]
 QED
 
-Triviality fn_inst_ids_block_distinct:
-  !fn bb.
-    fn_inst_ids_distinct fn /\
-    MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
-Proof
-  rpt strip_tac >>
-  fs[venomWfTheory.fn_inst_ids_distinct_def] >>
-  qsuff_tac `!ls. ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) ls)) /\
-                   MEM bb ls ==>
-                   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)`
-  >- metis_tac[] >>
-  Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
-QED
-
-Triviality ALL_DISTINCT_FLAT_MAP_UNIQUE:
-  !f ls a b x.
-    ALL_DISTINCT (FLAT (MAP f ls)) /\ MEM a ls /\ MEM b ls /\
-    MEM x (f a) /\ MEM x (f b) ==> a = b
-Proof
-  Induct_on `ls` >> simp[] >> rpt strip_tac >>
-  fs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
-QED
-
 (* --- End moved helpers --- *)
 
 (* If two blocks share an inst_id, they must be the same block *)
@@ -597,8 +572,9 @@ Triviality fn_inst_ids_distinct_unique_block:
 Proof
   rpt strip_tac >>
   fs[venomWfTheory.fn_inst_ids_distinct_def] >>
-  mp_tac (ISPEC ``\(bb:basic_block). MAP (\i. i.inst_id) bb.bb_instructions``
-           ALL_DISTINCT_FLAT_MAP_UNIQUE) >>
+  mp_tac (ISPECL [``fn.fn_blocks``,
+                  ``\(bb:basic_block). MAP (\i. i.inst_id) bb.bb_instructions``]
+           all_distinct_flat_map_unique) >>
   simp[] >> metis_tac[]
 QED
 

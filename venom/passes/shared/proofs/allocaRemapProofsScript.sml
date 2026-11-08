@@ -36,7 +36,7 @@
 
 Theory allocaRemapProofs
 Ancestors
-  allocaRemapDefs pointerConfinedDefs memLocDefs passResidualFrame oracleExecProps
+  venomExecProofs allocaRemapDefs pointerConfinedDefs memLocDefs passResidualFrame oracleExecProps
   venomExecSemantics venomEffects venomWf venomMemDefs
   venomInst venomState venomInstProps passSharedTransfer
   allocaRemapSSA stateEquiv passSharedField passSharedFrame opcodeClass
@@ -870,14 +870,6 @@ Finalise mstore8_preserves_remap_mem
 
 (* ===== Instruction-Level Preservation ===== *)
 
-(* FIND returns a member satisfying the predicate *)
-Theorem find_some_mem[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l /\ P x
-Proof
-  Induct_on `l` >> simp[FIND_thm] >> rpt gen_tac >> strip_tac >>
-  Cases_on `P h` >> gvs[] >> res_tac >> gvs[]
-QED
-
 (* ALL_DISTINCT MAP implies injectivity *)
 Theorem all_distinct_map_inj[local]:
   !(l:'a list) (f:'a -> 'b) x y.
@@ -918,7 +910,7 @@ Theorem fn_alloca_id_of_var_inj[local]:
 Proof
   rpt strip_tac >>
   gvs[fn_alloca_id_of_var_def, AllCaseEqs()] >>
-  imp_res_tac find_some_mem >> gvs[] >>
+  imp_res_tac FIND_MEM >> imp_res_tac FIND_P >> gvs[] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
     (irule fn_inst_ids_all_distinct >> gvs[wf_function_def]) >>
   drule_all all_distinct_inst_id_inj >> strip_tac >> gvs[]
@@ -1761,18 +1753,6 @@ Proof
   >- (metis_tac[non_alloca_output_notin_roots])
 QED
 
-(* Helper: non-pv operand agreement via alloca_remap_rel *)
-Theorem nonpv_operand_agrees[local]:
-  !fn roots remap s1 s2 op.
-    alloca_remap_rel fn roots remap s1 s2 /\
-    (!v. op = Var v ==> v NOTIN pointer_derived_vars fn roots) ==>
-    eval_operand op s1 = eval_operand op s2
-Proof
-  rpt strip_tac >>
-  irule eval_operand_non_pointer_remap >>
-  MAP_EVERY qexists_tac [`fn`, `remap`, `roots`] >> simp[]
-QED
-
 (* Helper: remap_rel_from_equiv specialized for update_var when output
    is not in pv — all pv/root vars pass through to the original states *)
 Theorem remap_rel_update_nonpv[local]:
@@ -1902,14 +1882,6 @@ Proof
   first_x_assum (qspecl_then [`bb`,`inst`,`s`,`v`,`out`,`w_out`,
     `inp`,`w_in`,`aid`,`off`,`asz`] mp_tac) >>
   simp[]
-QED
-
-Theorem resolve_phi_mem[local]:
-  !prev ops val_op.
-    resolve_phi prev ops = SOME val_op ==> MEM val_op ops
-Proof
-  ho_match_mp_tac resolve_phi_ind >> rpt strip_tac >>
-  gvs[resolve_phi_def, AllCaseEqs()]
 QED
 
 (* Combined helper for PV subcases of pointer-preserving ops:

@@ -31,158 +31,82 @@ val step_inst_base_opcode_tac =
   qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
 
 (* ===== exec_* result type lemmas ===== *)
-(* Each exec wrapper only returns OK or Error — never Halt/Abort/IntRet.
-   Proving these individually is fast; using them as [simp] makes the
-   opcode case split in the main theorems fast. *)
+(* Each exec wrapper only returns OK or Error, never Halt/Abort/IntRet.
+   Using them as [simp] makes the opcode case split in the main theorems
+   fast.  Case equations expose result constructors; no ambient rewrites,
+   so callback results, words and memory stay opaque. *)
+val exec_result_head_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [LET_THM, pairTheory.ELIM_UNCURRY, AllCaseEqs(), exec_result_distinct];
 
-(* Case equations expose result constructors; discard impossible branches before
-   inspecting their guards or state arguments. Keep the ambient simpset out. *)
-val exec_case_tac =
-  simp_tac pure_ss [AllCaseEqs(), exec_result_distinct,
-                    boolTheory.NOT_CLAUSES, boolTheory.AND_CLAUSES,
-                    boolTheory.OR_CLAUSES, boolTheory.EXISTS_SIMP,
-                    boolTheory.FORALL_SIMP];
+val exec_call_result_head_ss = exec_result_head_ss ++ rewrites
+  [exec_ext_call_def, exec_delegatecall_def, exec_create_def];
 
-(* --- Not Halt --- *)
-
-val exec_pure1_not_halt = store_thm("exec_pure1_not_halt[local,simp]",
-  ``!f inst s vs'. exec_pure1 f inst s <> Halt vs'``,
-  simp[exec_pure1_def] >> exec_case_tac);
-val exec_pure2_not_halt = store_thm("exec_pure2_not_halt[local,simp]",
-  ``!f inst s vs'. exec_pure2 f inst s <> Halt vs'``,
-  simp[exec_pure2_def] >> exec_case_tac);
-val exec_pure3_not_halt = store_thm("exec_pure3_not_halt[local,simp]",
-  ``!f inst s vs'. exec_pure3 f inst s <> Halt vs'``,
-  simp[exec_pure3_def] >> exec_case_tac);
-val exec_read0_not_halt = store_thm("exec_read0_not_halt[local,simp]",
-  ``!f inst s vs'. exec_read0 f inst s <> Halt vs'``,
-  simp[exec_read0_def] >> exec_case_tac);
-val exec_read1_not_halt = store_thm("exec_read1_not_halt[local,simp]",
-  ``!f inst s vs'. exec_read1 f inst s <> Halt vs'``,
-  simp[exec_read1_def] >> exec_case_tac);
-val exec_write2_not_halt = store_thm("exec_write2_not_halt[local,simp]",
-  ``!f inst s vs'. exec_write2 f inst s <> Halt vs'``,
-  simp[exec_write2_def] >> exec_case_tac);
-val exec_ext_call_not_halt = store_thm("exec_ext_call_not_halt[local,simp]",
-  ``!inst s g a v ao as_ ro rs st vs'.
-    exec_ext_call inst s g a v ao as_ ro rs st <> Halt vs'``,
-  simp[exec_ext_call_def] >> exec_case_tac);
-val exec_delegatecall_not_halt = store_thm(
-  "exec_delegatecall_not_halt[local,simp]",
-  ``!inst s g a ao as_ ro rs vs'.
-    exec_delegatecall inst s g a ao as_ ro rs <> Halt vs'``,
-  simp[exec_delegatecall_def] >> exec_case_tac);
-val exec_create_not_halt = store_thm("exec_create_not_halt[local,simp]",
-  ``!inst s v off sz salt vs'.
-    exec_create inst s v off sz salt <> Halt vs'``,
-  simp[exec_create_def] >> exec_case_tac);
-val exec_alloca_not_halt = store_thm("exec_alloca_not_halt[local,simp]",
-  ``!inst s a vs'. exec_alloca inst s a <> Halt vs'``,
-  simp[exec_alloca_def] >> exec_case_tac);
-
-(* --- Not Abort --- *)
-
-val exec_pure1_not_abort = store_thm("exec_pure1_not_abort[local,simp]",
-  ``!f inst s a vs'. exec_pure1 f inst s <> Abort a vs'``,
-  simp[exec_pure1_def] >> exec_case_tac);
-val exec_pure2_not_abort = store_thm("exec_pure2_not_abort[local,simp]",
-  ``!f inst s a vs'. exec_pure2 f inst s <> Abort a vs'``,
-  simp[exec_pure2_def] >> exec_case_tac);
-val exec_pure3_not_abort = store_thm("exec_pure3_not_abort[local,simp]",
-  ``!f inst s a vs'. exec_pure3 f inst s <> Abort a vs'``,
-  simp[exec_pure3_def] >> exec_case_tac);
-val exec_read0_not_abort = store_thm("exec_read0_not_abort[local,simp]",
-  ``!f inst s a vs'. exec_read0 f inst s <> Abort a vs'``,
-  simp[exec_read0_def] >> exec_case_tac);
-val exec_read1_not_abort = store_thm("exec_read1_not_abort[local,simp]",
-  ``!f inst s a vs'. exec_read1 f inst s <> Abort a vs'``,
-  simp[exec_read1_def] >> exec_case_tac);
-val exec_write2_not_abort = store_thm("exec_write2_not_abort[local,simp]",
-  ``!f inst s a vs'. exec_write2 f inst s <> Abort a vs'``,
-  simp[exec_write2_def] >> exec_case_tac);
-val exec_ext_call_not_abort = store_thm(
-  "exec_ext_call_not_abort[local,simp]",
-  ``!inst s g a v ao as_ ro rs st ab vs'.
-    exec_ext_call inst s g a v ao as_ ro rs st <> Abort ab vs'``,
-  simp[exec_ext_call_def] >> exec_case_tac);
-val exec_delegatecall_not_abort = store_thm(
-  "exec_delegatecall_not_abort[local,simp]",
-  ``!inst s g a ao as_ ro rs ab vs'.
-    exec_delegatecall inst s g a ao as_ ro rs <> Abort ab vs'``,
-  simp[exec_delegatecall_def] >> exec_case_tac);
-val exec_create_not_abort = store_thm("exec_create_not_abort[local,simp]",
-  ``!inst s v off sz salt ab vs'.
-    exec_create inst s v off sz salt <> Abort ab vs'``,
-  simp[exec_create_def] >> exec_case_tac);
-val exec_alloca_not_abort = store_thm("exec_alloca_not_abort[local,simp]",
-  ``!inst s a ab vs'. exec_alloca inst s a <> Abort ab vs'``,
-  simp[exec_alloca_def] >> exec_case_tac);
-
-
-(* --- Not IntRet --- *)
-
-Triviality exec_pure1_not_intret[local,simp]:
-  !f inst s vals vs'. exec_pure1 f inst s <> IntRet vals vs'
+Theorem exec_result_helpers_no_halt_abort:
+  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
+  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
+  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
 Proof
-  simp[exec_pure1_def] >> exec_case_tac
+  simp_tac exec_result_head_ss
+    [exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def, exec_alloca_def]
 QED
 
-Triviality exec_pure2_not_intret[local,simp]:
-  !f inst s vals vs'. exec_pure2 f inst s <> IntRet vals vs'
+Theorem exec_result_helpers_not_intret:
+  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
+  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
-  simp[exec_pure2_def] >> exec_case_tac
+  simp_tac exec_result_head_ss
+    [exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def, exec_alloca_def]
 QED
 
-Triviality exec_pure3_not_intret[local,simp]:
-  !f inst s vals vs'. exec_pure3 f inst s <> IntRet vals vs'
+Theorem exec_call_helpers_not_intret:
+  (!inst s g a v ao as_ ro rs is_s vs s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
+  (!inst s g a ao as_ ro rs vs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
+  (!inst s v off sz salt vs s'.
+     exec_create inst s v off sz salt <> IntRet vs s')
 Proof
-  simp[exec_pure3_def] >> exec_case_tac
+  simp_tac exec_call_result_head_ss []
 QED
 
-Triviality exec_read0_not_intret[local,simp]:
-  !f inst s vals vs'. exec_read0 f inst s <> IntRet vals vs'
+Theorem exec_call_helpers_no_halt_abort:
+  (!inst s g a v ao as_ ro rs is_s s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
+  (!inst s g a v ao as_ ro rs is_s ab s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
+  (!inst s g a ao as_ ro rs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
+  (!inst s g a ao as_ ro rs ab s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
+  (!inst s v off sz salt s'.
+     exec_create inst s v off sz salt <> Halt s') /\
+  (!inst s v off sz salt ab s'.
+     exec_create inst s v off sz salt <> Abort ab s')
 Proof
-  simp[exec_read0_def] >> exec_case_tac
+  simp_tac exec_call_result_head_ss []
 QED
 
-Triviality exec_read1_not_intret[local,simp]:
-  !f inst s vals vs'. exec_read1 f inst s <> IntRet vals vs'
-Proof
-  simp[exec_read1_def] >> exec_case_tac
-QED
-
-Triviality exec_write2_not_intret[local,simp]:
-  !f inst s vals vs'. exec_write2 f inst s <> IntRet vals vs'
-Proof
-  simp[exec_write2_def] >> exec_case_tac
-QED
-
-Triviality exec_ext_call_not_intret[local,simp]:
-  !inst s g a v ao as_ ro rs st vals vs'.
-    exec_ext_call inst s g a v ao as_ ro rs st <> IntRet vals vs'
-Proof
-  simp[exec_ext_call_def] >> exec_case_tac
-QED
-
-Triviality exec_delegatecall_not_intret[local,simp]:
-  !inst s g a ao as_ ro rs vals vs'.
-    exec_delegatecall inst s g a ao as_ ro rs <> IntRet vals vs'
-Proof
-  simp[exec_delegatecall_def] >> exec_case_tac
-QED
-
-Triviality exec_create_not_intret[local,simp]:
-  !inst s v off sz salt vals vs'.
-    exec_create inst s v off sz salt <> IntRet vals vs'
-Proof
-  simp[exec_create_def] >> exec_case_tac
-QED
-
-Triviality exec_alloca_not_intret[local,simp]:
-  !inst s a vals vs'. exec_alloca inst s a <> IntRet vals vs'
-Proof
-  simp[exec_alloca_def] >> exec_case_tac
-QED
+val _ = augment_srw_ss [rewrites
+  [exec_result_helpers_no_halt_abort, exec_result_helpers_not_intret,
+   exec_call_helpers_not_intret, exec_call_helpers_no_halt_abort]];
 (* ===== Main classification theorems ===== *)
 
 Triviality terminator_opcode_cases[local]:
@@ -650,12 +574,12 @@ Proof
 QED
 
 
-Triviality step_inst_base_nonterminator_not_intret[local]:
+Theorem step_inst_base_no_intret:
   !inst s vals vs'.
-    ~is_terminator inst.inst_opcode ==>
-    step_inst_base inst s <> IntRet vals vs'
+    step_inst_base inst s = IntRet vals vs' ==>
+    is_terminator inst.inst_opcode
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> CCONTR_TAC >>
   drule nonterminator_opcode_class >> strip_tac
   >- (qspecl_then [`inst`, `s`, `vals`, `vs'`] mp_tac
         effect_free_not_intret >> simp[])
@@ -691,7 +615,7 @@ Proof
       step_inst_base_opcode_tac >> simp[] >>
       gvs[AllCaseEqs(), extract_venom_result_def]) >>
   qspecl_then [`inst`, `vs`, `vals`, `vs'`] mp_tac
-    step_inst_base_nonterminator_not_intret >> simp[]
+    step_inst_base_no_intret >> simp[]
 QED
 Theorem step_inst_base_halt_opcodes:
   !inst vs vs'.
@@ -715,6 +639,16 @@ Proof
         ext_call_not_halt_abort >> gvs[]) >>
   qspecl_then [`inst`, `vs`, `vs'`] mp_tac
     storage_imm_log_assert_not_halt >> gvs[]
+QED
+
+Theorem step_inst_base_no_halt:
+  !inst s s'.
+    step_inst_base inst s = Halt s' ==>
+    is_terminator inst.inst_opcode
+Proof
+  rpt strip_tac >>
+  drule step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_halt_opcodes:
@@ -756,6 +690,22 @@ Proof
   gvs[] >>
   qspecl_then [`inst`, `vs`, `a`, `vs'`] mp_tac
     nofail_storage_imm_log_not_abort >> gvs[]
+QED
+
+(* Non-terminator non-INVOKE step_inst_base can only Abort from
+   ASSERT (Revert_abort), ASSERT_UNREACHABLE (ExHalt_abort),
+   RETURNDATACOPY (ExHalt_abort). All set returndata to []. *)
+Theorem step_inst_base_abort_opcode:
+  !inst s a s'.
+    step_inst_base inst s = Abort a s' /\
+    ~is_terminator inst.inst_opcode ==>
+    inst.inst_opcode = ASSERT \/
+    inst.inst_opcode = ASSERT_UNREACHABLE \/
+    inst.inst_opcode = RETURNDATACOPY
+Proof
+  rpt strip_tac >>
+  drule step_inst_base_abort_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_abort_opcodes:
