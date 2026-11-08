@@ -2013,12 +2013,20 @@ QED
    type widens to the call's type (type_widens_to: a tuple elementwise), so
    the tuple is unpacked at the callee's return type. *)
 Theorem body_assign_tuple_widened_call[local]:
-  !cx gs e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
+  !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    (!s'' tv t s'3' v t'.
+       eval_expr cx e s'' = (INL tv,t) /\ read_result cx tv s'3' = (INL v,t') ==>
+       body_tuple_target_ok cx (TupleTarget gs) v) /\
     body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
+    (!target. supported_stmt_expr_exists
+       (expr_abi_decode_target_root target) (Assign (TupleTarget gs) e) ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     stmt_exprs_ok cenv (Assign (TupleTarget gs) e) /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     lowered_value_type cenv e <> expr_type e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (TupleTarget gs) e))
