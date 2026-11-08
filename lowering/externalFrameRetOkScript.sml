@@ -54,6 +54,11 @@ Theorem external_frame_ret_ok:
       cenv ret
 Proof
   rpt gen_tac >> strip_tac >>
+  `ut' = T` by
+    (drule externalReturnPackageTheory.return_package_target_inversion >>
+     strip_tac >>
+     drule externalReturnPackageTheory.return_package_metadata >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
   simp[frame_ret_ok_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `eo`
   >- (irule return_selected_none_frag >>
