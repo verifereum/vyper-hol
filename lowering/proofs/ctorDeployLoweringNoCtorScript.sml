@@ -1977,9 +1977,10 @@ Proof
     (s with <| vs_allocas := s.vs_allocas |+ (id, (s.vs_alloca_next, LENGTH bytes));
                vs_alloca_next := s.vs_alloca_next + LENGTH bytes |>)` >>
   `step_inst_base (mk_inst id ALLOCA [Lit (n2w (LENGTH bytes))] [buf]) s = OK t` by
-    simp[Abbr `t`, venomInstTheory.mk_inst_def,
-         venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_alloca_def,
-         eval_operand_def, wordsTheory.w2n_n2w] >>
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[Abbr `t`, venomInstTheory.mk_inst_def,
+          venomExecSemanticsTheory.exec_alloca_def,
+          eval_operand_def, wordsTheory.w2n_n2w]) >>
   `eval_operand (Var buf) t = SOME (n2w s.vs_alloca_next) /\
    FLOOKUP t.vs_labels "runtime_begin" = SOME (n2w codepos) /\
    TAKE (LENGTH bytes)
@@ -2067,10 +2068,10 @@ Proof
            Lit (n2w (LENGTH bytes))] []]`] |> SRULE []) >>
   disch_then (qspecl_then [`0`, `ctx`, `bb`] mp_tac) >>
   (impl_tac >-
-    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def] >>
-     simp[venomInstTheory.is_terminator_def,
-          venomExecSemanticsTheory.step_inst_base_def,
-          venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
+    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
   strip_tac >> qexists_tac `final'` >>
   `run_context 1 ctx s = Halt final'` by
     (qpat_assum `run_block_non_phis 0 ctx bb t = _` mp_tac >>
