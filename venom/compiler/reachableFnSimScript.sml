@@ -6,14 +6,22 @@
  * so access_ok and allocas_from hold there) proves one block at a time:
  * from block-boundary states s (source) and t (target) related by R, with
  * s reachable, one block of the source and of the target end in results
- * related by R at the next boundary, by R_ret on internal return, or by
- * dead_result_rel on halt and abort.  Inside the block it may run callees
- * through fn_sim_below, the same simulation for smaller fuel.
- * reachable_fn_sim_ctx_sim turns that into ctx_sim.
+ * related by R at the next reachable boundary, by R_ret on internal
+ * return, or by dead_result_rel on halt and abort.  Inside the block it
+ * may run callees through fn_sim_below, the same simulation for smaller
+ * fuel.  reachable_fn_sim_ctx_sim turns that into ctx_sim.
+ *
+ * R and R_ret see the frame_reachable ghosts: the suspended callers stk
+ * and the argument sites PG, fixed for a frame, and the provenance G and
+ * taint tn at the boundary, which change from block to block.  A pass
+ * that leaves memory different in a caller's dead buffers needs stk to
+ * say where those are while a callee runs, and the taint to say which
+ * bytes of a fresh allocation may differ.
  *
  * TOP-LEVEL:
- *   block_reach              — a block-boundary state the source reaches
- *   one_block                — one run_blocks iteration: PHIs, then the block
+ *   block_reach              — the source reaches a block-boundary state
+ *   fn_run_rel               — related results of a function run
+ *   block_step_rel           — related results of one block
  *   fn_sim_below             — function-level simulation below a fuel bound
  *   reachable_fn_sim_ctx_sim — block obligation ==> ctx_sim
  *)
@@ -21,77 +29,161 @@
 Theory reachableFnSim
 Ancestors
   ptrDiscipline ptrSafeRun o1PassContract passSimulationDefs
-  contextCodegenRel venomExecSemantics venomState
+  contextCodegenRel venomExecSemantics venomState venomExecProps
+  venomRetProps venomInst ctxLookupAgreeHelpers list
 
-(* A block-boundary state of fn (before its PHIs) whose first active
-   instruction the source reaches from vs. *)
+(* A block-boundary state of fn (before its PHIs): if the block is
+   entered, the source reaches its first active instruction from vs with
+   these ghosts. *)
 Definition block_reach_def:
-  block_reach vs C fn s <=>
-    ?stk PG G tn s1 inst.
-      enters_block fn s s1 /\ active_inst fn inst s1 /\
+  block_reach vs C stk PG G tn fn s <=>
+    !s1 inst.
+      enters_block fn s s1 /\ active_inst fn inst s1 ==>
       frame_reachable vs C stk PG G tn fn inst s1
 End
 
-(* One iteration of run_blocks: the block's PHIs, then the block itself. *)
-Definition one_block_def:
-  one_block fuel ctx fn s =
-    case lookup_block s.vs_current_bb fn.fn_blocks of
-      NONE => Error "block not found"
-    | SOME bb =>
-        case eval_phis s bb.bb_instructions of
-          Error e => Error e
-        | OK s_phi =>
-            exec_block fuel ctx bb
-              (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
-End
-
-(* Related results of a whole function run. *)
+(* Related results of a whole function run.  R_ret sees the returned
+   values and the ghosts at the return. *)
 Definition fn_run_rel_def:
-  fn_run_rel D R_ret fn r r' <=>
+  fn_run_rel D R_ret stk PG fn r r' <=>
     case (r, r') of
       (Halt s, Halt s') => dead_result_rel D r r'
     | (Abort a s, Abort a' s') => dead_result_rel D r r'
-    | (IntRet v s, IntRet v' s') => v' = v /\ R_ret fn s s'
+    | (IntRet v s, IntRet v' s') =>
+        v' = v /\ ?G tn. R_ret stk PG G tn fn v s s'
     | _ => F
 End
 
-(* Related results of one block: a non-halted OK continues under R. *)
+(* Related results of one block: a non-halted OK reaches the next
+   boundary, and continues under R there. *)
 Definition block_step_rel_def:
-  block_step_rel D R R_ret fn r r' <=>
+  block_step_rel D vs C R R_ret stk PG fn r r' <=>
     case (r, r') of
       (OK s, OK s') =>
         (s'.vs_halted <=> s.vs_halted) /\
         (if s.vs_halted then dead_result_rel D (Halt s) (Halt s')
-         else R fn s s')
-    | _ => fn_run_rel D R_ret fn r r'
+         else ?G tn. block_reach vs C stk PG G tn fn s /\
+                     R stk PG G tn fn s s')
+    | _ => fn_run_rel D R_ret stk PG fn r r'
 End
 
 (* Every function of C simulates its namesake in C' from R-related,
    reachable block-boundary states, for every fuel below n. *)
 Definition fn_sim_below_def:
   fn_sim_below D vs C C' R R_ret n <=>
-    !k fn fn' s t.
+    !k stk PG G tn fn fn' s t.
       k < n /\
       MEM fn C.ctx_functions /\
       lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
-      R fn s t /\ block_reach vs C fn s /\
+      R stk PG G tn fn s t /\ block_reach vs C stk PG G tn fn s /\
       terminates (run_blocks k C fn s) ==>
-      ?m. fn_run_rel D R_ret fn (run_blocks k C fn s) (run_blocks m C' fn' t)
+      ?m. fn_run_rel D R_ret stk PG fn (run_blocks k C fn s)
+                                       (run_blocks m C' fn' t)
 End
 
+(* A block that stops the run (halted OK, Halt, Abort, IntRet) stops both
+   function runs alike. *)
+Theorem run_blocks_stop_sim[local]:
+  !D vs C C' R R_ret stk PG fn fn' bb bb' j m s t.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    block_step_rel D vs C R R_ret stk PG fn
+      (run_block j C bb s) (run_block m C' bb' t) /\
+    ~(?s1. run_block j C bb s = OK s1 /\ ~s1.vs_halted) ==>
+    fn_run_rel D R_ret stk PG fn (run_blocks (SUC j) C fn s)
+                                 (run_blocks (SUC m) C' fn' t)
+Proof
+  rpt strip_tac >> simp[run_blocks_unfold] >>
+  Cases_on `run_block j C bb s` >> Cases_on `run_block m C' bb' t` >>
+  gvs[block_step_rel_def, fn_run_rel_def] >> metis_tac[]
+QED
+
+(* A block that continues continues both runs; the target's later fuel
+   covers both its block and its continuation. *)
+Theorem run_blocks_ok_sim[local]:
+  !D R_ret stk PG fn fn' bb bb' j m m2 M s t s1 t1.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    run_block j C bb s = OK s1 /\ ~s1.vs_halted /\
+    run_block m C' bb' t = OK t1 /\ ~t1.vs_halted /\
+    fn_run_rel D R_ret stk PG fn (run_blocks j C fn s1)
+                                 (run_blocks m2 C' fn' t1) /\
+    m <= M /\ m2 <= M ==>
+    fn_run_rel D R_ret stk PG fn (run_blocks (SUC j) C fn s)
+                                 (run_blocks (SUC M) C' fn' t)
+Proof
+  rpt strip_tac >>
+  `run_block M C' bb' t = OK t1` by
+    (irule run_block_fuel_mono_OK >> qexists_tac `m` >> simp[]) >>
+  `run_blocks M C' fn' t1 = run_blocks m2 C' fn' t1` by
+    (irule (CONJUNCT2 (CONJUNCT2 fuel_mono)) >>
+     conj_tac >- (rpt strip_tac >>
+                  Cases_on `run_blocks j C fn s1` >> gvs[fn_run_rel_def]) >>
+     qexists_tac `m2` >> simp[]) >>
+  simp[run_blocks_unfold]
+QED
+
+(* The block obligation gives fn_sim_below at every bound. *)
+Theorem block_sim_fn_sim_below[local]:
+  !D vs C C' R R_ret.
+    (!k stk PG G tn fn fn' s t bb.
+       fn_sim_below D vs C C' R R_ret (SUC k) /\
+       MEM fn C.ctx_functions /\
+       lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+       R stk PG G tn fn s t /\ block_reach vs C stk PG G tn fn s /\
+       lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+       terminates (run_block k C bb s) ==>
+       ?m bb'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+               block_step_rel D vs C R R_ret stk PG fn
+                 (run_block k C bb s) (run_block m C' bb' t)) ==>
+    !n. fn_sim_below D vs C C' R R_ret n
+Proof
+  rpt gen_tac >> strip_tac >> completeInduct_on `n` >>
+  simp[Once fn_sim_below_def] >> rpt strip_tac >>
+  Cases_on `k` >- gvs[Once run_blocks_def, terminates_def] >>
+  rename1 `run_blocks (SUC j) C fn s` >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+     gvs[run_blocks_unfold, terminates_def]) >>
+  `terminates (run_block j C bb s)` by
+    (gvs[run_blocks_unfold] >>
+     Cases_on `run_block j C bb s` >> gvs[terminates_def]) >>
+  `fn_sim_below D vs C C' R R_ret (SUC j)` by
+    (qpat_x_assum `!m. m < n ==> _` irule >> simp[]) >>
+  qpat_x_assum `!k stk PG G tn fn fn' s t bb. _`
+    (qspecl_then [`j`, `stk`, `PG`, `G`, `tn`, `fn`, `fn'`, `s`, `t`, `bb`]
+       mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  Cases_on `?s1. run_block j C bb s = OK s1 /\ ~s1.vs_halted`
+  >- (gvs[] >>
+      `?t1 G1 tn1. run_block m C' bb' t = OK t1 /\ ~t1.vs_halted /\
+                   block_reach vs C stk PG G1 tn1 fn s1 /\
+                   R stk PG G1 tn1 fn s1 t1` by
+        (Cases_on `run_block m C' bb' t` >>
+         gvs[block_step_rel_def, fn_run_rel_def] >> metis_tac[]) >>
+      `terminates (run_blocks j C fn s1)` by gvs[run_blocks_unfold] >>
+      qpat_x_assum `!m. m < n ==> _` (qspec_then `SUC j`
+        (mp_tac o SIMP_RULE std_ss [fn_sim_below_def])) >>
+      impl_tac >- simp[] >>
+      disch_then (qspecl_then [`j`, `stk`, `PG`, `G1`, `tn1`, `fn`, `fn'`,
+                               `s1`, `t1`] mp_tac) >>
+      impl_tac >- simp[] >> strip_tac >>
+      qexists_tac `SUC (m + m')` >> irule run_blocks_ok_sim >>
+      simp[] >> qexistsl_tac [`m`, `m'`, `t1`] >> simp[]) >>
+  qexists_tac `SUC m` >> irule run_blocks_stop_sim >> simp[] >>
+  metis_tac[]
+QED
+
 (* Why it holds: strong induction on n for fn_sim_below n.  run_blocks
-   (SUC j) C fn s is one_block j C fn s followed by Halt (halted OK),
-   run_blocks j C fn s' (OK) or the propagated result; target fuels
-   compose by venomExecPropsTheory.fuel_mono.  The root reduces run_context
-   to run_blocks from the entry state, where frame_reachable's entry rule
-   gives block_reach; o1_ctx_shape rules out IntRet/OK at the root
-   (venomRetPropsTheory.run_context_not_int_ret, run_context_not_ok).
-   The missing piece is carrying frame_reachable along a source run
-   (across INVOKE via the call and ret rules), which nothing in the repo
-   proves yet; wf_function's distinct labels make active_inst pick the
-   block exec_block runs.  Pass proofs discharging the block obligation
-   need that same walk to reach their INVOKE sites, so it should be an
-   exported theorem. *)
+   (SUC j) C fn s looks up the block and runs run_block j on it, then
+   Halt (halted OK), run_blocks j C fn s' (OK) or the propagated result
+   (venomExecSemanticsTheory.run_blocks_unfold); the OK arm of
+   block_step_rel hands the next iteration its block_reach and R, and
+   target fuels compose by venomExecPropsTheory.fuel_mono.  The root
+   reduces run_context to run_blocks from the entry state, where
+   frame_reachable's entry rule gives block_reach with the empty ghosts;
+   o1_ctx_shape rules out IntRet/OK at the root
+   (venomRetPropsTheory.run_context_not_int_ret, run_context_not_ok). *)
 Theorem reachable_fn_sim_ctx_sim:
   !D vs C C' R R_ret.
     o1_ctx_shape C /\
@@ -103,19 +195,57 @@ Theorem reachable_fn_sim_ctx_sim:
        C.ctx_entry = SOME name /\
        lookup_function name C.ctx_functions = SOME fn /\
        fn_entry_label fn = SOME lbl ==>
-       R fn (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                        vs_inst_idx := 0 |>)
-            (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
-                        vs_inst_idx := 0 |>)) /\
-    (!k fn fn' s t.
+       R [] [] FEMPTY entry_taint fn
+         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                     vs_inst_idx := 0 |>)
+         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                     vs_inst_idx := 0 |>)) /\
+    (!k stk PG G tn fn fn' s t bb.
        fn_sim_below D vs C C' R R_ret (SUC k) /\
        MEM fn C.ctx_functions /\
        lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
-       R fn s t /\ block_reach vs C fn s /\
-       terminates (one_block k C fn s) ==>
-       ?m. block_step_rel D R R_ret fn (one_block k C fn s)
-                                       (one_block m C' fn' t)) ==>
+       R stk PG G tn fn s t /\ block_reach vs C stk PG G tn fn s /\
+       lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+       terminates (run_block k C bb s) ==>
+       ?m bb'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+               block_step_rel D vs C R R_ret stk PG fn
+                 (run_block k C bb s) (run_block m C' bb' t)) ==>
     ctx_sim D C C' vs vs
 Proof
-  cheat
+  rpt strip_tac >> rw[ctx_sim_def] >>
+  `!v t. run_context fuel C vs <> IntRet v t` by
+    (rpt gen_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
+     `MEM fn C.ctx_functions /\ fn.fn_name = name` by
+       metis_tac[lookup_function_MEM, lookup_function_selected_name] >>
+     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM,
+         entry_fn_no_return_def] >> metis_tac[]) >>
+  drule block_sim_fn_sim_below >> strip_tac >>
+  Cases_on `C.ctx_entry` >- gvs[run_context_def, terminates_def] >>
+  rename1 `C.ctx_entry = SOME name` >>
+  Cases_on `lookup_function name C.ctx_functions`
+  >- gvs[run_context_def, terminates_def] >>
+  rename1 `lookup_function name C.ctx_functions = SOME fn` >>
+  Cases_on `fn_entry_label fn`
+  >- gvs[run_context_def, run_function_def, terminates_def] >>
+  rename1 `fn_entry_label fn = SOME lbl` >>
+  `MEM fn C.ctx_functions /\ fn.fn_name = name` by
+    metis_tac[lookup_function_MEM, lookup_function_selected_name] >>
+  `?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
+         fn_entry_label fn' = SOME lbl` by metis_tac[] >>
+  qabbrev_tac `s0 = vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                              vs_inst_idx := 0 |>` >>
+  `!f. run_context f C vs = run_blocks f C fn s0 /\
+       run_context f C' vs = run_blocks f C' fn' s0` by
+    gvs[run_context_def, run_function_def, Abbr `s0`] >>
+  `block_reach vs C [] [] FEMPTY entry_taint fn s0` by
+    (rw[block_reach_def, Abbr `s0`] >> irule frame_reachable_entry >>
+     metis_tac[]) >>
+  qpat_x_assum `!n. fn_sim_below _ _ _ _ _ _ n`
+    (qspec_then `SUC fuel` (mp_tac o SIMP_RULE std_ss [fn_sim_below_def])) >>
+  disch_then (qspecl_then [`fuel`, `[]`, `[]`, `FEMPTY`, `entry_taint`,
+                           `fn`, `fn'`, `s0`, `s0`] mp_tac) >>
+  impl_tac >- (gvs[] >> metis_tac[]) >> strip_tac >>
+  qexists_tac `m` >> gvs[] >>
+  Cases_on `run_blocks fuel C fn s0` >> gvs[fn_run_rel_def] >>
+  Cases_on `run_blocks m C' fn' s0` >> gvs[]
 QED
