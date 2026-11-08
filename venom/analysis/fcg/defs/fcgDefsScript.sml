@@ -19,6 +19,7 @@
  *   fcg_visit              - process a single unvisited function
  *   fcg_dfs                - DFS worklist traversal (has termination proof)
  *   fcg_analyze            - top-level entry point
+ *   prune_unit_fcg_unreachable - drop the functions fcg_is_reachable rejects
  *
  * Helper lemmas (termination):
  *   filter_length_mono     - stricter predicate => shorter FILTER
@@ -33,7 +34,7 @@
 
 Theory fcgDefs
 Ancestors
-  venomInst relation cfgDefs alist list
+  venomInst venomCompilerTypes relation cfgDefs alist list
 
 (* ==========================================================================
    Result type
@@ -308,3 +309,12 @@ Proof
   pure_once_rewrite_tac[APPEND] >>
   once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
 QED
+
+(* Drop the functions the call graph cannot reach. *)
+Definition prune_unit_fcg_unreachable_def:
+  prune_unit_fcg_unreachable unit fcg =
+    unit with cu_context :=
+      unit.cu_context with ctx_functions :=
+        FILTER (\fn. fcg_is_reachable fcg fn.fn_name)
+               unit.cu_context.ctx_functions
+End

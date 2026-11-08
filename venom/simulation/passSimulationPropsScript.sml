@@ -8,6 +8,7 @@ Theory passSimulationProps
 Ancestors
   passSimulationProofs analysisSimDefs venomWf venomInst passSimulationDefs
   indexedLists list
+  passTransform
 
 (* ===== Utilities ===== *)
 
@@ -1132,7 +1133,7 @@ QED
 Theorem bmt_eq_mapi[local]:
   !f bb. block_map_transform f bb = bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions
 Proof
-  rw[MAPi_EQ_MAP, passSimulationDefsTheory.block_map_transform_def]
+  rw[MAPi_EQ_MAP, passTransformTheory.block_map_transform_def]
 QED
 
 (* WF preservation for function_map_transform (block_map_transform f) *)

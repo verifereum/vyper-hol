@@ -52,7 +52,7 @@ Proof
   >- (disj1_tac >> drule_all current_forward_inserted_phi_selected_defined >> simp[]) >>
   gvs[] >> disj2_tac >>
   `MEM old fn.fn_blocks /\ old.bb_label = h` by
-    metis_tac[venomExecPropsTheory.lookup_block_MEM, makeSsaHelperTheory.lookup_block_label] >>
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecProofsTheory.lookup_block_label] >>
   qpat_x_assum `old.bb_label = h` (SUBST_ALL_TAC o SYM) >>
   drule_all current_wf_original_phi_inserted_return >> metis_tac[]
 QED

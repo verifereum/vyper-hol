@@ -15,6 +15,7 @@ Ancestors
   venomExecSemantics venomExecProofs venomState venomInst
   analysisSimDefs finite_map pred_set list
   indexedLists instIdxIndep
+  passTransform
 Libs
   pairLib stepInstBaseLib
 

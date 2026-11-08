@@ -24,6 +24,7 @@ Ancestors
   venomInst
   indexedLists pointerConfinedDefs pointerConfinedProps
   list rich_list combin
+  passTransform
 
 (* ===== Structural preservation: remove_unused_single_pass ===== *)
 

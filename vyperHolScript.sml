@@ -33,7 +33,7 @@ Ancestors
   (* Venom execution: jump independence *)
   jumpIndep
   (* passes: oracle projections, FMP lowering, memory merging, SSA *)
-  concretizeOracleSim ssaOracleSim
+  concretizeOracleSim
   fmpLowerSequenceExec
   mmBlockSimProofs mmSupplySsaProofs mmSupplyWfProofs
   (* codegen: stack planning *)

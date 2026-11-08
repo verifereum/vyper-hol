@@ -336,3 +336,20 @@ Theorem icf_frame_update:
 Proof
   metis_tac[Excl "pass_residual_mask_equality"]
 QED
+
+(* ===== Proof Equivalence Relation ===== *)
+
+(* State equivalence allowing vs_memory to differ.
+   Both copy forwarding passes NOP mcopy instructions, removing a memory
+   write to the dst allocation. The forwarding preconditions ensure no
+   instruction reads from that memory after the rewrite, so the memory
+   difference is at a dead location.
+   Includes control flow fields so it can serve as both R_ok and R_term
+   in lift_result. *)
+Definition icf_equiv_def:
+  icf_equiv s1 s2 <=>
+    (!v. lookup_var v s1 = lookup_var v s2) /\
+    (* Memory, four FMP components and the bump pointer were unconstrained;
+       all control components and the allocation map remain compared. *)
+    icf_frame s1 = icf_frame s2
+End

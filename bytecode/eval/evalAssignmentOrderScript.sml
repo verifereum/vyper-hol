@@ -5,6 +5,7 @@ Ancestors
   vyperInterpreter vyperTypeSystem jsonToVyper jsonConstEval
   compileVyper concretizeMemLocDefs supportedProgram supportedStmts
   vyperSmallStep vyperStorageBackend finite_map While alist byte integer_word option
+  codegenReadyCompute
 Libs
   vyperCheckContractFrontendLib evalCompilerBytecodeLib finite_mapLib
   computeLib wordsLib cv_transLib
