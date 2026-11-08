@@ -47,7 +47,7 @@ Theorem calldata_scratch_members_nil_ptr:
     ((!fuel. ptr_safe_run D lower fuel ctx func PG H u actual) ==>
       !fuel. ptr_safe_run D lower fuel ctx func PG G tn initial)
 Proof
-  simp_tac (srw_ss()) [Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  simp_tac (srw_ss()) [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
   rpt strip_tac >>
   qexistsl_tac [`initial`, `G`, `tn`] >>
   simp[val_in_memory_def, abi_decode_sim_refl] >>

@@ -30,7 +30,9 @@ Proof
     fs[abi_decode_load_def, abi_decode_source_def, abi_decoder_prune_vars_def, mload_def] >>
   `fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var initial)` by
     irule abi_decoder_prune_fresh >>
-  drule_all abi_decoder_member_pointer_sequence >> strip_tac >>
+  drule_all (SRULE [cj 1 eval_operand_def]
+    (Q.INST [`src_base` |-> `0`, `base_op` |-> `Lit 0w`]
+      abi_decoder_member_pointer_sequence)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st')
     (abi_decoder_prune_vars st.cs_next_var initial) = OK clean` >>
   drule_all abi_decoder_member_pointer_code >> strip_tac >>
@@ -100,7 +102,7 @@ Proof
     (conj_tac >-
       (Cases_on `dyn` >>
        qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
-       simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+       simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
        rpt (pairarg_tac >> gvs[]) >>
        metis_tac[inst_extends_emit_op, inst_extends_trans]) >>
      metis_tac[inst_extends_emit_op]) >>

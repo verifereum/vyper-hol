@@ -349,7 +349,7 @@ Theorem member_navigation_source_endpoint:
 Proof
   Cases_on `dyn`
   >- suspend "dynamic"
-  >> simp[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+  >> simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   `MEM ADD [ADD; CALLDATALOAD] /\
    EVERY (\op. op_taint tn op = {}) [src; Lit (n2w ao)]` by
@@ -362,7 +362,7 @@ Proof
 QED
 
 Resume member_navigation_source_endpoint[dynamic]:
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_op ADD [src; Lit (n2w ao)] sa = (head,c1)` >>
   rename1 `emit_op CALLDATALOAD [head] c1 = (off,c2)` >>
@@ -461,7 +461,7 @@ Proof
   `inst_extends sa mid /\ same_blocks sa mid` by
     (Cases_on `dyn` >>
      qpat_x_assum `compile_getelemptr_abi _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
      (conj_tac >- metis_tac[inst_extends_emit_op, inst_extends_trans]) >>
      imp_res_tac emit_op_same_blocks >> fs[same_blocks_def]) >>

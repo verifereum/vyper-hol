@@ -61,7 +61,7 @@ Theorem calldata_bytestring_decoder_instructions:
   sb.cs_next_var = sa.cs_next_var + 3 /\
   sb.cs_next_id = sa.cs_next_id + 5
 Proof
-  simp[Once compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+  simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
        fresh_var_def, fresh_id_def, emit_def, listTheory.APPEND_ASSOC] >>
   disch_then (SUBST1_TAC o SYM) >>

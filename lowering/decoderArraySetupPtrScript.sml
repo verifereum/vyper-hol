@@ -111,7 +111,7 @@ Theorem calldata_dynamic_element_source_structure:
   EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st ready) /\
   LENGTH (emitted_insts st ready) = 2
 Proof
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def,
     comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,mid)` >>
@@ -338,7 +338,7 @@ Theorem calldata_dynamic_element_source_endpoint_ptr_core:
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
-  rpt gen_tac >> simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def,
+  rpt gen_tac >> simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def,
     comp_ignore_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,mid)` >>

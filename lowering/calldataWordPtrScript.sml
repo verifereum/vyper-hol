@@ -18,7 +18,7 @@ Theorem calldata_unclamped_word_instructions:
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 2
 Proof
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
        fresh_var_def, fresh_id_def, emit_def] >>
@@ -53,7 +53,7 @@ Theorem calldata_clamped_word_prefix_framed:
 Proof
   strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac (srw_ss()) [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac (srw_ss()) [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] sa = (value,c1)` >>
@@ -210,7 +210,7 @@ Proof
   strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `run_inst_seq _ _ = OK actual` (mk_asm "actual_run") >>
-  simp_tac (srw_ss()) [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac (srw_ss()) [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] sa = (value,c1)` >>
