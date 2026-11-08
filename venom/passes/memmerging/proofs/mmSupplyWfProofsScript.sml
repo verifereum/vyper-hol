@@ -567,14 +567,6 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `transform_block_supply _ _ _ = _` mp_tac >>
   simp[transform_block_supply_def, AllCaseEqs()] >> strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) (transform_block_dload dfg bb).bb_instructions) /\
-   EVERY (\i. i.inst_id < s.irs_next_inst) (transform_block_dload dfg bb).bb_instructions` by
-    (conj_tac >- simp[dload_preserves_ids] >>
-     `EVERY (\id. id < s.irs_next_inst)
-       (MAP (\i. i.inst_id) (transform_block_dload dfg bb).bb_instructions)` by
-       (pure_rewrite_tac[dload_preserves_ids] >>
-        simp[EVERY_MAP, combinTheory.o_DEF]) >>
-     fs[EVERY_MAP, combinTheory.o_DEF]) >>
   drule_all transform_block_memzero_supply_ids >> strip_tac >>
   drule_all transform_block_mode_supply_ids >> strip_tac >>
   qpat_x_assum `transform_block_mode_supply _ CalldataMerge _ _ = _` kall_tac >>
@@ -588,7 +580,7 @@ Proof
   qexistsl_tac [`bb3.bb_instructions`, `s2.irs_next_inst`] >> simp[] >>
   match_mp_tac inst_id_interval_compose >>
   qexistsl_tac [`bb2.bb_instructions`, `s1.irs_next_inst`] >> simp[] >>
-  fs[dload_preserves_ids]
+  simp[]
 QED
 
 Theorem supply_mode_step:
@@ -670,44 +662,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem supply_dload_base:
-  !fn bb s.
-    fn_inst_wf fn /\ wf_function fn /\ fn_inst_ids_distinct fn /\
-    MEM bb fn.fn_blocks /\ bb_well_formed bb /\
-    EVERY (\i. i.inst_id < s.irs_next_inst) bb.bb_instructions ==>
-    bb_well_formed (transform_block_dload (dfg_build_function fn) bb) /\
-    LAST (transform_block_dload (dfg_build_function fn) bb).bb_instructions =
-      LAST bb.bb_instructions /\
-    ALL_DISTINCT (MAP (\i. i.inst_id)
-      (transform_block_dload (dfg_build_function fn) bb).bb_instructions) /\
-    EVERY (\i. i.inst_id < s.irs_next_inst)
-      (transform_block_dload (dfg_build_function fn) bb).bb_instructions /\
-    (!i. MEM i (transform_block_dload (dfg_build_function fn) bb).bb_instructions /\
-      i.inst_opcode = PHI ==> MEM i (fn_insts fn)) /\
-    (!m i. MEM i (transform_block_dload (dfg_build_function fn) bb).bb_instructions /\
-      i.inst_opcode = mode_load_opcode m /\ i.inst_outputs <> [] ==>
-      MEM i (fn_insts fn))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    metis_tac[fn_inst_ids_distinct_block] >>
-  `bb_well_formed (transform_block_dload (dfg_build_function fn) bb)` by
-    metis_tac[transform_block_dload_wf] >>
-  `LAST (transform_block_dload (dfg_build_function fn) bb).bb_instructions =
-    LAST bb.bb_instructions` by metis_tac[transform_block_dload_last] >>
-  simp[dload_preserves_ids] >> conj_tac
-  >- (`EVERY (\id. id < s.irs_next_inst)
-         (MAP (\i. i.inst_id) (transform_block_dload (dfg_build_function fn) bb).bb_instructions)` by
-        (pure_rewrite_tac[dload_preserves_ids] >>
-         simp[EVERY_MAP, combinTheory.o_DEF]) >>
-      fs[EVERY_MAP, combinTheory.o_DEF]) >>
-  conj_tac
-  >- (rpt strip_tac >> irule fn_insts_mem_block >>
-      qexists_tac `bb` >> simp[] >> metis_tac[dload_phi_from]) >>
-  rpt strip_tac >> irule fn_insts_mem_block >>
-  qexists_tac `bb` >> simp[] >> metis_tac[dload_mode_load_passthrough]
-QED
-
 Theorem supply_modes_wf:
   !fn s bb s1 bb1 s2 bb2 t cc.
     fn_inst_wf fn /\ wf_function fn /\ fn_inst_ids_distinct fn /\ ssa_form fn /\
@@ -756,12 +710,14 @@ Proof
      fs[bb_well_formed_def] >> metis_tac[MEM_LAST_NOT_NIL]) >>
   qpat_x_assum `transform_block_supply _ _ _ = _` mp_tac >>
   simp[transform_block_supply_def, AllCaseEqs()] >> strip_tac >>
-  drule_all supply_dload_base >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `transform_block_memzero_supply _ _ bb1 = _` >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[fn_inst_ids_distinct_block] >>
+  `!i. MEM i bb.bb_instructions ==> MEM i (fn_insts fn)` by
+    metis_tac[fn_insts_mem_block] >>
   qpat_assum `transform_block_memzero_supply _ _ _ = _`
     (mp_then (Pat `transform_block_memzero_supply _ _ _ = _`) mp_tac supply_memzero_step) >>
   disch_then (qspec_then `fn` mp_tac) >>
-  simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
+  simp[] >> strip_tac >>
   `MEM (LAST bb2.bb_instructions) (fn_insts fn)` by metis_tac[] >>
   `bb_well_formed cc /\ LAST cc.bb_instructions = LAST bb2.bb_instructions` by
     (drule_all supply_modes_wf >> simp[]) >>
@@ -776,9 +732,9 @@ Proof
   `cc.bb_label = bb4.bb_label` by metis_tac[transform_block_mode_supply_label] >>
   `bb4.bb_label = bb3.bb_label` by metis_tac[transform_block_mode_supply_label] >>
   `bb3.bb_label = bb2.bb_label` by metis_tac[transform_block_mode_supply_label] >>
-  `bb2.bb_label = (transform_block_dload dfg bb).bb_label` by
+  `bb2.bb_label = bb.bb_label` by
     metis_tac[transform_block_memzero_supply_label] >>
-  gvs[transform_block_dload_def]
+  gvs[]
 QED
 
 Theorem transform_block_supply_succs:
