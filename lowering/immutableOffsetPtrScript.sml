@@ -10,8 +10,7 @@ Theorem immutable_offset_add_step[local]:
   step_inst_base (mk_inst id ADD [op; Lit (n2w off)] [out]) s =
     OK (update_var out (a + n2w off) s)
 Proof
-  strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  strip_tac >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def]
 QED

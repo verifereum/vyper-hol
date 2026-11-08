@@ -17,7 +17,7 @@ Theorem for_checked_assign_step[local]:
   eval_operand op s = SOME w ==>
   step_inst_base (mk_inst id ASSIGN [op] [out]) s = OK (update_var out w s)
 Proof
-  simp[Once step_inst_base_def, mk_inst_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 (* The first four instructions establish the order-test predicate.  The

@@ -21,7 +21,7 @@ Proof
     (s with vs_inst_idx := k)` by
     (irule ptr_inst_ok_mstore_tainted >> simp[]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[inst_seq_ptr_def, step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
     copy_mstore_inst_idx]
 QED
 

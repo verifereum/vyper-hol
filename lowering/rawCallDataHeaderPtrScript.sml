@@ -20,8 +20,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MLOAD [Var src] [out]) s =
      OK (update_var out (mload (w2n w) s) s)` by
-    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read1_def,
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read1_def,
        venomStateTheory.eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx func G tn
      (mk_inst id MLOAD [Var src] [out]) s` by
@@ -60,8 +59,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [left;right] [out]) s =
      OK (update_var out (a+b) s)` by
-    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_pure2_def]) >>
+    (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_pure2_def]) >>
   `ptr_inst_ok D 0 0 ctx func G tn
      (mk_inst id ADD [left;right] [out]) s` by
     (irule typedCopyPtrTheory.ptr_inst_ok_copy_len_binop >> simp[]) >>

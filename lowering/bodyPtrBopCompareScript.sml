@@ -17,8 +17,7 @@ Proof
        source_memory_read_ranges_def] >>
   TRY (conj_tac >- (rpt strip_tac >> gvs[op_prov_def, FLOOKUP_DEF])) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[])
@@ -87,8 +86,7 @@ Theorem bop_compare_state_frame:
 Proof
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  PURE_REWRITE_TAC[mk_inst_fields] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_fields, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   simp[mk_inst_def, exec_pure2_def, exec_pure1_def] >>
   rpt strip_tac >> gvs[AllCaseEqs(), update_var_def]
 QED

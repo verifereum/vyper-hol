@@ -38,7 +38,7 @@ Proof
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `step_inst_base (mk_inst sa.cs_next_id MLOAD [Var p] [out]) s =
     OK (update_var out (mload (w2n a) s) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def] >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all mload_path_ptr >>
   simp[update_var_def, arithmeticTheory.ADD1]

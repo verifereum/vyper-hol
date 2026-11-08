@@ -14,8 +14,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -65,8 +64,7 @@ Proof
   imp_res_tac emit_inst_extends >>
   `u.vs_current_bb = s.vs_current_bb /\ ~u.vs_halted` by
     (qpat_x_assum `step_inst_base _ _ = OK u` mp_tac >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def, AllCaseEqs(), update_var_def] >>
      rpt strip_tac >> gvs[]) >>
   qmatch_goalsub_abbrev_tac `jump_to lbl v` >>
   qexistsl_tac [`step_prov PG G (mk_inst sa.cs_next_id ASSIGN [op] [z]) u`,

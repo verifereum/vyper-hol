@@ -64,7 +64,7 @@ Proof
   qexists_tac `s'` >> gvs[] >>
   `step_inst_base inst s =
     OK (update_var out (if outcome.co_success then 1w else 0w) s')` by
-    (gvs[step_inst_base_def]) >>
+    (gvs[step_inst_base_opcode_eqs]) >>
   conj_tac
   >- (irule call_gas_path_ptr_edge >> simp[] >> metis_tac[]) >>
   conj_tac

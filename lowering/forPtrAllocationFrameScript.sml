@@ -24,7 +24,7 @@ Proof
   `step_inst_base inst s = OK t` by gvs[step_inst_non_invoke] >>
   Cases_on `inst.inst_opcode = ALLOCA`
   >- (qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
-      simp[Once step_inst_base_def, AllCaseEqs()] >> strip_tac >>
+      simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> strip_tac >>
       drule exec_alloca_old_allocations >> simp[]) >>
   `t.vs_allocas = s.vs_allocas` by
     (irule step_inst_base_preserves_allocas >> metis_tac[]) >>

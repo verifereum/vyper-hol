@@ -22,8 +22,7 @@ Proof
     fs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   drule_all bop_hash_mload_state >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   Cases_on `eval_operand (Var q)
     (update_var l (mload (w2n w) (update_var q (w + 32w) s))
       (update_var q (w + 32w) s))` >> simp[] >>

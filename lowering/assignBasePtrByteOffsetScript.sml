@@ -100,8 +100,7 @@ Proof
     (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [p]) s v tn` >>
   `step_inst_base (mk_inst sa.cs_next_id ADD [Var root;Lit (n2w off)] [p]) s =
     OK v` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `v`]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `v`]) >>
   `ptr_covers gf tf p v n` by
     (simp[Abbr `gf`, Abbr `tf`, Abbr `v`] >>
      irule assign_base_with_byte_offset_coverage >>

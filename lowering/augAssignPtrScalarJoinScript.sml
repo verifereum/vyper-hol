@@ -40,7 +40,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
        mk_inst_def] >>
-  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def] >>
+  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs] >>
   Cases_on `eval_operand arg s` >> simp[update_var_def]
 QED
 
@@ -88,7 +88,7 @@ Proof
     (gvs[] >> irule assign_ptr_edge >> metis_tac[]) >>
   `~s1.vs_halted` by
     (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-     simp[mk_inst_def, step_inst_base_def] >>
+     simp[mk_inst_def, step_inst_base_opcode_eqs] >>
      Cases_on `eval_operand arg s` >> gvs[update_var_def] >>
      strip_tac >> gvs[]) >>
   `gas_path_ptr_edge D 0 ctx fn PG G1 tn1 s1 0 G1 tn1

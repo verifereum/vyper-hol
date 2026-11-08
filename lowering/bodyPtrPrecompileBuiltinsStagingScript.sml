@@ -77,8 +77,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s =
     OK (update_var out (a + n2w off) s)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   simp[inst_seq_ptr_def] >> irule ptr_inst_ok_copy_len_binop >>
   gvs[ptr_covers_def, op_taint_def]
 QED
@@ -98,8 +97,7 @@ Proof
   strip_tac >> conj_tac
   >- (`step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s =
        OK (update_var tmp (mload (w2n a) s) s)` by
-        (pure_once_rewrite_tac[step_inst_base_def] >>
-         simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+        (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
       simp[inst_seq_ptr_def] >> irule ptr_inst_ok_mload >> simp[]) >>
   irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def] >> metis_tac[]
 QED
@@ -151,8 +149,7 @@ Proof
       (update_var out (a + n2w off) s) tn`] >>
   conj_tac
   >- (simp[run_inst_seq_def] >>
-      pure_once_rewrite_tac[step_inst_base_def] >>
-      simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+      simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   conj_tac >- (irule point_offset_checked >> metis_tac[]) >>
   conj_tac >- (irule point_offset_covers >> metis_tac[]) >>
   simp[copy_len_binop_ghost_frame, update_var_def, lookup_var_def,
@@ -183,8 +180,7 @@ Proof
       (update_var tmp (mload (w2n a) s) s) tn`] >>
   conj_tac
   >- (simp[run_inst_seq_def] >>
-      pure_once_rewrite_tac[step_inst_base_def] >>
-      simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+      simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   drule_all clean_word_load_checked >> strip_tac >> simp[] >>
   `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
   drule mload_ghost_clean >> strip_tac >>
@@ -210,8 +206,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MSTORE [Var dst; v] []) s =
      OK (mstore (w2n a) w s)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   drule_all clean_word_store_checked >> strip_tac >>
   drule_all mstore_ghost_frame >> strip_tac >>
   qexistsl [`mstore (w2n a) w s`,
@@ -286,8 +281,7 @@ Proof
   `step_inst_base (mk_inst id MSTORE [Var dst; v] [])
       (s with vs_inst_idx := k) =
     OK ((mstore (w2n a) w s) with vs_inst_idx := k)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def,
           mstore_def, write_memory_with_expansion_inst_idx]) >>
   `ptr_covers G tn dst (s with vs_inst_idx := k) 32` by simp[] >>
   `lookup_var dst (s with vs_inst_idx := k) = SOME a` by
@@ -334,8 +328,7 @@ Proof
   qexists_tac `t` >> simp[] >>
   `step_inst_base (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s =
     OK (update_var out (a + n2w off) s)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   gvs[run_inst_seq_def] >> irule point_offset_checked_cursors >>
   simp[] >> qexistsl [`capacity`, `n`] >> simp[]
 QED
@@ -365,8 +358,7 @@ Proof
   qexists_tac `t` >> simp[] >>
   `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s =
     OK (update_var tmp (mload (w2n a) s) s)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   gvs[run_inst_seq_def] >> irule clean_word_load_checked_cursors >> simp[]
 QED
 

@@ -15,7 +15,7 @@ Proof
   strip_tac >> simp[gas_path_edge_def] >>
   qexistsl_tac [`0`, `mk_inst 0 ASSIGN [Lit 1w] ["result"]`] >>
   simp[get_instruction_def, mk_inst_def, Once step_inst_def,
-       step_inst_base_def, eval_operand_def, gas_count_step_def,
+       step_inst_base_opcode_eqs, eval_operand_def, gas_count_step_def,
        is_terminator_def, update_var_def]
 QED
 
@@ -29,9 +29,9 @@ Proof
   strip_tac >> simp[gas_path_edge_def] >>
   qexistsl_tac [`0`, `mk_inst 1 JMP [Label lbl] []`] >>
   simp[get_instruction_def, mk_inst_def, Once step_inst_def,
-       step_inst_base_def, gas_count_step_def, is_terminator_def] >>
+       step_inst_base_opcode_eqs, gas_count_step_def, is_terminator_def] >>
   disj2_tac >> disj1_tac >> qexists_tac `lbl` >>
-  simp[step_inst_non_invoke, step_inst_base_def]
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs]
 QED
 
 Theorem bop_arrival_cursor_revisit:

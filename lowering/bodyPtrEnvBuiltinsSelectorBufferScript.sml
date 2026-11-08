@@ -86,8 +86,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MSTORE [Var dst; value] []) s` by
     (irule ptr_inst_ok_mstore >> simp[]) >>
   `step_inst_base (mk_inst id MSTORE [Var dst; value] []) s = OK (mstore (w2n a) w s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   drule_at (Pat `step_inst_base _ _ = _`) straight_line_ptr_edge >>
   simp[mk_inst_def, is_terminator_def] >> disch_then irule >> gvs[mk_inst_def]
 QED

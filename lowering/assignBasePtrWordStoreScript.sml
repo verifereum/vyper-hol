@@ -41,8 +41,7 @@ Proof
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
   simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -104,8 +103,7 @@ Theorem assign_base_storage_word_state_frame:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_write2_def, AllCaseEqs(), sstore_def, tstore_def] >>
   rpt strip_tac >> gvs[]

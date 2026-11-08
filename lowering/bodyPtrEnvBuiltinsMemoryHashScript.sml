@@ -148,11 +148,9 @@ Theorem memory_hash_seq_checks:
 Proof
   strip_tac >>
   `step_inst_base (mk_inst lid MLOAD [Var root] [len]) s = OK u` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   `step_inst_base (mk_inst aid ADD [Var root; Lit 32w] [dst]) u = OK v` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
      gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `~is_terminator (mk_inst lid MLOAD [Var root] [len]).inst_opcode /\
    ~is_terminator (mk_inst aid ADD [Var root; Lit 32w] [dst]).inst_opcode /\
@@ -264,11 +262,9 @@ Proof
   qabbrev_tac `u = update_var len n s` >>
   qabbrev_tac `v = update_var dst (a + 32w) u` >>
   `step_inst_base (mk_inst lid MLOAD [Var root] [len]) s = OK u` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def, Abbr `u`]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def, Abbr `u`]) >>
   `step_inst_base (mk_inst aid ADD [Var root; Lit 32w] [dst]) u = OK v` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `v`] >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `v`] >>
      gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE, Abbr `u`]) >>
   `step_inst_base (mk_inst hid SHA3 [Var dst; Var len] [out]) v = OK t` by
     (qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
@@ -293,8 +289,7 @@ Proof
   conj_tac >- irule hash_output_clean >>
   `?w. t = update_var out w v` by
     (qpat_x_assum `step_inst_base (mk_inst hid _ _ _) _ = _` mp_tac >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, AllCaseEqs()] >> metis_tac[]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >> metis_tac[]) >>
   irule memory_hash_ghosts >>
   simp[Abbr `u`, Abbr `v`, Abbr `G1`, Abbr `G2`, Abbr `tn1`, Abbr `tn2`] >>
   metis_tac[]

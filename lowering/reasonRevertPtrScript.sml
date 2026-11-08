@@ -20,8 +20,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> gvs[mem_read_ops_def] >> metis_tac[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
   simp[eval_operand_def] >> metis_tac[]
 QED
 
@@ -79,8 +78,7 @@ Proof
     (gvs[ptr_covers_def] >> metis_tac[]) >>
   `?sf. step_inst_base (mk_inst c2.cs_next_id REVERT [Var start;Var len] []) s2 =
           Abort Revert_abort sf` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def] >> metis_tac[]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >> metis_tac[]) >>
   `eval_operand (Var len) s2 = SOME (4w + n)` by simp[eval_operand_def] >>
   drule_all reason_emit_revert_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] assume_tac) >>

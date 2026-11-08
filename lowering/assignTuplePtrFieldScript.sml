@@ -35,7 +35,7 @@ Proof
      simp[eval_operand_def, op_taint_def]) >>
   `!out. step_inst_base (mk_inst sa.cs_next_id ADD [Lit a; Lit b] [out]) s =
     OK (update_var out (a+b) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   drule_all (emit_op_zero_path_ptr |> Q.INST [`opc` |-> `ADD`]
     |> SRULE [is_terminator_def]) >>
   disch_then (qspec_then `PG` strip_assume_tac) >>

@@ -60,7 +60,7 @@ Theorem normalization_alloca_storage_observations:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def]
 QED
 

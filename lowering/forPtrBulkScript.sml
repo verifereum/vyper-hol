@@ -18,8 +18,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MCOPY [Var dst; Var src; count_op] []) s =
     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   `step_prov PG G (mk_inst id MCOPY [Var dst; Var src; count_op] [])
      (mcopy (w2n b) (w2n a) (w2n n) s) = G` by
     (irule (cj 1 mcopy_operand_ghost_frame) >> simp[eval_operand_def]) >>
@@ -87,8 +86,7 @@ Proof
   qexistsl [`tf`, `sf`] >> conj_tac
   >- (simp[Abbr `tf`, Abbr `sf`] >> irule for_bulk_copy_checked_seq >> simp[]) >>
   conj_tac
-  >- (simp[run_inst_seq_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      simp[mk_inst_def, eval_operand_def, Abbr `sf`]) >>
+  >- (simp[run_inst_seq_def] >> simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, Abbr `sf`]) >>
   conj_tac >- simp[Abbr `sf`, for_bulk_copy_memory_frame] >>
   simp[] >> conj_tac
   >- simp[Abbr `sf`, mcopy_def, write_memory_with_expansion_def,

@@ -19,8 +19,7 @@ Proof
        mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
        step_inst_non_invoke] >>
   simp[memory_range_of_operands_def, mem_read_ops_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[update_var_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
 QED

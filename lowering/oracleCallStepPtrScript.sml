@@ -51,7 +51,7 @@ Theorem call_step_not_Halt:
     inst.inst_operands = [gas; addr; ao; az; ro; rz])) ==>
   step_inst fuel ctx inst s <> Halt t
 Proof
-  strip_tac >> simp[step_inst_non_invoke, step_inst_base_def] >>
+  strip_tac >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs] >>
   simp[AllCaseEqs(), exec_ext_call_not_Halt] >>
   rpt strip_tac >> gvs[AllCaseEqs(), exec_ext_call_not_Halt]
 QED
@@ -143,7 +143,7 @@ Theorem call_step_exec_ext_call:
   step_inst_base inst s =
   exec_ext_call inst s gw dw (if stat then 0w else vw) aw an rw rn stat
 Proof
-  strip_tac >> simp[step_inst_base_def]
+  strip_tac >> simp[step_inst_base_opcode_eqs]
 QED
 
 Theorem call_zero_access_ok_ptr:

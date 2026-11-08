@@ -29,8 +29,7 @@ Proof
   conj_tac
   >- (conj_tac >- metis_tac[] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
   simp[eval_operand_def, AllCaseEqs(), update_var_def]
 QED
 

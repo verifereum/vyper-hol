@@ -44,7 +44,7 @@ QED
 Resume builtin_allocation_certificate[state_rel]:
   `exec_alloca (mk_inst ia ALLOCA [Lit (n2w n)] [p]) s (n2w n:256 word) = OK s1` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
   drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
   simp[mk_inst_def] >> strip_tac >>
   gvs[mk_inst_def] >> first_x_assum drule_all >> simp[]
@@ -96,14 +96,12 @@ Proof
   qabbrev_tac `s1 = mstore b 4w s` >>
   qabbrev_tac `s2 = update_var q (n2w (b+32)) s1` >>
   `step_inst_base (mk_inst il MSTORE [Var p; Lit 4w] []) s = OK s1` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, Abbr `s1`]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def, Abbr `s1`]) >>
   `lookup_var p s1 = SOME (n2w b) /\ eval_operand value s1 = SOME w` by
     (simp[Abbr `s1`, mstore_def, lookup_var_def, eval_operand_def] >>
      Cases_on `value` >> gvs[eval_operand_def, lookup_var_def]) >>
   `step_inst_base (mk_inst ip ADD [Var p; Lit 32w] [q]) s1 = OK s2` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s2`,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s2`,
           wordsTheory.word_add_n2w]) >>
   `lookup_var q s2 = SOME (n2w (b+32)) /\ eval_operand value s2 = SOME w` by
     (simp[Abbr `s2`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
@@ -111,8 +109,7 @@ Proof
        FLOOKUP_UPDATE]) >>
   `step_inst_base (mk_inst iw MSTORE [Var q; value] []) s2 =
    OK (mstore (b+32) w s2)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   `t = mstore (b+32) w s2` by gvs[run_inst_seq_def] >>
   qabbrev_tac `tn1 = step_taint (mk_inst il MSTORE [Var p; Lit 4w] []) s s1 tn` >>
   qabbrev_tac `G2 = step_prov PG G (mk_inst ip ADD [Var p; Lit 32w] [q]) s2` >>

@@ -32,7 +32,7 @@ Proof
       (update_var out (a+n2w off) s) tn`, `update_var out (a+n2w off) s`] >>
   `step_inst_base (mk_inst id ADD [Var root;offset] [out]) s =
     OK (update_var out (a+n2w off) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[run_inst_seq_def, inst_seq_ptr_def, ptr_inst_ok_copy_arith,
        copy_len_binop_ghost_frame, copy_mk_immutable_taint] >>
   conj_tac

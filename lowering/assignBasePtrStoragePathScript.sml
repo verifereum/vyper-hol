@@ -24,8 +24,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s =
    OK (update_var tmp (mload (w2n a) s) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst id MLOAD [Var src] [tmp]) s` by
     (irule ptr_inst_ok_mload >> simp[]) >>
@@ -74,8 +73,7 @@ Proof
   `step_inst_base (mk_inst id (if tr then TSTORE else SSTORE)
      [addr; value] []) s =
      OK (if tr then tstore k w s else sstore k w s)` by
-    (Cases_on `tr` >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[COND_CLAUSES, mk_inst_def, instruction_accessors,
+    (Cases_on `tr` >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, COND_CLAUSES, mk_inst_def, instruction_accessors,
                       instruction_accfupds, K_THM, opcode_case_def] >>
      simp[exec_write2_def]) >>
   gvs[] >>
@@ -146,8 +144,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `v = update_var mv (n2w (32*i)) s` >>
   `step_inst_base (mk_inst id MUL [Var ctr;Lit 32w] [mv]) s = OK v` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       K_THM, opcode_case_def] >>
      simp[Abbr `v`, exec_pure2_def, eval_operand_def] >>
      once_rewrite_tac[MULT_COMM] >> simp[word_mul_n2w]) >>
@@ -199,8 +196,7 @@ Proof
   qabbrev_tac `tf = step_taint (mk_inst id ADD [Var root;offset] [tmp]) s v tn` >>
   `op_taint tn (Var root) = {}` by gvs[bodyPtrDefsTheory.ptr_covers_def] >>
   `step_inst_base (mk_inst id ADD [Var root;offset] [tmp]) s = OK v` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       K_THM, opcode_case_def] >>
      simp[Abbr `v`, exec_pure2_def, eval_operand_def]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 gf tf
@@ -372,8 +368,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst id ADD [left;right] [out]) s =
      OK (update_var out (a+b) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       K_THM, opcode_case_def] >> simp[exec_pure2_def]) >>
   qexistsl_tac [
     `step_prov PG G (mk_inst id ADD [left;right] [out]) (update_var out (a+b) s)`,
@@ -456,8 +451,7 @@ Theorem assign_base_storage_assign_counted:
 Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst id ASSIGN [Var src] [out]) s = OK (update_var out w s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       K_THM, opcode_case_def] >> simp[eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSIGN [Var src] [out]) s` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
@@ -605,8 +599,7 @@ Proof
   qabbrev_tac `t1 = tn with t_var := tn.t_var |+ (lt,{})` >>
   `step_inst_base (mk_inst id LT [Var ctr;Lit (n2w n)] [lt]) s =
     OK (update_var lt (bool_to_word (i<n)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       K_THM, opcode_case_def] >>
      simp[exec_pure2_def, eval_operand_def, w2n_n2w, LESS_MOD]) >>
   `gas_path_ptr D 0 ctx fn PG G tn s 0 g1 t1 (OK s1)` by
@@ -615,8 +608,7 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >> gvs[op_taint_def]) >>
   `step_inst_base (mk_inst (id+1) ISZERO [Var lt] [done]) s1 =
      OK (update_var done (bool_to_word (~(i<n))) s1)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       K_THM, opcode_case_def] >>
      simp[Abbr `s1`, exec_pure1_def, eval_operand_def, lookup_var_def,
           execution_frame_def, update_var_def, FLOOKUP_UPDATE, bool_to_word_def] >> Cases_on `i<n` >> simp[]) >>
@@ -840,8 +832,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst id EQ [Var ctr;Lit (n2w n)] [done]) s =
      OK (update_var done (bool_to_word (i=n)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                       K_THM, opcode_case_def] >>
      simp[exec_pure2_def, eval_operand_def, n2w_11, LESS_MOD]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id EQ [Var ctr;Lit (n2w n)] [done]) s` by

@@ -14,7 +14,7 @@ Proof
   gvs[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
       source_memory_write_ranges_def, source_memory_read_ranges_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
@@ -31,7 +31,7 @@ Proof
   gvs[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
       source_memory_write_ranges_def, source_memory_read_ranges_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   asm_rewrite_tac[] >> pure_rewrite_tac[opcode_case_def] >>
   simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]

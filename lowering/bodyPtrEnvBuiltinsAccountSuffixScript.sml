@@ -17,8 +17,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
        step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, update_var_def, AllCaseEqs()] >>
   rpt strip_tac >> Cases_on `op = arg` >> gvs[] >>

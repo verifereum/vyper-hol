@@ -58,8 +58,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, update_var_def]
 QED
@@ -82,7 +81,7 @@ Proof
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id load [a] [out]) s` by
     (irule ptr_inst_ok_slot_load >> simp[]) >>
   drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`) straight_line_ptr_edge >>
-  gvs[mk_inst_def, is_terminator_def, step_inst_base_def,
+  gvs[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
       exec_read1_def, slot_copy_word_def]
 QED
 
@@ -117,8 +116,7 @@ Proof
   >- (rpt strip_tac >> Cases_on `op = Var p` >> gvs[] >>
       qexists_tac `Var p` >> simp[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_write2_def, eval_operand_def, AllCaseEqs(), mstore_def] >>
   rpt strip_tac >> gvs[]
@@ -172,7 +170,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id EQ [Var ctr; Lit n] [out]) s =
      OK (update_var out (bool_to_word (x = n)) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   `ptr_inst_ok D lo 0 ctx fn G tn (mk_inst id EQ [Var ctr; Lit n] [out]) s` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
           source_memory_write_ranges_def, source_memory_read_ranges_def,

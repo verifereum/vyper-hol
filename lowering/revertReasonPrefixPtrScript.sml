@@ -38,8 +38,7 @@ Proof
     gvs[ptr_covers_def, eval_operand_def] >>
   `step_inst_base j (s1 with vs_inst_idx := SUC s.vs_inst_idx) =
      OK ((mstore (w2n a) value s1) with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (simp[Abbr `j`] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, mstore_def]) >>
+    (simp[Abbr `j`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def, mstore_def]) >>
   simp[] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
   `op_taint t2 (Var out) = {}` by
@@ -116,8 +115,7 @@ Proof
   strip_tac >>
   `exec_alloca (mk_inst id ALLOCA [Lit (n2w n)] [out]) s (n2w n:bytes32) = OK s1` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def] >> strip_tac >> first_x_assum ACCEPT_TAC) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def] >> strip_tac >> first_x_assum ACCEPT_TAC) >>
   `stmt_state_rel ctx func cenv cx es s1` by
     (drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
      gvs[mk_inst_def] >> metis_tac[]) >>
@@ -150,15 +148,13 @@ Proof
   disch_then (qspec_then `value` strip_assume_tac) >>
   `step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1 =
     OK (mstore b value s1)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp[Once run_inst_seq_def] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq _ s2` >>
   `step_inst_base (mk_inst (id+2) ADD [Var out; Lit off] [p]) s2 =
      OK (update_var p (n2w b + off) s2)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def,
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
           Abbr `s2`, mstore_def, lookup_var_def]) >>
   `stmt_state_rel ctx func cenv cx es (update_var p (n2w b+off) s2)` by
     (irule stmt_state_rel_update_var >> simp[Abbr `s2`]) >>
@@ -168,8 +164,7 @@ Proof
   Cases_on `step_inst_base (mk_inst (id+3) ALLOCA [Lit sz] [q]) s3` >>
   simp[] >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ s3 = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def] >> strip_tac >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >> strip_tac >>
   drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
   gvs[mk_inst_def] >> metis_tac[]
 QED
@@ -218,8 +213,7 @@ Theorem store_offset_endpoint:
   s2 = mstore (w2n a) value s1 /\
   s3 = update_var p (a+off) s2
 Proof
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_write2_def, exec_pure2_def, eval_operand_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, exec_pure2_def, eval_operand_def] >>
   strip_tac >> gvs[mstore_def, lookup_var_def]
 QED
 
@@ -280,6 +274,12 @@ Proof
   drule_all store_offset_endpoint >> strip_tac >> gvs[] >>
   `b + off < dimword(:256) /\ b < dimword(:256) /\ off < dimword(:256)` by decide_tac >>
   gvs[lookup_var_def] >>
+  conj_tac
+  >- (simp[ptr_covers_def, step_prov_def, set_prov_def, out_prov_def,
+       first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
+       FLOOKUP_DRESTRICT, op_taint_def, step_taint_def, out_taint_def,
+       set_var_taint_def, mstore_def, update_var_def, lookup_var_def,
+       eval_operand_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac) >>
   simp[ptr_covers_def, step_prov_def, set_prov_def, out_prov_def,
        first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_UPDATE,
        FLOOKUP_DRESTRICT, op_taint_def, step_taint_def, out_taint_def,
@@ -637,7 +637,7 @@ Theorem alloca_step_data_frame:
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >-
     (strip_tac >> gvs[update_var_def]) >>
   PairCases_on `x` >> simp[] >> strip_tac >> gvs[update_var_def]
@@ -723,7 +723,7 @@ Proof
      qexistsl_tac [`id`, `w2n sz`, `out`] >> simp[] >> metis_tac[]) >>
   irule expr_val_at_allocation_frame >> qexists_tac `s` >> simp[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >-
     (strip_tac >> gnvs[] >> conj_tac >-
        (simp[local_region_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>

@@ -74,8 +74,7 @@ Proof
   conj_tac >-
     (simp[inst_seq_ptr_def] >> conj_tac >-
        (irule ptr_inst_ok_mcopy_operand >> simp[]) >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   conj_tac >-
     (gen_tac >> disch_tac >> irule mcopy_byte_clean >>
      simp[eval_operand_def]) >>
@@ -104,8 +103,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_mload >> simp[]) >>
   `step_inst_base i s = OK (update_var (STRING #"%" (toString v)) (n2w L) s)` by
-    (simp[Abbr `i`] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+    (simp[Abbr `i`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
   `op_taint t1 (Var (STRING #"%" (toString v))) = {}` by
@@ -133,8 +131,7 @@ Resume revert_reason_copy_checks[controls]:
      simp[op_taint_def] >> fs[op_taint_def]) >>
   `step_inst_base j s1 = OK
      (update_var (STRING #"%" (toString (v+1))) (n2w L+31w) s1)` by
-    (simp[Abbr `j`] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s1`,
+    (simp[Abbr `j`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s1`,
           update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
@@ -166,8 +163,7 @@ Resume revert_reason_copy_checks[rounded]:
      irule abi_encoder_round_ceil32 >> simp[]) >>
   `step_inst_base k s2 = OK (update_var (STRING #"%" (toString (v+2)))
      (n2w (contractABI$ceil32 L)) s2)` by
-    (simp[Abbr `k`] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s2`,
+    (simp[Abbr `k`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s2`,
           update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g3 t3 _ s3 _ _` >>
@@ -197,8 +193,7 @@ Resume revert_reason_copy_checks[count]:
      simp[op_taint_def] >> fs[op_taint_def]) >>
   `step_inst_base l s3 = OK (update_var (STRING #"%" (toString (v+3)))
      (n2w (32+contractABI$ceil32 L)) s3)` by
-    (simp[Abbr `l`] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s3`,
+    (simp[Abbr `l`] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def, Abbr `s3`,
           update_var_def, lookup_var_def, FLOOKUP_UPDATE, word_add_n2w]) >>
   simp[Once inst_seq_ptr_def] >>
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g4 t4 _ s4 _ _` >>
@@ -239,7 +234,7 @@ Resume revert_reason_copy_checks[copy]:
           update_var_def, lookup_var_def, FLOOKUP_UPDATE, w2n_n2w, ADD_COMM] >>
      fs[update_var_def, ADD_COMM]) >>
   `?u. step_inst_base m s4 = OK u` by
-    (simp[Abbr `m`] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+    (simp[Abbr `m`] >> asm_simp_tac bool_ss [venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
      qpat_assum `!k. k < 4 ==> _` (fn th =>
        map_every (fn k => qspec_then k assume_tac th) [`0`, `1`, `2`, `3`]) >>
      fs[lookup_var_def] >>
@@ -360,23 +355,21 @@ Proof
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp[revert_reason_copy_def] >>
   simp[Once run_inst_seq_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_read1_def, exec_pure2_def, eval_operand_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, exec_pure2_def, eval_operand_def] >>
   simp[Once run_inst_seq_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
        FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM] >>
   simp[Once run_inst_seq_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
        FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM] >>
   simp[Once run_inst_seq_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def, lookup_var_def,
        FLOOKUP_UPDATE, word_add_n2w, w2n_n2w, ADD_COMM] >>
   simp[Once run_inst_seq_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, w2n_n2w, ADD_COMM] >>
   fs[lookup_var_def] >> simp[run_inst_seq_def] >>
   disch_then (SUBST1_TAC o SYM) >> simp[mcopy_mload_prefix] >>

@@ -89,8 +89,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, venomStateTheory.update_var_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
@@ -292,27 +291,27 @@ Proof
   strip_tac >> Cases_on `loc` >> gvs[]
   >- (qexists_tac `MLOAD` >>
       simp[compile_builtin_len_def, compile_ptr_load_def, MEM, ptr_load_val_def,
-           step_inst_base_def, mk_inst_def, exec_read1_def] >>
+           step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
       conj_tac
       >- (irule (SRULE[mk_inst_def] ptr_inst_ok_mload) >> simp[]) >>
       irule (SRULE[mk_inst_def] (cj 1 mload_ghost_clean)) >> simp[])
   >- (qexists_tac `SLOAD` >>
       simp[compile_builtin_len_def, compile_ptr_load_def, MEM, ptr_load_val_def,
-           step_inst_base_def, mk_inst_def, exec_read1_def] >>
+           step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
       conj_tac
       >- (irule (SRULE[mk_inst_def] ptr_inst_ok_nonmemory_load) >> simp[]) >>
       irule (SRULE[mk_inst_def] nonmemory_load_output_clean) >>
       simp[] >> qexists_tac `w` >> simp[])
   >- (qexists_tac `TLOAD` >>
       simp[compile_builtin_len_def, compile_ptr_load_def, MEM, ptr_load_val_def,
-           step_inst_base_def, mk_inst_def, exec_read1_def] >>
+           step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
       conj_tac
       >- (irule (SRULE[mk_inst_def] ptr_inst_ok_nonmemory_load) >> simp[]) >>
       irule (SRULE[mk_inst_def] nonmemory_load_output_clean) >>
       simp[] >> qexists_tac `w` >> simp[]) >>
   qexists_tac `DLOAD` >>
   simp[compile_builtin_len_def, compile_ptr_load_def, compile_imm_load_word_def,
-       MEM, ptr_load_val_def, step_inst_base_def, mk_inst_def, exec_read1_def] >>
+       MEM, ptr_load_val_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
   conj_tac
   >- (irule (SRULE[mk_inst_def] ptr_inst_ok_nonmemory_load) >> simp[]) >>
   irule (SRULE[mk_inst_def] nonmemory_load_output_clean) >>

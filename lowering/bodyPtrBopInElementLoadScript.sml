@@ -101,8 +101,7 @@ Theorem membership_address_binop_step:
     OK (update_var out (f a b) s)
 Proof
   strip_tac >> gvs[] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def]
 QED
@@ -449,8 +448,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MLOAD [Var src] [out]) s =
      OK (update_var out (mload (w2n w) s) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
        combinTheory.K_THM, opcode_case_def] >>
      simp[exec_read1_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MLOAD [Var src] [out]) s` by

@@ -24,8 +24,7 @@ Theorem alloca_new_site_bytes_contained:
   n < dimword(:256) /\ s.vs_alloca_next < dimword(:256) ==>
   new_site_bytes s t SUBSET {i | w2n w <= i /\ i < w2n w + n}
 Proof
-  pure_once_rewrite_tac[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id`
   >- (strip_tac >> gvs[update_var_def, eval_operand_def, lookup_var_def,
         FLOOKUP_UPDATE] >>

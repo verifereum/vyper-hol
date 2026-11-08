@@ -188,8 +188,7 @@ Proof
   qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j] _ _ _` >>
   `op_taint tn (Var bas) = {}` by fs[ptr_covers_def] >>
   `step_inst_base i s = OK (update_var addr (P+n2w n) s)` by
-    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_pure2_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
@@ -218,8 +217,7 @@ QED
 
 Resume offset_add_clean_load_checks[load]:
   `step_inst_base j s1 = OK (update_var len (mload (w2n Q) s1) s1)` by
-    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_read1_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
     (simp[Abbr `j`] >> irule ptr_inst_ok_mload >> simp[]) >>
@@ -227,8 +225,7 @@ Resume offset_add_clean_load_checks[load]:
     (qpat_x_assum `run_inst_seq _ s = OK t` mp_tac >>
      simp[Once run_inst_seq_def] >>
      simp[NoAsms, run_inst_seq_def] >>
-     simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      fs[exec_read1_def, eval_operand_def, update_var_def, lookup_var_def,
         FLOOKUP_UPDATE, mload_def]) >>
   simp[inst_seq_ptr_def] >>

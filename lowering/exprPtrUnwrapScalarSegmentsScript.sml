@@ -23,7 +23,7 @@ Proof
     `step_taint (mk_inst id ASSIGN [arg] [tmp]) s (update_var tmp x s) tn`,
     `update_var tmp x s`] >>
   `step_inst_base (mk_inst id ASSIGN [arg] [tmp]) s = OK (update_var tmp x s)` by
-    simp[step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[run_inst_seq_def, inst_seq_ptr_def, ptr_inst_ok_copy_assign, copy_assign_ghost_frame] >>
   conj_tac >- metis_tac[copy_assign_ghost_frame] >>
   rpt strip_tac >> irule ptr_covers_step_frame >>

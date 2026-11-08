@@ -29,8 +29,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MCOPY [Var dst; Var src; count_op] []) s =
     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   gvs[inst_seq_ptr_def] >>
   simp[SRULE [] (cj 5 typedCopyPtrTheory.mcopy_operand_ghost_frame),
        eval_operand_def] >>
@@ -48,8 +47,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MSTORE [Var dst; value] []) s =
     OK (mstore (w2n a) w s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   gvs[inst_seq_ptr_def] >>
   simp[SRULE [] (cj 5 typedCopyPtrTheory.mstore_ghost_frame)] >>
   rpt strip_tac >> decide_tac

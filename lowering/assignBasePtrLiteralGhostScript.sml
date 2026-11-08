@@ -572,7 +572,7 @@ Proof
   `64 < dimword (:256)` by simp[dimword_def] >>
   `exec_alloca (mk_inst i ALLOCA [Lit 64w] [p]) s (64w:bytes32) = OK u` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
   ` (mk_inst i ALLOCA [Lit 64w] [p]).inst_opcode = ALLOCA /\
     (mk_inst i ALLOCA [Lit 64w] [p]).inst_operands = [Lit 64w] /\
     (mk_inst i ALLOCA [Lit 64w] [p]).inst_outputs = [p]` by simp[mk_inst_def] >>

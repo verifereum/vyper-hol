@@ -53,5 +53,5 @@ Proof
   `?t. exec_ext_call ci u (HD (s.vs_gas_readings ++ [0w]))
       addr 0w wi an wo rn T = OK t` by
     (irule computed_static_exec_ok >> simp[Abbr `ci`, mk_inst_def]) >>
-  gvs[Abbr `ci`, step_inst_base_def, mk_inst_def, eval_operand_def]
+  gvs[Abbr `ci`, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]
 QED

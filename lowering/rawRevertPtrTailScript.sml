@@ -35,7 +35,7 @@ Proof
      qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` irule >> decide_tac) >>
   `mload b s = n2w n` by fs[mem_word_at_eq_mload] >>
   `step_inst_base (mk_inst il MLOAD [Var x] [l]) s = OK (update_var l (n2w n) s)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >> simp[mk_inst_def, exec_read1_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst il MLOAD [Var x] [l]) s` by
     (irule ptr_inst_ok_mload >> simp[]) >>
   `(mk_inst il MLOAD [Var x] [l]).inst_opcode <> INVOKE /\
@@ -63,8 +63,7 @@ Resume raw_revert_bytes_path_ptr[add]:
       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   `step_inst_base (mk_inst ia ADD [Var x;Lit 32w] [p]) s1 =
     OK (update_var p (n2w b + 32w) s1)` by
-    (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1 (mk_inst ia ADD [Var x;Lit 32w] [p]) s1` by
     (irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
   `~s1.vs_halted /\ lookup_block s1.vs_current_bb fn.fn_blocks = SOME bb /\

@@ -16,8 +16,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[AllCaseEqs(), mk_inst_def] >> rpt strip_tac >> gvs[]
+  simp[step_inst_base_opcode_eqs, AllCaseEqs(), mk_inst_def] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem bop_assert_ghost:
@@ -42,8 +41,7 @@ Theorem bop_assert_success_state:
 Proof
   strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem bop_assert_counted_edge:

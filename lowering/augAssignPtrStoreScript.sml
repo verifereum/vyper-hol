@@ -24,7 +24,7 @@ Proof
     (irule ptr_inst_ok_mstore >> simp[]) >>
   `step_inst_base (mk_inst id MSTORE [Var dst; value] []) s =
     OK (mstore (w2n a) w s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def] >>
   mp_tac (Q.INST [`lo` |-> `0`, `u` |-> `mstore (w2n (a:256 word)) w s`,
     `i` |-> `mk_inst id MSTORE [Var dst; value] []`] straight_line_ptr_edge) >>
   gvs[mk_inst_def, is_terminator_def] >> strip_tac >>

@@ -14,7 +14,7 @@ Theorem assign_base_ptr_alloca_map_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >> strip_tac >> gvs[] >>
   simp[update_var_def, FLOOKUP_UPDATE] >>
   PairCases_on `x` >> gvs[update_var_def]
@@ -54,7 +54,7 @@ Theorem assign_base_alloca_existing_map_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >> strip_tac >> gvs[]
   >- (simp[update_var_def, FLOOKUP_UPDATE] >>
       Cases_on `aid = id` >> gvs[]) >>
@@ -79,7 +79,7 @@ Proof
   gvs[run_inst_seq_def, AllCaseEqs()] >> conj_tac
   >- metis_tac[assign_base_alloca_existing_map_frame] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >> simp[] >> strip_tac >>
   gvs[AllCaseEqs()] >>
   simp[local_region_def, lookup_var_update_var] >>
@@ -155,7 +155,7 @@ Proof
   `~t.vs_halted` by
     (gvs[run_inst_seq_def, AllCaseEqs()] >>
      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >> simp[] >>
      strip_tac >> gvs[AllCaseEqs(), update_var_def]) >>
   `t.vs_current_bb = s.vs_current_bb` by suspend "control" >>

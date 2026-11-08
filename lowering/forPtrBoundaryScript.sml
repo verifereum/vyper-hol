@@ -81,8 +81,7 @@ Proof
     mp_tac (Q.GENL [`i`, `u`, `lo`] straight_line_single_path_ptr) >>
   simp[GSYM mk_inst_def, is_terminator_def] >> disch_then irule >>
   simp[] >> reverse conj_tac >- (irule ptr_inst_ok_mstore >> simp[]) >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_write2_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]
 QED
 
 (* Interface audit for the remaining For port (C1.1).
@@ -163,6 +162,5 @@ Proof
     mp_tac (Q.GENL [`i`, `u`, `lo`] straight_line_single_path_ptr) >>
   simp[GSYM mk_inst_def, is_terminator_def] >> disch_then irule >>
   simp[] >> reverse conj_tac >- (irule ptr_inst_ok_mload >> simp[]) >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_read1_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]
 QED

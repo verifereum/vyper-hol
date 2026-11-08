@@ -19,8 +19,7 @@ Theorem bop_scalar_no_abort:
   step_inst_base (mk_inst id opc ops [tmp]) s <> Abort a t
 Proof
   simp[MEM] >> strip_tac >> gvs[] >>
-  PURE_ONCE_REWRITE_TAC [step_inst_base_def] >>
-  pure_rewrite_tac [mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                     combinTheory.K_THM, opcode_case_def] >>
   simp[bop_pure_no_abort, AllCaseEqs()]
 QED

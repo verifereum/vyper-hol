@@ -23,7 +23,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `step_inst_base (mk_inst id MCOPY [Var dst;Var src;count_op] []) s =
     OK (mcopy (w2n b) (w2n a) (w2n n) s)` by
-    simp[step_inst_base_def, mk_inst_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
   simp[inst_seq_ptr_def, run_inst_seq_def] >>
   conj_tac >- (irule ptr_inst_ok_mcopy_operand >> simp[]) >>
   simp[mcopy_operand_ghost_frame, eval_operand_def]
@@ -88,7 +88,7 @@ Proof
   qexists_tac `step_taint
     (mk_inst sa.cs_next_id MCOPY [Var dst;Var src;Lit (n2w n)] []) s
     (mcopy (w2n b) (w2n a) n s) tn` >>
-  fs[inst_seq_ptr_def, run_inst_seq_def, step_inst_base_def,
+  fs[inst_seq_ptr_def, run_inst_seq_def, step_inst_base_opcode_eqs,
      mk_inst_def, eval_operand_def] >>
   conj_tac >- (simp[GSYM mk_inst_def] >>
     irule ptr_inst_ok_mcopy >> simp[] >> metis_tac[]) >>

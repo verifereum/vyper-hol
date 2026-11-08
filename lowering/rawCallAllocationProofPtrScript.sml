@@ -209,8 +209,7 @@ Theorem raw_call_alloca_state_frame:
   (!aid. aid <> id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
   u.vs_returndata = s.vs_returndata
 Proof
-  PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
   >- (strip_tac >> gvs[venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   rename1 `SOME site` >> PairCases_on `site` >>

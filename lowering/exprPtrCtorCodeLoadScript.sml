@@ -46,8 +46,7 @@ Proof
        source_memory_write_ranges_def, source_memory_read_ranges_def,
        mem_read_ops_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, update_var_def]
 QED
@@ -104,7 +103,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [src; region] [out]) s =
      OK (update_var out (a + r) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   gvs[run_inst_seq_def] >>
   qexistsl [`step_prov PG G (mk_inst id ADD [src; region] [out])
       (update_var out (a + r) s)`,
@@ -148,7 +147,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ILOAD [arg] [out]) s =
     OK (update_var out (mload (w2n a) s) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_read1_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
   gvs[run_inst_seq_def] >>
   qexistsl [`step_prov PG G (mk_inst id ILOAD [arg] [out])
     (update_var out (mload (w2n a) s) s)`,
@@ -463,7 +462,7 @@ Proof
   gvs[] >> qexistsl [`Gf`, `tnf`, `mstore (w2n addr) value s`] >> simp[] >>
   `step_inst_base (mk_inst sa.cs_next_id MSTORE [Var root;v] []) s =
     OK (mstore (w2n addr) value s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
   gvs[inst_seq_ptr_def] >> gen_tac >>
   simp[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def,
        mk_inst_def, is_terminator_def] >>

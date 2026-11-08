@@ -43,8 +43,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
        step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem blockhash_clean_other_operand[local]:
@@ -71,8 +70,7 @@ Proof
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSERT [arg] []) s` by
     (irule blockhash_assert_inst_ok >> simp[]) >>
   simp[Once inst_seq_ptr_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def] >> Cases_on `eval_operand arg s` >> simp[] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >> Cases_on `eval_operand arg s` >> simp[] >>
   Cases_on `x = 0w` >> simp[] >>
   pure_rewrite_tac[GSYM mk_inst_def] >> simp[assert_ghost_unchanged] >>
   goal_assum (drule_at Any)

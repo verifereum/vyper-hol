@@ -80,8 +80,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id (if tr then TLOAD else SLOAD) [arr_op] [out]) s =
     OK (update_var out (if tr then tload bw s else sload bw s) s)` by
-    (Cases_on `tr` >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (Cases_on `tr` >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
        combinTheory.K_THM, opcode_case_def] >> simp[exec_read1_def]) >>
   simp[] >> irule append_scalar_inst_check >>
   simp[update_var_def] >> Cases_on `tr` >> simp[]
@@ -97,8 +96,7 @@ Theorem membership_code_header_operand_step:
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id DLOAD [arr_op] [out]) s = OK (update_var out value s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
        combinTheory.K_THM, opcode_case_def] >> simp[exec_read1_def]) >>
   simp[] >>
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,

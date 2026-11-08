@@ -86,7 +86,7 @@ Proof
      simp[ptrDisciplineTheory.about_to_revert_def]) >>
   simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.allocas_from_def,
     venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def, AllCaseEqs()]
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs, AllCaseEqs()]
 QED
 
 Theorem ptr_inst_ok_forward_copy:
@@ -101,7 +101,7 @@ Proof
     (irule revert_forward_access_taint >> simp[]) >>
   simp[ptrSafeRunTheory.ptr_inst_ok_def, ptrDisciplineTheory.allocas_from_def,
     venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs,
     venomStateTheory.write_memory_with_expansion_def,
     venomStateTheory.write_memory_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]

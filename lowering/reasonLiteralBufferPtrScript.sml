@@ -88,8 +88,7 @@ Proof
     (simp[ptr_covers_def, w2n_n2w] >> decide_tac) >>
   `step_inst_base (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] []) s =
      OK (mstore b (n2w (LENGTH bs)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
   drule literal_mstore_ghost >>
   disch_then (qspecl_then [`n2w (LENGTH bs)`, `tn`, `id`, `PG`, `G`]
     strip_assume_tac) >>

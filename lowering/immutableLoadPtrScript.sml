@@ -14,8 +14,7 @@ Theorem immutable_load_step:
     OK (update_var out (immutable_copy_read ctor a s) s)
 Proof
   strip_tac >> Cases_on `ctor` >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, immutable_copy_read_def]
 QED

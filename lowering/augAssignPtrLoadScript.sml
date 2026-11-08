@@ -115,7 +115,7 @@ Proof
     (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   `step_inst_base (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s =
      OK (update_var out (mload (w2n a) s) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def] >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all mload_path_ptr >> strip_tac >>
   qexistsl_tac [
@@ -255,8 +255,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_read_ranges_def, source_memory_write_ranges_def,
        op_taint_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, eval_operand_def, update_var_def]
 QED
@@ -337,7 +336,7 @@ Proof
   `step_inst_base (mk_inst sa.cs_next_id (if tr then TLOAD else SLOAD) [Lit slot] [out]) s =
      OK (update_var out (if tr then tload slot s else sload slot s) s)` by
     (Cases_on `tr` >>
-     simp[step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def]) >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by simp[] >>
   drule_all storage_load_path_ptr >> strip_tac >>
   qexistsl_tac [

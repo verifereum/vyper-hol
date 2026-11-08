@@ -33,8 +33,7 @@ Theorem for_copy_len_binop_step:
     OK (update_var tmp (f a b) s)
 Proof
   strip_tac >> gvs[] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  PURE_REWRITE_TAC[mk_inst_def, instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def]
 QED
@@ -136,8 +135,7 @@ Proof
    eval_operand (Var src) u3 = SOME a /\ eval_operand (Var dst) u3 = SOME b` by
     (simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      gvs[lookup_var_def]) >>
-  rpt conj_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  PURE_REWRITE_TAC[mk_inst_def, instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  rpt conj_tac >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, exec_pure2_def, eval_operand_def] >>
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
@@ -365,8 +363,7 @@ Proof
   qabbrev_tac `g = step_prov PG G (mk_inst id MLOAD [Var src] [tmp]) u` >>
   qabbrev_tac `t = step_taint (mk_inst id MLOAD [Var src] [tmp]) s u tn` >>
   `step_inst_base (mk_inst id MLOAD [Var src] [tmp]) s = OK u` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     PURE_REWRITE_TAC[mk_inst_def, instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+    (asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
      simp[exec_read1_def, eval_operand_def, Abbr `u`]) >>
   `~is_terminator (mk_inst id MLOAD [Var src] [tmp]).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
@@ -512,7 +509,7 @@ Proof
      (sf with vs_inst_idx := k) gf tfinal` by
     (`step_inst_base (mk_inst (id+4) MCOPY [Var dst; Var src; Var t3] []) sf =
        OK (mcopy (w2n b) (w2n a) (w2n n) sf)` by
-       (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def, eval_operand_def]) >>
+       (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def]) >>
      qpat_x_assum `step_inst_base _ sf = _` (fn th =>
        qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [_] _ _ _`
          (strip_assume_tac o SRULE [inst_seq_ptr_def, th])) >>

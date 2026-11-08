@@ -297,7 +297,7 @@ Resume reason_encoder_alloc_buffer_resources[sites]:
   rpt gen_tac >> strip_tac >>
   `FLOOKUP s.vs_allocas aid = SOME (off,len)` by
     (qpat_x_assum `step_inst_base _ s = OK t` mp_tac >>
-     simp[Once step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
      gvs[AllCaseEqs()] >> rpt strip_tac >>
      gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   qpat_x_assum `!aid b len. aid < cc.cs_next_id /\ _ ==> _` irule >>
