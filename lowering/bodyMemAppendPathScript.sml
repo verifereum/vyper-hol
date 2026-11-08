@@ -64,7 +64,11 @@ Proof
          rewrite_tac [state_frame_vars]) >>
       qpat_x_assum `state_frame u = _` (fn th => pure_once_rewrite_tac [th]) >>
       qpat_x_assum `state_frame t = _` (fn th => pure_once_rewrite_tac [th]) >>
-      Cases_on `tr` >> simp[drop_fresh_def, sstore_def, tstore_def, LET_THM]) >>
+      qpat_assum `len = w2n (if _ then tload slot (drop_fresh sa s) else _)`
+        SUBST1_TAC >>
+      Cases_on `tr` >>
+      simp_tac (srw_ss()) [drop_fresh_def, sstore_def, tstore_def, LET_THM,
+                           state_frame_def]) >>
   rpt strip_tac >>
   `eval_operand (Var x) (drop_fresh sa s) = SOME a` by
     simp[eval_operand_def, lookup_var_drop_fresh] >>
