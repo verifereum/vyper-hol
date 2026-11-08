@@ -29,15 +29,7 @@ Proof
   strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >> gvs[] >>
   `a.vs_labels = s.vs_labels` by
-    (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
-     drule emitted_insts_emit_op >> strip_tac >>
-     qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` mp_tac >>
-     qpat_assum `emitted_insts sa sm = _` (fn th => rewrite_tac[th]) >>
-     simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_def, mk_inst_def,
-       eval_operand_def, exec_alloca_def] >>
-     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
-     >- (simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
-     PairCases_on `x` >> simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
+    (drule_all exprSimAllocTheory.hash_alloc_buffer_labels >> simp[]) >>
   `eval_operand src a = SOME sw` by
     (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
   `n < dimword (:256)` by decide_tac >>
