@@ -2000,13 +2000,29 @@ Proof
   rpt strip_tac >> metis_tac[native_seeded_suffix_prefix_available]
 QED
 
+(* Parameter positivity depends only on the empty input stack, not on
+   cleanup heights/promises or the input spill map. *)
+Theorem ready_empty_stack_parameter_coverage:
+  !fn ps.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\ ps.ps_stack = [] ==>
+    EVERY (\v. MEM (Var v) (SND (prepare_params_plan (liveness_analyze fn) fn ps)).ps_stack)
+      (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnPlanLineageSetupTheory.ready_parameter_names_distinct >> strip_tac >>
+  drule_all fnPlanLineageDemandTheory.post_parameter_demand_ready >> strip_tac >>
+  qspecl_then [`liveness_analyze fn`,`fn`,`ps`] mp_tac prepare_params_plan_inventory >>
+  simp[] >> simp[EVERY_MEM, MEM_MAP] >> metis_tac[]
+QED
+
+(* General empty-stack input includes every cleanup override of initialization. *)
 Theorem initialized_entry_block_available:
-  !fn dfg ch growth spill_base lbl_ctr param_ops incoming block_ops after.
-    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
-    prepare_params_plan (liveness_analyze fn) fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr) = (param_ops,incoming) /\
+  !fn dfg initial param_ops incoming block_ops after.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\ initial.ps_stack = [] /\
+    prepare_params_plan (liveness_analyze fn) fn initial = (param_ops,incoming) /\
     generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
-      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+      (HD fn.fn_blocks) initial =
         SOME (block_ops,after) ==>
     (!v. MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
       (LENGTH (HD fn.fn_blocks).bb_instructions)) ==>
@@ -2033,7 +2049,7 @@ Proof
   `!v. MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
       (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
       MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled` by
-    (qspecl_then [`fn`,`ch`,`growth`,`spill_base`,`lbl_ctr`] mp_tac native_parameter_coverage >>
+    (qspecl_then [`fn`,`initial`] mp_tac ready_empty_stack_parameter_coverage >>
      simp[EVERY_MEM]) >>
   drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
     native_ready_seeded_worker_available >>
@@ -2149,4 +2165,55 @@ Proof
     native_ready_seeded_worker_available >>
   disch_then (qspecl_then [`LENGTH (collect_phis bb.bb_instructions)`,`seed`] mp_tac) >>
   simp[] >> metis_tac[]
+QED
+
+
+(* The setup equation exposes the actual worker start, including arbitrary
+   incoming cleanup bookkeeping. No execution is selected by this interface. *)
+Theorem incoming_edge_block_available:
+  !fn entry lbl pred bb pb dfg incoming before pred_ops pred_after setup_ops start block_ops after.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    fn_reachable fn lbl /\ lbl <> entry /\
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb before =
+      SOME (pred_ops,pred_after) /\
+    EVERY (\v. MEM (Var v) pred_after.ps_stack \/ Var v IN FDOM pred_after.ps_spilled)
+      (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) /\
+    incoming.ps_stack = pred_after.ps_stack /\ incoming.ps_spilled = pred_after.ps_spilled /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming
+     else ([],incoming)) = (setup_ops,start) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb incoming =
+      SOME (block_ops,after) ==>
+    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
+      MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) /\
+    (!k ps v. LENGTH (collect_phis bb.bb_instructions) <= k /\
+      k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) start k ps /\
+      MEM (Var v) (compute_operands
+        (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb <> HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def] >>
+     metis_tac[venomExecPropsTheory.lookup_block_label]) >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) lbl)` by
+    metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1`
+  >- (`cfg_preds_of (cfg_analyze fn) lbl = [pred]` by
+        (gvs[LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+      `clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming =
+        (setup_ops,start)` by gvs[] >>
+      metis_tac[incoming_singleton_block_available]) >>
+  `1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl)` by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  `start = incoming` by gvs[] >> gvs[] >>
+  metis_tac[incoming_join_block_available, arithmeticTheory.ADD_COMM]
 QED
