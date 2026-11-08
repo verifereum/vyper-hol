@@ -3,7 +3,8 @@ Theory bodyMemSliceExtcode
 Ancestors
   exprSimSliceExtcode builtinBytesMemory fragGasSeqMem
   emitHelper emitHelperProps compileEnv exprLoweringProps fragExecMem instMemFrontier
-  venomExecSemantics venomInst venomState list
+  venomExecSemantics venomInst venomState list exprSimSliceMemory memSafeRun loweringHalt
+  exprSimSliceExtcodeContinue exprSimMemUnwrap venomMemDefs context
 
 Theorem slice_extcode_copy_store_mem_ok:
   emit_void EXTCODECOPY [addr;dst;start;len] sa = ((),sm) /\
@@ -65,4 +66,43 @@ Proof
     (rpt strip_tac >> first_x_assum irule >> rpt strip_tac >>
      gvs[] >> metis_tac[]) >>
   qexistsl_tac [`a`,`b`,`d`,`n`,`p`] >> simp[]
+QED
+
+Theorem slice_out_buf_mem_ok:
+  compile_slice_out_buf sz sa = ((out,data),sb) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> drule slice_out_buf_decompose >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  qpat_x_assum `emitted_insts sa sb = _` SUBST1_TAC >>
+  drule compile_alloc_buffer_insts >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
+  irule run_inst_seq_mem_ok_every >>
+  simp[below_frontier_no_ranges, mk_inst_def]
+QED
+
+Theorem slice_out_buf_path_mem:
+  compile_slice_out_buf sz sa = ((out,data),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  gas_path_mem ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >> drule slice_extcode_out_control >> strip_tac >>
+  `same_blocks sa sb` by
+    (qpat_x_assum `compile_slice_out_buf _ _ = _` mp_tac >>
+     simp[builtinBytesTheory.compile_slice_out_buf_def,
+          compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+          same_blocks_def] >> strip_tac >> gvs[]) >>
+  irule straight_path_mem >> simp[] >> qexists_tac `sa` >> simp[] >>
+  conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  irule slice_out_buf_mem_ok >> goal_assum (drule_at Any)
 QED
