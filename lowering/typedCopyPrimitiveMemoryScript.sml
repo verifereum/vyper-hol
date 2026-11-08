@@ -1,10 +1,11 @@
 (* Joint execution and memory safety for typed-copy primitives. *)
 Theory typedCopyPrimitiveMemory
 Ancestors
-  typedMemoryCopy fragExecMem instMemFrontier memSafeRun
+  typedMemoryCopy fragExecMem instMemFrontier memSafeRun bodyCopyMemory immutableMemoryFrame
   context compileEnv emitHelper emitHelperProps exprLoweringProps
   venomExecSemantics venomInst venomState venomMemDefs
-  exprSimProps valueEncoding valueEncodingProps valueEncodingProofs words list rich_list finite_map arithmetic
+  exprSimProps valueEncoding valueEncodingProps valueEncodingProofs valueCopy
+  words list rich_list finite_map arithmetic
 
 Theorem typed_copy_empty_frag_mem:
   val_in_memory tv v off s0.vs_memory ==>
@@ -63,4 +64,51 @@ Proof
   simp[typed_copy_word_state_frame] >>
   drule_all exprSimPropsTheory.val_in_memory_word >> strip_tac >>
   simp[mstore_mem_word_at_same, GSYM mem_word_at_eq_mload]
+QED
+
+Theorem typed_copy_dynamic_frag_mem:
+  compile_copy_memory_dynamic dst src len sa = ((),sb) /\
+  eval_operand dst s0 = SOME d /\ eval_operand src s0 = SOME a /\
+  eval_operand len s0 = SOME w /\
+  val_in_memory tv v (w2n a) s0.vs_memory /\ val_wf tv v /\
+  val_footprint tv v <= w2n w /\ w2n w <= type_memory_size tv /\
+  w2n a + w2n w <= s0.vs_alloca_next /\
+  w2n d + w2n w <= s0.vs_alloca_next ==>
+  frag_exec_mem ctx sa sb (\s. s = s0)
+    (\t. val_in_memory tv v (w2n d) t.vs_memory /\
+         typed_copy_state_frame sa (w2n d) (type_memory_size tv) s0 t) (\r. F)
+Proof
+  strip_tac >> drule_all typed_copy_dynamic_run_seq >> strip_tac >>
+  irule fragExecMemTheory.frag_exec_mem_run_inst_seq >>
+  gvs[same_blocks_def] >> simp[] >> conj_tac
+  >- (qpat_x_assum `compile_copy_memory_dynamic _ _ _ _ = _` mp_tac >>
+      simp[compile_copy_memory_dynamic_def] >> strip_tac >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      simp[run_inst_seq_mem_ok_last, below_frontier_MCOPY]) >>
+  conj_tac >- (irule mcopy_val_in_memory >> simp[]) >>
+  irule typed_copy_state_frame_subinterval >>
+  qexistsl_tac [`w2n d`, `w2n w`] >> simp[typed_copy_mcopy_state_frame]
+QED
+
+Theorem typed_copy_fixed_frag_mem:
+  compile_copy_memory dst src n sa = ((),sb) /\
+  eval_operand dst s0 = SOME d /\ eval_operand src s0 = SOME a /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\ n < dimword (:256) /\
+  val_in_memory tv v (w2n a) s0.vs_memory /\ val_wf tv v /\
+  val_footprint tv v <= n /\ n <= type_memory_size tv /\
+  w2n a + n <= s0.vs_alloca_next /\ w2n d + n <= s0.vs_alloca_next ==>
+  frag_exec_mem ctx sa sb (\s. s = s0)
+    (\t. val_in_memory tv v (w2n d) t.vs_memory /\
+         typed_copy_state_frame sa (w2n d) (type_memory_size tv) s0 t) (\r. F)
+Proof
+  Cases_on `n = 0` >> strip_tac
+  >- (gvs[compile_copy_memory_def, comp_return_def] >>
+      irule frag_exec_mem_refl >> simp[] >>
+      irule val_in_memory_relocate >> simp[] >>
+      qexistsl_tac [`w2n a`, `0`, `s0.vs_memory`] >> simp[mem_bytes_at_def]) >>
+  `compile_copy_memory_dynamic dst src (Lit (n2w n)) sa = ((),sb)` by
+    (Cases_on `n` >> gvs[compile_copy_memory_def, compile_copy_memory_dynamic_def]) >>
+  irule typed_copy_dynamic_frag_mem >> simp[] >>
+  goal_assum (drule_at (Pat `compile_copy_memory_dynamic _ _ _ _ = _`)) >>
+  qexistsl_tac [`a`, `n2w n`] >> simp[eval_operand_def, w2n_n2w, LESS_MOD]
 QED
