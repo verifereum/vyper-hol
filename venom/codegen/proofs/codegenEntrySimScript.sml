@@ -303,8 +303,8 @@ Theorem codegen_entry_asm_sim:
          (entry_asm_state vs es) = AsmFault as')) /\
          venom_asm_terminal_rel vs' as')
 Proof
-  rpt strip_tac >>
-  `initial_ctx_rel_tail [] cp prog unit.cu_context vs es` by
-    fs[initial_ctx_rel_def] >>
-  drule_all codegen_entry_asm_sim_tail >> simp[]
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`fuel`, `rpolicy`, `unit`, `cp`, `prog`, `Inv`, `vs`, `es`, `[]`]
+    mp_tac codegen_entry_asm_sim_tail >>
+  simp[GSYM initial_ctx_rel_def]
 QED
