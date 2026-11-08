@@ -17,7 +17,7 @@ Theorem emit_op_SHA3_correct:
 Proof
   rpt strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+  simp[run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
        eval_operand_update_var] >>
   drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
   conj_tac >- (irule fresh_vars_wrt_advance >> simp[] >>

@@ -671,7 +671,7 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s0 =
    exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s0
      (n2w sz : bytes32)` by
-    simp[step_inst_base_def, venomInstTheory.mk_inst_def] >>
+    simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def] >>
   qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
   `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w sz)] /\
    A.inst_outputs = [p] /\ A.inst_id = st.cs_next_id` by
@@ -1242,7 +1242,7 @@ Theorem compile_safe_add_runtime_error:
 Proof
   rpt gen_tac >> strip_tac >>
   `bounded_int_op (Unsigned 256) (i1 + i2) = INR err` by
-    fs[evaluate_binop_def] >>
+    fs[Q.SPECL [`v2`, `v1`, `u`, `tv`, `Add`] evaluate_binop_def |> CONV_RULE (RHS_CONV (SIMP_CONV (srw_ss()) []))] >>
   conj_tac >- (qpat_x_assum `bounded_int_op _ _ = _` mp_tac >>
                rw[bounded_int_op_def]) >>
   `dimword (:256) <=

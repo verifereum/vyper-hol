@@ -604,7 +604,7 @@ Triviality step_iszero_con[local]:
     step_inst_base (instruction iid ISZERO [input_op] [out]) s =
     OK (update_var out (bool_to_word (v = 0w)) s)
 Proof
-  rw[step_inst_base_def, exec_pure1_def, update_var_def]
+  rw[venomExecSemanticsTheory.step_inst_base_opcode_eqs, exec_pure1_def, update_var_def]
 QED
 
 Triviality step_assign_con[local]:
@@ -613,7 +613,7 @@ Triviality step_assign_con[local]:
     step_inst_base (instruction iid ASSIGN [src_op] [out]) s =
     OK (update_var out v s)
 Proof
-  rw[step_inst_base_def, exec_pure1_def, update_var_def]
+  rw[venomExecSemanticsTheory.step_inst_base_opcode_eqs, exec_pure1_def, update_var_def]
 QED
 
 (*
@@ -873,7 +873,7 @@ Triviality step_or_con[local]:
     step_inst_base (instruction iid OR [op1; op2] [out]) s =
     OK (update_var out (word_or v1 v2) s)
 Proof
-  rw[step_inst_base_def, exec_pure2_def, update_var_def]
+  rw[venomExecSemanticsTheory.step_inst_base_opcode_eqs, exec_pure2_def, update_var_def]
 QED
 
 (* IS_SOME(eval_operand) is preserved by safe_between steps *)
@@ -970,7 +970,7 @@ Theorem step_assert_ok:
     step_inst fuel ctx inst s = OK s
 Proof
   rpt strip_tac >> gvs[] >>
-  Cases_on `inst` >> gvs[step_inst_non_invoke, step_inst_base_def]
+  Cases_on `inst` >> gvs[step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs]
 QED
 
 Theorem step_assert_abort:
@@ -981,7 +981,7 @@ Theorem step_assert_abort:
       Abort Revert_abort (revert_state (set_returndata [] s))
 Proof
   rpt strip_tac >> gvs[] >>
-  Cases_on `inst` >> gvs[step_inst_non_invoke, step_inst_base_def]
+  Cases_on `inst` >> gvs[step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs]
 QED
 
 (* ===== run_insts FOLDL equivalence ===== *)
@@ -1055,7 +1055,7 @@ Proof
   (* Step 4: Compute the OR+ISZERO+ASSERT chain directly *)
   `step_inst fuel ctx or_inst s_mid =
    OK (update_var or_v (word_or v1 v2) s_mid)` by (
-    Cases_on `or_inst` >> gvs[step_inst_non_invoke, step_inst_base_def,
+    Cases_on `or_inst` >> gvs[step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
                                 exec_pure2_def, update_var_def]) >>
   qabbrev_tac `s_or = update_var or_v (word_or v1 v2) s_mid` >>
   `eval_operand (Var or_v) s_or = SOME (word_or v1 v2)` by
@@ -1063,7 +1063,7 @@ Proof
          finite_mapTheory.FLOOKUP_UPDATE] >>
   `step_inst fuel ctx iz_inst s_or =
    OK (update_var iz_v (bool_to_word (word_or v1 v2 = 0w)) s_or)` by (
-    Cases_on `iz_inst` >> gvs[step_inst_non_invoke, step_inst_base_def,
+    Cases_on `iz_inst` >> gvs[step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
                                 exec_pure1_def, update_var_def]) >>
   `word_or v1 v2 <> 0w` by (CCONTR_TAC >> gvs[word_or_eq_0w]) >>
   `bool_to_word (word_or v1 v2 = 0w) = 0w` by
@@ -2709,10 +2709,10 @@ Proof
       Cases_on `eval_operand op s` >- fs[] >>
       Cases_on `x = 0w`
       >- (DISJ1_TAC >>
-          simp[run_insts_def, step_inst_non_invoke, step_inst_base_def,
+          simp[run_insts_def, step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
                execution_equiv_refl])
       >- (DISJ2_TAC >>
-          simp[run_insts_def, step_inst_non_invoke, step_inst_base_def,
+          simp[run_insts_def, step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
                revert_returndata_exec_equiv_UNIV, execution_equiv_refl] >>
           metis_tac[ac_chain_inv_identity_transfer])
     )
@@ -2782,12 +2782,12 @@ Proof
       Cases_on `cval = 0w`
       >- (
         DISJ1_TAC >>
-        simp[run_insts_def, step_inst_non_invoke, step_inst_base_def,
+        simp[run_insts_def, step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
              execution_equiv_refl]
       )
       >- (
         DISJ2_TAC >>
-        simp[run_insts_def, step_inst_non_invoke, step_inst_base_def,
+        simp[run_insts_def, step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
              revert_returndata_exec_equiv_UNIV, execution_equiv_refl] >>
         metis_tac[ac_chain_inv_same_preds_mp_step_id]
       )

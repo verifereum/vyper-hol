@@ -105,7 +105,7 @@ Theorem mk_nop_inst_correct:
 Proof
   rpt gen_tac >>
   `(mk_nop_inst inst).inst_opcode <> INVOKE` by simp[mk_nop_inst_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_nop_inst_def]
+  simp[step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_nop_inst_def]
 QED
 
 Theorem mk_assign_inst_correct:
@@ -115,7 +115,7 @@ Theorem mk_assign_inst_correct:
     step_inst fuel ctx (mk_assign_inst inst src_op) s =
       OK (update_var out v s)
 Proof
-  rw[mk_assign_inst_def, step_inst_def, step_inst_base_def] >> rw[]
+  rw[mk_assign_inst_def, step_inst_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs] >> rw[]
 QED
 
 (* ===================================================================== *)
