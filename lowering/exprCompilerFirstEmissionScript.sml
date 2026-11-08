@@ -284,19 +284,15 @@ Resume first_emission_expr_compilers[pop]:
 QED
 
 Resume first_emission_expr_compilers[rawlog]:
-  simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
-  ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-      drule_at (Pos (el 2)) (cj 1 first_emission_emit_helpers) >> simp[]) >>
-  simp[cs_extends_refl]
+  match_mp_tac first_emission_rawlog_call >>
+  fs[Excl "expr_child_callback_def", Excl "builtin_child_callback_def",
+     Excl "type_child_callback_def", SF ETA_ss] >> metis_tac[]
 QED
 
 Resume first_emission_expr_compilers[rawrevert]:
-  simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
-  ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (ho_match_mp_tac first_emission_strong >> rpt gen_tac >> strip_tac >>
-      drule_at (Pos (el 2)) (cj 1 first_emission_emit_helpers) >> simp[]) >>
-  simp[cs_extends_refl]
+  match_mp_tac first_emission_rawrevert_call >>
+  fs[Excl "expr_child_callback_def", Excl "builtin_child_callback_def",
+     Excl "type_child_callback_def", SF ETA_ss] >> metis_tac[]
 QED
 
 Resume first_emission_expr_compilers[selfdestruct]:

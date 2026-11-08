@@ -141,17 +141,19 @@ Proof
      irule entry_code_bind >> simp[entry_code_emit_void, entry_code_emit_inst]) >>
   fs[compileEnvTheory.comp_ignore_bind_def] >>
   simp[compile_external_call_kwargs_def, compileEnvTheory.comp_ignore_bind_def] >>
-  rpt (irule entry_code_bind >> reverse conj_tac
-    >- (simp[entry_code_alloc_buffer, entry_code_emit_void, entry_code_emit_op,
-             entry_code_fresh_label, entry_code_emit_inst, entry_code_new_block] >>
-        IF_CASES_TAC >> simp[entry_code_extcodesize_check, entry_code_return,
-                            entry_code_emit_op]) >>
-    rpt gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >> simp[entry_code_return] >>
-  (rpt (irule entry_code_bind >> reverse conj_tac
-     >- simp[entry_code_alloc_buffer, entry_code_return_value_decode,
-             entry_code_decode_to_buf] >> rpt gen_tac >> BETA_TAC) >>
-   simp[entry_code_default_return_path, entry_code_return])
+  let
+    val boundaries = [entry_code_extcall_store_values, entry_code_encode_to_buf,
+      entry_code_return, entry_code_emit_op,
+      entry_code_emit_void, entry_code_emit_inst, entry_code_fresh_label,
+      entry_code_new_block, entry_code_alloc_buffer, entry_code_extcodesize_check,
+      entry_code_return_value_decode, entry_code_decode_to_buf,
+      entry_code_default_return_path];
+    fun preserve_tac g =
+      (FIRST [FIRST_PROVE [simp boundaries],
+        irule entry_code_bind >> reverse conj_tac
+          >- preserve_tac >> rpt gen_tac >> BETA_TAC >> preserve_tac,
+        IF_CASES_TAC >> preserve_tac]) g;
+  in preserve_tac end
 QED
 
 Theorem entry_code_fresh_vars[local]:

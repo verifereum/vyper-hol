@@ -4,7 +4,7 @@ Ancestors
   exprValueFirstEmission contextFirstEmission compilerFirstEmission
   entryConditionalFirstEmission abiEncoderFirstEmission abiEncoderAppend
   abiDecoderAppend exprLowering fragExec compileEnv emitHelper
-  venomInst context builtinSimple builtinPrefixFirstEmission
+  venomInst context builtinSimple builtinPrefixFirstEmission builtinSystem exprAggregateFirstEmission
 
 fun call_emit_tac g =
   (rpt gen_tac >> strip_tac >>
@@ -830,4 +830,69 @@ Proof
   Cases_on `compile_create_call cfn ce ck has_salt rof args a` >>
   simp_tac bool_ss [as_stack_val_def] >> strip_tac >>
   gvs[] >> drule_all first_emission_create_call >> simp[]
+QED
+
+(* Current logging/revert calls evaluate their inputs before emitting. *)
+fun call_pair_first_tac g =
+  (FIRST [FIRST_PROVE [simp[cs_extends_refl]],
+    ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (FIRST [ho_match_mp_tac first_emission_strong >> call_emit_tac,
+                 match_mp_tac first_emission_multi_exprs >> metis_tac[],
+                 match_mp_tac first_emission_lower_value >> metis_tac[],
+                 rewrite_tac[compile_alloc_buffer_def] >> call_weak_tac,
+                 rewrite_tac[compile_raw_revert_def] >> call_weak_tac]) >>
+      gen_tac >> call_pair_first_tac,
+    IF_CASES_TAC >> call_pair_first_tac]) g;
+
+Theorem first_emission_rawlog_call:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_call cfn ce rt ty RawLog args default_ret a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Cases_on `args`
+  >- (simp_tac (srw_ss()) [compile_call_def, LET_THM] >> call_pair_first_tac) >>
+  Cases_on `t`
+  >- (simp_tac (srw_ss()) [compile_call_def, LET_THM] >> call_pair_first_tac) >>
+  Cases_on `t'`
+  >- (simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
+      ho_match_mp_tac first_emission_pair_let >> conj_tac
+      >- (match_mp_tac first_emission_multi_exprs >> metis_tac[]) >>
+      gen_tac >> Cases_on `expr_type h' = BaseT (BytesT (Fixed 32))` >>
+      asm_simp_tac (srw_ss()) [] >> call_pair_first_tac) >>
+  Cases_on `t`
+  >- (simp_tac (srw_ss()) [compile_call_def, LET_THM] >> call_pair_first_tac) >>
+  simp_tac (srw_ss()) [compile_call_def, LET_THM] >> call_pair_first_tac
+QED
+
+Theorem first_emission_rawrevert_call:
+  (!ce ty e a x b. cfn ce ty e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_call cfn ce rt ty RawRevert args default_ret a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  strip_tac >> Cases_on `args`
+  >- (simp_tac (srw_ss()) [compile_call_def, LET_THM] >> call_pair_first_tac) >>
+  Cases_on `t` >> simp_tac (srw_ss()) [compile_call_def, LET_THM] >>
+  call_pair_first_tac
 QED

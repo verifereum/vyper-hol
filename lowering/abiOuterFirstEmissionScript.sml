@@ -3,7 +3,7 @@ Theory abiOuterFirstEmission
 Ancestors
   compilerFirstEmission abiEncoderAppend abiDecoderAppend builtinAbi
   exprValueFirstEmission exprAggregateFirstEmission exprLowering contextFirstEmission guardedCallbackFirstEmission
-  fragExec compileEnv emitHelper venomInst context
+  fragExec compileEnv emitHelper venomInst context exprCallFirstEmission
 
 fun abi_outer_append_tac g =
   (FIRST [FIRST_PROVE [asm_simp_tac (srw_ss())
@@ -129,6 +129,40 @@ fun abi_alloc_suffix_tac g =
       rpt gen_tac >> MATCH_ACCEPT_TAC abi_outer_encode_ptr_appends) >>
    fs[cs_appends_def]) g;
 
+Theorem first_emission_abi_encode_args:
+  !es.
+  (!e a x b. MEM e es /\ cfn ce (expr_type e) e a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))) ==>
+  !a x b. compile_abi_encode_args cfn ce es a = (x,b) ==>
+    cs_extends a b /\
+    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
+      a.cs_current_insts = b.cs_current_insts) \/
+     (!fn. fn_has_code a b fn ==>
+       ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
+Proof
+  Induct
+  >- (simp_tac bool_ss [compile_abi_encode_args_def] >>
+      metis_tac[first_emission_return]) >>
+  gen_tac >> strip_tac >>
+  simp_tac bool_ss [compile_abi_encode_args_def] >>
+  ho_match_mp_tac first_emission_bind >> conj_tac
+  >- metis_tac[listTheory.MEM] >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (IF_CASES_TAC
+      >- (ho_match_mp_tac first_emission_strong >>
+          MATCH_ACCEPT_TAC first_emission_materialize_vv) >>
+      MATCH_ACCEPT_TAC first_emission_unwrap_value) >>
+  gen_tac >> ho_match_mp_tac first_emission_bind >> conj_tac
+  >- (first_x_assum match_mp_tac >> metis_tac[listTheory.MEM]) >>
+  gen_tac >> metis_tac[first_emission_return]
+QED
+
 Theorem first_emission_type_abi_encode:
   (!e a x b. MEM e args /\ cfn ce (expr_type e) e a = (x,b) ==>
     cs_extends a b /\
@@ -159,7 +193,7 @@ Proof
       >- MATCH_ACCEPT_TAC first_emission_unwrap_value >>
       gen_tac >> MATCH_ACCEPT_TAC abi_outer_encode_ptr) >>
   ho_match_mp_tac first_emission_pair_let >> conj_tac
-  >- (match_mp_tac first_emission_multi_exprs >> first_assum ACCEPT_TAC) >>
+  >- (match_mp_tac first_emission_abi_encode_args >> first_assum ACCEPT_TAC) >>
   abi_alloc_suffix_tac
 QED
 

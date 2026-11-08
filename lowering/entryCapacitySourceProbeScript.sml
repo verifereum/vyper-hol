@@ -16,9 +16,12 @@ Proof
   strip_tac >>
   `fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, ss)` by
     metis_tac[lower_vyper_runtime_unit_allocs_ok] >>
-  drule_all fn_allocs_ok_body >>
-  simp[listTheory.EVERY_MEM] >>
-  strip_tac >> first_x_assum drule >> simp[]
+  `type_memory_bytes cenv =
+   type_memory_bytes (build_compile_env tops Internal mut fname fargs ret ss F)` by
+    (irule compileEnvTheory.type_memory_bytes_frame >>
+     simp[build_compile_env_ce_struct_fields]) >>
+  gvs[fn_allocs_ok_def, LET_THM, listTheory.EVERY_MEM] >>
+  first_x_assum drule >> simp[]
 QED
 
 Theorem lowered_external_parameter_nonwrap:
