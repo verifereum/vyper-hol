@@ -841,6 +841,61 @@ Proof
   fs[typed_copy_effect_def] >> metis_tac[]
 QED
 
+(* A counted child supplies the semantic read and both runtime layouts.
+   This boundary is independent of literal allocation and destination code. *)
+Theorem intcall_child_read_layout:
+  vv_post ctx func ce cx e es si sm t
+    (mid with gas_obs := []) raw vv q /\
+  gas_marked_exec F (ctx,func) (eval_expr cx e) (es,t) marks (INL raw) mid (OK q) /\
+  expr_body_pre ce cx env e es /\ expr_sim_inv ce cx env es /\
+  type_widens_to env.type_defs (expr_type e) dty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME stv ==>
+  ?v. (!tail. read_result cx raw (mid with gas_obs := tail) =
+          (INL v,mid with gas_obs := tail)) /\
+    value_has_type dtv v /\ value_has_type stv v /\
+    MAP FDOM es.scopes = MAP FDOM mid.scopes
+Proof
+  rpt strip_tac >>
+  `?v. read_result cx raw (mid with gas_obs := []) =
+       (INL v,mid with gas_obs := [])` by
+    metis_tac[exprSimAggregateSourceTheory.vv_post_materialises] >>
+  `!tail. read_result cx raw (mid with gas_obs := tail) =
+       (INL v,mid with gas_obs := tail)` by
+    (drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[]) >>
+  `vyperState$bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := gas_explicit marks t.vs_gas_readings) =
+     (INL v,mid with gas_obs := [])` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     qpat_x_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     simp[vyperStateTheory.bind_def]) >>
+  `value_runtime_typed env (post_value_type ce e) v /\
+   value_runtime_typed env dty v` by
+    (fs[GSYM vyperStateTheory.bind_def] >>
+     `expr_body_pre ce cx env e
+       (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
+     conj_tac
+     >- metis_tac[exprSimHypsTheory.memory_rhs_read_post_typed] >>
+     metis_tac[memoryLocalRhsPropsTheory.memory_rhs_read_destination_typed]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qspecl_then [`cx`, `e`,
+       `es with gas_obs := gas_explicit marks t.vs_gas_readings`,
+       `INL v`, `mid with gas_obs := []`] mp_tac
+       exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >>
+     impl_tac
+     >- (fs[gasSummaryTheory.gas_marked_exec_def] >>
+         qpat_x_assum `!tail. eval_expr _ _ _ = _`
+           (qspec_then `[]` mp_tac) >>
+         simp[vyperStateTheory.bind_def]) >> simp[]) >>
+  qexists_tac `v` >> simp[] >> conj_tac
+  >- (qpat_assum `value_runtime_typed env dty v`
+        (mp_then Any mp_tac memoryLocalRhsPropsTheory.memory_rhs_runtime_layout) >>
+      disch_then drule_all >> strip_tac >> gvs[]) >>
+  qpat_assum `value_runtime_typed env (post_value_type ce e) v`
+    (mp_then Any mp_tac memoryLocalRhsPropsTheory.memory_rhs_runtime_layout) >>
+  disch_then drule_all >> strip_tac >> gvs[]
+QED
+
 Theorem intcall_counted_child_store:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   intcall_expr_producer fp e /\
@@ -909,45 +964,8 @@ Proof
      (mid with gas_obs := []) raw vv q` by
     (fs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
      metis_tac[]) >>
-  `?v. read_result fp.jc_cx raw (mid with gas_obs := []) =
-       (INL v,mid with gas_obs := [])` by
-    metis_tac[exprSimAggregateSourceTheory.vv_post_materialises] >>
-  `!tail. read_result fp.jc_cx raw (mid with gas_obs := tail) =
-       (INL v,mid with gas_obs := tail)` by
-    (drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[]) >>
-  `vyperState$bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
-     (es with gas_obs := gas_explicit marks t.vs_gas_readings) =
-     (INL v,mid with gas_obs := [])` by
-    (fs[gasSummaryTheory.gas_marked_exec_def] >>
-     qpat_x_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     simp[vyperStateTheory.bind_def]) >>
-  `value_runtime_typed env (post_value_type ce e) v /\
-   value_runtime_typed env dty v` by
-    (fs[GSYM vyperStateTheory.bind_def] >>
-     `expr_body_pre ce fp.jc_cx env e
-       (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
-     conj_tac
-     >- metis_tac[exprSimHypsTheory.memory_rhs_read_post_typed] >>
-     metis_tac[memoryLocalRhsPropsTheory.memory_rhs_read_destination_typed]) >>
-  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
-    (qspecl_then [`fp.jc_cx`, `e`,
-       `es with gas_obs := gas_explicit marks t.vs_gas_readings`,
-       `INL v`, `mid with gas_obs := []`] mp_tac
-       exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >>
-     impl_tac
-     >- (fs[gasSummaryTheory.gas_marked_exec_def] >>
-         qpat_x_assum `!tail. eval_expr _ _ _ = _`
-           (qspec_then `[]` mp_tac) >>
-         simp[vyperStateTheory.bind_def]) >> simp[]) >>
-  `value_has_type dtv v /\ value_has_type stv v` by
-    (`expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
-     conj_tac
-     >- (qpat_assum `value_runtime_typed env dty v`
-           (mp_then Any mp_tac memoryLocalRhsPropsTheory.memory_rhs_runtime_layout) >>
-         disch_then drule_all >> strip_tac >> gvs[]) >>
-     qpat_assum `value_runtime_typed env (post_value_type ce e) v`
-       (mp_then Any mp_tac memoryLocalRhsPropsTheory.memory_rhs_runtime_layout) >>
-     disch_then drule_all >> strip_tac >> gvs[]) >>
+  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
+  drule_all intcall_child_read_layout >> strip_tac >>
   `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by simp[] >>
   drule_at (Pat `intcall_expr_cont _ _ _ es si t _ sm q`)
     intcall_expr_cont_root >>
