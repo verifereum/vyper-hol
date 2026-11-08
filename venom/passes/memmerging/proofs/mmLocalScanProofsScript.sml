@@ -2148,6 +2148,127 @@ Proof
   simp[] >> drule_all mm_local_prefix_fresh_mode_unchanged >> simp[]
 QED
 
+Theorem mm_local_prefix_group_producer_shape[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM q bb.bb_instructions /\ inst_wf q /\ MEM v q.inst_outputs /\
+  MEM cg (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM q.inst_id cg.cg_inst_ids ==>
+  q.inst_opcode = mode_load_opcode mode /\
+  (?addr. q.inst_operands = [Lit addr]) /\ q.inst_outputs = [v] /\
+  dfg_get_def (dfg_build_function fn0) v = SOME q
+Proof
+  strip_tac >> drule_all mm_local_prefix_group_roles_elim >> strip_tac
+  >- (`st = q` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+      gvs[inst_wf_def])
+  >- (rename1 `MEM copy_inst bb.bb_instructions` >>
+      `copy_inst = q` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+      Cases_on `mode` >> gvs[mode_copy_opcode_def, inst_wf_def]) >>
+  `MEM q' bb.bb_instructions` by simp[MEM_APPEND] >>
+  `q' = q` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >> gvs[]
+QED
+
+Theorem mm_local_prefix_external_id_absent[local]:
+  wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM u (fn_insts fn0) /\
+  ~MEM u (EL index fn0.fn_blocks).bb_instructions ==>
+  ~MEM u.inst_id (MAP (\i. i.inst_id) bb.bb_instructions)
+Proof
+  strip_tac >>
+  `MEM (EL index fn0.fn_blocks) fn0.fn_blocks` by simp[EL_MEM] >>
+  `fn_inst_ids_distinct fn0` by gvs[wf_function_def] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions)` by
+    metis_tac[mmWfProofsTheory.fn_inst_ids_distinct_block] >>
+  `EVERY (\i. i.inst_id < supply.irs_next_inst)
+      (EL index fn0.fn_blocks).bb_instructions /\
+    u.inst_id < supply.irs_next_inst` by
+    (gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+      irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP,
+      venomInstTheory.fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     metis_tac[MEM_MAP]) >>
+  strip_tac >> gvs[MEM_MAP] >>
+  drule_all mm_local_prefix_id_origin >> strip_tac
+  >- (gvs[MEM_MAP] >>
+      `MEM j (fn_insts fn0)` by
+        (irule mmWfProofsTheory.fn_insts_mem_block >> metis_tac[]) >>
+      `j = u` by metis_tac[mmWfProofsTheory.fn_inst_ids_distinct_inj] >> metis_tac[]) >>
+  decide_tac
+QED
+
+Theorem mm_local_prefix_external_load_unchanged[local]:
+  wf_ssa fn0 /\ wf_function fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM q bb.bb_instructions /\ q.inst_opcode = mode_load_opcode mode /\
+  q.inst_outputs = [v] /\
+  dfg_get_inst_by_id (dfg_build_function fn0) q.inst_id = SOME q /\
+  MEM u (dfg_get_uses (dfg_build_function fn0) v) /\
+  MEM u (fn_insts fn0) /\
+  ~MEM u (EL index fn0.fn_blocks).bb_instructions ==>
+  !r. apply_groups_inst_supply mode
+    (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed) r q = ([q],r)
+Proof
+  strip_tac >>
+  `~MEM u.inst_id (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_external_id_absent] >>
+  `~MEM q.inst_id (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+      (scan_block (dfg_build_function fn0) mode bb).ss_flushed)` by
+    (strip_tac >>
+     `q.inst_opcode IN {MLOAD; CALLDATALOAD; DLOAD}` by
+       (Cases_on `mode` >> gvs[mode_load_opcode_def]) >>
+     drule_all mm_local_deleted_load_certificate >> strip_tac >>
+     `MEM u.inst_id cg.cg_inst_ids` by gvs[EVERY_MEM] >>
+     drule_all mm_local_prefix_group_roles_elim >> strip_tac >>
+     gvs[MEM_MAP, MEM_APPEND] >> metis_tac[]) >>
+  drule_all mm_local_prefix_load_rep_absent >> simp[apply_groups_inst_supply_def]
+QED
+
+Theorem mm_local_memzero_producer_unchanged[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM q bb.bb_instructions /\ inst_wf q /\ q.inst_outputs <> [] ==>
+  !r. apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) r q = ([q],r)
+Proof
+  strip_tac >>
+  `!cg. MEM cg (scan_block_memzero dfg bb).mz_flushed ==>
+    ~MEM q.inst_id cg.cg_inst_ids` by
+    (rpt strip_tac >> drule_all mm_local_memzero_group_roles >> strip_tac >>
+     `i = q` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+     gvs[is_zero_store_def, is_calldatasize_copy_def, inst_wf_def]) >>
+  `~MEM q.inst_id (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)` by
+    (strip_tac >> gvs[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >>
+     rename1 `MEM cg (scan_block_memzero dfg bb).mz_flushed` >>
+     qpat_x_assum `MEM _ (nop_ids_of_group _ _ _ _)` mp_tac >>
+     simp[nop_ids_of_group_def] >>
+     Cases_on `REVERSE (sort_ids_by_block bb.bb_instructions cg.cg_inst_ids)` >>
+     simp[MEM_FILTER] >> disj2_tac >> strip_tac >>
+     `MEM q.inst_id (REVERSE (sort_ids_by_block bb.bb_instructions cg.cg_inst_ids))`
+       by (pure_asm_rewrite_tac[MEM] >> simp[]) >>
+     gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER] >> metis_tac[]) >>
+  `ALOOKUP (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) q.inst_id = NONE` by
+    (simp[alistTheory.ALOOKUP_NONE, rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >>
+     rpt strip_tac >> spose_not_then strip_assume_tac >>
+     rename1 `MEM cg (scan_block_memzero dfg bb).mz_flushed` >>
+     Cases_on `rep_of_group bb.bb_instructions cg` >> gvs[] >>
+     rename1 `rep_of_group bb.bb_instructions cg = SOME result` >>
+     PairCases_on `result` >> gvs[] >> drule mm_local_rep_member >>
+     metis_tac[]) >>
+  simp[apply_memzero_inst_supply_def]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
