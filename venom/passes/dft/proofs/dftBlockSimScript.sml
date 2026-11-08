@@ -95,14 +95,7 @@ QED
    3. Operand variables membership
    ================================================================ *)
 
-(* If Var x appears in an operand list, then x is in operand_vars of that list. *)
-Theorem mem_var_operand_vars:
-  !x ops. MEM (Var x) ops ==> MEM x (operand_vars ops)
-Proof
-  Induct_on `ops` >> rw[operand_vars_def] >>
-  gvs[operand_var_def] >>
-  Cases_on `h` >> gvs[operand_var_def]
-QED
+Theorem mem_var_operand_vars = venomInstTheory.mem_var_operand_vars
 
 (* ================================================================
    4. eval_operand preserved by step on non-output vars
