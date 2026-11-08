@@ -138,3 +138,46 @@ Proof
     (rpt strip_tac >> irule storage_copy_operand_preserved >> metis_tac[]) >>
   qexists_tac `u` >> fs[allocas_above_def] >> gvs[]
 QED
+
+Theorem protected_storage_suffix_landing:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  (if n = 1 then
+     do value <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+        emit_void MSTORE [dst; value] od
+   else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
+    sa = (result,sb) /\
+  fn_has_code sa sb func /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME (n2w b) /\
+  n = type_slot_size tv /\ n < 2**256 /\ b+32*n < 2**256 /\
+  stmt_state_rel ctx func ce cx es s /\
+  storage_holds cx (loc = LocTransient) ty (Value v) a es s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ 32*n <= sz /\ allocas_above lo s /\
+  (!p k. P p k ==> regions_disjoint p k b (32*n)) /\
+  (!q x. reserved q /\ q = Var x ==> not_fresh_at sa x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    val_wf tv v /\ val_in_memory tv v b u.vs_memory /\
+    val_footprint tv v <= type_memory_size tv /\
+    FLOOKUP u.vs_allocas aid = SOME (b,sz) /\
+    u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+    allocas_above lo u /\ copy_static u = copy_static s /\
+    (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  Cases_on `n = 1`
+  >- (fs[] >> irule protected_storage_word_landing >> simp[] >>
+      metis_tac[]) >>
+  `?r. compile_word_copy_loop src dst n loc LocMemory F sa = (r,sb)` by
+    (qpat_x_assum `_ sa = (result,sb)` mp_tac >>
+     simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     pairarg_tac >> simp[]) >>
+  drule_all protected_storage_loop_landing >> simp[]
+QED
