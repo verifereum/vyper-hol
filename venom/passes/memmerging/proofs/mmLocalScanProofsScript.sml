@@ -148,6 +148,86 @@ Proof
   metis_tac[mm_local_memzero_list_load_origin, mm_local_mode_list_load_origin]
 QED
 
+Theorem mm_local_memzero_list_use_origin[local]:
+  !xs s ys t j v.
+  mm_flat_map_supply (apply_memzero_inst_supply ns rm) s xs = (ys,t) /\
+  j < LENGTH ys /\ MEM v (venomInst$inst_uses (EL j ys)) ==>
+  MEM (EL j ys) xs \/
+  (0 < j /\ (EL (j - 1) ys).inst_outputs = [v] /\
+   venomInst$inst_uses (EL (j - 1) ys) = [] /\
+   venomInst$inst_uses (EL j ys) = [v])
+Proof
+  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >>
+  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `apply_memzero_inst_supply ns rm s h = (out,s1)` >>
+  Cases_on `j < LENGTH out`
+  >- (
+    qpat_x_assum `apply_memzero_inst_supply _ _ _ _ = _` mp_tac >>
+    simp[apply_memzero_inst_supply_def, AllCaseEqs()] >> strip_tac >>
+    gvs[EL_APPEND_EQN, mk_nop_from_def, mk_zero_store_inst_def,
+        mk_memzero_calldatacopy_def, venomInstTheory.inst_uses_def,
+        venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
+    `j = 0 \/ j = 1` by decide_tac >>
+    gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  `j - LENGTH out < LENGTH outs` by (gvs[] >> decide_tac) >>
+  `MEM v (venomInst$inst_uses (EL (j - LENGTH out) outs))` by
+    gvs[EL_APPEND_EQN] >>
+  first_x_assum drule >> disch_then drule >> disch_then drule >>
+  strip_tac >- gvs[EL_APPEND_EQN] >>
+  `0 < j /\ ~(j - 1 < LENGTH out) /\
+   j - 1 - LENGTH out = j - LENGTH out - 1` by decide_tac >>
+  gvs[EL_APPEND_EQN]
+QED
+
+Theorem mm_local_mode_list_use_origin[local]:
+  !xs s ys t j v.
+  mm_flat_map_supply (apply_groups_inst_supply mode ns rm) s xs = (ys,t) /\
+  j < LENGTH ys /\ MEM v (venomInst$inst_uses (EL j ys)) ==>
+  MEM (EL j ys) xs \/
+  (0 < j /\ (EL (j - 1) ys).inst_outputs = [v] /\
+   venomInst$inst_uses (EL (j - 1) ys) = [] /\
+   venomInst$inst_uses (EL j ys) = [v])
+Proof
+  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >>
+  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `apply_groups_inst_supply mode ns rm s h = (out,s1)` >>
+  Cases_on `j < LENGTH out`
+  >- (
+    qpat_x_assum `apply_groups_inst_supply _ _ _ _ _ = _` mp_tac >>
+    simp[apply_groups_inst_supply_def, AllCaseEqs()] >> strip_tac >>
+    gvs[EL_APPEND_EQN, mk_nop_from_def, mk_bulk_copy_inst_def,
+        mk_load_inst_def, mk_mstore_from_load_def,
+        venomInstTheory.inst_uses_def, venomInstTheory.operand_vars_def,
+        venomInstTheory.operand_var_def] >>
+    `j = 0 \/ j = 1` by decide_tac >>
+    gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+  `j - LENGTH out < LENGTH outs` by (gvs[] >> decide_tac) >>
+  `MEM v (venomInst$inst_uses (EL (j - LENGTH out) outs))` by
+    gvs[EL_APPEND_EQN] >>
+  first_x_assum drule >> disch_then drule >> disch_then drule >>
+  strip_tac >- gvs[EL_APPEND_EQN] >>
+  `0 < j /\ ~(j - 1 < LENGTH out) /\
+   j - 1 - LENGTH out = j - LENGTH out - 1` by decide_tac >>
+  gvs[EL_APPEND_EQN]
+QED
+
+Theorem mm_local_phase_use_origin[local]:
+  mm_local_phase dfg phase (bb,s) = (cc,t) /\
+  j < LENGTH cc.bb_instructions /\
+  MEM v (venomInst$inst_uses (EL j cc.bb_instructions)) ==>
+  MEM (EL j cc.bb_instructions) bb.bb_instructions \/
+  (0 < j /\ (EL (j - 1) cc.bb_instructions).inst_outputs = [v] /\
+   venomInst$inst_uses (EL (j - 1) cc.bb_instructions) = [] /\
+   venomInst$inst_uses (EL j cc.bb_instructions) = [v])
+Proof
+  Cases_on `phase` >>
+  simp[mm_local_phase_def, transform_block_memzero_supply_def,
+       transform_block_mode_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  metis_tac[mm_local_memzero_list_use_origin, mm_local_mode_list_use_origin]
+QED
+
 Theorem mm_local_pending_load_origin[local]:
   !fn0 supply index k bb sk mode i.
   index < LENGTH fn0.fn_blocks /\ k <= 4 /\
