@@ -27,6 +27,13 @@ Definition inliner_input_ok_def:
           EVERY (\op. !v. op = Var v ==> ~MEM v inst.inst_outputs)
             (TL inst.inst_operands)))
         (fn_insts fn)) ctx.ctx_functions /\
+    (* The compiler checks call/return arities before global inlining. *)
+    (!fn inst callee args.
+       MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+       inst.inst_opcode = INVOKE /\ MEM callee ctx.ctx_functions /\
+       inst.inst_operands = Label callee.fn_name::args ==>
+       EVERY (\r. raw_return_user_arity r = SOME (LENGTH inst.inst_outputs))
+         (fn_return_insts callee)) /\
     (!fn other. MEM fn ctx.ctx_functions /\ MEM other ctx.ctx_functions /\
        fn.fn_name <> other.fn_name ==>
        ~MEM other.fn_name (fn_labels fn)) /\
