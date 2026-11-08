@@ -91,7 +91,10 @@ Theorem extrequest_tuple_store_fold:
       ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
       q.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x z. not_fresh_at sm x /\ lookup_var x s = SOME z ==>
-         lookup_var x q = SOME z)
+         lookup_var x q = SOME z) /\
+      (!aid p k. aid < sm.cs_next_id /\ aid <> live /\
+         FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+         mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory)
 Proof
   Induct
   >- (simp[compile_extcall_store_values_def, comp_return_def] >>
@@ -181,7 +184,8 @@ Resume extrequest_tuple_store_fold[finish]:
   rename1 `gas_marked_path F ctx func h 0 (OK q)` >>
   `mem_bytes_at (w2n w + off) (type_memory_size tv) q.vs_memory =
    mem_bytes_at (w2n w + off) (type_memory_size tv) h.vs_memory` by
-    (first_assum irule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (qpat_x_assum `!a k. tuple_base <= a /\ _ ==> mem_bytes_at a k q.vs_memory = _` irule >>
+     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   `val_in_memory tv v (w2n w + off) q.vs_memory` by
     (metis_tac[val_in_memory_mem_agree, arithmeticTheory.LESS_EQ_REFL]) >>
   `!x z. not_fresh_at sm x /\ lookup_var x s = SOME z ==>
@@ -191,22 +195,32 @@ Resume extrequest_tuple_store_fold[finish]:
        (fs[ci_mono_def] >>
         metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]) >>
      metis_tac[]) >>
+  `!aid p k. aid < sm.cs_next_id /\ aid <> live /\
+      FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+      mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (map_every qx_gen_tac [`aid`, `old_base`, `old_size`] >> strip_tac >>
+     `FLOOKUP h.vs_allocas aid = SOME (old_base,old_size)` by
+       (qpat_x_assum `!aid row. FLOOKUP s.vs_allocas aid = SOME row ==> _` irule >>
+        simp[]) >>
+     `aid < sh.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
+     metis_tac[]) >>
   qexists_tac `q` >>
   conj_tac
   >- (`gas_marked_path F ctx func s 0 (OK h)` by fs[gas_marked_exec_def] >>
       drule_all gas_marked_path_then >> simp[]) >>
   simp[valueEncodingTheory.val_in_memory_def] >>
   conj_tac >- (metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
+  reverse conj_tac >- metis_tac[] >>
   suspend "windows"
 QED
 
 Resume extrequest_tuple_store_fold[windows]:
   rpt strip_tac >>
   `mem_bytes_at a k q.vs_memory = mem_bytes_at a k h.vs_memory` by
-    (first_assum irule >> simp[] >>
+    (qpat_assum `!a k. tuple_base <= a /\ _ ==> mem_bytes_at a k q.vs_memory = _` irule >> simp[] >>
      fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   `mem_bytes_at a k h.vs_memory = mem_bytes_at a k s.vs_memory` by
-    (first_assum irule >> simp[] >>
+    (qpat_assum `!a k. tuple_base <= a /\ _ ==> mem_bytes_at a k h.vs_memory = _` irule >> simp[] >>
      fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   metis_tac[]
 QED

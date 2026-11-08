@@ -159,7 +159,9 @@ Theorem extrequest_tuple_head_read:
     safe_operand sb dst /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     extrequest_history_frame cenv cx ec sc tc ee sb u /\
-    extrequest_history_frame cenv cx ee sm s ee sb u
+    extrequest_history_frame cenv cx ee sm s ee sb u /\
+    (!aid p k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory)
 Proof
   strip_tac >>
   `ci_mono sm sn /\ ci_mono sn sb` by
@@ -218,6 +220,11 @@ Resume extrequest_tuple_head_read[read_and_finish]:
     metis_tac[extrequest_history_frame_trans] >>
   `extrequest_history_frame cenv cx ec sc tc ee sb u` by
     metis_tac[extrequest_history_frame_trans] >>
+  `!aid p k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (`t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
+       simp[Abbr `t`, update_var_def] >>
+     fs[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
   qexistsl_tac [`v`, `t`, `u`] >> simp[] >> conj_tac
   >- (irule gas_marked_exec_zero_prefix >> goal_assum (drule_at Any) >> simp[]) >>
   metis_tac[safe_operand_mono, ci_mono_def]

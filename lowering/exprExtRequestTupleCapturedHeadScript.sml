@@ -75,6 +75,11 @@ Theorem extrequest_tuple_captured_head:
        lookup_var x q = SOME z) /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!aid row. FLOOKUP s.vs_allocas aid = SOME row ==>
+       FLOOKUP q.vs_allocas aid = SOME row) /\
+    (!aid p k. aid < sm.cs_next_id /\ aid <> live /\ 
+       FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+       mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory) /\
     (!eb cb tb.
        stmt_state_rel ctx func cenv cx eb tb /\
        extrequest_history_frame cenv cx eb cb tb ee sm s /\
@@ -191,6 +196,24 @@ Resume extrequest_tuple_captured_head[history_and_finish]:
   >- (rpt strip_tac >>
       `not_fresh_at su x` by (irule not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
       fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  conj_tac
+  >- (`q.vs_allocas = u.vs_allocas` by
+        (qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = u` mp_tac >>
+         simp[venomStateTheory.venom_state_component_equality]) >>
+      qpat_x_assum `extrequest_history_frame _ _ ee sm s ee su u` mp_tac >>
+      simp[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  conj_tac
+  >- (map_every qx_gen_tac [`aid`, `old_base`, `old_size`] >> strip_tac >>
+      `FLOOKUP u.vs_allocas aid = SOME (old_base,old_size)` by
+        (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+      `old_base + old_size <= tuple_base \/ tuple_base + sz <= old_base` by
+        (qpat_x_assum `allocas_non_overlapping u` mp_tac >>
+         rewrite_tac[venomMemDefsTheory.allocas_non_overlapping_def] >>
+         disch_then (qspecl_then [`aid`, `live`, `old_base`, `old_size`, `tuple_base`, `sz`] mp_tac) >>
+         simp[]) >>
+      `regions_disjoint old_base old_size (w2n (w + n2w off)) (type_memory_size tv)` by
+        (simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
   rpt strip_tac >>
   `extrequest_history_frame cenv cx eb cb tb ee su u` by
     (irule extrequest_history_frame_trans >>
