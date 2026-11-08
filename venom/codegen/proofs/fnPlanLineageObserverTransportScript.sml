@@ -974,3 +974,159 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[] >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
+
+(* Extinction uses the actual selected stack cell, not the predecessor's pair. *)
+Theorem native_indexed_phi_selected_unit_extinction:
+  !fn bb dfg j before inst rest ops after v d.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    DROP j (non_param_insts bb) = inst::rest /\
+    MEM v (inst_uses inst) /\ v <> HD inst.inst_outputs /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) before.ps_stack = SOME d /\
+    stack_peek d before.ps_stack = Var v /\
+    LIST_ELEM_COUNT (Var v) before.ps_stack +
+      (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1 /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn inst
+      (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (j + LENGTH (get_params bb.bb_instructions) + 1))
+      (bb_is_halting bb)
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      bb.bb_label before = SOME (ops,after) ==>
+    ~MEM (Var v) after.ps_stack /\ Var v NOTIN FDOM after.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_indexed_step_layout >> strip_tac >>
+  qspec_then `bb` (qx_choose_then `tail` assume_tac)
+    fnPlanLineageEntryProductionTheory.non_param_insts_phi_prefix >>
+  `inst = EL j (collect_phis bb.bb_instructions)` by gvs[EL_APPEND1] >>
+  `inst.inst_opcode = PHI` by
+    metis_tac[livenessTransferProofsTheory.collect_phis_mem, EL_MEM] >>
+  `get_params bb.bb_instructions = []` by
+    (`collect_phis bb.bb_instructions <> []` by
+       (Cases_on `collect_phis bb.bb_instructions` >> gvs[]) >>
+     drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> simp[]) >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j))` by
+    (`wf_function fn` by fs[codegen_ready_fn_def] >>
+     irule fnPlanLineageLivenessTheory.analyzed_phi_incoming_dead_after >>
+     simp[] >> qexists_tac `j` >> simp[] >>
+     metis_tac[fnPlanLineagePhiInputExclusionTheory.phi_codegen_block_ready]) >>
+  `rest <> []` by
+    (`collect_phis bb.bb_instructions <> []` by
+       (Cases_on `collect_phis bb.bb_instructions` >> gvs[]) >>
+     drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >>
+     strip_tac >>
+     `LENGTH (collect_phis bb.bb_instructions) < LENGTH (non_param_insts bb)` by
+       (gvs[] >>
+        qpat_x_assum `bb.bb_instructions = _ ++ rest'`
+          (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+        simp[] >> Cases_on `rest'` >> gvs[] >> decide_tac) >>
+     qpat_x_assum `DROP j _ = _`
+       (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     Cases_on `rest` >> gvs[] >> decide_tac) >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, arithmeticTheory.ADD1] >>
+  drule_all generate_phi_plan_selected_unit_extinction >> simp[]
+QED
+
+Theorem native_inst_prefix_phi_selected_extinction:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !bb v j before d.
+      lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\
+      lbl = bb.bb_label /\ halt = bb_is_halting bb /\
+      n = LENGTH (get_params bb.bb_instructions) /\
+      len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+      MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+      lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+      k <= LENGTH (collect_phis bb.bb_instructions) /\ j < k /\
+      (!i. i < k ==> v <> HD (EL i xs).inst_outputs) /\
+      MEM v (inst_uses (EL j xs)) /\
+      fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before /\
+      stack_get_phi_depth (FILTER is_var_operand (EL j xs).inst_operands) before.ps_stack = SOME d /\
+      stack_peek d before.ps_stack = Var v /\
+      LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+        (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 ==>
+      ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_strongind >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ mid = SOME (ops,final)` >>
+  `inst = EL k xs /\ k < LENGTH xs` by
+    (`k < LENGTH xs` by
+       (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+        simp[] >> decide_tac) >> metis_tac[HD_DROP, HD]) >>
+  qspec_then `bb` (qx_choose_then `tail` assume_tac)
+    fnPlanLineageEntryProductionTheory.non_param_insts_phi_prefix >>
+  `!i. i < SUC k ==> (EL i xs).inst_opcode = PHI /\ v <> HD (EL i xs).inst_outputs` by
+    (rpt gen_tac >> strip_tac >> conj_tac >-
+       (`i < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+        `EL i xs = EL i (collect_phis bb.bb_instructions)` by gvs[EL_APPEND1] >>
+        metis_tac[livenessTransferProofsTheory.collect_phis_mem, EL_MEM]) >> metis_tac[]) >>
+  Cases_on `j < k`
+  >- (`~MEM (Var v) mid.ps_stack /\ Var v NOTIN FDOM mid.ps_spilled` by
+        (first_x_assum irule >> simp[] >>
+         conj_tac >- (qexists_tac `bb` >> simp[] >> decide_tac) >>
+         qexistsl [`before`,`d`,`j`] >> gvs[]) >>
+      `inst.inst_opcode = PHI /\ v <> HD inst.inst_outputs` by
+        (qpat_x_assum `!i. i < SUC k ==> _ /\ _` (qspec_then `k` mp_tac) >> gvs[]) >>
+      gvs[generate_inst_plan_def, is_pre_codegen_opcode_def] >>
+      drule generate_phi_plan_nondefining_resource_nonincrease >>
+      disch_then (qspec_then `v` mp_tac) >>
+      `LIST_ELEM_COUNT (Var v) mid.ps_stack = 0` by
+        metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF, arithmeticTheory.NOT_ZERO_LT_ZERO] >>
+      simp[resource_zero_iff_absent] >> metis_tac[]) >>
+  `j = k` by decide_tac >>
+  `before = mid` by metis_tac[fnPlanLineageEntryProductionTheory.native_inst_prefix_deterministic] >>
+  `LIST_ELEM_COUNT (Var v) mid.ps_stack +
+    (if Var v IN FDOM mid.ps_spilled then 1 else 0) <= 1` by
+    (drule native_inst_prefix_phi_resource_nonincrease >>
+     disch_then (qspec_then `v` mp_tac) >>
+     impl_tac >- (rpt strip_tac >> `i < SUC k` by decide_tac >> metis_tac[]) >>
+     gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qpat_x_assum `!bb v j before d. _` kall_tac >>
+  gvs[] >>
+  irule (SRULE [arithmeticTheory.ADD_ASSOC] native_indexed_phi_selected_unit_extinction) >>
+  qexists_tac `bb` >> simp[GSYM arithmeticTheory.ADD_ASSOC] >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_SUC_REFL, arithmeticTheory.LESS_EQ_LESS_TRANS]
+QED
+
+(* Both stack survival and spill survival leave an unselected alternative;
+   neither form of survival is claimed impossible. *)
+Theorem native_inst_prefix_phi_survivor_unselected:
+  !fn bb dfg incoming k qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k qs /\
+    k <= LENGTH (collect_phis bb.bb_instructions) /\
+    (!i. i < k ==> v <> HD (EL i (non_param_insts bb)).inst_outputs) /\
+    LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+      (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+    (MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+    !j before d.
+      j < k /\ MEM v (inst_uses (EL j (non_param_insts bb))) /\
+      fnPlanLineageEntryProduction$native_inst_prefix
+        (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) incoming j before ==>
+      ~(stack_get_phi_depth
+          (FILTER is_var_operand (EL j (non_param_insts bb)).inst_operands)
+          before.ps_stack = SOME d /\
+        stack_peek d before.ps_stack = Var v)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  qpat_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ k qs`
+    (mp_then Any mp_tac native_inst_prefix_phi_selected_extinction) >>
+  disch_then (qspecl_then [`bb`,`v`] mp_tac) >>
+  disch_then (qspecl_then [`j`,`before`,`d`] mp_tac) >> simp[]
+QED
