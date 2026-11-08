@@ -22,10 +22,6 @@ fun vsr_eval_ops_tac () =
      eval_operand op s1 = eval_operand op s2` by (
     rw[] >> vsr_irule vsr_eval_operand >> simp[] >> metis_tac[])
 
-fun vsr_eval_rewrite_tac () =
-  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >> simp[]
-
 (* Cache only the dispatch equations and field projection needed by calls.
    The exec_* helpers already handle the oracle/concrete-call semantics. *)
 val vsr_call_opcode_rewrites = map (fn th => let
@@ -33,6 +29,15 @@ val vsr_call_opcode_rewrites = map (fn th => let
   val (guard, _) = dest_imp body
 in (rhs guard, th) end)
   (CONJUNCTS step_inst_base_opcode_eqs);
+
+fun vsr_eval_rewrite_tac () =
+  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >>
+  qpat_assum `inst.inst_opcode = _` (fn eq => let
+    val (_, th) = valOf (List.find
+      (fn (key, _) => aconv key (rhs (concl eq)))
+      vsr_call_opcode_rewrites)
+  in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end) >>
+  ASM_REWRITE_TAC[] >> simp[]
 
 val vsr_call_ctx = vsr_R_ok_fields |> SPEC_ALL |> UNDISCH |>
   CONJUNCT1 |> DISCH_ALL |> GEN_ALL;
