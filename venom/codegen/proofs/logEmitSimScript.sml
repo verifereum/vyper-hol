@@ -86,20 +86,21 @@ Theorem step_inst_log:
   w2n tc = LENGTH topic_ops /\
   eval_operand off_op vs = SOME off /\
   eval_operand sz_op vs = SOME sz /\
-  eval_operands topic_ops vs = SOME topics ==>
-  step_inst fuel ctx inst vs = OK
-    (vs with vs_logs := vs.vs_logs ++
+  eval_operands topic_ops vs = SOME topics /\
+  step_inst fuel ctx inst vs = OK vs' ==>
+  vs' = vs with vs_logs := vs.vs_logs ++
       [<|logger := w2w vs.vs_call_ctx.cc_address;
          topics := topics;
          data := TAKE (w2n sz)
-           (DROP (w2n off) vs.vs_memory ++ REPLICATE (w2n sz) 0w)|>])
+           (DROP (w2n off) vs.vs_memory ++ REPLICATE (w2n sz) 0w)|>]
 Proof
   rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
   simp[step_inst_non_invoke] >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   qpat_assum `inst.inst_opcode = LOG`
     (fn th => PURE_REWRITE_TAC[th]) >>
-  simp[LET_THM, ADD_COMM, REVERSE_APPEND]
+  simp[LET_THM, ADD_COMM, REVERSE_APPEND] >> rw[]
 QED
 
 Theorem source_memory_read_ranges_log:
@@ -261,9 +262,7 @@ Proof
          topics := topics;
          data := TAKE (w2n sz)
            (DROP (w2n off) vs.vs_memory ++ REPLICATE (w2n sz) 0w)|>]` by
-    (drule_all step_inst_log >>
-     disch_then (qspecl_then [`fuel`,`ctx`] mp_tac) >>
-     asm_simp_tac (srw_ss()) []) >>
+    (drule_all step_inst_log >> asm_simp_tac (srw_ss()) []) >>
   mp_tac (Q.ISPECL [`lo:(string,num) fmap`,`ps:plan_state`,
     `vs:venom_state`,`st:asm_state`,`off:bytes32`,`sz:bytes32`,
     `topics:bytes32 list`,`rest:bytes32 list`] asm_log_venom_asm_rel) >>
