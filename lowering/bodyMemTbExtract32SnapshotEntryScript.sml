@@ -49,7 +49,7 @@ Proof
   simp[stmt_state_rel_inst_idx] >> metis_tac[]
 QED
 
-Theorem extract32_snapshot_entry[local]:
+Theorem extract32_snapshot_entry:
   compile_bytestring_src src sa = ((len_op,data_op),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
