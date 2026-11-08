@@ -433,6 +433,9 @@ Resume log_success_suffix_run[data]:
      simp[GSYM EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"]) >>
   `EVERY (supported_scalar_type o SND) (SND (split_log_ops xs flags))` by
     gvs[EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"] >>
+  qpat_assum `MAP SND _ = _` (fn th =>
+    qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _`
+      (assume_tac o REWRITE_RULE [GSYM th])) >>
   drule_all log_data_stage_code >> strip_tac >>
   `st.cs_next_var <= limit_st.cs_next_var` by
     (drule log_output_buffer_shape >> strip_tac >>
