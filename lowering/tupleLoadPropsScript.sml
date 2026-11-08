@@ -9,7 +9,7 @@ Theory tupleLoadProps
 Ancestors
   stmtSimReturn stmtLowering context list rich_list freshWrites
   venomExecSemantics venomState exprLoweringProps emitHelperProps
-  compileEnv valueEncoding
+  compileEnv valueEncoding venomExecProofs
 
 Theorem compile_tuple_load_all_values:
   !tys cenv bop off sa elems sb s w.
@@ -59,23 +59,6 @@ Proof
   drule_all tuple_load_cons_compose >> strip_tac >>
   gvs[] >> simp[Once GENLIST_CONS, combinTheory.o_DEF] >>
   metis_tac[]
-QED
-
-Theorem eval_operands_length:
-  !ops s ws. eval_operands ops s = SOME ws ==> LENGTH ws = LENGTH ops
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  strip_tac >> gvs[AllCaseEqs()] >> first_x_assum drule >> simp[]
-QED
-
-Theorem eval_operands_index:
-  !ops s ws i.
-    eval_operands ops s = SOME ws /\ i < LENGTH ops ==>
-    eval_operand (EL i ops) s = SOME (EL i ws)
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  strip_tac >> gvs[AllCaseEqs()] >>
-  Cases_on `i` >> gvs[] >> first_x_assum drule_all >> simp[]
 QED
 
 Theorem compile_tuple_load_all_run:
