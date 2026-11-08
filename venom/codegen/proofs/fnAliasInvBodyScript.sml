@@ -1,7 +1,7 @@
 Theory fnAliasInvBody
 Ancestors
   fnAliasStep fnBlockPlanStatic fnBlockPlanStaticBodyPrefix
-  venomExecProps venomWf venomInst stackPlanGen livenessTransferProofs
+  venomExecProps venomExecSemantics venomWf venomInst stackPlanGen livenessTransferProofs
   removeUnusedSsaProofs list rich_list
 
 (* The lower invariant discharges the static premises of alias transport,
@@ -63,4 +63,62 @@ Proof
   gen_tac >> disch_tac >> irule alias_step_preserve >> simp[] >>
   goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
+QED
+
+(* The executor and planner consume the same remaining instruction suffix.
+   The relative planner index i corresponds to the absolute index i+np. *)
+Theorem regional_body_alias_suffix:
+  !insts i np ps ops qs vs vs1 fuel ctx lo fn ra bb sb cfg halting.
+  codegen_ready_fn fn /\ retpc_shape_ok fn /\
+  MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+  fn_reachable fn bb.bb_label /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  DROP (i + np) bb.bb_instructions = insts /\
+  vs.vs_inst_idx = i + np /\
+  EVERY (\inst. inst.inst_opcode <> PHI /\ ~is_param_opcode inst.inst_opcode) insts /\
+  regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb (i+np) ps /\
+  (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val (frame_view fn ra vs) lo at =
+    operand_val (frame_view fn ra vs) lo
+      (normalize_operand (dfg_build_function fn) [] at)) /\
+  generate_block_insts_plan (liveness_analyze fn) (dfg_build_function fn) cfg fn
+    bb.bb_label halting np (LENGTH bb.bb_instructions) i insts ps = SOME (ops,qs) /\
+  exec_block fuel ctx bb vs = OK vs1 ==>
+  !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+    operand_val (frame_view fn ra vs1) lo at =
+    operand_val (frame_view fn ra vs1) lo
+      (normalize_operand (dfg_build_function fn) [] at)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (`LENGTH bb.bb_instructions <= vs.vs_inst_idx` by
+        gvs[DROP_EQ_NIL] >>
+      qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+      simp[Once exec_block_def, get_instruction_def]) >>
+  `i + np < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[LENGTH_DROP] >> decide_tac) >>
+  `EL (i+np) bb.bb_instructions = h /\
+   DROP (SUC (i+np)) bb.bb_instructions = insts` by
+    metis_tac[DROP_CONS_EL, CONS_11] >>
+  `bb_well_formed bb` by
+    (qpat_x_assum `!i np ps ops qs vs vs1 fuel ctx lo fn ra bb sb cfg halting. _` kall_tac >>
+     gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[lookup_block_mem]) >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp_tac (std_ss ++ boolSimps.LET_ss) [Once generate_block_insts_plan_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp_tac std_ss [Once exec_block_def, get_instruction_def] >>
+  qpat_assum `vs.vs_inst_idx = _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `i + np < _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `EL (i+np) _ = h` (fn th => rewrite_tac[th]) >>
+  simp_tac std_ss [AllCaseEqs()] >> strip_tac >>
+  fs[NoAsms, EVERY_DEF] >>
+  `!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+    operand_val (frame_view fn ra s'') lo at =
+    operand_val (frame_view fn ra s'') lo
+      (normalize_operand (dfg_build_function fn) [] at)` by
+    (qpat_x_assum `!i np ps ops qs vs vs1 fuel ctx lo fn ra bb sb cfg halting. _` kall_tac >>
+     gen_tac >> disch_tac >> irule regional_body_alias_step >> simp[] >>
+     metis_tac[]) >>
+  cheat
 QED
