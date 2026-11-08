@@ -3361,6 +3361,62 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+(* Arbitrary predicates: retain the exact execution guards on trace tails. *)
+Theorem mm_local_trace_visit_every[local]:
+  get_instruction bb s.vs_inst_idx = SOME inst ==>
+  (EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+     (trace_block [] d fuel ctx fn bb s) <=>
+   P fn inst s /\
+   EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+     (trace_step [] d fuel ctx fn inst s) /\
+   (case step_inst fuel ctx inst s of
+      OK u => is_terminator inst.inst_opcode \/
+        EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+          (trace_block [] d fuel ctx fn bb
+            (u with vs_inst_idx := SUC s.vs_inst_idx))
+    | _ => T))
+Proof
+  strip_tac >> drule trace_block_visit >> disch_then (fn th => once_rewrite_tac[th]) >>
+  simp[EVERY_APPEND] >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+QED
+
+Theorem mm_local_trace_enter_every[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK sp ==>
+  (EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+     (trace_blocks [] d (SUC fuel) ctx fn s) <=>
+   EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+     (trace_block [] (SUC d) fuel ctx fn bb
+       (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+   (case exec_block fuel ctx bb
+       (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) of
+      OK u => u.vs_halted \/
+        EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+          (trace_blocks [] (SUC d) fuel ctx fn u)
+    | _ => T))
+Proof
+  strip_tac >> drule_all trace_blocks_enter >> disch_then (fn th => once_rewrite_tac[th]) >>
+  simp[EVERY_APPEND] >>
+  Cases_on `exec_block fuel ctx bb
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[] >>
+  rename1 `OK u` >> Cases_on `u.vs_halted` >> simp[]
+QED
+
+Theorem mm_local_trace_function_every[local]:
+  EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+    (trace_function fuel ctx fn s) <=>
+  (case fn_entry_label fn of
+     NONE => T
+   | SOME lbl =>
+     EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+       (trace_blocks [] 0 fuel ctx fn
+         (s with <|vs_current_bb := lbl; vs_inst_idx := 0|>)))
+Proof
+  Cases_on `fn_entry_label fn` >> simp[trace_function_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
