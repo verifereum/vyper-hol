@@ -3,7 +3,7 @@ Theory mmLocalScanProofs
 Ancestors
   mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner
-  venomWf stateEquiv rich_list mmTransform mmScan list
+  venomWf stateEquiv rich_list mmTransform mmScan mmCopy list
 Libs
   wordsLib finite_mapLib
 
@@ -44,6 +44,293 @@ Proof
   simp[mm_local_phase_def, transform_block_memzero_supply_def,
        transform_block_mode_supply_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
+QED
+
+Definition mm_local_group_roles_def:
+  mm_local_group_roles dfg mode xs cg <=>
+    !id. MEM id cg.cg_inst_ids ==>
+      (?st dst v. MEM st xs /\ st.inst_id = id /\ st.inst_opcode = MSTORE /\
+                  st.inst_operands = [Lit dst; Var v]) \/
+      (?cp dst src len. MEM cp xs /\ cp.inst_id = id /\
+        cp.inst_opcode = mode_copy_opcode mode /\
+        cp.inst_operands = [Lit dst; Lit src; Lit len]) \/
+      (?st dst v li. MEM st xs /\ st.inst_opcode = MSTORE /\
+        st.inst_operands = [Lit dst; Var v] /\ dfg_get_def dfg v = SOME li /\
+        li.inst_id = id /\ MEM st.inst_id cg.cg_inst_ids)
+End
+
+Theorem mm_local_roles_merge[local]:
+  mm_local_group_roles dfg mode xs a /\ mm_local_group_roles dfg mode xs b ==>
+  mm_local_group_roles dfg mode xs (copy_merge a b)
+Proof
+  simp[mm_local_group_roles_def, copy_merge_def, MEM_APPEND] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  rpt (qpat_x_assum `!id. _` kall_tac) >> metis_tac[]
+QED
+
+Theorem mm_local_insert_every[local]:
+  !cs cg. EVERY P cs /\ P cg ==> EVERY P (insert_sorted cs cg)
+Proof
+  Induct_on `cs` >> simp[insert_sorted_def] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem mm_local_merge_every[local]:
+  (!a b. P a /\ P b ==> P (copy_merge a b)) ==>
+  !cs. EVERY P cs ==> EVERY P (merge_adjacent cs)
+Proof
+  strip_tac >> recInduct merge_adjacent_ind >>
+  simp[merge_adjacent_def] >> rpt strip_tac >>
+  Cases_on `copy_can_merge c1 c2` >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_add_every[local]:
+  (!a b. P a /\ P b ==> P (copy_merge a b)) /\ EVERY P cs /\ P cg ==>
+  EVERY P (add_copy cs cg)
+Proof
+  simp[add_copy_def] >> metis_tac[mm_local_insert_every, mm_local_merge_every]
+QED
+
+Definition mm_local_scan_every_def:
+  mm_local_scan_every P ss <=> EVERY P ss.ss_copies /\ EVERY P ss.ss_flushed
+End
+
+Theorem mm_local_barrier_every[local]:
+  mm_local_scan_every P ss ==> mm_local_scan_every P (hard_barrier ss)
+Proof
+  simp[mm_local_scan_every_def, hard_barrier_def, EVERY_APPEND]
+QED
+
+Theorem mm_local_flush_every[local]:
+  mm_local_scan_every P ss /\ EVERY P cs ==>
+  mm_local_scan_every P (flush_copies ss cs)
+Proof
+  simp[mm_local_scan_every_def, flush_copies_def, EVERY_APPEND,
+       EVERY_MEM, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem mm_local_hazards_every[local]:
+  mm_local_scan_every P ss ==>
+  mm_local_scan_every P (flush_hazards mode ss cg)
+Proof
+  `!ss Q. mm_local_scan_every P ss ==>
+    mm_local_scan_every P (flush_copies ss (FILTER Q ss.ss_copies))` by
+    (rpt strip_tac >> irule mm_local_flush_every >>
+     gvs[mm_local_scan_every_def, EVERY_MEM, MEM_FILTER]) >>
+  simp[flush_hazards_def, waw_hazards_def, raw_hazards_def,
+       war_hazards_def, copies_that_overwrite_def] >>
+  rpt strip_tac >> rpt IF_CASES_TAC >> metis_tac[]
+QED
+
+Theorem mm_local_invalidate_every[local]:
+  mm_local_scan_every P (invalidate_loads ss iv) = mm_local_scan_every P ss
+Proof
+  simp[mm_local_scan_every_def, invalidate_loads_def]
+QED
+
+Theorem mm_local_load_every[local]:
+  mm_local_scan_every P ss ==> mm_local_scan_every P (scan_load mode ss inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >- simp[scan_load_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = src::ops` >>
+  Cases_on `ops`
+  >- (
+    Cases_on `operand_lit_val src`
+    >- simp[scan_load_def, mm_local_barrier_every] >>
+    Cases_on `inst.inst_outputs`
+    >- simp[scan_load_def, mm_local_barrier_every] >>
+    rename1 `inst.inst_outputs = out::outs` >>
+    Cases_on `outs` >> simp[scan_load_def, mm_local_barrier_every] >>
+    rpt IF_CASES_TAC >>
+    gvs[mm_local_scan_every_def, flush_copies_def, copies_that_overwrite_def,
+        EVERY_APPEND, EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  simp[scan_load_def, mm_local_barrier_every]
+QED
+
+Theorem mm_local_store_group_roles[local]:
+  MEM inst xs /\ inst.inst_opcode = MSTORE /\
+  inst.inst_operands = [Lit dst; Var v] ==>
+  mm_local_group_roles dfg mode xs
+    <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+       cg_inst_ids := inst.inst_id ::
+         (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id]) |>
+Proof
+  strip_tac >> Cases_on `dfg_get_def dfg v` >>
+  simp[mm_local_group_roles_def] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_store_roles[local]:
+  MEM inst xs /\ inst.inst_opcode = MSTORE /\
+  mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
+  mm_local_scan_every (mm_local_group_roles dfg mode xs)
+    (scan_store dfg mode ss inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands`
+  >- simp[scan_store_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::ops` >>
+  Cases_on `ops` >- simp[scan_store_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::value::ops` >>
+  Cases_on `ops`
+  >- (
+    Cases_on `dst` >> Cases_on `value` >>
+    simp[scan_store_def, operand_var_name_def, operand_lit_val_def,
+         mm_local_barrier_every] >>
+    rename1 `inst.inst_operands = [Lit addr; Var v]` >>
+    Cases_on `FLOOKUP ss.ss_loads v`
+    >- simp[mm_local_barrier_every] >>
+    simp[] >>
+    qmatch_goalsub_abbrev_tac `flush_hazards mode ss0 cg` >>
+    `mm_local_group_roles dfg mode xs cg` by
+      (simp[Abbr `cg`] >> irule mm_local_store_group_roles >> simp[]) >>
+    `mm_local_scan_every (mm_local_group_roles dfg mode xs) ss0` by
+      (simp[Abbr `ss0`] >> IF_CASES_TAC >>
+       simp[mm_local_invalidate_every]) >>
+    drule mm_local_hazards_every >>
+    disch_then (qspecl_then [`mode`, `cg`] assume_tac) >>
+    gvs[mm_local_scan_every_def] >>
+    irule mm_local_add_every >> simp[mm_local_roles_merge]) >>
+  simp[scan_store_def, mm_local_barrier_every]
+QED
+
+Theorem mm_local_bulk_roles[local]:
+  MEM inst xs /\ inst.inst_opcode = mode_copy_opcode mode /\
+  mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
+  mm_local_scan_every (mm_local_group_roles dfg mode xs)
+    (scan_bulk_copy mode ss inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands`
+  >- simp[scan_bulk_copy_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::ops` >>
+  Cases_on `ops` >- simp[scan_bulk_copy_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::src::ops` >>
+  Cases_on `ops` >- simp[scan_bulk_copy_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::src::len::ops` >>
+  Cases_on `ops`
+  >- (
+    Cases_on `dst` >>
+    simp[scan_bulk_copy_def, operand_lit_val_def, mm_local_barrier_every] >>
+    Cases_on `src` >>
+    simp[operand_lit_val_def, mm_local_barrier_every] >>
+    Cases_on `len` >>
+    simp[operand_lit_val_def, mm_local_barrier_every] >>
+    qmatch_goalsub_abbrev_tac `flush_hazards mode ss0 cg` >>
+    `mm_local_group_roles dfg mode xs cg` by
+      (simp[Abbr `cg`, mm_local_group_roles_def] >> metis_tac[]) >>
+    `mm_local_scan_every (mm_local_group_roles dfg mode xs) ss0` by
+      (simp[Abbr `ss0`] >> IF_CASES_TAC >>
+       simp[mm_local_invalidate_every]) >>
+    drule mm_local_hazards_every >>
+    disch_then (qspecl_then [`mode`, `cg`] assume_tac) >>
+    gvs[mm_local_scan_every_def] >>
+    irule mm_local_add_every >> simp[mm_local_roles_merge]) >>
+  simp[scan_bulk_copy_def, mm_local_barrier_every]
+QED
+
+Theorem mm_local_inst_roles[local]:
+  MEM inst xs /\ mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
+  mm_local_scan_every (mm_local_group_roles dfg mode xs)
+    (scan_inst dfg mode ss inst)
+Proof
+  strip_tac >> simp[scan_inst_def] >>
+  rpt IF_CASES_TAC >>
+  metis_tac[mm_local_load_every, mm_local_store_roles,
+            mm_local_bulk_roles, mm_local_barrier_every]
+QED
+
+Theorem mm_local_fold_roles[local]:
+  !is ss. EVERY (\i. MEM i xs) is /\
+  mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
+  mm_local_scan_every (mm_local_group_roles dfg mode xs)
+    (FOLDL (scan_inst dfg mode) ss is)
+Proof
+  Induct_on `is` >> simp[] >> metis_tac[mm_local_inst_roles]
+QED
+
+Theorem mm_local_scan_group_roles[local]:
+  MEM cg (scan_block dfg mode bb).ss_flushed ==>
+  mm_local_group_roles dfg mode bb.bb_instructions cg
+Proof
+  `mm_local_scan_every (mm_local_group_roles dfg mode bb.bb_instructions)
+    (scan_block dfg mode bb)` by
+    (simp[scan_block_def] >> irule mm_local_barrier_every >>
+     irule mm_local_fold_roles >>
+     simp[EVERY_MEM, mm_local_scan_every_def, empty_scan_state_def]) >>
+  gvs[mm_local_scan_every_def, EVERY_MEM]
+QED
+
+Theorem mm_local_scan_group_roles_elim[local]:
+  MEM cg (scan_block dfg mode bb).ss_flushed /\ MEM id cg.cg_inst_ids ==>
+  (?st dst v. MEM st bb.bb_instructions /\ st.inst_id = id /\
+    st.inst_opcode = MSTORE /\ st.inst_operands = [Lit dst; Var v]) \/
+  (?cp dst src len. MEM cp bb.bb_instructions /\ cp.inst_id = id /\
+    cp.inst_opcode = mode_copy_opcode mode /\
+    cp.inst_operands = [Lit dst; Lit src; Lit len]) \/
+  (?st dst v li. MEM st bb.bb_instructions /\ st.inst_opcode = MSTORE /\
+    st.inst_operands = [Lit dst; Var v] /\ dfg_get_def dfg v = SOME li /\
+    li.inst_id = id /\ MEM st.inst_id cg.cg_inst_ids)
+Proof
+  strip_tac >> drule mm_local_scan_group_roles >>
+  simp[mm_local_group_roles_def]
+QED
+
+Definition mm_local_zero_every_def:
+  mm_local_zero_every P mz <=>
+    EVERY (\cg. EVERY P cg.cg_inst_ids) mz.mz_copies /\
+    EVERY (\cg. EVERY P cg.cg_inst_ids) mz.mz_flushed
+End
+
+Theorem mm_local_zero_barrier_every[local]:
+  mm_local_zero_every P mz ==> mm_local_zero_every P (memzero_barrier mz)
+Proof
+  simp[mm_local_zero_every_def, memzero_barrier_def, EVERY_APPEND]
+QED
+
+Theorem mm_local_zero_add_every[local]:
+  mm_local_zero_every P mz /\ P id ==>
+  mm_local_zero_every P
+    (mz with mz_copies := add_copy mz.mz_copies (copy_memzero dst len [id]))
+Proof
+  simp[mm_local_zero_every_def] >> strip_tac >>
+  irule mm_local_add_every >>
+  simp[copy_merge_def, EVERY_APPEND, copy_memzero_def]
+QED
+
+Theorem mm_local_zero_inst_every[local]:
+  mm_local_zero_every P mz /\
+  ((is_zero_store inst \/ is_calldatasize_copy dfg inst) ==> P inst.inst_id) ==>
+  mm_local_zero_every P (scan_inst_memzero dfg mz inst)
+Proof
+  strip_tac >> simp[scan_inst_memzero_def] >>
+  rpt IF_CASES_TAC >> simp[mm_local_zero_barrier_every] >>
+  rpt (CASE_TAC >> gvs[mm_local_zero_barrier_every, mm_local_zero_add_every])
+QED
+
+Theorem mm_local_zero_fold_every[local]:
+  !is mz. mm_local_zero_every P mz /\
+  EVERY (\inst. (is_zero_store inst \/ is_calldatasize_copy dfg inst) ==>
+                P inst.inst_id) is ==>
+  mm_local_zero_every P (FOLDL (scan_inst_memzero dfg) mz is)
+Proof
+  Induct_on `is` >> simp[] >> metis_tac[mm_local_zero_inst_every]
+QED
+
+Theorem mm_local_memzero_group_roles[local]:
+  MEM cg (scan_block_memzero dfg bb).mz_flushed /\ MEM id cg.cg_inst_ids ==>
+  ?i. MEM i bb.bb_instructions /\ i.inst_id = id /\
+      (is_zero_store i \/ is_calldatasize_copy dfg i)
+Proof
+  qabbrev_tac `P = \id. ?i. MEM i bb.bb_instructions /\ i.inst_id = id /\
+                              (is_zero_store i \/ is_calldatasize_copy dfg i)` >>
+  `mm_local_zero_every P (scan_block_memzero dfg bb)` by
+    (simp[scan_block_memzero_def] >> irule mm_local_zero_barrier_every >>
+     irule mm_local_zero_fold_every >>
+     simp[mm_local_zero_every_def, empty_memzero_state_def, EVERY_MEM,
+          Abbr `P`] >> metis_tac[]) >>
+  gvs[mm_local_zero_every_def, EVERY_MEM, Abbr `P`] >> metis_tac[]
 QED
 
 Theorem mm_local_deleted_unpinned[local]:
