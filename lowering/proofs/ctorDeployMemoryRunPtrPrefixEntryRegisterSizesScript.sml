@@ -160,10 +160,10 @@ Proof
  `middle.cs_current_bb = st.cs_current_bb` by
    (qpat_x_assum `cs_extends st middle` mp_tac >> simp[cs_extends_def]) >>
  `alloca_inv prepared /\ alloca_frontier_inv_from k ctx func site prepared` by
-   (asm_rewrite_tac[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-       alloca_frontier_inv_from_def, remaining_alloca_budget_def] >>
-    metis_tac[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-       alloca_frontier_inv_from_def, remaining_alloca_budget_def]) >>
+   (qpat_x_assum `alloca_inv initial` mp_tac >>
+    qpat_x_assum `alloca_frontier_inv_from k ctx func site initial` mp_tac >>
+    simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+         alloca_frontier_inv_from_def, remaining_alloca_budget_def]) >>
  `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
    (rpt strip_tac >> simp[] >> first_x_assum irule >> decide_tac) >>
  `FLOOKUP AG ptr' = SOME (b,sz) /\ op_taint atn (Var ptr') = {}` by metis_tac[] >>
