@@ -4,6 +4,7 @@ Ancestors
   bodyIntCallMaterializeLanding storageCopyGasPath exprSimStorageCopy exprSimCopy
   intCallFrame compileEnv finite_map list rich_list words exprSimMemUnwrap
   emitHelperProps venomInst venomState placeMemoryPrimitiveForward exprLoweringProps
+  loweringPosts context valueCopy fragGasMode exprSimAlloc
 
 Theorem protected_storage_loop_landing:
   compile_word_copy_loop src dst n loc LocMemory F sa = (result,sb) /\
@@ -180,4 +181,85 @@ Proof
      simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      pairarg_tac >> simp[]) >>
   drule_all protected_storage_loop_landing >> simp[]
+QED
+
+Theorem storage_alloc_materialization_landing:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  (if n = 1 then
+     do value <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+        emit_void MSTORE [buf.buf_operand; value] od
+   else do compile_word_copy_loop src buf.buf_operand n loc LocMemory F; return () od)
+    sm = (result,sb) /\
+  (loc = LocStorage \/ loc = LocTransient) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ fresh_vars_wrt sa s /\
+  sz < dimword (:256) /\ 32*n <= sz /\ n = type_slot_size tv /\ n < 2**256 /\
+  allocas_above lo s /\ copy_old_operand sa src /\ eval_operand src s = SOME a /\
+  storage_holds cx (loc = LocTransient) ty (Value v) a es s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  (!q x. reserved q /\ q = Var x ==> not_fresh_at sa x) /\
+  (!p k. P p k ==> p+k <= lo) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u w. gas_marked_path F ctx func s 0 (OK u) /\
+    stmt_state_rel ctx func ce cx es u /\
+    eval_operand buf.buf_operand u = SOME w /\ val_wf tv v /\
+    val_in_memory tv v (w2n w) u.vs_memory /\
+    val_footprint tv v <= type_memory_size tv /\
+    FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+    lo <= w2n w /\ w2n w+sz < dimword (:256) /\ allocas_above lo u /\
+    s.vs_alloca_next <= u.vs_alloca_next /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP u.vs_allocas aid = SOME entry) /\
+    (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!q x. (reserved q \/ q = src) /\ q = Var x ==> not_fresh_at sa x` by
+    (fs[copy_old_operand_def] >> metis_tac[]) >>
+  mp_tac (Q.INST [`reserved` |-> `\q. reserved q \/ q = src`]
+    (SPEC_ALL materialization_alloc_landing)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  rename1 `gas_marked_path F ctx func s 0 (OK mid)` >>
+  `sa.cs_next_var <= sm.cs_next_var` by
+    (drule loweringHaltTheory.compile_alloc_buffer_parts >> simp[]) >>
+  `local_ptrs_reserved ce sm` by (irule local_ptrs_reserved_next_var >> metis_tac[]) >>
+  `!x. src = Var x \/ buf.buf_operand = Var x ==> not_fresh_at sm x` by
+    (rpt strip_tac >> fs[copy_old_operand_def] >>
+     gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `storage_holds cx (loc = LocTransient) ty (Value v) a es mid` by
+    gvs[storage_holds_def, contract_storage_def, contract_transient_def] >>
+  `eval_operand src mid = SOME a /\
+   eval_operand buf.buf_operand mid = SOME (n2w (w2n w)) /\
+   w2n w+32*n < 2**256` by (fs[dimword_def] >> metis_tac[]) >>
+  `!q x. (reserved q \/ q = buf.buf_operand) /\ q = Var x ==>
+     not_fresh_at sm x` by
+    (rpt strip_tac >> gvs[not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  mp_tac (Q.INST [`s` |-> `mid`, `sa` |-> `sm`, `b` |-> `w2n (w:bytes32)`,
+      `dst` |-> `buf.buf_operand`, `aid` |-> `sa.cs_next_id`,
+      `P` |-> `\p k. regions_disjoint p k (w2n (w:bytes32)) (32*n)`,
+      `reserved` |-> `\q. reserved q \/ q = buf.buf_operand`]
+    (SPEC_ALL protected_storage_suffix_landing)) >>
+  (impl_tac >- (simp[] >> gvs[] >> metis_tac[])) >> strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  `stmt_state_rel ctx func ce cx es u` by
+    (irule copy_buffer_state_rel_frame >>
+     qexistsl_tac [`w2n w`,
+       `mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+          [STRING #"%" (toString sa.cs_next_var)]`, `mid`, `sm`, `sz`] >>
+     simp[mk_inst_def] >> gvs[regions_disjoint_def] >>
+     rpt strip_tac >> first_assum irule >> fs[] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_LESS_EQ_MONO]) >>
+  `gas_marked_path F ctx func s 0 (OK u)` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  qexistsl_tac [`u`, `w`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `regions_disjoint p' k (w2n w) (32*n)` by
+    (fs[regions_disjoint_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  metis_tac[]
 QED

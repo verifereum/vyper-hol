@@ -16,6 +16,8 @@ Theorem materialization_alloc_run_fields:
   sz < dimword (:256) ==>
   t.vs_data_section = s.vs_data_section /\
   t.vs_immutables = s.vs_immutables /\
+  t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_call_ctx = s.vs_call_ctx /\
   s.vs_alloca_next <= t.vs_alloca_next /\ fresh_vars_wrt sm t /\
   t.vs_allocas = (abiBuiltinAllocation$abi_builtin_allocate_state sa.cs_next_id sz s).vs_allocas
 Proof
@@ -43,6 +45,8 @@ Theorem materialization_alloc_landing:
     lo <= w2n w /\ w2n w + sz < dimword (:256) /\
     allocas_above lo u /\ u.vs_memory = s.vs_memory /\
     u.vs_data_section = s.vs_data_section /\ u.vs_immutables = s.vs_immutables /\
+    u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+    u.vs_call_ctx = s.vs_call_ctx /\
     s.vs_alloca_next <= u.vs_alloca_next /\ fresh_vars_wrt sm u /\
     u.vs_allocas = (abiBuiltinAllocation$abi_builtin_allocate_state sa.cs_next_id sz s).vs_allocas /\
     (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
