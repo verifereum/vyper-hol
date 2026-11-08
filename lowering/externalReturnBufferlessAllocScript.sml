@@ -159,7 +159,7 @@ QED
 
 Theorem return_selected_bufferless_alloc_exit:
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ ce.ce_func_info name = (0,0,pvs) /\

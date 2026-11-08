@@ -201,7 +201,7 @@ Theorem return_selected_nocopy_window:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -306,7 +306,7 @@ Theorem return_selected_nocopy_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -343,7 +343,7 @@ Proof
   `ce.ce_max_return_size < dimword (:256)` by
     (drule_all return_site_output_buffer_bound >> simp[]) >>
   `compile_external_return (SOME op) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sb = (u,sf)` by
+    ce.ce_max_return_size F nkey ut (mut = View) sb = (u,sf)` by
     (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
      gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
@@ -372,7 +372,7 @@ Theorem return_selected_allocated_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -385,7 +385,7 @@ Theorem return_selected_allocated_path:
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
   compile_external_return (SOME op) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sb = (u,sf) /\
+    ce.ce_max_return_size F nkey ut (mut = View) sb = (u,sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sb /\ stmt_state_rel ctx func ce cx ee s /\
   (!y. op = Var y ==> not_fresh_at sb y) /\
@@ -484,7 +484,7 @@ Theorem return_selected_located_normalize_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -500,7 +500,7 @@ Theorem return_selected_located_normalize_path:
   compile_alloc_buffer (type_memory_bytes ce ret) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand ret src (expr_type e) sm = ((),sn) /\
   compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf) /\
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   (!y. src = Var y ==> not_fresh_at sa y) /\
@@ -536,7 +536,7 @@ Theorem return_selected_bufferless_normalize_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -555,7 +555,7 @@ Theorem return_selected_bufferless_normalize_path:
   compile_alloc_buffer (type_memory_bytes ce ret) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand ret (Lit 0w) phy sm = ((),sn) /\
   compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf) /\
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf) /\
   fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -597,7 +597,7 @@ Theorem return_selected_bufferless_nocopy_path:
   source_typing_ok tops am tx /\
   lookup_function NONE fname External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
+    (package_external_fn tops ut nkey_map (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
   same_frame cenv ce /\ get_tenv cx = type_env tops /\
@@ -614,7 +614,7 @@ Theorem return_selected_bufferless_nocopy_path:
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
   compile_external_return (SOME (Lit 0w)) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sb = (u,sf) /\
+    ce.ce_max_return_size F nkey ut (mut = View) sb = (u,sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sb /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -738,7 +738,7 @@ Theorem return_selected_located_suffix:
   source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
@@ -785,7 +785,7 @@ Proof
   `compile_store_memory_typed ce buf.buf_operand ret op (expr_type e) sm = ((),sn)`
     by metis_tac[] >>
   `compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf)` by gvs[] >>
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by gvs[] >>
   drule_all return_selected_located_normalize_path >> simp[]
 QED
 
@@ -805,7 +805,7 @@ Theorem return_selected_bufferless_suffix:
   source_typing_ok tops am tx /\
   lookup_function NONE tx.function_name External tops = SOME (mut,F,args,[],ret,fbody) /\
   set_external_package_target target
-    (package_external_fn tops F nkey_map
+    (package_external_fn tops ut nkey_map
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sinit) /\
@@ -853,7 +853,7 @@ Proof
      drule_all return_selected_raw_bytes >> simp[]) >>
   Cases_on `phy = ret`
   >- (`compile_external_return (SOME (Lit 0w)) F F ce.ce_ret_enc_info
-         ce.ce_max_return_size F nkey F (mut = View) sa = (u,sf)` by
+         ce.ce_max_return_size F nkey ut (mut = View) sa = (u,sf)` by
         (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
          gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
       drule_all return_selected_bufferless_nocopy_path >> simp[]) >>
@@ -863,6 +863,6 @@ Proof
   `compile_store_memory_typed ce buf.buf_operand ret (Lit 0w) phy sm = ((),sn)`
     by metis_tac[] >>
   `compile_external_return (SOME buf.buf_operand) F F ce.ce_ret_enc_info
-    ce.ce_max_return_size F nkey F (mut = View) sn = (u,sf)` by gvs[] >>
+    ce.ce_max_return_size F nkey ut (mut = View) sn = (u,sf)` by gvs[] >>
   drule_all return_selected_bufferless_normalize_path >> simp[]
 QED
