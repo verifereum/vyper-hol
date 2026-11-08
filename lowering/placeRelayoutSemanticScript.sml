@@ -7,6 +7,31 @@ Ancestors
   vyperTypeArgFits vyperTypeInvariants exprSimHypsDefs
   exprSimIfExpCompat vyperTypeSystem vyperAST compileEnv
 
+Theorem arg_type_fits_source_assignable[local]:
+  (!t u. arg_type_fits t u ==>
+    !tenv. assignable_type tenv u /\ well_formed_type tenv t ==>
+      assignable_type tenv t) /\
+  (!ts us. arg_types_fit ts us ==>
+    !tenv. EVERY (assignable_type tenv) us /\ EVERY (well_formed_type tenv) ts ==>
+      EVERY (assignable_type tenv) ts)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >> rw[arg_type_fits_def] >>
+  gvs[assignable_type_def] >>
+  all_tac
+  >>~- ([`assignable_type tenv t`],
+     first_x_assum irule >> simp[] >>
+     gvs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+     drule vyperTypeValuesTheory.evaluate_type_ArrayT_cases >>
+     metis_tac[]) >>
+  `EVERY (well_formed_type tenv) ts` by
+    (gvs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+     drule vyperTypeValuesTheory.evaluate_type_TupleT_cases >> strip_tac >>
+     gvs[listTheory.EVERY_MEM, listTheory.LIST_REL_EL_EQN,
+         listTheory.MEM_EL] >>
+     metis_tac[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
+  metis_tac[arg_types_fit_LENGTH, listTheory.LENGTH_NIL]
+QED
+
 Theorem strict_widened_assignment_nonword:
   expr_body_pre cenv cx env e es /\
   type_widens_to env.type_defs (expr_type e) dty /\
@@ -47,6 +72,7 @@ Theorem widened_place_semantic_endpoint:
   cenv.ce_func_return_type = build_func_return_type tops /\
   get_module_code cx NONE = SOME tops /\
   type_widens_to env.type_defs (expr_type e) dty /\
+  assignable_type env.type_defs (expr_type e) /\
   target_indices_pre cenv cx env bt /\
   ~(lowered_value_type cenv e = expr_type e \/
     is_bytestring_type (expr_type e) /\
@@ -62,6 +88,7 @@ Theorem widened_place_semantic_endpoint:
   lowered_value_type cenv e <> expr_type e /\
   lowered_value_type cenv e <> dty /\
   type_widens_to (get_tenv cx) (lowered_value_type cenv e) dty /\
+  assignable_type (get_tenv cx) (lowered_value_type cenv e) /\
   ?stv dtv.
     evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME stv /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\
@@ -92,5 +119,11 @@ Proof
   drule_all annassign_relayout_read_layout >> strip_tac >>
   `~is_word_type (expr_type e)` by metis_tac[return_source_word_widens_eq] >>
   drule_all expr_body_pre_relayout_source_bound >> strip_tac >>
+  `assignable_type (get_tenv cx) (lowered_value_type cenv e)` by
+    (irule (cj 1 arg_type_fits_source_assignable) >>
+     reverse conj_tac
+     >- simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
+     qexists_tac `expr_type e` >> simp[] >>
+     fs[type_widens_to_def] >> gvs[]) >>
   simp[] >> metis_tac[]
 QED
