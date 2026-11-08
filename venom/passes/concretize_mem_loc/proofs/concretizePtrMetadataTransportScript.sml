@@ -1,7 +1,7 @@
 Theory concretizePtrMetadataTransport
 Ancestors
   o1PassContract venomPassDispatcher venomPassSchedule
-  fmpLowerDefs makeSsaCurrentDefs simplifyCfgDefs singleUseExpansionDefs
+  fmpLowerDefs makeSsaDefs simplifyCfgDefs singleUseExpansionDefs
   cfgNormDefs dftDefs venomInst list
 
 Theorem ptr_make_ssa_mems[local]:

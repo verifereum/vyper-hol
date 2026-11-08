@@ -1,6 +1,6 @@
 Theory concretizeSuffixMetadataDirect
 Ancestors
-  fmpLowerDefs makeSsaCurrentDefs singleUseExpansionDefs dftDefs venomInst
+  fmpLowerDefs makeSsaDefs singleUseExpansionDefs dftDefs venomInst
 
 Theorem fmp_checked_seal_mems_used[local]:
   fmp_checked_seal ctx fn info blocks = SOME out ==>
