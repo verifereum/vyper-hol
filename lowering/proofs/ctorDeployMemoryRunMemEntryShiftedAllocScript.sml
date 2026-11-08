@@ -1,7 +1,7 @@
 (* Actual allocation at the constructor's reserved-memory frontier. *)
 Theory ctorDeployMemoryRunMemEntryShiftedAlloc
 Ancestors
-  ctorDeployLoweringEntryRegisterRun
+  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryAllocation
   ctorDeployMemoryRunMemEntryShiftedFrame
   ctorDeployMemoryRunMemEntryShiftedFrontier ctorDeployMemoryFrontier
   actualAllocExec allocaBudgetProps allocaFrontierBound venomExecSemantics venomState venomInst
@@ -73,16 +73,52 @@ Theorem ctor_checked_alloc_buffer_run_from:
    gas_path_mem ctx func initial 0 (OK a) /\
    a.vs_gas_readings = initial.vs_gas_readings /\ alloca_history func a
 Proof
- strip_tac >> drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_run >> strip_tac >>
- qexists `a` >> asm_rewrite_tac[] >>
- qmatch_goalsub_abbrev_tac `OK (raw with vs_inst_idx := _)` >>
+ strip_tac >>
+ `initial.vs_alloca_next + n < dimword (:256)` by
+   (drule_all ctor_alloc_buffer_credit_from >> simp[]) >>
+ `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+   [STRING #"%" (toString st.cs_next_var)]) (fn_insts func)` by
+   (drule_all entry_alloc_buffer_inst >> simp[]) >>
+ qabbrev_tac `raw = update_var (STRING #"%" (toString st.cs_next_var))
+   (n2w initial.vs_alloca_next)
+   (initial with <|vs_allocas := initial.vs_allocas |+
+     (st.cs_next_id,(initial.vs_alloca_next,n));
+     vs_alloca_next := initial.vs_alloca_next+n |>)` >>
+ `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) = OK raw` by
+   simp[exec_alloca_def, mk_inst_def, w2n_n2w, Abbr `raw`] >>
+ `alloca_inv raw` by metis_tac[alloca_inv_exec_alloca] >>
+ `alloca_frontier_inv_from k ctx func site raw` by
+   (irule deploy_ctor_alloca_frontier_preserved >>
+    conj_tac >- metis_tac[ctor_actual_function_ids] >>
+    qexistsl [`mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+      [STRING #"%" (toString st.cs_next_var)]`, `initial`, `site`] >>
+    fs[mk_inst_def, step_inst_base_def]) >>
+ `frag_exec ctx st sa (\u. u = initial)
+    (\u. u = raw with vs_inst_idx := LENGTH sa.cs_current_insts) (K F)` by
+   (irule compile_alloc_buffer_fresh_frag >> qexistsl [`buf`, `n`] >>
+    simp[Abbr `raw`]) >>
+ `abi_decode_sim ctx func initial (raw with vs_inst_idx := LENGTH sa.cs_current_insts)` by
+   (qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+    simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
+    simp[abi_decode_sim_def]) >>
+ `alloca_inv (raw with vs_inst_idx := LENGTH sa.cs_current_insts) /\
+  alloca_frontier_inv_from k ctx func site (raw with vs_inst_idx := LENGTH sa.cs_current_insts)` by
+   (conj_tac >- fs[alloca_inv_def] >>
+    irule deploy_ctor_alloca_frontier_fields >>
+    goal_assum (drule_at Any) >> simp[]) >>
+ drule compile_alloc_buffer_parts >> strip_tac >>
+ qexists `raw with vs_inst_idx := LENGTH sa.cs_current_insts` >>
+ asm_rewrite_tac[] >>
  `raw = update_var (STRING #"%" (toString st.cs_next_var))
    (n2w initial.vs_alloca_next)
    (initial with <| vs_allocas := initial.vs_allocas |+
      (st.cs_next_id,(initial.vs_alloca_next,n));
      vs_alloca_next := initial.vs_alloca_next+n |>)` by simp[Abbr `raw`] >>
  drule_all ctor_checked_alloc_buffer_edge >>
- disch_then (qspec_then `ctx` mp_tac) >> simp_tac (srw_ss()) []
+ disch_then (qspec_then `ctx` mp_tac) >>
+ simp[Abbr `raw`, update_var_def] >>
+ drule compile_alloc_buffer_insts >> simp[]
 QED
 
 Theorem ctor_checked_alloc_buffer_actual_from:
@@ -123,7 +159,36 @@ Proof
  `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
  drule_all ctor_checked_alloc_buffer_run_from >> strip_tac >>
  `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
- drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_state_props >> strip_tac >>
+ `not_scope_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
+   (irule local_ptrs_rel_fresh_not_scope_ptr >>
+    qexistsl [`func`, `initial`, `st`] >> simp[GREATER_EQ]) >>
+ `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) =
+    OK (a with vs_inst_idx := initial.vs_inst_idx)` by
+   gvs[exec_alloca_def, mk_inst_def, update_var_def, w2n_n2w,
+       venom_state_component_equality] >>
+ drule local_ptrs_rel_exec_alloca_fresh >> simp[mk_inst_def, IgnAsm `a = _`] >>
+ disch_then (qspecl_then [`func`, `ce`, `scopes`] mp_tac) >>
+ simp[local_ptrs_rel_inst_idx, IgnAsm `a = _`] >> strip_tac >>
+ `w = n2w initial.vs_alloca_next` by metis_tac[n2w_w2n] >>
+ drule compile_alloc_buffer_parts >> strip_tac >>
  qexists `a` >> asm_rewrite_tac[] >>
- gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+ simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+ conj_tac
+ >- (simp[local_backed_def] >> disj1_tac >>
+     qexists `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString st.cs_next_var)]` >>
+     drule_all entry_alloc_buffer_inst >> gvs[mk_inst_def]) >>
+ conj_tac
+ >- (fs[fresh_vars_wrt_def, update_var_def, GREATER_EQ] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+ conj_tac
+ >- (rpt strip_tac >>
+     qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
+     fs[local_region_def, lookup_var_def, update_var_def] >> metis_tac[]) >>
+ conj_tac
+ >- (rpt strip_tac >> IF_CASES_TAC >> gvs[lookup_var_def]) >>
+ simp[abi_encoder_registered_effect_def, frag_ids_def, GSPECIFICATION,
+      update_var_def, FLOOKUP_UPDATE] >>
+ rpt strip_tac >> IF_CASES_TAC >> gvs[]
 QED

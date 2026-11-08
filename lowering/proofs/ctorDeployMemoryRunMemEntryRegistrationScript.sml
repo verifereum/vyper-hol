@@ -473,8 +473,21 @@ Proof
     metis_tac[LESS_EQ_TRANS]) >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_blocks = middle.cs_blocks` by asm_rewrite_tac[] >>
- drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+ drule cs_extends_abi_decode >> strip_tac >>
+ drule_all fn_has_code_split >> strip_tac >>
+ drule abi_decoder_variable_counter >> strip_tac >>
+ drule_all abi_decoder_to_buf_code >>
+ simp_tac bool_ss [abi_decoder_code_def] >> strip_tac >>
+ qpat_x_assum `!i. abi_decoder_code_member _ _ ==> _` kall_tac >>
+ `frag_ids middle st' SUBSET frag_ids st st'` by
+   (qpat_x_assum `st.cs_next_id <= middle.cs_next_id` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+ Q.SUBGOAL_THEN
+   `middle.cs_blocks = st'.cs_blocks \/
+    !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` assume_tac >- metis_tac[] >>
+ qpat_x_assum `st.cs_blocks = middle.cs_blocks` kall_tac >>
  `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
    (asm_rewrite_tac[] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
  qpat_assum `eval_operand src prepared = _` assume_tac >>
@@ -577,8 +590,20 @@ Proof
  `st.cs_blocks = middle.cs_blocks` by simp[] >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_next_id <= middle.cs_next_id` by simp[] >>
- drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+ drule cs_extends_abi_decode >> strip_tac >>
+ drule_all fn_has_code_split >> strip_tac >>
+ drule abi_decoder_variable_counter >> strip_tac >>
+ drule_all abi_decoder_to_buf_code >>
+ simp_tac bool_ss [abi_decoder_code_def] >> strip_tac >>
+ qpat_x_assum `!i. abi_decoder_code_member _ _ ==> _` kall_tac >>
+ `frag_ids middle st' SUBSET frag_ids st st'` by
+   (qpat_x_assum `st.cs_next_id <= middle.cs_next_id` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+ Q.SUBGOAL_THEN
+   `middle.cs_blocks = st'.cs_blocks \/
+    !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` assume_tac >- metis_tac[] >>
  drule ctor_checked_arg_add_reach >> simp_tac (srw_ss()) [eval_operand_def] >>
  disch_then drule_all >>
  disch_then (qspec_then `ctx` (MAP_EVERY assume_tac o CONJUNCTS)) >>
@@ -597,7 +622,8 @@ Proof
     goal_assum (drule_at Any)) >>
  `sb < dimword (:256)` by decide_tac >>
  qpat_x_assum `st.cs_blocks = middle.cs_blocks` kall_tac >>
- irule ctor_checked_arg_setup_decode_actual >> asm_rewrite_tac[] >>
+ qpat_x_assum `st.cs_current_bb = middle.cs_current_bb` kall_tac >>
+ irule ctor_checked_arg_setup_decode_actual >> asm_simp_tac bool_ss [] >>
  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
  goal_assum (drule_at (Pat `abi_decode_sim _ _ _ _`)) >>
  asm_rewrite_tac[] >>
@@ -748,8 +774,20 @@ Proof
    (imp_res_tac ctor_checked_arg_emit_shape >> simp[] >> decide_tac) >>
  `cs_extends st m2 /\ cs_extends st middle` by metis_tac[cs_extends_trans] >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
- drule_all ctorDeployLoweringEntryAddressTheory.deploy_ctor_prefix_decoder_code_phase >>
- disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+ drule cs_extends_abi_decode >> strip_tac >>
+ drule_all fn_has_code_split >> strip_tac >>
+ drule abi_decoder_variable_counter >> strip_tac >>
+ drule_all abi_decoder_to_buf_code >>
+ simp_tac bool_ss [abi_decoder_code_def] >> strip_tac >>
+ qpat_x_assum `!i. abi_decoder_code_member _ _ ==> _` kall_tac >>
+ `frag_ids middle st' SUBSET frag_ids st st'` by
+   (qpat_x_assum `st.cs_next_id <= middle.cs_next_id` mp_tac >>
+    POP_ASSUM_LIST (K ALL_TAC) >>
+    simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+ Q.SUBGOAL_THEN
+   `middle.cs_blocks = st'.cs_blocks \/
+    !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` assume_tac >- metis_tac[] >>
  `fn_has_code st m1 func /\ fn_has_code m1 m2 func /\ fn_has_code m2 middle func` by
    metis_tac[fn_has_code_split, cs_extends_trans] >>
  drule_all ctor_checked_arg_dynamic_setup >>
@@ -758,7 +796,7 @@ Proof
  `abi_decoder_operand_live middle.cs_next_var src` by
    (irule abi_decoder_operand_live_fresh >> goal_assum (drule_at Any) >>
     goal_assum (drule_at Any)) >>
- irule ctor_checked_arg_setup_decode_actual >> asm_rewrite_tac[] >>
+ irule ctor_checked_arg_setup_decode_actual >> asm_simp_tac bool_ss [] >>
  goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
  goal_assum (drule_at (Pat `abi_decode_sim _ _ initial prepared`)) >>
  asm_rewrite_tac[] >>
@@ -1019,9 +1057,39 @@ Proof
  `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
  drule_all ctor_checked_alloc_buffer_run >> strip_tac >>
  `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
- drule_all ctorDeployLoweringEntryRegisterRunTheory.deploy_ctor_register_alloc_state_props >> strip_tac >>
- qexists `a` >> asm_rewrite_tac[] >>
- gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+ `not_scope_ptr ce scopes (STRING #"%" (toString st.cs_next_var))` by
+   (irule local_ptrs_rel_fresh_not_scope_ptr >>
+    qexistsl [`func`, `initial`, `st`] >> simp[GREATER_EQ]) >>
+ `exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+    [STRING #"%" (toString st.cs_next_var)]) initial (n2w n : bytes32) =
+    OK (a with vs_inst_idx := initial.vs_inst_idx)` by
+   gvs[exec_alloca_def, mk_inst_def, update_var_def, w2n_n2w,
+       venom_state_component_equality] >>
+ drule local_ptrs_rel_exec_alloca_fresh >> simp[mk_inst_def, IgnAsm `a = _`] >>
+ disch_then (qspecl_then [`func`, `ce`, `scopes`] mp_tac) >>
+ simp[local_ptrs_rel_inst_idx, IgnAsm `a = _`] >> strip_tac >>
+ `w = n2w initial.vs_alloca_next` by metis_tac[n2w_w2n] >>
+ drule compile_alloc_buffer_parts >> strip_tac >>
+ qexists `a` >>
+ asm_rewrite_tac[] >>
+ simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+ conj_tac
+ >- (simp[local_backed_def] >> disj1_tac >>
+     qexists `mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
+       [STRING #"%" (toString st.cs_next_var)]` >>
+     drule_all entry_alloc_buffer_inst >> gvs[mk_inst_def]) >>
+ conj_tac
+ >- (fs[fresh_vars_wrt_def, update_var_def, GREATER_EQ] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+ conj_tac
+ >- (rpt strip_tac >>
+     qpat_x_assum `!name b sz. local_region _ _ _ _ _ _ ==> _` mp_tac >>
+     fs[local_region_def, lookup_var_def, update_var_def] >> metis_tac[]) >>
+ conj_tac
+ >- (rpt strip_tac >> IF_CASES_TAC >> gvs[lookup_var_def]) >>
+ simp[abi_encoder_registered_effect_def, frag_ids_def, GSPECIFICATION,
+      update_var_def, FLOOKUP_UPDATE] >>
+ rpt strip_tac >> IF_CASES_TAC >> gvs[]
 QED
 
 Theorem ctor_checked_register_one_actual:
