@@ -1,7 +1,8 @@
 (* Seam 2 joint induction step: calls and pops. *)
 Theory bodyIntCallJointCall
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodyIntCallFamCallInt bodyIntCallFamCallExt
+  bodyIntCallFamCallPop
 
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
@@ -19,5 +20,9 @@ Theorem intcall_effect_producer_step:
   ((?a tgt args dflt. e = Call a tgt args dflt) \/ (?a tgt. e = Pop a tgt)) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  cheat
+  disch_then strip_assume_tac
+  >- (Cases_on `?nsid. tgt = IntCall nsid`
+      >- (irule intcall_intcall_step >> metis_tac[])
+      >> irule intcall_extcall_step >> metis_tac[])
+  >> irule intcall_pop_step >> metis_tac[]
 QED

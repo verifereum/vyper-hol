@@ -1,7 +1,9 @@
 (* Seam 2 joint induction step: statements and statement lists. *)
 Theory bodyIntCallJointStmt
 Ancestors
-  bodyIntCallJointContract bodyIntCallJointStmtBoundary bodyIntCallJointStmtZero bodyIntCallJointStmtSeq bodyIntCallJointStmtExpr bodyIntCallJointStmtJump bodyIntCallJointStmtRaise bodyIntCallJointStmtAssert
+  bodyIntCallJointContract bodyIntCallFamStmtList bodyIntCallFamStmtSimple
+  bodyIntCallFamStmtExit bodyIntCallFamStmtMutation bodyIntCallFamStmtReturn
+  bodyIntCallFamStmtIf bodyIntCallFamStmtFor
 
 (* L-stmt (C1.3.16): a single statement (the list [st]) of any form, given
    the producers of every expression and of every smaller statement list
@@ -15,5 +17,18 @@ Theorem intcall_stmt_producer_step:
   (!ss. (!st. MEM st ss ==> intcall_stmts_producer fp [st]) ==>
         intcall_stmts_producer fp ss)
 Proof
-  cheat
+  strip_tac >> conj_tac
+  >- (Cases_on `st` >> strip_tac
+      >~ [`For _ _ _ _ _`] >- (irule intcall_for_stmt_step >> metis_tac[])
+      >~ [`If _ _ _`] >- (irule intcall_if_stmt_step >> metis_tac[])
+      >~ [`Return _`] >- (irule intcall_return_stmt_step >> metis_tac[])
+      >~ [`Raise _`] >- (irule intcall_exit_stmt_step >> metis_tac[])
+      >~ [`Assert _ _`] >- (irule intcall_exit_stmt_step >> metis_tac[])
+      >~ [`Log _ _`] >- (irule intcall_exit_stmt_step >> metis_tac[])
+      >~ [`Assign _ _`] >- (irule intcall_mutation_stmt_step >> metis_tac[])
+      >~ [`AugAssign _ _ _ _`] >- (irule intcall_mutation_stmt_step >> metis_tac[])
+      >~ [`Append _ _`] >- (irule intcall_mutation_stmt_step >> metis_tac[])
+      >~ [`AnnAssign _ _ _`] >- (irule intcall_mutation_stmt_step >> metis_tac[])
+      >> irule intcall_simple_stmt_step >> metis_tac[]) >>
+  rpt strip_tac >> irule intcall_stmts_list_step >> metis_tac[]
 QED
