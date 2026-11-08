@@ -426,8 +426,8 @@ Proof
        venomInstTheory.get_instruction_def,
        venomExecSemanticsTheory.step_inst_non_invoke] >>
   pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
+  simp[venomStateTheory.update_var_def, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem deploy_prefix_context_guard_abort:
