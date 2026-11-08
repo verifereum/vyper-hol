@@ -179,7 +179,9 @@ Proof
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
-  >- EVAL_FRAME_CASE
+  (* Builtin In/NotIn: the membership branch's eval_exprs needs the
+     disjunct-guarded induction hypothesis; EVAL_FRAME_IH_TAC leaves it open. *)
+  >- (EVAL_FRAME_CASE >> metis_tac[])
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
   >- EVAL_FRAME_CASE
