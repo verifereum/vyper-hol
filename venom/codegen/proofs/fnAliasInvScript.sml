@@ -14636,6 +14636,215 @@ Proof
   irule alias_occ_reorder_move_entry_align >> metis_tac[]
 QED
 
+Definition alias_occ_input_restore_commands_def:
+  alias_occ_input_restore_commands op ps =
+    if is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)
+    then [AliasOccRestore op] else []
+End
+
+Definition alias_occ_input_tail_state_def:
+  alias_occ_input_tail_state nl op ps =
+    case op of
+      Var v => if MEM v nl then
+        (case stack_get_depth op ps.ps_stack of
+          NONE => ps | SOME dist => SND (do_dup dist ps)) else ps
+    | _ => ps with ps_stack := stack_push op ps.ps_stack
+End
+
+Definition alias_occ_input_tail_events_def:
+  alias_occ_input_tail_events site nl op ps =
+    case op of
+      Var v => if MEM v nl then
+        (case stack_get_depth op ps.ps_stack of
+          NONE => [] | SOME dist => [AliasOccPrimitive (AliasOccDup dist)]) else []
+    | _ => [AliasOccLiteralBirth site op]
+End
+
+Theorem alias_occ_input_tail_align:
+  alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_events_shadow (alias_occ_input_tail_events site nl op ps) s)
+    (alias_occ_input_tail_state nl op ps)
+Proof
+  Cases_on `op` >>
+  simp[alias_occ_input_tail_events_def, alias_occ_input_tail_state_def,
+    alias_occ_events_shadow_def, alias_occ_event_shadow_def, stack_push_def,
+    alias_occ_insert_align] >>
+  Cases_on `MEM s' nl` >> simp[] >>
+  Cases_on `stack_get_depth (Var s') ps.ps_stack` >>
+  simp[alias_occ_events_shadow_def, alias_occ_event_shadow_def,
+    GSYM alias_occ_command_real_def, alias_occ_command_align]
+QED
+
+Theorem alias_occ_emit_one_input_projection:
+  SND (emit_one_input opc nl op ps) =
+    alias_occ_input_tail_state nl op
+      (alias_occ_commands_real (alias_occ_input_restore_commands op ps) ps)
+Proof
+  pure_rewrite_tac[emit_one_input_def, LET_THM] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  Cases_on `is_var_operand op /\ IS_SOME (FLOOKUP ps.ps_spilled op)` >>
+  asm_rewrite_tac[alias_occ_input_restore_commands_def, alias_occ_commands_real_def,
+    alias_occ_command_real_def] >>
+  Cases_on `do_restore op ps` >> simp[] >>
+  Cases_on `op` >> simp[alias_occ_input_tail_state_def] >>
+  Cases_on `opc = INVOKE` >> simp[] >>
+  rename1 `MEM v nl` >> Cases_on `MEM v nl` >> simp[] >>
+  rename1 `stack_get_depth (Var v) p.ps_stack` >>
+  Cases_on `stack_get_depth (Var v) p.ps_stack` >> simp[] >>
+  pairarg_tac >> simp[]
+QED
+
+Definition alias_occ_emit_one_input_events_def:
+  alias_occ_emit_one_input_events site nl op ps =
+    MAP AliasOccPrimitive (alias_occ_input_restore_commands op ps) ++
+    alias_occ_input_tail_events site nl op
+      (alias_occ_commands_real (alias_occ_input_restore_commands op ps) ps)
+End
+
+Theorem alias_occ_emit_one_input_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_emit_one_input_events site nl op ps) s)
+    (SND (emit_one_input opc nl op ps))
+Proof
+  rewrite_tac[alias_occ_emit_one_input_events_def, alias_occ_emit_one_input_projection,
+    alias_occ_events_append, alias_occ_primitive_events] >>
+  strip_tac >> irule alias_occ_input_tail_align >> simp[alias_occ_commands_align]
+QED
+
+Definition alias_occ_emit_input_events_def:
+  (alias_occ_emit_input_events site opc [] nl ps = []) /\
+  (alias_occ_emit_input_events site opc (op::rest) nl ps =
+    alias_occ_emit_one_input_events site (operand_vars rest ++ nl) op ps ++
+    alias_occ_emit_input_events (SUC site) opc rest nl
+      (SND (emit_one_input opc (operand_vars rest ++ nl) op ps)))
+End
+
+Theorem alias_occ_emit_input_align:
+  !ops site opc nl ps s. alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_events_shadow (alias_occ_emit_input_events site opc ops nl ps) s)
+    (SND (emit_input_plan opc ops nl ps))
+Proof
+  Induct >> simp[alias_occ_emit_input_events_def, emit_input_plan_def,
+    alias_occ_events_shadow_def, alias_occ_events_append] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `emit_one_input opc (operand_vars ops ++ nl) h ps` >> simp[] >>
+  Cases_on `emit_input_plan opc ops nl r` >> simp[] >>
+  first_x_assum (qspecl_then [`SUC site`,`opc`,`nl`,`r`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  metis_tac[alias_occ_emit_one_input_align, pairTheory.SND]
+QED
+
+Theorem alias_occ_emit_input_wf:
+  alias_occ_wf s ==>
+  alias_occ_wf (alias_occ_events_shadow (alias_occ_emit_input_events site opc ops nl ps) s)
+Proof
+  simp[alias_occ_events_wf]
+QED
+
+Theorem alias_occ_emit_one_input_literal:
+  MEM (AliasOccLiteralBirth birth at) (alias_occ_emit_one_input_events site nl op ps) ==>
+  birth = site /\ at = op /\ ~is_var_operand op
+Proof
+  Cases_on `op` >>
+  simp[alias_occ_emit_one_input_events_def, alias_occ_input_restore_commands_def,
+    alias_occ_input_tail_events_def, is_var_operand_def, alias_occ_commands_real_def] >>
+  Cases_on `IS_SOME (FLOOKUP ps.ps_spilled (Var s))` >>
+  simp[alias_occ_commands_real_def, alias_occ_command_real_def] >>
+  Cases_on `MEM s nl` >> simp[] >>
+  BasicProvers.TOP_CASE_TAC >> simp[]
+QED
+
+Theorem alias_occ_generate_emit_align:
+  alias_occ_align s ps ==>
+  alias_occ_align s (SND (generate_emit_ops inst topics ps))
+Proof
+  simp[alias_occ_align_def, alias_emit_ops_inventory]
+QED
+
+Definition alias_occ_output_events_def:
+  (alias_occ_output_events site [] = []) /\
+  (alias_occ_output_events site (out::outs) =
+    AliasOccRegularBirth site (Var out)::alias_occ_output_events (SUC site) outs)
+End
+
+Theorem alias_occ_output_events_align:
+  !outs site ps s. alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_events_shadow (alias_occ_output_events site outs) s)
+    (FOLDL (\p out. p with ps_stack := stack_push (Var out) p.ps_stack) ps outs)
+Proof
+  Induct >> simp[alias_occ_output_events_def, alias_occ_events_shadow_def,
+    alias_occ_event_shadow_def] >> rpt strip_tac >> first_x_assum irule >>
+  simp[stack_push_def, alias_occ_insert_align]
+QED
+
+Theorem alias_occ_output_events_birth:
+  !outs site birth at.
+  MEM (AliasOccRegularBirth birth at) (alias_occ_output_events site outs) ==>
+  ?n. n < LENGTH outs /\ birth = site + n /\ at = Var (EL n outs)
+Proof
+  Induct >> simp[alias_occ_output_events_def] >> rpt strip_tac
+  >- (qexists_tac `0` >> simp[]) >>
+  first_x_assum drule >> strip_tac >> qexists_tac `SUC n` >> simp[]
+QED
+
+Definition alias_occ_regular_join_plan_def:
+  alias_occ_regular_join_plan liveness dfg fn lbl inst ps =
+    if inst.inst_opcode = JMP then
+      case join_target_ops liveness fn lbl inst of
+        NONE => ([],ps)
+      | SOME targets =>
+          case restore_spilled_plan targets ps of (rops,p1) =>
+            case reorder_plan dfg targets p1 of (sops,p2) => (rops ++ sops,p2)
+    else ([],ps)
+End
+
+Definition alias_occ_regular_join_events_def:
+  alias_occ_regular_join_events liveness dfg fn lbl inst ps =
+    if inst.inst_opcode = JMP then
+      case join_target_ops liveness fn lbl inst of
+        NONE => []
+      | SOME targets =>
+          [AliasOccPrimitive (AliasOccRestoreMany targets)] ++
+          alias_occ_reorder_events dfg targets (SND (restore_spilled_plan targets ps))
+    else []
+End
+
+Theorem alias_occ_regular_join_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_regular_join_events liveness dfg fn lbl inst ps) s)
+    (SND (alias_occ_regular_join_plan liveness dfg fn lbl inst ps))
+Proof
+  Cases_on `inst.inst_opcode = JMP` >>
+  simp[alias_occ_regular_join_events_def, alias_occ_regular_join_plan_def,
+    alias_occ_events_shadow_def] >>
+  Cases_on `join_target_ops liveness fn lbl inst` >> simp[alias_occ_events_shadow_def] >>
+  rename1 `SOME targets` >>
+  Cases_on `restore_spilled_plan targets ps` >> simp[] >>
+  Cases_on `reorder_plan dfg targets r` >> simp[alias_occ_events_append,
+    alias_occ_events_shadow_def, alias_occ_event_shadow_def] >> strip_tac >>
+  `alias_occ_align (alias_occ_command_shadow (AliasOccRestoreMany targets) s) r` by
+    metis_tac[alias_occ_command_align, alias_occ_command_real_def, pairTheory.SND] >>
+  drule alias_occ_reorder_align >>
+  disch_then (qspecl_then [`targets`,`dfg`] mp_tac) >> simp[]
+QED
+
+(* Both candidate plans are computed, but only the selected plan contributes
+   events. No semantic meaning is attributed to the cost comparison. *)
+Definition alias_occ_regular_targets_def:
+  alias_occ_regular_targets dfg opc operands ps =
+    if is_commutative opc /\ 2 <= LENGTH operands then
+      if reorder_cost (FST (reorder_plan dfg operands ps)) <
+         reorder_cost (FST (reorder_plan dfg
+           (TAKE (LENGTH operands - 2) operands ++
+            [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]) ps))
+      then operands
+      else TAKE (LENGTH operands - 2) operands ++
+        [EL (LENGTH operands - 1) operands; EL (LENGTH operands - 2) operands]
+    else operands
+End
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
