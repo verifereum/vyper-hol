@@ -2,7 +2,7 @@ Theory fnLineageInvPointLive
 Ancestors fnPlanLineagePath fnPlanLineagePhiActivation fnPlanLineageLiveness livenessAnalysisProps
   venomWf venomInst venomExecProps codegenReadyCompute list rich_list pred_set
   stackPlanGen cfgAnalysisProps removeUnusedSsaProofs livenessTransferProofs
-  fnPlanLineageDemandSupport fnPlanLineagePhiMaps relation
+  fnPlanLineageDemandSupport fnPlanLineagePhiMaps relation venomWfProps
 
 Theorem analyzed_output_live_point_to_after:
   !fn d bb j v p pb k.
