@@ -51,7 +51,7 @@ Proof
   simp[deploy_ctor_code_def, new_block_def] >> strip_tac >> gvs[]
 QED
 
-Theorem deploy_unit_execution_correct:
+Theorem deploy_unit_execution_correct_suffix:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
@@ -60,13 +60,18 @@ Theorem deploy_unit_execution_correct:
     gas_variant vs (deploy_entry_state prog cplan tops es)
     ==>
     ?marks.
-      deploy_source_exempt tops
+      (!tail.
+        load_contract NONE (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
+          [(NONE, tops)] [] =
+        load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+          [(NONE, tops)] []) /\
+      (deploy_source_exempt tops
         (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
            [(NONE, tops)] []) \/
       ?fuel. deploy_venom_result_rel tops runtime_bc tx
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])
-               (run_context fuel dunit.cu_context vs)
+               (run_context fuel dunit.cu_context vs))
 Proof
   rpt strip_tac >>
   `?exts ints fb cfo. classify_functions tops = (exts, ints, fb, cfo)` by
@@ -209,4 +214,26 @@ Proof
   pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
   gvs[deploy_ctor_finish_def, deploy_source_exempt_def, Abbr `cx`,
       deploy_cx_tops]
+QED
+
+
+Theorem deploy_unit_execution_correct:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    gas_variant vs (deploy_entry_state prog cplan tops es)
+    ==>
+    ?marks.
+      deploy_source_exempt tops
+        (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+           [(NONE, tops)] []) \/
+      ?fuel. deploy_venom_result_rel tops runtime_bc tx
+               (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
+                  [(NONE, tops)] [])
+               (run_context fuel dunit.cu_context vs)
+Proof
+  rpt strip_tac >> drule_all deploy_unit_execution_correct_suffix >>
+  strip_tac >> qexists_tac `marks` >> asm_rewrite_tac[]
 QED
