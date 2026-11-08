@@ -30,7 +30,7 @@ Ancestors
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
 
-(* SEAM (cheated; proved by its own alan run).
+(* Entry-to-registration prefix seam.
    Hints (not binding):
    - Code: source_selected_entry_check_code and source_selected_body_code
      come from the same packaged external member; compile_external_fn_bodies
@@ -213,3 +213,5 @@ Resume external_entry_reaches_registration_ptr[checks]:
   simp[] >>
   qexists_tac `bb` >> gvs[]
 QED
+
+Finalise external_entry_reaches_registration_ptr
