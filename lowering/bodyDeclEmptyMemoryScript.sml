@@ -204,6 +204,10 @@ Proof
    val_wf tyv (default_value tyv) /\ 32 <= type_memory_size tyv` by
     (irule memory_length_word_layout >> simp[mstore_mem_word_at_same] >>
      metis_tac[]) >>
+  `memory_value_rel tyv (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w t).vs_memory` by
+    metis_tac[val_in_memory_memory_value_rel,
+              vyperTypeDefaultsTheory.default_value_has_type_thm] >>
   `alloca_inv t` by fs[stmt_state_rel_def] >>
   `w2n w + 32 <= t.vs_alloca_next` by decide_tac >>
   `eval_operand (Lit 0w) t = SOME 0w` by simp[eval_operand_def] >>
