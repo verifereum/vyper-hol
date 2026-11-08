@@ -1,5 +1,5 @@
 Theory concretizeAnalysisSizes
-Ancestors
+Ancestors venomWfProps
   concretizeAnalysisSizeLookup concretizeAnalysisBoundary frameAllocationSizes
   concretizeMemLocDefs venomWf venomInst venomExecSemantics
   removeUnusedSsaProofs finite_map list pred_set

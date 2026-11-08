@@ -1,5 +1,5 @@
 Theory concretizePtrProductionCoverage
-Ancestors concretizeAnalysisOriginCoverage concretizeAnalysisOriginFlow
+Ancestors venomWfProps concretizeAnalysisOriginCoverage concretizeAnalysisOriginFlow
   concretizeAnalysisBaseModel concretizeAnalysisAffine concretizeAnalysisRoots
   concretizePtrClosure concretizePtrBPOrigins pointerClosure pointerConfinedDefs
   ptrDiscipline venomWf venomInst basePtrDefs list pred_set removeUnusedSsaProofs

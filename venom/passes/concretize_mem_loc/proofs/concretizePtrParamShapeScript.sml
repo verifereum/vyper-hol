@@ -1,5 +1,5 @@
 Theory concretizePtrParamShape
-Ancestors
+Ancestors venomWfProps
   concretizePtrParamSupport o1PassContract venomWf removeUnusedSsaProofs list
 
 Theorem o1_ctx_shape_instructions_wf:

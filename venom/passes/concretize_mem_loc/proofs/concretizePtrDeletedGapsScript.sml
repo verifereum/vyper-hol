@@ -1,5 +1,5 @@
 Theory concretizePtrDeletedGaps
-Ancestors concretizePtrLayoutOutput concretizePtrLedgerAlignment
+Ancestors venomWfProps concretizePtrLayoutOutput concretizePtrLedgerAlignment
   concretizeMemLocDefs staticLayoutCompletionProofs staticLayoutAllocatorProofs
   venomExecSemantics passSharedDefs removeUnusedSsaProofs list finite_map
 

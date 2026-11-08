@@ -1,5 +1,5 @@
 Theory concretizePtrAllocationSize
-Ancestors
+Ancestors venomWfProps
   concretizePtrActivationSupport concretizePtrAllocationOrigins
   concretizeMemLocDefs concretizeMemLocProofs concretizeAnalysisBoundary
   o1PassContract unitTransformDefs ptrDiscipline ptrDisciplineEmptyTaint

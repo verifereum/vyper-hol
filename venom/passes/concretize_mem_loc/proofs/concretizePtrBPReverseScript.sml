@@ -1,5 +1,5 @@
 Theory concretizePtrBPReverse
-Ancestors
+Ancestors venomWfProps
   concretizePtrClosure concretizePtrBPOrigins basePtrProps ptrDiscipline
   venomWf venomInst pointerConfinedDefs pointerClosure basePtrDefs list pred_set
   removeUnusedSsaProofs

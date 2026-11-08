@@ -1,5 +1,5 @@
 Theory fnLineageInvPointLive
-Ancestors fnPlanLineagePath fnPlanLineagePhiActivation fnPlanLineageLiveness livenessAnalysisProps
+Ancestors venomWfProps fnPlanLineagePath fnPlanLineagePhiActivation fnPlanLineageLiveness livenessAnalysisProps
   venomWf venomInst venomExecProps codegenReadyCompute list rich_list pred_set
   stackPlanGen cfgAnalysisProps removeUnusedSsaProofs livenessTransferProofs
   fnPlanLineageDemandSupport fnPlanLineagePhiMaps relation

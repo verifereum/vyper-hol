@@ -1,5 +1,5 @@
 Theory concretizePtrIncomingOrigins
-Ancestors contextCodegenRel ptrDiscipline frameOriginUpdates frameOriginReachable concretizePtrParamSupport concretizePtrRootCover
+Ancestors venomWfProps contextCodegenRel ptrDiscipline frameOriginUpdates frameOriginReachable concretizePtrParamSupport concretizePtrRootCover
   pointerClosure pointerConfinedDefs venomInst finite_map pred_set list words
   execEquivParamBase removeUnusedSsaProofs concretizeAnalysisRoots concretizePtrFrameOrigins
 

@@ -1,5 +1,5 @@
 Theory concretizePtrProtectedHistory
-Ancestors concretizePtrEndpointOrigin concretizePtrOwnerSeeds
+Ancestors venomWfProps concretizePtrEndpointOrigin concretizePtrOwnerSeeds
   concretizePtrOwnedActualInitializer concretizePtrHistoryDemand
   concretizePtrRevertHistory concretizePtrOwnerPath
   concretizePtrActivationSupport contextCodegenRel removeUnusedSsaProofs

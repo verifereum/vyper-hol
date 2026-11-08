@@ -1,5 +1,5 @@
 Theory frameResolvedTrace
-Ancestors frameResolvedOrigins frameActivationLifetime frameActivationCache
+Ancestors venomWfProps frameResolvedOrigins frameActivationLifetime frameActivationCache
   frameJointTrace frameOriginCache
   frameOriginUpdates ptrDiscipline ptrDisciplineEmptyTaint frameJointTransition venomExecSemantics
   venomState venomInst venomMemProps frameAllocationOwnership frameOriginHistory

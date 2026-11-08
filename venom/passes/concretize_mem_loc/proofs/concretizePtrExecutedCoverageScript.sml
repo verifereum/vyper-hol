@@ -1,5 +1,5 @@
 Theory concretizePtrExecutedCoverage
-Ancestors
+Ancestors venomWfProps
   concretizePtrImportCoverage concretizePtrImportOrigins concretizePtrAllocationSize
   o1ScheduleDecompHelpers
   staticLayoutAllocatorProofs staticLayoutCompletionProofs

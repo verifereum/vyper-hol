@@ -1,5 +1,5 @@
 Theory concretizePtrStackImports
-Ancestors
+Ancestors venomWfProps
   concretizePtrExecutedCoverage concretizePtrCallAncestry
   concretizePtrImportCoverage concretizePtrImportOrigins
   ptrDiscipline venomExecSemantics venomInst o1PassContract

@@ -1,5 +1,5 @@
 Theory frameRelocationArithmeticClassification
-Ancestors ptrDiscipline pointerConfinedDefs removeUnusedSsaProofs
+Ancestors venomWfProps ptrDiscipline pointerConfinedDefs removeUnusedSsaProofs
   venomInst finite_map list pred_set
 
 Theorem resolved_sub_right_absent:

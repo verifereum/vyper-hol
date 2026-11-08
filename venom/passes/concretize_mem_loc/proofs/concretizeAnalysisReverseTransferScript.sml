@@ -1,5 +1,5 @@
 Theory concretizeAnalysisReverseTransfer
-Ancestors
+Ancestors venomWfProps
   concretizeAnalysisExclusiveWriters concretizeAnalysisExclusiveSources concretizeAnalysisAffine
   frameOriginHistoryPreservation frameOriginUpdates ptrDiscipline
   pointerConfinedDefs pointerClosure removeUnusedSsaProofs venomWf venomExecSemantics venomState venomInst finite_map pred_set list rich_list

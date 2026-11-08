@@ -1,5 +1,5 @@
 Theory pointerClosure
-Ancestors pointerConfinedDefs venomInst While pred_set list allocaRemapSSA
+Ancestors venomWfProps pointerConfinedDefs venomInst While pred_set list allocaRemapSSA
   removeUnusedSsaProofs
 
 

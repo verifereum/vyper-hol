@@ -1,5 +1,5 @@
 Theory concretizeAnalysisWriteSafety
-Ancestors
+Ancestors venomWfProps
   ptrDiscipline arithmetic list finite_map concretizeAnalysisScanCoverage
   concretizePtrReadCoverage concretizeAnalysisBoundary concretizeMemLocDefs
   basePtrDefs frameOriginReachable frameOriginUpdates venomWf pred_set

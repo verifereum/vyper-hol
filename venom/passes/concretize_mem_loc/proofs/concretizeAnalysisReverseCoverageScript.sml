@@ -1,5 +1,5 @@
 Theory concretizeAnalysisReverseCoverage
-Ancestors
+Ancestors venomWfProps
   concretizeAnalysisChronologicalReady concretizeAnalysisReverseTransfer
   frameOriginHistoryCompletedWrites frameOriginHistory
   concretizePtrParamSupport frameOriginReachable

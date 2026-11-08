@@ -1,5 +1,5 @@
 Theory concretizeAnalysisSizeReach
-Ancestors
+Ancestors venomWfProps
   concretizeAnalysisSizes frameAllocationSizes frameOriginCache
   ptrDiscipline ptrDisciplineEmptyTaint contextCodegenRel
   venomWf venomInst venomExecSemantics removeUnusedSsaProofs list

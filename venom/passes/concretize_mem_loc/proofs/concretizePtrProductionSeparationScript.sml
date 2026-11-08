@@ -1,5 +1,5 @@
 Theory concretizePtrProductionSeparation
-Ancestors
+Ancestors venomWfProps
   concretizePtrCandidateSeparation concretizePtrOrdering
   staticLayoutAllocatorProofs concretizeMemLocDefs sorting list finite_map
   venomInst removeUnusedSsaProofs ptrDiscipline

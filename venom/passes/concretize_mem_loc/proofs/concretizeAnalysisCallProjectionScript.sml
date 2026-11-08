@@ -1,5 +1,5 @@
 Theory concretizeAnalysisCallProjection
-Ancestors frameOpenCall concretizeAnalysisOwnership concretizeAnalysisMetadataOwnership
+Ancestors venomWfProps frameOpenCall concretizeAnalysisOwnership concretizeAnalysisMetadataOwnership
   frameHistoryCfg o1PassContract removeUnusedSsaProofs relation list arithmetic
   venomExecSemantics ptrDiscipline venomInst venomWf frameJointTransition frameActivationCache
   contextCodegenRel venomExecProps frameJointTrace frameOriginHistory

@@ -1,5 +1,5 @@
 Theory concretizeAnalysisCollection
-Ancestors concretizeMemLocDefs staticLayoutAllocatorProofs venomWf
+Ancestors venomWfProps concretizeMemLocDefs staticLayoutAllocatorProofs venomWf
   o1PassContract concretizeAnalysisOwnership removeUnusedSsaProofs venomInst list combin
 
 Theorem collect_static_allocas_total:

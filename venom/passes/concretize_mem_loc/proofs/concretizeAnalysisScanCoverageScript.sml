@@ -1,5 +1,5 @@
 Theory concretizeAnalysisScanCoverage
-Ancestors
+Ancestors venomWfProps
   concretizeAnalysisScan concretizeAnalysisOriginCoverage cfgAnalysisProps cfgWf
   removeUnusedSsaProofs venomExecProofs venomInstProps venomWf venomInst
   codegenReadyCompute list pred_set

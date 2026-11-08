@@ -1,5 +1,5 @@
 Theory concretizeAnalysisAffine
-Ancestors concretizeAnalysisSupport concretizeAnalysisBoundary ptrDiscipline
+Ancestors venomWfProps concretizeAnalysisSupport concretizeAnalysisBoundary ptrDiscipline
   pointerConfinedDefs removeUnusedSsaProofs basePtrDefs basePtrProofs
   list pred_set venomInst combin
 

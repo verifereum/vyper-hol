@@ -1,5 +1,5 @@
 Theory concretizeAnalysisOwnership
-Ancestors
+Ancestors venomWfProps
   concretizeAnalysisSizes o1ScheduleDecomp o1PassContract fcgDefs mem2varProofs
   relation list words arithmetic venomWf venomInst removeUnusedSsaProofs
   mem2varBlockSimHelpers pair

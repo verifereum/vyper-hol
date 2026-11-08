@@ -1,5 +1,5 @@
 Theory concretizeAnalysisExclusiveWriters
-Ancestors
+Ancestors venomWfProps
   concretizeAnalysisExclusiveSources concretizeAnalysisRoots pointerClosure
   allocaRemapSSA removeUnusedSsaProofs phiWellFormed execEquivParamBase venomWf ptrDiscipline pointerConfinedDefs venomInst pred_set list
 

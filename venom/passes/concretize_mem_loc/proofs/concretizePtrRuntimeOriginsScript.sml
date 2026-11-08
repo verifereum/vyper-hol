@@ -1,5 +1,5 @@
 Theory concretizePtrRuntimeOrigins
-Ancestors
+Ancestors venomWfProps
   ptrDiscipline pointerConfinedDefs venomInst finite_map pred_set list
   execEquivParamBase removeUnusedSsaProofs runtimeProvenanceSources
 
