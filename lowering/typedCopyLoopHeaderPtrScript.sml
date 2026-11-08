@@ -1,6 +1,6 @@
 (* Executed test of the concrete typed-array loop. *)
 Theory typedCopyLoopHeaderPtr
-Ancestors typedCopyLoopLayoutPtr typedCopyOffsetPtr venomExecSemantics
+Ancestors wordLoadStorePtr typedCopyLoopLayoutPtr typedCopyOffsetPtr venomExecSemantics
   venomInst venomState words finite_map arithmetic
 
 Theorem typed_copy_loop_test_steps:

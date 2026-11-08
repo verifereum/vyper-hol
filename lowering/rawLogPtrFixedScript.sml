@@ -1,7 +1,7 @@
 (* Fixed RawLog buffer retention and the checked store/log suffix. *)
 Theory rawLogPtrFixed
 Ancestors
-  rawLogPtrInst rawLogPtrTopics bodyPtrHashBuiltinsAllocFrame wordArgsPtr
+  wordLoadStorePtr rawLogPtrInst rawLogPtrTopics bodyPtrHashBuiltinsAllocFrame wordArgsPtr
   bodyPtrHashBuiltinsKeccakFixed assignTuplePtrCopyLen exprSimRawLog
   instSeqComposePtr ghostPcTransportPtr instIdxIndep fragExecPtr bodyPtrDefs loweringPosts
   fragGasSeqPtr exprLoweringProps emitHelper context compileEnv rich_list typedCopyPtr ptrDiscipline venomState venomInst

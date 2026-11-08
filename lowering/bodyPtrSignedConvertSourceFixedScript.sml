@@ -1,7 +1,7 @@
 (* Fixed-run source prefix: the endpoint is supplied, never existential. *)
 Theory bodyPtrSignedConvertSourceFixed
 Ancestors
-  bodyPtrSignedConvertSourceCompile bodyPtrSignedConvertSourcePrefix
+  wordLoadStorePtr bodyPtrSignedConvertSourceCompile bodyPtrSignedConvertSourcePrefix
   typedCopyPtr typedCopyLoopHeaderPtr fragGasSeqPtr ghostPcTransportPtr
   instIdxIndep fragExec exprLoweringProps venomInstProofs venomState
   venomExecSemantics venomInst finite_map ptrDiscipline emitHelperProps bodyPtrDefs

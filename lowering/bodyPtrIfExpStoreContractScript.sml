@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpStoreContract
 Ancestors
-  bodyPtrDefs representationCleanPtr valueCopyBytes bodyPtrIfExpBytesPost
+  wordLoadStorePtr bodyPtrDefs representationCleanPtr valueCopyBytes bodyPtrIfExpBytesPost
   context compileEnv venomExecSemantics venomState typedCopyAgreement
   stmtAbortPtr emitHelper
 

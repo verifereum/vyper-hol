@@ -1,7 +1,7 @@
 (* Counted straight-line checks for the bytestring copy prefix. *)
 Theory assignTuplePtrLocalBytesCopy
 Ancestors
-  typedCopyPtr fragGasSeqPtr ghostPcTransportPtr instIdxIndep
+  wordLoadStorePtr typedCopyPtr fragGasSeqPtr ghostPcTransportPtr instIdxIndep
   context compileEnv emitHelper emitHelperProps fragExec exprLoweringProps
   venomExecSemantics venomInstProofs venomInst venomState
   bodyPtrDefs ptrSafeRun ptrDiscipline finite_map arithmetic list

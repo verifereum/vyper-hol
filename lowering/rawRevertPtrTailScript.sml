@@ -1,7 +1,7 @@
 (* Aborting bytes suffix, with the pointer ghost on every edge. *)
 Theory rawRevertPtrTail
 Ancestors
-  rawRevertPtrBoundary bodyPtrHashBuiltinsKeccakBytesRun
+  wordLoadStorePtr rawRevertPtrBoundary bodyPtrHashBuiltinsKeccakBytesRun
   typedCopyPtr typedCopyLoopHeaderPtr bodyPtrDefs fragGasSeqPtr fragGasPathPtr
   ptrDiscipline ptrSafeRun venomState venomInst venomExecSemantics
   words finite_map pred_set contextCodegenRel codegenRel valueEncodingProps

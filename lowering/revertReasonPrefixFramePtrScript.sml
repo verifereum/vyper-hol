@@ -1,6 +1,6 @@
 (* Shared observational effects of the checked encoder prefix. *)
 Theory revertReasonPrefixFramePtr
-Ancestors revertReasonPrefixPtr ghostObservationPtr decoderGhostFramePtr bodyPtrDefs
+Ancestors wordLoadStorePtr revertReasonPrefixPtr ghostObservationPtr decoderGhostFramePtr bodyPtrDefs
   allocationPtr loweringHalt typedCopyPtr ptrDiscipline instIdxIndep
   exprLoweringProps venomInstProps list
   allocaSiteResource localPtrsProps exprSimProps stmtSimLogSuffixFrame

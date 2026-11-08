@@ -1,7 +1,7 @@
 (* A clean scalar store initializes a word, without source-pointer coverage. *)
 Theory bodyPtrMakeArrayWordStore
 Ancestors
-  bodyPtrMakeArrayCopyStep representationCleanPtr robustCopyTransportPtr
+  wordLoadStorePtr bodyPtrMakeArrayCopyStep representationCleanPtr robustCopyTransportPtr
   valueEncodingProps valueEncodingProofs valueEncoding bodyPtrDefs venomMemProofs pred_set list
 
 Theorem mstore_raw_robust_word:
@@ -75,7 +75,7 @@ Proof
     `(step_taint (mk_inst id MSTORE [Var dst; value] []) s
       (mstore (w2n a) w s) tn).t_mem`,
     `{i | w2n a <= i /\ i < w2n a + 32}`] >>
-  simp[GSYM mem_agree_outside_def, typedCopyPtrTheory.mstore_memory_frame] >>
+  simp[GSYM mem_agree_outside_def, wordLoadStorePtrTheory.mstore_memory_frame] >>
   rpt strip_tac >> irule mstore_raw_outside_taint >> simp[] >> decide_tac
 QED
 
@@ -116,7 +116,7 @@ Proof
     `(mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac >- (irule mstore_raw_ptr_path >> simp[]) >>
   drule_all mstore_raw_ghost_frame >> strip_tac >>
-  simp[typedCopyPtrTheory.mstore_memory_frame] >>
+  simp[wordLoadStorePtrTheory.mstore_memory_frame] >>
   conj_tac
   >- (rpt strip_tac >> drule_all mstore_raw_old_coverage >> simp[]) >>
   conj_tac

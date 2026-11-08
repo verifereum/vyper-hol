@@ -2,7 +2,7 @@
    These construct edges directly, rather than converting fixed-run safety. *)
 Theory forPtrBoundary
 Ancestors
-  bodyPtrDefs typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr gasCount
+  wordLoadStorePtr bodyPtrDefs typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr gasCount
   emitHelperProps exprLoweringProps fragExec ptrSafeRun ptrDiscipline
   codegenRel contextCodegenRel venomInst venomState venomExecSemantics
   venomExecProofs venomInstProofs list

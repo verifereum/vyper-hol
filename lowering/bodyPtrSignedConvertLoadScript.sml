@@ -1,6 +1,6 @@
 Theory bodyPtrSignedConvertLoad
 Ancestors
-  typedCopyPtr fragGasSeqPtr ghostPcTransportPtr emitHelperProps
+  wordLoadStorePtr typedCopyPtr fragGasSeqPtr ghostPcTransportPtr emitHelperProps
   venomExecSemantics venomInstProofs venomInst venomState finite_map
   ptrDiscipline ptrSafeRun fragGasPathPtr
 

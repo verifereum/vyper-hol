@@ -1,7 +1,7 @@
 (* Pointer-certified dynamic child setup and bookkeeping. *)
 Theory logAbiChildPtr
 Ancestors
-  logAbiEncodePtr logAbiPrefixPtr logInstSeqPtr logTopicScalarPtr logAbiChildPostPtr
+  wordLoadStorePtr logAbiEncodePtr logAbiPrefixPtr logInstSeqPtr logTopicScalarPtr logAbiChildPostPtr
   abiEncoder abiEncoderChildCode abiEncoderChildPrefix abiDecoderReentry
   abiEncoderBytesCode bodyPtrDefs fragGasSeqPtr
   emitHelperProps emitHelper exprLoweringProps compileEnv

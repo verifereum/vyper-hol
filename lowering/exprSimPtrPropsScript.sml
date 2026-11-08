@@ -15,7 +15,7 @@
  *)
 Theory exprSimPtrProps
 Ancestors
-  bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
+  wordLoadStorePtr bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv vyperInterpreter
   vyperState ptrDiscipline fragGasSeqPtr typedCopyPtr decoderGhostFramePtr
   emitHelperProps fragExec exprLoweringProps venomInst venomState

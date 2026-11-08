@@ -1,7 +1,7 @@
 (* Inverse clean-word writes and robust field transport. *)
 Theory augAssignPtrFieldStore
 Ancestors
-  augAssignPtrStore robustCopyTransportPtr valueEncodingProps valueEncodingProofs
+  wordLoadStorePtr augAssignPtrStore robustCopyTransportPtr valueEncodingProps valueEncodingProofs
   venomMemProofs venomState list pred_set arithmetic typedCopyPtr bodyPtrDefs byte words
   stmtSimAssignAttr loweringSlice
 

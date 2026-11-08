@@ -1,7 +1,7 @@
 (* Counted clean scalar stores; source-update invariant transport is separate. *)
 Theory augAssignPtrStore
 Ancestors
-  augAssignPtrLoad typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr
+  wordLoadStorePtr augAssignPtrLoad typedCopyPtr fragExecPtr fragGasSeqPtr fragGasPathPtr
   bodyPtrDefs venomInst venomState venomExecSemantics ptrSafeRun
   ptrDiscipline emitHelperProps emitHelper compileEnv fragExec
   finite_map words loweringSlice robustCopyTransportPtr valueEncoding valueEncodingProps

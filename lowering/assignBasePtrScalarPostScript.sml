@@ -1,7 +1,7 @@
 (* Final local scope post for a clean scalar write. Storage/transient
    writes already use assign_base_clean_storage_ghost; do not duplicate it. *)
 Theory assignBasePtrScalarPost
-Ancestors assignBasePtrLocalStore assignBasePtrCleanStore assignBasePtrCleanStorage assignBasePtrScopePost
+Ancestors wordLoadStorePtr assignBasePtrLocalStore assignBasePtrCleanStore assignBasePtrCleanStorage assignBasePtrScopePost
   assignBasePtrLiteralOutcome assignBasePtrLiteralGhost typedCopyPtr
   bodyPtrDefs compileEnv localPtrsProps venomState venomExecSemantics
   ptrDiscipline venomInst words finite_map pred_set ghostPcTransportPtr

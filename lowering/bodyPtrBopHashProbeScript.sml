@@ -2,7 +2,7 @@
    payload-length bounds and transport across operands remain separate. *)
 Theory bodyPtrBopHashProbe
 Ancestors
-  typedCopyPtr fragGasSeqPtr
+  wordLoadStorePtr typedCopyPtr fragGasSeqPtr
 
 Theorem bop_hash_length_edge:
   ~s.vs_halted /\

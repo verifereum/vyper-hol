@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsObservations
-Ancestors typedCopyPtr bodyPtrDefs venomState pred_set
+Ancestors wordLoadStorePtr typedCopyPtr bodyPtrDefs venomState pred_set
 
 Theorem memory_observation_mstore:
   t.vs_memory = (mstore off w s).vs_memory /\

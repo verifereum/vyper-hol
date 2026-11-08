@@ -4,7 +4,7 @@
    obeys this frame as well as the non-writing stages. *)
 Theory bodyPtrMakeArrayStorageEndpoints
 Ancestors
-  bodyPtrMakeArrayStorageBody bodyPtrMakeArrayCopyStep
+  wordLoadStorePtr bodyPtrMakeArrayStorageBody bodyPtrMakeArrayCopyStep
   pred_set finite_map words bodyPtrDefs
   exprSimStorageCopy venomState ptrDiscipline
 
@@ -211,7 +211,7 @@ Proof
      mp_tac (Q.INST [`sm` |-> `mstore (b+32*k) w s`, `tnm` |-> `tm`]
        storage_body_store_prefix) >> simp[Abbr `tm`] >> strip_tac >> simp[]) >>
   conj_tac >- (qspecl_then [`s`, `b+32*k`, `w`] mp_tac
-    typedCopyPtrTheory.mstore_memory_frame >> simp[]) >>
+    wordLoadStorePtrTheory.mstore_memory_frame >> simp[]) >>
   rpt strip_tac >>
   mp_tac (Q.INST [`dst` |-> `dv`, `a` |-> `n2w (b+32*k)`]
     mstore_raw_outside_taint) >> simp[Abbr `tm`]

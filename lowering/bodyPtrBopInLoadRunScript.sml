@@ -2,7 +2,7 @@
    storage append interface does not expose. *)
 Theory bodyPtrBopInLoadRun
 Ancestors
-  bodyPtrBopInLoadOutput stmtAppendStorageRunPtr fragGasSeqPtr
+  wordLoadStorePtr bodyPtrBopInLoadOutput stmtAppendStorageRunPtr fragGasSeqPtr
   emitHelperProps exprLoweringProps ptrDiscipline venomInst venomState
   venomExecSemantics finite_map list typedCopyPtr pred_set ptrSafeRun codegenRel instIdxIndep
   ghostPcTransportPtr compileEnv contextCodegenRel

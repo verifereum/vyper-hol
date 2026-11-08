@@ -1,6 +1,6 @@
 (* Empty length-word values need only a clean zero header, not clean padding. *)
 Theory assignBasePtrEmptyStore
-Ancestors assignBasePtrScopePost assignTuplePtrStoreWord assignTuplePtrStoreHead
+Ancestors wordLoadStorePtr assignBasePtrScopePost assignTuplePtrStoreWord assignTuplePtrStoreHead
   annAssignPtrStore stmtSimDeclMem typedCopyPtr bodyPtrDefs exprSimMemoryTransport
   valueEncoding valueEncodingProps valueEncodingProofs venomMemProofs
   venomState venomExecSemantics venomInst emitHelper context compileEnv

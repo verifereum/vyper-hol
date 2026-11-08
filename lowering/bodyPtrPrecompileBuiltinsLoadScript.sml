@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsLoad
-Ancestors typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs
+Ancestors wordLoadStorePtr typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs
           memLocDefs contextCodegenRel codegenRel exprLoweringProps
           ptrDiscipline ptrSafeRun ptrCoverage compileEnv venomInst
           venomState venomInstProofs venomExecSemantics finite_map

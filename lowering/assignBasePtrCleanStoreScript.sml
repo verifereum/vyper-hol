@@ -1,6 +1,6 @@
 (* Counted clean scalar stores, with representation framing at the same endpoint. *)
 Theory assignBasePtrCleanStore
-Ancestors assignBasePtrLocalStore assignBasePtrWordStore assignBasePtrLiteralGhost
+Ancestors wordLoadStorePtr assignBasePtrLocalStore assignBasePtrWordStore assignBasePtrLiteralGhost
   typedCopyPtr robustCopyTransportPtr fragGasPathPtr fragGasSeqPtr
   bodyPtrDefs valueEncodingProofs valueEncodingProps venomMemProofs
   venomState venomExecSemantics venomInst ptrDiscipline words pred_set

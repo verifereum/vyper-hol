@@ -1,7 +1,7 @@
 (* Scalar store continuation on its actual fetched MSTORE edge. *)
 Theory bodyPtrMakeArrayPositiveWord
 Ancestors
-  bodyPtrMakeArrayPositiveFrame bodyPtrMakeArrayWordStore
+  wordLoadStorePtr bodyPtrMakeArrayPositiveFrame bodyPtrMakeArrayWordStore
   bodyPtrMakeArrayConsInvariant annAssignPtrScratch bodyPtrDefs
   bodyPtrMakeArrayStoreFrame calldataReconstruction venomState
   typedCopyPtr loweringPosts pred_set bodyPtrMakeArrayPrimitiveInstall context

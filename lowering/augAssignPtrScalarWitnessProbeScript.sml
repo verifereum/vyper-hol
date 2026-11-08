@@ -6,7 +6,7 @@
    no universal typed-word or expression provenance claim is made here. *)
 Theory augAssignPtrScalarWitnessProbe
 Ancestors
-  augAssignPtrLoad augAssignPtrProvenanceProbe gasSummaryComposePtr bodyPtrDefs
+  wordLoadStorePtr augAssignPtrLoad augAssignPtrProvenanceProbe gasSummaryComposePtr bodyPtrDefs
   exprSimNameWord exprSimNameValue exprSimValues stmtFragPtr
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   ptrDiscipline venomInst venomState finite_map loweringSlice venomExecSemantics fragExec
@@ -88,7 +88,7 @@ Proof
   conj_tac >- (simp[ghost_kept_def, Abbr `tm`, load_ambient_frame] >> metis_tac[]) >>
   conj_tac >- (qpat_x_assum `mload _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
     simp[Abbr `tm`, NoAsms] >>
-    irule (cj 1 typedCopyPtrTheory.mload_ghost_clean) >> simp[eval_operand_def]) >>
+    irule (cj 1 wordLoadStorePtrTheory.mload_ghost_clean) >> simp[eval_operand_def]) >>
   simp[Abbr `t`, update_var_def] >> conj_tac
   >- (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_var_def, fresh_id_def, emit_def]) >>

@@ -2,7 +2,7 @@
    clean but need not be a pointer; only old destinations retain coverage. *)
 Theory bodyPtrMakeArrayMemoryWord
 Ancestors
-  bodyPtrMakeArrayLoad bodyPtrMakeArrayWordClean bodyPtrMakeArrayMloadFrame typedCopyPtr
+  wordLoadStorePtr bodyPtrMakeArrayLoad bodyPtrMakeArrayWordClean bodyPtrMakeArrayMloadFrame typedCopyPtr
   exprSimProps bodyPtrDefs valueEncodingProps venomState venomInst finite_map
 
 Theorem memory_word_materialize_endpoint:

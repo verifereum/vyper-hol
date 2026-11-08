@@ -1,7 +1,7 @@
 (* Resource transport across the reason encoder's allocation prefix. *)
 Theory reasonPrefixResourcesPtr
 Ancestors
-  reasonAllocationFramePtr reasonBufferPtr allocationPtr normalizationAllocPtr robustCopyTransportPtr typedCopyPtr
+  wordLoadStorePtr reasonAllocationFramePtr reasonBufferPtr allocationPtr normalizationAllocPtr robustCopyTransportPtr typedCopyPtr
   bodyPtrDefs ptrDiscipline venomState venomInst pred_set arithmetic
   loweringPosts compileEnv exprLoweringProps exprSimProps exprSimAlloc emitHelperProps exprSimHash loweringHalt venomExecSemantics
 

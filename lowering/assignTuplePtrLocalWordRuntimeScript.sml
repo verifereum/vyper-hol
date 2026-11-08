@@ -2,7 +2,7 @@
    contract; no equality of the two evaluated types is required. *)
 Theory assignTuplePtrLocalWordRuntime
 Ancestors
-  assignTuplePtrStoreHead assignTuplePtrStoreWord stmtSimAssignStore
+  wordLoadStorePtr assignTuplePtrStoreHead assignTuplePtrStoreWord stmtSimAssignStore
   typedCopyPtr bodyPtrDefs compileEnv context emitHelper emitHelperProps
   venomState venomExecSemantics vyperState vyperLookup exprSimProps
   exprLoweringProps stmtSimDeclStore assignTuplePtrCopyEndpoint ptrDiscipline

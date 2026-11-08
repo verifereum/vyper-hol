@@ -1,6 +1,6 @@
 Theory bodyPtrBopHashSequence
 Ancestors
-  bodyPtrBopHashStep bodyPtrBopScalarProbe typedCopyPtr fragGasSeqPtr
+  wordLoadStorePtr bodyPtrBopHashStep bodyPtrBopScalarProbe typedCopyPtr fragGasSeqPtr
   ptrDiscipline venomInst finite_map codegenRel venomExecSemantics venomState
   valueEncodingProps ghostPcTransportPtr
 

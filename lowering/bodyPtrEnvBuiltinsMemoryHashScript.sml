@@ -1,7 +1,7 @@
 (* Memory-input hashing boundaries; offsets retain the allocation even for
    an empty payload. No padding cleanliness is required. *)
 Theory bodyPtrEnvBuiltinsMemoryHash
-Ancestors bodyPtrEnvBuiltinsHashStep bodyPtrEnvBuiltinsLen typedCopyPtr
+Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsHashStep bodyPtrEnvBuiltinsLen typedCopyPtr
   bodyPtrEnvBuiltinsEdges bodyPtrDefs ptrDiscipline venomInst venomState
   words finite_map pred_set decoderGhostFramePtr ghostPcTransportPtr
   fragGasSeqPtr instIdxIndep venomExecSemantics fragExec exprLoweringProps

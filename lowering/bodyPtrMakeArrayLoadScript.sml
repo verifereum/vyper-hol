@@ -1,7 +1,7 @@
 (* Raw counted MLOAD; typed cleanliness is deliberately a separate obligation. *)
 Theory bodyPtrMakeArrayLoad
 Ancestors
-  typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs venomInst
+  wordLoadStorePtr typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs venomInst
   venomExecSemantics venomState context
 
 Theorem mload_ptr_path:

@@ -1,6 +1,6 @@
 (* Standalone readonly data header; no operand-evaluation history. *)
 Theory rawCallDataHeaderPtr
-Ancestors rawCallHeaderFramePtr rawCallShapePtr typedOperandsPtr rawCallBufferPtr
+Ancestors wordLoadStorePtr rawCallHeaderFramePtr rawCallShapePtr typedOperandsPtr rawCallBufferPtr
   gasContext exprSimWordArgs exprSimDefs gasSummaryComposePtr vyperState
   vyperInterpreter exprSimHash wordOperandsPtr
 
@@ -25,7 +25,7 @@ Proof
        venomStateTheory.eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx func G tn
      (mk_inst id MLOAD [Var src] [out]) s` by
-    (irule typedCopyPtrTheory.ptr_inst_ok_mload >> simp[]) >>
+    (irule wordLoadStorePtrTheory.ptr_inst_ok_mload >> simp[]) >>
   `gas_path_ptr_edge D 0 ctx func PG G tn s 0
      (step_prov PG G (mk_inst id MLOAD [Var src] [out])
        (update_var out (mload (w2n w) s) s))
@@ -240,7 +240,7 @@ Proof
     finite_mapTheory.FLOOKUP_UPDATE] >>
   `eval_operand (Var x) s = SOME w` by
     simp[venomStateTheory.eval_operand_def] >>
-  drule_all typedCopyPtrTheory.mload_ghost_clean >>
+  drule_all wordLoadStorePtrTheory.mload_ghost_clean >>
   simp[] >> disch_then (qspecl_then [`sa.cs_next_id`, `lx`] mp_tac) >>
   gvs[venomStateTheory.lookup_var_def, venomInstTheory.mk_inst_def,
     venomStateTheory.update_var_def]

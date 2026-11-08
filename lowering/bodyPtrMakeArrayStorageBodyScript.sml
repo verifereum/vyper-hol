@@ -1,7 +1,7 @@
 (* Straight-line stages of the actual external copy-loop body. *)
 Theory bodyPtrMakeArrayStorageBody
 Ancestors
-  bodyPtrMakeArrayStorageControl bodyPtrMakeArrayAdd bodyPtrMakeArrayCopyStep
+  wordLoadStorePtr bodyPtrMakeArrayStorageControl bodyPtrMakeArrayAdd bodyPtrMakeArrayCopyStep
   ptrDiscipline ptrSafeRun venomExecSemantics venomInst venomState
   finite_map words codegenRel fragGasPathPtr typedCopyLoopHeaderPtr
   bodyPtrMakeArrayExternalLoop exprSimStorageCopy bodyPtrMakeArrayPrefix typedCopyPtr
@@ -563,7 +563,7 @@ Proof
   conj_tac >- simp[lookup_var_def, mstore_def] >>
   conj_tac >- (rpt strip_tac >>
     gvs[bodyPtrDefsTheory.ptr_covers_def, op_taint_def, lookup_var_def, mstore_def]) >>
-  conj_tac >- (simp[] >> irule typedCopyPtrTheory.mstore_memory_frame) >>
+  conj_tac >- (simp[] >> irule wordLoadStorePtrTheory.mstore_memory_frame) >>
   rpt strip_tac >> qpat_assum `tnf = _` SUBST1_TAC >>
   irule mstore_raw_outside_taint >> simp[]
 QED

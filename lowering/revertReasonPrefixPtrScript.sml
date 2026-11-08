@@ -1,7 +1,7 @@
 (* Checked allocation-prefix boundaries, including reused allocation sites. *)
 Theory revertReasonPrefixPtr
 Ancestors
-  revertReasonLayout allocationPtr typedCopyPtr fragExec fragGasSeqPtr ghostPcTransportPtr
+  wordLoadStorePtr revertReasonLayout allocationPtr typedCopyPtr fragExec fragGasSeqPtr ghostPcTransportPtr
   loweringSlice exprLoweringProps bodyPtrDefs fragExecPtr venomExecSemantics venomInst venomState
   ptrDiscipline finite_map words arithmetic exprSimAlloc localPtrsProps compileEnv instIdxIndep
   normalizationAllocPtr decoderGhostFramePtr loweringPosts

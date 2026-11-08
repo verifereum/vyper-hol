@@ -1,7 +1,7 @@
 (* Source-independent selector store and payload-address resources. *)
 Theory reasonSelectorResourcesPtr
 Ancestors
-  reasonStoragePrefixPtr reasonPrefixPtr reasonPrefixResourcesPtr
+  wordLoadStorePtr reasonStoragePrefixPtr reasonPrefixPtr reasonPrefixResourcesPtr
   typedCopyPtr allocationPtr loweringPosts exprLoweringProps emitHelperProps
   emitHelper context compileEnv venomInst venomState venomExecSemantics
   venomInstProofs ptrDiscipline ptrSafeRun bodyPtrDefs loweringHalt

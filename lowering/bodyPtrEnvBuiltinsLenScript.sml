@@ -1,7 +1,7 @@
 (* Raw value/place boundaries for the length builtin. *)
 Theory bodyPtrEnvBuiltinsLen
 Ancestors
-  bodyPtrEnvBuiltinsBoundary bodyPtrEnvBuiltinsEdges typedCopyPtr
+  wordLoadStorePtr bodyPtrEnvBuiltinsBoundary bodyPtrEnvBuiltinsEdges typedCopyPtr
   exprSimLen vyperTyping vyperValue valueEncoding loweringPosts
   representationCleanPtr compileEnv bodyPtrDefs accountsRelProps
   vyperAST vyperTypeSystem builtinSimple ptrSafeRun ptrDiscipline

@@ -1,6 +1,6 @@
 (* Fixed-byte hashing writes a clean word to a 32-byte scratch allocation. *)
 Theory bodyPtrEnvBuiltinsFixedHash
-Ancestors bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsMemoryHash
+Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsMemoryHash
   bodyPtrEnvBuiltinsSelectorBuffer bodyPtrEnvBuiltinsEdges bodyPtrEnvBuiltinsHashStep
   bodyPtrEnvBuiltinsGhostCompose bodyPtrEnvBuiltinsAllocation loweringHalt
   typedCopyPtr allocationPtr

@@ -1,7 +1,7 @@
 (* Counted safe instruction boundaries for tuple prefix construction. *)
 Theory assignTuplePtrPrefix
 Ancestors
-  assignTuplePtrBoundary fragGasSeqPtr fragGasPathPtr exprLoweringProps
+  wordLoadStorePtr assignTuplePtrBoundary fragGasSeqPtr fragGasPathPtr exprLoweringProps
   emitHelperProps emitHelper fragExec venomInst venomState venomExecSemantics
   ptrSafeRun venomInstProofs typedCopyPtr list
 

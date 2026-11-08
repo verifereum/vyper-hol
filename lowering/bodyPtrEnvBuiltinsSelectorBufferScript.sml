@@ -1,6 +1,6 @@
 (* Shared clean-store boundaries for folded and runtime selector buffers. *)
 Theory bodyPtrEnvBuiltinsSelectorBuffer
-Ancestors bodyPtrEnvBuiltinsAllocation bodyPtrEnvBuiltinsEdges
+Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsAllocation bodyPtrEnvBuiltinsEdges
   bodyPtrEnvBuiltinsBoundary typedCopyPtr
   robustCopyTransportPtr bodyPtrDefs exprSimProps exprLoweringProps compileEnv
   ptrDiscipline venomState venomExecSemantics finite_map pred_set

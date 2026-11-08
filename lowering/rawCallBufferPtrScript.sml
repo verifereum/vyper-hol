@@ -1,6 +1,6 @@
 Theory rawCallBufferPtr
 Ancestors
-  bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr typedCopyPtr
+  wordLoadStorePtr bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr typedCopyPtr
   finite_map pred_set exprSimMemoryTransport valueEncodingProps valueEncodingProofs
   venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr robustCopyTransportPtr
 

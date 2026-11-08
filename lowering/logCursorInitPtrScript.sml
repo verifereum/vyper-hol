@@ -2,7 +2,7 @@
    covered cell, so this boundary also applies to reused scratch cells. *)
 Theory logCursorInitPtr
 Ancestors
-  logInstSeqPtr logTopicScalarPtr typedCopyPtr emitHelperProps
+  wordLoadStorePtr logInstSeqPtr logTopicScalarPtr typedCopyPtr emitHelperProps
   ptrDiscipline venomExecSemantics venomState venomInst words pred_set
 
 Theorem emit_literal_cursor_init_seq_ptr:

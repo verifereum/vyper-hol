@@ -2,7 +2,7 @@
    only for instruction safety and ghost projections. *)
 Theory annAssignPtrLength
 Ancestors
- annAssignPtrSetup typedCopyPtr fragGasSeqPtr fragGasPathPtr
+ wordLoadStorePtr annAssignPtrSetup typedCopyPtr fragGasSeqPtr fragGasPathPtr
  bodyPtrDefs ptrDiscipline venomInst venomInstProofs venomExecSemantics
  venomState finite_map emitHelper emitHelperProps context compileEnv
  exprLoweringProps fragExec

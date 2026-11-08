@@ -3,7 +3,7 @@
    posts, not arbitrary ghost-region bounds. Low-level positioned load
    boundaries retain explicit coverage and typed cleanliness obligations. *)
 Theory bodyPtrBopInElementLoad
-Ancestors bodyPtrBopInLiveMemory bodyPtrBopInLoadRun
+Ancestors wordLoadStorePtr bodyPtrBopInLiveMemory bodyPtrBopInLoadRun
   bodyPtrBopInRepresentation stmtSimReturn arithmetic
   allocationPtr exprLoweringProps contextCodegenRel venomState words
   typedCopyLoopHeaderPtr bodyPtrBopInLiteralSuffix venomExecSemantics

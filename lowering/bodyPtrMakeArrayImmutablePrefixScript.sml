@@ -1,7 +1,7 @@
 (* Semantic observations of the checked immutable one-word endpoint. *)
 Theory bodyPtrMakeArrayImmutablePrefix
 Ancestors
-  bodyPtrMakeArrayImmutableCompose bodyPtrMakeArrayImmutableStep
+  wordLoadStorePtr bodyPtrMakeArrayImmutableCompose bodyPtrMakeArrayImmutableStep
   immutableCopyExecution immutableMemoryFrame typedCopyPtr valueEncodingProps
   bodyPtrDefs venomState venomExecSemantics words arithmetic pred_set
 

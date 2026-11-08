@@ -1,7 +1,7 @@
 (* Successful straight-line pointer sequences, with explicit cursors. *)
 Theory logInstSeqPtr
 Ancestors
-  fragGasSeqPtr fragExec instIdxIndep ghostPcTransportPtr exprLoweringProps
+  wordLoadStorePtr fragGasSeqPtr fragExec instIdxIndep ghostPcTransportPtr exprLoweringProps
   typedCopyPtr fragExecPtr emitHelperProps emitHelper compileEnv context finite_map words
   ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState list arithmetic
 

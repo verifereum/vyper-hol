@@ -1,7 +1,7 @@
 (* Counted storage-copy instructions. Loaded words may carry dead-byte taint. *)
 Theory assignBasePtrStoragePath
 Ancestors
-  assignBasePtrWordStore assignBasePtrStorageCoverage typedCopyPtr
+  wordLoadStorePtr assignBasePtrWordStore assignBasePtrStorageCoverage typedCopyPtr
   typedCopyLoopHeaderPtr fragGasPathPtr fragGasSeqPtr fragExecPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst
   stateFrame finite_map pred_set words combin decoderGhostFramePtr arithmetic list

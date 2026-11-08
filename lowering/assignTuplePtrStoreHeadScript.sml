@@ -1,7 +1,7 @@
 (* Concrete scalar-local store ghost integration. *)
 Theory assignTuplePtrStoreHead
 Ancestors
-  assignTuplePtrWordLocals assignTuplePtrCopyEndpoint typedCopyPtr bodyPtrDefs ptrDiscipline
+  wordLoadStorePtr assignTuplePtrWordLocals assignTuplePtrCopyEndpoint typedCopyPtr bodyPtrDefs ptrDiscipline
   venomInst venomState vyperLookup compileEnv finite_map pred_set list
   assignTuplePtrStoreWord tupleTargetStoreRun tupleTargetStoreProps
   stmtSimAssignStore exprSimProps context emitHelperProps emitHelper fragExec

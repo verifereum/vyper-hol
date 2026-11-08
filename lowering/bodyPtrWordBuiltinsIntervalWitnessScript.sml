@@ -1,6 +1,6 @@
 (* Interval-local fetch interface; no restriction on unrelated function code. *)
 Theory bodyPtrWordBuiltinsIntervalWitness
-Ancestors bodyPtrWordBuiltinsIntervalDataflow fragExec fragGasSeqPtr typedCopyPtr
+Ancestors wordLoadStorePtr bodyPtrWordBuiltinsIntervalDataflow fragExec fragGasSeqPtr typedCopyPtr
   venomExecSemantics venomInst venomState venomInstProofs ptrSafeRun ptrDiscipline
   gasCount fragGasPathPtr contextCodegenRel codegenRel venomExecProofs finite_map
 Libs finite_mapLib intReduce

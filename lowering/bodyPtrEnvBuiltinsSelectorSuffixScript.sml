@@ -1,6 +1,6 @@
 (* A shared checked selector allocation/store suffix. *)
 Theory bodyPtrEnvBuiltinsSelectorSuffix
-Ancestors bodyPtrEnvBuiltinsSelectorBuffer bodyPtrEnvBuiltinsAllocation
+Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsSelectorBuffer bodyPtrEnvBuiltinsAllocation
   bodyPtrEnvBuiltinsEdges allocationPtr typedCopyPtr loweringSlice
   ghostPcTransportPtr decoderGhostFramePtr loweringHalt fragExecPtr fragExec fragGasSeqPtr ptrDiscipline venomState
   venomExecSemantics venomInst compileEnv exprLoweringProps exprSimProps

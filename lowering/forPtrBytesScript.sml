@@ -1,6 +1,6 @@
 (* Counted bytestring copies: only the length word must be clean. *)
 Theory forPtrBytes
-Ancestors instIdxIndep forPtrSeqCompose forPtrBulk typedCopyPtr representationCleanPtr valueCopyBytes
+Ancestors wordLoadStorePtr instIdxIndep forPtrSeqCompose forPtrBulk typedCopyPtr representationCleanPtr valueCopyBytes
   exprSimBufferStore valueEncoding valueEncodingProps bodyPtrDefs
   loweringPosts venomState venomExecSemantics venomInst ptrSafeRun
   ptrDiscipline fragGasSeqPtr ghostPcTransportPtr finite_map exprLoweringProps

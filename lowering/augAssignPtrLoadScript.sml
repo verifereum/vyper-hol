@@ -1,7 +1,7 @@
 (* Counted load boundaries; semantic liveness is supplied separately. *)
 Theory augAssignPtrLoad
 Ancestors
-  augAssignPtrInterfaces typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs
+  wordLoadStorePtr augAssignPtrInterfaces typedCopyPtr fragGasSeqPtr fragGasPathPtr bodyPtrDefs
   venomInst venomState venomExecSemantics ptrSafeRun representationCleanPtr
   finite_map vyperValue emitHelperProps exprSimMemoryPath
   emitHelper compileEnv fragExec loweringPosts ptrDiscipline codegenRel

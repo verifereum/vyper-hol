@@ -1,5 +1,5 @@
 Theory bodyPtrPrecompileBuiltinsStaging
-Ancestors bodyPtrPrecompileBuiltinsFreshFrame bodyPtrPrecompileBuiltinsSeq
+Ancestors wordLoadStorePtr bodyPtrPrecompileBuiltinsFreshFrame bodyPtrPrecompileBuiltinsSeq
           allocationPtr typedCopyPtr fragExecPtr fragGasSeqPtr
           venomExecSemantics venomInst venomState ptrDiscipline bodyPtrDefs
           compileEnv exprLoweringProps finite_map loweringHalt context

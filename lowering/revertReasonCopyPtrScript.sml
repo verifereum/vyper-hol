@@ -1,6 +1,6 @@
 (* Checked padded-message copy, independent of reason normalization. *)
 Theory revertReasonCopyPtr
-Ancestors normalizerAllocationFrame revertReasonLayout revertReasonPrefixFramePtr abiEncoderRounding
+Ancestors wordLoadStorePtr normalizerAllocationFrame revertReasonLayout revertReasonPrefixFramePtr abiEncoderRounding
   exprLoweringProps venomMemProps venomInst venomExecSemantics venomState
   fragGasSeqPtr typedCopyPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr ptrDiscipline
   words arithmetic list rich_list finite_map codegenRel venomInstProofs

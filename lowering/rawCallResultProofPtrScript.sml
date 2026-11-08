@@ -1,7 +1,7 @@
 (* Finish-code boundaries for raw_call, after operand/output preparation. *)
 Theory rawCallResultProofPtr
 Ancestors
-  rawCallOracleProofPtr rawCallBufferPtr builtinSystem context emitHelper
+  wordLoadStorePtr rawCallOracleProofPtr rawCallBufferPtr builtinSystem context emitHelper
   compileEnv exprLoweringProps bodyPtrDefs builtinSimple builtinProps typedCopyPtr ifJumpPtr
 Libs
   monadsyntax
@@ -1118,7 +1118,7 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   drule_all raw_call_emit_mstore_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
-  drule_all typedCopyPtrTheory.mstore_ghost_frame >>
+  drule_all wordLoadStorePtrTheory.mstore_ghost_frame >>
   disch_then (qspecl_then [`PG`, `G`, `sa.cs_next_id`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ _ un (OK t)` >>
   `sb.cs_current_bb = sa.cs_current_bb` by

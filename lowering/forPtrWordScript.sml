@@ -1,6 +1,6 @@
 (* Finite checked word element copies, independent of block layout. *)
 Theory forPtrWord
-Ancestors forPtrAdmin typedCopyPtr fragGasSeqPtr ghostPcTransportPtr
+Ancestors wordLoadStorePtr forPtrAdmin typedCopyPtr fragGasSeqPtr ghostPcTransportPtr
   representationCleanPtr wordCopyRobustPtr robustCopyTransportPtr
   venomExecSemantics venomInst venomState finite_map instIdxIndep
   fragExecPtr bodyPtrDefs fragExec exprLoweringProps ptrSafeRun ptrDiscipline

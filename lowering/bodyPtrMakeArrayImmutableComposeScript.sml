@@ -1,7 +1,7 @@
 (* Assemble raw immutable-copy stages before lifting the installed path. *)
 Theory bodyPtrMakeArrayImmutableCompose
 Ancestors
-  bodyPtrMakeArrayUniformStages bodyPtrMakeArraySeqCompose
+  wordLoadStorePtr bodyPtrMakeArrayUniformStages bodyPtrMakeArraySeqCompose
   bodyPtrMakeArrayImmutableOne bodyPtrMakeArrayOffsetFrame
   bodyPtrMakeArrayImmutableStep exprSimCopy immutableCopyExecution immutableMemoryFrame
   freshWrites context compileEnv exprLoweringProps ptrDiscipline typedCopyPtr bodyPtrDefs

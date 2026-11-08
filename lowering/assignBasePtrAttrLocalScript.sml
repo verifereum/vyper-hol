@@ -1,6 +1,6 @@
 (* Local struct fields: keep robust representation separate from execution. *)
 Theory assignBasePtrAttrLocal
-Ancestors assignBasePtrFieldAddress assignBasePtrFieldRobust
+Ancestors wordLoadStorePtr assignBasePtrFieldAddress assignBasePtrFieldRobust
   assignBasePtrScopePost assignBasePtrScalarPost assignBasePtrWordStore
   typedCopyPtr assignTuplePtrStoreHead bodyPtrDefs stmtSimAssignAttr
   venomState venomExecSemantics venomMemProofs ptrDiscipline venomInst

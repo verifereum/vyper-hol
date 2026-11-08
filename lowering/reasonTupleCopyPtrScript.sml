@@ -1,7 +1,7 @@
 (* Shared checked copy boundaries for the raise/assert Error(string) tuple. *)
 Theory reasonTupleCopyPtr
 Ancestors
-  reasonPrefixPtr reasonResourcesPtr robustCopyTransportPtr typedCopyPtr
+  wordLoadStorePtr reasonPrefixPtr reasonResourcesPtr robustCopyTransportPtr typedCopyPtr
   valueEncodingProps valueEncodingProofs venomMemProofs ptrDiscipline
   venomExecSemantics venomState words list pred_set arithmetic fragExecPtr
   emitHelper bodyPtrDefs venomInst compileEnv fragExec finite_map fragGasPathPtr

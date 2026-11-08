@@ -1,7 +1,7 @@
 (* Same-witness load packaging.  This does not strengthen the RHS judgment. *)
 Theory augAssignPtrLoadClean
 Ancestors
-  augAssignPtrScalarWitnessProbe augAssignPtrLoad augAssignPtrProvenanceProbe
+  wordLoadStorePtr augAssignPtrScalarWitnessProbe augAssignPtrLoad augAssignPtrProvenanceProbe
   emitHelper emitHelperProps exprLoweringProps compileEnv stmtFragPtr
   exprSimNameWord bodyPtrDefs ptrDiscipline venomInst venomState finite_map
   loweringSlice venomExecSemantics fragExec typedCopyPtr codegenRel
@@ -55,7 +55,7 @@ Proof
   conj_tac >- (simp[ghost_kept_def, Abbr `tm`, load_ambient_frame] >> metis_tac[]) >>
   conj_tac >- (qpat_x_assum `mload _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
     simp[Abbr `tm`, NoAsms] >>
-    irule (cj 1 typedCopyPtrTheory.mload_ghost_clean) >> simp[eval_operand_def]) >>
+    irule (cj 1 wordLoadStorePtrTheory.mload_ghost_clean) >> simp[eval_operand_def]) >>
   simp[Abbr `t`, update_var_def, Abbr `H`, load_result_has_no_provenance] >>
   `sb.cs_next_var = sa.cs_next_var + 1 /\
    out = STRCAT "%" (toString sa.cs_next_var)` by

@@ -1,6 +1,6 @@
 (* Ghost transport for the actual allocating literal producer. *)
 Theory assignBasePtrLiteralGhost
-Ancestors assignBasePtrLiteralPost typedCopyPtr robustCopyTransportPtr
+Ancestors wordLoadStorePtr assignBasePtrLiteralPost typedCopyPtr robustCopyTransportPtr
   allocationPtr loweringHalt exprLoweringProps localPtrsProps bodyPtrDefs ptrDiscipline venomInst venomExecSemantics
   venomState valueEncodingProps exprSimProps compileEnv finite_map pred_set
   fragGasSeqPtr ghostPcTransportPtr instIdxIndep representationCleanPtr

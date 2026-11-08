@@ -1,7 +1,7 @@
 (* Fixed-run selector boundary: raw payload padding may remain tainted. *)
 Theory bodyPtrSignedConvertSignedFixed
 Ancestors
-  bodyPtrSignedConvertSignedLoad bodyPtrSignedConvertUnsignedFixed
+  wordLoadStorePtr bodyPtrSignedConvertSignedLoad bodyPtrSignedConvertUnsignedFixed
   bodyPtrSignedConvertIszero bodyPtrSignedConvertScalarOps
   venomState venomInst venomInstProofs venomExecSemantics finite_map words
   arithmetic pred_set ptrDiscipline ptrSafeRun codegenRel contextCodegenRel

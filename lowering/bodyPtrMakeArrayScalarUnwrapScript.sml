@@ -2,7 +2,7 @@
    No scalar source-buffer coverage is required or exported. *)
 Theory bodyPtrMakeArrayScalarUnwrap
 Ancestors
-  bodyPtrMakeArrayUnwrapIdentity bodyPtrMakeArrayScalarSemantics
+  wordLoadStorePtr bodyPtrMakeArrayUnwrapIdentity bodyPtrMakeArrayScalarSemantics
   bodyPtrMakeArrayMemoryWord bodyPtrMakeArrayMloadFrame
   bodyPtrMakeArrayExternalWord bodyPtrMakeArrayWordClean
   bodyPtrDefs loweringPosts context compileEnv venomState

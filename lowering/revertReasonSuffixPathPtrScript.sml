@@ -2,7 +2,7 @@
    run endpoints; subsequent pointer checks use counted endpoint cursors. *)
 Theory revertReasonSuffixPathPtr
 Ancestors
-  finalAbortSeqPtr revertReasonSuffixPtr revertReasonPrefixFramePtr fragGasSeqPtr
+  wordLoadStorePtr finalAbortSeqPtr revertReasonSuffixPtr revertReasonPrefixFramePtr fragGasSeqPtr
   instSeqComposePtr ghostPcTransportPtr valueEncodingProps pred_set instIdxIndep
   revertReasonPrefixPtr revertAllocationPtr
   typedCopyPtr decoderGhostFramePtr typedCopyLoopHeaderPtr finite_map ptrDiscipline

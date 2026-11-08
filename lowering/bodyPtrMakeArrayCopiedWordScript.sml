@@ -2,7 +2,7 @@
    retain that taint, rather than asserting clean padding or initialization. *)
 Theory bodyPtrMakeArrayCopiedWord
 Ancestors
-  bodyPtrMakeArrayCopyStep typedCopyPtr fragGasPathPtr fragGasPath
+  wordLoadStorePtr bodyPtrMakeArrayCopyStep typedCopyPtr fragGasPathPtr fragGasPath
   venomExecSemantics venomState valueEncodingProps ptrDiscipline ptrSafeRun
 
 Theorem external_word_store_path:

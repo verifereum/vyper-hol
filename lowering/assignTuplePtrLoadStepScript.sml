@@ -1,7 +1,7 @@
 (* Safe tuple member loads: robust representations justify clean scalar reads. *)
 Theory assignTuplePtrLoadStep
 Ancestors
-  assignTuplePtrBoundary assignTuplePtrPrefix representationCleanPtr bodyPtrDefs compileEnv
+  wordLoadStorePtr assignTuplePtrBoundary assignTuplePtrPrefix representationCleanPtr bodyPtrDefs compileEnv
   tupleTypedLoad tupleMemoryLayout words arithmetic list rich_list valueEncoding valueEncodingProofs
   typedCopyPtr ptrSafeRun ptrDiscipline venomExecSemantics venomInst venomState emitHelperProps
   emitHelper fragExec exprLoweringProps fragGasSeqPtr fragGasPathPtr exprSimProps stateFrame

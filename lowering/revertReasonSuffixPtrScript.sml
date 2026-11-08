@@ -2,7 +2,7 @@
    relation after scratch-memory writes. *)
 Theory revertReasonSuffixPtr
 Ancestors
-  mstoreOperandStep revertReasonLayout revertReasonCopyPtr revertAllocationPtr revertReasonPtr
+  wordLoadStorePtr mstoreOperandStep revertReasonLayout revertReasonCopyPtr revertAllocationPtr revertReasonPtr
   typedCopyPtr fragGasSeqPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr exprLoweringProps
   venomMemProps fragExec fragGasPathPtr gasCount ptrSafeRun typedCopyLoopHeaderPtr
   abiEncoderRounding revertReasonPrefixFramePtr list

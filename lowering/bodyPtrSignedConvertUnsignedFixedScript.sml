@@ -1,7 +1,7 @@
 (* Fixed-run unsigned suffix. Padding outside the occupied prefix may be dirty. *)
 Theory bodyPtrSignedConvertUnsignedFixed
 Ancestors
-  bodyPtrSignedConvertUnsignedLoad bodyPtrSignedConvertSourceFixed
+  wordLoadStorePtr bodyPtrSignedConvertUnsignedLoad bodyPtrSignedConvertSourceFixed
   typedCopyPtr typedCopyLoopHeaderPtr ptrDiscipline fragGasSeqPtr
   venomState venomInst venomInstProofs venomExecSemantics emitHelperProps
   finite_map words arithmetic pred_set fragExec exprLoweringProps

@@ -1,7 +1,7 @@
 (* Covered bytes prefixes and the dynamic RawLog suffix. *)
 Theory rawLogPtrDynamic
 Ancestors
-  rawLogPtrInst bodyPtrHashBuiltinsKeccakBytesRun
+  wordLoadStorePtr rawLogPtrInst bodyPtrHashBuiltinsKeccakBytesRun
   typedCopyPtr bodyPtrDefs fragGasSeqPtr ptrDiscipline venomState venomInst
   venomExecSemantics words finite_map pred_set contextCodegenRel codegenRel
   valueEncodingProps exprSimHash list context compileEnv emitHelper

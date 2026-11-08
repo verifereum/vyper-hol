@@ -1,7 +1,7 @@
 (* Checked size-slot and ABI payload boundaries, shared by raise and assert. *)
 Theory reasonEncoderTailPtr
 Ancestors
-  reasonTupleCopyPtr reasonPrefixPtr typedCopyPtr ghostPcTransportPtr
+  wordLoadStorePtr reasonTupleCopyPtr reasonPrefixPtr typedCopyPtr ghostPcTransportPtr
   venomExecSemantics venomState venomInst ptrDiscipline bodyPtrDefs
   emitHelper compileEnv fragExec finite_map words list fragExecPtr fragGasPathPtr
 

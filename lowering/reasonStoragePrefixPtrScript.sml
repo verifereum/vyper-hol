@@ -1,7 +1,7 @@
 (* Located storage/transient source frames for the shared reason prefix. *)
 Theory reasonStoragePrefixPtr
 Ancestors
-  storageNormalizationOwnershipPtr reasonPrefixPtr reasonPrefixResourcesPtr
+  wordLoadStorePtr storageNormalizationOwnershipPtr reasonPrefixPtr reasonPrefixResourcesPtr
   bodyPtrDefs loweringPosts allocationPtr reasonAllocationFramePtr
   exprSimAlloc exprSimProps exprLoweringProps loweringHalt compileEnv
   context venomState venomInst venomExecSemantics ptrDiscipline ptrSafeRun

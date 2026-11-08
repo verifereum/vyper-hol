@@ -1,7 +1,7 @@
 (* Endpoint-parametric frames: these apply to the same checked run and
    ghost witnesses, rather than introducing independently chosen ghosts. *)
 Theory forPtrElementFrame
-Ancestors bodyPtrDefs forPtrBytes forPtrBulk forPtrWord fragGasSeqPtr
+Ancestors wordLoadStorePtr bodyPtrDefs forPtrBytes forPtrBulk forPtrWord fragGasSeqPtr
   decoderGhostFramePtr ptrDiscipline venomInst venomExecSemantics venomState
   list finite_map pred_set exprLoweringProps instIdxIndep fragExec
 
@@ -51,7 +51,7 @@ Proof
     (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
   gvs[inst_seq_ptr_def] >>
-  simp[SRULE [] (cj 5 typedCopyPtrTheory.mstore_ghost_frame)] >>
+  simp[SRULE [] (cj 5 wordLoadStorePtrTheory.mstore_ghost_frame)] >>
   rpt strip_tac >> decide_tac
 QED
 
