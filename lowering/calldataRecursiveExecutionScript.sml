@@ -7,9 +7,9 @@ Ancestors
 
 Theorem calldata_recursive_member_appends[local]:
   cs_appends
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od)
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od)
 Proof
   ho_match_mp_tac cs_appends_bind >> conj_tac
   >- simp[cs_appends_abi_member_pointer] >> gen_tac >>
@@ -22,7 +22,7 @@ Theorem calldata_recursive_nonbulk_owned[local]:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   (is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) st = ((),final) /\
   fn_has_code st final fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
@@ -46,7 +46,7 @@ Theorem calldata_recursive_nonbulk_owned[local]:
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   (!middle last cdst csrc.
-    compile_abi_decode_to_buf cdst csrc CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf cdst csrc CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
     fn_has_code middle last fn /\
     st.cs_next_id <= middle.cs_next_id /\ last.cs_next_id <= final.cs_next_id /\
@@ -125,7 +125,7 @@ Proof
      POP_ASSUM_LIST (K all_tac) >>
      simp[abi_decoder_coherent_array_iff] >> strip_tac >>
      drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
-  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ st = _`
+  qpat_x_assum `compile_abi_decode_to_buf dst src _ _ _ _ st = _`
     (assume_tac o PURE_REWRITE_RULE [exprLoweringTheory.type_to_abi_dec_info_def]) >>
   qpat_assum `type_memory_bytes ce ty = _`
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
@@ -160,8 +160,8 @@ Proof
   irule calldata_coherent_nonbulk_array_owned_run >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qpat_assum `abi_decoder_coherent _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
-  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `abi_decode_loop_suffix _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `FLOOKUP initial.vs_allocas oid = _` (irule_at Any) >>
   qpat_assum `abi_decode_index_init _ = _` (irule_at Any) >>
@@ -191,7 +191,7 @@ QED
 Theorem calldata_coherent_owned_run:
   !ce env sf ty tv. abi_decoder_coherent ce env sf ty tv ==>
   !dst src st final fn initial p d ctx site oid base_addr cap.
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),final) /\
   fn_has_code st final fn /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
@@ -288,7 +288,7 @@ Resume calldata_coherent_owned_run[array]:
   `abi_decoder_coherent ce env sf (ArrayT ty bound) (ArrayTV tv bound)` by
     (irule (cj 3 abi_decoder_coherent_rules) >> asm_rewrite_tac[]) >>
   Cases_on `bound`
-  >- (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  >- (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
         calldata_coherent_fixed_array_owned_run_tail >>
       disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -323,7 +323,7 @@ Resume calldata_coherent_owned_run[fixed_callback]:
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_x_assum `ei = _` SUBST_ALL_TAC >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -356,7 +356,7 @@ QED
 Resume calldata_coherent_owned_run[nonbulk]:
   `abi_decoder_coherent ce env sf (ArrayT ty (Dynamic n)) (ArrayTV tv (Dynamic n))` by
     (irule (cj 3 abi_decoder_coherent_rules) >> asm_rewrite_tac[]) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     calldata_recursive_nonbulk_owned >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then irule >>
@@ -369,7 +369,7 @@ Resume calldata_coherent_owned_run[nonbulk_callback]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -393,9 +393,9 @@ Resume calldata_coherent_owned_run[tuple]:
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
   qpat_x_assum `tvs = _` SUBST_ALL_TAC >>
   drule calldata_member_indexed_metadata >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o REWRITE_RULE [abi_decoder_tuple_infos]) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     calldata_complex_tuple_owned_run_tail >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then irule >>
@@ -451,7 +451,7 @@ Resume calldata_coherent_owned_run[tuple_callback]:
      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
   qpat_x_assum `ei = _` SUBST_ALL_TAC >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
@@ -487,10 +487,10 @@ Resume calldata_coherent_owned_run[struct]:
   drule calldata_member_indexed_metadata >> strip_tac >>
   `MAP SND (ZIP (MAP FST args,tvs)) = tvs` by
     (drule LIST_REL_LENGTH >> simp[LENGTH_MAP] >> strip_tac >> simp[MAP_ZIP]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (fn th => qpat_assum `type_to_abi_dec_info sf ce (StructT nsid) = _`
       (fn eq => assume_tac (PURE_REWRITE_RULE [eq] th))) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     calldata_complex_struct_owned_run_tail >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then irule >>
@@ -555,7 +555,7 @@ Resume calldata_coherent_owned_run[struct_callback]:
     (fn th => pure_rewrite_tac[th] >>
       rule_assum_tac (PURE_REWRITE_RULE [th])) >>
   qpat_x_assum `!dst src st final fn initial p d ctx site oid base_addr cap. _`
-    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+    (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>

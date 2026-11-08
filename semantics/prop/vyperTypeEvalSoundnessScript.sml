@@ -5043,6 +5043,82 @@ Proof
   simp_tac(srw_ss())[] >> strip_tac >> gvs[no_type_error_result_def]
 QED
 
+Theorem code_slice_operand_typing:
+  code_slice_source bt es = SOME (ct,addr) /\
+  well_typed_exprs env es ==>
+  well_typed_exprs env (TL es) /\
+  well_typed_exprs env [addr] /\
+  well_typed_expr env (Builtin ct (Acc Code) [addr])
+Proof
+  rw[code_slice_source_SOME] >>
+  gvs[Once well_typed_expr_def] >>
+  gvs[Once well_typed_expr_def] >>
+  gvs[Once well_typed_expr_def]
+QED
+
+Theorem code_slice_operand_call_safe:
+  code_slice_source bt es = SOME (ct,addr) /\
+  call_evaluation_safe cx (int_calls_exprs es) ==>
+  call_evaluation_safe cx (int_calls_exprs (TL es)) /\
+  call_evaluation_safe cx (int_calls_exprs [addr])
+Proof
+  rw[code_slice_source_SOME] >>
+  irule call_evaluation_safe_mono >>
+  goal_assum (drule_at Any) >>
+  simp[int_calls_expr_def, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem code_access_runtime_typed[local]:
+  env.type_defs = get_tenv cx /\
+  well_typed_expr env (Builtin ct (Acc Code) [addr]) /\
+  exprs_runtime_typed env [addr] avs ==>
+  ?tv tvs. evaluate_type (get_tenv cx) ct = SOME tv /\
+    well_typed_builtin_app ct (Acc Code) [expr_type addr] /\
+    MAP (evaluate_type (get_tenv cx)) [expr_type addr] = MAP SOME tvs /\
+    LIST_REL value_has_type tvs avs
+Proof
+  simp[exprs_runtime_typed_def] >> strip_tac >>
+  qpat_x_assum `well_typed_expr _ _` mp_tac >>
+  simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
+  gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+  qexists_tac `tvs` >> gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]
+QED
+
+Theorem code_access_runtime_success[local]:
+  env.type_defs = get_tenv cx /\
+  well_typed_expr env (Builtin ct (Acc Code) [addr]) /\
+  exprs_runtime_typed env [addr] avs /\
+  context_well_typed cx /\ accounts_well_typed acc /\
+  evaluate_builtin cx acc ct (Acc Code) [expr_type addr] avs = INL v ==>
+  value_runtime_typed env ct v
+Proof
+  strip_tac >> drule_all code_access_runtime_typed >> strip_tac >>
+  simp[value_runtime_typed_def] >>
+  drule_at (Pos last) well_typed_builtin_app_success_type >>
+  simp[] >> disch_then (qspec_then `tvs` mp_tac) >> simp[]
+QED
+
+Theorem code_access_runtime_no_type_error[local]:
+  env.type_defs = get_tenv cx /\
+  well_typed_expr env (Builtin ct (Acc Code) [addr]) /\
+  exprs_runtime_typed env [addr] avs /\
+  context_well_typed cx /\ accounts_well_typed acc ==>
+  !msg. evaluate_builtin cx acc ct (Acc Code) [expr_type addr] avs <> INR (TypeError msg)
+Proof
+  strip_tac >> drule_all code_access_runtime_typed >> strip_tac >>
+  irule well_typed_builtin_app_no_type_error >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem exprs_runtime_typed_code_slice_cons[local]:
+  code_slice_source bt es = SOME (ct,addr) /\
+  value_runtime_typed env ct v /\ exprs_runtime_typed env (TL es) vs ==>
+  exprs_runtime_typed env es (v::vs)
+Proof
+  rw[code_slice_source_SOME, exprs_runtime_typed_def, value_runtime_typed_def] >>
+  qexists_tac `tv::tvs` >> gvs[expr_type_def]
+QED
+
 Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by (
@@ -5127,19 +5203,68 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
   simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
                      type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  Cases_on `eval_exprs cx es st` >>
-  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ bt <> Env MsgGas ==> _`
-    (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-  (impl_tac >- (simp[type_check_def, assert_def] >> metis_tac[])) >> strip_tac >>
-  qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
-    (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `option_CASE (code_slice_source bt es) _ SF st` >>
+  Cases_on `option_CASE (code_slice_source bt es) (eval_exprs cx es) SF st` >>
+  rename1 `option_CASE _ _ _ st = (args_res,args_st)` >>
+  `state_well_typed args_st /\ env_consistent env cx args_st /\
+   accounts_well_typed args_st.accounts /\ no_type_error_result args_res /\
+   case args_res of INL vs => exprs_runtime_typed env es vs | INR _ => T` by (
+    qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
+    Cases_on `code_slice_source bt es`
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
+          (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+        (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+        qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env es vs | INR _ => T`
+          (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
+        (impl_tac >- simp[]) >> simp[]) >>
+    rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+    rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
+    drule_all code_slice_operand_typing >> strip_tac >>
+    drule_all code_slice_operand_call_safe >> strip_tac >>
+    simp_tac(srw_ss())[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
+    Cases_on `eval_exprs cx (TL es) st` >>
+    rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
+    qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
+      (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+    qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env (TL es) vs | INR _ => T`
+      (qspecl_then [`env`,`st`,`tail_res`,`tail_st`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    reverse (Cases_on `tail_res`)
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
+    rename1 `eval_exprs cx (TL es) st = (INL tail_vs,tail_st)` >>
+    simp_tac(srw_ss())[] >>
+    Cases_on `eval_exprs cx [addr] tail_st` >>
+    rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
+    qpat_x_assum `!s'' x t v c a s3 tv t'. _ ==> _`
+      (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,`tail_vs`,`tail_st`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+    qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env [addr] vs | INR _ => T`
+      (qspecl_then [`env`,`tail_st`,`addr_res`,`addr_st`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
+    rpt (qpat_x_assum `!s'' x t. _` kall_tac) >>
+    reverse (Cases_on `addr_res`)
+    >- (simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
+    rename1 `eval_exprs cx [addr] tail_st = (INL avs,addr_st)` >>
+    simp_tac(srw_ss())[] >>
+    Cases_on `evaluate_builtin cx addr_st.accounts code_ty (Acc Code) [expr_type addr] avs` >>
+    simp_tac(srw_ss())[return_def, raise_def] >> strip_tac >> gvs[]
+    >- (conj_tac >- simp[no_type_error_result_def] >>
+        mp_tac (Q.INST [`acc` |-> `(addr_st:evaluation_state).accounts`, `ct` |-> `code_ty`, `v` |-> `x`]
+                  (SPEC_ALL code_access_runtime_success)) >>
+        (impl_tac >- simp[]) >> strip_tac >>
+        drule_all exprs_runtime_typed_code_slice_cons >> simp[]) >>
+    mp_tac (Q.INST [`acc` |-> `(addr_st:evaluation_state).accounts`, `ct` |-> `code_ty`]
+              (SPEC_ALL code_access_runtime_no_type_error)) >>
+    (impl_tac >- simp[]) >> gvs[no_type_error_result_def]) >>
   rpt (qpat_x_assum `!env st res st'. _` kall_tac) >>
-  qpat_x_assum `!s'' x t. _` kall_tac >>
+  rpt (qpat_x_assum `!s'' x t. _` kall_tac) >>
   Cases_on `args_res`
   >- (
-    rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+    rename1 `option_CASE _ _ _ st = (INL vs,args_st)` >>
     qpat_x_assum `case INL vs of INL vs => exprs_runtime_typed env es vs | INR v1 => T`
       mp_tac >> simp_tac(srw_ss())[] >> strip_tac >>
     qpat_x_assum `exprs_runtime_typed env es vs` mp_tac >>
@@ -8250,30 +8375,76 @@ Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
            AllCaseEqs()] >>
       strip_tac >> imp_res_tac next_gas_reading_state >>
       irule typed_scope_transition_scopes >> gvs[assert_def, return_def]) >>
-  qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ bt <> Env MsgGas ==> _`
-    (qspecl_then [`st`,`()`,`st`] mp_tac) >>
-  (impl_tac >- gvs[type_check_def, assert_def]) >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th =>
     simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, raise_def,
       type_check_def, assert_def, th]) >>
   qpat_assum `bt <> Len` (fn th => rewrite_tac[th]) >>
   qpat_assum `bt <> Env MsgGas` (fn th => rewrite_tac[th]) >>
-  simp[NoAsms, bind_def, ignore_bind_def, assert_def, return_def, raise_def,
-       AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
-    (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
-  disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  imp_res_tac lift_sum_state >> rpt BasicProvers.VAR_EQ_TAC >>
-  asm_rewrite_tac[] >>
-  qpat_x_assum `get_accounts _ = _` mp_tac >>
-  simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  imp_res_tac precompile_call_success_state >>
-  gvs[typed_scope_transition_def] >>
-  qexists_tac `events` >> simp[]
+  simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def, raise_def,
+    type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
+  qmatch_goalsub_abbrev_tac `option_CASE (code_slice_source bt es) _ SF st` >>
+  Cases_on `option_CASE (code_slice_source bt es) (eval_exprs cx es) SF st` >>
+  rename1 `option_CASE _ _ _ st = (args_res,args_st)` >>
+  `typed_scope_transition st args_st` by (
+    qpat_x_assum `option_CASE _ _ _ st = _` mp_tac >> qunabbrev_tac `SF` >>
+    Cases_on `code_slice_source bt es`
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        qpat_x_assum `!s'' x t. _ /\ bt <> Len /\ bt <> Env MsgGas /\ NONE = NONE ==> _`
+          (qspecl_then [`st`,`()`,`st`] mp_tac) >>
+        (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+        qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+          (qspecl_then [`env`,`st`,`args_res`,`args_st`] mp_tac) >>
+        (impl_tac >- simp[]) >> simp[]) >>
+    rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+    rename1 `code_slice_source bt es = SOME (code_ty,addr)` >>
+    drule_all code_slice_operand_typing >> strip_tac >>
+    drule_all code_slice_operand_call_safe >> strip_tac >>
+    simp_tac(srw_ss())[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
+    Cases_on `eval_exprs cx (TL es) st` >>
+    rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
+    qpat_x_assum `!s'' x t v c a. _ /\ _ /\ _ /\ _ /\ v = (c,a) ==> _`
+      (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+    qpat_x_assum `!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\ case res of INL vs => exprs_runtime_typed env (TL es) vs | INR _ => T`
+      (qspecl_then [`env`,`st`,`tail_res`,`tail_st`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+      (qspecl_then [`env`,`st`,`tail_res`,`tail_st`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    reverse (Cases_on `tail_res`)
+    >- (simp_tac(srw_ss())[] >> strip_tac >>
+        rpt (qpat_x_assum `!x. _` kall_tac) >> gvs[]) >>
+    rename1 `eval_exprs cx (TL es) st = (INL tail_vs,tail_st)` >>
+    simp_tac(srw_ss())[] >>
+    Cases_on `eval_exprs cx [addr] tail_st` >>
+    rename1 `eval_exprs cx [addr] tail_st = (addr_res,addr_st)` >>
+    qpat_x_assum `!s'' x t v c a s3 tv t'. _ ==> _`
+      (qspecl_then [`st`,`()`,`st`,`(code_ty,addr)`,`code_ty`,`addr`,`st`,`tail_vs`,`tail_st`] mp_tac) >>
+    (impl_tac >- simp[type_check_def, assert_def]) >> strip_tac >>
+    qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
+      (qspecl_then [`env`,`tail_st`,`addr_res`,`addr_st`] mp_tac) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    `typed_scope_transition st addr_st` by metis_tac[typed_scope_transition_trans] >>
+    rpt (qpat_x_assum `!x. _` kall_tac) >>
+    reverse (Cases_on `addr_res`) >> simp_tac(srw_ss())[]
+    >- (strip_tac >> gvs[]) >>
+    rename1 `eval_exprs cx [addr] tail_st = (INL avs,addr_st)` >>
+    Cases_on `evaluate_builtin cx addr_st.accounts code_ty (Acc Code) [expr_type addr] avs` >>
+    simp_tac(srw_ss())[return_def, raise_def] >> strip_tac >> gvs[]) >>
+  rpt (qpat_x_assum `!x. _` kall_tac) >>
+  reverse (Cases_on `args_res`) >> simp_tac(srw_ss())[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `option_CASE _ _ _ st = (INL vs,args_st)` >>
+  Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
+  simp_tac(srw_ss())[return_def, raise_def]
+  >- (Cases_on `precompile_call_success bt args_st` >>
+      rename1 `precompile_call_success bt args_st = (pc_res,pc_st)` >>
+      drule precompile_call_success_state >> strip_tac >>
+      Cases_on `pc_res` >> simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
+      irule typed_scope_transition_trans >>
+      qexists_tac `args_st` >> simp[typed_scope_transition_scopes]) >>
+  strip_tac >> gvs[]
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Attribute]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Attribute"

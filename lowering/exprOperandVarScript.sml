@@ -330,7 +330,7 @@ Proof
   irule freshWritesTheory.not_fresh_at_mono >>
   rename1 `compile_alloc_buffer _ _ = (buf,sm)` >>
   qexists `sm` >> reverse conj_tac >- metis_tac[] >>
-  rename1 `compile_abi_decode_to_buf _ _ _ _ info se = ((),sf)` >>
+  rename1 `compile_abi_decode_to_buf _ _ _ _ _ info se = ((),sf)` >>
   `se.cs_next_var <= sf.cs_next_var` by
     metis_tac[cj 1 ci_mono_compile_abi_decode, ci_mono_def, pairTheory.SND] >>
   qpat_x_assum `emit_op ADD _ sm = _` mp_tac >>
@@ -1242,8 +1242,6 @@ Resume compiler_builtin_var[bop]:
 QED
 Resume compiler_builtin_var[slice]:
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  IF_CASES_TAC
-  >- (builtin_ptr_var_tac >> metis_tac[compiler_slice_var]) >>
   IF_CASES_TAC
   >- (builtin_ptr_var_tac >> metis_tac[compiler_slice_var]) >>
   IF_CASES_TAC
@@ -2228,8 +2226,6 @@ QED
 
 Resume compiler_builtin_reserved_cong[slice]:
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  IF_CASES_TAC >> simp[]
-  >- rpt compiler_reserved_pair_tac >>
   IF_CASES_TAC >> simp[]
   >- rpt compiler_reserved_pair_tac >>
   IF_CASES_TAC >> simp[]

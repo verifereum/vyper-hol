@@ -15,12 +15,8 @@ val () = computeLib.upd_compset (computeLib.add_thms
 val fixture_root = "../memory-stores/oracle"
 
 val t03_tuple_assign_abi_decode = memoryStoreWitnessLib.evaluate fixture_root "t03_tuple_assign_abi_decode"
-Theorem t03_tuple_assign_abi_decode_matches_python_oracle:
-  ^(#term t03_tuple_assign_abi_decode) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "t03_tuple_assign_abi_decode")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation t03_tuple_assign_abi_decode))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "t03_tuple_assign_abi_decode" t03_tuple_assign_abi_decode
 
 val t06_tuple_assign_mixed_targets = memoryStoreWitnessLib.evaluate fixture_root "t06_tuple_assign_mixed_targets"
 Theorem t06_tuple_assign_mixed_targets_matches_python_oracle:
@@ -39,9 +35,5 @@ Proof
 QED
 
 val t11_tuple_onew_decode_mem = memoryStoreWitnessLib.evaluate fixture_root "t11_tuple_onew_decode_mem"
-Theorem t11_tuple_onew_decode_mem_matches_python_oracle:
-  ^(#term t11_tuple_onew_decode_mem) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "t11_tuple_onew_decode_mem")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation t11_tuple_onew_decode_mem))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "t11_tuple_onew_decode_mem" t11_tuple_onew_decode_mem

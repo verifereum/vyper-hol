@@ -27,7 +27,7 @@ Ancestors
   list  exprSimHyps exprSimLeaves exprSimOperators exprSimPlaces
   exprSimAggregates exprSimBuiltins exprSimCalls exprLowering
   vyperAST vyperTypeCallGraph vyperTypeSystem exprSimWordBuiltins
-  exprSimCalldataSlice exprSimPrecompiles exprSimLen
+  exprSimCalldataSlice exprSimPrecompiles exprSimLen exprSimSlice
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -41,13 +41,15 @@ Theorem compile_builtin_case:
   !nocalls ctx func cenv cx ann bi args.
     (!bop. bi <> Bop bop) /\ (!t n. bi <> MakeArray t n) /\
     bi <> ECAdd /\ bi <> ECMul /\
-    exprs_case nocalls ctx func cenv cx args ==>
+    (code_slice_source bi args = NONE ==>
+     exprs_case nocalls ctx func cenv cx args) /\
+    (!m. bi = Slice m ==> slice_extcode_case nocalls ctx func cenv cx args) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann bi args) /\
     expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by simp[expr_sim_case_of_vv] >>
   Cases_on `bi`
   >~ [`Builtin _ (Bop _) _`] >- metis_tac[]
   >~ [`Builtin _ (MakeArray _ _) _`] >- metis_tac[]
@@ -82,6 +84,8 @@ Proof
   >- (gvs[] >> irule expr_ok_of_vv >> irule compile_ecmul_sim >> gvs[]) >>
   rw[expr_ok_case] >> drule exprs_case_below >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`] assume_tac) >>
+  drule slice_extcode_case_below >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`] assume_tac) >>
   drule_at Any compile_builtin_case >> gvs[]
 QED
 
@@ -96,7 +100,7 @@ Theorem compile_type_builtin_case:
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)`
-    suffices_by metis_tac[expr_sim_case_of_vv] >>
+    suffices_by simp[expr_sim_case_of_vv] >>
   Cases_on `tb`
   >~ [`TypeBuiltin _ MaxValue _ _`] >- simp[compile_bound_builtin_case]
   >~ [`TypeBuiltin _ MinValue _ _`] >- simp[compile_bound_builtin_case]

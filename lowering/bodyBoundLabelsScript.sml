@@ -265,7 +265,7 @@ QED
 Theorem bound_labels_return_value_decode:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_return_value_decode buf lo hi s))))
+    (SND (compile_return_value_decode lo hi s))))
 Proof
   strip_tac >> simp[compile_return_value_decode_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
@@ -1827,11 +1827,11 @@ Theorem bound_labels_builtin_slice[local]:
     (SND (compile_builtin_dispatch_body f ce rt ty (Slice n) args s))))
 Proof
   strip_tac >> simp[compile_builtin_dispatch_body_def] >>
-  Cases_on `is_msg_data (HD args) \/ is_self_code (HD args)`
-  >- (rpt IF_CASES_TAC >> gvs[] >>
+  Cases_on `is_self_code (HD args)`
+  >- (gvs[] >>
       rpt (irule pair_let_snd_preserves >> reverse conj_tac
         >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-      simp[bound_labels_as_ptr_val, bound_labels_slice_calldata, bound_labels_slice_code]) >>
+      simp[bound_labels_as_ptr_val, bound_labels_slice_code]) >>
   gvs[] >> IF_CASES_TAC
   >- (irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>

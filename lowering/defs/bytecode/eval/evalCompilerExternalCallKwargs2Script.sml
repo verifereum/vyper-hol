@@ -16,28 +16,16 @@ val () = computeLib.upd_compset (computeLib.add_thms
 val fixture_root = "../external-calls/oracle"
 
 val e41_staticcall_gas = memoryStoreWitnessLib.evaluate fixture_root "e41_staticcall_gas"
-Theorem e41_staticcall_gas_matches_python_oracle:
-  ^(#term e41_staticcall_gas) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e41_staticcall_gas")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e41_staticcall_gas))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e41_staticcall_gas" e41_staticcall_gas
 
 val e42_extcall_gas_value_order = memoryStoreWitnessLib.evaluate fixture_root "e42_extcall_gas_value_order"
-Theorem e42_extcall_gas_value_order_matches_python_oracle:
-  ^(#term e42_extcall_gas_value_order) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e42_extcall_gas_value_order")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e42_extcall_gas_value_order))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e42_extcall_gas_value_order" e42_extcall_gas_value_order
 
 val e45_default_ret_ifexp = memoryStoreWitnessLib.evaluate fixture_root "e45_default_ret_ifexp"
-Theorem e45_default_ret_ifexp_matches_python_oracle:
-  ^(#term e45_default_ret_ifexp) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e45_default_ret_ifexp")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e45_default_ret_ifexp))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e45_default_ret_ifexp" e45_default_ret_ifexp
 
 val s01_send = memoryStoreWitnessLib.evaluate fixture_root "s01_send"
 Theorem s01_send_matches_python_oracle:
@@ -48,9 +36,5 @@ Proof
 QED
 
 val e19_gas_kw = memoryStoreWitnessLib.evaluate fixture_root "e19_gas_kw"
-Theorem e19_gas_kw_matches_python_oracle:
-  ^(#term e19_gas_kw) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e19_gas_kw")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e19_gas_kw))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e19_gas_kw" e19_gas_kw

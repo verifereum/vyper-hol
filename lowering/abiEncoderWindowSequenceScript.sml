@@ -5,6 +5,7 @@ Ancestors
   emitHelperProps moduleLoweringProps freshWrites exprLoweringProps
   compileEnv emitHelper fragExec venomInstProps
   venomState venomExecSemantics venomInst words list arithmetic
+  abiEncoderWindowLookup
 
 Definition window_seq_def:
   window_seq st st' s t <=>
@@ -159,4 +160,23 @@ Proof
   qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a && b) s` >>
   irule window_emit_register_pure >> (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`[lhs;rhs]`, `AND`] >> simp[is_terminator_def]
+QED
+
+Theorem abi_window_emit_register_fresh:
+  emit_op opc args st = (out,en) /\ opc <> INVOKE /\
+  ~is_terminator opc /\
+  run_inst_seq (emitted_insts st en) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) w s) /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  window_pure_seq st en s
+    (update_var (STRING #"%" (toString st.cs_next_var)) w s) /\
+  fresh_vars_wrt limit_st
+    ((update_var (STRING #"%" (toString st.cs_next_var)) w s)
+       with vs_inst_idx := idx)
+Proof
+  strip_tac >> conj_tac
+  >- metis_tac[window_emit_register_pure] >>
+  drule_all abi_window_emit_register_bounds >> strip_tac >>
+  irule abi_window_seq_fresh_idx >>
+  qexistsl_tac [`en`, `emitted_insts st en`, `s`] >> simp[]
 QED

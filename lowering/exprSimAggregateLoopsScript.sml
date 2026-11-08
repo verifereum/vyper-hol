@@ -263,6 +263,7 @@ Proof
 QED
 
 Theorem aggregate_tuple_store_marked[local]:
+  post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
   expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
@@ -519,6 +520,10 @@ Proof
   `expr_body_pre ce cx env h es /\ (nocalls ==> int_calls_expr h = [])` by
     metis_tac[listTheory.MEM] >>
   `well_typed_expr env h` by metis_tac[expr_body_pre_def] >>
+  `post_value_type ce h = expr_type h` by
+    (`lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
+       (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM]) >>
+     metis_tac[post_value_type_lowered, post_value_type_bytestring]) >>
   drule aggregate_tuple_cons_compile >>
   (impl_tac >- (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM])) >>
   strip_tac >>

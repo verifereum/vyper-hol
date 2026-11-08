@@ -887,6 +887,18 @@ Definition local_region_def:
       lookup_var p ss = SOME w ∧ base = w2n w
 End
 
+(* Live local regions depend only on the locals' pointer variables. *)
+Theorem local_region_lookup_cong:
+  (∀name entry p sz.
+     lookup_scopes name scopes = SOME entry ∧
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ⇒
+     lookup_var p t = lookup_var p s) ⇒
+  (local_region cenv scopes t name lo sz ⇔
+   local_region cenv scopes s name lo sz)
+Proof
+  rw[local_region_def] >> metis_tac[]
+QED
+
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
 Definition not_scope_ptr_def:

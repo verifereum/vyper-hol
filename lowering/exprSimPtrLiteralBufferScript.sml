@@ -462,7 +462,7 @@ QED
 (* Public counterpart of S1's local post constructor. *)
 Theorem literal_ptr_memory_vv_post:
   !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
-    ~is_word_type (expr_type e) /\
+    ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
     stmt_state_rel ctx func cenv cx es t /\
@@ -491,6 +491,7 @@ Proof
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def, base_ptr_def,
        vyperStateTheory.read_result_def, vyperStateTheory.return_def,
        eval_operand_def, lookup_var_def] >>
+  qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
   `eval_operand buf.buf_operand (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
     (Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]) >>
   conj_tac
@@ -617,7 +618,7 @@ Proof
 QED
 
 Theorem literal_ptr_memory_vv_frame_post:
-  ~is_word_type (expr_type e) /\
+  ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory /\
   val_footprint tv v <= n /\
@@ -726,12 +727,13 @@ Theorem literal_ptr_nonmemory_step[local]:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
-  qpat_assum `i.inst_opcode = _` (fn eq =>
-    PURE_ONCE_REWRITE_TAC
-      [tryfind (fn th => MATCH_MP th eq)
-         (CONJUNCTS step_inst_base_opcode_eqs)]) >>
-  simp[exec_alloca_def, exec_pure2_def, exec_write2_def, AllCaseEqs(),
-       update_var_def, mstore_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  asm_simp_tac bool_ss []
+  >- (simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+      rpt strip_tac >> gvs[])
+  >- (simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
+      rpt strip_tac >> gvs[]) >>
+  simp[exec_write2_def, AllCaseEqs(), update_var_def, mstore_def] >>
   rpt strip_tac >> gvs[]
 QED
 

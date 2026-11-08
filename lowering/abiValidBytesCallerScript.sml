@@ -20,6 +20,7 @@ Theorem compile_abi_decode_memory_valid_bytes:
     (vv,final) /\ fn_has_code ready final func /\
   abi_builtin_valid_bytes_resources n bs ready srcptr.ptr_operand min_size max_size
     p d prepared /\
+  (p + 32 + LENGTH bs <= d \/ d + abi_decode_bytes_copy_size n <= p + 32) /\
   ~prepared.vs_halted /\ prepared.vs_current_bb = ready.cs_current_bb /\
   prepared.vs_inst_idx = LENGTH ready.cs_current_insts /\
   abi_decode_sim ctx func initial prepared ==>
@@ -60,7 +61,8 @@ Proof
   gvs[needs_external_call_wrap_def, abi_static_size_def, abi_size_bound_def,
     is_abi_dynamic_def, abi_embedded_static_size_def, vyper_abi_size_bound_def,
     vyper_is_dynamic_def, vyper_to_abi_type_def,
-    vyper_base_to_abi_type_def, static_length_def, ceil32_def]
+    vyper_base_to_abi_type_def, static_length_def, ceil32_def,
+    abi_static_length_def, head_lengths_def]
 QED
 
 Theorem abi_valid_bytes_resources_from_source:
@@ -109,6 +111,7 @@ Theorem compile_abi_decode_bytes_source_caller:
   abi_decoder_operand_live ready.cs_next_var srcptr.ptr_operand /\
   max_size < dimword (:256) /\ p + 32 + LENGTH bs < dimword (:256) /\
   d + abi_decode_bytes_copy_size n < dimword (:256) /\ fresh_vars_wrt ready prepared /\
+  (p + 32 + LENGTH bs <= d \/ d + abi_decode_bytes_copy_size n <= p + 32) /\
   ((FLOOKUP prepared.vs_allocas (abi_builtin_decode_output_site ready min_size max_size) = NONE /\
       d = prepared.vs_alloca_next) \/
     FLOOKUP prepared.vs_allocas (abi_builtin_decode_output_site ready min_size max_size) =

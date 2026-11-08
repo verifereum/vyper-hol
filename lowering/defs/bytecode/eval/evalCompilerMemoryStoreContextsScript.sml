@@ -52,9 +52,5 @@ Proof
 QED
 
 val dec_from_memory2 = memoryStoreWitnessLib.evaluate fixture_root "dec_from_memory2"
-Theorem dec_from_memory2_matches_python_oracle:
-  ^(#term dec_from_memory2) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "dec_from_memory2")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation dec_from_memory2))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "dec_from_memory2" dec_from_memory2

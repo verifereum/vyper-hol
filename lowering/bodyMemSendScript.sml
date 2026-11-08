@@ -187,7 +187,7 @@ Theorem send_tail_path_mem:
   LENGTH gas_vs = (if has_gas then 1 else 0) /\
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es1 = (res, es') /\
-  expr_type e = NoneT ==>
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   ?r. gas_marked_path T ctx func t 0 r /\
       ((?t'. r = OK t' /\
              (?v. res = INL v /\

@@ -1087,11 +1087,13 @@ Proof
   drule storage_mapping_region_step >> disch_then (qspec_then `kv` assume_tac) >>
   `contract_storage_well_formed cx ee /\ storage_layout_safe cx` by
     gvs[expr_sim_inv_def] >>
+  drule_all mapping_leaf_storage_valid >> strip_tac >>
   drule_all mapping_leaf_vv_holds >> strip_tac >>
   simp[vv_post_def, expr_type_def, vv_at_def] >>
   conj_tac >- (Cases_on `tr` >> gvs[slot_loc_def]) >>
   qpat_x_assum `wb_frame _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[loweringPostsTheory.wb_frame_def] >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
+  strip_tac >> rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, Cases_on `tr` >> gvs[slot_loc_def] >> NO_TAC]
 
 QED
