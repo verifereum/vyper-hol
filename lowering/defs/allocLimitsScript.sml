@@ -44,7 +44,9 @@ Definition alloc_limits_expr_def:
     (type_memory_bytes cenv (StructT nsid) < 2 ** 64 /\
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
-    (alloc_limits_expr cenv x /\ alloc_limits_expr cenv y) /\
+    (alloc_limits_expr cenv x /\ alloc_limits_expr cenv y /\
+     (copies_subscript_base cenv x y ==>
+      type_memory_bytes cenv (expr_type x) < 2 ** 64)) /\
   alloc_limits_expr cenv (Attribute t x _) = alloc_limits_expr cenv x /\
   alloc_limits_expr cenv (Builtin t bi es) =
     ((case bi of

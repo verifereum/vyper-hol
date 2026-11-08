@@ -266,7 +266,7 @@ Theorem stmt_exprs_ok_same_frame:
   !cenv c. same_frame cenv c ==> stmt_exprs_ok c = stmt_exprs_ok cenv
 Proof
   rw[same_frame_def] >>
-  `c.ce_struct_fields = cenv.ce_struct_fields` by
+  `c.ce_struct_fields = cenv.ce_struct_fields /\ c.ce_modules = cenv.ce_modules` by
     (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `alloc_limits_expr c = alloc_limits_expr cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_struct_fields) >> simp[]) >>

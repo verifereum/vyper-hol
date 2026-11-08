@@ -4,13 +4,14 @@
  *
  * TOP-LEVEL:
  *   alloc_limits_struct_fields  -- the check reads only the struct sizes
+ *                                  and the modules
  *   alloc_limits_stmts_exists   -- alloc_limits_expr of every expression of
  *                                  a body, as supported_stmts_expr_exists
  *                                  traverses it
  *   fn_allocs_ok_body           -- that, and the parameters' and declared
  *                                  locals' sizes, of a function the runtime
  *                                  unit lowers, in any compile env with its
- *                                  struct sizes
+ *                                  struct sizes and modules
  *)
 Theory allocLimitsProps
 Ancestors
@@ -33,20 +34,20 @@ Proof
 QED
 
 Theorem alloc_limits_struct_fields:
-  (!c e c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c e c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
             alloc_limits_expr c' e = alloc_limits_expr c e) /\
-  (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
               alloc_limits_target c' tgt = alloc_limits_target c tgt) /\
-  (!c es c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c es c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
              alloc_limits_exprs c' es = alloc_limits_exprs c es) /\
-  (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
               alloc_limits_opt c' opt = alloc_limits_opt c opt) /\
-  (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
               alloc_limits_named_exprs c' kes = alloc_limits_named_exprs c kes)
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
-  simp[alloc_limits_expr_def]
+  simp[alloc_limits_expr_def, exprLoweringTheory.copies_subscript_base_def]
 QED
 
 Theorem alloc_limits_expr_exists:
@@ -120,11 +121,11 @@ Proof
   imp_res_tac alloc_limits_raise_exists >> simp[]
 QED
 
-(* The other checks read only the struct sizes too. *)
+(* The other checks read only the struct sizes and the modules too. *)
 Theorem alloc_limits_assignment_struct_fields:
-  (!c g c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c g c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
             alloc_limits_assignment c' g = alloc_limits_assignment c g) /\
-  (!c gs c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c gs c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
              alloc_limits_assignments c' gs = alloc_limits_assignments c gs)
 Proof
   ho_match_mp_tac alloc_limits_assignment_ind >> rpt conj_tac >>
@@ -133,7 +134,7 @@ Proof
 QED
 
 Theorem alloc_limits_frame:
-  !c c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  !c c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
     type_memory_bytes c' = type_memory_bytes c /\
     alloc_limits_expr c' = alloc_limits_expr c /\
     alloc_limits_target c' = alloc_limits_target c /\
@@ -161,13 +162,13 @@ Proof
 QED
 
 Theorem alloc_limits_stmt_struct_fields:
-  (!c s c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c s c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
             alloc_limits_stmt c' s = alloc_limits_stmt c s) /\
-  (!c ss c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c ss c'. c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules ==>
              alloc_limits_stmts c' ss = alloc_limits_stmts c ss)
 Proof
   ho_match_mp_tac alloc_limits_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
-  rpt strip_tac >> drule alloc_limits_frame >> strip_tac >>
+  rpt strip_tac >> drule_all alloc_limits_frame >> strip_tac >>
   gvs[alloc_limits_stmt_def]
 QED
 
@@ -179,7 +180,8 @@ QED
 Theorem fn_allocs_ok_body:
   !tops mut nr rr fname fargs dflts ret ss cenv.
     fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, ss) /\
-    cenv.ce_struct_fields = make_struct_fields_map tops ==>
+    cenv.ce_struct_fields = make_struct_fields_map tops /\
+    cenv.ce_modules = [(NONE, tops)] ==>
     EVERY (\(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs /\
     alloc_limits_exprs cenv dflts /\ alloc_limits_stmts cenv ss /\
     ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
@@ -189,7 +191,9 @@ Proof
   qabbrev_tac `c = build_compile_env tops Internal mut fname fargs ret ss F` >>
   `cenv.ce_struct_fields = c.ce_struct_fields` by
     simp[Abbr `c`, build_compile_env_ce_struct_fields] >>
-  drule alloc_limits_frame >> strip_tac >>
+  `cenv.ce_modules = c.ce_modules` by
+    simp[Abbr `c`, build_compile_env_ce_modules] >>
+  drule_all alloc_limits_frame >> strip_tac >>
   `alloc_limits_stmts cenv ss` by
     metis_tac[alloc_limits_stmt_struct_fields] >>
   gvs[] >> irule (cj 2 alloc_limits_stmts_exists) >> simp[]

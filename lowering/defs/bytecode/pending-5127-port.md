@@ -12,8 +12,6 @@ The changes, as they appear in the pinned Python compiler:
 
 - P4 direct ABI encoder: values are encoded straight into the destination
   buffer, and an external call sends exactly the encoded length plus 4 bytes.
-- P7 subscript overlap: a dynamic array's base is copied when the index
-  expression can modify it (also a source-semantics change).
 
 P1 (ceil32: `and(add(x, 31), not 31)`), P2 (dynamic external arguments
 assert that their calldata offset isn't below 4, `_get_abi_arg_ptr`), P5 (a
@@ -21,7 +19,10 @@ slice's output buffer allocated after its bounds check), P3 (escaping
 allocations: comparisons don't make an allocation escape, escaping static
 allocations stay live everywhere and are allocated first) and P6 (eager call
 arguments: internal- and external-call arguments are read as they are
-evaluated, also a source-semantics change) are ported. P2 still heads a
+evaluated, also a source-semantics change) and P7 (subscript overlap: an
+array base derived through a dynamic-array element is copied before an index
+that writes a variable the base reads or makes a risky call, also a
+source-semantics change) are ported. P2 still heads a
 section below because those fixtures also need P4.
 A fixture listed under several changes needs all of them. The attribution
 comes from reverting one change at a time in the pinned compiler and
@@ -56,9 +57,12 @@ recompiling.
 - `load_timing/call_storage_read`: matches once its internal functions are
   emitted in Python's order; the function bodies already match.
 
-## P7 (subscript overlap)
+## Pop receiver copy (vyperlang/vyper#5280), not #5127
 
-- `load_timing/nested_retained_pop`
+- `load_timing/nested_retained_pop`: the pinned compiler's
+  `_lower_dynarray_pop` copies a receiver whose index can resize it and pops
+  the copy, so the pop is lost; the source semantics pops the array itself.
+  Since vyperlang/vyper#5280, after the pin, the compiler rejects such a pop.
 
 ## P2 (calldata argument guard) + P4 (direct ABI encoder)
 

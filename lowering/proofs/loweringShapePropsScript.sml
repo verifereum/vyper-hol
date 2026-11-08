@@ -5016,6 +5016,55 @@ Proof
   shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `D`, Abbr `P`] >> shape_opcode_tac
 QED
 
+Theorem compile_materialize_vv_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ value_shape_ok st vv)
+    (compile_materialize_vv cenv ty vv) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_materialize_vv_def] >>
+  qabbrev_tac `VVFrame = \st. R st /\ value_shape_ok st vv` >>
+  `shape_stable VVFrame` by
+    (simp[Abbr `VVFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[value_shape_ok_stable]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. VVFrame st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape_framed `VVFrame`) >>
+  qx_gen_tac `tmp` >> simp[] >>
+  qabbrev_tac `BufFrame = \st. R st /\ plain_operand st tmp.buf_operand` >>
+  `shape_stable BufFrame` by
+    (simp[Abbr `BufFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[tmp.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. BufFrame st /\ plain_operand st v` >> conj_tac
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`, `\st. BufFrame st /\ value_shape_ok st vv`,
+                    `\v st. BufFrame st /\ plain_operand st v`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[Abbr `BufFrame`, Abbr `VVFrame`] >>
+      conj_tac >- simp[] >> shape_unwrap_value_tac `BufFrame`) >>
+  qx_gen_tac `src` >> simp[] >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. BufFrame st` >> conj_tac
+  >- (shape_under_tac compile_store_memory_shape_framed `BufFrame` >> simp[Abbr `BufFrame`]) >>
+  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `BufFrame`]
+QED
+
+Theorem compile_snapshot_vv_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ value_shape_ok st vv)
+    (compile_snapshot_vv cenv copy vv) (\v st. R st /\ value_shape_ok st v)
+Proof
+  strip_tac >> simp[compile_snapshot_vv_def] >> IF_CASES_TAC
+  >- (match_mp_tac shape_step_bind >>
+      qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
+      >- shape_unwrap_value_tac `R` >>
+      gen_tac >> simp[] >> irule shape_step_return >> simp[value_shape_ok_def]) >>
+  IF_CASES_TAC
+  >- (match_mp_tac shape_step_bind >>
+      qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
+      >- (irule compile_materialize_vv_shape >> simp[]) >>
+      gen_tac >> simp[] >> irule shape_step_return >>
+      simp[value_shape_ok_def, mk_ptr_def, loc_shape_ok_def, base_ptr_def]) >>
+  irule shape_step_return >> simp[]
+QED
+
 val shape_subscript_tuple_tac =
   qmatch_goalsub_abbrev_tac `compile_tuple_subscript _ fld_offset` >>
   match_mp_tac shape_step_bind >>
@@ -5057,6 +5106,12 @@ Proof
   >- (irule shape_step_conseq >> irule_at Any shape_step_frame >>
       qexists_tac `\st. cenv_shape_ok st cenv` >> simp[cenv_shape_ok_stable] >>
       first_assum (irule_at Any) >> simp[]) >>
+  qx_gen_tac `raw_base_vv` >> simp[] >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. cenv_shape_ok st cenv /\ value_shape_ok st v` >> conj_tac
+  >- (IF_CASES_TAC
+      >- (ho_match_mp_tac compile_snapshot_vv_shape >> simp[cenv_shape_ok_stable]) >>
+      irule shape_step_return >> simp[]) >>
   qx_gen_tac `base_vv` >> simp[] >>
   assume_tac (Q.SPEC `base_vv` value_shape_ok_stable) >>
   `shape_stable (\st. cenv_shape_ok st cenv /\ value_shape_ok st base_vv)` by
@@ -5881,55 +5936,6 @@ Resume compile_stage_intcall_args_shape[buffer]:
   simp[Abbr `HeadFrame`, Abbr `ValFrame`, Abbr `P`]
 QED
 Finalise compile_stage_intcall_args_shape[local]
-
-Theorem compile_materialize_vv_shape[local]:
-  shape_stable R ==>
-  shape_step internal compiler_label (\st. R st /\ value_shape_ok st vv)
-    (compile_materialize_vv cenv ty vv) (\v st. R st /\ plain_operand st v)
-Proof
-  strip_tac >> simp[compile_materialize_vv_def] >>
-  qabbrev_tac `VVFrame = \st. R st /\ value_shape_ok st vv` >>
-  `shape_stable VVFrame` by
-    (simp[Abbr `VVFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[value_shape_ok_stable]) >>
-  match_mp_tac shape_step_bind >>
-  qexists_tac `\b st. VVFrame st /\ plain_operand st b.buf_operand` >> conj_tac
-  >- (shape_under_tac compile_alloc_buffer_shape_framed `VVFrame`) >>
-  qx_gen_tac `tmp` >> simp[] >>
-  qabbrev_tac `BufFrame = \st. R st /\ plain_operand st tmp.buf_operand` >>
-  `shape_stable BufFrame` by
-    (simp[Abbr `BufFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
-     mp_tac (Q.SPEC `[tmp.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
-  match_mp_tac shape_step_bind >>
-  qexists_tac `\v st. BufFrame st /\ plain_operand st v` >> conj_tac
-  >- (irule shape_step_conseq >>
-      qexistsl_tac [`compiler_label`, `\st. BufFrame st /\ value_shape_ok st vv`,
-                    `\v st. BufFrame st /\ plain_operand st v`] >>
-      conj_tac >- simp[] >> conj_tac >- simp[Abbr `BufFrame`, Abbr `VVFrame`] >>
-      conj_tac >- simp[] >> shape_unwrap_value_tac `BufFrame`) >>
-  qx_gen_tac `src` >> simp[] >>
-  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. BufFrame st` >> conj_tac
-  >- (shape_under_tac compile_store_memory_shape_framed `BufFrame` >> simp[Abbr `BufFrame`]) >>
-  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `BufFrame`]
-QED
-
-Theorem compile_snapshot_vv_shape[local]:
-  shape_stable R ==>
-  shape_step internal compiler_label (\st. R st /\ value_shape_ok st vv)
-    (compile_snapshot_vv cenv copy vv) (\v st. R st /\ value_shape_ok st v)
-Proof
-  strip_tac >> simp[compile_snapshot_vv_def] >> IF_CASES_TAC
-  >- (match_mp_tac shape_step_bind >>
-      qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
-      >- shape_unwrap_value_tac `R` >>
-      gen_tac >> simp[] >> irule shape_step_return >> simp[value_shape_ok_def]) >>
-  IF_CASES_TAC
-  >- (match_mp_tac shape_step_bind >>
-      qexists_tac `\v st. R st /\ plain_operand st v` >> conj_tac
-      >- (irule compile_materialize_vv_shape >> simp[]) >>
-      gen_tac >> simp[] >> irule shape_step_return >>
-      simp[value_shape_ok_def, mk_ptr_def, loc_shape_ok_def, base_ptr_def]) >>
-  irule shape_step_return >> simp[]
-QED
 
 Theorem compile_ext_call_kwarg_shape[local]:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
