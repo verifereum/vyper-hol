@@ -896,6 +896,171 @@ Proof
   disch_then drule_all >> strip_tac >> gvs[]
 QED
 
+(* Materialization transports an old literal root and composes the outer
+   continuation, without depending on the subsequent destination store. *)
+Theorem intcall_child_materialize_root:
+  intcall_frame_ok fp /\ expr_body_pre ce fp.jc_cx env e es /\
+  intcall_joint_res fp ce env es0 s0c s0 /\
+  intcall_joint_res fp ce env es si t /\
+  intcall_expr_cont fp ce env es0 s0c s0 es si t /\
+  intcall_expr_cont fp ce env es si t ee sm q /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  s0c.cs_next_var <= si.cs_next_var /\ s0c.cs_next_id <= si.cs_next_id /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,su) /\
+  fn_has_code sm sn fp.jc_func /\ fn_has_code sn su fp.jc_func /\
+  fn_inst_ids_distinct fp.jc_func /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es si sm t ee raw vv q /\
+  read_result fp.jc_cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME stv /\
+  FLOOKUP t.vs_allocas rid = SOME (b,k) /\ rid < si.cs_next_id /\
+  eval_operand buf t = SOME bw /\ (!lbl. buf <> Label lbl) /\
+  (!x. buf = Var x ==> not_fresh_at si x) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+   ~is_bytestring_type (post_value_type ce e) /\
+   (case vv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   !tv. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME tv ==>
+   ?w a k. eval_operand (vv_operand vv) q = SOME w /\
+     a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+     (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
+  (!name a n. local_region ce es.scopes t name a n ==> regions_disjoint b k a n) ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func q 0 (OK u) /\
+    intcall_expr_cont fp ce env es0 s0c s0 ee su u /\
+    expr_val_rel fp.jc_cx (post_value_type ce e) v op u /\
+    expr_val_at ce fp.jc_cx (post_value_type ce e) si su ee v op u /\
+    eval_operand dst u = SOME (bw + n2w off) /\
+    (!x. dst = Var x ==> not_fresh_at su x) /\
+    FLOOKUP u.vs_allocas rid = SOME (b,k) /\ eval_operand buf u = SOME bw /\
+    mem_bytes_at b k u.vs_memory = mem_bytes_at b k t.vs_memory /\
+    (!name a n. local_region ce ee.scopes u name a n ==> regions_disjoint b k a n)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `intcall_expr_cont _ _ _ es si t ee sm q`)
+    intcall_expr_cont_root >> disch_then drule_all >> strip_tac >>
+  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
+    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
+  `local_ptrs_reserved ce si /\ intcall_joint_res fp ce env ee sm q /\
+   ~q.vs_halted /\ q.vs_current_bb = sm.cs_current_bb /\
+   q.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (conj_tac >- fs[intcall_joint_res_def] >> fs[intcall_expr_cont_def]) >>
+  drule_all intcall_child_unwrap_condition >> disch_tac >>
+  `type_memory_bytes ce (post_value_type ce e) = type_memory_size stv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size, intcall_joint_res_def] >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    intcall_add_unwrap_landing_conditional >>
+  disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  simp[] >> disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- fs[]) >> strip_tac >>
+  `intcall_expr_cont fp ce env es si t ee su u` by
+    (irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
+     qexistsl_tac [`ee`, `sm`, `q`] >> simp[]) >>
+  drule_at (Pat `intcall_expr_cont _ _ _ es si t ee su u`)
+    intcall_expr_cont_root >> disch_then drule_all >> strip_tac >>
+  `intcall_expr_cont fp ce env es0 s0c s0 ee su u` by
+    (irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
+     qexistsl_tac [`es`, `si`, `t`] >> simp[]) >>
+  qexists_tac `u` >> simp[] >> gvs[]
+QED
+
+(* Static operand liveness for the literal child's interleaved suffix. *)
+Theorem intcall_child_store_operands:
+  compile_expr ce ty e si = (vv,sm) /\
+  emit_op ADD args sm = (dst,sn) /\ unwrap_value ce vv sn = (op,su) /\
+  compile_store_memory ce op dst dty sty su = ((),sb) /\
+  sa.cs_next_var <= si.cs_next_var /\
+  (!x. buf = Var x ==> not_fresh_at si x) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) ==>
+  sa.cs_next_var <= su.cs_next_var /\ su.cs_next_var <= sb.cs_next_var /\
+  (!x. buf = Var x ==> not_fresh_at su x) /\
+  (!x. op = Var x ==> not_fresh_at su x)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
+    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
+  `sm.cs_next_var <= sn.cs_next_var` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  `sn.cs_next_var <= su.cs_next_var /\ sn.cs_next_id <= su.cs_next_id` by
+    (mp_tac (Q.SPECL [`ce`, `vv`, `sn`] ci_mono_unwrap_value) >> simp[ci_mono_def]) >>
+  `su.cs_next_var <= sb.cs_next_var` by
+    (mp_tac (Q.SPECL [`ce`, `op`, `dst`, `dty`, `sty`, `su`]
+       ci_mono_compile_store_memory) >> simp[ci_mono_def]) >>
+  `si.cs_next_var <= su.cs_next_var /\ sa.cs_next_var <= su.cs_next_var` by decide_tac >>
+  `!x. buf = Var x ==> not_fresh_at su x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sn x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  simp[] >> drule exprOperandVarTheory.compiler_unwrap_value_var >>
+  Cases_on `vv` >> fs[vv_operand_def]
+QED
+
+(* The owned root's untouched slices and separation survive a typed store. *)
+Theorem intcall_root_store_landing:
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  intcall_joint_res fp ce env es0 sa s0 /\
+  intcall_expr_cont fp ce env es0 sa s0 es su s /\
+  compile_store_memory ce src dst dty sty su = ((),sb) /\
+  (!x. src = Var x ==> not_fresh_at su x) /\
+  (!x. dst = Var x ==> not_fresh_at su x) /\
+  expr_val_rel fp.jc_cx sty v src s /\
+  expr_val_at ce fp.jc_cx sty si su es v src s /\
+  type_widens_to (get_tenv fp.jc_cx) sty dty /\
+  evaluate_type (get_tenv fp.jc_cx) dty = SOME dtv /\
+  evaluate_type (get_tenv fp.jc_cx) sty = SOME stv /\
+  value_has_type dtv v /\ value_has_type stv v /\
+  type_memory_size dtv + 64 < dimword (:256) /\
+  eval_operand dst s = SOME dw /\ eval_operand buf s = SOME bw /\
+  (!x. buf = Var x ==> not_fresh_at su x) /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,k) /\
+  sa.cs_next_id <= inst.inst_id /\ inst.inst_id < si.cs_next_id /\
+  MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
+  sa.cs_next_var <= su.cs_next_var /\ su.cs_next_var <= sb.cs_next_var /\
+  fp.jc_lo <= b /\ b <= w2n dw /\
+  w2n dw + type_memory_size dtv <= b+k /\ b+k < dimword (:256) /\
+  (!name a n. local_region ce es.scopes s name a n ==> regions_disjoint b k a n) /\
+  (!name a n. local_region ce es0.scopes s0 name a n ==> regions_disjoint b k a n) /\
+  mem_bytes_at b k s.vs_memory = mem_bytes_at b k t.vs_memory /\
+  fn_has_code su sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func ==>
+  ?u. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    val_in_memory dtv v (w2n dw) u.vs_memory /\
+    intcall_expr_cont fp ce env es0 sa s0 es sb u /\
+    FLOOKUP u.vs_allocas inst.inst_id = SOME (b,k) /\ eval_operand buf u = SOME bw /\
+    (!name a n. local_region ce es.scopes u name a n ==> regions_disjoint b k a n) /\
+    (!a n. b <= a /\ a+n <= b+k /\
+       (a+n <= w2n dw \/ w2n dw + type_memory_size dtv <= a) ==>
+       mem_bytes_at a n u.vs_memory = mem_bytes_at a n t.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!name a n. local_region ce es.scopes s name a n ==>
+     a+n <= w2n dw \/ w2n dw + type_memory_size dtv <= a` by
+    (rpt strip_tac >>
+     qpat_x_assum `!n a z. local_region ce _ s n a z ==> _` drule >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  `!name a n. local_region ce es0.scopes s0 name a n ==> a+n <= b \/ b+k <= a` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name a n. local_region ce es0.scopes s0 name a n ==> _` drule >>
+     simp[regions_disjoint_def, DISJ_COMM]) >>
+  drule_all intcall_child_store_landing >> strip_tac >>
+  `!name a n. local_region ce es.scopes u name a n ==> regions_disjoint b k a n` by
+    (rpt strip_tac >>
+     `local_region ce es0.scopes s0 name a n` by
+       (irule local_region_frame >> conj_tac
+        >- (qexists_tac `fp.jc_func` >>
+            fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def]) >>
+        qexistsl_tac [`sa`, `es.scopes`, `u`] >>
+        fs[intcall_expr_cont_def, intcall_joint_res_def]) >> metis_tac[]) >>
+  qexists_tac `u` >> simp[] >> conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  `mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory` by simp[] >>
+  `a = b + (a-b) /\ a-b+n <= k` by decide_tac >>
+  qpat_x_assum `mem_bytes_at b k s.vs_memory = _` mp_tac >>
+  disch_then (mp_then Any mp_tac valueEncodingPropsTheory.mem_bytes_at_translated_window) >>
+  disch_then (qspecl_then [`a-b`, `n`] mp_tac) >> simp[]
+QED
+
 Theorem intcall_counted_child_store:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   intcall_expr_producer fp e /\
@@ -966,36 +1131,19 @@ Proof
      metis_tac[]) >>
   `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
   drule_all intcall_child_read_layout >> strip_tac >>
-  `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by simp[] >>
-  drule_at (Pat `intcall_expr_cont _ _ _ es si t _ sm q`)
-    intcall_expr_cont_root >>
-  disch_then drule_all >> strip_tac >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    intcall_child_materialize_root >>
+  disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP t.vs_allocas _ = _`)) >>
+  disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand buf t = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  disch_then (qspec_then `v` mp_tac) >>
+  disch_then (rev_drule_at (Pat `intcall_expr_cont _ _ _ es0 s0c s0 es si t`)) >>
+  (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
+  rename1 `gas_marked_path F _ _ q 0 (OK uu)` >>
   `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
     metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
-  `local_ptrs_reserved ce si /\
-   intcall_joint_res fp ce env (mid with gas_obs := []) sm q /\
-   ~q.vs_halted /\ q.vs_current_bb = sm.cs_current_bb /\
-   q.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    (conj_tac >- fs[intcall_joint_res_def] >>
-     fs[intcall_expr_cont_def]) >>
-  drule_all intcall_child_unwrap_condition >> disch_tac >>
-  `type_memory_bytes ce (post_value_type ce e) = type_memory_size stv` by
-    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size, intcall_joint_res_def] >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    intcall_add_unwrap_landing_conditional >>
-  disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
-  simp[] >> disch_then (qspec_then `env` mp_tac) >>
-  (impl_tac >- fs[]) >> strip_tac >>
-  rename1 `gas_marked_path F _ _ q 0 (OK uu)` >>
-  `intcall_expr_cont fp ce env es si t (mid with gas_obs := []) su uu` by
-    (irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
-     qexistsl_tac [`mid with gas_obs := []`, `sm`, `q`] >> simp[]) >>
-  drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)
-    intcall_expr_cont_root >>
-  disch_then drule_all >> strip_tac >>
-  `intcall_expr_cont fp ce env es0 s0c s0 (mid with gas_obs := []) su uu` by
-    (irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
-     qexistsl_tac [`es`, `si`, `t`] >> simp[]) >>
   `sm.cs_next_var <= sn.cs_next_var` by
     (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
   `sn.cs_next_var <= su.cs_next_var /\ sn.cs_next_id <= su.cs_next_id` by
