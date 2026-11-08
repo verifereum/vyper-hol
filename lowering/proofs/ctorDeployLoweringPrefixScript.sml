@@ -410,24 +410,23 @@ Theorem deploy_prefix_guard_abort:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[Once venomExecSemanticsTheory.exec_block_def, venomInstTheory.get_instruction_def,
-       venomExecSemanticsTheory.step_inst_non_invoke,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_read0_def] >>
-  simp[venomInstTheory.is_terminator_def] >>
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+  pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[venomExecSemanticsTheory.exec_read0_def, venomInstTheory.is_terminator_def] >>
   simp[Once venomExecSemanticsTheory.exec_block_def,
        venomInstTheory.get_instruction_def, venomStateTheory.update_var_def,
-       venomExecSemanticsTheory.step_inst_non_invoke,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_pure1_def,
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+  pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[venomExecSemanticsTheory.exec_pure1_def,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
        venomExecSemanticsTheory.bool_to_word_def] >>
   simp[finite_mapTheory.FLOOKUP_UPDATE, venomInstTheory.is_terminator_def,
        venomExecSemanticsTheory.bool_to_word_def] >>
   simp[Once venomExecSemanticsTheory.exec_block_def,
        venomInstTheory.get_instruction_def,
-       venomExecSemanticsTheory.step_inst_non_invoke,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomExecSemanticsTheory.step_inst_non_invoke] >>
+  pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
