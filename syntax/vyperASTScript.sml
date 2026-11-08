@@ -555,3 +555,17 @@ Definition ArrayT_type_def[simp]:
 End
 
 val () = cv_auto_trans ArrayT_type_def;
+
+(* Whether a subscript base passes through a dynamic-array element anywhere
+   in its Subscript/Attribute chain. Such a base is read as a value before
+   its index is evaluated, since the index could resize the enclosing array.
+   Mirrors Python: expr.py _subscript_base_length_can_stale *)
+Definition base_through_dynarray_def:
+  base_through_dynarray (Subscript _ e _) =
+    ((case expr_type e of ArrayT _ (Dynamic _) => T | _ => F) ∨
+     base_through_dynarray e) ∧
+  base_through_dynarray (Attribute _ e _) = base_through_dynarray e ∧
+  base_through_dynarray _ = F
+End
+
+val () = cv_auto_trans base_through_dynarray_def;

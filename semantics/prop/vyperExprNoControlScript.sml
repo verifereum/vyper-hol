@@ -860,6 +860,9 @@ Resume canonical_eval_no_control_with_results[Subscript]:
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
+  rpt (qpat_x_assum `!s res t s' res' t'. _` drule_all >> strip_tac) >>
+  Cases_on `subscript_reads_base cx e1 e2` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
   metis_tac[read_result_no_control, select_result_no_control]
 QED
 

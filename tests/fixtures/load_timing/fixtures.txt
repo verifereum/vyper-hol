@@ -5,3 +5,5 @@ nested_retained_pop
 call_storage_read
 call_memory_pop
 builtin_eager_read
+subscript_base_copy
+subscript_base_live

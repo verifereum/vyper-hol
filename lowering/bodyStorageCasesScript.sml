@@ -511,10 +511,13 @@ QED
 Theorem body_eval_subscript_storage:
   (!r s'. eval_expr cx e1 st = (r,s') ==>
           contract_storage_well_formed cx s') /\
-  (!tv s r s'. eval_expr cx e1 st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\
-    IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
-    eval_expr cx idx s = (r,s') ==> contract_storage_well_formed cx s') /\
+  (!tv s tv' s0 r s'. eval_expr cx e1 st = (INL tv,s) /\
+    (if subscript_reads_base cx e1 idx then
+       do v <- read_result cx tv; return (Value v) od
+     else return tv) s = (INL tv',s0) /\
+    runtime_storage_consistent env cx s0 /\
+    IS_SOME s0.outcomes /\ oracle_storage_ok cx s0 /\
+    eval_expr cx idx s0 = (r,s') ==> contract_storage_well_formed cx s') /\
   (well_typed_expr env e1 \/ ?vt. type_place_expr env e1 = SOME vt) /\
   runtime_storage_consistent env cx st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e1) /\
@@ -537,7 +540,18 @@ Proof
     (drule (cj 5 eval_outcome_suffix_mutual) >> simp[]) >>
   drule_all body_oracle_storage_entry_transfer >> strip_tac >>
   Cases_on `base_res` >> gvs[return_def, raise_def]
-  >- (Cases_on `eval_expr cx idx base_st` >>
+  >- (rename1 `eval_expr cx e1 st = (INL base_tv,base_st)` >>
+      Cases_on `(if subscript_reads_base cx e1 idx then
+        bind (read_result cx base_tv) (\v. return (Value v))
+        else return base_tv) base_st` >>
+      rename1 `(if subscript_reads_base cx e1 idx then _ else _) base_st = (early_res,early_st)` >>
+      `early_st = base_st` by
+        (Cases_on `subscript_reads_base cx e1 idx` >>
+         gvs[bind_def, return_def, AllCaseEqs()] >>
+         metis_tac[read_result_state]) >> gvs[] >>
+      reverse (Cases_on `early_res`) >> gvs[return_def, raise_def]
+      >- (strip_tac >> gvs[]) >>
+      Cases_on `eval_expr cx idx base_st` >>
       rename1 `eval_expr cx idx base_st = (idx_res,idx_st)` >>
       `contract_storage_well_formed cx idx_st` by metis_tac[] >>
       Cases_on `idx_res` >> gvs[return_def, raise_def]

@@ -238,6 +238,108 @@ Proof
   EVAL_TAC
 QED
 
+Definition immutable_subscript_context_def:
+  immutable_subscript_context = empty_evaluation_context with
+    <|sources := [(0w, [(NONE, [])])]; in_deploy := T|>
+End
+
+Definition immutable_subscript_state_def:
+  immutable_subscript_state outer = empty_state with immutables :=
+    [(0w, [(NONE, FEMPTY |+ ("a",
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2)) outer,
+       ArrayV (case outer of
+         Fixed _ => SArrayV [(0, ArrayV (DynArrayV [IntV 0]))]
+       | Dynamic _ => DynArrayV [ArrayV (DynArrayV [IntV 0])]))))])]
+End
+
+(* These differ only in the outer bound. Dynamic-array element reads capture
+   the inner value; a fixed-array projection still reads its live length. *)
+Theorem immutable_dynamic_element_captured_before_index_pop:
+  FST (eval_expr immutable_subscript_context
+    (Subscript (BaseT (UintT 256))
+      (Subscript (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+        (TopLevelName (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+          (Dynamic 1)) (NONE,"a"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Pop (BaseT (UintT 256))
+        (SubscriptTarget (TopLevelNameTarget (NONE,"a"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))))
+    (immutable_subscript_state (Dynamic 1))) = INL (Value (IntV 0))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem immutable_fixed_element_live_after_index_pop:
+  FST (eval_expr immutable_subscript_context
+    (Subscript (BaseT (UintT 256))
+      (Subscript (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+        (TopLevelName (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+          (Fixed 1)) (NONE,"a"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Pop (BaseT (UintT 256))
+        (SubscriptTarget (TopLevelNameTarget (NONE,"a"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))))
+    (immutable_subscript_state (Fixed 1))) =
+      INR (Error (RuntimeError "evaluate_subscripts array_index"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* The last index removes the selected row from the live immutable tree. *)
+Theorem immutable_ancestor_pop_captured_rvalue:
+  FST (eval_expr immutable_subscript_context
+    (Subscript (BaseT (UintT 256))
+      (Subscript (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+        (Subscript (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+            (Dynamic 2))
+          (TopLevelName
+            (ArrayT (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+              (Dynamic 2)) (Dynamic 1)) (NONE,"a"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))
+        (Literal (BaseT (UintT 256)) (IntL 1)))
+      (Subscript (BaseT (UintT 256))
+        (Pop (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+          (SubscriptTarget (TopLevelNameTarget (NONE,"a"))
+            (Literal (BaseT (UintT 256)) (IntL 0))))
+        (Literal (BaseT (UintT 256)) (IntL 0))))
+    (empty_state with immutables := [(0w, [(NONE, FEMPTY |+ ("a",
+      (ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2))
+        (Dynamic 2)) (Dynamic 1),
+       ArrayV (DynArrayV [ArrayV (DynArrayV
+         [ArrayV (DynArrayV [IntV 1; IntV 2]);
+          ArrayV (DynArrayV [IntV 0; IntV 5])])]))))])])) =
+    INL (Value (IntV 0))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem immutable_target_live_after_index_pop:
+  FST (eval_base_place immutable_subscript_context
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"a"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Pop (BaseT (UintT 256))
+        (SubscriptTarget (TopLevelNameTarget (NONE,"a"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))))
+    (immutable_subscript_state (Dynamic 1))) =
+      INR (Error (RuntimeError "evaluate_subscripts array_index"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem root_array_live_after_index_pop:
+  FST (eval_expr cx
+    (Subscript (BaseT (UintT 256))
+      (Name (ArrayT (BaseT (UintT 256)) (Dynamic 1)) "d")
+      (Pop (BaseT (UintT 256)) (NameTarget "d")))
+    (empty_state with scopes := [FEMPTY |+ ("d",
+      <|assignable := T; type := ArrayTV (BaseTV (UintT 256)) (Dynamic 1);
+        value := ArrayV (DynArrayV [IntV 0]); popped := []|>)])) =
+      INR (Error (RuntimeError "evaluate_subscripts array_index"))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 Theorem eval_target_place_nested_mapping_probe:
   lookup_global cx NONE "m" st =
     (INL (HashMapRef F slot (BaseT (UintT 256))
@@ -259,6 +361,53 @@ QED
 Theorem encode_hashmap_key_bytes4_left_aligned:
   encode_hashmap_key (BaseT (BytesT (Fixed 4))) (BytesV [0x01w; 0xffw; 0xc9w; 0xa7w]) =
     0x01ffc9a7w << 224
+Proof
+  EVAL_TAC
+QED
+
+(* sha256 in an index is a risky call: self.d[0][i] copies its base when i
+   hashes a storage variable.  It also does when i hashes a constant, which
+   Python folds away (keeping the base live); this check has no folder
+   yet (vyper-hol#1303).  Mirrors Python: expr.py _contains_risky_call. *)
+Definition sha_overlap_modules_def:
+  sha_overlap_modules =
+    [(NONE,
+      [VariableDecl Private
+         (Constant (Literal (BaseT (BytesT (Dynamic 1))) (BytesL [120w])))
+         "FOO" (BaseT (BytesT (Dynamic 1))) NONE;
+       VariableDecl Private Storage "b" (BaseT (BytesT (Dynamic 1))) NONE;
+       VariableDecl Private Storage "d"
+         (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2)) (Dynamic 2)) NONE])]
+End
+
+Definition sha_overlap_base_def:
+  sha_overlap_base =
+    Subscript (ArrayT (BaseT (UintT 256)) (Dynamic 2))
+      (TopLevelName
+         (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 2)) (Dynamic 2))
+         (NONE,"d"))
+      (Literal (BaseT (UintT 256)) (IntL 0))
+End
+
+(* convert(sha256(arg), uint256) % 2 *)
+Definition sha_overlap_index_def:
+  sha_overlap_index arg =
+    Builtin (BaseT (UintT 256)) (Bop Mod)
+      [TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+         [Builtin (BaseT (BytesT (Fixed 32))) Sha256 [arg]];
+       Literal (BaseT (UintT 256)) (IntL 2)]
+End
+
+Theorem sha256_of_storage_copies_base:
+  subscript_overlap sha_overlap_modules sha_overlap_base
+    (sha_overlap_index (TopLevelName (BaseT (BytesT (Dynamic 1))) (NONE,"b")))
+Proof
+  EVAL_TAC
+QED
+
+Theorem sha256_of_constant_copies_base:
+  subscript_overlap sha_overlap_modules sha_overlap_base
+    (sha_overlap_index (TopLevelName (BaseT (BytesT (Dynamic 1))) (NONE,"FOO")))
 Proof
   EVAL_TAC
 QED

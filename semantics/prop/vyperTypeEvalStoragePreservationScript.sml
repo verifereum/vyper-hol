@@ -3165,6 +3165,20 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Subscript]:
                   runtime_storage_consistent_layout] >>
       Cases_on `base_res` >> gvs[return_def, raise_def]
       >- (rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
+          Cases_on `(if subscript_reads_base cx e e' then
+            bind (read_result cx base_tv) (\v. return (Value v))
+            else return base_tv) st1` >>
+          rename1 `_ st1 = (early_res,early_st)` >>
+          `early_st = st1` by
+            (qpat_assum `_ st1 = (early_res,early_st)` mp_tac >>
+             rpt (pop_assum kall_tac) >> Cases_on `subscript_reads_base cx e e'` >>
+             simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+             imp_res_tac read_result_state >> gvs[]) >>
+          qpat_x_assum `early_st = st1` SUBST_ALL_TAC >>
+          (reverse (Cases_on `early_res`)
+          >- (qpat_x_assum `!s tv t s1 tv1 t1. _` kall_tac >> simp[] >> strip_tac >> gvs[]) >>
+          rename1 `_ st1 = (INL early_tv,st1)`) >>
+          simp_tac(srw_ss())[] >>
           Cases_on `eval_expr cx e' st1` >>
           rename1 `eval_expr cx e' st1 = (index_res,st2)` >>
           ORACLE_STORAGE_TAC >>
@@ -3202,6 +3216,20 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Subscript]:
               runtime_storage_consistent_layout] >>
   Cases_on `base_res` >> gvs[return_def, raise_def]
   >- (rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
+      Cases_on `(if subscript_reads_base cx e e' then
+        bind (read_result cx base_tv) (\v. return (Value v))
+        else return base_tv) st1` >>
+      rename1 `_ st1 = (early_res,early_st)` >>
+      `early_st = st1` by
+        (qpat_assum `_ st1 = (early_res,early_st)` mp_tac >>
+         rpt (pop_assum kall_tac) >> Cases_on `subscript_reads_base cx e e'` >>
+         simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+         imp_res_tac read_result_state >> gvs[]) >>
+      qpat_x_assum `early_st = st1` SUBST_ALL_TAC >>
+      (reverse (Cases_on `early_res`)
+      >- (qpat_x_assum `!s tv t s1 tv1 t1. _` kall_tac >> simp[] >> strip_tac >> gvs[]) >>
+      rename1 `_ st1 = (INL early_tv,st1)`) >>
+      simp_tac(srw_ss())[] >>
       Cases_on `eval_expr cx e' st1` >>
       rename1 `eval_expr cx e' st1 = (index_res,st2)` >>
       ORACLE_STORAGE_TAC >>

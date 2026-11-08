@@ -51,7 +51,7 @@ Datatype:
   | IfExpK expr expr eval_continuation
   | ConditionalK eval_continuation
   | StructLitK (identifier list) eval_continuation
-  | SubscriptK type expr eval_continuation
+  | SubscriptK type bool expr eval_continuation
   | SubscriptK1 type eval_result eval_continuation
   | AttributeK type identifier eval_continuation
   | BuiltinK type builtin (type list) eval_continuation
@@ -161,7 +161,8 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx5 (StructLit _ (src_id_opt, id) kes) st k =
     eval_exprs_cps cx5 (MAP SND kes) st (StructLitK (MAP FST kes) k) ∧
   eval_expr_cps cx6 (Subscript _ e1 e2) st k =
-    eval_expr_cps cx6 e1 st (SubscriptK (expr_type e1) e2 k) ∧
+    eval_expr_cps cx6 e1 st
+      (SubscriptK (expr_type e1) (subscript_reads_base cx6 e1 e2) e2 k) ∧
   eval_expr_cps cx7 (Attribute _ e id) st k =
     eval_expr_cps cx7 e st (AttributeK (expr_type e) id k) ∧
   eval_expr_cps cx8 (Builtin ty bt es) st k =
@@ -446,7 +447,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (ConditionalK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfExpK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (StructLitK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (SubscriptK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (SubscriptK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SubscriptK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
@@ -538,8 +539,11 @@ Definition apply_tv_def:
     liftk cx ApplyTv (select_result cx ty tv (AttrSubscript id) st) k /\
   apply_tv cx tv st (TupleAssignK gs k) =
     liftk cx ApplyVal (read_result cx tv st) (TupleAssignK gs k) /\
-  apply_tv cx tv st (SubscriptK arr_typ e k) =
-    eval_expr_cps cx e st (SubscriptK1 arr_typ tv k) ∧
+  apply_tv cx tv st (SubscriptK arr_typ rd e k) =
+    (if rd then
+       liftk cx ApplyTv (do v <- read_result cx tv; return (Value v) od st)
+         (SubscriptK arr_typ F e k)
+     else eval_expr_cps cx e st (SubscriptK1 arr_typ tv k)) ∧
   apply_tv cx tv st (IfK ss1 ss2 k) =
     liftk cx (K Apply) (push_scope st) (IfK1 tv ss1 ss2 k) ∧
   apply_tv cx tv st (LenK k) =
@@ -1400,6 +1404,21 @@ Proof
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> Cases_on `subscript_reads_base cx e e'` \\ gvs[return_def]
+    >- (rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1, bind_def,
+           return_def]
+        \\ CASE_TAC \\ reverse CASE_TAC
+        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+        \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def]
+        \\ first_x_assum (drule_then (qspecl_then [`r`,`Value x'`,`r''`] mp_tac))
+        \\ simp[bind_def, return_def] \\ rw[]
+        \\ CASE_TAC \\ reverse CASE_TAC
+        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+        >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+        \\ CASE_TAC \\ reverse CASE_TAC
+        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+        >> rw[Once OWHILE_THM, stepk_def, apply_val_def,
+              apply_val_subscript_def, liftk1, bind_def])
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def]
     \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC

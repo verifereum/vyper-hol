@@ -546,6 +546,25 @@ Proof
   simp[eval_result_typed_def]
 QED
 
+Theorem optional_read_result_live_typed[local]:
+  state_well_typed st /\ eval_result_typed (env,cx,st) pv (Type ty) /\
+  live_memory_result st pv /\
+  (if flag then bind (read_result cx pv) (\v. return (Value v))
+   else return pv) st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL out => eval_result_typed (env,cx,st') out (Type ty) /\
+                         live_memory_result st' out | INR _ => T)
+Proof
+  Cases_on `flag`
+  >- (strip_tac >> Cases_on `read_result cx pv st` >>
+      rename1 `read_result cx pv st = (rr,rs)` >>
+      drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+      Cases_on `rr` >>
+      gvs[bind_def, return_def, eval_result_typed_def,
+          value_runtime_typed_def, live_memory_result_def, no_type_error_result_def]) >>
+  simp[return_def] >> rpt strip_tac >> gvs[no_type_error_result_def]
+QED
+
 Theorem annassign_new_variable_after_read_result_sound[local]:
   env_consistent env cx st /\ state_well_typed st /\ accounts_well_typed st.accounts /\
   get_tenv cx = env.type_defs /\ evaluate_type env.type_defs typ = SOME tyv /\
@@ -4632,6 +4651,40 @@ Proof
   metis_tac[]
 QED
 
+Theorem hashmap_place_expr_no_early_read[local]:
+  !env e kt vt. type_place_expr env e = SOME (HashMapT kt vt) ==>
+    ~base_through_dynarray e
+Proof
+  measureInduct_on `expr_size e` >> rpt strip_tac >> Cases_on `e` >>
+  gvs[Once well_typed_expr_def, AllCaseEqs(), base_through_dynarray_def] >>
+  (Cases_on `vt'`
+   >- (rename1 `subscript_vtype (Type bt) _ = _` >>
+       Cases_on `bt` >> gvs[subscript_vtype_def, AllCaseEqs()]) >>
+   gvs[subscript_vtype_def, AllCaseEqs()] >>
+   drule type_place_expr_annotation_ok_stmt >>
+   simp[vtype_annotation_ok_def] >> strip_tac >> gvs[] >>
+   qpat_x_assum `!y. _` (qspec_then `e'` mp_tac) >>
+   simp[expr_size_def] >> metis_tac[])
+QED
+
+Theorem place_optional_read_result_live_typed[local]:
+  type_place_expr env e = SOME vt /\
+  state_well_typed st /\ eval_result_typed (env,cx,st) pv vt /\
+  live_memory_result st pv /\
+  (if subscript_reads_base cx e e' then bind (read_result cx pv) (\v. return (Value v))
+   else return pv) st = (res,st') ==>
+  st' = st /\ no_type_error_result res /\
+  (case res of INL out => eval_result_typed (env,cx,st') out vt /\
+                         live_memory_result st' out | INR _ => T)
+Proof
+  Cases_on `vt` >> strip_tac
+  >- (drule_all optional_read_result_live_typed >> simp[]) >>
+  drule hashmap_place_expr_no_early_read >> strip_tac >>
+  `~subscript_reads_base cx e e'` by
+    metis_tac[subscript_reads_base_through_dynarray] >>
+  gvs[return_def, no_type_error_result_def]
+QED
+
 Theorem eval_expr_subscript_index_matches_stmt[local]:
   !ct ie rt cx st tv st1 idx st2.
     subscript_type_ok ct ie rt /\
@@ -4672,8 +4725,23 @@ Resume eval_scc_type_sound_results_mutual[Expr_Subscript]:
           qpat_x_assum `well_typed_expr env e ==> _` drule >>
           simp_tac(srw_ss())[] >> strip_tac >>
           Cases_on `br`
-          >- (rename1 `eval_expr cx e st = (INL base_pv,st1)` >>
-              qpat_x_assum `!s'' pv t. eval_expr cx e s'' = (INL pv,t) ==> _` drule >> strip_tac >>
+          >- (rename1 `eval_expr cx e st = (INL raw_base_pv,st1)` >>
+              rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+              rule_assum_tac BETA_RULE >>
+              simp_tac(srw_ss())[] >>
+              Cases_on `(if subscript_reads_base cx e e' then
+                bind (read_result cx raw_base_pv) (\v. return (Value v))
+                else return raw_base_pv) st1` >>
+              rename1 `_ st1 = (base_res,base_st)` >>
+              drule_all optional_read_result_live_typed >> strip_tac >>
+              reverse (Cases_on `base_res`)
+              >- (qpat_x_assum `!s tv t s1 tv1 t1. _` kall_tac >>
+                  simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
+              rename1 `_ st1 = (INL base_pv,base_st)` >>
+              qpat_x_assum `!s tv t s1 tv1 t1. _` drule_all >> strip_tac >>
+              qpat_x_assum `base_st = st1` SUBST_ALL_TAC >>
+              rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+              rule_assum_tac BETA_RULE >>
               simp_tac(srw_ss())[] >>
               Cases_on `eval_expr cx e' st1` >>
               rename1 `eval_expr cx e' st1 = (ir,st2)` >>
@@ -4749,8 +4817,22 @@ Resume eval_scc_type_sound_results_mutual[Expr_Subscript_projection]:
     (qspec_then `bvt` mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   Cases_on `br`
-  >- (rename1 `eval_expr cx e st = (INL base_pv,st1)` >>
-      qpat_x_assum `!s'' pv t. eval_expr cx e s'' = (INL pv,t) ==> _` drule >> strip_tac >>
+  >- (rename1 `eval_expr cx e st = (INL raw_base_pv,st1)` >>
+      rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+      rule_assum_tac BETA_RULE >> simp_tac(srw_ss())[] >>
+      Cases_on `(if subscript_reads_base cx e e' then
+        bind (read_result cx raw_base_pv) (\v. return (Value v))
+        else return raw_base_pv) st1` >>
+      rename1 `_ st1 = (base_res,base_st)` >>
+      drule_all place_optional_read_result_live_typed >> strip_tac >>
+      reverse (Cases_on `base_res`)
+      >- (qpat_x_assum `!s tv t s1 tv1 t1. _` kall_tac >>
+          simp_tac(srw_ss())[] >> strip_tac >> gvs[]) >>
+      rename1 `_ st1 = (INL base_pv,base_st)` >>
+      qpat_x_assum `!s tv t s1 tv1 t1. _` drule_all >> strip_tac >>
+      qpat_x_assum `base_st = st1` SUBST_ALL_TAC >>
+      rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+      rule_assum_tac BETA_RULE >>
       simp_tac(srw_ss())[] >>
       Cases_on `eval_expr cx e' st1` >>
       rename1 `eval_expr cx e' st1 = (ir,st2)` >>
@@ -7998,14 +8080,29 @@ fun trace_result_tac label g = let val suspend = trace_result_tac in
           (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac] >>
       qpat_x_assum `!env st res st'. _ ==> (case res of INL pv => live_memory_result _ _ | INR _ => T)` kall_tac >>
       (reverse (Cases_on `q`)
-      >- (qpat_x_assum `!s'' res t. _` kall_tac >>
+      >- (qpat_x_assum `!s tv t s1 tv1 t1. _` kall_tac >>
           qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
           simp[NoAsms, Once evaluate_def, bind_def] >>
           asm_rewrite_tac[] >> simp[NoAsms, raise_def] >>
           strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC) >>
-      qpat_x_assum `!s'' res t. eval_expr _ _ _ = _ ==> _`
-        (qspecl_then [`st`,`x`,`r`] mp_tac) >>
-      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      Cases_on `(if subscript_reads_base cx e e' then
+        bind (read_result cx x) (\v. return (Value v)) else return x) r` >>
+      rename1 `_ r = (base_res,base_st)` >>
+      `base_st = r` by
+        (qpat_assum `_ r = (base_res,base_st)` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         Cases_on `subscript_reads_base cx e e'` >>
+         simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+         imp_res_tac read_result_state >> gvs[]) >>
+      qpat_x_assum `base_st = r` SUBST_ALL_TAC >>
+      (reverse (Cases_on `base_res`)
+      >- (qpat_x_assum `!s tv t s1 tv1 t1. _` kall_tac >>
+          qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+          simp[NoAsms, Once evaluate_def, bind_def] >>
+          asm_rewrite_tac[] >> simp[NoAsms] >>
+          strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+          gvs[]) >>
+      qpat_x_assum `!s tv t s1 tv1 t1. _` drule_all >> strip_tac) >>
       Cases_on `eval_expr cx e' r` >>
       qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
         (drule_at (Pat `eval_expr _ _ _ = _`)) >>
@@ -9498,9 +9595,22 @@ Resume eval_scc_type_sound_results_mutual[Live_Subscript_Capture_Index_Selection
       qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
       simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
       simp[NoAsms, raise_def] >> strip_tac >> gvs[]) >>
-  qpat_x_assum `!s'' res t. eval_expr _ _ _ = _ ==> _`
-    (qspecl_then [`st`,`x`,`r`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+  rule_assum_tac BETA_RULE >>
+  Cases_on `(if subscript_reads_base cx e e' then
+    bind (read_result cx x) (\v. return (Value v)) else return x) r` >>
+  rename1 `_ r = (base_res,base_st)` >>
+  FIRST [drule_all place_optional_read_result_live_typed >> strip_tac,
+         drule_all optional_read_result_live_typed >> strip_tac] >>
+  (reverse (Cases_on `base_res`)
+  >- (rpt (first_x_assum (fn th => if is_forall (concl th) then kall_tac th else NO_TAC)) >>
+      qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+      simp[NoAsms, Once evaluate_def, bind_def] >> asm_rewrite_tac[] >>
+      simp[NoAsms] >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!s tv t s1 tv1 t1. _` drule_all >> strip_tac) >>
+  qpat_x_assum `base_st = r` SUBST_ALL_TAC >>
+  rule_assum_tac (REWRITE_RULE [sumTheory.sum_case_def]) >>
+  rule_assum_tac BETA_RULE >>
   Cases_on `eval_expr cx e' r` >>
   qpat_x_assum `!env st res st'. _ ==> (_ /\ _)`
     (drule_at (Pat `eval_expr _ _ _ = _`)) >>

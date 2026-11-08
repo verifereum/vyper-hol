@@ -99,7 +99,11 @@ QED
    cheated there for compile_expr_sim too. *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
-    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
+    (!s'' res t s3 res' t'. eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2
+        then do v <- read_result cx res; return (Value v) od
+        else return res) s3 = (INL res',t') ==>
+       body_expr_ok cx e2) /\
     body_expr_ok cx e1 ==>
     body_expr_ok cx (Subscript v8 e1 e2)
 Proof

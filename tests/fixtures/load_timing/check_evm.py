@@ -34,6 +34,8 @@ CASES = (
     Case("call_storage_read", "f()", (), 0),
     Case("call_memory_pop", "f()", (), 2),
     Case("builtin_eager_read", "f()", (), 0),
+    Case("subscript_base_copy", "f()", (), 5),
+    Case("subscript_base_live", "f()", (), 7),
 )
 
 

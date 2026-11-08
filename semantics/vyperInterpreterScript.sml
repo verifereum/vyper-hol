@@ -7,6 +7,7 @@ Ancestors
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
+  vyperSubscriptOverlap
 Libs
   cv_transLib wordsLib intLib monadsyntax
 
@@ -449,6 +450,25 @@ Definition remcode_def:
       FILTER (λ((src_id, fn), ss). ¬MEM (src_id, fn) cx.stk)
         (FLAT (MAP (λ(src_id, ts). module_fns src_id ts) mods))
 End
+
+(* Whether array subscript e1[e2] reads its base before evaluating its index:
+   the index could resize a dynamic array the base was derived from. *)
+Definition subscript_reads_base_def:
+  subscript_reads_base cx e1 e2 =
+    subscript_overlap
+      (case ALOOKUP cx.sources cx.txn.target of NONE => [] | SOME mods => mods)
+      e1 e2
+End
+
+val () = cv_auto_trans subscript_reads_base_def;
+
+Theorem subscript_reads_base_through_dynarray:
+  subscript_reads_base cx e1 e2 ⇒
+  is_ArrayT (expr_type e1) ∧ base_through_dynarray e1
+Proof
+  rw[subscript_reads_base_def] >> drule subscript_overlap_through_dynarray >>
+  simp[]
+QED
 
 (* these helpers are also for termination, to enable HOL4's definition machinery
 * to "see through" the state-exception monad when constructing the termination
@@ -1581,6 +1601,10 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Subscript _ e1 e2) = do
     res <- eval_expr cx e1;
+    res <- (if subscript_reads_base cx e1 e2 then do
+              v <- read_result cx res;
+              return (Value v)
+            od else return res);
     idx <- eval_expr cx e2;
     v <- read_result cx idx;
     select_result cx (expr_type e1) res (ValueSubscript v)

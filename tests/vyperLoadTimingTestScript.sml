@@ -33,6 +33,8 @@ val (nested_pop_program, nested_pop_context) = load_fixture "nested_retained_pop
 val (call_storage_program, call_storage_context) = load_fixture "call_storage_read";
 val (call_memory_program, call_memory_context) = load_fixture "call_memory_pop";
 val (builtin_eager_program, builtin_eager_context) = load_fixture "builtin_eager_read";
+val (subscript_copy_program, subscript_copy_context) = load_fixture "subscript_base_copy";
+val (subscript_live_program, subscript_live_context) = load_fixture "subscript_base_live";
 
 Definition pop_refill_program_def:
   pop_refill_program = ^pop_program
@@ -103,6 +105,26 @@ Definition builtin_eager_read_context_def:
   builtin_eager_read_context = ^builtin_eager_context
 End
 val () = cv_auto_trans builtin_eager_read_context_def;
+
+Definition subscript_base_copy_program_def:
+  subscript_base_copy_program = ^subscript_copy_program
+End
+val () = cv_auto_trans subscript_base_copy_program_def;
+
+Definition subscript_base_copy_context_def:
+  subscript_base_copy_context = ^subscript_copy_context
+End
+val () = cv_auto_trans subscript_base_copy_context_def;
+
+Definition subscript_base_live_program_def:
+  subscript_base_live_program = ^subscript_live_program
+End
+val () = cv_auto_trans subscript_base_live_program_def;
+
+Definition subscript_base_live_context_def:
+  subscript_base_live_context = ^subscript_live_context
+End
+val () = cv_auto_trans subscript_base_live_context_def;
 
 Theorem load_timing_cont_pre[cv_pre]:
   cont_pre (eval_stmts_cps cx ss st DoneK)
@@ -180,6 +202,20 @@ QED
 Theorem builtin_storage_argument_reads_before_later_argument:
   FST (load_timing_run builtin_eager_read_context
     builtin_eager_read_program [] empty_state) = INL (IntV 0)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem subscript_base_reads_before_index_write:
+  FST (load_timing_run subscript_base_copy_context
+    subscript_base_copy_program [] empty_state) = INL (IntV 5)
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem subscript_base_stays_live_for_harmless_index:
+  FST (load_timing_run subscript_base_live_context
+    subscript_base_live_program [] empty_state) = INL (IntV 7)
 Proof
   CONV_TAC cv_eval
 QED
