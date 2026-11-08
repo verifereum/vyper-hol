@@ -82,7 +82,13 @@ Theorem step_fresh_write_op:
 Proof
   rpt gen_tac >> simp[fresh_write_op_def] >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> strip_tac
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    let
+      fun matches th =
+        aconv (rhs (fst (dest_imp (snd (strip_forall (concl th))))))
+              (rhs (concl eq))
+      val rule = valOf (List.find matches (CONJUNCTS step_inst_base_opcode_eqs))
+    in PURE_ONCE_REWRITE_TAC [MATCH_MP rule eq] end) >> strip_tac
   >>~- ([`exec_pure1 _ _ _ = OK _`],
         drule (cj 1 exec_pure_ok_update) >> strip_tac >>
         gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality])
@@ -93,8 +99,8 @@ Proof
         drule (cj 3 exec_pure_ok_update) >> strip_tac >>
         gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality]) >>
   (* the assertions *)
-  pop_assum mp_tac >> rpt (CASE_TAC >> simp[]) >> rw[update_var_def] >>
-  simp[FLOOKUP_UPDATE, venom_state_component_equality]
+  gvs[AllCaseEqs(), update_var_def, FLOOKUP_UPDATE,
+      venom_state_component_equality]
 QED
 
 (* ===== The run ===== *)

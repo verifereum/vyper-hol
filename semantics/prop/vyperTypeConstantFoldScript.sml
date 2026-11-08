@@ -41,8 +41,72 @@ Theorem evaluate_builtin_constant_context:
   evaluate_builtin (constant_context mods) empty_accounts ty bt tys vs
 Proof
   rpt gen_tac >> Cases_on `bt` >>
-  simp[constant_builtin_def] >>
-  simp[evaluate_builtin_def, get_tenv_constant_context]
+  simp[constant_builtin_def]
+  >- (rewrite_tac [CONV_RULE
+        (RHS_CONV (PURE_ONCE_REWRITE_CONV
+          [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Len`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Not`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Neg`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Abs`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Keccak256`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Sha256`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `AsWeiValue dn`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Uint2Str n`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `MakeArray t bd`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Ceil`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Floor`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `AddMod`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `MulMod`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `Bop op`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context])
+  >- (rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+        [TypeBase.case_def_of ``:builtin``]))
+        (Q.INST [`bt` |-> `MethodId`] (SPEC_ALL evaluate_builtin_def))] >>
+      simp[get_tenv_constant_context]) >>
+  rewrite_tac [CONV_RULE (RHS_CONV (PURE_ONCE_REWRITE_CONV
+    [TypeBase.case_def_of ``:builtin``]))
+    (Q.INST [`bt` |-> `PowMod256`] (SPEC_ALL evaluate_builtin_def))] >>
+  simp[get_tenv_constant_context]
 QED
 
 Theorem evaluate_type_builtin_constant_context:
@@ -532,7 +596,6 @@ Proof
   >- metis_tac[vyperTypeConversionsTheory.evaluate_max_value_well_typed]
   >- metis_tac[vyperTypeConversionsTheory.evaluate_min_value_well_typed]
   >- metis_tac[vyperTypeConversionsTheory.evaluate_min_value_well_typed] >>
-  Cases_on `vs` >>
   gvs[evaluate_type_def, evaluate_type_builtin_def,
       within_int_bound_def, value_has_type_def]
 QED
