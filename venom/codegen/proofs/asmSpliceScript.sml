@@ -566,7 +566,7 @@ Proof
       listTheory.ALL_DISTINCT_APPEND] >> metis_tac[]
 QED
 
-Theorem label_refs_append[local]:
+Theorem label_refs_append:
   asm_label_refs (a ++ b) = asm_label_refs a ++ asm_label_refs b
 Proof
   simp[asm_label_refs_def, listTheory.MAP_APPEND, listTheory.FLAT_APPEND]
