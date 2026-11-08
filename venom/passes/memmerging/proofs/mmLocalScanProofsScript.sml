@@ -3206,6 +3206,18 @@ Proof
   gvs[]
 QED
 
+Theorem mm_local_expand_mem_max[local]:
+  expand_mem (expand_mem mem n) m = expand_mem mem (MAX n m)
+Proof
+  Cases_on `n <= m`
+  >- (`MAX n m = m` by (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+      simp[expand_mem_monotone]) >>
+  `MAX n m = n` by simp[arithmeticTheory.MAX_DEF] >>
+  `~(m > LENGTH (expand_mem mem n))` by
+    (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  simp[Once expand_mem_def]
+QED
+
 Theorem mm_local_zero_write_merge[local]:
   d1 <= d2 /\ d2 <= d1+n1 ==>
   write_memory_with_expansion d2 (REPLICATE n2 0w)
@@ -3219,17 +3231,8 @@ Proof
   `d1 + (MAX (d1+n1) (d2+n2) - d1) = MAX (d1+n1) (d2+n2)` by
     (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
   simp[venomStateTheory.venom_state_component_equality] >>
-  `expand_mem (expand_mem s.vs_memory (d1+n1)) (d2+n2) =
-   expand_mem s.vs_memory (MAX (d1+n1) (d2+n2))` by
-    (Cases_on `d1+n1 <= d2+n2`
-     >- (`MAX (d1+n1) (d2+n2) = d2+n2` by
-           (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
-         simp[expand_mem_monotone]) >>
-     `MAX (d1+n1) (d2+n2) = d1+n1` by simp[arithmeticTheory.MAX_DEF] >>
-     `~(d2+n2 > LENGTH (expand_mem s.vs_memory (d1+n1)))` by
-       (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
-     simp[Once expand_mem_def]) >>
-  simp[] >> irule mm_local_zero_replace_merge >> simp[]
+  simp[mm_local_expand_mem_max] >>
+  irule mm_local_zero_replace_merge >> simp[]
 QED
 
 Theorem mm_local_memzero_merge_effect[local]:
@@ -3248,6 +3251,44 @@ Theorem mm_local_zero_write_empty[local]:
     s with vs_memory := expand_mem s.vs_memory dst
 Proof
   simp[write_as_replace, replace_bytes_def, TAKE_DROP]
+QED
+
+Theorem mm_local_replace_disjoint_commute[local]:
+  (d1 + LENGTH bs1 <= d2 \/ d2 + LENGTH bs2 <= d1) /\
+  MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) <= LENGTH mem ==>
+  replace_bytes d2 bs2 (replace_bytes d1 bs1 mem) =
+  replace_bytes d1 bs1 (replace_bytes d2 bs2 mem)
+Proof
+  rw[LIST_EQ_REWRITE, replace_bytes_def, LENGTH_APPEND, LENGTH_TAKE,
+    LENGTH_DROP] >>
+  rw[EL_APPEND_EQN, EL_TAKE, EL_DROP, LENGTH_APPEND,
+    LENGTH_TAKE, LENGTH_DROP, arithmeticTheory.MAX_DEF] >> gvs[]
+QED
+
+Theorem mm_local_write_disjoint_commute[local]:
+  (d1 + LENGTH bs1 <= d2 \/ d2 + LENGTH bs2 <= d1) ==>
+  write_memory_with_expansion d2 bs2 (write_memory_with_expansion d1 bs1 s) =
+  write_memory_with_expansion d1 bs1 (write_memory_with_expansion d2 bs2 s)
+Proof
+  strip_tac >> simp[write_as_replace] >>
+  `d1 + LENGTH bs1 <= LENGTH (expand_mem s.vs_memory (d1 + LENGTH bs1))` by
+    simp[expand_mem_ge] >>
+  `d2 + LENGTH bs2 <= LENGTH (expand_mem s.vs_memory (d2 + LENGTH bs2))` by
+    simp[expand_mem_ge] >>
+  simp[expand_replace, mm_local_expand_mem_max,
+       venomStateTheory.venom_state_component_equality] >>
+  simp[arithmeticTheory.MAX_COMM] >>
+  irule mm_local_replace_disjoint_commute >> simp[] >>
+  simp[arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mm_local_write_pair_length[local]:
+  LENGTH (write_memory_with_expansion d2 bs2
+    (write_memory_with_expansion d1 bs1 s)).vs_memory =
+  MAX (LENGTH s.vs_memory) (MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2))
+Proof
+  simp[write_as_replace, replace_bytes_len, expand_mem_ge] >>
+  simp[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
 
 (* Essential counterexample evidence: a variable-free unreachable block. *)
