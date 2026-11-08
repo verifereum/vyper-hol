@@ -5,6 +5,8 @@ Ancestors
   abiValueEncoding loweringPosts bodySimAugPlaceLoad exprSimDefs
   compileEnv exprSimProps exprLoweringProps bodyMemAugAssignAttrLocal
   fragGasMode stmtSimAugAssignPlace bodyAugPlaceTarget bodySimAugPlaceLive
+  bodyMemEmitOpFrame venomExecSemantics venomInst venomState
+  stmtSimAugAssignPlaceStorage
 
 Theorem aug_place_memory_word_frontier:
   stmt_state_rel ctx func cenv cx es s /\
@@ -70,5 +72,83 @@ Proof
   `w2n w + 32 <= s.vs_alloca_next` by
     (irule aug_place_memory_word_frontier >> metis_tac[]) >>
   simp[] >> drule_all augassign_field_read_path_mem >> strip_tac >>
+  metis_tac[]
+QED
+
+(* Storage and transient loads have no linear-memory footprint. *)
+Theorem aug_place_storage_access_path:
+  emit_op (if tr then TLOAD else SLOAD) [arg] sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx st s /\
+  alloca_history func s /\ eval_operand arg s = SOME slot /\
+  (!x. arg = Var x ==> not_fresh_at sa x) /\
+  (if tr then tload slot s else sload slot s) = typed_val_to_w256 tv cur ==>
+  ?u. gas_marked_path T ctx func s 0 (OK u) /\
+    eval_operand op u = SOME (typed_val_to_w256 tv cur) /\
+    stmt_state_rel ctx func cenv cx st u /\ eval_operand arg u = SOME slot /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ alloca_history func u /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp u = lookup_var rp s) /\
+    u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    (?out. op = Var out /\ not_fresh_at sb out)
+Proof
+  rpt strip_tac >>
+  `step_inst_base
+     (mk_inst sa.cs_next_id (if tr then TLOAD else SLOAD) [arg]
+       [STRING #"%" (toString sa.cs_next_var)]) s =
+   OK (update_var (STRING #"%" (toString sa.cs_next_var))
+       (typed_val_to_w256 tv cur) s)` by
+    (Cases_on `tr` >> gvs[step_inst_base_def, mk_inst_def, exec_read1_def]) >>
+  drule_at (Pat `step_inst_base _ _ = _`) emit_op_word_path_frame_mem >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then drule >>
+  (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  Cases_on `arg` >> gvs[eval_operand_def, lookup_var_def] >> metis_tac[]
+QED
+
+(* Source decoding and machine access agree after a pure storage target. *)
+Theorem aug_place_storage_read_path:
+  contract_storage_well_formed cx es /\
+  EVERY (supported_pure_expr tops) (target_indices bt) /\
+  eval_target_place cx bt es = (INL (StoragePlace tr slot tv),st) /\
+  target_post ctx func cenv cx es sa sp s0 st
+    (PlaceR (StoragePlace tr slot tv)) (Type ty) r s /\
+  is_word_type ty /\
+  emit_op (if tr then TLOAD else SLOAD) [FST r] sp = (op,sb) /\
+  fn_has_code sp sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sp /\ alloca_history func s /\
+  ~s.vs_halted /\ s.vs_current_bb = sp.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sp.cs_current_insts ==>
+  ?cur u.
+    read_place cx (StoragePlace tr slot tv) st = (INL cur,st) /\
+    place_type_value cx (StoragePlace tr slot tv) st = (INL tv,st) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur /\
+    gas_marked_path T ctx func s 0 (OK u) /\
+    eval_operand op u = SOME (typed_val_to_w256 tv cur) /\
+    stmt_state_rel ctx func cenv cx st u /\ eval_operand (FST r) u = SOME slot /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ alloca_history func u /\
+    (!rp. not_fresh_at sp rp ==> lookup_var rp u = lookup_var rp s) /\
+    u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+    sp.cs_next_var <= sb.cs_next_var /\
+    (?out. op = Var out /\ not_fresh_at sb out)
+Proof
+  rpt strip_tac >>
+  drule_all aug_place_pure_target_storage_range >> strip_tac >>
+  drule_all aug_place_pure_target_storage_live >> strip_tac >>
+  `evaluate_type (get_tenv cx) ty = SOME tv /\
+   stmt_state_rel ctx func cenv cx st s /\
+   eval_operand (FST r) s = SOME slot /\
+   (!x. FST r = Var x ==> not_fresh_at sp x)` by
+    gvs[target_post_def, place_ptr_rel_def] >>
+  drule_all aug_place_storage_read_ready >> strip_tac >>
+  drule_all aug_place_storage_load_ready >> strip_tac >>
+  drule_all aug_place_storage_access_path >> strip_tac >>
   metis_tac[]
 QED
