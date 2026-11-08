@@ -73,6 +73,49 @@ Proof
   simp[intcall_expr_cont_def, loweringPostsTheory.vv_post_def] >> metis_tac[]
 QED
 
+(* Recover the ordinary value post from the producer's normal certificate. *)
+Theorem intcall_vv_post_intro:
+  vv_holds ce fp.jc_cx (post_value_type ce e) tv vv ee u /\
+  vv_at ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u /\
+  (post_value_type ce e <> expr_type e ==>
+   vv_own ce fp.jc_cx (post_value_type ce e) sa sb ee tv vv u) /\
+  (~expr_has_effect e ==> vv_storage_live fp.jc_cx vv ee u) /\
+  intcall_expr_cont fp ce env es sa s ee sb u ==>
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee tv vv u
+Proof
+  simp[loweringPostsTheory.vv_post_def, intcall_expr_cont_def,
+       intcall_joint_res_def] >> metis_tac[]
+QED
+
+Theorem intcall_expr_cont_frame:
+  intcall_expr_cont fp ce env es sa s ee sb u ==>
+  wb_frame ce es sa s u
+Proof
+  simp[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
+  metis_tac[]
+QED
+
+Theorem intcall_expr_cont_trans:
+  intcall_joint_res fp ce env es a s /\
+  intcall_expr_cont fp ce env es a s em b t /\
+  intcall_expr_cont fp ce env em b t ee d u /\
+  a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var /\
+  MAP FDOM es.scopes = MAP FDOM em.scopes ==>
+  intcall_expr_cont fp ce env es a s ee d u
+Proof
+  strip_tac >>
+  `wb_frame ce es a s t` by metis_tac[intcall_expr_cont_frame] >>
+  `wb_frame ce em b t u` by metis_tac[intcall_expr_cont_frame] >>
+  `wb_frame ce es a s u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     conj_tac >- fs[intcall_joint_res_def] >>
+     conj_tac >- (qexistsl [`em`, `b`, `t`] >> simp[]) >>
+     qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >>
+     fs[intcall_joint_res_def]) >>
+  fs[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 (* Calls and pops are values, never mapping places. *)
 Theorem intcall_effect_map_producer:
   ((?a tgt args dflt. e = Call a tgt args dflt) \/
