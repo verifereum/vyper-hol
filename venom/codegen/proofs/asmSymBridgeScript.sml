@@ -544,7 +544,7 @@ Proof
       IF_CASES_TAC
       >- (gvs[asm_sym_rel_def] >>
           simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
-      irule related_create_completion >> simp[]) >>
+      rewrite_tac[COND_CLAUSES] >> irule related_create_completion >> simp[]) >>
   rename1 `cs.as_stack = value :: off :: sz :: tail0` >>
   Cases_on `tail0` >- gvs[] >> gvs[] >>
   rename1 `cs.as_stack = value :: off :: sz :: salt :: tail` >>
@@ -560,7 +560,7 @@ Proof
   IF_CASES_TAC
   >- (gvs[asm_sym_rel_def] >>
       simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
-  irule related_create_completion >> simp[]
+  rewrite_tac[COND_CLAUSES] >> irule related_create_completion >> simp[]
 QED
 
 Theorem asm_step_op_call[local]:
