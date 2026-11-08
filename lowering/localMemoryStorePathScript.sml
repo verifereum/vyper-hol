@@ -10,6 +10,7 @@ Ancestors
   compileEnv valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
   vyperExprNoControl venomExecSemantics venomExecProofs venomInst venomState
   fragGasSeq fragGasMode context exprSimBufferStore stmtSimDeclPath
+  memoryValueEncoding
 Libs
   monadsyntax
 
@@ -142,6 +143,8 @@ Proof
      qexists_tac `type_memory_size entry.type` >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
      decide_tac) >>
+  `memory_value_rel entry.type v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `stmt_state_rel ctx func cenv cx es1 t` by
     (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   `t.vs_allocas = s.vs_allocas` by

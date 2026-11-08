@@ -991,7 +991,7 @@ Theorem local_header_store_path:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>

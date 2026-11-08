@@ -4,7 +4,7 @@ Ancestors
   localPtrsProps compileEnv vyperLookup vyperPlaceStatePreservation
   vyperAssignPreservesType vyperTypeInvariants valueEncodingTyping
   exprSimProps vyperState vyperTyping valueEncoding valueEncodingProps
-  venomState finite_map arithmetic
+  venomState finite_map arithmetic memoryValueEncoding
 
 Theorem pop_path_updated_typed:
   mutable_place_path tv path /\ value_has_type tv a /\
@@ -56,7 +56,7 @@ Proof
     (qpat_assum `local_ptrs_rel _ _ _ _` mp_tac >>
      pure_rewrite_tac[local_ptrs_rel_def] >> strip_tac >>
      qpat_x_assum `!name e q sq. _` drule_all >>
-     strip_tac >> gvs[]) >>
+     strip_tac >> gvs[] >> metis_tac[memory_value_rel_val_in_memory]) >>
   `local_region cenv scopes s id (w2n w) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
   `!j b sq. j <> id /\ local_region cenv scopes s j b sq ==>
@@ -81,6 +81,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> gvs[]) >>
+  irule val_in_memory_memory_value_rel >> simp[] >>
   qpat_x_assum `val_in_memory _ updated _ u.vs_memory` mp_tac >>
   simp[ADD_COMM]
 QED

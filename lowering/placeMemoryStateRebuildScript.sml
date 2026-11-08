@@ -5,7 +5,7 @@ Ancestors
   vyperPlaceWriteSoundness vyperState compileEnv stmtSimDefs
   finite_map list pair exprSimProps valueEncodingTyping loweringPosts
   vyperStoragePlaceProvenance exprSimHypsDefs vyperTypeStatePreservation words
-  vyperTypeValues venomState arithmetic
+  vyperTypeValues venomState arithmetic memoryValueEncoding
 
 Theorem write_memory_place_entry_update:
   write_place cx (MemoryPlace id path) v ee = (INL (),ff) ==>
@@ -71,7 +71,8 @@ Proof
     (qpat_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
      qpat_x_assum `!name entry p sz. _`
-       (drule_all_then strip_assume_tac) >> gvs[]) >>
+       (drule_all_then strip_assume_tac) >> gvs[] >>
+     metis_tac[memory_value_rel_val_in_memory]) >>
   drule mem_path_offset_sound >> strip_tac >>
   drule_all replace_memory_entry_type_path_preserves_type >> strip_tac >>
   `val_in_memory new_entry.type new_entry.value (w2n w) t.vs_memory` by
@@ -81,6 +82,8 @@ Proof
      qpat_x_assum `!name b len a n. _` (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
      disch_then (qspecl_then [`b`, `n`] mp_tac) >>
      (impl_tac >- decide_tac) >> simp[]) >>
+  `memory_value_rel new_entry.type new_entry.value (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   irule local_ptrs_rel_write_local >>
   qexistsl_tac [`new_entry`, `id`, `p`, `ee.scopes`, `r`, `sz`, `w`] >>
   simp[] >> suspend "lift"

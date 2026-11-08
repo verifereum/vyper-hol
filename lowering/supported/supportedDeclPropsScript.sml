@@ -29,14 +29,16 @@ Proof
   EVAL_TAC
 QED
 
-(* Internal-call default expansion remains owned by #546. External defaults,
-   guarded functions and raw-return external functions are admitted. *)
+(* Guarded functions and raw-return external functions are admitted. Default
+   arguments are not, for now: internal-call default expansion is owned by
+   #546, and the grouped external-defaults entry lowering is not yet covered
+   by the entry proofs. *)
 Theorem supported_function_flags_defaults_contract:
   supported_declaration_header []
     (FunctionDecl External View T F "f" [] [] NoneT []) /\
   supported_declaration_header []
     (FunctionDecl External Pure F T "f" [] [] (BaseT (BytesT (Dynamic 8))) []) /\
-  supported_declaration_header []
+  ~supported_declaration_header []
     (FunctionDecl External View F F "f" [("x", BaseT BoolT)]
       [Literal (BaseT BoolT) (BoolL T)] NoneT []) /\
   ~supported_declaration_header []

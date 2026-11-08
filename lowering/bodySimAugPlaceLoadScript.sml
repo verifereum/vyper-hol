@@ -7,7 +7,7 @@ Ancestors
   vyperInterpreter vyperScopePreservation vyperValueOperation
   vyperPlaceStatePreservation vyperAssignPreservesType
   exprSimBuffer exprLoweringProps compileEnv exprSimDefs exprSimHypsDefs
-  loweringPosts exprSimProps exprSimSource
+  loweringPosts exprSimProps exprSimSource memoryValueEncoding
 
 Theorem aug_place_projection_needs_shape:
   mem_path_offset (StructTV [("a",BaseTV BoolT);("b",BaseTV BoolT)])
@@ -287,7 +287,8 @@ Proof
    val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
       (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
-     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[] >>
+     irule memory_value_rel_val_in_memory >> simp[]) >>
   `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
   drule mem_path_offset_sound >> strip_tac >>
   `w2n (w + n2w off) = w2n w + off` by
