@@ -1,7 +1,7 @@
 (* Bounded ranks for concrete dominator queries. *)
 Theory dominatorRankProofs
 Ancestors
-  dominatorProofs dominatorAnalysisProps dominatorDefs cfgDefs venomWf list pred_set
+  dominatorProofs dominatorDefs cfgDefs venomWf list pred_set
 
 Theorem dominator_query_subset:
   wf_function fn /\ MEM p (fn_labels fn) ==>

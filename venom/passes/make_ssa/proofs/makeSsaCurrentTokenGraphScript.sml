@@ -1,7 +1,7 @@
 Theory makeSsaCurrentTokenGraph
 Ancestors
   makeSsaCurrentTokens makeSsaCurrentAnalysis makeSsaCurrentTree
-  dominatorAnalysisProps dominatorRankProofs dominatorDefs pred_set
+  dominatorProofs dominatorRankProofs dominatorDefs pred_set
 
 Theorem current_token_root_idom:
   wf_function fn /\ entry_block fn = SOME eb ==>

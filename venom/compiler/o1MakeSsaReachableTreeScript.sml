@@ -1,7 +1,7 @@
 Theory o1MakeSsaReachableTree
 Ancestors
   o1MakeSsaRootedTree dominatorRankProofs o1MakeSsaActualMaps
-  dominatorAnalysisProps dominatorDefs cfgAnalysisProps cfgDefs venomInst
+  dominatorProofs dominatorDefs cfgAnalysisProps cfgDefs venomInst
   makeSsaCurrentDefs list pred_set
 
 Theorem reachable_parent_chain:

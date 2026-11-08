@@ -1,7 +1,7 @@
 Theory makeSsaCurrentSingletonCut
 Ancestors
   makeSsaCurrentCutTokens makeSsaCurrentLastSite makeSsaCurrentTokens
-  makeSsaCurrentAnalysis dominatorDefs dominatorAnalysisProps venomWf list
+  makeSsaCurrentAnalysis dominatorDefs dominatorProofs venomWf list
 
 Theorem current_single_site_edge_tokens:
   wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\

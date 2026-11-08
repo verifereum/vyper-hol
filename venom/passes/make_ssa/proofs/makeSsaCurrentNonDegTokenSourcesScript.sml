@@ -1,7 +1,7 @@
 Theory makeSsaCurrentNonDegTokenSources
 Ancestors
   makeSsaCurrentTokens makeSsaCurrentCutTokens makeSsaCurrentLastSite
-  makeSsaCurrentGraphCut dominatorAnalysisProps dominatorDefs
+  makeSsaCurrentGraphCut dominatorProofs dominatorDefs
   venomWf venomInst list
 
 Definition current_nondeg_token_at_def:

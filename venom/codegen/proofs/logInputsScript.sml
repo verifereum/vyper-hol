@@ -61,7 +61,7 @@ Proof
   asm_simp_tac (srw_ss()) [LET_THM, ADD_COMM, REVERSE_APPEND] >>
   Cases_on `eval_operand off_op vs` >> simp[] >>
   Cases_on `eval_operand sz_op vs` >> simp[] >>
-  Cases_on `eval_operands topic_ops vs` >> simp[]
+  Cases_on `eval_operands topic_ops vs` >> simp[] >> rw[]
 QED
 
 Theorem log_instruction_inputs:

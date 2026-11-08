@@ -2,7 +2,7 @@ Theory o1MakeSsaVisitPaths
 Ancestors
   o1MakeSsaVisitTrace o1MakeSsaReachableTree o1MakeSsaRootedTree
   o1MakeSsaActualMaps makeSsaCurrentDefs makeSsaCurrentInduct
-  dominatorAnalysisProps venomInst list pair
+  dominatorProofs venomInst list pair
 
 Definition tree_parent_paths_def:
   tree_parent_paths parent root ancestors (DNode lbl children) <=>
