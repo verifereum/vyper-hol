@@ -25,8 +25,7 @@ Proof
       arithmeticTheory.LESS_EQ_LESS_EQ_MONO]) >>
   `step_inst_base (mk_inst id MSTORE [Var p; Lit 0w] []) s =
     OK (mstore (w2n w) 0w s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx func G tn
      (mk_inst id MSTORE [Var p; Lit 0w] []) s` by
     (irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>

@@ -34,8 +34,7 @@ Proof
    op_taint tn (Lit (n2w n)) = {}` by simp[eval_operand_def, op_taint_def] >>
   `step_inst_base (mk_inst id MCOPY [Var dst;Var src;Lit (n2w n)] []) s =
      OK (mcopy (w2n b) (w2n a) n s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, eval_operand_def, w2n_n2w]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, w2n_n2w]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst id MCOPY [Var dst;Var src;Lit (n2w n)] []) s` by
     (irule ptr_inst_ok_mcopy_operand >> simp[w2n_n2w] >>

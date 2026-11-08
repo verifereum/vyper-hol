@@ -55,8 +55,7 @@ Proof
  rpt gen_tac >> strip_tac >>
  `step_inst_base (mk_inst id opc [left;right] [out]) s =
     OK (update_var out (f a b) s)` by
-   (gvs[] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    simp[mk_inst_def, exec_pure2_def]) >>
+   (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]) >>
  `gas_path_ptr_edge D 0 ctx func PG G tn s 0
    (step_prov PG G (mk_inst id opc [left;right] [out]) (update_var out (f a b) s))
    (step_taint (mk_inst id opc [left;right] [out]) s (update_var out (f a b) s) tn)

@@ -122,8 +122,7 @@ Theorem numeric_iszero_step:
   step_inst_base (mk_inst id ISZERO [arg] [out]) s =
     OK (update_var out (bool_to_word (a = 0w)) s)
 Proof
-  strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_pure1_def]
+  strip_tac >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def]
 QED
 
 Theorem numeric_binary_step:

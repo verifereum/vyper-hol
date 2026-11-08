@@ -47,8 +47,7 @@ Proof
     by (irule ptr_inst_ok_mstore_taint_transparent >> simp[]) >>
   `step_inst_base (mk_inst iid MSTORE [Var dst;value] []) s =
     OK (mstore (w2n a) w s)`
-    by (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-        simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    by (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def]) >>
   `(mk_inst iid MSTORE [Var dst;value] []).inst_opcode <> INVOKE /\
    ~is_terminator (mk_inst iid MSTORE [Var dst;value] []).inst_opcode`
     by simp[mk_inst_def, is_terminator_def] >>
