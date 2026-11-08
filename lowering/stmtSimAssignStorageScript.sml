@@ -320,7 +320,7 @@ Proof
   qexistsl_tac [`[Lit slot; op]`, `if tr then TSTORE else SSTORE`, `[]`,
                 `st`, `st'`] >>
   Cases_on `tr` >> gvs[emit_void_def, emit_inst_def, is_terminator_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   fs[mk_inst_def, exec_write2_def, eval_operand_def]
 QED
 
