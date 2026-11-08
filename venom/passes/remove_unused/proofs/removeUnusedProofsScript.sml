@@ -1193,7 +1193,7 @@ Proof
   rpt strip_tac >>
   fs[remove_unused_single_pass_def, LET_THM,
      clear_nops_function_def,
-     passSimulationDefsTheory.function_map_transform_def,
+     passTransformTheory.function_map_transform_def,
      listTheory.MEM_FLAT, listTheory.MEM_MAP, listTheory.MAP_MAP_o,
      combinTheory.o_DEF] >>
   rename1 `MEM bbo _.fn_blocks` >>
@@ -1260,7 +1260,7 @@ Proof
   SPOSE_NOT_THEN ASSUME_TAC >>
   fs[fn_all_outputs_def, remove_unused_single_pass_def, LET_THM,
      clear_nops_function_def,
-     passSimulationDefsTheory.function_map_transform_def,
+     passTransformTheory.function_map_transform_def,
      listTheory.MAP_MAP_o, combinTheory.o_DEF,
      listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
   rename1 `MEM bb' _.fn_blocks` >>

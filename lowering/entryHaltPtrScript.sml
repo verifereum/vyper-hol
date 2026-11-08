@@ -318,7 +318,7 @@ Proof
     (qspecl_then [`0`, `ctx`, `fn`, `s`, `bb`, `st.cs_next_id`, `buf`,
                   `op`, `w`, `0`, `n`] mp_tac return_copy_run >>
      impl_tac >- gvs[] >>
-     simp[valueEncodingTheory.mem_bytes_at_def] >> strip_tac >> metis_tac[]) >>
+     simp[valueEncodingDefsTheory.mem_bytes_at_def] >> strip_tac >> metis_tac[]) >>
   qexists_tac `0` >> simp[exit_result_def] >>
   (conj_tac >- metis_tac[]) >>
   `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w n)] [buf]) (fn_insts fn)` by

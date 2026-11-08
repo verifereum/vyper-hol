@@ -5,15 +5,15 @@ Ancestors
   abiDecoderReentryPointer abiDecoderVarSequence abiDecoderVarExtend abiDecoderTypedContract
   abiDecoderCoherence abiDecoderArrayInitExec abiDecoderContract abiDecoderFrame
   abiDecoderFrameCompose abiDecoderLoop abiDecoderAllocation abiDecoderProtectedScratch fragExec
-  instIdxIndep exprLoweringProps emitHelperProps compileEnv venomState valueEncoding words list
+  instIdxIndep exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs venomState valueEncoding words list
   arithmetic
 
 Theorem abi_decoder_bulk_reentry_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecDynArray ei abi_sz mem_sz F maxn)
+  compile_abi_decode_to_buf dst src opc base_op hi (DecDynArray ei abi_sz mem_sz F maxn)
     st = ((),st') /\ ~dec_info_needs_clamp ei /\
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV vs))
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
     val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
@@ -38,11 +38,11 @@ Proof
 QED
 
 Theorem abi_decoder_bulk_reentry_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecDynArray ei abi_sz mem_sz F maxn)
+  compile_abi_decode_to_buf dst src opc base_op hi (DecDynArray ei abi_sz mem_sz F maxn)
     st = ((),st') /\ ~dec_info_needs_clamp ei /\
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV vs))
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (\actual. val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d actual.vs_memory /\
@@ -63,11 +63,11 @@ Proof
 QED
 
 Theorem abi_decoder_bulk_reentry_execute:
-  compile_abi_decode_to_buf dst src opc hi (DecDynArray ei abi_sz mem_sz F maxn)
+  compile_abi_decode_to_buf dst src opc base_op hi (DecDynArray ei abi_sz mem_sz F maxn)
     st = ((),st') /\ ~dec_info_needs_clamp ei /\ fn_has_code st st' fn /\
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV vs))
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   abi_decoder_budget first last b cap initial /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -90,11 +90,11 @@ Proof
 QED
 
 Theorem abi_decoder_bulk_reentry_protected:
-  compile_abi_decode_to_buf dst src opc hi (DecDynArray ei abi_sz mem_sz F maxn)
+  compile_abi_decode_to_buf dst src opc base_op hi (DecDynArray ei abi_sz mem_sz F maxn)
     st = ((),st') /\ ~dec_info_needs_clamp ei /\ fn_has_code st st' fn /\
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray ei abi_sz mem_sz F maxn) (ListV avs) (ArrayV (DynArrayV vs))
-    st last src dst opc hi sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
+    st last src dst opc base_op hi B sb d b cap (abi_decoder_prune_vars st.cs_next_var initial) /\
   abi_decoder_budget first last b cap initial /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -113,7 +113,7 @@ Theorem abi_decoder_bulk_reentry_protected:
 Proof
   strip_tac >> drule_all abi_decoder_bulk_reentry_execute >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_recursive_pre`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def]) >>
   drule abi_decoder_pre_output_separated >> disch_then assume_tac >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `t:venom_state`,

@@ -3,7 +3,7 @@ Theory stmtForRangeMemoryLoop
 Ancestors
   stmtForRangeMemoryEntry stmtForRangeMemoryRound bodyMemoryDefs stmtSimDeclGas
   gasExemptCert gasSummary gasOutcome gasContext stmtSimForRounds fragGasMode venomExecSemantics
-  stmtSimForLoop stmtSimDefs stmtSimProps stmtLowering compileEnv
+  stmtSimForLoop stmtSimDefs stmtSimProps stmtLowering compileEnv loweringStateRelDefs
   loweringPosts exprLoweringProps vyperState allocaHistory
   stmtForRangeMemoryParts fragExec fragGasPathMem venomState venomInst memSafeRun
 Libs
@@ -232,7 +232,7 @@ Theorem for_frag_start_gas_mem:
   stmt_frag_mem d ctx func cx lc RetQ c m source es
 Proof
   simp[stmt_frag_mem_def, for_outcome_start_gas_mem,
-       stmt_state_rel_def, compileEnvTheory.state_rel_gas_obs,
+       stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
        immutable_alloca_sep_def]
 QED
 

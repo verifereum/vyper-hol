@@ -2,7 +2,7 @@ Theory exprSimPopNestedLocalSuffix
 Ancestors
   exprSimPopNestedLocalPost exprSimPopNestedLocalRun exprSimProps
   venomState words arithmetic list exprSimHyps exprSimHypsDefs vyperTypeEnv
-  exprSimPopNestedLocalPtrs exprSimWordArgs exprLoweringProps compileEnv
+  exprSimPopNestedLocalPtrs exprSimWordArgs exprLoweringProps compileEnv loweringStateRelDefs
   loweringPosts localPtrsProps exprSimAttributeFields finite_map valueEncoding
   exprSimVVFrame
 

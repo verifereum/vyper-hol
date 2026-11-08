@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWrites abiEncoderReentryLeaves abiEncoderChildSuffix abiEncoderMemory abiBuiltinPrefix
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderArrayHeader abiDecoderContract abiDecoderGuards
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps
-  venomState venomExecSemantics venomMemProps words list arithmetic
+  venomState venomExecSemantics venomMemProps words list arithmetic abiDecoderRange
 
 Theorem abi_encoder_cursor_store_load:
   emit_void MSTORE [cursor_op;value_op] st = ((),stored_st) /\

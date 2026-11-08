@@ -3,7 +3,7 @@ Theory exprSimExtract32Lift
 Ancestors
   exprSimExtract32Post exprSimExtract32Assembly exprSimExtract32Read
   exprSimProps freshWrites varsExt loweringPosts exprLoweringProps
-  compileEnv venomState venomExecSemantics finite_map list
+  compileEnv loweringStateRelDefs venomState venomExecSemantics finite_map list
   gasSummary fragGasMode vyperState
 
 Theorem extract32_post_drop_fresh:

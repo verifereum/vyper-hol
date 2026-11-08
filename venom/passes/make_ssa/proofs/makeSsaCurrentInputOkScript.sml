@@ -10,7 +10,7 @@
  *)
 Theory makeSsaCurrentInputOk
 Ancestors
-  makeSsaCurrentDefs venomWf cfgWf venomInst irSupply unitShapeDefs
+  makeSsaDefs venomWf cfgWf venomInst irSupply unitShapeDefs
   o1PassContract makeSsaCurrentProps makeSsaCurrentWfSsa makeSsaCurrentCfg
 
 Theorem make_ssa_current_fn_input_ok:

@@ -32,7 +32,7 @@
 
 Theory singleUseExpansionDefs
 Ancestors
-  passSimulationDefs dfgDefs venomExecSemantics venomInst irSupply
+  passTransform dfgDefs venomExecSemantics venomInst irSupply
 
 (* ===== Opcodes to skip ===== *)
 

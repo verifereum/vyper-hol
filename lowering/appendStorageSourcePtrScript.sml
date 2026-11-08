@@ -40,18 +40,7 @@ Theorem append_toplevel_place_any:
   !st. eval_target_place cx (TopLevelNameTarget nid) st =
          (INL (StoragePlace tr slot tv), st)
 Proof
-  PairCases_on `nid` >>
-  `!st. eval_target_place cx (TopLevelNameTarget (nid0,nid1)) st =
-        bind (lookup_global cx nid0 nid1) get_place st` by
-    (gen_tac >> simp[Once evaluate_def] >>
-     simp[Once evaluate_def, bind_def]) >>
-  pop_assum (fn th => rewrite_tac[th]) >>
-  simp[bind_def, lookup_global_def, lift_option_type_def, return_def,
-       raise_def, get_immutables_def, get_address_immutables_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
-           get_immutables_def, get_address_immutables_def,
-           lift_option_type_def])
+  metis_tac[stmtSimAppendStorageComposeTheory.append_toplevel_place_any]
 QED
 
 Theorem eval_append_storage_bind:

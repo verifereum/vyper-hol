@@ -1,8 +1,9 @@
 Theory makeSsaCurrentFinalSlots
 Ancestors
   makeSsaCurrentTreePaths makeSsaCurrentTreeTrace makeSsaCurrentEdgeTrace
-  makeSsaCurrentRenameTrace makeSsaCurrentInduct makeSsaCurrentDefs
-  makeSsaHelper cfgTransformProps venomInst list rich_list pair
+  makeSsaCurrentRenameTrace makeSsaCurrentInduct makeSsaDefs
+   cfgTransformProps venomInst list rich_list pair
+  venomExecProofs
 
 Definition current_phi_view_def:
   current_phi_view insts =

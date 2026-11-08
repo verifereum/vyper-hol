@@ -13,6 +13,7 @@ Ancestors
   venomState venomInst venomExecSemantics venomExecProps venomWf
   stateEquiv stateEquivProps
   crossBlockSimDefs crossBlockSimProps execEquivParamProps pointerConfinedDefs
+  passTransform
 
 (* ===== Monotonicity: larger excluded set is weaker ===== *)
 
