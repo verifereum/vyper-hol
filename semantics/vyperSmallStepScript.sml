@@ -1431,7 +1431,8 @@ Proof
     >> simp[get_accounts_def, return_def]
     >> CASE_TAC \\ CASE_TAC \\ simp[return_def]
     \\ CASE_TAC \\ CASE_TAC
-    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"] )
+    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"]
+    \\ Cases_on `q` \\ Cases_on `q'` \\ simp[] )
   \\ conj_tac >- ( (* eval_expr (Pop bt) *)
     rpt gen_tac >> strip_tac
     >> pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def]
