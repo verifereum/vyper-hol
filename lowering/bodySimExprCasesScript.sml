@@ -153,11 +153,13 @@ Proof
   `subscript_base_type_exact env (Call t (IntCall fid) args drv)` by
     (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
      simp[Once vyperTypeSystemTheory.well_typed_expr_def]) >>
-  gvs[vyperTypeSystemTheory.subscript_base_type_exact_def, AllCaseEqs()] >>
+  fs[vyperTypeSystemTheory.subscript_base_type_exact_def] >>
+  Cases_on `FLOOKUP env.fn_sigs fid` >> fs[] >>
+  rename1 `FLOOKUP env.fn_sigs fid = SOME sig` >>
   `cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      rw[expr_body_pre_def, expr_sim_inv_def]) >>
-  simp[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
+  gvs[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
