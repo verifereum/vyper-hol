@@ -178,10 +178,8 @@ Theorem word_val_in_memory_complete:
 Proof
   rpt gen_tac >> strip_tac >>
   `(?bt. tv = BaseTV bt) \/ (?n. tv = FlagTV n)` by
-    (qpat_x_assum `evaluate_type _ _ = _` mp_tac >>
-     qpat_x_assum `is_word_type _` mp_tac >>
-     Cases_on `ty` >> simp[is_word_type_def, evaluate_type_def] >>
-     rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >> rw[] >> simp[]) >>
+    (drule_all loweringSliceTheory.evaluate_word_memory_type >>
+     simp[loweringSliceTheory.word_memory_type_def]) >>
   gvs[memory_value_rel_def]
 QED
 

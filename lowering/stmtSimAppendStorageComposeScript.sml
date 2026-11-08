@@ -191,12 +191,26 @@ Proof
     (gen_tac >> simp[Once evaluate_def] >>
      simp[Once evaluate_def, bind_def]) >>
   pop_assum (fn th => rewrite_tac[th]) >>
+  Cases_on `get_module_code cx nid0` >>
   simp[bind_def, lookup_global_def, lift_option_type_def, return_def,
-       raise_def, get_immutables_def, get_address_immutables_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
-           get_immutables_def, get_address_immutables_def,
-           lift_option_type_def])
+       raise_def, LET_THM] >>
+  rename1 `find_var_decl_by_name nid1 ts` >>
+  Cases_on `find_var_decl_by_name nid1 ts`
+  >- (simp[get_immutables_def, get_address_immutables_def, bind_def,
+           lift_option_type_def, return_def, raise_def] >>
+      Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+      simp[return_def, raise_def] >>
+      rename1 `get_source_immutables nid0 imms` >>
+      Cases_on `FLOOKUP (get_source_immutables nid0 imms) nid1` >>
+      simp[get_place_def, return_def, raise_def]) >>
+  rename1 `find_var_decl_by_name nid1 ts = SOME decl` >> PairCases_on `decl` >> Cases_on `decl0` >>
+  simp[] >>
+  rename1 `lookup_var_slot_from_layout cx istr nid0 decl1` >>
+  Cases_on `lookup_var_slot_from_layout cx istr nid0 decl1` >>
+  simp[bind_def, get_place_def, return_def, raise_def] >>
+  rename1 `evaluate_type (get_tenv cx) vty` >>
+  Cases_on `evaluate_type (get_tenv cx) vty` >>
+  simp[bind_def, get_place_def, return_def, raise_def]
 QED
 
 Theorem eval_append_storage_bind:
