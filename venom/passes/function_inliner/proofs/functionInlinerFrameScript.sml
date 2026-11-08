@@ -318,3 +318,22 @@ Proof
     simp[FUN_EQ_THM, clone_operand_inline_rename] >>
   simp[clone_instruction_def, inline_rename_inst_def, SF ETA_ss]
 QED
+
+(* At call entry no callee variables have been established.  The target may
+   retain arbitrary bindings in the fresh namespace; none is read yet. *)
+Theorem inline_frame_setup_empty:
+  setup_callee fn args caller = SOME cs /\ ~caller.vs_halted ==>
+  inline_frame_rel ren {} caller.vs_vars P cs caller
+Proof
+  simp[inline_frame_rel_def] >> metis_tac[inline_shared_frame_setup]
+QED
+
+Theorem inline_frame_write_establish:
+  inline_frame_rel ren V saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P ==>
+  inline_frame_rel ren (x INSERT V) saved P
+    (update_var x w s) (update_var (ren x) w t)
+Proof
+  simp[inline_frame_rel_def, lookup_var_def, update_var_def,
+    FLOOKUP_UPDATE] >> metis_tac[]
+QED
