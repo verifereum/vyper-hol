@@ -2,7 +2,7 @@
 Theory functionInlinerOperational
 Ancestors
   functionInlinerFrame functionInlinerOpacity functionInlinerNamespace
-  functionInlinerDefs venomExecSemantics venomState venomInst list rich_list
+  functionInlinerDefs venomExecSemantics venomState venomInst venomWf list rich_list
 
 Theorem inline_parameter_step:
   MEM inst.inst_opcode [PARAM; FMP_PARAM] /\
@@ -1969,4 +1969,149 @@ Proof
   Cases_on `eval_operands inst.inst_operands s` >> simp[] >>
   IF_CASES_TAC >> simp[inline_opaque_frame_exceptional_halt] >>
   irule inline_create_clone_result >> simp[] >> metis_tac[]
+QED
+
+(* Successful ordinary steps establish their declared outputs; early terminal
+   paths need only preserve the incoming support. *)
+Definition inline_ordinary_step_result_def:
+  inline_ordinary_step_result ren V opaque saved P inst r q <=>
+    lift_result
+      (inline_opaque_frame_rel ren (V UNION set inst.inst_outputs) opaque saved P)
+      (inline_opaque_frame_rel ren V opaque saved P)
+      (inline_opaque_frame_rel ren V opaque saved P) r q /\
+    (!ret st. r <> IntRet ret st)
+End
+
+Theorem inline_ordinary_step_result_cases[simp]:
+  (inline_ordinary_step_result ren V opaque saved P inst (OK s) q <=>
+    ?t. q = OK t /\
+      inline_opaque_frame_rel ren (V UNION set inst.inst_outputs) opaque saved P s t) /\
+  (inline_ordinary_step_result ren V opaque saved P inst (Halt s) q <=>
+    ?t. q = Halt t /\ inline_opaque_frame_rel ren V opaque saved P s t) /\
+  (inline_ordinary_step_result ren V opaque saved P inst (Abort a s) q <=>
+    ?t. q = Abort a t /\ inline_opaque_frame_rel ren V opaque saved P s t) /\
+  (inline_ordinary_step_result ren V opaque saved P inst (Error e) q <=>
+    ?e'. q = Error e') /\
+  (inline_ordinary_step_result ren V opaque saved P inst (IntRet ret s) q <=> F)
+Proof
+  Cases_on `q` >>
+  simp[inline_ordinary_step_result_def, stateEquivTheory.lift_result_def] >>
+  metis_tac[]
+QED
+
+Theorem inline_clone_eval_operands_restrict:
+  !xs ops.
+    (!op. MEM op ops ==>
+      eval_operand (clone_operand p labels op) t = eval_operand op s) /\
+    (!op. MEM op xs ==> MEM op ops) ==>
+    eval_operands (MAP (clone_operand p labels) xs) t = eval_operands xs s
+Proof
+  Induct_on `xs` >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand (clone_operand p labels h) t = eval_operand h s` by metis_tac[MEM] >>
+  `eval_operands (MAP (clone_operand p labels) xs) t = eval_operands xs s`
+    by metis_tac[MEM] >>
+  simp[]
+QED
+
+Theorem inline_clone_eval_operands_members:
+  (!op. MEM op ops ==>
+    eval_operand (clone_operand p labels op) t = eval_operand op s) ==>
+  eval_operands (MAP (clone_operand p labels) ops) t = eval_operands ops s
+Proof
+  strip_tac >> irule inline_clone_eval_operands_restrict >>
+  qexists_tac `ops` >> simp[]
+QED
+
+Theorem inline_clone_eval_operands_reverse_tail:
+  (!op. MEM op ops ==>
+    eval_operand (clone_operand p labels op) t = eval_operand op s) ==>
+  eval_operands (MAP (clone_operand p labels) (REVERSE (TL ops))) t =
+    eval_operands (REVERSE (TL ops)) s
+Proof
+  strip_tac >> irule inline_clone_eval_operands_restrict >>
+  qexists_tac `ops` >> simp[] >> Cases_on `ops` >> simp[]
+QED
+
+(* Representative static shapes used by the ordinary-class dispatcher.
+   In particular BUMP imposes no distinctness condition on its outputs. *)
+Theorem inline_inst_wf_log_shape:
+  inst_wf inst /\ inst.inst_opcode = LOG ==>
+  (?tc rest. inst.inst_operands = Lit tc :: rest /\ LENGTH rest = w2n tc + 2) /\
+  inst.inst_outputs = []
+Proof
+  strip_tac >> gvs[inst_wf_def] >> metis_tac[]
+QED
+
+Theorem inline_inst_wf_bump_shape:
+  inst_wf inst /\ inst.inst_opcode = BUMP ==>
+  LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 2
+Proof
+  strip_tac >> gvs[inst_wf_def]
+QED
+
+Theorem inline_inst_wf_getfmp_shape:
+  inst_wf inst /\ inst.inst_opcode = GETFMP ==>
+  inst.inst_operands = [] /\ LENGTH inst.inst_outputs = 1
+Proof
+  strip_tac >> gvs[inst_wf_def]
+QED
+
+Theorem inline_inst_wf_call_shape:
+  inst_wf inst /\ inst.inst_opcode = CALL ==>
+  LENGTH inst.inst_operands = 7 /\ LENGTH inst.inst_outputs = 1
+Proof
+  strip_tac >> gvs[inst_wf_def]
+QED
+
+Theorem inline_call_clone_ok:
+  inst.inst_opcode = CALL /\ LENGTH inst.inst_operands = 7 /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x /\ step_inst fuel ctx inst s = OK s' ==>
+  ?t'. step_inst fuel' ctx' (clone_instruction p labels inst) t = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = CALL /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 7 /\
+    (clone_instruction p labels inst).inst_operands =
+      MAP (clone_operand p labels) inst.inst_operands` by simp[clone_instruction_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  gvs[step_inst_non_invoke, inline_call_eval_list, AllCaseEqs()] >>
+  irule inline_ext_call_clone_frame >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_create_opcode_clone_ok:
+  MEM inst.inst_opcode [CREATE; CREATE2] /\
+  LENGTH inst.inst_operands = (if inst.inst_opcode = CREATE then 3 else 4) /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x /\ step_inst fuel ctx inst s = OK s' ==>
+  ?t'. step_inst fuel' ctx' (clone_instruction p labels inst) t = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  strip_tac >>
+  `MEM (clone_instruction p labels inst).inst_opcode [CREATE; CREATE2] /\
+    LENGTH (clone_instruction p labels inst).inst_operands =
+      (if (clone_instruction p labels inst).inst_opcode = CREATE then 3 else 4) /\
+    (clone_instruction p labels inst).inst_operands =
+      MAP (clone_operand p labels) inst.inst_operands /\
+    (clone_instruction p labels inst).inst_opcode = inst.inst_opcode` by
+    gvs[clone_instruction_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  Cases_on `inst.inst_opcode = CREATE` >> gvs[] >>
+  gvs[step_inst_non_invoke, inline_create_eval_list, AllCaseEqs()] >>
+  irule inline_create_clone_frame >> simp[] >> metis_tac[]
 QED
