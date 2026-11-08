@@ -2,6 +2,7 @@
 Theory bodyIntCallJointCall
 Ancestors
   bodyIntCallJointContract supportedExprs bodyIntCallSemanticEntry
+  bodySimAugPlaceScopes stmtSimAugAssignPlaceStorage
 
 Theorem internal_prologue_module_pins:
   compile_internal_prologue ce params has_rb ret sa = ((ce',pc),sb) /\
@@ -124,6 +125,68 @@ Proof
        vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_def,
        vyperStateTheory.evaluate_subscripts_def,
        finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* A genuine evaluation boundary: the first argument captures the array,
+   while the second pops it.  Reading happens after both evaluations. *)
+Theorem intcall_deferred_pop_probe[local]:
+  FST (bind
+    (eval_expr_results cx
+      [Name (ArrayT (BaseT BoolT) (Dynamic 2)) "x";
+       Pop (BaseT BoolT) (NameTarget "x")])
+    (read_results cx)
+    (es with scopes := [FEMPTY |+ ("x",
+      <| assignable := T; type := ArrayTV (BaseTV BoolT) (Dynamic 2);
+         value := ArrayV (DynArrayV [BoolV T; BoolV F]);
+         popped := [] |>)])) =
+  INL [ArrayV (DynArrayV [BoolV T]); BoolV F]
+Proof
+  EVAL_TAC >> simp[] >> EVAL_TAC
+QED
+
+Theorem intcall_pure_results_storage:
+  !args tops cx es r ee tr.
+    supported_pure_exprs tops args /\
+    eval_expr_results cx args es = (r,ee) ==>
+    get_storage cx ee tr = get_storage cx es tr
+Proof
+  Induct >> rpt gen_tac
+  >- simp[vyperInterpreterTheory.evaluate_def,
+          vyperStateTheory.return_def] >>
+  simp[Once vyperInterpreterTheory.evaluate_def,
+       supported_pure_expr_def, vyperStateTheory.bind_def] >>
+  Cases_on `eval_expr cx h es` >>
+  rename1 `eval_expr cx h es = (head,mid)` >>
+  Cases_on `head` >> simp[] >> strip_tac >>
+  drule_all aug_place_pure_eval_storage >> strip_tac >>
+  gvs[AllCaseEqs(), vyperStateTheory.return_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem intcall_memory_read_scopes:
+  ee.scopes = es.scopes ==>
+  FST (read_result cx (PlaceR (MemoryPlace name path)) ee) =
+  FST (read_result cx (PlaceR (MemoryPlace name path)) es)
+Proof
+  strip_tac >>
+  Cases_on `lookup_scopes name es.scopes` >>
+  simp[vyperStateTheory.read_result_def, vyperStateTheory.read_place_def,
+       vyperStateTheory.get_scopes_def, vyperStateTheory.bind_def,
+       vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  rename1 `read_memory_path entry path` >>
+  Cases_on `vyperState$read_memory_path entry path` >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
+Theorem intcall_pure_results_memory_read:
+  supported_pure_exprs tops args /\
+  eval_expr_results cx args es = (r,ee) ==>
+  FST (read_result cx (PlaceR (MemoryPlace name path)) ee) =
+  FST (read_result cx (PlaceR (MemoryPlace name path)) es)
+Proof
+  strip_tac >> irule intcall_memory_read_scopes >>
+  drule_all aug_place_pure_results_scopes >> simp[]
 QED
 
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
