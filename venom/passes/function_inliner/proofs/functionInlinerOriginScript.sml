@@ -639,3 +639,38 @@ Proof
     (irule inliner_reachable_call_target_external >> metis_tac[]) >>
   metis_tac[clone_instruction_call_signature]
 QED
+
+Theorem find_invoke_idx_call_member[local]:
+  !insts name n i. find_invoke_idx name insts n = SOME i ==>
+    ?call args. MEM call insts /\ call.inst_opcode = INVOKE /\
+      call.inst_operands = Label name::args
+Proof
+  Induct >> simp[Once find_invoke_idx_def] >> rpt gen_tac >>
+  IF_CASES_TAC
+  >- (strip_tac >> Cases_on `h.inst_operands` >> gvs[] >>
+      Cases_on `h'` >> gvs[] >> metis_tac[]) >>
+  strip_tac >> first_x_assum drule >> metis_tac[]
+QED
+
+Theorem find_invoke_site_call_member[local]:
+  !bbs name lbl i. find_invoke_site name bbs = SOME (lbl,i) ==>
+    ?bb call args. MEM bb bbs /\ MEM call bb.bb_instructions /\
+      call.inst_opcode = INVOKE /\ call.inst_operands = Label name::args
+Proof
+  Induct >> simp[Once find_invoke_site_def] >> rpt gen_tac >>
+  Cases_on `find_invoke_idx name h.bb_instructions 0`
+  >- (simp[] >> metis_tac[]) >>
+  simp[] >> strip_tac >> drule find_invoke_idx_call_member >> metis_tac[]
+QED
+
+Theorem inline_one_site_selected_call:
+  !caller callee ist caller' ist'.
+    inline_one_site caller callee ist = SOME (caller',ist') ==>
+    ?call args. MEM call (fn_insts caller) /\ call.inst_opcode = INVOKE /\
+      call.inst_operands = Label callee.fn_name::args
+Proof
+  rpt gen_tac >> simp[inline_one_site_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> drule find_invoke_site_call_member >> strip_tac >>
+  qexistsl [`call`, `args`] >> simp[] >>
+  metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks_iff, fn_insts_def]
+QED
