@@ -2,6 +2,14 @@ Theory fnPlanLineageObserverTransport
 Ancestors fnPlanLineageWide fnPlanLineagePhiResources fnPlanLineageNativeTerminal
 Libs stackPlanGenTheory stackModelTheory stackPlanOpsTheory listTheory rich_listTheory
 
+Theorem get_params_mem:
+  !insts inst. MEM inst (get_params insts) ==>
+    MEM inst insts /\ is_param_opcode inst.inst_opcode
+Proof
+  Induct >> simp[get_params_def] >> rpt gen_tac >>
+  Cases_on `is_param_opcode h.inst_opcode` >> simp[] >> metis_tac[]
+QED
+
 Theorem mark_dead_stack_elem_count_nonincrease:
   !stk retained x. x <> dead_stack_marker ==>
     LIST_ELEM_COUNT x (mark_dead_stack retained stk) <= LIST_ELEM_COUNT x stk
