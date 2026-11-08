@@ -18,7 +18,7 @@
 
 Theory taintAgree
 Ancestors
-  o1LowerDloadShared ptrDiscipline codegenRel contextCodegenRel
+  o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomState finite_map pred_set list
 
 (* s and t agree except at the taint tn, the dead bytes X, and memory at
@@ -39,7 +39,11 @@ End
 
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
    no taint, so taint_agree evaluates it equally in t; access_ok puts
-   each read ending above lo inside a site (below the bump pointer), and
+   each read ending above lo inside a site, below the bump pointer since
+   the root starts with no allocations
+   (o1LowerDloadOccurrenceTheory.frame_reachable_occurrence_annotation),
+   and distinct block labels (o1_ctx_shape) keep in_revert_forward from
+   switching access_ok off except at REVERT and its RETURNDATACOPY;
    taint_ok keeps tainted bytes away from reads other than MLOAD, ILOAD,
    MCOPY and RETURN; the read premise keeps X away.  The propagating
    opcodes (ASSIGN, shifts, MLOAD/ILOAD, MSTORE/ISTORE, MCOPY,
@@ -54,6 +58,7 @@ End
 Theorem taint_agree_step_base:
   !vs C stk PG G tn fn inst s t D X lo r.
     frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    o1_ctx_shape C /\ MEM fn C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
     ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
     taint_within D C vs /\ dead_wf D /\
     inst.inst_opcode <> INVOKE /\
