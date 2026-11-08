@@ -91,7 +91,7 @@ Proof
   strip_tac >> irule emit_op_assignment_frame >>
   conj_tac
   >- (qexistsl_tac [`[a;b]`,`SHA3`] >>
-      simp[Once step_inst_base_def, mk_inst_def, read_memory_def]) >> simp[]
+      simp[step_inst_base_opcode_eqs, mk_inst_def, read_memory_def]) >> simp[]
 QED
 
 Theorem assignment_frame_memory:

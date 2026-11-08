@@ -161,7 +161,11 @@ Proof
   strip_tac >> Cases_on `inst.inst_opcode` >>
   gvs[abi_encoder_ignored_inputs_def] >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
-  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs, exec_read0_def] >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [tryfind (fn th => MATCH_MP th eq)
+         (CONJUNCTS step_inst_base_opcode_eqs)]) >>
+  simp[exec_read0_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   drule abi_encoder_vars_extend_frame >> strip_tac >>
   asm_rewrite_tac[] >> irule abi_decoder_vars_extend_update >> simp[]
