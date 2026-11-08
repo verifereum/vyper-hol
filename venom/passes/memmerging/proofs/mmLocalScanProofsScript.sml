@@ -3185,6 +3185,71 @@ Proof
   irule mm_local_prefix_structure >> metis_tac[]
 QED
 
+Theorem mm_local_zero_merge_bound[local]:
+  d1 <= d2 /\ d1 + n1 <= eom /\ d2 + n2 <= eom ==>
+  d1 + (MAX (d1+n1) (d2+n2) - d1) <= eom
+Proof
+  simp[arithmeticTheory.MAX_DEF] >> decide_tac
+QED
+
+Theorem mm_local_zero_replace_merge[local]:
+  d1 <= d2 /\ d2 <= d1+n1 /\
+  MAX (d1+n1) (d2+n2) <= LENGTH mem ==>
+  replace_bytes d2 (REPLICATE n2 0w)
+    (replace_bytes d1 (REPLICATE n1 0w) mem) =
+  replace_bytes d1 (REPLICATE (MAX (d1+n1) (d2+n2)-d1) 0w) mem
+Proof
+  rw[LIST_EQ_REWRITE, replace_bytes_def, LENGTH_APPEND, LENGTH_TAKE,
+    LENGTH_DROP, LENGTH_REPLICATE] >>
+  rw[EL_APPEND_EQN, EL_TAKE, EL_DROP, EL_REPLICATE,
+    LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP, LENGTH_REPLICATE, arithmeticTheory.MAX_DEF] >>
+  gvs[]
+QED
+
+Theorem mm_local_zero_write_merge[local]:
+  d1 <= d2 /\ d2 <= d1+n1 ==>
+  write_memory_with_expansion d2 (REPLICATE n2 0w)
+    (write_memory_with_expansion d1 (REPLICATE n1 0w) s) =
+  write_memory_with_expansion d1
+    (REPLICATE (MAX (d1+n1) (d2+n2)-d1) 0w) s
+Proof
+  strip_tac >> simp[write_as_replace] >>
+  `d1+n1 <= LENGTH (expand_mem s.vs_memory (d1+n1))` by simp[expand_mem_ge] >>
+  simp[expand_replace] >>
+  `d1 + (MAX (d1+n1) (d2+n2) - d1) = MAX (d1+n1) (d2+n2)` by
+    (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  simp[venomStateTheory.venom_state_component_equality] >>
+  `expand_mem (expand_mem s.vs_memory (d1+n1)) (d2+n2) =
+   expand_mem s.vs_memory (MAX (d1+n1) (d2+n2))` by
+    (Cases_on `d1+n1 <= d2+n2`
+     >- (`MAX (d1+n1) (d2+n2) = d2+n2` by
+           (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+         simp[expand_mem_monotone]) >>
+     `MAX (d1+n1) (d2+n2) = d1+n1` by simp[arithmeticTheory.MAX_DEF] >>
+     `~(d2+n2 > LENGTH (expand_mem s.vs_memory (d1+n1)))` by
+       (simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+     simp[Once expand_mem_def]) >>
+  simp[] >> irule mm_local_zero_replace_merge >> simp[]
+QED
+
+Theorem mm_local_memzero_merge_effect[local]:
+  d1 <= d2 /\ d2 <= d1+n1 /\
+  cg = copy_merge (copy_memzero d1 n1 ids1) (copy_memzero d2 n2 ids2) ==>
+  write_memory_with_expansion d2 (REPLICATE n2 0w)
+    (write_memory_with_expansion d1 (REPLICATE n1 0w) s) =
+  write_memory_with_expansion cg.cg_dst (REPLICATE cg.cg_length 0w) s
+Proof
+  simp[copy_merge_def, copy_memzero_def] >>
+  metis_tac[mm_local_zero_write_merge]
+QED
+
+Theorem mm_local_zero_write_empty[local]:
+  write_memory_with_expansion dst [] s =
+    s with vs_memory := expand_mem s.vs_memory dst
+Proof
+  simp[write_as_replace, replace_bytes_def, TAKE_DROP]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
