@@ -2,7 +2,8 @@
 Theory bodyIntCallStorageLanding
 Ancestors
   bodyIntCallMaterializeLanding storageCopyGasPath exprSimStorageCopy exprSimCopy
-  intCallFrame compileEnv finite_map list words
+  intCallFrame compileEnv finite_map list rich_list words exprSimMemUnwrap
+  emitHelperProps venomInst venomState placeMemoryPrimitiveForward exprLoweringProps
 
 Theorem protected_storage_loop_landing:
   compile_word_copy_loop src dst n loc LocMemory F sa = (result,sb) /\
@@ -50,4 +51,90 @@ Proof
   `!q. reserved q ==> eval_operand q t = eval_operand q s` by
     (rpt strip_tac >> irule storage_copy_operand_preserved >> metis_tac[]) >>
   qexists_tac `t` >> fs[allocas_above_def] >> gvs[]
+QED
+
+(* Count the public operational word run; no separate semantic endpoint. *)
+Theorem protected_storage_word_path:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  do v <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+     emit_void MSTORE [dst; v] od sa = (result,sb) /\
+  fn_has_code sa sb func /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME (n2w b) /\
+  b+32 < 2**256 /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    copy_prefix loc a b 1 s 1 u /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all storage_unwrap_word_run >> strip_tac >>
+  drule storage_copy_word_layout >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    (fs[same_blocks_def] >>
+     `?l. sb.cs_current_insts = sa.cs_current_insts ++ l` by
+       metis_tac[IS_PREFIX_APPEND] >>
+     gvs[emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb) /\
+   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)` by
+    (gvs[mk_inst_def, is_terminator_def] >> Cases_on `loc = LocStorage` >> simp[]) >>
+  `gas_marked_path F ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule straight_line_zero_gas_path >> simp[] >> metis_tac[]) >>
+  `~t.vs_halted` by (fs[copy_prefix_def] >> drule copy_static_fields >> simp[]) >>
+  qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  fs[copy_prefix_idx, lookup_var_def]
+QED
+
+Theorem protected_storage_word_landing:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  do value <- emit_op (if loc = LocStorage then SLOAD else TLOAD) [src];
+     emit_void MSTORE [dst; value] od sa = (result,sb) /\
+  fn_has_code sa sb func /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ eval_operand dst s = SOME (n2w b) /\
+  type_slot_size tv = 1 /\ b+32 < 2**256 /\
+  stmt_state_rel ctx func ce cx es s /\
+  storage_holds cx (loc = LocTransient) ty (Value v) a es s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ allocas_above lo s /\
+  (!p k. P p k ==> regions_disjoint p k b 32) /\
+  (!q x. reserved q /\ q = Var x ==> not_fresh_at sa x) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    val_wf tv v /\ val_in_memory tv v b u.vs_memory /\
+    val_footprint tv v <= type_memory_size tv /\
+    FLOOKUP u.vs_allocas aid = SOME (b,sz) /\
+    u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+    allocas_above lo u /\ copy_static u = copy_static s /\
+    (!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all protected_storage_word_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `copy_static u = copy_static s` by fs[copy_prefix_def] >>
+  drule copy_static_fields >> strip_tac >>
+  `copy_prefix (if loc = LocTransient then LocTransient else LocStorage)
+     a b (type_slot_size tv) s (type_slot_size tv) u` by
+    (Cases_on `loc = LocTransient` >> gvs[]) >>
+  drule_all copy_buffer_storage_contents >> strip_tac >>
+  `!p k. P p k ==> mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (rpt strip_tac >> irule copy_prefix_bytes >>
+     qexistsl_tac [`a`, `b`, `1`, `loc`, `1`] >>
+     fs[regions_disjoint_def]) >>
+  `!q. reserved q ==> eval_operand q u = eval_operand q s` by
+    (rpt strip_tac >> irule storage_copy_operand_preserved >> metis_tac[]) >>
+  qexists_tac `u` >> fs[allocas_above_def] >> gvs[]
 QED
