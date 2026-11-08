@@ -16,7 +16,15 @@ Theorem materialize_vv_at_alloc_frame:
   sm.cs_next_id <= sn.cs_next_id ==>
   vv_at cenv cx ty sa sn es tv vv t
 Proof
-  cheat
+  Cases_on `vv` >>
+  simp[vv_at_def, vv_operand_def, expr_val_at_def] >>
+  rpt strip_tac >> gvs[]
+  >>~- ([`FLOOKUP s.vs_allocas aid = SOME (b,sz)`],
+        disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+        metis_tac[])
+  >>~- ([`local_region cenv es.scopes s n b sz`],
+        disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[])
+  >> metis_tac[]
 QED
 
 (* Transport the incoming captured value over allocation, before unwrap.
@@ -36,7 +44,35 @@ Theorem materialize_vv_post_alloc_storage_frame:
   sm.cs_next_id <= sn.cs_next_id ==>
   vv_post ctx func cenv cx e es sa sn s0 es' tv vv t
 Proof
-  cheat
+  strip_tac >>
+  `!n b sz. local_region cenv es'.scopes s n b sz <=>
+             local_region cenv es'.scopes t n b sz` by
+    (rpt gen_tac >> sym_tac >> irule copy_buffer_local_region_frame >>
+     qexists_tac `sm` >> simp[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[vv_post_def] >> strip_tac >>
+  `vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by
+    (irule exprSimVVFrameTheory.vv_holds_vars_frame >> qexists_tac `s` >> simp[]) >>
+  `vv_at cenv cx (post_value_type cenv e) sa sn es' tv vv t` by
+    (irule materialize_vv_at_alloc_frame >> qexistsl [`s`, `sm`] >> simp[]) >>
+  `locals_kept cenv es es' s0 t` by
+    (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
+  `post_value_type cenv e <> expr_type e ==>
+   vv_own cenv cx (post_value_type cenv e) sa sn es' tv vv t` by
+    (strip_tac >>
+     qpat_x_assum `_ ==> vv_own _ _ _ _ _ _ _ _ _` drule >>
+     Cases_on `vv` >>
+     simp[vv_own_def, expr_val_own_def, vv_operand_def] >>
+     rpt strip_tac >> gvs[vv_operand_def] >>
+     disj1_tac >> qexistsl [`aid`, `b`, `sz`] >> simp[] >>
+     metis_tac[]) >>
+  `~expr_has_effect e ==> vv_storage_live cx vv es' t` by
+    (Cases_on `vv` >>
+     gvs[vv_storage_live_def, vv_operand_def]) >>
+  simp[vv_post_def] >> gvs[]
 QED
 
 (* Rebase the variable watermark, not the allocation watermark: the
@@ -88,7 +124,19 @@ Theorem materialize_store_state_run:
         mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
       locals_kept ce es es s t
 Proof
-  cheat
+  strip_tac >> drule_all materialize_store_owned_run >> strip_tac >>
+  `copy_static t = copy_static s` by
+    (qpat_x_assum `(t with <|vs_vars := _; vs_memory := _|>) = s`
+       (mp_tac o Q.AP_TERM `copy_static`) >> simp[copy_static_def]) >>
+  `stmt_state_rel ctx func ce cx es t` by
+    (irule copy_buffer_state_rel_frame >>
+     qexistsl [`w2n dw`, `inst`, `s`, `sa`, `type_memory_size tv`] >>
+     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `locals_kept ce es es s t` by
+    (irule copy_buffer_locals_kept_frame >>
+     qexistsl [`w2n dw`, `s`, `type_memory_size tv`] >>
+     simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qexists_tac `t` >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 (* Writing a newly owned allocation cannot damage the original expression
@@ -106,14 +154,33 @@ Theorem materialize_fresh_store_frame:
      b + sz <= lb \/ lb + len <= b) ==>
   wb_frame ce es es' sa s0 t
 Proof
-  cheat
+  strip_tac >>
+  `locals_kept ce es es' s0 t` by
+    (irule copy_buffer_locals_kept_frame >>
+     qexistsl [`b`, `s`, `sz`] >>
+     simp[] >> gvs[wb_frame_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  rewrite_tac[wb_frame_def] >> conj_tac
+  >- (rpt strip_tac >> gvs[wb_frame_def] >> metis_tac[]) >>
+  conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >>
+  simp[] >> rpt strip_tac >>
+  `FLOOKUP s.vs_allocas aid' = SOME (off,sz')` by
+    (gvs[wb_frame_def] >> metis_tac[]) >>
+  `off + sz' <= b \/ b + sz <= off` by
+    (gvs[allocas_non_overlapping_def] >>
+     qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` irule >>
+     qexistsl [`aid'`, `aid`] >> simp[] >> decide_tac) >>
+  `mem_bytes_at off sz' t.vs_memory = mem_bytes_at off sz' s.vs_memory` by
+    metis_tac[] >>
+  gvs[wb_frame_def] >> metis_tac[]
 QED
 
 Theorem materialize_vv_post_operand:
   vv_post ctx func ce cx e es sa sm s0 es' tv vv s ==>
   ?w. eval_operand (vv_operand vv) s = SOME w
 Proof
-  cheat
+  Cases_on `vv` >>
+  simp[vv_post_def, vv_holds_def, vv_operand_def, expr_val_rel_def] >>
+  metis_tac[]
 QED
 
 Theorem materialize_alloc_vv_sim:
@@ -150,14 +217,20 @@ Theorem materialize_compile_trace:
     compile_store_memory ce src buf.buf_operand ty ty su = ((),sb) /\
     dst = buf.buf_operand
 Proof
-  cheat
+  simp[compile_materialize_vv_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem materialize_expr_post_inst_idx[local]:
   expr_post ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
   expr_post ctx func ce cx e es sa sb s0 es' v op s
 Proof
-  cheat
+  simp[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+       expr_val_rel_def, expr_val_at_def, expr_val_own_def,
+       venomStateTheory.lookup_var_def,
+       local_region_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem materialize_store_owned_post_sim:
