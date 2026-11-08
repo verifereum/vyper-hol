@@ -82,13 +82,17 @@ Proof
   cheat
 QED
 
-(* ADMITTED: an immutable written by the constructor (see the header). *)
+(* ADMITTED: an immutable written by the constructor (see the header).
+   assignable_type excludes the empty struct, the one zero-size value type:
+   its unwrap still emits an MLOAD/ISTORE that clobbers a neighbouring
+   immutable (checked counterexample), and Vyper rejects empty structs. *)
 Theorem immutable_deploy_assign_case:
   !ctx func cx lctx RetQ cenv ty env tops nsid e es ity.
     body_inv tops ctx cenv cx /\ cx.in_deploy /\
     supported_immutable_type tops nsid = SOME ity /\
     type_place_target env (TopLevelNameTarget nsid) = SOME (Type ity) /\
     type_widens_to env.type_defs (expr_type e) ity /\
+    assignable_type env.type_defs (expr_type e) /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     expr_body_pre cenv cx env e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
