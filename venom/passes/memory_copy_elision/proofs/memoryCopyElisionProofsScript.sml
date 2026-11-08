@@ -1069,8 +1069,8 @@ Proof
   simp_tac std_ss [LET_THM] >> BETA_TAC >>
   Cases_on `inst.inst_opcode` >> gvs[]
   >> rpt strip_tac >> gvs[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
-  gvs[inst_uses_def, venomInstTheory.operand_vars_def,
-       venomInstTheory.operand_var_def] >>
+  gvs[inst_uses_def, operand_vars_def,
+       operand_var_def] >>
   Cases_on `inst.inst_operands` >>
   gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   Cases_on `t` >>
@@ -1120,8 +1120,8 @@ Proof
   TRY BasicProvers.TOP_CASE_TAC >>
   gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   (* Remaining: ADD/SUB Var-Var with out as operand (contradiction) *)
-  gvs[EVERY_MEM, venomInstTheory.operand_vars_def,
-       venomInstTheory.operand_var_def, MEM_FLAT, MEM_MAP,
+  gvs[EVERY_MEM, operand_vars_def,
+       operand_var_def, MEM_FLAT, MEM_MAP,
        bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
   BasicProvers.EVERY_CASE_TAC >>
   gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
@@ -2117,8 +2117,8 @@ Proof
   >- cheat (* Lit — shared gap: unreachable at fixpoint *)
   >- (rename1 `[Var src]` >>
       `src <> out` by (
-        gvs[EVERY_MEM, inst_uses_def, venomInstTheory.operand_vars_def,
-            venomInstTheory.operand_var_def]) >>
+        gvs[EVERY_MEM, inst_uses_def, operand_vars_def,
+            operand_var_def]) >>
       simp[FLOOKUP_UPDATE] >>
       first_x_assum (qspec_then `src` mp_tac) >> simp[bp_get_ptrs_def])
   >> cheat (* Label — shared gap: unreachable at fixpoint *)
@@ -3882,16 +3882,6 @@ QED
 
 (* --- SSA structural helpers for bp_ptr_sound_exec_block --- *)
 
-(* MEM v (operand_vars ops) ==> MEM (Var v) ops
-   NB: must use venomInst operand_vars to match inst_uses_def *)
-Triviality mem_operand_vars_var[local]:
-  !ops v. MEM v (venomInst$operand_vars ops) ==> MEM (Var v) ops
-Proof
-  Induct >> simp[venomInstTheory.operand_vars_def] >> rpt strip_tac >>
-  Cases_on `venomInst$operand_var h` >> gvs[] >>
-  Cases_on `h` >> gvs[venomInstTheory.operand_var_def]
-QED
-
 (* inst output not in own uses: from def_dominates_uses + ssa_form.
    The definer of v must be strictly before inst in the block, but by SSA
    uniqueness, the definer IS inst — contradiction with "strictly before". *)
@@ -3904,7 +3894,7 @@ Triviality ssa_no_self_use[local]:
 Proof
   rpt strip_tac >>
   fs[inst_uses_def] >>
-  drule mem_operand_vars_var >> strip_tac >>
+  drule (iffLR MEM_operand_vars_eq_Var) >> strip_tac >>
   `MEM out inst.inst_outputs` by (
     fs[inst_output_def] >>
     Cases_on `inst.inst_outputs` >> gvs[] >>

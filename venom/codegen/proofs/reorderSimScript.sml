@@ -14,7 +14,7 @@ Ancestors
   stackPlanGen stackPlanOps stackPlanTypes stackModel
   codegenRel asmSem planExec planWf
   indexedLists list rich_list finite_map arithmetic
-  operandInventory inputInventory reduceDepthSim reorderStages
+  operandInventory inputInventory reduceDepthSim reorderStages venomInst
 
 
 (* Value-sensitive equality for planner stacks.  Reorder may replace an
