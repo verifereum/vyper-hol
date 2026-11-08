@@ -13,7 +13,7 @@
 
 Theory bodyIntCallJointPackage
 Ancestors
-  bodyIntCallSeamDefs bodyIntCallJointContract
+  bodyIntCallSeamDefs bodyIntCallJointContract bodyIntCallEntryTransport
 Libs
   monadsyntax
 
