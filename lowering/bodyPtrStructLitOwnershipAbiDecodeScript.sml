@@ -73,8 +73,8 @@ Resume alloc_run_abi_decode_mutual[word]:
   irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >> reverse conj_tac
   >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr] >>
   gen_tac >> simp[SF ETA_ss] >>
-  irule alloc_run_compile_abi_decode_static >>
-  simp[alloc_run_compile_abi_clamp_basetype]
+  irule (SRULE [SF ETA_ss] alloc_run_compile_abi_decode_static) >>
+  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_abi_clamp_basetype]
 QED
 Resume alloc_run_abi_decode_mutual[empty]:
   simp[Once compile_abi_decode_to_buf_def, comp_return_def, alloc_run_def, alloc_frame_refl]
