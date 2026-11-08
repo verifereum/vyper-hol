@@ -213,7 +213,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem typed_sa_initial_exec[local]:
+Theorem typed_sa_initial_exec:
   bb.bb_instructions = prefix ++
     [mk_inst id ASSIGN [Lit 0w] [ctr]; mk_inst (id+1) JMP [Label hdr] []] /\
   s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted ==>
