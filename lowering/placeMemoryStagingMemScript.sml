@@ -2,6 +2,7 @@
    only the staging allocation's separation from live locals is required. *)
 Theory placeMemoryStagingMem
 Ancestors
+  stagingMemoryEndpoint
   bodyMemAssignTupleLocalsPrefix bodyMemAggregateBounds exprSimAlloc
   localPtrsProps stmtSimReturn loweringPosts venomState venomInst
   exprLoweringProps compileEnv bodyDeclMemoryCore loweringSlice fragExec
@@ -34,10 +35,13 @@ Theorem compile_staging_prefix_mem:
     (!x. buf.buf_operand = Var x ==> not_fresh_at sn x) /\
     w2n w + n < dimword (:256) /\
     (!name b len. local_region ce es.scopes t name b len ==>
-       regions_disjoint (w2n w) n b len)
+       regions_disjoint (w2n w) n b len) /\
+    (!a k. a + k <= w2n w \/ w2n w + n <= a ==>
+       mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
-  strip_tac >> drule_all tuple_scratch_path_mem >>
-  disch_then (qx_choosel_then [`t`, `w`] strip_assume_tac) >>
+  strip_tac >> drule_all staging_memory_endpoint >>
+  disch_then (qx_choosel_then [`t`, `w`, `a`, `u`] strip_assume_tac) >>
+  qpat_x_assum `t = u with vs_inst_idx := _` kall_tac >>
   qexistsl_tac [`t`, `w`] >> simp[] >>
   `fn_has_code sa sm func` by
     (drule_all body_scratch_prefix_shape >> strip_tac >>
@@ -46,6 +50,7 @@ Proof
   conj_tac
   >- (`t.vs_alloca_next < dimword (:256)` by
         metis_tac[alloca_room_next_lt, stmt_state_rel_def] >> decide_tac) >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
   qexistsl_tac [`ce`, `func`,
     `mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]

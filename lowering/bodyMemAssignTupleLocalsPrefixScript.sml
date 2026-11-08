@@ -1,6 +1,7 @@
 (* Memory-checked staging and load prefix of tuple-local assignment. *)
 Theory bodyMemAssignTupleLocalsPrefix
 Ancestors
+  stagingMemoryEndpoint
   bodyMemAssignTupleLocalsPrep bodyDeclMemoryCore bodyDeclMemoryCounted
   exprSimAlloc exprSimBufferStore abiBuiltinAllocation tupleStageProps
   fragGasPathMem fragGasMode fragGasSeqMem allocaHistoryFragment
@@ -11,36 +12,6 @@ Ancestors
   loweringPosts vyperTyping instMemFrontier stmtSimReturn tupleLoadProps stmtLowering tupleTypedLoad
 Libs
   monadsyntax
-
-(* Snapshot execution retains its allocation witness even on loop re-entry. *)
-Theorem tuple_scratch_run_allocation[local]:
-  compile_alloc_buffer n sa = (buf,sm) /\
-  compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
-  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  (!x. src = Var x ==> not_fresh_at sa x) /\
-  eval_operand src s = SOME sw /\ n < dimword (:256) /\
-  run_inst_seq (emitted_insts sa sm) s = OK a /\
-  run_inst_seq (emitted_insts sm sn) a = OK t ==>
-  ?w. eval_operand buf.buf_operand t = SOME w /\
-    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
-    (!x. buf.buf_operand = Var x ==> not_fresh_at sn x)
-Proof
-  strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
-  drule_all literal_alloc_buffer_run >> strip_tac >> gvs[] >>
-  `a.vs_labels = s.vs_labels` by
-    (drule_all exprSimAllocTheory.hash_alloc_buffer_labels >> simp[]) >>
-  `eval_operand src a = SOME sw` by
-    (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
-  `n < dimword (:256)` by decide_tac >>
-  drule_all buffer_copy_memory_run >> strip_tac >> gvs[] >>
-  `sm.cs_next_var = sn.cs_next_var` by
-    metis_tac[buffer_copy_memory_shape] >>
-  qexists_tac `w` >>
-  Cases_on `n = 0` >>
-  gvs[mcopy_def, write_memory_with_expansion_def, LET_THM,
-      eval_operand_def, lookup_var_def, not_fresh_at_def]
-QED
 
 Theorem tuple_scratch_path_mem:
   compile_alloc_buffer n sa = (buf,sm) /\
@@ -69,39 +40,9 @@ Theorem tuple_scratch_path_mem:
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
     (!x. buf.buf_operand = Var x ==> not_fresh_at sn x)
 Proof
-  strip_tac >> drule_all body_scratch_prefix_shape >> strip_tac >>
-  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
-  drule_all body_scratch_prefix_run >> strip_tac >>
-  drule_all tuple_scratch_run_allocation >> strip_tac >> gvs[] >>
-  `run_inst_seq (emitted_insts sa sn) s = OK t` by
-    (asm_rewrite_tac[] >>
-     qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a`
-       (mp_tac o MATCH_MP run_inst_seq_append) >> simp[]) >>
-  `run_inst_seq_mem_ok (emitted_insts sa sn) s` by
-    (asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> simp[] >>
-     rpt strip_tac >> gvs[]) >>
-  `return_buf_frame d ce sn t` by
-    (irule return_buf_frame_frame >> qexistsl_tac [`ce`, `s`, `sa`] >> simp[]) >>
-  `EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sn)` by
-    metis_tac[body_scratch_prefix_no_gas] >>
-  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-     ~is_terminator i.inst_opcode) (emitted_insts sa sn)` by
-    (fs[EVERY_MEM] >> metis_tac[MEM_APPEND]) >>
-  `gas_path_mem ctx func s 0
-     (OK (t with vs_inst_idx := LENGTH sn.cs_current_insts)) /\
-   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb` by
-    (irule body_decl_cursor_path >> simp[] >> qexists_tac `sa` >> simp[]) >>
-  `alloca_inv s` by fs[stmt_state_rel_def] >>
-  `alloca_history func (t with vs_inst_idx := LENGTH sn.cs_current_insts)` by
-    (irule body_store_memory_history >> simp[] >>
-     qexistsl_tac [`s`, `sa`] >> simp[]) >>
-  qexistsl_tac [`t with vs_inst_idx := LENGTH sn.cs_current_insts`, `w`] >>
-  simp[stmt_state_rel_inst_idx] >> conj_tac
-  >- (Cases_on `d` >- fs[return_buf_frame_def] >>
-      rename1 `return_buf_frame (SOME pair)` >> PairCases_on `pair` >>
-      fs[return_buf_frame_def, lookup_var_def]) >>
-  fs[lookup_var_def] >>
-  Cases_on `buf.buf_operand` >> gvs[eval_operand_def, lookup_var_def]
+  strip_tac >> drule_all staging_memory_endpoint >>
+  disch_then (qx_choosel_then [`t`, `w`, `a`, `u`] strip_assume_tac) >>
+  qexistsl_tac [`t`, `w`] >> simp[]
 QED
 
 Theorem tuple_container_frontier:
