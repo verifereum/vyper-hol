@@ -3,8 +3,8 @@ Ancestors
   loadElimTransferProvenance loadElimDefs venomEffects finite_map list pred_set
 
 Theorem le_retained_store_lookup:
-  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME [op] /\
-  ~le_transfer_generates ctx inst key op /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
+  (!op. ops = [op] ==> ~le_transfer_generates ctx inst key op) /\
   inst.inst_opcode <> ctx.lctx_config.lc_load /\
   ctx.lctx_config.lc_store = SOME st /\ inst.inst_opcode = st /\
   inst.inst_operands = [addr;value] ==>
@@ -13,7 +13,7 @@ Theorem le_retained_store_lookup:
   FLOOKUP (load_invalidate ctx.lctx_aliases ctx.lctx_bp ctx.lctx_addr_space
     (unwrap_load_lattice initial)
     (load_get_write_key ctx.lctx_bp ctx.lctx_addr_space
-      (normalize_operand ctx.lctx_dfg []) inst)) key = SOME [op]
+      (normalize_operand ctx.lctx_dfg []) inst)) key = SOME ops
 Proof
   strip_tac >>
   qpat_x_assum `FLOOKUP _ _ = _` mp_tac >>
@@ -24,8 +24,8 @@ Proof
 QED
 
 Theorem le_retained_store_invalidation_member:
-  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME [op] /\
-  ~le_transfer_generates ctx inst key op /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
+  (!op. ops = [op] ==> ~le_transfer_generates ctx inst key op) /\
   inst.inst_opcode <> ctx.lctx_config.lc_load /\
   ctx.lctx_config.lc_store = SOME st /\ inst.inst_opcode = st /\
   inst.inst_operands = [addr;value] ==>
@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem le_retained_nonstore_no_write_effect:
-  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME [op] /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
   inst.inst_opcode <> ctx.lctx_config.lc_load /\
   ctx.lctx_config.lc_store = SOME st /\ inst.inst_opcode <> st ==>
   (case ctx.lctx_addr_space of

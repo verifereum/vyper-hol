@@ -46,7 +46,7 @@ QED
 Theorem le_configured_retained_other_read:
   le_configured_context ctx /\
   MEM ctx.lctx_addr_space [AddrSp_Memory;AddrSp_Storage;AddrSp_Transient] /\
-  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME [op] /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
   ctx.lctx_config.lc_store <> SOME inst.inst_opcode /\
   step_inst fuel C inst s = OK t ==>
   le_read_address ctx.lctx_addr_space a t = le_read_address ctx.lctx_addr_space a s
@@ -72,8 +72,8 @@ Theorem le_configured_retained_step_read:
   ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
   dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
   le_absolute_key ctx.lctx_addr_space key /\
-  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME [op] /\
-  ~le_transfer_generates ctx inst key op /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
+  (!op. ops = [op] ==> ~le_transfer_generates ctx inst key op) /\
   le_key_address ctx.lctx_addr_space key s = SOME a /\ a < dimword (:256) /\
   step_inst fuel C inst s = OK t ==>
   le_read_address ctx.lctx_addr_space a t = le_read_address ctx.lctx_addr_space a s
@@ -104,6 +104,26 @@ Proof
   gvs[]
   >- (drule le_calldata_read_step >> simp[]) >>
   drule le_data_read_step >> simp[]
+QED
+
+(* Alternatives need not all denote the current read. Their multiplicity
+   alone excludes a singleton overwrite at this retained step. *)
+Theorem le_configured_multivalue_step_read:
+  le_configured_context ctx /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
+  le_absolute_key ctx.lctx_addr_space key /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
+  1 < LENGTH ops /\
+  le_key_address ctx.lctx_addr_space key s = SOME a /\ a < dimword (:256) /\
+  step_inst fuel C inst s = OK t ==>
+  le_read_address ctx.lctx_addr_space a t = le_read_address ctx.lctx_addr_space a s
+Proof
+  strip_tac >>
+  `!op. ops = [op] ==> ~le_transfer_generates ctx inst key op` by
+    (rpt strip_tac >> gvs[]) >>
+  drule_all le_configured_retained_step_read >> simp[]
 QED
 
 Theorem le_configured_generation_address:
@@ -200,7 +220,14 @@ Proof
           (df_at NONE (load_analyze ctx fn) bb.bb_label u.vs_inst_idx)` by
         (irule le_analyze_step_transfer >> simp[] >>
          metis_tac[lookup_block_label]) >>
-      irule le_configured_retained_step_read >> simp[] >> metis_tac[]) >>
+      `FLOOKUP (unwrap_load_lattice
+        (load_transfer ctx (EL u.vs_inst_idx bb.bb_instructions)
+          (df_at NONE (load_analyze ctx fn) bb.bb_label u.vs_inst_idx))) key =
+        SOME [op]` by metis_tac[] >>
+      `!v. [op] = [v] ==>
+        ~le_transfer_generates ctx (EL u.vs_inst_idx bb.bb_instructions) key v` by
+        simp[] >>
+      drule_all le_configured_retained_step_read >> simp[]) >>
   metis_tac[le_phi_read_occ_after]
 QED
 
