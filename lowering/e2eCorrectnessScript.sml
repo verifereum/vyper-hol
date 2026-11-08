@@ -23,7 +23,7 @@ Ancestors
   venomExecSemantics
   vyperABI
   vyperInterpreter
-  compileEnv compileVyper
+  compileEnv loweringStateRelDefs compileVyper
   venomInst
   list
 

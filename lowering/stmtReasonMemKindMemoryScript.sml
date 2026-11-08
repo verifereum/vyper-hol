@@ -9,7 +9,7 @@ Ancestors
   stmtSimReasonExpr stmtSimReason exprOperandVar localPtrsProps
   stmtSimDefs exprLoweringProps loweringPosts fragGasPathMem fragGasMode
   fragExec instMemFrontier venomMemDefs exprLowering stmtLowering
-  emitHelper compileEnv valueEncoding vfmConstants vyperValue
+  emitHelper compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs vfmConstants vyperValue
   vyperInterpreter venomExecSemantics venomState venomInst context
   words list rich_list finite_map arithmetic
 Libs

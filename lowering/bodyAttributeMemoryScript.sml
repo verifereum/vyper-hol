@@ -12,7 +12,7 @@ Ancestors
   exprSimDefs loweringPosts gasOutcome gasSummary gasContext fragGasMode
   bodySimStmtCases exprLowering exprLoweringProps compileEnv context
   vyperAST vyperInterpreter vyperState vyperTypeExprSoundness fragExec
-  exprSimProps valueTypingMemoryProps valueEncoding vyperTyping
+  exprSimProps valueTypingMemoryProps valueEncoding valueEncodingDefs vyperTyping
 
 (* The counted outcome of a source also gives, at its normal end, a run of
    the source that reached the end state. *)

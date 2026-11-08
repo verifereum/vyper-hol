@@ -2,7 +2,7 @@ Theory abiDecoderArrayInit
 Ancestors
   abiDecoderArrayInitExec abiDecoderPrimitiveArrayFacts abiDecoderPrimitiveLoopContext
   abiDecoderArrayInvariant abiDecoderCoherence abiDecoderTypedContract abiDecoderReservation
-  abiDecoderContract abiDecoderFrame abiDecoderFrameCompose compileEnv valueEncoding vyperABI
+  abiDecoderContract abiDecoderFrame abiDecoderFrameCompose compileEnv loweringStateRelDefs valueEncoding vyperABI
   words list arithmetic abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderDynarrayPrefix
   abiDecoderArrayHeader abiDecoderAllocation abiDecoderReentry fragExec instIdxIndep
   exprLoweringProps emitHelperProps venomState

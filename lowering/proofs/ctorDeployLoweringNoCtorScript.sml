@@ -6,7 +6,7 @@ Ancestors
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
-  valueEncoding vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
+  valueEncoding valueEncodingDefs vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
   venomPipelineData venomPipelineDriver venomPipelineRunner venomFnScheduleRunner
   unitLabelMap fcgPruning
@@ -2651,7 +2651,7 @@ Proof
   disch_then (qspecl_then [`tx`, `[]`, `am`] mp_tac) >> simp[] >> strip_tac >>
   qexists `[]` >>
   simp[no_ctor_gas_marks, deploy_venom_result_rel_def] >>
-  gvs[compileEnvTheory.storage_agree_def, compileEnvTheory.transient_agree_def,
+  gvs[loweringStateRelDefsTheory.storage_agree_def, loweringStateRelDefsTheory.transient_agree_def,
       e2eDefsTheory.logs_correspond_def,
       vfmStateTheory.account_state_component_equality]
 QED

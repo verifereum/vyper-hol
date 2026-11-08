@@ -1,6 +1,6 @@
 Theory abiTupleEncodePrepare
 Ancestors
-  abiTupleProps abiTupleEncodeSlot exprLowering context compileEnv emitHelperProps
+  abiTupleProps abiTupleEncodeSlot exprLowering context compileEnv loweringStateRelDefs emitHelperProps
   exprLoweringProps venomInst words list rich_list arithmetic abiTupleEncodeResult
   abiTupleEncodeInput abiTupleEncodeMemory abiDecoderReentry abiDecoderContract
   abiDecoderFrameCompose venomState venomExecSemantics abiBuiltinAllocation emitHelper

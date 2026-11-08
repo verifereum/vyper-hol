@@ -3,7 +3,7 @@ Theory abiBuiltinValidInput
 Ancestors
   abiDecoderReadableTypes abiDecoderValidContract abiBuiltinSource abiBuiltinDecodeSetup
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiValidAggregateHeads
-  abiDecodeRanges vyperABIValid vyperABI contractABI compileEnv valueEncoding valueEncodingProps
+  abiDecodeRanges vyperABIValid vyperABI contractABI compileEnv valueEncoding valueEncodingDefs valueEncodingProps
   venomState words list
 
 Theorem abi_decoder_source_readable_head:

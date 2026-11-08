@@ -3,7 +3,7 @@ Theory abiDecoderBytes
 Ancestors
   abiDecoderGuards abiDecoderCopy abiDecoderComposition abiDecoderContract abiDecoderBytesBound
   abiDecoderGuard abiCanonicalBytes abiEncoder emitHelperProps exprLoweringProps compileEnv
-  emitHelper valueEncoding venomExecSemantics venomState words
+  emitHelper valueEncoding valueEncodingDefs venomExecSemantics venomState words
 
 Definition abi_decode_bytes_copy_size_def:
   abi_decode_bytes_copy_size n = 32 + 32 * ((n + 31) DIV 32)

@@ -38,7 +38,7 @@ Proof
        (`~s.vs_call_ctx.cc_static` by
           (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
            Cases_on `tr` >>
-           simp[stmt_state_rel_def, compileEnvTheory.state_rel_def,
+           simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
                 tstore_def, sstore_def, LET_THM]) >>
         Cases_on `tr` >>
         gvs[step_inst_base_def, exec_write2_def, mk_inst_def]) >>

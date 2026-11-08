@@ -1,7 +1,7 @@
 Theory rawReturnMem
 Ancestors
   rawReturnHalt fragExec fragExecMem memSafeRun instMemFrontier
-  allocaFootprint loweringHalt compileEnv stmtLowering context venomState
+  allocaFootprint loweringHalt compileEnv loweringStateRelDefs stmtLowering context venomState
   venomInst venomExecSemantics emitHelper emitHelperProps
 
 (* An instruction that aborts ends the run, so the run is memory safe

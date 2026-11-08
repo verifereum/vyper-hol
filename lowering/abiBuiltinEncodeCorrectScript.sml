@@ -1,6 +1,6 @@
 Theory abiBuiltinEncodeCorrect
 Ancestors
-  abiBuiltinAllocation abiBuiltinEncodeSetup abiDecoderEffect compileEnv venomState finite_map
+  abiBuiltinAllocation abiBuiltinEncodeSetup abiDecoderEffect compileEnv loweringStateRelDefs venomState finite_map
   abiBuiltinEncodeCode abiEncoderWrites abiBuiltinPrefix abiEncoderBytesPrefix
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderReentryAddress abiDecoderFrameCompose
   abiDecoderFrame abiDecoderArrayInitExec abiDecoderContract abiDecoderGuards
@@ -8,7 +8,7 @@ Ancestors
   venomMemProps words list arithmetic abiEncoderSequence abiDecoderCorrectLeaves abiDecoderLoop
   fragExec instIdxIndep abiEncoderComplexDynamic abiDecoderAllocation abiEncoderCorrectRecursive
   abiEncoderCorrect abiEncoderAppend abiEncoderCounters abiDecoderAppend exprLowering
-  valueEncoding abiBuiltinEncodePre abiBuiltinEncodeContext abiBuiltinDecodeEffect
+  valueEncoding valueEncodingDefs abiBuiltinEncodePre abiBuiltinEncodeContext abiBuiltinDecodeEffect
   abiEncoderInput builtinAbi valueEncodingProps
 
 (* TOP-LEVEL: preserve the actual output allocation through encoder execution.

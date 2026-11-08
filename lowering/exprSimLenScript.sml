@@ -26,8 +26,8 @@ Ancestors
   exprSimDefs
   loweringPosts
   list fragExec  exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
-  exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
-  valueEncoding
+  exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs accountsRelProps
+  valueEncoding valueEncodingDefs
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping vyperStorage
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps

@@ -44,7 +44,9 @@ Theorem compile_store_bytestring_robust_frag_ptr:
         !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
           val_in_memory ft fv p m)
 Proof
-  typedCopyRobustLib.robust
-    (compile_store_bytestring_frag_ptr, robust_representation_exterior_frame,
-     clean_copied_window, all_tac)
+  typedCopyRobustLib.intro >>
+  typedCopyRobustLib.execute
+    (compile_store_bytestring_frag_ptr, robust_representation_exterior_frame) >>
+  typedCopyRobustLib.witness >>
+  typedCopyRobustLib.conclude clean_copied_window
 QED

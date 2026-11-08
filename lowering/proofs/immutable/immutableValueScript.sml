@@ -3,7 +3,7 @@
    Omitted fixed-array elements still have their source default values. *)
 Theory immutableValue
 Ancestors
-  immutableEncoding valueEncoding vyperValue integer_word list alist
+  immutableEncoding valueEncoding valueEncodingDefs vyperValue integer_word list alist
 Libs wordsLib intLib
 
 Definition immutable_mask_fit_def:

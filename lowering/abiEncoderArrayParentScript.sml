@@ -1,7 +1,7 @@
 Theory abiEncoderArrayParent
 Ancestors
   abiEncoderArrayPhases abiEncoderComplexCode abiDecoderIndexInit abiDecoderArrayHeader
-  compileEnv emitHelper words list abiEncoderArrayContext abiEncoderCursorStoreLoad
+  compileEnv loweringStateRelDefs emitHelper words list abiEncoderArrayContext abiEncoderCursorStoreLoad
   abiEncoderBytesPrefix abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry
   abiDecoderFrameCompose abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps
   venomState venomExecSemantics arithmetic abiEncoderSequence abiDecoderLoop fragExec

@@ -2,7 +2,7 @@
 Theory bodyMemAssignTopCopyCompiler
 Ancestors
   list rich_list finite_map pred_set fragExec loweringSlice
-  emitHelper emitHelperProps exprLoweringProps context compileEnv
+  emitHelper emitHelperProps exprLoweringProps context compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState
 Libs
   monadsyntax

@@ -5,7 +5,7 @@ Ancestors
   abiDecoderContract abiDecoderReentryPointer abiDecoderReentry
   abiEncoderRegisteredEffect abiEncoderProps allocaFrontierBound allocaBudgetProps
   fragExec instIdxIndep venomState venomExecSemantics venomInst
-  compileEnv valueEncoding words list arithmetic finite_map venomMemDefs
+  compileEnv loweringStateRelDefs valueEncoding words list arithmetic finite_map venomMemDefs
 
 Theorem ctor_actual_bytestring_labels_fragment:
   compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\

@@ -3,7 +3,7 @@
 Theory exprSimMemUnwrap
 Ancestors
   exprSimMemDefs exprSimUnwrap exprSimDefs loweringPosts gasOutcome
-  exprLowering compileEnv vyperInterpreter vyperState
+  exprLowering compileEnv loweringStateRelDefs vyperInterpreter vyperState
   exprSimUnwrapProps exprSimProps exprSimMemorySource bodyFieldMemoryProps
   gasSummary gasSummaryCompose gasExemptCert fragGasMode fragGasPath
   fragGasPathMem fragGasSeqMem fragExecMem instMemFrontier allocaHistoryFragment
@@ -1148,7 +1148,7 @@ Proof
       (mem_bytes_at (w2n a) (type_memory_size tv) u.vs_data_section) u` by
     (qspecl_then [`type_slot_size tv`, `w2n a`, `w2n w`, `0`, `u`] mp_tac
       immutable_runtime_transfers_snapshot >>
-     simp[valueEncodingTheory.mem_bytes_at_def, valueEncodingPropsTheory.type_memory_size_slots] >>
+     simp[valueEncodingDefsTheory.mem_bytes_at_def, valueEncodingPropsTheory.type_memory_size_slots] >>
      gvs[valueEncodingPropsTheory.type_memory_size_slots]) >>
   gvs[] >> conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>

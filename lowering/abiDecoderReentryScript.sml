@@ -3,7 +3,7 @@
 Theory abiDecoderReentry
 Ancestors
   abiDecoderVarExtend abiDecoderTypedContract abiDecoderCoherence abiDecoderContract
-  abiDecoderFrame emitHelperProps exprLoweringProps compileEnv venomState
+  abiDecoderFrame emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs venomState
   emitHelper abiDecodeRanges valueEncoding finite_map pred_set arithmetic
 
 Definition abi_decoder_older_vars_def:

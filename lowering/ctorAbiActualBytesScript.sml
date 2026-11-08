@@ -5,7 +5,7 @@ Ancestors
   abiDecoderString abiDecoderBytestring vyperABI vyperTyping
   abiDecoderReentryPointer abiDecoderReentry abiDecoderVarExtend
   abiDecoderContract abiDecoderTypedContract abiEncoder compileEnv abiEncoderRegisteredEffect
-  valueEncoding valueEncodingProps vyperValue contractABI venomState
+  valueEncoding valueEncodingDefs valueEncodingProps vyperValue contractABI venomState
   venomExecSemantics venomInst words list arithmetic finite_map
 
 Theorem ctor_actual_bytes_sequence:

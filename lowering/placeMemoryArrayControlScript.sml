@@ -2,7 +2,7 @@ Theory placeMemoryArrayControl
 Ancestors
   placeMemoryForwardPath placeMemoryDynarrayForward placeMemoryPrimitiveForward fragGasSeq fragGasMode
   fragGasPath exprLoweringProps venomInstProofs venomExecSemantics venomExecProofs venomInst venomState
-  context compileEnv emitHelper emitHelperProps ASCIInumbers finite_map list rich_list arithmetic
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps ASCIInumbers finite_map list rich_list arithmetic
 
 (* A straight-line prefix followed by one concrete control transfer. *)
 Theorem typed_memory_prefix_jump_forward:

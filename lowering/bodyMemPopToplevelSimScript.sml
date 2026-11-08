@@ -2,7 +2,7 @@ Theory bodyMemPopToplevelSim
 Ancestors
   bodyMemPopToplevelPath exprSimMemDefs exprSimPopStorage
   exprSimDefs exprSimProps loweringPosts exprSimLen exprSimTopLevelProps
-  exprSimHyps exprSimHypsDefs exprLoweringProps exprLowering compileEnv
+  exprSimHyps exprSimHypsDefs exprLoweringProps exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperStorageBackend vyperStorageLayoutSafety vyperStorage
   vyperState venomState venomExecSemantics venomInst accountsRelProps
   gasOutcome gasSummary fragGasMode fragGasPathMem

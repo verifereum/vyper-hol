@@ -7,7 +7,7 @@ Ancestors
   stmtSimDeclStore stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
+  compileEnv loweringStateRelDefs valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
   vyperExprNoControl venomExecSemantics venomExecProofs venomInst venomState
   fragGasSeq fragGasMode context exprSimBufferStore stmtSimDeclPath
 Libs

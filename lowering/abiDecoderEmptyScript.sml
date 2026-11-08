@@ -1,7 +1,7 @@
 Theory abiDecoderEmpty
 Ancestors
   abiDecoderCoherence abiDecoderOffset abiDecoderComplexHead abiDecoderTypedContract
-  abiDecoderContract abiEncoder compileEnv emitHelper valueEncoding vyperABI vyperValue
+  abiDecoderContract abiEncoder compileEnv emitHelper valueEncoding valueEncodingDefs vyperABI vyperValue
   contractABI venomState venomExecSemantics words list abiDecoderComplexGuard abiDecoderReentry
   abiDecoderLoop fragExec
 

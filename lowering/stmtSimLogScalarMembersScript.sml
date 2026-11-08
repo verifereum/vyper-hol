@@ -3,7 +3,7 @@ Theory stmtSimLogScalarMembers
 Ancestors
   stmtSimLogEncodeLayout abiEncoder emitHelper compileEnv abiEncoderInputFrame abiEncoderMembersStep
   abiEncoderTuple abiEncoderOpenPrefix abiDecoderFrame abiDecoderFrameCompose abiDecoderContract
-  abiEncoderInput abiDecodeRanges valueEncoding valueEncodingProps contractABI list arithmetic
+  abiEncoderInput abiDecodeRanges valueEncoding valueEncodingDefs valueEncodingProps contractABI list arithmetic
   abiEncoderChildCode abiEncoderMemberCode abiEncoderReentryLeaves abiEncoderLeaves
   abiEncoderChildPrefix abiEncoderChildSuffix abiEncoderBytes abiEncoderCounters abiEncoderResultLive
   abiBuiltinPrefix abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderReentryAddress

@@ -25,7 +25,7 @@ Ancestors
   allocLimits fragExec fragExecMem localPtrsProps freshWrites
   exprOpenPrimitives exprOperandVar
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   supportedStmtTraverse supportedStmts supportedExprs supportedTypes
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperTypeSystem vyperTyping

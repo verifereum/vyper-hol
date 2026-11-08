@@ -28,7 +28,7 @@ Ancestors
   allocLimits fragExec fragExecMem localPtrsProps freshWrites
   exprOpenPrimitives exprOperandVar
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   supportedStmtTraverse supportedStmts supportedExprs supportedExprForms
   supportedTypes
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
@@ -538,7 +538,7 @@ Proof
   `~s.vs_call_ctx.cc_static` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
-     simp[stmt_state_rel_def, compileEnvTheory.state_rel_def,
+     simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
           tstore_def, sstore_def, LET_THM]) >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>

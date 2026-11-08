@@ -4,7 +4,7 @@ Ancestors
   abiDecoderCoherence abiDecoderTypedContract exprLowering
   abiDecoderAppend abiDecoderCounters abiDecoderCode abiDecoderContract abiDecoderPhi abiEncoder emitHelper emitHelperProps context fragExec
   abiEncoderRegisteredEffect abiEncoderProps actualAllocCredit actualAllocExec
-  entryArgPtrs localPtrsProps compileEnv compileVyper moduleLowering moduleLoweringProps allocLimitsProps
+  entryArgPtrs localPtrsProps compileEnv loweringStateRelDefs compileVyper moduleLowering moduleLoweringProps allocLimitsProps
   allocaFrontierBound allocaBudgetProps valueEncoding vyperABI vyperCompiler
   venomExecSemantics venomState venomInst venomMemDefs
   words list finite_map pred_set arithmetic
@@ -671,7 +671,7 @@ Theorem ctor_alloc_buffer_state_props[local]:
   fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
   (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
   (!name b sz. local_region ce scopes a name b sz ==>
-    compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+    loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
   (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
     lookup_var x a = SOME w) /\
   abi_encoder_registered_effect (frag_ids st sa) [] initial a
@@ -733,7 +733,7 @@ Theorem ctor_alloc_buffer_actual:
     fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
     (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
     (!name b sz. local_region ce scopes a name b sz ==>
-      compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+      loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
     a.vs_memory = initial.vs_memory /\
     a.vs_data_section = initial.vs_data_section /\
     a.vs_call_ctx = initial.vs_call_ctx /\ a.vs_labels = initial.vs_labels /\
@@ -1417,7 +1417,7 @@ Theorem ctor_scratch_decode_bind_ptr:
   local_backed func p s d n /\ d+n <= s.vs_alloca_next /\
   type_memory_size entry.type <= n /\ val_wf entry.type entry.value /\
   val_in_memory entry.type entry.value d t.vs_memory /\
-  (!nm b sz. local_region ce scopes s nm b sz ==> compileEnv$regions_disjoint d n b sz) ==>
+  (!nm b sz. local_region ce scopes s nm b sz ==> loweringStateRelDefs$regions_disjoint d n b sz) ==>
   local_ptrs_rel func (ce with ce_vars := ce.ce_vars |+ (name,PtrVar (Var p) n)) scopes t
 Proof
   strip_tac >>
@@ -1434,7 +1434,7 @@ Proof
   `local_ptrs_rel func ce scopes t` by
     (irule ctor_scratch_local_ptrs_frame >>
      qexistsl [`d`, `ids`, `s`, `n`] >> simp[] >>
-     fs[compileEnvTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   `local_backed func p t d n` by
     (irule local_backed_frame >> qexists `s` >> simp[] >> conj_tac
      >- (rpt strip_tac >> drule_all ctor_scratch_new_allocations >> simp[]) >>

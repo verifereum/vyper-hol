@@ -3,7 +3,7 @@
    Word and byte paths deliberately do not inspect irrelevant metadata. *)
 Theory typedCopyAgreement
 Ancestors
-  context typedCopyDomain typedCopyCounterexample typedCopyProducer
+  context typedCopyDomain typedCopyProducer
   compileEnv emitHelper venomInst vyperAST list pair arithmetic
 Libs
   monadsyntax
@@ -60,21 +60,4 @@ Theorem compile_store_memory_typed_invalid:
   compile_store_memory_typed cenv dst dst_ty src src_ty = emit_void INVALID []
 Proof
   rpt strip_tac >> simp[Once compile_store_memory_typed_def]
-QED
-
-Theorem audit_cycle_total_invalid:
-  compile_store_memory_typed cycle_env (Lit 0w) cycle_type (Lit 0w) cycle_type =
-  emit_void INVALID []
-Proof
-  EVAL_TAC
-QED
-
-Theorem audit_cycle_finite_state:
-  compile_store_memory_typed cycle_env (Lit 0w) cycle_type (Lit 0w) cycle_type st =
-  ((), st with <|cs_next_id := st.cs_next_id + 1;
-                cs_current_insts := st.cs_current_insts ++
-                  [mk_inst st.cs_next_id INVALID [] []]|>)
-Proof
-  simp[audit_cycle_total_invalid, emit_void_def, emit_inst_def, fresh_id_def,
-       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED

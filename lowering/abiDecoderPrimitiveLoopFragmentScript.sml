@@ -3,7 +3,7 @@ Ancestors
   abiDecoderArrayAdvance abiDecoderArrayPrefix abiDecoderPrimitiveMemory
   abiDecoderStaticLoopSetup abiDecoderReentry abiDecoderGuards abiDecoderFrameCompose
   abiDecoderContract abiDecoderCoherence abiDecoderTypedContract abiDecoderDynamic
-  abiDecoderLoopSetup exprLoweringProps emitHelperProps compileEnv valueEncoding venomState
+  abiDecoderLoopSetup exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs valueEncoding venomState
   contractABI vyperTyping words arithmetic list abiDecoderClampedWord abiDecoderTypedCompose
   fragExec instIdxIndep venomInst rich_list
 

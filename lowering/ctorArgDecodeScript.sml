@@ -8,7 +8,7 @@ Ancestors
   allocaFrontierBound allocaBudgetProps valueEncoding contractABI vyperABI
   venomExecSemantics venomState venomInst venomMemDefs
   words list rich_list finite_map pred_set arithmetic abiDecoderMemberSlice
-  exprLowering compileEnv abiEncoder context emitHelper fragExec
+  exprLowering compileEnv loweringStateRelDefs abiEncoder context emitHelper fragExec
   abiDecoderAppend abiDecoderCounters abiDecoderCode exprLoweringProps
   ctorAbiActualSites abiDecoderReentryAddress abiDecoderReentry
   abiDecoderLoop instIdxIndep ctorAbiActualMemory abiDecoderMembers

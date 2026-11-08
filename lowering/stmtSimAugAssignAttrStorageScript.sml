@@ -56,7 +56,7 @@ Ancestors
   exprSimTopLevelProps exprOpenPrimitives vyperExprNoControl
   vyperStorageLayoutSafety vyperStorageBackend
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding accountsRelProps
+  compileEnv loweringStateRelDefs valueEncoding accountsRelProps
   vyperInterpreter vyperState vyperStorage vyperValue vyperValueOperation
   vyperTyping vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeSystem vyperAST

@@ -44,8 +44,8 @@ Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasPath
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding
-  vyperAST vyperInterpreter vyperState vyperValue vyperTyping
+  exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState

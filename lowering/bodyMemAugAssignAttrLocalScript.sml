@@ -10,7 +10,7 @@ Ancestors
   exprBopSimDefs exprBopSimProps exprSimSource exprSimDefs stmtSimDefs
   exprSimFieldLayout exprSimAttributeFields exprSimHypsDefs
   vyperTypeInvariants vyperTypeSystem vyperTyping vyperTypeEnv
-  finite_map alist compileEnv
+  finite_map alist compileEnv loweringStateRelDefs
   bodyFieldMemoryProps bodyDeclMemoryCounted bodyDeclMemoryCore
   allocaFootprint fragGasSeqMem stmtSimProps localPtrsProps
   exprLoweringProps emitHelper emitHelperProps loweringSlice exprSimOps

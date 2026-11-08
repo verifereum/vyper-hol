@@ -1,7 +1,7 @@
 Theory stmtForArrayMemoryRounds
 Ancestors
   stmtForArrayControlMemory stmtForArrayMemoryRoundSupport
-  stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv
+  stmtSimForArrayLoop stmtSimProps exprLoweringProps bodyMemoryDefs loweringPosts compileEnv loweringStateRelDefs
   venomState allocaHistory fragGasMode fragGasPathMem finite_map list arithmetic
   stmtForArrayMemoryCopy stmtForArrayMemoryBodyEntry rich_list emitHelper venomInst
   bodyDeclMemoryCounted stmtLowering venomMemDefs stmtSimDefs gasContext vyperState

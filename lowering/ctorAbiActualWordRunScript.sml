@@ -3,7 +3,7 @@ Ancestors
   ctorAbiActualScalar ctorAbiActualWorld ctorAbiActualReentry
   abiDecoderReentryPointer abiDecoderReentry abiDecoderVarExtend
   abiDecoderClampedWord abiDecoderContract abiDecoderLoop
-  abiEncoderProps abiEncoderRegisteredEffect abiEncoder compileEnv exprLoweringProps
+  abiEncoderProps abiEncoderRegisteredEffect abiEncoder compileEnv loweringStateRelDefs exprLoweringProps
   allocaFrontierBound allocaBudgetProps venomMemDefs
   fragExec instIdxIndep venomExecSemantics venomState venomInst
   abiDecoderWordTyped abiDecoderLayout abiDecoderTypedContract

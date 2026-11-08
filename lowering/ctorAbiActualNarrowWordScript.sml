@@ -6,7 +6,7 @@ Ancestors
   fragExec venomState venomMemDefs finite_map pred_set list arithmetic words
   abiDecoderWordTyped abiDecoderLayout abiDecoderTypedContract abiDecoderReentryPointer
   abiDecoderClampedWord abiDecoderCoherence allocaFrontierBound allocaBudgetProps
-  valueEncoding compileEnv exprLoweringProps venomExecSemantics
+  valueEncoding compileEnv loweringStateRelDefs exprLoweringProps venomExecSemantics
 
 (* The independent memory frame, not the broad effect, provides separation. *)
 Theorem ctor_actual_frame_empty_effect:

@@ -25,7 +25,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   exprSimAggregateSource exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
-  localPtrsProps compileEnv valueEncoding valueEncodingProofs
+  localPtrsProps compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProofs
   valueEncodingProps exprLowering vyperInterpreter vyperState
   exprSimHyps  fragExec exprSimAggregateChildren exprSimOps
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom
@@ -887,7 +887,7 @@ Theorem struct_tuple_memory_post[local]:
   fields_in_memory (ZIP (names,vs)) (ZIP (names,tvs)) ptr mem
 Proof
   Induct_on `names` >> Cases_on `tvs` >> Cases_on `vs` >>
-  simp[listTheory.ZIP_def, valueEncodingTheory.val_in_memory_def] >>
+  simp[listTheory.ZIP_def, valueEncodingDefsTheory.val_in_memory_def] >>
   rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 

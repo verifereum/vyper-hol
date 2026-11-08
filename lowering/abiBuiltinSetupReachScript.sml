@@ -2,7 +2,7 @@ Theory abiBuiltinSetupReach
 Ancestors
   abiBuiltinDecodeSetup abiBuiltinDecodeAllocation abiBuiltinSetupFrames abiBuiltinAllocation
   abiBuiltinDecodeHeader abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry
-  abiDecoderGuards abiDecoderContract context compileEnv emitHelper emitHelperProps
+  abiDecoderGuards abiDecoderContract context compileEnv loweringStateRelDefs emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomState finite_map words arithmetic list
   abiDecoderLoop fragExec instIdxIndep venomInst
 

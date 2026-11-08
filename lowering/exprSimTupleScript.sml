@@ -60,8 +60,8 @@ Ancestors
   fragExec  exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimAggregateLayout exprSimAttributeFields exprSimAttribute
   placeTypingProps
-  exprLowering exprLoweringProps compileEnv context
-  valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs context
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperValueOperation vyperTyping vyperTypeSystem vyperTypeExprSoundness
   vyperPlaceResultTyping valueEncodingProofs
   venomState venomInst

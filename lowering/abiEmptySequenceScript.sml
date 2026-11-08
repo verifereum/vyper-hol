@@ -4,7 +4,7 @@ Ancestors
   context emitHelper venomState venomInst words list rich_list arithmetic abiTupleEncodeInput
   abiEncoderInput abiEncoderMemory abiDecoderReentry abiDecoderContract exprLowering
   venomExecSemantics finite_map contractABI abiDecoderFrameCompose abiDecoderArrayHeader
-  valueEncoding valueEncodingProps abiEmptyEffect abiDecoderGuards
+  valueEncoding valueEncodingDefs valueEncodingProps abiEmptyEffect abiDecoderGuards
 Libs
   wordsLib
 

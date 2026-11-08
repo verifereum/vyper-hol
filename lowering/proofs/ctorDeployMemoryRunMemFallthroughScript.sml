@@ -8,7 +8,7 @@ Ancestors
   ctorDeployLoweringDefs stmtSimDefs memSafeRun immutableDeployExecution
   allocaSiteResource exprLoweringProps venomInst venomExecSemantics venomState
   fragExecMem instMemFrontier ctorReturnFrame nonreentrantExit loweringHalt
-  stmtSimProps bodySim fragExec compileEnv emitHelper moduleLowering
+  stmtSimProps bodySim fragExec compileEnv loweringStateRelDefs emitHelper moduleLowering
   exprLoweringProps context unitTransformDefs contextCodegenRel codegenRel
 
 Theorem compile_constructor_epilogue_related_alloca_frontier:
@@ -74,7 +74,7 @@ Proof
   gvs[] >> Cases_on `imm` >>
   gvs[immutable_base_zero_alt, eval_operand_def, lookup_var_def,
       update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
-      compileEnvTheory.not_fresh_at_def] >>
+      loweringStateRelDefsTheory.not_fresh_at_def] >>
   metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LE_ADD,
             stringTheory.STRCAT_def, listTheory.APPEND]
 QED

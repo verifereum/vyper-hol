@@ -2,7 +2,7 @@ Theory abiEncoderComplexPrefix
 Ancestors
   abiEncoderComplexCode abiDecoderIndexInit abiDecoderReentryAddress abiDecoderAllocation
   abiDecoderReentry abiDecoderArrayHeader abiDecoderGuards abiDecoderContract abiDecoderFrame
-  emitHelperProps exprLoweringProps compileEnv emitHelper context venomExecSemantics
+  emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper context venomExecSemantics
   venomMemProps venomState venomInst finite_map words list rich_list arithmetic abiDecoderLoop
   fragExec instIdxIndep abiDecoderEffect abiDecoderProtectedScratch
   abiDecoderPrimitiveLoopFrames abiDecoderFrameCompose pred_set

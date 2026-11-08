@@ -79,9 +79,9 @@ Theory loweringHalt
 Ancestors
   list rich_list finite_map
   fragExec loweringSlice accountsRelProps
-  stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv
+  stmtLowering moduleLowering context emitHelper emitHelperProps compileEnv loweringStateRelDefs
   abiEncoder abiEncoderProps abiEncoderFragment
-  valueEncoding valueEncodingProps
+  valueEncoding valueEncodingDefs valueEncodingProps
   e2eDefs vyperABI contractABI vyperInterpreter vyperState vyperValue
   vyperValueOperation vfmExecution
   venomExecSemantics venomInst venomInstProofs venomState venomMemProps

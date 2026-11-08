@@ -4,7 +4,7 @@ Theory abiDecoderValidBytes
 Ancestors
   abiValidBytes abiDecoderBytes abiDecoderBytesTyped abiDecoderBytesFrame
   abiDecoderString abiDecoderVarSequence abiDecoderContract abiDecoderFrame abiDecoderReservation
-  valueEncoding valueEncodingProps abiEncoder emitHelper compileEnv
+  valueEncoding valueEncodingDefs valueEncodingProps abiEncoder emitHelper compileEnv
   venomExecSemantics venomState contractABI words list arithmetic
 
 Definition abi_decoder_valid_bytes_pre_def:

@@ -3,7 +3,7 @@
 Theory abiBuiltinBytesSetup
 Ancestors
   abiBuiltinValidBytes abiBuiltinDecodeSetup abiBuiltinSetupReach abiBuiltinAllocation
-  abiDecoderBytes abiDecoderContract abiDecoderReentry valueEncoding valueEncodingProps
+  abiDecoderBytes abiDecoderContract abiDecoderReentry valueEncoding valueEncodingDefs valueEncodingProps
   emitHelperProps compileEnv venomState words arithmetic
 
 Theorem abi_builtin_bytes_setup_resources:
