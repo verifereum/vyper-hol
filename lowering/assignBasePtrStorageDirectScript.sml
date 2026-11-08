@@ -1,17 +1,15 @@
-(* Direct-store boundary probes. Zero-capacity supported aggregates must not
-   silently be strengthened to positive-capacity inputs by the continuation. *)
+(* Direct-store boundary probes. A memberless struct is no longer a supported
+   storage type (the nonempty-struct supported_* definitions), so the
+   zero-capacity direct store this file used to exhibit cannot arise. *)
 Theory assignBasePtrStorageDirect
 Ancestors assignBasePtrStorageExtent supportedTypes vyperValue vyperAST
   compileEnv exprLowering vyperTypeSystem vyperTypeInvariants valueEncodingProps
   exprSimHypsDefs
 
-Theorem assign_base_empty_struct_storage_shape:
-  supported_storage_type [StructDecl "Empty" []] (StructT (NONE,"Empty")) /\
-  ~is_word_type (StructT (NONE,"Empty")) /\
-  (!elem n. StructT (NONE,"Empty") <> ArrayT elem (Dynamic n)) /\
-  type_memory_size (StructTV []) = 0
+Theorem assign_base_empty_struct_storage_rejected:
+  ~supported_storage_type [StructDecl "Empty" []] (StructT (NONE,"Empty"))
 Proof
-  EVAL_TAC >> simp[]
+  EVAL_TAC
 QED
 
 (* Actual assignment typing, unlike the syntactic whitelist, excludes zero
