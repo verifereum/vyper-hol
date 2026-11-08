@@ -4,7 +4,7 @@ Ancestors
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   exprSimOps exprSimOperands compileEnv venomState stmtLowering
-  exprSimWordArgs exprSimHyps exprSimAttributeFields logArgumentCompile
+  exprSimWordArgs exprSimHyps exprSimAttributeFields logArgumentCompile exprLowering
 
 (* A captured value in a live local survives a later expression whenever
    its footprint avoids the local's dynamic array length words, the only
