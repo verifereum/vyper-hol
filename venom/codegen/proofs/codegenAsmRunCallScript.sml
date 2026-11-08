@@ -22,6 +22,48 @@ Ancestors
    runs out of gas or overflows the stack is frame_resource_starved; the
    assembly has no such limits.  The assembly semantics is
    deterministic, so each clause is about its one terminal state. *)
+Theorem codegen_asm_run_call_tail:
+  !rpolicy unit cp prog Inv vs es gas_tail.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel_tail gas_tail cp prog unit.cu_context vs es
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       ((!n as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
+         (entry_asm_state vs es) = AsmHalt as' ==>
+           frame_outcome es r es' NONE as'.as_returndata as'.as_logs /\
+           es'.rollback.accounts = as'.as_accounts /\
+           es'.rollback.toDelete = as'.as_pending_deletions /\
+           es'.rollback.tStorage = as'.as_transient /\
+           as'.as_requests = call_requests es /\ as'.as_gas_readings = gas_tail) /\
+        (!n as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
+         (entry_asm_state vs es) = AsmRevert as' ==>
+           as'.as_gas_readings = gas_tail /\
+           ?lgs. frame_outcome es r es' (SOME Reverted) as'.as_returndata lgs) /\
+        (!n as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
+         (entry_asm_state vs es) = AsmFault as' ==>
+           as'.as_gas_readings = gas_tail /\
+           ?exc lgs. exc <> Reverted /\
+                     frame_outcome es r es' (SOME exc) [] lgs)))
+Proof
+  rpt strip_tac >>
+  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  drule asm_frame_rel_entry >> strip_tac >>
+  Cases_on `run_call es` >- fs[run_call_eq_tr] >>
+  rename1 `run_call es = SOME res` >> PairCases_on `res` >>
+  qexistsl_tac [`res0`, `res1`] >> simp[] >>
+  Cases_on `frame_resource_starved es res0 res1` >> simp[] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  qspecl_then [`n`, `gas_tail`, `prog`, `vs.vs_data_section`, `es`, `entry_asm_state vs es`,
+               `es`, `res0`, `res1`] mp_tac asm_frame_run >>
+  asm_simp_tac (srw_ss()) []
+QED
+
 Theorem codegen_asm_run_call:
   !rpolicy unit cp prog Inv vs es.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -50,14 +92,8 @@ Theorem codegen_asm_run_call:
                      frame_outcome es r es' (SOME exc) [] lgs)))
 Proof
   rpt strip_tac >>
-  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
-  drule asm_frame_rel_entry >> strip_tac >>
-  Cases_on `run_call es` >- fs[run_call_eq_tr] >>
-  rename1 `run_call es = SOME res` >> PairCases_on `res` >>
-  qexistsl_tac [`res0`, `res1`] >> simp[] >>
-  Cases_on `frame_resource_starved es res0 res1` >> simp[] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  qspecl_then [`n`, `prog`, `vs.vs_data_section`, `es`, `entry_asm_state vs es`,
-               `es`, `res0`, `res1`] mp_tac asm_frame_run >>
-  asm_simp_tac (srw_ss()) []
+  `initial_ctx_rel_tail [] cp prog unit.cu_context vs es` by
+    fs[codegenEntryRelTheory.initial_ctx_rel_def] >>
+  drule_all codegen_asm_run_call_tail >> strip_tac >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >> metis_tac[]
 QED

@@ -172,7 +172,7 @@ QED
 (* entry_asm_state meets the entry relation of the first function, with no
    return address and nothing below the (empty) parameter block. *)
 Theorem entry_fn_entry_state_rel[local]:
-  initial_ctx_rel cp prog ctx vs es /\
+  initial_ctx_rel_tail gas_tail cp prog ctx vs es /\
   ctx.ctx_functions = fe :: rest /\
   get_params (HD fe.fn_blocks).bb_instructions = [] /\
   fn_entry_label fe = SOME lbl ==>
@@ -180,7 +180,7 @@ Theorem entry_fn_entry_state_rel[local]:
     (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
     (entry_asm_state vs es) ra []
 Proof
-  rw[initial_ctx_rel_def] >>
+  rw[codegenEntryRelTheory.initial_ctx_rel_tail_def] >>
   gvs[initial_state_rel_def, stack_params_rel_def, initial_codegen_state_rel_def,
       fn_entry_label_def, entry_block_def, LENGTH_NIL_SYM] >>
   simp[fn_entry_state_rel_def, entry_asm_state_def, fn_has_retpc_def,
@@ -197,14 +197,14 @@ QED
    an empty stack), the memory relation and the shared fields.  The
    remaining gen_fn_simulation premises come from codegen_context_obligations,
    codegen_reachability_package and initial_ctx_rel's label agreement. *)
-Theorem codegen_entry_asm_sim:
-  !fuel rpolicy unit cp prog Inv vs es.
+Theorem codegen_entry_asm_sim_tail:
+  !fuel rpolicy unit cp prog Inv vs es gas_tail.
     generate_context_plan unit.cu_context = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
     unit_shape_ok unit /\
     codegen_context_obligations Inv unit.cu_context cp /\
     codegen_reachability_package Inv unit.cu_context vs /\
-    initial_ctx_rel cp prog unit.cu_context vs es
+    initial_ctx_rel_tail gas_tail cp prog unit.cu_context vs es
     ==>
     (!ret vs'. run_context fuel unit.cu_context vs <> IntRet ret vs') /\
     (!vs'. run_context fuel unit.cu_context vs = Halt vs' ==>
@@ -256,9 +256,9 @@ Proof
   mp_tac codegen_invoke_targets_retpc >> impl_tac >- simp[] >> strip_tac >>
   `!l. FLOOKUP vs.vs_labels l =
        OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)`
-    by gvs[initial_ctx_rel_def] >>
+    by gvs[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def] >>
   `~vs.vs_call_ctx.cc_static`
-    by gvs[initial_ctx_rel_def, initial_state_rel_def, msg_ctx_rel_def] >>
+    by gvs[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def, initial_state_rel_def, msg_ctx_rel_def] >>
   `asm_block_at prog 0 (execute_plan cp.cp_initial_fmp r.sr_plan)`
     by metis_tac[codegen_assembly_first_region] >>
   `fn_entry_state_rel cp fe
@@ -277,4 +277,34 @@ Proof
       simp[entry_asm_state_def, fn_has_retpc_def]) >>
   strip_tac >> rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
   res_tac >> metis_tac[]
+QED
+
+Theorem codegen_entry_asm_sim:
+  !fuel rpolicy unit cp prog Inv vs es.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel cp prog unit.cu_context vs es
+    ==>
+    (!ret vs'. run_context fuel unit.cu_context vs <> IntRet ret vs') /\
+    (!vs'. run_context fuel unit.cu_context vs = Halt vs' ==>
+       ?n as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
+         (entry_asm_state vs es) = AsmHalt as' /\
+         venom_asm_terminal_rel vs' as') /\
+    (!a vs'. run_context fuel unit.cu_context vs = Abort a vs' ==>
+       ?n as'.
+         ((a = Revert_abort /\
+           asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
+         (entry_asm_state vs es) = AsmRevert as') \/
+          (a = ExHalt_abort /\
+           asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog) prog n
+         (entry_asm_state vs es) = AsmFault as')) /\
+         venom_asm_terminal_rel vs' as')
+Proof
+  rpt strip_tac >>
+  `initial_ctx_rel_tail [] cp prog unit.cu_context vs es` by
+    fs[initial_ctx_rel_def] >>
+  drule_all codegen_entry_asm_sim_tail >> simp[]
 QED
