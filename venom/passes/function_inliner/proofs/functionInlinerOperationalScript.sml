@@ -1287,3 +1287,150 @@ Proof
   IF_CASES_TAC >>
   simp[inline_opaque_frame_exceptional_halt, inline_opaque_frame_write_memory]
 QED
+
+Theorem inline_copy_data_eval_list:
+  MEM inst.inst_opcode [CALLDATACOPY; DLOADBYTES; CODECOPY] /\
+  LENGTH inst.inst_operands = 3 ==>
+  step_inst_base inst s =
+    case eval_operands inst.inst_operands s of
+      NONE => Error "undefined operand"
+    | SOME ws => OK (write_memory_with_expansion (w2n (EL 0 ws))
+        (TAKE (w2n (EL 2 ws)) (DROP (w2n (EL 1 ws))
+          (if inst.inst_opcode = CALLDATACOPY then s.vs_call_ctx.cc_calldata
+           else if inst.inst_opcode = DLOADBYTES then s.vs_data_section
+           else s.vs_code) ++ REPLICATE (w2n (EL 2 ws)) 0w)) s)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  gvs[] >> simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operand h' s` >> simp[] >>
+  Cases_on `eval_operand h'' s` >> simp[]
+QED
+
+Theorem inline_copy_data_atomic_clone_result:
+  MEM inst.inst_opcode [CALLDATACOPY; DLOADBYTES; CODECOPY] /\
+  LENGTH inst.inst_operands = 3 /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `MEM (clone_instruction p labels inst).inst_opcode
+      [CALLDATACOPY; DLOADBYTES; CODECOPY] /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 3` by
+    gvs[clone_instruction_def] >>
+  `s.vs_call_ctx = t.vs_call_ctx /\ s.vs_data_section = t.vs_data_section /\
+   s.vs_code = t.vs_code` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  `inst.inst_opcode <> INVOKE /\
+   (clone_instruction p labels inst).inst_opcode <> INVOKE` by gvs[] >>
+  simp[step_inst_non_invoke, inline_copy_data_eval_list] >>
+  simp[clone_instruction_def] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[inline_opaque_frame_write_memory]
+QED
+
+Theorem inline_extcodecopy_eval_list:
+  inst.inst_opcode = EXTCODECOPY /\ LENGTH inst.inst_operands = 4 ==>
+  step_inst_base inst s =
+    case eval_operands inst.inst_operands s of
+      NONE => Error "undefined operand"
+    | SOME ws => OK (write_memory_with_expansion (w2n (EL 1 ws))
+        (TAKE (w2n (EL 3 ws)) (DROP (w2n (EL 2 ws))
+          (lookup_account (w2w (EL 0 ws)) s.vs_accounts).code ++
+          REPLICATE (w2n (EL 3 ws)) 0w)) s)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operand h' s` >> simp[] >>
+  Cases_on `eval_operand h'' s` >> simp[] >>
+  Cases_on `eval_operand h''' s` >> simp[]
+QED
+
+Theorem inline_extcodecopy_atomic_clone_result:
+  inst.inst_opcode = EXTCODECOPY /\ LENGTH inst.inst_operands = 4 /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = EXTCODECOPY /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 4` by
+    simp[clone_instruction_def] >>
+  `s.vs_accounts = t.vs_accounts` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality] >>
+  simp[step_inst_non_invoke, inline_extcodecopy_eval_list] >>
+  simp[clone_instruction_def] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[inline_opaque_frame_write_memory]
+QED
+
+Theorem inline_istore_eval_list:
+  inst.inst_opcode = ISTORE /\ LENGTH inst.inst_operands = 2 ==>
+  step_inst_base inst s =
+    case eval_operands inst.inst_operands s of
+      NONE => Error "undefined operand"
+    | SOME ws => OK (istore (w2n (EL 0 ws)) (EL 1 ws) s)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  simp[step_inst_base_opcode_eqs, eval_operands_def] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operand h' s` >> simp[]
+QED
+
+Theorem inline_shared_frame_istore:
+  inline_shared_frame (istore off w s) = istore off w (inline_shared_frame s) /\
+  (istore off w s).vs_vars = s.vs_vars
+Proof
+  simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    istore_def, mstore_def]
+QED
+
+Theorem inline_opaque_frame_istore:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_opaque_frame_rel ren V opaque saved P
+    (istore off w s) (istore off w t)
+Proof
+  strip_tac >> irule inline_opaque_frame_shared_effect >> conj_tac
+  >- (simp[inline_shared_frame_istore] >>
+      metis_tac[inline_opaque_frame_rel_def, inline_frame_rel_def]) >>
+  qexistsl [`s`, `t`] >> simp[inline_shared_frame_istore]
+QED
+
+Theorem inline_istore_atomic_clone_result:
+  inst.inst_opcode = ISTORE /\ LENGTH inst.inst_operands = 2 /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  strip_tac >>
+  `(clone_instruction p labels inst).inst_opcode = ISTORE /\
+    LENGTH (clone_instruction p labels inst).inst_operands = 2` by
+    simp[clone_instruction_def] >>
+  simp[step_inst_non_invoke, inline_istore_eval_list] >>
+  simp[clone_instruction_def] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[inline_opaque_frame_istore]
+QED
