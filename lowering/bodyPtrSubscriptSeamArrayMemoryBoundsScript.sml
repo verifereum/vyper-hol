@@ -56,3 +56,53 @@ Proof
   rpt strip_tac >> `local_ptrs_reserved cenv sm` by
     metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >> metis_tac[]
 QED
+
+Theorem unsigned_literal_bounds_counted:
+  emit_op LT [idx;Lit len] sa = (Var lt,sm) /\
+  emit_op ISZERO [Var lt] sm = (Var not_oob,sn) /\
+  emit_op OR [Lit 0w;Var not_oob] sn = (Var invalid,sp) /\
+  emit_op ISZERO [Var invalid] sp = (Var valid,sq) /\
+  emit_void ASSERT [Var valid] sq = ((),sb) /\ fn_has_code sa sb func /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand idx s = SOME a /\ w2n a < w2n len /\ op_taint tn idx = {} ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+    sf.vs_memory = s.vs_memory /\ sf.vs_allocas = s.vs_allocas /\
+    sf.vs_fmp = s.vs_fmp /\ sf.vs_accounts = s.vs_accounts /\
+    sf.vs_transient = s.vs_transient /\ sf.vs_call_ctx = s.vs_call_ctx /\
+    sf.vs_requests = s.vs_requests /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel ctx func cenv cx es sf)
+Proof
+  strip_tac >>
+  `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sp /\ ci_mono sp sq` by
+    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `ci_mono sq sb` by metis_tac[ci_mono_emit_void, pairTheory.SND] >>
+  `cs_extends sa sn /\ cs_extends sn sb` by
+    metis_tac[ci_mono_def, cs_extends_trans] >>
+  `fn_has_code sa sn func /\ fn_has_code sn sb func` by
+    metis_tac[fn_has_code_split] >>
+  drule_all literal_lt_iszero_counted >>
+  disch_then (qspecl_then [`PG`, `G`, `D`] mp_tac) >>
+  disch_then (qx_choosel_then [`G1`, `tn1`, `s1`] strip_assume_tac) >>
+  `eval_operand (Var not_oob) s1 = SOME 0w` by
+    simp[eval_operand_def, bool_to_word_def] >>
+  drule_all or_iszero_assert_counted_read_only >>
+  disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`, `s2`] strip_assume_tac) >>
+  qexistsl_tac [`G2`, `tn2`, `s2`] >> simp[] >> conj_tac
+  >- (drule_all gas_path_ptr_then >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> `not_fresh_at sn p` by
+        metis_tac[ci_mono_def, not_fresh_at_mono] >> metis_tac[]) >>
+  rpt strip_tac >> `local_ptrs_reserved cenv sn` by
+    metis_tac[ci_mono_def, local_ptrs_reserved_next_var] >> metis_tac[]
+QED
