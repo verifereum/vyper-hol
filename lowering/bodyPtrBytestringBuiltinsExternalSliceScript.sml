@@ -26,13 +26,8 @@ Proof
     mem_read_ops_def, sized_source_write_range_def, mk_inst_def,
     step_inst_non_invoke] >>
   rpt strip_tac >> gvs[] >>
-  TRY (qpat_x_assum `step_inst_base _ _ = Halt _` mp_tac >>
-       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-       simp[eval_operand_def] >> NO_TAC) >>
-  TRY (qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-       simp[eval_operand_def, write_memory_with_expansion_def,
-         write_memory_def, expand_memory_def] >> strip_tac >> gvs[] >> NO_TAC) >>
+  gvs[step_inst_base_opcode_eqs, eval_operand_def,
+      write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
   spose_not_then strip_assume_tac >> gvs[] >>
   Cases_on `op = Var dst` >> gvs[] >>
   Cases_on `op = start` >> gvs[] >>
