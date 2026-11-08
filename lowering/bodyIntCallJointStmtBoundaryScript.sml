@@ -2,7 +2,7 @@
 Theory bodyIntCallJointStmtBoundary
 Ancestors
   bodyIntCallJointContract exprLoweringProps loweringPosts compileEnv intCallFrame
-  stmtSimProps bodyMemoryDefs freshWrites
+  stmtSimProps bodyMemoryDefs freshWrites exprSimHyps allocLimits
 
 Theorem intcall_return_buffer_bound:
   intcall_joint_res fp ce env es sa s /\ fp.jc_rb = SOME (bw,cap) ==>
@@ -43,4 +43,63 @@ Proof
   `return_buf_frame fp.jc_rb ce sb s` by
     (drule return_buf_frame_frame >> disch_then irule >> simp[]) >>
   simp[] >> rpt strip_tac >> metis_tac[freshWritesTheory.not_fresh_at_mono]
+QED
+
+Theorem intcall_type_alloc_headroom:
+  expr_sim_inv ce cx env es /\ type_alloc_ok ce ty /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv ==>
+  type_memory_size tv + 64 < dimword (:256)
+Proof
+  strip_tac >>
+  drule_all expr_sim_inv_memory_size >> strip_tac >>
+  gvs[type_alloc_ok_def, wordsTheory.dimword_def] >> decide_tac
+QED
+
+Theorem intcall_copy_metadata:
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es ==>
+  acyclic_struct_metadata ce.ce_struct_fields /\
+  sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv)
+Proof
+  strip_tac >>
+  reverse (rpt conj_tac)
+  >- (rpt strip_tac >> drule_all expr_sim_inv_memory_size >> simp[]) >>
+  fs[bodySimTheory.body_inv_def, exprSimHypsDefsTheory.expr_sim_inv_def]
+QED
+
+Theorem arg_type_fits_antisym:
+  (!t u. arg_type_fits t u /\ arg_type_fits u t ==> t = u) /\
+  (!ts us. arg_types_fit ts us /\ arg_types_fit us ts ==> ts = us)
+Proof
+  ho_match_mp_tac vyperTypeSystemTheory.arg_type_fits_ind >>
+  rpt conj_tac >>
+  simp[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once vyperTypeSystemTheory.arg_type_fits_def] >>
+  strip_tac >> fs[]
+QED
+
+Theorem type_widens_to_antisym:
+  type_widens_to tenv t u /\ type_widens_to tenv u t ==> t = u
+Proof
+  simp[vyperTypeSystemTheory.type_widens_to_def] >>
+  metis_tac[cj 1 arg_type_fits_antisym]
+QED
+
+Theorem intcall_widening_sandwich_headroom:
+  expr_sim_inv ce cx env es /\ type_alloc_ok ce a /\
+  ~is_word_type p /\ evaluate_type (get_tenv cx) p = SOME tv /\
+  type_widens_to (get_tenv cx) p a /\
+  type_widens_to (get_tenv cx) a p ==>
+  type_memory_size tv + 64 < dimword (:256)
+Proof
+  strip_tac >>
+  `p = a` by metis_tac[type_widens_to_antisym] >> gvs[] >>
+  drule_all intcall_type_alloc_headroom >> simp[]
 QED
