@@ -225,8 +225,7 @@ Proof
  simp[stmt_state_rel_inst_idx, annassign_ghost_inst_idx_ptr] >>
  conj_tac >- metis_tac[] >>
  conj_tac >- (irule stmt_state_rel_declare_store >> simp[] >>
-   conj_tac >- (qexists `inst` >> gvs[]) >>
-   qpat_x_assum `!u. memory_value_rel _ _ _ _` (qspec_then `s` ACCEPT_TAC)) >>
+   qexists `inst` >> gvs[]) >>
  conj_tac >- (
    irule annassign_ghost_scope_update_ptr >> simp[] >>
    reverse conj_tac
