@@ -192,3 +192,17 @@ Proof
   simp[collect_locals_def, augAssignNestedReachProbeTheory.nested_reach_body_def]
 QED
 
+
+Theorem runtime_linear_phases[local]:
+  compile_generate_runtime sels exts ints NONE Linear bc md dense info s =
+  (do fallback <- fresh_label "fallback";
+      compile_selector_dispatch_linear (MAP (\(sel,lbl,_). (sel,lbl)) sels) fallback;
+      compile_external_fn_bodies exts;
+      new_block fallback;
+      emit_inst REVERT [Lit 0w; Lit 0w] [];
+      _ <- compile_internal_fn_bodies ints;
+      return ()
+   od) s
+Proof
+  simp[compile_generate_runtime_def]
+QED
