@@ -878,6 +878,58 @@ Proof
   first_x_assum irule >> simp[] >> qexists `c` >> simp[]
 QED
 
+(* Unlike the membership-only interface, this boundary exposes the actual
+   remaining compilation at every step, so its consumer can split code. *)
+Theorem intcall_compile_multi_vvs_suffix:
+  !todo doneE doneV doneR es c s vvs d.
+  (!de dv dr rest ee b u. P de dv dr rest ee b u ==>
+     ~u.vs_halted /\ P de dv dr rest (ee with gas_obs := []) b u) /\
+  (!de dv dr e tail ee b u vv b' vs.
+     whole = de ++ (e::tail) /\ P de dv dr (e::tail) ee b u /\
+     cfn ce (expr_type e) e b = (vv,b') /\
+     compile_multi_vvs cfn ce tail b' = (vs,d) ==>
+     gas_outcome memory tops (ctx,func) (eval_expr cx e) (ee,u)
+       (\res ef t. ?r. res = INL r /\
+         P (de ++ [e]) (dv ++ [vv]) (dr ++ [r]) tail ef b' t)
+       (\res ef r. ?ex. res = INR ex /\ X ex ef r)) /\
+  whole = doneE ++ todo /\ P doneE doneV doneR todo es c s /\
+  compile_multi_vvs cfn ce todo c = (vvs,d) ==>
+  gas_outcome memory tops (ctx,func) (eval_expr_results cx todo) (es,s)
+    (\res ee u. ?rs. res = INL rs /\
+       P (doneE ++ todo) (doneV ++ vvs) (doneR ++ rs) [] ee d u)
+    (\res ee r. ?ex. res = INR ex /\ X ex ee r)
+Proof
+  Induct_on `todo`
+  >- (rpt strip_tac >>
+      gvs[exprLoweringTheory.compile_multi_vvs_def,
+          compileEnvTheory.comp_return_def] >>
+      simp[Once vyperInterpreterTheory.evaluate_def] >>
+      irule intcall_gas_outcome_return >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[exprLoweringTheory.compile_multi_vvs_def,
+      compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+      AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `cfn ce (expr_type h) h c = (hv,b)` >>
+  rename1 `compile_multi_vvs cfn ce todo b = (tvs,d)` >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  irule exprSimSubscriptMapTheory.gas_outcome_bind_result_exec >>
+  qexistsl [`\res ee r. ?ex. res = INR ex /\ X ex ee r`,
+    `\res ee u. ?r. res = INL r /\
+       P (doneE ++ [h]) (doneV ++ [hv]) (doneR ++ [r]) todo ee b u`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      irule intcall_gas_outcome_map_results >> simp[] >>
+      qpat_x_assum `!doneV' doneR' es' c' s'' vvs' d'. _`
+        (qspecl_then [`doneV ++ [hv]`, `doneR ++ [v]`]
+          (irule o PURE_REWRITE_RULE [GSYM listTheory.APPEND_ASSOC,
+             listTheory.APPEND])) >>
+      simp[] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> simp[]) >>
+  first_x_assum irule >> simp[] >>
+  qexists `c` >> simp[]
+QED
+
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
    (callable_graph_descent), the statement producer of every frame whose
