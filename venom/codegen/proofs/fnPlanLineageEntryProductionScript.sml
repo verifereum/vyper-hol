@@ -1295,3 +1295,32 @@ Proof
     metis_tac[] >>
   metis_tac[native_live_boundary_coverage, native_live_boundary_count]
 QED
+
+(* Positive join seeds do not require chronological origins or resource counts.
+   The candidate seed is already successful_join_edge_phi_candidate in
+   fnPlanLineageJoinEntry; stack-identical incoming states use it unchanged. *)
+Theorem successful_join_live_through_stack_seed:
+  codegen_ready_fn fn /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  phi_block_ready (liveness_analyze fn) bb /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 =
+    SOME (ops,after) /\
+  incoming.ps_stack = after.ps_stack /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions))) /\
+  EVERY (\inst. ~MEM v (inst_defs inst)) (collect_phis bb.bb_instructions) ==>
+  MEM (Var v) incoming.ps_stack
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM v (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))` by
+    metis_tac[analyzed_ready_phi_live_through_edge] >>
+  drule_all fnPlanLineageEdgeTheory.generate_block_plan_join_edge_suffix >>
+  strip_tac >> simp[listTheory.MEM_MAP_f]
+QED
