@@ -59,7 +59,11 @@ Proof
     metis_tac[topcopy_rhs_memory] >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
     fs[expr_sim_inv_def] >>
-  Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)`
+  `!gs v es1.
+     (do result <- eval_expr cx e; read_result cx result od)
+       (es with gas_obs := gs) = (INL v, es1) ==> value_has_type tvt v` by
+    (rpt strip_tac >> drule_all topcopy_rhs_value_typed >> simp[]) >>
+  (Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)`
   >- (`acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
       `!name fields.
          FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
@@ -67,10 +71,10 @@ Proof
          EVERY (\(fname, fty, sz). !tv.
            evaluate_type (get_tenv cx) fty = SOME tv ==>
            sz = type_memory_size tv) fields` by fs[expr_sim_inv_def] >>
-      irule compile_assign_storage_sparse_stmt_frag_mem >>
-      goal_assum (drule_at Any) >> simp[] >>
-      rpt strip_tac >> metis_tac[topcopy_rhs_value_typed, pairTheory.PAIR_EQ]) >>
-  irule compile_assign_storage_copy_stmt_frag_mem >>
-  goal_assum (drule_at Any) >> simp[] >>
-  rpt strip_tac >> drule_all topcopy_rhs_value_typed >> simp[]
+      irule compile_assign_storage_sparse_stmt_frag_mem >> asm_rewrite_tac[] >>
+      qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
+      asm_rewrite_tac[]) >>
+  irule compile_assign_storage_copy_stmt_frag_mem >> asm_rewrite_tac[] >>
+  qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
+  asm_rewrite_tac[])
 QED
