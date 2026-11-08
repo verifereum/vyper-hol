@@ -331,3 +331,27 @@ Proof
   goal_assum (drule_at Any) >>
   `MEM (EL i elems) elems` by (irule listTheory.EL_MEM >> simp[]) >> metis_tac[]
 QED
+
+Theorem tuple_place_pointer_owned_region:
+  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sp.cs_next_id /\
+  (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+    b+sz <= lb \/ lb+lsz <= b) ==>
+  FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ aid < sa.cs_next_id /\
+  (!n lb lsz. local_region cenv ee.scopes s n lb lsz ==>
+    b+sz <= lb \/ lb+lsz <= b)
+Proof
+  strip_tac >>
+  `!n lb lsz. local_region cenv ee.scopes s n lb lsz <=>
+    local_region cenv es.scopes s0 n lb lsz` by
+    (irule tuple_place_pointer_local_regions >>
+     fs[tuple_place_head_def] >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `sp.cs_next_id <= sa.cs_next_id` by
+    (qspec_then `bt` mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     disch_then (qspecl_then [`cenv`, `sp`] mp_tac) >>
+     simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  fs[loweringPostsTheory.target_post_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
