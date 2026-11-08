@@ -78,3 +78,30 @@ Proof
   drule_all fn_inst_ids_distinct_inj >> strip_tac >>
   gvs[abi_decoder_alloc_shape_def]
 QED
+
+Theorem extrequest_encoder_function_alloca_output:
+  compile_abi_encode_to_buf dst src ei st = (len,en) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids st en /\
+  inst.inst_opcode = ALLOCA ==>
+  ?n. inst.inst_outputs = [STRING #"%" (toString n)] /\ st.cs_next_var <= n
+Proof
+  strip_tac >>
+  `extrequest_code_witness st en` by
+    metis_tac[cj 2 extrequest_encoder_witness_mutual, pairTheory.SND] >>
+  fs[extrequest_code_witness_def, frag_ids_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all fn_inst_ids_distinct_inj >> strip_tac >> gvs[]
+QED
+
+Theorem extrequest_encoder_function_alloca_not_local:
+  compile_abi_encode_to_buf dst src ei st = (len,en) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids st en /\
+  inst.inst_opcode = ALLOCA /\ local_ptrs_reserved cenv st ==>
+  ?out. inst.inst_outputs = [out] /\ not_local_ptr cenv scopes out
+Proof
+  strip_tac >> drule_all extrequest_encoder_function_alloca_output >> strip_tac >>
+  qexists `STRING #"%" (toString n)` >> simp[] >>
+  irule exprLoweringPropsTheory.local_ptrs_reserved_fresh >> metis_tac[]
+QED

@@ -7,8 +7,11 @@ Ancestors
 Definition extrequest_code_witness_def:
   extrequest_code_witness a b <=>
     cs_extends a b /\ a.cs_next_id <= b.cs_next_id /\
+    a.cs_next_var <= b.cs_next_var /\
     !fn id. fn_has_code a b fn /\ a.cs_next_id <= id /\ id < b.cs_next_id ==>
-      ?i. MEM i (fn_insts fn) /\ i.inst_id = id /\ abi_decoder_alloc_shape i
+      ?i. MEM i (fn_insts fn) /\ i.inst_id = id /\ abi_decoder_alloc_shape i /\
+        (i.inst_opcode = ALLOCA ==>
+          ?n. i.inst_outputs = [STRING #"%" (toString n)] /\ a.cs_next_var <= n)
 End
 
 Theorem extrequest_code_witness_refl:
@@ -24,7 +27,11 @@ Proof
   rw[extrequest_code_witness_def]
   >- metis_tac[cs_extends_trans] >>
   drule_all fn_has_code_split >> strip_tac >>
-  Cases_on `id < b.cs_next_id` >> metis_tac[arithmeticTheory.NOT_LESS]
+  Cases_on `id < b.cs_next_id` >- simp[] >>
+  `b.cs_next_id <= id` by decide_tac >>
+  qpat_x_assum `!fn id. fn_has_code b c fn /\ _ ==> _` drule_all >>
+  strip_tac >> qexists `i` >> simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> qexists `n` >> simp[]
 QED
 
 Theorem extrequest_code_witness_return:
@@ -52,7 +59,8 @@ Proof
 QED
 
 Theorem extrequest_code_witness_emit_inst:
-  opc <> ALLOCA \/ (ops = [Lit 32w] /\ ?out. outs = [out]) ==>
+  opc <> ALLOCA \/ (ops = [Lit 32w] /\
+    ?n. outs = [STRING #"%" (toString n)] /\ st.cs_next_var <= n) ==>
   extrequest_code_witness st (SND (emit_inst opc ops outs st))
 Proof
   disch_tac >>
