@@ -746,6 +746,17 @@ Proof
   qexists_tac `off - k` >> simp[]
 QED
 
+(* The keys a bytestring's encoding writes: 0 and one per data word. *)
+Theorem encode_dyn_bytes_slots_keys:
+  encode_dyn_bytes_slots max bs = SOME writes ==>
+  !j. MEM j (MAP FST writes) <=> j < 1 + word_size (LENGTH bs)
+Proof
+  simp[encode_dyn_bytes_slots_def] >>
+  strip_tac >>
+  gvs[MEM_MAP_FST_MAPi, LENGTH_bytes_to_slots,
+      Excl "MAP_MAPi"] >> decide_tac
+QED
+
 (* Helper: ALL_DISTINCT for consecutive MAPi offsets *)
 Theorem ALL_DISTINCT_MAP_FST_MAPi[local]:
   ALL_DISTINCT (MAP FST (MAPi (λi (s:bytes32). (i + k, s)) slots))

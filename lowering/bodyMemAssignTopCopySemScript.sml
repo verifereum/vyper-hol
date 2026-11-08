@@ -1,25 +1,11 @@
-(* Non-bytestring values occupy their full declared memory footprint.
+(* The memory words a top-level copy reads: a non-bytestring value
+   occupies its full declared memory footprint (topcopy_val_footprint).
    Storage-copy semantics and compiler boundaries are shared with S1. *)
 Theory bodyMemAssignTopCopySem
 Ancestors
   stmtSimAssignStorageCopy exprSimHash exprSimProps loweringPosts
   compileEnv vyperValue vyperTyping valueEncodingProps
   words arithmetic
-
-Theorem topcopy_val_footprint:
-  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
-  val_footprint tv v = type_memory_size tv
-Proof
-  rpt strip_tac >> Cases_on `v` >> simp[val_footprint_def] >>
-  Cases_on `tv` >> simp[] >>
-  rename1 `BaseTV b` >> Cases_on `b` >> simp[] >>
-  Cases_on `ty` >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
-QED
 
 Theorem topcopy_post_words:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv w.

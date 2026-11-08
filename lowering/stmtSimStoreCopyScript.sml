@@ -2,9 +2,10 @@
  * Statement simulation: copying a value from memory into storage or
  * transient storage (#637)
  *
- * compile_store_storage (and its transient twin in compile_assign_value),
- * for a value held in more than one word, runs compile_word_copy_loop from
- * the value's memory buffer to its slot: word i of the buffer (MLOAD at
+ * compile_store_slots, for a static value held in more than one word, runs
+ * compile_word_copy_loop from the value's memory buffer to its slot
+ * (compile_memory_to_storage or compile_memory_to_transient): word i of
+ * the buffer (MLOAD at
  * buf + 32 * i) is stored at slot + i (SSTORE or TSTORE), for i from 0
  * to word_count - 1, in that order.  The loop reaches its exit block with
  * those stores done and nothing else changed but its own fresh variables.
@@ -53,7 +54,7 @@ Theorem compile_store_copy_layout[local]:
       new_block exit
     od
 Proof
-  rpt strip_tac >> gvs[compile_word_copy_loop_def, word_scale_def,
+  rpt strip_tac >> gvs[compile_word_copy_loop_def, compile_word_copy_loop_op_def, word_scale_def,
                         compile_ptr_load_def, compile_ptr_store_def,
                         comp_bind_assoc]
 QED

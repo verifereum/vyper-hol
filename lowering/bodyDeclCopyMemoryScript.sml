@@ -50,9 +50,6 @@ Theorem annassign_copy_parts_mem:
       lower_value compile_expr cenv (expr_type e) e sA = (op, sB) /\
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                 type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -90,7 +87,7 @@ QED
    a memory-located value bounds. *)
 Theorem annassign_copy_post_path_mem:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v tyv vtyp
-   sc rest a loc info bytes d.
+   sc rest a loc bytes d.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
     post_value_type cenv e = expr_type e /\
     expr_store_bound cx vtyp v op s /\
@@ -105,7 +102,7 @@ Theorem annassign_copy_post_path_mem:
     type_memory_bytes cenv vtyp = type_memory_size tyv /\
     0 < type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    compile_assign_value cenv (Var p) LocMemory op F loc vtyp vtyp info bytes sb =
+    compile_assign_value cenv (Var p) LocMemory op F loc vtyp vtyp bytes sb =
       ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     alloca_history func s /\ return_buf_frame d cenv sb s /\
@@ -207,7 +204,7 @@ Proof
   `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by metis_tac[] >>
   drule_all annassign_copy_parts_mem >>
   disch_then (qx_choosel_then [`sA`, `sV`, `sB`, `vv`, `op`] strip_assume_tac) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `!ty. type_memory_bytes c ty = _` (fn th => rewrite_tac[th]) >>
   qpat_assum `!e. lowered_value_type c e = _` (fn th => rewrite_tac[th]) >>
   qpat_assum `lowered_value_type cenv e = _` (fn th => rewrite_tac[th]) >>
@@ -306,11 +303,7 @@ Proof
   disch_then (qspecl_then [`sb`, `id`, `p`,
     `type_memory_bytes cenv (expr_type e)`, `w`, `ai`, `tyv`,
     `expr_type e`, `sc`, `rest`, `T`, `vv_location vv`] mp_tac) >>
-  disch_then (qspecl_then [`case expr_type e of
-        ArrayT elem_ty (Dynamic _) =>
-          SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                type_memory_bytes cenv elem_ty)
-      | _ => NONE`, `type_memory_bytes cenv (expr_type e)`, `d`] mp_tac) >>
+  disch_then (qspecl_then [`type_memory_bytes cenv (expr_type e)`, `d`] mp_tac) >>
   impl_tac
   >- (simp[] >> fs[]) >>
   disch_then (qx_choose_then `tf:venom_state` strip_assume_tac) >>

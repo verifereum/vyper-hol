@@ -65,14 +65,14 @@ Proof
 QED
 
 
-Theorem gas_shadow_compiles_word_copy_loop:
+Theorem gas_shadow_compiles_word_copy_loop_op:
   gas_shadow_compiles
-    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
-    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+    (compile_word_copy_loop_op src dst cnt load_loc store_loc is_ctor)
+    (compile_word_copy_loop_op src dst cnt load_loc store_loc is_ctor)
 Proof
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >>
-  pure_rewrite_tac[compile_word_copy_loop_def, LET_THM] >> BETA_TAC >>
+  pure_rewrite_tac[compile_word_copy_loop_op_def, LET_THM] >> BETA_TAC >>
   asm_rewrite_tac[] >>
   rewrite_tac[comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
@@ -85,6 +85,14 @@ Proof
                gas_shadow_compiles_ptr_store]
        >> gen_tac >> BETA_TAC) >>
   simp[gas_shadow_compiles_new_block]
+QED
+
+Theorem gas_shadow_compiles_word_copy_loop:
+  gas_shadow_compiles
+    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+    (compile_word_copy_loop src dst word_count load_loc store_loc is_ctor)
+Proof
+  simp[compile_word_copy_loop_def, gas_shadow_compiles_word_copy_loop_op]
 QED
 
 Theorem gas_shadow_compiles_storage_to_memory:
@@ -477,27 +485,34 @@ Proof
   Cases_on `prim` >> simp[compile_load_memory_def, gas_shadow_compiles_return]
 QED
 
-Theorem gas_shadow_compiles_store_transient:
-  gas_shadow_compiles (compile_store_transient val_op slot prim word_count)
-    (compile_store_transient val_op slot prim word_count)
+Theorem gas_shadow_compiles_store_slots:
+  (!cenv src slot ty tr.
+     gas_shadow_compiles (compile_store_slots cenv src slot ty tr)
+       (compile_store_slots cenv src slot ty tr)) /\
+  (!cenv src slot members mem_off slot_off tr.
+     gas_shadow_compiles
+       (compile_store_slots_members cenv src slot members mem_off slot_off tr)
+       (compile_store_slots_members cenv src slot members mem_off slot_off tr)) /\
+  (!cenv src slot elem cnt tr.
+     gas_shadow_compiles (compile_copy_elements_to_slots cenv src slot elem cnt tr)
+       (compile_copy_elements_to_slots cenv src slot elem cnt tr))
 Proof
-  Cases_on `prim` >> Cases_on `word_count = 1` >>
-  simp[compile_store_transient_def, gas_shadow_compiles_bind,
-       gas_shadow_compiles_emit_void, gas_shadow_compiles_memory_to_transient,
-       gas_shadow_compiles_return]
-QED
-
-Theorem gas_shadow_compiles_dynarray_to_storage:
-  gas_shadow_compiles (compile_dynarray_to_storage src dst elem_words elem_mem_size transient)
-    (compile_dynarray_to_storage src dst elem_words elem_mem_size transient)
-Proof
-  Cases_on `elem_words = 1` >> Cases_on `transient` >>
-  simp[compile_dynarray_to_storage_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac >> once_rewrite_tac[compile_store_slots_def] >>
+  simp[LET_THM, comp_ignore_bind_def, gas_shadow_compiles_return] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY (Cases_on `ty` >> gvs[] >> TRY (rename1 `ArrayT _ bd` >> Cases_on `bd` >> gvs[])) >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_fresh_label, gas_shadow_compiles_fresh_var,
                gas_shadow_compiles_emit_inst, gas_shadow_compiles_new_block,
-               gas_shadow_compiles_emit_void, gas_shadow_compiles_word_copy_loop]
-       >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_emit_void]
+               gas_shadow_compiles_emit_void, gas_shadow_compiles_return,
+               gas_shadow_compiles_bind, gas_shadow_compiles_lit_byte_offset,
+               gas_shadow_compiles_memory_to_storage,
+               gas_shadow_compiles_memory_to_transient,
+               gas_shadow_compiles_word_copy_loop_op,
+               compile_bytestring_word_count_def]
+       >> gen_tac >> BETA_TAC) >>
+  simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_return]
 QED
 
 Theorem gas_shadow_compiles_iload_to_memory:

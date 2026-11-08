@@ -372,7 +372,8 @@ Theorem bound_labels_dynarray_append:
 Proof
   strip_tac >> simp[compile_dynarray_append_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_store_memory, bound_labels_word_copy_loop, comp_return_def]),
+    bound_labels_store_memory, cj 1 bound_labels_store_slots,
+    bound_labels_word_copy_loop, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
@@ -2059,15 +2060,15 @@ Theorem bound_labels_assign_value[local]:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_assign_value ce dst loc v prim src dt st da sz s))))
+    (SND (compile_assign_value ce dst loc v prim src dt st sz s))))
 Proof
   strip_tac >> Cases_on `loc` >> simp[compile_assign_value_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_emit_inst, bound_labels_alloc_buffer, bound_labels_copy_memory,
     bound_labels_store_memory, bound_labels_memory_typed,
-    bound_labels_dynarray_to_storage, bound_labels_store_storage,
+    cj 1 bound_labels_store_slots,
     compile_memory_to_storage_def, compile_memory_to_transient_def,
-    bound_labels_word_copy_loop, bound_labels_store_transient, bound_labels_imm_store_word,
+    bound_labels_word_copy_loop, bound_labels_imm_store_word,
     bound_labels_imm_store_words, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC, CASE_TAC])

@@ -144,7 +144,7 @@
     "p15_local_append_bytes.json": "98950d82bea68d7ab189647d3a4a3352be4dc9f96d0117fbd812359f7aeab52e",
     "p16_return_tuple_bytes_widen.hex": "8e3a62918de7cf262712329ea3c7e2d8e50e290c1d8f4c3b506b93faf2773f66",
     "p16_return_tuple_bytes_widen.json": "09466aa2c8beb6f3ea25765fa1abe50527817fd251ce9113e9cff857e334efc2",
-    "p20_nested_pop.hex": "fd88e8c7ad9fd7aaea929c9a1ee1911be1c95ddff01172fd5bfacccfc92c1e0d",
+    "p20_nested_pop.hex": "62cb7d16e72f886639d36d78eab9444e37f643257e1a0856f898c52a181d7833",
     "p20_nested_pop.json": "d028cb63d5d2eafc8c9b779129e286a7a679755d22c9e2a92f53851a5fe70485",
     "p64_string_annassign_call.hex": "eac88931dea6312eae405b83884dc10388030a38299d2da07a0fcd119daf4314",
     "p64_string_annassign_call.json": "700c0ca262f48b4728f1d587cad288ef2f2d8df93d09c167a1989748371f5e1b",

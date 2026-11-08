@@ -58,7 +58,7 @@ Ancestors
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
-  bodyAssignPlace
+  bodyAssignPlace stmtSimAssignStorageSparse
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
   exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
@@ -219,8 +219,9 @@ Theorem lowered_value_type_not_call_word[local]:
 Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
   rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def] >>
-  simp[exprLoweringTheory.concat_buffer_type_def] >> rpt CASE_TAC >>
-  gvs[is_word_type_def]
+  simp[exprLoweringTheory.concat_buffer_type_def] >>
+  Cases_on `ty` >> simp[is_word_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >> gvs[is_word_type_def]
 QED
 
 (* A supported reason is a string expression (supported_string_reason),
@@ -1187,8 +1188,35 @@ Proof
   simp[exprLoweringTheory.lowered_value_type_def]
 QED
 
-(* An assignment to a private ABI-static storage or transient aggregate.
-   Region separation comes from storage_layout_safe in expr_sim_inv. *)
+(* A storage variable is never a bytestring and, unless a DynArray, has no
+   length word. *)
+Theorem topcopy_not_bytestring:
+  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
+Proof
+  Cases_on `t` >> simp[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
+       Once supportedTypesTheory.supported_nested_type_def,
+       supportedTypesTheory.supported_full_word_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
+       Once supportedTypesTheory.supported_nested_type_def,
+       supportedTypesTheory.supported_full_word_type_def]
+QED
+
+Theorem topcopy_no_length_word:
+  !tops t. supported_storage_type tops t /\
+    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule topcopy_not_bytestring >>
+  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
+  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
+QED
+
+(* An assignment to a private storage or transient aggregate: the dense
+   copy for an ABI-static type, the live-slot store otherwise.  Region
+   separation comes from storage_layout_safe in expr_sim_inv. *)
 Theorem body_assign_toplevel_copy[local]:
   !cx nsid e tops ctx func cenv env env' ret_ty lctx RetQ es res es' mut ty
    slot.
@@ -1198,8 +1226,7 @@ Theorem body_assign_toplevel_copy[local]:
        occurs_abi_decode_target target tops) /\
     supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
     (mut = Storage \/ mut = Transient) /\
-    ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
-    (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+    ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
     0 < type_memory_bytes cenv ty /\ expr_type e = ty /\
     supported_expr tops e /\
     expr_sim_inv cenv cx env es /\
@@ -1242,12 +1269,22 @@ Proof
     (drule_all storage_rhs_lowered_type >> simp[]) >>
   `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
     fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)`
+  >- (`~is_bytestring_type (expr_type e) /\ ~has_length_word (expr_type e)` by
+        metis_tac[topcopy_not_bytestring, topcopy_no_length_word] >>
+      `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+      irule compile_assign_storage_sparse_stmt_frag >> asm_rewrite_tac[] >>
+      qexistsl_tac [`env`, `id_str`, `off`, `tr`, `tops`, `tvt`,
+                    `expr_type e`] >>
+      asm_rewrite_tac[] >>
+      rpt strip_tac >> drule_all expr_body_pre_eval_gas >> strip_tac >>
+      gvs[value_runtime_typed_def]) >>
   irule compile_assign_storage_copy_stmt_frag >> asm_rewrite_tac[] >>
   qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
   asm_rewrite_tac[] >>
   rpt strip_tac >> drule_all expr_body_pre_eval_gas >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
   gvs[value_runtime_typed_def])
 QED
 
@@ -1330,8 +1367,7 @@ Theorem body_assign_other:
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
-        ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
-        (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\
@@ -1418,8 +1454,7 @@ Proof
               supported_variable_decl tops nsid =
                 SOME (Private, mut, ty, SOME slot) /\
               (mut = Storage \/ mut = Transient) /\
-              ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
-              (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
               0 < type_memory_bytes cenv ty /\ expr_type e = ty`
   >- (gvs[] >> irule body_assign_toplevel_copy >> metis_tac[]) >>
   Cases_on `?id fld sid fty.

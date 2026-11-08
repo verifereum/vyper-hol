@@ -320,7 +320,7 @@ QED
 (* The actual nonword memory assignment has an overlap-safe staging copy. *)
 Theorem assign_memory_body_parts[local]:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) ==>
+    ann ann bytes sa = ((),sb) ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce ann) sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src (type_memory_bytes ce ann) sm = ((),sn) /\
@@ -334,7 +334,7 @@ QED
 
 Theorem assign_memory_body_code:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) /\ fn_has_code sa sb func ==>
+    ann ann bytes sa = ((),sb) /\ fn_has_code sa sb func ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce ann) sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src (type_memory_bytes ce ann) sm = ((),sn) /\
@@ -467,7 +467,7 @@ Theorem compile_assign_value_name_staging_prefix_mem_ok:
   type_memory_bytes ce ann = type_memory_size entry.type /\
   type_memory_size entry.type < dimword (:256) /\
   compile_assign_value ce dst LocMemory (Var p) F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) /\
+    ann ann bytes sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ not_fresh_at sa p ==>
   ?buf sm sn a t w.
@@ -542,7 +542,7 @@ Theorem compile_assign_value_name_staged_mem_ok:
   type_memory_bytes ce ann = type_memory_size entry.type /\
   type_memory_size entry.type < dimword (:256) /\
   compile_assign_value ce dst LocMemory (Var p) F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) /\
+    ann ann bytes sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   (!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
@@ -591,7 +591,7 @@ Theorem assign_name_staged_run[local]:
   type_memory_bytes ce ann = type_memory_size entry.type /\
   type_memory_size entry.type < dimword (:256) /\
   compile_assign_value ce dst LocMemory (Var p) F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) /\
+    ann ann bytes sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   (!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
@@ -670,7 +670,7 @@ QED
 
 Theorem assign_memory_body_shape[local]:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) /\ fn_has_code sa sb func ==>
+    ann ann bytes sa = ((),sb) /\ fn_has_code sa sb func ==>
   same_blocks sa sb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -693,7 +693,7 @@ QED
 
 Theorem assign_memory_body_history[local]:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) /\ fn_has_code sa sb func /\
+    ann ann bytes sa = ((),sb) /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -718,7 +718,7 @@ Theorem compile_assign_value_name_staged_body_frag_mem:
   type_memory_bytes ce ann = type_memory_size entry.type /\
   type_memory_size entry.type < dimword (:256) /\
   compile_assign_value ce dst LocMemory (Var p) F (SOME LocMemory)
-    ann ann info bytes sa = ((),sb) /\
+    ann ann bytes sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ ~block_is_terminated sa /\
   (!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
@@ -745,7 +745,7 @@ Proof
   `!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x` by (simp[] >> metis_tac[])
   >- (`w2n d + type_memory_size entry.type <= s0.vs_alloca_next` by decide_tac >>
       drule_all compile_assign_value_name_staged_mem_ok >> simp[]) >>
-  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     assign_name_staged_run >> disch_then drule >> disch_then drule >>
   disch_then drule >> simp[] >>
   (impl_tac >- metis_tac[]) >> strip_tac >>

@@ -422,7 +422,7 @@ Proof
     mp_tac run_from_jump_end_mem >>
   impl_tac
   >- (gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
-      simp[mk_inst_def, is_terminator_def, Once step_inst_base_def,
+      simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
            inst_mem_below_frontier_def, source_memory_read_ranges_def,
            source_memory_write_ranges_def]) >>
   disch_then (qspecl_then [`fuel`, `Halt final`] mp_tac) >>

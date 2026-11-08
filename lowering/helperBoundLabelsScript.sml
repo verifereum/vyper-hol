@@ -68,13 +68,13 @@ Proof
   drule bound_labels_fresh_label >> simp[]
 QED
 
-Theorem bound_labels_word_copy_loop:
+Theorem bound_labels_word_copy_loop_op:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_word_copy_loop src dst n ld st ctor s))))
+    (all_blocks (SND (compile_word_copy_loop_op src dst cnt ld st ctor s))))
 Proof
-  strip_tac >> simp[compile_word_copy_loop_def] >>
+  strip_tac >> simp[compile_word_copy_loop_op_def] >>
   irule bound_labels_fresh_label_bind >> simp[] >> rpt strip_tac >>
   irule bound_labels_fresh_label_bind >> simp[] >> rpt strip_tac >>
   irule bound_labels_fresh_label_bind >> simp[] >> rpt strip_tac >>
@@ -85,6 +85,15 @@ Proof
     gen_tac, strip_tac,
     irule bound_labels_bind, irule bound_labels_ignore_bind,
     conj_tac, IF_CASES_TAC])
+QED
+
+Theorem bound_labels_word_copy_loop:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_word_copy_loop src dst n ld st ctor s))))
+Proof
+  simp[compile_word_copy_loop_def, bound_labels_word_copy_loop_op]
 QED
 
 Theorem bound_labels_location_copy:
@@ -154,19 +163,6 @@ Proof
   strip_tac >> simp[compile_load_storage_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_alloc_buffer, bound_labels_location_copy, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind,
-    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
-QED
-
-Theorem bound_labels_store_storage:
-  (!l. compiler_label l ==> P l) /\
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_store_storage v slot prim n s))))
-Proof
-  strip_tac >> simp[compile_store_storage_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_location_copy, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
@@ -414,6 +410,48 @@ Proof
     cj 1 bound_labels_memory_typed, bound_labels_copy_memory]
 QED
 
+Theorem bound_labels_bytestring_word_count:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_bytestring_word_count src s))))
+Proof
+  strip_tac >> simp[compile_bytestring_word_count_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op]),
+    gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
+QED
+
+Theorem bound_labels_store_slots:
+  (!cenv src slot ty tr s.
+    (!l. compiler_label l ==> P l) /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label)
+      (all_blocks (SND (compile_store_slots cenv src slot ty tr s))))) /\
+  (!cenv src slot members mem_off slot_off tr s.
+    (!l. compiler_label l ==> P l) /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label)
+      (all_blocks (SND (compile_store_slots_members cenv src slot members
+                          mem_off slot_off tr s))))) /\
+  (!cenv src slot elem cnt tr s.
+    (!l. compiler_label l ==> P l) /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+    EVERY P (MAP (\bb. bb.bb_label)
+      (all_blocks (SND (compile_copy_elements_to_slots cenv src slot elem cnt
+                          tr s)))))
+Proof
+  ho_match_mp_tac compile_store_slots_ind >> rpt strip_tac >>
+  simp[Once compile_store_slots_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
+    bound_labels_emit_inst, bound_labels_location_copy,
+    bound_labels_word_copy_loop_op, bound_labels_bytestring_word_count,
+    bound_labels_lit_byte_offset, bound_labels_new_block,
+    cj 4 bound_labels_primitives, comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
+    irule bound_labels_bind, irule bound_labels_ignore_bind,
+    conj_tac, IF_CASES_TAC, CASE_TAC]) >>
+  gvs[]
+QED
+
 Theorem bound_labels_encode_log_topic:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label)
@@ -432,34 +470,6 @@ Theorem bound_labels_load_memory:
 Proof
   Cases_on `prim` >>
   simp[compile_load_memory_def, comp_return_def, bound_labels_emit_op]
-QED
-
-Theorem bound_labels_store_transient:
-  (!l. compiler_label l ==> P l) /\
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_store_transient v slot prim n s))))
-Proof
-  strip_tac >> simp[compile_store_transient_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_location_copy, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind,
-    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
-QED
-
-Theorem bound_labels_dynarray_to_storage:
-  (!l. compiler_label l ==> P l) /\
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_dynarray_to_storage src dst ew em transient s))))
-Proof
-  strip_tac >> simp[compile_dynarray_to_storage_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_emit_inst, bound_labels_word_copy_loop,
-    bound_labels_new_block, cj 4 bound_labels_primitives]),
-    gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
-    irule bound_labels_bind, irule bound_labels_ignore_bind,
-    conj_tac, IF_CASES_TAC])
 QED
 
 Theorem bound_labels_iload_to_memory:

@@ -1032,12 +1032,13 @@ End
 
 (* ===== Storage Relation up to Dead Bytes ===== *)
 (* The source writes a bytestring as its length and the slots its bytes use
-   (encode_dyn_bytes_slots), zero-padding the last one.  Bytestring padding
-   need not agree with the memory buffer's unused bytes.
-   DynArray capacity elements remain related even after a shrink:
-   a previously captured child pointer may still read their headers or
-   values.  This relation requires sparse storage copies that preserve
-   those inactive slots.  The relation on
+   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering
+   (compile_store_slots) writes the same slots, but copies the last word of
+   a bytestring from its memory buffer as it is, so the bytes past a
+   bytestring's length can differ.  DynArray capacity elements remain
+   related even after a shrink: both sides write only the active elements,
+   and a previously captured child pointer may still read the inactive
+   ones' headers or values.  The relation on
    the running contract's storage and transient storage therefore only
    compares the bytes that are not dead.
 

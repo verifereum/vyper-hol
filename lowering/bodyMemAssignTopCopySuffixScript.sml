@@ -162,8 +162,9 @@ Theorem storage_copy_suffix_run_mem:
   !ctx func cenv cx es' tr src k n typ src_ty loc sa sb s b.
     compile_assign_value cenv (Lit k)
       (if tr then LocTransient else LocStorage) src F loc
-      typ src_ty NONE (32 * n) sa = ((),sb) /\
-    ~is_word_type typ /\ typ = src_ty /\ type_memory_bytes cenv typ = 32*n /\
+      typ src_ty (32 * n) sa = ((),sb) /\
+    ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
+    typ = src_ty /\ type_memory_bytes cenv typ = 32*n /\
     0 < n /\ n < dimword (:256) /\ w2n b + 32*n <= s.vs_alloca_next /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ eval_operand src s = SOME b /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -182,10 +183,13 @@ Theorem storage_copy_suffix_run_mem:
       t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >> simp[] >>
-  Cases_on `32*n <= 32`
-  >- (`n = 1` by decide_tac >> gvs[] >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  `32 * n DIV 32 = n` by
+    (irule arithmeticTheory.DIV_UNIQUE >> qexists_tac `0` >> simp[]) >>
+  dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >>
+  qpat_x_assum `32 * n DIV 32 = n` (fn th => simp[th]) >>
+  Cases_on `n = 1`
+  >- (gvs[] >>
       simp[comp_bind_def, AllCaseEqs()] >> strip_tac >>
       Cases_on `emit_op MLOAD [src] sa` >> gvs[] >>
       `COUNT_LIST 1 = [0]` by EVAL_TAC >>
@@ -224,7 +228,7 @@ Theorem storage_copy_success_run_mem:
     lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
     compile_assign_value cenv (Lit (n2w slot))
       (if tr then LocTransient else LocStorage) op F loc
-      (expr_type e) (expr_type e) NONE (type_memory_size tv) sm = ((),sf) /\
+      (expr_type e) (expr_type e) (type_memory_size tv) sm = ((),sf) /\
     fn_has_code sa sm func /\ fn_has_code sm sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
     ?t. gas_marked_path T ctx func s1 0 (OK t) /\
@@ -256,7 +260,7 @@ Proof
   `alloca_inv s1` by fs[expr_post_def, stmt_state_rel_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [type_memory_size_slots]) >>
   `w2n w + 32 * type_slot_size tv <= s1.vs_alloca_next` by decide_tac >>
-  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     storage_copy_suffix_run_mem >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s1`, `w`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>

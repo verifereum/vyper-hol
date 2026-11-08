@@ -67,8 +67,13 @@ Proof
            read_place_def, get_immutables_def, get_address_immutables_def,
            bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[bind_def, return_def, raise_def])) >>
+      (* one split per lookup: a repeated FULL_CASE_TAC/gvs runs over the
+         step limit here *)
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[return_def, raise_def]) >>
   simp[select_result_def, extend_place_def, raise_def]
 QED
 

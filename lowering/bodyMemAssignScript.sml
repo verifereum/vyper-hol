@@ -44,7 +44,8 @@ Proof
               supported_variable_decl tops nsid =
                 SOME (Private, mut, ty, SOME slot) /\
               (mut = Storage \/ mut = Transient) /\
-              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+              (!elem n. ty <> ArrayT elem (Dynamic n)) /\
               0 < type_memory_bytes cenv ty /\ expr_type e = ty`
   >- (pop_assum (REPEAT_TCL CHOOSE_THEN (MAP_EVERY assume_tac o CONJUNCTS)) >>
       qpat_x_assum `t = _` SUBST_ALL_TAC >>

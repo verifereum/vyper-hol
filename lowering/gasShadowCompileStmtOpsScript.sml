@@ -120,8 +120,8 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_assign_value:
-  gas_shadow_compiles (compile_assign_value cenv dst loc v prim src_loc ty sty da n)
-    (compile_assign_value cenv dst loc v prim src_loc ty sty da n)
+  gas_shadow_compiles (compile_assign_value cenv dst loc v prim src_loc ty sty n)
+    (compile_assign_value cenv dst loc v prim src_loc ty sty n)
 Proof
   Cases_on `loc`
   >- suspend "memory"
@@ -148,13 +148,7 @@ Resume gas_shadow_compiles_assign_value[storage]:
       simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
            gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_store_memory_typed]) >>
   gen_tac >> Cases_on `prim` >>
-  simp[gas_shadow_compiles_emit_void] >>
-  Cases_on `da`
-  >- (Cases_on `(if is_bytestring_type ty then type_memory_bytes cenv sty else n) <= 32` >>
-      simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
-           gas_shadow_compiles_emit_void, gas_shadow_compiles_memory_to_storage]) >>
-  rename1 `SOME p` >> PairCases_on `p` >>
-  simp[gas_shadow_compiles_dynarray_to_storage]
+  simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_store_slots]
 QED
 
 Resume gas_shadow_compiles_assign_value[transient]:
@@ -164,13 +158,7 @@ Resume gas_shadow_compiles_assign_value[transient]:
       simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
            gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_store_memory_typed]) >>
   gen_tac >> Cases_on `prim` >>
-  simp[gas_shadow_compiles_emit_void] >>
-  Cases_on `da`
-  >- (Cases_on `(if is_bytestring_type ty then type_memory_bytes cenv sty else n) <= 32` >>
-      simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
-           gas_shadow_compiles_emit_void, gas_shadow_compiles_memory_to_transient]) >>
-  rename1 `SOME p` >> PairCases_on `p` >>
-  simp[gas_shadow_compiles_dynarray_to_storage]
+  simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_store_slots]
 QED
 
 Resume gas_shadow_compiles_assign_value[code]:

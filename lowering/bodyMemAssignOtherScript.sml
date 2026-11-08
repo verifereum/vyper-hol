@@ -35,7 +35,8 @@ Theorem body_assign_other_mem:
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
         (mut = Storage \/ mut = Transient) /\
-        ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+        ~is_word_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+        (!elem n. ty <> ArrayT elem (Dynamic n)) /\
         0 < type_memory_bytes cenv ty /\ expr_type e = ty) /\
     ~(?id fld sid fty.
         t = AttributeTarget (NameTarget id) fld /\

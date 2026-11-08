@@ -158,11 +158,12 @@ Definition compile_copy_memory_def:
     emit_void MCOPY [dst; src; Lit (n2w (SUC size))]
 End
 
-(* Parameterized word-copy loop between two address spaces.
+(* Parameterized word-copy loop between two address spaces, copying as many
+   words as count_op holds at run time (a bytestring's live words).
    Mirrors Python: context.py _word_copy_loop
    Used for storage↔memory and transient↔memory bulk copies. *)
-Definition compile_word_copy_loop_def:
-  compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor =
+Definition compile_word_copy_loop_op_def:
+  compile_word_copy_loop_op src_op dst_op count_op load_loc store_loc is_ctor =
     let src_scale = word_scale load_loc in
     let dst_scale = word_scale store_loc in
     do
@@ -176,7 +177,7 @@ Definition compile_word_copy_loop_def:
       emit_inst JMP [Label cond_lbl] [];
       (* Cond block *)
       new_block cond_lbl;
-      done_op <- emit_op EQ [Var counter_var; Lit (n2w word_count)];
+      done_op <- emit_op EQ [Var counter_var; count_op];
       emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
       (* Body block *)
       new_block body_lbl;
@@ -207,6 +208,14 @@ Definition compile_word_copy_loop_def:
     od
 End
 
+(* The word-copy loop for a fixed word count: Python's _word_copy_loop with
+   an int count, which it emits as a literal. *)
+Definition compile_word_copy_loop_def:
+  compile_word_copy_loop src_op dst_op word_count load_loc store_loc is_ctor =
+    compile_word_copy_loop_op src_op dst_op (Lit (n2w word_count))
+      load_loc store_loc is_ctor
+End
+
 (* ===== Load from Storage/Transient to Memory ===== *)
 (* Mirrors Python: context.py _load_storage_to_memory *)
 Definition compile_storage_to_memory_def:
@@ -214,7 +223,8 @@ Definition compile_storage_to_memory_def:
     compile_word_copy_loop slot buf word_count LocStorage LocMemory F
 End
 
-(* Mirrors Python: context.py _store_memory_to_storage *)
+(* Copy word_count words from memory to storage.  Python inlines this
+   _word_copy_loop call in _store_memory_to_slots. *)
 Definition compile_memory_to_storage_def:
   compile_memory_to_storage buf slot word_count =
     compile_word_copy_loop buf slot word_count LocMemory LocStorage F
@@ -226,7 +236,8 @@ Definition compile_transient_to_memory_def:
     compile_word_copy_loop slot buf word_count LocTransient LocMemory F
 End
 
-(* Mirrors Python: context.py _store_memory_to_transient *)
+(* Copy word_count words from memory to transient storage, as
+   compile_memory_to_storage. *)
 Definition compile_memory_to_transient_def:
   compile_memory_to_transient buf slot word_count =
     compile_word_copy_loop buf slot word_count LocMemory LocTransient F
@@ -315,21 +326,6 @@ Definition compile_load_storage_def:
          do compile_storage_to_memory slot buf_op word_count;
             return buf_op
          od
-      od
-End
-
-(* Mirrors Python: context.py store_storage *)
-Definition compile_store_storage_def:
-  compile_store_storage val slot is_prim_word word_count =
-    if is_prim_word then
-      emit_void SSTORE [slot; val]
-    else if word_count = 1 then
-      do loaded <- emit_op MLOAD [val];
-         emit_void SSTORE [slot; loaded]
-      od
-    else
-      do _ <- compile_memory_to_storage val slot word_count;
-         return ()
       od
 End
 
@@ -574,9 +570,6 @@ Definition compile_store_immutable_def:
     compile_imm_store_words imm src_ptr (Lit (n2w dst_offset)) num_words 0
 End
 
-(* ===== Dynamic Array to Storage Copy ===== *)
-(* Copy only length + actual elements from memory to storage.
-   Mirrors Python: stmt.py _copy_dynarray_to_storage *)
 (* ===== Load Calldata ===== *)
 (* Mirrors Python: context.py load_calldata *)
 Definition compile_load_calldata_def:
@@ -901,86 +894,125 @@ Definition compile_load_memory_def:
       return ptr_op
 End
 
-(* ===== Store Transient ===== *)
-(* Full store_transient: primitive vs complex.
-   Mirrors Python: context.py store_transient *)
-Definition compile_store_transient_def:
-  compile_store_transient val slot is_prim_word word_count =
-    if is_prim_word then
-      emit_void TSTORE [slot; val]
-    else if word_count = 1 then
-      do loaded <- emit_op MLOAD [val];
-         emit_void TSTORE [slot; loaded]
-      od
-    else
-      do _ <- compile_memory_to_transient val slot word_count;
-         return ()
-      od
+(* ===== Store to Storage/Transient Slots ===== *)
+(* The words a bytestring at memory src occupies: its length word and the
+   words holding its bytes, 1 + ceil(length / 32).
+   Mirrors Python: context.py _bytestring_word_count *)
+Definition compile_bytestring_word_count_def:
+  compile_bytestring_word_count src =
+    do len_op <- emit_op MLOAD [src];
+       sum_op <- emit_op ADD [len_op; Lit 63w];
+       emit_op SHR [Lit 5w; sum_op]
+    od
 End
 
-Definition compile_dynarray_to_storage_def:
-  compile_dynarray_to_storage src_ptr dst_slot elem_words elem_mem_size transient =
-    do (* Load length *)
-       len_op <- emit_op MLOAD [src_ptr];
-       (* Create loop blocks *)
-       cond_lbl <- fresh_label "dyn_cond";
-       body_lbl <- fresh_label "dyn_body";
-       exit_lbl <- fresh_label "dyn_exit";
-       (* Entry: counter = 0 *)
-       counter <- fresh_var;
-       emit_inst ASSIGN [Lit 0w] [counter];
-       emit_inst JMP [Label cond_lbl] [];
-       (* Cond: counter < length *)
-       new_block cond_lbl;
-       lt_op <- emit_op LT [Var counter; len_op];
-       done_op <- emit_op ISZERO [lt_op];
-       emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
-       (* Body: copy one element *)
-       new_block body_lbl;
-       if elem_words = 1 then
-         (* Simple case: single word per element.
-            src_offset = 32 + counter * 32, dst = dst_slot + 1 + counter *)
-         do mul_op <- emit_op MUL [Var counter; Lit 32w];
-            src_off <- emit_op ADD [Lit 32w; mul_op];
-            src_elem <- emit_op ADD [src_ptr; src_off];
-            val_op <- emit_op MLOAD [src_elem];
-            slot_off <- emit_op ADD [Var counter; Lit 1w];
-            dst_elem <- emit_op ADD [dst_slot; slot_off];
-            (if transient then emit_void TSTORE [dst_elem; val_op]
-             else emit_void SSTORE [dst_elem; val_op]);
-            (* Increment counter *)
-            new_ctr <- emit_op ADD [Var counter; Lit 1w];
-            emit_inst ASSIGN [new_ctr] [counter];
-            emit_inst JMP [Label cond_lbl] [];
-            (* Exit: store length *)
-            new_block exit_lbl;
-            (if transient then emit_void TSTORE [dst_slot; len_op]
-             else emit_void SSTORE [dst_slot; len_op])
+(* Copy a value of type ty at memory src to the slots from slot (transient
+   storage if transient).  Only the words holding the value are written: a
+   DynArray's length and its first length elements, a bytestring's length
+   word and the words holding its bytes, at any depth; the slots past them
+   keep their contents.  A type with no DynArray or bytestring inside is
+   copied whole.  Struct and tuple members recurse with constant offsets;
+   static and dynamic arrays share one element loop, whose count is a
+   literal or the loaded length, and a DynArray's length is written last.
+   Recursion rejects cyclic struct metadata with INVALID, as the typed
+   memory copy does.
+   Mirrors Python: context.py _store_memory_to_slots, _copy_dynarray_to_storage
+   and _copy_elements_to_slots (store_storage/store_transient of a complex
+   value) *)
+Definition compile_store_slots_def:
+  compile_store_slots cenv src slot ty transient =
+    (let store_opc = (if transient then TSTORE else SSTORE) in
+     let store_loc = (if transient then LocTransient else LocStorage) in
+     if ¬is_abi_dynamic cenv.ce_struct_fields ty then
+       let words = type_memory_bytes cenv ty DIV 32 in
+       if words = 1 then
+         do loaded <- emit_op MLOAD [src];
+            emit_void store_opc [slot; loaded]
          od
        else
-         (* Multi-word elements: src_offset = 32 + counter * elem_mem_size,
-            dst_slot_i = dst_slot + 1 + counter * elem_words.
-            Uses word_copy_loop for each element.
-            Mirrors Python: stmt.py _copy_dynarray_to_storage complex case *)
-         do mul_op <- emit_op MUL [Var counter; Lit (n2w elem_mem_size)];
-            src_off <- emit_op ADD [Lit 32w; mul_op];
-            src_elem <- emit_op ADD [src_ptr; src_off];
-            slot_mul <- emit_op MUL [Var counter; Lit (n2w elem_words)];
-            slot_off <- emit_op ADD [Lit 1w; slot_mul];
-            dst_elem <- emit_op ADD [dst_slot; slot_off];
-            compile_word_copy_loop src_elem dst_elem elem_words
-                         LocMemory (if transient then LocTransient else LocStorage)
-                         F;
-            (* Increment counter *)
-            new_ctr <- emit_op ADD [Var counter; Lit 1w];
-            emit_inst ASSIGN [new_ctr] [counter];
-            emit_inst JMP [Label cond_lbl] [];
-            (* Exit: store length *)
-            new_block exit_lbl;
-            (if transient then emit_void TSTORE [dst_slot; len_op]
-             else emit_void SSTORE [dst_slot; len_op])
+         do (if transient then compile_memory_to_transient
+             else compile_memory_to_storage) src slot words;
+            return ()
          od
-    od
+     else if is_bytestring_type ty then
+       do count_op <- compile_bytestring_word_count src;
+          compile_word_copy_loop_op src slot count_op LocMemory store_loc F;
+          return ()
+       od
+     else if ¬acyclic_struct_metadata cenv.ce_struct_fields then
+       emit_void INVALID []
+     else
+       case ty of
+         ArrayT elem (Dynamic _) =>
+           do len_op <- emit_op MLOAD [src];
+              src_data <- emit_op ADD [src; Lit 32w];
+              slot_data <- emit_op ADD [slot; Lit 1w];
+              compile_copy_elements_to_slots cenv src_data slot_data elem
+                len_op transient;
+              emit_void store_opc [slot; len_op]
+           od
+       | ArrayT elem (Fixed n) =>
+           compile_copy_elements_to_slots cenv src slot elem (Lit (n2w n))
+             transient
+       | TupleT tys =>
+           compile_store_slots_members cenv src slot
+             (MAP (λt. (t, type_memory_bytes cenv t)) tys) 0 0 transient
+       | StructT nsid =>
+           compile_store_slots_members cenv src slot
+             (MAP SND (get_struct_fields cenv.ce_struct_fields
+                         (nsid_to_string nsid))) 0 0 transient
+       | _ => emit_void INVALID []) ∧
+
+  (* Members as (type, memory size) pairs; a member's slots are its memory
+     words. *)
+  compile_store_slots_members cenv src slot [] mem_off slot_off transient =
+    return () ∧
+  compile_store_slots_members cenv src slot ((ty, sz)::rest) mem_off slot_off
+                              transient =
+    (do member_src <- compile_lit_byte_offset src mem_off;
+        member_slot <- compile_lit_byte_offset slot slot_off;
+        compile_store_slots cenv member_src member_slot ty transient;
+        compile_store_slots_members cenv src slot rest (mem_off + sz)
+          (slot_off + sz DIV 32) transient
+     od) ∧
+
+  compile_copy_elements_to_slots cenv src slot elem count_op transient =
+    (let elem_mem_size = type_memory_bytes cenv elem in
+     let elem_words = elem_mem_size DIV 32 in
+     do cond_lbl <- fresh_label "dyn_cond";
+        body_lbl <- fresh_label "dyn_body";
+        exit_lbl <- fresh_label "dyn_exit";
+        counter <- fresh_var;
+        emit_inst ASSIGN [Lit 0w] [counter];
+        emit_inst JMP [Label cond_lbl] [];
+        new_block cond_lbl;
+        lt_op <- emit_op LT [Var counter; count_op];
+        done_op <- emit_op ISZERO [lt_op];
+        emit_inst JNZ [done_op; Label exit_lbl; Label body_lbl] [];
+        new_block body_lbl;
+        src_off <- emit_op MUL [Var counter; Lit (n2w elem_mem_size)];
+        src_elem <- emit_op ADD [src; src_off];
+        slot_off <- emit_op MUL [Var counter; Lit (n2w elem_words)];
+        slot_elem <- emit_op ADD [slot; slot_off];
+        compile_store_slots cenv src_elem slot_elem elem transient;
+        new_ctr <- emit_op ADD [Var counter; Lit 1w];
+        emit_inst ASSIGN [new_ctr] [counter];
+        emit_inst JMP [Label cond_lbl] [];
+        _ <- new_block exit_lbl;
+        return ()
+     od)
+Termination
+   WF_REL_TAC `measure (λx. case x of
+     INL (cenv,src,slot,ty,transient) =>
+       3 * type_rank cenv.ce_struct_fields ty
+   | INR (INL (cenv,src,slot,members,mem_off,slot_off,transient)) =>
+       3 * SUM (MAP (type_rank cenv.ce_struct_fields o FST) members) + 1
+   | INR (INR (cenv,src,slot,elem,count_op,transient)) =>
+       3 * type_rank cenv.ce_struct_fields elem + 1)` >>
+   rpt strip_tac >> gvs[] >>
+   ASM_SIMP_TAC std_ss [type_rank_struct_equation] >>
+   simp[type_rank_def, MAP_MAP_o, o_DEF, type_rank_positive] >>
+   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> decide_tac
 End
 
 (* Helper: ILOAD word-by-word to memory buffer (ctor, no immutables_alloca).

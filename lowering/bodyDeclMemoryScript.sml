@@ -63,7 +63,7 @@ Theorem body_annassign_name_path[local]:
   emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p] st = ((),sA) /\
   (!u. lower_value compile_expr c ty (Name ty source_id) u = (src,u)) /\
   compile_assign_value c (Var p) LocMemory src F (SOME LocMemory)
-    ty ty info bytes sA = ((),sb) /\
+    ty ty bytes sA = ((),sb) /\
   expr_sim_pre c cx env (Name ty source_id) es /\
   (do result <- eval_expr cx (Name ty source_id); read_result cx result od) es = (INL v,es) /\
   ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
@@ -124,7 +124,7 @@ Theorem body_annassign_name_prepare[local]:
   call_evaluation_safe cx (int_calls_stmt (AnnAssign id ty (Name ty source_id))) /\
   ~is_word_type ty /\ 0 < type_memory_bytes ce ty /\
   stmt_env ce lctx ret_ty (AnnAssign id ty (Name ty source_id)) sa = (c,sb) ==>
-  ?tyv v sc rest st sA src info es'.
+  ?tyv v sc rest st sA src es'.
     eval_stmt cx (AnnAssign id ty (Name ty source_id)) es = (INL (),es') /\
     (!tail. eval_stmt cx (AnnAssign id ty (Name ty source_id))
       (es with gas_obs := tail) = (INL (),es' with gas_obs := tail)) /\
@@ -138,7 +138,7 @@ Theorem body_annassign_name_prepare[local]:
       [STRING #"%" (toString sa.cs_next_var)] st = ((),sA) /\
     (!u. lower_value compile_expr c ty (Name ty source_id) u = (src,u)) /\
     compile_assign_value c (Var (STRING #"%" (toString sa.cs_next_var)))
-      LocMemory src F (SOME LocMemory) ty ty info (type_memory_bytes ce ty) sA = ((),sb) /\
+      LocMemory src F (SOME LocMemory) ty ty (type_memory_bytes ce ty) sA = ((),sb) /\
     expr_sim_pre c cx env (Name ty source_id) es /\
     (do result <- eval_expr cx (Name ty source_id); read_result cx result od) es = (INL v,es) /\
     evaluate_type (get_tenv cx) ty = SOME tyv /\
@@ -225,7 +225,7 @@ Theorem body_annassign_name_code[local]:
   emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))]
     [STRING #"%" (toString sa.cs_next_var)] st = ((),sA) /\
   compile_assign_value c (Var (STRING #"%" (toString sa.cs_next_var)))
-    LocMemory src F (SOME LocMemory) ty ty info bytes sA = ((),sb) /\
+    LocMemory src F (SOME LocMemory) ty ty bytes sA = ((),sb) /\
   0 < type_memory_bytes c ty /\ fn_has_code sa sb func ==>
   cs_extends sa sA /\ cs_extends sA sb /\
   fn_has_code sa sA func /\ fn_has_code sA sb func /\ ~block_is_terminated sb
@@ -243,7 +243,7 @@ Proof
   simp[] >> conj_tac
   >- gvs[fn_has_code_def, emitted_blocks_def] >>
   irule compile_assign_value_memory_same_open >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >> simp[]
 QED
 
 Theorem body_decl_normal_landing[local]:

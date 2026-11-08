@@ -1146,11 +1146,8 @@ Definition compile_dynarray_append_def:
                return ()
             od
           else
-            let word_count = elem_size DIV word_scale in
-            do compile_word_copy_loop val_op elem_ptr word_count
-                                      LocMemory dst_loc F;
-               return ()
-            od);
+            compile_store_slots cenv val_op elem_ptr dst_elem_ty
+              (dst_loc = LocTransient));
        (* Increment and store new length *)
        new_len <- emit_op ADD [len_op; Lit 1w];
        emit_void store_opc [base_op; new_len]

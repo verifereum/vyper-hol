@@ -17,8 +17,8 @@ Proof
   >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
            mk_inst_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
-           step_inst_base_def, jump_to_def, op_taint_def]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+           step_inst_base_opcode_eqs, jump_to_def, op_taint_def]) >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
        is_terminator_def]
 QED
 
@@ -40,11 +40,11 @@ Proof
   >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
            mk_inst_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
-           step_inst_base_def, jump_to_def, op_taint_def] >>
+           step_inst_base_opcode_eqs, jump_to_def, op_taint_def] >>
       Cases_on `v = 0w` >> simp[jump_to_def] >>
       rpt strip_tac >> Cases_on `op'` >> gvs[op_taint_def] >>
       strip_tac >> gvs[]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
        is_terminator_def] >>
   Cases_on `v = 0w` >> gvs[]
 QED

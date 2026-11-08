@@ -51,10 +51,7 @@ Proof
   `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by simp[] >>
   drule_all assign_storage_copy_code_parts >> strip_tac >>
   rename1 `lower_value _ _ _ _ sa = (op, sB)` >> gvs[] >>
-  drule (INST_TYPE [alpha |-> ``:num # num``] storage_copy_no_dyn_info) >>
-  disch_then (qspec_then
-    `\elem. ((type_memory_bytes cenv elem + 31) DIV 32,
-             type_memory_bytes cenv elem)` assume_tac) >> fs[] >>
+  fs[] >>
   `cs_extends sa sB` by metis_tac[cj 2 compile_expr_grows] >>
   `cs_extends sB sb` by
     metis_tac[cj 1 ci_mono_stmt_helpers, ci_mono_def, pairTheory.SND] >>

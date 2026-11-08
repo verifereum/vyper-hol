@@ -107,7 +107,7 @@ Proof
   qid_spec_tac `s` >>
   Cases_on `word_scale load_loc = 1` >>
   Cases_on `word_scale store_loc = 1` >>
-  simp[contextTheory.compile_word_copy_loop_def, comp_ignore_bind_def] >>
+  simp[contextTheory.compile_word_copy_loop_def, contextTheory.compile_word_copy_loop_op_def, comp_ignore_bind_def] >>
   rpt gen_tac >>
   rpt (irule compiler_counter_bind >> conj_tac >> rpt gen_tac >> BETA_TAC) >>
   simp[compiler_counter_primitives, compiler_counter_return,

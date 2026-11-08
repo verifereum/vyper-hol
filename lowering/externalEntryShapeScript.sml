@@ -1501,13 +1501,13 @@ Proof
   rpt gen_tac >> Cases_on `p` >> simp[as_ptr_val_def]
 QED
 
-Theorem compile_word_copy_loop_labels:
+Theorem compile_word_copy_loop_op_labels:
   !src dst wc ll sl ic s.
-    cs_extends s (SND (compile_word_copy_loop src dst wc ll sl ic s)) /\
+    cs_extends s (SND (compile_word_copy_loop_op src dst wc ll sl ic s)) /\
     EVERY (isPREFIX "@")
-      (added_labels s (SND (compile_word_copy_loop src dst wc ll sl ic s)))
+      (added_labels s (SND (compile_word_copy_loop_op src dst wc ll sl ic s)))
 Proof
-  rpt gen_tac >> rewrite_tac[contextTheory.compile_word_copy_loop_def, LET_THM] >>
+  rpt gen_tac >> rewrite_tac[contextTheory.compile_word_copy_loop_op_def, LET_THM] >>
   BETA_TAC >>
   rpt (FIRST [irule fresh_label_bind_labels,
               irule new_block_action_labels >>
@@ -1519,6 +1519,15 @@ Proof
        simp[comp_return_labels, emit_void_labels, emit_op_labels,
             emit_inst_labels, fresh_var_action_labels,
             compile_ptr_load_labels, compile_ptr_store_labels])
+QED
+
+Theorem compile_word_copy_loop_labels:
+  !src dst wc ll sl ic s.
+    cs_extends s (SND (compile_word_copy_loop src dst wc ll sl ic s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_word_copy_loop src dst wc ll sl ic s)))
+Proof
+  simp[contextTheory.compile_word_copy_loop_def, compile_word_copy_loop_op_labels]
 QED
 
 Theorem compile_storage_to_memory_labels:
@@ -3745,15 +3754,41 @@ Theorem stmt_context_helpers_labels:
   (!v b s. cs_extends s (SND (compile_encode_log_topic v b s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (compile_encode_log_topic v b s)))) /\
   (!k t v s. cs_extends s (SND (compile_nonreentrant_unlock k t v s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_nonreentrant_unlock k t v s)))) /\
-  (!src dst ew ems t s. cs_extends s (SND (compile_dynarray_to_storage src dst ew ems t s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_dynarray_to_storage src dst ew ems t s))))
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_nonreentrant_unlock k t v s))))
 Proof
   rpt conj_tac >> rpt gen_tac >>
   once_rewrite_tac[compile_memory_to_storage_def, compile_memory_to_transient_def,
     compile_slot_to_memory_def, compile_load_memory_def, compile_encode_log_topic_def,
-    compile_nonreentrant_unlock_def, compile_dynarray_to_storage_def] >>
+    compile_nonreentrant_unlock_def] >>
   stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem compile_store_slots_labels:
+  (!cenv src slot ty tr s.
+    cs_extends s (SND (compile_store_slots cenv src slot ty tr s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_store_slots cenv src slot ty tr s)))) /\
+  (!cenv src slot members mem_off slot_off tr s.
+    cs_extends s (SND (compile_store_slots_members cenv src slot members
+                         mem_off slot_off tr s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_store_slots_members cenv src slot members mem_off slot_off
+              tr s)))) /\
+  (!cenv src slot elem cnt tr s.
+    cs_extends s (SND (compile_copy_elements_to_slots cenv src slot elem cnt tr
+                         s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_copy_elements_to_slots cenv src slot elem cnt tr s))))
+Proof
+  ho_match_mp_tac contextTheory.compile_store_slots_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[contextTheory.compile_store_slots_def,
+    contextTheory.compile_bytestring_word_count_def] >>
+  stmt_labels_chain (compile_lit_byte_offset_labels ::
+    stmt_context_helpers_labels :: compile_word_copy_loop_op_labels ::
+    contextTheory.compile_bytestring_word_count_def ::
+    stmt_labels_rws) >>
+  gvs[]
 QED
 
 Theorem compile_dynarray_append_labels:
@@ -3764,8 +3799,7 @@ Theorem compile_dynarray_append_labels:
 Proof
   rpt gen_tac >> once_rewrite_tac[compile_dynarray_append_def] >>
   simp[LET_THM] >>
-  qmatch_goalsub_abbrev_tac `compile_word_copy_loop _ _ _ LocMemory dl F` >>
-  stmt_labels_chain stmt_labels_rws
+  stmt_labels_chain (cj 1 compile_store_slots_labels :: stmt_labels_rws)
 QED
 
 Theorem comp_get_labels:
@@ -3785,14 +3819,15 @@ Proof
 QED
 
 val stmt_labels_rws = stmt_labels_rws @
-  [stmt_context_helpers_labels, compile_dynarray_append_labels, comp_get_labels,
+  [stmt_context_helpers_labels, compile_store_slots_labels,
+   compile_dynarray_append_labels, comp_get_labels,
    compile_get_target_ptr_expr_labels];
 
 Theorem compile_assign_value_labels:
-  !cenv d l v p sl dt st da m s.
-    cs_extends s (SND (compile_assign_value cenv d l v p sl dt st da m s)) /\
+  !cenv d l v p sl dt st m s.
+    cs_extends s (SND (compile_assign_value cenv d l v p sl dt st m s)) /\
     EVERY (isPREFIX "@") (added_labels s
-      (SND (compile_assign_value cenv d l v p sl dt st da m s)))
+      (SND (compile_assign_value cenv d l v p sl dt st m s)))
 Proof
   rpt gen_tac >> Cases_on `l` >>
   once_rewrite_tac[compile_assign_value_def]

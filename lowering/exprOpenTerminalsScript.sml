@@ -36,7 +36,7 @@ Theorem compile_word_copy_loop_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
-  simp[compile_word_copy_loop_def, comp_bind_def, comp_ignore_bind_def] >>
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >>
   drule new_block_open >> simp[]
 QED

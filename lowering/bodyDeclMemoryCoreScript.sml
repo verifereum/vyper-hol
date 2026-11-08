@@ -451,9 +451,9 @@ Proof
 QED
 
 Theorem annassign_memory_assign_body_frag_mem:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R info bytes.
+  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty ty info bytes sa = ((), sb) /\
+      ty ty bytes sa = ((), sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
     eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
@@ -634,12 +634,12 @@ Proof
 QED
 
 Theorem annassign_name_rhs_body_frag_mem:
-  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d R info bytes.
+  !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d R bytes.
     lower_value compile_expr cenv ty (Name ty source_id) sa = (src,sm) /\
     expr_sim_pre cenv cx env (Name ty source_id) es /\
     (do result <- eval_expr cx (Name ty source_id); read_result cx result od) es = (INL v,es) /\
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
-      ty ty info bytes sm = ((), sb) /\
+      ty ty bytes sm = ((), sb) /\
     not_fresh_at sa p /\ lookup_var p s = SOME w /\
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
@@ -669,7 +669,7 @@ Proof
       comp_bind_def, comp_return_def, unwrap_value_def,
       contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
   irule annassign_memory_assign_body_frag_mem >> simp[] >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[eval_operand_def] >>
   qexists_tac `inst` >> simp[] >>
   fs[local_ptrs_reserved_def] >> metis_tac[]
@@ -686,9 +686,7 @@ Theorem body_annassign_name_compiler_parts:
       lower_value compile_expr c typ (Name typ source_id) sA = (op,sB) /\
       compile_assign_value c (Var p) LocMemory op F (vv_location vv)
         typ (lowered_value_type c (Name typ source_id))
-        (case typ of ArrayT elem_ty (Dynamic _) =>
-          SOME ((type_memory_bytes c elem_ty + 31) DIV 32,type_memory_bytes c elem_ty)
-        | _ => NONE) (type_memory_bytes c typ) sB = ((),sb)
+        (type_memory_bytes c typ) sB = ((),sb)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>

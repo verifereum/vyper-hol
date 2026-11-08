@@ -1,7 +1,7 @@
 (* Assignments to ABI-static storage or transient aggregates copy every
    encoded slot from memory. Source-static encoding coverage justifies
    that dense copy under the capacity-wide storage agreement mask.
-   Dynamic types use the general place-store proof. *)
+   stmtSimAssignStorageSparse has the ABI-dynamic case. *)
 
 Theory stmtSimAssignStorageCopy
 Ancestors
@@ -276,14 +276,6 @@ Proof
        comp_return_def, compile_store_at_loc_def]
 QED
 
-Theorem storage_copy_no_dyn_info:
-  (!elem n. typ <> ArrayT elem (Dynamic n)) ==>
-  (case typ of ArrayT elem (Dynamic n) => SOME (f elem) | _ => NONE) = NONE
-Proof
-  strip_tac >> Cases_on `typ` >> simp[] >>
-  rename1 `ArrayT elem bound` >> Cases_on `bound` >> simp[] >> metis_tac[]
-QED
-
 (* Expose the RHS prefix independently of the later assignment dispatch.
    In particular this interface remains valid when RHS evaluation fails. *)
 Theorem assign_storage_copy_code_parts:
@@ -304,9 +296,6 @@ Theorem assign_storage_copy_code_parts:
       compile_assign_value cenv (Lit slot)
         (if tr then LocTransient else LocStorage) op (is_word_type vtyp)
         (vv_location vv) vtyp (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                 type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -329,12 +318,12 @@ QED
    remains. No dynamic-array path or normalization can be selected. *)
 Theorem assign_storage_copy_suffix:
   !cenv dst src tr loc typ src_ty mem_size.
-    ~is_word_type typ /\
+    ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
     typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
     compile_assign_value cenv dst
       (if tr then LocTransient else LocStorage) src F loc
-      typ src_ty NONE mem_size =
-    (if mem_size <= 32 then
+      typ src_ty mem_size =
+    (if mem_size DIV 32 = 1 then
        do loaded <- emit_op MLOAD [src];
           emit_void (if tr then TSTORE else SSTORE) [dst; loaded]
        od
@@ -345,44 +334,58 @@ Theorem assign_storage_copy_suffix:
        od)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >> Cases_on `tr` >>
-  simp[FUN_EQ_THM, compile_assign_value_def, comp_bind_def, comp_return_def]
+  simp[FUN_EQ_THM, compile_assign_value_def] >>
+  simp[Once compile_store_slots_def, comp_bind_def, comp_return_def]
 QED
 
-Theorem storage_copy_loop_open[local]:
+(* A value's footprint is its type's memory size unless it is a bytestring. *)
+Theorem topcopy_val_footprint:
+  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  val_footprint tv v = type_memory_size tv
+Proof
+  rpt strip_tac >> Cases_on `v` >> simp[val_footprint_def] >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `BaseTV b` >> Cases_on `b` >> simp[] >>
+  Cases_on `ty` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
+QED
+
+(* The word copy loop ends in its exit block, which is open. *)
+Theorem word_copy_loop_op_open:
   !src dst n loc ctor sa u sb.
-    compile_word_copy_loop src dst n LocMemory loc ctor sa = (u,sb) ==>
+    compile_word_copy_loop_op src dst n LocMemory loc ctor sa = (u,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >>
-  simp[compile_word_copy_loop_def, comp_ignore_bind_def, comp_bind_def] >>
-  ntac 4 (pairarg_tac >> simp[]) >>
-  ntac 4 (pairarg_tac >> simp[]) >>
-  ntac 4 (pairarg_tac >> simp[]) >>
-  ntac 4 (pairarg_tac >> simp[]) >>
-  pairarg_tac >> simp[] >>
-  strip_tac >> pop_assum mp_tac >>
-  simp[new_block_def, block_is_terminated_def] >> strip_tac >> gvs[]
+  simp[compile_word_copy_loop_op_def, comp_ignore_bind_def, comp_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >>
+  strip_tac >> gvs[new_block_def, block_is_terminated_def]
 QED
 
 Theorem assign_storage_copy_suffix_open:
   !cenv dst src tr loc typ src_ty mem_size sa sb.
     compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
-      src F loc typ src_ty NONE mem_size sa = ((),sb) /\
-    ~is_word_type typ /\
+      src F loc typ src_ty mem_size sa = ((),sb) /\
+    ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
     typ = src_ty /\ type_memory_bytes cenv typ = mem_size ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >> simp[] >>
-  Cases_on `mem_size <= 32`
+  Cases_on `mem_size DIV 32 = 1`
   >- (simp[comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
       drule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
       Cases_on `tr` >> simp[is_terminator_def]) >>
   simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
        comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  irule storage_copy_loop_open >> Cases_on `tr` >> metis_tac[]
+  irule word_copy_loop_op_open >> Cases_on `tr` >>
+  fs[compile_word_copy_loop_def] >> metis_tac[]
 QED
 
 Theorem storage_copy_dyn_live_word[local]:
@@ -900,7 +903,7 @@ Theorem compile_store_copy_path[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_word_copy_loop_def, word_scale_def, compile_ptr_load_def,
+  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, word_scale_def, compile_ptr_load_def,
        compile_ptr_store_def, comp_ignore_bind_def, comp_bind_def,
        comp_return_def, fresh_label_def, fresh_var_def, emit_inst_def,
        emit_op_def, emit_void_def, fresh_id_def, emit_def, new_block_def] >>
@@ -1389,8 +1392,8 @@ Theorem storage_copy_suffix_run[local]:
   !ctx func cenv cx es' tr src k n typ src_ty loc sa sb s b.
     compile_assign_value cenv (Lit k)
       (if tr then LocTransient else LocStorage) src F loc
-      typ src_ty NONE (32 * n) sa = ((),sb) /\
-    ~is_word_type typ /\
+      typ src_ty (32 * n) sa = ((),sb) /\
+    ~is_word_type typ /\ ~is_abi_dynamic cenv.ce_struct_fields typ /\
     typ = src_ty /\ type_memory_bytes cenv typ = 32 * n /\
     0 < n /\ n < dimword (:256) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -1412,10 +1415,13 @@ Theorem storage_copy_suffix_run[local]:
                ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-    dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >> simp[] >>
-  Cases_on `32 * n <= 32`
-  >- (`n = 1` by decide_tac >> gvs[] >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  `32 * n DIV 32 = n` by
+    (irule arithmeticTheory.DIV_UNIQUE >> qexists_tac `0` >> simp[]) >>
+  dep_rewrite.DEP_REWRITE_TAC[assign_storage_copy_suffix] >>
+  qpat_x_assum `32 * n DIV 32 = n` (fn th => simp[th]) >>
+  Cases_on `n = 1`
+  >- (gvs[] >>
       simp[comp_bind_def, AllCaseEqs()] >> strip_tac >>
       Cases_on `emit_op MLOAD [src] sa` >> gvs[] >>
       `COUNT_LIST 1 = [0]` by EVAL_TAC >>
@@ -1587,7 +1593,7 @@ Theorem storage_copy_success_run[local]:
     lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
     compile_assign_value cenv (Lit (n2w slot))
       (if tr then LocTransient else LocStorage) op F loc
-      (expr_type e) (expr_type e) NONE (type_memory_size tv) sm = ((),sf) /\
+      (expr_type e) (expr_type e) (type_memory_size tv) sm = ((),sf) /\
     fn_has_code sa sm func /\ fn_has_code sm sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
@@ -1611,7 +1617,7 @@ Proof
     (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all storage_copy_post_region >> strip_tac >>
   RULE_ASSUM_TAC (REWRITE_RULE [valueEncodingPropsTheory.type_memory_size_slots]) >>
-  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     storage_copy_suffix_run >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s1`, `w`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
@@ -1672,10 +1678,6 @@ Proof
      gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
   drule_all assign_storage_copy_code_parts >> strip_tac >>
   qpat_x_assum `~(has_length_word _ /\ _)` kall_tac >> gvs[] >>
-  drule (INST_TYPE [alpha |-> ``:num # num``] storage_copy_no_dyn_info) >>
-  disch_then (qspec_then
-    `\elem. ((type_memory_bytes cenv elem + 31) DIV 32,
-             type_memory_bytes cenv elem)` assume_tac) >>
   fs[] >>
   `cs_extends sa sB` by metis_tac[cj 2 compile_expr_grows] >>
   `cs_extends sB sb` by
