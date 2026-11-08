@@ -130,10 +130,16 @@ Proof
       Cases_on `op` >> simp[eval_operand_def, lookup_var_def]) >>
   irule frag_exec_run_inst_seq >>
   gvs[venomInstTheory.mk_inst_def] >>
-  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
-       IS_PREFIX_APPEND3, run_inst_seq_def, stmt_state_rel_inst_idx,
-       is_terminator_def, step_inst_base_def, Abbr `A`,
-       venomInstTheory.mk_inst_def]
+  (let
+     val eq = valOf (List.find (fn th =>
+       let val (guard, _) = dest_imp (snd (strip_forall (concl th)))
+       in aconv (rhs guard) (Parse.Term `ALLOCA`) end)
+       (CONJUNCTS step_inst_base_opcode_eqs))
+   in
+     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+          IS_PREFIX_APPEND3, run_inst_seq_def, stmt_state_rel_inst_idx,
+          is_terminator_def, eq, Abbr `A`, venomInstTheory.mk_inst_def]
+   end)
 QED
 
 Theorem annassign_mstore_framed_frag:
