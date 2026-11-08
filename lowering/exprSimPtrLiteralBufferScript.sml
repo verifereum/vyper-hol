@@ -140,8 +140,7 @@ Proof
     (simp[ptr_covers_def, w2n_n2w] >> decide_tac) >>
   `step_inst_base (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] []) s =
      OK (mstore b (n2w (LENGTH bs)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
+    (simp[mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, w2n_n2w]) >>
   drule literal_mstore_ghost >>
   disch_then (qspecl_then [`n2w (LENGTH bs)`, `tn`, `id`, `PG`, `G`]
     strip_assume_tac) >>
@@ -725,14 +724,9 @@ Theorem literal_ptr_nonmemory_step[local]:
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  asm_simp_tac bool_ss [] >>
-  pure_rewrite_tac[opcode_case_def] >>
-  simp[exec_alloca_def, exec_pure2_def, exec_write2_def, AllCaseEqs(),
-       update_var_def, mstore_def] >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >>
+  gvs[step_inst_base_opcode_eqs, exec_alloca_def, exec_pure2_def,
+      exec_write2_def, AllCaseEqs(), update_var_def, mstore_def]
 QED
 
 Theorem literal_ptr_nonmemory_seq[local]:
