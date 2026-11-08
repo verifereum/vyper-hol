@@ -65,6 +65,10 @@ Proof
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_immutables_def, get_address_immutables_def,
        lift_option_type_def, lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  Cases_on `ALOOKUP s.immutables cx.txn.target` >> simp[return_def, raise_def] >>
+  Cases_on `FLOOKUP (get_source_immutables o' x) s'` >>
+  simp[return_def, raise_def] >>
+  Cases_on `subscripts_type (FST x') l` >> simp[return_def, raise_def] >>
   rpt (CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def])
 QED
 
