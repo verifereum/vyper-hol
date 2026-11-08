@@ -104,6 +104,28 @@ Proof
        supported_pure_expr_def]
 QED
 
+(* Diagnostic boundary: after a later argument changes a local, the captured
+   place reads the new value; an immediate result remains a snapshot. *)
+Theorem intcall_deferred_read_probe[local]:
+  read_results cx
+    [PlaceR (MemoryPlace "x" []); Value (BoolV T)]
+    (es with scopes := [FEMPTY |+ ("x",
+      <| assignable := T; type := BaseTV BoolT;
+         value := BoolV F; popped := [] |>)]) =
+  (INL [BoolV F; BoolV T],
+    es with scopes := [FEMPTY |+ ("x",
+      <| assignable := T; type := BaseTV BoolT;
+         value := BoolV F; popped := [] |>)])
+Proof
+  simp[vyperStateTheory.read_results_def, vyperStateTheory.read_result_def,
+       vyperStateTheory.read_place_def, vyperStateTheory.bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.get_scopes_def,
+       vyperStateTheory.lookup_scopes_def, vyperStateTheory.read_memory_path_def,
+       vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_def,
+       vyperStateTheory.evaluate_subscripts_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
    (callable_graph_descent), the statement producer of every frame whose
