@@ -136,10 +136,11 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* Shared computed behavior for all four special addresses; Send has empty
-   calldata so the EC cases are valid zero points, not arbitrary oracle heads. *)
-Theorem send_cps_computed_no_consumption_no_request:
-  EVERY (λtarget. send_observe target 0 (SOME [cpscv_tail])
+(* Shared computed behavior for all four special addresses: the head
+   outcome's success bit is taken and no request is recorded. Send has empty
+   calldata so the EC cases are valid zero points. *)
+Theorem send_cps_computed_consumes_no_request:
+  EVERY (λtarget. send_observe target 0 (SOME [cpscv_tail; cpscv_tail])
     (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
     send_initial_requests cpscv_tail_snapshot) [1w;2w;6w;7w]
 Proof

@@ -676,6 +676,7 @@ Definition apply_vals_def:
     liftk cx ApplyTv (do
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
+      precompile_call_success bt;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ tys k) =
@@ -688,6 +689,7 @@ Definition apply_vals_def:
       event <- lift_option
         (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
         "Log encode event";
+      check_not_static cx;
       push_log event
     od st) k ∧
   apply_vals cx vs st (CustomErrorK error_name arg_types k) =
@@ -713,7 +715,7 @@ Definition apply_vals_def:
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
       is_view <<- is_view_mut mut;
       (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
-      lock_if_nr cx nr is_view;
+      lock_if_nr (cx with stk updated_by TL) nr is_view;
       cxf <- push_function src_fn env (cx with stk updated_by TL);
       return (prev, cxf, body, rtv, is_view) od st
      of (INR ex, st) => apply_exc (cx with stk updated_by TL) ex st k
@@ -753,6 +755,7 @@ Definition apply_vals_def:
       topic_vals <<- (case topics of
          TupleV tvs => tvs | DynArrayV tvs => tvs | _ => []);
       type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+      check_not_static cx;
       push_log (encode_raw_event_values cx.txn.target topic_vals data);
       return $ Value NoneV
     od st
@@ -769,6 +772,7 @@ Definition apply_vals_def:
     (case do
       type_check (LENGTH vs = 1) "selfdestruct args";
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
+      check_not_static cx;
       accounts <- get_accounts;
       self_acct <<- lookup_account cx.txn.target accounts;
       balance <<- self_acct.balance;
@@ -1423,9 +1427,12 @@ Proof
     \\ (CASE_TAC \\ reverse CASE_TAC
         >- rw[Once OWHILE_THM, stepk_def, apply_exc_def])
     >> rw[Once OWHILE_THM, stepk_def, apply_vals_def,
-          apply_tv_def, bind_def, liftk1]
-    >> CASE_TAC \\ CASE_TAC
-    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"] )
+          apply_tv_def, bind_def, ignore_bind_def, liftk1]
+    >> simp[get_accounts_def, return_def]
+    >> CASE_TAC \\ CASE_TAC \\ simp[return_def]
+    \\ CASE_TAC \\ CASE_TAC
+    \\ gvs[bind_def, ignore_bind_def, return_def, CaseEq "prod", CaseEq "sum"]
+    \\ Cases_on `q` \\ Cases_on `q'` \\ simp[] )
   \\ conj_tac >- ( (* eval_expr (Pop bt) *)
     rpt gen_tac >> strip_tac
     >> pure_once_rewrite_tac [eval_expr_cps_def, evaluate_def]
@@ -2069,3 +2076,10 @@ Proof
   \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
+
+(* Integration audit: required CPS equivalences must be kernel closed. *)
+val () = List.app (fn (name,th) =>
+  let val (oracles,_) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail ("CPS oracle debt: " ^ name)
+  end) (DB.thms "vyperSmallStep");

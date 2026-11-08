@@ -345,7 +345,7 @@ QED
 Definition cpscv_computed_observations_def:
   cpscv_computed_observations =
     let r = cpscv_run (cpscv_call T 2w (BaseT (UintT 256)) NONE)
-      (cpscv_state with outcomes := SOME [cpscv_tail]) in
+      (cpscv_state with outcomes := SOME [cpscv_tail; cpscv_tail]) in
     FST r = INL (Value (IntV
       76608535402990681306785640849444230170906828356424760867673094225215694626710)) /\
     cpscv_snapshot 3 4w cpscv_initial_logs
@@ -354,13 +354,15 @@ Definition cpscv_computed_observations_def:
       (Call (BaseT (UintT 256)) (ExtCall F F ("f",[],BaseT (UintT 256)) [EKValue])
         [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [2w]));
          Literal (BaseT (UintT 256)) (IntL 0)] NONE)
-      (cpscv_state with outcomes := SOME [cpscv_tail]) in
+      (cpscv_state with outcomes := SOME [cpscv_tail; cpscv_tail]) in
     FST nr = FST r /\ cpscv_snapshot 3 4w cpscv_initial_logs
       cpscv_initial_requests cpscv_tail_snapshot (SND nr)
 End
 val () = cv_auto_trans cpscv_computed_observations_def;
 
-Theorem cpscv_computed_no_consumption_no_request:
+(* A computed call consumes the head outcome for its success bit and
+   records no request. *)
+Theorem cpscv_computed_consumes_no_request:
   cpscv_computed_observations
 Proof
   CONV_TAC cv_eval

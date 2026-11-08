@@ -112,9 +112,11 @@ Theorem place_storage_raw_write:
   FST ((do
       write_place cx (StoragePlace T 7w (BaseTV (UintT 256))) (IntV 10);
       read_place cx (StoragePlace T 7w (BaseTV (UintT 256)))
-    od) empty_state) = INL (IntV 10)
+    od) empty_state) =
+  if cx.txn.is_static then INR (Error (RuntimeError "write in static context"))
+  else INL (IntV 10)
 Proof
-  EVAL_TAC >> simp[]
+  gen_tac >> EVAL_TAC >> Cases_on `cx.txn.is_static` >> simp[]
 QED
 
 Theorem place_memory_extension_bounds:

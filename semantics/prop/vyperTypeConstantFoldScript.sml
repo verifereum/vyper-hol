@@ -557,6 +557,15 @@ Definition constant_machine_immutables_def:
     case ALOOKUP am.immutables addr of NONE => [] | SOME imms => imms
 End
 
+(* Constant folding runs without the outcome oracle, so a precompile's
+   success check passes without consuming anything. *)
+Theorem precompile_call_success_initial_state:
+  precompile_call_success bt (initial_state am sc) =
+  return () (initial_state am sc)
+Proof
+  simp[precompile_call_success_def, initial_state_def]
+QED
+
 Theorem constant_value_eval_expr_shape[local]:
   (!mods imms e v cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_value mods imms e = SOME v /\
@@ -720,7 +729,8 @@ Proof
     qexists `Value v` >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def, expr_type_def, eval_result_typed_def,
-         read_result_def, value_runtime_typed_def, constant_result_shape_def] >>
+         read_result_def, value_runtime_typed_def, constant_result_shape_def,
+         precompile_call_success_initial_state] >>
     metis_tac[])
   >~ [`TypeBuiltin`] >- (
     `well_typed_exprs (artifact_env artifact mods current_src) es /\
@@ -871,15 +881,20 @@ Proof
   Induct_on `es` >> rpt gen_tac >> strip_tac
   >- gvs[Once evaluate_def, return_def, constant_value_def] >>
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >> strip_tac >>
-  gvs[sum_CASE_rator, AllCaseEqs()] >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[NoAsms, sum_CASE_rator, CaseEq "prod", CaseEq "sum", return_def] >>
+  strip_tac >>
   drule read_result_state >>
   disch_then SUBST_ALL_TAC >>
-  `constant_value mods imms h = SOME v''` by metis_tac[] >>
+  `s'' = st` by metis_tac[listTheory.MEM] >>
+  qpat_x_assum `s'' = st` SUBST_ALL_TAC >>
+  `constant_value mods imms h = SOME v''` by metis_tac[listTheory.MEM] >>
+  gvs[IgnAsm `!e pv next. _`, IgnAsm `!vs st'. _`] >>
   rename1 `eval_exprs cx es st = (INL tailvals,tailstate)` >>
   `tailstate = st /\ constant_values mods imms es = SOME tailvals` by metis_tac[] >>
+  `constant_value mods imms h = SOME v''` by metis_tac[] >>
   qpat_x_assum `!e pv next. _` kall_tac >>
-  gvs[return_def, constant_value_def]
+  simp[constant_value_def]
 QED
 
 Theorem constant_eval_expr_fold_agreement[local]:
@@ -1040,9 +1055,11 @@ Resume constant_eval_expr_fold_agreement[builtin]:
          lift_sum_def, get_accounts_def, return_def] >> strip_tac >>
     gvs[sum_CASE_rator, AllCaseEqs()] >>
     drule_all constant_eval_exprs_fold_lift >> strip_tac >>
-    gvs[return_def, raise_def, constant_result_shape_def, read_result_def] >>
+    gvs[return_def, raise_def, constant_result_shape_def, read_result_def,
+        precompile_call_success_initial_state] >>
     `get_tenv cx = type_env_all_modules mods` by simp[get_tenv_def] >>
-    `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL v''` by
+    rename1 `evaluate_builtin cx _ v8 bt (MAP expr_type es) vs = INL bv` >>
+    `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL bv` by
       metis_tac[evaluate_builtin_constant_context] >>
     gvs[constant_value_def]
 QED

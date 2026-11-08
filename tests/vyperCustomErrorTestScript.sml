@@ -108,12 +108,12 @@ Theorem custom_error_contract_checker:
     (custom_error_program "Ordered"
       [one_expr; Literal (BaseT BoolT) (BoolL T)]) = NONE
 Proof
-  rewrite_tac[custom_error_program_def, one_expr_def, two_expr_def,
-              custom_error_uint_def] >>
-  rpt conj_tac
-  >- (CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >>
-      simp[])
-  >> CONV_TAC (LAND_CONV vyperCheckContractLib.check_contract_conv) >>
+  PURE_REWRITE_TAC [custom_error_program_def, custom_error_uint_def,
+    one_expr_def, two_expr_def] >>
+  CONV_TAC (DEPTH_CONV (fn tm =>
+    if same_const (fst (strip_comb tm)) ``check_contract`` andalso
+       length (snd (strip_comb tm)) = 4
+    then vyperCheckContractLib.check_contract_conv tm else NO_CONV tm)) >>
   simp[]
 QED
 

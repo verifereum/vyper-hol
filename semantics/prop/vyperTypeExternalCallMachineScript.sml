@@ -58,8 +58,11 @@ Theorem call_lock_send_success_components:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) ==>
   body_st.scopes = [scope] /\
@@ -71,7 +74,7 @@ Proof
   `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
    state_well_typed body_st` by
     (irule call_lock_send_prefix_body_state_ready_c53 >> simp[] >>
-     qexistsl [`cx`, `gobs`, `mut`, `nr`, `orc`, `rqs`] >> simp[bind_def, ignore_bind_def]) >>
+     qexistsl [`cx`, `gobs`, `mut`, `nr`, `orc`, `rqs`] >> gvs[bind_def, ignore_bind_def]) >>
   `lock_st.accounts =
      (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>).accounts` by
     metis_tac[call_lock_action_preserves_accounts_c53] >>
@@ -94,8 +97,11 @@ Theorem checked_explicit_body_from_states_preserves_components:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,st') ==>
@@ -132,8 +138,11 @@ Theorem checked_getter_body_from_states_preserves_components:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,st') ==>
@@ -156,7 +165,7 @@ Theorem checked_getter_send_eval_success_components:
   ALOOKUP mods src = SOME ts /\
   module_allocated am.layouts tx.target src ts /\ MEM decl ts /\
   is_public_getter_decl tx.function_name decl /\
-  external_getter_tuple src decl = SOME (View,F,args,[],ret,body) /\
+  external_getter_tuple src decl = SOME (View,nr,args,[],ret,body) /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   (do send_call_value View cx; eval_stmts cx body
@@ -164,57 +173,17 @@ Theorem checked_getter_send_eval_success_components:
   (res = INL () \/ ?v. res = INR (ReturnException v)) ==>
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `do _; _ od _ = _` mp_tac >>
-  simp[bind_def, ignore_bind_def] >>
-  Cases_on `send_call_value View
-    (initial_evaluation_context am.sources am.layouts tx src)
-    (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` >>
-  Cases_on `q` >> gvs[]
-  >- (rpt strip_tac >>
-      mp_tac (GEN_ALL (Q.INST
-        [`mut` |-> `View`, `nr` |-> `F`, `dflts` |-> `[]`,
-         `cx` |-> `initial_evaluation_context am.sources am.layouts tx src`,
-         `lock_st` |-> `initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>`]
-        (SPEC_ALL checked_getter_body_from_states_preserves_components))) >>
-      simp[return_def] >> disch_then drule_all >> simp[])
-  >- (rpt strip_tac >>
-      mp_tac (GEN_ALL (Q.INST
-        [`mut` |-> `View`, `nr` |-> `F`, `dflts` |-> `[]`,
-         `cx` |-> `initial_evaluation_context am.sources am.layouts tx src`,
-         `lock_st` |-> `initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>`]
-        (SPEC_ALL checked_getter_body_from_states_preserves_components))) >>
-      simp[return_def] >> disch_then drule_all >> simp[])
-  >- (rpt strip_tac >>
-      FIRST
-        [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
-         simp[no_control_exc_def],
-         `return () (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) =
-          (INL (),initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by simp[return_def] >>
-         funpow 7 drule_then drule
-           checked_getter_body_from_states_preserves_components >>
-         simp[] >> disch_then (drule_then drule) >> gvs[]])
-  >- (rpt strip_tac >>
-      FIRST
-        [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
-         simp[no_control_exc_def],
-         `return () (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) =
-          (INL (),initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by simp[return_def] >>
-         funpow 7 drule_then drule
-           checked_getter_body_from_states_preserves_components >>
-         simp[] >> disch_then (drule_then drule) >> gvs[]])
-  >- (rpt strip_tac >>
-      FIRST
-        [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
-         simp[no_control_exc_def],
-         `return () (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) =
-          (INL (),initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` by simp[return_def] >>
-         funpow 7 drule_then drule
-           checked_getter_body_from_states_preserves_components >>
-         simp[] >> disch_then (drule_then drule) >> gvs[]])
-  >- (strip_tac >>
-      drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
-      simp[no_control_exc_def])
+  strip_tac >>
+  Cases_on `cx.txn.value = 0` >>
+  gvs[send_call_value_def, check_def, assert_def, raise_def,
+      ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  irule checked_public_getter_body_preserves_machine_components >>
+  goal_assum (drule_at (Pat `eval_stmts`)) >>
+  goal_assum (drule_at (Pat `external_getter_tuple`)) >>
+  gvs[initial_state_def, machine_well_typed_def, state_well_typed_def] >>
+  metis_tac[]
 QED
 
 Theorem checked_explicit_call_run_success_components:
@@ -230,8 +199,11 @@ Theorem checked_explicit_call_run_success_components:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                         (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
@@ -243,12 +215,15 @@ Proof
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   qpat_x_assum `do _; _; _ od _ = _` mp_tac >>
-  simp[bind_def, ignore_bind_def] >>
+  simp[bind_def, ignore_bind_def] >> PURE_REWRITE_TAC [GSYM ignore_bind_def] >>
   Cases_on `(if nr then
                case cx.nonreentrant_slot of
                  NONE => raise (Error (TypeError "nonreentrant slot missing"))
-               | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                                (mut = View \/ mut = Pure)
+               | SOME slot => do
+                     acquire_nonreentrant_lock cx.txn.target slot
+                       ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                     if (mut = View \/ mut = Pure) then return () else check_not_static cx
+                   od
              else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` >>
   Cases_on `q` >> gvs[]
   >- (Cases_on `send_call_value mut
@@ -454,36 +429,39 @@ Theorem call_external_function_selected_getter_success_machine_well_typed[local]
   machine_well_typed am'
 Proof
   rpt strip_tac >>
-  `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
+  `mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
     (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
      >- (rename1 `is_public_getter_decl _
            (VariableDecl vis storage id ty init)` >>
          Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
          Cases_on `storage` >> gvs[] >>
          Cases_on `is_ArrayT ty` >> gvs[] >>
-         TRY (drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >> NO_TAC) >>
-         gvs[external_getter_tuple_def]) >>
+         FIRST
+           [drule_all array_public_getter_tuple_shape >> metis_tac[],
+            gvs[external_getter_tuple_def]]) >>
      rename1 `is_public_getter_decl _
        (HashMapDecl vis transient id kt vt init)` >>
      Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
      drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
   gvs[] >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac bool_ss [call_external_function_def, LET_THM] >>
-  simp[initial_evaluation_context_def] >>
-  Cases_on `tx.value = 0` >>
-  simp[send_call_value_def, bind_def, ignore_bind_def, return_def,
-       check_def, assert_def, raise_def, set_scopes_def, initial_state_def] >>
-  strip_tac >>
-  qpat_x_assum `(\(res,am_out,rqs). _) _ = _` mp_tac >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  simp[AllCaseEqs()] >> strip_tac >>
-  rename1 `eval_stmts _ _ _ = (res, st_body)` >>
+  `(nr ==> (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot <> NONE)` by
+    (strip_tac >> drule_all checked_selected_getter_lock_slot >>
+     simp[initial_evaluation_context_def]) >>
+  dxrule_all_then assume_tac call_external_function_view_success_without_lock >>
+  drule call_external_function_success_phases >> strip_tac >>
+  gvs[eval_external_defaults_nil, bind_def, ignore_bind_def, return_def,
+      initial_evaluation_context_def] >>
+  qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
+  simp[send_call_value_def, check_def, assert_def, bind_def, ignore_bind_def,
+       return_def, raise_def] >>
+  IF_CASES_TAC >> gvs[return_def, raise_def] >> strip_tac >>
+  gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+      initial_state_def] >>
   `state_well_typed st_body /\ accounts_well_typed st_body.accounts` by
-    (drule (SRULE [initial_evaluation_context_def, initial_state_def]
+    (drule (SRULE [initial_state_def, initial_evaluation_context_def]
        checked_getter_initial_body_components) >>
-     strip_tac >> first_x_assum drule_all >> simp[]) >>
-  gvs[return_def, machine_well_typed_def, abstract_machine_from_state_def,
+     disch_then irule >> metis_tac[]) >>
+  gvs[machine_well_typed_def, abstract_machine_from_state_def,
       state_well_typed_def]
 QED
 
@@ -545,16 +523,16 @@ Proof
     gvs[checked_contract_runtime_ready_def] >>
   `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH dflts` by
     gvs[checked_call_inputs_ready_def, checked_defaults_ready_def]
-  >>~- ([`MEM (FunctionDecl External _ _ _ _ _ _ _ _) _`],
-     drule_at (Pat `call_external_function`)
-       call_external_function_selected_explicit_success_machine_well_typed >>
-     simp[] >> disch_then (fn th => metis_tac[th])) >>
-  (`nr = F /\ mut = View /\ dflts = []` by
-       (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >>~- ([`MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body') ts`],
+      drule_at (Pat `call_external_function`)
+        call_external_function_selected_explicit_success_machine_well_typed >>
+      simp[] >> disch_then (fn th => metis_tac[th])) >>
+  (`mut = View /\ dflts = []` by
+       (Cases_on `decl` >> gvs[is_public_getter_decl_def]
         >- (rename1 `is_public_getter_decl _ (VariableDecl vis storage id ty init)` >>
             Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
-            Cases_on `storage` >> gvs[] >> Cases_on `is_ArrayT ty` >> gvs[] >>
-            TRY (drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >> NO_TAC) >>
+            Cases_on `is_ArrayT ty`
+            >- (drule_all array_public_getter_tuple_shape >> metis_tac[]) >>
             gvs[external_getter_tuple_def]) >>
         rename1 `is_public_getter_decl _ (HashMapDecl vis transient id kt vt init)` >>
         Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
@@ -581,3 +559,10 @@ Proof
   >- metis_tac[checked_call_external_success_preserves_machine_well_typed] >>
   metis_tac[checked_call_external_failure_preserves_machine_well_typed]
 QED
+
+(* Machine preservation must not inherit admitted prerequisites. *)
+val () = List.app (fn (_, th) =>
+  if List.null (List.filter (fn s => s <> "DISK_THM")
+      (#1 (Tag.dest_tag (Thm.tag th)))) then ()
+  else raise Fail "external call machine preservation has oracle dependencies")
+  (DB.thms "vyperTypeExternalCallMachine");

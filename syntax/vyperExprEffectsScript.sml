@@ -1,7 +1,9 @@
 (* TOP-LEVEL: conservative syntactic purity test shared by the interpreter
    proofs and lowering. Calls and Pop may change state; nested occurrences
    propagate through every expression constructor that can contain them.
-   msg.gas is impure because it consumes a gas reading. *)
+   msg.gas is impure because it consumes a gas reading, and so are the
+   precompile builtins (sha256, ecrecover, ecadd, ecmul), which consume a
+   call outcome. *)
 Theory vyperExprEffects
 Ancestors
   vyperAST list pair
@@ -15,7 +17,9 @@ Definition pure_expr_def:
   pure_expr (StructLit _ _ kes) = EVERY pure_expr (MAP SND kes) /\
   pure_expr (Subscript _ e1 e2) = (pure_expr e1 /\ pure_expr e2) /\
   pure_expr (Attribute _ e _) = pure_expr e /\
-  pure_expr (Builtin _ bt es) = (bt <> Env MsgGas /\ EVERY pure_expr es) /\
+  pure_expr (Builtin _ bt es) =
+    (bt <> Env MsgGas /\ bt <> Sha256 /\ bt <> ECRecover /\ bt <> ECAdd /\
+     bt <> ECMul /\ EVERY pure_expr es) /\
   pure_expr (TypeBuiltin _ _ _ es) = EVERY pure_expr es /\
   pure_expr _ = F
 Termination

@@ -449,6 +449,14 @@ val RAW_CALL_FINISH_TAC =
    gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
        raw_call_return_type_def] >> decide_tac);
 
+Theorem frame_call_value_error[local]:
+  frame_call_value cx v st = (INR e,st') ==>
+  e = Error (RuntimeError "write in static context")
+Proof
+  rw[frame_call_value_def, ignore_bind_def, bind_def, check_def, assert_def,
+     return_def, raise_def] >> gvs[AllCaseEqs(), raise_def]
+QED
+
 (* Shared execution is independent of how the input bytes were obtained. *)
 Theorem eval_raw_call_result_sound:
   runtime_consistent env cx st /\
@@ -461,16 +469,23 @@ Theorem eval_raw_call_result_sound:
     expr_result_typed env e tv)
 Proof
   strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[eval_raw_call_def, type_check_def, assert_def, bind_def,
+  simp[eval_raw_call_def, check_def, type_check_def, assert_def, bind_def,
        ignore_bind_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def, UNCURRY, COND_RATOR,
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  Cases_on `frame_call_value cx
+    (if flags.rcf_is_static then NONE else SOME amount) st` >>
+  rename1 `frame_call_value _ _ _ = (fcv,st0)` >>
+  drule frame_call_value_state >> disch_then SUBST_ALL_TAC >>
+  reverse (Cases_on `fcv`) >> simp[]
+  >- (drule frame_call_value_error >> rpt strip_tac >>
+      gvs[no_type_error_result_def]) >>
+  rename1 `frame_call_value _ _ _ = (INL value_opt,_)` >>
   Cases_on `flags.rcf_is_delegate` >> Cases_on `IS_SOME st.outcomes` >>
   simp[]
   >>~- ([`take_call_outcome _ _ _ _`],
-    (Cases_on `take_call_outcome target_addr calldata
-        (if flags.rcf_is_static then NONE else SOME amount) st` >>
+    (Cases_on `take_call_outcome target_addr calldata value_opt st` >>
       rename1 `take_call_outcome _ _ _ _ = (taken,mid)` >>
       `runtime_consistent env cx mid` by
         (drule_all take_call_outcome_runtime_consistent >> simp[]) >>
@@ -1543,6 +1558,15 @@ Proof
   simp[eval_ext_call_def, bind_apply, ignore_bind_apply, ext_call_checks,
        lift_option_type_def, return_def, raise_def, get_accounts_def,
        no_type_error_result_def] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `frame_call_value cx vreq st` >>
+  Cases_on `frame_call_value cx vreq st` >>
+  rename1 `frame_call_value _ _ _ = (fcv,st0)` >>
+  drule frame_call_value_state >> disch_then SUBST_ALL_TAC >>
+  Cases_on `fcv` >> gvs[]
+  >>~- ([`frame_call_value _ _ _ = (INR _,_)`],
+        drule frame_call_value_error >> strip_tac >>
+        gvs[runtime_consistent_def, no_type_error_result_def]) >>
+  rename1 `frame_call_value _ _ _ = (INL value_opt,_)` >>
   qmatch_asmsub_abbrev_tac
     `eval_ext_call_effects cx target_addr calldata value_opt gas st.accounts st` >>
   Cases_on `eval_ext_call_effects cx target_addr calldata value_opt gas st.accounts st` >>
@@ -1589,6 +1613,12 @@ Proof
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss()) [eval_send_def, bind_def, ignore_bind_def,
     type_check_def, assert_def, return_def, lift_option_type_def, LET_THM] >>
+  Cases_on `frame_call_value cx (SOME amount) st` >>
+  rename1 `frame_call_value _ _ _ = (fcv,st0)` >>
+  drule frame_call_value_state >> disch_then SUBST_ALL_TAC >>
+  reverse (Cases_on `fcv`) >> simp[]
+  >- (drule frame_call_value_error >> rpt strip_tac >>
+      gvs[runtime_consistent_def, no_type_error_result_def]) >>
   Cases_on `st.outcomes` >>
   asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def] >> strip_tac
   >- (gvs[get_accounts_def, get_transient_storage_def, lift_option_def,

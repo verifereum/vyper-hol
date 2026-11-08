@@ -726,12 +726,6 @@ Proof
   imp_res_tac Num_int_lt >> simp[]
 QED
 
-Theorem w2n_word_exp_lt_256[local]:
-  !i i'. w2n (i2w i ** i2w i' : 256 word) < dimword (:256)
-Proof
-  irule wordsTheory.w2n_lt
-QED
-
 Theorem within_int_bound_min[local]:
   !n i i'. within_int_bound (Signed n) i ∧ within_int_bound (Signed n) i' ==>
     ∃i''. (i < i' ∧ i = i'' ∨ ¬(i < i') ∧ i' = i'') ∧ within_int_bound (Signed n) i''
@@ -880,9 +874,6 @@ Proof
     gvs[within_int_bound_def] >> NO_TAC) >>
   (* Decimal Mul: the checked signed quotient is the returned value. *)
   TRY (gvs[within_int_bound_def] >> NO_TAC) >>
-  (* ExpMod: word_exp result bounded by 2^256 *)
-  TRY (
-    mp_tac w2n_word_exp_lt_256 >> simp[] >> NO_TAC) >>
   (* Flag bitwise: unfold to int_bitwise, apply nat bound (just the < part) *)
   PURE_REWRITE_TAC[int_bitwiseTheory.int_and_def, int_bitwiseTheory.int_or_def,
                    int_bitwiseTheory.int_xor_def] >>
@@ -950,10 +941,15 @@ Theorem int_type_Num_bound:
 Proof
   rpt strip_tac >>
   qmatch_goalsub_abbrev_tac `_ < bound` >>
-  qpat_x_assum `value_has_type _ _` mp_tac >>
-  simp[value_has_type_inv] >> strip_tac >> gvs[well_formed_type_value_def]
+  qpat_x_assum `value_has_type _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [value_has_type_inv]) >>
+  qpat_x_assum `tyv = _` SUBST_ALL_TAC >>
+  qpat_x_assum `well_formed_type_value _`
+    (strip_assume_tac o PURE_REWRITE_RULE [well_formed_type_value_def])
   >- (irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >>
-      unabbrev_all_tac >> simp[] >>
+      qpat_x_assum `Abbrev (bound = _)`
+        (SUBST1_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+      conj_tac >- first_assum ACCEPT_TAC >>
       irule (iffRL EXP_BASE_LE_MONO) >> simp[]) >>
   Cases_on `n = 0` >- (unabbrev_all_tac >> gvs[within_int_bound_def]) >>
   gvs[within_int_bound_def, LET_THM, Num_neg] >>
@@ -2487,6 +2483,7 @@ Theorem well_typed_builtin_app_no_type_error:
 Proof
   strip_tac >>
   Cases_on `blt` >>
+  fs[] >>
   gvs[well_typed_builtin_app_def, LET_THM,
       LENGTH_EQ_NUM_compute,
       Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",
@@ -2678,7 +2675,7 @@ Proof
   TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Dynamic n))) (Slice n) _ vs = INL v` >>
        metis_tac[slice_bytes_builtin_success_type] >> NO_TAC) >>
   TRY (rename1 `evaluate_builtin _ _ (BaseT (StringT n)) (Slice n) _ vs = INL v` >>
-       metis_tac[slice_string_builtin_success_type] >> NO_TAC) >>
+       drule_all slice_string_builtin_success_type >> simp[] >> NO_TAC) >>
   (* MakeArray success produces the tuple/array value requested by the static rule. *)
   TRY (rename1 `evaluate_builtin _ _ ty (MakeArray o' b) _ vs = INL v` >>
        metis_tac[make_array_success_type] >> NO_TAC) >>
@@ -2765,7 +2762,10 @@ Theorem is_sized_type_cases[local]:
     (∃elem n. t = ArrayT elem (Dynamic n)) ∨ (∃n. t = BaseT (StringT n)) ∨
     (∃n. t = BaseT (BytesT (Dynamic n)))
 Proof
-  simp[oneline is_sized_type_def] >> rpt CASE_TAC >> simp[]
+  Cases_on `t` >> simp[is_sized_type_def]
+  >- (rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_sized_type_def] >>
+      rename1 `BytesT bd` >> Cases_on `bd` >> simp[is_sized_type_def]) >>
+  rename1 `ArrayT elem bd` >> Cases_on `bd` >> simp[is_sized_type_def]
 QED
 
 (* Len consumes a forced Value, so only the sized value cases are needed. *)
@@ -2917,7 +2917,8 @@ Resume well_typed_type_builtin_no_type_error[extract32]:
   gvs[LENGTH_EQ_NUM_compute] >>
   Cases_on `tvs` >> gvs[] >>
   drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
-  drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+  `is_int_type (BaseT (UintT width))` by simp[] >>
   drule_all evaluate_extract32_supported_no_type_error >>
   fs[evaluate_type_builtin_def] >>
   simp[AllCaseEqs(), LET_THM]
@@ -3044,6 +3045,8 @@ Proof
   >- (gvs[LENGTH_EQ_NUM_compute] >>
       Cases_on `tvs` >> gvs[] >>
       drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+      rename1 `evaluate_type _ (BaseT (UintT width)) = SOME _` >>
+      `is_int_type (BaseT (UintT width))` by simp[] >>
       drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
       gvs[evaluate_type_builtin_def, AllCaseEqs()] >>
       drule_all evaluate_extract32_well_typed >> simp[])

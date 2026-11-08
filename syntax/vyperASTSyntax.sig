@@ -541,7 +541,10 @@ signature vyperASTSyntax = sig
   val View_tm : term val is_View : term -> bool
   val Nonpayable_tm : term val is_Nonpayable : term -> bool
   val Payable_tm : term val is_Payable : term -> bool
-  val Public_tm : term val is_Public : term -> bool
+  val Public_tm : term
+  val mk_Public : term -> term
+  val dest_Public : term -> term
+  val is_Public : term -> bool
   val Private_tm : term val is_Private : term -> bool
   val Constant_tm : term
   val mk_Constant_tm : term -> term

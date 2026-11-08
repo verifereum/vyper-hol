@@ -262,6 +262,7 @@ Theorem raw_call_calldata_original_input_test:
   (st.outcomes = NONE \/ flags.rcf_is_delegate) /\
   ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
   ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
+  (cx.txn.is_static ==> amount = 0) /\
   cx.txn.calldata = [1w; 2w; 3w; 4w; 10w; 11w; 99w] /\
   run_raw_call cx flags to cx.txn.calldata amount gas st.accounts st.tStorage =
       SOME (success, retdata, accounts', transient', logs') ==>
@@ -277,8 +278,8 @@ Theorem raw_call_calldata_original_input_test:
 Proof
   rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `success` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  gvs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def, check_def,
+  Cases_on `flags.rcf_max_outsize = 0` >> Cases_on `cx.txn.is_static` >>
+  gvs[eval_raw_call_def, frame_call_value_def, COND_RATOR, bind_def, ignore_bind_def, type_check_def, check_def,
        assert_def, get_accounts_def, get_transient_storage_def, lift_option_def,
        update_accounts_def, update_transient_def, append_logs_def, return_def, raise_def]
 QED

@@ -196,13 +196,13 @@ Definition resolve_json_toplevel_def:
         (resolve_json_type decls ret_ty))
       ret_ann (resolve_json_stmts decls body)) ∧
   (resolve_json_toplevel decls
-      (JTL_VariableDecl name ty ann is_public is_immutable is_transient value) =
+      (JTL_VariableDecl name ty ann is_public is_immutable is_transient is_reentrant value) =
     JTL_VariableDecl name (resolve_json_type decls ty) ann is_public
-      is_immutable is_transient (resolve_json_expr_opt decls value)) ∧
+      is_immutable is_transient is_reentrant (resolve_json_expr_opt decls value)) ∧
   (resolve_json_toplevel decls
-      (JTL_HashMapDecl name kt vt is_public is_transient) =
+      (JTL_HashMapDecl name kt vt is_public is_transient is_reentrant) =
     JTL_HashMapDecl name (resolve_json_type decls kt)
-      (resolve_json_value_type decls vt) is_public is_transient) ∧
+      (resolve_json_value_type decls vt) is_public is_transient is_reentrant) ∧
   (resolve_json_toplevel decls (JTL_EventDef name fields) =
     JTL_EventDef name
       (MAP (λ(arg, indexed). (resolve_json_arg decls arg, indexed)) fields)) ∧

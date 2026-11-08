@@ -232,28 +232,18 @@ Proof
   irule machine_frame_custom_error_tail >> metis_tac[]
 QED
 
-Theorem machine_frame_push_function:
-  state_rel_frame machine_frame (push_function src_fn sc cx)
-Proof
-  simp[state_rel_frame_def, push_function_def, return_def]
-QED
-
-Theorem machine_frame_pop_function:
-  state_rel_frame machine_frame (pop_function prev)
-Proof
-  simp[pop_function_def, machine_frame_primitives]
-QED
-
 Theorem machine_frame_internal_lock:
   state_rel_frame machine_frame
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot T
+       | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot T; return () od
      else return ())
 Proof
   Cases_on `nr` >> simp[] >> Cases_on `cx.nonreentrant_slot` >>
-  simp[machine_frame_view_lock, machine_frame_primitives]
+  simp[machine_frame_primitives, ignore_bind_def] >>
+  irule state_rel_frame_bind_guarded >>
+  simp[machine_frame_def, machine_frame_view_lock, machine_frame_primitives]
 QED
 
 Theorem machine_frame_switch_BoolV:
@@ -265,17 +255,6 @@ Proof
   >- simp[machine_frame_read_result] >>
   gen_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
   IF_CASES_TAC >> simp[machine_frame_primitives]
-QED
-
-Theorem machine_frame_reads:
-  state_rel_frame machine_frame (lookup_global cx src id) /\
-  state_rel_frame machine_frame (lookup_flag_mem cx nsid mid) /\
-  state_rel_frame machine_frame (read_storage_slot cx tr slot ty) /\
-  state_rel_frame machine_frame (result_array_length cx r)
-Proof
-  simp[state_rel_frame_result] >> metis_tac[lookup_global_state,
-    lookup_flag_mem_state, read_storage_slot_state,
-    result_array_length_state, machine_frame_refl]
 QED
 
 Theorem machine_frame_assign_tuple:

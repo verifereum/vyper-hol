@@ -23,7 +23,7 @@ Theorem machine_frame_raw_call_active[local]:
 Proof
   strip_tac >>
   qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[eval_raw_call_def, type_check_def, assert_def, bind_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def, type_check_def, assert_def, bind_def,
        ignore_bind_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def, pairTheory.UNCURRY, COND_RATOR,
@@ -63,7 +63,7 @@ Theorem machine_frame_raw_call:
 Proof
   strip_tac >> Cases_on `~flags.rcf_is_delegate /\ amount = 0`
   >- metis_tac[machine_frame_raw_call_active] >>
-  gvs[eval_raw_call_def, type_check_def, assert_def, bind_def,
+  gvs[eval_raw_call_def, frame_call_value_def, check_def, COND_RATOR, type_check_def, assert_def, bind_def,
       ignore_bind_def, raise_def, machine_frame_def]
 QED
 
@@ -160,6 +160,13 @@ Proof
                machine_frame_static_oracle)
 QED
 
+Theorem frame_call_value_NONE[local]:
+  frame_call_value cx NONE = return NONE
+Proof
+  simp[FUN_EQ_THM, frame_call_value_def, check_def, assert_def,
+       ignore_bind_def, bind_def, return_def, COND_RATOR]
+QED
+
 Theorem machine_frame_ext_call:
   eval_ext_call cx T skip sig opts vs st = (res,st') ==>
   machine_frame st st'
@@ -168,7 +175,8 @@ Proof
     suffices_by metis_tac[state_rel_frame_at] >>
   PairCases_on `sig` >> Cases_on `vs`
   >- simp[eval_ext_call_def, machine_frame_primitives] >>
-  simp[Once eval_ext_call_def, state_rel_frame_def, ignore_bind_def] >>
+  simp[Once eval_ext_call_def, frame_call_value_NONE, state_rel_frame_def,
+       ignore_bind_def] >>
   gen_tac >>
   simp[Once bind_def, type_check_def, assert_def] >>
   IF_CASES_TAC >> simp[raise_def, return_def] >>
@@ -182,6 +190,7 @@ Proof
   simp[Once bind_def, get_accounts_def, return_def] >>
   simp[Once bind_def, check_def, assert_def] >>
   IF_CASES_TAC >> simp[return_def, raise_def] >>
+  simp[Once bind_def, return_def, frame_call_value_NONE] >>
   irule state_rel_bind_pointwise >> rpt conj_tac
   >- (rpt strip_tac >> BETA_TAC >>
       irule (SRULE [state_rel_frame_def, check_def, ignore_bind_def]

@@ -279,7 +279,7 @@ Theorem take_adopt_call_outcome_effects:
     (rq.cr_static \/ ~outcome.co_success ==>
       st2.accounts = st.accounts /\ st2.tStorage = st.tStorage /\
       st2.logs = st.logs) /\
-    (computed_precompile rq ==> prefix = [] /\ st2.requests = st.requests)
+    (computed_precompile rq ==> st2.requests = st.requests)
 Proof
   rpt strip_tac >> drule_all checked_call_outcome_success_frame >> strip_tac >>
   drule take_call_outcome_success >> strip_tac >>
