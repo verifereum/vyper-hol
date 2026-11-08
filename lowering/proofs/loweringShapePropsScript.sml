@@ -9198,10 +9198,10 @@ Proof
     `\st. cenv_shape_ok st cenv /\ cenv_shape_ok st cenv /\
           value_shape_ok st (StackValue src_ty arg_op)`,
     `\v st. cenv_shape_ok st cenv /\ cenv_shape_ok st cenv /\ plain_operand st v`] >>
-  rpt conj_tac
-  >- (irule (BETA_RULE (Q.INST [`R` |-> `\st. cenv_shape_ok st cenv`]
-                 compile_materialize_vv_shape_under)) >>
-      simp[cenv_shape_ok_stable]) >>
+  rpt conj_tac >>
+  TRY (irule (BETA_RULE (Q.INST [`R` |-> `\st. cenv_shape_ok st cenv`]
+                  compile_materialize_vv_shape_under)) >>
+       simp[cenv_shape_ok_stable] >> NO_TAC) >>
   simp[value_shape_ok_def]
 QED
 
@@ -13497,7 +13497,8 @@ Theorem compile_generate_grouped_runtime_shape:
     compile_generate_grouped_runtime groups internal_fns fallback_fn
       (initial_compile_state "__entry") = ((),st1) /\
     EVERY external_group_shape_ok groups /\ fallback_shape_ok fallback_fn /\
-    EVERY internal_fn_shape_ok internal_fns ==>
+    EVERY internal_fn_shape_ok internal_fns /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) ==>
     shape_state st1 /\
     ?entry_blocks segs.
       all_blocks st1 = entry_blocks ++ FLAT segs /\
@@ -13948,7 +13949,7 @@ QED
 
 Theorem package_external_group_shape_ok:
   !tops target trans nkeys src.
-    runtime_bodies_shape_ok tops /\ immutable_free_program tops /\
+    runtime_bodies_shape_ok tops /\
     MEM src (FST (classify_functions tops)) ==>
     external_group_shape_ok (package_external_group tops target trans nkeys src)
 Proof
@@ -14530,8 +14531,24 @@ Proof
   `opaque_insts_ok
      (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs)))`
     by (fs[shape_state_def, shape_base_state_def, state_insts_def]) >>
+  `!i x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) /\
+         MEM x i.inst_outputs /\
+         opaque_out RETPC_PARAM
+           (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) x ==>
+         i.inst_opcode = RETPC_PARAM`
+    by (fs[shape_state_def, shape_base_state_def, state_insts_def] >>
+        metis_tac[]) >>
+  `!i j x.
+     MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) /\
+     MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) /\
+     i.inst_opcode = RETPC_PARAM /\
+     MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j`
+    by (fs[shape_state_def, shape_base_state_def, state_insts_def] >>
+        metis_tac[]) >>
   `raw_checked_blocks (entry_blocks ++ FLAT segs)`
     by fs[shape_state_def, raw_checked_state_def] >>
+  `rets_scoped (entry_blocks ++ FLAT segs)`
+    by fs[shape_state_def, shape_base_state_def] >>
   drule_all raw_checked_internal_segments >> strip_tac >>
   `package_internal_blocks (internal_fn_descriptors internal_fns)
      (entry_blocks ++ FLAT segs) =
@@ -14545,7 +14562,8 @@ Proof
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_grouped_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
-  conj_tac >- (irule lowered_unit_source_ok >> gs[]) >>
+  conj_tac >-
+   (irule lowered_unit_source_ok >> gs[] >> conj_tac >> first_assum ACCEPT_TAC) >>
   simp[mk_venom_context_def]
 QED
 
