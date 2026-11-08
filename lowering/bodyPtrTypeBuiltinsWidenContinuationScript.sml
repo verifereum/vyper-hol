@@ -4,6 +4,7 @@ Ancestors
   bodyPtrTypeBuiltinsWidenActual bodyPtrTypeBuiltinsWidenFrame exprSimConvertBytes
   bodyPtrSignedConvertSourceFrame stmtFragPtr
   bodyPtrTypeBuiltinsWidenCounted bodyPtrHashBuiltinsCursor
+  bodyPtrEnvBuiltinsEntryFrame
   exprSimPtrLiteralBuffer gasSummaryComposePtr gasSummary exprSimDefs
   fragGasPathPtr rawCallBufferPtr bodyPtrTypeBuiltinsMemoryInterface
   exprLoweringProps bodyPtrDefs venomState loweringPosts exprLowering
@@ -32,7 +33,7 @@ Theorem widen_convert_modern_outcome_ptr:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   ca.cs_next_var <= sa.cs_next_var /\ ca.cs_next_id <= sa.cs_next_id /\
   lower_value compile_expr cenv ty e ca = (Var src,sa) /\
-  bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
+  bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
   ghost_kept cenv es ca G0 tn0 s0 G tn /\ local_ptrs_rel fn cenv es.scopes s0 /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts ==>
@@ -58,7 +59,9 @@ Proof
      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))` by
     (irule widen_convert_run_success_post >> metis_tac[]) >>
   `ghost_kept cenv es ca G0 tn0 s0 H th` by
-    (irule operand_suffix_ghost_kept >> metis_tac[]) >>
+    (irule (SRULE [expr_post_entry_gas_obs, ghost_kept_entry_gas_obs]
+      (Q.INST [`es` |-> `es with gas_obs := gs`] operand_suffix_ghost_kept)) >>
+     simp[] >> metis_tac[]) >>
   `val_wf tout vout` by (irule convert_bytestring_wf >> metis_tac[]) >>
   `ptr_val_ok cx target vout (Var dst) H th
      (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))` by
