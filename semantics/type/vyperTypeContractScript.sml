@@ -924,6 +924,62 @@ Definition event_indexable_type_def:
   event_indexable_type _ = F
 End
 
+(* ===== Loop iterables written by internal callees ===== *)
+
+(* Vyper counts as writes of an internal call the state variables its callee
+   writes, directly or through further internal calls (the
+   func_type.is_internal case of the call visitor in
+   vyper/semantics/analysis/local.py), so a for loop whose body calls a
+   function that writes the iterated place is rejected too ("Cannot modify
+   loop variable").  iterator_unmodified checks the body's own writes; these
+   check its calls. *)
+
+(* A callee's write w leaves place p alone.  Only writes to top-level
+   bindings count: a callee's locals are its own. *)
+Definition callee_write_ok_def:
+  callee_write_ok p w <=>
+    case FST (place_access w []) of
+    | TopLevelNameTarget _ => ~place_contains w p
+    | _ => T
+End
+
+(* No function reachable from callee, callee included, writes p, in its
+   body or in the default arguments a call evaluates. *)
+Definition callee_writes_ok_def:
+  callee_writes_ok mods p callee <=>
+    let reached = callee :: reachable_nodes (contract_call_edges mods)
+                              (LENGTH (contract_call_nodes mods)) callee in
+      EVERY (\(src,tls).
+        EVERY (\tl. case tl of
+          | FunctionDecl _ _ _ _ fn _ dflts _ body =>
+              MEM (src,fn) reached ==>
+              EVERY (expr_writes_ok (callee_write_ok p)) dflts /\
+              stmts_writes_ok (callee_write_ok p) body
+          | _ => T) tls) mods
+End
+
+Definition stmt_loop_calls_ok_def:
+  stmt_loop_calls_ok mods (For _ _ it _ body) =
+    ((case it of
+      | Array e =>
+          (case expr_place e of
+           | SOME p => EVERY (callee_writes_ok mods p) (int_calls_stmts body)
+           | NONE => T)
+      | Range _ _ => T) /\
+     stmts_loop_calls_ok mods body) /\
+  stmt_loop_calls_ok mods (If _ yes no) =
+    (stmts_loop_calls_ok mods yes /\ stmts_loop_calls_ok mods no) /\
+  stmt_loop_calls_ok mods _ = T /\
+  stmts_loop_calls_ok mods [] = T /\
+  stmts_loop_calls_ok mods (s::ss) =
+    (stmt_loop_calls_ok mods s /\ stmts_loop_calls_ok mods ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,s) => stmt_size s
+    | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[]
+End
+
 Definition check_toplevel_decl_def:
   check_toplevel_decl mods art src tl =
     let tenv = type_env_all_modules mods in
@@ -941,20 +997,21 @@ Definition check_toplevel_decl_def:
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
-        ALL_DISTINCT (MAP FST fields) /\
+        fields <> [] /\ ALL_DISTINCT (MAP FST fields) /\
         EVERY (\(_,ty). assignable_type tenv ty) fields
     | FlagDecl id members => T
     | InterfaceDecl id funcs =>
         EVERY (\(fn,args,ret,mut).
-          params_ok tenv args /\ well_formed_type tenv ret) funcs
+          params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret)) funcs
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty /\
                                   (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args
     | FunctionDecl vis mut nr rr name args dflts ret body =>
-        params_ok tenv args /\ well_formed_type tenv ret /\
+        params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret) /\
         function_header_ok vis mut nr rr name args dflts ret /\
-        function_mutability_ok mods vis mut nr dflts body
+        function_mutability_ok mods vis mut nr dflts body /\
+        stmts_loop_calls_ok mods body
 End
 
 (* ===== Callable-body checks ===== *)
@@ -1122,6 +1179,21 @@ Theorem check_contract_function_header:
   MEM (src,tls) mods /\
   MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
   function_header_ok vis mut nr rr name args dflts ret
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_function_return_type:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
+  ret = NoneT \/ assignable_type (type_env_all_modules mods) ret
 Proof
   strip_tac >>
   qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>

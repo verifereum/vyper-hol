@@ -605,6 +605,11 @@ Proof
          type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
          fn_sigs := fn_sigs; flag_members := flag_members; event_fields := art.cta_event_fields|>) args)` by
     (simp[] >> irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
+  `ret <> NoneT ==>
+   assignable_type (get_tenv (initial_evaluation_context sources layouts tx src)) ret` by
+    (gvs[get_tenv_def, initial_evaluation_context_def] >>
+     drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
+     metis_tac[check_contract_function_return_type, alistTheory.ALOOKUP_MEM]) >>
   `T <=> Internal = Internal` by simp[] >>
   drule_all check_function_body_static_maps_transfer_initial >>
   simp[]
@@ -664,7 +669,9 @@ Proof
   `ALOOKUP mods src_id_opt = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
   drule lookup_callable_function_T_SOME_cases >> strip_tac >> gvs[]
-  >- (`check_function_body layouts tx.target mods deploy_art src_id_opt Internal fm nr
+  >- (`ret <> NoneT ==> assignable_type (type_env_all_modules mods) ret` by
+        metis_tac[check_contract_function_return_type, alistTheory.ALOOKUP_MEM] >>
+      `check_function_body layouts tx.target mods deploy_art src_id_opt Internal fm nr
          args dflts ret body` by
         (irule check_contract_live_deploy_function_body_MEM >>
          gvs[context_function_live_def, initial_evaluation_context_def] >> metis_tac[]) >>
@@ -738,6 +745,8 @@ Proof
              flag_members := flag_members; event_fields := deploy_art.cta_event_fields|>`] >>
       simp[get_tenv_def, Once type_stmt_def,
            Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
+  `ret <> NoneT ==> assignable_type (type_env_all_modules mods) ret` by
+    metis_tac[check_contract_function_return_type, alistTheory.ALOOKUP_MEM] >>
   `check_function_body layouts tx.target mods deploy_art src_id_opt Deploy fm nr
      args dflts ret body` by
     (irule check_contract_live_deploy_function_body_MEM >>
