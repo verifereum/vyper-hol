@@ -39,11 +39,3 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
-  configuredE2ECorrectness
-  evalCompilerInternalImmutables
-  evalAssignmentOrder
-  (* focused internal-frame allocation, cleanup and whitelist regressions *)
-  calleeMemoryWitness
-  cleanupPromiseWitness
-  joinSpillWitness
-  internalFrameWhitelistDiagnostic

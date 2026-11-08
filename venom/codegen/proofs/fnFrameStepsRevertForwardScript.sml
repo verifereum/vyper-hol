@@ -2,12 +2,13 @@
 Theory fnFrameStepsRevertForward
 Ancestors
   contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
-  stackPlanGen venomExecProofs removeUnusedSsaProofs frameRel
+  stackPlanGen venomExecProofs frameRel
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
   fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady
+  venomWfProps
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
