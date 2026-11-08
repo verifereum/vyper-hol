@@ -5,7 +5,7 @@ Ancestors
   venomExecProofs venomState venomInst words arithmetic
 
 (* The bound operand is consumed before either comparison result is written. *)
-Theorem typed_array_bound_header_control[local]:
+Theorem typed_array_bound_header_control:
   ~s.vs_halted /\ s.vs_inst_idx = 0 /\
   eval_operand (Var ctr) s = SOME (n2w i) /\
   eval_operand bound s = SOME (n2w n) /\ i <= n /\ n < dimword(:256) ==>
@@ -33,7 +33,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE, jump_to_def, is_terminator_def]
 QED
 
-Theorem typed_array_bound_header_mem_safe[local]:
+Theorem typed_array_bound_header_mem_safe:
   s.vs_inst_idx = 0 ==>
   mem_safe_block fuel ctx
     <|bb_label := hdr; bb_instructions :=

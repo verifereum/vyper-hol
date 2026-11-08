@@ -118,7 +118,7 @@ Definition typed_sa_backedge_state_def:
     update_var ctr (n2w (SUC i)) (update_var nv (n2w (SUC i)) s)
 End
 
-Theorem typed_sa_backedge_control[local]:
+Theorem typed_sa_backedge_control:
   bb.bb_instructions = prefix ++ typed_sa_backedge_insts id ctr nv hdr /\
   s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\
   eval_operand (Var ctr) s = SOME (n2w i) /\
@@ -147,7 +147,7 @@ Proof
        is_terminator_def]
 QED
 
-Theorem typed_sa_backedge_mem_safe[local]:
+Theorem typed_sa_backedge_mem_safe:
   bb.bb_instructions = prefix ++ typed_sa_backedge_insts id ctr nv hdr /\
   s.vs_inst_idx = LENGTH prefix ==>
   mem_safe_block fuel ctx bb s
