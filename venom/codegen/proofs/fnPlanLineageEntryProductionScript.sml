@@ -1447,3 +1447,35 @@ Proof
     incoming_join_native_phi_positive_prefix >>
   simp[] >> metis_tac[]
 QED
+
+(* Positive singleton-edge setup: spill-only witnesses are retained too.
+   No restriction is imposed on incoming cleanup height or promises. *)
+Theorem analyzed_single_pred_clean_available:
+  codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  cfg_preds_of (cfg_analyze fn) lbl = [pred] /\
+  EVERY (\v. MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled)
+    (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) /\
+  incoming.ps_stack = after.ps_stack /\ incoming.ps_spilled = after.ps_spilled /\
+  clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming = (ops,cleaned) ==>
+  EVERY (\v. MEM (Var v) cleaned.ps_stack \/ Var v IN FDOM cleaned.ps_spilled)
+    (live_vars_at (liveness_analyze fn) lbl 0)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `NULL (collect_phis bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+     first_x_assum (qspec_then `bb` mp_tac) >> simp[]) >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule_all analyzed_live_out_edge_subset >>
+  simp[pred_setTheory.SUBSET_DEF] >> disch_tac >>
+  `EVERY (\v. MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled)
+    (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0))` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_at (Pat `clean_stack_plan _ _ _ _ _ = _`)
+    fnPlanLineageInventoryTheory.clean_stack_plan_input_coverage >>
+  gvs[livenessDefsTheory.input_vars_from_def] >> metis_tac[]
+QED

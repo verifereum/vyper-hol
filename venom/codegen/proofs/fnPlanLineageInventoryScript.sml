@@ -6574,11 +6574,12 @@ QED
 Theorem clean_stack_plan_input_coverage:
   !lv cfg fn bb pred ps ops qs.
     cfg_preds_of cfg bb.bb_label = [pred] /\
-    EVERY (\v. MEM (Var v) ps.ps_stack)
+    EVERY (\v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
       (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0)) /\
     clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
-    EVERY (\v. MEM (Var v) qs.ps_stack)
+    EVERY (\v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled)
       (input_vars_from pred bb.bb_instructions (live_vars_at lv bb.bb_label 0))
 Proof
-  simp[EVERY_MEM] >> metis_tac[clean_stack_plan_input_mem]
+  simp[EVERY_MEM] >>
+  metis_tac[clean_stack_plan_input_mem, clean_stack_plan_spilled_unchanged]
 QED
