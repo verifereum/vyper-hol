@@ -6,7 +6,7 @@
    stmtSimAssignPlace's compile_assign_place_case. *)
 Theory bodyMemAssignPlace
 Ancestors
-  bodyMemoryPreds supportedTargets targetPlaceSim
+  bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
 
 Theorem body_assign_place_mem_case:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.

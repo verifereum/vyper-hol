@@ -9,7 +9,7 @@
    compile_augassign_place_storage_case. *)
 Theory bodyMemAugAssignPlace
 Ancestors
-  bodyMemoryPreds supportedTargets targetPlaceSim
+  bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
 
 Theorem body_augassign_place_mem_case:
   !cx ty t bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
