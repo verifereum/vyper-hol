@@ -3,6 +3,10 @@ Ancestors
   exprSimAbiEncodeArgsTupleSource exprSimAbiEncodeArgsTupleProbe
   exprLowering compileEnv fragGasMode intCallStep
   venomExecSemantics venomInst venomState finite_map gasCount fragGasPath
+  placeMemoryStaging emitHelperProps loweringHalt emitHelper fragExec
+  abiDecodeStaticProps
+
+val _ = temp_delsimps ["exec_block_non_phis"];
 
 Theorem tuple_return_metadata:
   compute_func_info sft tuple_narrow
@@ -237,3 +241,67 @@ Proof
   disch_then (qspec_then `0` mp_tac) >>
   simp[cj 1 gas_path_rules]
 QED
+
+Theorem tuple_target_allocated_path:
+  compile_alloc_buffer 128 sa = (buf,sm) /\
+  emit_void INVOKE [Label name; buf.buf_operand] sm = ((),sb) /\
+  stmt_state_rel (tuple_target_context name ctx) fn ce cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved ce sa /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r p. gas_marked_path F (tuple_target_context name ctx) fn s 0
+    (OK (r with <| vs_memory := (tuple_target_writes p r).vs_memory;
+                   vs_inst_idx := LENGTH sb.cs_current_insts |>)) /\
+    eval_operand buf.buf_operand r = SOME p /\
+    FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n p,128) /\
+    w2n p + 128 < dimword (:256) /\ r.vs_memory = s.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s) /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+       FLOOKUP r.vs_allocas aid = SOME e) /\
+    (!local b len. local_region ce es.scopes r local b len ==>
+       regions_disjoint (w2n p) 128 b len)
+Proof
+  rpt strip_tac >>
+  `cs_extends sa sm` by metis_tac[compile_alloc_buffer_extends] >>
+  `cs_extends sm sb` by
+    gvs[emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+        comp_return_def, emit_def, fresh_id_def, cs_extends_def] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `128 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all compile_alloc_buffer_forward >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `sb.cs_current_bb = sm.cs_current_bb` by
+    gvs[emit_void_def, emit_inst_def, comp_ignore_bind_def, comp_bind_def,
+        comp_return_def, emit_def, fresh_id_def] >>
+  drule_all fn_has_code_same_block >>
+  simp[] >> strip_tac >>
+  `gas_marked_path F (tuple_target_context name ctx) fn r 0
+     (OK (r with <|vs_memory := (tuple_target_writes tw r).vs_memory;
+                   vs_inst_idx := LENGTH sb.cs_current_insts|>))` by
+    (`gas_marked_path F (tuple_target_context name ctx) fn r 0
+        (OK (r with <|vs_memory := (tuple_target_writes tw r).vs_memory;
+                      vs_inst_idx := SUC r.vs_inst_idx|>))` by
+       (irule tuple_target_invoke_path >> metis_tac[]) >>
+     fs[arithmeticTheory.ADD1] >> metis_tac[]) >>
+  qexistsl_tac [`r`, `tw`] >> simp[] >>
+  drule_all gas_marked_path_then >> simp[] >> metis_tac[]
+QED
+
+Theorem tuple_target_writes_frame:
+  w2n (p:bytes32) + 128 < dimword (:256) /\
+  (i < w2n p \/ w2n p + 128 <= i) ==>
+  mem_bytes_at i 1 (tuple_target_writes p s).vs_memory =
+  mem_bytes_at i 1 s.vs_memory
+Proof
+  strip_tac >>
+  `w2n (p + 32w) = w2n p + 32 /\
+   w2n (p + 64w) = w2n p + 64 /\
+   w2n (p + 96w) = w2n p + 96` by
+    (rpt conj_tac >> irule w2n_add_n2w_lt >> decide_tac) >>
+  simp[tuple_target_writes_def] >>
+  rpt (irule EQ_TRANS >>
+       irule_at Any mem_bytes_at_mstore_outside >> conj_tac >- decide_tac) >>
+  simp[]
+QED
+
