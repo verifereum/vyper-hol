@@ -472,12 +472,12 @@ Proof
   simp[stmt_frag_def, stmt_framed_frag_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   impl_tac
-  >- (fs[ret_pc_ok_def, gas_admissible_def] >> metis_tac[]) >>
+  >- (fs[ret_pc_ok_def, gas_admissible_def] >> metis_tac[] >> NO_TAC) >>
   simp[gasOutcomeTheory.gas_outcome_def] >> strip_tac
   >- ((* the body runs along a target path *)
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
-      qabbrev_tac `gx = gas_explicit marks s0.vs_gas_readings` >>
+      (qabbrev_tac `gx = gas_explicit marks s0.vs_gas_readings` >>
       `!tail. call_external_body am cx F mut (type_env (cx_tops cx))
          (es0 with gas_obs := gx ++ tail) env fbody ret =
          call_external_body am cx F mut (type_env (cx_tops cx))
@@ -500,20 +500,19 @@ Proof
       `stmt_res_ok NoLoop res /\ (res = INL () ==> ret = NoneT)` by
         (first_x_assum irule >> qexistsl_tac [`es'`, `gx`] >>
          gvs[Abbr `cx`]) >>
-      qspecl_then [`am`, `cx`, `mut`, `type_env (cx_tops cx)`, `env`, `fbody`, `ret`,
-                   `es0 with gas_obs := gx`, `res`, `es'`] mp_tac
-        call_external_body_run >>
-      impl_tac >- simp[] >> strip_tac >>
-      pure_rewrite_tac[source_unit_execution_correct_def,
-                       source_unit_execution_correct_at_def] >>
+      pure_rewrite_tac[source_unit_execution_correct_def] >>
       qexists_tac `marks` >>
       `gas_explicit marks vs.vs_gas_readings = gx` by
         (qpat_assum `s0.vs_gas_readings = _`
            (fn th => simp[Abbr `gx`, th])) >>
-      pop_assum SUBST1_TAC >> conj_tac
-      >~ [`!tail. call_external _ (gs ++ tail) _ _ = _ (* g *)`]
+      pop_assum SUBST1_TAC >> reverse conj_tac
       >- first_assum ACCEPT_TAC >>
-      disj2_tac >> simp[]
+      pure_rewrite_tac[source_unit_execution_correct_at_def] >>
+      qspecl_then [`am`, `cx`, `mut`, `type_env (cx_tops cx)`, `env`, `fbody`, `ret`,
+                   `es0 with gas_obs := gx`, `res`, `es'`] mp_tac
+        call_external_body_run >>
+      (impl_tac >- (simp[] >> NO_TAC)) >> disch_then strip_assume_tac >>
+      disj2_tac >> simp[])
       >- ((* the body falls off its end *)
           gvs[stmt_post_def, stmt_lands_def] >>
           `~lookup_raw_return_or_F (NONE : num option) tx.function_name
@@ -584,7 +583,8 @@ Proof
      call_external_body am cx F mut (type_env (cx_tops cx))
      (es0 with gas_obs := gx) env fbody ret` by
     (irule (Q.INST [`res` |-> `INR (Error err)`, `es'` |-> `ee`]
-              call_external_body_gas_suffix) >> simp[]) >>
+              call_external_body_gas_suffix) >> simp[] >>
+     qexistsl_tac [`ee`, `err`] >> simp[]) >>
   `!tail. call_external (SOME vs.vs_outcomes) (gx ++ tail) am tx =
      call_external (SOME vs.vs_outcomes) gx am tx` by simp[] >>
   `?ee'. eval_stmts cx fbody (es0 with gas_obs := gx) =
@@ -596,15 +596,14 @@ Proof
                `es0 with gas_obs := gx`, `INR (Error err)`, `ee'`] mp_tac
     call_external_body_run >>
   impl_tac >- simp[] >> strip_tac >>
-  pure_rewrite_tac[source_unit_execution_correct_def,
-                   source_unit_execution_correct_at_def] >>
+  pure_rewrite_tac[source_unit_execution_correct_def] >>
   qexists_tac `marks` >>
   `gas_explicit marks vs.vs_gas_readings = gx` by
     (qpat_assum `s0.vs_gas_readings = _`
        (fn th => simp[Abbr `gx`, th])) >>
-  pop_assum SUBST1_TAC >> conj_tac
-  >~ [`!tail. call_external _ (gs ++ tail) _ _ = _ (* g *)`]
-      >- first_assum ACCEPT_TAC >>
+  pop_assum SUBST1_TAC >> reverse conj_tac
+  >- first_assum ACCEPT_TAC >>
+  pure_rewrite_tac[source_unit_execution_correct_at_def] >>
   disj1_tac >> gvs[source_exempt_def]
 QED
 
