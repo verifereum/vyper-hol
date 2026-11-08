@@ -2,6 +2,7 @@
 Theory bodyIntCallFamStmtMutation
 Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtMutationResource
+  bodyIntCallFamStmtMutationLocalStore
 
 Theorem intcall_mutation_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
