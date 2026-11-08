@@ -1674,7 +1674,7 @@ val step_base_unfold_tac =
     (fn opc_th =>
       qpat_x_assum `step_inst_base _ _ = OK _`
         (fn base_th =>
-          let val th = SIMP_RULE (srw_ss()) [step_inst_base_def, opc_th] base_th
+          let val th = SIMP_RULE (srw_ss()) [venomExecSemanticsTheory.step_inst_base_opcode_eqs, opc_th] base_th
           in ASSUME_TAC opc_th >> ASSUME_TAC th end));
 
 (* bool_to_word b = if b then 1w else 0w — needed because step_inst_base

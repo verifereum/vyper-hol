@@ -65,7 +65,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`id`, `0`, `byte_count`, `ss`] memory_snapshot_allocation_step) >>
   impl_tac >- first_assum MATCH_ACCEPT_TAC >>
-  simp_tac (srw_ss()) [Once step_inst_base_def, mk_inst_def, eval_operand_def] >> DISCH_TAC >>
+  simp_tac (srw_ss()) [venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >> DISCH_TAC >>
   drule_all alloca_inv_exec_alloca >> DISCH_TAC >>
   mp_tac (Q.SPECL [`memory_snapshot_allocated id 0 byte_count ss`,
     `memory_snapshot_alloc_frame id byte_count ss`] abi_allocation_fields_inv) >>

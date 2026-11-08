@@ -3145,8 +3145,12 @@ Proof
     `ABS qq ≤ ABS (qq * B)` by (irule abs_le_abs_mul >> simp[]) >>
     fs[int_min_256, int_max_256] >>
     (`ABS qq ≤ 57896044618658097711785492504343953926634992332820282019728792003956564819968` by
-      (irule integerTheory.INT_LE_TRANS >> qexists_tac `ABS (qq * B)` >> simp[] >>
-       irule integerTheory.INT_LE_TRANS >> qexists_tac `ABS (qq * B + rr)` >> simp[] >>
+      (qpat_x_assum `ABS qq ≤ ABS (qq * B)` mp_tac >>
+       qpat_x_assum `ABS (qq * B) ≤ ABS P` mp_tac >>
+       qpat_x_assum `_ ≤ qq * B + rr` mp_tac >>
+       qpat_x_assum `qq * B + rr ≤ _` mp_tac >>
+       qpat_x_assum `P = qq * B + rr` mp_tac >>
+       rpt (pop_assum kall_tac) >>
        simp[integerTheory.INT_ABS] >> rw[] >> intLib.ARITH_TAC) >>
     Cases_on `qq ≤ 57896044618658097711785492504343953926634992332820282019728792003956564819967`
     >- ((* the quotient is in range: it is A, so the remainder is 0 *)
