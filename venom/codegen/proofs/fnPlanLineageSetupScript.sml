@@ -1261,7 +1261,7 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem native_regular_fresh_output_resource_bound:
+Theorem native_regular_fresh_output_properties[local]:
   !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
     inst.inst_opcode <> JMP /\ ALL_DISTINCT inst.inst_outputs /\
     ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
@@ -1269,8 +1269,10 @@ Theorem native_regular_fresh_output_resource_bound:
     (!w. MEM (Var w) (compute_operands inst) ==>
       MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
     generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,qs)
-    ==> LIST_ELEM_COUNT (Var v) qs.ps_stack +
-      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+    ==> (LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1) /\
+      ((MEM v inst.inst_outputs /\ ~halting /\ ~MEM v nl) ==>
+        ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_at (Pos last) native_regular_stages >>
@@ -1292,8 +1294,61 @@ Proof
   `LIST_ELEM_COUNT (Var v) ps7.ps_stack +
     (if Var v IN FDOM ps7.ps_spilled then 1 else 0) <= 1` by
     gvs[elem_count_append] >>
-  drule_all regular_post_emit_tail_resource_nonincrease >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  conj_tac
+  >- (drule_all regular_post_emit_tail_resource_nonincrease >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  suspend "dead_tail"
+QED
+
+Resume native_regular_fresh_output_properties[dead_tail]:
+  strip_tac >>
+  `inst.inst_outputs <> []` by (strip_tac >> gvs[]) >>
+  `MEM (Var v) (MAP Var (FILTER (\w. ~MEM w nl) inst.inst_outputs))` by
+    simp[MEM_MAP, MEM_FILTER] >>
+  `LIST_ELEM_COUNT (Var v) ps7.ps_stack <= 1 /\ Var v NOTIN FDOM ps7.ps_spilled` by
+    gvs[] >>
+  `~MEM (Var v) ps8.ps_stack /\ Var v NOTIN FDOM ps8.ps_spilled` by
+    (namedCases_on `popmany_plan (MAP Var (FILTER (\w. ~MEM w nl) inst.inst_outputs)) ps7`
+       ["pops p"] >>
+     drule_all popmany_plan_unique_absent >>
+     mp_tac (Q.SPECL [`MAP Var (FILTER (\w. ~MEM w nl) inst.inst_outputs)`, `ps7`]
+       popmany_plan_spilled_unchanged) >> simp[] >> gvs[]) >>
+  `~MEM (Var v) ps9.ps_stack /\ Var v NOTIN FDOM ps9.ps_spilled` by
+    (namedCases_on `optimistic_swap_plan dfg inst nl term ps8` ["sops p"] >>
+     drule optimistic_swap_plan_inventory_subset >>
+     disch_then (qspec_then `Var v` mp_tac) >>
+     Cases_on `FILTER (\w. MEM w nl) inst.inst_outputs = []` >> gvs[]) >>
+  metis_tac[release_dead_spills_inventory_subset]
+QED
+
+Finalise native_regular_fresh_output_properties
+
+Theorem native_regular_fresh_output_resource_bound:
+  !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
+    inst.inst_opcode <> JMP /\ ALL_DISTINCT inst.inst_outputs /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+    ~MEM (Var v) (compute_operands inst) /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,qs)
+    ==> LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  metis_tac[native_regular_fresh_output_properties]
+QED
+
+Theorem native_regular_fresh_output_demand_support:
+  !lv dfg cfg fn inst nl halting term lbl ps ops qs v.
+    inst.inst_opcode <> JMP /\ ALL_DISTINCT inst.inst_outputs /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+    ~MEM (Var v) (compute_operands inst) /\
+    (!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,qs) /\
+    MEM v inst.inst_outputs /\ ~halting ==>
+    (MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==> MEM v nl
+Proof
+  metis_tac[native_regular_fresh_output_properties]
 QED
 
 Theorem native_regular_observer_upper:
