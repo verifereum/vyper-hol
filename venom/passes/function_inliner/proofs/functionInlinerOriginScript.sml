@@ -674,3 +674,150 @@ Proof
   qexistsl [`call`, `args`] >> simp[] >>
   metis_tac[unitShapeDefsTheory.MEM_fn_insts_blocks_iff, fn_insts_def]
 QED
+
+Theorem qualified_call_path_external[local]:
+  !ctx n fn target root orig args.
+    qualified_origin ctx n fn /\ MEM root ctx.ctx_functions /\
+    MEM orig (fn_insts root) /\ orig.inst_opcode = INVOKE /\
+    orig.inst_operands = Label target::args /\
+    inliner_call_path ctx fn.fn_name target ==>
+    ~MEM target (fn_labels fn)
+Proof
+  rpt strip_tac >>
+  `inliner_fn_origin ctx n fn` by metis_tac[qualified_origin_erasure] >>
+  `inliner_input_ok ctx` by metis_tac[inliner_fn_origin_input_ok] >>
+  `?rank : string -> num. !caller callee.
+    MEM callee (fcg_get_callees (fcg_analyze ctx) caller) ==>
+    rank callee < rank caller` by metis_tac[inliner_input_ok_def] >>
+  `rank target < rank fn.fn_name` by metis_tac[inliner_call_path_rank] >>
+  `target <> fn.fn_name` by (strip_tac >> gvs[]) >>
+  `wf_invoke_targets ctx` by metis_tac[inliner_input_ok_def] >>
+  qpat_x_assum `wf_invoke_targets ctx` mp_tac >>
+  rewrite_tac[venomWfTheory.wf_invoke_targets_def] >>
+  disch_then (qspecl_then [`root`, `orig`] mp_tac) >> simp[] >> strip_tac >>
+  gvs[ctx_fn_names_def, MEM_MAP] >>
+  metis_tac[inliner_fn_origin_separation]
+QED
+
+Theorem qualified_origin_calls_aux[local]:
+  !ctx n fn. qualified_origin ctx n fn ==>
+    !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE ==>
+    ?target args root orig orig_args.
+      inst.inst_operands = Label target::args /\
+      MEM root ctx.ctx_functions /\ MEM orig (fn_insts root) /\
+      orig.inst_opcode = INVOKE /\ orig.inst_operands = Label target::orig_args /\
+      LENGTH orig.inst_outputs = LENGTH inst.inst_outputs /\
+      (fcg_is_reachable (fcg_analyze ctx) fn.fn_name ==>
+        inliner_call_path ctx fn.fn_name target)
+Proof
+  ho_match_mp_tac qualified_origin_strongind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      `wf_invoke_targets ctx` by metis_tac[inliner_input_ok_def] >>
+      qpat_x_assum `wf_invoke_targets ctx` mp_tac >>
+      rewrite_tac[venomWfTheory.wf_invoke_targets_def] >>
+      disch_then (qspecl_then [`fn`, `inst`] mp_tac) >> simp[] >> strip_tac >>
+      qexistsl [`lbl`, `rest`, `fn`, `inst`, `rest`] >> simp[] >>
+      strip_tac >> irule inliner_reachable_call_path >> metis_tac[])
+  >- metis_tac[]
+  >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule inline_one_site_name >> strip_tac >>
+  drule_all inline_one_site_invoke_origin >> strip_tac
+  >- (qpat_x_assum `!inst. MEM inst (fn_insts fn) /\ _ ==> _`
+        (qspec_then `orig` mp_tac) >> simp[] >> strip_tac >>
+      qexistsl [`target`, `args`, `root`, `orig'`, `orig_args`] >> gvs[])
+  >> drule clone_function_inst_origin >> strip_tac >>
+  `orig'.inst_opcode = INVOKE` by gvs[clone_instruction_def] >>
+  qpat_x_assum `!inst. MEM inst (fn_insts fn') /\ _ ==> _`
+    (qspec_then `orig'` mp_tac) >> simp[] >> strip_tac >>
+  `~MEM target (fn_labels fn')` by
+    (irule qualified_call_path_external >> metis_tac[]) >>
+  qspecl_then [`orig'`, `inline_prefix ist.is_inline_count`, `fn_labels fn'`]
+    mp_tac clone_instruction_call_signature >> simp[] >>
+  strip_tac >>
+  qexistsl [`target`, `MAP (clone_operand (inline_prefix ist.is_inline_count) (fn_labels fn')) args`,
+            `root`, `orig''`, `orig_args`] >> simp[] >>
+  reverse conj_tac
+  >- (strip_tac >> drule inline_one_site_selected_call >> strip_tac >>
+      qpat_x_assum `!inst. MEM inst (fn_insts fn) /\ _ ==> _`
+        (qspec_then `call` mp_tac) >> simp[] >> strip_tac >>
+      gvs[] >> metis_tac[inliner_call_path_trans]) >>
+  gvs[]
+QED
+
+Theorem qualified_origin_call_provenance:
+  !ctx n fn inst target args.
+    qualified_origin ctx n fn /\ MEM inst (fn_insts fn) /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label target::args ==>
+    ?root orig orig_args.
+      MEM root ctx.ctx_functions /\ MEM orig (fn_insts root) /\
+      orig.inst_opcode = INVOKE /\ orig.inst_operands = Label target::orig_args /\
+      LENGTH orig.inst_outputs = LENGTH inst.inst_outputs
+Proof
+  rpt strip_tac >> drule_all qualified_origin_calls_aux >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem qualified_origin_call_path:
+  !ctx n fn inst target args.
+    qualified_origin ctx n fn /\ MEM inst (fn_insts fn) /\
+    inst.inst_opcode = INVOKE /\ inst.inst_operands = Label target::args /\
+    fcg_is_reachable (fcg_analyze ctx) fn.fn_name ==>
+    inliner_call_path ctx fn.fn_name target
+Proof
+  rpt strip_tac >> drule_all qualified_origin_calls_aux >>
+  strip_tac >> gvs[]
+QED
+
+Theorem qualified_origin_call_target_external:
+  !ctx n fn call target args.
+    qualified_origin ctx n fn /\ fcg_is_reachable (fcg_analyze ctx) fn.fn_name /\
+    MEM call (fn_insts fn) /\ call.inst_opcode = INVOKE /\
+    call.inst_operands = Label target::args ==>
+    ~MEM target (fn_labels fn)
+Proof
+  rpt strip_tac >> drule_all qualified_origin_call_provenance >> strip_tac >>
+  `inliner_call_path ctx fn.fn_name target` by
+    (irule qualified_origin_call_path >> metis_tac[]) >>
+  metis_tac[qualified_call_path_external]
+QED
+
+Theorem qualified_origin_clone_call_signature:
+  !ctx n fn call target args p.
+    qualified_origin ctx n fn /\ fcg_is_reachable (fcg_analyze ctx) fn.fn_name /\
+    MEM call (fn_insts fn) /\ call.inst_opcode = INVOKE /\
+    call.inst_operands = Label target::args ==>
+    (clone_instruction p (fn_labels fn) call).inst_operands =
+      Label target::MAP (clone_operand p (fn_labels fn)) args /\
+    LENGTH (clone_instruction p (fn_labels fn) call).inst_outputs =
+      LENGTH call.inst_outputs /\
+    (clone_instruction p (fn_labels fn) call).inst_opcode = INVOKE
+Proof
+  rpt strip_tac >>
+  `~MEM target (fn_labels fn)` by
+    (irule qualified_origin_call_target_external >> metis_tac[]) >>
+  metis_tac[clone_instruction_call_signature]
+QED
+
+Theorem qualified_origin_call_return_arity:
+  !ctx n caller m callee call args r.
+    qualified_origin ctx n caller /\ qualified_origin ctx m callee /\
+    MEM call (fn_insts caller) /\ call.inst_opcode = INVOKE /\
+    call.inst_operands = Label callee.fn_name::args /\
+    MEM r (fn_insts callee) /\ (r.inst_opcode = RET \/ r.inst_opcode = RETFMP) ==>
+    raw_return_user_arity r = SOME (LENGTH call.inst_outputs)
+Proof
+  rpt strip_tac >> drule_all qualified_origin_call_provenance >> strip_tac >>
+  drule_at (Pat `qualified_origin ctx m callee`) qualified_origin_returns >>
+  strip_tac >>
+  first_x_assum (qspec_then `r` mp_tac) >> simp[] >> strip_tac >>
+  `inliner_input_ok ctx` by
+    metis_tac[qualified_origin_erasure, inliner_fn_origin_input_ok] >>
+  qpat_x_assum `inliner_input_ok ctx` mp_tac >>
+  rewrite_tac[inliner_input_ok_def] >> strip_tac >>
+  `EVERY (\r. raw_return_user_arity r = SOME (LENGTH orig.inst_outputs))
+     (fn_return_insts root')` by metis_tac[] >>
+  gvs[EVERY_MEM, callLayoutDefsTheory.fn_return_insts_def,
+      callLayoutDefsTheory.is_raw_return_opcode_def, fn_insts_def,
+      venomWfPropsTheory.fn_insts_blocks_flat, MEM_FILTER] >>
+  metis_tac[]
+QED
