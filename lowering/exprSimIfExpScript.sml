@@ -2287,7 +2287,7 @@ Resume ifexp_arm_outcome[exception]:
 QED
 Finalise ifexp_arm_outcome[local]
 
-Theorem ifexp_root_outcome_suffix[local]:
+Theorem ifexp_root_outcome_suffix:
   gas_outcome F tops (ctx,func) source (es,s0) Q R /\
   (!res ee u. Q res ee u /\ ~u.vs_halted ==>
      ?v. gas_path ctx func u 0 (OK v) /\ Q' res ee v) ==>
@@ -2360,7 +2360,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem ifexp_root_arm_finish[local]:
+Theorem ifexp_root_arm_finish:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_type e = t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
@@ -2414,7 +2414,7 @@ Proof
   metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_root_selected_outcome_prefix[local]:
+Theorem ifexp_root_selected_outcome_prefix:
   gas_marked_exec F (ctx,func)
     (vyperState$bind (eval_expr cx c) (read_result cx))
     (es,s0) marks (INL (BoolV sel)) mid (OK u) /\

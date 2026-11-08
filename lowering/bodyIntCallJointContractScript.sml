@@ -90,7 +90,8 @@ QED
    for owner; the return PC, the root return buffer's pointer and the
    immutable base are reserved, every reserved operand is a variable the
    prologue defined at the operand origin, and the return PC holds pc
-   there; the return buffer's capacity is the return value's size and P
+   there; no supported struct is memberless (the interim condition trunk's
+   supported_program carries until the checker's rejection reaches it); the return buffer's capacity is the return value's size and P
    misses it; the source return type evaluates to ret_tv.  The root env
    returns internally (RET to the return PC, as the prologue sets it), with
    the stack-return count of the declared return type, and a return buffer
@@ -122,6 +123,8 @@ Definition intcall_frame_ok_def:
     (!x. fp.jc_root_ce.ce_imm_alloca = SOME x ==> fp.jc_reserved x) /\
     (!op. fp.jc_reserved op ==>
           ?x w. op = Var x /\ lookup_var x fp.jc_oorig = SOME w) /\
+    (!id fs. supportedTypes$supported_struct_fields fp.jc_tops id = SOME fs ==>
+             fs <> []) /\
     (!bw cap. fp.jc_rb = SOME (bw,cap) ==>
        cap = type_memory_size fp.jc_ret_tv /\
        w2n bw + cap <= fp.jc_lo /\
