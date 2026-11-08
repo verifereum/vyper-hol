@@ -98,7 +98,7 @@ Theorem compile_log_save_arg_value_backing:
         (~exprs_can_mutate cenv suffix) (w2n saved_addr) byte_count
 Proof
   rpt gen_tac >> strip_tac >> DISCH_TAC >> qx_gen_tac `saved_addr` >> DISCH_TAC >>
-  Cases_on `~exprs_can_mutate cenv suffix`
+  reverse (Cases_on `exprs_can_mutate cenv suffix`)
   >- (`out = loaded` by fs[] >>
       `saved = src` by
         (qpat_x_assum `compile_log_save_arg _ _ _ _ _ = _` mp_tac >>
