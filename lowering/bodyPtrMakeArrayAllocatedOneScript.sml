@@ -62,6 +62,7 @@ Theorem allocated_one_slot_endpoint_frame:
     ghost_inv d cenv cx es H tm z /\ ghost_kept cenv es sa G tn s H tm /\
     (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
     (!esi si e raw vv base.
+      post_value_type cenv e = expr_type e /\
       vv_post ctx func cenv cx e esi si sa base es raw vv s /\
       read_result cx raw es = (INL v,es) /\
       MAP FDOM esi.scopes = MAP FDOM es.scopes /\

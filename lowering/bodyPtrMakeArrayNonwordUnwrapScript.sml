@@ -5,7 +5,7 @@ Ancestors
   bodyPtrMakeArrayExternalUnwrap bodyPtrMakeArrayUnwrapIdentity
   bodyPtrMakeArrayLayoutTransport exprPtrUnwrapMarked exprSimProps
   bodyPtrDefs loweringPosts exprLowering context compileEnv bodyPtrMakeArrayMemoryFrame
-  fragGasPathPtr fragGasPath
+  fragGasPathPtr fragGasPath exprSimHyps valueCopyBytes
 
 Theorem unwrapped_old_pointer_coverage:
   ghost_kept ce es' sn G tn s H tm /\
@@ -48,6 +48,11 @@ Theorem literal_nonword_unwrap:
       ptr_covers H tm x z n)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type ce e = expr_type e` by
+    (qpat_assum `int_calls_expr e = [] \/ _` strip_assume_tac
+     >- (irule exprSimHypsTheory.post_value_type_no_calls >>
+         first_assum ACCEPT_TAC) >>
+     irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   `!s H tm. ptr_val_ok cx (expr_type e) v op H tm s ==>
     ptr_mem_ok cx (lowered_value_type ce e) v op H tm s` by
     (rpt strip_tac >> irule make_array_child_ptr_mem_lowered >>
@@ -59,11 +64,14 @@ Proof
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> gvs[] >>
       qexistsl [`s`, `G`, `tn`] >> simp[ghost_kept_def]) >>
   rename1 `LocatedValue t p` >>
-  `t = expr_type e /\ ~is_word_type t` by metis_tac[vv_post_located_type] >>
+  `~is_word_type t` by
+    (drule vv_post_located_type >> strip_tac >> gvs[] >>
+     imp_res_tac valueCopyBytesTheory.is_bytestring_word_type >> gvs[]) >>
   Cases_on `p.ptr_location = LocMemory`
   >- (drule_all unwrap_memory_ptr_path >>
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> gvs[] >>
       qexistsl [`s`, `G`, `tn`] >> simp[ghost_kept_def]) >>
+  `t = expr_type e` by (drule vv_post_located_type >> gvs[]) >>
   drule_all external_nonword_unwrap >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   gvs[] >> qexistsl [`z`, `H`, `tm`] >> simp[] >>

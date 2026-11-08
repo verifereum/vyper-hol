@@ -35,6 +35,8 @@ Theorem external_storage_one_unwrap:
     (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
+  drule external_located_post_type >>
+  impl_tac >- (Cases_on `tr` >> gvs[]) >> strip_tac >>
   drule_all external_consumer_compile_frame >> strip_tac >>
   drule_all make_array_storage_consumer_read >> strip_tac >>
   drule_all make_array_storage_consumer_taint >> strip_tac >>
@@ -114,6 +116,8 @@ Theorem external_storage_loop_unwrap:
     (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
+  drule external_located_post_type >>
+  impl_tac >- (Cases_on `tr` >> gvs[]) >> strip_tac >>
   drule_all external_consumer_compile_frame >> strip_tac >>
   drule_all make_array_storage_consumer_read >> strip_tac >>
   drule_all make_array_storage_consumer_taint >> strip_tac >>
@@ -191,6 +195,7 @@ Theorem external_code_unwrap:
     (!x. not_fresh_at sn x ==> lookup_var x z = lookup_var x s)
 Proof
   strip_tac >>
+  drule external_located_post_type >> impl_tac >- gvs[] >> strip_tac >>
   drule_all external_consumer_compile_frame >> strip_tac >>
   drule_all make_array_immutable_consumer_read >> strip_tac >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME tv` by metis_tac[] >>
