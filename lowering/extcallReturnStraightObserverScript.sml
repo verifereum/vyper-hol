@@ -1,10 +1,10 @@
 (* Equal-block, length-preserving entry-prefix sanitation. *)
 Theory extcallReturnStraightObserver
 Ancestors
-  extcallReturnCountedTransport exprSimAbiGasBridge compileEnv fragExec exprLoweringProps abiDecoderLoop
+  extcallReturnObserver extcallReturnObserverRun extcallReturnCountedTransport exprSimAbiGasBridge compileEnv fragExec exprLoweringProps abiDecoderLoop
   simplifyCfgFixupSemantics venomExecSemantics venomExecProofs
   venomInstProofs venomInstProofs1 venomInstProps venomInst list rich_list
-  arithmetic
+  arithmetic venomWf mem2varBlockSimHelpers
 
 Theorem return_straight_shape:
   cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks ==>
@@ -230,4 +230,154 @@ Proof
   qpat_x_assum `isPREFIX sb.cs_current_insts _` mp_tac >>
   simp[IS_PREFIX_APPEND] >> strip_tac >> gvs[MEM_APPEND] >>
   disj1_tac >> irule MEM_DROP_IMP >> goal_assum (drule_at Any)
+QED
+
+Theorem return_straight_observer_distinct:
+  cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  LENGTH ids = LENGTH sa.cs_current_insts /\ ALL_DISTINCT ids /\
+  ~MEM stop ids /\
+  (!i. MEM i (fn_insts func) ==> ~MEM i.inst_id ids /\ i.inst_id <> stop) ==>
+  fn_inst_ids_distinct
+    (frag_observer (start_relabel sa.cs_current_bb ids sa)
+      (start_swap sa sa.cs_current_bb ids sb) func stop)
+Proof
+  strip_tac >> drule_all return_straight_swap >> strip_tac >>
+  drule_all return_straight_shape >> strip_tac >>
+  `emitted_blocks (start_relabel sa.cs_current_bb ids sa)
+    (start_swap sa sa.cs_current_bb ids sb) = []` by
+    (irule (cj 3 return_straight_shape) >> simp[start_relabel_def] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) sb.cs_current_insts)` by
+    (fs[fn_has_code_def] >>
+     `MEM bb func.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+       (irule ALL_DISTINCT_FLAT_MAP_MEM >>
+        qexists_tac `MAP (\b. b.bb_instructions) func.fn_blocks` >>
+        fs[fn_inst_ids_distinct_def, MAP_MAP_o, combinTheory.o_DEF, MEM_MAP] >>
+        metis_tac[]) >>
+     qpat_x_assum `isPREFIX sb.cs_current_insts _` mp_tac >>
+     simp[IS_PREFIX_APPEND] >> rpt strip_tac >> gvs[MAP_APPEND, ALL_DISTINCT_APPEND]) >>
+  `!i. MEM i (DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts) ==>
+       MEM i (fn_insts func)` by
+    (rpt strip_tac >> fs[fn_has_code_def] >> irule lookup_block_fn_insts >>
+     goal_assum (drule_at Any) >>
+     qpat_x_assum `isPREFIX sb.cs_current_insts _` mp_tac >>
+     simp[IS_PREFIX_APPEND] >> strip_tac >> gvs[MEM_APPEND] >>
+     disj1_tac >> irule MEM_DROP_IMP >> goal_assum (drule_at Any)) >>
+  simp[fn_inst_ids_distinct_def, frag_observer_def, start_swap_def,
+       MAP_APPEND, MAP_MAP_o, combinTheory.o_DEF, mk_inst_def,
+       ALL_DISTINCT_APPEND, MEM_MAP] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id)
+     (DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts))` by
+    (pure_rewrite_tac[MAP_DROP] >> irule ALL_DISTINCT_DROP >> simp[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem return_straight_observer_members:
+  cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks /\
+  LENGTH ids = LENGTH sa.cs_current_insts ==>
+  (MEM i (fn_insts
+     (frag_observer (start_relabel sa.cs_current_bb ids sa)
+       (start_swap sa sa.cs_current_bb ids sb) func stop)) <=>
+   (?id. MEM id ids /\ i = mk_inst id NOP [] []) \/
+   MEM i (DROP (LENGTH sa.cs_current_insts) sb.cs_current_insts) \/
+   i = mk_inst stop STOP [] [])
+Proof
+  strip_tac >> drule_all return_straight_swap >> strip_tac >>
+  drule_all return_straight_shape >> strip_tac >>
+  `emitted_blocks (start_relabel sa.cs_current_bb ids sa)
+    (start_swap sa sa.cs_current_bb ids sb) = []` by
+    (irule (cj 3 return_straight_shape) >> simp[start_relabel_def] >> metis_tac[]) >>
+  simp[frag_observer_def, fn_insts_def, fn_insts_blocks_def,
+       start_swap_def, MEM_APPEND, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem return_straight_observer_id_agreement:
+  cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  LENGTH ids = LENGTH sa.cs_current_insts /\
+  (!i. MEM i (fn_insts func) ==> ~MEM i.inst_id ids /\ i.inst_id <> stop) ==>
+  !i j. MEM i (fn_insts func) /\
+    MEM j (fn_insts (frag_observer (start_relabel sa.cs_current_bb ids sa)
+      (start_swap sa sa.cs_current_bb ids sb) func stop)) /\
+    i.inst_id = j.inst_id ==> i = j
+Proof
+  strip_tac >> simp[return_straight_observer_members] >> rpt strip_tac
+  >- (gvs[mk_inst_def] >> metis_tac[])
+  >- (`MEM j (fn_insts func)` by
+        (fs[fn_has_code_def] >> irule lookup_block_fn_insts >>
+         goal_assum (drule_at Any) >>
+         qpat_x_assum `isPREFIX sb.cs_current_insts _` mp_tac >>
+         simp[IS_PREFIX_APPEND] >> strip_tac >> gvs[MEM_APPEND] >>
+         disj1_tac >> irule MEM_DROP_IMP >> goal_assum (drule_at Any)) >>
+      metis_tac[localPtrsPropsTheory.fn_inst_ids_distinct_inj]) >>
+  gvs[mk_inst_def] >> metis_tac[]
+QED
+
+Theorem return_straight_completion:
+  cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks /\ frag_gas_free sa sb /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?ids stop full. LENGTH ids = LENGTH sa.cs_current_insts /\
+    fn_has_code (start_relabel sa.cs_current_bb ids sa)
+      (start_swap sa sa.cs_current_bb ids sb) full /\
+    fn_inst_ids_distinct full /\ full.fn_name = func.fn_name /\
+    (!i. MEM i (fn_insts full) /\ i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==>
+         MEM i (fn_insts func)) /\
+    (!i. MEM i (fn_insts full) ==> i.inst_opcode <> INVOKE) /\
+    (!i. i.inst_opcode = ALLOCA ==>
+       (MEM i (fn_insts full) <=> MEM i (fn_insts func))) /\
+    (!fuel ctx'. run_from fuel ctx' full s =
+                  run_from fuel ctx (frag_observer sa sb func stop) s) /\
+    (!t ctx'. ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+       abi_decode_sim ctx' full s t ==>
+       abi_decode_sim ctx (frag_observer sa sb func stop) s t)
+Proof
+  strip_tac >> drule_all return_straight_shape >> strip_tac >>
+  `LENGTH sa.cs_current_insts <= LENGTH sb.cs_current_insts` by
+    metis_tac[IS_PREFIX_LENGTH] >>
+  qspecl_then [`fn_insts func`, `LENGTH sa.cs_current_insts`]
+    strip_assume_tac frag_relabel_fresh_ids >> rename1 `~MEM stop ids` >>
+  qabbrev_tac `obs = frag_observer (start_relabel sa.cs_current_bb ids sa)
+      (start_swap sa sa.cs_current_bb ids sb) func stop` >>
+  `fn_has_code (start_relabel sa.cs_current_bb ids sa)
+      (start_swap sa sa.cs_current_bb ids sb) obs /\
+   fn_inst_ids_distinct obs /\ obs.fn_name = func.fn_name /\
+   (!i. MEM i (fn_insts obs) ==> i.inst_opcode <> INVOKE /\
+       (i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==> MEM i (fn_insts func)))` by
+    (drule_all return_straight_observer_provenance >>
+     disch_then (qspec_then `stop` strip_assume_tac) >>
+     simp[Abbr `obs`, return_straight_observer_code,
+          return_straight_observer_distinct]) >>
+  qspec_then `obs` strip_assume_tac (Q.GEN `obs` return_observer_complete_fresh_label) >>
+  qabbrev_tac `full = return_observer_complete func obs keep` >>
+  `sa.cs_current_bb <> keep /\ sb.cs_current_bb <> keep` by
+    (drule_all return_straight_swap >> strip_tac >>
+     drule_all fn_has_code_start >> strip_tac >>
+     fs[fn_has_code_def, start_relabel_def] >>
+     imp_res_tac lookup_block_MEM >> imp_res_tac lookup_block_label >>
+     fs[MEM_MAP] >> metis_tac[]) >>
+  qexistsl_tac [`ids`, `stop`, `full`] >>
+  simp[Abbr `full`, return_observer_complete_has_code] >>
+  conj_tac
+  >- (irule return_observer_complete_ids >> simp[] >>
+      simp[Abbr `obs`] >> metis_tac[return_straight_observer_id_agreement]) >>
+  conj_tac >- simp[return_observer_complete_def] >>
+  conj_tac
+  >- (simp[return_observer_complete_members] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[return_observer_complete_members] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  conj_tac >- simp[return_observer_complete_allocas] >>
+  conj_tac
+  >- (rpt gen_tac >>
+      `run_from fuel ctx' (return_observer_complete func obs keep) s =
+       run_from fuel ctx obs s` by
+        (irule return_observer_complete_run_from >> fs[EVERY_MEM]) >>
+      simp[Abbr `obs`] >> irule return_straight_observer_run >> simp[]) >>
+  rpt strip_tac >> irule return_straight_observer_sim >> simp[] >>
+  qexistsl_tac [`ids`] >> simp[] >>
+  irule return_observer_complete_sim >> simp[] >>
+  qexistsl_tac [`ctx'`, `func`, `keep`] >> fs[EVERY_MEM]
 QED
