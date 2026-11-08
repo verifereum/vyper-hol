@@ -1,13 +1,13 @@
 (* Memory-safe primitive paths for live-slot storage stores. *)
 Theory storeSlotsMemoryPaths
 Ancestors
-  bodyMemAssignTopCopyPaths placeStoreStorage typedMemoryCopy
+  bodyMemAssignTopCopyPaths placeStoreStorage placeStoreCopyPath typedMemoryCopy
   fragGasSeqMem fragGasSeqAbort fragGasMode fragExecMem instMemFrontier
   emitHelper emitHelperProps exprLoweringProps context compileEnv
   venomExecSemantics venomState venomInst list rich_list finite_map words
   arithmetic valueEncoding valueEncodingProps
 
-Theorem store_slots_emitted_seq_path_mem:
+Theorem store_slots_emitted_seq_path_mem[local]:
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   same_blocks sa sb /\ fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -71,6 +71,59 @@ Proof
     (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >> simp[]
 QED
 
+Theorem store_slots_bytes_count_arith_path_mem[local]:
+  emit_op ADD [loaded; Lit 63w] a = (sum,b) /\
+  emit_op SHR [Lit 5w; sum] b = (cnt,sm) /\
+  fn_has_code a b func /\ fn_has_code b sm func /\
+  eval_operand loaded t = SOME (n2w L) /\ L + 63 < dimword (:256) /\
+  ~t.vs_halted /\ t.vs_current_bb = a.cs_current_bb /\
+  t.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?u. gas_marked_path T ctx func t 0 (OK u) /\
+      eval_operand cnt u = SOME (n2w (1 + word_size L)) /\
+      u.vs_memory = t.vs_memory /\
+      (!off len. typedMemoryCopy$typed_copy_state_frame a off len t u) /\
+      u.vs_alloca_next = t.vs_alloca_next /\
+      ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sm.cs_current_insts
+Proof
+  strip_tac >>
+  `ci_mono a b` by metis_tac[typed_copy_emit_op_mono] >>
+  `?r. gas_marked_path T ctx func t 0 (OK r) /\
+       eval_operand sum r = SOME (n2w (L + 63)) /\
+       r.vs_memory = t.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame a off len t r) /\
+       r.vs_alloca_next = t.vs_alloca_next /\
+       ~r.vs_halted /\ r.vs_current_bb = b.cs_current_bb /\
+       r.vs_inst_idx = LENGTH b.cs_current_insts` by
+    (irule store_slots_emit_op_path_mem >> simp[] >>
+     qexistsl_tac [`[loaded; Lit 63w]`, `ADD`] >>
+     simp[is_terminator_def, below_frontier_no_ranges, step_inst_base_opcode_eqs,
+          mk_inst_def, exec_pure2_def, eval_operand_def, GSYM word_add_n2w]) >>
+  `(n2w (L + 63):bytes32) >>> 5 = n2w (1 + word_size L)` by
+    (once_rewrite_tac[GSYM w2n_11] >>
+     simp[Excl "w2n_11", w2n_lsr, w2n_n2w, LESS_MOD,
+          vfmConstantsTheory.word_size_def] >>
+     qspec_then `L + 31` mp_tac (SRULE [] (Q.SPEC `32` DIVISION)) >>
+     qspec_then `L + 63` mp_tac (SRULE [] (Q.SPEC `32` DIVISION)) >>
+     rpt strip_tac >>
+     `(L + 31) DIV 32 + 1 < dimword (:256)` by intLib.ARITH_TAC >>
+     simp[LESS_MOD] >> intLib.ARITH_TAC) >>
+  `?u. gas_marked_path T ctx func r 0 (OK u) /\
+       eval_operand cnt u = SOME (n2w (1 + word_size L)) /\
+       u.vs_memory = r.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame b off len r u) /\
+       u.vs_alloca_next = r.vs_alloca_next /\
+       ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (irule store_slots_emit_op_path_mem >> simp[] >>
+     qexistsl_tac [`[Lit 5w; sum]`, `SHR`] >>
+     simp[is_terminator_def, below_frontier_no_ranges, step_inst_base_opcode_eqs,
+          mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+  qexists_tac `u` >> simp[] >> conj_tac
+  >- (drule_all gas_marked_path_then >> simp[]) >>
+  rpt gen_tac >> metis_tac[typed_copy_state_frame_trans, typed_copy_state_frame_mono]
+QED
+
 Theorem store_slots_bytes_count_path_mem:
   compile_bytestring_word_count src sa = (cnt,sm) /\
   eval_operand src s = SOME sw /\
@@ -111,53 +164,14 @@ Proof
      simp[is_terminator_def, below_frontier_MLOAD, mk_inst_def,
           step_inst_base_opcode_eqs, exec_read1_def,
           GSYM valueEncodingPropsTheory.mem_word_at_eq_mload]) >>
-  suspend "rest"
-QED
-
-Resume store_slots_bytes_count_path_mem[rest]:
-  `?r. gas_marked_path T ctx func t 0 (OK r) /\
-       eval_operand sum r = SOME (n2w (L + 63)) /\
-       r.vs_memory = t.vs_memory /\
-       (!off len. typedMemoryCopy$typed_copy_state_frame a off len t r) /\
-       r.vs_alloca_next = t.vs_alloca_next /\
-       ~r.vs_halted /\ r.vs_current_bb = b.cs_current_bb /\
-       r.vs_inst_idx = LENGTH b.cs_current_insts` by
-    (irule store_slots_emit_op_path_mem >> simp[] >>
-     qexistsl_tac [`[loaded; Lit 63w]`, `ADD`] >>
-     simp[is_terminator_def, below_frontier_no_ranges, step_inst_base_opcode_eqs,
-          mk_inst_def, exec_pure2_def, eval_operand_def,
-          GSYM wordsTheory.word_add_n2w]) >>
-  `(n2w (L + 63):bytes32) >>> 5 = n2w (1 + word_size L)` by
-    (once_rewrite_tac[GSYM wordsTheory.w2n_11] >>
-     simp[Excl "w2n_11", wordsTheory.w2n_lsr, wordsTheory.w2n_n2w,
-          arithmeticTheory.LESS_MOD, vfmConstantsTheory.word_size_def] >>
-     qspec_then `L + 31` mp_tac (SRULE [] (Q.SPEC `32` arithmeticTheory.DIVISION)) >>
-     qspec_then `L + 63` mp_tac (SRULE [] (Q.SPEC `32` arithmeticTheory.DIVISION)) >>
-     rpt strip_tac >>
-     `(L + 31) DIV 32 + 1 < dimword (:256)` by intLib.ARITH_TAC >>
-     simp[arithmeticTheory.LESS_MOD] >> intLib.ARITH_TAC) >>
-  `?u. gas_marked_path T ctx func r 0 (OK u) /\
-       eval_operand cnt u = SOME (n2w (1 + word_size L)) /\
-       u.vs_memory = r.vs_memory /\
-       (!off len. typedMemoryCopy$typed_copy_state_frame b off len r u) /\
-       u.vs_alloca_next = r.vs_alloca_next /\
-       ~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
-       u.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    (irule store_slots_emit_op_path_mem >> simp[] >>
-     qexistsl_tac [`[Lit 5w; sum]`, `SHR`] >>
-     simp[is_terminator_def, below_frontier_no_ranges, step_inst_base_opcode_eqs,
-          mk_inst_def, exec_pure2_def, eval_operand_def]) >>
+  drule_all store_slots_bytes_count_arith_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `u` >> simp[] >> conj_tac
-  >- (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
-      qexists_tac `t` >> simp[] >>
-      irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_marked_path_then)) >>
-      qexists_tac `r` >> simp[]) >>
-  rpt gen_tac >>
-  metis_tac[typed_copy_state_frame_trans, typed_copy_state_frame_mono]
+  >- (drule_all gas_marked_path_then >> simp[]) >>
+  rpt gen_tac >> metis_tac[typed_copy_state_frame_trans, typed_copy_state_frame_mono]
 QED
-Finalise store_slots_bytes_count_path_mem
 
-Theorem store_slots_runtime_test_path_mem:
+Theorem store_slots_runtime_test_path_mem[local]:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id EQ [Var cv; countop] [tv]]
@@ -199,7 +213,7 @@ Proof
       lookup_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem store_slots_runtime_header_path_mem:
+Theorem store_slots_runtime_header_path_mem[local]:
   store_copy_frame sa loc b k s0 i s /\
   eval_operand (Var cv) s = SOME (n2w i) /\
   eval_operand countop s = SOME (n2w n) /\
@@ -211,9 +225,9 @@ Theorem store_slots_runtime_header_path_mem:
     (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
       store_copy_frame sa loc b k s0 i t /\
-      eval_operand (Var cv) t = SOME (n2w i) /\
+      eval_operand (Var cv) t = SOME (n2w i) /\ ~t.vs_halted /\
       t.vs_current_bb = (if i = n then exit else bodylbl) /\
-      t.vs_inst_idx = 0 /\ ~t.vs_halted
+      t.vs_inst_idx = 0
 Proof
   strip_tac >>
   `isPREFIX [mk_inst id EQ [Var cv; countop] [tv]]
@@ -242,7 +256,7 @@ Proof
   gvs[topcopy_frame_jump, jump_to_def, eval_operand_def, lookup_var_def]
 QED
 
-Theorem store_slots_runtime_init_path_mem:
+Theorem store_slots_runtime_init_path_mem[local]:
   ~s.vs_halted /\ (!x. not_fresh_at sa x ==> x <> cv) /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX [mk_inst id ASSIGN [Lit 0w] [cv];
@@ -270,7 +284,7 @@ Proof
   gvs[topcopy_frame_jump, jump_to_def, eval_operand_def, lookup_var_def]
 QED
 
-Theorem store_slots_runtime_body_path_mem:
+Theorem store_slots_runtime_body_path_mem[local]:
   store_copy_frame sa loc b k s0 i s /\ ~s0.vs_call_ctx.cc_static /\
   (loc = LocStorage \/ loc = LocTransient) /\
   w2n b + 32*(i+1) <= s0.vs_alloca_next /\
@@ -293,8 +307,8 @@ Theorem store_slots_runtime_body_path_mem:
      mk_inst (id+7) JMP [Label hdr] []] bb.bb_instructions ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
       store_copy_frame sa loc b k s0 (SUC i) t /\
-      eval_operand (Var cv) t = SOME (n2w (SUC i)) /\
-      t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
+      eval_operand (Var cv) t = SOME (n2w (SUC i)) /\ ~t.vs_halted /\
+      t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `isPREFIX _ _`
@@ -317,4 +331,56 @@ Proof
   qexists_tac `jump_to hdr t` >>
   conj_tac >- (drule_all gas_marked_path_then >> simp[]) >>
   gvs[topcopy_frame_jump, jump_to_def, eval_operand_def, lookup_var_def]
+QED
+
+Theorem store_slots_runtime_copy_path_mem:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop_op src dst countop LocMemory loc ctor sa = (u,sb) /\
+  fn_has_code sa sb func /\ n < dimword (:256) /\
+  w2n b + 32*n <= s0.vs_alloca_next /\
+  (!x. src = Var x \/ dst = Var x \/ countop = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s0 = SOME b /\ eval_operand dst s0 = SOME k /\
+  eval_operand countop s0 = SOME (n2w n) /\
+  ~s0.vs_call_ctx.cc_static /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path T ctx func s0 0 (OK t) /\
+      store_copy_frame sa loc b k s0 n t /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all place_store_runtime_copy_code >> strip_tac >>
+  `!j q. j <= n /\ store_copy_frame sa loc b k s0 j q /\
+     eval_operand (Var cv) q = SOME (n2w j) /\ ~q.vs_halted /\
+     q.vs_current_bb = hdr /\ q.vs_inst_idx = 0 ==>
+     ?t. gas_marked_path T ctx func q 0 (OK t) /\
+       store_copy_frame sa loc b k s0 j t /\ eval_operand (Var cv) t = SOME (n2w j) /\
+       ~t.vs_halted /\ t.vs_current_bb = (if j=n then exit else body_lbl) /\
+       t.vs_inst_idx = 0` by
+    (rpt gen_tac >> strip_tac >> irule store_slots_runtime_header_path_mem >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >>
+     qexistsl_tac [`countop`, `idh`, `tv`] >> simp[] >>
+     gvs[ALL_DISTINCT] >> metis_tac[topcopy_frame_operand]) >>
+  `!j q. j < n /\ store_copy_frame sa loc b k s0 j q /\
+     eval_operand (Var cv) q = SOME (n2w j) /\ ~q.vs_halted /\
+     q.vs_current_bb = body_lbl /\ q.vs_inst_idx = 0 ==>
+     ?t. gas_marked_path T ctx func q 0 (OK t) /\
+       store_copy_frame sa loc b k s0 (SUC j) t /\
+       eval_operand (Var cv) t = SOME (n2w (SUC j)) /\ ~t.vs_halted /\
+       t.vs_current_bb = hdr /\ t.vs_inst_idx = 0` by
+    (rpt gen_tac >> strip_tac >> irule store_slots_runtime_body_path_mem >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >>
+     gvs[ALL_DISTINCT] >> rpt strip_tac >> metis_tac[]) >>
+  `?r. gas_marked_path T ctx func s0 0 (OK r) /\
+       store_copy_frame sa loc b k s0 0 r /\ eval_operand (Var cv) r = SOME 0w /\
+       r.vs_current_bb = hdr /\ r.vs_inst_idx = 0 /\ ~r.vs_halted` by
+    (irule store_slots_runtime_init_path_mem >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> gvs[] >> metis_tac[]) >>
+  `?t. gas_marked_path T ctx func r 0 (OK t) /\
+       store_copy_frame sa loc b k s0 n t /\ ~t.vs_halted /\
+       t.vs_current_bb = exit /\ t.vs_inst_idx = 0` by
+    (irule topcopy_loop_induction >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+     qexistsl_tac [`cv`, `hdr`, `0`, `body_lbl`, `n`] >> simp[]) >>
+  qexists_tac `t` >> simp[] >> drule_all gas_marked_path_then >> simp[]
 QED
