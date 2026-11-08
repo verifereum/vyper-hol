@@ -337,6 +337,171 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem native_indexed_step_layout:
+  !fn bb k inst rest.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    DROP k (non_param_insts bb) = inst::rest ==>
+    k < LENGTH (non_param_insts bb) /\
+    inst = EL k (non_param_insts bb) /\
+    inst = EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions /\
+    MEM inst bb.bb_instructions /\ ~is_param_opcode inst.inst_opcode /\
+    inst_wf inst /\ codegen_ready_inst inst /\ ALL_DISTINCT inst.inst_outputs /\
+    (inst.inst_opcode <> PHI ==> LENGTH (collect_phis bb.bb_instructions) <= k)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k < LENGTH (non_param_insts bb)` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+     simp[] >> decide_tac) >>
+  `inst = EL k (non_param_insts bb)` by metis_tac[HD_DROP, HD] >>
+  `inst = EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions` by
+    metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
+  `MEM inst bb.bb_instructions /\ ~is_param_opcode inst.inst_opcode` by
+    (`MEM inst (non_param_insts bb)` by metis_tac[EL_MEM] >>
+     gvs[non_param_insts_def, MEM_FILTER]) >>
+  `inst_wf inst /\ codegen_ready_inst inst` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `ALL_DISTINCT inst.inst_outputs` by
+    (irule fnPlanLineageCallersTheory.codegen_ready_inst_outputs_distinct >>
+     qexists_tac `fn` >> simp[] >>
+     gvs[venomInstTheory.fn_insts_def] >>
+     metis_tac[venomInstTheory.fmp_fn_insts_blocks_intro]) >>
+  gvs[] >> strip_tac >> spose_not_then assume_tac >>
+  qspec_then `bb` (qx_choose_then `tail` assume_tac)
+    fnPlanLineageEntryProductionTheory.non_param_insts_phi_prefix >>
+  `k < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+  `EL k (non_param_insts bb) = EL k (collect_phis bb.bb_instructions)` by
+    simp[EL_APPEND1] >>
+  metis_tac[livenessTransferProofsTheory.collect_phis_mem, EL_MEM]
+QED
+
+Theorem native_indexed_step_nondefining_observer_bound:
+  !fn bb dfg k before inst rest ops after v b.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    DROP k (non_param_insts bb) = inst::rest /\
+    ~MEM v inst.inst_outputs /\ b <= 1 /\
+    LIST_ELEM_COUNT (Var v) before.ps_stack +
+      (if Var v IN FDOM before.ps_spilled then 1 else 0) <= b /\
+    (LENGTH (collect_phis bb.bb_instructions) <= k ==>
+      (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH (get_params bb.bb_instructions)+k)) ==>
+        MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+      (!w. MEM (Var w) (compute_operands inst) ==>
+        MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled)) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn inst
+      (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (k + LENGTH (get_params bb.bb_instructions) + 1))
+      (bb_is_halting bb)
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      bb.bb_label before = SOME (ops,after) ==>
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= b
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_indexed_step_layout >> strip_tac >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (`v <> HD inst.inst_outputs` by
+        gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+           is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+           venomInstTheory.is_raw_fmp_opcode_def, venomInstTheory.is_param_opcode_def] >>
+      strip_tac >>
+      qpat_x_assum `inst = EL (_ + k) bb.bb_instructions`
+        (fn th => qpat_x_assum `generate_phi_plan _ _ _ _ = _`
+          (mp_tac o REWRITE_RULE [Once arithmeticTheory.ADD_COMM, GSYM th])) >>
+      strip_tac >> drule_all generate_phi_plan_nondefining_resource_nonincrease >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `LENGTH (collect_phis bb.bb_instructions) <= k` by metis_tac[] >>
+  qpat_x_assum `(LENGTH (collect_phis _) <= k ==> _)` mp_tac >> simp[] >> strip_tac >>
+  Cases_on `inst.inst_opcode = JMP`
+  >- (`SUC k = LENGTH (non_param_insts bb)` by
+        (qspecl_then [`fn`,`bb`,`k`] mp_tac
+           fnPlanLineageEntryProductionTheory.ready_block_ordinary_suffix_layout >>
+         simp[] >> disch_then (qspec_then `k` mp_tac) >> simp[] >> gvs[]) >>
+      `bb.bb_instructions = get_params bb.bb_instructions ++ non_param_insts bb` by
+        metis_tac[fnPlanLineageCallersTheory.ready_block_parameter_suffix] >>
+      `LENGTH bb.bb_instructions = LENGTH (get_params bb.bb_instructions) + SUC k` by
+        metis_tac[LENGTH_APPEND] >>
+      `rest = []` by
+        (qpat_x_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+         Cases_on `rest` >> simp[] >> decide_tac) >>
+      `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> fs[]) >>
+      `PRE (LENGTH bb.bb_instructions) = LENGTH (get_params bb.bb_instructions) + k` by decide_tac >>
+      `LAST bb.bb_instructions = inst` by metis_tac[LAST_EL] >>
+      Cases_on `b = 0` >> gvs[]
+      >- (gvs[elem_count_zero_iff, indicator_zero_iff] >>
+          irule native_terminal_jmp_nondefining_absent >>
+          qexistsl_tac [`bb`,`dfg`,`fn`,`ops`,`before`] >>
+          `PRE (LENGTH (get_params bb.bb_instructions) + LENGTH (non_param_insts bb)) =
+             k + LENGTH (get_params bb.bb_instructions)` by decide_tac >> simp[] >> gvs[]) >>
+      `b = 1` by decide_tac >> gvs[] >>
+      irule native_terminal_jmp_observer_upper >>
+      qexistsl_tac [`bb`,`dfg`,`fn`,`ops`,`before`] >>
+      `PRE (LENGTH (get_params bb.bb_instructions) + LENGTH (non_param_insts bb)) =
+         k + LENGTH (get_params bb.bb_instructions)` by decide_tac >> simp[] >> gvs[]) >>
+  Cases_on `b = 0` >> gvs[]
+  >- (gvs[elem_count_zero_iff, indicator_zero_iff] >>
+      drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        fnPlanLineageNativeOriginsTheory.native_inst_variable_origins >>
+      disch_then (qspec_then `v` mp_tac) >> simp[] >>
+      `LENGTH (compute_operands (EL k (non_param_insts bb))) <= 16 /\
+       ((EL k (non_param_insts bb)).inst_opcode = OFFSET ==>
+        (EL k (non_param_insts bb)).inst_outputs <> [])` by
+        (conj_tac >- fs[codegen_ready_inst_def] >>
+         strip_tac >> gvs[venomWfTheory.inst_wf_def] >>
+         Cases_on `(EL k (non_param_insts bb)).inst_outputs` >> gvs[]) >> metis_tac[]) >>
+  `b = 1` by decide_tac >> gvs[] >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    fnPlanLineageSetupTheory.native_inst_observer_upper >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> gvs[codegen_ready_inst_def]
+QED
+
+Theorem native_indexed_step_fresh_output_resource_bound:
+  !fn bb dfg k before inst rest ops after v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    DROP k (non_param_insts bb) = inst::rest /\ MEM v inst.inst_outputs /\
+    ~MEM (Var v) before.ps_stack /\ Var v NOTIN FDOM before.ps_spilled /\
+    (LENGTH (collect_phis bb.bb_instructions) <= k ==>
+      !w. MEM (Var w) (compute_operands inst) ==>
+        MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn inst
+      (if rest = [] then live_vars_at (liveness_analyze fn) bb.bb_label
+          (LENGTH bb.bb_instructions)
+       else live_vars_at (liveness_analyze fn) bb.bb_label
+          (k + LENGTH (get_params bb.bb_instructions) + 1))
+      (bb_is_halting bb)
+      (case rest of [] => F | h::t => is_terminator h.inst_opcode)
+      bb.bb_label before = SOME (ops,after) ==>
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_indexed_step_layout >> strip_tac >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+           is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+           venomInstTheory.is_raw_fmp_opcode_def, venomInstTheory.is_param_opcode_def] >>
+      strip_tac >>
+      qpat_x_assum `inst = EL (_ + k) bb.bb_instructions`
+        (fn th => qpat_x_assum `generate_phi_plan _ _ _ _ = _`
+          (mp_tac o REWRITE_RULE [Once arithmeticTheory.ADD_COMM, GSYM th])) >>
+      strip_tac >> drule generate_phi_plan_resource_bound >>
+      disch_then (qspec_then `v` mp_tac) >>
+      `LIST_ELEM_COUNT (Var v) before.ps_stack = 0` by
+        gvs[GSYM LIST_ELEM_COUNT_MEM] >> simp[] >>
+      Cases_on `v = HD inst.inst_outputs` >> gvs[]) >>
+  `inst.inst_opcode <> JMP` by (strip_tac >> gvs[venomWfTheory.inst_wf_def]) >>
+  `!w. MEM (Var w) (compute_operands inst) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled` by metis_tac[] >>
+  `~MEM (Var v) (compute_operands inst)` by metis_tac[] >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    fnPlanLineageSetupTheory.native_inst_fresh_output_resource_bound >>
+  disch_then (qspec_then `v` mp_tac) >> simp[]
+QED
+
 Theorem native_inst_prefix_nondefining_observer_bound:
   !lv dfg cfg fn lbl halt n len xs incoming k qs.
     fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
@@ -366,96 +531,21 @@ Proof
     (if Var v IN FDOM before.ps_spilled then 1 else 0) <= b` by
     (first_x_assum irule >> simp[] >> qexists_tac `bb` >> simp[] >>
      rpt strip_tac >> `j < SUC k` by decide_tac >> metis_tac[]) >>
+  irule native_indexed_step_nondefining_observer_bound >> simp[] >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `DROP _ _ = _`)) >> simp[] >>
   `k < LENGTH (non_param_insts bb)` by
     (qpat_x_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
      simp[] >> decide_tac) >>
-  `inst = EL k (non_param_insts bb)` by
-    metis_tac[HD_DROP, HD] >>
-  `inst = EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions` by
-    metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
-  `MEM inst bb.bb_instructions /\ ~is_param_opcode inst.inst_opcode` by
-    (`MEM inst (non_param_insts bb)` by metis_tac[EL_MEM] >>
-     gvs[non_param_insts_def, MEM_FILTER]) >>
-  `inst_wf inst /\ codegen_ready_inst inst /\ ~MEM v inst.inst_outputs` by
-    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
-  qpat_x_assum `!bb' v' b'. _ ==> LIST_ELEM_COUNT _ before.ps_stack + _ <= b'` kall_tac >>
-  Cases_on `inst.inst_opcode = PHI`
-  >- (`v <> HD inst.inst_outputs` by
-        (gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute]) >>
-      qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-      simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
-           is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
-           venomInstTheory.is_raw_fmp_opcode_def, venomInstTheory.is_param_opcode_def] >>
-      strip_tac >>
-      qpat_x_assum `inst = EL (_ + k) bb.bb_instructions`
-        (fn th => qpat_x_assum `generate_phi_plan _ _ _ _ = _`
-          (mp_tac o REWRITE_RULE [Once arithmeticTheory.ADD_COMM, GSYM th])) >>
-      strip_tac >>
-      drule_all generate_phi_plan_nondefining_resource_nonincrease >>
-      metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  `LENGTH (collect_phis bb.bb_instructions) <= k` by
-    (spose_not_then assume_tac >>
-     qspec_then `bb` (qx_choose_then `tail` assume_tac)
-       fnPlanLineageEntryProductionTheory.non_param_insts_phi_prefix >>
-     `k < LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
-     `EL k (non_param_insts bb) = EL k (collect_phis bb.bb_instructions)` by
-       simp[EL_APPEND1] >>
-     metis_tac[livenessTransferProofsTheory.collect_phis_mem, EL_MEM]) >>
-  `(!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
-           (LENGTH (get_params bb.bb_instructions)+k)) ==>
-         MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
-   (!w. MEM (Var w) (compute_operands inst) ==>
-         MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled)` by
-    (qpat_x_assum `!j before w. _` (qspecl_then [`k`,`before`] mp_tac) >>
-     simp[] >> gvs[]) >>
-  Cases_on `inst.inst_opcode = JMP`
-  >- (`SUC k = LENGTH (non_param_insts bb)` by
-        (qspecl_then [`fn`,`bb`,`k`] mp_tac
-           fnPlanLineageEntryProductionTheory.ready_block_ordinary_suffix_layout >>
-         simp[] >> disch_then (qspec_then `k` mp_tac) >> simp[] >> gvs[]) >>
-      `bb.bb_instructions = get_params bb.bb_instructions ++ non_param_insts bb` by
-        metis_tac[fnPlanLineageCallersTheory.ready_block_parameter_suffix] >>
-      `LENGTH bb.bb_instructions = LENGTH (get_params bb.bb_instructions) + SUC k` by
-        metis_tac[LENGTH_APPEND] >>
-      `rest = []` by
-        (qpat_x_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
-         Cases_on `rest` >> simp[] >> decide_tac) >>
-      `bb.bb_instructions <> []` by
-        (Cases_on `bb.bb_instructions` >> fs[]) >>
-      `PRE (LENGTH bb.bb_instructions) = LENGTH (get_params bb.bb_instructions) + k` by decide_tac >>
-      `LAST bb.bb_instructions = inst` by
-        (metis_tac[LAST_EL]) >>
-      Cases_on `b = 0` >> gvs[]
-      >- (gvs[elem_count_zero_iff, indicator_zero_iff] >>
-          irule native_terminal_jmp_nondefining_absent >>
-          qexistsl_tac [`bb`,`dfg`,`fn`,`ops`,`before`] >>
-          `PRE (LENGTH (get_params bb.bb_instructions) + LENGTH (non_param_insts bb)) =
-             k + LENGTH (get_params bb.bb_instructions)` by decide_tac >>
-          simp[] >> gvs[]) >>
-      `b = 1` by decide_tac >> gvs[] >>
-      irule native_terminal_jmp_observer_upper >>
-      qexistsl_tac [`bb`,`dfg`,`fn`,`ops`,`before`] >>
-      `PRE (LENGTH (get_params bb.bb_instructions) + LENGTH (non_param_insts bb)) =
-         k + LENGTH (get_params bb.bb_instructions)` by decide_tac >>
-      simp[] >> gvs[]) >>
-  Cases_on `b = 0` >> gvs[]
-  >- (gvs[elem_count_zero_iff, indicator_zero_iff] >>
-      drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-        fnPlanLineageNativeOriginsTheory.native_inst_variable_origins >>
-      disch_then (qspec_then `v` mp_tac) >>
-      simp[] >>
-      `LENGTH (compute_operands (EL k (non_param_insts bb))) <= 16 /\
-       ((EL k (non_param_insts bb)).inst_opcode = OFFSET ==>
-        (EL k (non_param_insts bb)).inst_outputs <> [])` by
-        (conj_tac >- fs[codegen_ready_inst_def] >>
-         strip_tac >> gvs[venomWfTheory.inst_wf_def] >>
-         Cases_on `(EL k (non_param_insts bb)).inst_outputs` >> gvs[]) >>
-      metis_tac[]) >>
-  `b = 1` by decide_tac >> gvs[] >>
-  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    fnPlanLineageSetupTheory.native_inst_observer_upper >>
-  disch_then (qspec_then `v` mp_tac) >>
-  simp[] >> gvs[codegen_ready_inst_def]
+  `inst = EL k (non_param_insts bb)` by metis_tac[HD_DROP, HD] >>
+  conj_tac
+  >- (`MEM (EL k (non_param_insts bb)) (non_param_insts bb)` by simp[EL_MEM] >>
+      `MEM (EL k (non_param_insts bb)) bb.bb_instructions` by
+        gvs[non_param_insts_def, MEM_FILTER] >>
+      gvs[EVERY_MEM]) >>
+  strip_tac >>
+  qpat_x_assum `!j before w. _` (qspecl_then [`k`,`before`] mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 
