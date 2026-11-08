@@ -316,8 +316,10 @@ Theorem compile_assign_storage_copy_stmt_frag_ptr:
 Proof
   strip_tac >>
   `lowered_value_type cenv e = expr_type e` by
-    (irule bodyMemAssignTopCopyFactsTheory.topcopy_rhs_lowered_type >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (mp_tac (Q.SPECL [`cenv`, `e`, `tops`, `bctx`, `cx`, `env`, `es`]
+               bodyMemAssignTopCopyFactsTheory.topcopy_rhs_lowered_type) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   mp_tac (SPEC_ALL compile_assign_storage_copy_eq_frag_ptr) >>
