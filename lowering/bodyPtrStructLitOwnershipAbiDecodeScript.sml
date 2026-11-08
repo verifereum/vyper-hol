@@ -137,6 +137,7 @@ Resume alloc_run_abi_decode_mutual[loop]:
     >- (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
       SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
       SRULE [SF ETA_ss] alloc_run_compile_abi_decode_dyn_elem_ptr,
+      SRULE [SF ETA_ss] alloc_run_compile_abi_dec_addr,
       SRULE [SF ETA_ss] alloc_run_fresh_label_fresh,
       SRULE [SF ETA_ss] alloc_run_new_block_fresh,
       SRULE [SF ETA_ss, listTheory.EVERY_DEF]
