@@ -14,7 +14,13 @@ Theorem dynarray_window_from_header_tail:
     mem_bytes_at (off + 32) (len - 32) m0 ==>
     mem_bytes_at off len m1 = mem_bytes_at off len m0
 Proof
-  cheat
+  rpt strip_tac >>
+  `mem_word_at off m1 = mem_word_at off m0`
+    by gvs[val_in_memory_def] >>
+  `mem_bytes_at off 32 m1 = mem_bytes_at off 32 m0`
+    by metis_tac[mem_bytes_at_word_eq] >>
+  `len = 32 + (len - 32)` by decide_tac >>
+  metis_tac[mem_bytes_at_split_padded]
 QED
 
 Theorem local_ptrs_rel_value_at:
@@ -26,7 +32,8 @@ Theorem local_ptrs_rel_value_at:
     val_in_memory entry.type entry.value (w2n w) ss.vs_memory /\
     type_memory_size entry.type <= sz
 Proof
-  cheat
+  rpt strip_tac >> gvs[local_ptrs_rel_def] >>
+  first_x_assum drule_all >> simp[]
 QED
 
 Theorem dynamic_local_window_kept:
@@ -43,7 +50,17 @@ Theorem dynamic_local_window_kept:
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss1.vs_memory =
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss0.vs_memory
 Proof
-  cheat
+  rpt strip_tac >>
+  `type_memory_size entry.type <= sz` by
+    metis_tac[local_ptrs_rel_value_at] >>
+  `local_region ce es.scopes ss0 name (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `mem_bytes_at (w2n w) sz ss1.vs_memory =
+   mem_bytes_at (w2n w) sz ss0.vs_memory` by
+    (fs[locals_kept_def] >> metis_tac[]) >>
+  drule mem_bytes_at_agree_window >> strip_tac >>
+  sym_tac >> first_x_assum irule >>
+  gvs[val_footprint_def]
 QED
 
 Theorem dynamic_local_window_scopes_kept:
@@ -60,5 +77,5 @@ Theorem dynamic_local_window_scopes_kept:
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss1.vs_memory =
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss0.vs_memory
 Proof
-  cheat
+  rpt strip_tac >> irule dynamic_local_window_kept >> metis_tac[]
 QED
