@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallForceLanding exprSimUnwrap exprSimHash exprSimAggregateChildren
   fragGasMode exprLoweringProps loweringPosts intCallFrame compileEnv
   venomState valueEncoding valueCopy valueCopyBytes list finite_map
-  bodyIntCallWordLanding vyperInterpreter vyperState
+  bodyIntCallWordLanding vyperInterpreter vyperState exprLowering
 
 Theorem forcing_readonly_state_rel:
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
@@ -75,4 +75,25 @@ Proof
      qpat_x_assum `!q. _ ==> eval_operand q u = eval_operand q s`
        (qspec_then `Var x` mp_tac) >> simp[eval_operand_def]) >>
   qexists_tac `u` >> simp[gas_marked_path_def, expr_val_rel_def]
+QED
+
+Theorem protected_identity_value_forcing:
+  unwrap_value ce vv sa = (op,sb) /\
+  vv_holds ce cx ty (Value v) vv es s /\
+  (case vv of StackValue _ _ => T
+    | LocatedValue _ p => p.ptr_location = LocMemory /\ ~is_word_type ty) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  op = vv_operand vv /\ sb = sa /\ expr_val_rel cx ty v op s /\
+  gas_marked_path F ctx func s 0 (OK s)
+Proof
+  strip_tac >> Cases_on `vv`
+  >- (gvs[vv_holds_def, read_result_def, return_def, unwrap_value_def,
+          comp_return_def, contextTheory.vv_operand_def] >>
+      simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules]) >>
+  rename1 `LocatedValue ann p` >> fs[vv_holds_def] >>
+  `~is_word_type ann` by metis_tac[is_bytestring_word_type] >>
+  gvs[unwrap_value_def, comp_return_def, contextTheory.vv_operand_def,
+      read_result_def, return_def, expr_val_rel_def] >>
+  simp[gas_marked_path_def, fragGasPathTheory.gas_path_rules]
 QED
