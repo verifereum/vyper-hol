@@ -51,9 +51,21 @@ QED
 
 Theorem body_builtin_mem_ok:
   !cx ty bt es.
+    (!s'' x t v code_ty addr s3 tail_vs t'.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) /\
+       eval_exprs cx (TL es) s3 = (INL tail_vs,t') ==>
+       body_exprs_mem_ok cx [addr]) /\
+    (!s'' x t v code_ty addr.
+       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = SOME v /\ v = (code_ty,addr) ==>
+       body_exprs_mem_ok cx (TL es)) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
-       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
+       (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas /\
+       code_slice_source bt es = NONE ==>
        body_exprs_mem_ok cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
@@ -61,7 +73,23 @@ Theorem body_builtin_mem_ok:
        body_expr_mem_ok cx (HD es)) ==>
     body_expr_mem_ok cx (Builtin ty bt es)
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  (* A code slice reads x.code without evaluating it; the operand list as a
+     whole is still memory-safe, since a bare x.code is (body_acc_code_mem). *)
+  `!s'' x t.
+     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
+     (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
+     body_exprs_mem_ok cx es` by
+    (rpt gen_tac >> strip_tac >>
+     Cases_on `code_slice_source bt es`
+     >- (first_x_assum irule >> metis_tac[]) >>
+     rename1 `code_slice_source bt es = SOME v` >> PairCases_on `v` >>
+     `body_exprs_mem_ok cx (TL es)` by metis_tac[] >>
+     gvs[vyperInterpreterTheory.code_slice_source_SOME] >>
+     gvs[body_exprs_mem_ok_def, body_acc_code_mem]) >>
+  qpat_x_assum `!s'' x t v code_ty addr s3 tail_vs t'. _` kall_tac >>
+  qpat_x_assum `!s'' x t v code_ty addr. _` kall_tac >>
+  qpat_x_assum `!s'' x t. _ /\ code_slice_source bt es = NONE ==> _` kall_tac >>
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas ==>
    body_exprs_mem_ok cx es` by
     (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
