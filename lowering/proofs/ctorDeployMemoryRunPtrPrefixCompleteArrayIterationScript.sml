@@ -76,9 +76,11 @@ Proof
   `ip <> Var fresh /\ Var dst <> Var fresh` by
     metis_tac[abi_decoder_live_excludes_output] >>
   drule_all deploy_ctor_array_observation_backedge >>
-  disch_then (qspec_then `hdr` assume_tac) >>
+  disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
   drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
-  simp[w2n_n2w] >> disch_tac >> gvs[] >>
+  simp[w2n_n2w] >> disch_tac >>
+  qpat_x_assum `ip = Var slot_var` SUBST_ALL_TAC >>
+  `slot_var <> fresh` by metis_tac[] >>
   qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
     (mp_then (Pos (el 3)) mp_tac prefix_loop_increment_steps) >>
   disch_then drule_all >>
@@ -134,7 +136,22 @@ Resume prefix_complete_backedge_support_pair[support]:
   simp[] >> reverse (rpt conj_tac)
   >- (simp[Abbr `raw`,Abbr `H`,Abbr `qt`,Abbr `q`] >>
       drule_all prefix_loop_increment_run >> simp[LET_THM]) >>
-  gvs[jump_to_def,SUBSET_DEF,DISJOINT_DEF,EXTENSION] >> metis_tac[]
+  rule_assum_tac BETA_RULE >>
+  qpat_x_assum `_ /\ _` strip_assume_tac >>
+  `dst <> fresh` by metis_tac[] >>
+  qpat_assum `!x. x <> fresh ==> _`
+    (qspec_then `dst` mp_tac) >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  qpat_assum `!x. x <> fresh ==> _`
+    (qspec_then `slot_var` mp_tac) >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  simp[Abbr `raw`,Abbr `fresh`] >>
+  simp[SUBSET_DEF,DISJOINT_DEF,EXTENSION]
+  >- (qpat_x_assum `DISJOINT B tn.t_mem` mp_tac >>
+      simp[DISJOINT_DEF,EXTENSION] >> metis_tac[])
+  >- (rpt gen_tac >> tautLib.TAUT_TAC) >>
+  qpat_x_assum `fresh_vars_wrt limit_st (jump_to _ _)` mp_tac >>
+  simp[jump_to_def]
 QED
 
 Finalise prefix_complete_backedge_support_pair
