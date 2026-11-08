@@ -136,7 +136,7 @@ Proof
     adopt_reset_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
     source_memory_write_ranges_def, range_bytes_def, update_var_def,
     lookup_var_def, SF CONJ_ss] >>
-  Cases_on `eval_operand left s` >> simp[]
+  Cases_on `eval_operand left s` >> gvs[op_taint_def]
 QED
 
 Theorem setup_scalar_binop_safe:
