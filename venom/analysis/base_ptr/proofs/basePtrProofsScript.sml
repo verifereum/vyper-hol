@@ -147,7 +147,7 @@ Proof
   >- (
     `step_inst_base inst s = OK s'` by
       metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-    gvs[venomExecSemanticsTheory.step_inst_base_def] >>
+    gvs[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
     gvs[AllCaseEqs(), venomExecSemanticsTheory.exec_alloca_def,
         venomStateTheory.update_var_def, FLOOKUP_UPDATE])
   >>
@@ -180,7 +180,11 @@ Proof
   >- (
     `step_inst_base inst s = OK s'` by
       fs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-    fs[venomExecSemanticsTheory.step_inst_base_def] >>
+    Cases_on `inst.inst_opcode` >>
+    gvs[venomInstTheory.is_terminator_def] >>
+    qpat_assum `inst.inst_opcode = _` (fn eq =>
+      fs[tryfind (fn th => MATCH_MP th eq)
+        (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs)]) >>
     gvs[venomInstTheory.is_terminator_def, AllCaseEqs()] >>
     TRY (pairarg_tac >> gvs[] >>
          drule pack_dret_dynamic_preserves_non_memory >>
@@ -481,7 +485,7 @@ QED
 
 Resume bp_handle_inst_sound_proof[alloca]:
   gvs[venomExecSemanticsTheory.step_inst_non_invoke,
-      venomExecSemanticsTheory.step_inst_base_def,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
       venomExecSemanticsTheory.exec_alloca_def,
       venomWfTheory.inst_wf_def] >>
   gvs[venomStateTheory.update_var_def,
@@ -494,7 +498,7 @@ QED
 
 Resume bp_handle_inst_sound_proof[add]:
   gvs[venomExecSemanticsTheory.step_inst_non_invoke,
-      venomExecSemanticsTheory.step_inst_base_def,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
       venomExecSemanticsTheory.exec_pure2_def, AllCaseEqs(),
       venomWfTheory.inst_wf_def,
       venomStateTheory.update_var_def,
@@ -523,7 +527,7 @@ QED
 
 Resume bp_handle_inst_sound_proof[sub]:
   gvs[venomExecSemanticsTheory.step_inst_non_invoke,
-      venomExecSemanticsTheory.step_inst_base_def,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs,
       venomExecSemanticsTheory.exec_pure2_def, AllCaseEqs(),
       venomWfTheory.inst_wf_def,
       venomStateTheory.update_var_def,
@@ -550,7 +554,7 @@ QED
 Resume bp_handle_inst_sound_proof[assign]:
   fs[GSYM bp_get_ptrs_def] >>
   gvs[venomExecSemanticsTheory.step_inst_non_invoke,
-      venomExecSemanticsTheory.step_inst_base_def, AllCaseEqs(),
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs, AllCaseEqs(),
       venomWfTheory.inst_wf_def,
       venomStateTheory.update_var_def,
       venomStateTheory.lookup_var_def, FLOOKUP_UPDATE,
