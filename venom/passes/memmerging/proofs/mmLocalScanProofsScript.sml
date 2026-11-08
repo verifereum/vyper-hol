@@ -2970,6 +2970,48 @@ Proof
   metis_tac[mm_local_extends_trans]
 QED
 
+Theorem mm_local_supply_coverage[local]:
+  ir_supply_covers_fn s fn <=>
+  MEM fn.fn_name s.irs_used_labels /\
+  !bb. MEM bb fn.fn_blocks ==>
+    MEM bb.bb_label s.irs_used_labels /\
+    EVERY (mm_local_inst_covered s) bb.bb_instructions
+Proof
+  rewrite_tac[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+    irSupplyTheory.fn_ir_vars_def, irSupplyTheory.fn_ir_labels_def,
+    list_subset_def] >>
+  simp[EVERY_FLAT, EVERY_MAP, combinTheory.o_DEF,
+    irSupplyTheory.block_ir_inst_ids_def, irSupplyTheory.block_ir_vars_def,
+    irSupplyTheory.block_ir_labels_def] >>
+  simp[EVERY_FLAT, EVERY_MAP, combinTheory.o_DEF,
+    mm_local_inst_covered_def, list_subset_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_prefix_supply_covers[local]:
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  ir_supply_covers_fn sk (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
+Proof
+  strip_tac >> drule_all mm_local_prefix_resources >> strip_tac >>
+  `MEM (EL index fn0.fn_blocks) fn0.fn_blocks` by simp[EL_MEM] >>
+  `MEM fn0.fn_name supply.irs_used_labels /\
+   !b. MEM b fn0.fn_blocks ==>
+     MEM b.bb_label supply.irs_used_labels /\
+     EVERY (mm_local_inst_covered supply) b.bb_instructions` by
+    gvs[mm_local_supply_coverage] >>
+  `EVERY (mm_local_inst_covered sk) bb.bb_instructions` by metis_tac[] >>
+  simp[mm_local_supply_coverage] >> conj_tac
+  >- (gvs[ir_supply_extends_def, list_subset_def, EVERY_MEM] >> metis_tac[]) >>
+  `!b. MEM b fn0.fn_blocks ==>
+    MEM b.bb_label sk.irs_used_labels /\
+    EVERY (mm_local_inst_covered sk) b.bb_instructions` by
+    (rpt strip_tac
+     >- (gvs[ir_supply_extends_def, list_subset_def, EVERY_MEM] >> metis_tac[]) >>
+     gvs[EVERY_MEM] >> metis_tac[mm_local_inst_covered_mono]) >>
+  rpt strip_tac >> gvs[MEM_LUPDATE] >> metis_tac[EL_MEM]
+QED
+
 Theorem mm_local_prefix_function_wf[local]:
   fn_inst_wf fn0 /\ wf_function fn0 /\ ssa_form fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
@@ -3101,6 +3143,46 @@ Proof
      goal_assum (drule_at (Pat `mm_local_prefix _ _ _ k = _`)) >> simp[] >>
      metis_tac[]) >>
   simp[wf_ssa_def] >> irule mm_local_prefix_ssa_form >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_structure[local]:
+  fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks ==>
+  fn_inst_wf fn /\ wf_function fn /\ wf_ssa fn /\ all_reachable fn /\
+  ir_supply_covers_fn sk fn /\ fn_entry_label fn = fn_entry_label fn0
+Proof
+  strip_tac >>
+  `ssa_form fn0` by gvs[wf_ssa_def] >>
+  `EVERY (\i. i.inst_id < supply.irs_next_inst)
+    (EL index fn0.fn_blocks).bb_instructions` by
+    (gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+      irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM, MEM_MAP]) >>
+  drule_all mm_local_prefix_cfg_transport >> strip_tac >>
+  `fn_inst_wf fn` by metis_tac[mm_local_prefix_inst_wf] >>
+  `wf_function fn` by metis_tac[mm_local_prefix_function_wf] >>
+  `wf_ssa fn` by metis_tac[mm_local_prefix_wf_ssa] >>
+  `ir_supply_covers_fn sk fn` by metis_tac[mm_local_prefix_supply_covers] >>
+  simp[]
+QED
+
+Theorem mm_local_phase_structure[local]:
+  fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k < 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (bb,sk) = (bb',sk') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks ==>
+  fn_inst_wf fn' /\ wf_function fn' /\ wf_ssa fn' /\ all_reachable fn' /\
+  ir_supply_covers_fn sk' fn' /\ fn_entry_label fn' = fn_entry_label fn0
+Proof
+  strip_tac >>
+  `SUC k <= 4 /\ mm_local_prefix fn0 supply index (SUC k) = (bb',sk')` by
+    (simp[mm_local_prefix_suc] >> decide_tac) >>
+  irule mm_local_prefix_structure >> metis_tac[]
 QED
 
 (* Essential counterexample evidence: a variable-free unreachable block. *)
