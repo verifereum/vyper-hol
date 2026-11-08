@@ -19,7 +19,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id MUL [left;right] [out]) s =
     OK (update_var out (a*b) s)` by
-    (simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id MUL [left;right] [out]) s` by
     (irule typed_copy_loop_test_check >> simp[update_var_def] >>
      rpt strip_tac >> gvs[]) >>

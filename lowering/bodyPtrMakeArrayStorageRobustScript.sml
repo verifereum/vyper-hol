@@ -4,7 +4,7 @@ Ancestors
   storageDecodeMemory bodyPtrDefs valueEncodingProps valueEncodingProofs list
   accountsRelProps exprSimStorageCopy compileEnv words ptrDiscipline venomState
 
-Theorem copy_bytes_mem_agree_outside:
+Theorem copy_bytes_taint_agree_outside:
   copy_bytes st bs n D dst mem /\
   (!i j. i < n /\ j < 32 /\ ~D (bs+i) j ==>
     dst+32*i+j NOTIN tainted) /\
@@ -32,7 +32,7 @@ Proof
   rpt strip_tac >> irule decode_value_live_memory >> simp[] >>
   qexistsl_tac [`bs`, `st`] >> simp[] >>
   gvs[storage_live_memory_def] >>
-  irule copy_bytes_mem_agree_outside >>
+  irule copy_bytes_taint_agree_outside >>
   qexistsl_tac [`mem`, `tainted`] >> simp[] >>
   metis_tac[arithmeticTheory.ADD_ASSOC]
 QED

@@ -5,20 +5,7 @@ Ancestors
   bodyPtrMakeArrayStorageBody bodyPtrMakeArrayAdd typedCopyPtr
   ptrDiscipline venomState fragGasPathPtr finite_map accountsRelProps words
   storageDecodeMemory valueEncodingProofs vyperStorage bodyPtrMakeArrayStorageRobust
-
-Theorem storage_range_agree_dead_bytes:
-  storage_range_agree st rt a tv ==>
-  (dead_bytes rt (w2n a) tv j b <=> dead_bytes st (w2n a) tv j b)
-Proof
-  strip_tac >> irule (cj 1 dead_bytes_live_frame) >>
-  rpt strip_tac >>
-  `i < dimword (:256)` by
-    (fs[storage_range_agree_def] >> decide_tac) >>
-  qpat_x_assum `storage_range_agree _ _ _ _` mp_tac >>
-  simp[storage_range_agree_def] >> strip_tac >>
-  first_x_assum (qspecl_then [`n2w i`, `c`] mp_tac) >>
-  simp[w2n_n2w]
-QED
+  exprPtrUnwrapStorageFacts
 
 Theorem copied_storage_range_live_memory:
   storage_range_agree st rt a tv /\
