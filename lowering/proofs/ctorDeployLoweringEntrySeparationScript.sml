@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntrySeparation
 Ancestors
+  loweringStateRelDefs
   ctorAbiActualFrame abiEncoderRegisteredEffect compileEnv exprLoweringProps
   venomMemDefs venomState venomInst finite_map pred_set words list arithmetic
 

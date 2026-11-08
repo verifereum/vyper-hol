@@ -1,33 +1,19 @@
 (*
- * Make SSA Pass — Definitions
+ * MakeSSA pass — definitions.
  *
- * Converts a function into Static Single Assignment (SSA) form:
- *   1. Compute definition points: which blocks define each variable
- *   2. Insert PHI nodes at dominance frontiers (pruned by liveness)
- *   3. Rename variables with version suffixes (x → x:1, x:2, ...)
- *      using dominator tree walk
- *   4. Remove degenerate PHIs (single value → ASSIGN, all same → ASSIGN)
+ * Converts a function into SSA form over the canonical CFG, dominator and
+ * liveness analyses, with fresh names drawn from the IR supply:
+ *   1. compute_defs: the blocks that define each variable
+ *   2. PHI insertion at dominance frontiers, pruned by liveness
+ *   3. renaming along the dominator tree
+ *   4. degenerate-PHI cleanup
  *
- * TOP-LEVEL:
- *   dom_tree               — dominator tree datatype
- *   dom_tree_labels         — all labels in a dominator tree
- *   compute_defs            — definition points for each variable
- *   process_frontiers       — process frontier blocks for PHI insertion
- *   insert_phis_for_var     — insert PHIs for one variable (worklist)
- *   add_phi_nodes           — insert PHIs at dominance frontiers
- *   version_var             — create versioned variable name (e.g., "x:3")
- *   rename_blocks           — rename variables via dom tree walk
- *   rename_children         — rename across sibling subtrees
- *   remove_degenerate_phis  — simplify trivial PHIs to ASSIGNs
- *   make_ssa_fn             — full SSA construction pass
- *   make_ssa_ctx            — transform all functions in context
- *
- * Upstream: vyperlang/vyper@fa30658 (make_ssa pass)
+ * Upstream: vyperlang/vyper venom/passes/make_ssa.py
  *)
 
 Theory makeSsaDefs
 Ancestors
-  cfgTransform venomWf dominatorDefs
+  cfgTransform venomWf cfgDefs dominatorDefs livenessDefs irSupply
   list rich_list alist
 
 (* ===== Dominator Tree ===== *)
@@ -55,115 +41,6 @@ Definition dom_tree_labels_def:
     lbl :: FLAT (MAP dom_tree_labels children)
 End
 
-(* ===== CFG Path and Dominance ===== *)
-
-(* A CFG path through a function's blocks: a list of block labels
-   where consecutive elements are connected by CFG edges (bb_succs). *)
-Definition cfg_path_def:
-  (cfg_path bbs [] = T) ∧
-  (cfg_path bbs [l] = (lookup_block l bbs ≠ NONE)) ∧
-  (cfg_path bbs (l1 :: l2 :: rest) =
-    ((∃bb. lookup_block l1 bbs = SOME bb ∧ MEM l2 (bb_succs bb)) ∧
-     cfg_path bbs (l2 :: rest)))
-End
-
-(* d dominates n in a CFG: every path from entry to n passes through d. *)
-Definition cfg_dominates_def:
-  cfg_dominates bbs entry d n ⇔
-    ∀path. cfg_path bbs path ∧ path ≠ [] ∧
-           HD path = entry ∧ MEM n path ⇒ MEM d path
-End
-
-(* Parent node of a label in the dom_tree.
-   dtree_parent t lbl = SOME p iff p is the direct parent of lbl in t. *)
-Definition dtree_parent_def:
-  (dtree_parent (DNode lbl []) child_lbl = NONE) ∧
-  (dtree_parent (DNode lbl (DNode c cs :: rest)) child_lbl =
-    if c = child_lbl then SOME lbl
-    else case dtree_parent (DNode c cs) child_lbl of
-           SOME p => SOME p
-         | NONE => dtree_parent (DNode lbl rest) child_lbl)
-End
-
-(* ===== Analysis Validity Predicates ===== *)
-
-(* The dominator tree analysis is valid for the given function.
-   dom_frontiers: block → dominance frontier blocks
-   dtree: dominator tree (root = entry block)
-   dom_post_order: blocks in dominator tree post-order *)
-Definition valid_dom_tree_def:
-  valid_dom_tree dom_frontiers dtree dom_post_order func ⇔
-    (* dtree root is the entry block *)
-    (∃entry children. dtree = DNode entry children ∧
-     fn_entry_label func = SOME entry) ∧
-    (* dtree covers exactly the function's block labels *)
-    set (dom_tree_labels dtree) = set (fn_labels func) ∧
-    ALL_DISTINCT (dom_tree_labels dtree) ∧
-    (* Dominator tree property: parent is the immediate dominator
-       of child in the CFG — parent dominates child, and no closer
-       dominator exists between parent and child. *)
-    (∀child parent entry.
-       fn_entry_label func = SOME entry ∧
-       dtree_parent dtree child = SOME parent ⇒
-       cfg_dominates func.fn_blocks entry parent child ∧
-       parent ≠ child ∧
-       (∀d. cfg_dominates func.fn_blocks entry d child ∧ d ≠ child ⇒
-            cfg_dominates func.fn_blocks entry d parent ∨ d = parent)) ∧
-    (* Dominance is antisymmetric for reachable blocks.
-       Standard compiler theory fact: follows from shortest-path argument. *)
-    (∀d n entry.
-       fn_entry_label func = SOME entry ⇒
-       cfg_dominates func.fn_blocks entry d n ⇒
-       cfg_dominates func.fn_blocks entry n d ⇒
-       d = n) ∧
-    (* dom_post_order covers exactly the function's block labels *)
-    set dom_post_order = set (fn_labels func) ∧
-    ALL_DISTINCT dom_post_order ∧
-    (* dom_frontiers map to valid block labels *)
-    (∀lbl fs. ALOOKUP dom_frontiers lbl = SOME fs ⇒
-              ∀f. MEM f fs ⇒ lookup_block f func.fn_blocks ≠ NONE) ∧
-    (* dom_frontiers are correct: DF(b) = {d | ∃pred p of d.
-       b dominates p ∧ b does not strictly dominate d} *)
-    (∀b d entry.
-       fn_entry_label func = SOME entry ⇒
-       (MEM d (case ALOOKUP dom_frontiers b of SOME fs => fs | NONE => []) ⇔
-        (∃p bb_p. lookup_block p func.fn_blocks = SOME bb_p ∧
-                  MEM d (bb_succs bb_p) ∧
-                  cfg_dominates func.fn_blocks entry b p ∧
-                  (b = d ∨ ¬cfg_dominates func.fn_blocks entry b d))))
-End
-
-(* The CFG predecessor/successor maps are valid for the function. *)
-Definition valid_cfg_maps_def:
-  valid_cfg_maps pred_map succ_map func ⇔
-    (∀lbl. ALOOKUP succ_map lbl =
-           OPTION_MAP bb_succs (lookup_block lbl func.fn_blocks)) ∧
-    (∀lbl ps. ALOOKUP pred_map lbl = SOME ps ⇒
-              set ps = {p | ∃bb. lookup_block p func.fn_blocks = SOME bb ∧
-                                 MEM lbl (bb_succs bb)}) ∧
-    (∀lbl. lookup_block lbl func.fn_blocks ≠ NONE ⇒
-           ∃ps. ALOOKUP pred_map lbl = SOME ps)
-End
-
-(* The liveness analysis is valid: live_in vars are actually used. *)
-Definition valid_liveness_def:
-  valid_liveness live_in func ⇔
-    (∀lbl vs. ALOOKUP live_in lbl = SOME vs ⇒
-              lookup_block lbl func.fn_blocks ≠ NONE)
-End
-
-(* The entry block has no predecessors (no back-edges to entry).
-   Required for SSA correctness: PHI instructions at entry would error
-   because vs_prev_bb = NONE on first execution. When entry has no
-   predecessors, the dominance frontier condition ensures no PHIs are
-   inserted at entry. This is naturally satisfied by Vyper's pipeline. *)
-Definition fn_entry_no_preds_def:
-  fn_entry_no_preds func ⇔
-    ∀entry bb.
-      fn_entry_label func = SOME entry ∧
-      MEM bb func.fn_blocks ⇒
-      ¬MEM entry (bb_succs bb)
-End
 
 (* ===== Definition Points ===== *)
 
@@ -426,496 +303,836 @@ Definition insert_phi_at_block_def:
     bb with bb_instructions := phi_inst :: bb.bb_instructions
 End
 
-(* Process frontier blocks for one worklist element.
-   For each frontier block f:
-   - Skip if already has a PHI (MEM f has_phi)
-   - If var not live-in at f: mark as processed (add to has_phi) but don't insert
-   - If var live-in: insert PHI and add f to both worklist and has_phi
-   Structural recursion on the frontier list. *)
-Definition process_frontiers_def:
-  process_frontiers var pred_map live_in bbs rest has_phi [] =
-    (bbs, rest, has_phi) ∧
-  process_frontiers var pred_map live_in bbs rest has_phi (f::fs) =
+(* A finite association-list view of a query function, in function-label
+   order.  This is the only conversion used by the current-analysis bridge. *)
+Definition current_query_map_def:
+  current_query_map labels query = MAP (\l. (l, query l)) labels
+End
+
+Definition current_pred_map_def:
+  current_pred_map fn =
+    current_query_map (fn_labels fn) (cfg_preds_of (cfg_analyze fn))
+End
+
+Definition current_succ_map_def:
+  current_succ_map fn =
+    current_query_map (fn_labels fn) (cfg_succs_of (cfg_analyze fn))
+End
+
+Definition current_frontier_map_def:
+  current_frontier_map fn =
+    let cfg = cfg_analyze fn in
+    let dom = dom_analyze cfg fn in
+      current_query_map (fn_labels fn) (frontier_of dom)
+End
+
+Definition current_live_in_def:
+  current_live_in fn =
+    let live = liveness_analyze fn in
+      current_query_map (fn_labels fn) (df_boundary [] live)
+End
+
+(* Build the dominator tree from the canonical dominated-children query.
+   Fuel makes this executable independently of analysis correctness. *)
+Definition current_dom_tree_aux_def:
+  (current_dom_tree_aux dom 0 lbl = DNode lbl []) /\
+  (current_dom_tree_aux dom (SUC fuel) lbl =
+     DNode lbl
+       (MAP (current_dom_tree_aux dom fuel) (dominated_of dom lbl)))
+End
+
+Definition current_dom_tree_def:
+  current_dom_tree fn =
+    let cfg = cfg_analyze fn in
+    let dom = dom_analyze cfg fn in
+      case fn_entry_label fn of
+        NONE => DNode "" []
+      | SOME entry => current_dom_tree_aux dom (LENGTH (fn_labels fn)) entry
+End
+
+(* Structural postorder of the dominator tree (children left-to-right, then
+   the node), rather than the CFG DFS postorder. *)
+Definition dom_tree_postorder_def:
+  dom_tree_postorder (DNode lbl children) =
+    FLAT (MAP dom_tree_postorder children) ++ [lbl]
+End
+
+Definition current_dom_postorder_def:
+  current_dom_postorder fn = dom_tree_postorder (current_dom_tree fn)
+End
+
+(* ===== Supply-aware PHI insertion ===== *)
+
+(* The ID is supplied explicitly by fresh_inst_id at the unique insertion
+   point; this constructor contains no placeholder or arithmetic ID. *)
+Definition build_phi_inst_supply_def:
+  build_phi_inst_supply id var pred_labels =
+    <| inst_id := id;
+       inst_opcode := PHI;
+       inst_operands := FLAT (MAP (\l. [Label l; Var var]) pred_labels);
+       inst_outputs := [var] |>
+End
+
+Definition process_frontiers_supply_def:
+  process_frontiers_supply s var pred_map live_in bbs rest has_phi [] =
+    (bbs, rest, has_phi, s) /\
+  process_frontiers_supply s var pred_map live_in bbs rest has_phi (f::fs) =
     if MEM f has_phi then
-      process_frontiers var pred_map live_in bbs rest has_phi fs
+      process_frontiers_supply s var pred_map live_in bbs rest has_phi fs
     else
       let is_live = case ALOOKUP live_in f of
                       SOME vars => MEM var vars
                     | NONE => F in
-      if ¬is_live then
-        process_frontiers var pred_map live_in bbs rest (f :: has_phi) fs
+      if ~is_live then
+        process_frontiers_supply s var pred_map live_in bbs rest
+                                 (f::has_phi) fs
       else
-        let preds = case ALOOKUP pred_map f of
-                      SOME ps => ps | NONE => [] in
-        let phi = build_phi_inst var preds in
-        let bbs' = MAP (λbb.
-          if bb.bb_label = f
-          then insert_phi_at_block phi bb
-          else bb) bbs in
-        process_frontiers var pred_map live_in bbs' (f :: rest) (f :: has_phi) fs
+        let preds = case ALOOKUP pred_map f of SOME ps => ps | NONE => [] in
+        let (id,s') = fresh_inst_id s in
+        let phi = build_phi_inst_supply id var preds in
+        let bbs' = MAP (\bb.
+          if bb.bb_label = f then insert_phi_at_block phi bb else bb) bbs in
+          process_frontiers_supply s' var pred_map live_in bbs'
+                                   (f::rest) (f::has_phi) fs
 End
 
-(* Helper: adding an element to the exclusion set decreases filter count
-   by exactly 1 when the element is in the list and not yet excluded,
-   and the list has no duplicates. *)
-Triviality filter_add_mem_decrease:
-  ∀U (h:'a) hp.
-    MEM h U ∧ ¬MEM h hp ∧ ALL_DISTINCT U ⇒
-    LENGTH (FILTER (λx. ¬MEM x (h::hp)) U) + 1 ≤
-    LENGTH (FILTER (λx. ¬MEM x hp) U)
+Theorem process_frontiers_supply_labels:
+  !fs s var pm li bbs rest hp bbs' rest' hp' s'.
+    process_frontiers_supply s var pm li bbs rest hp fs =
+      (bbs',rest',hp',s') ==>
+    MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs
+Proof
+  Induct >- simp[process_frontiers_supply_def] >>
+  pop_assum $ mk_asm "ih" >>
+  simp[process_frontiers_supply_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- (strip_tac >> asm "ih" drule >> simp[])
+  >> IF_CASES_TAC >> gvs[]
+  >- (strip_tac >> asm "ih" drule >> simp[])
+  >> rpt CASE_TAC >> gvs[] >>
+  pairarg_tac >> gvs[] >> strip_tac >>
+  asm "ih" drule >>
+  rw[MAP_MAP_o, insert_phi_at_block_def] >>
+  irule MAP_CONG >> rw[]
+QED
+
+Triviality filter_add_mem_decrease_supply:
+  !U (h:'a) hp.
+    MEM h U /\ ~MEM h hp /\ ALL_DISTINCT U ==>
+    LENGTH (FILTER (\x. ~MEM x (h::hp)) U) + 1 <=
+    LENGTH (FILTER (\x. ~MEM x hp) U)
 Proof
   Induct >> simp[ALL_DISTINCT] >> rpt strip_tac >> gvs[]
   >- (
-    (* head = h: filter_new(U) + 1 ≤ SUC(filter_old(U))
-       suffices to show filter_new(U) ≤ filter_old(U) *)
-    `LENGTH (FILTER (λx. x ≠ h ∧ ¬MEM x hp) U) ≤
-     LENGTH (FILTER (λx. ¬MEM x hp) U)` suffices_by DECIDE_TAC >>
+    `LENGTH (FILTER (\x. x <> h /\ ~MEM x hp) U) <=
+     LENGTH (FILTER (\x. ~MEM x hp) U)` suffices_by DECIDE_TAC >>
     irule LENGTH_FILTER_LEQ_MONO >> simp[])
   >- (
-    (* head ≠ h, MEM h U: case split on MEM head hp *)
     Cases_on `MEM h hp`
-    >- (
-      (* MEM h hp: both IFs false, apply IH directly *)
-      `¬(h ≠ h' ∧ ¬MEM h hp)` by simp[] >>
-      `¬(¬MEM h hp)` by simp[] >>
-      simp[] >> first_x_assum drule_all >> simp[])
-    >- (
-      (* ¬MEM h hp: both IFs true (h ≠ h' since h ∉ U, h' ∈ U) *)
-      `h ≠ h'` by metis_tac[MEM] >>
-      simp[LENGTH] >> first_x_assum drule_all >> DECIDE_TAC))
+    >- (`~(h <> h' /\ ~MEM h hp)` by simp[] >>
+        `~(~MEM h hp)` by simp[] >>
+        simp[] >> first_x_assum drule_all >> simp[])
+    >- (`h <> h'` by metis_tac[MEM] >>
+        simp[LENGTH] >> first_x_assum drule_all >> DECIDE_TAC))
 QED
 
-(* Helper: strengthening the exclusion set cannot increase filter count *)
-Triviality filter_weaken_exclusion:
-  ∀(U:'a list) hp1 hp2.
-    (∀x. MEM x hp1 ⇒ MEM x hp2) ⇒
-    LENGTH (FILTER (λx. ¬MEM x hp2) U) ≤
-    LENGTH (FILTER (λx. ¬MEM x hp1) U)
+Triviality filter_weaken_exclusion_supply:
+  !(U:'a list) hp1 hp2.
+    (!x. MEM x hp1 ==> MEM x hp2) ==>
+    LENGTH (FILTER (\x. ~MEM x hp2) U) <=
+    LENGTH (FILTER (\x. ~MEM x hp1) U)
 Proof
   Induct >> rw[FILTER] >> gvs[] >> res_tac >> DECIDE_TAC
 QED
 
-(* process_frontiers preserves block labels (only modifies instructions) *)
-Triviality process_frontiers_labels:
-  ∀fs var pm li bbs rest hp bbs' rest' hp'.
-    process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ⇒
-    MAP (λbb. bb.bb_label) bbs' = MAP (λbb. bb.bb_label) bbs
+Triviality process_frontiers_supply_measure:
+  !fs s var pm li bbs rest hp bbs' rest' hp' s' U.
+    process_frontiers_supply s var pm li bbs rest hp fs =
+      (bbs',rest',hp',s') ==>
+    (!f. MEM f fs ==> MEM f U) ==>
+    ALL_DISTINCT U ==>
+    LENGTH (FILTER (\x. ~MEM x hp') U) + LENGTH rest' <=
+    LENGTH (FILTER (\x. ~MEM x hp) U) + LENGTH rest
 Proof
-  Induct >> rw[process_frontiers_def] >> gvs[] >>
-  rpt CASE_TAC >> gvs[] >>
-  first_x_assum drule >> rw[MAP_MAP_o, insert_phi_at_block_def] >>
-  irule MAP_CONG >> rw[]
-QED
-
-(* Frontier labels from ALOOKUP are in the nub universe *)
-Triviality alookup_mem_flat_nub:
-  ∀d df (prefix : 'a list) f x.
-    ALOOKUP df d = SOME x ∧ MEM f x ⇒
-    MEM f (nub (prefix ++ FLAT (MAP SND df)))
-Proof
-  rpt strip_tac >>
-  imp_res_tac ALOOKUP_MEM >>
-  simp[MEM_nub, MEM_APPEND] >>
-  disj2_tac >> simp[MEM_FLAT] >>
-  qexists_tac `x` >> simp[MEM_MAP] >>
-  qexists_tac `(d,x)` >> simp[]
-QED
-
-(* process_frontiers does not increase the worklist-universe measure.
-   U is a fixed universe containing all frontier labels. *)
-Triviality process_frontiers_measure:
-  ∀fs var pm li bbs rest hp bbs' rest' hp' U.
-    process_frontiers var pm li bbs rest hp fs = (bbs', rest', hp') ⇒
-    (∀f. MEM f fs ⇒ MEM f U) ⇒
-    ALL_DISTINCT U ⇒
-    LENGTH (FILTER (λx. ¬MEM x hp') U) + LENGTH rest' ≤
-    LENGTH (FILTER (λx. ¬MEM x hp) U) + LENGTH rest
-Proof
-  Induct >> simp[process_frontiers_def] >> rpt gen_tac >>
+  Induct >- simp[process_frontiers_supply_def] >>
+  pop_assum $ mk_asm "ih" >>
+  simp[process_frontiers_supply_def] >> rpt gen_tac >>
   IF_CASES_TAC >> gvs[]
-  >- metis_tac[]
-  >> IF_CASES_TAC >> gvs[] >> rpt strip_tac >>
-  `∀f. MEM f fs ⇒ MEM f U` by metis_tac[] >>
-  first_x_assum (drule_then strip_assume_tac) >>
-  first_x_assum (qspec_then `U` mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac
   >- (
-    (* ¬MEM h hp, not live: hp grows, rest same *)
-    `LENGTH (FILTER (λx. ¬MEM x (h::hp)) U) ≤
-     LENGTH (FILTER (λx. ¬MEM x hp) U)` by
-      (irule filter_weaken_exclusion >> simp[]) >>
+    rpt strip_tac >>
+    `!f. MEM f fs ==> MEM f U` by metis_tac[] >>
+    asm "ih" (drule_then (qspec_then `U` mp_tac)) >>
+    simp[])
+  >> IF_CASES_TAC >> gvs[]
+  >- (
+    rpt strip_tac >>
+    `!f. MEM f fs ==> MEM f U` by metis_tac[] >>
+    asm "ih" (drule_then (qspec_then `U` mp_tac)) >>
+    (impl_tac >- simp[]) >> strip_tac >>
+    `LENGTH (FILTER (\x. ~MEM x (h::hp)) U) <=
+     LENGTH (FILTER (\x. ~MEM x hp) U)` by
+      (irule filter_weaken_exclusion_supply >> simp[]) >>
     DECIDE_TAC)
-  >- (
-    (* ¬MEM h hp, live: hp grows, rest grows by 1 *)
-    `MEM h U` by metis_tac[] >>
-    `LENGTH (FILTER (λx. ¬MEM x (h::hp)) U) + 1 ≤
-     LENGTH (FILTER (λx. ¬MEM x hp) U)` by
-      (irule filter_add_mem_decrease >> simp[]) >>
-    gvs[LENGTH] >> DECIDE_TAC)
+  >> rpt CASE_TAC >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
+  `!f. MEM f fs ==> MEM f U` by metis_tac[] >>
+  asm "ih" (drule_then (qspec_then `U` mp_tac)) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `MEM h U` by metis_tac[] >>
+  `LENGTH (FILTER (\x. ~MEM x (h::hp)) U) + 1 <=
+   LENGTH (FILTER (\x. ~MEM x hp) U)` by
+    (irule filter_add_mem_decrease_supply >> simp[]) >>
+  gvs[LENGTH] >> DECIDE_TAC
 QED
 
-(* Insert PHIs for one variable at all required frontier blocks.
-   Worklist algorithm: process each block's dominance frontiers,
-   adding new blocks to the worklist when PHIs are inserted. *)
-Definition insert_phis_for_var_def:
-  insert_phis_for_var var dom_frontiers pred_map live_in bbs [] has_phi =
-    bbs ∧
-  insert_phis_for_var var dom_frontiers pred_map live_in bbs (d::rest) has_phi =
+
+Definition frontier_work_needed_def:
+  frontier_work_needed dom_frontiers has_phi d =
+    case ALOOKUP dom_frontiers d of
+      NONE => F
+    | SOME fs => EXISTS (\f. ~MEM f has_phi) fs
+End
+
+Definition insert_phis_for_var_supply_def:
+  insert_phis_for_var_supply s var dom_frontiers pred_map live_in bbs [] has_phi =
+    (bbs,s) /\
+  insert_phis_for_var_supply s var dom_frontiers pred_map live_in bbs
+                             (d::rest) has_phi =
     let frontiers = case ALOOKUP dom_frontiers d of
                       SOME fs => fs | NONE => [] in
-    let (bbs', rest', has_phi') =
-      process_frontiers var pred_map live_in bbs rest has_phi frontiers in
-    insert_phis_for_var var dom_frontiers pred_map live_in bbs' rest' has_phi'
+    let (bbs',rest',has_phi',s') =
+      process_frontiers_supply s var pred_map live_in bbs rest has_phi
+                               frontiers in
+    let work = FILTER (frontier_work_needed dom_frontiers has_phi') rest' in
+      insert_phis_for_var_supply s' var dom_frontiers pred_map live_in
+                                 bbs' work has_phi'
 Termination
-  WF_REL_TAC `measure (λ(var, df, pm, li, bbs, wl, hp).
-    LENGTH (FILTER (λx. ¬MEM x hp)
-      (nub (MAP (λbb. bb.bb_label) bbs ++
-            FLAT (MAP SND df)))) + LENGTH wl)` >>
+  WF_REL_TAC `measure (\(s,var,df,pm,li,bbs,wl,hp).
+    LENGTH (FILTER (\x. ~MEM x hp)
+      (nub (MAP (\bb. bb.bb_label) bbs ++ FLAT (MAP SND df)))) +
+    LENGTH wl)` >>
   rpt strip_tac >>
+  rename1 `(bbs',rest',has_phi',next_supply) =
+    process_frontiers_supply s var pred_map live_in bbs rest has_phi _` >>
   qabbrev_tac `fs = case ALOOKUP dom_frontiers d of
                       NONE => [] | SOME x => x` >>
-  qabbrev_tac `U = nub (MAP (λbb. bb.bb_label) bbs ++
+  qabbrev_tac `U = nub (MAP (\bb. bb.bb_label) bbs ++
                          FLAT (MAP SND dom_frontiers))` >>
-  qabbrev_tac `result = process_frontiers var pred_map live_in
+  qabbrev_tac `result = process_frontiers_supply s var pred_map live_in
                           bbs rest has_phi fs` >>
-  `result = (bbs', rest', has_phi')` by simp[Abbr `result`, Abbr `fs`] >>
+  `result = (bbs',rest',has_phi',next_supply)` by
+    simp[Abbr `result`, Abbr `fs`] >>
   pop_assum SUBST_ALL_TAC >> simp[] >>
-  (* Labels preserved → universe unchanged *)
-  `process_frontiers var pred_map live_in bbs rest has_phi fs =
-   (bbs', rest', has_phi')` by gvs[markerTheory.Abbrev_def] >>
-  `MAP (λbb. bb.bb_label) bbs' = MAP (λbb. bb.bb_label) bbs` by
-     (irule process_frontiers_labels >> metis_tac[]) >>
-  `nub (MAP (λbb. bb.bb_label) bbs' ++
-        FLAT (MAP SND dom_frontiers)) = U` by simp[Abbr `U`] >>
+  `process_frontiers_supply s var pred_map live_in bbs rest has_phi fs =
+   (bbs',rest',has_phi',next_supply)` by gvs[markerTheory.Abbrev_def] >>
+  `MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs` by
+    (irule process_frontiers_supply_labels >> metis_tac[]) >>
+  `nub (MAP (\bb. bb.bb_label) bbs' ++ FLAT (MAP SND dom_frontiers)) = U` by
+    simp[Abbr `U`] >>
   gvs[] >>
-  (* Frontier labels ⊆ U *)
-  `∀f. MEM f fs ⇒ MEM f U` by (
-    unabbrev_all_tac >>
-    rpt strip_tac >>
+  `!f. MEM f fs ==> MEM f U` by (
+    unabbrev_all_tac >> rpt strip_tac >>
     Cases_on `ALOOKUP dom_frontiers d` >> gvs[] >>
     simp[MEM_nub, MEM_APPEND, MEM_FLAT, MEM_MAP] >>
-    disj2_tac >>
-    qexists_tac `x` >> simp[] >>
-    qexists_tac `(d, x)` >> simp[] >>
-    metis_tac[ALOOKUP_MEM]) >>
-  (* Apply measure lemma *)
+    disj2_tac >> qexists_tac `x` >> simp[] >>
+    qexists_tac `(d,x)` >> simp[] >> metis_tac[ALOOKUP_MEM]) >>
   `ALL_DISTINCT U` by simp[Abbr `U`, all_distinct_nub] >>
-  `LENGTH (FILTER (λx. ¬MEM x has_phi') U) + LENGTH rest' ≤
-   LENGTH (FILTER (λx. ¬MEM x has_phi) U) + LENGTH rest` by
-    metis_tac[process_frontiers_measure] >>
+  `LENGTH (FILTER (\x. ~MEM x has_phi') U) + LENGTH rest' <=
+   LENGTH (FILTER (\x. ~MEM x has_phi) U) + LENGTH rest` by
+    metis_tac[process_frontiers_supply_measure] >>
+  `LENGTH (FILTER (frontier_work_needed dom_frontiers has_phi') rest') <=
+   LENGTH rest'` by simp[rich_listTheory.LENGTH_FILTER_LEQ] >>
   DECIDE_TAC
 End
 
-(* Insert PHIs for all variables. *)
-Definition add_phi_nodes_def:
-  add_phi_nodes dom_frontiers pred_map live_in bbs defs =
-    FOLDL (λbbs_acc (var, def_blocks).
-      insert_phis_for_var var dom_frontiers pred_map live_in
-        bbs_acc def_blocks [])
-    bbs defs
+Definition add_phi_nodes_supply_def:
+  (add_phi_nodes_supply s dom_frontiers pred_map live_in bbs [] = (bbs,s)) /\
+  (add_phi_nodes_supply s dom_frontiers pred_map live_in bbs
+                        ((var,def_blocks)::defs) =
+    let (bbs',s') = insert_phis_for_var_supply s var dom_frontiers pred_map
+                                                live_in bbs def_blocks [] in
+      add_phi_nodes_supply s' dom_frontiers pred_map live_in bbs' defs)
 End
 
-(* ===== Variable Renaming ===== *)
+(* ===== Supply-aware concrete-name renaming ===== *)
 
-(* Create versioned variable name: "x" with version 3 → "x:3".
-   Version 0 keeps the original name (no suffix). *)
-Definition version_var_def:
-  version_var base (n:num) =
-    if n = 0 then base
-    else STRCAT base (STRCAT ":" (toString n))
-End
-
-(* Rename state: tracks the current version counter and name stack
-   for each variable. Represented as assoc lists.
-   counters: var → next version number
-   stacks: var → [current_version, ...] (head = latest) *)
-(* Rename state: counters (var → next version) and stacks (var → version stack).
-   All version numbers are natural numbers. *)
-
-(* Initial rename state from definition points.
-   Returns (counters, stacks) where each var starts at counter 0, stack [0]. *)
-Definition init_rename_state_def:
-  init_rename_state defs =
+Definition init_current_rename_state_def:
+  init_current_rename_state defs =
     let vars = MAP FST defs in
-    (MAP (λv. (v, 0n)) vars,
-     MAP (λv. (v, [0n])) vars)
+      (MAP (\v. (v,0n)) vars, MAP (\v. (v,[v])) vars)
 End
 
-(* Get latest version of a variable. *)
-Definition latest_version_def:
-  latest_version (counters : (string # num) list,
-                  stacks : (string # num list) list) var =
-    case ALOOKUP stacks var of
-      SOME (ver :: _) => version_var var ver
-    | _ => var
+Definition latest_current_name_def:
+  latest_current_name
+    (counters : (string # num) list, stacks : (string # string list) list) var =
+    case ALOOKUP stacks var of SOME (name::_) => name | _ => var
 End
 
-(* Push a new version for a variable. *)
-Definition push_version_def:
-  push_version (counters : (string # num) list,
-                stacks : (string # num list) list) var =
-    let ver = case ALOOKUP counters var of SOME n => n | NONE => 0n in
-    let counters' = (var, ver + 1n) ::
-                    FILTER (λ(v,_). v ≠ var) counters in
-    let stacks' =
-      case ALOOKUP stacks var of
-        SOME stack => (var, ver :: stack) ::
-                      FILTER (λ(v,_). v ≠ var) stacks
-      | NONE => (var, [ver]) :: stacks in
-    ((counters', stacks'), ver)
-End
-
-(* Rename operands in a non-PHI instruction. *)
-Definition rename_operands_def:
-  rename_operands rs [] = [] ∧
-  rename_operands rs (Var v :: ops) =
-    Var (latest_version rs v) :: rename_operands rs ops ∧
-  rename_operands rs (op :: ops) =
-    op :: rename_operands rs ops
-End
-
-(* Rename output variables: push new versions. *)
-Definition rename_outputs_def:
-  rename_outputs rs [] = (rs, [] : string list) ∧
-  rename_outputs rs (v::vs) =
-    let (rs', ver : num) = push_version rs v in
-    let new_name = version_var v ver in
-    let (rs'', rest) = rename_outputs rs' vs in
-    (rs'', new_name :: rest)
-End
-
-(* Rename a single instruction.
-   For non-PHI: rename input operands, then push new versions for outputs.
-   For PHI: only push new versions for outputs (operands renamed separately). *)
-Definition rename_inst_def:
-  rename_inst rs inst =
-    if inst.inst_opcode = PHI then
-      let (rs', outs') = rename_outputs rs inst.inst_outputs in
-      (rs', inst with inst_outputs := outs')
+(* Counter zero is the original spelling and consumes no supply.  Every later
+   definition gets its concrete spelling directly from fresh_ir_var. *)
+Definition push_current_name_def:
+  push_current_name s
+    (counters : (string # num) list, stacks : (string # string list) list) var =
+    let n = case ALOOKUP counters var of SOME k => k | NONE => 0n in
+    let counters' = (var,n+1)::FILTER (\(v,_). v <> var) counters in
+    if n = 0 then
+      let stacks' = (var,var::case ALOOKUP stacks var of
+                                SOME ns => ns | NONE => []) ::
+                    FILTER (\(v,_). v <> var) stacks in
+        ((counters',stacks'),s,var)
     else
-      let ops' = rename_operands rs inst.inst_operands in
-      let (rs', outs') = rename_outputs rs inst.inst_outputs in
-      (rs', inst with <| inst_operands := ops'; inst_outputs := outs' |>)
+      let (name,s') = fresh_ir_var s in
+      let stacks' = (var,name::case ALOOKUP stacks var of
+                                  SOME ns => ns | NONE => []) ::
+                    FILTER (\(v,_). v <> var) stacks in
+        ((counters',stacks'),s',name)
 End
 
-(* Rename all instructions in a block. Thread rename state. *)
-Definition rename_block_insts_def:
-  rename_block_insts rs [] = (rs, []) ∧
-  rename_block_insts rs (inst::rest) =
-    let (rs', inst') = rename_inst rs inst in
-    let (rs'', rest') = rename_block_insts rs' rest in
-    (rs'', inst' :: rest')
+Definition rename_current_operands_def:
+  (rename_current_operands rs [] = []) /\
+  (rename_current_operands rs (Var v::ops) =
+    Var (latest_current_name rs v)::rename_current_operands rs ops) /\
+  (rename_current_operands rs (op::ops) =
+    op::rename_current_operands rs ops)
 End
 
-(* Update PHI operands for a predecessor: rename vars matching the label. *)
-Definition update_phi_for_pred_def:
-  update_phi_for_pred rs current_label [] = [] ∧
-  update_phi_for_pred rs current_label [x] = [x] ∧
-  update_phi_for_pred rs current_label (Label l :: Var v :: rest) =
+Definition rename_current_outputs_def:
+  (rename_current_outputs s rs [] = (rs,s,[]:string list)) /\
+  (rename_current_outputs s rs (v::vs) =
+    let (rs',s',name) = push_current_name s rs v in
+    let (rs'',s'',rest) = rename_current_outputs s' rs' vs in
+      (rs'',s'',name::rest))
+End
+
+Definition rename_current_inst_def:
+  rename_current_inst s rs inst =
+    if inst.inst_opcode = PHI then
+      let (rs',s',outs') = rename_current_outputs s rs inst.inst_outputs in
+        (rs',s',inst with inst_outputs := outs')
+    else
+      let ops' = rename_current_operands rs inst.inst_operands in
+      let (rs',s',outs') = rename_current_outputs s rs inst.inst_outputs in
+        (rs',s',inst with <| inst_operands := ops'; inst_outputs := outs' |>)
+End
+
+Definition rename_current_block_insts_def:
+  (rename_current_block_insts s rs [] = (rs,s,[])) /\
+  (rename_current_block_insts s rs (inst::rest) =
+    let (rs',s',inst') = rename_current_inst s rs inst in
+    let (rs'',s'',rest') = rename_current_block_insts s' rs' rest in
+      (rs'',s'',inst'::rest'))
+End
+
+Definition update_current_phi_for_pred_def:
+  (update_current_phi_for_pred rs current_label [] = []) /\
+  (update_current_phi_for_pred rs current_label [x] = [x]) /\
+  (update_current_phi_for_pred rs current_label (Label l::Var v::rest) =
     (if l = current_label
-     then Label l :: Var (latest_version rs v) ::
-          update_phi_for_pred rs current_label rest
-     else Label l :: Var v ::
-          update_phi_for_pred rs current_label rest) ∧
-  update_phi_for_pred rs current_label (x :: y :: rest) =
-    x :: y :: update_phi_for_pred rs current_label rest
+     then Label l::Var (latest_current_name rs v)::
+          update_current_phi_for_pred rs current_label rest
+     else Label l::Var v::update_current_phi_for_pred rs current_label rest)) /\
+  (update_current_phi_for_pred rs current_label (x::y::rest) =
+    x::y::update_current_phi_for_pred rs current_label rest)
 End
 
-(* ===== Dominator Tree Walk ===== *)
-
-(* Update successor PHIs for a given block label and rename state. *)
-Definition update_succ_phis_def:
-  update_succ_phis rs current_label bbs succs =
-    FOLDL (λbs s.
-      case lookup_block s bs of
+Definition update_current_succ_phis_def:
+  update_current_succ_phis rs current_label bbs succs =
+    FOLDL (\bs lbl.
+      case lookup_block lbl bs of
         NONE => bs
-      | SOME sbb =>
-          let sbb' = sbb with bb_instructions :=
-            MAP (λinst.
-              if inst.inst_opcode ≠ PHI then inst
-              else inst with inst_operands :=
-                update_phi_for_pred rs current_label inst.inst_operands)
-            sbb.bb_instructions in
-          replace_block s sbb' bs)
-    bbs succs
+      | SOME bb =>
+          let bb' = bb with bb_instructions :=
+            MAP (\inst. if inst.inst_opcode <> PHI then inst
+                        else inst with inst_operands :=
+                          update_current_phi_for_pred rs current_label
+                                                      inst.inst_operands)
+                bb.bb_instructions in
+            replace_block lbl bb' bs) bbs succs
 End
 
-(* Rename variables in dominator tree order.
-   Structural recursion on dom_tree.
-   rename_blocks processes a single subtree rooted at a dom_tree node.
-   rename_children processes a list of sibling subtrees.
-   Returns (final_counters, updated_blocks):
-   - Counters are threaded through siblings so each gets unique versions
-   - Each child sees the parent's stacks (not sibling's pushed versions)
-   This matches Python's _rename_vars where var_name_counters is a shared
-   class attribute (monotonically increasing) while var_name_stacks uses
-   push/pop (children see parent's stack, not sibling's). *)
-Definition rename_blocks_def:
-  (rename_blocks rs bbs succ_map (DNode lbl children) =
+Definition rename_current_blocks_def:
+  (rename_current_blocks s rs bbs succ_map (DNode lbl children) =
     case lookup_block lbl bbs of
-      NONE => (FST rs, bbs)
+      NONE => (FST rs,s,bbs)
     | SOME bb =>
-        let (rs1, insts') = rename_block_insts rs bb.bb_instructions in
+        let (rs1,s1,insts') =
+          rename_current_block_insts s rs bb.bb_instructions in
         let bb' = bb with bb_instructions := insts' in
         let bbs1 = replace_block lbl bb' bbs in
-        let succs = case ALOOKUP succ_map lbl of
-                      SOME ss => ss | NONE => [] in
-        let bbs2 = update_succ_phis rs1 lbl bbs1 succs in
-        let parent_stacks = SND rs1 in
-        rename_children (FST rs1) parent_stacks bbs2 succ_map children) ∧
-  (rename_children ctrs stacks bbs succ_map [] = (ctrs, bbs)) ∧
-  (rename_children ctrs stacks bbs succ_map (child::rest) =
-    let (ctrs', bbs') =
-      rename_blocks (ctrs, stacks) bbs succ_map child in
-    rename_children ctrs' stacks bbs' succ_map rest)
+        let succs = case ALOOKUP succ_map lbl of SOME ss => ss | NONE => [] in
+        let bbs2 = update_current_succ_phis rs1 lbl bbs1 succs in
+          rename_current_children s1 (FST rs1) (SND rs1) bbs2 succ_map
+                                  children) /\
+  (rename_current_children s ctrs stacks bbs succ_map [] = (ctrs,s,bbs)) /\
+  (rename_current_children s ctrs stacks bbs succ_map (child::rest) =
+    let (ctrs',s',bbs') =
+      rename_current_blocks s (ctrs,stacks) bbs succ_map child in
+      rename_current_children s' ctrs' stacks bbs' succ_map rest)
 End
 
-(* Compute the rename state at each block during the domtree walk.
-   Returns an alist: block_label → entry_rename_state.
-   The entry rename state at a block is the state BEFORE rename_block_insts
-   processes the block — i.e., the state used for renaming operands. *)
-Definition block_rename_states_def:
-  (block_rename_states rs bbs succ_map (DNode lbl children) =
-    case lookup_block lbl bbs of
-      NONE => [(lbl, rs)]
-    | SOME bb =>
-        let (rs1, insts') = rename_block_insts rs bb.bb_instructions in
-        let parent_stacks = SND rs1 in
-        (lbl, rs) ::
-        children_rename_states (FST rs1) parent_stacks bbs succ_map children) /\
-  (children_rename_states ctrs stacks bbs succ_map [] = []) /\
-  (children_rename_states ctrs stacks bbs succ_map (child::rest) =
-    let child_states = block_rename_states (ctrs, stacks) bbs succ_map child in
-    let ctrs' = case rename_blocks (ctrs, stacks) bbs succ_map child of
-                  (c, _) => c in
-    child_states ++
-    children_rename_states ctrs' stacks bbs succ_map rest)
+(* Python's liveness_in_vars deliberately skips leading PHIs.  MakeSSA uses
+   the liveness immediately before the first ordinary instruction when
+   deciding whether another PHI is needed on a repeated SSA run. *)
+(* Build the finite liveness map directly from blocks.  In particular, the
+   common first-SSA case with no leading PHI reduces immediately to the old
+   index-zero query without repeatedly looking the block up in the function. *)
+Definition current_live_in_after_phis_def:
+  current_live_in_after_phis live [] = [] /\
+  current_live_in_after_phis live (bb::bbs) =
+    (bb.bb_label,
+     case bb.bb_instructions of
+       [] => ([] : string list)
+     | inst::rest =>
+         if inst.inst_opcode = PHI then
+           live_vars_at live bb.bb_label
+             (LENGTH (collect_phis bb.bb_instructions))
+         else live_vars_at live bb.bb_label 0) ::
+    current_live_in_after_phis live bbs
 End
 
-(* The sigma (variable mapping) at a block label, derived from the rename state. *)
-Definition block_sigma_def:
-  block_sigma dtree bbs succ_map rs0 lbl x =
-    case ALOOKUP (block_rename_states rs0 bbs succ_map dtree) lbl of
-      SOME rs => latest_version rs x
-    | NONE => x
+Definition blocks_have_leading_phi_def:
+  blocks_have_leading_phi [] = F /\
+  blocks_have_leading_phi (bb::bbs) =
+    (case bb.bb_instructions of
+       [] => blocks_have_leading_phi bbs
+     | inst::_ => inst.inst_opcode = PHI \/ blocks_have_leading_phi bbs)
 End
 
-(* ===== Degenerate PHI Removal ===== *)
+Definition select_current_live_in_def:
+  select_current_live_in F live fn =
+    current_query_map (fn_labels fn) (df_boundary [] live) /\
+  select_current_live_in T live fn =
+    current_live_in_after_phis live fn.fn_blocks
+End
 
-(* Remove degenerate PHIs:
-   - Self-referential operands (phi output = operand value) are removed
-   - 0 remaining operands → remove instruction (NOP)
-   - 1 remaining operand → convert to ASSIGN
-   - All same value → convert to ASSIGN *)
-Definition simplify_phi_def:
-  simplify_phi inst =
-    if inst.inst_opcode ≠ PHI then inst
+(* Mirror Python's degenerate-PHI cleanup while preserving definitions and
+   instruction IDs: when the non-self inputs are all equal the PHI collapses
+   to an ASSIGN (no inputs: a NOP); otherwise it is kept as it is. *)
+Definition current_phi_output_def:
+  current_phi_output [out] = SOME out /\
+  current_phi_output _ = NONE
+End
+
+Definition remove_current_phi_self_def:
+  remove_current_phi_self out [] = [] /\
+  remove_current_phi_self out [x] = [x] /\
+  remove_current_phi_self out (Label l::Var v::rest) =
+    (if v = out then remove_current_phi_self out rest
+     else Label l::Var v::remove_current_phi_self out rest) /\
+  remove_current_phi_self out (x::y::rest) =
+    x::y::remove_current_phi_self out rest
+End
+
+Definition current_phi_values_def:
+  current_phi_values [] = SOME ([] : string list) /\
+  current_phi_values (Label l::Var v::rest) =
+    (case current_phi_values rest of
+       NONE => NONE
+     | SOME vs => SOME (v::vs)) /\
+  current_phi_values _ = NONE
+End
+
+Definition simplify_current_phi_raw_def:
+  simplify_current_phi_raw inst =
+    if inst.inst_opcode <> PHI then inst
+    else case current_phi_output inst.inst_outputs of
+      NONE => inst
+    | SOME out =>
+        let cleaned = remove_current_phi_self out inst.inst_operands in
+        case current_phi_values cleaned of
+          NONE => inst
+        | SOME [] =>
+            inst with <| inst_opcode := NOP; inst_operands := [];
+                         inst_outputs := [] |>
+        | SOME (v::vs) =>
+            if EVERY (\w. w = v) vs then
+              inst with <| inst_opcode := ASSIGN;
+                           inst_operands := [Var v] |>
+            (* A PHI that stays a PHI keeps its self edges: eval_one_phi
+               needs an operand for every incoming edge. *)
+            else inst
+End
+
+Definition keep_current_phi_vars_def:
+  keep_current_phi_vars original candidate =
+    if EVERY (\v. MEM v (inst_ir_vars original))
+             (inst_ir_vars candidate)
+    then candidate
+    else original
+End
+
+Definition simplify_current_phi_def:
+  simplify_current_phi inst =
+    keep_current_phi_vars inst (simplify_current_phi_raw inst)
+End
+
+Definition simplify_current_phi_prefix_parts_def:
+  simplify_current_phi_prefix_parts [] = ([],[]) /\
+  simplify_current_phi_prefix_parts (inst::rest) =
+    if inst.inst_opcode <> PHI then ([],inst::rest)
     else
-      let out = case inst.inst_outputs of [v] => SOME v | _ => NONE in
-      let pairs = phi_pairs inst.inst_operands in
-      (* Remove self-referential pairs *)
-      let pairs' = case out of
-                     NONE => pairs
-                   | SOME v => FILTER (λ(l,var). var ≠ v) pairs in
-      case pairs' of
-        [] => inst with <| inst_opcode := NOP;
-                          inst_operands := [];
-                          inst_outputs := [] |>
-      | [(l, v)] => inst with <| inst_opcode := ASSIGN;
-                                 inst_operands := [Var v] |>
-      | _ =>
-          (* Check if all values are the same *)
-          let vals = MAP SND pairs' in
-          (case vals of
-             [] => inst  (* shouldn't happen *)
-           | (v :: vs) =>
-               if EVERY (λx. x = v) vs then
-                 inst with <| inst_opcode := ASSIGN;
-                              inst_operands := [Var v] |>
-               else
-                 inst with inst_operands :=
-                   FLAT (MAP (λ(l,v). [Label l; Var v]) pairs'))
+      let inst' = simplify_current_phi inst in
+      let (phis,ordinary) = simplify_current_phi_prefix_parts rest in
+        if inst'.inst_opcode = PHI then (inst'::phis,ordinary)
+        else (phis,inst'::ordinary)
 End
 
-(* Apply degenerate PHI removal to all blocks. *)
-Definition remove_degenerate_phis_def:
-  remove_degenerate_phis bbs =
-    MAP (λbb. bb with bb_instructions :=
-      FILTER (λi. i.inst_opcode ≠ NOP)
-        (MAP simplify_phi bb.bb_instructions))
-    bbs
+Definition reassign_current_inst_ids_def:
+  reassign_current_inst_ids [] insts = insts /\
+  reassign_current_inst_ids ids [] = [] /\
+  reassign_current_inst_ids (id::ids) (inst::insts) =
+    (inst with inst_id := id)::reassign_current_inst_ids ids insts
 End
 
-(* ===== Ensure Well-Formed ===== *)
-
-(* Instruction sort key: PHI/parameter pseudos → 0, regular → 1,
-   terminator → 2.  All parameter metadata must remain in the prefix. *)
-Definition inst_sort_key_def:
-  inst_sort_key inst =
-    if inst.inst_opcode = PHI ∨ is_param_opcode inst.inst_opcode then 0n
-    else if is_terminator inst.inst_opcode then 2n
-    else 1n
+Definition simplify_current_phi_prefix_def:
+  simplify_current_phi_prefix insts =
+    let (phis,ordinary) = simplify_current_phi_prefix_parts insts in
+      reassign_current_inst_ids (MAP (\inst. inst.inst_id) insts)
+        (phis ++ ordinary)
 End
 
-(* Sort instructions so PHIs are at the start and terminators at the end.
-   Uses insertion sort (stable) to match Python's list.sort(key=...). *)
-Definition insert_by_key_def:
-  insert_by_key inst [] = [inst] ∧
-  insert_by_key inst (h::t) =
-    if inst_sort_key inst ≤ inst_sort_key h
-    then inst :: h :: t
-    else h :: insert_by_key inst t
+Definition simplify_current_phi_block_def:
+  simplify_current_phi_block bb =
+    case bb.bb_instructions of
+      [] => bb
+    | inst::rest =>
+        if inst.inst_opcode = PHI then
+          bb with bb_instructions :=
+            simplify_current_phi_prefix bb.bb_instructions
+        else bb
 End
 
-Definition stable_sort_insts_def:
-  stable_sort_insts [] = [] ∧
-  stable_sort_insts (inst::rest) =
-    insert_by_key inst (stable_sort_insts rest)
+Definition simplify_current_phis_def:
+  simplify_current_phis bbs =
+    if blocks_have_leading_phi bbs then
+      MAP simplify_current_phi_block bbs
+    else bbs
 End
 
-Definition ensure_well_formed_def:
-  ensure_well_formed bbs =
-    MAP (λbb. bb with bb_instructions :=
-      stable_sort_insts bb.bb_instructions) bbs
+Definition simplify_current_phis_if_def:
+  simplify_current_phis_if enabled bbs =
+    if enabled then simplify_current_phis bbs else bbs
 End
 
-(* ===== Full Pass ===== *)
+Theorem simplify_current_phi_raw_id[simp]:
+  (simplify_current_phi_raw inst).inst_id = inst.inst_id
+Proof
+  Cases_on `inst.inst_opcode <> PHI` >> simp[simplify_current_phi_raw_def] >>
+  Cases_on `current_phi_output inst.inst_outputs` >> simp[] >>
+  rename1 `current_phi_output inst.inst_outputs = SOME out` >>
+  Cases_on `current_phi_values (remove_current_phi_self out inst.inst_operands)` >>
+  simp[] >> rename1 `current_phi_values _ = SOME values` >>
+  Cases_on `values` >> simp[] >> IF_CASES_TAC >> simp[]
+QED
 
-(* Full make_ssa pass on a function.
-   Requires pre-computed: CFG, dominator tree, liveness.
-   Parameters encode these analyses as maps.
-   dtree: dominator tree (root = entry block, structural recursion target)
-   dom_post_order: block labels in dominator tree post-order
-     (determines variable/PHI insertion order to match Python). *)
-Definition make_ssa_fn_def:
-  make_ssa_fn dom_frontiers dtree dom_post_order
-              pred_map succ_map live_in func =
-    case fn_entry_label func of
-      NONE => func
+Theorem simplify_current_phi_id[simp]:
+  (simplify_current_phi inst).inst_id = inst.inst_id
+Proof
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem simplify_current_phi_vars:
+  MEM v (inst_ir_vars (simplify_current_phi inst)) ==>
+  MEM v (inst_ir_vars inst)
+Proof
+  Cases_on `EVERY (\v. MEM v (inst_ir_vars inst))
+                  (inst_ir_vars (simplify_current_phi_raw inst))`
+  >- (simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+      fs[listTheory.EVERY_MEM]) >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_length:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) ==>
+    LENGTH phis + LENGTH ordinary = LENGTH insts
+Proof
+  Induct >- simp[simplify_current_phi_prefix_parts_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode <> PHI`
+  >- (simp[simplify_current_phi_prefix_parts_def] >> strip_tac >> gvs[]) >>
+  simp[simplify_current_phi_prefix_parts_def] >>
+  pairarg_tac >> gvs[] >> CASE_TAC >> strip_tac >> gvs[]
+QED
+
+Theorem reassign_current_inst_ids_ids:
+  !ids insts.
+    LENGTH ids = LENGTH insts ==>
+    MAP (\inst. inst.inst_id) (reassign_current_inst_ids ids insts) = ids
+Proof
+  Induct >> Cases_on `insts` >>
+  simp[reassign_current_inst_ids_def]
+QED
+
+Theorem MAP_simplify_current_phi_prefix_ids[simp]:
+  MAP (\inst. inst.inst_id) (simplify_current_phi_prefix insts) =
+  MAP (\inst. inst.inst_id) insts
+Proof
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  irule reassign_current_inst_ids_ids >>
+  drule simplify_current_phi_prefix_parts_length >> simp[]
+QED
+
+Theorem simplify_current_phi_block_label[simp]:
+  (simplify_current_phi_block bb).bb_label = bb.bb_label
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >> gvs[]
+QED
+
+Theorem MAP_simplify_current_phis_labels[simp]:
+  MAP (\bb. bb.bb_label) (simplify_current_phis bbs) =
+  MAP (\bb. bb.bb_label) bbs
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  simp[simplify_current_phis_def, MAP_MAP_o] >>
+  irule MAP_CONG >> simp[]
+QED
+
+Theorem simplify_current_phi_block_ids[simp]:
+  block_ir_inst_ids (simplify_current_phi_block bb) =
+  block_ir_inst_ids bb
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >>
+  gvs[block_ir_inst_ids_def]
+QED
+
+Theorem MAP_simplify_current_phis_inst_ids[simp]:
+  MAP block_ir_inst_ids (simplify_current_phis bbs) =
+  MAP block_ir_inst_ids bbs
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  simp[simplify_current_phis_def, MAP_MAP_o] >>
+  irule MAP_CONG >> simp[]
+QED
+
+Theorem MAP_simplify_current_phis_if_labels[simp]:
+  MAP (\bb. bb.bb_label) (simplify_current_phis_if enabled bbs) =
+  MAP (\bb. bb.bb_label) bbs
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def]
+QED
+
+Theorem MAP_simplify_current_phis_if_inst_ids[simp]:
+  MAP block_ir_inst_ids (simplify_current_phis_if enabled bbs) =
+  MAP block_ir_inst_ids bbs
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def]
+QED
+
+Theorem reassign_current_inst_ids_vars:
+  !ids insts.
+    LENGTH ids = LENGTH insts ==>
+    MAP inst_ir_vars (reassign_current_inst_ids ids insts) =
+    MAP inst_ir_vars insts
+Proof
+  Induct >> Cases_on `insts` >>
+  simp[reassign_current_inst_ids_def, inst_ir_vars_def,
+       venomInstTheory.inst_uses_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_vars:
+  !insts phis ordinary v.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) /\
+    MEM v (FLAT (MAP inst_ir_vars (phis ++ ordinary))) ==>
+    MEM v (FLAT (MAP inst_ir_vars insts))
+Proof
+  Induct >- simp[simplify_current_phi_prefix_parts_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode <> PHI`
+  >- (simp[simplify_current_phi_prefix_parts_def] >> strip_tac >> gvs[]) >>
+  simp[simplify_current_phi_prefix_parts_def] >>
+  pairarg_tac >> gvs[] >> CASE_TAC >> strip_tac >> gvs[] >>
+  metis_tac[simplify_current_phi_vars]
+QED
+
+Theorem simplify_current_phi_prefix_vars:
+  MEM v (FLAT (MAP inst_ir_vars (simplify_current_phi_prefix insts))) ==>
+  MEM v (FLAT (MAP inst_ir_vars insts))
+Proof
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  `LENGTH (MAP (\inst. inst.inst_id) insts) =
+   LENGTH (phis ++ ordinary)` by
+    (drule simplify_current_phi_prefix_parts_length >> simp[]) >>
+  drule_all reassign_current_inst_ids_vars >> strip_tac >> gvs[] >>
+  strip_tac >>
+  mp_tac (Q.SPECL [`insts`,`phis`,`ordinary`,`v`]
+    simplify_current_phi_prefix_parts_vars) >> simp[]
+QED
+
+Theorem simplify_current_phi_block_vars:
+  MEM v (block_ir_vars (simplify_current_phi_block bb)) ==>
+  MEM v (block_ir_vars bb)
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >>
+  gvs[block_ir_vars_def] >> strip_tac >>
+  drule simplify_current_phi_prefix_vars >> simp[]
+QED
+
+Theorem simplify_current_phis_vars_subset:
+  MEM v (FLAT (MAP block_ir_vars (simplify_current_phis bbs))) ==>
+  MEM v (FLAT (MAP block_ir_vars bbs))
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  gvs[simplify_current_phis_def, MEM_FLAT, MEM_MAP] >>
+  metis_tac[simplify_current_phi_block_vars]
+QED
+
+Theorem simplify_current_phis_if_vars_subset:
+  MEM v (FLAT (MAP block_ir_vars (simplify_current_phis_if enabled bbs))) ==>
+  MEM v (FLAT (MAP block_ir_vars bbs))
+Proof
+  Cases_on `enabled` >> gvs[simplify_current_phis_if_def] >>
+  metis_tac[simplify_current_phis_vars_subset]
+QED
+
+(* This boundary intentionally binds every analysis from this very fn. *)
+Definition make_ssa_current_fn_def:
+  make_ssa_current_fn s fn =
+    case fn_entry_label fn of
+      NONE => (fn,s)
     | SOME entry =>
-        (* Iterate blocks in dom_post_order for compute_defs *)
+        let cfg = cfg_analyze fn in
+        let dom = dom_analyze cfg fn in
+        let live = liveness_analyze fn in
+        let had_phis = blocks_have_leading_phi fn.fn_blocks in
+        let pred_map = current_query_map (fn_labels fn) (cfg_preds_of cfg) in
+        let succ_map = current_query_map (fn_labels fn) (cfg_succs_of cfg) in
+        let frontiers = current_query_map (fn_labels fn) (frontier_of dom) in
+        let live_in = select_current_live_in had_phis live fn in
+        let dtree = current_dom_tree_aux dom (LENGTH (fn_labels fn)) entry in
+        let postorder = dom_tree_postorder dtree in
         let ordered_bbs = MAP THE (FILTER IS_SOME
-          (MAP (λlbl. lookup_block lbl func.fn_blocks) dom_post_order)) in
+          (MAP (\lbl. lookup_block lbl fn.fn_blocks) postorder)) in
         let defs = compute_defs ordered_bbs in
-        (* 1. Insert PHI nodes *)
-        let bbs1 = add_phi_nodes dom_frontiers pred_map live_in
-                     func.fn_blocks defs in
-        (* 2. Rename variables — structural recursion on dtree *)
-        let rs0 = init_rename_state defs in
-        let (_, bbs2) = rename_blocks rs0 bbs1 succ_map dtree in
-        func with fn_blocks := bbs2
+        let (bbs1,s1) = add_phi_nodes_supply s frontiers pred_map live_in
+                                             fn.fn_blocks defs in
+        let rs0 = init_current_rename_state defs in
+        let (_,s2,bbs2) = rename_current_blocks s1 rs0 bbs1 succ_map dtree in
+        let bbs3 = simplify_current_phis_if had_phis bbs2 in
+          (fn with fn_blocks := bbs3,s2)
 End
 
-(* Transform all functions in context.
-   Note: in practice, the caller provides pre-computed analyses.
-   This definition takes analysis maps as parameters. *)
-Definition make_ssa_ctx_def:
-  make_ssa_ctx dom_frontiers_fn dtree_fn dom_post_order_fn
-               pred_map_fn succ_map_fn live_in_fn ctx =
-    ctx with ctx_functions := MAP (λfunc.
-      make_ssa_fn (dom_frontiers_fn func) (dtree_fn func)
-                  (dom_post_order_fn func)
-                  (pred_map_fn func) (succ_map_fn func)
-                  (live_in_fn func) func)
-    ctx.ctx_functions
+Definition make_ssa_functions_supply_def:
+  (make_ssa_functions_supply s [] = ([],s)) /\
+  (make_ssa_functions_supply s (fn::fns) =
+    let (fn',s') = make_ssa_current_fn s fn in
+    let (fns',s'') = make_ssa_functions_supply s' fns in
+      (fn'::fns',s''))
 End
+
+Definition make_ssa_ctx_supply_def:
+  make_ssa_ctx_supply s ctx =
+    let (fns,s') = make_ssa_functions_supply s ctx.ctx_functions in
+      (ctx with ctx_functions := fns,s')
+End
+
+Definition make_ssa_unit_supply_def:
+  make_ssa_unit_supply s unit =
+    let (ctx,s') = make_ssa_ctx_supply s unit.cu_context in
+      (unit with cu_context := ctx,s')
+End
+
+Definition make_ssa_configured_with_supply_def:
+  make_ssa_configured_with_supply unit =
+    make_ssa_unit_supply (init_ir_supply unit) unit
+End
+
+Definition make_ssa_configured_def:
+  make_ssa_configured unit = FST (make_ssa_configured_with_supply unit)
+End
+
+Theorem make_ssa_configured_with_supply_eq:
+  make_ssa_configured_with_supply unit =
+    make_ssa_unit_supply (init_ir_supply unit) unit
+Proof
+  simp[make_ssa_configured_with_supply_def]
+QED
+
+Theorem make_ssa_configured_eq:
+  make_ssa_configured unit = FST (make_ssa_configured_with_supply unit)
+Proof
+  simp[make_ssa_configured_def]
+QED
+
+Theorem make_ssa_current_fn_current_analysis_eq:
+  make_ssa_current_fn s fn =
+    case fn_entry_label fn of
+      NONE => (fn,s)
+    | SOME entry =>
+        let cfg = cfg_analyze fn in
+        let dom = dom_analyze cfg fn in
+        let live = liveness_analyze fn in
+        let had_phis = blocks_have_leading_phi fn.fn_blocks in
+        let pred_map = current_query_map (fn_labels fn) (cfg_preds_of cfg) in
+        let succ_map = current_query_map (fn_labels fn) (cfg_succs_of cfg) in
+        let frontiers = current_query_map (fn_labels fn) (frontier_of dom) in
+        let live_in = select_current_live_in had_phis live fn in
+        let dtree = current_dom_tree_aux dom (LENGTH (fn_labels fn)) entry in
+        let postorder = dom_tree_postorder dtree in
+        let ordered_bbs = MAP THE (FILTER IS_SOME
+          (MAP (\lbl. lookup_block lbl fn.fn_blocks) postorder)) in
+        let defs = compute_defs ordered_bbs in
+        let (bbs1,s1) = add_phi_nodes_supply s frontiers pred_map live_in
+                                             fn.fn_blocks defs in
+        let rs0 = init_current_rename_state defs in
+        let (_,s2,bbs2) = rename_current_blocks s1 rs0 bbs1 succ_map dtree in
+        let bbs3 = simplify_current_phis_if had_phis bbs2 in
+          (fn with fn_blocks := bbs3,s2)
+Proof
+  simp[make_ssa_current_fn_def]
+QED
+
+Theorem ALOOKUP_current_query_map:
+  !labels query l.
+    MEM l labels ==>
+    ALOOKUP (current_query_map labels query) l = SOME (query l)
+Proof
+  Induct >> gvs[current_query_map_def] >> metis_tac[]
+QED
+
+Theorem ALOOKUP_current_pred_map:
+  MEM l (fn_labels fn) ==>
+  ALOOKUP (current_pred_map fn) l =
+    SOME (cfg_preds_of (cfg_analyze fn) l)
+Proof
+  simp[current_pred_map_def, ALOOKUP_current_query_map]
+QED
+
+Theorem ALOOKUP_current_succ_map:
+  MEM l (fn_labels fn) ==>
+  ALOOKUP (current_succ_map fn) l =
+    SOME (cfg_succs_of (cfg_analyze fn) l)
+Proof
+  simp[current_succ_map_def, ALOOKUP_current_query_map]
+QED
+
+Theorem ALOOKUP_current_frontier_map:
+  MEM l (fn_labels fn) ==>
+  ALOOKUP (current_frontier_map fn) l =
+    SOME (frontier_of (dom_analyze (cfg_analyze fn) fn) l)
+Proof
+  simp[current_frontier_map_def, ALOOKUP_current_query_map]
+QED
+
+Theorem ALOOKUP_current_live_in:
+  MEM l (fn_labels fn) ==>
+  ALOOKUP (current_live_in fn) l =
+    SOME (df_boundary [] (liveness_analyze fn) l)
+Proof
+  simp[current_live_in_def, ALOOKUP_current_query_map]
+QED
+
+Theorem current_dom_tree_eq:
+  current_dom_tree fn =
+    let cfg = cfg_analyze fn in
+    let dom = dom_analyze cfg fn in
+      case fn_entry_label fn of
+        NONE => DNode "" []
+      | SOME entry => current_dom_tree_aux dom (LENGTH (fn_labels fn)) entry
+Proof
+  simp[current_dom_tree_def]
+QED
+
+Theorem current_dom_postorder_eq:
+  current_dom_postorder fn = dom_tree_postorder (current_dom_tree fn)
+Proof
+  simp[current_dom_postorder_def]
+QED

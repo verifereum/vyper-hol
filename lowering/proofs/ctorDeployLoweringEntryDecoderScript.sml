@@ -1,6 +1,7 @@
 (* Shifted allocation credit and complete observations for coherent decoders. *)
 Theory ctorDeployLoweringEntryDecoder
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryNoAlloc ctorDeployLoweringEntryArrayFrame
  ctorDeployLoweringEntryMember ctorDeployLoweringEntryArrayRun
  ctorDeployLoweringEntryRegistration ctorDeployMemoryFrontier

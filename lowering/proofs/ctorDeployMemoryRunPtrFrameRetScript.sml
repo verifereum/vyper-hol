@@ -13,9 +13,9 @@ Ancestors
   ctorDeployMemoryRunPtrDefs ctorDeployLoweringDefs ctorDeployDefs ptrSafeRun
   ptrDiscipline stmtSimDefs bodySim moduleLowering ctorReturnFrame
   immutableDeployExecution nonreentrantSource loweringHalt allocaSiteResource
-  exprLoweringProps fragExec compileEnv emitHelper e2eDeployDefs
+  exprLoweringProps fragExec compileEnv loweringStateRelDefs emitHelper e2eDeployDefs
   venomExecSemantics venomState venomInst codegenRel contextCodegenRel memLocDefs
-  valueEncoding
+  valueEncoding valueEncodingDefs
   vyperStorageLayoutSafety vyperContext vyperState
 
 (* One opcode's dispatch equation, keeping the simplification local. *)

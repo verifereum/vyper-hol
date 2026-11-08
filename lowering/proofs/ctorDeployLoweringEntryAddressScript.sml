@@ -1,6 +1,7 @@
 (* Register-only constructor argument address preparation. *)
 Theory ctorDeployLoweringEntryAddress
 Ancestors
+  loweringStateRelDefs
  abiDecoderAppend abiDecoderCounters abiDecoderCode
  ctorRegisterArgs abiDecoderReentryAddress abiDecoderReentry abiDecoderContract
  abiDecoderVarSequence abiDecoderLoop abiDecoderCoherence abiEncoderRegisteredEffect abiEncoderProps

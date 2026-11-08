@@ -1,6 +1,7 @@
 (* Operational boundaries for shifted constructor array entry. *)
 Theory ctorDeployLoweringEntryArrayOps
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployLoweringEntryArrayFrame ctorDeployLoweringEntryAllocation
   ctorDeployLoweringEntryRegistration ctorAbiActualArrayEntry
   ctorAbiActualArrayPrepare ctorAbiActualArrayInvariant ctorAbiActualFrame ctorAbiActualSites abiDecoderPrimitiveLoopEntry

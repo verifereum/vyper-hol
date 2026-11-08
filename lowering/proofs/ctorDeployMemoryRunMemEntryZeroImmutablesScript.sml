@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryZeroImmutables
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntrySourceDefaults
   ctorDeployLoweringEntryImmutableMemory immutableRelation compileVyper
   ctorDeployDefs e2eDeployDefs compileEnv

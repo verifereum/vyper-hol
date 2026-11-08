@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryAggregate
 Ancestors
+  valueEncodingDefs
   vyperABI contractABI list rich_list arithmetic vyperTyping vyperValue valueEncoding supportedTypes
   ctorDeployMemoryRunMemEntrySupported ctorDeployMemoryRunMemEntryDefaults
   ctorDeployMemoryRunMemEntrySparse ctorDeployMemoryRunMemEntryAggregateProbe

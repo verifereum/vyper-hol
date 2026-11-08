@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompletePrefix
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryArrayOps ctorDeployLoweringEntryCompleteScalar
  ctorAbiActualArrayPrepare ctorAbiActualArrayEntry ctorAbiActualArrayInvariant
  ctorDeployLoweringEntryArrayFrame ctorDeployLoweringEntryAllocation

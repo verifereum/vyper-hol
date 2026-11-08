@@ -1,6 +1,7 @@
 (* The actual original-unit entry state before constructor registration. *)
 Theory ctorDeployLoweringEntryPrefix
 Ancestors
+  loweringStateRelDefs
  ctorDeployDefs context ctorDeployLoweringDefs deployUnitProducers ctorDeployMemoryFrontier
  moduleLoweringProps fragExec venomExecSemantics venomInst venomState
  vyperCompiler compileEnv o1PassContract e2eEntry finite_map list

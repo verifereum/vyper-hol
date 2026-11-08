@@ -9,7 +9,7 @@ Ancestors
   ctorDeployLoweringReturnPending ctorDeployDefsReach
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractSoundness
   vyperImmutableMetadataFrame
-  entryStateRel structFieldsProps vyperTypeDeploymentSoundness moduleLowering compileEnv
+  entryStateRel structFieldsProps vyperTypeDeploymentSoundness moduleLowering compileEnv loweringStateRelDefs
 
 Theorem deploy_supported_constructor_nr[local]:
   !tops env mut nr args dflts ret body.
@@ -482,7 +482,7 @@ Theorem deploy_padded_prefix_bytes[local]:
   off + n <= cap ==>
   mem_bytes_at off n (TAKE cap (mem ++ REPLICATE cap 0w)) = mem_bytes_at off n mem
 Proof
-  rw[valueEncodingTheory.mem_bytes_at_def, listTheory.LIST_EQ_REWRITE,
+  rw[valueEncodingDefsTheory.mem_bytes_at_def, listTheory.LIST_EQ_REWRITE,
      listTheory.LENGTH_TAKE_EQ, listTheory.EL_TAKE,
      listTheory.EL_APPEND_EQN, listTheory.EL_DROP,
      rich_listTheory.EL_REPLICATE] >>

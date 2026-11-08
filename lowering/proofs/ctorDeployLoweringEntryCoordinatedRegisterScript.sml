@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCoordinatedRegister
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryCompleteRegister ctorDeployLoweringEntryResourceRegister
   ctorDeployLoweringEntryRegisterSizes ctorDeployLoweringEntrySeparation
   abiDecoderLoop ctorDeployLoweringEntryCompleteRegisterBoundary

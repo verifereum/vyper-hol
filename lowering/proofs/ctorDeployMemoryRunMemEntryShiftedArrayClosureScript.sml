@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedArrayClosure
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryAllocation
  ctorDeployMemoryRunMemEntryShiftedComplex
  ctorDeployMemoryRunMemEntryShiftedIndex ASCIInumbers pred_set

@@ -82,7 +82,7 @@ Proof
         (irule exprLoweringTheory.type_to_abi_dec_info_layout_cong >> simp[]) >>
       fs[abi_decoder_metadata_def])
   >- (irule compileVyperTheory.build_positional_args_layout_cong >> simp[]) >>
-  simp[compileEnvTheory.local_ptrs_rel_def, compileEnvTheory.local_region_def]
+  simp[loweringStateRelDefsTheory.local_ptrs_rel_def, loweringStateRelDefsTheory.local_region_def]
 QED
 
 Theorem ctor_task_register_actual:
@@ -174,7 +174,7 @@ Proof
      fs[abi_decoder_metadata_def, wordsTheory.dimword_def] >> decide_tac) >>
   `!aid. st1.cs_next_id <= aid ==> FLOOKUP fixed.vs_allocas aid = NONE` by simp[] >>
   `mem_bytes_at 0 (LENGTH fixed.vs_data_section) fixed.vs_data_section = fixed.vs_data_section` by
-    simp[valueEncodingTheory.mem_bytes_at_def, TAKE_APPEND] >>
+    simp[valueEncodingDefsTheory.mem_bytes_at_def, TAKE_APPEND] >>
   `build_positional_args
      (ce_pack with <|ce_target := rpolicy.rpol_target;
        ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)|>) fargs =

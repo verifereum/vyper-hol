@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompleteMemberBoundary
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryMember ctorDeployLoweringEntryCompleteScalar
  ctorDeployLoweringEntryArrayFrame ctorDeployLoweringEntryRegistration
  ctorAbiActualLabelMember ctorAbiActualObservations ctorAbiActualWorld

@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompleteRegister
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryCompleteRecursive
  ctorDeployLoweringEntryCompleteRegisterBoundary ctorDeployLoweringEntryCanonical
  abiDecoderLoop abiDecoderCounters abiDecoderCode abiDecoderContract abiDecoderCoherence

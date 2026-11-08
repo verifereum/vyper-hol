@@ -2,6 +2,7 @@
    O is only an ML quotation, not a logical definition. *)
 Theory ctorDeployMemoryRunMemEntryShiftedObservation
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier
   ctorAbiActualArrayInvariant ctorAbiActualArrayEntry
   ctorAbiActualSites ctorAbiActualFrame abiDecoderReentryAddress abiDecoderDynamicLoopSetup

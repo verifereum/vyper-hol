@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryComplex
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryMember
   ctorDeployMemoryRunMemEntryMembers ctorDeployMemoryRunMemEntryCompositeSetup
   ctorDeployMemoryRunMemEntryWord ctorAbiActualComplex ctorAbiActualObservations

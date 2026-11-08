@@ -6,7 +6,7 @@ Ancestors
   gasNormalPrefix gasSummary gasContext gasCount fragGasMode loweringPosts
   exprSimNameWord exprSimNameValue loweringSlice exprLowering exprLoweringProps
   fragExec fragExecMem allocaHistoryFragment instMemFrontier
-  emitHelperProps emitHelper compileEnv context venomInst venomState
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs context venomInst venomState
   venomExecSemantics venomMemDefs vyperInterpreter vyperState vyperAST
   vyperTypeEnv vyperTypeSystem vyperTypeInvariants valueEncoding valueEncodingProofs
   list rich_list finite_map words arithmetic

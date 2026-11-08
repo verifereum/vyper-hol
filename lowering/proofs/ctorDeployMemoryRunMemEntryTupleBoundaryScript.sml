@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryTupleBoundary
 Ancestors
+  valueEncodingDefs
   ctorDeployMemoryRunMemEntryAggregate supportedTypes vyperValue vyperABI
   vyperTyping valueEncoding contractABI list words
 

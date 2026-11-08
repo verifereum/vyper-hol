@@ -22,14 +22,15 @@ Theorem abi_scratch_decoder_array_child_input:
     (dec (Array NONE at) bs) (ArrayV (DynArrayV vs)) /\
   vyper_decode_valid_enc (Array NONE at) bs /\ j < LENGTH vs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
-  abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap s /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
   eval_operand childsrc s = SOME (n2w (sb + off)) /\
   eval_operand childdst s = SOME (n2w (d + 32 + j * type_memory_bytes ce ty)) /\
   abi_decoder_operand_live st.cs_next_var childsrc /\
-  abi_decoder_operand_live st.cs_next_var childdst /\ abi_decoder_operand_live st.cs_next_var hi ==>
-  abi_scratch_decoder_input ce env sf ty tv childbs (EL j vs) st childsrc childdst opc hi
+  abi_decoder_operand_live st.cs_next_var childdst /\ abi_decoder_operand_live st.cs_next_var base_op /\
+  abi_decoder_operand_live st.cs_next_var hi ==>
+  abi_scratch_decoder_input ce env sf ty tv childbs (EL j vs) st childsrc childdst opc base_op hi B
     (sb + off) (d + 32 + j * type_memory_bytes ce ty) first last b cap s
 Proof
   simp_tac bool_ss [LET_THM] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -40,7 +41,7 @@ Proof
     `vyper_to_abi_type env ty`, `DROP 32 (bs:word8 list)`, `DROP 32 (bs:word8 list)`]
     abi_decode_array_member_EL) >> impl_tac >- asm_simp_tac bool_ss [] >>
   disch_then (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
-  `sb + LENGTH bs < dimword (:256)` by fs[abi_scratch_decoder_ranges_def] >>
+  `B + sb + LENGTH bs < dimword (:256)` by fs[abi_scratch_decoder_ranges_def] >>
   drule_all (SIMP_RULE arith_ss [LET_THM] abi_valid_array_child_window) >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `j * type_memory_bytes ce ty + type_memory_bytes ce ty <= maxn * type_memory_bytes ce ty`
@@ -59,7 +60,7 @@ QED
 
 (* Reach a physical recursive child after either actual array-address prefix. *)
 Theorem abi_scratch_decoder_array_setup_from_state:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,ready) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
@@ -67,12 +68,13 @@ Theorem abi_scratch_decoder_array_setup_from_state:
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
   abi_decoder_budget first last b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
   ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st ready (\s. s = initial)
@@ -89,7 +91,7 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_array_setup_reach:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,ready) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) di
@@ -97,12 +99,13 @@ Theorem abi_scratch_decoder_array_setup_reach:
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
   abi_decoder_budget first last b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
   ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   fn_has_code st ready func /\ ~initial.vs_halted /\
@@ -111,7 +114,7 @@ Theorem abi_scratch_decoder_array_setup_reach:
     abi_scratch_decoder_input ce env sf ty tv
       (abi_decode_member_bytes (vyper_to_abi_type env ty) (DROP 32 bs)
         (DROP (j * abi_member_head_size (vyper_to_abi_type env ty)) (DROP 32 bs)))
-      (EL j vs) ready (FST (SND ops)) (SND (SND ops)) opc hi
+      (EL j vs) ready (FST (SND ops)) (SND (SND ops)) opc base_op hi B
       (sb + (32 + abi_decode_member_offset (vyper_to_abi_type env ty) (DROP 32 bs)
         (j * abi_member_head_size (vyper_to_abi_type env ty))))
       (d + 32 + j * type_memory_bytes ce ty) first last b cap prepared /\
@@ -145,10 +148,11 @@ QED
 
 (* Execute an actual array child under the physical recursive contract. *)
 Theorem abi_scratch_decoder_array_body:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   fn_has_code st end_st func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
@@ -159,11 +163,12 @@ Theorem abi_scratch_decoder_array_body:
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap initial /\
-  mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+  mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var ip /\
   abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
   st.cs_next_id <= middle.cs_next_id /\ end_st.cs_next_id <= last /\
@@ -188,18 +193,14 @@ Proof
     (qpat_assum `abi_decoder_address_frame _ _ _`
       (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_address_frame_def]) >>
      drule_all abi_decoder_budget_transport >> simp[]) >>
-  qhdtm_x_assum `abi_scratch_decoder` (mp_tac o PURE_REWRITE_RULE [abi_scratch_decoder_def]) >>
-  disch_then (qspecl_then [`SND (SND (ops:operand # operand # operand))`,
-    `FST (SND (ops:operand # operand # operand))`, `opc`, `hi`, `middle`, `end_st`,
-    `func`, `ctx`, `first`, `last`, `b`, `cap`, `limit_st`, `prepared:venom_state`,
-    `abi_decode_member_bytes (vyper_to_abi_type env ty) (DROP 32 bs)
-      (DROP (j * abi_member_head_size (vyper_to_abi_type env ty)) (DROP 32 bs))`,
-    `EL j (vs:vyperValue$value list)`,
-    `sb + (32 + abi_decode_member_offset (vyper_to_abi_type env ty) (DROP 32 bs)
-      (j * abi_member_head_size (vyper_to_abi_type env ty)))`,
-    `d + 32 + j * type_memory_bytes ce ty`] mp_tac) >>
-  impl_tac >- asm_simp_tac bool_ss [] >>
-  disch_then (qx_choose_then `actual` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `first <= abi_decoder_entry_floor middle` by
+    simp[abi_decoder_entry_floor_def] >>
+  qhdtm_x_assum `abi_scratch_decoder` (assume_tac o PURE_REWRITE_RULE [abi_scratch_decoder_def]) >>
+  first_x_assum (drule_at (Pat `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`end_st`, `func`, `ctx`, `limit_st`] mp_tac) >>
+  asm_simp_tac bool_ss [] >>
+  strip_tac >>
+  rename1 `abi_decode_sim ctx func prepared actual` >>
   `eval_operand (FST ops) actual = SOME (n2w j)` by
     (drule_all abi_scratch_effect_operand >> simp[]) >>
   `abi_scratch_effect first last st.cs_next_id end_st.cs_next_id st.cs_next_var limit_st
@@ -215,19 +216,21 @@ QED
 
 (* Actual recursive array body execution extends the initialized typed prefix. *)
 Theorem abi_scratch_decoder_body_inputs:
-  abi_scratch_decoder_loop_inv opc bs tv vs sb d outsz slot site
+  abi_scratch_decoder_loop_inv opc bs tv vs (B + sb) d outsz slot site
     first last lo hi next limit_st b cap initial body_lbl j s /\
-  abi_scratch_decoder_ranges opc hi_op src dst sb (LENGTH bs)
+  abi_scratch_decoder_ranges opc base_op hi_op src dst B sb (LENGTH bs)
     d outsz first last b cap initial /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live next base_op /\
   abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next ip /\
   eval_operand ip initial = SOME (n2w slot) /\ slot < dimword (:256) /\ next <= body_next ==>
-  abi_decoder_valid_array_memory opc bs tv vs sb d j s /\
-  abi_scratch_decoder_ranges opc hi_op src dst sb (LENGTH bs)
+  abi_decoder_valid_array_memory opc bs tv vs (B + sb) d j s /\
+  abi_scratch_decoder_ranges opc base_op hi_op src dst B sb (LENGTH bs)
     d outsz first last b cap s /\
   fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s /\
   eval_operand ip s = SOME (n2w slot) /\ mload (w2n (n2w slot:bytes32)) s = n2w j /\
   abi_decoder_operand_live body_next src /\ abi_decoder_operand_live body_next dst /\
+  abi_decoder_operand_live body_next base_op /\
   abi_decoder_operand_live body_next hi_op /\ abi_decoder_operand_live body_next ip /\
   s.vs_current_bb = body_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted
 Proof
@@ -245,10 +248,11 @@ QED
 (* TOP-LEVEL: the generated body extends the initialized prefix even when its
    recursive child allocates scratch and changes the current basic block. *)
 Theorem abi_scratch_decoder_array_iteration:
-  abi_decode_array_element_setup ip src dst opc hi_op (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi_op
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi_op
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   fn_has_code st end_st func /\ st.cs_current_insts = [] /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
@@ -259,20 +263,21 @@ Theorem abi_scratch_decoder_array_iteration:
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
   (is_dynamic (vyper_to_abi_type env ty) ==>
     !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_scratch_decoder_loop_inv opc bs tv vs sb d
+  abi_scratch_decoder_loop_inv opc bs tv vs (B + sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial st.cs_current_bb j s /\ j < LENGTH vs /\
-  abi_scratch_decoder_ranges opc hi_op src dst sb
+  abi_scratch_decoder_ranges opc base_op hi_op src dst B sb
     (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap initial /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live next base_op /\
   abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next ip /\
   eval_operand ip initial = SOME (n2w slot) /\ slot < dimword (:256) /\
   first <= lo /\ lo <= st.cs_next_id /\ st.cs_next_id <= middle.cs_next_id /\
   end_st.cs_next_id <= hi /\ hi <= last /\ next <= st.cs_next_var /\
   first <= site /\ site < last /\ (site < st.cs_next_id \/ end_st.cs_next_id <= site) /\
   end_st.cs_next_var <= limit_st.cs_next_var ==>
-  ?actual. abi_decoder_valid_array_memory opc bs tv vs sb d (SUC j) actual /\
+  ?actual. abi_decoder_valid_array_memory opc bs tv vs (B + sb) d (SUC j) actual /\
     abi_scratch_effect first last lo hi next limit_st
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\ mload slot actual = n2w j /\
@@ -289,7 +294,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `first <= st.cs_next_id /\ end_st.cs_next_id <= last` by decide_tac >>
   `s.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
-  `mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs` by
+  `mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs` by
     fs[abi_decoder_valid_array_memory_def] >>
   drule_all (Q.INST [`initial` |-> `s:venom_state`, `p` |-> `n2w slot:bytes32`]
     abi_scratch_decoder_array_body) >> disch_then (qspec_then `ctx` strip_assume_tac) >>

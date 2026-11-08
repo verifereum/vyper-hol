@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryArrayFiniteWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryAllocation
   ctorDeployMemoryRunMemEntryShiftedArrayClosure ctorDeployMemoryRunMemEntrySequenceWorld
   ctorDeployMemoryRunMemEntryArrayEntryWorld ctorDeployMemoryRunMemEntryCheckedComplexWorld

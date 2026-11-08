@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryStateRel
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryBodyResources ctorDeployLoweringEntrySourceFrame
  entryStateRel ctorDeployEntry abiEncoderCorrect o1PassContract
  ctorDeployLoweringDefs ctorDeployLoweringEntryTransport vyperInterpreter vyperState

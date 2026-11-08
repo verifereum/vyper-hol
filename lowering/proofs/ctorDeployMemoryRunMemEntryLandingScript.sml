@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryLanding
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryStateRel
  ctorDeployMemoryRunMemEntryProvenance ctorDeployMemoryRunMemEntryResources
  ctorDeployMemoryRunMemEntrySourceWorld ctorDeployMemoryRunMemEntryZeroImmutables

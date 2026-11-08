@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryLocalBound
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryCheckedRegisterOneWorld
   ctorDeployLoweringEntrySeparation compileEnv localPtrsProps venomState finite_map
   ctorDeployMemoryRunMemEntryCheckedArgWorld ctorDeployMemoryRunMemEntryCheckedStep

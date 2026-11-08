@@ -1,6 +1,7 @@
 (* Actual-site credit with the initial immutable offset retained. *)
 Theory ctorDeployLoweringEntryAllocation
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryRegistration ctorDeployMemoryFrontier
   actualAllocCredit actualAllocExec allocaBudgetProps allocaFrontierBound
   ctorAbiActualAlloc ctorAbiActualFrame ctorAbiActualMemory

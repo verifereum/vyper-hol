@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryArrayChildWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryArrayBody ctorDeployMemoryRunMemEntryCheckedMembersWorld
   ctorDeployMemoryRunMemEntryArrayEdgesWorld
   ctorDeployMemoryRunMemEntryArraySetupWorld

@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryBodyResources
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryLocalBounds ctorDeployLoweringEntryCoordinatedDeployment
  ctorDeployLoweringEntryInputs ctorDeployLoweringEntryPrefix
  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryTransport
@@ -382,7 +383,7 @@ Proof
  conj_tac >- decide_tac >>
  conj_tac >> rpt gen_tac >> strip_tac >>
  `q <= b` by metis_tac[] >>
- pure_rewrite_tac[compileEnvTheory.regions_disjoint_def] >> decide_tac
+ pure_rewrite_tac[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem deploy_ctor_entry_immutable_layout:

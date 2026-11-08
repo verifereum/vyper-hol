@@ -1,6 +1,7 @@
 (* Actual constructor index slots above a reserved-memory frontier. *)
 Theory ctorDeployMemoryRunMemEntryShiftedIndex
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployLoweringEntryAllocation ctorDeployLoweringEntryArrayFrame
   ctorDeployMemoryRunMemEntryShiftedAlloc ctorDeployMemoryRunMemEntryShiftedFrame
   ctorDeployMemoryFrontier ctorDeployMemoryRunMemEntryShiftedObservation

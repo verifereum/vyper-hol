@@ -56,7 +56,7 @@ Theory intCallFrame
 Ancestors
   list finite_map arithmetic words
   venomExecSemantics venomExecProofs venomMemProofs venomState venomInst
-  valueEncoding valueEncodingProps localPtrsProps compileEnv
+  valueEncoding valueEncodingProps localPtrsProps compileEnv loweringStateRelDefs
 
 (* ===== Allocations above a bound ===== *)
 

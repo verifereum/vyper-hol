@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompleteArrayBody
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryCompleteRecursiveBoundary ctorDeployLoweringEntryArrayRun
  abiDecoderArrayInvariant abiDecoderContract abiDecoderDynamicLoopSetup abiDecoderArraySetupInputs
  abiDecoderReentry abiDecoderTypedContract abiEncoderRegisteredEffect

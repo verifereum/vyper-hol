@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedRegistration
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunMemEntryCheckedRecursiveWorld
   ctorDeployLoweringEntryAddress ctorDeployLoweringEntryDecoder
  ctorDeployMemoryRunMemEntryRegistration ctorDeployMemoryRunMemEntryShiftedRecursive

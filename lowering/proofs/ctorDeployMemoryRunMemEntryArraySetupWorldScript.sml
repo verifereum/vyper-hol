@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryArraySetupWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryArrayBody ctorDeployMemoryRunMemEntryArraySteps
   ctorDeployMemoryRunMemEntrySequenceWorld
   ctorAbiActualArrayBody ctorAbiActualFrame ctorAbiActualWorld

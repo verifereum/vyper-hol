@@ -1,6 +1,6 @@
 Theory o1MakeSsaVisitRetention
 Ancestors
-  o1MakeSsaVisitTrace o1MakeSsaReaching makeSsaCurrentDefs
+  o1MakeSsaVisitTrace o1MakeSsaReaching makeSsaDefs
   makeSsaCurrentInduct venomInst list pair alist
 
 Theorem retention_inst_phi:
@@ -84,7 +84,7 @@ Theorem retention_replace_rename:
   block_slot q n j p x (replace_block lbl (bb with bb_instructions := outs) bbs)
 Proof
   rpt strip_tac >>
-  `bb.bb_label = lbl` by metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+  `bb.bb_label = lbl` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
   fs[block_slot_def] >>
   simp[retention_lookup_replace] >> Cases_on `q = lbl` >> gvs[]
   >- (metis_tac[retention_rename_slot]) >>
@@ -101,7 +101,7 @@ Theorem retention_replace_patch:
         bb.bb_instructions) bbs)
 Proof
   rpt strip_tac >>
-  `bb.bb_label = lbl` by metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+  `bb.bb_label = lbl` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
   fs[block_slot_def] >> simp[retention_lookup_replace] >>
   Cases_on `q = lbl` >> gvs[]
   >- (metis_tac[retention_patch_slot]) >>

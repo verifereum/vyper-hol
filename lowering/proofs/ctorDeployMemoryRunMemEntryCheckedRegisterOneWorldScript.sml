@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryCheckedRegisterOneWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryRegisterRun
  ctorDeployMemoryRunMemEntryCheckedArgWorld
  ctorDeployMemoryRunMemEntryCheckedStep

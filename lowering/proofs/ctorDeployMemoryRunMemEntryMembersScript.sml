@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryMembers
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunMemEntryCompositeSetup ctorAbiActualMemberRun
   ctorAbiActualMemberInputs ctorAbiActualMemberBoundary ctorAbiActualChildFrame ctorAbiActualMembers
   ctorAbiActualEmpty ctorAbiActualNarrowWord ctorAbiActualNarrow ctorAbiActualFrame

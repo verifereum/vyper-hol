@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryAggregateInputs
 Ancestors
+  valueEncodingDefs
  ctorDeployLoweringEntryScalarInputs ctorDeployLoweringEntryQuantitativeInputs supportedTypes vyperABI vyperValue
  vyperTyping vyperTypeValues valueEncoding contractABI list option finite_map
  vyperTypeABI vyperABIRoundtrip abiDecodeRanges ctorDeployLoweringEntrySparseInputs

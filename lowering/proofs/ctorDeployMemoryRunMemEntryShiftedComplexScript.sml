@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedComplex
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryMember
   ctorDeployMemoryRunMemEntryShiftedCheckedMembers ctorDeployMemoryRunMemEntryComplex
   ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier

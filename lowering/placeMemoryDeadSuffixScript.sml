@@ -1,7 +1,7 @@
 Theory placeMemoryDeadSuffix
 Ancestors
   placeMemoryFieldRebuild exprSimProps vyperPlaceStatePreservation
-  exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncoding
+  exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncoding valueEncodingDefs
   vyperTyping loweringPosts arithmetic list
 
 (* Only the length header and live prefix constrain a dynamic representation. *)

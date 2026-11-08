@@ -1,6 +1,7 @@
 (* Same-witness observations for allocation-free constructor decoders. *)
 Theory ctorDeployLoweringEntryNoAlloc
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryArrayFrame
  ctorDeployMemoryFrontier ctorAbiActualLabelBytes ctorAbiActualBulk
  ctorAbiActualObservations ctorAbiActualBytes ctorAbiActualNarrowWord

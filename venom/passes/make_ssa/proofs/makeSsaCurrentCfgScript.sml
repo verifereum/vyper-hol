@@ -11,7 +11,7 @@
  *)
 Theory makeSsaCurrentCfg
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaCurrentInduct makeSsaDefs
+  makeSsaDefs makeSsaCurrentProps makeSsaCurrentInduct
   venomExecProofs venomWf cfgWf venomInst venomState cfgTransform list rich_list
 
 Overload block_succs_map = ``MAP (\bb. (bb.bb_label, bb_succs bb))``

@@ -1,6 +1,6 @@
 Theory placeMemoryProtectedFrame
 Ancestors
-  placeMemoryCopyEffect exprSimAlloc exprLoweringProps compileEnv
+  placeMemoryCopyEffect exprSimAlloc exprLoweringProps compileEnv loweringStateRelDefs
   venomInst finite_map
 
 (* A protected slice survives both writes, relative to the allocation-only

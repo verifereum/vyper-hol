@@ -1,6 +1,7 @@
 (* Boundary probes for constructor registration above the immutable region. *)
 Theory ctorDeployLoweringEntryRegistration
 Ancestors
+  loweringStateRelDefs
   ctorRegisterArgs fragExec moduleLowering
   compileEnv exprLoweringProps abiDecoderLoop loweringHalt abiEncoderRegisteredEffect venomState
   ctorAbiActualLabelWord ctorAbiActualObservations ctorAbiActualWordRun

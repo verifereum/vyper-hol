@@ -1,6 +1,7 @@
 (* Dynamic-array integration of complete preparation and finite iteration. *)
 Theory ctorDeployLoweringEntryCompleteArray
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryCompleteArrayRun ctorDeployLoweringEntryCompletePrefix
   ctorDeployLoweringEntryCompleteNoAlloc ctorDeployLoweringEntryArrayRun
   ctorDeployLoweringEntryArrayOps ctorDeployLoweringEntryRegistration

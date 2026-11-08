@@ -1,6 +1,7 @@
 (* Complete heterogeneous member execution: observations share the run witness. *)
 Theory ctorDeployLoweringEntryCompleteMember
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployLoweringEntryCompleteMemberBoundary ctorDeployLoweringEntryMember
   ctorAbiActualChildFrame ctorAbiActualMemberInputs abiDecoderMemberBody abiDecoderMemberInfos
   abiDecoderComplexExecute abiDecoderComplexHead abiDecoderEmpty abiDecoderDynamicLoopSetup abiDecoderReentry ctorAbiActualObservations

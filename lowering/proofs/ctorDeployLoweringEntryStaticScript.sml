@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryStatic
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringDefs ctorDeployLoweringEntryPrefix ctorDeployLoweringFrame
  exprOpenTerminals exprOpenPrimitives moduleLowering emitHelperProps compileEnv venomInst abiEncoder
 Libs dep_rewrite

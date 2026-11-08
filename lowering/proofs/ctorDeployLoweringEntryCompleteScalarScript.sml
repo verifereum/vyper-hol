@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompleteScalar
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryNoAlloc
  ctorDeployLoweringEntryArrayFrame ctorAbiActualWorld ctorAbiActualNarrowWord
  ctorAbiActualWordRun abiDecoderClampedWord abiDecoderWordTyped

@@ -2,12 +2,13 @@
 Theory fnFrameStepsRevertForward
 Ancestors
   contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
-  stackPlanGen venomExecProofs removeUnusedSsaProofs frameRel
+  stackPlanGen venomExecProofs frameRel
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
   fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady
+  venomWfProps
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -4089,7 +4090,7 @@ Theorem rf_entry_copy_setup:
 Proof
   rpt gen_tac >> strip_tac >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-    metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+    metis_tac[venomExecProofsTheory.lookup_block_label] >>
   `i < j` by fs[revert_forward_pair_def] >>
   `i <= i /\ i <= j` by decide_tac >>
   `?inst. get_instruction bb i = SOME inst` by

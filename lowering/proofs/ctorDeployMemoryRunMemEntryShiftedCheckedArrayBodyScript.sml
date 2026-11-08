@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryShiftedCheckedArrayBody
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryArrayBody ctorDeployMemoryRunMemEntryShiftedCheckedMembers
   ctorDeployMemoryRunMemEntryShiftedCheckedArrayEdges
   ctorDeployMemoryRunMemEntryShiftedObservation ctorDeployMemoryFrontier

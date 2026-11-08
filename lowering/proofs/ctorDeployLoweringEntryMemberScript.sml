@@ -1,6 +1,7 @@
 (* Same-witness observations for heterogeneous member setup. *)
 Theory ctorDeployLoweringEntryMember
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployLoweringEntryArrayFrame ctorDeployLoweringEntryRegistration
   ctorAbiActualLabelMember ctorAbiActualObservations ctorAbiActualWorld
   ctorAbiActualMemberSetup ctorAbiActualNarrowWord

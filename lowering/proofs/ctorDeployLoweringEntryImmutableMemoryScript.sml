@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryImmutableMemory
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployLoweringNoCtor ctorDeployLoweringEntrySourceFrame
   immutableSectionRel immutableRelation loweringSlice valueEncodingProps
   valueEncodingProofs compileEnv ctorDeployLoweringDefs ctorDeployDefs

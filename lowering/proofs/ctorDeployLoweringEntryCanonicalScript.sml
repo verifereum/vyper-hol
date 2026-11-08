@@ -1,6 +1,7 @@
 (* Canonical constructor tuple source slices. *)
 Theory ctorDeployLoweringEntryCanonical
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryAddress compileEnv exprLoweringProps abiDecoderTypedContract
  abiEncoderProps finite_map
  ctorRegisterArgs abiDecoderReentryAddress abiDecoderMemberSlice abiDecoderMemberBody

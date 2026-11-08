@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompleteRecursiveBoundary
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryCompleteScalar ctorDeployLoweringEntryArrayRun
  ctorAbiActualArrayBody ctorAbiActualFrame ctorAbiActualWorld
  ctorAbiActualArrayIteration ctorDeployLoweringEntryRegistration

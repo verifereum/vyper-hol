@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryBytes
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryWord abiDecoderBytesBound abiDecoderGuard
   abiDecoderBytesTyped ctorAbiActualBytes abiCanonicalBytes
   fragGasSeqMem fragGasPathMem allocaHistory rich_list instIdxIndep fragExec

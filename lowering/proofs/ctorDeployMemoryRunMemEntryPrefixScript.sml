@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryPrefix
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryRegistration ctorDeployMemoryRunMemEntryBoundary
   ctorDeployMemoryRunMemEntryCompositeSetup contextProps emitHelperProps
   context emitHelper fragExec fragExecMem instMemFrontier unitTransformDefs

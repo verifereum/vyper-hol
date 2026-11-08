@@ -1,6 +1,7 @@
 (* One-element operational boundaries for the shifted constructor decoder. *)
 Theory ctorDeployLoweringEntryArrayRun
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployLoweringEntryArrayOps ctorDeployLoweringEntryRegistration
   ctorAbiActualArrayBody ctorAbiActualArrayIteration ctorAbiActualArrayInvariant
   ctorAbiActualFrame ctorAbiActualWorld ctorAbiActualNarrow

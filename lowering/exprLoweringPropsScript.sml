@@ -54,12 +54,12 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
+  exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple
   builtinCreate context
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
+  valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs
   vyperAST vyperTyping fcgDefs
 Libs
   pairLib BasicProvers monadsyntax
@@ -139,7 +139,7 @@ Theorem decode_static_aggregate_bulk_ir:
     (DecComplex F [(DecPrimWord NoClamp,32,32);
                    (DecPrimWord NoClamp,32,32)]) 64 64 F 3 in
   let out = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 4w)
-                   CALLDATALOAD (Lit 0w) info st) in
+                   CALLDATALOAD (Lit 0w) (Lit 0w) info st) in
   out.cs_blocks = [] /\
   MAP (\i. i.inst_opcode) out.cs_current_insts =
     [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATALOAD; MSTORE;
@@ -156,7 +156,7 @@ Theorem decode_clamped_aggregate_loop_ir:
     (DecComplex F [(DecPrimWord (IntClamp 8 F),32,32);
                    (DecPrimWord (IntClamp 8 F),32,32)]) 64 64 F 3 in
   let out = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 4w)
-                   CALLDATALOAD (Lit 0w) info st) in
+                   CALLDATALOAD (Lit 0w) (Lit 0w) info st) in
   out.cs_blocks <> [] /\
   ~MEM CALLDATACOPY (MAP (\i. i.inst_opcode)
     (FLAT (MAP (\bb. bb.bb_instructions) out.cs_blocks) ++
@@ -359,7 +359,7 @@ Proof
   simp[local_region_def, lookup_scopes_def, lookup_var_def,
        immutable_alloca_sep_def, immutable_decl_sep_alt, get_source_immutables_def,
        finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
-       type_memory_size_def, compileEnvTheory.regions_disjoint_def, wordsTheory.dimword_def,
+       type_memory_size_def, loweringStateRelDefsTheory.regions_disjoint_def, wordsTheory.dimword_def,
        venomMemPropsTheory.dimindex_256] >>
   conj_tac
   >- (rpt strip_tac >> gvs[AllCaseEqs()] >>
@@ -421,7 +421,7 @@ Proof
   first_x_assum (drule_all_then strip_assume_tac) >>
   `!b sz. ss.vs_alloca_next <= b ==>
           regions_disjoint off (type_memory_size tv) b sz` by
-    (rw[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+    (rw[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   rpt conj_tac >- decide_tac >> metis_tac[])
 QED
 
@@ -3032,30 +3032,76 @@ Proof
   rpt strip_tac >> simp[abiEncoderTheory.compile_abi_decode_static_def] >> BETA_TAC >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (first_x_assum irule) >> simp[ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_getelemptr_abi[local]:
-  ∀ src_op is_dyn abi_offset load_opc hi_op sa.
-    ci_mono sa (SND (compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op sa))
+Theorem ci_mono_compile_abi_dec_addr[local]:
+  !base_op pos sa.
+    ci_mono sa (SND (compile_abi_dec_addr base_op pos sa))
 Proof
-  rpt gen_tac >> Cases_on `hi_op = Lit 0w` >> Cases_on `is_dyn` >>
-  simp[abiEncoderTheory.compile_getelemptr_abi_def] >> BETA_TAC >>
-  rpt IF_CASES_TAC >> gvs[] >>
-  rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >>
-       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-       rpt strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_dec_addr_def] >>
+  IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_getelemptr_abi[local]:
+  ∀ src_op is_dyn abi_offset load_opc base_op hi_op sa.
+    ci_mono sa (SND (compile_getelemptr_abi src_op is_dyn abi_offset load_opc base_op hi_op sa))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_getelemptr_abi_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> Cases_on `is_dyn` >> simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_abi_dec_addr] >> rpt gen_tac >>
+  ntac 2 (ho_match_mp_tac ci_mono_bind >> conj_tac
+    >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >- simp[ci_mono_comp_return] >> rpt gen_tac >>
+      ntac 2 (ho_match_mp_tac ci_mono_bind >> conj_tac
+        >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+      simp[ci_mono_emit_void]) >> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_abi_decode_range_check[local]:
+  !a e h sa. ci_mono sa (SND (compile_abi_decode_range_check a e h sa))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_decode_range_check_def] >>
+  ntac 5 (ho_match_mp_tac ci_mono_bind >>
+    conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+  simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_abi_decode_head_check[local]:
+  !src hi sa. ci_mono sa (SND
+    ((if hi = Lit 0w then comp_return (Lit 0w)
+      else do head_end <- emit_op ADD [src; Lit 32w];
+              compile_abi_decode_range_check src head_end hi;
+              comp_return head_end
+           od) sa))
+Proof
+  rpt gen_tac >> IF_CASES_TAC >- simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >>
+  conj_tac >- simp[ci_mono_compile_abi_decode_range_check] >>
+  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_compile_abi_decode_dyn_elem_ptr[local]:
-  ∀ load_opc elem_src src_data hi_op elem_abi_sz sa.
-    ci_mono sa (SND (compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz sa))
+  ∀ load_opc base_op elem_src src_data hi_op elem_abi_sz sa.
+    ci_mono sa (SND (compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src src_data hi_op elem_abi_sz sa))
 Proof
   rpt gen_tac >>
-  rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >> BETA_TAC >>
-  Cases_on `hi_op = Lit 0w` >> simp[] >>
-  rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >>
-       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-       rpt strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_abi_dec_addr] >> rpt gen_tac >>
+  ntac 2 (ho_match_mp_tac ci_mono_bind >>
+    conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >- simp[ci_mono_comp_return] >> rpt gen_tac >>
+      ntac 2 (ho_match_mp_tac ci_mono_bind >>
+        conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+      ho_match_mp_tac ci_mono_ignore_bind >>
+      conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >>
+      conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+      simp[ci_mono_compile_abi_decode_range_check]) >>
+  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_compile_extcodesize_check[local]:
@@ -3065,8 +3111,8 @@ Proof
 QED
 
 Theorem ci_mono_compile_return_value_decode:
-  ∀ buf_op min_sz max_sz sa.
-    ci_mono sa (SND (compile_return_value_decode buf_op min_sz max_sz sa))
+  !min_sz max_sz sa.
+    ci_mono sa (SND (compile_return_value_decode min_sz max_sz sa))
 Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
@@ -3383,42 +3429,39 @@ Theorem ci_mono_compile_abi_decode_bytes_bound[local]:
       (SND
         ((if hi_op = Lit 0w then return ()
           else
-            do data_start <- emit_op ADD [src_op; Lit 32w];
-               data_end <- emit_op ADD [data_start; len_op];
-               oob <- emit_op GT [data_end; hi_op];
-               ok2 <- emit_op ISZERO [oob];
-               emit_void ASSERT [ok2]
+            do data_end <- emit_op ADD [src_op; len_op];
+               compile_abi_decode_range_check src_op data_end hi_op
             od) sa))
 Proof
   rpt gen_tac >> IF_CASES_TAC >- simp[ci_mono_comp_return] >>
-  ntac 4 (ho_match_mp_tac ci_mono_bind >>
-    conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
-  simp[ci_mono_emit_void]
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  simp[ci_mono_compile_abi_decode_range_check]
 QED
 
 Theorem ci_mono_compile_abi_decode:
-  (∀ dst src_op load_opc hi_op info sa.
-    ci_mono sa (SND (compile_abi_decode_to_buf dst src_op load_opc hi_op info sa))) ∧
-  (∀ dst src_op load_opc hi_op elems abi_offset vyper_offset sa.
-    ci_mono sa (SND (compile_abi_decode_complex_elems dst src_op load_opc hi_op elems abi_offset vyper_offset sa))) ∧
-  (∀ dst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa.
-    ci_mono sa (SND (compile_abi_decode_dyn_loop dst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa)))
+  (∀ dst src_op load_opc base_op hi_op info sa.
+    ci_mono sa (SND (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info sa))) ∧
+  (∀ dst src_op load_opc base_op hi_op elems abi_offset vyper_offset sa.
+    ci_mono sa (SND (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op elems abi_offset vyper_offset sa))) ∧
+  (∀ dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa.
+    ci_mono sa (SND (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa)))
 Proof
   let
     val [c0,c1,c2,c3,c4,c5,c6] = CONJUNCTS abiEncoderTheory.compile_abi_decode_to_buf_def
     val db = fn t => ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[t] >> rpt strip_tac
     val dib = fn t => ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[t] >> rpt strip_tac
     val decode_ind = BETA_RULE (ISPECL
-      [``λdst src_op load_opc hi_op info.
+      [``λdst src_op load_opc base_op hi_op info.
            ∀sa. ci_mono sa
-             (SND (compile_abi_decode_to_buf dst src_op load_opc hi_op info sa))``,
-       ``λdst src_op load_opc hi_op elems abi_offset vyper_offset.
+             (SND (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info sa))``,
+       ``λdst src_op load_opc base_op hi_op elems abi_offset vyper_offset.
            ∀sa. ci_mono sa
-             (SND (compile_abi_decode_complex_elems dst src_op load_opc hi_op
+             (SND (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op
                elems abi_offset vyper_offset sa))``,
-       ``λdst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt.
+       ``λdst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt.
            ∀sa. ci_mono sa
-             (SND (compile_abi_decode_dyn_loop dst src_op load_opc hi_op
+             (SND (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op
                elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa))``]
       abiEncoderTheory.compile_abi_decode_to_buf_ind)
     val decode_prem = fst (dest_imp (concl decode_ind))
@@ -3427,30 +3470,36 @@ Proof
     (fn prem_th => ACCEPT_TAC (MATCH_MP decode_ind prem_th)) >- (
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
   (* DecPrimWord *)
-  >- (rewrite_tac[c0] >> BETA_TAC >>
+  >- (rewrite_tac[c0] >> BETA_TAC >> db ci_mono_compile_abi_dec_addr >>
       irule ci_mono_compile_abi_decode_static >> simp[ci_mono_compile_abi_clamp_basetype])
   (* DecBytestring *)
   >- (rewrite_tac[c1] >>
+      db ci_mono_compile_abi_decode_head_check >>
+      db ci_mono_compile_abi_dec_addr >>
       ntac 3 (db ci_mono_emit_op) >>
       dib ci_mono_emit_void >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
       >- (irule ci_mono_compile_abi_decode_bytes_bound) >>
-      rpt strip_tac >>
-      Cases_on `load_opc` >> simp[ci_mono_emit_void])
+      rpt strip_tac >> IF_CASES_TAC
+      >- (Cases_on `load_opc` >> simp[ci_mono_emit_void]) >>
+      ntac 4 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
+      db ci_mono_emit_op >> simp[ci_mono_emit_void])
   (* DecDynArray *)
   >- (rpt strip_tac >> rewrite_tac[c2] >> BETA_TAC >>
+      db ci_mono_compile_abi_decode_head_check >>
+      db ci_mono_compile_abi_dec_addr >>
       ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (
         IF_CASES_TAC >> gvs[]
         >- simp[ci_mono_comp_return]
         >> rpt strip_tac >>
-           ntac 5 (db ci_mono_emit_op) >>
-           simp[ci_mono_emit_void]) >>
+           ntac 2 (db ci_mono_emit_op) >>
+           simp[ci_mono_compile_abi_decode_range_check]) >>
       rpt strip_tac >>
       db ci_mono_emit_op >> dib ci_mono_emit_void >>
       simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-      >- (ntac 3 (db ci_mono_emit_op) >>
-          Cases_on `load_opc` >> simp[ci_mono_emit_void])
+      >- (ntac 2 (db ci_mono_emit_op) >> db ci_mono_compile_abi_dec_addr >>
+          db ci_mono_emit_op >> Cases_on `load_opc` >> simp[ci_mono_emit_void])
       >> db ci_mono_compile_alloc_buffer >> dib ci_mono_emit_void >>
       first_x_assum irule >> simp[])
   (* DecComplex *)
@@ -3459,7 +3508,7 @@ Proof
       >- (qpat_x_assum `∀static_sz. _ ∧ hi_op = Lit 0w ⇒ _`
             (qspec_then `FOLDR (λ(_0,abi_sz,_1) acc. abi_sz + acc) 0 elems` mp_tac) >>
           simp[]) >>
-      ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
+      db ci_mono_emit_op >> dib ci_mono_compile_abi_decode_range_check >>
       qpat_x_assum `∀static_sz. _ ∧ hi_op ≠ Lit 0w ⇒ _`
         (qspec_then `FOLDR (λ(_0,abi_sz,_1) acc. abi_sz + acc) 0 elems` mp_tac) >>
       simp[])
@@ -3481,7 +3530,8 @@ Proof
   BETA_TAC >> simp_tac pure_ss [LET_THM] >> BETA_TAC >>
   ntac 3 (db ci_mono_fresh_label) >>
   dib ci_mono_emit_inst >> dib ci_mono_new_block >>
-  ntac 4 (db ci_mono_emit_op) >> dib ci_mono_emit_inst >> dib ci_mono_new_block >>
+  db ci_mono_emit_op >> db ci_mono_compile_abi_dec_addr >>
+  ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_inst >> dib ci_mono_new_block >>
   ntac 4 (db ci_mono_emit_op) >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- (
     IF_CASES_TAC >> simp[ci_mono_compile_abi_decode_dyn_elem_ptr, ci_mono_comp_return]) >>

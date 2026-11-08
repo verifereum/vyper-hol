@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntrySourceWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntrySourceDefaults ctorDeployLoweringEntrySourceFrame
   ctorDeployLoweringFrame ctorDeployLoweringDefs ctorDeployLoweringEntryTransport
   ctorDeployDefs e2eDeployDefs e2eDefs compileEnv venomState accountsRelProps e2eEntry

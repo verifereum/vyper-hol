@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryArrayClosure
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunMemEntryComplex ctorDeployMemoryRunMemEntryArrayFinite
  ctorDeployMemoryRunMemEntryBulk ctorDeployMemoryRunMemEntryWord
  ctorAbiActualBulk abiDecoderBulkReentry abiDecoderBulkExecute abiDecoderBulk

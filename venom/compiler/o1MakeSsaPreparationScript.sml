@@ -1,6 +1,6 @@
 Theory o1MakeSsaPreparation
 Ancestors
-  makeSsaCurrentDefs makeSsaDefs venomInst list pair
+  makeSsaDefs venomInst list pair
 
 Definition prepared_prefix_def:
   prepared_prefix old new <=> old.bb_label = new.bb_label /\

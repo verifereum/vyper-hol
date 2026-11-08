@@ -63,12 +63,11 @@ End
 
 Definition abi_decoder_primitive_loop_code_def:
   abi_decoder_primitive_loop_code fn st0 st1 (ops:operand # operand # operand)
-      ip src opc hdr exit_lbl hid first iv <=>
-    st0.cs_current_insts = [] /\ first + 4 <= st0.cs_next_var /\
+      ip src opc base_op hdr exit_lbl hid first iv <=>
+    st0.cs_current_insts = [] /\
+    first + 4 + abi_decode_position_header_delta base_op <= st0.cs_next_var /\
     FST ops = Var iv /\
-    abi_decode_loop_cfg fn hdr st0.cs_current_bb exit_lbl hid ip src opc
-      (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
-      (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3))) /\
+    abi_decode_position_loop_cfg fn hdr st0.cs_current_bb exit_lbl hid ip src opc base_op first /\
     (?bb. lookup_block st0.cs_current_bb fn.fn_blocks = SOME bb /\
       bb.bb_instructions = st1.cs_current_insts ++
         abi_decode_backedge_insts st1.cs_next_id iv
@@ -76,9 +75,9 @@ Definition abi_decoder_primitive_loop_code_def:
 End
 
 Theorem abi_decoder_primitive_body_counters:
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st1) ==>
   st0.cs_next_var + 7 <= st1.cs_next_var
 Proof
@@ -89,15 +88,15 @@ Proof
 QED
 
 Theorem abi_decoder_primitive_body_contained:
-  abi_decoder_primitive_loop_code fn st0 st1 ops ip src opc hdr exit_lbl hid first iv /\
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decoder_primitive_loop_code fn st0 st1 ops ip src opc base_op hdr exit_lbl hid first iv /\
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st0 = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st1) /\ abi_decode_source_opcode opc ==>
   fn_has_code st0 st1 fn
 Proof
   strip_tac >> drule_all abi_decoder_primitive_loop_body_shape >> strip_tac >>
-  qpat_x_assum `abi_decoder_primitive_loop_code _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `abi_decoder_primitive_loop_code _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac [abi_decoder_primitive_loop_code_def] >> strip_tac >>
   rename1 `lookup_block st0.cs_current_bb fn.fn_blocks = SOME body_bb` >>
   simp[fn_has_code_def, emitted_blocks_def] >>

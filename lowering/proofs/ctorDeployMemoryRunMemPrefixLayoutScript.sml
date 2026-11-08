@@ -2,7 +2,7 @@ Theory ctorDeployMemoryRunMemPrefixLayout
 Ancestors
   ctorDeployMemoryRunMemPrefixSource ctorDeployInitcode ctorDeployShape
   ctorDeployLoweringCode ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
-  compileVyper moduleLowering compileEnv fragExec vyperCompiler context
+  compileVyper moduleLowering compileEnv loweringStateRelDefs fragExec vyperCompiler context
   supportedProgram supportedNames ctorRegisterArgs deployUnitProducers venomInst e2eEntry o1PassContract venomState vyperTypeContractSoundness words loweringShapeProps loweringShapeSource ctorGeneratorShape list ctorUnitShape loweringShapeDefs
 
 Theorem ctor_prefix_package_nonpayable:

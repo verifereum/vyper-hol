@@ -1,6 +1,7 @@
 (* Same-witness world-framed primitive decoder paths. *)
 Theory ctorDeployMemoryRunMemEntryCheckedBaseWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntrySequenceWorld
   ctorDeployMemoryRunMemEntryWord ctorDeployMemoryRunMemEntryBytes
   ctorDeployMemoryRunMemEntryShiftedFrame ctorDeployMemoryFrontier

@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryInputs
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
  ctorDeployLoweringEntryAggregateInputs ctorDeployLoweringEntryTransport
  ctorDeployLoweringEntrySelection ctorDeployLoweringEntryPrefix
  ctorDeployLoweringEntryRegisterRun abiDecoderTypedContract ctorSourceInputs

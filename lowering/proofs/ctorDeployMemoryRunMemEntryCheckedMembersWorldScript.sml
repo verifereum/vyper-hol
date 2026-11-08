@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryCheckedMembersWorld
 Ancestors
+  loweringStateRelDefs valueEncodingDefs
   ctorDeployMemoryRunMemEntryCheckedBaseWorld
   ctorDeployMemoryRunMemEntryMembersSetupWorld
   ctorDeployMemoryRunMemEntryShiftedCheckedMembers

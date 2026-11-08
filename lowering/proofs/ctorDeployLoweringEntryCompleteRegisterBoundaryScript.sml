@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompleteRegisterBoundary
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryResourceBoundary ctorAbiActualSites ctorAbiActualFrame
   abiEncoderRegisteredEffect
   venomMemDefs venomState venomInst finite_map pred_set list arithmetic

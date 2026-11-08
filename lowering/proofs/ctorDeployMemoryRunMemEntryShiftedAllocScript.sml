@@ -1,6 +1,7 @@
 (* Actual allocation at the constructor's reserved-memory frontier. *)
 Theory ctorDeployMemoryRunMemEntryShiftedAlloc
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryAllocation
   ctorDeployMemoryRunMemEntryShiftedFrame
   ctorDeployMemoryRunMemEntryShiftedFrontier ctorDeployMemoryFrontier

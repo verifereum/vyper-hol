@@ -1,6 +1,7 @@
 (* Shifted persistent observations; Ok is an ML abbreviation, not a definition. *)
 Theory ctorDeployLoweringEntryArrayFrame
 Ancestors
+  valueEncodingDefs
   ctorDeployLoweringEntryAllocation ctorAbiActualArrayContext
   ctorAbiActualArrayInvariant ctorAbiActualArrayEntry ctorDeployMemoryFrontier
   abiDecoderTypedContract abiDecoderContract abiDecoderReentry abiEncoderRegisteredEffect

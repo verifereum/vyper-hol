@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryWord
 Ancestors
+  abiDecoderRange loweringStateRelDefs
   ctorDeployMemoryRunMemEntryCheckedStep ctorAbiActualLabelWord
   ctorAbiActualWordRun ctorAbiActualWorld abiDecoderPrimitiveCaller
   ctorAbiActualObservations ctorAbiActualNarrowWord allocaFrontierBound allocaBudgetProps

@@ -1,6 +1,7 @@
 (* Shifted constructor registration, retaining observations of the actual run. *)
 Theory ctorDeployLoweringEntryRegisterRun
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryCanonical abiDecoderCounters abiDecoderCode abiDecoderContract
  abiDecoderCoherence abiDecoderTypedContract abiDecoderReentryAddress abiEncoder
  ctorDeployLoweringEntryDecoder ctorDeployLoweringEntryAllocation ctorRegisterArgs

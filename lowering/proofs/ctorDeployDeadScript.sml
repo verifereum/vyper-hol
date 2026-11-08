@@ -8,7 +8,7 @@
 Theory ctorDeployDead
 Ancestors
   ctorDeployDefs ctorDeployDeadSectionFrame ctorDeployDeadSectionRel
-  ctorDeployDeadLoad ctorDeployDeadImmTypes e2eComposition ptrDiscipline accountsRelProps compileEnv
+  ctorDeployDeadLoad ctorDeployDeadImmTypes e2eComposition ptrDiscipline accountsRelProps compileEnv loweringStateRelDefs
   vyperInterpreter list rich_list
 
 Theorem deploy_dead_wf:

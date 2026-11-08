@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryMembersSetupWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryCompositeSetup
   ctorDeployMemoryRunMemEntrySequenceWorld
   ctorAbiActualComplex ctorAbiActualLabelMember ctorAbiActualLabelEmpty

@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryTaskBound
 Ancestors
+  loweringStateRelDefs
  ctorDeployMemoryRunMemEntryRegistrationBound ctorDeployMemoryRunMemEntryTaskActual
  ctorDeployMemoryRunMemEntryTaskInitial ctorDeployMemoryRunMemEntryTaskInputs
  ctorDeployMemoryRunMemEntryTaskRegistration ctorDeployMemoryRunMemEntrySupport
@@ -134,7 +135,7 @@ Proof
     fs[abi_decoder_metadata_def, dimword_def] >> decide_tac) >>
  `!aid. st1.cs_next_id <= aid ==> FLOOKUP fixed.vs_allocas aid = NONE` by simp[] >>
  `mem_bytes_at 0 (LENGTH fixed.vs_data_section) fixed.vs_data_section = fixed.vs_data_section` by
-   simp[valueEncodingTheory.mem_bytes_at_def, TAKE_APPEND] >>
+   simp[valueEncodingDefsTheory.mem_bytes_at_def, TAKE_APPEND] >>
  `!id b sz. local_region
     (ce_pack with <|ce_target := rpolicy.rpol_target;
       ce_imm_alloca := (if imm_len tops > 0 then SOME imm else NONE)|>)

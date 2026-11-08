@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryCompositeSetup
 Ancestors
+  loweringStateRelDefs
   ctorDeployMemoryRunMemEntryCompositeEdges ctorAbiActualComplex
   ctorAbiActualLabelMember ctorAbiActualLabelEmpty ctorAbiActualMemberInputs
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderGuard

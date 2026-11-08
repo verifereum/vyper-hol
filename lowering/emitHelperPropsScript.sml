@@ -30,7 +30,7 @@
 Theory emitHelperProps
 Ancestors
   fragGasPath gasCount fragExec
-  exprLoweringProps localPtrsProps emitHelper compileEnv
+  exprLoweringProps localPtrsProps emitHelper compileEnv loweringStateRelDefs
   venomExecSemantics venomExecProofs venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic

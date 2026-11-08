@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryCheckedComplexWorld
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryMember
   ctorDeployMemoryRunMemEntryCheckedMembersWorld
   ctorDeployMemoryRunMemEntryMembersSetupWorld

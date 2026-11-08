@@ -1,5 +1,6 @@
 Theory ctorDeployLoweringEntryCompleteNoAlloc
 Ancestors
+  loweringStateRelDefs
  ctorDeployLoweringEntryCompleteScalar ctorDeployLoweringEntryDecoder
  ctorDeployLoweringEntryRegistration ctorDeployLoweringEntryArrayFrame
  ctorDeployMemoryFrontier ctorAbiActualLabelBytes ctorAbiActualBulk

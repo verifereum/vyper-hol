@@ -1,5 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryRegistration
 Ancestors
+  loweringStateRelDefs
   ctorDeployLoweringEntryAddress ctorDeployLoweringEntryRegisterRun
  ctorDeployMemoryRunMemEntryRecursive ctorArgDecode ctorRegisterArgs
  abiDecoderMemberBody abiDecoderMemberSlice abiDecoderTypedContract abiDecoderCoherence
