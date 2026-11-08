@@ -317,3 +317,20 @@ Theorem phi_protected_demand_step:
 Proof
   rpt strip_tac >> drule rich_listTheory.DROP_CONS_EL >> simp[]
 QED
+
+(* Relocated from ReturnCut for shared ready-block phase layout consumers. *)
+Theorem ordered_phis_ordinary_suffix:
+  !insts.
+    (!i j. i < j /\ j < LENGTH insts /\
+      (EL j insts).inst_opcode = PHI ==> (EL i insts).inst_opcode = PHI) ==>
+    EVERY (\inst. inst.inst_opcode <> PHI)
+      (DROP (LENGTH (collect_phis insts)) insts)
+Proof
+  Induct >- simp[livenessDefsTheory.collect_phis_def] >>
+  rpt strip_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[livenessDefsTheory.collect_phis_def] >> first_x_assum irule >>
+      rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+  simp[livenessDefsTheory.collect_phis_def, listTheory.EVERY_EL] >>
+  rpt strip_tac >> Cases_on `n` >> gvs[] >>
+  first_x_assum (qspecl_then [`0`, `SUC n'`] mp_tac) >> simp[]
+QED

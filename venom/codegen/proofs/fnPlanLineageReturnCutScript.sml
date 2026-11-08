@@ -171,22 +171,6 @@ Proof
   qexistsl_tac [`before`, `a`, `j`, `after`, `pa`, `jb`] >> simp[]
 QED
 
-(* The prefix-order condition is the PHI clause of bb_well_formed. *)
-Theorem ordered_phis_ordinary_suffix:
-  !insts.
-    (!i j. i < j /\ j < LENGTH insts /\
-      (EL j insts).inst_opcode = PHI ==> (EL i insts).inst_opcode = PHI) ==>
-    EVERY (\inst. inst.inst_opcode <> PHI)
-      (DROP (LENGTH (collect_phis insts)) insts)
-Proof
-  Induct >- simp[livenessDefsTheory.collect_phis_def] >>
-  rpt strip_tac >> Cases_on `h.inst_opcode = PHI`
-  >- (simp[livenessDefsTheory.collect_phis_def] >> first_x_assum irule >>
-      rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
-  simp[livenessDefsTheory.collect_phis_def, listTheory.EVERY_EL] >>
-  rpt strip_tac >> Cases_on `n` >> gvs[] >>
-  first_x_assum (qspecl_then [`0`, `SUC n'`] mp_tac) >> simp[]
-QED
 
 Theorem ordinary_output_post_phi_demand_exclusion:
   !fn d db k v j jb.
@@ -206,7 +190,7 @@ Proof
               venomExecPropsTheory.lookup_block_label] >>
   `EVERY (\inst. inst.inst_opcode <> PHI)
       (DROP (LENGTH (collect_phis jb.bb_instructions)) jb.bb_instructions)` by
-    (irule ordered_phis_ordinary_suffix >>
+    (irule fnPlanLineageLivenessTheory.ordered_phis_ordinary_suffix >>
      fs[wf_function_def, bb_well_formed_def] >> metis_tac[]) >>
   `LENGTH (collect_phis jb.bb_instructions) <= LENGTH jb.bb_instructions` by
     (qspec_then `jb.bb_instructions` strip_assume_tac

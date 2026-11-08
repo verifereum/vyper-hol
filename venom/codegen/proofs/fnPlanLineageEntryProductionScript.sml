@@ -1925,3 +1925,228 @@ Proof
      disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
   metis_tac[analyzed_live_coverage_computed_operands]
 QED
+
+Theorem ready_block_ordinary_suffix_layout:
+  !fn bb a.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    LENGTH (collect_phis bb.bb_instructions) <=
+      LENGTH (get_params bb.bb_instructions) + a ==>
+    !j. a <= j /\ j < LENGTH (non_param_insts bb) ==>
+      (EL j (non_param_insts bb)).inst_opcode <> PHI /\
+      ((EL j (non_param_insts bb)).inst_opcode = JMP ==>
+        SUC j = LENGTH (non_param_insts bb))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb_well_formed bb` by metis_tac[codegen_ready_fn_def, wf_function_def] >>
+  `EVERY (\inst. inst.inst_opcode <> PHI)
+      (DROP (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions)` by
+    (irule ordered_phis_ordinary_suffix >> gvs[bb_well_formed_def]) >>
+  `LENGTH bb.bb_instructions = LENGTH (get_params bb.bb_instructions) +
+      LENGTH (non_param_insts bb)` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `EL j (non_param_insts bb) =
+    EL (LENGTH (get_params bb.bb_instructions)+j) bb.bb_instructions` by
+    metis_tac[ready_block_suffix_index] >>
+  simp[] >> conj_tac
+  >- (gvs[EVERY_EL] >>
+      first_x_assum (qspec_then
+        `LENGTH (get_params bb.bb_instructions)+j-LENGTH (collect_phis bb.bb_instructions)` mp_tac) >>
+      simp[EL_DROP]) >>
+  strip_tac >>
+  `is_terminator (EL (LENGTH (get_params bb.bb_instructions)+j)
+      bb.bb_instructions).inst_opcode` by simp[is_terminator_def] >>
+  fs[bb_well_formed_def] >>
+  qpat_x_assum `!i. _ /\ is_terminator _ ==> _`
+    (qspec_then `LENGTH (get_params bb.bb_instructions)+j` mp_tac) >>
+  simp[is_terminator_def] >> decide_tac
+QED
+
+(* One consumer for every concrete positive phase seed. *)
+Theorem native_ready_seeded_worker_available:
+  !fn bb dfg a incoming seed ops after.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= LENGTH (non_param_insts bb) /\
+    LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+a /\
+    generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (non_param_insts bb) incoming = SOME (ops,after) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming a seed /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+a)) ==>
+      MEM (Var v) seed.ps_stack \/ Var v IN FDOM seed.ps_spilled) ==>
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH bb.bb_instructions)) ==>
+      MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) /\
+    (!k ps v. a <= k /\ k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k ps /\
+      MEM (Var v) (compute_operands
+        (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!j. a <= j /\ j < LENGTH (non_param_insts bb) ==>
+      (EL j (non_param_insts bb)).inst_opcode <> PHI /\
+      ((EL j (non_param_insts bb)).inst_opcode = JMP ==>
+        SUC j = LENGTH (non_param_insts bb))` by
+    (qspecl_then [`fn`,`bb`,`a`] mp_tac ready_block_ordinary_suffix_layout >> simp[]) >>
+  conj_tac
+  >- metis_tac[native_seeded_worker_exit_available] >>
+  rpt strip_tac >> metis_tac[native_seeded_suffix_prefix_available]
+QED
+
+Theorem initialized_entry_block_available:
+  !fn dfg ch growth spill_base lbl_ctr param_ops incoming block_ops after.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    prepare_params_plan (liveness_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) = (param_ops,incoming) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+        SOME (block_ops,after) ==>
+    (!v. MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+      (LENGTH (HD fn.fn_blocks).bb_instructions)) ==>
+      MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) /\
+    (!k ps v. k < LENGTH (non_param_insts (HD fn.fn_blocks)) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn (HD fn.fn_blocks).bb_label
+        (bb_is_halting (HD fn.fn_blocks)) (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+        (LENGTH (HD fn.fn_blocks).bb_instructions) (non_param_insts (HD fn.fn_blocks)) incoming k ps /\
+      MEM (Var v) (compute_operands
+        (EL (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+k)
+          (HD fn.fn_blocks).bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ready_entry_static_boundary >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `?inst_ops. generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (HD fn.fn_blocks).bb_label (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+      (non_param_insts (HD fn.fn_blocks)) incoming = SOME (inst_ops,after)` by
+    (qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_block_plan_def, AllCaseEqs()] >> metis_tac[]) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))) ==>
+      MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled` by
+    (qspecl_then [`fn`,`ch`,`growth`,`spill_base`,`lbl_ctr`] mp_tac native_parameter_coverage >>
+     simp[EVERY_MEM]) >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+    native_ready_seeded_worker_available >>
+  disch_then (qspecl_then [`0`,`incoming`] mp_tac) >>
+  simp[native_inst_prefix_zero] >> metis_tac[]
+QED
+
+Theorem incoming_singleton_block_available:
+  !fn lbl pred bb pb dfg incoming before pred_ops pred_after clean_ops cleaned block_ops after.
+    codegen_ready_fn fn /\ fn_reachable fn lbl /\
+    cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\ bb <> HD fn.fn_blocks /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    cfg_preds_of (cfg_analyze fn) lbl = [pred] /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb before =
+      SOME (pred_ops,pred_after) /\
+    EVERY (\v. MEM (Var v) pred_after.ps_stack \/ Var v IN FDOM pred_after.ps_spilled)
+      (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) /\
+    incoming.ps_stack = pred_after.ps_stack /\ incoming.ps_spilled = pred_after.ps_spilled /\
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming = (clean_ops,cleaned) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb incoming =
+      SOME (block_ops,after) ==>
+    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
+      MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) /\
+    (!k ps v. k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) cleaned k ps /\
+      MEM (Var v) (compute_operands
+        (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+  drule_all nonentry_block_no_params >> strip_tac >>
+  `collect_phis bb.bb_instructions = []` by
+    (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+     first_x_assum (qspec_then `bb` mp_tac) >> simp[NULL_EQ]) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+    MEM (Var v) cleaned.ps_stack \/ Var v IN FDOM cleaned.ps_spilled` by
+    (drule_at (Pat `clean_stack_plan _ _ _ _ _ = _`)
+       analyzed_single_pred_clean_available >> simp[EVERY_MEM] >>
+     disch_then (qspecl_then [`pred`,`pb`,`lbl`,`pred_after`] mp_tac) >>
+     gvs[EVERY_MEM]) >>
+  `?inst_ops. generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    bb.bb_label (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) 0 (non_param_insts bb) cleaned = SOME (inst_ops,after)` by
+    (qpat_x_assum `generate_block_plan _ _ _ _ bb incoming = _` mp_tac >>
+     simp[generate_block_plan_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+    native_ready_seeded_worker_available >>
+  disch_then (qspecl_then [`0`,`cleaned`] mp_tac) >>
+  simp[native_inst_prefix_zero] >> metis_tac[]
+QED
+
+Theorem incoming_join_block_available:
+  !fn entry lbl pred bb pb dfg incoming before pred_ops pred_after block_ops after.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    fn_reachable fn lbl /\ lbl <> entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb before =
+      SOME (pred_ops,pred_after) /\
+    incoming.ps_stack = pred_after.ps_stack /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb incoming =
+      SOME (block_ops,after) ==>
+    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions)) ==>
+      MEM (Var v) after.ps_stack \/ Var v IN FDOM after.ps_spilled) /\
+    (!k ps v. LENGTH (collect_phis bb.bb_instructions) <= k /\
+      k < LENGTH (non_param_insts bb) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k ps /\
+      MEM (Var v) (compute_operands
+        (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `bb <> HD fn.fn_blocks` by
+    (Cases_on `fn.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def] >> metis_tac[]) >>
+  `canonical_param_prefix fn` by gvs[codegen_ready_fn_def] >>
+  drule_all nonentry_block_no_params >> strip_tac >>
+  `?inst_ops. generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    bb.bb_label (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) 0 (non_param_insts bb) incoming = SOME (inst_ops,after)` by
+    metis_tac[generate_join_block_worker] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH (non_param_insts bb)` by
+    (qspec_then `bb` (qx_choose_then `tail` assume_tac) non_param_insts_phi_prefix >>
+     qpat_x_assum `non_param_insts bb = _ ++ _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+  `?seed suffix_ops.
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming
+      (LENGTH (collect_phis bb.bb_instructions)) seed /\
+    generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (LENGTH (collect_phis bb.bb_instructions))
+      (DROP (LENGTH (collect_phis bb.bb_instructions)) (non_param_insts bb)) seed =
+      SOME (suffix_ops,after)` by metis_tac[native_worker_prefix_boundary] >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+LENGTH (collect_phis bb.bb_instructions))) ==>
+    MEM (Var v) seed.ps_stack \/ Var v IN FDOM seed.ps_spilled` by
+    (simp[] >> rpt strip_tac >>
+     metis_tac[incoming_join_native_post_phi_available]) >>
+  drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ 0 _ _ = _`)
+    native_ready_seeded_worker_available >>
+  disch_then (qspecl_then [`LENGTH (collect_phis bb.bb_instructions)`,`seed`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
