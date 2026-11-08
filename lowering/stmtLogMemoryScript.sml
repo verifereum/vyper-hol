@@ -142,6 +142,7 @@ QED
 
 Resume compile_log_ready_stmt_frag_mem[args_value]:
   gvs[Excl "enc_def"] >>
+  qabbrev_tac `xs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, Excl "enc_def"] >>
@@ -167,7 +168,8 @@ Resume compile_log_ready_stmt_frag_mem[args_value]:
   `local_ptrs_reserved cenv sm` by
     (drule_all compile_log_eval_all_grows >> strip_tac >>
      metis_tac[local_ptrs_reserved_next_var]) >>
-  `LENGTH flags = LENGTH xs` by simp[] >>
+  `LENGTH flags = LENGTH xs` by
+    (qpat_assum `MAP SND xs = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
