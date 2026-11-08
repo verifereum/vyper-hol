@@ -130,6 +130,9 @@ Theorem abi_decode_ptr_relative_load:
     state_frame t = state_frame (s with vs_inst_idx := t.vs_inst_idx) /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt sc t) /\
+    (?ap. addr = Var ap /\ not_fresh_at sc ap /\
+      abi_decode_ptr_window G' tn' t ap (b+n2w p) (h-p)) /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x))
@@ -207,6 +210,16 @@ Resume abi_decode_ptr_relative_load[load_fields]:
   `op_prov Hf (Var out) = NONE /\ tmf.t_imm = tm.t_imm` by
     simp[Abbr `Hf`, Abbr `tmf`, op_prov_def, step_prov_def, set_prov_def,
          out_prov_def, mk_inst_def, FLOOKUP_DRESTRICT, step_taint_def, imm_taint_def] >>
+  `not_fresh_at sc ap` by
+    (irule not_fresh_at_mono >> qexists_tac `sb` >> simp[]) >>
+  `ap <> out` by gvs[not_fresh_at_def] >>
+  `abi_decode_ptr_window Hf tmf tf ap (b+n2w p) (h-p)` by
+    (irule abi_decode_ptr_window_frame >> qexistsl_tac [`H`, `u`, `tm`] >>
+     simp[Abbr `tf`, Abbr `Hf`, Abbr `tmf`, lookup_var_def, update_var_def,
+          step_prov_def, set_prov_def, out_prov_def, step_taint_def,
+          set_var_taint_def, op_taint_def, mk_inst_def,
+          FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >> fs[lookup_var_def, op_taint_def]) >>
+  `(fresh_vars_wrt sa s ==> fresh_vars_wrt sc tf)` by suspend "load_fresh" >>
   asm_rewrite_tac[] >>
   qpat_assum `state_frame u = _`
     (strip_assume_tac o SRULE [state_frame_def, venom_state_component_equality]) >>
@@ -228,6 +241,25 @@ Resume abi_decode_ptr_relative_load[load_fields]:
   qpat_x_assum `lookup_var x u = _` mp_tac >>
   qpat_x_assum `op_taint tm (Var x) = _` mp_tac >>
   simp_tac (srw_ss()) [lookup_var_def, op_taint_def]
+QED
+
+Resume abi_decode_ptr_relative_load[load_fresh]:
+  strip_tac >>
+  `lookup_var src s = SOME b` by fs[abi_decode_ptr_window_def] >>
+  `ap = STRING #"%" (toString sa.cs_next_var) /\
+   out = STRING #"%" (toString sb.cs_next_var)` by gvs[] >>
+  `u.vs_vars = (update_var ap (b+n2w p) s).vs_vars` by
+    (qpat_x_assum `run_inst_seq (emitted_insts sa sb) s = _` mp_tac >>
+     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
+          exec_pure2_def, eval_operand_def, update_var_def,
+          venom_state_component_equality]) >>
+  `fresh_vars_wrt sb u` by
+    (fs[fresh_vars_wrt_def, lookup_var_def] >>
+     metis_tac[fresh_vars_wrt_advance]) >>
+  `fresh_vars_wrt sc (update_var out (mload (w2n (b+n2w p)) u) u)` by
+    (irule fresh_vars_wrt_advance >>
+     qexistsl_tac [`sb.cs_next_var`, `sb`] >> simp[]) >>
+  fs[Abbr `tf`, fresh_vars_wrt_def]
 QED
 
 Finalise abi_decode_ptr_relative_load

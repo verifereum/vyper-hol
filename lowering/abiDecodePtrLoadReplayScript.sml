@@ -1,7 +1,7 @@
 (* Supplied-runtime interface for the checked relative memory read. *)
 Theory abiDecodePtrLoadReplay
 Ancestors
-  abiDecodePtrRead venomState venomExecSemantics stateFrame
+  abiDecodePtrRead abiDecodePtrMemberFrame bodyPtrDefs compileEnv venomState venomExecSemantics stateFrame
 
 Theorem abi_decode_relative_load_success_replay_ptr:
   compile_abi_dec_addr (Var src) pos sa = (addr,sb) /\
@@ -26,6 +26,9 @@ Theorem abi_decode_relative_load_success_replay_ptr:
     u.vs_call_ctx = s.vs_call_ctx /\
     tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt sc u) /\
+    (?ap. addr = Var ap /\ not_fresh_at sc ap /\
+      abi_decode_ptr_window G' tn' u ap (b+n2w p) (h-p)) /\
     (!x. not_fresh_at sa x ==>
       lookup_var x u = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x))
@@ -40,5 +43,6 @@ Proof
     (qpat_x_assum `t.vs_inst_idx = _` mp_tac >>
      simp[NoAsms, venom_state_component_equality]) >>
   qexistsl_tac [`out`, `G'`, `tn'`] >>
-  gvs[state_frame_def, lookup_var_def]
+  gvs[state_frame_def, lookup_var_def, abi_decode_ptr_window_def, ptr_covers_def,
+      fresh_vars_wrt_def]
 QED
