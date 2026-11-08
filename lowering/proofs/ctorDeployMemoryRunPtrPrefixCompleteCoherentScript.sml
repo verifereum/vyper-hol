@@ -117,11 +117,11 @@ Proof
   >- (rpt gen_tac >> disch_tac >> simp_tac bool_ss [Abbr `P`] >>
       MATCH_ACCEPT_TAC (BETA_RULE prefix_flag_complete_code)) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> FULL_SIMP_TAC bool_ss [Abbr `P`] >>
+  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
       match_mp_tac (BETA_RULE prefix_array_complete_code) >> first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> FULL_SIMP_TAC bool_ss [Abbr `P`] >>
+  >- (rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
       match_mp_tac (BETA_RULE prefix_tuple_complete_code_contract) >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> strip_tac >> FULL_SIMP_TAC bool_ss [Abbr `P`] >>
+  rpt gen_tac >> strip_tac >> unabbrev_all_tac >> BETA_TAC >> rule_assum_tac BETA_RULE >>
   match_mp_tac (BETA_RULE prefix_struct_complete_code_contract) >> asm_rewrite_tac[]
 QED
