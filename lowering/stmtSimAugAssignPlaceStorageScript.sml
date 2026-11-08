@@ -460,6 +460,14 @@ Proof
               assert_def, return_def, raise_def, AllCaseEqs()] >>
           imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
           Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def])
+      >> Cases_on `blt = Bop In \/ blt = Bop NotIn`
+      >- (gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
+              assert_def, return_def, raise_def, lift_option_type_def,
+              AllCaseEqs()] >>
+          gvs[vyperMiscTheory.option_CASE_rator,
+              vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def,
+              raise_def, lift_sum_def] >>
+          first_x_assum (drule_then assume_tac) >> simp[])
       >> gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
              assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
              AllCaseEqs()] >>

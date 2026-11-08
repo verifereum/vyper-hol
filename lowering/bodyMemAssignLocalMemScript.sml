@@ -18,6 +18,7 @@ Ancestors
   valueCopyBytes valueTypingMemoryProps abiBuiltinAllocation exprSimBufferStore
   stmtLowering fragExec exprSimProps freshWrites fragGasPathMem exprOperandVar
   bodyDeclCopyMemory gasExemptCert exprSimSource gasOracleReplay
+  memoryValueEncoding
 Libs
   monadsyntax
 
@@ -198,7 +199,7 @@ Theorem local_memory_write_frame:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
       mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
-    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\ value_has_type entry.type v /\
     val_wf entry.type v /\ val_in_memory entry.type v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
@@ -229,6 +230,8 @@ Proof
        (fs[regions_disjoint_def] >> decide_tac) >>
      qpat_x_assum `!b n. _ ==> mem_bytes_at b n t.vs_memory = _`
        (qspecl_then [`off`, `type_memory_size tv`] mp_tac) >> simp[]) >>
+  `memory_value_rel entry.type v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   irule stmt_state_rel_write_local >> simp[] >>
   qexistsl_tac [`s`, `w`] >>
   simp[] >> conj_tac
@@ -326,7 +329,7 @@ Theorem local_header_store_path_mem[local]:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
     val_wf entry.type v /\
-    val_in_memory entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
+    memory_value_rel entry.type v (w2n w) (mstore (w2n w) wd s).vs_memory ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes := pre ++
             (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
@@ -401,8 +404,9 @@ Proof
     (irule memory_length_word_layout >> simp[mstore_mem_word_at_same] >> metis_tac[]) >>
   `val_wf entry.type (default_value tyv) /\
    32 <= type_memory_size entry.type /\
-   val_in_memory entry.type (default_value tyv) (w2n w)
-     (mstore (w2n w) 0w s0).vs_memory` by simp[] >>
+   memory_value_rel entry.type (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w s0).vs_memory` by
+    simp[CONJUNCT1 default_memory_layout] >>
   drule_all local_header_store_path_mem >> strip_tac >>
   `~block_is_terminated sb` by
     (qpat_x_assum `emit_void _ _ _ = _` mp_tac >>

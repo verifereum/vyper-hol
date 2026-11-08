@@ -817,8 +817,8 @@ Proof
      gvs[Abbr`vs`, entry_venom_state_def, call_state_rel_def]) >>
   `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
    fixed_region_reserved 0 unit.cu_context` by
-    (drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-     drule run_lowering_eom_none >> simp[fixed_region_reserved_def]) >>
+    (drule lower_vyper_runtime_unit_raw_defaults >>
+     simp[fixed_region_reserved_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>

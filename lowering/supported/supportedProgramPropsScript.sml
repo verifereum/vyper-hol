@@ -199,7 +199,7 @@ QED
 
 (* Entry/header validity is checked by check_contract, not the whitelist.
    Constructor defaults, which check_contract also rejects, are outside the
-   whitelist too: it admits defaults only on external functions. *)
+   whitelist too: it admits no default arguments for now. *)
 Theorem supported_entry_header_context:
   supported_program [FunctionDecl Deploy Nonpayable T F "__init__" [] [] NoneT []] /\
   ~supported_program [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT []] /\
@@ -230,23 +230,28 @@ Proof
   EVAL_TAC
 QED
 
-(* Source-shape uniqueness is internal-only, not a global namespace check. *)
-Theorem supported_function_name_sharing:
-  supported_program
+(* Function names are unique across the whole contract for now, external
+   and internal alike, so sharing a name is rejected. *)
+Theorem supported_function_name_sharing_rejected:
+  ~supported_program
     [FunctionDecl External Pure F F "helper" [] [] NoneT [];
      program_test_internal []] /\
-  supported_program [program_test_deploy []; program_test_deploy []]
+  ~supported_program [program_test_deploy []; program_test_deploy []]
 Proof
   EVAL_TAC
 QED
 
-(* msg.gas is on the whitelist (the gas proofs cover it), so it may be a
-   default too. *)
+(* msg.gas is on the whitelist (the gas proofs cover it), so it is a
+   supported default expression too. Functions with default arguments are
+   outside the whitelist for now, so no such program is supported. *)
 Theorem supported_default_expression_checks:
-  EVERY (\e. supported_program
+  EVERY (supported_default_expression
     [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
-       [e] NoneT []])
+       [expr_test_uint] NoneT []])
     [expr_test_uint; Builtin (BaseT (UintT 256)) (Env MsgGas) []] /\
+  ~supported_program
+    [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
+       [expr_test_uint] NoneT []] /\
   EVERY (\e. ~supported_program
     [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
        [e] NoneT []])

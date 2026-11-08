@@ -13828,6 +13828,18 @@ Proof
   metis_tac[classify_functions_def]
 QED
 
+(* The supported fragment has no default arguments for now, so a supported
+   program's runtime unit takes the ordinary run_lowering path. *)
+Theorem supported_program_no_external_defaults:
+  !tops. supported_program tops ==>
+    ~EXISTS external_has_defaults (FST (classify_functions tops))
+Proof
+  rw[NOT_EXISTS, EVERY_MEM, pairTheory.FORALL_PROD, external_has_defaults_def] >>
+  drule classify_functions_external_source >> strip_tac >>
+  drule_all supported_program_declaration >>
+  simp[supportedDeclsTheory.supported_function_header_contract]
+QED
+
 Theorem MEM_classify_internal:
   !tops mut nr rr name args dflts ret body.
     MEM (mut,nr,rr,name,args,dflts,ret,body)

@@ -49,7 +49,7 @@ Theorem selected_external_package_member[local]:
   lookup_function NONE tx.function_name External tops =
     SOME (mut,nr,args,dflts,ret,fbody) ==>
   ?ce pa mc key view rt.
-    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,F,view,fbody,rt)
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt)
       (MAP (set_external_package_target target o
         package_external_fn tops T (K global_nonreentrant_slot))
         (FST (classify_functions tops)))
@@ -59,7 +59,7 @@ Proof
      set_external_package_target target
        (package_external_fn tops T (K global_nonreentrant_slot)
          (mut,nr,rr,tx.function_name,args,dflts,ret,fbody)) =
-       ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,F,view,fbody,rt)` by
+       ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt)` by
     simp[package_external_fn_def, set_external_package_target_def] >>
   metis_tac[MEM_MAP, combinTheory.o_THM]
 QED
@@ -74,14 +74,19 @@ Theorem lower_runtime_selected_source_packages:
     sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
     EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
-    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,F,view,fbody,rt) exts
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,T,view,fbody,rt) exts
 Proof
   strip_tac >> drule_all selected_external_package_member >>
   disch_then (qspec_then `rp.rpol_target` strip_assume_tac) >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-  strip_tac >> fs[] >>
+  strip_tac >>
+  `~EXISTS external_has_defaults q` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
+  qpat_x_assum `(if EXISTS external_has_defaults q then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >> fs[] >>
   goal_assum (drule_at Any) >>
   simp[external_source_package_labels, internal_source_package_labels] >>
   metis_tac[]

@@ -71,6 +71,11 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fb,ctor)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
+  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
   qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
   impl_tac >- fs[] >>
   rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>

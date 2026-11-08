@@ -7,8 +7,8 @@ Ancestors
 Theorem supported_runtime_callable:
   supported_program tops /\
   lookup_callable_function F name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
-  nr = F /\ dflts = [] /\
-  (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
+  dflts = [] /\
+  (?rr. MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops) /\
   EVERY (supported_value_type tops o SND) args /\
   supported_return_type tops ret /\
   supported_function_body tops Internal args ss /\
@@ -50,8 +50,8 @@ Theorem supported_internal_callable:
   IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) ==>
-  nr = F /\ dflts = [] /\
-  (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
+  dflts = [] /\
+  (?rr. MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops) /\
   EVERY (supported_value_type tops o SND) args /\
   supported_return_type tops ret /\
   supported_function_body tops Internal args ss /\
@@ -118,15 +118,15 @@ QED
 Theorem body_intcall_source_selection:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
-  ?mut args ret ss.
+  ?mut nr args ret ss.
     src = NONE /\
     get_module_code cx src = SOME tops /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
+      SOME (mut,nr,args,[],ret,ss) /\
     LENGTH es = LENGTH args /\
     MAP expr_type es = MAP SND args /\
     type_widens_to env.type_defs ret ty /\
-    (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
+    (?rr. MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops) /\
     EVERY (supported_value_type tops o SND) args /\
     supported_return_type tops ret /\
     supported_function_body tops Internal args ss /\

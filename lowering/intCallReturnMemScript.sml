@@ -215,6 +215,7 @@ Theorem compile_internal_return_memory_frag:
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
     (!x. buf_op = Var x ==> not_fresh_at sa x) /\
     (!x. rpc = Var x ==> not_fresh_at sa x) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
     w2n bw + type_memory_size tv + 64 < dimword (:256) /\
@@ -241,7 +242,8 @@ Proof
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
    (!x. buf_op = Var x ==> not_fresh_at su x) /\
-   (!x. rpc = Var x ==> not_fresh_at su x)` by
+   (!x. rpc = Var x ==> not_fresh_at su x) /\
+   (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at su x)` by
     (fs[not_fresh_at_def] >> metis_tac[]) >>
   qpat_x_assum `compile_internal_return _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_internal_return_def, comp_ignore_bind_def, comp_bind_def] >>
@@ -288,7 +290,10 @@ Resume compile_internal_return_memory_frag[frame]:
   `stmt_state_rel ctx func cenv cx (es with scopes := [])
      (s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>)` by
     (irule result_state_memory_frame >> simp[] >> qexists_tac `s0` >>
-     simp[local_region_def, lookup_scopes_def]) >>
+     simp[local_region_def, lookup_scopes_def] >> rpt strip_tac >>
+     `not_fresh_at su x` by metis_tac[] >>
+     qpat_x_assum `!x. not_fresh_at su x ==> _` drule >>
+     simp[lookup_var_def]) >>
   `stmt_state_rel ctx func cenv cx (es with scopes := []) pre` by
     (qspecl_then [`func`, `cenv`, `cx`, `es with scopes := []`,
        `s0 with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory|>`,
