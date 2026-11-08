@@ -5,7 +5,7 @@
 Theory functionInlinerOrigin
 Ancestors
   functionInlinerContract functionInlinerWf functionInlinerDefs cfgTransform
-  list
+  indexedLists venomInst venomWfProps list
 
 Inductive inliner_fn_origin:
   (!ctx fn.
@@ -156,4 +156,196 @@ Theorem inliner_fn_origin_separation:
       ~MEM other.fn_name (fn_labels fn)
 Proof
   metis_tac[inliner_fn_origin_separation_aux]
+QED
+
+(* Rewriting introduces only assignments and continuation jumps. Other
+   surviving instructions are unchanged, in particular nested calls. *)
+Theorem rewrite_inline_inst_survivor:
+  !args outs ret inst pi ri.
+    MEM ri (FST (rewrite_inline_inst args outs ret inst pi)) /\
+    ri.inst_opcode <> ASSIGN /\ ri.inst_opcode <> JMP ==>
+    ri = inst
+Proof
+  rpt gen_tac >>
+  simp[rewrite_inline_inst_def, AllCaseEqs(), SF boolSimps.COND_elim_ss, MEM_MAPi] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem rewrite_inline_inst_no_return:
+  !args outs ret inst pi ri.
+    MEM ri (FST (rewrite_inline_inst args outs ret inst pi)) ==>
+    ri.inst_opcode <> RET /\ ri.inst_opcode <> RETFMP
+Proof
+  rpt gen_tac >>
+  rpt strip_tac >>
+  `ri = inst` by
+    (irule rewrite_inline_inst_survivor >> simp[] >> metis_tac[]) >>
+  gvs[rewrite_inline_inst_def, is_param_opcode_def, MEM_MAPi] >>
+  gvs[instruction_component_equality]
+QED
+
+Theorem rewrite_inline_insts_survivor:
+  !insts args outs ret pi ris pi' ri.
+    rewrite_inline_insts args outs ret insts pi = (ris,pi') /\
+    MEM ri ris /\ ri.inst_opcode <> ASSIGN /\ ri.inst_opcode <> JMP ==>
+    MEM ri insts
+Proof
+  Induct >> simp[rewrite_inline_insts_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >>
+  simp[] >> strip_tac >> gvs[] >>
+  metis_tac[rewrite_inline_inst_survivor, pairTheory.FST]
+QED
+
+Theorem rewrite_inline_insts_no_return:
+  !insts args outs ret pi ris pi' ri.
+    rewrite_inline_insts args outs ret insts pi = (ris,pi') /\
+    MEM ri ris ==>
+    ri.inst_opcode <> RET /\ ri.inst_opcode <> RETFMP
+Proof
+  Induct >> simp[rewrite_inline_insts_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >>
+  simp[] >> strip_tac >> gvs[] >>
+  metis_tac[rewrite_inline_inst_no_return, pairTheory.FST]
+QED
+
+Theorem rewrite_inline_block_survivor:
+  !bb args outs ret pi bb' pi' ri.
+    rewrite_inline_block args outs ret bb pi = (bb',pi') /\
+    MEM ri bb'.bb_instructions /\
+    ri.inst_opcode <> ASSIGN /\ ri.inst_opcode <> JMP ==>
+    MEM ri bb.bb_instructions
+Proof
+  rpt gen_tac >> simp[rewrite_inline_block_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  metis_tac[rewrite_inline_insts_survivor]
+QED
+
+Theorem rewrite_inline_block_no_return:
+  !bb args outs ret pi bb' pi' ri.
+    rewrite_inline_block args outs ret bb pi = (bb',pi') /\
+    MEM ri bb'.bb_instructions ==>
+    ri.inst_opcode <> RET /\ ri.inst_opcode <> RETFMP
+Proof
+  rpt gen_tac >> simp[rewrite_inline_block_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  metis_tac[rewrite_inline_insts_no_return]
+QED
+
+Theorem rewrite_inline_blocks_survivor:
+  !bbs args outs ret pi bbs' pi' bb' ri.
+    rewrite_inline_blocks args outs ret bbs pi = (bbs',pi') /\
+    MEM bb' bbs' /\ MEM ri bb'.bb_instructions /\
+    ri.inst_opcode <> ASSIGN /\ ri.inst_opcode <> JMP ==>
+    ?bb. MEM bb bbs /\ MEM ri bb.bb_instructions
+Proof
+  Induct >> simp[rewrite_inline_blocks_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >>
+  simp[] >> strip_tac >> gvs[] >>
+  metis_tac[rewrite_inline_block_survivor]
+QED
+
+Theorem rewrite_inline_blocks_no_return:
+  !bbs args outs ret pi bbs' pi' bb' ri.
+    rewrite_inline_blocks args outs ret bbs pi = (bbs',pi') /\
+    MEM bb' bbs' /\ MEM ri bb'.bb_instructions ==>
+    ri.inst_opcode <> RET /\ ri.inst_opcode <> RETFMP
+Proof
+  Induct >> simp[rewrite_inline_blocks_def] >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >>
+  simp[] >> strip_tac >> gvs[] >>
+  metis_tac[rewrite_inline_block_no_return]
+QED
+
+Theorem clone_instruction_call_signature:
+  !inst p labels target args.
+    inst.inst_operands = Label target::args /\ ~MEM target labels ==>
+    (clone_instruction p labels inst).inst_operands =
+      Label target::MAP (clone_operand p labels) args /\
+    LENGTH (clone_instruction p labels inst).inst_outputs =
+      LENGTH inst.inst_outputs /\
+    (clone_instruction p labels inst).inst_opcode = inst.inst_opcode
+Proof
+  simp[clone_instruction_def, clone_operand_def]
+QED
+
+Theorem clone_instruction_return_arity:
+  !inst p labels.
+    (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+    raw_return_user_arity (clone_instruction p labels inst) =
+      raw_return_user_arity inst
+Proof
+  rpt strip_tac >>
+  simp[clone_instruction_def, callLayoutDefsTheory.raw_return_user_arity_def,
+       listTheory.NULL_EQ]
+QED
+
+Theorem inline_call_site_return_origin:
+  !caller callee p ret lbl idx inst.
+    MEM inst (fn_insts (inline_call_site p ret caller callee lbl idx)) /\
+    (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+    MEM inst (fn_insts caller)
+Proof
+  rpt gen_tac >>
+  Cases_on `lookup_block lbl caller.fn_blocks`
+  >- simp[inline_call_site_def] >>
+  simp[inline_call_site_def] >> pairarg_tac >> simp[] >>
+  simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+       replace_block_def, MEM_MAP] >>
+  rpt strip_tac >> gvs[SF boolSimps.COND_elim_ss,
+                         instruction_component_equality] >>
+  metis_tac[rewrite_inline_blocks_no_return,
+            venomExecProofsTheory.lookup_block_MEM,
+            rich_listTheory.MEM_TAKE, rich_listTheory.MEM_DROP_IMP]
+QED
+
+(* Static instruction projections are insensitive to ID renumbering. *)
+Theorem renumber_insts_projection[local]:
+  !insts n acc n' res f.
+    (!i k. f (i with inst_id := k) = f i) /\
+    FOLDL (\(id,acc) i. (id + 1n, acc ++ [i with inst_id := id]))
+      (n,acc) insts = (n',res) ==>
+    MAP f res = MAP f (acc ++ insts)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> simp[MAP_APPEND, APPEND_ASSOC]
+QED
+
+Theorem renumber_block_projection:
+  !n bb f.
+    (!i k. f (i with inst_id := k) = f i) ==>
+    MAP f (SND (renumber_block_inst_ids n bb)).bb_instructions =
+      MAP f bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[renumber_block_inst_ids_def] >> pairarg_tac >> simp[] >>
+  drule_all renumber_insts_projection >> simp[]
+QED
+
+Theorem renumber_blocks_projection[local]:
+  !bbs n acc n' res f.
+    (!i k. f (i with inst_id := k) = f i) /\
+    FOLDL (\(n,acc) bb.
+      let (n',bb') = renumber_block_inst_ids n bb in (n',acc ++ [bb']))
+      (n,acc) bbs = (n',res) ==>
+    FLAT (MAP (\bb. MAP f bb.bb_instructions) res) =
+    FLAT (MAP (\bb. MAP f bb.bb_instructions) (acc ++ bbs))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `FOLDL _ _ _ = _` mp_tac >> simp[Once FOLDL] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[LET_THM] >>
+  first_x_assum drule_all >> simp[MAP_APPEND, APPEND_ASSOC] >>
+  drule renumber_block_projection >>
+  disch_then (qspecl_then [`n`, `h`] mp_tac) >> simp[]
+QED
+
+Theorem renumber_fn_projection:
+  !fn f.
+    (!i k. f (i with inst_id := k) = f i) ==>
+    MAP f (fn_insts (renumber_fn_inst_ids fn)) = MAP f (fn_insts fn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[renumber_fn_inst_ids_def] >> pairarg_tac >> simp[] >>
+  drule_all (SRULE [LET_THM] renumber_blocks_projection) >>
+  simp[fn_insts_def, fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o,
+       combinTheory.o_DEF]
 QED
