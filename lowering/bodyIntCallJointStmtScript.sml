@@ -1,7 +1,7 @@
 (* Seam 2 joint induction step: statements and statement lists. *)
 Theory bodyIntCallJointStmt
 Ancestors
-  bodyIntCallJointContract bodyIntCallJointStmtBoundary bodyIntCallJointStmtZero bodyIntCallJointStmtSeq bodyIntCallJointStmtExpr
+  bodyIntCallJointContract bodyIntCallJointStmtBoundary bodyIntCallJointStmtZero bodyIntCallJointStmtSeq bodyIntCallJointStmtExpr bodyIntCallJointStmtJump bodyIntCallJointStmtRaise
 
 (* L-stmt (C1.3.16): a single statement (the list [st]) of any form, given
    the producers of every expression and of every smaller statement list
