@@ -71,3 +71,20 @@ Proof
       disch_then (qspec_then `emitted_insts sb sc` mp_tac) >> simp[]) >>
   simp[] >> irule inst_seq_ptr_abort_append >> metis_tac[]
 QED
+
+Theorem abi_decode_run_continue_abort_normalized:
+  EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+  EVERY (\i. ~is_terminator i.inst_opcode) ys /\
+  run_inst_seq xs s = OK (t with vs_inst_idx := s.vs_inst_idx) /\
+  run_inst_seq (xs ++ ys) s = Abort a u ==>
+  run_inst_seq ys t = Abort a (u with vs_inst_idx := t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `run_inst_seq ys (t with vs_inst_idx := s.vs_inst_idx) = Abort a u` by
+    (qpat_assum `run_inst_seq xs s = _`
+      (mp_then Any (qspec_then `ys` mp_tac) run_inst_seq_append) >> simp[]) >>
+  qspec_then `ys` mp_tac run_inst_seq_inst_idx >>
+  disch_then (qspecl_then [`t with vs_inst_idx := s.vs_inst_idx`,
+    `t.vs_inst_idx`] mp_tac) >>
+  simp[exec_result_map_def]
+QED
