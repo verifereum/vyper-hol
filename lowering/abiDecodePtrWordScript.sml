@@ -10,7 +10,7 @@ Ancestors
   bodyPtrBopHashSuffix abiDecodePtrHead instSeqComposePtr assignTuplePtrLocalBytesCopy
   words arithmetic rich_list exprSimAccounts abiDecodePtrNormalized venomInst instIdxIndep
   abiDecodePtrContinuation assignTuplePtrCopyLen calldataWordLive abiDecoderReentry
-  exprPtrUnwrapEndpointFrames exprPtrUnwrapPostFrames
+  exprPtrUnwrapEndpointFrames exprPtrUnwrapPostFrames abiDecodePtrWordRuntimeFrame
 
 Theorem abi_decode_clamp_scalar:
   compile_abi_clamp_basetype value clamp sa = ((),sb) /\ value IN A /\
@@ -668,7 +668,18 @@ Theorem abi_decode_word_success_framed:
     abi_clamp_ok clamp (mload (w2n b+p) s) /\
     mem_word_at (w2n d) u.vs_memory = mload (w2n b+p) s /\
     abi_decode_ptr_window H tf u dst d 32 /\
-    abi_decode_ptr_window H tf u src b h
+    abi_decode_ptr_window H tf u src b h /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+               vs_inst_idx := s.vs_inst_idx|>) = s /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory /\
+    (!a n. a+n <= w2n d \/ w2n d+32 <= a ==>
+      mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory) /\
+    (!i. ~(w2n d <= i /\ i < w2n d+32) ==>
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (fresh_vars_wrt sa s ==> fresh_vars_wrt sb u)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_word_success_ptr >>
@@ -676,7 +687,7 @@ Proof
   rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf` >>
   `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
    u.vs_call_ctx = s.vs_call_ctx` by
-    (qpat_x_assum `(u with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s` mp_tac >>
+    (qpat_assum `(u with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[venom_state_component_equality]) >>
   `stor_taint_ok cx tf u` by
     (irule copy_stor_taint_frame >> qexistsl [`s`, `tn`] >>
@@ -698,7 +709,13 @@ Resume abi_decode_word_success_framed[stmt_frame]:
      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
      qexistsl [`w2n d`, `32`, `sa`] >> simp[lookup_var_def] >>
      metis_tac[lookup_var_def]) >>
-  qexistsl [`H`, `tf`] >> fs[stmt_state_rel_inst_idx]
+  `fresh_vars_wrt sa s ==> fresh_vars_wrt sb u` by
+    (strip_tac >> irule abi_decode_word_runtime_fresh >>
+     goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+     qexists_tac `s` >> simp[]) >>
+  qexistsl [`H`, `tf`] >> asm_rewrite_tac[stmt_state_rel_inst_idx] >>
+  qpat_x_assum `stmt_state_rel ctx func cenv cx es (u with vs_inst_idx := _)` mp_tac >>
+  simp[stmt_state_rel_inst_idx]
 QED
 
 Finalise abi_decode_word_success_framed
