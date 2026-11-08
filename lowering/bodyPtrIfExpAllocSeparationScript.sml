@@ -83,7 +83,7 @@ Theorem ifexp_alloca_step_base:
   lookup_var out u = SOME (n2w (buffer_allocation_base s id))
 Proof
   strip_tac >> qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
   simp[mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
        buffer_allocation_base_def, AllCaseEqs()] >>
   strip_tac >> gvs[venomStateTheory.update_var_def, lookup_var_def, FLOOKUP_UPDATE]

@@ -13,7 +13,7 @@ Theorem alloca_step_old_register_frame:
 Proof
   strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
     venomStateTheory.eval_operand_def, venomExecSemanticsTheory.exec_alloca_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
   >- (strip_tac >> gvs[] >>

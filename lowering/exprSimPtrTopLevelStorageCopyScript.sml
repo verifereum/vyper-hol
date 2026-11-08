@@ -669,11 +669,11 @@ Proof
   qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `v = update_var vv (copy_runtime_word loc s (a+n2w k)) u1` >>
   `step_inst_base j u1 = OK v` by
-    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
+    (Cases_on `loc = LocStorage` >>
+     simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
       step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def,
       lookup_var_def, update_var_def, FLOOKUP_UPDATE, copy_runtime_word_def,
-      sload_def, tload_def, contract_storage_def, contract_transient_def] >>
-     Cases_on `loc = LocStorage` >> simp[]) >>
+      sload_def, tload_def, contract_storage_def, contract_transient_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1 j u1` by
     (simp[Abbr `j`] >> irule toplevel_ptr_inst_ok_load >>
      Cases_on `loc = LocStorage` >> simp[]) >>
@@ -1350,11 +1350,11 @@ Proof
   qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `v = update_var vv (copy_runtime_word loc s (a+c)) u1` >>
   `step_inst_base j u1 = OK v` by
-    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
+    (Cases_on `loc = LocStorage` >>
+     simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
       step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def,
       lookup_var_def, update_var_def, FLOOKUP_UPDATE, copy_runtime_word_def,
-      sload_def, tload_def, contract_storage_def, contract_transient_def] >>
-     Cases_on `loc = LocStorage` >> simp[]) >>
+      sload_def, tload_def, contract_storage_def, contract_transient_def]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
   `eval_operand (Var sv) u1 = SOME (a+c)` by
@@ -1458,11 +1458,11 @@ Proof
     simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
          exec_pure2_def, eval_operands_def, eval_operand_def] >>
   `step_inst_base j u = OK (update_var vv (copy_runtime_word loc s (a+c)) u)` by
-    (simp[Abbr `j`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
+    (Cases_on `loc = LocStorage` >>
+     simp[Abbr `j`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
           exec_read1_def, eval_operand_def, lookup_var_def, update_var_def,
           FLOOKUP_UPDATE, copy_runtime_word_def, sload_def, tload_def,
-          contract_storage_def, contract_transient_def] >>
-     Cases_on `loc = LocStorage` >> simp[]) >>
+          contract_storage_def, contract_transient_def]) >>
   gvs[exprLoweringPropsTheory.run_inst_seq_def] >>
   simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   gvs[lookup_var_def]

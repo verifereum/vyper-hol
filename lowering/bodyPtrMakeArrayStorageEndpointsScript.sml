@@ -86,13 +86,12 @@ Proof
     (`step_inst_base (mk_inst lid (if loc = LocStorage then SLOAD else TLOAD)
         [Var av] [vv]) s1 =
       OK (update_var vv (copy_runtime_word loc s (a+n2w k)) s1)` by
-       (simp[Abbr `s1`, Once venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       (Cases_on `loc = LocStorage` >>
+        simp[Abbr `s1`, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
           venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read1_def,
           eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
           copy_runtime_word_def, sload_def, tload_def, contract_storage_def,
-          contract_transient_def] >>
-        Cases_on `loc = LocStorage` >>
-        simp[contract_transient_def, contract_storage_def]) >>
+          contract_transient_def]) >>
      mp_tac (Q.INST [`opc` |-> `if loc = LocStorage then SLOAD else TLOAD`,
        `H` |-> `step_prov PG G (mk_inst id ADD [src;Var cv] [av])
          (update_var av (a+n2w k) s)`,
