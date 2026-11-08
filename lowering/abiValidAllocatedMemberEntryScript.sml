@@ -27,6 +27,8 @@ Theorem abi_valid_allocated_members_head_entry:
       (abi_decode_members (MAP (vyper_to_abi_type env) tys) (DROP p xs)
         (DROP (abi_member_head_size (vyper_to_abi_type env ty)) (DROP (p+ao) xs))) = SOME rest /\
     abi_decode_sim ctx func s t /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
     abi_valid_allocated_entry ce env sf ty tv v ctx func cenv cx es middle end_st
       base_op hi (FST ops) (SND ops) B L xs
       (p + if dec_info_needs_offset (type_to_abi_dec_info sf ce ty)
