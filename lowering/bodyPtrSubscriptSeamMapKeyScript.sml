@@ -2,6 +2,7 @@
    Keep that instruction order explicit at the pointer boundary. *)
 Theory bodyPtrSubscriptSeamMapKey
 Ancestors
+  wordLoadStorePtr
   bodyPtrHashBuiltinsKeccakBytesRun exprSimMapKey fragGasSeqPtr
   typedCopyPtr typedCopyLoopHeaderPtr ptrDiscipline venomExecSemantics
   venomState venomInst finite_map words pred_set list arithmetic

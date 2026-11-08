@@ -1,6 +1,7 @@
 (* Counted rereading of the current dynamic-array header. *)
 Theory bodyPtrSubscriptLengthRead
 Ancestors
+  wordLoadStorePtr
   bodyPtrSubscriptIndexExecution typedCopyPtr typedCopyLayoutPtr
   representationCleanPtr fragGasSeqPtr emitHelperProps exprSimMemoryPath
   fragExec ptrCoverage venomInstProofs venomExecSemantics

@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsEmptyUniform
 Ancestors
+  wordLoadStorePtr
   bodyPtrTypeBuiltinsEmptyZero typedCopyPtr fragGasSeqPtr ghostPcTransportPtr
   bodyPtrDefs fragExecPtr
   ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst finite_map words emitHelperProps

@@ -1,5 +1,6 @@
 Theory bodyPtrPopMemoryStore
 Ancestors
+  wordLoadStorePtr
   exprSimPtrProps typedCopyPtr fragExecPtr fragExec fragGasPathPtr bodyPtrDefs
   emitHelperProps emitHelper compileEnv venomInst venomState venomExecSemantics
   ptrDiscipline ptrSafeRun decoderGhostFramePtr codegenRel contextCodegenRel

@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsEmptyPost
 Ancestors
+  wordLoadStorePtr
   bodyPtrDefs exprSimAggregateLayout venomMemProofs valueEncoding
   valueEncodingProofs list
 

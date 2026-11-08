@@ -2,6 +2,7 @@
    This does not assert initialization outside the written word. *)
 Theory bodyPtrStructLitFieldStore
 Ancestors
+  wordLoadStorePtr
   fragGasSeqPtr fragGasPathPtr fragExecPtr typedCopyPtr
   ptrSafeRun ptrDiscipline bodyPtrDefs venomExecSemantics venomInstProofs
   venomInst venomState contextCodegenRel finite_map robustCopyTransportPtr

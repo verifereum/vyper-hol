@@ -1,5 +1,6 @@
 Theory bodyPtrTypeBuiltinsEmptyWords
 Ancestors
+  wordLoadStorePtr
   bodyPtrTypeBuiltinsEmptyZero bodyPtrTypeBuiltinsEmptyUniform bodyPtrTypeBuiltinsSeq abiEmptySequence
   builtinSimple emitHelper emitHelperProps compileEnv context exprLoweringProps
   venomInst venomState venomExecSemantics list rich_list words typedCopyPtr

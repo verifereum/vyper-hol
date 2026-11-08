@@ -1,6 +1,7 @@
 (* Selective live-register frames: non-live registers may change freely. *)
 Theory bodyPtrStructLitFreshGhost
 Ancestors
+  wordLoadStorePtr
   bodyPtrStructLitGhostFrame decoderGhostFramePtr bodyPtrDefs venomState
   finite_map typedCopyPtr venomInst
 
