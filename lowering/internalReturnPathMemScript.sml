@@ -1,7 +1,7 @@
 (* Counted memory-safe terminal steps of an internal return. *)
 Theory internalReturnPathMem
 Ancestors
-  fragGasPathMem fragExec gasCount memSafeRun instMemFrontier
+  fragGasPathMem fragGasPath fragExec gasCount memSafeRun instMemFrontier
   venomExecSemantics venomState venomInst emitHelperProps stmtSimReturn
 
 Theorem internal_ret_path_mem:
@@ -37,4 +37,20 @@ Proof
   irule internal_ret_path_mem >> simp[] >>
   qexistsl_tac [`sa.cs_next_id`, `ops ++ [Var rpc]`] >>
   simp[] >> irule stmtSimReturnTheory.step_ret_values >> simp[] >> metis_tac[]
+QED
+
+(* A memory path and an S1 exit describe the same deterministic execution. *)
+Theorem internal_return_path_post:
+  frag_exec ctx sa sb P (\t. F) R /\ P s /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  gas_path_mem ctx func s n r /\ exit_result r ==>
+  R r
+Proof
+  strip_tac >> drule gas_path_mem_exec >> strip_tac >>
+  fs[frag_exec_def, exit_result_def] >>
+  first_x_assum (qspecl_then [`func`, `s`] mp_tac) >> simp[] >> strip_tac >>
+  metis_tac[gas_run_from_fuel_mono, arithmeticTheory.LESS_EQ_CASES,
+            exit_result_not_error]
 QED
