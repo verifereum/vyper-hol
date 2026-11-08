@@ -17,7 +17,8 @@
  *)
 Theory entryPtrSeamRegister
 Ancestors
-  entryPtrSeamDecoder entryDecoderBudgetBoundary entryStateRel entryArgPtrs entryLocals
+  entryPtrSeamDecoder entryDecoderBudgetBoundary actualDecoderAllocationPtr
+  entryStateRel entryArgPtrs entryLocals
   entryDecodePlanProps entryDecodeProps bodySimEntry actualRegistrationCode
   vyperCompiler moduleLoweringProps exprLoweringProps vyperInterpreter
   vyperContext venomExecSemantics venomState compileEnv supportedProgram
