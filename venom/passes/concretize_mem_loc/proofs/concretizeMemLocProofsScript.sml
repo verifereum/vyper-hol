@@ -476,7 +476,8 @@ Resume allocate_with_livesets_non_overlapping[step]:
   rpt gen_tac >> strip_tac >> rpt strip_tac
   >> simp[Once allocate_with_livesets_def]
   >> pairarg_tac >> simp[]
-  >> first_x_assum (mp_tac o Q.SPECL [`global ++ MAP (\(_1,_2,pos',asz). (pos',asz)) (FILTER (\(_3,other_live,_4,_5). sinter inst_addr_to other_live live_insts <> []) already)`, `pos`, `_0`])
+  >> rename1 `allocate_one _ _ = (pos,rest)`
+  >> first_x_assum (mp_tac o Q.SPECL [`global ++ MAP (\(_1,_2,pos',asz). (pos',asz)) (FILTER (\(_3,other_live,_4,_5). sinter inst_addr_to other_live live_insts <> []) already)`, `pos`, `rest`])
   >> impl_tac >- simp[]
   >> impl_tac >- (irule awl_step_invs >> metis_tac[])
   >> simp[LET_THM, MAP_APPEND, MEM_APPEND, MEM, FORALL_PROD, DISJ_ASSOC]
@@ -1936,8 +1937,9 @@ Triviality step_inst_base_intret_terminator[local]:
     step_inst_base inst s = IntRet vals s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* Effect-free ops only return OK or Error *)
@@ -2509,7 +2511,7 @@ Proof
       qpat_x_assum `∃v. _` mp_tac >> simp[] >> metis_tac[MEM]
     ) >>
     qpat_x_assum `∃v. _` kall_tac >>
-    asm_rewrite_tac[step_inst_base_def] >>
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
     simp[exec_pure2_def] >>
     Cases_on `inst.inst_operands`
     >- simp[lift_result_def] >>
@@ -2546,7 +2548,7 @@ Proof
       qpat_x_assum `∃v. _` mp_tac >> simp[] >> metis_tac[MEM]
     ) >>
     qpat_x_assum `∃v. _` kall_tac >>
-    asm_rewrite_tac[step_inst_base_def] >>
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
     simp[exec_pure2_def] >>
     Cases_on `inst.inst_operands`
     >- simp[lift_result_def] >>
@@ -2582,7 +2584,7 @@ Proof
       simp[is_pointer_preserving_op_def] >>
       qpat_x_assum `∃v. _` mp_tac >> simp[] >> metis_tac[MEM]
     ) >>
-    asm_rewrite_tac[step_inst_base_def] >>
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
     Cases_on `inst.inst_operands`
     >- simp[lift_result_def] >>
     rename1 `inst.inst_operands = op1::ops` >>
