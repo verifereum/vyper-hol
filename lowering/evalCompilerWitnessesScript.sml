@@ -15,6 +15,7 @@ Ancestors
   evalCompilerPhiPointers
   evalCompilerInternalFrames
   evalCompilerAllocationLimit
+  evalCompilerPopSubscriptOverlap
   evalCompilerConversions
   evalCompilerRawCalls
   evalCompilerLoadTiming
