@@ -18,7 +18,7 @@ Theorem immutable_runtime_load_checks_uniform:
 Proof
   strip_tac >> gvs[compile_imm_load_word_def] >>
   drule emitted_insts_emit_op >> strip_tac >>
-  gvs[inst_seq_ptr_def, Once step_inst_base_def, mk_inst_def, exec_read1_def] >>
+  gvs[inst_seq_ptr_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
   gen_tac >>
   simp[inst_seq_ptr_def, ptr_inst_ok_external_load,
        Once step_inst_base_def, mk_inst_def, exec_read1_def,
