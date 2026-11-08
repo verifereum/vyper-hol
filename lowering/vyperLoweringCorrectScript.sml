@@ -976,18 +976,6 @@ Proof
   simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
 QED
 
-Theorem lower_vyper_runtime_unit_run_lowering:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
-    ?selectors external_fns internal_fns fallback_fn entry_info.
-      run_lowering selectors external_fns internal_fns fallback_fn rpolicy
-        0 0 [] entry_info "__entry" = SOME unit
-Proof
-  rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
-  Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
-  strip_tac >> metis_tac[]
-QED
-
 (* The grouped-defaults lowering builds its functions the same way. *)
 Theorem run_grouped_lowering_eom_none[local]:
   run_grouped_lowering groups internal_fns fallback_fn rpolicy entry_label =
