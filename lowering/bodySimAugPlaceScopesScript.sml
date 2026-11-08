@@ -68,13 +68,15 @@ Resume aug_place_pure_scopes_mutual[builtin]:
   rpt strip_tac >>
   Cases_on `blt = Len` >> Cases_on `blt = Env MsgGas` >>
   gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-      assert_def, return_def, raise_def, AllCaseEqs()] >>
+      assert_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
+      vfmTypesTheory.option_CASE_rator,
+      AllCaseEqs()] >>
   imp_res_tac result_array_length_state >>
   imp_res_tac next_gas_reading_state >>
   imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   gvs[builtin_args_length_ok_def] >>
-  Cases_on `es` >> gvs[] >> first_x_assum drule_all >> simp[]
+  Cases_on `es` >> gvs[] >> res_tac >> gvs[]
 QED
 Resume aug_place_pure_scopes_mutual[typebuiltin]:
   rpt strip_tac >>
