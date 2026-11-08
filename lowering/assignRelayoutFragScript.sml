@@ -25,6 +25,7 @@ Theorem assign_relayout_normal_continuation:
      val_wf stv v /\ val_wf dtv v /\ val_footprint stv v = type_memory_size stv) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   sa.cs_next_var <= sb.cs_next_var /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_id <= sb.cs_next_id /\ stmt_state_rel ctx func cenv cx es s0 /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
@@ -47,7 +48,7 @@ Theorem assign_relayout_normal_continuation:
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
     (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -74,6 +75,11 @@ Proof
   `type_memory_size dtv <= cap` by
     (fs[expr_post_def, stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      metis_tac[]) >>
+  `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
+    (irule expr_post_alloca_frame >> metis_tac[]) >>
   drule assign_relayout_store_post_path >>
   disch_then (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   simp[] >> disch_then drule >>
@@ -100,7 +106,17 @@ Proof
     (rpt strip_tac >>
      `not_fresh_at sb x` by (irule not_fresh_at_mono >> metis_tac[]) >>
      `lookup_var x s = SOME w` by metis_tac[] >> simp[]) >>
-  metis_tac[]
+  conj_tac >- metis_tac[] >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `ee`, `s`, `sb`] >> simp[] >>
+  conj_tac >-
+    (qpat_x_assum `alloca_frame cenv es sa s0 cenv _ s` mp_tac >> simp[]) >>
+  qpat_x_assum `alloca_frame cenv ee sb s cenv _ t` mp_tac >>
+  qmatch_goalsub_abbrev_tac `ee with scopes := scs` >>
+  `ee with <|scopes := scs; gas_obs := []|> =
+   (ee with scopes := scs) with gas_obs := []` by
+    simp[evaluation_state_component_equality] >>
+  pop_assum (fn th => pure_once_rewrite_tac [th]) >> simp[]
 QED
 
 (* Assignment composition is independent of the representation of the value. *)
@@ -116,10 +132,10 @@ Theorem assign_local_store_rhs_outcome:
       (es,s0) marks (INL v) ee (OK t) /\ Q (INL v) (ee with gas_obs := []) t ==>
     ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
       (ee with gas_obs := [],t) [] (INL ()) ff (OK u) /\
-      stmt_post ctx func cx lctx old c sa sf s0 (INL ()) (ff with gas_obs := []) u) ==>
+      stmt_post ctx func cx lctx old c sa sf es s0 (INL ()) (ff with gas_obs := []) u) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx old c sa sf s0)
+    (stmt_post ctx func cx lctx old c sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rewrite_tac[gas_outcome_def] >>
@@ -242,6 +258,7 @@ Proof
   `~block_is_terminated sb` by
     (drule compile_assign_memory_relayout_open >> simp[]) >>
   `sa.cs_next_var <= sB.cs_next_var` by metis_tac[cj 2 compile_expr_grows] >>
+  `sa.cs_next_id <= sB.cs_next_id` by metis_tac[cj 2 compile_expr_grows] >>
   `!x. op = Var x ==> not_fresh_at sB x` by
     (drule_then (drule_then assume_tac) compile_lower_value_var >> simp[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
