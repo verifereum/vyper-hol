@@ -70,10 +70,10 @@ Theorem abi_valid_allocated_array_prefix_frame:
   abi_valid_allocated_frame sites cd cn s t /\ alloca_inv s /\
   FLOOKUP s.vs_allocas aid = SOME (B,cap) /\ aid NOTIN sites /\
   B <= d /\ d+32+j*type_memory_size tv <= B+cap /\
-  d+32+j*type_memory_size tv <= cd ==>
+  (d+32+j*type_memory_size tv <= cd \/ cd+cn <= d) ==>
   abi_valid_allocated_array_prefix tv vs j d t
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `mem_bytes_at d 32 t.vs_memory = mem_bytes_at d 32 s.vs_memory` by
     (irule abi_valid_allocated_frame_owned_slice >>
      qpat_assum `abi_valid_allocated_frame _ _ _ _ _` (irule_at Any) >>
