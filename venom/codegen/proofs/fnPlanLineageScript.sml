@@ -31,7 +31,7 @@ Ancestors
   fnPlanLineagePhiSchedule fnPlanLineagePhiTemporal codegenReadyCompute
   fnPlanLineageCallTrace fnPlanLineageEdge fnPlanLineageNativeTrace
   fnPlanLineageNativeOrigins fnPlanLineageEntryProduction
-  fnPlanLineageChronologicalPrefix
+  fnPlanLineageChronologicalPrefix fnPlanLineageNativeResources
 
 (* ===== The calls of the DFS function planner ===== *)
 
@@ -322,6 +322,7 @@ Theorem dfs_block_state_native_incoming:
     lookup_block pred fn.fn_blocks = SOME pb /\
     generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb before = SOME (ops,after) /\
     MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    cfg_reachable_of (cfg_analyze fn) pred /\
     ps.ps_stack = after.ps_stack /\ ps.ps_spilled = after.ps_spilled /\
     chronological_support fn visited after /\
     native_live_boundary fn pb (LENGTH pb.bb_instructions) after
@@ -339,12 +340,38 @@ Proof
        initialized_trace_event_exit >>
      simp[] >> disch_then (qspec_then `earlier` mp_tac) >>
      simp[]) >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by
+    (gvs[] >>
+     drule_at (Pat `plan_aux_trace _ _ _ _ _ _ _ _ _`)
+       initialized_trace_event_reachable >>
+     simp[] >> disch_then (qspec_then `earlier` mp_tac) >> simp[]) >>
   `~MEM lbl (MAP FST pre)` by
     (drule plan_aux_trace_distinct_keys >>
      simp[listTheory.MAP_APPEND, listTheory.ALL_DISTINCT_APPEND] >> metis_tac[]) >>
   qexistsl_tac [`MAP FST pre`, `pred`, `before`, `pb`, `ops`, `after`] >>
   simp[] >> irule chronological_support_mono >> goal_assum (drule_at Any) >>
   simp[pred_setTheory.SUBSET_DEF, listTheory.MAP_APPEND] >> metis_tac[]
+QED
+
+Theorem dfs_block_state_native_join_residual:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) ==>
+  ?pred prefix.
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    ps.ps_stack = prefix ++ MAP Var
+      (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+    DISJOINT (set prefix) (set (MAP Var
+      (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)))) /\
+    ps.ps_spilled = FEMPTY
+Proof
+  strip_tac >> drule_all dfs_block_state_native_incoming >> strip_tac >>
+  drule_all native_join_edge_residual >> strip_tac >>
+  qexistsl_tac [`pred`, `prefix`] >> simp[]
 QED
 
 Theorem dfs_block_state_native_phi_selection:

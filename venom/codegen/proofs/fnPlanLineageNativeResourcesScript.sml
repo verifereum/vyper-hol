@@ -1,7 +1,7 @@
 Theory fnPlanLineageNativeResources
 Ancestors
   fnPlanLineageCallers fnPlanLineageSetup fnPlanLineagePath
-  fnPlanLineageNativeOrigins fnPlanLineagePhiLiveBudget stackPlanGen venomWf
+  fnPlanLineageNativeOrigins fnPlanLineagePhiLiveBudget fnPlanLineageEdge stackPlanGen venomWf
   venomInst passSharedDefs removeUnusedSsaProofs list rich_list finite_map bag
 
 (* Live resource accounting is independent of chronological origin support. *)
@@ -196,4 +196,64 @@ Proof
     native_phi_live_demand_step >>
   disch_then (qspecl_then [`out`, `dist`] mp_tac) >>
   gvs[native_live_boundary_def] >> metis_tac[]
+QED
+
+(* A covered suffix consumes the complete unit resource budget for an item.
+   No restriction is imposed on other items in the residual prefix. *)
+Theorem resource_suffix_cancel:
+  !x prefix suffix spills.
+    MEM x suffix /\
+    LIST_ELEM_COUNT x (prefix ++ suffix) +
+      (if x IN FDOM spills then 1 else 0) <= 1 ==>
+    ~MEM x prefix /\ x NOTIN FDOM spills /\
+    LIST_ELEM_COUNT x suffix = 1
+Proof
+  rpt gen_tac >>
+  simp[LIST_ELEM_COUNT_THM, GSYM LIST_ELEM_COUNT_MEM] >>
+  Cases_on `x IN FDOM spills` >> simp[] >> decide_tac
+QED
+
+Theorem native_live_boundary_suffix_exclusion:
+  !fn bb i ps prefix suffix.
+    native_live_boundary fn bb i ps /\ ps.ps_stack = prefix ++ suffix /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+      MEM (Var v) suffix) ==>
+    !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) ==>
+      ~MEM (Var v) prefix /\ Var v NOTIN FDOM ps.ps_spilled /\
+      LIST_ELEM_COUNT (Var v) suffix = 1
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  drule_all native_live_boundary_count >> strip_tac >>
+  irule resource_suffix_cancel >> simp[] >> gvs[]
+QED
+
+Theorem native_join_edge_residual:
+  codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+  lookup_block pred fn.fn_blocks = SOME pb /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb before = SOME (ops,after) /\
+  native_live_boundary fn pb (LENGTH pb.bb_instructions) after ==>
+  ?prefix. after.ps_stack = prefix ++ MAP Var
+      (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+    DISJOINT (set prefix) (set (MAP Var
+      (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)))) /\
+    after.ps_spilled = FEMPTY
+Proof
+  strip_tac >> drule_all generate_block_plan_join_edge_suffix >> strip_tac >>
+  drule_all analyzed_join_edge_spilled_empty >> strip_tac >>
+  drule_all ready_join_edge_terminator >> strip_tac >>
+  `pb.bb_label = pred` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `set (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions)) =
+   set (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0))` by
+    metis_tac[fnPlanLineageLivenessTheory.analyzed_live_out_jmp] >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) pb.bb_label (LENGTH pb.bb_instructions)) ==>
+    MEM (Var v) (MAP Var (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0)))` by
+    (gvs[pred_setTheory.EXTENSION, MEM_MAP] >> metis_tac[]) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) pb.bb_label (LENGTH pb.bb_instructions)) ==>
+    ~MEM (Var v) prefix` by metis_tac[native_live_boundary_suffix_exclusion] >>
+  qexists_tac `prefix` >> simp[] >>
+  simp[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION, MEM_MAP] >>
+  metis_tac[]
 QED
