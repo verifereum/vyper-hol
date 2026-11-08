@@ -906,7 +906,7 @@ QED
 (* S2, Milestone 5: proved in loweringShapeSource as
    lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
    builtin arities and distinct internal names; raw_shape_free_program
-   excludes msg.gas values, raw_call and create calls (wider than the unit
+   excludes msg.gas values, raw_call, selfdestruct and create calls (wider than the unit
    shape needs: a plain raw_call passes it, but the body-shape proof lacks
    that case).
    Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
