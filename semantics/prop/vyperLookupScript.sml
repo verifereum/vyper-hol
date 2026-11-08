@@ -520,7 +520,9 @@ Proof
   Induct >> rpt gen_tac
   >- simp[evaluate_subscripts_def] >>
   Cases_on `h`
-  >- (Cases_on `v` >> Cases_on `a` >>
+  >- (Cases_on `v` >>
+      simp[assign_subscripts_def, evaluate_subscripts_def] >>
+      Cases_on `a` >>
       simp[assign_subscripts_def, evaluate_subscripts_def] >>
       rpt strip_tac >> gvs[AllCaseEqs()] >>
       first_x_assum drule >> strip_tac >> simp[]) >>
