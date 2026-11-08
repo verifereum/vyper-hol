@@ -5,7 +5,7 @@
    the tail evaluates; any other slice takes its operands' judgment. *)
 Theory bodyMemBiSliceNonSelf
 Ancestors
-  bodyMemoryPreds exprLowering bodyMemSliceScratch
+  bodyMemoryPreds exprLowering bodyMemSliceScratch bodyMemSliceData
 
 Theorem body_builtin_slice_nonself_mem:
   !cx ty n es.
