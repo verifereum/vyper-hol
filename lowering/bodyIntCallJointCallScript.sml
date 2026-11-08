@@ -448,6 +448,71 @@ Proof
   strip_tac >> sym_tac >> first_x_assum irule >> simp[]
 QED
 
+Theorem intcall_pure_child_immutable_holds:
+  immutable_holds ce cx ty r w es s /\
+  supported_pure_expr fp.jc_tops child /\
+  eval_expr cx child es = (INL child_r,ee) /\
+  vv_post ctx func ce cx child es a b s ee child_r child_vv u ==>
+  immutable_holds ce cx ty r w ee u
+Proof
+  strip_tac >>
+  `ee.immutables = es.immutables` by
+    (drule_all intcall_pure_expr_immutables >> simp[]) >>
+  irule intcall_immutable_holds_frame >>
+  qexistsl [`es`, `s`] >> simp[] >> conj_tac
+  >- (drule exprSimAttributeTheory.immutable_holds_read >> strip_tac >>
+      drule_all intcall_pure_child_read_result >> strip_tac >> simp[]) >>
+  rpt strip_tac >>
+  `~expr_has_effect child` by
+    metis_tac[supportedExprTraverseTheory.supported_pure_expr_effect_free] >>
+  metis_tac[intcall_pure_child_immutable_memory]
+QED
+
+(* Representation transport uses the semantic type independently of the
+   located annotation.  The extra typed-word equation is framed explicitly. *)
+Theorem intcall_memory_vv_holds_frame:
+  vv_holds ce cx ty r (LocatedValue ann p) es s /\
+  p.ptr_location = LocMemory /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  eval_operand p.ptr_operand u = eval_operand p.ptr_operand s /\
+  (!v tv w. read_result cx r es = (INL v,es) /\
+     evaluate_type (get_tenv cx) ty = SOME tv /\
+     eval_operand p.ptr_operand s = SOME w ==>
+     val_wf tv v /\
+     mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory =
+     mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory) /\
+  (is_word_type ty ==> !w. eval_operand p.ptr_operand s = SOME w ==>
+     mem_word_at (w2n w) u.vs_memory = mem_word_at (w2n w) s.vs_memory) ==>
+  vv_holds ce cx ty r (LocatedValue ann p) ee u
+Proof
+  strip_tac >> fs[loweringPostsTheory.vv_holds_def] >> rpt strip_tac
+  >>~- ([`val_in_memory _ _ _ _`],
+        irule exprSimPropsTheory.val_in_memory_footprint_agree >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem intcall_stack_vv_holds_frame:
+  vv_holds ce cx ty r (StackValue ann op) es s /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  eval_operand op u = eval_operand op s /\
+  (~is_word_type ty ==> !v tv w.
+     read_result cx r es = (INL v,es) /\
+     evaluate_type (get_tenv cx) ty = SOME tv /\
+     eval_operand op s = SOME w ==>
+     val_wf tv v /\
+     mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory =
+     mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory) ==>
+  vv_holds ce cx ty r (StackValue ann op) ee u
+Proof
+  simp[loweringPostsTheory.vv_holds_def,
+       loweringPostsTheory.expr_val_rel_def] >> strip_tac >>
+  qexists `v` >> simp[] >>
+  Cases_on `is_word_type ty` >- fs[] >> fs[] >> rpt strip_tac >>
+  irule exprSimPropsTheory.val_in_memory_footprint_agree >> metis_tac[]
+QED
+
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
    (callable_graph_descent), the statement producer of every frame whose
