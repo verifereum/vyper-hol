@@ -1280,60 +1280,6 @@ Proof
   irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]
 QED
 
-Theorem abi_encode_lowered_well_typed_coherent:
-  !cenv cx env ann ensure mid target args es.
-    expr_body_pre cenv cx env
-      (TypeBuiltin ann (AbiEncode ensure mid) target args) es ==>
-    well_typed_expr env
-      (TypeBuiltin
-        (lowered_value_type cenv
-          (TypeBuiltin ann (AbiEncode ensure mid) target args))
-        (AbiEncode ensure mid) target args)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) target args) /\
-   sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-   env.type_defs = get_tenv cx` by
-    gvs[expr_body_pre_def, expr_sim_inv_def,
-        vyperTypeInvariantsTheory.env_consistent_def,
-        vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  drule expr_body_pre_var_types_well_formed >> strip_tac >>
-  qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
-  gvs[well_typed_expr_def, type_builtin_result_ok_def,
-      well_typed_type_builtin_args_def] >>
-  `EVERY (well_formed_type (get_tenv cx)) (MAP expr_type args)` by
-    (qpat_x_assum `abi_encode_size_ok _ _ _ _ _` kall_tac >>
-     qpat_x_assum `args <> []` kall_tac >>
-     qpat_x_assum `well_typed_exprs env args` mp_tac >>
-     Induct_on `args` >> simp[well_typed_expr_def] >>
-     metis_tac[well_typed_expr_type_well_formed]) >>
-  qmatch_goalsub_abbrev_tac `lowered_value_type cenv be` >>
-  qabbrev_tac `enc_ty0 = if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
-                     else TupleT (MAP expr_type args)` >>
-  `abi_size_bound cenv.ce_struct_fields enc_ty0 =
-   vyper_abi_size_bound (get_tenv cx) enc_ty0` by
-    (simp[Abbr `enc_ty0`] >> IF_CASES_TAC
-     >- (Cases_on `args` >> gvs[well_formed_type_def,
-             optionTheory.IS_SOME_EXISTS] >>
-         drule_all abi_props_vyper_typed >> simp[]) >>
-     irule abi_size_bound_tuple_typed >>
-     fs[well_formed_type_def, EVERY_MEM]) >>
-  `!k. abi_encode_size_ok (get_tenv cx) ensure (TupleT (MAP expr_type args)) mid k =
-   (vyper_abi_size_bound (get_tenv cx) enc_ty0 +
-    (if IS_SOME mid then 4 else 0) <= k)` by
-    (Cases_on `args` >> gvs[] >> Cases_on `t` >>
-     Cases_on `mid` >> Cases_on `ensure` >>
-     gvs[abi_encode_size_ok_def, abi_encode_method_id_size_def,
-         abi_encode_method_id_bytes_def, Abbr `enc_ty0`]) >>
-  simp[Abbr `be`, lowered_value_type_def] >>
-  gvs[well_formed_type_def, evaluate_type_def, type_slot_size_def] >>
-  drule word_size_monotone >> strip_tac >>
-  qpat_x_assum `word_size _ <= word_size n` mp_tac >>
-  qpat_x_assum `word_size n + 1 <= _` mp_tac >>
-  qpat_x_assum `_ <= n` mp_tac >>
-  qpat_x_assum `n < _` mp_tac >> decide_tac
-QED
-
 Theorem memory_rhs_read_annotation_typed:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
@@ -1346,11 +1292,201 @@ Proof
   gvs[expr_body_pre_def, expr_sim_inv_def]
 QED
 
+Theorem physical_concat_fits[local]:
+  !ty n args.
+    well_typed_builtin_app ty (Concat n) (MAP expr_type args) ==>
+    arg_type_fits
+      (concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args))) ty
+Proof
+  rpt gen_tac >> simp[well_typed_builtin_app_def] >> strip_tac >>
+  `!ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
+        MAP bytelike_type_bound ts = MAP concat_payload_capacity ts` by
+    (Induct >> simp[] >> rpt strip_tac >>
+     gvs[bytelike_type_bound_def, concat_payload_capacity_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     simp[bound_length_def, concat_payload_capacity_def]) >>
+  `MAP bytelike_type_bound (MAP expr_type args) =
+   MAP concat_payload_capacity (MAP expr_type args)` by
+    (first_x_assum irule >> fs[EVERY_MEM]) >>
+  fs[MAP_MAP_o] >> gvs[concat_buffer_type_def, arg_type_fits_def]
+QED
+
+Theorem expr_body_pre_physical_type:
+  !ce e cx env es.
+    expr_body_pre ce cx env e es ==>
+    arg_type_fits (lowered_value_type ce e) (expr_type e) /\
+    ?tvp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tvp
+Proof
+  ho_match_mp_tac lowered_value_type_ind >> rpt conj_tac
+  >~ [`Call _ (IntCall _) _ _`]
+  >- (rpt strip_tac >> drule ifexp_body_pre_intcall_physical >> simp[expr_type_def])
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[expr_body_pre_def, well_typed_expr_def, well_typed_literal_def,
+          well_formed_type_def, evaluate_type_def, lowered_value_type_def,
+          expr_type_def, arg_type_fits_def, compatible_bound_def,
+          type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
+  >- (rpt gen_tac >> strip_tac >>
+      gvs[expr_body_pre_def, well_typed_expr_def, well_typed_literal_def,
+          well_formed_type_def, evaluate_type_def, lowered_value_type_def,
+          expr_type_def, arg_type_fits_def, compatible_bound_def,
+          type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> decide_tac)
+  >~ [`Builtin _ (Concat _) _`]
+  >- (rpt strip_tac >> drule expr_body_pre_type_evaluates >> simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+      `well_typed_builtin_app ty (Concat v2) (MAP expr_type args)` by
+        gvs[expr_body_pre_def, well_typed_expr_def] >>
+      drule physical_concat_fits >> strip_tac >>
+      simp[lowered_value_type_def, expr_type_def] >>
+      gvs[expr_type_def, arg_type_fits_def, concat_buffer_type_def,
+          evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `ty` >> gvs[arg_type_fits_def, evaluate_type_def] >>
+      rename1 `BaseT bt` >> Cases_on `bt` >>
+      gvs[arg_type_fits_def, evaluate_type_def, AllCaseEqs(), type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> simp[] >>
+      rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+      gvs[arg_type_fits_def, evaluate_type_def, type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> simp[])
+  >~ [`TypeBuiltin _ (AbiEncode _ _) _ _`]
+  >- (rpt gen_tac >> ntac 2 strip_tac >> rpt gen_tac >> disch_tac >>
+      `!e. MEM e args ==> expr_body_pre ce cx env e es` by
+        (rpt strip_tac >>
+         qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+         rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+            byte_widths_expr_def, alloc_limits_expr_def,
+            supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+         imp_res_tac int_calls_exprs_every_mem >>
+         gvs[expr_has_evm_run_thm, EXISTS_MEM] >>
+         metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
+                   alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]) >>
+      `!e. MEM e args ==> arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+        (Cases_on `LENGTH args = 1 /\ ~ensure` >> gvs[] >-
+           (gvs[LENGTH_EQ_NUM_compute] >> metis_tac[]) >> metis_tac[]) >>
+      `arg_types_fit (MAP (lowered_value_type ce) args) (MAP expr_type args)` by
+        (`!xs. (!e. MEM e xs ==> arg_type_fits (lowered_value_type ce e) (expr_type e)) ==>
+             arg_types_fit (MAP (lowered_value_type ce) xs) (MAP expr_type xs)` by
+           (Induct >> simp[arg_type_fits_def] >> metis_tac[]) >> metis_tac[]) >>
+      `abi_size_bound ce.ce_struct_fields
+         (if LENGTH args = 1 /\ ~ensure then lowered_value_type ce (HD args)
+          else TupleT (MAP (lowered_value_type ce) args)) <=
+       abi_size_bound ce.ce_struct_fields
+         (if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
+          else TupleT (MAP expr_type args))` by
+        (IF_CASES_TAC >-
+           (gvs[LENGTH_EQ_NUM_compute] >>
+            irule (cj 1 abi_args_fits_size_bound) >> metis_tac[]) >>
+         simp[] >> irule (cj 2 abi_args_fits_size_bound) >> simp[]) >>
+      `env.type_defs = get_tenv cx /\
+       sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+       well_typed_exprs env args` by
+        gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
+            env_consistent_def, env_context_consistent_def] >>
+      `!e. MEM e args ==> IS_SOME (evaluate_type env.type_defs (expr_type e))` by
+        metis_tac[expr_body_pre_type_evaluates] >>
+      `!t. MEM t (MAP expr_type args) ==>
+         abi_size_bound ce.ce_struct_fields t = vyper_abi_size_bound env.type_defs t /\
+         abi_embedded_static_size ce.ce_struct_fields t +
+           (if is_abi_dynamic ce.ce_struct_fields t then abi_size_bound ce.ce_struct_fields t else 0) =
+         vyper_abi_embedded_size env.type_defs t` by
+        (rpt strip_tac >>
+         `?tv. evaluate_type env.type_defs t = SOME tv` by
+           metis_tac[MEM_MAP, optionTheory.IS_SOME_EXISTS] >>
+         drule_all abi_props_vyper_typed >> simp[]) >>
+      `abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)) =
+       vyper_abi_size_bound env.type_defs (TupleT (MAP expr_type args))` by
+        (irule abi_size_bound_tuple_agrees >> metis_tac[]) >>
+      drule expr_body_pre_type_evaluates >>
+      simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+      gvs[expr_body_pre_def, well_typed_expr_def,
+          type_builtin_result_ok_def, well_typed_type_builtin_args_def,
+          lowered_value_type_def, expr_type_def, abi_encode_size_ok_def] >>
+      Cases_on `args` >> gvs[] >> rename1 `h::rest` >>
+      Cases_on `rest` >> Cases_on `ensure` >>
+      gvs[arg_type_fits_def, evaluate_type_def, well_formed_type_def,
+          abi_encode_method_id_size_def, abi_encode_method_id_bytes_def,
+          type_slot_size_def] >>
+      imp_res_tac word_size_monotone >> simp[] >>
+      Cases_on `method_id` >> gvs[abi_encode_method_id_bytes_def] >>
+      `!p q n. p <= q /\ q + 4 <= n ==> p + 4 <= n` by decide_tac >>
+      first_x_assum (fn th => imp_res_tac th) >>
+      imp_res_tac word_size_monotone >> simp[] >>
+      `!p q n. p <= q /\ q <= n ==> p <= n` by decide_tac >>
+      first_x_assum (fn th => imp_res_tac th) >>
+      imp_res_tac word_size_monotone >> simp[SF ETA_ss]) >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_type_evaluates >> simp[optionTheory.IS_SOME_EXISTS] >>
+  simp[lowered_value_type_def, expr_type_def, ifexp_arg_type_fits_refl]
+QED
+
+Theorem expr_body_pre_lowered_fits:
+  expr_body_pre ce cx env e es ==>
+  arg_type_fits (lowered_value_type ce e) (expr_type e)
+Proof
+  metis_tac[expr_body_pre_physical_type]
+QED
+
+Theorem expr_body_pre_lowered_evaluates:
+  expr_body_pre ce cx env e es ==>
+  ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv
+Proof
+  metis_tac[expr_body_pre_physical_type]
+QED
+
+Theorem eval_exprs_physical_runtime_typed:
+  !args es vs es'.
+    EVERY (\e. expr_body_pre ce cx env e es) args /\
+    eval_exprs cx args es = (INL vs,es') /\
+    (!e st v st'. MEM e args /\ expr_body_pre ce cx env e st /\
+      (do r <- eval_expr cx e; read_result cx r od) st = (INL v,st') ==>
+      value_runtime_typed env (lowered_value_type ce e) v) ==>
+    LIST_REL (\e v. value_runtime_typed env (lowered_value_type ce e) v) args vs
+Proof
+  Induct
+  >- (simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[EVERY_DEF] >>
+  qpat_x_assum `eval_exprs cx (h::args) es = _` mp_tac >>
+  simp[Once evaluate_def, GSYM vyperStateTheory.bind_assoc] >>
+  Cases_on `(do r <- eval_expr cx h; read_result cx r od) es` >>
+  rename1 `_ = (rr,st)` >> Cases_on `rr` >>
+  simp[bind_def, return_def] >>
+  Cases_on `eval_exprs cx args st` >>
+  rename1 `_ = (tr,ts)` >> Cases_on `tr` >> simp[] >> strip_tac >> gvs[] >>
+  `expr_sim_inv ce cx env st` by
+    metis_tac[exprSimSourceTheory.expr_body_pre_eval] >>
+  `EVERY (\e. expr_body_pre ce cx env e st) args` by
+    (gvs[EVERY_MEM, expr_body_pre_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem physical_runtime_typed_list_layouts:
+  !args vs es.
+    EVERY (\e. expr_body_pre ce cx env e es) args /\
+    env.type_defs = get_tenv cx /\
+    LIST_REL (\e v. value_runtime_typed env (lowered_value_type ce e) v) args vs ==>
+    arg_types_fit (MAP (lowered_value_type ce) args) (MAP expr_type args) /\
+    ?ptvs stvs.
+      LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv)
+        (MAP (lowered_value_type ce) args) ptvs /\
+      LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv)
+        (MAP expr_type args) stvs /\
+      values_have_types ptvs vs
+Proof
+  Induct >> Cases_on `vs` >>
+  simp[vyperTypingTheory.value_has_type_def, arg_type_fits_def] >>
+  rpt strip_tac >>
+  gvs[value_runtime_typed_def] >>
+  drule expr_body_pre_lowered_fits >> strip_tac >>
+  drule expr_body_pre_type_evaluates >>
+  simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl [`tv::ptvs`, `x::stvs`] >>
+  simp[vyperTypingTheory.value_has_type_def]
+QED
+
 Theorem memory_rhs_read_lowered_typed_unwidened:
   !cenv e env cx es v es'.
     expr_body_pre cenv cx env e es /\
-    (!a f args d. e = Call a (IntCall f) args d ==>
-       lowered_value_type cenv e = expr_type e) /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     value_runtime_typed env (lowered_value_type cenv e) v
 Proof
@@ -1376,12 +1512,77 @@ Proof
   >~ [`Builtin _ (Concat _) _`]
   >- (rpt strip_tac >> simp[lowered_value_type_def] >>
       drule_all concat_read_buffer_typed >> simp[])
-  >- (rpt gen_tac >> strip_tac >>
-      drule abi_encode_lowered_well_typed_coherent >> strip_tac >>
-      irule type_builtin_read_annotation_typed >>
-      metis_tac[expr_body_pre_def])
+  >~ [`TypeBuiltin _ (AbiEncode _ _) _ _`]
+  >- (rpt strip_tac >>
+      `!e. MEM e args ==> expr_body_pre cenv cx env e es` by
+        (rpt strip_tac >>
+         qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+         rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+            byte_widths_expr_def, alloc_limits_expr_def,
+            supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+         imp_res_tac int_calls_exprs_every_mem >>
+         gvs[expr_has_evm_run_thm, EXISTS_MEM] >>
+         metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
+                   alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]) >>
+      `env.type_defs = get_tenv cx /\
+       sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+       well_typed_type_builtin_args (AbiEncode ensure method_id) v4 (MAP expr_type args)` by
+        gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
+            env_consistent_def, env_context_consistent_def] >>
+      drule expr_body_pre_lowered_evaluates >> strip_tac >>
+      qpat_x_assum `bind _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def,
+           type_builtin_args_length_ok_def, lift_sum_def, read_result_def,
+           evaluate_type_builtin_def] >>
+      Cases_on `eval_exprs cx args es` >> rename1 `eval_exprs cx args es = (rr,st)` >>
+      Cases_on `rr`
+      >- (simp[return_def, raise_def, read_result_def] >>
+          `LIST_REL (\e v. value_runtime_typed env (lowered_value_type cenv e) v) args x` by
+            (irule eval_exprs_physical_runtime_typed >>
+             qexistsl [`cx`, `es`, `st`] >> simp[EVERY_MEM] >>
+             Cases_on `LENGTH args = 1 /\ ~ensure` >> gvs[] >-
+               (gvs[LENGTH_EQ_NUM_compute] >> metis_tac[]) >> metis_tac[]) >>
+          `EVERY (\e. expr_body_pre cenv cx env e es) args` by simp[EVERY_MEM] >>
+          drule_all physical_runtime_typed_list_layouts >> strip_tac >>
+          gvs[well_typed_type_builtin_args_def] >>
+          Cases_on `LENGTH args = 1 /\ ~ensure`
+          >- (gvs[LENGTH_EQ_NUM_compute] >>
+              gvs[vyperABITheory.needs_external_call_wrap_def, lowered_value_type_def,
+                  value_runtime_typed_def, evaluate_type_def,
+                  bind_def, return_def, read_result_def] >>
+              Cases_on `evaluate_abi_encode_bytes (get_tenv cx) (expr_type h) v'` >>
+              gvs[return_def, raise_def, read_result_def,
+                  vyperTypingTheory.value_has_type_def] >> strip_tac >> gvs[] >>
+              gvs[arg_type_fits_def] >>
+              drule_all abi_args_physical_singleton_capacity >>
+              disch_then (qspec_then `method_id` mp_tac) >>
+              simp[vyperTypingTheory.value_has_type_def,
+                   abi_encode_method_id_size_def] >>
+              Cases_on `method_id` >>
+              gvs[abi_encode_method_id_bytes_def] >> decide_tac) >>
+          `1 <= LENGTH args` by (Cases_on `args` >> gvs[]) >>
+          `~(~ensure /\ needs_external_call_wrap (TupleT (MAP expr_type args)))` by
+            (simp[vyperABITheory.needs_external_call_wrap_def] >>
+             metis_tac[arithmeticTheory.EQ_LESS_EQ]) >>
+          simp[lowered_value_type_def, SF ETA_ss] >>
+          Cases_on `evaluate_abi_encode_bytes (get_tenv cx)
+            (TupleT (MAP expr_type args)) (ArrayV (TupleV x))` >>
+          gvs[return_def, raise_def, read_result_def] >> strip_tac >> gvs[] >>
+          drule_all abi_args_physical_tuple_capacity >>
+          disch_then (qspec_then `method_id` mp_tac) >>
+          gvs[lowered_value_type_def, value_runtime_typed_def,
+              evaluate_type_def, SF ETA_ss] >>
+          simp[vyperTypingTheory.value_has_type_def, abi_encode_method_id_size_def] >>
+          Cases_on `method_id` >> gvs[abi_encode_method_id_bytes_def] >> metis_tac[]) >>
+      Cases_on `1 <= LENGTH args` >> simp[return_def, raise_def])
   >~ [`Call _ (IntCall _) _ _`]
-  >- (rw[] >> metis_tac[memory_rhs_read_annotation_typed]) >>
+  >- (rw[] >> drule_all ifexp_intcall_read_physical_typed >> strip_tac >>
+      `env.type_defs = get_tenv cx` by
+        gvs[expr_body_pre_def, expr_sim_inv_def,
+            vyperTypeInvariantsTheory.env_consistent_def,
+            vyperTypeInvariantsTheory.env_context_consistent_def] >>
+      simp[value_runtime_typed_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> simp[lowered_value_type_def] >>
   metis_tac[memory_rhs_read_annotation_typed]
 QED
@@ -1396,44 +1597,10 @@ Theorem lowered_zero_bytestring_read_empty:
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     (v = BytesV [] \/ v = StringV "")
 Proof
-  rpt gen_tac >>
-  map_every qid_spec_tac [`es'`, `v`, `es`, `env`, `cx`, `e`, `cenv`] >>
-  ho_match_mp_tac lowered_value_type_ind >>
-  rpt conj_tac >> rpt gen_tac
-  >~ [`Literal (BaseT (StringT _)) (StringL _)`]
-  >- (simp[lowered_value_type_def] >> strip_tac >> gvs[] >>
-      gvs[Once evaluate_def, vyperValueOperationTheory.evaluate_literal_def, bind_def, return_def,
-          read_result_def])
-  >~ [`Literal (BaseT (BytesT (Dynamic _))) (BytesL _)`]
-  >- (simp[lowered_value_type_def] >> strip_tac >> gvs[] >>
-      gvs[Once evaluate_def, vyperValueOperationTheory.evaluate_literal_def, bind_def, return_def,
-          read_result_def])
-  >~ [`TypeBuiltin _ (AbiEncode _ _) _ _`]
-  >- (strip_tac >>
-      rename1 `expr_body_pre cenv cx env
-        (TypeBuiltin ann (AbiEncode ensure method_id) target args) es` >>
-      `lowered_value_type cenv
-         (TypeBuiltin ann (AbiEncode ensure method_id) target args) =
-       BaseT (BytesT (Dynamic 0))` by
-        gvs[lowered_value_type_def] >>
-      drule_all expr_body_pre_abi_encode_zero_annotation >> strip_tac >>
-      irule value_runtime_typed_zero_bytestring_empty >>
-      qexists_tac `env` >> disj1_tac >>
-      irule type_builtin_read_annotation_typed >>
-      gvs[expr_body_pre_def] >> goal_assum drule >> simp[] >>
-      metis_tac[])
-  >~ [`Builtin _ (Concat _) _`]
-  >- (rpt strip_tac >> drule_all concat_read_buffer_typed >> strip_tac >>
-      irule value_runtime_typed_zero_bytestring_empty >> qexists_tac `env` >>
-      gvs[lowered_value_type_def])
-  >~ [`Call _ (IntCall _) _ _`]
-  >- (strip_tac >> drule_all expr_body_pre_read_value_typed >> strip_tac >>
-      irule value_runtime_typed_zero_bytestring_empty >> qexists_tac `env` >>
-      gvs[lowered_value_type_def, expr_type_def])
-  >> (strip_tac >> drule_all expr_body_pre_read_value_typed >> strip_tac >>
-      irule value_runtime_typed_zero_bytestring_empty >> qexists_tac `env` >>
-      qpat_x_assum `lowered_value_type _ _ = _` mp_tac >>
-      simp[lowered_value_type_def] >> strip_tac >> gvs[])
+  rpt strip_tac >>
+  drule_all memory_rhs_read_lowered_typed_unwidened >> strip_tac >>
+  irule value_runtime_typed_zero_bytestring_empty >>
+  qexists_tac `env` >> metis_tac[]
 QED
 
 Theorem lowered_value_type_bytestring:
