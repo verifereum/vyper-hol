@@ -460,6 +460,40 @@ Proof
   metis_tac[native_live_boundary_suffix_exclusion]
 QED
 
+Theorem dfs_block_state_native_ordinary_residual_observations:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (non_param_insts bb) ps a qs /\
+  LENGTH (collect_phis bb.bb_instructions) <= a /\
+  a <= PRE (LENGTH bb.bb_instructions) /\ a <= j /\ j < LENGTH bb.bb_instructions /\
+  qs.ps_stack = prefix ++ suffix /\
+  (!v. MEM v (live_vars_at (liveness_analyze fn) lbl a) ==> MEM (Var v) suffix) ==>
+  EVERY (\v. ~MEM (Var v) prefix) (live_vars_at (liveness_analyze fn) lbl a) /\
+  (!k. a <= k /\ k <= j ==>
+    EVERY (\v. ~MEM (Var v) prefix) (EL k bb.bb_instructions).inst_outputs) /\
+  EVERY (\v. ~MEM (Var v) prefix)
+    (live_vars_at (liveness_analyze fn) lbl (SUC j) ++
+     (EL j bb.bb_instructions).inst_outputs) /\
+  (!v. MEM (Var v) (compute_operands (EL j bb.bb_instructions)) ==>
+    ~MEM (Var v) prefix)
+Proof
+  strip_tac >> drule_all dfs_block_state_native_incoming >> strip_tac >>
+  `bb.bb_label = lbl /\ MEM bb fn.fn_blocks` by
+    metis_tac[venomExecPropsTheory.lookup_block_label, venomExecPropsTheory.lookup_block_MEM] >>
+  `lbl <> entry` by metis_tac[] >>
+  `~MEM bb.bb_label visited` by simp[] >>
+  drule_all incoming_join_native_ordinary_prefix >> strip_tac >>
+  qpat_x_assum `bb.bb_label = lbl` (SUBST_ALL_TAC o SYM) >>
+  drule_all native_ordinary_interval_residual_exclusion >> simp[]
+QED
+
 Theorem dfs_block_state_unique:
   fn_entry_label fn = SOME entry /\
   generate_fn_plan_aux lv dfg cfg fn [entry] [] ps0 = SOME result /\

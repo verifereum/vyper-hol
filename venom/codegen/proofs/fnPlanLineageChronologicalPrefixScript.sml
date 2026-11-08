@@ -5,6 +5,72 @@ Ancestors
   fnPlanLineagePhiLiveBudget fnPlanLineageLiveness stackPlanGen venomWf venomInst
   list rich_list finite_map callLayoutDefs
 
+(* Native origins at a boundary exclude definitions throughout a later interval.
+   This says nothing about chronological freshness on runtime revisits. *)
+Theorem chronological_origin_interval_outputs_fresh:
+  !fn visited bb a j ps.
+    ssa_form fn /\ MEM bb fn.fn_blocks /\ ~MEM bb.bb_label visited /\
+    a <= j /\ j < LENGTH bb.bb_instructions /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE a bb.bb_instructions) /\ MEM v di.inst_outputs)) ==>
+    !k. a <= k /\ k <= j ==>
+      EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+        (EL k bb.bb_instructions).inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  irule chronological_origin_output_fresh >> simp[] >>
+  qexistsl_tac [`fn`, `visited`] >> simp[] >>
+  rpt strip_tac >>
+  `set (TAKE a bb.bb_instructions) SUBSET set (TAKE k bb.bb_instructions)` by
+    (`TAKE a bb.bb_instructions = TAKE a (TAKE k bb.bb_instructions)` by
+       simp[rich_listTheory.TAKE_TAKE_T] >>
+     pop_assum SUBST1_TAC >> irule LIST_TO_SET_TAKE) >>
+  gvs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem native_ordinary_interval_residual_exclusion:
+  !fn visited bb a j ps prefix suffix.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    ~MEM bb.bb_label visited /\ a <= j /\ j < LENGTH bb.bb_instructions /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled ==>
+      (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+        MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
+      (?di. MEM di (TAKE a bb.bb_instructions) /\ MEM v di.inst_outputs)) /\
+    native_live_boundary fn bb a ps /\ ps.ps_stack = prefix ++ suffix /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label a) ==>
+      MEM (Var v) suffix) ==>
+    EVERY (\v. ~MEM (Var v) prefix)
+      (live_vars_at (liveness_analyze fn) bb.bb_label a) /\
+    (!k. a <= k /\ k <= j ==>
+      EVERY (\v. ~MEM (Var v) prefix) (EL k bb.bb_instructions).inst_outputs) /\
+    EVERY (\v. ~MEM (Var v) prefix)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC j) ++
+       (EL j bb.bb_instructions).inst_outputs) /\
+    (!v. MEM (Var v) (compute_operands (EL j bb.bb_instructions)) ==>
+      ~MEM (Var v) prefix)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\v. ~MEM (Var v) prefix)
+     (live_vars_at (liveness_analyze fn) bb.bb_label a)` by
+    (simp[EVERY_MEM] >> metis_tac[native_live_boundary_suffix_exclusion]) >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `!k. a <= k /\ k <= j ==>
+     EVERY (\v. ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled)
+       (EL k bb.bb_instructions).inst_outputs` by
+    (gen_tac >> strip_tac >>
+     irule chronological_origin_interval_outputs_fresh >>
+     qexistsl_tac [`a`, `fn`, `j`, `visited`] >> gvs[MEM_APPEND] >> metis_tac[]) >>
+  `!k. a <= k /\ k <= j ==>
+     EVERY (\v. ~MEM (Var v) prefix) (EL k bb.bb_instructions).inst_outputs` by
+    (gvs[EVERY_MEM, MEM_APPEND] >> metis_tac[]) >>
+  simp[] >> conj_tac
+  >- (drule_all ordinary_interval_prefix_exclusion >> simp[]) >>
+  rpt strip_tac >> drule_all interval_computed_query_origin >>
+  gvs[EVERY_MEM] >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
+QED
+
 Theorem native_chronological_step:
   !fn visited bb i ps dfg cfg halting term ops qs.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
