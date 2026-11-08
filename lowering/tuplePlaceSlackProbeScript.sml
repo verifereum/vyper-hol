@@ -66,8 +66,8 @@ QED
          :67-73 uses only end bounds. The stronger margin is then passed into
          typed_memory_child_forward_apply at :77. Slow fixed (:351) and
          dynamic (:555) runners propagate it to that element boundary.
-       tuple/struct: typed_memory_tuple_fields_forward
-         (placeMemoryFieldsForward:286) carries +64 at :304, derives it for
+       tuple/struct: typed_memory_fields_forward
+         (placeMemoryFieldsForward:291) carries +64 at :304, derives it for
          a child at :359 and applies typed_memory_child_forward_apply at :363.
          Address calculations :344-348 use only no-wrap. The struct adapter
          carries the same bound at :439.
