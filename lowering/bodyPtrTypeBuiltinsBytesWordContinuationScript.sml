@@ -6,12 +6,12 @@ Ancestors bodyPtrTypeBuiltinsBytesWordContinue bodyPtrTypeBuiltinsBytesWordTypes
 Libs monadsyntax
 
 Theorem bytes_word_continuation_ptr:
-  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e (es with gas_obs := gs) /\
   is_bytestring_type (expr_type e) /\ ~is_bytestring_type dst /\
   valid_conversion (expr_type e) dst /\ well_formed_type tenv dst /\
   ~((?b. dst = BaseT (IntT b)) \/ dst = BaseT DecimalT) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
+  (do r <- eval_expr cx e; read_result cx r od) (es with gas_obs := gs) = (INL v,ee) /\
   (if lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
       lowered_value_type cenv e = BaseT (StringT 0)
    then out = Lit 0w /\ sb = sa
@@ -40,6 +40,8 @@ Theorem bytes_word_continuation_ptr:
     (\res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_body_pre cenv cx env e es` by
+    fs[exprSimSourceTheory.expr_body_pre_gas_obs] >>
   Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
             lowered_value_type cenv e = BaseT (StringT 0)`
   >- ((Q.SUBGOAL_THEN `v = BytesV [] \/ v = StringV []` assume_tac
