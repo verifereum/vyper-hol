@@ -2836,6 +2836,140 @@ Proof
   irule mm_local_prefix_phase_external_available >> metis_tac[]
 QED
 
+Definition mm_local_inst_covered_def:
+  mm_local_inst_covered s i <=>
+    MEM i.inst_id s.irs_used_inst_ids /\ i.inst_id < s.irs_next_inst /\
+    list_subset (irSupply$inst_ir_vars i) s.irs_used_vars /\
+    list_subset (irSupply$inst_ir_labels i) s.irs_used_labels
+End
+
+Theorem mm_local_extends_refl[local]:
+  ir_supply_extends s s
+Proof
+  simp[ir_supply_extends_def, list_subset_def, EVERY_MEM]
+QED
+
+Theorem mm_local_extends_trans[local]:
+  ir_supply_extends s t /\ ir_supply_extends t u ==> ir_supply_extends s u
+Proof
+  simp[ir_supply_extends_def, list_subset_def, EVERY_MEM] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem mm_local_inst_covered_mono[local]:
+  ir_supply_extends s t /\ mm_local_inst_covered s i ==>
+  mm_local_inst_covered t i
+Proof
+  simp[ir_supply_extends_def, mm_local_inst_covered_def, list_subset_def, EVERY_MEM] >>
+  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+Theorem mm_local_mode_resources[local]:
+  apply_groups_inst_supply mode ns rm s i = (out,t) ==>
+  ir_supply_extends s t /\
+  (mm_local_inst_covered s i ==> EVERY (mm_local_inst_covered t) out)
+Proof
+  simp[apply_groups_inst_supply_def] >>
+  Cases_on `MEM i.inst_id ns` >> simp[]
+  >- (strip_tac >> gvs[mm_local_extends_refl, mm_local_inst_covered_def,
+       mk_nop_from_def, irSupplyTheory.inst_ir_vars_def,
+       irSupplyTheory.inst_ir_labels_def, venomInstTheory.inst_uses_def,
+       irSupplyTheory.operand_ir_labels_def, venomInstTheory.operand_vars_def,
+       list_subset_def]) >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[]
+  >- (strip_tac >> gvs[mm_local_extends_refl]) >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >>
+  gvs[irSupplyTheory.fresh_inst_id_def, AllCaseEqs()] >>
+  imp_res_tac irSupplyTheory.fresh_ir_var_contract >>
+  gvs[ir_supply_extends_def, mm_local_inst_covered_def,
+    mk_bulk_copy_inst_def, mk_load_inst_def, mk_mstore_from_load_def,
+    irSupplyTheory.inst_ir_vars_def, irSupplyTheory.inst_ir_labels_def,
+    venomInstTheory.inst_uses_def, irSupplyTheory.operand_ir_labels_def,
+    venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
+    list_subset_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem mm_local_zero_resources[local]:
+  apply_memzero_inst_supply ns rm s i = (out,t) ==>
+  ir_supply_extends s t /\
+  (mm_local_inst_covered s i ==> EVERY (mm_local_inst_covered t) out)
+Proof
+  simp[apply_memzero_inst_supply_def] >>
+  Cases_on `MEM i.inst_id ns` >> simp[]
+  >- (strip_tac >> gvs[mm_local_extends_refl, mm_local_inst_covered_def,
+       mk_nop_from_def, irSupplyTheory.inst_ir_vars_def,
+       irSupplyTheory.inst_ir_labels_def, venomInstTheory.inst_uses_def,
+       irSupplyTheory.operand_ir_labels_def, venomInstTheory.operand_vars_def,
+       list_subset_def]) >>
+  Cases_on `ALOOKUP rm i.inst_id` >> simp[]
+  >- (strip_tac >> gvs[mm_local_extends_refl]) >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >>
+  gvs[irSupplyTheory.fresh_inst_id_def, AllCaseEqs()] >>
+  imp_res_tac irSupplyTheory.fresh_ir_var_contract >>
+  gvs[ir_supply_extends_def, mm_local_inst_covered_def,
+    mk_zero_store_inst_def, mk_memzero_calldatacopy_def,
+    irSupplyTheory.inst_ir_vars_def, irSupplyTheory.inst_ir_labels_def,
+    venomInstTheory.inst_uses_def, irSupplyTheory.operand_ir_labels_def,
+    venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def,
+    list_subset_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem mm_local_list_resources[local]:
+  (!s i out t. f s i = (out,t) ==>
+    ir_supply_extends s t /\
+    (mm_local_inst_covered s i ==> EVERY (mm_local_inst_covered t) out)) ==>
+  !xs s ys t. mm_flat_map_supply f s xs = (ys,t) ==>
+    ir_supply_extends s t /\
+    (EVERY (mm_local_inst_covered s) xs ==> EVERY (mm_local_inst_covered t) ys)
+Proof
+  strip_tac >> Induct >> simp[mm_flat_map_supply_def, mm_local_extends_refl] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  qpat_assum `!s i out t. f s i = _ ==> _` drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  conj_tac >- metis_tac[mm_local_extends_trans] >>
+  strip_tac >>
+  `EVERY (mm_local_inst_covered s1) xs` by
+    (gvs[EVERY_MEM] >> metis_tac[mm_local_inst_covered_mono]) >>
+  simp[EVERY_APPEND] >> gvs[EVERY_MEM] >> metis_tac[mm_local_inst_covered_mono]
+QED
+
+Theorem mm_local_phase_resources[local]:
+  mm_local_phase dfg phase (bb,s) = (cc,t) ==>
+  ir_supply_extends s t /\ cc.bb_label = bb.bb_label /\
+  (EVERY (mm_local_inst_covered s) bb.bb_instructions ==>
+    EVERY (mm_local_inst_covered t) cc.bb_instructions)
+Proof
+  Cases_on `phase` >>
+  simp[mm_local_phase_def, transform_block_mode_supply_def,
+    transform_block_memzero_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_at (Pat `mm_flat_map_supply _ _ _ = _`) mm_local_list_resources >>
+  (impl_tac >- metis_tac[mm_local_mode_resources, mm_local_zero_resources]) >> simp[]
+QED
+
+Theorem mm_local_prefix_resources[local]:
+  !fn0 supply index k bb sk.
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  ir_supply_extends supply sk /\ bb.bb_label = (EL index fn0.fn_blocks).bb_label /\
+  (EVERY (mm_local_inst_covered supply) (EL index fn0.fn_blocks).bb_instructions ==>
+    EVERY (mm_local_inst_covered sk) bb.bb_instructions)
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero, mm_local_extends_refl] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4 /\ k <= 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `ir_supply_extends supply sp /\ prev.bb_label = (EL index fn0.fn_blocks).bb_label /\
+    (EVERY (mm_local_inst_covered supply) (EL index fn0.fn_blocks).bb_instructions ==>
+      EVERY (mm_local_inst_covered sp) prev.bb_instructions)` by
+    (first_x_assum irule >> simp[]) >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  drule mm_local_phase_resources >> strip_tac >>
+  metis_tac[mm_local_extends_trans]
+QED
+
 Theorem mm_local_prefix_function_wf[local]:
   fn_inst_wf fn0 /\ wf_function fn0 /\ ssa_form fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k <= 4 /\
