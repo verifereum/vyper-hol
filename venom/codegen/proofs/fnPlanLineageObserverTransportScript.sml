@@ -1793,3 +1793,48 @@ Proof
   drule_all (REWRITE_RULE [arithmeticTheory.ADD1]
     fnPlanLineagePhiScheduleTheory.analyzed_native_phi_schedule_observer_support) >> simp[]
 QED
+
+Theorem native_join_phi_input_extinction:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ lookup_block pred fn.fn_blocks = SOME pb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\ collect_phis bb.bb_instructions <> [] /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps0 = SOME (ops,after) /\
+  incoming.ps_stack = after.ps_stack /\
+  fnPlanLineageEntryProduction$native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn)
+    fn lbl halt 0 len bb.bb_instructions incoming (LENGTH (collect_phis bb.bb_instructions)) endpoint /\
+  MEM v (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+  (!inst. MEM inst (collect_phis bb.bb_instructions) ==> ~MEM v inst.inst_outputs) /\
+  ~MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions))) /\
+  LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+    (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 ==>
+  ~MEM (Var v) endpoint.ps_stack /\ Var v NOTIN FDOM endpoint.ps_spilled
+Proof
+  strip_tac >>
+  `~NULL (collect_phis bb.bb_instructions)` by simp[NULL_EQ] >>
+  drule_all fnPlanLineageJoinEntryTheory.successful_join_edges_native_cells >> strip_tac >>
+  `!w i. MEM w (live_vars_at (liveness_analyze fn) lbl 0) /\
+    FLOOKUP (FST (build_phi_maps pred (collect_phis bb.bb_instructions))) w = SOME i ==>
+    IS_SOME (FLOOKUP (SND (build_phi_maps pred (collect_phis bb.bb_instructions))) i) /\
+    IS_SOME (FLOOKUP (SND (build_phi_maps pred (collect_phis bb.bb_instructions))) i)` by metis_tac[] >>
+  drule_all fnPlanLineagePhiScheduleTheory.analyzed_native_slot_schedule_extinction >>
+  disch_then (qspecl_then [`prefixQ`, `prefixP`, `halt`] strip_assume_tac) >>
+  `incoming.ps_stack = prefixP ++ MAP (phi_cell_value T) cells` by metis_tac[] >>
+  drule_all (REWRITE_RULE [GSYM arithmeticTheory.ADD1] native_phi_schedule_endpoint) >>
+  strip_tac >>
+  `~MEM (Var v) (MAP (phi_cell_value T) cells_end)` by metis_tac[] >>
+  `MEM (Var v) (MAP (phi_cell_value T) cells)` by
+    (asm_rewrite_tac[] >> simp[MEM_MAP]) >>
+  `LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells) > 0` by
+    metis_tac[rich_listTheory.LIST_ELEM_COUNT_MEM] >>
+  `LIST_ELEM_COUNT (Var v) prefixP = 0 /\ Var v NOTIN FDOM incoming.ps_spilled` by
+    (qpat_x_assum `LIST_ELEM_COUNT _ _ + _ <= 1` mp_tac >>
+     qpat_x_assum `LIST_ELEM_COUNT _ _ > 0` mp_tac >>
+     asm_rewrite_tac[] >> simp[rich_listTheory.LIST_ELEM_COUNT_THM] >>
+     Cases_on `Var v IN FDOM incoming.ps_spilled` >> simp[] >> decide_tac) >>
+  `~MEM (Var v) prefixP` by
+    (qpat_x_assum `LIST_ELEM_COUNT _ prefixP = 0` mp_tac >>
+     simp[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM]) >>
+  simp[MEM_APPEND]
+QED
