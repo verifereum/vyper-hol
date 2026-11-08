@@ -80,3 +80,82 @@ Proof
   simp[Once exec_block_def, venomInstTheory.get_instruction_def, step_inst_non_invoke] >>
   simp[Once step_inst_base_def, venomInstTheory.is_terminator_def]
 QED
+
+Theorem observation_run_unique[local]:
+  run_from n ctx fn s = r /\ (!e. r <> Error e) /\
+  run_from m ctx fn s = q /\ (!e. q <> Error e) ==> r = q
+Proof
+  strip_tac >>
+  `run_from (n + m) ctx fn s = r` by
+    (irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `n` >> simp[]) >>
+  `run_from (n + m) ctx fn s = q` by
+    (irule gas_run_from_fuel_mono >> simp[] >> qexists_tac `m` >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem nested_observation_no_endpoint_path:
+  !n t. ~(gas_path nested_premise_unit.cu_context nested_observation_function
+    nested_observation_start n (OK t) /\
+    t.vs_current_bb = nested_observation_state.cs_current_bb /\
+    t.vs_inst_idx = LENGTH nested_observation_state.cs_current_insts)
+Proof
+  rpt strip_tac >>
+  drule gas_path_normal >> strip_tac >>
+  drule_all nested_observation_endpoint_halts >> strip_tac >>
+  first_x_assum (qspecl_then [`0`, `Halt (halt_state (t with vs_returndata := []))`] mp_tac) >>
+  simp[] >> strip_tac >>
+  mp_tac nested_observation_target_probe >> strip_tac >>
+  spose_not_then assume_tac >>
+  `Halt (halt_state (t with vs_returndata := [])) = Abort Revert_abort t'` by
+    (irule observation_run_unique >> simp[] >> metis_tac[]) >> gvs[]
+QED
+
+Theorem nested_observation_no_summary:
+  ~gas_summary (nested_premise_unit.cu_context, nested_observation_function)
+    (eval_stmt nested_initial_cx
+      (AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+        (Literal (BaseT (UintT 256)) (IntL 1))))
+    (nested_premise_es, nested_observation_start)
+    (stmt_post nested_premise_unit.cu_context nested_observation_function
+      nested_initial_cx lctx nested_premise_cenv cenv' sa
+      nested_observation_state nested_observation_start)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  pure_rewrite_tac[gas_summary_def] >>
+  rpt strip_tac >>
+  `res = INL ()` by
+    (qpat_x_assum `!tail. _ = _` (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o AP_TERM ``FST : (unit + exception) # evaluation_state -> unit + exception``) >>
+     simp[nested_initial_source_replay]) >>
+  gvs[stmt_post_def, loweringPostsTheory.stmt_lands_def,
+      stmt_exit_loop_ctl] >>
+  metis_tac[nested_observation_no_endpoint_path]
+QED
+
+Theorem nested_observation_no_outcome:
+  ~gas_outcome memory tops
+    (nested_premise_unit.cu_context, nested_observation_function)
+    (eval_stmt nested_initial_cx
+      (AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+        (Literal (BaseT (UintT 256)) (IntL 1))))
+    (nested_premise_es, nested_observation_start)
+    (stmt_post nested_premise_unit.cu_context nested_observation_function
+      nested_initial_cx lctx nested_premise_cenv cenv' sa
+      nested_observation_state nested_observation_start)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  rpt strip_tac
+  >- metis_tac[gas_summary_at_summary, nested_observation_no_summary] >>
+  qpat_x_assum `gas_exempt_cert _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[GSYM IMP_F] >>
+  irule source_replay_excludes_gas_exempt_cert >>
+  rpt gen_tac >>
+  qspec_then `obs` mp_tac nested_initial_source_replay >>
+  Cases_on `eval_stmt nested_initial_cx
+      (AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+        (Literal (BaseT (UintT 256)) (IntL 1)))
+      (nested_premise_es with gas_obs := obs)` >>
+  simp[ignore_bind_def, bind_def, return_def] >>
+  strip_tac >> gvs[]
+QED
