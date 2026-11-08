@@ -102,6 +102,75 @@ Proof
   strip_tac >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem mm_local_memzero_list_load_origin[local]:
+  !xs s ys t i other.
+  mm_flat_map_supply (apply_memzero_inst_supply ns rm) s xs = (ys,t) /\
+  MEM i ys /\ i.inst_opcode = mode_load_opcode other ==> MEM i xs
+Proof
+  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >>
+  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[MEM_APPEND] >- (
+    qpat_x_assum `apply_memzero_inst_supply _ _ _ _ = _` mp_tac >>
+    simp[apply_memzero_inst_supply_def, AllCaseEqs()] >> strip_tac >>
+    Cases_on `other` >>
+    gvs[mk_nop_from_def, mk_zero_store_inst_def, mk_memzero_calldatacopy_def,
+        mode_load_opcode_def]) >>
+  metis_tac[]
+QED
+
+Theorem mm_local_mode_list_load_origin[local]:
+  !xs s ys t i other.
+  mm_flat_map_supply (apply_groups_inst_supply mode ns rm) s xs = (ys,t) /\
+  other <> mode /\ MEM i ys /\ i.inst_opcode = mode_load_opcode other ==>
+  MEM i xs
+Proof
+  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >>
+  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[MEM_APPEND] >- (
+    qpat_x_assum `apply_groups_inst_supply _ _ _ _ _ = _` mp_tac >>
+    simp[apply_groups_inst_supply_def, AllCaseEqs()] >> strip_tac >>
+    Cases_on `mode` >> Cases_on `other` >>
+    gvs[mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
+        mk_mstore_from_load_def, mode_load_opcode_def, mode_copy_opcode_def]) >>
+  metis_tac[]
+QED
+
+Theorem mm_local_phase_other_load_origin[local]:
+  mm_local_phase dfg phase (bb,s) = (cc,t) /\ phase <> SOME other /\
+  MEM i cc.bb_instructions /\ i.inst_opcode = mode_load_opcode other ==>
+  MEM i bb.bb_instructions
+Proof
+  Cases_on `phase` >>
+  simp[mm_local_phase_def, transform_block_memzero_supply_def,
+       transform_block_mode_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  metis_tac[mm_local_memzero_list_load_origin, mm_local_mode_list_load_origin]
+QED
+
+Theorem mm_local_pending_load_origin[local]:
+  !fn0 supply index k bb sk mode i.
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME mode) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  MEM i bb.bb_instructions /\ i.inst_opcode = mode_load_opcode mode ==>
+  MEM i (EL index fn0.fn_blocks).bb_instructions
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `k = 0 \/ k = 1 \/ k = 2 \/ k = 3` by decide_tac >>
+  gvs[] >>
+  drule mm_local_phase_other_load_origin >>
+  simp[] >> strip_tac >> metis_tac[merge_mode_distinct]
+QED
+
 Definition mm_local_zero_fn_def:
   mm_local_zero_fn = mk_raw_function "f"
     [<| bb_label := "entry"; bb_instructions :=
