@@ -91,7 +91,7 @@ Proof
        (mp_tac o REWRITE_RULE [generate_inst_plan_def]) >>
      asm_simp_tac (srw_ss()) [is_pre_codegen_opcode_def,
        is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
-       is_raw_fmp_opcode_def, is_fmp_param_opcode_def, is_param_opcode_def]) >>
+       is_raw_fmp_opcode_def, is_fmp_param_opcode_def, is_param_opcode_def, LET_THM]) >>
   mp_tac (Q.SPECL [`alloc_base`,`liveness`,`dfg`,`cfg`,`func`,`inst`,`nl`,
     `is_halting`,`next_is_term`,`bb`,`ps`,`ops`,`post`,`initial_fmp`,`fuel`,
     `ctx`,`lo`,`o2pc`,`prog`,`vs`,`vs'`,`st`]
