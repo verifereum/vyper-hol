@@ -3,6 +3,9 @@ Theory sourceWordDecoderPtr
 Ancestors calldataTypedRobustPtr entryDecodeProps abiCanonicalHeadSize
   abiStaticAggregateProps byte words valueEncoding bodyPtrDefs
   calldataWordPtr abiDecoderContract list valueEncodingProofs
+  abiDecoderPrimitiveCaller abiDecoderNumericWord abiDecoderSigned
+  abiDecoderFixedBytes abiDecoderCoherence abiDecoderWordTyped
+  vyperABI vyperTyping contractABI exprLowering abiDecoderClamp compileEnv vyperValue arithmetic
 
 Theorem calldata_source_word_ptr_endpoint:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
@@ -62,4 +65,65 @@ Proof
        metis_tac[mem_agree_outside_def] >>
      pop_assum mp_tac >> simp[LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
   metis_tac[val_in_memory_word, mem_word_at_bytes]
+QED
+
+Theorem coherent_source_word_clamp:
+  abi_decoder_coherent ce env sf ty tv /\ is_word_type ty /\
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
+  srcpos < dimword (:256) /\
+  mem_bytes_at srcpos (LENGTH (enc (vyper_to_abi_type env ty) av))
+    (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av ==>
+  abi_decoder_clamp_valid clamp (abi_decode_load opc (n2w srcpos : bytes32) s)
+Proof
+  strip_tac >>
+  `evaluate_type env ty = SOME tv` by
+    metis_tac[abi_decoder_coherent_header, abi_decoder_header_def] >>
+  `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
+    (drule_all vyper_to_abi_word_enc >> simp[]) >>
+  drule abi_decoder_primitive_cases >> disch_then (qspec_then `clamp` mp_tac) >>
+  asm_simp_tac bool_ss [] >> strip_tac >> gvs[]
+  >- (rename1 `is_word_type (BaseT bt)` >>
+      `type_to_abi_dec_info sf ce (BaseT bt) =
+        DecPrimWord (type_to_abi_clamp (BaseT bt))` by
+        metis_tac[abi_decoder_base_word_info] >>
+      (gvs[] >> Cases_on `bt` >> gvs[is_word_type_def] >>
+      FIRST [rename1 `BytesT bound` >> Cases_on `bound`, all_tac] >>
+      gvs[is_word_type_def] >> Cases_on `v` >>
+      gvs[value_has_type_def, vyper_to_abi_base_def,
+          abi_decoder_coherent_base_iff, abi_decoder_scalar_valid_def] >>
+      gvs[evaluate_type_def, AllCaseEqs()]) >- (irule abi_decoder_canonical_uint_clamp >> simp[] >>
+           qexists_tac `NumV (Num i)` >>
+           simp[has_type_def, valid_int_bound_def, enc_def, enc_number_def])
+       >- (irule abi_decoder_canonical_int_clamp >> simp[valid_int_bound_def] >>
+           qexists_tac `i` >>
+           simp[valid_int_bound_def, enc_def, enc_number_def])
+       >- (simp[type_to_abi_clamp_def] >>
+           irule abi_decoder_canonical_bool_clamp >> simp[] >>
+           qexists_tac `NumV (if b then 1 else 0)` >>
+           Cases_on `b` >> simp[has_type_def, enc_def, enc_number_def])
+       >- (simp[type_to_abi_clamp_def] >>
+           irule abi_decoder_canonical_decimal_clamp >> simp[] >>
+           qexists_tac `i` >> simp[enc_def, enc_number_def])
+       >- (rename1 `LENGTH bs <= 32` >>
+           `abi_decode_load opc (n2w srcpos : bytes32) s = word_of_bytes T 0w bs` by
+             (simp[abi_decode_load_bytes, TAKE_LENGTH_TOO_LONG,
+                   word_of_bytes_append_zero]) >>
+           drule abi_decoder_fixed_bytes_shift_zero >>
+           Cases_on `LENGTH bs = 32` >>
+           simp[type_to_abi_clamp_def, abi_decoder_clamp_valid_def]) >>
+       simp[type_to_abi_clamp_def] >>
+       irule abi_decoder_canonical_address_clamp >> simp[] >>
+       qexists_tac `NumV (w2n (word_of_bytes_be l : address))` >>
+       simp[has_type_def, enc_def, enc_number_def, GSYM dimword_def] >>
+       mp_tac (Q.ISPEC `word_of_bytes_be l : address` w2n_lt) >>
+       simp[dimword_def, fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
+  gvs[abi_decoder_coherent_flag_iff] >>
+  Cases_on `v` >>
+  gvs[value_has_type_def, vyper_to_abi_def, Once type_to_abi_dec_info_def] >>
+  `abi_decode_load opc (n2w srcpos : bytes32) s = n2w n` by
+    (irule abi_decoder_canonical_word_load >> simp[]) >>
+  Cases_on `ce.ce_flag_n_members (nsid_to_string nsid) = 256` >>
+  gvs[abi_decoder_clamp_valid_def] >>
+  irule LESS_EQ_LESS_TRANS >> qexists_tac `n` >> simp[MOD_LESS_EQ]
 QED
