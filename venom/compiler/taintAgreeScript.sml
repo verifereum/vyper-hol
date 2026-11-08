@@ -22,13 +22,16 @@ Ancestors
   venomExecSemantics venomState finite_map pred_set list
 
 (* s and t agree except at the taint tn, the dead bytes X, and memory at
-   or above the bump allocator.  The fields not listed are equal. *)
+   or above the bump allocator; call requests agree outside D (their
+   snapshots may hold tainted storage).  The fields not listed are
+   equal. *)
 Definition taint_agree_def:
   taint_agree D X tn s t <=>
     ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
     t with <| vs_vars := s.vs_vars; vs_memory := s.vs_memory;
               vs_accounts := s.vs_accounts; vs_transient := s.vs_transient;
-              vs_immutables := s.vs_immutables |> = s /\
+              vs_immutables := s.vs_immutables;
+              vs_requests := s.vs_requests |> = s /\
     FDOM t.vs_vars = FDOM s.vs_vars /\
     (!v. v IN FDOM s.vs_vars ==>
          word_agree_except (op_taint tn (Var v))
