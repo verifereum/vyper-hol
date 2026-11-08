@@ -45,8 +45,14 @@ Proof
           rename1 `is_extcode h` >> Cases_on `is_extcode h` >>
           gvs[gas_shadow_extcode]) >>
       IF_CASES_TAC >> gvs[]) >>
-  rpt gen_tac >> strip_tac >> Cases_on `tb` >> simp[] >>
-  Cases_on `es` >> simp[]
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> Cases_on `tb` >> simp[] >>
+      Cases_on `es` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> simp[] >> Cases_on `ct` >>
+  simp[ext_call_alloc_ok_def] >> rename1 `ExtCall _ _ sig _` >>
+  PairCases_on `sig` >>
+  simp[SF ETA_ss, ext_call_alloc_ok_def, GSYM MAP_DROP, GSYM MAP_TAKE, MAP_MAP_o,
+       combinTheory.o_DEF, gasShadowCompilePureTheory.gas_shadow_lowered_value_type]
 QED
 
 Theorem gas_shadow_alloc_limits_assignment:
@@ -95,6 +101,39 @@ Proof
   simp[log_alloc_ok_def]
 QED
 
+Theorem gas_shadow_target_store_place[local]:
+  !ce bt. target_store_place ce (gas_shadow_target bt) = target_store_place ce bt
+Proof
+  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >>
+  gvs[gas_shadow_expr_def, target_store_place_def]
+QED
+
+Theorem gas_shadow_lowered_value_type[local]:
+  !ce e. lowered_value_type ce (gas_shadow_expr e) = lowered_value_type ce e
+Proof
+  recInduct exprLoweringTheory.lowered_value_type_ind >>
+  rw[gas_shadow_expr_def, exprLoweringTheory.lowered_value_type_def,
+     vyperASTTheory.expr_type_def] >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute]
+QED
+
+Theorem gas_shadow_is_empty_value_expr[local]:
+  !e. is_empty_value_expr (gas_shadow_expr e) = is_empty_value_expr e
+Proof
+  recInduct stmtLoweringTheory.is_empty_value_expr_ind >>
+  rw[gas_shadow_expr_def, gas_shadow_builtin_def,
+     stmtLoweringTheory.is_empty_value_expr_def]
+QED
+
+Theorem gas_shadow_assign_alloc_ok[local]:
+  !ce bt e. assign_alloc_ok ce (gas_shadow_target bt) (gas_shadow_expr e) =
+            assign_alloc_ok ce bt e
+Proof
+  simp[assign_alloc_ok_def, gas_shadow_target_store_place,
+       gas_shadow_lowered_value_type, gas_shadow_is_empty_value_expr]
+QED
+
 Theorem gas_shadow_alloc_limits_stmt:
   (!ce s. alloc_limits_stmt ce (gas_shadow_stmt s) = alloc_limits_stmt ce s) /\
   (!ce ss. alloc_limits_stmts ce (MAP gas_shadow_stmt ss) = alloc_limits_stmts ce ss)
@@ -102,7 +141,8 @@ Proof
   ho_match_mp_tac alloc_limits_stmt_ind >>
   simp[gas_shadow_stmt_def, alloc_limits_stmt_def, gas_shadow_alloc_limits_expr,
        gas_shadow_alloc_limits_assignment] >>
-  rpt gen_tac >> Cases_on `g` >> simp[gas_shadow_assignment_def]
+  rpt gen_tac >> Cases_on `g` >>
+  simp[gas_shadow_assignment_def, gas_shadow_assign_alloc_ok]
 QED
 
 Theorem gas_shadow_stmt_valued_return:

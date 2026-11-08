@@ -498,6 +498,9 @@ Datatype:
        at this type even where the call is used at a wider type.
        Mirrors Python: func_t.return_type in expr.py _lower_internal_call *)
     ce_func_return_type : string -> type;
+    (* Declared internal-call mutability for delayed operand snapshots.
+       Mirrors Python: ContractFunctionT.is_modifying. *)
+    ce_func_mutability : string -> function_mutability;
     (* Internal function ids: func_name → id. Spells the INVOKE target
        (internal_fn_label).
        Mirrors Python: func_t._function_id in expr.py lower_Call *)

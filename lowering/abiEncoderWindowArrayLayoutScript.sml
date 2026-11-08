@@ -35,13 +35,6 @@ Proof
   metis_tac[abi_encoder_open_array_length]
 QED
 
-Theorem window_array_prefix_zero:
-  mem_word_at d mem = n2w (LENGTH avs) ==>
-  abi_encoder_array_prefix ty avs 0 d mem
-Proof
-  metis_tac[abi_encoder_array_prefix_empty]
-QED
-
 Theorem window_array_prefix_complete:
   abi_encoder_window_input (AbiDynArray ei asz msz active)
     (Array NONE ty) (ListV avs) sb cap source /\
