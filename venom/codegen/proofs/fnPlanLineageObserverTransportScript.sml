@@ -186,3 +186,32 @@ Proof
   disch_then (qspec_then `Var v` assume_tac) >>
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
+
+Theorem prepare_params_plan_nondefining_resource_nonincrease:
+  !lv fn ps ops qs v.
+    prepare_params_plan lv fn ps = (ops,qs) /\
+    EVERY (\inst. v <> HD inst.inst_outputs)
+      (get_params (HD fn.fn_blocks).bb_instructions) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `get_params (HD fn.fn_blocks).bb_instructions = []`
+  >- gvs[prepare_params_plan_def] >>
+  qpat_x_assum `prepare_params_plan _ _ _ = _` mp_tac >>
+  simp[prepare_params_plan_def, fnPlanLineageSetupTheory.parameter_push_fold, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule fnPlanLineageInventoryTheory.optimistic_swap_plan_resource_count >>
+  disch_then (qspec_then `Var v` mp_tac) >>
+  drule fnPlanLineageInventoryTheory.popmany_plan_resource_nonincrease >>
+  disch_then (qspec_then `Var v` mp_tac) >>
+  `~MEM (Var v) (MAP (\inst. Var (HD inst.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions))` by
+    (gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  `LIST_ELEM_COUNT (Var v) (MAP (\inst. Var (HD inst.inst_outputs))
+      (get_params (HD fn.fn_blocks).bb_instructions)) = 0` by
+    (fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  fs[LIST_ELEM_COUNT_DEF] >> simp[FILTER_APPEND]
+QED
