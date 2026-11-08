@@ -5,29 +5,6 @@ Ancestors
   exprSimMemDefs exprSimProps loweringPosts gasSummary fragGasMode
   fragGasPathMem gasContext context exprLowering compileEnv
 
-Theorem ifexp_conditional_read_cases:
-  !cx raw st res st'.
-    (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
-    read_result cx raw st = (res,st') \/
-    ?m. conditional_result cx raw st = (INR (Error (TypeError m)),st') /\
-        res = INR (Error (TypeError m))
-Proof
-  rpt gen_tac >> Cases_on `raw` >>
-  simp[conditional_result_def, read_result_def, bind_def, return_def, raise_def] >>
-  rename1 `place_type_value cx p st` >>
-  Cases_on `place_type_value cx p st` >> rename1 `place_type_value cx p st = (pr,pst)` >>
-  drule place_type_value_state >> strip_tac >> gvs[] >>
-  Cases_on `pr` >> simp[]
-  >- (IF_CASES_TAC >> simp[read_result_def, bind_def, return_def] >>
-      Cases_on `read_place cx p pst` >> rename1 `read_place cx p pst = (rr,ss)` >>
-      Cases_on `rr` >> simp[read_result_def, return_def]) >>
-  Cases_on `p` >>
-  gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-      get_address_immutables_def, bind_def, return_def, lift_option_type_def,
-      raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
-QED
-
 Theorem ifexp_marked_conditional_of_read_mem:
   gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
   gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\

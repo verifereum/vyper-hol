@@ -374,7 +374,7 @@ Proof
       `read_result cx raw ast = (q,r) \/
        ?m. conditional_result cx raw ast = (INR (Error (TypeError m)),r) /\
            q = INR (Error (TypeError m))` by
-        (irule ifexp_conditional_read_cases >> simp[bind_def]) >>
+        (irule conditional_read_cases >> simp[bind_def]) >>
       gvs[bind_def, expr_res_ok_def])
 QED
 
@@ -392,7 +392,7 @@ Proof
   rename1 `_ = (ar,ast)` >> Cases_on `ar` >> simp[bind_def] >>
   rename1 `conditional_result cx raw ast` >>
   Cases_on `(do r <- conditional_result cx raw; read_result cx r od) ast` >>
-  drule ifexp_conditional_read_cases >> strip_tac >> simp[bind_def] >>
+  drule conditional_read_cases >> strip_tac >> simp[bind_def] >>
   qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
   gvs[bind_def, expr_res_ok_def]
 QED
