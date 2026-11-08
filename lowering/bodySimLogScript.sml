@@ -196,8 +196,8 @@ Proof
   Induct >> simp[] >> rpt gen_tac >>
   simp[Once supported_pure_expr_def, Once well_typed_expr_def] >> strip_tac >>
   irule lowered_value_type_bytestring_iff >> conj_tac
-  >~ [`?env. _`] >- (qexists_tac `env` >> simp[]) >>
-  rpt gen_tac >> strip_tac >> gvs[supported_pure_expr_def]
+  >- (rpt gen_tac >> strip_tac >> gvs[supported_pure_expr_def]) >>
+  qexists_tac `env` >> simp[]
 QED
 
 Theorem body_log_case:
