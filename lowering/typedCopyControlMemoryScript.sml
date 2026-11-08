@@ -96,7 +96,7 @@ Proof
   simp[FLOOKUP_UPDATE]
 QED
 
-Theorem typed_copy_assign_frag_mem[local]:
+Theorem typed_copy_assign_frag_mem:
   !ctx op counter a b s w.
     emit_inst ASSIGN [op] [counter] a = ((),b) /\
     eval_operand op s = SOME w ==>
