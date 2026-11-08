@@ -10,7 +10,8 @@ Ancestors
   placeMemoryPrimitiveForward instIdxIndep exprSimProps exprSimUnwrap
   exprSimAggregateChildren bodyIntCallAggregateStoreFrame
   bodyIntCallCompletedModes intCallStep exprSimSend
-  bodyIntCallWidenedChildStore typedMemoryCopy
+  bodyIntCallWidenedChildStore typedMemoryCopy exprSimSubscriptMap
+  memoryLocalRhsProps
 
 (* The continuation uses the standard write-back frame, so its composition
    and old-allocation interface are shared with other expression proofs. *)
@@ -838,6 +839,214 @@ Proof
   conj_tac >- fs[typed_copy_effect_def] >>
   conj_tac >- metis_tac[typed_copy_effect_operand_preserved] >>
   fs[typed_copy_effect_def] >> metis_tac[]
+QED
+
+Theorem intcall_counted_child_store:
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  intcall_expr_producer fp e /\
+  expr_body_pre ce fp.jc_cx env e es /\
+  supportedExprs$supported_expr fp.jc_tops e /\
+  calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
+  intcall_joint_res fp ce env es0 s0c s0 /\
+  intcall_expr_cont fp ce env es0 s0c s0 es si t /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  s0c.cs_next_var <= si.cs_next_var /\ s0c.cs_next_id <= si.cs_next_id /\
+  compile_expr ce (expr_type e) e si = (vv,sm) /\
+  emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,su) /\
+  compile_store_memory ce op dst dty (post_value_type ce e) su = ((),sb) /\
+  fn_has_code si sm fp.jc_func /\ fn_has_code sm sn fp.jc_func /\
+  fn_has_code sn su fp.jc_func /\ fn_has_code su sb fp.jc_func /\
+  fn_inst_ids_distinct fp.jc_func /\
+  type_widens_to env.type_defs (expr_type e) dty /\
+  type_widens_to (get_tenv fp.jc_cx) (post_value_type ce e) dty /\
+  evaluate_type (get_tenv fp.jc_cx) dty = SOME dtv /\
+  evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME stv /\
+  type_memory_size dtv + 64 < dimword (:256) /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,k) /\
+  s0c.cs_next_id <= inst.inst_id /\ inst.inst_id < si.cs_next_id /\
+  MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
+  eval_operand buf t = SOME bw /\ (!lbl. buf <> Label lbl) /\
+  (!x. buf = Var x ==> not_fresh_at si x) /\
+  fp.jc_lo <= b /\ b <= w2n bw /\
+  w2n bw + off + type_memory_size dtv <= b+k /\ b+k < dimword (:256) /\
+  (!name a n. local_region ce es.scopes t name a n ==>
+     regions_disjoint b k a n) /\
+  (!name a n. local_region ce es0.scopes s0 name a n ==>
+     regions_disjoint b k a n) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (vyperState$bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)) (es,t)
+    (\res ee u. ?v. res = INL v /\
+       val_in_memory dtv v (w2n bw + off) u.vs_memory /\
+       intcall_expr_cont fp ce env es0 s0c s0 ee sb u /\
+       FLOOKUP u.vs_allocas inst.inst_id = SOME (b,k) /\
+       eval_operand buf u = SOME bw /\
+       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+       (!name a n. local_region ce ee.scopes u name a n ==>
+          regions_disjoint b k a n) /\
+       (!a n. b <= a /\ a+n <= b+k /\
+          (a+n <= w2n bw+off \/ w2n bw+off+type_memory_size dtv <= a) ==>
+          mem_bytes_at a n u.vs_memory = mem_bytes_at a n t.vs_memory))
+    (\res ee r. expr_exit res r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `intcall_joint_res fp ce env es si t /\ ~t.vs_halted /\
+   t.vs_current_bb = si.cs_current_bb /\
+   t.vs_inst_idx = LENGTH si.cs_current_insts` by fs[intcall_expr_cont_def] >>
+  `gas_admissible (eval_expr fp.jc_cx e) expr_vv_res_ok es` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_vv_gas_admissible] >>
+  dxrule (iffLR intcall_expr_producer_def) >>
+  disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  disch_then drule_all >> disch_tac >>
+  irule gas_outcome_bind_result_exec >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- (Cases >> simp[exprSimDefsTheory.expr_exit_INL,
+                           stmtSimPropsTheory.expr_exit_INR_type]) >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `gas_marked_exec _ _ _ _ marks (INL raw) mid (OK q)` >>
+  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es si sm t
+     (mid with gas_obs := []) raw vv q` by
+    (fs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+     metis_tac[]) >>
+  `?v. read_result fp.jc_cx raw (mid with gas_obs := []) =
+       (INL v,mid with gas_obs := [])` by
+    metis_tac[exprSimAggregateSourceTheory.vv_post_materialises] >>
+  `!tail. read_result fp.jc_cx raw (mid with gas_obs := tail) =
+       (INL v,mid with gas_obs := tail)` by
+    (drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[]) >>
+  `vyperState$bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
+     (es with gas_obs := gas_explicit marks t.vs_gas_readings) =
+     (INL v,mid with gas_obs := [])` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     qpat_x_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     simp[vyperStateTheory.bind_def]) >>
+  `value_runtime_typed env (post_value_type ce e) v /\
+   value_runtime_typed env dty v` by
+    (fs[GSYM vyperStateTheory.bind_def] >>
+     `expr_body_pre ce fp.jc_cx env e
+       (es with gas_obs := gas_explicit marks t.vs_gas_readings)` by simp[] >>
+     conj_tac
+     >- metis_tac[exprSimHypsTheory.memory_rhs_read_post_typed] >>
+     metis_tac[memoryLocalRhsPropsTheory.memory_rhs_read_destination_typed]) >>
+  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
+    (qspecl_then [`fp.jc_cx`, `e`,
+       `es with gas_obs := gas_explicit marks t.vs_gas_readings`,
+       `INL v`, `mid with gas_obs := []`] mp_tac
+       exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >>
+     impl_tac
+     >- (fs[gasSummaryTheory.gas_marked_exec_def] >>
+         qpat_x_assum `!tail. eval_expr _ _ _ = _`
+           (qspec_then `[]` mp_tac) >>
+         simp[vyperStateTheory.bind_def]) >> simp[]) >>
+  `value_has_type dtv v /\ value_has_type stv v` by
+    (`expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
+     conj_tac
+     >- (qpat_assum `value_runtime_typed env dty v`
+           (mp_then Any mp_tac memoryLocalRhsPropsTheory.memory_rhs_runtime_layout) >>
+         disch_then drule_all >> strip_tac >> gvs[]) >>
+     qpat_assum `value_runtime_typed env (post_value_type ce e) v`
+       (mp_then Any mp_tac memoryLocalRhsPropsTheory.memory_rhs_runtime_layout) >>
+     disch_then drule_all >> strip_tac >> gvs[]) >>
+  `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by simp[] >>
+  drule_at (Pat `intcall_expr_cont _ _ _ es si t _ sm q`)
+    intcall_expr_cont_root >>
+  disch_then drule_all >> strip_tac >>
+  `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
+    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
+  `local_ptrs_reserved ce si /\
+   intcall_joint_res fp ce env (mid with gas_obs := []) sm q /\
+   ~q.vs_halted /\ q.vs_current_bb = sm.cs_current_bb /\
+   q.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (conj_tac >- fs[intcall_joint_res_def] >>
+     fs[intcall_expr_cont_def]) >>
+  drule_all intcall_child_unwrap_condition >> disch_tac >>
+  `type_memory_bytes ce (post_value_type ce e) = type_memory_size stv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size, intcall_joint_res_def] >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    intcall_add_unwrap_landing_conditional >>
+  disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  simp[] >> disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >- fs[]) >> strip_tac >>
+  rename1 `gas_marked_path F _ _ q 0 (OK uu)` >>
+  `intcall_expr_cont fp ce env es si t (mid with gas_obs := []) su uu` by
+    (irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
+     qexistsl_tac [`mid with gas_obs := []`, `sm`, `q`] >> simp[]) >>
+  drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)
+    intcall_expr_cont_root >>
+  disch_then drule_all >> strip_tac >>
+  `intcall_expr_cont fp ce env es0 s0c s0 (mid with gas_obs := []) su uu` by
+    (irule intcall_expr_cont_trans >> conj_tac >- simp[] >>
+     qexistsl_tac [`es`, `si`, `t`] >> simp[]) >>
+  `sm.cs_next_var <= sn.cs_next_var` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  `sn.cs_next_var <= su.cs_next_var /\ sn.cs_next_id <= su.cs_next_id` by
+    (mp_tac (Q.SPECL [`ce`, `vv`, `sn`] ci_mono_unwrap_value) >>
+     simp[ci_mono_def]) >>
+  `su.cs_next_var <= sb.cs_next_var` by
+    (mp_tac (Q.SPECL [`ce`, `op`, `dst`, `dty`, `post_value_type ce e`, `su`]
+       ci_mono_compile_store_memory) >> simp[ci_mono_def]) >>
+  `si.cs_next_var <= su.cs_next_var /\ s0c.cs_next_var <= su.cs_next_var` by
+    decide_tac >>
+  `!x. buf = Var x ==> not_fresh_at su x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sn x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `!x. op = Var x ==> not_fresh_at su x` by
+    (drule exprOperandVarTheory.compiler_unwrap_value_var >>
+     Cases_on `vv` >> fs[vv_operand_def]) >>
+  `w2n bw + off < dimword (:256) /\ off < dimword (:256)` by decide_tac >>
+  `w2n (bw + n2w off) = w2n bw + off` by
+    (mp_tac (wordsTheory.w2n_add_2 |> INST_TYPE [alpha |-> ``:256``] |>
+       Q.INST [`a` |-> `bw`, `b` |-> `n2w off`]) >>
+     simp[]) >>
+  `b <= w2n (bw + n2w off) /\
+   w2n (bw + n2w off) + type_memory_size dtv <= b+k` by fs[] >>
+  `!name a n. local_region ce (mid with gas_obs := []).scopes uu name a n ==>
+     a+n <= w2n (bw + n2w off) \/
+     w2n (bw + n2w off) + type_memory_size dtv <= a` by
+    (rpt strip_tac >>
+     qpat_x_assum `!n a z. local_region ce _ uu n a z ==> _` drule >>
+     fs[regions_disjoint_def] >> decide_tac) >>
+  `!name a n. local_region ce es0.scopes s0 name a n ==>
+     a+n <= b \/ b+k <= a` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name a n. local_region ce es0.scopes s0 name a n ==> _` drule >>
+     simp[regions_disjoint_def, DISJ_COMM]) >>
+  drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
+    intcall_child_store_landing >>
+  disch_then (drule_at (Pat `expr_val_rel _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
+  disch_then drule_all >> strip_tac >>
+  `!name a n. local_region ce (mid with gas_obs := []).scopes u name a n ==>
+      regions_disjoint b k a n` by
+    (rpt strip_tac >>
+     `local_region ce es0.scopes s0 name a n` by
+       (irule local_region_frame >>
+        conj_tac
+        >- (qexists_tac `fp.jc_func` >>
+            fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def]) >>
+        qexistsl_tac [`s0c`, `(mid with gas_obs := []).scopes`, `u`] >>
+        fs[intcall_expr_cont_def, intcall_joint_res_def]) >>
+     metis_tac[]) >>
+  `gas_marked_path F fp.jc_ctx fp.jc_func q 0 (OK u)` by
+    (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
+  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl_tac [`INL v`, `mid`, `OK u`] >>
+  conj_tac
+  >- (simp[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
+  simp[] >>
+  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  conj_tac >- fs[] >>
+  rpt gen_tac >> strip_tac >>
+  `mem_bytes_at a n u.vs_memory = mem_bytes_at a n uu.vs_memory` by
+    (qpat_x_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _` irule >>
+     fs[] >> decide_tac) >>
+  `a = b + (a-b) /\ a-b+n <= k` by decide_tac >>
+  qpat_x_assum `mem_bytes_at b k uu.vs_memory = _` mp_tac >>
+  disch_then (mp_then Any mp_tac valueEncodingPropsTheory.mem_bytes_at_translated_window) >>
+  disch_then (qspecl_then [`a-b`, `n`] mp_tac) >> simp[]
 QED
 
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
