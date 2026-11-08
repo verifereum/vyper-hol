@@ -851,6 +851,7 @@ Theorem copy_finish_capacity[local]:
   eval_operand op z = SOME w /\
   w2n w + type_memory_size tv <= z.vs_alloca_next /\
   evaluate_type (get_tenv cx) t = SOME tv /\ t = expr_type e /\
+  post_value_type cenv e = expr_type e /\
   s0.vs_alloca_next <= s.vs_alloca_next /\
   s.vs_alloca_next <= u.vs_alloca_next /\
   z.vs_alloca_next = u.vs_alloca_next /\
