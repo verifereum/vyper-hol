@@ -48,8 +48,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> gvs[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[AllCaseEqs(), istore_def, mstore_def] >>
   rpt strip_tac >> gvs[]
@@ -107,7 +106,7 @@ Proof
       (istore (w2n a) value s) tn`, `istore (w2n a) value s`] >>
   `step_inst_base (mk_inst id ISTORE [arg;v] []) s =
     OK (istore (w2n a) value s)` by
-    simp[step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   qspecl_then [`arg`, `v`, `a`, `value`, `s`, `id`, `tn`] mp_tac
     istore_transferred_taint >>
   impl_tac >- simp[] >> strip_tac >>
@@ -166,7 +165,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [region; dst] [tmp]) s =
      OK (update_var tmp a s)` by
-    (simp[mk_inst_def, step_inst_base_def, exec_pure2_def] >>
+    (simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def] >>
      simp[wordsTheory.WORD_ADD_0]) >>
   `run_inst_seq [mk_inst id ADD [region; dst] [tmp]] s =
      OK (update_var tmp a s)` by simp[run_inst_seq_def] >>
@@ -239,8 +238,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> gvs[mem_read_ops_def] >> metis_tac[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, eval_operand_def, update_var_def]
 QED
@@ -267,7 +265,7 @@ Proof
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
   `step_inst_base (mk_inst id MLOAD [Var p] [out]) s =
     OK (update_var out (mload (w2n w) s) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_read1_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
   gvs[run_inst_seq_def] >>
   qexistsl [`step_prov PG G (mk_inst id MLOAD [Var p] [out])
     (update_var out (mload (w2n w) s) s)`,
