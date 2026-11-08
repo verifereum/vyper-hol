@@ -1,6 +1,6 @@
 Theory loadElimOccurrencePositions
 Ancestors
-  loadElimOccurrence loadElimOccurrenceCoverage venomExecProps venomExecProofs venomInst venomInstProps
+  loadElimOccurrence loadElimOccurrenceCoverage loadElimJoinPlacement venomExecProps venomExecProofs venomInst venomInstProps
   list rich_list
 
 Theorem le_occ_suffix_positions:
@@ -51,4 +51,11 @@ Proof
   Cases_on `l` >> gvs[] >> Cases_on `t` >> gvs[] >>
   simp[le_occ_route_def] >>
   metis_tac[lookup_block_label, eval_phis_preserves_current_bb]
+QED
+
+Theorem le_pred_path_suffix:
+  !pre tail. le_pred_path cfg (pre ++ tail) ==> le_pred_path cfg tail
+Proof
+  Induct >- simp[] >> Cases_on `pre` >> Cases_on `tail` >>
+  simp[loadElimJoinPlacementTheory.le_pred_path_def] >> metis_tac[]
 QED

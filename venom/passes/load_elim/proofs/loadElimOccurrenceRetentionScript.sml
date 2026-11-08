@@ -130,3 +130,58 @@ Proof
   disch_then (qspecl_then [`load_analyze ctx fn`, `ctx`] SUBST1_TAC) >>
   simp[] >> metis_tac[le_distinct_members_length]
 QED
+
+(* The final block is only partially executed: its input, not its exit,
+   is the endpoint used to trace the complete preceding blocks. *)
+Theorem le_action_partial_suffix_retention:
+  !post. wf_function fn /\
+  le_pred_path (cfg_analyze fn) (j::post) /\
+  EVERY (\l. ?b. MEM b fn.fn_blocks /\ b.bb_label = l) (j::post) /\
+  ~MEM j post /\
+  find_join_block (cfg_analyze fn) {} (LAST (j::post)) = j /\
+  MEM (LAST (j::post)) (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block (LAST (j::post)) fn.fn_blocks = SOME lastbb /\
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) (LAST (j::post)) 0)) k = SOME ops /\
+  MEM a ops /\ MEM b ops /\ a <> b /\
+  compute_phi_action m (cfg_analyze fn) (load_analyze ctx fn) k lbl inst = SOME pa /\
+  pa.pa_join_lbl = j /\ MEM bb fn.fn_blocks /\
+  MEM bb.bb_label (FRONT (j::post)) ==>
+  ?ys. 1 < LENGTH ys /\
+    !n. n <= LENGTH bb.bb_instructions ==>
+      FLOOKUP (unwrap_load_lattice
+        (df_at NONE (load_analyze ctx fn) bb.bb_label n)) k = SOME ys
+Proof
+  Induct using SNOC_INDUCT >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `j::SNOC x post = SNOC x (j::post)` by simp[] >>
+  `le_pred_path (cfg_analyze fn) (j::post) /\
+   MEM (LAST (j::post)) (cfg_preds_of (cfg_analyze fn) x)` by
+    metis_tac[le_pred_path_snoc, NOT_CONS_NIL] >>
+  `LAST (j::SNOC x post) = x` by metis_tac[LAST_SNOC] >>
+  `FRONT (j::SNOC x post) = j::post` by metis_tac[FRONT_SNOC] >>
+  qpat_x_assum `j::SNOC x post = _` kall_tac >>
+  fs[MEM_SNOC, EVERY_SNOC] >>
+  `cfg_preds_of (cfg_analyze fn) x = [LAST (j::post)]` by
+    (qpat_x_assum `find_join_block _ {} _ = j` mp_tac >>
+     simp[Once find_join_block_def] >>
+     Cases_on `cfg_preds_of (cfg_analyze fn) x` >> gvs[] >>
+     Cases_on `t` >> gvs[]) >>
+  `fn_entry_label fn <> SOME x` by
+    metis_tac[loadElimActualGenerationTheory.le_analyze_entry_no_lookup,
+      optionTheory.NOT_NONE_SOME] >>
+  `df_at NONE (load_analyze ctx fn) x 0 =
+    df_boundary NONE (load_analyze ctx fn) (LAST (j::post))` by
+    metis_tac[le_entry_sole_pred_boundary] >>
+  `find_join_block (cfg_analyze fn) {x} (LAST (j::post)) = j` by
+    (qpat_x_assum `find_join_block _ {} _ = j` mp_tac >>
+     simp[Once find_join_block_def]) >>
+  `EVERY (\l. ?z. MEM z fn.fn_blocks /\ z.bb_label = l) (j::post)` by
+    (simp[] >> metis_tac[]) >>
+  `FLOOKUP (unwrap_load_lattice
+    (df_boundary NONE (load_analyze ctx fn) (LAST (j::post)))) k = SOME ops` by
+    metis_tac[] >>
+  `MEM bb.bb_label (j::post)` by simp[] >>
+  drule_all le_action_full_suffix_retention >>
+  strip_tac >> qexists_tac `ys` >> metis_tac[]
+QED
