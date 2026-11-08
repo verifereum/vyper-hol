@@ -276,6 +276,83 @@ Proof
   drule vyperStateTheory.read_result_state >> simp[]
 QED
 
+(* The endpoint's immutable separation, not an old allocation-frontier
+   bound, protects an initialized constructor immutable from a pure child. *)
+Theorem intcall_pure_child_immutable_memory:
+  vv_post ctx func ce cx child es sa sb s ee r vv u /\
+  ~expr_has_effect child /\ ce.ce_is_ctor /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+             NONE => FEMPTY
+           | SOME imms => get_source_immutables ce.ce_module imms) name =
+    SOME (tv,v) ==>
+  mem_bytes_at off (type_memory_size tv) u.vs_memory =
+  mem_bytes_at off (type_memory_size tv) s.vs_memory
+Proof
+  strip_tac >> drule_all vv_post_pure_memory_frame >> strip_tac >>
+  qpat_x_assum `!off len. _` irule >>
+  `stmt_state_rel ctx func ce cx ee u` by
+    fs[loweringPostsTheory.vv_post_def] >>
+  pop_assum mp_tac >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_def,
+       exprLoweringPropsTheory.immutable_alloca_sep_def] >>
+  strip_tac >> rpt strip_tac >> first_x_assum drule_all >>
+  simp[] >> metis_tac[]
+QED
+
+(* Captured-read equality allows arbitrary source result forms and the
+   annotation on a located value need not equal its semantic type. *)
+Theorem intcall_vv_at_frame:
+  vv_at ce cx ty a b es r vv s /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s /\
+  (!aid q. FLOOKUP s.vs_allocas aid = SOME q ==>
+           FLOOKUP u.vs_allocas aid = SOME q) /\
+  (!n off sz. local_region ce ee.scopes u n off sz <=>
+              local_region ce es.scopes s n off sz) /\
+  b.cs_next_id <= d.cs_next_id ==>
+  vv_at ce cx ty a d ee r vv u
+Proof
+  Cases_on `vv` >>
+  simp[loweringPostsTheory.vv_at_def, contextTheory.vv_operand_def,
+       loweringPostsTheory.expr_val_at_def] >>
+  strip_tac >> rpt strip_tac >> first_x_assum drule_all >>
+  strip_tac >> simp[]
+  >- (rename1 `FLOOKUP s.vs_allocas aid = SOME (off,sz)` >>
+      disj1_tac >> qexistsl [`aid`, `off`, `sz`] >> gvs[] >>
+      first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[])
+  >- (rename1 `FLOOKUP s.vs_allocas aid = SOME (off,sz)` >>
+      disj1_tac >> qexistsl [`aid`, `off`, `sz`] >> gvs[] >>
+      first_assum ACCEPT_TAC)
+  >> disj2_tac >> disj1_tac >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem intcall_vv_own_frame:
+  vv_own ce cx ty a b es r vv s /\
+  (!v. read_result cx r ee = (INL v,ee) <=>
+       read_result cx r es = (INL v,es)) /\
+  eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s /\
+  (!aid q. FLOOKUP s.vs_allocas aid = SOME q ==>
+           FLOOKUP u.vs_allocas aid = SOME q) /\
+  (!n off sz. local_region ce ee.scopes u n off sz ==>
+              local_region ce es.scopes s n off sz) /\
+  b.cs_next_id <= d.cs_next_id ==>
+  vv_own ce cx ty a d ee r vv u
+Proof
+  Cases_on `vv` >>
+  simp[loweringPostsTheory.vv_own_def, contextTheory.vv_operand_def,
+       loweringPostsTheory.expr_val_own_def] >>
+  strip_tac >> rpt strip_tac >> first_x_assum drule_all >>
+  strip_tac >> simp[] >>
+  rename1 `FLOOKUP s.vs_allocas aid = SOME (off,sz)` >>
+  disj1_tac >> qexistsl [`aid`, `off`, `sz`] >> simp[] >>
+  rpt strip_tac >> first_x_assum drule_all >> simp[] >> metis_tac[]
+QED
+
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
    (callable_graph_descent), the statement producer of every frame whose
