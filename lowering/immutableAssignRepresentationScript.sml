@@ -2,7 +2,7 @@
 Theory immutableAssignRepresentation
 Ancestors
   immutableDeployPhysicalSource placeMemoryTypeInterfaces valueEncodingProps
-  vyperTypeSystem exprSimHypsDefs vyperTypeInvariants
+  vyperTypeSystem exprSimHyps exprSimHypsDefs vyperTypeInvariants
 
 Theorem immutable_assign_widened_memory_positive:
   assignable_type tenv sty /\
@@ -20,11 +20,12 @@ QED
 Theorem immutable_assign_rhs_memory_positive:
   expr_body_pre ce cx env e es /\
   assignable_type env.type_defs (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
   evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv ==>
   0 < type_memory_size stv
 Proof
   strip_tac >>
+  `?etv. evaluate_type (get_tenv cx) (expr_type e) = SOME etv` by
+    metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
