@@ -284,6 +284,15 @@ Proof
   fs[intcall_expr_cont_frame]
 QED
 
+Theorem intcall_map_producer_other:
+  (!ty id. e <> TopLevelName ty id) /\
+  (!ty e1 e2. e <> Subscript ty e1 e2) ==>
+  intcall_map_producer fp e
+Proof
+  rw[intcall_map_producer_def, exprSimMapDefsTheory.expr_map_pre_def] >>
+  Cases_on `e` >> gvs[vyperTypeSystemTheory.well_typed_expr_def]
+QED
+
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
    literals (MakeArray NONE), array literals (MakeArray (SOME _)), struct
    literals, attributes and subscripts (every place_type case: tuple and
