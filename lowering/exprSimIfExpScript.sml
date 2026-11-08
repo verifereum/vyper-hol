@@ -245,7 +245,7 @@ Proof
     simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[venomInstTheory.mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> disj1_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_pure1_def, comp_bind_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_pure1_def, comp_bind_def,
        comp_return_def] >> gvs[]
 QED
 
@@ -583,13 +583,25 @@ Proof
    s7.cs_current_insts = [] /\ s11.cs_current_insts = [] /\
    st'.cs_current_insts = [] /\ s7.cs_current_bb = tl /\
    s11.cs_current_bb = el /\ st'.cs_current_bb = xl` by
-    (rpt (qpat_x_assum `new_block _ _ = _` mp_tac) >>
-     rpt (qpat_x_assum `cs_extends _ _` kall_tac) >>
-     qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
-     qpat_x_assum `!e sa sb op. _` kall_tac >>
-     rpt (qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac) >>
-     rpt (qpat_x_assum `emit_inst _ _ _ _ = _` kall_tac) >>
-     simp[new_block_def] >> rpt strip_tac >> gvs[]) >>
+    (`s7.cs_next_var = s6.cs_next_var /\
+      s7.cs_next_id = s6.cs_next_id /\
+      s7.cs_current_insts = [] /\ s7.cs_current_bb = tl` by
+       (qpat_x_assum `new_block tl s6 = _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[new_block_def] >> rpt strip_tac >> gvs[]) >>
+     `s11.cs_next_var = s10.cs_next_var /\
+      s11.cs_next_id = s10.cs_next_id /\
+      s11.cs_current_insts = [] /\ s11.cs_current_bb = el` by
+       (qpat_x_assum `new_block el s10 = _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[new_block_def] >> rpt strip_tac >> gvs[]) >>
+     `st'.cs_next_var = s14.cs_next_var /\
+      st'.cs_next_id = s14.cs_next_id /\
+      st'.cs_current_insts = [] /\ st'.cs_current_bb = xl` by
+       (qpat_x_assum `new_block xl s14 = _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[new_block_def] >> rpt strip_tac >> gvs[]) >>
+     simp[]) >>
   `cs_extends s1 s5 /\ cs_extends s7 s11 /\ cs_extends s11 st'` by
     metis_tac[cs_extends_trans] >>
   `cs_extends s1 st'` by metis_tac[cs_extends_trans] >>
