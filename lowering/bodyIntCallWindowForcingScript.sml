@@ -5,7 +5,7 @@
    lowered from sv) to the forced operand. *)
 Theory bodyIntCallWindowForcing
 Ancestors
-  bodyIntCallForcing
+  bodyIntCallForcing bodyIntCallWindowCopy
 
 Theorem protected_value_window_forcing:
   unwrap_value ce vv sa = (op,sb) /\ vv_holds ce cx ty r vv es s /\
