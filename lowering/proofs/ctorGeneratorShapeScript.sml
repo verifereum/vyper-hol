@@ -65,12 +65,12 @@ Proof
 QED
 
 Theorem deploy_constructor_tail_shape:
-  !cenv body imm nr key trans runtime_size immutables_len.
+  !cenv body imm nr key trans vw runtime_size immutables_len.
     cenv.ce_return_pc = NONE /\
     ~supported_stmts_expr_exists expr_shape_root body ==>
     shape_step F compiler_label
       (\st. cenv_shape_ok st cenv /\ plain_operand st imm)
-      (do (if nr then compile_nonreentrant_lock key trans F else return ());
+      (do (if nr then compile_nonreentrant_lock key trans vw else return ());
           exit_lbl <- fresh_label "ctor_exit";
           compile_stmts (cenv with ce_ctor_exit_label := SOME exit_lbl)
             NoLoop NoneT body;
@@ -78,7 +78,7 @@ Theorem deploy_constructor_tail_shape:
           (if block_is_terminated cs then return ()
            else emit_inst JMP [Label exit_lbl] []);
           new_block exit_lbl;
-          (if nr then compile_nonreentrant_unlock key trans F else return ());
+          (if nr then compile_nonreentrant_unlock key trans vw else return ());
           compile_constructor_epilogue runtime_size immutables_len imm od)
       (\u st. T)
 Proof
@@ -101,7 +101,7 @@ QED
 
 Resume deploy_constructor_tail_shape[lock]:
   Cases_on `nr` >> simp[]
-  >- (mp_tac (Q.SPECL [`F`, `compiler_label`, `key`, `trans`, `F`]
+  >- (mp_tac (Q.SPECL [`F`, `compiler_label`, `key`, `trans`, `vw`]
         compile_nonreentrant_lock_shape) >>
       simp[shape_step_def] >> rpt strip_tac >>
       first_x_assum drule_all >> strip_tac >>
@@ -157,7 +157,7 @@ Resume deploy_constructor_tail_shape[finish]:
   gen_tac >> BETA_TAC >> irule shape_step_ignore_bind >>
   qexists_tac `\u st. plain_operand st imm` >> reverse conj_tac
   >- (Cases_on `nr` >> simp[]
-      >- (mp_tac (Q.SPECL [`F`, `compiler_label`, `key`, `trans`, `F`]
+      >- (mp_tac (Q.SPECL [`F`, `compiler_label`, `key`, `trans`, `vw`]
             compile_nonreentrant_unlock_shape) >>
           simp[shape_step_def] >> rpt strip_tac >>
           first_x_assum drule_all >> strip_tac >> metis_tac[plain_operand_mono]) >>
@@ -168,7 +168,7 @@ QED
 Finalise deploy_constructor_tail_shape[local]
 
 Theorem deploy_constructor_prefix_shape:
-  !cenv body pay nr key trans runtime_size immutables_len args data_size.
+  !cenv body pay nr key trans vw runtime_size immutables_len args data_size.
     cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
     ~supported_stmts_expr_exists expr_shape_root body ==>
     shape_step F compiler_label (\st. T)
@@ -183,17 +183,17 @@ Theorem deploy_constructor_prefix_shape:
           ce <- compile_register_constructor_args
             (cenv with ce_imm_alloca :=
               (if immutables_len > 0 then SOME imm else NONE)) args 0 data_size;
-          (if nr then compile_nonreentrant_lock key trans F else return ());
+          (if nr then compile_nonreentrant_lock key trans vw else return ());
           lbl <- fresh_label "ctor_exit";
           compile_stmts (ce with ce_ctor_exit_label := SOME lbl) NoLoop NoneT body;
           cs <- comp_get;
           (if block_is_terminated cs then return () else emit_inst JMP [Label lbl] []);
           new_block lbl;
-          (if nr then compile_nonreentrant_unlock key trans F else return ());
+          (if nr then compile_nonreentrant_unlock key trans vw else return ());
           compile_constructor_epilogue runtime_size immutables_len imm od)
       (\u st. T)
 Proof
-  ntac 10 gen_tac >> strip_tac >> irule shape_step_ignore_bind >>
+  ntac 11 gen_tac >> strip_tac >> irule shape_step_ignore_bind >>
   qexists_tac `\u st. T` >> reverse conj_tac >- suspend "pay" >>
   gen_tac >> BETA_TAC >> irule shape_step_bind >>
   qexists_tac `\imm st. plain_operand st imm` >> reverse conj_tac
@@ -299,17 +299,20 @@ QED
 
 Resume compile_generate_deploy_shape[present]:
   rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
+  `?g k t vw. cenv.ce_nonreentrant = (g,k,t,vw)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
   drule_all deploy_constructor_prefix_shape >>
-  disch_then (qspecl_then [`is_payable`, `is_nonreentrant`, `nkey`, `use_transient`]
-    (qspecl_then [`runtime_size`, `immutables_len`, `constructor_args`, `data_size`]
-      assume_tac)) >>
+  disch_then (qspecl_then [`is_payable`, `is_nonreentrant`, `nkey`,
+    `use_transient`, `vw`, `runtime_size`, `immutables_len`,
+    `constructor_args`, `data_size`] assume_tac) >>
   qmatch_asmsub_abbrev_tac `shape_step F compiler_label (\st. T) prefix _` >>
   `compile_generate_deploy T runtime_size immutables_len constructor_args
      data_size ctor_internal_fns cenv ss is_payable is_nonreentrant nkey
      use_transient = comp_ignore_bind prefix
        (compile_internal_fn_bodies ctor_internal_fns)` by
-    simp[compile_generate_deploy_def, Abbr `prefix`, comp_ignore_bind_def,
-      comp_bind_assoc] >>
+    (qpat_x_assum `cenv.ce_nonreentrant = _` (fn th =>
+       simp[th, compile_generate_deploy_def, Abbr `prefix`,
+         comp_ignore_bind_def, comp_bind_assoc])) >>
   qpat_x_assum `compile_generate_deploy _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac [] >>
   Cases_on `prefix (initial_compile_state "__deploy")` >>
