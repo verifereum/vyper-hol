@@ -311,6 +311,21 @@ QED
    internal call's at its callee's declared return type, which the typing
    lets the call site widen (well_typed_expr), and which expr_sim_inv says
    cenv records. *)
+(* An internal call's value, laid out at the callee's declared return type,
+   widens to the call's annotation. *)
+Theorem intcall_lowered_widens:
+  !cenv cx env es ty fid args drv.
+    expr_sim_inv cenv cx env es /\
+    well_typed_expr env (Call ty (IntCall fid) args drv) ==>
+    type_widens_to env.type_defs
+      (lowered_value_type cenv (Call ty (IntCall fid) args drv)) ty
+Proof
+  rpt strip_tac >> PairCases_on `fid` >>
+  gvs[expr_sim_inv_def, well_typed_expr_def, lowered_value_type_def,
+      vyperASTTheory.expr_type_def] >>
+  metis_tac[type_widens_to_def]
+QED
+
 Theorem post_value_type_widens:
   !cenv cx env es e.
     expr_sim_inv cenv cx env es /\ well_typed_expr env e ==>
@@ -318,10 +333,8 @@ Theorem post_value_type_widens:
 Proof
   rpt strip_tac >>
   Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
-  >- (gvs[] >> rename1 `IntCall fid` >> PairCases_on `fid` >>
-      gvs[expr_sim_inv_def, well_typed_expr_def, lowered_value_type_def,
-          vyperASTTheory.expr_type_def] >>
-      metis_tac[type_widens_to_def]) >>
+  >- (gvs[] >> drule_all intcall_lowered_widens >>
+      rw[vyperASTTheory.expr_type_def]) >>
   `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_not_int_call] >>
   simp[type_widens_to_def]
 QED
@@ -1247,7 +1260,8 @@ Proof
 QED
 
 Theorem ifexp_intcall_read_physical_typed:
-  expr_body_pre ce cx env (Call ty (IntCall fid) args drv) es /\
+  expr_sim_inv ce cx env es /\
+  well_typed_expr env (Call ty (IntCall fid) args drv) /\
   (do r <- eval_expr cx (Call ty (IntCall fid) args drv);
       read_result cx r od) es = (INL v,es') ==>
   ?stv. evaluate_type (get_tenv cx)
@@ -1256,8 +1270,8 @@ Theorem ifexp_intcall_read_physical_typed:
 Proof
   strip_tac >> PairCases_on `fid` >>
   `env_context_consistent env cx` by
-    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def] >>
-  fs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
+    gvs[expr_sim_inv_def, env_consistent_def] >>
+  fs[expr_sim_inv_def, well_typed_expr_def,
      lowered_value_type_def, vyperASTTheory.expr_type_def] >>
   qpat_x_assum `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> _` drule >>
   disch_then SUBST1_TAC >>

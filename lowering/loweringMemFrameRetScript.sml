@@ -215,7 +215,7 @@ Proof
   rename1 `Return (SOME e)` >> irule return_value_counted_mem >>
   rpt conj_tac
   >- metis_tac[]
-  >- (rpt strip_tac >>
+  >- (rpt strip_tac >> disj1_tac >>
       qpat_x_assum `!func. _` (qspec_then `func` (irule o cj 3)) >>
       metis_tac[])
   >> metis_tac[]

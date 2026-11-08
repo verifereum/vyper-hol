@@ -101,6 +101,49 @@ Proof
 QED
 
 (* KEY LEMMA: a value of type t also has the wider declared type u. *)
+Theorem arg_type_fits_trans:
+  (!t u w. arg_type_fits t u /\ arg_type_fits u w ==> arg_type_fits t w) /\
+  (!ts us ws. arg_types_fit ts us /\ arg_types_fit us ws ==>
+              arg_types_fit ts ws)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >> rw[arg_type_fits_def]
+  >>~- ([`arg_types_fit (u::us) ws`],
+        Cases_on `ws` >> gvs[arg_type_fits_def] >> metis_tac[])
+  >>~- ([`arg_type_fits (TupleT us) w`],
+        Cases_on `w` >> gvs[arg_type_fits_def] >> metis_tac[])
+  >>~- ([`arg_type_fits (ArrayT u _) w`],
+        Cases_on `w` >> gvs[arg_type_fits_def] >>
+        qmatch_asmsub_rename_tac `arg_type_fits (ArrayT _ _) (ArrayT _ bd)` >>
+        Cases_on `bd` >> gvs[arg_type_fits_def] >> metis_tac[]) >>
+  Cases_on `w` >> gvs[arg_type_fits_def] >>
+  qmatch_asmsub_rename_tac `arg_type_fits _ (BaseT bt)` >>
+  Cases_on `bt` >> gvs[arg_type_fits_def] >>
+  qmatch_asmsub_rename_tac `arg_type_fits _ (BaseT (BytesT bd))` >>
+  Cases_on `bd` >> gvs[arg_type_fits_def]
+QED
+
+Theorem arg_type_fits_antisym:
+  (!t u. arg_type_fits t u ==> arg_type_fits u t ==> t = u) /\
+  (!ts us. arg_types_fit ts us ==> arg_types_fit us ts ==> ts = us)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp_tac std_ss [arg_type_fits_def] >> rpt strip_tac >> gvs[] >>
+  gvs[arg_type_fits_def]
+QED
+
+Theorem type_widens_to_trans:
+  type_widens_to tenv t u /\ type_widens_to tenv u w ==>
+  type_widens_to tenv t w
+Proof
+  rw[type_widens_to_def] >> metis_tac[arg_type_fits_trans]
+QED
+
+Theorem type_widens_to_antisym:
+  type_widens_to tenv t u /\ type_widens_to tenv u t ==> t = u
+Proof
+  rw[type_widens_to_def] >> metis_tac[arg_type_fits_antisym]
+QED
+
 Theorem type_widens_to_value_has_type:
   type_widens_to tenv t u /\ evaluate_type tenv t = SOME tv /\
   value_has_type tv v ==>

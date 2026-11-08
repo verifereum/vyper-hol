@@ -1,9 +1,10 @@
-(* An incompatible internal-call layout yields the counted return contract
-   through the actual value-view expression prefix, not an arbitrary
-   expression postcondition endpoint. *)
+(* A valued return of the external frame whose value is not laid out at its
+   annotation: an internal call widened from the callee's declared type.
+   Once the value is in place at that type it is normalized into a buffer at
+   the return type and returned, memory-safely, to an exit. *)
 Theory externalReturnWidenedCallMem
 Ancestors
-  externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
+  externalReturnNormalizedMem externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
   nonreentrantExit internalReturnMetadata incompatibleReturnLayout returnLocatedMismatchMem
   stmtSimDefs loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
@@ -40,7 +41,7 @@ Theorem external_frame_ret_widened_call_mem:
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa0) ==>
-    !cenv' env lctx e es d RetQ.
+    !cenv' env lctx e es sa sb cenv'' s0 op s1 ee v t.
        same_frame cenv cenv' /\
        ~(lowered_value_type cenv' e = expr_type e \/
         is_bytestring_type (expr_type e) /\
@@ -48,30 +49,62 @@ Theorem external_frame_ret_widened_call_mem:
         arg_type_fits (lowered_value_type cenv' e) (expr_type e)) /\
        expr_sim_inv cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
+       stmt_exprs_ok cenv' (Return (SOME e)) /\
        IS_SOME (type_stmt env ret (Return (SOME e))) /\
-       expr_vv_sim_mem unit.cu_context func cenv'
-         (initial_evaluation_context am.sources am.layouts tx NONE) ret e es ==>
-       stmt_frag_mem d unit.cu_context func
-         (initial_evaluation_context am.sources am.layouts tx NONE) lctx RetQ cenv'
-         (stmt_env cenv' lctx ret (Return (SOME e)))
-         (eval_stmt (initial_evaluation_context am.sources am.layouts tx NONE)
-           (Return (SOME e))) es
-(* TEMPORARILY CHEATED - the posts now state vv_holds at post_value_type,
-   which for a widened IntCall is lowered_value_type, the call's located
-   type.  Such returns now have real normal outcomes, so the vacuity
-   through return_located_mismatch_mem no longer applies; the return
-   sequence still needs a real memory-safety proof on a value laid out at
-   the internal function's return type.
+       call_evaluation_safe
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         (int_calls_stmt (Return (SOME e))) /\
+       stmt_env cenv' lctx ret (Return (SOME e)) sa = (cenv'', sb) /\
+       lower_value compile_expr cenv' ret e sa = (op, s1) /\
+       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+       local_ptrs_reserved cenv' sa /\ ~block_is_terminated sa /\
+       stmt_state_rel unit.cu_context func cenv'
+         (initial_evaluation_context am.sources am.layouts tx NONE) es s0 /\
+       alloca_history func s0 /\ ~s0.vs_halted /\
+       s0.vs_current_bb = sa.cs_current_bb /\
+       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+       expr_post unit.cu_context func cenv'
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         e es sa s1 s0 ee v op t /\
+       (?gs ee'.
+          bind (eval_expr
+                  (initial_evaluation_context am.sources am.layouts tx NONE) e)
+            (read_result
+               (initial_evaluation_context am.sources am.layouts tx NONE))
+            (es with gas_obs := gs) = (INL v, ee')) /\
+       t.vs_current_bb = s1.cs_current_bb /\
+       t.vs_inst_idx = LENGTH s1.cs_current_insts /\
+       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+       ~t.vs_halted ==>
+       ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
+                mem_safe_run fuel unit.cu_context func t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all external_package_frame_internal_maps >> strip_tac >>
-  irule return_located_mismatch_mem >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  irule incompatible_return_layout_located >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-*)
-Proof
-  cheat
+  drule_all incompatible_return_layout_intcall >> strip_tac >>
+  qpat_x_assum `e = _` SUBST_ALL_TAC >>
+  `expr_type (Call ann (IntCall fid) xs drv) = ann` by simp[expr_type_def] >>
+  `type_widens_to
+     (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+     ann ret` by
+    (`env.type_defs =
+      get_tenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
+       (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+        simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+          vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+     qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def, AllCaseEqs()]) >>
+  `post_value_type cenv' (Call ann (IntCall fid) xs drv) =
+   lowered_value_type cenv' (Call ann (IntCall fid) xs drv)` by
+    simp[post_value_type_def] >>
+  `~is_word_type ret` by metis_tac[typed_copy_word_widening] >>
+  `~(is_bytestring_type
+       (lowered_value_type cenv' (Call ann (IntCall fid) xs drv)) /\
+     is_bytestring_type ret)` by
+    metis_tac[type_widens_from_bytestring] >>
+  `lowered_value_type cenv' (Call ann (IntCall fid) xs drv) <> ret` by
+    metis_tac[vyperTypeArgFitsTheory.type_widens_to_antisym] >>
+  drule_all external_frame_ret_value_normalized_run_mem >> simp[]
 QED

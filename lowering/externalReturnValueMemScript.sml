@@ -88,6 +88,13 @@ Proof
     ~(is_bytestring_type (lowered_value_type cenv' e) /\ is_bytestring_type ret) /\
     lowered_value_type cenv' e <> ret`
   >- (qpat_x_assum `~is_word_type ret /\ _` strip_assume_tac >>
+      `post_value_type cenv' e = lowered_value_type cenv' e` by
+        (qpat_x_assum `_ = expr_type e \/ _` strip_assume_tac
+         >- metis_tac[post_value_type_lowered] >>
+         `type_widens_to env.type_defs (expr_type e) ret` by
+           (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+            simp[type_stmt_def, AllCaseEqs()]) >>
+         metis_tac[type_widens_from_bytestring]) >>
       drule_all external_frame_ret_value_normalized_run_mem >> simp[]) >>
   drule_all external_frame_ret_value_direct_run_mem >> simp[]
 QED
