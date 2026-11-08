@@ -633,10 +633,11 @@ Proof
   `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
      es0 actual` by
     (drule (cj 2 deploy_ctor_entry_immutable_resources) >>
-     disch_then irule >> fs[allocas_from_def] >> metis_tac[]) >>
+     disch_then irule >> fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
   `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
      (es0 with outcomes := SOME vs.vs_outcomes) actual` by
-    fs[immutable_alloca_sep_def] >>
+    (qpat_x_assum `immutable_alloca_sep func ce _ es0 actual` mp_tac >>
+     simp[immutable_alloca_sep_def] >> tautLib.TAUT_TAC) >>
   `immutable_base_zero ce actual` by
     (drule_all prefix_entry_immutable_base >> simp[]) >>
   `alloca_room unit.cu_context func actual` by
