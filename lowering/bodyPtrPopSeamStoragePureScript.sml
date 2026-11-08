@@ -12,7 +12,7 @@ Theory bodyPtrPopSeamStoragePure
 Ancestors
   bodyPtrPopTargetDefs bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs
   targetPlaceSim targetPlaceLive vyperPureExpr vyperInterpreter vyperState
-  vyperAST
+  vyperAST bodyPtrPopStoragePureCompose
 
 (* Hints, not part of the statement:
    - compile_expr of the pop is compile_get_target_ptr then
@@ -46,5 +46,5 @@ Theorem pop_nested_storage_pure_vv_ptr:
     EVERY pure_expr (target_indices bt) ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann bt) es
 Proof
-  cheat
+  metis_tac[pop_storage_pure_compose]
 QED
