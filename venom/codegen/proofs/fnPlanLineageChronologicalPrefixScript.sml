@@ -875,7 +875,7 @@ Proof
 QED
 
 Theorem incoming_join_native_ordinary_prefix:
-  !fn entry lbl bb pred pb dfg ps0 ops ps visited k qs.
+  !fn entry lbl bb pred pb dfg ps0 ops ps visited incoming k qs.
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
     cfg_reachable_of (cfg_analyze fn) pred /\
     fn_reachable fn lbl /\ lbl <> entry /\
@@ -888,9 +888,10 @@ Theorem incoming_join_native_ordinary_prefix:
     native_live_boundary fn pb (LENGTH pb.bb_instructions) ps /\
     LENGTH (collect_phis bb.bb_instructions) <= k /\
     k <= PRE (LENGTH bb.bb_instructions) /\
+    incoming.ps_stack = ps.ps_stack /\ incoming.ps_spilled = ps.ps_spilled /\
     native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
       (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-      (LENGTH bb.bb_instructions) (non_param_insts bb) ps k qs ==>
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k qs ==>
     (!v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
       (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
         MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
@@ -911,19 +912,30 @@ Proof
   qabbrev_tac `p = LENGTH (collect_phis bb.bb_instructions)` >>
   `k = p + (k-p)` by decide_tac >>
   `?mid. native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
-      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions ps p mid /\
+      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions incoming p mid /\
     native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
       (bb_is_halting bb) p (LENGTH bb.bb_instructions) (DROP p bb.bb_instructions) mid (k-p) qs` by
     (qspecl_then [`k-p`, `p`] mp_tac
        (INST_TYPE [alpha |-> ``:cfg_analysis``] native_inst_prefix_split) >>
      simp[] >> disch_then drule >> simp[]) >>
-  `native_live_boundary fn bb p mid` by
+  `EVERY (\inst. inst.inst_opcode = PHI) (TAKE p bb.bb_instructions)` by
+    (`TAKE p bb.bb_instructions = collect_phis bb.bb_instructions` by
+       (qspec_then `bb.bb_instructions` (qx_choose_then `tail` mp_tac) collect_phis_prefix >>
+        disch_then (mp_tac o Q.AP_TERM `TAKE p`) >> simp[Abbr `p`, TAKE_LENGTH_APPEND]) >>
+     simp[EVERY_MEM] >> metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  `?shadow. native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions ps p shadow /\
+      shadow.ps_stack = mid.ps_stack /\ shadow.ps_spilled = mid.ps_spilled` by
+    (irule (INST_TYPE [alpha |-> ``:cfg_analysis``] native_phi_prefix_physical_transport) >>
+     simp[] >> qexists_tac `incoming` >> simp[]) >>
+  `native_live_boundary fn bb p shadow` by
     (simp[Abbr `p`] >> irule incoming_join_native_phi_boundary >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
      simp[] >>
      goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      metis_tac[]) >>
+  `native_live_boundary fn bb p mid` by gvs[native_live_boundary_def] >>
   `!v. MEM (Var v) mid.ps_stack \/ Var v IN FDOM mid.ps_spilled ==>
       (?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
         MEM v di.inst_outputs /\ MEM db.bb_label visited) \/
@@ -944,7 +956,7 @@ Proof
 QED
 
 Theorem incoming_join_native_worker_exit:
-  !fn entry lbl bb pred pb dfg ps0 ops ps visited chunks qs.
+  !fn entry lbl bb pred pb dfg ps0 ops ps visited incoming chunks qs.
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
     cfg_reachable_of (cfg_analyze fn) pred /\
     fn_reachable fn lbl /\ lbl <> entry /\
