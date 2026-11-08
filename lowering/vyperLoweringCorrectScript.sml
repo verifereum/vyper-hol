@@ -189,6 +189,14 @@ Definition external_call_result_rel_def:
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
         LIST_REL (request_agree cx) rqs ss.vs_requests
+    | (INR HaltException, Halt ss) =>
+        ss.vs_returndata = [] /\
+        accounts_agree cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+        transient_agree cx am'.tStorage ss.vs_transient /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        LIST_REL (request_agree cx) rqs ss.vs_requests
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error (RevertData _)), Abort Revert_abort _) => T
@@ -215,7 +223,8 @@ QED
 
 (* An external function's return sequences, run from state_rel at the
    return (whose accounts_rel gives every address's accounts and transient
-   storage as in the source, with no pending deletions), halt in the
+   storage as in the source, and which equates the two sides' pending
+   deletions), halt in the
    success case of external_call_result_rel.  The source result is the one
    call_external_function builds: the returned value cast to the return
    type (NoneV when the body returns without a value or falls off its
@@ -837,7 +846,9 @@ QED
 
 (* The same, for the plan and buffer size update_cenv_ret_abi builds from a
    compile env with the program's struct map (as build_compile_env's is), for
-   a return type with no NoneT in it (retAbiPlanProps). *)
+   a return type with no NoneT in it (retAbiPlanProps).  Accounts remain raw
+   at the return; external_call_result_rel processes pending deletions only
+   at the success boundary, as in external_return_abi_result_rel. *)
 Theorem external_return_abi_cenv_result_rel:
   !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
      tops tx srcs exps layouts Q.

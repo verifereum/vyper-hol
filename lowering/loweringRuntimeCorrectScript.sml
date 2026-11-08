@@ -84,8 +84,8 @@ QED
 
 (* The call valid_vyper_call selects sends the call value and then runs
    call_external_body from the bound arguments, with pending deletions
-   finalised on success.  es0 is the state after the value moved, as
-   external_entry_reaches_body starts the body from it. *)
+   finalised on success and on halt.  es0 is the state after the value
+   moved, as external_entry_reaches_body starts the body from it. *)
 Theorem call_external_selected_body:
   !tops am tx ret mut args fbody env orc es0.
     source_deployment_rel tops am tx /\
@@ -102,6 +102,8 @@ Theorem call_external_selected_body:
              (initial_evaluation_context am.sources am.layouts tx NONE)
              F mut (type_env tops) es0 env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
+      | (INR HaltException, am', rqs) =>
+          (INR HaltException, finalize_pending_deletions am', rqs)
       | failure => failure
 Proof
   rw[source_deployment_rel_def] >>
@@ -471,7 +473,7 @@ Theorem call_external_body_run:
                (INL v',
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
-    (!e. res = INR e /\ (!v. e <> ReturnException v) ==>
+    (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
      call_external_body am cx F mut tenv es0 env fbody ret =
        (INR e, am, es'.requests))
 Proof
@@ -554,7 +556,7 @@ QED
    asks of the call's failure, given that a RevertData exit reverts. *)
 Theorem expr_exit_external_result[local]:
   !e r tops ret tx am rqs.
-    expr_exit (INR e : unit + exception) r /\
+    e <> HaltException /\ expr_exit (INR e : unit + exception) r /\
     (!d a t. e = Error (RevertData d) /\ r = Abort a t ==> a = Revert_abort) ==>
     external_call_result_rel tops ret tx (INR e, am, rqs) r
 Proof
@@ -658,6 +660,7 @@ Proof
   strip_tac
   >- ((* an error or an assertion *)
       Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR e) _` >>
+      `e <> HaltException` by (strip_tac >> gvs[stmt_res_ok_def]) >>
       `!v. e <> ReturnException v` by
         (rpt strip_tac >> gvs[expr_exit_def] >>
          Cases_on `run_from fuel unit.cu_context func s0` >>
@@ -668,13 +671,14 @@ Proof
         expr_exit_external_result >>
       impl_tac
       >- (conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
           rpt strip_tac >> gvs[] >>
           qspecl_then [`tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
                        `cx`, `env_t`, `env'`, `ret`, `RetQ`, `fbody`, `es0`,
                        `d`, `es'`, `sa`, `sb`, `cenv'`, `s0`, `fuel`, `a`, `t`]
             mp_tac external_body_revert_data_reverts >>
           impl_tac >- gvs[ret_pc_ok_def] >> simp[]) >>
-      simp[]) >>
+      Cases_on `e` >> gvs[]) >>
   (* a return *)
   gvs[Abbr`RetQ`, abstract_machine_from_state_def]
 QED

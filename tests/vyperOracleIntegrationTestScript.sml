@@ -20,7 +20,7 @@ Definition integration_program_def:
     [FunctionDecl External Nonpayable F F "calls" [] [] NoneT integration_body;
      FunctionDecl Deploy Payable F F "__init__" [] [] NoneT integration_body;
      FunctionDecl External Nonpayable F F "defaults" [("x",NoneT)]
-       [send_call 20w 0] NoneT [Expr (send_call 10w 7)]]
+       [send_call 42w 0] NoneT [Expr (send_call 10w 7)]]
 End
 val () = cv_auto_trans integration_program_def;
 
@@ -59,7 +59,7 @@ Definition integration_machine_snapshot_def:
     (lookup_account 11w am.accounts).balance = balance /\
     lookup_storage 1w (lookup_account 11w am.accounts).storage = persistent /\
     lookup_storage 1w (vfmExecution$lookup_transient_storage 11w am.tStorage) = transient /\
-    am.logs = logs
+    am.logs = logs /\ am.pending_deletions = []
 End
 val () = cv_auto_trans integration_machine_snapshot_def;
 
@@ -139,13 +139,13 @@ Definition integration_defaults_constants_observe_def:
       (SOME [send_outcome T [] 17; send_outcome T [] 23]) []
       integration_machine (integration_tx "defaults") in
     let mods = [(NONE,
-      [VariableDecl Private (Constant (send_call 20w 0)) "c" NoneT NONE;
+      [VariableDecl Private (Constant (send_call 42w 0)) "c" NoneT NONE;
        FunctionDecl Deploy Payable F F "__init__" [] [] NoneT [Expr (send_call 10w 7)]])] in
     let loaded = load_contract (SOME [send_outcome T [] 17]) []
       integration_machine (integration_tx "__init__") mods [] in
     r = INL NoneV /\
     integration_request_fields rqs =
-      [(20w,0,[],F,3,2w,4w); (10w,7,[],F,17,9w,8w)] /\
+      [(42w,0,[],F,3,2w,4w); (10w,7,[],F,17,9w,8w)] /\
     integration_machine_snapshot 23 9w 8w
       (cpscv_adopted_logs ++ [<|logger := 11w; topics := [1w]; data := [8w]|>]) am /\
     (case loaded of INR _ => F | INL (am,rqs) =>
@@ -258,7 +258,7 @@ QED
 (* The complete rollback equality is certified separately from computable
    snapshots; CV does not decide equality of function-valued account maps. *)
 Theorem public_failure_whole_machine_rollback:
-  call_external orc gobs integration_machine tx = (INR exc,am,rqs) ==>
+  call_external orc gobs integration_machine tx = (INR exc,am,rqs) /\ exc <> HaltException ==>
   am = integration_machine
 Proof
   metis_tac[call_external_error_rollback]

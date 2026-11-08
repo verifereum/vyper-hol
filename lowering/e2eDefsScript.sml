@@ -173,20 +173,21 @@ End
    deployment or call commits its deletions (finalize_pending_deletions),
    and a failed call returns the machine it was given. *)
 Theorem call_external_transaction_pending_deletions:
-  !orc am tx r am' rqs.
+  !orc gobs am tx r am' rqs.
     call_external_transaction orc gobs am tx = (r, am', rqs) /\
     am.pending_deletions = [] ==>
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-      rw[] >> simp[])
-  >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
+  >- gvs[call_external_def, AllCaseEqs(), finalize_pending_deletions_def] >>
+  rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
+  reverse (Cases_on `exn = HaltException`)
+  >- (drule call_external_error_rollback >> simp[clear_machine_logs_def]) >>
+  gvs[call_external_def, AllCaseEqs(), finalize_pending_deletions_def]
 QED
 
 Theorem load_contract_pending_deletions:
-  !orc am tx mods exps am' rqs.
+  !orc gobs am tx mods exps am' rqs.
     load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
     am'.pending_deletions = []
 Proof
@@ -408,11 +409,12 @@ Definition logs_correspond_def:
       vyper_logs evm_logs
 End
 
-(* ===== Frame-aware result: outcomes in, requests compared ONLY on success ===== *)
+(* ===== Frame-aware result: outcomes in, requests compared ONLY on success or halt ===== *)
 
-(* On success, the EVM's final accounts, transient storage and requests
-   agree with the source's: equal except at storage bytes the source
-   leaves dead (accounts_agree, compileEnv). *)
+(* On success or halt, the EVM's final accounts (after processing the
+   pending deletions), transient storage and requests agree with the
+   source's: equal except at storage bytes the source leaves dead
+   (accounts_agree, compileEnv). *)
 
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
@@ -423,6 +425,16 @@ Definition call_result_rel_def:
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           tx_return_bytes tops ret tx v out /\
+          accounts_agree cx am'.accounts
+            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+          transient_agree cx am'.tStorage es'.rollback.tStorage /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs lgs /\
+          LIST_REL (request_agree cx) rqs (MAP FST trace)
+    | (INR HaltException, am', rqs) =>
+        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+        ?lgs.
+          frame_outcome es r es' NONE [] lgs /\
           accounts_agree cx am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
           transient_agree cx am'.tStorage es'.rollback.tStorage /\

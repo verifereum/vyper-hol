@@ -42,6 +42,9 @@ Ancestors
   loweringMemCorrect
   configuredE2ECorrectness
   finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
+  asmOptPeephole
+  asmOptPruneUnreachable asmOptPruneUnused asmOptMergeJumpdests
+  asmOptInefficientJumps
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)

@@ -863,7 +863,7 @@ Resume body_oracle_storage_mutual[intcall_return]:
         vyperStorageBackendTheory.get_storage_def]) >>
    simp_tac (srw_ss()) [Once push_function_def, return_def,
      Excl "unlock_if_nr_def", Excl "lock_if_nr_def", Excl "lift_option_type_def"] >> strip_tac >>
-   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_return_storage) >>
+   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_actual_return_storage) >>
    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
    simp_tac bool_ss [GSYM ignore_bind_def] >>
    qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')`
