@@ -1472,6 +1472,23 @@ Proof
   gvs[Abbr `input`, arithmeticTheory.ADD_COMM] >> metis_tac[]
 QED
 
+Theorem ready_parameter_output_head_mem:
+  !fn bb inst.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM inst (get_params bb.bb_instructions) ==>
+    MEM (HD inst.inst_outputs) inst.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule fnPlanLineageObserverTransportTheory.get_params_mem >> strip_tac >>
+  `inst_wf inst` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
+         listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `LENGTH inst.inst_outputs = 1` by
+    (Cases_on `inst.inst_opcode` >>
+     gvs[venomInstTheory.is_param_opcode_def, venomWfTheory.inst_wf_def]) >>
+  gvs[listTheory.LENGTH_EQ_NUM_compute]
+QED
+
 Theorem lineage_state_block_nondefining_observer_bound:
   !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after v b.
     b <= 1 /\ codegen_ready_fn fn /\
@@ -1497,17 +1514,10 @@ Proof
          `EVERY (\inst. v <> HD inst.inst_outputs)
             (get_params (HD fn.fn_blocks).bb_instructions)` by
            (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-            `MEM inst (HD fn.fn_blocks).bb_instructions /\ is_param_opcode inst.inst_opcode` by
-              metis_tac[fnPlanLineageObserverTransportTheory.get_params_mem] >>
-            `inst_wf inst` by
-              (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
-                   listTheory.EVERY_MEM] >> metis_tac[]) >>
-            `LENGTH inst.inst_outputs = 1` by
-              (Cases_on `inst.inst_opcode` >>
-               gvs[venomInstTheory.is_param_opcode_def, venomWfTheory.inst_wf_def]) >>
-            gvs[listTheory.LENGTH_EQ_NUM_compute, listTheory.EVERY_MEM] >>
-            qpat_x_assum `!inst'. MEM inst' _ ==> _`
-              (qspec_then `inst` mp_tac) >> simp[]) >>
+            `MEM (HD fn.fn_blocks) fn.fn_blocks` by
+              (Cases_on `fn.fn_blocks` >> gvs[codegen_ready_fn_def]) >>
+            drule_all ready_parameter_output_head_mem >>
+            metis_tac[fnPlanLineageObserverTransportTheory.get_params_mem]) >>
          drule_all fnPlanLineageObserverTransportTheory.prepare_params_plan_nondefining_resource_nonincrease >>
          simp[Abbr `input`] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
      Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1` >> gvs[]
@@ -1565,18 +1575,9 @@ Proof
          disch_then (qspec_then `v` mp_tac) >>
          impl_tac
          >- (gvs[listTheory.EXISTS_MEM, listTheory.EVERY_MEM] >> rpt strip_tac >>
-             `MEM inst (HD fn.fn_blocks).bb_instructions /\ is_param_opcode inst.inst_opcode` by
-               metis_tac[fnPlanLineageObserverTransportTheory.get_params_mem] >>
-             `inst_wf inst` by
-               (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
-                    listTheory.EVERY_MEM] >> metis_tac[]) >>
-             `inst.inst_outputs <> []` by
-               (Cases_on `inst.inst_opcode` >>
-                gvs[venomInstTheory.is_param_opcode_def, venomWfTheory.inst_wf_def,
-                    listTheory.LENGTH_EQ_NUM_compute]) >>
-             qpat_x_assum `!e. MEM e (get_params _) ==> _`
-               (qspec_then `inst` mp_tac) >>
-             Cases_on `inst.inst_outputs` >> gvs[]) >>
+             `MEM (HD fn.fn_blocks) fn.fn_blocks` by
+               (Cases_on `fn.fn_blocks` >> gvs[codegen_ready_fn_def]) >>
+             drule_all ready_parameter_output_head_mem >> metis_tac[]) >>
          simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff,
               fnPlanLineageObserverTransportTheory.indicator_zero_iff]) >>
      qexists_tac `0` >> simp[] >>
