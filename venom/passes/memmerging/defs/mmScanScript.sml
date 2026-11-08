@@ -22,7 +22,7 @@
  * Helper:
  *   flush_copies           — finalize pending copies into output
  *   invalidate_loads       — remove loads overlapping a write
- *   is_volatile_memory     — barrier-triggering instruction (write-effects check)
+ *   is_volatile_memory     — barrier-triggering memory reader or writer
  *)
 
 Theory mmScan
@@ -58,12 +58,11 @@ End
 
 (* ===== Volatile memory check ===== *)
 
-(* Python: _volatile_memory (#4914) — checks STORAGE/TRANSIENT/MEMORY write effects *)
+(* Python: _volatile_memory — pending writes must precede memory readers. *)
 Definition is_volatile_memory_def:
   is_volatile_memory inst <=>
-    Eff_STORAGE IN write_effects inst.inst_opcode \/
-    Eff_TRANSIENT IN write_effects inst.inst_opcode \/
-    Eff_MEMORY IN write_effects inst.inst_opcode
+    Eff_MEMORY IN (read_effects inst.inst_opcode UNION
+                   write_effects inst.inst_opcode)
 End
 
 (* ===== Operand helpers ===== *)
@@ -358,7 +357,7 @@ Definition find_dload_mstore_pair_def:
                (* Semantic order: MSTORE [addr; val] *)
                case use_inst.inst_operands of
                  [dst_op; Var v] =>
-                   if v = out_var then
+                   if v = out_var /\ dst_op <> Var out_var then
                      SOME <| dp_dload_id := inst.inst_id;
                              dp_mstore_id := use_inst.inst_id;
                              dp_src := src_op;

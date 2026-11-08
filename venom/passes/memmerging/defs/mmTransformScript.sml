@@ -255,22 +255,32 @@ Definition transform_block_memzero_def:
       FLAT (MAP (apply_memzero_inst nop_set rep_map) bb.bb_instructions)
 End
 
-(* Dload peephole transform.
-   Python: _merge_mstore_dload *)
+(* Both ends consult the function-wide DFG: the single use may be in
+   another block, which Python's InstUpdater updates in place. *)
+Definition transform_dload_inst_def:
+  transform_dload_inst dfg inst =
+    case find_dload_mstore_pair dfg inst of
+      SOME dp => mk_nop_from inst
+    | NONE =>
+        if inst.inst_opcode = MSTORE then
+          (case inst.inst_operands of
+             [_; Var v] =>
+               (case dfg_get_def dfg v of
+                  SOME load_inst =>
+                    (case find_dload_mstore_pair dfg load_inst of
+                       SOME dp =>
+                         if dp.dp_mstore_id = inst.inst_id then
+                           mk_dloadbytes_inst inst dp.dp_src dp.dp_dst
+                         else inst
+                     | NONE => inst)
+                | NONE => inst)
+           | _ => inst)
+        else inst
+End
+
 Definition transform_block_dload_def:
   transform_block_dload dfg bb =
-    let pairs = find_dload_pairs dfg bb.bb_instructions in
-    let dload_nops = MAP (\dp. dp.dp_dload_id) pairs in
-    let mstore_map = MAP (\dp. (dp.dp_mstore_id, dp)) pairs in
-    bb with bb_instructions :=
-      MAP (\inst.
-        if MEM inst.inst_id dload_nops then
-          mk_nop_from inst
-        else
-          case ALOOKUP mstore_map inst.inst_id of
-            SOME dp => mk_dloadbytes_inst inst dp.dp_src dp.dp_dst
-          | NONE => inst)
-      bb.bb_instructions
+    bb with bb_instructions := MAP (transform_dload_inst dfg) bb.bb_instructions
 End
 
 (* ===== Full transform: all sub-passes composed ===== *)

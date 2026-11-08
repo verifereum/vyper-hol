@@ -196,8 +196,8 @@ Proof
   simp[transform_block_dload_def] >> strip_tac >>
   irule mm_map_delete_context >>
   conj_tac
-  >- (gen_tac >> BETA_TAC >> IF_CASES_TAC >> simp[mk_nop_from_def] >>
-      CASE_TAC >> simp[mk_dloadbytes_inst_def]) >>
+  >- (gen_tac >> simp[transform_dload_inst_def] >>
+      rpt CASE_TAC >> simp[mk_nop_from_def, mk_dloadbytes_inst_def]) >>
   simp[]
 QED
 
