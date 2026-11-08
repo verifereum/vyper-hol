@@ -10,7 +10,7 @@
  * spill map the current block's code leaves (fnPlanLineage).
  *
  * TOP-LEVEL:
- *   lineage_alias_successor — CHEATED: one block preserves the invariant
+ *   lineage_alias_successor — one block preserves the invariant
  *)
 
 Theory fnAliasInv
@@ -201,10 +201,42 @@ Proof
   strip_tac >> gvs[] >>
   `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
     metis_tac[livenessProofsTheory.current_collect_phis_length] >>
-  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  qspec_then `LENGTH (collect_phis bb.bb_instructions)` mp_tac generate_block_insts_plan_split >>
-  disch_then (drule_then (fn th => rewrite_tac[th])) >> strip_tac >>
-  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [run_block_def, AllCaseEqs()] >> strip_tac >>
-  cheat
+  qspecl_then [`LENGTH (collect_phis bb.bb_instructions)`, `bb.bb_instructions`]
+    (drule_then (fn th => drule (iffLR (SPEC_ALL th))))
+    generate_block_insts_plan_split >> strip_tac >>
+  qspecl_then [`vs`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs
+  >- (fs[run_block_def] >>
+      `?pred. vs.vs_prev_bb = SOME pred` by
+        (Cases_on `bb.bb_instructions` >- gvs[collect_phis_def] >>
+         rename1 `bb.bb_instructions = inst::rest` >>
+         `inst.inst_opcode = PHI` by
+           (Cases_on `inst.inst_opcode = PHI` >> gvs[collect_phis_def]) >>
+         qpat_x_assum `eval_phis _ _ = OK _` mp_tac >>
+         simp[Once eval_phis_def] >>
+         Cases_on `vs.vs_prev_bb` >-
+           (Cases_on `inst.inst_outputs` >> simp[eval_one_phi_def]) >> simp[]) >>
+      `regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn)
+         spill_base bb (LENGTH (collect_phis bb.bb_instructions)) ps_mid /\
+       (!at. MEM at ps_mid.ps_stack \/ at IN FDOM ps_mid.ps_spilled ==>
+         operand_val (frame_view fn ra s') lo at =
+         operand_val (frame_view fn ra s') lo (normalize_operand (dfg_build_function fn) [] at))` by
+        (irule lineage_phi_eval_exit >> metis_tac[]) >>
+      drule_all ready_body_suffix_layout >> simp[] >> strip_tac >>
+      `s'.vs_labels = vs.vs_labels` by
+        metis_tac[venomExecPropsTheory.eval_phis_preserves_labels] >>
+      `phi_prefix_length bb.bb_instructions = LENGTH (collect_phis bb.bb_instructions)` by
+        metis_tac[regional_collect_phis_length] >>
+      qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ 0 _ _ = _` kall_tac >>
+      gen_tac >> disch_tac >>
+      drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`)
+        regional_body_alias_suffix >> disch_then irule >> simp[] >>
+      reverse conj_tac >- metis_tac[] >>
+      qexistsl_tac [`ctx`, `fuel`, `s' with vs_inst_idx := LENGTH (collect_phis bb.bb_instructions)`] >>
+      simp[] >> reverse conj_tac >- metis_tac[] >>
+      simp[frame_view_def] >> gen_tac >> disch_tac >>
+      qpat_x_assum `!at. MEM at ps_mid.ps_stack \/ _ ==> _` (drule_then mp_tac) >>
+      Cases_on `normalize_operand (dfg_build_function fn) [] at'` >>
+      Cases_on `at'` >> simp[frame_view_def, operand_val_def]) >>
+  fs[run_block_def]
+
 QED
