@@ -4,7 +4,7 @@ Ancestors
   abiDecoderCoherence abiDecoderTypedContract exprLowering
   abiDecoderAppend abiDecoderCounters abiDecoderCode abiDecoderContract abiDecoderPhi abiEncoder emitHelper emitHelperProps context fragExec
   abiEncoderRegisteredEffect abiEncoderProps actualAllocCredit actualAllocExec
-  entryArgPtrs localPtrsProps compileEnv compileVyper moduleLowering moduleLoweringProps allocLimitsProps
+  entryArgPtrs localPtrsProps memoryValueEncoding compileEnv compileVyper moduleLowering moduleLoweringProps allocLimitsProps
   allocaFrontierBound allocaBudgetProps valueEncoding vyperABI vyperCompiler
   venomExecSemantics venomState venomInst venomMemDefs
   words list finite_map pred_set arithmetic
@@ -1419,6 +1419,7 @@ Theorem ctor_scratch_decode_bind_ptr:
   lookup_var p s = SOME w /\ not_fresh_at st p /\ w2n w = d /\
   local_backed func p s d n /\ d+n <= s.vs_alloca_next /\
   type_memory_size entry.type <= n /\ val_wf entry.type entry.value /\
+  value_has_type entry.type entry.value /\
   val_in_memory entry.type entry.value d t.vs_memory /\
   (!nm b sz. local_region ce scopes s nm b sz ==> compileEnv$regions_disjoint d n b sz) ==>
   local_ptrs_rel func (ce with ce_vars := ce.ce_vars |+ (name,PtrVar (Var p) n)) scopes t
@@ -1448,7 +1449,9 @@ Proof
    ce with ce_vars updated_by (\m. m |+ (name,PtrVar (Var p) n))` by
     simp[compile_env_component_equality] >>
   pop_assum SUBST1_TAC >> irule intCallCalleeTheory.local_ptrs_rel_bind_ptr >>
-  asm_rewrite_tac[] >> qexistsl [`entry`, `w`] >> simp[] >> metis_tac[]
+  asm_rewrite_tac[] >> qexistsl [`entry`, `w`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  irule val_in_memory_memory_value_rel >> simp[]
 QED
 
 Theorem ctor_registered_alloc_decode_effect:
@@ -1538,6 +1541,9 @@ Proof
   drule_all ctor_decode_constructor_arg_old_prefix >>
   disch_then (qx_choose_then `actual` (map_every assume_tac o CONJUNCTS)) >>
   `type_memory_bytes ce' ty = type_memory_bytes ce ty` by simp[] >>
+  `value_has_type entry.type entry.value` by
+    (qpat_x_assum `abi_decoder_metadata ce _ _ _ _ _ _` mp_tac >>
+     simp[abi_decoder_metadata_def]) >>
   ntac 10 (pop_last_assum kall_tac) >>
   qpat_x_assum `abi_decoder_coherent ce _ _ _ _` kall_tac >>
   qpat_x_assum `abi_decoder_metadata ce _ _ _ _ _ _` kall_tac >>

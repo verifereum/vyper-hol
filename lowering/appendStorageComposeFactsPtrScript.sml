@@ -1,7 +1,7 @@
 (* Exported source/machine boundaries for append composition. *)
 Theory appendStorageComposeFactsPtr
 Ancestors
-  appendStorageSourcePtr stmtSimAppendStorageCompose stmtSimDefs
+  stmtSimAppendStorageCompose stmtSimDefs
   accountsRelProps appendStorageRel exprLowering emitHelper emitHelperProps
   compileEnv venomState vyperStorage vfmState list rich_list
   exprSimDefs exprLoweringProps vyperState vyperValue vyperStorageBackend venomInst

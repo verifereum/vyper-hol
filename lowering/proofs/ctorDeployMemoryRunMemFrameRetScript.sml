@@ -169,7 +169,7 @@ Proof
        run_inst_seq_mem_ok [mk_inst st_exit.cs_next_id TSTORE
           [Lit (n2w nkey); Lit 0w] []] s` by
         (simp[run_inst_seq_def, run_inst_seq_mem_ok_def, mk_inst_def,
-          step_inst_base_def, eval_operand_def, Abbr `u`,
+          step_inst_base_opcode_eqs, eval_operand_def, Abbr `u`,
           inst_mem_below_frontier_def, inst_dload_in_section_def,
           exec_write2_def, contextCodegenRelTheory.source_memory_read_ranges_def,
           codegenRelTheory.source_memory_write_ranges_def] ) >>

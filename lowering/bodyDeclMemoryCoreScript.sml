@@ -30,13 +30,15 @@ Theorem body_stmt_state_rel_declare_store_frame:
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size tyv <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    type_memory_size tyv <= sz /\ val_wf tyv v /\
+    type_memory_size tyv <= sz /\ val_wf tyv v /\ value_has_type tyv v /\
     val_in_memory tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t
 Proof
   rpt gen_tac >> strip_tac >>
+  `memory_value_rel tyv v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
        lookup_var q t = lookup_var q s` by
     (rpt strip_tac >- simp[] >>
