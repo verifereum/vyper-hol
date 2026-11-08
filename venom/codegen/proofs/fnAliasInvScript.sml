@@ -15306,6 +15306,81 @@ Proof
   AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, pairTheory.FORALL_PROD]
 QED
 
+Definition alias_occ_clean_events_def:
+  alias_occ_clean_events site liveness cfg fn bb ps =
+    case cfg_preds_of cfg bb.bb_label of
+      [pred_lbl] =>
+        if LENGTH (cfg_succs_of cfg pred_lbl) <= 1 then []
+        else
+          (case lookup_block pred_lbl fn.fn_blocks of
+            NONE => []
+          | SOME pred_bb =>
+              let inputs = input_vars_from pred_lbl bb.bb_instructions
+                (live_vars_at liveness bb.bb_label 0) in
+              let layout = live_vars_at liveness pred_lbl
+                (LENGTH pred_bb.bb_instructions) in
+              let to_pop = FILTER (\v. ~MEM v inputs) layout in
+              let physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack))
+                (MAP Var to_pop) in
+              let retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical in
+              let to_cleanup = FILTER (\op. ~MEM op retained) physical in
+              let ok = (ps.ps_cleanup_promised \/
+                cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth
+                  cfg fn bb (LENGTH ps.ps_stack - LENGTH to_cleanup)) in
+              if NULL inputs /\ ok then
+                alias_occ_mark_events site 0 (K T) ps.ps_stack
+              else if ok then
+                alias_occ_popmany_events to_cleanup ps ++
+                alias_occ_mark_events site 0 (\op. MEM op retained)
+                  (SND (popmany_plan to_cleanup ps)).ps_stack
+              else alias_occ_popmany_events (MAP Var to_pop) ps)
+    | _ => []
+End
+
+Theorem alias_occ_align_cleanup_promised:
+  alias_occ_align s (ps with ps_cleanup_promised := promised) = alias_occ_align s ps
+Proof
+  simp[alias_occ_align_def]
+QED
+
+Theorem alias_occ_clean_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_clean_events site liveness cfg fn bb ps) s)
+    (SND (clean_stack_plan liveness cfg fn bb ps))
+Proof
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- simp[alias_occ_clean_events_def, clean_stack_plan_def, alias_occ_events_shadow_def] >>
+  Cases_on `t`
+  >- (simp[alias_occ_clean_events_def, clean_stack_plan_def] >>
+      Cases_on `LENGTH (cfg_succs_of cfg h) <= 1`
+      >- simp[alias_occ_events_shadow_def] >>
+      asm_rewrite_tac[] >>
+      Cases_on `lookup_block h fn.fn_blocks`
+      >- simp[alias_occ_events_shadow_def] >>
+      simp[] >>
+      qmatch_goalsub_abbrev_tac `NULL inputs` >>
+      qmatch_goalsub_abbrev_tac `cleanup_elision_safe a b cfg fn bb n` >>
+      Cases_on `ps.ps_cleanup_promised \/ cleanup_elision_safe a b cfg fn bb n` >>
+      asm_rewrite_tac[]
+      >- (Cases_on `NULL inputs` >> simp[]
+          >- (strip_tac >>
+              mp_tac (Q.INST [`test` |-> `K T`] alias_occ_mark_align) >>
+              simp[alias_occ_align_def, combinTheory.K_DEF]) >>
+          simp[pairTheory.ELIM_UNCURRY, alias_occ_events_append,
+            alias_occ_align_cleanup_promised, mark_dead_stack_def] >>
+          strip_tac >>
+          qmatch_goalsub_abbrev_tac `popmany_plan cleanup ps` >>
+          qmatch_goalsub_abbrev_tac `alias_occ_mark_events site 0 test` >>
+          `alias_occ_align (alias_occ_events_shadow (alias_occ_popmany_events cleanup ps) s)
+             (SND (popmany_plan cleanup ps))` by
+            (irule alias_occ_popmany_align >> simp[]) >>
+          drule (Q.INST [`site` |-> `site`, `test` |-> `test`] alias_occ_mark_align) >>
+          simp[alias_occ_align_def]) >>
+      simp[alias_occ_popmany_align]) >>
+  simp[alias_occ_clean_events_def, clean_stack_plan_def, alias_occ_events_shadow_def]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
