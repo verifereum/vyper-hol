@@ -70,9 +70,9 @@ Proof
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
   simp[deploy_state_rel_def] >> strip_tac >>
   drule_all no_ctor_args >> strip_tac >>
-  qpat_x_assum `gas_variant _ _` mp_tac >>
-  simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-       venom_state_component_equality]
+  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_code, s.vs_labels)`) >>
+  simp[deploy_entry_state_def, entry_venom_state_def]
 QED
 
 Theorem no_ctor_simple_data:
@@ -2014,9 +2014,9 @@ Proof
   `imm_len tops < dimword(:256) /\
    LENGTH runtime_bc + imm_len tops < dimword(:256)` by decide_tac >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
-     simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          venom_state_component_equality, init_venom_state_def]) >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
   irule (no_ctor_fresh_sequence |>
     Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`, `id` |-> `0`] |>
     SRULE [listTheory.LENGTH_APPEND, rich_listTheory.LENGTH_REPLICATE]) >>
@@ -2107,9 +2107,9 @@ Proof
   `imm_len tops < dimword(:256) /\
    LENGTH runtime_bc + imm_len tops < dimword(:256)` by decide_tac >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
-     simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          venom_state_component_equality, init_venom_state_def]) >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
   qexists_tac `1` >> asm_rewrite_tac[] >>
   mp_tac (no_ctor_simple_context_execution |>
     Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`,
@@ -2623,9 +2623,9 @@ Proof
   strip_tac >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
   simp[deploy_state_rel_def] >> strip_tac >>
-  qpat_x_assum `gas_variant _ _` mp_tac >>
-  simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-       venom_state_component_equality, init_venom_state_def] >>
+  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts, s.vs_transient, s.vs_logs)`) >>
+  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
   metis_tac[]
 QED
 
