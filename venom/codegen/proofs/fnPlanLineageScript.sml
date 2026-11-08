@@ -1849,6 +1849,103 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> gvs[] >> metis_tac[]
 QED
 
+(* A starting cut may lie inside the PHIs. Only the actually traversed
+   suffix is constrained not to define the observer. *)
+Theorem lineage_state_suffix_dead_stack:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after
+   setup_ops start a seed v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    (if bb = HD fn.fn_blocks then
+       prepare_params_plan (liveness_analyze fn) fn
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+      (setup_ops,start) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) start a seed /\
+    ~MEM (Var v) seed.ps_stack /\
+    ~MEM v (live_vars_at (liveness_analyze fn) lbl
+      (MAX (LENGTH (get_params bb.bb_instructions)+a)
+        (LENGTH (collect_phis bb.bb_instructions)))) /\
+    (!j. a <= j /\ j < LENGTH (non_param_insts bb) ==>
+      ~MEM v (EL j (non_param_insts bb)).inst_outputs) ==>
+    ~MEM (Var v) after.ps_stack /\
+    ~MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_block_native_run >> strip_tac >> gvs[] >>
+  `a <= LENGTH (non_param_insts bb)` by
+    metis_tac[fnPlanLineageEntryProductionTheory.native_inst_prefix_bound] >>
+  `LENGTH (get_params bb.bb_instructions) + LENGTH (non_param_insts bb) =
+    LENGTH bb.bb_instructions` by
+    (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qspec_then `bb.bb_instructions` strip_assume_tac
+       fnPlanLineageLivenessTheory.collect_phis_prefix >>
+     metis_tac[listTheory.LENGTH_APPEND, arithmeticTheory.LESS_EQ_ADD]) >>
+  qspecl_then [`fn`, `bb`, `dfg`, `a`] mp_tac
+    fnPlanLineageObserverTransportTheory.native_seeded_phi_body_dead_stack >>
+  simp[arithmeticTheory.ADD_COMM] >>
+  disch_then (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  metis_tac[arithmeticTheory.ADD_SYM]
+QED
+
+Theorem lineage_state_incoming_prefix_dead_stack:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb pred
+   setup_ops start k qs v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+      (setup_ops,start) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
+    ~MEM (Var v) ps.ps_stack /\
+    ~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0)) /\
+    (!j. j < k ==> ~MEM v (EL j (non_param_insts bb)).inst_outputs) ==>
+    ~MEM (Var v) qs.ps_stack /\
+    (LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (get_params bb.bb_instructions)+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem,
+              venomExecPropsTheory.lookup_block_label] >>
+  `fn_reachable fn lbl` by
+    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  `bb <> HD fn.fn_blocks` by
+    (irule fnPlanLineageObserverTransportTheory.ready_incoming_block_nonentry >>
+     simp[] >> qexists_tac `pred` >> simp[]) >>
+  `~MEM (Var v) (ps with <|ps_cleanup_height := h;
+     ps_cleanup_promised := promised|>).ps_stack` by simp[] >>
+  gvs[] >>
+  qspecl_then [`fn`, `bb`] mp_tac
+    fnPlanLineageObserverTransportTheory.native_incoming_prefix_dead_stack >>
+  simp[arithmeticTheory.ADD_COMM] >>
+  disch_then (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (qspecl_then [`pred`,
+    `ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem lineage_state_incoming_block_dead_stack:
   !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after pred v.
     codegen_ready_fn fn /\
@@ -1880,13 +1977,10 @@ Proof
     (qspec_then `bb.bb_instructions` strip_assume_tac
        fnPlanLineageLivenessTheory.collect_phis_prefix >>
      metis_tac[listTheory.LENGTH_APPEND, arithmeticTheory.LESS_EQ_ADD]) >>
-  `~MEM (Var v) (ps with <|ps_cleanup_height := h;
-     ps_cleanup_promised := promised|>).ps_stack` by simp[] >>
   `!j. j < LENGTH bb.bb_instructions ==>
     ~MEM v (EL j bb.bb_instructions).inst_outputs` by
     gvs[listTheory.EVERY_EL] >>
-  qspecl_then [`fn`, `bb`] mp_tac
-    fnPlanLineageObserverTransportTheory.native_incoming_prefix_dead_stack >>
+  drule_at (Pat `lookup_block _ _ = _`) lineage_state_incoming_prefix_dead_stack >>
   simp[] >>
   disch_then (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
@@ -1963,6 +2057,126 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   first_x_assum irule >> simp[] >>
   qexistsl_tac [`(z0,z1)`, `h0`] >> gvs[]
+QED
+
+(* Complete intermediate vertices are constrained, but only the executed
+   prefix of the endpoint is nondefining. The endpoint may still be in PHIs. *)
+Theorem lineage_history_incoming_prefix_dead_stack:
+  !fn dfg ch growth spill_base lbl_ctr vertices a lbl ps pred v
+   bb h promised setup_ops start k qs.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) (FST a) (SND a) /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices a (lbl,ps) /\
+    MEM (FST a) (cfg_succs_of (cfg_analyze fn) pred) /\
+    ~MEM (Var v) (SND a).ps_stack /\
+    (!ab. lookup_block (FST a) fn.fn_blocks = SOME ab ==>
+      ~MEM v (input_vars_from pred ab.bb_instructions
+        (live_vars_at (liveness_analyze fn) (FST a) 0))) /\
+    EVERY (\vertex. !ib. lookup_block (FST vertex) fn.fn_blocks = SOME ib ==>
+      EVERY (\inst. ~MEM v inst.inst_outputs) ib.bb_instructions) vertices /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+      (setup_ops,start) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) start k qs /\
+    (!j. j < k ==> ~MEM v (EL j (non_param_insts bb)).inst_outputs) ==>
+    ~MEM (Var v) qs.ps_stack /\
+    (LENGTH (collect_phis bb.bb_instructions) <= LENGTH (get_params bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (get_params bb.bb_instructions)+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_history_incoming_dead_stack >> simp[] >> strip_tac >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps` by
+    metis_tac[lineage_history_reconstruct, pairTheory.FST, pairTheory.SND] >>
+  drule_all lineage_state_incoming_prefix_dead_stack >>
+  simp[arithmeticTheory.ADD_COMM]
+QED
+
+(* An actual instruction-cut interval crossing at least one edge. The
+   first edge's realization is explicit so the starting cut and its terminal
+   state use the very same cleanup choice. No outputs before a, or after k,
+   are constrained. Only completely traversed intermediate vertices use
+   whole-block nondefinition. *)
+Theorem lineage_history_suffix_prefix_dead_stack:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after
+   setup_ops start a seed succ sp vertices last_lbl last_ps last_bb
+   last_h last_promised last_setup last_start k qs v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    (if bb = HD fn.fn_blocks then
+       prepare_params_plan (liveness_analyze fn) fn
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+         (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+      (setup_ops,start) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) start a seed /\
+    ~MEM (Var v) seed.ps_stack /\
+    ~MEM v (live_vars_at (liveness_analyze fn) lbl
+      (MAX (LENGTH (get_params bb.bb_instructions)+a)
+        (LENGTH (collect_phis bb.bb_instructions)))) /\
+    (!j. a <= j /\ j < LENGTH (non_param_insts bb) ==>
+      ~MEM v (EL j (non_param_insts bb)).inst_outputs) /\
+    lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) (succ,sp) /\
+    sp.ps_stack = after.ps_stack /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr))
+      vertices (succ,sp) (last_lbl,last_ps) /\
+    EVERY (\vertex. !ib. lookup_block (FST vertex) fn.fn_blocks = SOME ib ==>
+      EVERY (\inst. ~MEM v inst.inst_outputs) ib.bb_instructions) vertices /\
+    lookup_block last_lbl fn.fn_blocks = SOME last_bb /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) last_lbl) = 1 then
+       clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn last_bb
+         (last_ps with <|ps_cleanup_height := last_h;
+           ps_cleanup_promised := last_promised|>)
+     else ([],last_ps with <|ps_cleanup_height := last_h;
+       ps_cleanup_promised := last_promised|>)) = (last_setup,last_start) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn last_lbl
+      (bb_is_halting last_bb) (LENGTH (get_params last_bb.bb_instructions))
+      (LENGTH last_bb.bb_instructions) (non_param_insts last_bb) last_start k qs /\
+    (!j. j < k ==> ~MEM v (EL j (non_param_insts last_bb)).inst_outputs) ==>
+    ~MEM (Var v) qs.ps_stack /\
+    (LENGTH (collect_phis last_bb.bb_instructions) <=
+       LENGTH (get_params last_bb.bb_instructions)+k ==>
+      ~MEM v (live_vars_at (liveness_analyze fn) last_lbl
+        (LENGTH (get_params last_bb.bb_instructions)+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_suffix_dead_stack >> strip_tac >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ sp` by
+    metis_tac[lineage_edge_step] >>
+  `MEM succ (cfg_succs_of (cfg_analyze fn) lbl)` by
+    metis_tac[lineage_edge_physical] >>
+  `~MEM (Var v) sp.ps_stack` by simp[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) lbl` by
+    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze] >>
+  `!sb. lookup_block succ fn.fn_blocks = SOME sb ==>
+    ~MEM v (input_vars_from lbl sb.bb_instructions
+      (live_vars_at (liveness_analyze fn) succ 0))` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all fnPlanLineageLivenessTheory.analyzed_live_out_edge_subset >>
+     simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  drule_at (Pat `LRC _ _ _ _`) lineage_history_incoming_prefix_dead_stack >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 (* KEY LEMMA (cheated, for alan): a lineage state regenerates the block's
