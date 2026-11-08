@@ -125,3 +125,71 @@ Proof
       bodyPtrDefsTheory.ghost_kept_def, ptrDisciplineTheory.op_taint_def] >>
   metis_tac[]
 QED
+
+Theorem mapping_index_tail_ptr:
+  expr_post ctx fn cenv cx e es sa sn s0 ee kv key s /\
+  hashmap_key_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
+  ptr_val_ok cx (post_value_type cenv e) kv key G tn s /\
+  lower_value compile_expr cenv (expr_type e) e sa = (key,sn) /\
+  (if is_bytestring_type (expr_type e) then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript slot hashed sp = (out,sb) /\
+  fn_has_code sn sb fn /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sn /\
+  ghost_inv d cenv cx ee G tn s /\
+  (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
+  (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  (!z. slot = Var z ==> not_fresh_at sn z) /\
+  eval_operand slot s = SOME base_slot /\ op_taint tn slot = {} ==>
+  ?u Gu tnu. gas_path_ptr D 0 ctx fn PG G tn s 0 Gu tnu (OK u) /\
+    eval_operand out u = SOME (hashmap_slot base_slot (encode_hashmap_key (expr_type e) kv)) /\
+    stmt_state_rel ctx fn cenv cx ee u /\ ghost_inv d cenv cx ee Gu tnu u /\
+    op_taint tnu out = {} /\ wb_frame cenv ee sn s u /\
+    ghost_kept cenv ee sn G tn s Gu tnu /\
+    u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  drule mapping_key_encoding_extends >> strip_tac >>
+  `cs_extends sp sb` by
+    (mp_tac (Q.SPECL [`slot`, `hashed`, `sp`] ci_mono_compile_mapping_subscript) >>
+     simp[ci_mono_def]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `!z. key = Var z ==> not_fresh_at sn z` by
+    (drule_at (Pos hd) exprOperandVarTheory.compile_lower_value_var >> simp[]) >>
+  drule_all mapping_key_encoding_layout >> strip_tac >>
+  drule_all mapping_key_encode_endpoint_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rename1 `gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK a)` >>
+  drule_all mapping_encoding_slot_frame >> strip_tac >>
+  `local_ptrs_reserved cenv sp /\
+   (!z. slot = Var z \/ hashed = Var z ==> not_fresh_at sp z) /\
+   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sp p) /\
+   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sp p)` by
+    metis_tac[local_ptrs_reserved_next_var, freshWritesTheory.not_fresh_at_mono] >>
+  `~a.vs_halted` by
+    (qpat_x_assum `a with <|vs_vars := _; vs_inst_idx := _|> = s`
+       (mp_tac o Q.AP_TERM `\v. v.vs_halted`) >> simp[]) >>
+  drule_all mapping_slot_hash_endpoint_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `a.vs_memory = s.vs_memory /\ a.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `a with <|vs_vars := _; vs_inst_idx := _|> = s`
+      (mp_tac o Q.AP_TERM `\v. (v.vs_memory,v.vs_allocas)`) >> simp[]) >>
+  `wb_frame cenv ee sn s a` by
+    (simp[loweringPostsTheory.wb_frame_def] >>
+     irule exprSimPropsTheory.locals_kept_regions >> simp[]) >>
+  `stmt_state_rel ctx fn cenv cx ee s` by
+    gvs[loweringPostsTheory.expr_post_def] >>
+  `wb_frame cenv ee sn s u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `ghost_kept cenv ee sn G tn s G'' tn''` by
+    (irule hash_ghost_kept_then >> goal_assum (drule_at Any) >>
+     qexistsl [`G'`, `a`, `sp`, `tn'`] >> simp[] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  qexistsl [`u`, `G''`, `tn''`] >> simp[] >>
+  drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]
+QED
