@@ -809,29 +809,6 @@ Proof
   Cases_on `Var v IN FDOM qs.ps_spilled` >> simp[GSYM LIST_ELEM_COUNT_MEM]
 QED
 
-Theorem native_inst_prefix_split:
-  !k p lv dfg cfg fn lbl halt n total xs ps qs.
-    native_inst_prefix lv dfg cfg fn lbl halt n total xs ps (p+k) qs ==>
-    ?mid. native_inst_prefix lv dfg cfg fn lbl halt n total xs ps p mid /\
-      native_inst_prefix lv dfg cfg fn lbl halt (n+p) total (DROP p xs) mid k qs
-Proof
-  Induct
-  >- (rpt strip_tac >> qexists_tac `qs` >> fs[native_inst_prefix_zero]) >>
-  rpt gen_tac >> rename1 `native_inst_prefix lv dfg cfg fn lbl halt n len xs ps _ qs` >>
-  rewrite_tac[arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
-  qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ (SUC _) _` mp_tac >>
-  simp[Once native_inst_prefix_cases] >> strip_tac >>
-  `?mid. native_inst_prefix lv dfg cfg fn lbl halt n len xs ps p mid /\
-     native_inst_prefix lv dfg cfg fn lbl halt (n+p) len (DROP p xs) mid k ps'` by
-    metis_tac[arithmeticTheory.ADD_COMM] >>
-  qexists_tac `mid` >> conj_tac >- first_assum ACCEPT_TAC >>
-  irule (cj 2 native_inst_prefix_rules) >>
-  goal_assum (drule_at Any) >>
-  qexistsl_tac [`inst`, `ops`, `rest`] >>
-  `k + (n + p) + 1 = k + (n + (p + 1))` by decide_tac >>
-  simp[rich_listTheory.DROP_DROP_T]
-QED
-
 Theorem collect_phis_prefix_index:
   !xs i. i < LENGTH xs /\
     (!j. j <= i ==> (EL j xs).inst_opcode = PHI) ==>

@@ -1725,3 +1725,203 @@ Proof
   drule_all generate_inst_plan_jmp_suffix >> strip_tac >>
   gvs[pred_setTheory.EXTENSION, MEM_MAP] >> metis_tac[MEM_APPEND]
 QED
+
+(* Shared structural split, relocated from ChronologicalPrefix. *)
+Theorem native_inst_prefix_split:
+  !k p lv dfg cfg fn lbl halt n total xs ps qs.
+    native_inst_prefix lv dfg cfg fn lbl halt n total xs ps (p+k) qs ==>
+    ?mid. native_inst_prefix lv dfg cfg fn lbl halt n total xs ps p mid /\
+      native_inst_prefix lv dfg cfg fn lbl halt (n+p) total (DROP p xs) mid k qs
+Proof
+  Induct
+  >- (rpt strip_tac >> qexists_tac `qs` >> fs[native_inst_prefix_zero]) >>
+  rpt gen_tac >> rename1 `native_inst_prefix lv dfg cfg fn lbl halt n len xs ps _ qs` >>
+  rewrite_tac[arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
+  qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ (SUC _) _` mp_tac >>
+  simp[Once native_inst_prefix_cases] >> strip_tac >>
+  `?mid. native_inst_prefix lv dfg cfg fn lbl halt n len xs ps p mid /\
+     native_inst_prefix lv dfg cfg fn lbl halt (n+p) len (DROP p xs) mid k ps'` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  qexists_tac `mid` >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule (cj 2 native_inst_prefix_rules) >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`inst`, `ops`, `rest`] >>
+  `k + (n + p) + 1 = k + (n + (p + 1))` by decide_tac >>
+  simp[rich_listTheory.DROP_DROP_T]
+QED
+
+Theorem native_inst_prefix_deterministic:
+  !k lv dfg cfg fn lbl halt n total xs ps qs rs.
+    native_inst_prefix lv dfg cfg fn lbl halt n total xs ps k qs /\
+    native_inst_prefix lv dfg cfg fn lbl halt n total xs ps k rs ==> qs = rs
+Proof
+  Induct >- simp[native_inst_prefix_zero] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ (SUC _) qs` mp_tac >>
+  simp[Once native_inst_prefix_cases] >> strip_tac >>
+  qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ (SUC _) rs` mp_tac >>
+  simp[Once native_inst_prefix_cases] >> strip_tac >> gvs[] >>
+  `ps' = ps''` by metis_tac[] >> gvs[]
+QED
+
+Theorem native_seeded_ordinary_prefix_available:
+  !fn bb dfg a k incoming seed qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= k /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming a seed /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k qs /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+a)) ==>
+      MEM (Var v) seed.ps_stack \/ Var v IN FDOM seed.ps_spilled) /\
+    (!j. a <= j /\ j < k ==>
+      (EL j (non_param_insts bb)).inst_opcode <> JMP /\
+      (EL j (non_param_insts bb)).inst_opcode <> PHI) ==>
+    !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+k)) ==>
+      MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `k = a + (k-a)` by decide_tac >>
+  `?mid. native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming a mid /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions)+a)
+      (LENGTH bb.bb_instructions) (DROP a (non_param_insts bb)) mid (k-a) qs` by
+    (irule native_inst_prefix_split >> simp[]) >>
+  `mid = seed` by metis_tac[native_inst_prefix_deterministic] >> gvs[] >>
+  `!j. j < k-a ==>
+    (EL j (DROP a (non_param_insts bb))).inst_opcode <> JMP /\
+    (EL j (DROP a (non_param_insts bb))).inst_opcode <> PHI` by
+    (rpt strip_tac >>
+     `a+j < k /\ a <= a+j` by decide_tac >>
+     `k <= LENGTH (non_param_insts bb)` by metis_tac[native_inst_prefix_bound] >>
+     `j < LENGTH (DROP a (non_param_insts bb))` by (simp[] >> decide_tac) >>
+     gvs[EL_DROP] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  drule native_ordinary_interval_available >>
+  disch_then (qspecl_then [`bb`,`a`] mp_tac) >> simp[]
+QED
+
+Theorem native_seeded_worker_exit_available:
+  !fn bb dfg a incoming seed ops qs.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= LENGTH (non_param_insts bb) /\
+    generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) 0 (non_param_insts bb) incoming = SOME (ops,qs) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming a seed /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+a)) ==>
+      MEM (Var v) seed.ps_stack \/ Var v IN FDOM seed.ps_spilled) /\
+    (!j. a <= j /\ j < LENGTH (non_param_insts bb) ==>
+      (EL j (non_param_insts bb)).inst_opcode <> PHI /\
+      ((EL j (non_param_insts bb)).inst_opcode = JMP ==>
+        SUC j = LENGTH (non_param_insts bb))) ==>
+    !v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH bb.bb_instructions)) ==>
+      MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH bb.bb_instructions = LENGTH (get_params bb.bb_instructions) +
+    LENGTH (non_param_insts bb)` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming
+      (LENGTH (non_param_insts bb)) qs` by metis_tac[native_worker_prefix_endpoint] >>
+  Cases_on `a = LENGTH (non_param_insts bb)`
+  >- (`seed = qs` by metis_tac[native_inst_prefix_deterministic] >> gvs[]) >>
+  `a < LENGTH (non_param_insts bb) /\ non_param_insts bb <> []` by
+    (conj_tac >- decide_tac >> CCONTR_TAC >> gvs[]) >>
+  Cases_on `(LAST (non_param_insts bb)).inst_opcode = JMP`
+  >- (`?before chunk.
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) incoming
+        (PRE (LENGTH (non_param_insts bb))) before /\
+      generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+        (LAST (non_param_insts bb))
+        (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+        (bb_is_halting bb) F bb.bb_label before = SOME (chunk,qs)` by
+      (irule native_worker_terminal_prefix >> goal_assum (drule_at Any) >>
+       simp[native_inst_prefix_zero] >> metis_tac[]) >>
+      `LAST bb.bb_instructions = LAST (non_param_insts bb)` by
+        (drule_all ready_block_parameter_suffix >> disch_then SUBST1_TAC >>
+         Cases_on `non_param_insts bb` >> gvs[LAST_APPEND]) >>
+      `PRE (LENGTH bb.bb_instructions) = LENGTH (get_params bb.bb_instructions) +
+        PRE (LENGTH (non_param_insts bb))` by
+        (Cases_on `non_param_insts bb` >> gvs[]) >>
+      `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (PRE (LENGTH bb.bb_instructions))) ==>
+        MEM (Var v) before.ps_stack \/ Var v IN FDOM before.ps_spilled` by
+        (asm_rewrite_tac[] >> rpt strip_tac >> irule native_seeded_ordinary_prefix_available >>
+         goal_assum (drule_at Any) >> simp[] >>
+         qexistsl_tac [`a`,`dfg`,`incoming`,`seed`] >> simp[] >>
+         (conj_tac >- (rpt strip_tac >>
+           `j < LENGTH (non_param_insts bb) /\ SUC j <> LENGTH (non_param_insts bb)` by decide_tac >>
+           metis_tac[])) >> gvs[]) >>
+      `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+      qpat_x_assum `LAST bb.bb_instructions = _`
+        (fn th => rule_assum_tac (REWRITE_RULE [GSYM th])) >>
+      drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+        analyzed_terminal_jmp_live_available >>
+      asm_simp_tac bool_ss []) >>
+  `!j. a <= j /\ j < LENGTH (non_param_insts bb) ==>
+    (EL j (non_param_insts bb)).inst_opcode <> JMP /\
+    (EL j (non_param_insts bb)).inst_opcode <> PHI` by
+    (rpt strip_tac >>
+     `SUC j = LENGTH (non_param_insts bb)` by metis_tac[] >>
+     `EL j (non_param_insts bb) = LAST (non_param_insts bb)` by
+       (simp[LAST_EL] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >> metis_tac[]) >>
+  asm_rewrite_tac[] >> rpt strip_tac >> irule native_seeded_ordinary_prefix_available >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`a`,`dfg`,`incoming`,`seed`] >> gvs[]
+QED
+
+Theorem native_seeded_suffix_prefix_available:
+  !fn bb dfg a k incoming seed ps.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    a <= k /\ k < LENGTH (non_param_insts bb) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming a seed /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions) (non_param_insts bb) incoming k ps /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+a)) ==>
+      MEM (Var v) seed.ps_stack \/ Var v IN FDOM seed.ps_spilled) /\
+    (!j. a <= j /\ j < LENGTH (non_param_insts bb) ==>
+      (EL j (non_param_insts bb)).inst_opcode <> PHI /\
+      ((EL j (non_param_insts bb)).inst_opcode = JMP ==>
+        SUC j = LENGTH (non_param_insts bb))) ==>
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+k)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    (!v. MEM (Var v) (compute_operands
+      (EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!j. a <= j /\ j < k ==>
+    (EL j (non_param_insts bb)).inst_opcode <> JMP /\
+    (EL j (non_param_insts bb)).inst_opcode <> PHI` by
+    (rpt strip_tac >> `j < LENGTH (non_param_insts bb) /\
+      SUC j <> LENGTH (non_param_insts bb)` by decide_tac >> metis_tac[]) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+k)) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled` by
+    (metis_tac[native_seeded_ordinary_prefix_available]) >>
+  conj_tac >- simp[] >>
+  `LENGTH (get_params bb.bb_instructions)+k < LENGTH bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  metis_tac[analyzed_live_coverage_computed_operands]
+QED
