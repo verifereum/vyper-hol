@@ -61,18 +61,20 @@ QED
 Theorem static_dec_next_id:
   (!info n. static_dec info n ==>
      !dst src st st'.
-       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st =
+       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st =
          ((), st') ==> st.cs_next_id <= st'.cs_next_id) /\
   (!elems n. static_decs elems n ==>
      !dst src k st st'.
-       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
          elems k k st = ((), st') ==> st.cs_next_id <= st'.cs_next_id)
 Proof
   ho_match_mp_tac static_dec_strongind >> rpt conj_tac
-  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def] >>
+  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+        comp_bind_def, comp_return_def] >>
       irule compile_abi_decode_static_next_id >>
       goal_assum (drule_at Any) >> metis_tac[compile_abi_clamp_next_id])
-  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def] >> metis_tac[])
+  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+        comp_bind_def, comp_return_def] >> metis_tac[])
   >- simp[compile_abi_decode_to_buf_def, comp_return_def] >>
   rpt strip_tac >> rename1 `static_dec ei m` >>
   drule_all decode_elems_cons_phases >> strip_tac >>

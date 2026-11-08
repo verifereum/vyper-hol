@@ -1,7 +1,7 @@
 (* Allocated zero-layout normalization of the actual returned value. *)
 Theory externalReturnBufferlessAlloc
 Ancestors externalReturnIntcallMetadata externalReturnBufferlessNormalize externalReturnSiteSemantics
-  externalReturnZeroLayout externalReturnCopyAlloc externalReturnCopyRecursive
+  externalReturnZeroWidening externalReturnCopyAlloc externalReturnCopyRecursive
   externalReturnCopyFrame exprSimAlloc localPtrsProps loweringSlice
   compileEnv context venomState fragExec runFromGasPath vyperTypeSystem exprLoweringProps
 

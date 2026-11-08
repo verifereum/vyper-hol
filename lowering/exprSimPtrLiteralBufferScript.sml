@@ -4,7 +4,7 @@ Ancestors
   exprSimPtrLiteralPayload exprSimLiteralBuffer allocationPtr exprLowering
   context emitHelper freshWrites vfmConstants loweringHalt
   exprSimPtrLiteralChunks robustCopyTransportPtr exprSimProps
-  bodyPtrDefs compileEnv valueEncoding valueEncodingProofs valueEncodingProps
+  bodyPtrDefs compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingProps
   venomMemProofs venomState finite_map words list pred_set
   exprSimPtrLiteralOps venomExecSemantics venomInst fragExecPtr fragExec fragGasSeqPtr exprLoweringProps ptrDiscipline instIdxIndep
 
@@ -140,8 +140,8 @@ Proof
     (simp[ptr_covers_def, w2n_n2w] >> decide_tac) >>
   `step_inst_base (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] []) s =
      OK (mstore b (n2w (LENGTH bs)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
+    simp[mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
+         eval_operand_def, w2n_n2w] >>
   drule literal_mstore_ghost >>
   disch_then (qspecl_then [`n2w (LENGTH bs)`, `tn`, `id`, `PG`, `G`]
     strip_assume_tac) >>
@@ -725,13 +725,18 @@ Theorem literal_ptr_nonmemory_step[local]:
   t.vs_transient = s.vs_transient
 Proof
   strip_tac >>
-  qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  asm_simp_tac bool_ss [] >>
-  FIRST_PROVE [
-    simp[exec_alloca_def, exec_pure2_def, exec_write2_def, AllCaseEqs(),
-         update_var_def, mstore_def] >>
-    rpt strip_tac >> gvs[]]
+  qpat_x_assum `step_inst_base i s = OK t` mp_tac
+  (* One opcode per step, each with its own executor: one simp over all three
+     cases took 4.5 s. *)
+  >- (simp[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(),
+           update_var_def, mstore_def] >>
+      rpt strip_tac >> gvs[])
+  >- (simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(),
+           update_var_def, mstore_def] >>
+      rpt strip_tac >> gvs[]) >>
+  simp[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs(),
+       update_var_def, mstore_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem literal_ptr_nonmemory_seq[local]:

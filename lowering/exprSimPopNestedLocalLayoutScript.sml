@@ -1,7 +1,7 @@
 Theory exprSimPopNestedLocalLayout
 Ancestors
-  compileEnv exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncodingProofs
-  loweringPosts vyperArray vyperTyping vyperTypeInvariants venomState arithmetic vyperValueOperation vyperState valueEncoding valueEncodingTyping abiStaticSparseProps alist vyperAssignPreservesType
+  exprSimAggregateEncoding exprSimPop valueEncodingProps valueEncodingProofs
+  loweringPosts vyperArray vyperTyping vyperTypeInvariants venomState arithmetic vyperValueOperation vyperState valueEncoding valueEncodingDefs valueEncodingTyping abiStaticSparseProps alist vyperAssignPreservesType
 
 (* A word store inside slot i cannot alter a distinct slot j. *)
 Theorem val_in_memory_mstore_other_index:

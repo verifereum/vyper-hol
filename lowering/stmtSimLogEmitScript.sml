@@ -3,7 +3,7 @@ Theory stmtSimLogEmit
 Ancestors
   stmtSimLogEncodeFrame stmtSimLogTopics stmtSimLogDataRun stmtSimLogArgsRun
   stmtSimLogSource venomExecSemantics venomState venomInst loweringSlice
-  compileEnv exprLoweringProps valueEncoding words list arithmetic extCallOracleStep
+  compileEnv loweringStateRelDefs exprLoweringProps valueEncoding valueEncodingDefs words list arithmetic extCallOracleStep
   emitHelper emitHelperProps
 
 Theorem log_emit_step:

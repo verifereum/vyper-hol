@@ -63,7 +63,7 @@ Proof
   `p <> p'` by (strip_tac >> gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
   `ins.inst_id <> ins'.inst_id` by
     (strip_tac >> drule_all fn_inst_ids_distinct_inj >> strip_tac >> gvs[]) >>
-  gvs[alloca_inv_def, allocas_non_overlapping_def, compileEnvTheory.regions_disjoint_def] >>
+  gvs[alloca_inv_def, allocas_non_overlapping_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
   metis_tac[]
 QED
 

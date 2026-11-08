@@ -60,8 +60,8 @@ Ancestors
   fragExec  exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimAggregateLayout exprSimAttributeFields exprSimAttribute
   placeTypingProps
-  exprLowering exprLoweringProps compileEnv context
-  valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs context
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperValueOperation vyperTyping vyperTypeSystem vyperTypeExprSoundness
   vyperPlaceResultTyping valueEncodingProofs
   venomState venomInst
@@ -984,41 +984,26 @@ Proof
       rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
   rename1 `PlaceR pl` >> Cases_on `pl`
   >~ [`StoragePlace tr slot ptv`]
-  >- (Cases_on `ptv` >> Cases_on `tr` >>
+  >- (Cases_on `ptv` >> TRY (Cases_on `b`) >> Cases_on `tr` >>
       simp[select_result_def, extend_place_def, extend_storage_place_def,
            resolve_array_element_def, vyperStoragePlaceProvenanceTheory.resolve_array_element_empty, check_def,
            assert_def, ignore_bind_def, get_storage_backend_def,
            get_accounts_def, get_transient_storage_def, bind_def,
            lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
-           LET_THM]
-      >~ [`oEL (Num i) l`]
-      >- (Cases_on `0 <= i /\ Num i < LENGTH l` >> simp[] >>
-          Cases_on `oEL (Num i) l` >> simp[return_def, raise_def])
-      >~ [`oEL (Num i) l`]
-      >- (Cases_on `0 <= i /\ Num i < LENGTH l` >> simp[] >>
-          Cases_on `oEL (Num i) l` >> simp[return_def, raise_def]) >>
-      Cases_on `b` >>
-      simp[assert_def, ignore_bind_def, get_transient_storage_def,
-           get_storage_backend_def, get_accounts_def, bind_def,
-           return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[check_def, assert_def, ignore_bind_def,
-               get_storage_backend_def, get_accounts_def,
-               get_transient_storage_def, bind_def, return_def, raise_def,
-               pairTheory.UNCURRY])) >>
+           LET_THM, vfmTypesTheory.option_CASE_rator, COND_RATOR, COND_RAND] >>
+      rpt (BasicProvers.TOP_CASE_TAC >> simp[COND_RAND]) >> gvs[])
+  >~ [`MemoryPlace id path`]
+  >- (simp[select_result_def, extend_place_def, place_type_value_def,
+           read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+           lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+      rpt strip_tac >> gvs[]) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
-       read_place_def, get_scopes_def, get_immutables_def,
-       get_address_immutables_def, bind_def, ignore_bind_def,
-       lift_option_type_def, lift_sum_def, return_def, raise_def] >|
-  [Cases_on `lookup_scopes s ee.scopes` >> simp[return_def, raise_def] >>
-   Cases_on `subscripts_type x.type l` >> simp[return_def, raise_def] >>
-   rpt (CASE_TAC >> simp[bind_def, return_def, raise_def]),
-   Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
-   simp[return_def, raise_def] >>
-   Cases_on `FLOOKUP (get_source_immutables o' x) s` >>
-   simp[return_def, raise_def] >>
-   Cases_on `subscripts_type (FST x') l` >> simp[return_def, raise_def] >>
-   rpt (CASE_TAC >> simp[bind_def, return_def, raise_def])]
+       read_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem tuple_source[local]:

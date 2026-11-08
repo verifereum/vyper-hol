@@ -59,7 +59,7 @@ Theorem window_member_prefix_zero:
   window_member_prefix infos ats avs 0 d mem
 Proof
   simp[window_member_prefix_def, abi_tuple_heads_def, abi_tuple_tails_def,
-    valueEncodingTheory.mem_bytes_at_def]
+    valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem window_members_inv_entry:
@@ -525,7 +525,7 @@ Proof
   irule window_member_prefix_step >>
   asm_rewrite_tac[] >>
   simp[abi_tuple_heads_length, abiDecodeRangesTheory.head_lengths_acc,
-    valueEncodingTheory.mem_bytes_at_def]
+    valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem window_member_prefix_dynamic_step:

@@ -1,7 +1,7 @@
 (* Shared execution interface for expression buffer allocations. *)
 Theory exprSimAlloc
 Ancestors
-  list rich_list finite_map context compileEnv loweringSlice exprLoweringProps
+  list rich_list finite_map context compileEnv loweringStateRelDefs loweringSlice exprLoweringProps
   emitHelperProps fragExec localPtrsProps venomInst venomState
   venomExecSemantics
 
@@ -58,7 +58,7 @@ Proof
       `FLOOKUP t.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
       gvs[venomMemDefsTheory.alloca_inv_def,
           venomMemDefsTheory.allocas_non_overlapping_def,
-          compileEnvTheory.regions_disjoint_def] >>
+          loweringStateRelDefsTheory.regions_disjoint_def] >>
       qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _` drule >>
       disch_then (qspecl_then [`b`, `sz`, `w2n w`, `w2n n`] mp_tac) >>
       simp[arithmeticTheory.ADD_COMM]) >>

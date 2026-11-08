@@ -1,6 +1,6 @@
 (* Proof-only inhabitants of zero-size layouts. *)
 Theory externalReturnZeroWitness
-Ancestors externalReturnZeroLayout valueEncoding vyperValue vyperTyping
+Ancestors externalReturnZeroWidening valueEncoding valueEncodingDefs vyperValue vyperTyping
   vyperTypeArgFits vyperTypeSystem
 
 Theorem return_zero_default_mutual:

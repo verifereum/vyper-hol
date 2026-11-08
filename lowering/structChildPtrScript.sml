@@ -1,6 +1,6 @@
 (* Positional struct representation, with explicit metadata alignment. *)
 Theory structChildPtr
-Ancestors typedCopyLayoutPtr valueEncoding list arithmetic
+Ancestors typedCopyLayoutPtr valueEncoding valueEncodingDefs list arithmetic
 
 Theorem fields_in_memory_element:
   !fields ftvs addr mem i.

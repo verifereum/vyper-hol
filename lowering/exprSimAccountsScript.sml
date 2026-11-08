@@ -39,7 +39,7 @@ Ancestors
   list rich_list words integer_word byte
   fragExec freshWrites varsExt loweringSlice  exprSimHyps exprSimUnop
   exprSimOperators exprSimWordBuiltins exprBopLowering exprLowering
-  emitHelper emitHelperProps compileEnv exprLoweringProps accountsRelProps
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps accountsRelProps
   valueEncoding
   valueEncodingProofs venomExecSemantics venomInst venomState venomMemProps
   vyperAST vyperInterpreter vyperContext vyperValue vyperTyping

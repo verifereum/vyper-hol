@@ -1,6 +1,6 @@
 Theory o1MakeSsaCallOwnership
 Ancestors
-  o1MakeSsaOwnership o1MakeSsaFlags makeSsaCurrentDefs list pred_set
+  o1MakeSsaOwnership o1MakeSsaFlags makeSsaDefs list pred_set
 
 Theorem current_rename_owner_outputs:
   !outs s rs rs' s' ns V H.

@@ -1,7 +1,7 @@
 (* Producer boundary: actual readable footprint, never unused capacity. *)
 Theory externalReturnFootprint
 Ancestors
-  loweringPosts valueEncoding compileEnv venomMemDefs arithmetic
+  loweringPosts valueEncoding compileEnv loweringStateRelDefs venomMemDefs arithmetic
 
 Theorem return_expr_val_wf:
   expr_val_at cenv cx ty sa sb es v op s /\

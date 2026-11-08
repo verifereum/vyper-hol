@@ -104,7 +104,7 @@ Resume owned_array_initializer[pc_frame]:
      abi_encoder_registered_effect_def, entry_loop_fields_def,
      alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
      abi_alloca_history_def, alloca_frontier_inv_def, eval_op_inst_idx, mload_def,
-     compileEnvTheory.fresh_vars_wrt_def] >>
+     loweringStateRelDefsTheory.fresh_vars_wrt_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise owned_array_initializer
@@ -425,7 +425,7 @@ Proof
      entry_loop_fields_def, abi_encoder_registered_effect_def, jump_to_def,
      alloca_frontier_inv_def, abi_alloca_history_def, alloca_inv_def,
      allocas_non_overlapping_def, alloca_next_valid_def,
-     compileEnvTheory.fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
+     loweringStateRelDefsTheory.fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
      abi_decode_load_def, abi_decode_source_def, mload_def,
      abiDecoderFrameTheory.abi_decode_footprint_frame_def] >>
   conj_tac >> first_assum ACCEPT_TAC

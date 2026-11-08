@@ -1,7 +1,7 @@
 Theory externalReturnAllocEncoder
 Ancestors
   externalReturnOutputWindowRun externalReturnCopyAlloc exprSimAlloc
-  abiEncoderWindowContract exprLoweringProps compileEnv fragExec
+  abiEncoderWindowContract exprLoweringProps compileEnv loweringStateRelDefs fragExec
   venomState venomInst venomMemDefs valueEncoding words
 
 Theorem return_output_alloc_encoder_continuation:

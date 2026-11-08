@@ -4,7 +4,7 @@ Ancestors
   abiDecoderCoherence abiDecoderTypedContract exprLowering
   abiDecoderAppend abiDecoderCounters abiDecoderCode abiDecoderContract abiDecoderPhi abiEncoder emitHelper emitHelperProps context fragExec
   abiEncoderRegisteredEffect abiEncoderProps actualAllocCredit actualAllocExec
-  entryArgPtrs localPtrsProps compileEnv compileVyper moduleLowering moduleLoweringProps allocLimitsProps
+  entryArgPtrs localPtrsProps compileEnv loweringStateRelDefs compileVyper moduleLowering moduleLoweringProps allocLimitsProps
   allocaFrontierBound allocaBudgetProps valueEncoding vyperABI vyperCompiler
   venomExecSemantics venomState venomInst venomMemDefs
   words list finite_map pred_set arithmetic
@@ -140,7 +140,7 @@ Theorem ctor_register_cons:
    od) st
 Proof
   strip_tac >>
-  simp[build_positional_args_def, build_positional_arg_def,
+  simp_tac (srw_ss()) [LET_THM, build_positional_args_def, build_positional_arg_def,
        Once compile_register_constructor_args_def,
        var_location_memory_size_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
@@ -149,7 +149,8 @@ Proof
     (ce with ce_vars := ce.ce_vars |+
       (name, PtrVar buf.buf_operand (type_memory_bytes ce ty)))`
     by simp[compile_env_component_equality] >>
-  asm_rewrite_tac []
+  asm_simp_tac (srw_ss()) [LET_THM, var_location_memory_size_def,
+    comp_bind_def, comp_return_def, comp_ignore_bind_def]
 QED
 
 Theorem ctor_registration_appends:
@@ -472,7 +473,7 @@ QED
 
 Theorem ctor_decode_buffer_old_prefix:
   !dst src hi ce env ty tv av v st st' ctx func site initial sb d.
-  compile_abi_decode_to_buf dst src DLOAD hi
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),st') /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv
@@ -521,7 +522,7 @@ Proof
      rpt strip_tac >> res_tac >> gvs[]) >>
   drule (BETA_RULE ctor_actual_coherent_run) >>
   disch_then (drule_at Any) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand dst initial = _`)) >>
   disch_then (drule_at (Pat `fresh_vars_wrt _ _`)) >>
   simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>
@@ -643,7 +644,10 @@ Proof
      qexistsl [`mk_inst st.cs_next_id ALLOCA [Lit (n2w n)]
        [STRING #"%" (toString st.cs_next_var)]`, `initial`, `site`] >>
      drule_all entry_alloc_buffer_inst >>
-     fs[mk_inst_def, step_inst_base_def]) >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                      combinTheory.K_THM, opcode_case_def] >>
+     fs[mk_inst_def]) >>
   `frag_exec ctx st sa (\u. u = initial)
      (\u. u = raw with vs_inst_idx := LENGTH sa.cs_current_insts) (\r. F)` by
     (irule compile_alloc_buffer_fresh_frag >> qexistsl [`buf`, `n`] >>
@@ -671,7 +675,7 @@ Theorem ctor_alloc_buffer_state_props[local]:
   fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
   (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
   (!name b sz. local_region ce scopes a name b sz ==>
-    compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+    loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
   (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
     lookup_var x a = SOME w) /\
   abi_encoder_registered_effect (frag_ids st sa) [] initial a
@@ -733,7 +737,7 @@ Theorem ctor_alloc_buffer_actual:
     fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
     (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
     (!name b sz. local_region ce scopes a name b sz ==>
-      compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+      loweringStateRelDefs$regions_disjoint initial.vs_alloca_next n b sz) /\
     a.vs_memory = initial.vs_memory /\
     a.vs_data_section = initial.vs_data_section /\
     a.vs_call_ctx = initial.vs_call_ctx /\ a.vs_labels = initial.vs_labels /\
@@ -774,7 +778,7 @@ Theorem ctor_singleton_decode_code:
        do offset_val <- emit_op DLOAD [static_src];
           emit_op ADD [Lit 0w; offset_val]
        od else comp_return static_src);
-     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+     compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
        (type_to_abi_dec_info ce.ce_struct_fields ce ty)
   od
 Proof
@@ -783,7 +787,9 @@ Proof
         metis_tac[ctor_arg_word_descriptor] >>
       simp[build_positional_arg_def, compile_decode_args_def,
         var_location_decode_operand_def, compile_abi_decode_to_buf_def,
-        compile_abi_decode_static_def, FUN_EQ_THM,
+        compile_abi_decode_static_def,
+        abiDecoderRangeTheory.compile_abi_dec_addr_zero,
+        compile_abi_decode_range_check_def, FUN_EQ_THM,
         comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
       rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
       pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
@@ -806,7 +812,7 @@ Theorem ctor_singleton_decode_phases:
      (?offset_val second. ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty /\
        emit_op DLOAD [static_src] first = (offset_val,second) /\
        emit_op ADD [Lit 0w; offset_val] second = (src,middle))) /\
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last)
 Proof
   rpt gen_tac >> strip_tac >> drule ctor_singleton_decode_code >>
@@ -944,7 +950,7 @@ QED
 Theorem ctor_prefix_decoder_code_phase[local]:
   cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
   abi_decode_source_opcode opc /\ st.cs_next_id <= middle.cs_next_id /\
-  compile_abi_decode_to_buf dst src opc hi di middle = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi di middle = ((),end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -1122,7 +1128,7 @@ Theorem ctor_singleton_address_prefix[local]:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME
       (if ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty
@@ -1204,7 +1210,7 @@ Theorem ctor_canonical_singleton_prefix[local]:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared sb.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit (n2w data_size))
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit (n2w data_size))
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME (n2w sb) /\
     eval_operand (Var ptr) prepared = SOME (n2w d) /\
@@ -1417,7 +1423,7 @@ Theorem ctor_scratch_decode_bind_ptr:
   local_backed func p s d n /\ d+n <= s.vs_alloca_next /\
   type_memory_size entry.type <= n /\ val_wf entry.type entry.value /\
   val_in_memory entry.type entry.value d t.vs_memory /\
-  (!nm b sz. local_region ce scopes s nm b sz ==> compileEnv$regions_disjoint d n b sz) ==>
+  (!nm b sz. local_region ce scopes s nm b sz ==> loweringStateRelDefs$regions_disjoint d n b sz) ==>
   local_ptrs_rel func (ce with ce_vars := ce.ce_vars |+ (name,PtrVar (Var p) n)) scopes t
 Proof
   strip_tac >>
@@ -1434,7 +1440,7 @@ Proof
   `local_ptrs_rel func ce scopes t` by
     (irule ctor_scratch_local_ptrs_frame >>
      qexistsl [`d`, `ids`, `s`, `n`] >> simp[] >>
-     fs[compileEnvTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   `local_backed func p t d n` by
     (irule local_backed_frame >> qexists `s` >> simp[] >> conj_tac
      >- (rpt strip_tac >> drule_all ctor_scratch_new_allocations >> simp[]) >>

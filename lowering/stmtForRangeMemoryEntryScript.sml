@@ -4,7 +4,7 @@ Ancestors
   stmtForRangeMemoryParts stmtSimForLoop stmtSimDeclStore
   loweringSlice localPtrsProps valueEncodingProps stmtSimProps stmtSimForParts
   venomState venomExecSemantics finite_map vyperState valueEncoding
-  stmtSimDefs compileEnv vyperValue exprLoweringProps allocaHistory
+  stmtSimDefs compileEnv loweringStateRelDefs vyperValue exprLoweringProps allocaHistory
   fragGasPathMem venomInst
 Libs
   intLib
