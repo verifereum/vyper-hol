@@ -2,7 +2,7 @@
 Theory appendStorageRel
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
-  stmtSimAppendStorage accountsRelProps vyperStorageFrame compileEnv
+  stmtSimAppendStorage accountsRelProps vyperStorageFrame compileEnv loweringStateRelDefs
   vyperValue vyperStorageBackend vyperStorage words vfmState venomState
    exprLoweringProps  varsExt stateFrame finite_map
 

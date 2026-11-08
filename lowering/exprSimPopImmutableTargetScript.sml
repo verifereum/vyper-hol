@@ -36,7 +36,7 @@ Ancestors
   bodySim targetPlaceSim targetPlaceSimCasesBase targetPlaceSimCases
   targetPlaceSimDefs
   exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext
-  exprLowering exprLoweringProps compileEnv vyperAST vyperState
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs vyperAST vyperState
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph venomState
 Libs wordsLib intLib
 
@@ -416,7 +416,7 @@ Proof
   simp[vyperTypingTheory.value_has_type_def, mem_field_offset_def] >>
   rpt gen_tac >> PairCases_on `h` >> PairCases_on `h'` >>
   simp[vyperTypingTheory.value_has_type_def, mem_field_offset_def,
-       valueEncodingTheory.val_in_memory_def] >>
+       valueEncodingDefsTheory.val_in_memory_def] >>
   rpt gen_tac >> strip_tac >>
   Cases_on `h0 = s` >> gvs[AllCaseEqs()] >>
   rpt strip_tac >> PairCases_on `z` >> gvs[] >>
@@ -2197,7 +2197,7 @@ Resume imm_target_subscript_step[suffix]:
      gvs[vyperTypingTheory.value_has_type_def,
          vyperValueOperationTheory.array_length_def,
          valueEncodingPropsTheory.val_in_memory_dynarray,
-         mload_def, valueEncodingTheory.mem_word_at_def, arithmeticTheory.ADD_COMM]) >>
+         mload_def, valueEncodingDefsTheory.mem_word_at_def, arithmeticTheory.ADD_COMM]) >>
   gvs[] >>
   `(array_index (ArrayTV etv bd) a i = NONE <=>
        ~idx_in_range (is_signed_type (expr_type e)) (val_to_w256 (IntV i))

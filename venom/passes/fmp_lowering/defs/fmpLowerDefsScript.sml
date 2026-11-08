@@ -335,6 +335,21 @@ Definition fmp_checked_seal_def:
           if fmp_signature_syntax_wf sig sealed then SOME sealed else NONE
 End
 
+(* The plan's entries in block and instruction order.  Walking the function's
+   own points keeps this computable, where fmap_to_alist is not; a plan entry
+   at a point outside the function is dropped, which fmp_reclaim_input
+   excludes. *)
+Definition fmp_plan_to_alist_def:
+  fmp_plan_to_alist fn (plan:fmp_reclaim_plan) =
+    FLAT (MAP (\bb.
+      FLAT (GENLIST (\k.
+        case FLOOKUP plan (bb.bb_label,k) of
+          NONE => []
+        | SOME target => [((bb.bb_label,k),target)])
+        (LENGTH bb.bb_instructions)))
+      fn.fn_blocks)
+End
+
 Definition fmp_lower_function_with_info_def:
   fmp_lower_function_with_info infos ctx s fn =
     case fn.fn_fmp_signature of
@@ -366,7 +381,7 @@ Definition fmp_lower_function_with_info_def:
                      | SOME root_layout =>
                          case fmp_lower_blocks infos ctx runner
                            (case root_layout of FmpRootLayout n r pc s2 => s2)
-                           (fmap_to_alist plan) fn.fn_blocks of
+                           (fmp_plan_to_alist fn plan) fn.fn_blocks of
                            NONE => NONE
                          | SOME (FmpBlocksResult blocks leftover s3) =>
                              if leftover <> [] then NONE

@@ -30,7 +30,7 @@
 
 Theory deadStoreElimDefs
 Ancestors
-  deadStoreElimFrame analysisSimDefs passSharedDefs venomEffects memSSADefs
+   passTransform passSharedDefs venomEffects memSSADefs
   memAliasDefs memLocDefs basePtrDefs cfgDefs While
 
 (* is_store_opcode (in passSharedDefs) covers MSTORE/SSTORE/TSTORE.
@@ -262,47 +262,4 @@ Definition dse_function_def:
     let fn1 = dse_function_space analysis_fn AddrSp_Memory fn in
     let fn2 = dse_function_space analysis_fn AddrSp_Storage fn1 in
     dse_function_space analysis_fn AddrSp_Transient fn2
-End
-
-(* ===== Observable equivalence for DSE ===== *)
-
-(* DSE removes dead stores — the written value is never read on any
-   path within the function (memSSA treats RETURN/REVERT/LOG/SHA3
-   as memory reads). The raw memory/storage/transient state at the
-   eliminated location differs between original and transformed,
-   but no instruction observes the difference.
-
-   dse_equiv compares everything except the address space being
-   optimized. After running DSE for all 3 spaces, the combined
-   equivalence (dse_all_equiv) drops memory, transient, and
-   storage (inside vs_accounts) comparison.
-
-   This is correct because:
-   - Variables are unchanged (DSE only NOPs stores with empty outputs)
-   - Logs, return data, halt status, immutables etc. unchanged
-   - RETURN/REVERT data is unaffected (memSSA marks those reads
-     as live, preventing elimination of stores in the return range)
-   - vs_inst_idx and vs_current_bb are excluded: clear_nops_function
-     changes instruction count within blocks, so Halt/Abort states may
-     carry different inst_idx. These are purely internal control-flow
-     fields with no semantic meaning after function completion.
-     (execution_equiv also excludes these, enabling the clear_nops bridge.) *)
-Definition dse_equiv_def:
-  dse_equiv (space : addr_space) s1 s2 <=>
-    (!v. lookup_var v s1 = lookup_var v s2) /\
-    (space <> AddrSp_Memory ==> s1.vs_memory = s2.vs_memory) /\
-    (space <> AddrSp_Transient ==> s1.vs_transient = s2.vs_transient) /\
-    (space <> AddrSp_Storage ==> s1.vs_accounts = s2.vs_accounts) /\
-    dse_frame space s1 = dse_frame space s2
-End
-
-(* After all 3 spaces: memory, transient, and accounts may differ *)
-(* Note: vs_current_bb and vs_inst_idx are excluded — they are internal
-   control-flow fields with no semantic meaning after function completion.
-   vs_memory, vs_transient, vs_accounts are excluded because each space
-   may differ at eliminated store locations. *)
-Definition dse_all_equiv_def:
-  dse_all_equiv s1 s2 <=>
-    (!v. lookup_var v s1 = lookup_var v s2) /\
-    dse_all_frame s1 = dse_all_frame s2
 End

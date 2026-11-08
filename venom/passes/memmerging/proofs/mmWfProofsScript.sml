@@ -11,6 +11,7 @@ Ancestors
   pred_set finite_map list rich_list arithmetic words alist
   mmCopyEquiv mmCopy mmScan passSharedField
   dfgAnalysisProps dfgDefs passSimulationDefs passSimulationProps
+  passTransform
 
 (* ===== Structural helpers for wf preservation ===== *)
 

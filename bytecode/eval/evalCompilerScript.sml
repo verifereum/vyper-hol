@@ -9,6 +9,7 @@
 
 Theory evalCompiler
 Ancestors compileVyper concretizeMemLocDefs alist byte integer_word option
+  codegenReadyCompute
 Libs finite_mapLib computeLib wordsLib
 
 val () = computeLib.upd_compset add_finite_map_compset

@@ -6,7 +6,7 @@
  *)
 Theory makeSsaCurrentUsedInstIds
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentInduct irSupply
+  makeSsaDefs makeSsaCurrentInduct irSupply
 
 Theorem fresh_inst_id_used_inst_ids:
   fresh_inst_id s = (id,s') ==>

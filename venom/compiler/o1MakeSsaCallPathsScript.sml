@@ -1,6 +1,6 @@
 Theory o1MakeSsaCallPaths
 Ancestors
-  unitShapeDefs makeSsaCurrentDefs list
+  unitShapeDefs makeSsaDefs list
 
 (* The structural observations made by a bounded revert witness. *)
 Definition mssa_revert_block_def:

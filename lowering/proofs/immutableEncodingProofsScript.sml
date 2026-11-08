@@ -1,6 +1,6 @@
 Theory immutableEncodingProofs
 Ancestors
-  immutableEncoding valueEncoding vyperValue
+  immutableEncoding valueEncoding valueEncodingDefs vyperValue
 
 Theorem immutable_fit_exact:
   LENGTH bs = n ==> immutable_fit n bs = bs

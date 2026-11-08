@@ -6,7 +6,7 @@
  * 1) Well-formedness — building a DFG preserves well_formed_dfg.
  * 2) Correctness — if dfg_get_def returns an instruction, it comes from
  *    the original instruction list.
- * 3) Finiteness — dfg_def_ids is finite.
+ * 3) Finiteness — dfg_def_ids is finite (stated in defs/dfgDefsScript.sml).
  *
  * Internal proof machinery lives in proofs/dfgCorrectnessProofScript.sml.
  * Re-exported via ACCEPT_TAC.
@@ -144,22 +144,6 @@ Theorem dfg_build_function_correct:
     MEM v inst.inst_outputs /\ MEM inst (fn_insts fn)
 Proof
   ACCEPT_TAC dfg_build_function_correct_proof
-QED
-
-(* ==========================================================================
-   3) Finiteness / termination helpers
-   ========================================================================== *)
-
-Theorem dfg_def_ids_finite:
-  !dfg. FINITE (dfg_def_ids dfg)
-Proof
-  ACCEPT_TAC dfg_def_ids_finite_proof
-QED
-
-Theorem dfg_get_def_implies_dfg_def_ids:
-  !dfg v inst. dfg_get_def dfg v = SOME inst ==> inst.inst_id IN dfg_def_ids dfg
-Proof
-  ACCEPT_TAC dfg_get_def_implies_dfg_def_ids_proof
 QED
 
 (* ==========================================================================

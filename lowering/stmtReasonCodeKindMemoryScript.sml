@@ -11,8 +11,8 @@ Ancestors
   immutableCopyExecution valueEncodingProps valueEncodingProofs
   stmtSimDefs exprLoweringProps loweringPosts fragGasPathMem fragGasMode
   fragExec fragExecMem instMemFrontier freshWrites venomMemDefs venomInstProps
-  exprLowering stmtLowering emitHelper emitHelperProps compileEnv
-  valueEncoding vfmConstants vyperValue vyperInterpreter
+  exprLowering stmtLowering emitHelper emitHelperProps compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs vfmConstants vyperValue vyperInterpreter
   venomExecSemantics venomState venomInst context
   words list rich_list finite_map arithmetic
 Libs

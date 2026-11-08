@@ -2,8 +2,9 @@ Theory o1MakeSsaEventFrames
 Ancestors
   o1MakeSsaTraversalFrames o1MakeSsaVisitTrace o1MakeSsaVisitRetention
   o1MakeSsaPatchFrames
-  makeSsaCurrentDefs makeSsaCurrentInduct makeSsaCurrentProps makeSsaHelper
+  makeSsaDefs makeSsaCurrentInduct makeSsaCurrentProps
   list pair cfgTransformProps
+  venomExecProofs
 
 Theorem visit_tree_coverage:
   (!tree path s rs bbs sm ct t final events.
