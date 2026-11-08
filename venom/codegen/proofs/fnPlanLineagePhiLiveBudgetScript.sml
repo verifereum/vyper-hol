@@ -100,3 +100,54 @@ Proof
       (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1` by metis_tac[] >>
   simp[]
 QED
+
+(* Positive availability needs neither output freshness nor a resource upper bound. *)
+Theorem generate_phi_plan_live_available:
+  !inst live halt ps ops qs out dist v.
+    inst.inst_outputs = [out] /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME dist /\
+    MEM v live /\
+    (v = out \/ MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    generate_phi_plan inst live halt ps = (ops,qs) ==>
+    MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all generate_phi_plan_live_count >>
+  Cases_on `v = out` >>
+  Cases_on `Var v IN FDOM ps.ps_spilled` >>
+  Cases_on `Var v IN FDOM qs.ps_spilled` >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
+Theorem generate_phi_plan_selected_other_mem:
+  !inst next halt ps ops qs d w out x.
+    inst.inst_outputs = [out] /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    stack_peek d ps.ps_stack = Var w /\
+    x <> w /\ x <> out /\ MEM (Var x) ps.ps_stack /\
+    generate_phi_plan inst next halt ps = (ops,qs) ==>
+    MEM (Var x) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by
+    (fs[stack_get_phi_depth_def] >> drule planAlignTheory.stack_find_bound >> simp[]) >>
+  drule generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`next`,`halt`] mp_tac) >>
+  Cases_on `phi_write_phase inst next d ps` >> simp[] >> strip_tac >>
+  rename1 `phi_write_phase inst next d ps = (wops,ws)` >>
+  `LIST_ELEM_COUNT (Var x) ws.ps_stack = LIST_ELEM_COUNT (Var x) ps.ps_stack` by
+    (qpat_x_assum `phi_write_phase _ _ _ _ = _` mp_tac >>
+     simp[phi_write_phase_def] >> IF_CASES_TAC
+     >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+         drule do_dup_stack_exact >> simp[] >> strip_tac >>
+         simp[stack_poke_def, LUPDATE_APPEND2, LUPDATE_def,
+              reorderSimTheory.elem_count_append, LIST_ELEM_COUNT_DEF, FILTER_APPEND]) >>
+     strip_tac >> gvs[] >> drule stack_poke_count_balance >>
+     disch_then (qspecl_then [`Var x`,`Var out`] mp_tac) >> simp[]) >>
+  Cases_on `~halt /\ ~MEM out next` >> gvs[]
+  >- (pairarg_tac >> gvs[] >>
+      drule_at (Pat `popmany_plan _ _ = _`) popmany_plan_other_elem_count >>
+      disch_then (qspec_then `Var x` mp_tac) >> simp[] >>
+      metis_tac[LIST_ELEM_COUNT_MEM]) >>
+  metis_tac[LIST_ELEM_COUNT_MEM]
+QED
