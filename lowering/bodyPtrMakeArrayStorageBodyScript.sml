@@ -129,7 +129,7 @@ Proof
       (update_var out (a*b) s) = DRESTRICT G (COMPL {out}) /\
    step_taint (mk_inst id MUL [left;right] [out]) s
       (update_var out (a*b) s) tn = (tn with t_var := tn.t_var |+ (out,{}))` by
-    (irule typed_copy_loop_arith_ghost >> simp[update_var_def]) >>
+    (irule typed_copy_loop_arith_ghost_clean >> simp[update_var_def, DISJ_IMP_THM]) >>
   mp_tac (Q.INST [`left` |-> `left`, `right` |-> `right`, `out` |-> `out`]
     copy_loop_mul_ptr_path) >> simp[]
 QED
