@@ -3,6 +3,7 @@ Ancestors bodyPtrBopInMixed bodyPtrBopInSourceOrigin exprSimOperators
   exprBopSimProps vyperState
 
 Theorem membership_mixed_source_adapter:
+  post_value_type cenv e2 = expr_type e2 ==>
   lower_value compile_expr cenv (expr_type e1) e1 sa = (needle,sc) ==>
   compile_expr cenv (expr_type e2) e2 sc = (vv,sm) ==>
   body_exprs_ptr_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
@@ -83,7 +84,8 @@ Proof
     (Q.INST [`P1` |-> `\rr ee. ?gs. bind (eval_expr cx e1) (read_result cx)
       (es with gas_obs := gs) = (rr,ee)`,
      `P2` |-> `\v1 es1 rr ee. ?gs. eval_expr cx e2
-      (es1 with gas_obs := gs) = (rr,ee)`] membership_mixed_outcome_ptr) >>
+      (es1 with gas_obs := gs) = (rr,ee)`]
+      (UNDISCH (SPEC_ALL membership_mixed_outcome_ptr))) >>
   fs[] >>
   `!v ee. (?gs. bind (eval_expr cx e1) (read_result cx)
       (es with gas_obs := gs) = (INL v,ee)) ==>

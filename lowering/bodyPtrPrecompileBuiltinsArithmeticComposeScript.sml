@@ -5,6 +5,7 @@ Ancestors bodyPtrPrecompileBuiltinsECMulRunner bodyPtrPrecompileBuiltinsOperandC
           exprSimWordArgs wordArgsPtr exprSimCalldataSlice
 
 Theorem precompile_operand_bind_ptr:
+  post_value_type cenv e = expr_type e ==>
   expr_sim_ptr d ctx PG fn cenv cx ty e es /\
   expr_body_pre cenv cx env e es /\
   lower_value compile_expr cenv ty e sa = (op,sb) /\
@@ -32,7 +33,7 @@ Theorem precompile_operand_bind_ptr:
     (bind (bind (eval_expr cx e) (read_result cx)) next) (es,s0,G0,tn0)
     Q (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >>
+  disch_tac >> strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then drule >> simp[] >>

@@ -192,7 +192,7 @@ Resume augassign_storage_place_pipeline_ptr[finish_normal]:
      `lookup_var z t = SOME w` by simp[] >>
      `lookup_var z t' = SOME w` by
        (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-          (mp_tac o cj 4 o REWRITE_RULE [expr_post_def]) >> simp[]) >>
+          (mp_tac o cj 5 o REWRITE_RULE [expr_post_def]) >> simp[]) >>
      metis_tac[]) >>
   `!z. not_fresh_at sa z ==> FLOOKUP H' z = FLOOKUP G0 z /\
        op_taint tm' (Var z) = op_taint tn0 (Var z)` by

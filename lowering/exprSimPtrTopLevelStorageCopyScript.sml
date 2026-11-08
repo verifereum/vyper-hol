@@ -1853,7 +1853,9 @@ Theorem toplevel_copy_body_counted_literal:
     toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf
       (r with vs_inst_idx := s.vs_inst_idx+7)
 Proof
-  metis_tac[toplevel_copy_body_counted]
+  strip_tac >>
+  mp_tac (Q.GEN `code` (SPEC_ALL toplevel_copy_body_counted)) >>
+  simp[] >> disch_then irule >> fs[]
 QED
 
 Theorem toplevel_copy_body_backedge:

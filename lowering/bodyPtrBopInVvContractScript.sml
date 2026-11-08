@@ -34,6 +34,7 @@ Definition membership_vv_post_def:
 End
 
 Theorem membership_vv_contract_ptr:
+  post_value_type cenv e = expr_type e ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty e es /\
   compile_expr cenv ty e sa = (vv,sb) /\
   membership_vv_entry d ctx func cenv cx e es sa sb s0 G0 tn0 /\

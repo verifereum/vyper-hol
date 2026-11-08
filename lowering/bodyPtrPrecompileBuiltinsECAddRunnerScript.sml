@@ -52,6 +52,9 @@ fun ecadd_start () = (
     (drule exprSimSourceTheory.expr_body_pre_builtin_arg >>
      simp[expr_body_pre_def] >>
      disch_then (qspecl_then [`a`,`es`] mp_tac) >> simp[]) >>
+  `post_value_type cenv a = expr_type a` by
+    (irule exprSimHypsTheory.post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >> fs[expr_body_pre_def]) >>
   `expr_sim_ptr d ctx PG fn cenv cx (expr_type a) a es` by
     metis_tac[bodyPtrPrecompileBuiltinsCasesTheory.body_expr_ptr_frame,
               bodyPtrPrecompileBuiltinsCasesTheory.body_exprs_ptr_head] >>
@@ -69,8 +72,9 @@ fun ecadd_start () = (
   `gas_admissible (bind (eval_expr cx a) (read_result cx)) expr_res_ok es` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
   simp[bodyPtrPrecompileBuiltinsECMulRunnerTheory.ec_eval_source_bind] >>
-  irule precompile_operand_bind_ptr >> simp[] >>
-  qexistsl [`cenv`,`d`,`env`,`p`,`sa`,`s1`,`expr_type a`] >>
+  qpat_assum `post_value_type cenv a = _`
+    (irule o MATCH_MP precompile_operand_bind_ptr) >> simp[] >>
+  qexistsl [`d`,`env`,`p`,`sa`,`s1`,`expr_type a`] >>
   simp[] >> rpt strip_tac);
 
 fun ecadd_second () = (
@@ -79,6 +83,9 @@ fun ecadd_second () = (
   `expr_body_pre cenv cx env b ee` by
     (drule exprSimSourceTheory.expr_body_pre_builtin_arg >>
      disch_then (qspecl_then [`b`,`ee`] mp_tac) >> simp[]) >>
+  `post_value_type cenv b = expr_type b` by
+    (irule exprSimHypsTheory.post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`ee`] >> fs[expr_body_pre_def]) >>
   `expr_sim_ptr d ctx PG fn cenv cx (expr_type b) b ee` by
     metis_tac[bodyPtrPrecompileBuiltinsCasesTheory.body_expr_ptr_frame,
               bodyPtrPrecompileBuiltinsCasesTheory.body_exprs_ptr_head] >>
@@ -92,8 +99,9 @@ fun ecadd_second () = (
      not_fresh_at s1 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `gas_admissible (bind (eval_expr cx b) (read_result cx)) expr_res_ok ee` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >>
-  irule precompile_operand_bind_ptr >> simp[] >>
-  qexistsl [`cenv`,`d`,`env`,`q`,`s1`,`sm`,`expr_type b`] >>
+  qpat_assum `post_value_type cenv b = _`
+    (irule o MATCH_MP precompile_operand_bind_ptr) >> simp[] >>
+  qexistsl [`d`,`env`,`q`,`s1`,`sm`,`expr_type b`] >>
   simp[] >> rpt strip_tac);
 in
 fun ecadd_prefix () = ecadd_start () >> ecadd_second ();
@@ -152,6 +160,12 @@ Resume ecadd_expr_vv_sim_ptr[tail_frame]:
   `!i. MEM i (emitted_insts sm sb) ==> MEM i (fn_insts fn)` by
     metis_tac[exprSimHashTheory.hash_emitted_inst_mem] >>
   drule_all precompile_tail_placement >> strip_tac >>
+  `expr_val_rel cx (expr_type b) v' q t' /\
+   expr_val_at cenv cx (expr_type b) s1 sm ee' v' q t'` by
+    (qpat_assum `expr_post _ _ _ _ b _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type cenv b = _`
+       (fn th => rewrite_tac[loweringPostsTheory.expr_post_def, th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   `expr_val_at cenv cx (expr_type b) sa sm ee' v' q t'` by
     (irule exprSimPropsTheory.expr_val_at_start_mono >>
      qexists `s1` >> fs[loweringPostsTheory.expr_post_def]) >>

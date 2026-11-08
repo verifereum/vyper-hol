@@ -94,6 +94,7 @@ Theorem log_eval_ptr_post_cons:
   sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
   ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
   (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G1 t) /\
@@ -256,6 +257,8 @@ QED
 
 Resume compile_log_eval_all_ptr_ind[post_cons]:
   rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule stmtSimLogArgsRunTheory.log_scalar_post_value_type >> fs[]) >>
   `?bt. expr_type e = BaseT bt` by (Cases_on `expr_type e` >>
      gvs[supported_scalar_type_def, supported_word_type_def, supported_string_type_def]) >>
   `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by simp[] >>

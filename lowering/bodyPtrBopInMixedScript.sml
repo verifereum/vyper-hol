@@ -13,6 +13,7 @@ QED
 (* The second source operand is raw eval_expr and its compiler call is
    compile_expr. In particular no target unwrap is inserted here. *)
 Theorem membership_mixed_outcome_ptr:
+  post_value_type cenv e2 = expr_type e2 ==>
   p1 = bind (eval_expr cx e1) (read_result cx) /\
   p2 = eval_expr cx e2 /\
   body_exprs_ptr_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
@@ -75,7 +76,7 @@ Theorem membership_mixed_outcome_ptr:
     (bind p1 (\v1. bind p2 (next v1))) (es,s0,G0,tn0)
     Q (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >> gvs[] >>
+  strip_tac >> strip_tac >> gvs[] >>
   drule expr_body_pre_bop >> strip_tac >>
   `expr_sim_ptr d ctx PG func cenv cx ty1 e1 es` by
     (fs[body_exprs_ptr_ok_pair, body_expr_ptr_ok_def] >> metis_tac[]) >>
@@ -98,7 +99,8 @@ Proof
   `membership_vv_entry d ctx func cenv cx e2 es1 sb sc s1 G1 tn1 /\
    (!gs rr ee. eval_expr cx e2 (es1 with gas_obs := gs) = (rr,ee) ==>
       P2 v1 es1 rr ee)` by metis_tac[] >>
-  irule membership_vv_contract_ptr >> simp[] >>
+  irule (UNDISCH (Q.INST [`e` |-> `e2`] (SPEC_ALL membership_vv_contract_ptr))) >>
+  simp[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   qexists_tac `P2 v1 es1` >>

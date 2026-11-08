@@ -8,6 +8,7 @@ Ancestors
 Theorem located_unwrap_copy_sizing:
   expr_body_pre cenv cx env e es /\
   vv_holds cenv cx (expr_type e) tv (LocatedValue ann p) es' s /\
+  p.ptr_location <> LocMemory /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
   ~is_word_type (expr_type e) ==>
   ann = expr_type e /\

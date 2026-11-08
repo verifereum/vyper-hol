@@ -3,7 +3,7 @@
 Theory assignBasePtrStorageExtent
 Ancestors assignBasePtrStorageTypes exprSimHyps exprSimHypsDefs
   supportedTypes loweringPosts vyperValue vyperTyping exprLowering compileEnv bodySim supportedExprs
-  stmtSimReturn assignBasePtrEndpointAudit words arithmetic
+  stmtSimReturn exprSimTypedAlloc assignBasePtrEndpointAudit words arithmetic
 
 Theorem assign_base_nonbytes_footprint:
   !ty tenv tv v.

@@ -94,6 +94,14 @@ Resume compile_assign_local_memory_widen_stmt_frag_ptr[normal]:
   SUBGOAL_THEN ``expr_type e = lowered_value_type cenv e \/
     is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type cenv e)``
     assume_tac >- metis_tac[] >>
+  `post_value_type cenv e = expr_type e` by
+    (qpat_assum `expr_type e = _ \/ _` strip_assume_tac
+     >- (irule post_value_type_lowered >> first_assum (ACCEPT_TAC o SYM)) >>
+     irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
+  qpat_assum `post_value_type cenv e = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+  `ptr_buf_ok cenv e op G t` by
+    (qpat_x_assum `_ ==> ptr_buf_ok _ _ _ _ _` irule >> first_assum ACCEPT_TAC) >>
   drule_all (annassign_memory_rhs_layout_ptr |> SPEC_ALL |>
     Q.INST [`typ` |-> `lowered_value_type cenv e`, `tyv` |-> `ltv`] ) >> strip_tac >>
   suspend "source"

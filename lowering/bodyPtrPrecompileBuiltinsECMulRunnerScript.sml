@@ -114,6 +114,9 @@ Proof
     (drule exprSimSourceTheory.expr_body_pre_builtin_arg >>
      simp[expr_body_pre_def] >>
      disch_then (qspecl_then [`a`, `es`] mp_tac) >> simp[]) >>
+  `post_value_type cenv a = expr_type a` by
+    (irule exprSimHypsTheory.post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >> fs[expr_body_pre_def]) >>
   `expr_sim_ptr d ctx PG fn cenv cx (expr_type a) a es` by
     metis_tac[body_expr_ptr_frame, body_exprs_ptr_head] >>
   drule bodyPtrPrecompileBuiltinsArithmeticTailTheory.ecmul_compiler_append >>
@@ -212,6 +215,7 @@ Resume ecmul_expr_vv_sim_ptr[scalar_continuation]:
   `!l. p <> Label l` by simp[] >>
   `!w. eval_operand p t = SOME w ==> eval_operand p t' = SOME w` by
     metis_tac[exprSimOperandsTheory.expr_post_operand_word, optionTheory.SOME_11] >>
+  `post_value_type cenv a = expr_type a` by fs[] >>
   `expr_val_rel cx (expr_type a) v p t' /\
    expr_val_at cenv cx (expr_type a) sa sm ee' v p t'` by
     (drule_all ec_point_operand_kept >> simp[]) >>
@@ -246,8 +250,11 @@ Resume ecmul_expr_vv_sim_ptr[tail_frame]:
     [ArrayT (BaseT (UintT 256)) (Fixed 2); BaseT (UintT 256)] [v;v'] ee'` >>
   rename1 `ec_source_tail _ _ _ _ _ _ = (rr,fin)` >>
   `expr_val_rel cx (BaseT (UintT 256)) v' scalar t'` by
-    (qpat_assum `expr_type b = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-     fs[loweringPostsTheory.expr_post_def]) >>
+    (`post_value_type cenv b = expr_type b` by
+       (irule loweringPostsTheory.post_value_type_word >> fs[is_word_type_def]) >>
+     fs[loweringPostsTheory.expr_post_def] >>
+     qpat_x_assum `expr_val_rel _ (expr_type b) _ _ _` mp_tac >>
+     qpat_assum `expr_type b = _` (fn th => rewrite_tac[th])) >>
   `stor_taint_ok cx tn' t'` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   fs[bodyPtrDefsTheory.stor_taint_ok_def] >>
   `expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) sa sm ee' v p t' /\

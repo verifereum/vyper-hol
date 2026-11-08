@@ -130,6 +130,7 @@ Theorem assign_base_ptr_expr_post_index:
 Proof
   simp[loweringPostsTheory.expr_post_def, stmt_state_rel_inst_idx,
     loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
+    loweringPostsTheory.expr_val_own_def,
     exprSimPropsTheory.locals_kept_inst_idx, local_region_def, lookup_var_def]
 QED
 
@@ -173,7 +174,8 @@ Theorem assign_base_ptr_expr_post_gas_obs:
   expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
   simp[loweringPostsTheory.expr_post_def, stmt_state_rel_def, state_rel_gas_obs,
-    loweringPostsTheory.expr_val_at_def]
+    loweringPostsTheory.expr_val_at_def,
+    loweringPostsTheory.expr_val_own_def]
 QED
 
 Theorem assign_base_ptr_one_byte_outcome:

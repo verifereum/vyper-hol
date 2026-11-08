@@ -59,6 +59,8 @@ QED
 
 Resume compile_assign_storage_stmt_frag_ptr[normal]:
   gvs[] >> drule gas_marked_exec_ptr_exec >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_word] >>
   `encode_value tvt v = SOME [(0,typed_val_to_w256 etv v)]` by
     (qpat_x_assum `!gs v es1. _ ==> encode_value _ _ = _` irule >>
      fs[gas_marked_exec_def] >> metis_tac[]) >>

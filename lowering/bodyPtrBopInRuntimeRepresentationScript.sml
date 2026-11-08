@@ -56,6 +56,7 @@ Proof
 QED
 
 Theorem membership_vv_post_runtime_representation:
+  post_value_type cenv e = expr_type e /\
   membership_vv_post d ctx fn cenv cx e es sc sd vv s0 G0 tn0 tvv ee s G tn /\
   compile_expr cenv ty e sc = (vv,sd) /\ local_ptrs_reserved cenv sc /\
   expr_type e = ArrayT et bd /\

@@ -89,9 +89,14 @@ Theorem reason_encoder_readonly_post:
     expr_post ctx func cenv cx e es sa sb s0 es' v op t
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_val_at cenv cx (expr_type e) sa sb es' v op t` by
+  `expr_val_at cenv cx (post_value_type cenv e) sa sb es' v op t` by
     (irule reason_encoder_value_location_frame >>
      qexists_tac `s` >> gvs[expr_post_def]) >>
+  `post_value_type cenv e <> expr_type e ==>
+   expr_val_own cenv cx (post_value_type cenv e) sa sb es' v op t` by
+    (strip_tac >> gvs[expr_post_def, expr_val_own_def] >> rpt strip_tac >>
+     qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >>
+     qexists_tac `w` >> simp[] >> metis_tac[]) >>
   gvs[expr_post_def, expr_val_rel_def, locals_kept_def] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -167,6 +172,7 @@ Finalise reason_encoder_alloc_buffer_post
    allocations and current locals by the allocation-run boundary. *)
 Theorem reason_encoder_allocated_store_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc inst b sz a w.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -222,6 +228,7 @@ Finalise reason_encoder_allocated_store_post
    keeps the original expression interval while compilation advances at cc. *)
 Theorem reason_encoder_alloc_buffer_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc cd buf n tv ow PG G tn.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
     (!p. op = Var p ==> not_fresh_at cc p) /\ local_ptrs_reserved cenv cc /\
@@ -347,6 +354,7 @@ QED
 Theorem reason_encoder_allocated_store_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc inst b sz
     dst value a addr u w tv ow tn id.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -392,6 +400,7 @@ QED
 (* First compiler consumer of the allocation and store resource boundaries. *)
 Theorem reason_encoder_selector_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 buf n tv ow PG G tn.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
@@ -603,6 +612,7 @@ QED
 (* The original source interval survives all four prefix operations. *)
 Theorem reason_encoder_prefix_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 c3 c4 buf payload tuple n m tv ow PG G tn.
+    post_value_type cenv e = expr_type e /\
     expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\

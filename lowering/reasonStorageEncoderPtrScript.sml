@@ -80,8 +80,12 @@ Proof
      >- (drule expr_body_pre_type_evaluates >> simp[evaluate_type_def] >>
          rpt strip_tac >> gvs[]) >>
      gvs[is_word_type_def]) >>
+  `post_value_type cenv r = expr_type r` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     fs[compileEnvTheory.is_bytestring_type_def]) >>
   `vv_holds cenv cx (expr_type r) tv (LocatedValue ann p) ee t /\
    stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
+  `p.ptr_location <> LocMemory` by (Cases_on `tr` >> fs[]) >>
   drule_all located_unwrap_copy_sizing >> strip_tac >>
   `type_alloc_ok cenv (BaseT (StringT cap))` by
     metis_tac[alloc_limits_expr_type_alloc_ok] >>
@@ -136,5 +140,13 @@ Proof
   asm_rewrite_tac[] >> rpt strip_tac >>
   `?ann p tr. vv = LocatedValue ann p /\
     p.ptr_location = (if tr then LocTransient else LocStorage)` by metis_tac[] >>
-  gvs[] >> irule reason_storage_success_path_ptr >> metis_tac[]
+  gvs[] >>
+  `well_typed_expr env r /\ alloc_limits_expr cenv r` by fs[expr_body_pre_def] >>
+  drule_all reason_supported_string_type >> strip_tac >>
+  `post_value_type cenv r = expr_type r` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     fs[compileEnvTheory.is_bytestring_type_def]) >>
+  qpat_x_assum `post_value_type cenv r = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  irule reason_storage_success_path_ptr >> metis_tac[]
 QED

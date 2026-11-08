@@ -23,19 +23,20 @@ Proof
 QED
 
 Theorem raw_call_stack_value_view_post:
+  post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
   expr_val_at cenv cx (expr_type e) sa sb ee v op t /\
   wb_frame cenv es sa s0 t ==>
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue ty op) t
 Proof
-  strip_tac >> irule vv_post_frame_intro >> simp[] >>
+  strip_tac >> irule vv_post_frame_intro >> asm_rewrite_tac[] >> simp[] >>
   simp[loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def,
     vyperStateTheory.read_result_def, vyperStateTheory.return_def]
 QED
 
 Theorem raw_call_memory_value_view_post:
-  expr_type e = lowty /\ ~is_word_type (expr_type e) /\
+  post_value_type cenv e = expr_type e /\ expr_type e = lowty /\ ~is_word_type (expr_type e) /\
   stmt_state_rel ctx func cenv cx ee t /\
   expr_val_rel cx (expr_type e) v op t /\
   expr_val_at cenv cx (expr_type e) sa sb ee v op t /\
@@ -43,13 +44,18 @@ Theorem raw_call_memory_value_view_post:
   vv_post ctx func cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue lowty (mk_ptr op LocMemory)) t
 Proof
-  strip_tac >> gvs[] >> irule vv_post_frame_intro >> simp[] >> conj_tac
-  >- (fs[loweringPostsTheory.vv_holds_def, loweringPostsTheory.expr_val_rel_def,
-        contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
-        vyperStateTheory.return_def] >> metis_tac[]) >>
-  fs[loweringPostsTheory.vv_at_def, loweringPostsTheory.expr_val_at_def,
+  strip_tac >> qpat_x_assum `expr_type e = lowty` (SUBST_ALL_TAC o SYM) >>
+  irule vv_post_frame_intro >> asm_rewrite_tac[] >>
+  qpat_x_assum `post_value_type _ _ = _` kall_tac >> simp[] >>
+  rpt conj_tac >>
+  fs[loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def,
+    loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
     contextTheory.mk_ptr_def, vyperStateTheory.read_result_def,
-    vyperStateTheory.return_def]
+    vyperStateTheory.return_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!tv. evaluate_type _ _ = SOME tv ==> _` (drule_then mp_tac) >>
+  qpat_x_assum `!tv. evaluate_type _ _ = SOME tv /\ _ ==> _` (drule_then mp_tac) >>
+  fs[]
 QED
 
 Theorem raw_call_vv_sim_ptr:
