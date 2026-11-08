@@ -18,9 +18,7 @@ Proof
        source_memory_read_ranges_def,
        eval_operand_def] >>
   conj_tac >- (rpt strip_tac >> gvs[] >> simp[mem_read_ops_def] >> metis_tac[]) >>
-  simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  simp[step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
   simp[exec_read1_def, eval_operand_def, AllCaseEqs(), mload_def,
        update_var_def] >> rpt strip_tac >> gvs[]
 QED
