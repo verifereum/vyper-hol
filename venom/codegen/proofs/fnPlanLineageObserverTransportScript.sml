@@ -1922,3 +1922,45 @@ Resume native_incoming_phi_body_stack_support[phi_shape]:
 QED
 
 Finalise native_incoming_phi_body_stack_support
+
+Theorem native_phi_fresh_output_demand_support:
+  !inst nl halting ps ops qs v.
+    v = HD inst.inst_outputs /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+    generate_phi_plan inst nl halting ps = (ops,qs) /\ ~halting ==>
+    (MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==> MEM v nl
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM v nl` >- simp[] >>
+  `~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled` suffices_by simp[] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack`
+  >- gvs[generate_phi_plan_def] >>
+  rename1 `stack_get_phi_depth _ _ = SOME d` >>
+  drule fnPlanLineagePhiTemporalTheory.generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`nl`,`T`] mp_tac) >>
+  namedCases_on `fnPlanLineagePhiTemporal$phi_write_phase inst nl d ps` ["writes ws"] >>
+  simp[] >> strip_tac >>
+  `LIST_ELEM_COUNT (Var v) ws.ps_stack +
+    (if Var v IN FDOM ws.ps_spilled then 1 else 0) <= 1` by
+    (qpat_assum `generate_phi_plan _ _ T _ = _`
+       (mp_then Any mp_tac generate_phi_plan_resource_bound) >>
+     disch_then (qspec_then `v` mp_tac) >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  drule fnPlanLineagePhiTemporalTheory.generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`nl`,`halting`] mp_tac) >> simp[] >>
+  namedCases_on `popmany_plan [Var v] ws` ["pops final"] >>
+  strip_tac >>
+  `LIST_ELEM_COUNT (Var v) ws.ps_stack <= 1` by
+    (Cases_on `Var v IN FDOM ws.ps_spilled` >> gvs[] >> decide_tac) >>
+  `~MEM (Var v) final.ps_stack` by
+    (irule fnPlanLineageInventoryTheory.popmany_plan_unique_absent >>
+     qexistsl [`[Var v]`,`pops`,`ws`] >> simp[]) >>
+  `ws.ps_spilled = ps.ps_spilled` by
+    (qpat_x_assum `phi_write_phase _ _ _ _ = _` mp_tac >>
+     simp[fnPlanLineagePhiTemporalTheory.phi_write_phase_def] >> IF_CASES_TAC
+     >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+         drule deepResidualBudgetTheory.do_dup_spilled_eq >> simp[]) >>
+     strip_tac >> gvs[]) >>
+  mp_tac (Q.SPECL [`[Var v]`,`ws`]
+    fnPlanLineageInventoryTheory.popmany_plan_spilled_unchanged) >> gvs[]
+QED
