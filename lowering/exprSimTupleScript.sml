@@ -991,15 +991,34 @@ Proof
            get_accounts_def, get_transient_storage_def, bind_def,
            lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
            LET_THM] >>
-      rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[check_def, assert_def, ignore_bind_def,
-               get_storage_backend_def, get_accounts_def,
-               get_transient_storage_def, bind_def, return_def, raise_def,
-               pairTheory.UNCURRY])) >>
+      BasicProvers.FULL_CASE_TAC >> gvs[check_def, assert_def, ignore_bind_def,
+          get_storage_backend_def, get_accounts_def,
+          get_transient_storage_def, bind_def, return_def, raise_def,
+          pairTheory.UNCURRY] >>
+      BasicProvers.FULL_CASE_TAC >> gvs[check_def, assert_def, ignore_bind_def,
+          get_storage_backend_def, get_accounts_def,
+          get_transient_storage_def, bind_def, return_def, raise_def,
+          pairTheory.UNCURRY] >>
+      BasicProvers.FULL_CASE_TAC >> gvs[check_def, assert_def, ignore_bind_def,
+          get_storage_backend_def, get_accounts_def,
+          get_transient_storage_def, bind_def, return_def, raise_def,
+          pairTheory.UNCURRY] >>
+      BasicProvers.FULL_CASE_TAC >> gvs[check_def, assert_def, ignore_bind_def,
+          get_storage_backend_def, get_accounts_def,
+          get_transient_storage_def, bind_def, return_def, raise_def,
+          pairTheory.UNCURRY] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[check_def, assert_def, ignore_bind_def,
+          get_storage_backend_def, get_accounts_def,
+          get_transient_storage_def, bind_def, return_def, raise_def,
+          pairTheory.UNCURRY])) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_scopes_def, get_immutables_def,
        get_address_immutables_def, bind_def, ignore_bind_def,
        lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def] >>
+  BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
 QED
 
