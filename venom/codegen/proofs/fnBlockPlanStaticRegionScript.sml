@@ -1206,7 +1206,7 @@ Proof
   rpt strip_tac >>
   `ssa_form fn` by gvs[codegen_ready_fn_def] >>
   `i < LENGTH bb.bb_instructions` by decide_tac >>
-  `i = j` by metis_tac[removeUnusedProofsTheory.ssa_form_no_dup_in_block] >>
+  `i = j` by metis_tac[venomWfPropsTheory.ssa_form_no_dup_in_block] >>
   gvs[]
 QED
 
