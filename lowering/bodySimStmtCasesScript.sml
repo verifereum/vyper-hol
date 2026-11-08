@@ -219,8 +219,9 @@ Theorem lowered_value_type_not_call_word[local]:
 Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
   rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def] >>
-  simp[exprLoweringTheory.concat_buffer_type_def] >> rpt CASE_TAC >>
-  gvs[is_word_type_def]
+  simp[exprLoweringTheory.concat_buffer_type_def] >>
+  Cases_on `ty` >> simp[is_word_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >> gvs[is_word_type_def]
 QED
 
 (* A supported reason is a string expression (supported_string_reason),
