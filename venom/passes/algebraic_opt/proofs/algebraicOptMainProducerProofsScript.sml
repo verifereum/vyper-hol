@@ -4,6 +4,7 @@ Ancestors
   algebraicOptRangeConditionProofs algebraicOptRangeLocalProofs
   venomInst venomState venomExecSemantics venomExecProps algebraicOptDefs
   algebraicOptComposeProofs algebraicOptRelationProofs algebraicOptCmpChunkProofs
+  algebraicOptTraceProofs
 Libs
   listTheory
 
@@ -102,4 +103,58 @@ Proof
   `ao_main_observations fn V (update_var x v2 s) (update_var x v2 r)` by
     (irule ao_main_observations_update >> simp[]) >>
   gvs[ao_main_observations_def, lookup_var_def, update_var_def]
+QED
+
+Theorem ao_source_step_call_ctx:
+  !ctx fn a b. ao_source_step ctx fn a b ==>
+    (SND (SND b)).vs_call_ctx = (SND (SND a)).vs_call_ctx
+Proof
+  ho_match_mp_tac ao_source_step_ind >> simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+      disch_then (fn th => once_rewrite_tac[th]) >> simp[])
+  >- metis_tac[venomInstPropsTheory.step_preserves_call_ctx] >>
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+      AllCaseEqs(), jump_to_def] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem ao_source_trace_call_ctx:
+  !trace ctx fn a b.
+    ao_source_trace ctx fn trace /\ MEM a trace /\ MEM b trace ==>
+    (SND (SND a)).vs_call_ctx = (SND (SND b)).vs_call_ctx
+Proof
+  Induct >> simp[ao_source_trace_def] >>
+  rpt gen_tac >> Cases_on `trace` >> simp[ao_source_trace_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[ao_source_step_call_ctx, MEM]
+QED
+
+Theorem ao_source_address_value:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+  ao_source_trace ctx fn trace /\ LAST trace = (h,F,s) /\
+  (!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs ==>
+    lookup_var x (SND (SND (HD trace))) = NONE) /\
+  dfg_get_def (dfg_build_function fn) x = SOME prod /\
+  prod.inst_opcode = ADDRESS /\ lookup_var x s = SOME value ==>
+  value = w2w s.vs_call_ctx.cc_address
+Proof
+  strip_tac >>
+  `prod.inst_opcode <> PHI /\ ~is_terminator prod.inst_opcode` by
+    simp[is_terminator_def] >>
+  drule_all ao_dfg_source_producer >> strip_tac >>
+  `MEM prod (fn_insts fn)` by metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
+  `lookup_var x (SND (SND (HD trace))) = NONE` by metis_tac[] >>
+  drule_all ao_source_trace_last_output >> strip_tac >>
+  `u.vs_call_ctx = s.vs_call_ctx` by
+    (qspecl_then [`trace`,`ctx`,`fn`,`(q,F,u)`,`(h,F,s)`]
+       mp_tac ao_source_trace_call_ctx >>
+     `MEM (h,F,s) trace` by
+       metis_tac[rich_listTheory.MEM_LAST_NOT_NIL] >>
+     impl_tac >- asm_rewrite_tac[MEM_APPEND, MEM] >> simp[]) >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs,
+      eval_operand_def, AllCaseEqs(), lookup_var_def, update_var_def] >>
+  gvs[exec_read0_def, AllCaseEqs(), update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
 QED
