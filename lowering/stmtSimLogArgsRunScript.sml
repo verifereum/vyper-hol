@@ -205,8 +205,7 @@ Resume compile_log_eval_all_gas[head_value]:
      drule forced_eval_expr_preserves_scopes_dom >> simp[]) >>
   qpat_x_assum `!ctx func cenv cx R. _`
     (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `R`, `es_end with gas_obs := []`,
-                  `sm`, `ZIP (MAP FST ys, MAP expr_type args)`, `sb`, `t`, `env`,
-                  `env0`, `es0`, `ys`] mp_tac) >>
+                  `sm`, `sb`, `t`, `env`, `env0`, `es0`, `ys`] mp_tac) >>
   impl_tac >- (fs[] >> metis_tac[]) >>
   simp[gas_outcome_def] >> strip_tac
   >- suspend "tail_summary" >>
