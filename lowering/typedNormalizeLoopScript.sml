@@ -225,7 +225,7 @@ Proof
   strip_tac >> gvs[LENGTH_APPEND] >> decide_tac
 QED
 
-Theorem typed_array_local_prefix_step[local]:
+Theorem typed_array_local_prefix_step:
   (!j a m m'. j < n /\ mem_bytes_at a stride m = mem_bytes_at a stride m' ==>
     (D j a m <=> D j a m')) /\
   (!j. j < i ==> D j ((addr:num)+stride*j) mem) /\
@@ -245,7 +245,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem typed_array_local_source_frame[local]:
+Theorem typed_array_local_source_frame:
   (!j a m m'. j < n /\ mem_bytes_at a stride m = mem_bytes_at a stride m' ==>
     (Src j a m <=> Src j a m')) /\
   (!j. j < n ==> Src j (addr+stride*j) mem) /\
@@ -264,7 +264,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem typed_array_child_exterior[local]:
+Theorem typed_array_child_exterior:
   i < n /\ (a+ss*n <= b \/ b+ds*n <= a) /\
   (!p k. p+k <= b+ds*i \/ b+ds*i+ds <= p ==>
     mem_bytes_at p k mem' = mem_bytes_at p k mem) ==>
@@ -471,7 +471,7 @@ Proof
   metis_tac[LESS_EQ_TRANS, LESS_EQ_REFL]
 QED
 
-Theorem typed_sarray_pointer_fresh[local]:
+Theorem typed_sarray_pointer_fresh:
   sc.cs_next_var = sa.cs_next_var+7 /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
   let ctr = "%" ++ toString sa.cs_next_var;
