@@ -349,3 +349,126 @@ Proof
   simp[fn_insts_def, fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o,
        combinTheory.o_DEF]
 QED
+
+Theorem fix_inline_phis_nonphi_origin:
+  !old new bb fn inst.
+    MEM inst (fn_insts (fix_inline_phis old new bb fn)) /\
+    inst.inst_opcode <> PHI ==>
+    MEM inst (fn_insts fn)
+Proof
+  rpt gen_tac >>
+  simp[fix_inline_phis_def, fn_insts_def,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff, MEM_MAP] >>
+  rpt strip_tac >>
+  gvs[SF boolSimps.COND_elim_ss, MEM_MAP, subst_label_inst_def,
+      instruction_component_equality] >>
+  metis_tac[instruction_component_equality]
+QED
+
+Theorem renumber_fn_inst_projection_origin:
+  !f fn inst.
+    (!i k. f (i with inst_id := k) = f i) /\
+    MEM inst (fn_insts (renumber_fn_inst_ids fn)) ==>
+    ?orig. MEM orig (fn_insts fn) /\ f orig = f inst
+Proof
+  rpt strip_tac >> drule renumber_fn_projection >>
+  disch_then (qspec_then `fn` assume_tac) >>
+  `MEM (f inst) (MAP f (fn_insts fn))` by metis_tac[MEM_MAP] >>
+  gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem inline_one_site_return_origin:
+  !caller callee ist caller' ist' inst.
+    inline_one_site caller callee ist = SOME (caller',ist') /\
+    MEM inst (fn_insts caller') /\
+    (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+    ?orig. MEM orig (fn_insts caller) /\
+      orig.inst_opcode = inst.inst_opcode /\
+      raw_return_user_arity orig = raw_return_user_arity inst
+Proof
+  rpt gen_tac >> simp[inline_one_site_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule_at (Pos last) (Q.ISPEC `\i. (i.inst_opcode, raw_return_user_arity i)`
+    renumber_fn_inst_projection_origin) >>
+  (impl_tac >- simp[callLayoutDefsTheory.raw_return_user_arity_def,
+                        dretShapeDefsTheory.parse_dret_shape_def]) >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `MEM inst (fn_insts (renumber_fn_inst_ids _))` kall_tac >>
+  qpat_x_assum `MEM orig _` mp_tac >> CASE_TAC >> simp[] >> strip_tac >>
+  `orig.inst_opcode <> PHI` by simp[] >>
+  metis_tac[fix_inline_phis_nonphi_origin, inline_call_site_return_origin]
+QED
+
+Theorem inliner_fn_origin_returns:
+  !ctx n fn. inliner_fn_origin ctx n fn ==>
+    ?root. MEM root ctx.ctx_functions /\ root.fn_name = fn.fn_name /\
+      !inst. MEM inst (fn_insts fn) /\
+        (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+        ?orig. MEM orig (fn_insts root) /\
+          orig.inst_opcode = inst.inst_opcode /\
+          raw_return_user_arity orig = raw_return_user_arity inst
+Proof
+  ho_match_mp_tac inliner_fn_origin_ind >> rpt conj_tac
+  >- (rpt strip_tac >> qexists_tac `fn` >> simp[] >> metis_tac[])
+  >- metis_tac[]
+  >> rpt gen_tac >> strip_tac >>
+  drule inline_one_site_name >> strip_tac >>
+  qexists_tac `root` >> simp[] >> rpt strip_tac >>
+  metis_tac[inline_one_site_return_origin]
+QED
+
+Theorem inline_call_site_invoke_origin:
+  !caller callee p ret lbl idx inst.
+    MEM inst (fn_insts (inline_call_site p ret caller callee lbl idx)) /\
+    inst.inst_opcode = INVOKE ==>
+    MEM inst (fn_insts caller) \/
+    MEM inst (fn_insts (clone_function p callee))
+Proof
+  rpt gen_tac >>
+  Cases_on `lookup_block lbl caller.fn_blocks`
+  >- simp[inline_call_site_def] >>
+  simp[inline_call_site_def] >> pairarg_tac >> simp[] >>
+  simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+       replace_block_def, MEM_MAP] >>
+  rpt strip_tac >> gvs[SF boolSimps.COND_elim_ss,
+                         instruction_component_equality]
+  >- (disj1_tac >> metis_tac[venomExecProofsTheory.lookup_block_MEM,
+                            rich_listTheory.MEM_TAKE])
+  >- (disj1_tac >> metis_tac[])
+  >- (disj1_tac >> metis_tac[venomExecProofsTheory.lookup_block_MEM,
+                            rich_listTheory.MEM_DROP_IMP])
+  >> disj2_tac >>
+  `inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> JMP` by simp[] >>
+  drule_all rewrite_inline_blocks_survivor >> simp[]
+QED
+
+Theorem clone_function_inst_origin:
+  !p fn inst.
+    MEM inst (fn_insts (clone_function p fn)) ==>
+    ?orig. MEM orig (fn_insts fn) /\
+      inst = clone_instruction p (fn_labels fn) orig
+Proof
+  simp[clone_function_def, fn_insts_def,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff, MEM_MAP,
+       clone_basic_block_def] >> rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem inline_one_site_invoke_origin:
+  !caller callee ist caller' ist' inst.
+    inline_one_site caller callee ist = SOME (caller',ist') /\
+    MEM inst (fn_insts caller') /\ inst.inst_opcode = INVOKE ==>
+    ?orig. (MEM orig (fn_insts caller) \/
+      MEM orig (fn_insts (clone_function (inline_prefix ist.is_inline_count) callee))) /\
+      orig.inst_opcode = INVOKE /\
+      orig.inst_operands = inst.inst_operands /\
+      orig.inst_outputs = inst.inst_outputs
+Proof
+  rpt gen_tac >> simp[inline_one_site_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule_at (Pos last) (Q.ISPEC `\i. (i.inst_opcode, i.inst_operands, i.inst_outputs)`
+    renumber_fn_inst_projection_origin) >> simp[] >> strip_tac >> gvs[] >>
+  qpat_x_assum `MEM inst (fn_insts (renumber_fn_inst_ids _))` kall_tac >>
+  qpat_x_assum `MEM orig _` mp_tac >> CASE_TAC >> simp[] >> strip_tac >>
+  `orig.inst_opcode <> PHI` by simp[] >>
+  metis_tac[fix_inline_phis_nonphi_origin, inline_call_site_invoke_origin]
+QED
