@@ -9,6 +9,8 @@ Ancestors
   abiDecoderAbortReentry abiDecoderReentry abiDecoderReentryPointer
   exprLoweringProps localPtrsProps emitHelperProps emitHelper
   compileEnv context venomState venomMemDefs venomInst
+  abiValidAllocatedContract abiMalformedSiteFrame abiDecoderArrayHeader
+  exprSimAlloc venomExecSemantics venomMemProps
   finite_map pred_set words list arithmetic
 
 Theorem abi_valid_allocated_array_init_fresh_run:
@@ -120,4 +122,105 @@ Proof
   strip_tac >> drule_all abi_valid_allocated_array_init_run >> strip_tac >>
   drule_all abi_malformed_init_total >> strip_tac >- gvs[] >>
   gvs[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+(* An ALLOCA can reuse a cached row; new rows begin at the old frontier. *)
+Theorem abi_valid_allocated_buffer_origin:
+  compile_alloc_buffer n st = (buf,en) /\
+  run_inst_seq (emitted_insts st en) s = OK t ==>
+  !id b sz. FLOOKUP t.vs_allocas id = SOME (b,sz) ==>
+    FLOOKUP s.vs_allocas id = SOME (b,sz) \/ s.vs_alloca_next <= b
+Proof
+  simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+       exec_alloca_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[update_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `st.cs_next_id = id` >> gvs[]
+QED
+
+Theorem abi_valid_allocated_index_effect:
+  abi_decode_index_init st = (ip,en) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv st /\ st.cs_next_id IN sites /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  en.cs_next_var <= ceiling.cs_next_var /\ fresh_vars_wrt ceiling s ==>
+  ?t slot. run_inst_seq (emitted_insts st en) s = OK t /\
+    abi_valid_allocated_effect ctx func cenv cx es st.cs_next_var
+      sites dstid d outsz s t /\
+    fresh_vars_wrt ceiling t /\ eval_operand ip t = SOME (n2w slot) /\
+    mload slot t = 0w /\ slot+32 < dimword (:256) /\
+    FLOOKUP t.vs_allocas st.cs_next_id = SOME (slot,32)
+Proof
+  strip_tac >> drule_all abi_malformed_index_resource >>
+  disch_then (qspec_then `dstid` strip_assume_tac) >>
+  drule abi_decode_index_init_trace >> strip_tac >>
+  `32 < dimword (:256)` by
+    simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st allocation_st) s = OK allocated` >>
+  `eval_operand (Lit 0w) allocated = SOME 0w` by simp[eval_operand_def] >>
+  drule_all abi_decode_store_sequence >> strip_tac >>
+  `inst_extends allocation_st en /\ inst_extends st allocation_st` by
+    metis_tac[inst_extends_emit_void, abi_decode_alloc_buffer_inst_extends] >>
+  drule_all run_inst_seq_emit_extend >> strip_tac >>
+  `t = mstore (w2n w) 0w allocated` by gvs[] >>
+  `!id b sz. FLOOKUP allocated.vs_allocas id = SOME (b,sz) ==>
+     FLOOKUP s.vs_allocas id = SOME (b,sz) \/ s.vs_alloca_next <= b` by
+    (rpt strip_tac >> irule abi_valid_allocated_buffer_origin >>
+     qexistsl_tac [`buf`, `allocation_st`, `32`, `st`, `allocated`] >> simp[]) >>
+  qexistsl_tac [`t`, `slot`] >> simp[abi_valid_allocated_effect_def] >>
+  simp[abi_valid_allocated_frame_def] >> rpt strip_tac >>
+  `abi_malformed_site_range sites s allocated (w2n w) 32` by
+    (qpat_x_assum `!id b sz. FLOOKUP allocated.vs_allocas id = _ ==> _` drule >>
+     strip_tac
+     >- (simp[abi_malformed_site_range_def] >> disj1_tac >>
+         qexistsl_tac [`st.cs_next_id`, `w2n w`, `32`] >> simp[]) >>
+     simp[abi_malformed_site_range_def] >> disj2_tac >> simp[] >>
+     fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `a+1 <= w2n w \/ w2n w+32 <= a` by
+    (qpat_x_assum `~abi_malformed_site_range _ _ _ _ _` mp_tac >>
+     qpat_x_assum `abi_malformed_site_range _ _ _ _ _` mp_tac >>
+     simp[abi_malformed_site_range_def, mstore_def, write_memory_with_expansion_def] >>
+     rpt strip_tac >> gvs[] >>
+     Cases_on `a+1 <= w2n w \/ w2n w+32 <= a` >> simp[] >>
+     `w2n w <= a /\ a+1 <= w2n w+32` by decide_tac >> metis_tac[LESS_EQ_TRANS]) >>
+  `mem_bytes_at a 1 (mstore (w2n w) 0w allocated).vs_memory =
+     mem_bytes_at a 1 allocated.vs_memory` by
+    (irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> simp[]) >>
+  fs[]
+QED
+
+Theorem abi_valid_allocated_array_header_effect:
+  abi_decode_array_header dst addr MLOAD st = (cnt,en) /\
+  abi_malformed_entry ctx func cenv cx es st sites dstid live
+    base_op hi src dst B L xs p d outsz s /\
+  32 <= outsz /\ fn_inst_ids_distinct func /\
+  eval_operand addr s = SOME a /\ fresh_vars_wrt st s ==>
+  ?t. run_inst_seq (emitted_insts st en) s = OK t /\
+    fresh_vars_wrt en t /\ eval_operand cnt t = SOME (mload (w2n a) s) /\
+    abi_valid_allocated_effect ctx func cenv cx es st.cs_next_var
+      sites dstid d outsz s t /\
+    mem_word_at d t.vs_memory = mload (w2n a) s /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
+Proof
+  strip_tac >> drule_all abi_malformed_init_header_resource >> strip_tac >>
+  `eval_operand dst s = SOME (n2w d) /\ d < dimword (:256)` by
+    (fs[abi_malformed_entry_def] >> decide_tac) >>
+  drule_all abiMalformedBulkArrayTheory.abi_malformed_array_header_exact >> strip_tac >> gvs[] >>
+  simp[abi_valid_allocated_effect_def] >>
+  conj_tac
+  >- (conj_tac
+      >- (simp[abi_valid_allocated_frame_def] >> rpt strip_tac >>
+          rename1 `mem_bytes_at q 1 t.vs_memory = _` >>
+          `q < d \/ d+32 <= q` by decide_tac >>
+          qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+          simp[] >> irule abiDecodeStaticPropsTheory.mem_bytes_at_mstore_outside >> simp[]) >>
+      qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+      simp[mstore_def, write_memory_with_expansion_def]) >>
+  qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >>
+  simp[valueEncodingPropsTheory.mstore_mem_word_at_same]
 QED
