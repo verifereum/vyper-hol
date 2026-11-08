@@ -41,19 +41,24 @@ QED
 
 Theorem alloc_limits_struct_fields:
   (!c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
             alloc_limits_expr c' e = alloc_limits_expr c e) /\
   (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
               alloc_limits_target c' tgt = alloc_limits_target c tgt) /\
   (!c es c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
              alloc_limits_exprs c' es = alloc_limits_exprs c es) /\
   (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
               alloc_limits_opt c' opt = alloc_limits_opt c opt) /\
   (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
               alloc_limits_named_exprs c' kes = alloc_limits_named_exprs c kes)
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
@@ -157,10 +162,12 @@ QED
 (* The other checks read only the struct sizes too. *)
 Theorem alloc_limits_assignment_struct_fields:
   (!c g c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
             alloc_limits_assignment c' g = alloc_limits_assignment c g) /\
   (!c gs c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
              alloc_limits_assignments c' gs = alloc_limits_assignments c gs)
 Proof
   ho_match_mp_tac alloc_limits_assignment_ind >> rpt conj_tac >>
@@ -170,7 +177,8 @@ QED
 
 Theorem alloc_limits_frame:
   !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules ==>
     type_memory_bytes c' = type_memory_bytes c /\
     alloc_limits_expr c' = alloc_limits_expr c /\
     alloc_limits_target c' = alloc_limits_target c /\
@@ -205,7 +213,8 @@ Definition alloc_env_agree_def:
     c'.ce_module_vars = c.ce_module_vars /\
     c'.ce_hashmap_info = c.ce_hashmap_info /\
     c'.ce_module_var_type = c.ce_module_var_type /\
-    c'.ce_func_return_type = c.ce_func_return_type
+    c'.ce_func_return_type = c.ce_func_return_type /\
+    c'.ce_modules = c.ce_modules
 End
 
 Theorem target_store_place_frame:
@@ -302,7 +311,8 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[fn_allocs_ok_def] >>
   qabbrev_tac `c = build_compile_env tops Internal mut fname fargs ret ss F` >>
   `cenv.ce_struct_fields = c.ce_struct_fields /\
-   cenv.ce_func_return_type = c.ce_func_return_type` by gvs[alloc_env_agree_def] >>
+   cenv.ce_func_return_type = c.ce_func_return_type /\
+   cenv.ce_modules = c.ce_modules` by gvs[alloc_env_agree_def] >>
   drule_all alloc_limits_frame >> strip_tac >>
   `alloc_limits_stmts cenv ss` by
     metis_tac[alloc_limits_stmt_struct_fields] >>

@@ -11,10 +11,14 @@
  *                                          allocates for an expression
  *   alloc_limits_stmt(s) -- the same for every expression of a statement,
  *                           every local it declares, and a log's buffers
+ *
+ * alloc_limits_expr also carries one more codegen-time rejection, checked
+ * up front the same way: pop_subscript_overlap, Python's "risky overlap"
+ * panic for a subscript of a pop() result (vyperlang/vyper#5350).
  *)
 Theory allocLimits
 Ancestors
-  stmtLowering compileEnv vyperAST vfmConstants list pair
+  stmtLowering compileEnv vyperAST vyperSubscriptOverlap vfmConstants list pair
 
 (* The buffer the lowering allocates for a bytes or string literal, its
    length word and its data rounded up to whole words, is below 2 ** 64
@@ -69,6 +73,32 @@ Proof
        listTheory.list_size_def]
 QED
 
+(* Whether the expression is a pop() result, or a member or element of one.
+   Mirrors Python: expr.py _is_derived_from_pop (vyperlang/vyper#5350) *)
+Definition base_from_pop_def:
+  base_from_pop (Pop _ _) = T /\
+  base_from_pop (Subscript _ e _) = base_from_pop e /\
+  base_from_pop (Attribute _ e _) = base_from_pop e /\
+  base_from_pop _ = F
+End
+
+(* Whether array subscript base[idx] is rejected, in a contract whose
+   modules are mods: the base is derived from a pop() result, reads a
+   variable other than a constant, and the index writes a variable the base
+   reads or makes a risky call.  The popped element lies past the array's
+   new length, so the index could overwrite it before the base is read.
+   The same test as subscript_overlap, with base_from_pop in place of
+   base_through_dynarray.
+   Mirrors Python: expr.py _lower_array_subscript (vyperlang/vyper#5350) *)
+Definition pop_subscript_overlap_def:
+  pop_subscript_overlap mods base idx <=>
+    is_ArrayT (expr_type base) /\ base_from_pop base /\
+    let reads = nonconstant_reads mods (expr_accesses mods base) in
+      reads <> [] /\
+      let idx_as = expr_accesses mods idx in
+        any_written reads idx_as \/ MEM RiskyAcc idx_as
+End
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
@@ -92,7 +122,8 @@ Definition alloc_limits_expr_def:
      alloc_limits_named_exprs cenv kes) /\
   alloc_limits_expr cenv (Subscript t x y) =
     (type_alloc_ok cenv t /\ alloc_limits_expr cenv x /\
-     alloc_limits_expr cenv y) /\
+     alloc_limits_expr cenv y /\
+     ~pop_subscript_overlap cenv.ce_modules x y) /\
   alloc_limits_expr cenv (Attribute t x _) =
     (type_alloc_ok cenv t /\ alloc_limits_expr cenv x) /\
   (* Python's codegen rejects an address's .code anywhere but as slice()'s
