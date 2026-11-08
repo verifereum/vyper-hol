@@ -64,9 +64,10 @@ Proof
   qexistsl_tac [`H`,`u`,`q`,`p`] >> simp[] >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def,
-    exec_alloca_def, eval_operand_def, bind_outputs_def,
-    update_var_def, lookup_var_def, AllCaseEqs()] >>
+  simp[run_inst_seq_def] >>
+  simp[step_inst_base_def, mk_inst_def] >>
+  simp[exec_alloca_def, eval_operand_def, bind_outputs_def,
+    update_var_def, lookup_var_def] >>
   strip_tac >> gvs[lookup_var_def, FLOOKUP_UPDATE] >>
   qpat_x_assum `(n2w _ : bytes32) = n2w _` mp_tac >>
   simp[n2w_11]
