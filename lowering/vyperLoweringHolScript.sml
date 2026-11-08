@@ -39,6 +39,7 @@ Ancestors
   finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
   asmOptPeephole
   asmOptPruneUnused asmOptMergeJumpdests
+  asmOptInefficientJumps
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
