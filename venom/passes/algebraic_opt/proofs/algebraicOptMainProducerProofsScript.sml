@@ -4,7 +4,8 @@ Ancestors
   algebraicOptRangeConditionProofs algebraicOptRangeLocalProofs
   venomInst venomState venomExecSemantics venomExecProps algebraicOptDefs
   algebraicOptComposeProofs algebraicOptRelationProofs algebraicOptCmpChunkProofs
-  algebraicOptTraceProofs
+  algebraicOptTraceProofs algebraicOptMainRangeProofs algebraicOptMainLayoutProofs
+  algebraicOptSupplyProofs algebraicOptShapeProofs
 Libs
   listTheory
 
@@ -229,4 +230,69 @@ Proof
         >- (Cases_on `producer.inst_opcode = ADDRESS` >> simp[ao_post_flip_inst_def]
             >- address >> unchanged) >> unchanged) >> unchanged
   end
+QED
+
+Theorem ao_main_allocated_scalar_chunk:
+  !ctx fn s0 n k s inst bb V r t mid fr next fuel.
+  ao_source_prefix ctx fn s0 n k F s /\
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  s0.vs_inst_idx = 0 /\ s0.vs_prev_bb = NONE /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  (!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs ==> lookup_var x s0 = NONE) /\
+  MEM inst (fn_insts fn) /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  MEM inst.inst_opcode
+    [SHL; SHR; SAR; SIGNEXTEND; Exp; ADD; SUB; XOR; AND; MUL;
+     Div; SDIV; Mod; SMOD; OR; EQ; GT; LT; SGT; SLT] /\
+  step_inst_base inst s = OK t /\
+  ao_main_observations fn V s r /\ s.vs_labels = r.vs_labels /\
+  (!i x. MEM i (fn_insts fn) /\
+    (MEM (Var x) i.inst_operands \/ MEM x i.inst_outputs) ==> x IN V) /\
+  ir_supply_inst_ok mid /\ V SUBSET set mid.irs_used_vars /\
+  ao_alloc_fresh mid = (fr,next) ==>
+  ?u. ao_cmp_exec_chunk fuel ctx
+        (ao_transform_inst (dfg_build_function fn) (range_analyze fn)
+          s.vs_current_bb s.vs_inst_idx (ao_compute_fn_iszero_targets fn) fr inst) r = OK u /\
+      ao_main_observations fn V t u /\
+      (u with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+      u.vs_inst_idx = r.vs_inst_idx + LENGTH
+        (ao_transform_inst (dfg_build_function fn) (range_analyze fn)
+          s.vs_current_bb s.vs_inst_idx (ao_compute_fn_iszero_targets fn) fr inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ao_source_prefix_has_trace >> strip_tac >>
+  `!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs ==>
+     lookup_var x (SND (SND (HD trace))) = NONE` by (simp[] >> metis_tac[]) >>
+  Cases_on `ao_opt_producer (dfg_build_function fn)
+    (ao_resolve_iszero_inst (ao_compute_fn_iszero_targets fn) inst)`
+  >- (drule_all ao_alloc_fresh_scalar_separation >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `ao_opt_producer _ inst0 = NONE` >>
+      qabbrev_tac `p = ao_pre_flip_inst inst0` >>
+      `!y. y = SND (fr "not") \/ y = SND (fr "iz") ==>
+         ~MEM (Var y) p.inst_operands /\ ~MEM y p.inst_outputs` by
+        (unabbrev_all_tac >>
+         drule ao_main_resolved_fresh_support >>
+         disch_then (qspec_then `V` mp_tac) >> simp[] >>
+         disch_then (qspecl_then [`mid`, `fr`, `next`] mp_tac) >> simp[] >> metis_tac[]) >>
+      `!a w. MEM a p.inst_operands /\ eval_operand a r = SOME w ==>
+         in_range (range_get_range (range_analyze fn)
+           s.vs_current_bb s.vs_inst_idx a) w` by
+        (unabbrev_all_tac >> rpt strip_tac >>
+         irule ao_main_scalar_operand_ranges >>
+         goal_assum (drule_at Any) >> simp[] >>
+         conj_tac >- gvs[MEM] >>
+         conj_tac
+         >- (qexistsl [`V`, `r`] >> simp[] >> metis_tac[]) >>
+         qexistsl [`ctx`, `k`, `n`, `s0`] >> simp[] >> metis_tac[]) >>
+      irule ao_main_scalar_transform_chunk >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `inst.inst_opcode = SIGNEXTEND` by
+    (qpat_x_assum `ao_opt_producer _ _ = SOME _` mp_tac >>
+     simp[ao_opt_producer_def, ao_resolve_iszero_inst_def] >>
+     gvs[MEM] >> rpt strip_tac >> gvs[]) >>
+  irule ao_main_signextend_producer_chunk >>
+  goal_assum (drule_at Any) >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`bb`, `k`, `s`, `trace`] >> simp[] >> metis_tac[]
 QED
