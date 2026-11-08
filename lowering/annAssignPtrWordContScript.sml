@@ -54,6 +54,10 @@ Proof
   (!u. val_in_memory tyv v (w2n w)
       (mstore (w2n w) (typed_val_to_w256 etv v) u).vs_memory)` by
    fs[store_lays_out_def] >>
+ `!u. memory_value_rel tyv v (w2n w)
+      (mstore (w2n w) (typed_val_to_w256 etv v) u).vs_memory` by
+   (`word_memory_type tyv` by fs[store_lays_out_def] >>
+    metis_tac[loweringSliceTheory.word_memory_type_memory_value_rel]) >>
  `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
  qpat_x_assum `ghost_kept _ _ _ _ _ _ _ _`
    (strip_assume_tac o REWRITE_RULE [ghost_kept_def]) >>

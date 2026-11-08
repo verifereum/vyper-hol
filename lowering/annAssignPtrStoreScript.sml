@@ -190,7 +190,8 @@ Theorem annassign_declare_store_ptr:
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n a,sz) /\
  32 <= sz /\ type_memory_size ty <= sz /\ val_wf ty v /\
- (!u. val_in_memory ty v (w2n a) (mstore (w2n a) wd u).vs_memory) ==>
+ (!u. val_in_memory ty v (w2n a) (mstore (w2n a) wd u).vs_memory) /\
+ (!u. memory_value_rel ty v (w2n a) (mstore (w2n a) wd u).vs_memory) ==>
  ?s' tn'.
  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
  stmt_state_rel ctx func cenv cx
@@ -224,7 +225,8 @@ Proof
  simp[stmt_state_rel_inst_idx, annassign_ghost_inst_idx_ptr] >>
  conj_tac >- metis_tac[] >>
  conj_tac >- (irule stmt_state_rel_declare_store >> simp[] >>
-   qexists `inst` >> gvs[]) >>
+   conj_tac >- (qexists `inst` >> gvs[]) >>
+   qpat_x_assum `!u. memory_value_rel _ _ _ _` (qspec_then `s` ACCEPT_TAC)) >>
  conj_tac >- (
    irule annassign_ghost_scope_update_ptr >> simp[] >>
    reverse conj_tac
