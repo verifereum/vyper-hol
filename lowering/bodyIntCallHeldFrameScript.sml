@@ -17,7 +17,7 @@ QED
 (* Restatement of the [local] exprSimIfExp$ifexp_vv_at_alloc_frame
    (lowering/exprSimIfExpScript.sml:270), which this branch can't export;
    to be deduplicated at the trunk merge (moved next to vv_at_def). *)
-Theorem held_vv_at_alloc_frame[local]:
+Theorem held_vv_at_alloc_frame:
   vv_at cenv cx ty sa sb es raw vv s /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                FLOOKUP q.vs_allocas aid = SOME entry) /\
