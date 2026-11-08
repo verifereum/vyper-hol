@@ -24,6 +24,7 @@ Proof
        lift_option_def, check_def, assert_def, return_def, raise_def,
        frame_call_value_def, get_accounts_def, get_transient_storage_def,
        update_accounts_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def,
        take_call_outcome_def, call_outcome_request_def,
        adopt_call_outcome_def] >>
   Cases_on `cx.txn.is_static` >> Cases_on `x' = 0` >>
@@ -32,6 +33,7 @@ Proof
   simp[ignore_bind_def, bind_def, get_accounts_def, get_transient_storage_def,
        take_call_outcome_def, call_outcome_request_def] >>
   simp[return_def, raise_def, assert_def, update_accounts_def,
+       update_pending_deletions_def,
        update_transient_def, append_logs_def, adopt_call_outcome_def,
        bind_def, ignore_bind_def]
   >>~- ([`s.outcomes = NONE`],

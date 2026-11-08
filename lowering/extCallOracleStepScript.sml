@@ -261,7 +261,7 @@ Proof
      simp[step_inst_base_def, eval_operand_def]) >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
   qpat_x_assum `~cx.txn.is_static` (fn th =>
-    simp[eval_send_def, frame_call_value_def, th, bind_def, ignore_bind_def,
+    simp[eval_send_def, frame_call_value_def, update_pending_deletions_def, th, bind_def, ignore_bind_def,
          type_check_def, assert_def, check_def, lift_option_type_def,
          vyperStateTheory.return_def]) >>
   Cases_on `take_call_outcome (w2w aw) [] (SOME (w2n vw)) es` >>

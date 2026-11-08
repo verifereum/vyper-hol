@@ -156,7 +156,7 @@ Proof
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, get_transient_storage_def,
+       get_accounts_def, update_accounts_def, update_pending_deletions_def, get_transient_storage_def,
        lift_option_def, update_transient_def, append_logs_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
@@ -530,7 +530,7 @@ Proof
                   st1.accounts st1.tStorage (vyper_to_tx_params cx.txn)` >>
       simp[raise_def, return_def] >>
       rename1 `_ = SOME res` >> PairCases_on `res` >>
-      simp[check_def, assert_def, update_accounts_def, update_transient_def,
+      simp[check_def, assert_def, update_accounts_def, update_pending_deletions_def, update_transient_def,
            append_logs_def, return_def, raise_def] >>
       Cases_on `res0` >> simp[] >>
       strip_tac >> gvs[evaluation_state_component_equality]) >>
