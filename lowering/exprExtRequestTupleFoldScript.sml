@@ -89,7 +89,9 @@ Theorem extrequest_tuple_store_fold:
            (SUM (MAP (\(e,r,vv,ty,tv,v). type_memory_size tv) cells)) ==>
          mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
       ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
-      q.vs_inst_idx = LENGTH sb.cs_current_insts
+      q.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!x z. not_fresh_at sm x /\ lookup_var x s = SOME z ==>
+         lookup_var x q = SOME z)
 Proof
   Induct
   >- (simp[compile_extcall_store_values_def, comp_return_def] >>
@@ -182,6 +184,13 @@ Resume extrequest_tuple_store_fold[finish]:
     (first_assum irule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   `val_in_memory tv v (w2n w + off) q.vs_memory` by
     (metis_tac[val_in_memory_mem_agree, arithmeticTheory.LESS_EQ_REFL]) >>
+  `!x z. not_fresh_at sm x /\ lookup_var x s = SOME z ==>
+      lookup_var x q = SOME z` by
+    (map_every qx_gen_tac [`reg`, `word`] >> strip_tac >>
+     `not_fresh_at sh reg` by
+       (fs[ci_mono_def] >>
+        metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
   qexists_tac `q` >>
   conj_tac
   >- (`gas_marked_path F ctx func s 0 (OK h)` by fs[gas_marked_exec_def] >>

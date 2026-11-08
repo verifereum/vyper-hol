@@ -3,6 +3,7 @@ Theory exprExtRequestPayload
 Ancestors
   exprExtRequestPrefixOps exprExtRequestEncoderState exprExtRequestTupleWindow
   exprExtRequestReconstruct exprExtRequestHistoryCompose exprSafeOperand fragGasMode
+  exprExtRequestTupleFold exprExtRequestAllocationEndpoint loweringHalt
   valueEncoding valueEncodingProps valueEncodingProofs venomState venomExecSemantics
   vyperABI selectorDispatch list arithmetic
 
@@ -170,4 +171,61 @@ Proof
   qexists_tac `t` >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!aid q k. _` drule_all >>
   strip_tac >> first_x_assum irule >> simp[ADD_COMM]
+QED
+
+(* Capture root is immediately before the tuple allocation, after selector. *)
+Theorem extrequest_allocate_tuple_endpoint:
+  EVERY (extrequest_tuple_cell ctx func ce cx ee sa s ee) cells /\
+  sz = SUM (MAP (\(e,r,vv,ty,tv,v). type_memory_size tv) cells) /\
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  compile_extcall_store_values ce
+    (MAP (\(e,r,vv,ty,tv,v). (vv,ty)) cells) buf.buf_operand 0 sm = ((),sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce sa /\
+  ee.gas_obs = [] /\ sz < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?q w. gas_marked_path F ctx func s 0 (OK q) /\
+    stmt_state_rel ctx func ce cx ee q /\
+    extrequest_history_frame ce cx ee sa s ee sb q /\
+    eval_operand buf.buf_operand q = SOME w /\
+    tuple_in_memory (MAP (\(e,r,vv,ty,tv,v). v) cells)
+      (MAP (\(e,r,vv,ty,tv,v). tv) cells) (w2n w) q.vs_memory /\
+    FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+    w2n w + sz < dimword (:256) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved ce sb
+Proof
+  strip_tac >> drule_all extrequest_allocation_endpoint >> strip_tac >>
+  `safe_operand sm buf.buf_operand` by
+    (gvs[safe_operand_def] >> metis_tac[]) >>
+  `sa.cs_next_id < sm.cs_next_id` by
+    (drule compile_alloc_buffer_parts >> simp[]) >>
+  `!name tv v off.
+    ce.ce_is_ctor /\
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) (w2n w) sz` by
+    (rpt strip_tac >> qpat_x_assum `ce.ce_is_ctor ==> _` drule >>
+     disch_then drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  `sa.cs_next_id <= sa.cs_next_id /\ w2n w <= w2n w /\
+   w2n w + SUM (MAP (\(e,r,vv,ty,tv,v). type_memory_size tv) cells) <= w2n w + sz` by simp[] >>
+  `ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
+    regions_disjoint off (type_memory_size tv) (w2n w) sz` by metis_tac[] >>
+  drule_at (Pat `EVERY _ _`) extrequest_tuple_store_fold >>
+  disch_then (drule_at (Pat `compile_extcall_store_values _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `extrequest_history_frame _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
+  simp[] >> disch_then (qspec_then `sa.cs_next_id` mp_tac) >>
+  simp[] >> (impl_tac >- gvs[]) >> strip_tac >>
+  `eval_operand buf.buf_operand q = SOME w` by
+    (simp[eval_operand_def] >> first_x_assum irule >> gvs[eval_operand_def]) >>
+  `gas_marked_path F ctx func s 0 (OK q)` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  qexistsl_tac [`q`, `w`] >> simp[] >>
+  gvs[exprExtRequestHistoryTheory.extrequest_history_frame_def]
 QED
