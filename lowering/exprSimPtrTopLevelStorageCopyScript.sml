@@ -1389,7 +1389,7 @@ Proof
   qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `v = update_var dv (n2w (b+32*k)) u1` >>
   `step_inst_base j u1 = OK v` by
-    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`, step_inst_base_def,
+    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`, step_inst_base_opcode_eqs,
          mk_inst_def, exec_pure2_def, eval_operands_def, eval_operand_def,
          lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      gvs[lookup_var_def, GSYM word_add_n2w]) >>
