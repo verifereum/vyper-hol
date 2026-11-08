@@ -1267,6 +1267,69 @@ Proof
   drule_all mm_local_prefix_original_consumer >> simp[]
 QED
 
+Theorem mm_local_scan_lookup_step[local]:
+  FLOOKUP (scan_inst dfg mode ss inst).ss_loads v = SOME a ==>
+  FLOOKUP ss.ss_loads v = SOME a \/
+  (inst.inst_opcode = mode_load_opcode mode /\
+   ?w. inst.inst_operands = [Lit w] /\ inst.inst_outputs = [v] /\ a = w2n w)
+Proof
+  simp[scan_inst_def] >> IF_CASES_TAC
+  >- (simp[scan_load_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >>
+        gvs[hard_barrier_def, operand_lit_val_def]) >>
+      rpt IF_CASES_TAC >>
+      gvs[flush_copies_def, finite_mapTheory.FLOOKUP_UPDATE,
+          AllCaseEqs()] >> Cases_on `h` >>
+      gvs[operand_lit_val_def] >> metis_tac[]) >>
+  IF_CASES_TAC
+  >- (simp[scan_store_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >> gvs[hard_barrier_def]) >>
+      simp[flush_hazards_def] >> rpt IF_CASES_TAC >>
+      gvs[flush_copies_def, invalidate_loads_def,
+          finite_mapTheory.FLOOKUP_DRESTRICT, AllCaseEqs()]) >>
+  IF_CASES_TAC
+  >- (simp[scan_bulk_copy_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >> gvs[hard_barrier_def]) >>
+      simp[flush_hazards_def] >> rpt IF_CASES_TAC >>
+      gvs[flush_copies_def, invalidate_loads_def,
+          finite_mapTheory.FLOOKUP_DRESTRICT, AllCaseEqs()]) >>
+  IF_CASES_TAC >> simp[hard_barrier_def]
+QED
+
+Theorem mm_local_scan_lookup_fold[local]:
+  !xs ss v a.
+  FLOOKUP (FOLDL (scan_inst dfg mode) ss xs).ss_loads v = SOME a ==>
+  FLOOKUP ss.ss_loads v = SOME a \/
+  ?q w. MEM q xs /\ q.inst_opcode = mode_load_opcode mode /\
+    q.inst_operands = [Lit w] /\ q.inst_outputs = [v] /\ a = w2n w
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac
+  >- (drule mm_local_scan_lookup_step >> strip_tac >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem mm_local_scan_lookup_prefix[local]:
+  (!v a. FLOOKUP ss.ss_loads v = SOME a ==>
+    ?q w. MEM q pre /\ q.inst_opcode = mode_load_opcode mode /\
+      q.inst_operands = [Lit w] /\ q.inst_outputs = [v] /\ a = w2n w) ==>
+  !v a. FLOOKUP (FOLDL (scan_inst dfg mode) ss xs).ss_loads v = SOME a ==>
+    ?q w. MEM q (pre ++ xs) /\ q.inst_opcode = mode_load_opcode mode /\
+      q.inst_operands = [Lit w] /\ q.inst_outputs = [v] /\ a = w2n w
+Proof
+  rpt strip_tac >> drule mm_local_scan_lookup_fold >>
+  simp[MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem mm_local_scan_lookup_origin[local]:
+  FLOOKUP (FOLDL (scan_inst dfg mode) empty_scan_state xs).ss_loads v = SOME a ==>
+  ?q w. MEM q xs /\ q.inst_opcode = mode_load_opcode mode /\
+    q.inst_operands = [Lit w] /\ q.inst_outputs = [v] /\ a = w2n w
+Proof
+  strip_tac >> drule mm_local_scan_lookup_fold >>
+  simp[empty_scan_state_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
