@@ -43,6 +43,7 @@ Proof
       `(do r <- eval_expr cx (Call ty (IntCall fid) args drv);
            read_result cx r od) (es with gas_obs := g) = (INL v, es')` by
         (CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC) >>
+      `expr_sim_inv cenv cx env (es with gas_obs := g)` by simp[] >>
       drule_all exprSimHypsTheory.ifexp_intcall_read_physical_typed >>
       simp[]) >>
   `lowered_value_type cenv e = expr_type e` by
