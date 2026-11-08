@@ -2,6 +2,7 @@
 Theory entryDecoderBudgetBoundary
 Ancestors
   abiDecoderAllocation actualAllocCredit pred_set arithmetic words
+  fragExec vyperCompiler venomInst venomExecSemantics
 
 Theorem abi_decoder_ids_card:
   CARD (abi_decoder_ids first last) = last - first
@@ -33,4 +34,17 @@ Theorem weighted_credit_does_not_supply_dense_margin:
   ~(dimword (:256) - 32 + 32 * 1 < dimword (:256))
 Proof
   EVAL_TAC >> simp[]
+QED
+
+(* Containment at an empty endpoint does not certify the next opcode. *)
+Theorem empty_fragment_does_not_certify_exit_phi:
+  fn_has_code (initial_compile_state "exit") (initial_compile_state "exit")
+    (mk_raw_function "test"
+      [<|bb_label := "exit";
+         bb_instructions := [mk_inst 0 PHI [] ["x"]]|>]) /\
+  phi_prefix_length [mk_inst 0 PHI [] ["x"]] = 1
+Proof
+  simp[fn_has_code_def, initial_compile_state_def, emitted_blocks_def,
+    lookup_block_def, mk_raw_function_def, listTheory.FIND_thm,
+    phi_prefix_length_def, mk_inst_def]
 QED
