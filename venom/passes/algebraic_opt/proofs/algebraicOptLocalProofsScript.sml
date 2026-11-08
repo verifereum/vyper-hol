@@ -158,3 +158,119 @@ Proof
   gvs (local_opcode_eqs [``OR``]) >>
   gvs[exec_pure2_def] >> metis_tac[]
 QED
+
+(* The top set bit survives subtraction of one unless it was the only bit. *)
+Theorem ao_power_of_two_value:
+  !w:bytes32. is_power_of_two w ==>
+    w2n w = 2 ** LOG2 (w2n w)
+Proof
+  rpt strip_tac >>
+  gvs[passSharedDefsTheory.is_power_of_two_def] >>
+  `0 < w2n w` by metis_tac[arithmeticTheory.NOT_ZERO_LT_ZERO, wordsTheory.w2n_eq_0] >>
+  `LOG2 (w2n w) < 256` by
+    (drule wordsTheory.LOG2_w2n_lt >>
+     simp[fcpLib.INDEX_CONV ``dimindex(:256)``]) >>
+  `2 ** LOG2 (w2n w) <= w2n w /\
+   w2n w < 2 ** SUC (LOG2 (w2n w))` by
+    (drule logrootTheory.LOG2_PROPERTY >>
+     simp[GSYM bitTheory.LOG2_def]) >>
+  `w - 1w = n2w (w2n w - 1)` by
+    simp[wordsTheory.n2w_sub] >>
+  `w ' (LOG2 (w2n w))` by
+    (mp_tac (Q.SPECL [`w2n (w:bytes32)`, `LOG2 (w2n (w:bytes32))`]
+      (INST_TYPE [alpha |-> ``:256``] wordsTheory.word_index_n2w)) >>
+     simp[fcpLib.INDEX_CONV ``dimindex(:256)``, bitTheory.BIT_LOG2]) >>
+  `~BIT (LOG2 (w2n w)) (w2n w - 1)` by
+    (qpat_x_assum `word_and _ _ = _` (mp_tac o
+      Q.AP_TERM `word_bit (LOG2 (w2n w))`) >>
+     simp[wordsTheory.word_bit_def, wordsTheory.word_and_def,
+          fcpLib.INDEX_CONV ``dimindex(:256)``,
+          fcpTheory.FCP_BETA, wordsTheory.word_index,
+          wordsTheory.word_index_n2w, bitTheory.BIT_LOG2, bitTheory.BIT_ZERO]) >>
+  spose_not_then assume_tac >>
+  `2 ** LOG2 (w2n w) <= w2n w - 1` by decide_tac >>
+  `0 < w2n w - 1` by
+    (mp_tac (Q.SPEC `LOG2 (w2n (w:bytes32))` bitTheory.ZERO_LT_TWOEXP) >>
+     decide_tac) >>
+  `LOG2 (w2n w) <= LOG2 (w2n w - 1)` by
+    metis_tac[bitTheory.TWOEXP_LE_IMP_LE_LOG2] >>
+  `LOG2 (w2n w - 1) < SUC (LOG2 (w2n w))` by
+    (`w2n w - 1 < 2 ** SUC (LOG2 (w2n w))` by decide_tac >>
+     qpat_x_assum `w2n w - 1 < _` mp_tac >>
+     pure_rewrite_tac[bitTheory.LT_TWOEXP] >> simp[]) >>
+  `LOG2 (w2n w - 1) = LOG2 (w2n w)` by decide_tac >>
+  `w2n w - 1 <> 0` by decide_tac >>
+  drule bitTheory.BIT_LOG2 >> gvs[]
+QED
+
+Theorem ao_power_of_two_log:
+  !w:bytes32. is_power_of_two w ==>
+    w2n (passSharedDefs$word_log2 w) < 256 /\
+    w = n2w (2 ** w2n (passSharedDefs$word_log2 w))
+Proof
+  rpt strip_tac >>
+  `w <> 0w` by gvs[passSharedDefsTheory.is_power_of_two_def] >>
+  drule wordsTheory.LOG2_w2n_lt >>
+  simp[fcpLib.INDEX_CONV ``dimindex(:256)``] >> strip_tac >>
+  `LOG2 (w2n w) < dimword(:256)` by
+    (simp[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+     decide_tac) >>
+  drule ao_power_of_two_value >> strip_tac >>
+  simp[passSharedDefsTheory.word_log2_def] >>
+  metis_tac[wordsTheory.n2w_w2n]
+QED
+
+Theorem ao_power_of_two_mul:
+  !(x:bytes32) w. is_power_of_two w ==>
+    x * w = x << w2n (passSharedDefs$word_log2 w)
+Proof
+  rpt strip_tac >> drule ao_power_of_two_log >> strip_tac >>
+  rewrite_tac[wordsTheory.WORD_MUL_LSL] >>
+  metis_tac[wordsTheory.WORD_MULT_COMM]
+QED
+
+Theorem ao_power_of_two_div:
+  !(x:bytes32) w. is_power_of_two w ==>
+    safe_div x w = x >>> w2n (passSharedDefs$word_log2 w)
+Proof
+  rpt strip_tac >> drule ao_power_of_two_log >> strip_tac >>
+  `w <> 0w` by gvs[passSharedDefsTheory.is_power_of_two_def] >>
+  simp[safe_div_def] >>
+  `w2n (passSharedDefs$word_log2 w) < dimindex(:256)` by
+    simp[fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  drule wordsTheory.WORD_DIV_LSR >>
+  disch_then (qspec_then `x` mp_tac) >> metis_tac[]
+QED
+
+Theorem ao_power_of_two_mod:
+  !(x:bytes32) w. is_power_of_two w ==>
+    safe_mod x w = word_and x (w - 1w)
+Proof
+  rpt strip_tac >> drule ao_power_of_two_value >> strip_tac >>
+  `w <> 0w` by gvs[passSharedDefsTheory.is_power_of_two_def] >>
+  `0 < w2n w` by metis_tac[wordsTheory.w2n_eq_0,
+      arithmeticTheory.NOT_ZERO_LT_ZERO] >>
+  `w - 1w = n2w (w2n w - 1)` by simp[wordsTheory.n2w_sub] >>
+  simp[safe_mod_def, wordsTheory.word_mod_def] >>
+  qpat_x_assum `w2n w = _` (fn th => once_rewrite_tac[th]) >>
+  metis_tac[wordsTheory.WORD_AND_EXP_SUB1, wordsTheory.n2w_w2n]
+QED
+
+Theorem ao_safe_arithmetic_zero_one:
+  !x:bytes32.
+    safe_div x 0w = 0w /\ safe_div 0w x = 0w /\ safe_div x 1w = x /\
+    safe_mod x 0w = 0w /\ safe_mod 0w x = 0w /\ safe_mod x 1w = 0w /\
+    safe_sdiv x 0w = 0w /\ safe_sdiv 0w x = 0w /\ safe_sdiv x 1w = x /\
+    safe_smod x 0w = 0w /\ safe_smod 0w x = 0w /\ safe_smod x 1w = 0w
+Proof
+  gen_tac >> Cases_on `x = 0w` >>
+  simp[safe_div_def, safe_mod_def, safe_sdiv_def, safe_smod_def,
+       wordsTheory.word_div_def, wordsTheory.word_mod_def,
+       wordsTheory.word_quot_def, wordsTheory.word_rem_def,
+       wordsTheory.word_msb_n2w, bitTheory.BIT_ZERO,
+       wordsTheory.WORD_NEG_NEG] >>
+  Cases_on `word_msb x` >>
+  simp[wordsTheory.word_div_def, wordsTheory.word_mod_def,
+       wordsTheory.WORD_NEG_NEG, wordsTheory.w2n_eq_0,
+       fcpLib.INDEX_CONV ``dimindex(:256)``, bitTheory.BIT_DEF]
+QED
