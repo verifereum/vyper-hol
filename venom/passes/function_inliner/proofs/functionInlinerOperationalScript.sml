@@ -413,3 +413,337 @@ Proof
         venom_state_component_equality]) >>
   qexistsl [`s`, `t`] >> simp[]
 QED
+
+(* Exhaustive semantic classes for the ordinary (non-rewritten) fragment. *)
+Definition inline_pure1_opcode_def:
+  inline_pure1_opcode opc <=> MEM opc [ISZERO; NOT]
+End
+
+Definition inline_pure2_opcode_def:
+  inline_pure2_opcode opc <=>
+    MEM opc [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp;
+      EQ; LT; GT; SLT; SGT; AND; OR; XOR; SHL; SHR; SAR;
+      SIGNEXTEND; BYTE; OFFSET]
+End
+
+Definition inline_pure3_opcode_def:
+  inline_pure3_opcode opc <=> MEM opc [ADDMOD; MULMOD]
+End
+
+Definition inline_read0_opcode_def:
+  inline_read0_opcode opc <=>
+    MEM opc [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
+      COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
+      BLOBBASEFEE; SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE]
+End
+
+Definition inline_read1_opcode_def:
+  inline_read1_opcode opc <=>
+    MEM opc [MLOAD; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; BALANCE;
+      CALLDATALOAD; EXTCODESIZE; EXTCODEHASH; ILOAD; DLOAD]
+End
+
+Definition inline_effect_opcode_def:
+  inline_effect_opcode opc <=>
+    MEM opc [MSTORE; MSTORE8; MCOPY; SSTORE; TSTORE; ISTORE;
+      CALLDATACOPY; RETURNDATACOPY; DLOADBYTES; CODECOPY; EXTCODECOPY;
+      LOG; SELFDESTRUCT; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]
+End
+
+Definition inline_special_opcode_def:
+  inline_special_opcode opc <=>
+    MEM opc [GETFMP; INITIAL_FMP; BUMP; GAS; SHA3; NOP;
+      STOP; RETURN; REVERT; SINK; ASSERT; ASSERT_UNREACHABLE; INVALID]
+End
+
+Definition inline_ordinary_opcode_def:
+  inline_ordinary_opcode opc <=>
+    ~MEM opc [INVOKE; PHI; ASSIGN; PARAM; FMP_PARAM; RETPC_PARAM;
+      RET; RETFMP; JMP; JNZ; DJMP; ALLOCA; DALLOCA; DRET; SETFMP]
+End
+
+Theorem inline_ordinary_opcode_coverage:
+  inline_ordinary_opcode opc <=>
+    inline_pure1_opcode opc \/ inline_pure2_opcode opc \/
+    inline_pure3_opcode opc \/ inline_read0_opcode opc \/
+    inline_read1_opcode opc \/ inline_effect_opcode opc \/
+    inline_special_opcode opc
+Proof
+  Cases_on `opc` >> simp[inline_ordinary_opcode_def,
+    inline_pure1_opcode_def, inline_pure2_opcode_def, inline_pure3_opcode_def,
+    inline_read0_opcode_def, inline_read1_opcode_def,
+    inline_effect_opcode_def, inline_special_opcode_def]
+QED
+
+Theorem inline_pure2_opcode_dispatch:
+  inline_pure2_opcode inst.inst_opcode ==>
+  ?f. (!s. step_inst_base inst s = exec_pure2 f inst s) /\
+    (!s. step_inst_base (clone_instruction p labels inst) s =
+      exec_pure2 f (clone_instruction p labels inst) s)
+Proof
+  Cases_on `inst.inst_opcode` >>
+  simp[inline_pure2_opcode_def] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >>
+  metis_tac[]
+QED
+
+Theorem inline_pure2_opcode_clone_result:
+  inline_pure2_opcode inst.inst_opcode /\ inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  inline_ordinary_result
+    (inline_opaque_frame_rel ren (x INSERT V) opaque saved P)
+    (step_inst fuel ctx inst s)
+    (step_inst fuel' ctx' (clone_instruction p labels inst) t)
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (gvs[inline_pure2_opcode_def]) >>
+  drule inline_pure2_opcode_dispatch >>
+  disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  simp[step_inst_non_invoke] >>
+  irule inline_pure2_clone_result >> simp[]
+QED
+
+Theorem inline_pure1_opcode_dispatch:
+  inline_pure1_opcode inst.inst_opcode ==>
+  ?f. (!s. step_inst_base inst s = exec_pure1 f inst s) /\
+    (!s. step_inst_base (clone_instruction p labels inst) s =
+      exec_pure1 f (clone_instruction p labels inst) s)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[inline_pure1_opcode_def] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >> metis_tac[]
+QED
+
+Theorem inline_pure3_opcode_dispatch:
+  inline_pure3_opcode inst.inst_opcode ==>
+  ?f. (!s. step_inst_base inst s = exec_pure3 f inst s) /\
+    (!s. step_inst_base (clone_instruction p labels inst) s =
+      exec_pure3 f (clone_instruction p labels inst) s)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[inline_pure3_opcode_def] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >> metis_tac[]
+QED
+
+Theorem inline_read0_opcode_dispatch:
+  inline_read0_opcode inst.inst_opcode ==>
+  ?f. (!s. step_inst_base inst s = exec_read0 f inst s) /\
+    (!s. step_inst_base (clone_instruction p labels inst) s =
+      exec_read0 f (clone_instruction p labels inst) s) /\
+    (!s. f (inline_shared_frame s) = f s)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[inline_read0_opcode_def] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >>
+  qmatch_goalsub_abbrev_tac `exec_read0 reader inst` >>
+  qexists `reader` >>
+  simp[Abbr `reader`, inline_shared_frame_def, stateFrameTheory.execution_frame_def]
+QED
+
+Theorem inline_read1_opcode_dispatch:
+  inline_read1_opcode inst.inst_opcode ==>
+  ?f. (!s. step_inst_base inst s = exec_read1 f inst s) /\
+    (!s. step_inst_base (clone_instruction p labels inst) s =
+      exec_read1 f (clone_instruction p labels inst) s) /\
+    (!w s. f w (inline_shared_frame s) = f w s)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[inline_read1_opcode_def] >>
+  simp[clone_instruction_def, step_inst_base_opcode_eqs] >>
+  qmatch_goalsub_abbrev_tac `exec_read1 reader inst` >>
+  qexists `reader` >>
+  simp[Abbr `reader`, inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def]
+QED
+
+Theorem inline_pure13_opcode_clone_frame:
+  (inline_pure1_opcode inst.inst_opcode \/ inline_pure3_opcode inst.inst_opcode) /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x /\ step_inst fuel ctx inst s = OK s' ==>
+  ?t'. step_inst fuel' ctx' (clone_instruction p labels inst) t = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (gvs[inline_pure1_opcode_def, inline_pure3_opcode_def]) >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  gvs[step_inst_non_invoke] >>
+  Cases_on `inline_pure1_opcode inst.inst_opcode`
+  >- (drule inline_pure1_opcode_dispatch >>
+      disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+      gvs[] >> irule inline_pure1_clone_frame >> simp[] >>
+      qexists `s` >> simp[]) >>
+  gvs[] >> drule inline_pure3_opcode_dispatch >>
+  disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+  gvs[] >> irule inline_pure3_clone_frame >> simp[] >>
+  qexists `s` >> simp[]
+QED
+
+Theorem inline_read_opcode_clone_frame:
+  (inline_read0_opcode inst.inst_opcode \/ inline_read1_opcode inst.inst_opcode) /\
+  inst.inst_outputs = [x] /\
+  eval_operands (MAP (clone_operand p labels) inst.inst_operands) t =
+    eval_operands inst.inst_operands s /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x /\ step_inst fuel ctx inst s = OK s' ==>
+  ?t'. step_inst fuel' ctx' (clone_instruction p labels inst) t = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (gvs[inline_read0_opcode_def, inline_read1_opcode_def]) >>
+  `(clone_instruction p labels inst).inst_opcode <> INVOKE` by
+    simp[clone_instruction_def] >>
+  gvs[step_inst_non_invoke] >>
+  Cases_on `inline_read0_opcode inst.inst_opcode`
+  >- (drule inline_read0_opcode_dispatch >>
+      disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+      gvs[] >> irule inline_read0_clone_frame >>
+      metis_tac[]) >>
+  gvs[] >> drule inline_read1_opcode_dispatch >>
+  disch_then (qspecl_then [`p`, `labels`] strip_assume_tac) >>
+  gvs[] >> irule inline_read1_clone_frame >>
+  metis_tac[]
+QED
+
+Theorem inline_shared_frame_requests:
+  venom_call_request (inline_shared_frame s) addr value ao az static =
+    venom_call_request s addr value ao az static /\
+  venom_create_request (inline_shared_frame s) value off sz salt =
+    venom_create_request s value off sz salt
+Proof
+  simp[venomCallOracleDefsTheory.venom_call_request_def,
+    venomCallOracleDefsTheory.venom_create_request_def,
+    read_memory_def, inline_shared_frame_def, stateFrameTheory.execution_frame_def]
+QED
+
+Theorem inline_shared_frame_consume_call:
+  consume_call_outcome rq ro rz (inline_shared_frame s) =
+    (FST (consume_call_outcome rq ro rz s),
+     inline_shared_frame (SND (consume_call_outcome rq ro rz s)))
+Proof
+  simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    write_memory_with_expansion_def]
+QED
+
+Theorem inline_shared_frame_consume_create:
+  consume_create_outcome rq (inline_shared_frame s) =
+    (FST (consume_create_outcome rq s),
+     inline_shared_frame (SND (consume_create_outcome rq s)))
+Proof
+  simp[venomCallOracleDefsTheory.consume_create_outcome_eq,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def]
+QED
+
+Theorem inline_opaque_frame_consume_call:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  FST (consume_call_outcome rq ro rz s) = FST (consume_call_outcome rq ro rz t) /\
+  inline_opaque_frame_rel ren V opaque saved P
+    (SND (consume_call_outcome rq ro rz s)) (SND (consume_call_outcome rq ro rz t))
+Proof
+  strip_tac >>
+  `inline_shared_frame s = inline_shared_frame t` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `consume_call_outcome rq ro rz (inline_shared_frame s) =
+   consume_call_outcome rq ro rz (inline_shared_frame t)` by simp[] >>
+  pop_assum mp_tac >>
+  pure_rewrite_tac[inline_shared_frame_consume_call, pairTheory.PAIR_EQ] >> strip_tac >>
+  asm_rewrite_tac[] >> irule inline_opaque_frame_shared_effect >>
+  conj_tac >- asm_rewrite_tac[] >>
+  qexistsl [`s`, `t`] >> simp[venomCallOracleDefsTheory.consume_call_outcome_eq]
+QED
+
+Theorem inline_ext_call_clone_frame:
+  inst.inst_outputs = [x] /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x /\
+  exec_ext_call inst s gas addr value ao az ro rz static = OK s' ==>
+  ?t'. exec_ext_call (clone_instruction p labels inst) t
+      gas addr value ao az ro rz static = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  rpt strip_tac >>
+  `venom_call_request s addr value ao az static =
+    venom_call_request t addr value ao az static` by
+    metis_tac[inline_shared_frame_requests, inline_opaque_frame_rel_def,
+      inline_frame_rel_def] >>
+  drule inline_opaque_frame_consume_call >>
+  disch_then (qspecl_then [`w2n rz`,
+    `venom_call_request s addr value ao az static`, `w2n ro`] strip_assume_tac) >>
+  gvs[exec_ext_call_def, clone_instruction_def] >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  irule inline_opaque_frame_write_establish >> simp[]
+QED
+
+Theorem inline_opaque_frame_consume_create:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  FST (consume_create_outcome rq s) = FST (consume_create_outcome rq t) /\
+  inline_opaque_frame_rel ren V opaque saved P
+    (SND (consume_create_outcome rq s)) (SND (consume_create_outcome rq t))
+Proof
+  strip_tac >>
+  `inline_shared_frame s = inline_shared_frame t` by
+    gvs[inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  `consume_create_outcome rq (inline_shared_frame s) =
+   consume_create_outcome rq (inline_shared_frame t)` by simp[] >>
+  pop_assum mp_tac >>
+  pure_rewrite_tac[inline_shared_frame_consume_create, pairTheory.PAIR_EQ] >> strip_tac >>
+  asm_rewrite_tac[] >> irule inline_opaque_frame_shared_effect >>
+  conj_tac >- asm_rewrite_tac[] >>
+  qexistsl [`s`, `t`] >> simp[venomCallOracleDefsTheory.consume_create_outcome_eq]
+QED
+
+Theorem inline_create_clone_frame:
+  inst.inst_outputs = [x] /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x /\
+  exec_create inst s value off sz salt = OK s' ==>
+  ?t'. exec_create (clone_instruction p labels inst) t value off sz salt = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  rpt strip_tac >>
+  `venom_create_request s value off sz salt =
+    venom_create_request t value off sz salt` by
+    metis_tac[inline_shared_frame_requests, inline_opaque_frame_rel_def,
+      inline_frame_rel_def] >>
+  drule inline_opaque_frame_consume_create >>
+  disch_then (qspec_then `venom_create_request s value off sz salt` strip_assume_tac) >>
+  gvs[exec_create_def, clone_instruction_def, AllCaseEqs()] >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  irule inline_opaque_frame_write_establish >> simp[]
+QED
+
+Theorem inline_shared_frame_delegate_state:
+  make_venom_delegatecall_state (inline_shared_frame s) target gas data code static =
+    make_venom_delegatecall_state s target gas data code static
+Proof
+  simp[make_venom_delegatecall_state_def, venom_to_tx_params_def,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def]
+QED
+
+Theorem inline_extract_result_frame:
+  extract_venom_result (inline_shared_frame s) out ro rz rr =
+    OPTION_MAP (\(w,t). (w, inline_shared_frame t))
+      (extract_venom_result s out ro rz rr)
+Proof
+  namedCases_on `rr` ["", "pair"] >> simp[extract_venom_result_def] >>
+  PairCases_on `pair` >> simp[] >>
+  Cases_on `pair1.contexts` >> simp[] >>
+  rename1 `head::tail` >> Cases_on `tail` >> simp[] >>
+  PairCases_on `head` >>
+  simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    write_memory_with_expansion_def] >>
+  pairarg_tac >> simp[]
+QED
