@@ -810,3 +810,62 @@ Proof
   disch_then (qspecl_then [`bb`,`v`,`0`] mp_tac) >>
   gvs[elem_count_zero_iff, indicator_zero_iff] >> metis_tac[]
 QED
+
+(* A selected physical cell, unlike mere PHI operand membership, consumes
+   the entire unit resource budget. Reuse the existing PHI erasure boundary. *)
+Theorem generate_phi_plan_selected_unit_extinction:
+  !inst ps d v next halting ops qs.
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+    stack_peek d ps.ps_stack = Var v /\
+    ~MEM v next /\ v <> HD inst.inst_outputs /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 /\
+    generate_phi_plan inst next halting ps = (ops,qs) ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (Var v) ps.ps_stack` by
+    (fs[stack_get_phi_depth_def] >>
+     drule planAlignTheory.stack_find_bound >> strip_tac >>
+     fs[stack_peek_def] >>
+     `LENGTH ps.ps_stack - (d+1) < LENGTH ps.ps_stack` by decide_tac >>
+     metis_tac[EL_MEM]) >>
+  `0 < LIST_ELEM_COUNT (Var v) ps.ps_stack` by
+    metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF] >>
+  `Var v NOTIN FDOM ps.ps_spilled` by
+    (strip_tac >> gvs[] >> decide_tac) >>
+  `LENGTH (FILTER (\op. op = Var v) ps.ps_stack) = 1` by
+    (fs[LIST_ELEM_COUNT_DEF] >> decide_tac) >>
+  irule fnPlanLineagePhiResourcesTheory.dead_phi_selected_erased >>
+  qexistsl_tac [`d`,`halting`,`inst`,`next`,`ops`,`ps`] >> simp[]
+QED
+
+(* D describes the actual incoming path demand. Selection on demand loss
+   is explicit: union-of-alternatives PHI liveness alone cannot supply it. *)
+Theorem generate_phi_plan_observer_demand_transport:
+  !inst ps v next halting ops qs D.
+    v <> HD inst.inst_outputs /\
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==> D v) /\
+    (D v /\ ~MEM v next ==>
+      ?d. stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+          stack_peek d ps.ps_stack = Var v) /\
+    generate_phi_plan inst next halting ps = (ops,qs) ==>
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==> MEM v next)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `MEM v next` >- simp[] >>
+  Cases_on `MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled`
+  >- (`D v` by metis_tac[] >>
+      `?d. stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+           stack_peek d ps.ps_stack = Var v` by metis_tac[] >>
+      drule_all generate_phi_plan_selected_unit_extinction >> simp[]) >>
+  `LIST_ELEM_COUNT (Var v) ps.ps_stack +
+    (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 0` by
+    (simp[resource_zero_iff_absent] >> metis_tac[]) >>
+  drule_all generate_phi_plan_nondefining_resource_nonincrease >>
+  simp[] >> strip_tac >>
+  `LIST_ELEM_COUNT (Var v) qs.ps_stack +
+    (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 0` by gvs[] >>
+  fs[resource_zero_iff_absent]
+QED
