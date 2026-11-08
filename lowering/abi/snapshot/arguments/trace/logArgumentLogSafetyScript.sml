@@ -183,7 +183,7 @@ Theorem log_ready_arguments_empty_safe:
 Proof
   rpt gen_tac >>
   disch_then (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
-  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[] >>
+  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[expr_can_mutate_def] >>
   `abi_request_reservation reserved requests ss` by (drule_all abi_request_credit_reservation >> simp[]) >>
   `ss.vs_alloca_next < dimword(:256)` by
     (qspecl_then [`reserved`, `MAP FST requests`, `ss`, `0`] mp_tac abi_alloca_budget_request_room >>
