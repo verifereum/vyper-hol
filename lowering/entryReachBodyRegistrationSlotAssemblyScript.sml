@@ -88,13 +88,13 @@ Theorem entry_selected_slot_run:
     (TAKE i (MAP (vyper_to_abi_type (type_env tops)) (MAP SND args)))) /\
   fn_has_code start final fn /\ cs_extends final entry_end /\
   fn = mk_raw_function "__entry" (all_blocks entry_end) /\ fn_inst_ids_distinct fn /\
-  i < LENGTH args /\ entry_prefix_witness (type_env tops) args tx.args i cei st s /\
+  i < LENGTH args /\ entry_prefix_witness fn (type_env tops) args tx.args i cei st s /\
   alloca_inv s /\ alloca_frontier_inv unit.cu_context fn site s /\
   abi_alloca_history (fn_insts fn) s /\ fresh_vars_wrt final s /\
   (!id r. FLOOKUP s.vs_allocas id = SOME r ==> id < st.cs_next_id) /\
   entry_loop_fields vs s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t. entry_prefix_witness (type_env tops) args tx.args (SUC i) cei1 last t /\
+  ?t. entry_prefix_witness fn (type_env tops) args tx.args (SUC i) cei1 last t /\
     alloca_inv t /\ alloca_frontier_inv unit.cu_context fn site t /\
     abi_alloca_history (fn_insts fn) t /\ fresh_vars_wrt final t /\
     (!id r. FLOOKUP t.vs_allocas id = SOME r ==> id < last.cs_next_id) /\
@@ -195,11 +195,23 @@ Resume entry_selected_slot_run[prefix]:
   `val_wf tv (EL i tx.args)` by
     (irule valueTypingMemoryPropsTheory.value_has_type_memory_wf >>
      fs[entry_source_metadata_def]) >>
-  `entry_slot_witness (type_env tops) args tx.args i cei1 last t` by
-    (irule entry_slot_witness_new >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> decide_tac) >>
-  `!j. j < i ==> entry_slot_witness (type_env tops) args tx.args j cei1 last t` by
+  `t.vs_alloca_next < dimword (:256)` by
+    (irule allocaFrontierBoundTheory.alloca_frontier_inv_bound >>
+     fs[array_child_result_def] >> metis_tac[]) >>
+  `root < dimword (:256)` by
+    (fs[array_child_result_def, entryReachBodyOwnedRegionTheory.entry_owned_region_def,
+        venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
+     first_x_assum drule >> decide_tac) >>
+  `?vname ins. buf.buf_operand = Var vname /\
+    MEM ins (fn_insts (mk_raw_function "__entry" (all_blocks entry_end))) /\
+    ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
+    ins.inst_id = st.cs_next_id` by
+    (suspend "provenance") >>
+  `entry_slot_witness (mk_raw_function "__entry" (all_blocks entry_end)) (type_env tops) args tx.args i cei1 last t` by
+    (irule entry_slot_witness_new >>
+     qpat_assum `array_child_result _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[] >> goal_assum (drule_at Any) >> simp[] >> fs[] >> decide_tac) >>
+  `!j. j < i ==> entry_slot_witness (mk_raw_function "__entry" (all_blocks entry_end)) (type_env tops) args tx.args j cei1 last t` by
     (rpt strip_tac >> irule entry_slot_witness_old >>
      qpat_assum `compile_register_positional_args cei [_] _ _ = _` (irule_at Any) >>
      qpat_assum `array_child_result _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
@@ -218,6 +230,11 @@ Resume entry_selected_slot_run[prefix]:
   qexists_tac `t` >> simp[] >>
   conj_tac >- (irule entry_prefix_witness_step >> simp[]) >>
   rpt strip_tac >> first_x_assum irule >> simp[] >> qexists_tac `fuel` >> simp[]
+QED
+
+Resume entry_selected_slot_run[provenance]:
+  drule_all calldataRegistrationTheory.register_singleton_alloca_output >> strip_tac >>
+  gvs[] >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Finalise entry_selected_slot_run

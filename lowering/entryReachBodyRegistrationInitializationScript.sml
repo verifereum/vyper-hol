@@ -25,7 +25,7 @@ Theorem entry_registration_initial_endpoint:
   fn_has_code st last fn /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ LENGTH values = LENGTH args ==>
-  ?t. entry_prefix_witness env args values 0 ce last t /\
+  ?t. entry_prefix_witness fn env args values 0 ce last t /\
     fresh_vars_wrt limit t /\ alloca_inv t /\
     abi_alloca_history (fn_insts fn) t /\
     alloca_frontier_inv unit.cu_context fn site t /\

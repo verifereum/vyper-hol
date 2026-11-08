@@ -30,7 +30,7 @@ Theorem entry_registration_prefix_run:
   compile_guarded_body cef F key ut view fbody rt registered = ((),final) /\
   fn_has_code start final fn /\ cs_extends final entry_end /\
   fn = mk_raw_function "__entry" (all_blocks entry_end) /\ fn_inst_ids_distinct fn /\
-  entry_prefix_witness (type_env tops) args tx.args 0 ce start s /\
+  entry_prefix_witness fn (type_env tops) args tx.args 0 ce start s /\
   alloca_inv s /\ alloca_frontier_inv unit.cu_context fn site s /\
   abi_alloca_history (fn_insts fn) s /\ fresh_vars_wrt final s /\
   (!id r. FLOOKUP s.vs_allocas id = SOME r ==> id < start.cs_next_id) /\
@@ -38,7 +38,7 @@ Theorem entry_registration_prefix_run:
   s.vs_current_bb = start.cs_current_bb /\ s.vs_inst_idx = LENGTH start.cs_current_insts ==>
   !i cei sti. i <= LENGTH args /\
     compile_register_positional_args ce (TAKE i pos) 4 start = (cei,sti) ==>
-  ?t. entry_prefix_witness (type_env tops) args tx.args i cei sti t /\
+  ?t. entry_prefix_witness fn (type_env tops) args tx.args i cei sti t /\
     alloca_inv t /\ alloca_frontier_inv unit.cu_context fn site t /\
     abi_alloca_history (fn_insts fn) t /\ fresh_vars_wrt final t /\
     (!id r. FLOOKUP t.vs_allocas id = SOME r ==> id < sti.cs_next_id) /\
@@ -72,7 +72,7 @@ Resume entry_registration_prefix_run[successor]:
      qpat_assum `compile_register_positional_args ce (TAKE i pos) _ _ = _` (irule_at Any) >>
      qpat_assum `compile_register_positional_args cei' [_] _ _ = _` (irule_at Any) >> simp[]) >>
   gvs[] >>
-  `?u. entry_prefix_witness (type_env tops) args tx.args (SUC i) cei sti u /\
+  `?u. entry_prefix_witness (mk_raw_function "__entry" (all_blocks entry_end)) (type_env tops) args tx.args (SUC i) cei sti u /\
     alloca_inv u /\ alloca_frontier_inv unit.cu_context
       (mk_raw_function "__entry" (all_blocks entry_end)) site u /\
     abi_alloca_history (fn_insts (mk_raw_function "__entry" (all_blocks entry_end))) u /\
@@ -87,7 +87,7 @@ Resume entry_registration_prefix_run[successor]:
     (irule entry_selected_slot_run >>
      qpat_assum `compile_register_positional_args cei' [_] _ _ = _` (irule_at Any) >>
      qpat_assum `compile_register_positional_args ce (TAKE i pos) _ _ = _` (irule_at Any) >>
-     qpat_assum `entry_prefix_witness _ _ _ i _ _ t` (irule_at Any) >>
+     qpat_assum `entry_prefix_witness _ _ _ _ i _ _ t` (irule_at Any) >>
      qpat_assum `set_external_package_target _ _ = _` (irule_at Any) >>
      qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
      qpat_assum `source_typing_ok _ _ _` (irule_at Any) >>
@@ -121,13 +121,13 @@ Theorem entry_registration_full_run:
   compile_guarded_body cef F key ut view fbody rt registered = ((),final) /\
   fn_has_code start final fn /\ cs_extends final entry_end /\
   fn = mk_raw_function "__entry" (all_blocks entry_end) /\ fn_inst_ids_distinct fn /\
-  entry_prefix_witness (type_env tops) args tx.args 0 ce start s /\
+  entry_prefix_witness fn (type_env tops) args tx.args 0 ce start s /\
   alloca_inv s /\ alloca_frontier_inv unit.cu_context fn site s /\
   abi_alloca_history (fn_insts fn) s /\ fresh_vars_wrt final s /\
   (!id r. FLOOKUP s.vs_allocas id = SOME r ==> id < start.cs_next_id) /\
   entry_loop_fields vs s /\ ~s.vs_halted /\
   s.vs_current_bb = start.cs_current_bb /\ s.vs_inst_idx = LENGTH start.cs_current_insts ==>
-  ?t. entry_prefix_witness (type_env tops) args tx.args (LENGTH args) cef registered t /\
+  ?t. entry_prefix_witness fn (type_env tops) args tx.args (LENGTH args) cef registered t /\
     alloca_inv t /\ alloca_frontier_inv unit.cu_context fn site t /\
     abi_alloca_history (fn_insts fn) t /\ fresh_vars_wrt final t /\
     (!id r. FLOOKUP t.vs_allocas id = SOME r ==> id < registered.cs_next_id) /\
@@ -145,7 +145,7 @@ Proof
   qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `lower_vyper_runtime_unit _ _ = _` (irule_at Any) >>
   qpat_assum `source_typing_ok _ _ _` (irule_at Any) >>
-  qpat_assum `entry_prefix_witness _ _ _ 0 _ _ s` (irule_at Any) >>
+  qpat_assum `entry_prefix_witness _ _ _ _ 0 _ _ s` (irule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `LENGTH pos = LENGTH args` (SUBST1_TAC o SYM) >> simp[]
 QED
