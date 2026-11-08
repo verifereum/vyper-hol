@@ -30,6 +30,12 @@ Ancestors
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
 
+Theorem vars_pc_only_gas_readings:
+  !s t. vars_pc_only s t ==> t.vs_gas_readings = s.vs_gas_readings
+Proof
+  rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
+QED
+
 (* Entry-to-registration prefix seam.
    Hints (not binding):
    - Code: source_selected_entry_check_code and source_selected_body_code
@@ -86,6 +92,7 @@ Theorem external_entry_reaches_registration_ptr:
       vars_pc_only
         (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
                     vs_inst_idx := 0 |>) s1 /\
+      s1.vs_gas_readings = vs.vs_gas_readings /\
       fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
       s1.vs_current_bb = st.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -178,6 +185,11 @@ Resume external_entry_reaches_registration_ptr[checks]:
   qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `u`, `G2`, `tn2`] >>
   simp[entry_taint_def] >>
   (conj_tac >- metis_tac[vars_pc_only_trans]) >>
+  (conj_tac >-
+    (`vars_pc_only (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                               vs_inst_idx := 0 |>) u`
+       by metis_tac[vars_pc_only_trans] >>
+     drule vars_pc_only_gas_readings >> simp[])) >>
   all_tac >>
   `cs_extends opened st` by
     (qspec_then `pkg3` (qspec_then `mut = Payable` mp_tac) compile_entry_checks_shape >>
