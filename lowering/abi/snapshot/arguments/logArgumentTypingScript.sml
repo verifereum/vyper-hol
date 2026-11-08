@@ -40,7 +40,11 @@ Theorem checked_expr_event_arg_compatible:
     well_typed_expr env e /\ event_arg_compatible fty (expr_type e) ==>
     event_arg_compatible fty (lowered_value_type cenv e)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `e` >> fs[expr_type_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `e` >> fs[expr_type_def]
+  >~ [`Builtin _ b _`]
+  >- (Cases_on `b` >>
+      FIRST [irule concat_event_arg_compatible >> fs[Once well_typed_expr_def],
+        simp[lowered_value_type_def, expr_type_def]]) >>
   FIRST [irule literal_event_arg_compatible >> fs[Once well_typed_expr_def],
     drule_all checked_type_builtin_event_arg_compatible >> simp[],
     simp[lowered_value_type_def, expr_type_def]]

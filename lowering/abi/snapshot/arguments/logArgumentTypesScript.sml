@@ -74,6 +74,24 @@ Proof
          fs[well_typed_literal_def]]
 QED
 
+Theorem concat_event_arg_compatible:
+  !cenv fty ty n args.
+    well_typed_builtin_app ty (Concat n) (MAP expr_type args) /\ event_arg_compatible fty ty ==>
+    event_arg_compatible fty (lowered_value_type cenv (Builtin ty (Concat n) args))
+Proof
+  rpt gen_tac >> simp_tac bool_ss [well_typed_builtin_app_def] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  `MAP bytelike_type_bound (MAP expr_type args) = MAP concat_payload_capacity (MAP expr_type args)` by
+    (irule concat_payload_capacity_bound >> fs[EVERY_MEM]) >>
+  `SUM (MAP (concat_payload_capacity o expr_type) args) <= n` by
+    (qpat_x_assum `SUM _ <= n` mp_tac >>
+     qpat_x_assum `MAP _ _ = MAP _ _` (fn th => REWRITE_TAC [th, GSYM MAP_MAP_o])) >>
+  simp[lowered_value_type_def, concat_buffer_type_def] >>
+  FIRST [MATCH_MP_TAC (CONJUNCT1 event_arg_compatible_bytestring_narrow),
+         MATCH_MP_TAC (CONJUNCT2 event_arg_compatible_bytestring_narrow)] >>
+  qexists_tac `n` >> conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem abi_encode_source_argument_type:
   !args ensure.
     (case TupleT (MAP expr_type args) of

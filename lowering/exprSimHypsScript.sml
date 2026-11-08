@@ -853,16 +853,6 @@ Proof
   simp[return_def, raise_def, bind_def, ignore_bind_def]
 QED
 
-Theorem concat_payload_capacity_bound:
-  !ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
-       MAP bytelike_type_bound ts = MAP concat_payload_capacity ts
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  gvs[bytelike_type_bound_def, concat_payload_capacity_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[bound_length_def, concat_payload_capacity_def]
-QED
-
 Theorem concat_map_ctor_11:
   (!l1 l2. MAP BytesV l1 = MAP BytesV l2 <=> l1 = l2) /\
   (!l1 l2. MAP StringV l1 = MAP StringV l2 <=> l1 = l2)
