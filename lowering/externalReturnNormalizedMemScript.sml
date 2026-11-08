@@ -4,6 +4,7 @@ Ancestors
   externalReturnDirectMem externalReturnNormalizeRun externalNormalizePremises
   externalReturnSelectedMetadata externalReturnEncoderSuffixMem
   stmtSimReturnWiden typedStoreEndpoint externalReturnPrefix returnValueTyped
+  incompatibleReturnLayout
   vyperTypeSystem stmtLowering exprLoweringProps loweringPosts
   exprSimDefs vyperTypeArgFits compileEnv typedNormalizeEntryBoundary
   stmtLoweringMono fragExec exprOperandVar externalReturnRegisteredWindowMem
@@ -74,7 +75,6 @@ Theorem external_frame_ret_value_normalized_run_mem:
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa0) ==>
     !cenv' env lctx e es sa sb cenv'' s0 op s1 ee v t.
        same_frame cenv cenv' /\
-       post_value_type cenv' e = lowered_value_type cenv' e /\
        expr_sim_inv cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
        stmt_exprs_ok cenv' (Return (SOME e)) /\
@@ -116,6 +116,19 @@ Proof
   drule_all external_package_frame_exit >> strip_tac >>
   qmatch_asmsub_abbrev_tac `expr_post ctx func cenv' cx` >>
   qpat_x_assum `?gs ee'. _` strip_assume_tac >>
+  `post_value_type cenv' e = lowered_value_type cenv' e` by
+    (`well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) ret` by
+       (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+        simp[type_stmt_def, AllCaseEqs()]) >>
+     Cases_on `lowered_value_type cenv' e = expr_type e \/
+       is_bytestring_type (expr_type e) /\
+       is_bytestring_type (lowered_value_type cenv' e) /\
+       arg_type_fits (lowered_value_type cenv' e) (expr_type e)`
+     >- (pop_assum strip_assume_tac
+         >- metis_tac[post_value_type_lowered] >>
+         metis_tac[type_widens_from_bytestring]) >>
+     drule_all incompatible_return_layout_intcall >> strip_tac >>
+     simp[post_value_type_def]) >>
   drule_all return_value_physical_typed >> strip_tac >>
   `~(is_bytestring_type ret /\
      is_bytestring_type (lowered_value_type cenv' e))` by metis_tac[] >>

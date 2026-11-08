@@ -81,7 +81,9 @@ Theorem external_frame_ret_widened_call_mem:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all external_package_frame_internal_maps >> strip_tac >>
+  `well_typed_expr env e` by
+    (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def, AllCaseEqs()]) >>
   drule_all incompatible_return_layout_intcall >> strip_tac >>
   qpat_x_assum `e = _` SUBST_ALL_TAC >>
   `expr_type (Call ann (IntCall fid) xs drv) = ann` by simp[expr_type_def] >>
@@ -96,9 +98,6 @@ Proof
           vyperTypeInvariantsTheory.env_context_consistent_def]) >>
      qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
      simp[type_stmt_def, AllCaseEqs()]) >>
-  `post_value_type cenv' (Call ann (IntCall fid) xs drv) =
-   lowered_value_type cenv' (Call ann (IntCall fid) xs drv)` by
-    simp[post_value_type_def] >>
   `~is_word_type ret` by metis_tac[typed_copy_word_widening] >>
   `~(is_bytestring_type
        (lowered_value_type cenv' (Call ann (IntCall fid) xs drv)) /\
