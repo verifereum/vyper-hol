@@ -17,6 +17,22 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* TEMPORARILY CHEATED - the posts now state vv_holds at post_value_type,
+   which for a widened IntCall is lowered_value_type, the call's located
+   type.  Such returns now have real normal outcomes, so the vacuity
+   through return_located_mismatch_mem no longer applies; the return
+   sequence still needs a real memory-safety proof on a value laid out at
+   the internal function's return type.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all external_package_frame_internal_maps >> strip_tac >>
+  irule return_located_mismatch_mem >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  irule incompatible_return_layout_located >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+*)
 Theorem external_frame_ret_widened_call_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env0 lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa0 func.
@@ -56,22 +72,6 @@ Theorem external_frame_ret_widened_call_mem:
          (stmt_env cenv' lctx ret (Return (SOME e)))
          (eval_stmt (initial_evaluation_context am.sources am.layouts tx NONE)
            (Return (SOME e))) es
-(* TEMPORARILY CHEATED - the posts now state vv_holds at post_value_type,
-   which for a widened IntCall is lowered_value_type, the call's located
-   type.  Such returns now have real normal outcomes, so the vacuity
-   through return_located_mismatch_mem no longer applies; the return
-   sequence still needs a real memory-safety proof on a value laid out at
-   the internal function's return type.
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all external_package_frame_internal_maps >> strip_tac >>
-  irule return_located_mismatch_mem >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  irule incompatible_return_layout_located >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-*)
 Proof
   cheat
 QED
