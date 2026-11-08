@@ -35,6 +35,23 @@ Proof
       AllCaseEqs()]
 QED
 
+Theorem call_external_nonpayable_gas[local]:
+  source_deployment_rel tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut, F, args, [], ret, fbody) /\
+  mut <> Payable /\ tx.value <> 0 ==>
+  !gobs gobs'.
+    call_external orc gobs am tx = call_external orc gobs' am tx
+Proof
+  rw[source_deployment_rel_def] >>
+  simp[call_external_def, find_function_module_def,
+       lookup_exported_function_def, get_self_code_def, get_module_code_def,
+       initial_evaluation_context_def] >>
+  gvs[call_external_function_def, bind_def, ignore_bind_def, return_def,
+      send_call_value_def, check_def, assert_def, LET_THM] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[])
+QED
+
 (* When the source cannot move the call value (a nonpayable function
    called with value), the run from __entry reaches the selected
    function's entry checks (external_entry_reaches_checks), which abort
@@ -87,8 +104,14 @@ Proof
   impl_tac >- simp[] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
-  simp[source_unit_execution_correct_def, source_unit_execution_correct_at_def] >>
-  qexists_tac `[]` >> disj2_tac >>
+  simp[source_unit_execution_correct_def] >>
+  qexists_tac `[]` >> conj_tac
+  >~ [`!tail. call_external _ (gs ++ tail) _ _ = _`]
+  >- (gen_tac >>
+      irule call_external_nonpayable_gas >> simp[] >>
+      qexistsl_tac [`args`, `fbody`, `mut`, `ret`, `tops`] >> simp[]) >>
+  simp[source_unit_execution_correct_at_def] >>
+  disj2_tac >>
   first_x_assum (qspecl_then [`fuel`, `Abort Revert_abort t`] mp_tac) >>
   simp[] >> strip_tac >> qexists_tac `fuel'` >> gvs[]
 QED
