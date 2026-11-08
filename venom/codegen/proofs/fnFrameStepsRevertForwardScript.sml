@@ -7,7 +7,7 @@ Ancestors
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
-  fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady
+  fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady inputMaterialised livenessProofs operandInventory reorderStages
 
 Theorem resolve_block_assigns_cong:
   !insts at h.

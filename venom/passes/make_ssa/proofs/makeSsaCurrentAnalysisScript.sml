@@ -3,7 +3,7 @@ Theory makeSsaCurrentAnalysis
 Ancestors
   makeSsaCurrentDefs makeSsaDefs cfgAnalysisProps cfgHelpers dominatorProofs
   dominatorQueryProofs dominatorRankProofs makeSsaCurrentTree dominatorDefs
-  venomWf cfgWf cfgDefs venomInst venomExecProps relation list sorting
+  venomWf cfgWf cfgDefs venomInst venomExecProps relation list sorting cfgCorrectnessProof
 
 Theorem current_cfg_edge_succs:
   wf_function fn ==>

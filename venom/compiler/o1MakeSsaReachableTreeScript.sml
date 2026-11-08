@@ -2,7 +2,7 @@ Theory o1MakeSsaReachableTree
 Ancestors
   o1MakeSsaRootedTree dominatorRankProofs o1MakeSsaActualMaps
   dominatorProofs dominatorDefs cfgAnalysisProps cfgDefs venomInst
-  makeSsaCurrentDefs list pred_set
+  makeSsaCurrentDefs list pred_set cfgCorrectnessProof
 
 Theorem reachable_parent_chain:
   wf_function fn /\ entry_block fn = SOME bb ==>

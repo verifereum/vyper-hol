@@ -4,7 +4,7 @@ Ancestors
   fnFrameTerminalPrep preparedPrefixSim asmFrame strongPrefixSim prefixSim stackOpSim
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
-  venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map callLayoutDefs list rich_list reorderSim planWf stackModel
+  venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map callLayoutDefs list rich_list reorderSim planWf stackModel reduceDepthSim
 
 Theorem release_dead_spills_stack:
   (release_dead_spills nl ps).ps_stack = ps.ps_stack

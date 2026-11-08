@@ -27,7 +27,7 @@ Ancestors
   makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
   makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
   makeSsaCurrentInduct makeSsaDefs makeSsaCurrentSelectedLive cfgDefs cfgHelpers finite_map
-  ssaPipeline codegenReadyCompute makeSsaCurrentCfg
+  ssaPipeline codegenReadyCompute makeSsaCurrentCfg livenessProofs venomFnInstsProofs
 Libs
   rich_listTheory
 

@@ -11,7 +11,7 @@ Theory fnPlanLineageJoin
 Ancestors
   fnLineageInv fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
   cfgAnalysisProps venomWf venomInst list rich_list simplifyCfgDefs
-  livenessConvergenceProofs livenessBlockProofs livenessTransferProofs
+  livenessConvergenceProofs livenessBlockProofs livenessTransferProofs cfgCorrectnessProof dfHelperProofs
 
 Theorem join_predecessor_jmp_shape:
   !fn pred pb bb.

@@ -5,7 +5,7 @@ Ancestors
   makeSsaCurrentSelectedLive makeSsaCurrentOccurrence makeSsaCurrentLastSite
   makeSsaCurrentDominanceBridge makeSsaCurrentAnalysis makeSsaCurrentDefs
   livenessTransferProofs livenessDefs venomWf venomInst venomExecProps cfgWf dominatorDefs
-  list alist
+  list alist cfgCorrectnessProof
 
 Theorem current_phi_operand_single_bound:
   fn_phi_operands_single_def fn /\
@@ -50,7 +50,7 @@ Proof
   `blocks_have_leading_phi fn.fn_blocks` by
     metis_tac[current_phi_operand_has_leading_phi] >>
   `MEM b (fn_labels fn)` by
-    metis_tac[current_cfg_edge_succs, cfgAnalysisPropsTheory.cfg_analyze_succ_labels] >>
+    metis_tac[current_cfg_edge_succs, cfgCorrectnessProofTheory.cfg_analyze_succ_labels] >>
   `fn_reachable fn b` by
     (gvs[all_reachable_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
   `?bb. lookup_block b fn.fn_blocks = SOME bb` by

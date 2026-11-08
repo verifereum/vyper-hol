@@ -4,7 +4,7 @@ Ancestors
   stackPlanGen stackPlanOps allocMono frameViewFacts frameViewMemory
   contextCodegenRel list venomWf finite_map planWf stackModel
   codegenRel asmFrame venomInst venomEffects asmIR genBlockSim stackOpSim reorderSim
-  frameRel planExec asmSem venomState regularMemorySim stackOpAsmSim
+  frameRel planExec asmSem venomState regularMemorySim stackOpAsmSim memoryReadRel
 
 (* Empty outputs eliminate both postfix phases.  Keep the arranged planner
    as the semantic boundary, so prefix simulation needs no shadow-state

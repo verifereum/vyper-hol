@@ -24,7 +24,7 @@ Ancestors
   genericInputReady reorderSim doSwapSim codegenRel asmSem planExec
   stackPlanGen stackPlanOps stackPlanTypes stackModel blockSimHelpers planWf planSpillBounds foldlSim
   reorderSpillFresh prefixSpillReplay scratchPrefixSim spillSim stackOpSim
-  list rich_list finite_map arithmetic
+  list rich_list finite_map arithmetic inputPlanSim reorderStages
 Libs BasicProvers
 
 Definition residual_budget_wf_marked_def:

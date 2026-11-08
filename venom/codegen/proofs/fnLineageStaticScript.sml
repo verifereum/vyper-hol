@@ -21,7 +21,7 @@ Ancestors
   codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
   relation list finite_map dominatorProofs cfgAnalysisProps
   removeUnusedSsaProofs cfgNormBase livenessProofs livenessTransferProofs
-  fnFrameStepsRevertForward dominatorProofs dfgAnalysisProps
+  fnFrameStepsRevertForward dominatorProofs dfgAnalysisProps cfgCorrectnessProof dfHelperProofs
 
 Theorem lineage_state_entry_cases[local]:
   lineage_state liveness dfg cfg fn ps0 lbl ps ==>

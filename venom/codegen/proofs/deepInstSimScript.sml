@@ -21,7 +21,7 @@ Ancestors
   doSwapSim mixedPrefixSim codegenRel blockSimHelpers planSpillBounds
   stackOpSim stackModel stackPlanGen stackPlanOps stackPlanTypes planExec
   asmSem venomExecSemantics venomState venomInst
-  sorting list rich_list arithmetic
+  sorting list rich_list arithmetic spillPlanSim
 
 (* regularPostfixSim's regular_generated_postfix_sim_structural on the
    numeric do_swap simulation. *)

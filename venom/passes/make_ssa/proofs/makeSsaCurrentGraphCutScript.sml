@@ -2,7 +2,7 @@ Theory makeSsaCurrentGraphCut
 Ancestors
   makeSsaCurrentTokenGraph makeSsaCurrentTokens makeSsaCurrentAnalysis
   makeSsaCurrentFrontier dominatorProofs cfgDefs venomWf cfgAnalysisProps
-  dominatorProofs dominatorDefs venomInst list pred_set
+  dominatorProofs dominatorDefs venomInst list pred_set cfgCorrectnessProof
 
 Theorem current_strict_dom_parent:
   wf_function fn /\ cfg_reachable_of (cfg_analyze fn) l /\

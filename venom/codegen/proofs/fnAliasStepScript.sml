@@ -17,7 +17,7 @@ Ancestors
   stackPlanOps stackPlanTypes venomExecSemantics venomState livenessDefs
   dfgDefs cfgDefs deepResidualBudget fnFrameStepsRevertForward frameViewFacts
   venomExecProps venomInstProps planWf stackModel foldlSim
-  list rich_list finite_map pred_set
+  list rich_list finite_map pred_set reorderStages
 
 (* ===== Slot provenance: the planner manufactures no operand ===== *)
 
