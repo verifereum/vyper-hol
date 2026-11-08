@@ -28,15 +28,15 @@ Proof
   qpat_x_assum `st'.cs_current_insts = _` kall_tac >>
   rpt (qpat_x_assum `emitted_insts _ _ = _` SUBST1_TAC) >>
   simp[run_inst_seq_def, mk_inst_def]
-  >- (simp[Once step_inst_base_def] >>
+  >- (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
       simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
+  >- (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
       simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
+  >- (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
       simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >- (simp[Once step_inst_base_def] >>
+  >- (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
       simp[exec_pure2_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[])
-  >> simp[Once step_inst_base_def] >>
+  >> simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
   simp[exec_pure1_def, AllCaseEqs(), update_var_def] >> rw[] >> simp[]
 QED
 
