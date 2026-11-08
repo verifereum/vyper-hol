@@ -463,9 +463,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
        memory_range_of_operands_def, mk_inst_def, eval_operand_def] >>
-  simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  simp[step_inst_non_invoke, venomExecSemanticsTheory.step_inst_base_opcode_eqs] >>
   simp[eval_operand_def, step_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def, halt_state_def, set_returndata_def,
        ret_taint_def] >>
