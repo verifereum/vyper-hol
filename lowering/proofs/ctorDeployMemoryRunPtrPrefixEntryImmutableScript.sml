@@ -245,7 +245,7 @@ Proof
     (irule abi_caller_coherent >> metis_tac[]) >>
   drule abiDecoderCoherenceTheory.abi_decoder_coherent_header >>
   simp[abiDecoderCoherenceTheory.abi_decoder_header_def,
-       GSYM type_mem_bytes_type_memory_bytes, build_compile_env_ce_struct_fields]
+       GSYM structFieldsPropsTheory.type_mem_bytes_type_memory_bytes, build_compile_env_ce_struct_fields]
 QED
 
 Theorem prefix_entry_evaluated_default_admissible[local]:
