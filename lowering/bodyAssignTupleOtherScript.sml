@@ -147,7 +147,7 @@ Proof
   cheat
 QED
 
-Theorem tuple_places_typing[local]:
+Theorem tuple_places_typing:
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' ==>
   ?tys tvs. expr_type e = TupleT tys /\ gs <> [] /\
@@ -179,7 +179,7 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[type_memory_size_def]
 QED
 
-Theorem tuple_places_component_bound[local]:
+Theorem tuple_places_component_bound:
   expr_body_pre cenv cx env e es /\ expr_type e = TupleT tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) ==>
   !i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
@@ -283,7 +283,7 @@ Proof
       drule tuple_places_fields_decl >> strip_tac >> gvs[])
 QED
 
-Theorem tuple_places_member[local]:
+Theorem tuple_places_member:
   get_module_code cx NONE = SOME tops /\
   expr_sim_inv cenv cx env es /\
   supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
@@ -353,7 +353,7 @@ Proof
   irule body_expr_ok_intro >> gvs[] >> metis_tac[]
 QED
 
-Theorem tuple_places_target_case[local]:
+Theorem tuple_places_target_case:
   body_inv tops ctx cenv cx /\ supported_target tops bindings bt /\
   supported_target_pure tops bt ==>
   target_case F ctx func cenv cx bt
@@ -408,7 +408,7 @@ Proof
   qexists_tac `calls` >> simp[]
 QED
 
-Theorem tuple_places_indices_pre[local]:
+Theorem tuple_places_indices_pre:
   body_inv tops ctx cenv cx /\ supported_target tops bindings bt /\
   supported_target_pure tops bt /\ well_typed_atarget env (BaseTarget bt) ty /\
   MEM (BaseTarget bt) gs /\
