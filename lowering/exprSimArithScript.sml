@@ -197,8 +197,14 @@ Proof
             (i2w z : bytes32) =
               truncate_to_bits (type_bits ty) (is_signed_type ty) (i2w rr)` by
     (gen_tac >> irule wrapped_int_op_word >> simp[]) >>
-  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-       val_to_w256_def, unsafe_word_op_def, word_value_def] >>
+  simp[bop_result_def] >>
+  simp[SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+      evaluate_builtin_def)] >>
+  simp (map (fn opq => SIMP_RULE (srw_ss()) []
+    (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+    [`UnsafeAdd`, `UnsafeSub`, `UnsafeMul`, `UnsafeDiv`] @
+    [val_to_w256_def, unsafe_word_op_def, word_value_def]) >>
   TRY (wrap_tac >> NO_TAC) >>
   (* UnsafeDiv *)
   Cases_on `i2 = 0` >> gvs[]
@@ -557,8 +563,13 @@ Theorem bop_result_checked:
       else INR (Error (RuntimeError "bounded_int_op bound"))
 Proof
   rw[] >>
-  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-       bounded_int_op_def] >>
+  simp[bop_result_def] >>
+  simp[SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+      evaluate_builtin_def)] >>
+  simp (map (fn opq => SIMP_RULE (srw_ss()) []
+    (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+    [`Add`, `Sub`, `Mul`] @ [bounded_int_op_def]) >>
   rw[]
 QED
 
@@ -657,8 +668,13 @@ Proof
        i2w_eq_0_within >> gvs[]) >>
   `bop = Div \/ bop = Mod` by fs[] >>
   Cases_on `is_signed_type ty` >> gvs[math_val_def] >>
-  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-       bounded_int_op_def, int_bound_bits_def] >>
+  simp[bop_result_def] >>
+  simp[SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+      evaluate_builtin_def)] >>
+  simp (map (fn opq => SIMP_RULE (srw_ss()) []
+    (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+    [`Div`, `Mod`] @ [bounded_int_op_def, int_bound_bits_def]) >>
   TRY (conj_tac >- (rw[] >> fs[])) >>
   strip_tac >> `i2 <> 0` by fs[]
   >~ [`safe_sdiv`]
@@ -820,9 +836,15 @@ Proof
            type_bounds_def, type_bits_def, is_signed_type_def]) >>
   qexists_tac `BaseT (IntT 168)` >> conj_tac
   >- (fs[] >>
-      simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-           bounded_int_op_def, bounded_decimal_op_def, type_to_int_bound_def,
-           int_bound_bits_def] >> rw[]) >>
+      simp[bop_result_def] >>
+      simp[SIMP_RULE (srw_ss()) []
+        (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+          evaluate_builtin_def)] >>
+      simp (map (fn opq => SIMP_RULE (srw_ss()) []
+        (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+        [`Add`, `Sub`, `Mod`] @
+        [bounded_int_op_def, bounded_decimal_op_def, type_to_int_bound_def,
+         int_bound_bits_def]) >> rw[]) >>
   `bop = Add \/ bop = Sub \/ bop = Mod` by fs[] >>
   FIRST (map (fn th => irule th >>
                        simp[type_to_int_bound_def, type_bits_def] >> NO_TAC)
@@ -877,9 +899,15 @@ Proof
   `in_type_range (BaseT DecimalT) d1 /\ in_type_range (BaseT DecimalT) d2` by
     simp[in_type_range_decimal] >>
   `bop = Mul \/ bop = Div` by fs[] >>
-  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-       decimal_sgn_quot, bounded_decimal_op_def, compile_binop_def,
-       is_decimal_type_def, decimal_divisor_def, val_to_w256_def]
+  simp[bop_result_def] >>
+  simp[SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+      evaluate_builtin_def)] >>
+  simp (map (fn opq => SIMP_RULE (srw_ss()) []
+    (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+    [`Mul`, `Div`] @
+    [decimal_sgn_quot, bounded_decimal_op_def, compile_binop_def,
+     is_decimal_type_def, decimal_divisor_def, val_to_w256_def])
   >- ((* Mul: truncating product, bounded to 168 bits *)
       Cases_on `within_int_bound (Signed 168) (d1 * d2 quot 10000000000)` >>
       simp[word_value_def, val_to_w256_def] >> rpt strip_tac >>
