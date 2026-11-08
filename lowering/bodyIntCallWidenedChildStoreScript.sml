@@ -46,5 +46,12 @@ Theorem intcall_widened_child_store_frame:
       typed_copy_effect ctx func a b u t (w2n dw) (type_memory_size dtv) /\
       stmt_state_rel ctx func ce cx es t
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS)
+  >> drule_all compile_store_memory_typed_forward_sharp
+  >> disch_then (qspec_then `ctx` strip_assume_tac)
+  >> qexists_tac `t` >> simp[]
+  >> irule aggregate_store_control_frame
+  >> qexistsl_tac [`w2n dw`, `type_memory_size dtv`, `u`, `a`]
+  >> fs[typed_copy_effect_def]
+  >> metis_tac[]
 QED
