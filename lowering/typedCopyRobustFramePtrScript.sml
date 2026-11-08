@@ -1,6 +1,6 @@
 (* Robust bytestring normalization and ambient effects, on one witness. *)
 Theory typedCopyRobustFramePtr
-Ancestors typedCopyAmbientFramePtr typedCopyRobustTransportPtr
+Ancestors typedCopyRobustEffectsPtr typedCopyAmbientFramePtr typedCopyRobustTransportPtr
   typedCopyBytesRobustPtr
 
 Theorem compile_store_bytestring_robust_ambient_frag_ptr:
@@ -44,9 +44,8 @@ Theorem compile_store_bytestring_robust_ambient_frag_ptr:
         !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
           val_in_memory ft fv p m)
 Proof
-  typedCopyRobustLib.robust
-    (compile_store_bytestring_ambient_frag_ptr,
-     robust_representation_exterior_frame, clean_copied_window,
-     (`stor_taint_ok cx tn s ==> stor_taint_ok cx tnf sf` by
-       simp[bodyPtrDefsTheory.stor_taint_ok_def]))
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all compile_store_bytestring_robust_effects_frag_ptr >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  qexistsl [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[]
 QED

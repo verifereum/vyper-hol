@@ -151,7 +151,7 @@ val store_compose =
   qpat_assum `frag_exec_ptr _ _ _ sa sc _ _ _` (irule_at Any) >>
   simp[] >> first_assum ACCEPT_TAC;
 
-fun store_bytestring (length_fragment, copy_fragment, copy_ghost,
+fun store_bytestring_with_effects effects (length_fragment, copy_fragment, copy_ghost,
                       round_size, copy_exterior) =
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
@@ -202,6 +202,10 @@ fun store_bytestring (length_fragment, copy_fragment, copy_ghost,
      simp[Abbr `Gf`, Abbr `tnf`, Abbr `t`] >> gvs[]) >>
   `tnf.t_imm = tn1.t_imm` by
     simp[Abbr `tnf`, step_taint_def, imm_taint_def, mk_inst_def] >>
+  (if effects then
+     (conj_tac >- simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def, write_memory_def]) >>
+     (conj_tac >- simp[Abbr `t`, mcopy_def, write_memory_with_expansion_def, write_memory_def])
+   else all_tac) >>
   conj_tac >- simp[Abbr `t`, mcopy_def, read_memory_def,
                    write_memory_with_expansion_def, write_memory_def] >>
   conj_tac >-
@@ -215,4 +219,5 @@ fun store_bytestring (length_fragment, copy_fragment, copy_ghost,
   qpat_x_assum `!p. not_fresh_at sa p ==> _` (qspec_then `p` mp_tac) >>
   simp[lookup_var_def, mcopy_def, write_memory_with_expansion_def,
        write_memory_def, op_taint_def];
+val store_bytestring = store_bytestring_with_effects false;
 end

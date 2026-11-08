@@ -367,6 +367,10 @@ Proof
   >- suspend "continuing_step"
   >> qexists_tac `j` >>
   CONV_TAC (BINOP_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  qpat_assum `get_instruction _ _ = SOME _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `step_inst k A _ _ = _` (fn th => rewrite_tac[th]) >>
+  qpat_assum `step_inst j B _ _ = _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `!y. _` kall_tac >>
   simp[step_result_rel_def, frame_result_rel_def]
 QED
 

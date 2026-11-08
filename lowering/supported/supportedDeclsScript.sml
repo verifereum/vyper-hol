@@ -44,7 +44,7 @@ Definition supported_declaration_header_def:
     | HashMapDecl Private transient name kt vt (SOME slot) =>
         supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | StructDecl name fields =>
-        EVERY (supported_place_type tops o SND) fields
+        ~NULL fields /\ EVERY (supported_place_type tops o SND) fields
     | EventDecl name fields =>
         (* Python rejects more than three indexed fields (EventT) *)
         EVERY (supported_scalar_type o SND o FST) fields /\

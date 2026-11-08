@@ -137,7 +137,7 @@ Theorem body_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >> rpt gen_tac
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
   >~ [`Call ty (IntCall (src_id_opt,fn)) es kw`] >- suspend "intcall_start"
   >~ [`eval_iterator cx (Array e)`] >-
     (strip_tac >> match_mp_tac body_array_iterator_consumer >>
@@ -177,12 +177,12 @@ Proof
     (rpt strip_tac >> metis_tac[body_eval_for_nil_storage, runtime_storage_consistent_storage])
   >~ [`eval_for _ _ _ _ (_::_)`] >- suspend "for_cons"
   >~ [`assign_tuple_target_list _ (_::_) (_::_)`] >-
-    (strip_tac >> match_mp_tac (SRULE [] body_tuple_list_cons_consumer) >>
+    (simp[] >> strip_tac >> match_mp_tac (SRULE [] body_tuple_list_cons_consumer) >>
      conj_tac >> first_assum ACCEPT_TAC)
   >~ [`assign_tuple_targets _ (BaseTarget _) _`] >-
     (strip_tac >> match_mp_tac body_tuple_base_consumer >> first_assum ACCEPT_TAC)
   >~ [`assign_tuple_targets _ (TupleTarget _) _`] >-
-    (strip_tac >> match_mp_tac body_tuple_nested_consumer >> first_assum ACCEPT_TAC)
+    (simp[] >> strip_tac >> match_mp_tac body_tuple_nested_consumer >> first_assum ACCEPT_TAC)
   >>~- ([`assign_tuple_target_list _ _ _`],
     rpt strip_tac >> gvs[Once evaluate_def, return_def, raise_def] >>
     metis_tac[runtime_storage_consistent_storage]) >>
@@ -593,7 +593,7 @@ Resume body_oracle_storage_mutual[literal_expr]:
 QED
 
 Resume body_oracle_storage_mutual[for_cons]:
-  strip_tac >> match_mp_tac (SRULE [] body_for_cons_consumer) >>
+  simp[] >> strip_tac >> match_mp_tac (SRULE [] body_for_cons_consumer) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
@@ -699,7 +699,7 @@ Resume body_oracle_storage_mutual[for_entry]:
 QED
 
 Resume body_oracle_storage_mutual[intcall_start]:
-  strip_tac >>
+  simp[] >> strip_tac >>
   qpat_x_assum `!a b c d e f g h i j k l m n p q r s. _ ==> _` kall_tac >>
   qpat_x_assum `!a. _` (mk_asm "intcall_ih1") >>
   qpat_x_assum `!a. _` (mk_asm "intcall_ih2") >>
