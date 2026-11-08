@@ -991,12 +991,19 @@ Proof
            get_accounts_def, get_transient_storage_def, bind_def,
            lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
            LET_THM, vfmTypesTheory.option_CASE_rator, COND_RATOR, COND_RAND] >>
-      rpt (BasicProvers.TOP_CASE_TAC >> simp[COND_RAND]) >> gvs[]) >>
+      rpt (BasicProvers.TOP_CASE_TAC >> simp[COND_RAND]) >> gvs[])
+  >~ [`MemoryPlace id path`]
+  >- (simp[select_result_def, extend_place_def, place_type_value_def,
+           read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+           lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+      rpt strip_tac >> gvs[]) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
-       read_place_def, get_scopes_def, get_immutables_def,
-       get_address_immutables_def, bind_def, ignore_bind_def,
-       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+       read_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem tuple_source[local]:
