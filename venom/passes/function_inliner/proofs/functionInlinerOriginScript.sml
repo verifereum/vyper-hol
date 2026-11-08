@@ -5,7 +5,7 @@
 Theory functionInlinerOrigin
 Ancestors
   functionInlinerContract functionInlinerWf functionInlinerDefs cfgTransform
-  indexedLists venomInst venomWfProps list
+  indexedLists venomInst venomWfProps list fcgAnalysisProps fmpLowerProps
 
 Inductive inliner_fn_origin:
   (!ctx fn.
@@ -471,4 +471,106 @@ Proof
   qpat_x_assum `MEM orig _` mp_tac >> CASE_TAC >> simp[] >> strip_tac >>
   `orig.inst_opcode <> PHI` by simp[] >>
   metis_tac[fix_inline_phis_nonphi_origin, inline_call_site_invoke_origin]
+QED
+
+Theorem inliner_reachable_call_rank:
+  !ctx fn inst target args (rank : string -> num).
+    inliner_input_ok ctx /\ MEM fn ctx.ctx_functions /\
+    fcg_is_reachable (fcg_analyze ctx) fn.fn_name /\
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label target::args /\
+    (!caller callee.
+      MEM callee (fcg_get_callees (fcg_analyze ctx) caller) ==>
+      rank callee < rank caller) ==>
+    rank target < rank fn.fn_name
+Proof
+  rpt strip_tac >>
+  `ctx_wf ctx` by gvs[inliner_input_ok_def] >>
+  `lookup_function fn.fn_name ctx.ctx_functions = SOME fn` by
+    (irule fmp_lookup_function_self >>
+     gvs[venomWfTheory.ctx_wf_def, venomWfTheory.ctx_distinct_fn_names_def,
+         ctx_fn_names_def]) >>
+  `fn_directly_calls ctx fn.fn_name target` by
+    (simp[fcgDefsTheory.fn_directly_calls_def] >> metis_tac[]) >>
+  drule_all fcg_analyze_callees_complete >> metis_tac[]
+QED
+
+Theorem inliner_reachable_call_target_external:
+  !ctx fn inst target args.
+    inliner_input_ok ctx /\ MEM fn ctx.ctx_functions /\
+    fcg_is_reachable (fcg_analyze ctx) fn.fn_name /\
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label target::args ==>
+    ~MEM target (fn_labels fn)
+Proof
+  rpt strip_tac >>
+  `?rank : string -> num. !caller callee.
+    MEM callee (fcg_get_callees (fcg_analyze ctx) caller) ==>
+    rank callee < rank caller` by metis_tac[inliner_input_ok_def] >>
+  `rank target < rank fn.fn_name` by
+    (irule inliner_reachable_call_rank >> metis_tac[]) >>
+  `target <> fn.fn_name` by (spose_not_then assume_tac >> gvs[]) >>
+  `wf_invoke_targets ctx` by metis_tac[inliner_input_ok_def] >>
+  qpat_x_assum `wf_invoke_targets ctx` mp_tac >>
+  rewrite_tac[venomWfTheory.wf_invoke_targets_def] >>
+  disch_then (qspecl_then [`fn`, `inst`] mp_tac) >> simp[] >> strip_tac >>
+  gvs[ctx_fn_names_def, MEM_MAP] >>
+  metis_tac[inliner_input_ok_def]
+QED
+
+(* Qualified static provenance: arbitrary callers, but only original-reachable
+   callees may be cloned.  Erasure retains the unrestricted structural API. *)
+Inductive qualified_origin:
+  (!ctx fn.
+    inliner_input_ok ctx /\ MEM fn ctx.ctx_functions ==>
+    qualified_origin ctx 0 fn) /\
+  (!ctx n m fn.
+    qualified_origin ctx n fn /\ n <= m ==>
+    qualified_origin ctx m fn) /\
+  (!ctx n caller callee ist caller' ist'.
+    qualified_origin ctx n caller /\ qualified_origin ctx n callee /\
+    fcg_is_reachable (fcg_analyze ctx) callee.fn_name /\
+    ist.is_inline_count = n /\
+    inline_one_site caller callee ist = SOME (caller',ist') ==>
+    qualified_origin ctx ist'.is_inline_count caller')
+End
+
+Theorem qualified_origin_init:
+  !ctx fn. inliner_input_ok ctx /\ MEM fn ctx.ctx_functions ==>
+    qualified_origin ctx 0 fn
+Proof
+  metis_tac[qualified_origin_rules]
+QED
+
+Theorem qualified_origin_weaken:
+  !ctx n m fn. qualified_origin ctx n fn /\ n <= m ==>
+    qualified_origin ctx m fn
+Proof
+  metis_tac[qualified_origin_rules]
+QED
+
+Theorem qualified_origin_erasure:
+  !ctx n fn. qualified_origin ctx n fn ==> inliner_fn_origin ctx n fn
+Proof
+  ho_match_mp_tac qualified_origin_ind >> rpt conj_tac >>
+  metis_tac[inliner_fn_origin_rules]
+QED
+
+Theorem qualified_origin_name:
+  !ctx n fn. qualified_origin ctx n fn ==>
+    ?root. MEM root ctx.ctx_functions /\ root.fn_name = fn.fn_name
+Proof
+  metis_tac[qualified_origin_erasure, inliner_fn_origin_name]
+QED
+
+Theorem qualified_origin_returns:
+  !ctx n fn. qualified_origin ctx n fn ==>
+    ?root. MEM root ctx.ctx_functions /\ root.fn_name = fn.fn_name /\
+      !inst. MEM inst (fn_insts fn) /\
+        (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) ==>
+        ?orig. MEM orig (fn_insts root) /\
+          orig.inst_opcode = inst.inst_opcode /\
+          raw_return_user_arity orig = raw_return_user_arity inst
+Proof
+  metis_tac[qualified_origin_erasure, inliner_fn_origin_returns]
 QED
