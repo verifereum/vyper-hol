@@ -1057,80 +1057,70 @@ Proof
   irule indexed_replacement_wf >> simp[]
 QED
 
-Theorem transform_blocks_supply_ids:
-  !dfg bbs s ccs t.
-    ALL_DISTINCT (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) bbs)) /\
-    EVERY (\id. id < s.irs_next_inst)
-      (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) bbs)) /\
-    transform_blocks_supply dfg s bbs = (ccs,t) ==>
-    ALL_DISTINCT (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) ccs)) /\
-    s.irs_next_inst <= t.irs_next_inst /\
-    EVERY (\id. id < t.irs_next_inst)
-      (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) ccs)) /\
-    (!id. MEM id (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) ccs)) ==>
-      MEM id (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) bbs)) \/
-      (s.irs_next_inst <= id /\ id < t.irs_next_inst))
+Theorem selected_dload_supply_inv:
+  mm_supply_wf_inv s fn /\ MEM src fn.fn_blocks ==>
+  mm_supply_wf_inv s (fn with fn_blocks := MAP (transform_block_dload
+    (find_dload_pairs (dfg_build_function fn) src.bb_instructions)) fn.fn_blocks)
 Proof
-  gen_tac >> Induct
-  >- simp[transform_blocks_supply_def] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `transform_blocks_supply _ _ _ = _` mp_tac >>
-  simp[Once transform_blocks_supply_def, AllCaseEqs()] >> strip_tac >>
-  fs[ALL_DISTINCT_APPEND, EVERY_APPEND, EVERY_MAP, combinTheory.o_DEF] >>
-  drule_all transform_block_supply_ids >> strip_tac >>
-  `EVERY (\id. id < s1.irs_next_inst)
-    (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) bbs))` by
-    (fs[EVERY_MEM] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-  first_x_assum drule_all >> strip_tac >>
-  `!i id. MEM i bb'.bb_instructions /\
-    MEM id (FLAT (MAP (\b. MAP (\j. j.inst_id) b.bb_instructions) bbs')) ==>
-    i.inst_id <> id` by
-    (rpt gen_tac >> strip_tac >>
-     qpat_x_assum `!i. MEM i bb'.bb_instructions ==> _` (qspec_then `i` mp_tac) >>
-     qpat_x_assum `!id. MEM id _ ==> _` (qspec_then `id` mp_tac) >>
-     fs[EVERY_MEM] >> metis_tac[NOT_LESS_EQUAL]) >>
-  gvs[] >> conj_tac
-  >- (simp[ALL_DISTINCT_APPEND, MEM_MAP] >> metis_tac[]) >>
-  conj_tac
-  >- (simp[EVERY_MAP, combinTheory.o_DEF] >>
-      fs[EVERY_MEM] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-  gen_tac >> simp[MEM_MAP] >> strip_tac
-  >- (gvs[] >>
-      qpat_x_assum `!i. MEM i bb'.bb_instructions ==> _` drule >>
-      simp[MEM_MAP] >> strip_tac
-      >- metis_tac[] >>
-      disj2_tac >> intLib.ARITH_TAC) >>
-  qpat_x_assum `!id. MEM id _ ==> _` drule >> strip_tac
-  >- simp[] >> disj2_tac >> intLib.ARITH_TAC
+  simp[mm_supply_wf_inv_def] >> strip_tac >>
+  simp[dload_function_inst_wf, selected_dload_function_wf, dload_function_ssa,
+       mm_ids_def, MAP_MAP_o, combinTheory.o_DEF, dload_preserves_ids] >>
+  conj_tac >- fs[mm_ids_def] >>
+  fs[list_subset_def, EVERY_MEM] >> metis_tac[dload_function_output_mem]
 QED
 
-Theorem transform_blocks_supply_structure:
-  !fn bbs s ccs t.
-    fn_inst_wf fn /\ wf_function fn /\ ssa_form fn /\
-    EVERY (\bb. MEM bb fn.fn_blocks) bbs /\
-    ALL_DISTINCT (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) bbs)) /\
-    EVERY (\id. id < s.irs_next_inst)
-      (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) bbs)) /\
-    transform_blocks_supply (dfg_build_function fn) s bbs = (ccs,t) ==>
-    MAP (\b. b.bb_label) ccs = MAP (\b. b.bb_label) bbs /\
-    EVERY bb_well_formed ccs /\
-    (!cc. MEM cc ccs ==> ?bb. MEM bb bbs /\ bb_succs cc = bb_succs bb)
+Definition supply_step_def:
+  supply_step (fn,s) n =
+    if n < LENGTH fn.fn_blocks then
+      let bb = EL n fn.fn_blocks in
+      let pairs = find_dload_pairs (dfg_build_function fn) bb.bb_instructions in
+      let updated = fn with fn_blocks := MAP (transform_block_dload pairs) fn.fn_blocks in
+      case transform_block_supply (dfg_build_function updated) s
+        (transform_block_dload pairs bb) of
+      (cc,t) => (updated with fn_blocks := LUPDATE cc n updated.fn_blocks,t)
+    else (fn,s)
+End
+
+Theorem supply_step_inv:
+  mm_supply_wf_inv s fn /\ supply_step (fn,s) n = (fn',t) ==>
+  mm_supply_wf_inv t fn'
 Proof
-  gen_tac >> Induct
-  >- simp[transform_blocks_supply_def] >>
+  simp[supply_step_def, LET_THM] >> IF_CASES_TAC
+  >- (strip_tac >> gvs[AllCaseEqs()] >>
+      `MEM (EL n fn.fn_blocks) fn.fn_blocks` by metis_tac[MEM_EL] >>
+      drule_all selected_dload_supply_inv >> strip_tac >>
+      qmatch_asmsub_abbrev_tac `mm_supply_wf_inv s updated` >>
+      `n < LENGTH updated.fn_blocks` by simp[Abbr `updated`] >>
+      `EL n updated.fn_blocks = transform_block_dload
+        (find_dload_pairs (dfg_build_function fn) (EL n fn.fn_blocks).bb_instructions)
+        (EL n fn.fn_blocks)` by simp[Abbr `updated`, EL_MAP] >>
+      drule_at (Pat `mm_supply_wf_inv _ _`) indexed_supply_inv >>
+      disch_then (qspecl_then [`t`,`n`,`cc`] mp_tac) >> simp[] >>
+      gvs[Abbr `updated`]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem transform_function_supply_fold:
+  transform_function_supply s fn =
+    FOLDL supply_step (fn,s) (COUNT_LIST (LENGTH fn.fn_blocks))
+Proof
+  simp[transform_function_supply_def, transform_function_with_def,
+       supply_step_def, FUN_EQ_THM, pairTheory.FORALL_PROD] >>
+  AP_THM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM, pairTheory.FORALL_PROD, supply_step_def]
+QED
+
+Theorem supply_fold_inv:
+  !ns fn s fn' t.
+    mm_supply_wf_inv s fn /\ FOLDL supply_step (fn,s) ns = (fn',t) ==>
+    mm_supply_wf_inv t fn'
+Proof
+  Induct >- (rpt gen_tac >> simp[] >> metis_tac[]) >>
+  simp[] >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `transform_blocks_supply _ _ _ = _` mp_tac >>
-  simp[Once transform_blocks_supply_def, AllCaseEqs()] >> strip_tac >>
-  fs[ALL_DISTINCT_APPEND, EVERY_APPEND, EVERY_MAP, combinTheory.o_DEF] >>
-  drule_all transform_block_supply_ids >> strip_tac >>
-  drule_all transform_block_supply_wf_last >> strip_tac >>
-  drule_all transform_block_supply_succs >> strip_tac >>
-  drule transform_block_supply_label >> strip_tac >>
-  `EVERY (\id. id < s1.irs_next_inst)
-    (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) bbs))` by
-    (fs[EVERY_MEM] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-  first_x_assum drule_all >> strip_tac >>
-  gvs[] >> metis_tac[]
+  Cases_on `supply_step (fn,s) h` >>
+  drule_all supply_step_inv >> strip_tac >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem mm_preserves_wf_function:
@@ -1141,23 +1131,8 @@ Theorem mm_preserves_wf_function:
     wf_function fn'
 Proof
   rpt gen_tac >> strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) fn.fn_blocks))` by
-    fs[wf_function_def, fn_inst_ids_distinct_def] >>
-  `EVERY (\id. id < s.irs_next_inst)
-    (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) fn.fn_blocks))` by
-    fs[ir_supply_covers_fn_def, fn_ir_inst_ids_def, EVERY_FLAT,
-       EVERY_MAP, combinTheory.o_DEF, block_ir_inst_ids_def] >>
-  qpat_x_assum `transform_function_supply _ _ = _` mp_tac >>
-  simp[transform_function_supply_def, AllCaseEqs()] >> strip_tac >>
-  drule_all transform_blocks_supply_ids >> strip_tac >>
-  `EVERY (\bb. MEM bb fn.fn_blocks) fn.fn_blocks` by simp[EVERY_MEM] >>
-  drule_all transform_blocks_supply_structure >> strip_tac >>
-  gvs[wf_function_def, fn_labels_def, fn_has_entry_def,
-      fn_inst_ids_distinct_def, EVERY_MEM, fn_succs_closed_def] >>
-  conj_tac
-  >- (Cases_on `bbs` >> gvs[]) >>
-  rpt strip_tac >>
-  qpat_x_assum `!cc. MEM cc bbs ==> _` drule >> strip_tac >>
-  metis_tac[]
+  drule_all mm_supply_wf_inv_init >> strip_tac >>
+  fs[transform_function_supply_fold] >>
+  drule_all supply_fold_inv >> simp[mm_supply_wf_inv_def]
 QED
 
