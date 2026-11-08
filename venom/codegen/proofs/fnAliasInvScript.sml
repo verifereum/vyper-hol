@@ -15174,6 +15174,138 @@ Proof
     alias_occ_regular_events_align, pairTheory.SND]
 QED
 
+Definition alias_occ_param_events_def:
+  (alias_occ_param_events site [] = []) /\
+  (alias_occ_param_events site (inst::insts) =
+    AliasOccParameterBirth site (Var (HD inst.inst_outputs)) ::
+    alias_occ_param_events (SUC site) insts)
+End
+
+Theorem alias_occ_param_events_align:
+  !insts site ps s. alias_occ_align s ps ==>
+  alias_occ_align (alias_occ_events_shadow (alias_occ_param_events site insts) s)
+    (FOLDL (\p inst. p with ps_stack := stack_push (Var (HD inst.inst_outputs)) p.ps_stack)
+      ps insts)
+Proof
+  Induct >> simp[alias_occ_param_events_def, alias_occ_events_shadow_def,
+    alias_occ_event_shadow_def] >> rpt strip_tac >> first_x_assum irule >>
+  simp[stack_push_def, alias_occ_insert_align]
+QED
+
+Theorem alias_occ_param_events_birth:
+  !insts site birth at.
+  MEM (AliasOccParameterBirth birth at) (alias_occ_param_events site insts) ==>
+  ?n. n < LENGTH insts /\ birth = site + n /\ at = Var (HD (EL n insts).inst_outputs)
+Proof
+  Induct >> simp[alias_occ_param_events_def] >> rpt strip_tac
+  >- (qexists_tac `0` >> simp[]) >>
+  first_x_assum drule >> strip_tac >> qexists_tac `SUC n` >> simp[]
+QED
+
+Definition alias_occ_prepare_params_events_def:
+  alias_occ_prepare_params_events liveness fn ps =
+    let entry = HD fn.fn_blocks in
+    let params = get_params entry.bb_instructions in
+    if params = [] then [] else
+    let pushed = FOLDL (\p inst.
+      p with ps_stack := stack_push (Var (HD inst.inst_outputs)) p.ps_stack) ps params in
+    let live = live_vars_at liveness entry.bb_label (LENGTH params) in
+    let to_pop = FILTER (\v. ~MEM (operand_to_string v) live) pushed.ps_stack in
+    let vars = FILTER is_var_operand to_pop in
+    let popped = SND (popmany_plan vars pushed) in
+    let next_term = case FIND (\inst. ~is_param_opcode inst.inst_opcode) entry.bb_instructions of
+      SOME inst => is_terminator inst.inst_opcode | NONE => F in
+    alias_occ_param_events 0 params ++ alias_occ_popmany_events vars pushed ++
+    MAP AliasOccPrimitive
+      (alias_occ_optimistic_commands dfg_empty (LAST params) live next_term popped)
+End
+
+Theorem alias_occ_prepare_params_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_prepare_params_events liveness fn ps) s)
+    (SND (prepare_params_plan liveness fn ps))
+Proof
+  strip_tac >>
+  Cases_on `get_params (HD fn.fn_blocks).bb_instructions = []` >>
+  simp[alias_occ_prepare_params_events_def, prepare_params_plan_def,
+    pairTheory.ELIM_UNCURRY, alias_occ_events_append, alias_occ_events_shadow_def] >>
+  irule alias_occ_optimistic_align >>
+  irule alias_occ_popmany_align >>
+  irule alias_occ_param_events_align >> simp[]
+QED
+
+Definition alias_occ_mark_events_def:
+  (alias_occ_mark_events site offset test [] = []) /\
+  (alias_occ_mark_events site offset test (at::ats) =
+    (if test at then [AliasOccDeadRelabel site (offset + LENGTH ats)] else []) ++
+    alias_occ_mark_events site offset test ats)
+End
+
+Theorem alias_occ_mark_segment:
+  !middle before after site test s.
+  s.alias_occs = before ++ middle ++ after ==>
+  alias_occ_events_shadow
+    (alias_occ_mark_events site (LENGTH after) test (MAP FST middle)) s =
+  s with alias_occs := before ++
+    MAP (\(at,id). (if test at then dead_stack_marker else at, id)) middle ++ after
+Proof
+  Induct
+  >- (simp[alias_occ_mark_events_def, alias_occ_events_shadow_def] >>
+      rpt strip_tac >> qpat_x_assum `s.alias_occs = _` (SUBST1_TAC o SYM) >> simp[]) >>
+  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
+  Cases_on `test h0` >>
+  simp[alias_occ_mark_events_def, alias_occ_events_append,
+    alias_occ_events_shadow_def, alias_occ_event_shadow_def]
+  >- (`alias_occ_relabel (LENGTH after + LENGTH middle) dead_stack_marker s =
+        s with alias_occs := before ++ (dead_stack_marker,h1)::middle ++ after` by
+        (pure_rewrite_tac[alias_occ_relabel_def] >>
+         `LENGTH s.alias_occs - 1 - (LENGTH after + LENGTH middle) = LENGTH before` by simp[] >>
+         qpat_x_assum `LENGTH s.alias_occs - 1 - _ = _` (fn th => pure_rewrite_tac[th]) >>
+         qpat_x_assum `s.alias_occs = _` (fn th => pure_rewrite_tac[th]) >>
+         pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+         simp_tac std_ss [EL_APPEND_EQN, LUPDATE_LENGTH, EL, HD]) >>
+      asm_rewrite_tac[] >>
+      first_x_assum (qspecl_then
+        [`before ++ [(dead_stack_marker,h1)]`, `after`, `site`, `test`,
+         `s with alias_occs := before ++ (dead_stack_marker,h1)::middle ++ after`] mp_tac) >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  first_x_assum (qspecl_then
+    [`before ++ [(h0,h1)]`, `after`, `site`, `test`, `s`] mp_tac) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
+QED
+
+Theorem alias_occ_mark_shadow:
+  alias_occ_events_shadow
+    (alias_occ_mark_events site 0 test (MAP FST s.alias_occs)) s =
+  s with alias_occs :=
+    MAP (\(at,id). (if test at then dead_stack_marker else at, id)) s.alias_occs
+Proof
+  irule (SRULE [] (Q.INST [`before` |-> `[]`, `after` |-> `[]`]
+    (SPEC_ALL alias_occ_mark_segment))) >> simp[]
+QED
+
+Theorem alias_occ_mark_align:
+  alias_occ_align s ps ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_mark_events site 0 test ps.ps_stack) s)
+    (ps with ps_stack := MAP (\at. if test at then dead_stack_marker else at) ps.ps_stack)
+Proof
+  simp[alias_occ_align_def] >> strip_tac >>
+  qpat_x_assum `MAP FST _ = _` (SUBST1_TAC o SYM) >>
+  simp[alias_occ_mark_shadow, MAP_MAP_o, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
+QED
+
+Theorem alias_occ_mark_ids:
+  alias_occ_ids
+    (alias_occ_events_shadow
+      (alias_occ_mark_events site 0 test (MAP FST s.alias_occs)) s) = alias_occ_ids s
+Proof
+  simp[alias_occ_mark_shadow, alias_occ_ids_def, MAP_MAP_o,
+    combinTheory.o_DEF, pairTheory.LAMBDA_PROD] >>
+  AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM, pairTheory.FORALL_PROD]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
