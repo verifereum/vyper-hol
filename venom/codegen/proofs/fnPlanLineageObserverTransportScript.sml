@@ -1130,3 +1130,58 @@ Proof
   disch_then (qspecl_then [`bb`,`v`] mp_tac) >>
   disch_then (qspecl_then [`j`,`before`,`d`] mp_tac) >> simp[]
 QED
+
+(* Dead spill entries are allowed here: only analyzed reads, not spill
+   membership, control whether an ordinary step can recreate a stack cell. *)
+Theorem native_ordinary_dead_stack_step:
+  !fn bb i inst dfg ps ops qs v halt term.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    i < LENGTH bb.bb_instructions /\ inst = EL i bb.bb_instructions /\
+    inst.inst_opcode <> PHI /\ ~MEM v inst.inst_outputs /\
+    ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label i) /\
+    ~MEM (Var v) ps.ps_stack /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn inst
+      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))
+      halt term bb.bb_label ps = SOME (ops,qs) ==>
+    ~MEM (Var v) qs.ps_stack /\
+    ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst_wf inst /\ codegen_ready_inst inst` by
+    (irule fnPlanLineageQuarantineTheory.ready_member_instruction_shape >>
+     metis_tac[EL_MEM]) >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by
+    metis_tac[fnPlanLineageCallersTheory.analyzed_computed_operand_demand] >>
+  `~MEM (Var v) inst.inst_operands` by
+    (strip_tac >>
+     `MEM v (inst_uses inst)` by
+       gvs[venomInstTheory.inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+     `MEM (Var v) (compute_operands inst)` by
+       metis_tac[ordinary_inst_uses_compute_operands] >>
+     metis_tac[fnPlanLineageCallersTheory.analyzed_computed_operand_demand]) >>
+  `!targets. inst.inst_opcode = JMP /\
+    join_target_ops (liveness_analyze fn) fn bb.bb_label inst = SOME targets ==>
+    ~MEM (Var v) targets` by
+    (rpt gen_tac >> strip_tac >>
+     `LAST bb.bb_instructions = inst /\ SUC i = LENGTH bb.bb_instructions` by
+       (`wf_function fn` by fs[codegen_ready_fn_def] >>
+        `~(i < LENGTH bb.bb_instructions - 1)` by
+          (strip_tac >>
+           drule passSimulationPropsTheory.wf_non_terminator_prefix >>
+           disch_then (qspec_then `bb` mp_tac) >> simp[] >>
+           metis_tac[venomInstTheory.is_terminator_def]) >>
+        `i = PRE (LENGTH bb.bb_instructions)` by decide_tac >>
+        `SUC i = LENGTH bb.bb_instructions` by decide_tac >>
+        simp[] >> Cases_on `bb.bb_instructions` >> fs[] >> simp[LAST_EL]) >>
+     `bb.bb_instructions <> []` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+     `set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH bb.bb_instructions))) = set targets` by
+       (irule fnPlanLineageEntryProductionTheory.native_terminal_jmp_target_set >>
+        gvs[]) >>
+     gvs[pred_setTheory.EXTENSION, MEM_MAP] >>
+     qpat_x_assum `!x. _ <=> MEM x targets`
+       (qspec_then `Var v` mp_tac) >> simp[]) >>
+  conj_tac >-
+    (drule_all fnPlanLineageQuarantineTheory.native_inst_stack_quarantine >> simp[]) >>
+  simp[]
+QED
