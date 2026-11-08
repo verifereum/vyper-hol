@@ -322,13 +322,16 @@ Proof
 QED
 
 Theorem extracted_prefix_lookup:
-  extract_context_with_internals entry ints sz = SOME (ctx,data) /\
+  extract_context_with_internals entry
+    (ints : (string # compile_env # (string # bool) list # bool # bool # num #
+      bool # bool # bool # num # stmt list # type option) list) sz = SOME (ctx,data) /\
   all_blocks sz = pre ++ tail /\
   (!d. MEM d (internal_fn_descriptors ints) ==>
        ~MEM (FST d) (MAP (\bb. bb.bb_label) pre)) /\
   lookup_function entry ctx.ctx_functions = SOME efn /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) efn.fn_blocks) /\
-  MEM bb pre ==> lookup_block bb.bb_label efn.fn_blocks = SOME bb
+  MEM bb pre /\ bb.bb_label = label ==>
+  lookup_block label efn.fn_blocks = SOME bb
 Proof
   strip_tac >>
   qpat_assum `extract_context_with_internals _ _ _ = _`
@@ -337,7 +340,127 @@ Proof
   fs[GSYM loweringShapeDefsTheory.all_blocks_def] >>
   `efn.fn_blocks = entry_blocks` by
     (drule_all extracted_entry_blocks >> simp[]) >>
-  irule venomExecPropsTheory.MEM_lookup_block >> simp[] >>
+  gvs[] >> irule venomExecPropsTheory.MEM_lookup_block >> simp[] >>
   irule package_internal_blocks_prefix_mem >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem nested_external_slice_blocks[local]:
+  nested_external_slice_end.cs_blocks = nested_external_slice_start.cs_blocks
+Proof
+  rewrite_tac[nested_external_slice_end_def, nested_external_slice_cenv_def,
+    nested_external_compile_env] >>
+  CONV_TAC (LAND_CONV (RESTR_EVAL_CONV [``function_selector``, ``calldata_method_id``])) >>
+  EVAL_TAC
+QED
+
+Theorem nested_external_preinternal_blocks[local]:
+  !sb. (do new_block (FST (fresh_label "fallback" (initial_compile_state "__entry")));
+           emit_inst REVERT [Lit 0w; Lit 0w] []
+        od) (SND (emit_inst STOP [] [] nested_external_slice_end)) = ((),sb) ==>
+    MEM <|bb_label := "fn_probe"; bb_instructions :=
+      nested_external_insts ++ [mk_inst 49 STOP [] []]|> (all_blocks sb) /\
+    ~MEM "internal 0 f()_runtime" (MAP (\bb. bb.bb_label) (all_blocks sb))
+Proof
+  gen_tac >>
+  simp[compiler_ignore_bind_projection, loweringShapeRulesTheory.emit_inst_eq,
+       compileEnvTheory.new_block_def, loweringShapeDefsTheory.all_blocks_def,
+       nested_external_slice_label, nested_external_slice_insts,
+       nested_external_slice_blocks] >>
+  EVAL_TAC
+QED
+
+Theorem nested_external_runtime_extract[local]:
+  ?ints sz data.
+    compile_generate_runtime [(3075143081,"fn_probe",F)]
+      [("fn_probe",nested_external_slice_cenv,
+        ([] : (string # bool # bool # num # abi_dec_info) list),4,F,F,0,F,F,
+        [AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+          (Literal (BaseT (UintT 256)) (IntL 1)); Return NONE],(NONE : type option))]
+      ints NONE Linear 0 0 ([] : dense_bucket list)
+      (build_dense_entry_info [(3075143081,"fn_probe",F)]
+        [("fn_probe",nested_external_slice_cenv,
+          ([] : (string # bool # bool # num # abi_dec_info) list),4,F,F,0,F,F,
+          [AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+            (Literal (BaseT (UintT 256)) (IntL 1)); Return NONE],(NONE : type option))])
+      (initial_compile_state "__entry") = ((),sz) /\
+    ints <> [] /\
+    (!d. MEM d (internal_fn_descriptors ints) ==>
+      FST d = "internal 0 f()_runtime") /\
+    extract_context_with_internals "__entry" ints sz =
+      SOME (nested_external_unit.cu_context,data) /\
+    lowering_context_ok nested_external_unit.cu_context
+Proof
+  `lower_vyper_runtime_unit nested_external_tops nested_premise_policy =
+    SOME nested_external_unit` by
+    (mp_tac nested_external_lowering_exists >>
+     Cases_on `lower_vyper_runtime_unit nested_external_tops nested_premise_policy` >>
+     simp[nested_external_unit_def]) >>
+  `nested_external_slice_cenv with ce_target := K T = nested_external_slice_cenv` by
+    simp[nested_external_slice_cenv_def, nested_external_compile_env] >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  rewrite_tac[nested_external_preprocess, nested_external_selector,
+    nested_external_internal_package, set_external_package_target_def,
+    set_internal_package_target_def, set_fallback_package_target_def,
+    package_fallback_fn_def, nested_external_internal_env_compare,
+    augAssignNestedPremiseProbeTheory.nested_premise_policy_def] >>
+  asm_rewrite_tac[] >>
+  simp[vyperCompilerTheory.run_lowering_def] >>
+  strip_tac >> pairarg_tac >>
+  gvs[AllCaseEqs()] >>
+  qpat_x_assum `((),_) = compile_generate_runtime _ _ _ _ _ _ _ _ _ _`
+    (assume_tac o SYM) >>
+  qmatch_asmsub_abbrev_tac `compile_generate_runtime _ _ packages` >>
+  qexistsl_tac [`packages`, `st1`, `data`] >>
+  qpat_x_assum `_ = nested_external_unit` (fn th => rewrite_tac[GSYM th]) >>
+  simp[Abbr `packages`, vyperCompilerTheory.internal_fn_descriptors_def] >>
+  metis_tac[]
+QED
+
+Theorem nested_external_actual_lookup:
+  lookup_block "fn_probe" nested_external_entry_fn.fn_blocks =
+    SOME <|bb_label := "fn_probe"; bb_instructions :=
+      nested_external_insts ++ [mk_inst 49 STOP [] []]|>
+Proof
+  mp_tac nested_external_runtime_extract >> strip_tac >>
+  qpat_x_assum `compile_generate_runtime _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[nested_external_runtime_phase, compiler_ignore_bind_projection] >>
+  simp[compileEnvTheory.comp_return_def, compileEnvTheory.comp_bind_def] >>
+  pairarg_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `compile_internal_fn_bodies ints sb` >>
+  Cases_on `_0` >> gvs[] >>
+  rename1 `compile_internal_fn_bodies ints sb = ((),sz)` >>
+  `?tail. all_blocks sz = all_blocks sb ++ tail` by
+    (irule internal_fn_bodies_retains_prefix >> simp[] >> metis_tac[pairTheory.PAIR_EQ]) >>
+  `MEM <|bb_label := "fn_probe"; bb_instructions :=
+       nested_external_insts ++ [mk_inst 49 STOP [] []]|> (all_blocks sb) /\
+   ~MEM "internal 0 f()_runtime" (MAP (\bb. bb.bb_label) (all_blocks sb))` by
+    (irule nested_external_preinternal_blocks >>
+     simp[Abbr `sb`, compiler_ignore_bind_projection,
+       loweringShapeRulesTheory.emit_inst_eq]) >>
+  mp_tac nested_external_entry_registered >> strip_tac >>
+  `nested_external_entry_fn = func` by simp[nested_external_entry_fn_def] >>
+  gvs[] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) nested_external_entry_fn.fn_blocks)` by
+    (drule vyperCompilerTheory.lowering_context_ok_bridge >> strip_tac >>
+     `MEM nested_external_entry_fn nested_external_unit.cu_context.ctx_functions` by
+       metis_tac[venomInstTheory.lookup_function_MEM] >>
+     gvs[listTheory.EVERY_MEM, venomInstTheory.fn_labels_def] >> metis_tac[]) >>
+  irule extracted_prefix_lookup >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`nested_external_unit.cu_context`, `data`, `"__entry"`, `ints`] >>
+  simp[] >> rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem nested_external_slice_code:
+  fn_has_code nested_external_slice_start nested_external_slice_end
+    nested_external_entry_fn
+Proof
+  simp[fragExecTheory.fn_has_code_def, nested_external_slice_emitted,
+       nested_external_slice_label, nested_external_slice_insts] >>
+  qexists_tac `<|bb_label := "fn_probe"; bb_instructions :=
+    nested_external_insts ++ [mk_inst 49 STOP [] []]|>` >>
+  simp[nested_external_actual_lookup, rich_listTheory.IS_PREFIX_APPEND]
 QED
