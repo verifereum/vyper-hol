@@ -51,6 +51,8 @@ Owner note 4 (argon's proof notes, approved):
 2. In `memoryLocalRhsProps`, the theorem that unfolds `lowered_value_type_def` on AbiEncode is `memory_rhs_read_lowered_typed`. Its AbiEncode arm can call `memory_rhs_read_lowered_typed_unwidened`.
 3. `lowered_zero_bytestring_read_empty` (`exprSimHyps`) follows from `memory_rhs_read_lowered_typed_unwidened` and `value_runtime_typed_zero_bytestring_empty`; it does not need `expr_body_pre_abi_encode_zero_annotation`.
 
+Owner note 5 (repair scope): the previous run proved `exprSimHyps` with the lowering change (commits 4689af76f..0dd3df936) and stopped at `exprSimIfExpCompat.ifexp_lowered_type_classify`, whose AbiEncode case no longer goes through. Any theory in the target's ancestor cone whose proof the lowering change broke (that one included) is in scope for proof repair: change its proofs and add lemmas next to it freely, reusing the physical capacity lemmas just proved in `exprSimHyps`. Theorem statements stay as they are; if one turns out false or needs a premise, stop and report it with a checked counterexample rather than changing it. Overlaid (skip-worktree) files stay untouched.
+
 ## Completion Criteria
 
 - The theorem is proved with no `cheat` in `lowering/exprSimAbiEncodeArgsScript.sml`, or in helper theories named `exprSimAbiEncodeArgs<Part>`.
