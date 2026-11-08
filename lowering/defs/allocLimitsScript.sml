@@ -266,14 +266,20 @@ End
    No other assignment allocates it, so no other is checked. *)
 Definition assign_alloc_ok_def:
   assign_alloc_ok cenv bt e ⇔
-    case target_store_place cenv bt of
+    (case target_store_place cenv bt of
       SOME (SOME (ValPT dty)) =>
         (let sty = lowered_value_type cenv e in
            ¬is_word_type dty ∧ dty ≠ sty ∧
            ¬(is_bytestring_type dty ∧ is_bytestring_type sty) ∧
            ¬(has_length_word (expr_type e) ∧ is_empty_value_expr e) ⇒
            type_memory_bytes cenv dty < 2 ** 64)
-    | _ => T
+    | _ => T) ∧
+    (* The snapshot of the RHS taken before an effectful target's indices
+       (compile_snapshot_vv) copies a composite into a temporary of its
+       lowered type's size. *)
+    (expr_can_mutate cenv (target_to_expr bt) ∧
+     ¬(has_length_word (expr_type e) ∧ is_empty_value_expr e) ⇒
+     type_alloc_ok cenv (lowered_value_type cenv e))
 End
 
 (* alloc_limits_expr of every expression of a statement, targets' keys

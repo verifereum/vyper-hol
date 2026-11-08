@@ -131,9 +131,9 @@ val () = load_timing_run_def
             eval_stmts_eq_cont_cps]
   |> cv_auto_trans;
 
-Theorem popped_storage_result_reads_after_target_refill:
+Theorem popped_storage_result_reads_before_target_refill:
   FST (load_timing_run pop_refill_context pop_refill_program [] empty_state) =
-    INL (IntV 9)
+    INL (IntV 5)
 Proof
   CONV_TAC cv_eval
 QED
@@ -147,11 +147,11 @@ Proof
   CONV_TAC cv_eval
 QED
 
-Theorem conditional_memory_result_observes_target_pop:
+Theorem conditional_memory_result_copies_before_target_pop:
   FST (load_timing_run conditional_memory_view_context
-    conditional_memory_view_program [BoolV T] empty_state) = INL (IntV 1) /\
+    conditional_memory_view_program [BoolV T] empty_state) = INL (IntV 2) /\
   FST (load_timing_run conditional_memory_view_context
-    conditional_memory_view_program [BoolV F] empty_state) = INL (IntV 1)
+    conditional_memory_view_program [BoolV F] empty_state) = INL (IntV 2)
 Proof
   CONV_TAC cv_eval
 QED

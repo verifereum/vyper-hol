@@ -39,8 +39,8 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   simp[Once evaluate_def, FUN_EQ_THM, bind_def] >> qx_gen_tac `st` >>
   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
-  simp[write_place_def, bind_def] >>
-  Cases_on `read_result cx x' r` >> Cases_on `q` >> simp[]
+  Cases_on `read_result cx x' r` >> Cases_on `q` >>
+  simp[write_place_def, bind_def]
 QED
 
 Theorem vv_at_start_var_mem_src[local]:

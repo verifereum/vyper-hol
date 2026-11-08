@@ -109,6 +109,13 @@ Definition vv_is_stack_def:
   vv_is_stack (LocatedValue _ _) = F
 End
 
+(* The same value tagged with another type (Python reads VyperValue.typ as
+   the value's lowered type; compile_expr tags with the annotation). *)
+Definition vv_with_type_def:
+  vv_with_type ty (StackValue _ op) = StackValue ty op ∧
+  vv_with_type ty (LocatedValue _ p) = LocatedValue ty p
+End
+
 (* ===== Load/Store by Location ===== *)
 
 (* Constructor immutable addresses are offsets relative to the staged base.

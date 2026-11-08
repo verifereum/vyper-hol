@@ -25,11 +25,11 @@ class Case:
 
 
 CASES = (
-    Case("pop_refill", "f()", (), 9),
+    Case("pop_refill", "f()", (), 5),
     Case("conditional_snapshot", "f(bool)", (1,), 5),
     Case("conditional_snapshot", "f(bool)", (0,), 5),
-    Case("conditional_memory_view", "f(bool)", (1,), 1),
-    Case("conditional_memory_view", "f(bool)", (0,), 1),
+    Case("conditional_memory_view", "f(bool)", (1,), 2),
+    Case("conditional_memory_view", "f(bool)", (0,), 2),
     Case("nested_retained_pop", "f()", (), 5),
     Case("call_storage_read", "f()", (), 10),
     Case("call_memory_pop", "f()", (), 1),

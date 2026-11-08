@@ -1812,8 +1812,18 @@ Resume eval_scc_storage_preservation_results_mutual[Assign_Base]:
     metis_tac[runtime_storage_consistent_intro, runtime_storage_consistent_layout] >>
   reverse (Cases_on `rhs_res`) >- (simp[] >> strip_tac >> gvs[]) >>
   drule_all eval_expr_success_storage_facts >> strip_tac >>
-  qpat_x_assum `!s pv t. eval_expr _ _ _ = _ ==> _`
-    (drule_then strip_assume_tac) >>
+  rename1 `eval_expr cx e st = (INL pv,rhs_st)` >>
+  simp_tac(srw_ss())[] >>
+  Cases_on `read_result cx pv rhs_st` >>
+  rename1 `read_result cx pv rhs_st = (read_res,read_st)` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  reverse (Cases_on `read_res`) >- (simp[] >> strip_tac >> gvs[]) >>
+  rename1 `read_result cx pv rhs_st = (INL v,rhs_st)` >>
+  first_x_assum (qspecl_then [`st`, `pv`, `rhs_st`, `rhs_st`, `v`, `rhs_st`] mp_tac) >>
+  simp[] >> disch_then strip_assume_tac >>
+  `value_runtime_typed env (expr_type e) v` by
+    (fs[runtime_consistent_def] >>
+     drule_all read_live_result_success_type >> simp[]) >>
   simp_tac(srw_ss())[] >>
   Cases_on `eval_target_place cx bt rhs_st` >>
   rename1 `eval_target_place cx bt rhs_st = (target_res,target_st)` >>
@@ -1826,27 +1836,10 @@ Resume eval_scc_storage_preservation_results_mutual[Assign_Base_write]:
   RESUME_TAC >> strip_tac >>
   POP_ASSUM_LIST (map_every assume_tac o List.filter (not o is_forall o concl)) >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
-  qmatch_assum_rename_tac `eval_expr cx e st = (INL pv,rhs_st)` >>
+  qmatch_assum_rename_tac `read_result cx pv rhs_st = (INL v,rhs_st)` >>
   qmatch_assum_rename_tac `eval_target_place cx bt rhs_st = (INL p,target_st)` >>
   drule_all eval_target_place_success_storage_type >> strip_tac >>
   drule_all eval_target_place_storage_trace >> strip_tac >>
-  `vyperImmutableMetadataFrame$immutable_metadata_frame rhs_st target_st` by
-    (drule (cj 8 eval_metadata_frame_mutual) >> simp[]) >>
-  `eval_result_typed (env,cx,target_st) pv (Type (expr_type e))` by
-    (Cases_on `pv` >> gvs[eval_result_typed_def] >>
-     metis_tac[runtime_place_typed_transport]) >>
-  `live_memory_result target_st pv` by
-    (irule live_result_transport >> qexists_tac `rhs_st` >> simp[]) >>
-  `runtime_consistent env cx target_st` by
-    (drule_all eval_target_place_preserves_runtime_consistent >> simp[]) >>
-  `state_well_typed target_st` by gvs[runtime_consistent_def] >>
-  Cases_on `read_result cx pv target_st` >>
-  rename1 `read_result cx pv target_st = (read_res,read_st)` >>
-  imp_res_tac read_result_state >> gvs[] >>
-  Cases_on `read_res` >> gvs[] >>
-  qmatch_assum_rename_tac `read_result cx pv target_st = (INL v,target_st)` >>
-  `value_runtime_typed env (expr_type e) v` by
-    (drule_all read_live_result_success_type >> simp[]) >>
   `value_runtime_typed env tty v` by
     (fs[value_runtime_typed_def] >>
      drule_all type_widens_to_value_has_type >> strip_tac >> gvs[]) >>

@@ -47,7 +47,7 @@ fun ci_mono_chain_tac rws =
 val ci_mono_grows_rws = [
   ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst, ci_mono_fresh_var,
   ci_mono_fresh_label, ci_mono_new_block, ci_mono_compile_alloc_buffer,
-  ci_mono_unwrap_value, ci_mono_compile_store_memory,
+  ci_mono_unwrap_value, ci_mono_compile_snapshot_vv, ci_mono_compile_store_memory,
   ci_mono_compile_copy_memory, ci_mono_compile_word_copy_loop,
   ci_mono_compile_store_bytestring, ci_mono_compile_keccak256_key,
   ci_mono_compile_mapping_subscript, ci_mono_compile_array_subscript,

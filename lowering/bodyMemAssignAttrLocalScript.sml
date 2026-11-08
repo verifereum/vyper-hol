@@ -238,13 +238,14 @@ Proof
   `ignore_bind
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (return ()) =
-   vyperState$bind (eval_expr cx e)
-     (\pv. ignore_bind
+   vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind
        (vyperState$bind (eval_target_place cx (AttributeTarget (NameTarget id) fld))
-         (\p. vyperState$bind (read_result cx pv) (write_place cx p)))
+         (\p. write_place cx p v))
        (return ()))` by
     simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_value >> simp[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[]
 QED
 

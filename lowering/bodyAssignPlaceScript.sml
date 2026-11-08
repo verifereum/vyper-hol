@@ -348,7 +348,9 @@ QED
 
 Theorem body_assign_place_case:
   !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ok cx t) /\
     body_expr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -379,7 +381,8 @@ Proof
       Cases_on `supported_immutable_type tops nsid` >> gvs[] >>
       drule_all_then strip_assume_tac body_immutable_target_type >> gvs[] >>
       metis_tac[immutable_deploy_assign_case]) >>
-  `((?s pv s1. eval_expr cx e s = (INL pv,s1)) ==>
+  `((?s pv s1 sread v s2. eval_expr cx e s = (INL pv,s1) /\
+                           read_result cx pv sread = (INL v,s2)) ==>
       target_case F ctx func cenv cx t)` by metis_tac[body_target_case] >>
   `cenv.ce_target CapMcopy /\
    acyclic_struct_metadata cenv.ce_struct_fields` by

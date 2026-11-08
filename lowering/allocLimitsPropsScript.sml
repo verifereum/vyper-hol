@@ -205,8 +205,32 @@ Definition alloc_env_agree_def:
     c'.ce_module_vars = c.ce_module_vars /\
     c'.ce_hashmap_info = c.ce_hashmap_info /\
     c'.ce_module_var_type = c.ce_module_var_type /\
-    c'.ce_func_return_type = c.ce_func_return_type
+    c'.ce_func_return_type = c.ce_func_return_type /\
+    c'.ce_func_mutability = c.ce_func_mutability
 End
+
+Theorem call_can_mutate_frame:
+  c'.ce_func_mutability = c.ce_func_mutability ==>
+  call_can_mutate c' ct = call_can_mutate c ct
+Proof
+  Cases_on `ct` >> simp[exprLoweringTheory.call_can_mutate_def]
+QED
+
+(* Whether an expression can mutate reads only the functions' mutability. *)
+Theorem expr_can_mutate_frame:
+  (!c e c'. c'.ce_func_mutability = c.ce_func_mutability ==>
+            expr_can_mutate c' e = expr_can_mutate c e) /\
+  (!c es c'. c'.ce_func_mutability = c.ce_func_mutability ==>
+             exprs_can_mutate c' es = exprs_can_mutate c es) /\
+  (!c oe c'. c'.ce_func_mutability = c.ce_func_mutability ==>
+             opt_expr_can_mutate c' oe = opt_expr_can_mutate c oe) /\
+  (!c kes c'. c'.ce_func_mutability = c.ce_func_mutability ==>
+              named_exprs_can_mutate c' kes = named_exprs_can_mutate c kes)
+Proof
+  ho_match_mp_tac exprLoweringTheory.expr_can_mutate_ind >>
+  rw[exprLoweringTheory.expr_can_mutate_def] >>
+  metis_tac[call_can_mutate_frame]
+QED
 
 Theorem target_store_place_frame:
   !c c' bt.
@@ -239,7 +263,9 @@ Proof
   drule type_memory_bytes_frame >> strip_tac >>
   `lowered_value_type c' e = lowered_value_type c e` by
     (irule lowered_value_type_frame >> simp[]) >>
-  simp[]
+  `expr_can_mutate c' (target_to_expr bt) = expr_can_mutate c (target_to_expr bt)` by
+    (irule (cj 1 expr_can_mutate_frame) >> simp[]) >>
+  simp[type_alloc_ok_def]
 QED
 
 (* A statement's check reads the struct sizes, for a log the events, and

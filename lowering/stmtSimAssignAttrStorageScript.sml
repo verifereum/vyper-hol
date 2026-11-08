@@ -547,16 +547,17 @@ Proof
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
   rename1 `eval_expr cx e es = (INL pv, es1)` >>
+  Cases_on `read_result cx pv es1` >>
+  rename1 `read_result cx pv es1 = (r3, es3)` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `r3` >> simp[] >>
   Cases_on `eval_target_place cx
               (AttributeTarget (TopLevelNameTarget (src, id)) fld) es1` >>
   rename1 `_ = (r2, es2)` >>
   drule eval_target_place_attr_toplevel >> rpt (disch_then drule) >>
   strip_tac >>
   Cases_on `r2` >> simp[]
-  >- (gvs[] >> Cases_on `read_result cx pv es1` >>
-      rename1 `read_result cx pv es1 = (r3, es3)` >>
-      imp_res_tac read_result_state >> gvs[] >>
-      Cases_on `r3` >> simp[write_place_def] >> metis_tac[]) >>
+  >- (gvs[] >> simp[write_place_def] >> metis_tac[]) >>
   strip_tac >> gvs[]
 QED
 
@@ -565,9 +566,9 @@ Theorem eval_assign_attr_toplevel_action:
     (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld)) e) =
   bind (eval_expr cx e)
     (\pv. do
+      v <- read_result cx pv;
       p <- eval_target_place cx
         (AttributeTarget (TopLevelNameTarget (src, id)) fld);
-      v <- read_result cx pv;
       write_place cx p v
     od)
 Proof
@@ -601,9 +602,9 @@ Theorem assign_attr_storage_tail[local]:
   write_storage_slot cx tr (n2w slot + n2w off) ftv v ee = (res, ee') ==>
   !tail.
     (do
+      v <- read_result cx raw;
       p <- eval_target_place cx
         (AttributeTarget (TopLevelNameTarget (src, id)) fld);
-      v <- read_result cx raw;
       write_place cx p v
     od) (ee with gas_obs := tail) = (res, ee' with gas_obs := tail)
 Proof
@@ -700,9 +701,9 @@ Theorem assign_attr_storage_source_counted[local]:
     write_storage_slot cx tr (n2w slot + n2w off) ftv v ee = (res, ee') /\
     (!tail.
       (do
+        v <- read_result cx raw;
         p <- eval_target_place cx
           (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-        v <- read_result cx raw;
         write_place cx p v
       od) (ee with gas_obs := tail) = (res, ee' with gas_obs := tail)) /\
     (!u st. storage_dead cx tr
@@ -764,7 +765,8 @@ Proof
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   asm_simp_tac (srw_ss())
-    [compile_stmt_def, compile_assign_value_def, comp_bind_def,
+    [compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, compile_assign_value_def, comp_bind_def,
      comp_ignore_bind_def, comp_return_def, LET_THM] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv, sm)` >> simp[] >>
@@ -937,9 +939,10 @@ Proof
     `\raw ee t. vv_post ctx func cenv cx e es sa sm s0 ee raw vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts`, `e`,
-    `\raw. do p <- eval_target_place cx
-       (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-       v <- read_result cx raw; write_place cx p v od`] >>
+    `\raw. do v <- read_result cx raw;
+       p <- eval_target_place cx
+         (AttributeTarget (TopLevelNameTarget (src,id)) fld);
+       write_place cx p v od`] >>
   reverse conj_tac
   >- (conj_tac >- simp[eval_assign_attr_toplevel_action] >>
       qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
@@ -959,9 +962,10 @@ Proof
       write_storage_slot cx tr (n2w slot + n2w (struct_field_offset_slots
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))
         ftv v ee = (res,ee') /\
-      (!tail. (do p <- eval_target_place cx
-        (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-        v <- read_result cx tv; write_place cx p v od)
+      (!tail. (do v <- read_result cx tv;
+        p <- eval_target_place cx
+          (AttributeTarget (TopLevelNameTarget (src,id)) fld);
+        write_place cx p v od)
         (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
       (!u st. storage_dead cx tr (update_storage
         (n2w slot + n2w (struct_field_offset_slots
@@ -972,8 +976,9 @@ Proof
        assign_attr_storage_source_counted)) >>
      strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
   drule_all (SRULE [] (Q.INST [`k` |-> `\raw. do
+    v <- read_result cx raw;
     p <- eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-    v <- read_result cx raw; write_place cx p v od`]
+    write_place cx p v od`]
     assign_attr_storage_word_suffix)) >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl_tac [`res`,`ee'`,`r`] >> simp[]

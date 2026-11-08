@@ -1468,8 +1468,8 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (Assign (BaseTarget t) e) = do
     pv <- eval_expr cx e;
-    p <- eval_target_place cx t;
     v <- read_result cx pv;
+    p <- eval_target_place cx t;
     write_place cx p v
   od ∧
   eval_stmt cx (Assign (TupleTarget gs) e) = do
