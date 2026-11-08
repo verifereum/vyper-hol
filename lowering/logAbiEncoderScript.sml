@@ -50,7 +50,8 @@ Theorem log_abi_emit_suffix:
     (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [size_op;dst]) [] mid =
       ((),final) /\
   LENGTH ops < dimword(:256) /\ eval_operands ops s = SOME ws /\
-  eval_operand dst s = SOME dw /\ eval_operand size_op s = SOME len ==>
+  eval_operand dst s = SOME dw /\ eval_operand size_op s = SOME len /\
+  ~s.vs_call_ctx.cc_static ==>
   frag_exec ctx mid final (\t. t = s)
     (\t. t = (s with <|
       vs_logs := s.vs_logs ++

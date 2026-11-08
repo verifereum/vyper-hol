@@ -226,6 +226,7 @@ QED
 
 Theorem step_persistent_return_unlock[local]:
   !id key s.
+    ~s.vs_call_ctx.cc_static ==>
     step_inst_base (mk_inst id SSTORE [Lit key; Lit 3w] []) s =
       OK (sstore key 3w s)
 Proof
@@ -243,7 +244,8 @@ Theorem internal_word_return_run:
        RET [op;rpc] []] /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  eval_operand op s = SOME w /\ eval_operand rpc s = SOME pc ==>
+  eval_operand op s = SOME w /\ eval_operand rpc s = SOME pc /\
+  ~s.vs_call_ctx.cc_static ==>
   run_from 0 ctx func s =
     IntRet <| iret_values := [w]; iret_adopt_fmp := NONE |>
       (return_unlock_state cenv s)

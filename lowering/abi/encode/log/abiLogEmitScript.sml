@@ -11,7 +11,8 @@ Theorem emit_inst_LOG_path:
     fn_has_code cs cs' func /\ LENGTH topic_ops < dimword(:256) /\
     eval_operands topic_ops ss = SOME topics /\ eval_operand offset_op ss = SOME off /\
     eval_operand size_op ss = SOME len /\ ss.vs_current_bb = cs.cs_current_bb /\
-    ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted ==>
+    ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted /\
+    ~ss.vs_call_ctx.cc_static ==>
     ?out. fragment_path ctx func ss out /\
       out.vs_current_bb = cs'.cs_current_bb /\ out.vs_inst_idx = LENGTH cs'.cs_current_insts /\ ~out.vs_halted /\
       out.vs_logs = ss.vs_logs ++ [<|logger := w2w ss.vs_call_ctx.cc_address;

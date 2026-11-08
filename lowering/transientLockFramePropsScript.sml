@@ -80,7 +80,7 @@ QED
 
 Theorem compile_nonreentrant_lock_transient_frame:
   compile_nonreentrant_lock key T is_view st = ((),st') /\
-  tload (n2w key) ss <> 1w /\
+  tload (n2w key) ss <> 1w /\ ~ss.vs_call_ctx.cc_static /\
   fresh_vars_wrt st ss /\ local_ptrs_rel func cenv scopes ss ==>
   ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
     fresh_vars_wrt st' ss' /\ local_ptrs_rel func cenv scopes ss' /\
@@ -100,6 +100,7 @@ QED
 
 Theorem compile_nonreentrant_unlock_transient_frame:
   compile_nonreentrant_unlock key T is_view st = ((),st') /\
+  ~ss.vs_call_ctx.cc_static /\
   fresh_vars_wrt st ss /\ local_ptrs_rel func cenv scopes ss ==>
   ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
     fresh_vars_wrt st' ss' /\ local_ptrs_rel func cenv scopes ss'
@@ -107,7 +108,7 @@ Proof
   Cases_on `is_view` >> strip_tac
   >- gvs[compile_nonreentrant_unlock_transient_view,
          emitted_insts_def, run_inst_seq_def] >>
-  drule compile_nonreentrant_unlock_transient_correct >> strip_tac >> simp[] >>
+  drule_all compile_nonreentrant_unlock_transient_correct >> strip_tac >> simp[] >>
   gvs[compile_nonreentrant_unlock_def, emit_void_def, comp_bind_def,
       comp_return_def, fresh_id_def, emit_def, fresh_vars_wrt_def]
 QED

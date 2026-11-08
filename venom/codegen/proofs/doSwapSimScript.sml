@@ -6709,7 +6709,7 @@ Proof
     (if k <= 16 then [] else [SOSwap 1])) idxs) ++
     (if k <= 16 then [SOSwap k] else [])` >>
   `FST (do_dup d (ps with ps_alloc := al)) = MAP SOSpill offsets ++ [SODup 16] ++ ops` by
-    (qspecl_then [`d`, `ps with ps_alloc := al`] mp_tac do_dup_big_decompose >>
+    (qspecl_then [`d`, `ps with ps_alloc := al`] mp_tac do_dup_big_decompose_explicit >>
      simp[LET_THM, Abbr `k`, Abbr `items`, Abbr `offsets`, Abbr `idxs`, Abbr `ops`, APPEND_ASSOC]) >>
   qabbrev_tac `stem = TAKE (LENGTH ps.ps_stack - k) ps.ps_stack` >>
   `LENGTH items = k /\ 0 < k /\ k < LENGTH ps.ps_stack` by
@@ -6789,8 +6789,8 @@ Theorem dup_trace_length_allocator_cong[local]:
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `d <= 15`
   >- simp[do_dup_def] >>
-  qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose >>
-  qspecl_then [`d`, `qs`] mp_tac do_dup_big_decompose >>
+  qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose_explicit >>
+  qspecl_then [`d`, `qs`] mp_tac do_dup_big_decompose_explicit >>
   simp[LET_THM] >> rpt strip_tac >> simp[] >>
   `spill_alloc_n [] ps.ps_alloc (REVERSE (top_n (d - 15) qs.ps_stack)) =
    spill_alloc_n [] ps.ps_alloc (REVERSE (top_n (d - 15) ps.ps_stack))` by
@@ -6952,7 +6952,7 @@ Proof
       (if k <= 16 then [] else [SOSwap 1])) idxs) ++
     (if k <= 16 then [SOSwap k] else [])` >>
   `FST (do_dup d ps) = MAP SOSpill offsets ++ tail` by
-    (qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose >>
+    (qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose_explicit >>
      simp[LET_THM, Abbr `k`, Abbr `offsets`, Abbr `idxs`, Abbr `tail`, APPEND_ASSOC]) >>
   `LENGTH offsets = k` by
     (simp[Abbr `offsets`, spill_alloc_n_offsets_length, top_n_def, LENGTH_TAKE, Abbr `k`] >>

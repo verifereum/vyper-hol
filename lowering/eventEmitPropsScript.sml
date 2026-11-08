@@ -11,7 +11,8 @@ Theorem step_LOG:
   !id topic_ops topics offset_op size_op off len ss.
     LENGTH topic_ops < dimword(:256) /\
     eval_operands topic_ops ss = SOME topics /\
-    eval_operand offset_op ss = SOME off /\ eval_operand size_op ss = SOME len ==>
+    eval_operand offset_op ss = SOME off /\ eval_operand size_op ss = SOME len /\
+    ~ss.vs_call_ctx.cc_static ==>
     step_inst_base
       (mk_inst id LOG
         (Lit (n2w (LENGTH topic_ops)) ::
@@ -33,7 +34,7 @@ Theorem emit_inst_LOG_correct:
     LENGTH topic_ops < dimword(:256) /\
     eval_operands topic_ops ss = SOME topics /\
     eval_operand offset_op ss = SOME off /\ eval_operand size_op ss = SOME len /\
-    fresh_vars_wrt cs ss ==>
+    ~ss.vs_call_ctx.cc_static /\ fresh_vars_wrt cs ss ==>
     run_inst_seq (emitted_insts cs cs') ss =
       OK (ss with vs_logs := ss.vs_logs ++
         [<|logger := w2w ss.vs_call_ctx.cc_address;

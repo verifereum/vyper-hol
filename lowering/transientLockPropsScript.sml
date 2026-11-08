@@ -15,7 +15,8 @@ Proof
 QED
 
 Theorem step_TSTORE:
-  eval_operand op1 ss = SOME key /\ eval_operand op2 ss = SOME value ==>
+  eval_operand op1 ss = SOME key /\ eval_operand op2 ss = SOME value /\
+  ~ss.vs_call_ctx.cc_static ==>
   step_inst_base (mk_inst id TSTORE [op1;op2] []) ss =
     OK (tstore key value ss)
 Proof
@@ -43,10 +44,26 @@ Proof
 QED
 
 Theorem step_TSTORE_lit:
+  ~ss.vs_call_ctx.cc_static ==>
   step_inst_base (mk_inst id TSTORE [Lit key;Lit value] []) ss =
     OK (tstore key value ss)
 Proof
   simp[step_inst_base_def, exec_write2_def, eval_operand_def]
+QED
+
+Theorem update_var_call_ctx[local]:
+  (update_var x v s).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[update_var_def]
+QED
+
+(* In a static frame TSTORE halts. *)
+Theorem step_TSTORE_lit_static[local]:
+  ss.vs_call_ctx.cc_static ==>
+  step_inst_base (mk_inst id TSTORE [Lit key;Lit value] []) ss =
+    Abort ExHalt_abort (halt_state (set_returndata [] ss))
+Proof
+  simp[step_inst_base_def, eval_operands_def, eval_operand_def]
 QED
 
 Theorem step_EQ_recent_one[local]:
@@ -126,18 +143,21 @@ Theorem transient_lock_code_execution:
     let checked = transient_lock_checked_state st key ss in
     if tload (n2w key) ss = 1w then
       Abort Revert_abort (revert_state (set_returndata [] checked))
+    else if ~is_view /\ ss.vs_call_ctx.cc_static then
+      Abort ExHalt_abort (halt_state (set_returndata [] checked))
     else OK (if is_view then checked else tstore (n2w key) 1w checked)
 Proof
   Cases_on `tload (n2w key) ss = 1w` >> Cases_on `is_view` >>
+  Cases_on `ss.vs_call_ctx.cc_static` >>
   simp[transient_lock_code_def, transient_lock_checked_state_def,
        run_inst_seq_def, step_TLOAD_lit, step_EQ_recent_one,
        step_ISZERO_recent, step_ASSERT_recent, step_TSTORE_lit,
-       bool_to_word_def]
+       step_TSTORE_lit_static, update_var_call_ctx, bool_to_word_def]
 QED
 
 Theorem compile_nonreentrant_lock_transient_correct:
   compile_nonreentrant_lock key T F st = ((),st') /\
-  tload (n2w key) ss <> 1w ==>
+  tload (n2w key) ss <> 1w /\ ~ss.vs_call_ctx.cc_static ==>
   ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
         tload (n2w key) ss' = 1w /\
         ss'.vs_accounts = ss.vs_accounts /\
@@ -174,7 +194,8 @@ Proof
 QED
 
 Theorem compile_nonreentrant_unlock_transient_correct:
-  compile_nonreentrant_unlock key T F st = ((),st') ==>
+  compile_nonreentrant_unlock key T F st = ((),st') /\
+  ~ss.vs_call_ctx.cc_static ==>
   run_inst_seq (emitted_insts st st') ss = OK (tstore (n2w key) 0w ss)
 Proof
   simp[compile_nonreentrant_unlock_def] >> strip_tac >>
@@ -190,13 +211,14 @@ Proof
 QED
 
 Theorem compile_nonreentrant_unlock_transient_frame:
-  compile_nonreentrant_unlock key T F st = ((),st') ==>
+  compile_nonreentrant_unlock key T F st = ((),st') /\
+  ~ss.vs_call_ctx.cc_static ==>
   ?ss'. run_inst_seq (emitted_insts st st') ss = OK ss' /\
         tload (n2w key) ss' = 0w /\
         ss'.vs_accounts = ss.vs_accounts /\
         ss'.vs_memory = ss.vs_memory
 Proof
-  strip_tac >> drule compile_nonreentrant_unlock_transient_correct >>
+  strip_tac >> drule_all compile_nonreentrant_unlock_transient_correct >>
   simp[tstore_def, tload_def, contract_transient_def,
        lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
@@ -205,7 +227,7 @@ QED
    a mutating guard while the first mutating guard is held. *)
 Theorem compile_nonreentrant_transient_nested_revert:
   compile_nonreentrant_lock key T F st = ((),st') /\
-  tload (n2w key) ss <> 1w /\
+  tload (n2w key) ss <> 1w /\ ~ss.vs_call_ctx.cc_static /\
   run_inst_seq (emitted_insts st st') ss = OK held /\
   compile_nonreentrant_lock key T is_view next = ((),next') ==>
   ?ss'. run_inst_seq (emitted_insts next next') held = Abort Revert_abort ss'

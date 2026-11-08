@@ -110,7 +110,7 @@ Theorem compile_nonreentrant_lock_source_correct:
   nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   compile_nonreentrant_lock key T is_view st = ((),st') /\
-  tload (n2w key) ss <> 1w ==>
+  tload (n2w key) ss <> 1w /\ ~ss.vs_call_ctx.cc_static ==>
   ?vs' ss'.
     acquire_nonreentrant_lock cx.txn.target key is_view vs = (INL (),vs') /\
     run_inst_seq (emitted_insts st st') ss = OK ss' /\
@@ -150,7 +150,7 @@ Proof
 QED
 
 Theorem compile_nonreentrant_unlock_source_correct:
-  state_rel func cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\ ~ss.vs_call_ctx.cc_static /\
   compile_nonreentrant_unlock key T is_view st = ((),st') ==>
   ?vs' ss'.
     (if is_view then return () else
@@ -161,7 +161,7 @@ Proof
   Cases_on `is_view` >> strip_tac
   >- gvs[compile_nonreentrant_unlock_transient_view, emitted_insts_def,
          run_inst_seq_def, vyperStateTheory.return_def] >>
-  drule compile_nonreentrant_unlock_transient_correct >> strip_tac >>
+  drule_all compile_nonreentrant_unlock_transient_correct >> strip_tac >>
   simp[release_nonreentrant_lock_execution] >>
   irule state_rel_transient_update >> simp[] >>
   metis_tac[storage_dead_update_zero]

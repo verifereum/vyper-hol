@@ -25,7 +25,7 @@ Theorem nonreentrant_entry_lock_source_correct:
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
-  tload (n2w global_nonreentrant_slot) ss <> 1w ==>
+  tload (n2w global_nonreentrant_slot) ss <> 1w /\ ~ss.vs_call_ctx.cc_static ==>
   ?vs' ss'.
     (case cx.nonreentrant_slot of
        NONE => vyperState$raise (vyperState$Error (TypeError "nonreentrant slot missing"))
@@ -71,7 +71,7 @@ Theorem nonreentrant_entry_unlock_source_correct:
   MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops /\
   function_header_ok vis mut T rr name args dflts ret /\
   cx.nonreentrant_slot = lookup_nonreentrant_slot am.layouts tx.target /\
-  state_rel func cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\ ~ss.vs_call_ctx.cc_static /\
   compile_nonreentrant_unlock global_nonreentrant_slot T (mut = View) st = ((),st') ==>
   ?vs' ss'.
     (if ~(mut = View \/ mut = Pure) then
@@ -101,7 +101,7 @@ Theorem checked_nonreentrant_entry_lock:
   state_rel func cenv cx vs ss /\ fresh_vars_wrt st ss /\
   local_ptrs_rel func cenv scopes ss /\
   compile_nonreentrant_lock global_nonreentrant_slot T (mut = View) st = ((),st') /\
-  tload (n2w global_nonreentrant_slot) ss <> 1w ==>
+  tload (n2w global_nonreentrant_slot) ss <> 1w /\ ~ss.vs_call_ctx.cc_static ==>
   ?vs' ss'.
     (case cx.nonreentrant_slot of
        NONE => vyperState$raise

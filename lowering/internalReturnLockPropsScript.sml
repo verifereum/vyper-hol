@@ -8,7 +8,7 @@ Ancestors
   vyperAST list rich_list transientLockFrameProps
 
 Theorem compile_return_unlock_source_correct:
-  state_rel func cenv cx vs ss /\
+  state_rel func cenv cx vs ss /\ ~ss.vs_call_ctx.cc_static /\
   cenv.ce_nonreentrant = (T,key,T,is_view) /\
   compile_return_unlock cenv st = ((),st') ==>
   ?vs' ss'.
@@ -107,7 +107,8 @@ QED
 
 Theorem transient_unlock_return_execution:
   !values ss words rpc pc id key.
-  eval_operands values ss = SOME words /\ eval_operand rpc ss = SOME pc ==>
+  eval_operands values ss = SOME words /\ eval_operand rpc ss = SOME pc /\
+  ~ss.vs_call_ctx.cc_static ==>
   run_inst_seq
     [mk_inst id TSTORE [Lit key;Lit 0w] [];
      mk_inst (id + 1) RET (values ++ [rpc]) []] ss =
@@ -127,7 +128,7 @@ Theorem compile_internal_bare_return_releases:
   cenv.ce_return_pc = SOME (PtrVar rpc byte_size) /\
   cenv.ce_nonreentrant = (T,key,T,F) /\
   compile_stmt cenv lctx ty (Return NONE) st = ((),st') /\
-  eval_operand rpc ss = SOME pc ==>
+  eval_operand rpc ss = SOME pc /\ ~ss.vs_call_ctx.cc_static ==>
   run_inst_seq (emitted_insts st st') ss =
     IntRet <| iret_values := []; iret_adopt_fmp := NONE |>
       (tstore (n2w key) 0w ss)
@@ -143,7 +144,8 @@ Theorem compile_internal_value_return_releases:
   cenv.ce_return_buf = NONE /\ cenv.ce_returns_count = 1 /\
   cenv.ce_nonreentrant = (T,key,T,F) /\
   compile_internal_return_from_env cenv ty src_ty value rpc st = ((),st') /\
-  eval_operand value ss = SOME word /\ eval_operand rpc ss = SOME pc ==>
+  eval_operand value ss = SOME word /\ eval_operand rpc ss = SOME pc /\
+  ~ss.vs_call_ctx.cc_static ==>
   run_inst_seq (emitted_insts st st') ss =
     IntRet <| iret_values := [word]; iret_adopt_fmp := NONE |>
       (tstore (n2w key) 0w ss)
