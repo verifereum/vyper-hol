@@ -21,8 +21,8 @@ Proof
       simp[access_ok_def, taint_ok_def] >>
       simp[source_memory_write_ranges_def, source_memory_read_ranges_def,
            mk_inst_def, op_taint_def] >>
-      simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def, jump_to_def]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+      simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def, jump_to_def]) >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
        is_terminator_def]
 QED
 
@@ -141,7 +141,7 @@ Proof
     (rpt strip_tac >>
      `step_inst fuel ctx eqi ss = OK (update_var out v ss)` by
        simp[Abbr `eqi`, Abbr `v`, step_inst_non_invoke, mk_inst_def,
-            step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+            step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
      irule ptr_safe_run_scalar_continuation >>
      qexistsl_tac [`bb`, `eqi`, `update_var out v ss`] >>
      simp[Abbr `eqi`, is_terminator_def, mk_inst_def, update_var_def] >>
@@ -297,7 +297,7 @@ Proof
        [STRING #"%" (toString st.cs_next_var)]) ss =
      OK (update_var (STRING #"%" (toString st.cs_next_var)) (n2w (LENGTH cd)) ss)` by
     simp[Abbr `cd`, step_inst_non_invoke, mk_inst_def,
-         step_inst_base_def, exec_read0_def] >>
+         step_inst_base_opcode_eqs, exec_read0_def] >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `b0`] mp_tac) >>
   disch_then (qspecl_then [`st`, `st with cs_next_var := SUC st.cs_next_var`,
@@ -319,7 +319,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[lt]:
        [STRING #"%" (toString (st.cs_next_var + 1))]) u1 =
      OK (update_var (STRING #"%" (toString (st.cs_next_var + 1)))
        (bool_to_word (LENGTH cd < 4)) u1)` by
-    simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+    simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
          exec_pure2_def, eval_operand_def, dimword_def] >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `b0`] mp_tac) >>
@@ -342,7 +342,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[iszero]:
        [STRING #"%" (toString (st.cs_next_var + 2))]) u2 =
      OK (update_var (STRING #"%" (toString (st.cs_next_var + 2)))
        (bool_to_word (4 <= LENGTH cd)) u2)` by
-    (simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def, exec_pure1_def] >>
+    (simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs, exec_pure1_def] >>
      Cases_on `LENGTH cd < 4` >> simp[bool_to_word_def]) >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `b0`] mp_tac) >>
@@ -405,7 +405,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[load]:
      (mk_inst (st.cs_next_id + 4) CALLDATALOAD [Lit 0w]
        [STRING #"%" (toString (st.cs_next_var + 3))]) s4 =
      OK (update_var (STRING #"%" (toString (st.cs_next_var + 3))) w s4)` by
-    simp[Abbr `w`, step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+    simp[Abbr `w`, step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
          exec_read1_def, eval_operand_def] >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `bd`] mp_tac) >>
@@ -431,7 +431,7 @@ Resume compile_selector_dispatch_linear_ptr_endpoint[shift]:
        [STRING #"%" (toString (st.cs_next_var + 4))]) u5 =
      OK (update_var (STRING #"%" (toString (st.cs_next_var + 4)))
        (calldata_method_id cd) u5)` by
-    (simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+    (simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
           exec_pure2_def, eval_operand_def] >>
      simp[dimword_def]) >>
   drule dispatch_scalar_update_ptr_endpoint >>

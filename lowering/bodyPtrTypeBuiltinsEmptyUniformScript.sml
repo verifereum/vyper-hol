@@ -27,7 +27,7 @@ Proof
     simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `!k. step_inst_base (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
       (u with vs_inst_idx := k) = OK (v with vs_inst_idx := k)` by
-    (gvs[Abbr `v`, step_inst_base_def, mk_inst_def, exec_write2_def,
+    (gvs[Abbr `v`, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
          eval_operand_def, lookup_var_def, mstore_def]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[inst_seq_ptr_def] >> strip_tac >>

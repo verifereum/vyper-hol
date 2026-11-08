@@ -163,7 +163,7 @@ Resume widen_copy_checked_certificate[cursor]:
   qpat_x_assum `n <> 0` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >> strip_tac >> strip_tac >>
   simp[inst_seq_ptr_def] >>
-  simp[step_inst_base_def, mk_inst_def, eval_operand_def, lookup_var_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, lookup_var_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   Cases_on `FLOOKUP s.vs_vars p` >> gvs[] >>
   Cases_on `FLOOKUP s.vs_vars src` >> gvs[mcopy_def]

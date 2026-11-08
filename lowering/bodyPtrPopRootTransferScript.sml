@@ -20,7 +20,7 @@ Proof
   qabbrev_tac `u = update_var out (if tr then tload slot s else sload slot s) s` >>
   `step_inst_base (mk_inst id opc ops outs) s = OK u` by
     (map_every qunabbrev_tac [`opc`,`ops`,`outs`,`u`] >>
-     Cases_on `tr` >> simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+     Cases_on `tr` >> simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
        eval_operands_def, update_var_def, exec_read1_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id opc ops outs) s` by
     (irule append_scalar_inst_check >> simp[Abbr `opc`, Abbr `ops`,
@@ -49,7 +49,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ISZERO [op] [out]) s =
     OK (update_var out (bool_to_word (w = 0w)) s)` by
-    simp[step_inst_base_def, exec_pure1_def, mk_inst_def, eval_operands_def] >>
+    simp[step_inst_base_opcode_eqs, exec_pure1_def, mk_inst_def, eval_operands_def] >>
   conj_tac
   >- (irule typed_copy_loop_test_check >> simp[update_var_def] >> metis_tac[]) >>
   simp[] >> irule typed_copy_loop_arith_ghost_clean >> simp[update_var_def]
@@ -126,10 +126,10 @@ Proof
     (irule pop_root_header_transfer >> simp[]) >>
   pop_assum mp_tac >> simp[Once inst_seq_ptr_def] >>
   Cases_on `tr` >>
-  simp[step_inst_base_def, exec_read1_def, mk_inst_def,
+  simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def,
        eval_operands_def, eval_operand_def] >> strip_tac >>
   simp[Once inst_seq_ptr_def] >>
-  simp[step_inst_base_def, exec_read1_def, mk_inst_def,
+  simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def,
        eval_operands_def, eval_operand_def] >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [] _ _ _`
     (strip_assume_tac o SRULE [inst_seq_ptr_def]) >>

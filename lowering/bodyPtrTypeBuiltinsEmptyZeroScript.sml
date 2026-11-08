@@ -130,7 +130,7 @@ Resume empty_zero_pair_certificate[sequence]:
      (u with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ u _ _` mp_tac >>
-  simp[inst_seq_ptr_def, step_inst_base_def,
+  simp[inst_seq_ptr_def, step_inst_base_opcode_eqs,
        mk_inst_def, exec_write2_def, eval_operand_def]
 QED
 

@@ -12,7 +12,7 @@ Theorem pop_scalar_binary_step:
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id opc [a;b] [out]) s = OK (update_var out z s)` by
-    (gvs[] >> simp[step_inst_base_def, mk_inst_def, exec_pure2_def,
+    (gvs[] >> simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
                    eval_operands_def]) >>
   simp[] >> gvs[] >>
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,

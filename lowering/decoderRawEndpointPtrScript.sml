@@ -35,7 +35,7 @@ Proof
    t.vs_labels = s.vs_labels /\ t.vs_current_bb = s.vs_current_bb /\
    t.vs_alloca_next = s.vs_alloca_next` by
     (drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   `run_inst_seq (emitted_insts sa sb)
     (s with vs_inst_idx := LENGTH sa.cs_current_insts) =
@@ -82,7 +82,7 @@ Proof
   `t.vs_labels = s.vs_labels /\ t.vs_current_bb = s.vs_current_bb /\
    t.vs_alloca_next = s.vs_alloca_next` by
     (drule emitted_insts_emit_op >> strip_tac >>
-     gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_pure2_def,
+     gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        eval_operand_def, lookup_var_def, update_var_def]) >>
   `run_inst_seq (emitted_insts sa sb)
     (s with vs_inst_idx := LENGTH sa.cs_current_insts) =

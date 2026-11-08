@@ -109,7 +109,7 @@ Proof
     (mp_then Any mp_tac convert_scalar_run_shape) >> simp[] >>
   disch_then (qx_choose_then `z` SUBST_ALL_TAC) >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, mk_inst_def, AllCaseEqs()] >> strip_tac >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, AllCaseEqs()] >> strip_tac >>
   gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 

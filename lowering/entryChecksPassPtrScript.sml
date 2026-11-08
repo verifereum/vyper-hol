@@ -59,10 +59,10 @@ Proof
   qexistsl_tac [`bb`, `mk_inst id CALLVALUE [] [out]`,
     `update_var out s.vs_call_ctx.cc_callvalue s`] >>
   simp[update_var_def, mk_inst_def, is_terminator_def, step_inst_non_invoke,
-       step_inst_base_def, exec_read0_def] >>
+       step_inst_base_opcode_eqs, exec_read0_def] >>
   simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
-       step_inst_non_invoke, step_inst_base_def, exec_read0_def,
+       step_inst_non_invoke, step_inst_base_opcode_eqs, exec_read0_def,
        mk_inst_def, update_var_def] >>
   fs[mk_inst_def]
 QED
@@ -87,10 +87,10 @@ Proof
      simp[set_prov_def, DRESTRICT_UNIV, taint_component_equality]) >>
   rpt strip_tac >> irule ptr_safe_run_scalar_continuation >>
   qexistsl_tac [`bb`, `mk_inst id ASSERT [op] []`, `s`] >>
-  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def, is_terminator_def] >>
+  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs, is_terminator_def] >>
   simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
-       step_inst_non_invoke, step_inst_base_def, mk_inst_def]
+       step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Theorem compile_entry_value_check_ptr_endpoint[local]:
@@ -135,7 +135,7 @@ Resume compile_entry_value_check_ptr_endpoint[iszero]:
       [Var (STRING #"%" (toString st.cs_next_var))]
       [STRING #"%" (toString (st.cs_next_var + 1))]) s1 =
     OK (update_var (STRING #"%" (toString (st.cs_next_var + 1))) 1w s1)` by
-    simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def, exec_pure1_def,
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
          bool_to_word_def] >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
@@ -194,7 +194,7 @@ Resume compile_entry_size_check_ptr_endpoint[size]:
     (mk_inst st.cs_next_id CALLDATASIZE [] [STRING #"%" (toString st.cs_next_var)]) s =
     OK (update_var (STRING #"%" (toString st.cs_next_var))
       (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)` by
-    simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def, exec_read0_def] >>
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def] >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
   disch_then (qspecl_then [`st`, `st with cs_next_var := st.cs_next_var + 1`,
@@ -214,7 +214,7 @@ Resume compile_entry_size_check_ptr_endpoint[lt]:
       [Var (STRING #"%" (toString st.cs_next_var)); Lit (n2w m)]
       [STRING #"%" (toString (st.cs_next_var + 1))]) s1 =
     OK (update_var (STRING #"%" (toString (st.cs_next_var + 1))) 0w s1)` by
-    simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def, exec_pure2_def,
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
          eval_operand_def, word_lo_n2w, bool_to_word_def] >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>
@@ -234,7 +234,7 @@ Resume compile_entry_size_check_ptr_endpoint[iszero]:
       [Var (STRING #"%" (toString (st.cs_next_var + 1)))]
       [STRING #"%" (toString (st.cs_next_var + 2))]) s2 =
     OK (update_var (STRING #"%" (toString (st.cs_next_var + 2))) 1w s2)` by
-    simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def, exec_pure1_def,
+    simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def,
          bool_to_word_def] >>
   drule dispatch_scalar_update_ptr_endpoint >>
   disch_then (qspecl_then [`fn`, `bb`] mp_tac) >>

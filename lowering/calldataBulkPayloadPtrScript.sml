@@ -80,7 +80,7 @@ Proof
   `t = write_memory_with_expansion (w2n dw)
     (TAKE (w2n nw)
       (DROP (w2n sw) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n nw) 0w)) s` by
-    gvs[run_inst_seq_def, step_inst_base_def, mk_inst_def] >>
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
   drule_all calldatacopy_ghost_frame >>
   disch_then (qspecl_then [`tn`,`sa.cs_next_id`,`PG`,`G`] strip_assume_tac) >>
   qexistsl_tac [

@@ -16,7 +16,7 @@ Proof
   qabbrev_tac `t = if tr then tstore slot w s else sstore slot w s` >>
   `step_inst_base (mk_inst id (if tr then TSTORE else SSTORE) [Lit slot;v] []) s = OK t` by
     (Cases_on `tr` >>
-     simp[step_inst_base_def, mk_inst_def, eval_operands_def,
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def,
           eval_operand_def, exec_write2_def, Abbr `t`]) >>
   `t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
    t.vs_requests = s.vs_requests` by
@@ -144,7 +144,7 @@ Proof
   >- (Cases_on `tr` >> simp[mk_inst_def, is_terminator_def]) >>
   qexistsl_tac [`G`, `t with vs_inst_idx := k`, `tn1`] >> simp[] >>
   conj_tac
-  >- (Cases_on `tr` >> gvs[Abbr `t`, step_inst_base_def, mk_inst_def,
+  >- (Cases_on `tr` >> gvs[Abbr `t`, step_inst_base_opcode_eqs, mk_inst_def,
        exec_write2_def, eval_operands_def, eval_operand_def, sstore_def, tstore_def]) >>
   simp[Abbr `tn1`, GSYM mk_inst_def] >> irule pop_root_store_transfer >>
   gvs[eval_operand_def, lookup_var_def]

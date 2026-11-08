@@ -31,7 +31,7 @@ Proof
        (mp_then Any mp_tac straight_line_ptr_edge) >>
      simp[mk_inst_def, is_terminator_def] >> disch_then irule >>
      conj_tac
-     >- simp[Once step_inst_base_def, mk_inst_def, eval_operand_def, w2n_n2w] >>
+     >- simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, w2n_n2w] >>
      conj_tac >- simp[] >>
      irule (SRULE [mk_inst_def] ptr_inst_ok_mcopy_operand) >>
      simp[eval_operand_def, op_taint_def, w2n_n2w]) >>

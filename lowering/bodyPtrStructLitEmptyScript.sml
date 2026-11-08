@@ -147,7 +147,7 @@ Proof
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] assume_tac) >>
   `~t.vs_halted` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[venomExecSemanticsTheory.step_inst_base_def, mk_inst_def,
+     simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
        venomExecSemanticsTheory.exec_alloca_def] >>
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >>
      simp[update_var_def] >> rpt strip_tac >> gvs[] >>

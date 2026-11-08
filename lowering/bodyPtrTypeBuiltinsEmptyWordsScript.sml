@@ -135,7 +135,7 @@ Resume empty_zero_words_certificate[run]:
     simp[Abbr `u`, lookup_var_update_var] >>
   `step_inst_base (mk_inst (sm.cs_next_id+1) MSTORE
      [Var out; Lit 0w] []) u = OK v` by
-    simp[Abbr `v`, step_inst_base_def, mk_inst_def, exec_write2_def, eval_operand_def] >>
+    simp[Abbr `v`, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def] >>
   asm_rewrite_tac[] >>
   drule run_inst_seq_append >> disch_then (fn th => rewrite_tac[th]) >>
   asm_rewrite_tac[run_inst_seq_def] >> simp[mk_inst_def]

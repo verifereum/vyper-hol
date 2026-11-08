@@ -40,6 +40,6 @@ Proof
   qexistsl_tac [`mstore (w2n w) 0w s`, `G`, `tn'`] >>
   gvs[emit_void_def, fresh_id_def, emit_def, comp_bind_def, comp_return_def,
       emitted_insts_def, DROP_LENGTH_APPEND] >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_write2_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def, op_taint_def, mstore_def, lookup_var_def]
 QED

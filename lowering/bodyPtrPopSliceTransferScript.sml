@@ -9,7 +9,7 @@ Theorem pop_root_load_step[local]:
   OK (update_var x0 (if tr then tload slot s else sload slot s) s)
 Proof
   Cases_on `tr` >> simp_tac std_ss [] >>
-  simp[Once step_inst_base_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[exec_read1_def, eval_operand_def]
 QED
 

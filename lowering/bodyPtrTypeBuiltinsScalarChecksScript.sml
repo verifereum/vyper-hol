@@ -106,7 +106,7 @@ Proof
   >>
   qpat_x_assum `step_inst_base _ _ = Abort _ _` mp_tac >>
   CONV_TAC (LAND_CONV (LAND_CONV (REWRITE_CONV
-    [step_inst_base_def, mk_inst_def, instruction_accessors,
+    [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
      instruction_accfupds, combinTheory.K_THM, opcode_case_def]))) >>
   gvs[MEM] >> simp[exec_pure2_def, exec_pure1_def, AllCaseEqs()]
 QED
@@ -216,7 +216,7 @@ Proof
   drule iszero_run_shape >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   CONV_TAC (LAND_CONV (LAND_CONV (REWRITE_CONV
-    [step_inst_base_def, mk_inst_def, instruction_accessors,
+    [step_inst_base_opcode_eqs, mk_inst_def, instruction_accessors,
      instruction_accfupds, combinTheory.K_THM, opcode_case_def]))) >>
   simp[AllCaseEqs()] >>
   strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
