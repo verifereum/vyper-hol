@@ -4,7 +4,7 @@ Ancestors
   externalEntryChecks moduleLoweringProps vyperCompiler venomInst
   loweringShapeDefs compileEnv selectedBodyCode venomWf moduleLowering
   loweringShapeProps compileVyper vyperLoweringCorrect entryDispatchProps
-  venomState venomExecSemantics entryChecksProps list pair
+  venomState venomExecSemantics entryChecksProps entryRegistrationOpen list pair
 Libs
   monadsyntax
 
@@ -213,6 +213,7 @@ Theorem entry_canonical_checks_reached:
       (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\
     venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
     func = mk_raw_function "__entry" (all_blocks se) /\ fn_inst_ids_distinct func /\
+    ~block_is_terminated start /\
     compile_entry_checks mincd pay checks = ((),start) /\
     compile_register_positional_args ce pos 4 start = (cenv,registered) /\
     compile_guarded_body cenv F key ut iv fbody rt registered = ((),body_end) /\
@@ -228,6 +229,8 @@ Theorem entry_canonical_checks_reached:
       ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
   strip_tac >> drule_all entry_source_canonical_code >> strip_tac >>
+  `~block_is_terminated checks` by simp[block_is_terminated_def] >>
+  drule_all entry_checks_preserve_open >> strip_tac >>
   `lbl = "fn_" ++ tx.function_name` by
     (qpat_assum `set_external_package_target _ _ = _` mp_tac >>
      simp_tac (srw_ss()) [set_external_package_target_def,

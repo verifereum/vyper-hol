@@ -4,7 +4,8 @@ Ancestors
   entryChecksProps externalEntryChecks compileVyper compileEnv
   moduleLoweringProps vyperLoweringCorrect vyperInterpreter vyperState
   e2eDefs abiDecoderCorrect abiDecoderCounters
-  entryReachBodyRegistrationInitialization words list
+  entryReachBodyRegistrationInitialization entryBodyEndpointStructure
+  entryRegistrationOpen words list
 
 Theorem entry_successful_value[local]:
   send_call_value mut cx st = (INL (),es) ==>
@@ -74,6 +75,8 @@ Theorem entry_canonical_registration_reached:
     venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_inst_ids_distinct fn /\
     compile_register_positional_args ce pos 4 start = (cenv,registered) /\
+    ~block_is_terminated start /\ ~block_is_terminated registered /\
+    local_ptrs_reserved cenv registered /\
     compile_guarded_body cenv F key ut iv fbody rt registered = ((),final) /\
     fn_has_code start final fn /\ fn_has_code registered final fn /\
     (!inst. MEM inst (state_insts registered) ==> MEM inst (fn_insts fn)) /\
@@ -88,6 +91,8 @@ Theorem entry_canonical_registration_reached:
       ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
   strip_tac >> drule_all entry_canonical_checks_reached >> strip_tac >>
+  drule_all registration_preserves_open >> strip_tac >>
+  drule_all targeted_external_entry_locals >> strip_tac >>
   drule_all entry_selected_check_premises >> strip_tac >>
   `start.cs_next_var <= body_end.cs_next_var` by
     (drule compile_register_positional_args_next_var >> strip_tac >>

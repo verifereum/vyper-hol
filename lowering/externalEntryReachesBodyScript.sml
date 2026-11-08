@@ -2,6 +2,7 @@
 Theory externalEntryReachesBody
 Ancestors
   entryReachBodyStateAssembly entryReachBodyRootChecks entryReachBodySelectedCode
+  entryBodyRegistrationComposition entryLocals entryReachBodyExactArrayLoop
   stmtSimProps
   stmtSimDefs
   exprSimDefs
@@ -83,6 +84,19 @@ Theorem external_entry_reaches_body:
                (!e. r <> Error e) ==>
                ?fuel'. run_context fuel' unit.cu_context vs = r
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all entry_canonical_registration_reached >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions` by
+    metis_tac[venomInstTheory.lookup_function_MEM] >>
+  drule_all entry_body_state_assembly >> strip_tac >>
+  qexistsl_tac [`lbl`,`ce`,`pos`,`mincd`,`pay`,`key`,`ut`,`iv`,`rt`,
+    `start`,`cenv`,`registered`,`final`,`fn`,`t`] >>
+  simp[] >>
+  `t.vs_gas_readings = vs.vs_gas_readings` by
+    fs[entry_loop_fields_def] >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+      simp[package_external_fn_def]) >>
+  metis_tac[]
 QED
 
