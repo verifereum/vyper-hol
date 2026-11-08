@@ -2,7 +2,7 @@
 Theory mmLocalScanProofs
 Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
-  venomFnScheduleRunner
+  venomFnScheduleRunner allocaRemapSSA
   venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
 Libs
   wordsLib finite_mapLib
@@ -1065,18 +1065,18 @@ Proof
   drule irSupplyTheory.fresh_ir_var_contract >> strip_tac >> gvs[]
 QED
 
-Theorem mm_local_list_old_use[local]:
-  !f xs s ys t.
+Theorem mm_local_list_old_vars[local]:
+  !vars f xs s ys t.
   (!u i out w. f u i = (out,w) ==>
     (!v. MEM v u.irs_used_vars ==> MEM v w.irs_used_vars) /\
-    (!j v. MEM j out /\ MEM v (venomInst$inst_uses j) /\
+    (!j v. MEM j out /\ MEM v (vars j) /\
       MEM v u.irs_used_vars ==> j = i)) /\
   mm_flat_map_supply f s xs = (ys,t) ==>
   (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
-  (!j v. MEM j ys /\ MEM v (venomInst$inst_uses j) /\
+  (!j v. MEM j ys /\ MEM v (vars j) /\
     MEM v s.irs_used_vars ==> MEM j xs)
 Proof
-  gen_tac >> Induct >> simp[mm_flat_map_supply_def] >>
+  ntac 2 gen_tac >> Induct >> simp[mm_flat_map_supply_def] >>
   rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
   qpat_assum `!u i out w. _` drule >> strip_tac >>
   qpat_x_assum `!s ys t. _` (qspecl_then [`s1`, `outs`, `t`] mp_tac) >>
@@ -1093,7 +1093,8 @@ Proof
   Cases_on `phase` >>
   simp[mm_local_phase_def, transform_block_memzero_supply_def,
        transform_block_mode_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  drule_at (Pat `mm_flat_map_supply _ _ _ = _`) mm_local_list_old_use >>
+  drule_at (Pat `mm_flat_map_supply _ _ _ = _`)
+    (Q.ISPEC `venomInst$inst_uses` mm_local_list_old_vars) >>
   (impl_tac >- metis_tac[mm_local_memzero_old_use, mm_local_mode_old_use]) >>
   simp[]
 QED
@@ -1359,6 +1360,134 @@ Theorem mm_local_scan_group_roles_elim[local]:
 Proof
   strip_tac >> drule mm_local_scan_group_roles >>
   simp[mm_local_group_roles_def]
+QED
+
+Theorem mm_local_mode_old_output_var[local]:
+  apply_groups_inst_supply mode ns rm s i = (out,t) ==>
+  (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
+  (!j v. MEM j out /\ MEM v j.inst_outputs /\
+    MEM v s.irs_used_vars ==> j = i)
+Proof
+  rw[apply_groups_inst_supply_def, AllCaseEqs()] >>
+  gvs[mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
+      mk_mstore_from_load_def, irSupplyTheory.fresh_inst_id_def] >>
+  drule irSupplyTheory.fresh_ir_var_contract >> strip_tac >> gvs[]
+QED
+
+Theorem mm_local_memzero_old_output_var[local]:
+  apply_memzero_inst_supply ns rm s i = (out,t) ==>
+  (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
+  (!j v. MEM j out /\ MEM v j.inst_outputs /\
+    MEM v s.irs_used_vars ==> j = i)
+Proof
+  rw[apply_memzero_inst_supply_def, AllCaseEqs()] >>
+  gvs[mk_nop_from_def, mk_zero_store_inst_def, mk_memzero_calldatacopy_def,
+      irSupplyTheory.fresh_inst_id_def] >>
+  drule irSupplyTheory.fresh_ir_var_contract >> strip_tac >> gvs[]
+QED
+
+Theorem mm_local_phase_old_output_var[local]:
+  mm_local_phase dfg phase (bb,s) = (cc,t) ==>
+  (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
+  (!i v. MEM i cc.bb_instructions /\ MEM v i.inst_outputs /\
+    MEM v s.irs_used_vars ==> MEM i bb.bb_instructions)
+Proof
+  Cases_on `phase` >>
+  simp[mm_local_phase_def, transform_block_memzero_supply_def,
+       transform_block_mode_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_at (Pat `mm_flat_map_supply _ _ _ = _`)
+    (Q.ISPEC `\i:instruction. i.inst_outputs` mm_local_list_old_vars) >>
+  (impl_tac >- metis_tac[mm_local_memzero_old_output_var,
+                       mm_local_mode_old_output_var]) >>
+  metis_tac[]
+QED
+
+Theorem mm_local_prefix_old_output_var[local]:
+  !fn0 supply index k bb sk.
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) ==>
+  (!v. MEM v supply.irs_used_vars ==> MEM v sk.irs_used_vars) /\
+  (!i v. MEM i bb.bb_instructions /\ MEM v i.inst_outputs /\
+    MEM v supply.irs_used_vars ==> MEM i (EL index fn0.fn_blocks).bb_instructions)
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- simp[mm_local_prefix_zero] >>
+  rpt gen_tac >> strip_tac >>
+  `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `(!v. MEM v supply.irs_used_vars ==> MEM v sp.irs_used_vars) /\
+   (!i v. MEM i prev.bb_instructions /\ MEM v i.inst_outputs /\
+     MEM v supply.irs_used_vars ==> MEM i (EL index fn0.fn_blocks).bb_instructions)`
+    by (first_x_assum irule >> simp[]) >>
+  drule mm_local_phase_old_output_var >> strip_tac >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_producer_identify[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM q bb.bb_instructions /\ MEM v q.inst_outputs /\
+  dfg_get_def (dfg_build_function fn0) v = SOME li ==> q = li
+Proof
+  rpt strip_tac >>
+  drule dfgCorrectnessProofTheory.dfg_build_function_correct_proof >> strip_tac >>
+  `MEM v supply.irs_used_vars` by
+    (mp_tac (Q.SPECL [`fn0.fn_blocks`, `supply.irs_used_vars`]
+      mmSupplyWfProofsTheory.mm_supply_outputs_covered) >>
+     gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_vars_def,
+         list_subset_def, EVERY_MEM, venomInstTheory.fn_insts_def, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  `MEM q (EL index fn0.fn_blocks).bb_instructions` by
+    metis_tac[mm_local_prefix_old_output_var] >>
+  `MEM q (fn_insts fn0)` by
+    (irule mmWfProofsTheory.fn_insts_mem_block >>
+     qexists_tac `EL index fn0.fn_blocks` >> simp[EL_MEM]) >>
+  irule allocaRemapSSATheory.ssa_unique_output >>
+  conj_tac
+  >- (qexists_tac `fn0` >> gvs[wf_ssa_def]) >>
+  qexists_tac `v` >> simp[]
+QED
+
+Theorem mm_local_nonoriginal_def_absent[local]:
+  ~MEM v (irSupply$fn_ir_vars fn0) ==>
+  dfg_get_def (dfg_build_function fn0) v = NONE
+Proof
+  strip_tac >> Cases_on `dfg_get_def (dfg_build_function fn0) v` >> simp[] >>
+  drule dfgCorrectnessProofTheory.dfg_build_function_correct_proof >> strip_tac >>
+  mp_tac (Q.SPECL [`fn0.fn_blocks`, `irSupply$fn_ir_vars fn0`]
+    mmSupplyWfProofsTheory.mm_supply_outputs_covered) >>
+  gvs[irSupplyTheory.fn_ir_vars_def, list_subset_def, EVERY_MEM,
+      venomInstTheory.fn_insts_def, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_group_roles_elim[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM cg (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  MEM id cg.cg_inst_ids ==>
+  (?st dst v. MEM st bb.bb_instructions /\ st.inst_id = id /\
+    st.inst_opcode = MSTORE /\ st.inst_operands = [Lit dst; Var v]) \/
+  (?cp dst src len. MEM cp bb.bb_instructions /\ cp.inst_id = id /\
+    cp.inst_opcode = mode_copy_opcode mode /\
+    cp.inst_operands = [Lit dst; Lit src; Lit len]) \/
+  (?pre q mid st post v addr dst.
+    bb.bb_instructions = pre ++ [q] ++ mid ++ [st] ++ post /\
+    q.inst_opcode = mode_load_opcode mode /\
+    q.inst_operands = [Lit addr] /\ q.inst_outputs = [v] /\
+    st.inst_opcode = MSTORE /\ st.inst_operands = [Lit dst; Var v] /\
+    dfg_get_def (dfg_build_function fn0) v = SOME q /\ q.inst_id = id /\
+    MEM st.inst_id cg.cg_inst_ids)
+Proof
+  rpt strip_tac >> drule_all mm_local_scan_group_roles_elim >> strip_tac
+  >- metis_tac[]
+  >- metis_tac[] >>
+  `MEM q bb.bb_instructions /\ MEM v q.inst_outputs` by simp[MEM_APPEND] >>
+  drule_all mm_local_prefix_producer_identify >> strip_tac >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem mm_local_stage_correct:
