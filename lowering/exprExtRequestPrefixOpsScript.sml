@@ -114,7 +114,14 @@ Theorem extrequest_alloc_selector_endpoint:
     mem_bytes_at (w2n w) 32 t.vs_memory = word_to_bytes wd T /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    local_ptrs_reserved cenv sb
+    local_ptrs_reserved cenv sb /\
+    (!name b len. local_region cenv ee.scopes t name b len ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (cenv.ce_is_ctor ==> !name tv v off.
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+       FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+       regions_disjoint (w2n w) sz off (type_memory_size tv))
 Proof
   strip_tac >> drule_all extrequest_allocation_endpoint >> strip_tac >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -138,6 +145,11 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
+  `!name b len. local_region cenv ee.scopes t name b len <=>
+      local_region cenv ee.scopes u name b len` by
+    (qpat_assum `(t with <|vs_memory := _; vs_inst_idx := _|>) = u` mp_tac >>
+     simp[venom_state_component_equality] >> strip_tac >>
+     simp[local_region_def, lookup_var_def]) >>
   qexistsl_tac [`t`, `w`] >> rpt conj_tac
   >- (qpat_assum `gas_marked_path F ctx func s 0 (OK u)`
         (mp_then Any mp_tac gas_marked_path_then) >>
@@ -149,7 +161,7 @@ Proof
         mp_tac >> simp[venom_state_component_equality] >> metis_tac[])
   >- simp[]
   >- simp[mem_bytes_at_mstore_same]
-  >> simp[]
+  >> simp[] >> metis_tac[]
 QED
 
 Resume extrequest_alloc_selector_endpoint[history]:
