@@ -1266,6 +1266,52 @@ Proof
   qexists_tac `0` >> simp[]
 QED
 
+
+Theorem mm_local_flat_map_supply_use_order[local]:
+  (!s i out t j v.
+    f s i = (out,t) /\ j < LENGTH out /\
+    MEM v (venomInst$inst_uses (EL j out)) ==>
+    (EL j out = i /\ MEM v (venomInst$inst_uses i)) \/
+    (?a. a < j /\ MEM v (EL a out).inst_outputs)) ==>
+  !xs s ys t j v.
+  mm_flat_map_supply f s xs = (ys,t) /\ j < LENGTH ys /\
+  MEM v (venomInst$inst_uses (EL j ys)) ==>
+  (?b r chunk z. b < LENGTH xs /\ f r (EL b xs) = (chunk,z) /\
+    MEM (EL j ys) chunk /\ EL j ys = EL b xs /\
+    MEM v (venomInst$inst_uses (EL b xs)) /\
+    (!q. MEM q (TAKE b xs) /\
+      (!r out z. f r q = (out,z) ==> MEM q out) ==>
+      ?c. c < j /\ EL c ys = q)) \/
+  (?a. a < j /\ MEM v (EL a ys).inst_outputs)
+Proof
+  strip_tac >> Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >>
+  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `f s h = (out,s1)` >>
+  Cases_on `j < LENGTH out`
+  >- (gvs[EL_APPEND_EQN] >>
+      qpat_x_assum `!s i out t j v. _` drule >>
+      disch_then drule >> disch_then drule >> strip_tac
+      >- (disj1_tac >> qexistsl [`0`, `s`, `out`, `s1`] >> simp[] >>
+          metis_tac[MEM_EL]) >>
+      disj2_tac >> qexists_tac `a` >> simp[EL_APPEND_EQN]) >>
+  `j - LENGTH out < LENGTH outs` by (gvs[] >> decide_tac) >>
+  `MEM v (venomInst$inst_uses (EL (j - LENGTH out) outs))` by
+    gvs[EL_APPEND_EQN] >>
+  first_x_assum drule >> disch_then drule >> disch_then drule >> strip_tac
+  >- (disj1_tac >> qexistsl [`SUC b`, `r`, `chunk`, `z`] >>
+      gvs[EL_APPEND_EQN] >> rpt strip_tac >>
+      gvs[TAKE_def]
+      >- (`MEM h out` by metis_tac[] >>
+          qpat_x_assum `MEM h out` (mp_tac o REWRITE_RULE [MEM_EL]) >>
+          disch_then (qx_choose_then `pos` strip_assume_tac) >>
+          qexists_tac `pos` >> simp[EL_APPEND_EQN] >> decide_tac) >>
+      first_x_assum drule >> disch_then drule >> strip_tac >>
+      qexists_tac `LENGTH out + c` >> simp[EL_APPEND_EQN] >> decide_tac) >>
+  disj2_tac >> qexists_tac `LENGTH out + a` >>
+  gvs[EL_APPEND_EQN] >> decide_tac
+QED
+
 Theorem mm_local_flat_map_supply_use[local]:
   (!s i out t j v.
     f s i = (out,t) /\ j < LENGTH out /\
@@ -1280,24 +1326,9 @@ Theorem mm_local_flat_map_supply_use[local]:
     MEM v (venomInst$inst_uses i)) \/
   (?a. a < j /\ MEM v (EL a ys).inst_outputs)
 Proof
-  strip_tac >> Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
-  rpt gen_tac >>
-  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
-  rename1 `f s h = (out,s1)` >>
-  Cases_on `j < LENGTH out`
-  >- (gvs[EL_APPEND_EQN] >>
-      qpat_x_assum `!s i out t j v. _` drule >>
-      disch_then drule >> disch_then drule >> strip_tac
-      >- (disj1_tac >> metis_tac[MEM, MEM_EL]) >>
-      disj2_tac >> qexists_tac `a` >> simp[EL_APPEND_EQN]) >>
-  `j - LENGTH out < LENGTH outs` by (gvs[] >> decide_tac) >>
-  `MEM v (venomInst$inst_uses (EL (j - LENGTH out) outs))` by
-    gvs[EL_APPEND_EQN] >>
-  first_x_assum drule >> disch_then drule >> disch_then drule >>
-  strip_tac
-  >- (disj1_tac >> gvs[EL_APPEND_EQN] >> metis_tac[MEM]) >>
-  disj2_tac >> qexists_tac `LENGTH out + a` >>
-  gvs[EL_APPEND_EQN] >> decide_tac
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule_all mm_local_flat_map_supply_use_order >>
+  metis_tac[EL_MEM]
 QED
 
 Theorem mm_local_mode_old_use[local]:
@@ -2345,6 +2376,48 @@ Proof
       simp[] >> metis_tac[MEM]) >>
   gvs[] >> `k <= 4` by decide_tac >>
   irule mm_local_prefix_used_producer_unchanged >> metis_tac[]
+QED
+
+Theorem mm_local_available_endpoint_transport[local]:
+  (!d n. fn_dominates fn d n ==> fn_dominates fn' d n) /\
+  target'.bb_label = target.bb_label /\
+  (!db q. MEM db fn.fn_blocks /\ MEM q db.bb_instructions /\
+    MEM v q.inst_outputs ==>
+    ?db'. MEM db' fn'.fn_blocks /\ db'.bb_label = db.bb_label /\
+      MEM q db'.bb_instructions) /\
+  def_available_at fn target NONE v ==>
+  def_available_at fn' target' NONE v
+Proof
+  simp[def_available_at_def] >> metis_tac[]
+QED
+
+Theorem mm_local_available_point_transport[local]:
+  fn'.fn_blocks = MAP B fn.fn_blocks /\ MEM target fn.fn_blocks /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  (!b. MEM b fn.fn_blocks ==> (B b).bb_label = b.bb_label) /\
+  (!d n. fn_dominates fn d n ==> fn_dominates fn' d n) /\
+  (!db q. MEM db fn.fn_blocks /\ MEM q db.bb_instructions /\
+    MEM v q.inst_outputs ==> MEM q (B db).bb_instructions) /\
+  (!q a b. a < b /\ b < LENGTH target.bb_instructions /\
+    EL a target.bb_instructions = q /\ EL b target.bb_instructions = u /\
+    MEM v q.inst_outputs ==>
+    ?c d. c < d /\ d < LENGTH (B target).bb_instructions /\
+      EL c (B target).bb_instructions = q /\ EL d (B target).bb_instructions = u) /\
+  def_available_at fn target (SOME u) v ==>
+  def_available_at fn' (B target) (SOME u) v
+Proof
+  strip_tac >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  qexistsl [`B def_bb`, `def_inst`] >>
+  conj_tac >- metis_tac[MEM_MAP] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- metis_tac[] >>
+  strip_tac >>
+  `def_bb.bb_label = target.bb_label` by metis_tac[] >>
+  `def_bb = target` by metis_tac[mmWfProofsTheory.all_distinct_map_inv] >>
+  gvs[] >> metis_tac[]
 QED
 
 (* Essential counterexample evidence: a variable-free unreachable block. *)
