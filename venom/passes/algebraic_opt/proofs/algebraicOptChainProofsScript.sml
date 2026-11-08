@@ -271,3 +271,77 @@ Proof
   gvs[] >>
   irule ao_word_chain_keep_truth >> simp[] >> metis_tac[]
 QED
+
+Theorem ao_compute_iszero_step_offset:
+  !targets inst.
+    ao_compute_iszero_step targets (ao_handle_offset_inst inst) =
+    ao_compute_iszero_step targets inst
+Proof
+  rpt gen_tac >> Cases_on `inst.inst_opcode = ADD` >>
+  simp[ao_handle_offset_inst_def] >>
+  gvs[ao_compute_iszero_step_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  rename1 `inst.inst_operands = Label lbl::Lit w::rest` >>
+  Cases_on `rest` >> simp[]
+QED
+
+Theorem ao_compute_iszero_fold_offset[local]:
+  !insts targets.
+    FOLDL ao_compute_iszero_step targets (MAP ao_handle_offset_inst insts) =
+    FOLDL ao_compute_iszero_step targets insts
+Proof
+  Induct >> simp[ao_compute_iszero_step_offset]
+QED
+
+Theorem ao_compute_iszero_targets_offset:
+  !insts. ao_compute_iszero_targets (MAP ao_handle_offset_inst insts) =
+          ao_compute_iszero_targets insts
+Proof
+  simp[ao_compute_iszero_targets_def, ao_compute_iszero_fold_offset]
+QED
+
+Theorem ao_compute_iszero_step_min_length[local]:
+  (!v chn. ALOOKUP targets v = SOME chn ==> 1 < LENGTH chn) ==>
+  !v chn. ALOOKUP (ao_compute_iszero_step targets inst) v = SOME chn ==>
+    1 < LENGTH chn
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = ISZERO` >> simp[ao_compute_iszero_step_def]
+  >- (Cases_on `inst.inst_operands` >> simp[]
+      >- metis_tac[] >>
+      Cases_on `t` >> simp[]
+      >- (Cases_on `inst.inst_outputs` >> simp[]
+          >- metis_tac[] >>
+          Cases_on `t` >> simp[]
+          >- (rpt strip_tac >> gvs[AllCaseEqs(), LENGTH_SNOC]
+              >- (Cases_on `h` >> simp[] >>
+                  Cases_on `ALOOKUP targets s` >> simp[] >>
+                  first_x_assum drule >> decide_tac) >>
+              metis_tac[]) >> metis_tac[]) >>
+      Cases_on `inst.inst_outputs` >> simp[]
+      >- metis_tac[] >>
+      Cases_on `t` >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ao_compute_iszero_fold_min_length[local]:
+  !insts targets.
+    (!v chn. ALOOKUP targets v = SOME chn ==> 1 < LENGTH chn) ==>
+    !v chn. ALOOKUP (FOLDL ao_compute_iszero_step targets insts) v = SOME chn ==>
+      1 < LENGTH chn
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  metis_tac[ao_compute_iszero_step_min_length]
+QED
+
+Theorem ao_compute_iszero_targets_min_length:
+  !insts v chn. ALOOKUP (ao_compute_iszero_targets insts) v = SOME chn ==>
+    1 < LENGTH chn
+Proof
+  gen_tac >>
+  qspecl_then [`insts`, `[]`] mp_tac ao_compute_iszero_fold_min_length >>
+  simp[ao_compute_iszero_targets_def]
+QED

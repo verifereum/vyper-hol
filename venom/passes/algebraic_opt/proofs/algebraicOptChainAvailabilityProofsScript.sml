@@ -166,3 +166,49 @@ Proof
      simp[] >> metis_tac[]) >>
   qexists_tac `ws` >> simp[]
 QED
+
+Theorem ao_source_computed_chain_values:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+  ao_source_trace ctx fn trace /\ LAST trace = (h,F,s) /\
+  (!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
+    lookup_var x (SND (SND (HD trace))) = NONE) /\
+  ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chn /\
+  eval_operand (Var v) s = SOME value /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME target /\
+  def_available_at fn target use_opt v /\
+  (case use_opt of
+     SOME use => get_instruction target s.vs_inst_idx = SOME use /\
+                 use.inst_opcode <> PHI
+   | NONE => ?term. get_instruction target s.vs_inst_idx = SOME term /\
+                    is_terminator term.inst_opcode) ==>
+  1 < LENGTH chn /\ LAST chn = Var v /\ ao_chain_edges (fn_insts fn) chn /\
+  ?ws. LENGTH ws = LENGTH chn /\ ao_word_chain ws /\ LAST ws = value /\
+       (!j. j < LENGTH chn ==> eval_operand (EL j chn) s = SOME (EL j ws))
+Proof
+  strip_tac >>
+  fs[algebraicOptDefsTheory.ao_compute_fn_iszero_targets_def] >>
+  drule ao_compute_iszero_targets_witnesses >> strip_tac >>
+  drule ao_compute_iszero_targets_min_length >> strip_tac >> simp[] >>
+  irule ao_source_chain_values >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_source_selected_phi_computed_chain_values:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+  2 <= LENGTH trace /\ ao_source_trace ctx fn trace /\ LAST trace = (h,T,s) /\
+  (!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
+    lookup_var x (SND (SND (HD trace))) = NONE) /\
+  ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chn /\
+  eval_operand (Var v) s = SOME value /\
+  MEM bb fn.fn_blocks /\ MEM phi bb.bb_instructions /\
+  phi.inst_opcode = PHI /\ s.vs_prev_bb = SOME pred /\
+  resolve_phi pred phi.inst_operands = SOME (Var v) ==>
+  1 < LENGTH chn /\ LAST chn = Var v /\ ao_chain_edges (fn_insts fn) chn /\
+  ?ws. LENGTH ws = LENGTH chn /\ ao_word_chain ws /\ LAST ws = value /\
+       (!j. j < LENGTH chn ==> eval_operand (EL j chn) s = SOME (EL j ws))
+Proof
+  strip_tac >>
+  fs[algebraicOptDefsTheory.ao_compute_fn_iszero_targets_def] >>
+  drule ao_compute_iszero_targets_witnesses >> strip_tac >>
+  drule ao_compute_iszero_targets_min_length >> strip_tac >> simp[] >>
+  irule ao_source_selected_phi_chain_values >> simp[] >> metis_tac[]
+QED
