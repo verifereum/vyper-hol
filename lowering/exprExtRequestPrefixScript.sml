@@ -4,6 +4,7 @@ Ancestors
   exprExtRequestShape exprExtRequestPayload exprExtRequestHistoryCompose
   exprExtRequestTupleFold loweringHalt exprSafeOperand fragGasMode
   exprLoweringProps emitHelperProps compileEnv list fragExec venomExecSemantics venomState
+  abiEncoderInputFrame loweringPosts
 
 Theorem extrequest_prefix_split:
   extrequest_compile_prefix ce vals tys memsz abisz mid retsz ei sa =
@@ -38,6 +39,24 @@ Proof
   rpt (goal_assum (drule_at Any) >> simp[])
 QED
 
+Theorem extrequest_history_writeback:
+  extrequest_history_frame ce cx ec sa s ee sp t ==>
+  wb_frame ce ec sa s t
+Proof
+  strip_tac >> simp[wb_frame_def] >> rpt conj_tac
+  >- (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def])
+  >- (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def])
+  >- (rpt strip_tac >>
+      fs[exprExtRequestHistoryTheory.extrequest_history_frame_def,
+         compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+  rewrite_tac[locals_kept_def] >> rpt strip_tac >>
+  `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+    (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  `off = b + (off-b) /\ off-b+len <= sz` by decide_tac >>
+  drule abi_encoder_window_slice >>
+  disch_then (qspecl_then [`off-b`, `len`] mp_tac) >> simp[]
+QED
+
 Theorem extrequest_empty_prefix_endpoint:
   extrequest_compile_prefix ce [] tys memsz abisz (ce.ce_method_id fname tys)
     retsz ei sa = ((bufop,offset,len),sp) /\
@@ -57,7 +76,9 @@ Theorem extrequest_empty_prefix_endpoint:
     w2n w + retsz < dimword (:256) /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\
-    local_ptrs_reserved ce sp /\ safe_operand sp offset
+    local_ptrs_reserved ce sp /\ safe_operand sp offset /\
+    wb_frame ce ee sa s t /\ eval_operand bufop t = SOME w /\
+    safe_operand sp bufop /\ safe_operand sp len
 Proof
   strip_tac >> drule extrequest_prefix_split >> simp[] >> strip_tac >> gvs[] >>
   `ci_mono sa sm` by
@@ -71,7 +92,13 @@ Proof
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
   `32 <= MAX abisz retsz + 32` by decide_tac >>
   drule_all extrequest_empty_payload_endpoint >> strip_tac >>
-  qexistsl_tac [`t`, `w`] >> simp[eval_operand_def] >>
+  `wb_frame ce ee sa s t` by metis_tac[extrequest_history_writeback] >>
+  `safe_operand sp buf.buf_operand` by
+    (drule compile_alloc_buffer_parts >> strip_tac >>
+     simp[safe_operand_def] >> rpt strip_tac >>
+     irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sm` >>
+     fs[ci_mono_def] >> decide_tac) >>
+  qexistsl_tac [`t`, `w`] >> simp[eval_operand_def, safe_operand_def] >>
   fs[arithmeticTheory.MAX_DEF] >> rw[] >> decide_tac
 QED
 
@@ -179,7 +206,9 @@ Theorem extrequest_tuple_prefix_endpoint:
        mem_bytes_at p (type_memory_size tv) t.vs_memory =
          mem_bytes_at p (type_memory_size tv) s.vs_memory) /\
     (!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
-       FLOOKUP t.vs_allocas aid = SOME (p,k))
+       FLOOKUP t.vs_allocas aid = SOME (p,k)) /\
+    extrequest_history_frame ce cx ee sa s ee sp t /\
+    wb_frame ce ee sa s t /\ safe_operand sp bufop
 Proof
   strip_tac >> drule extrequest_prefix_split >> strip_tac >> gvs[] >>
   `ZIP (MAP (\(e,r,vv,ty,tv,v). vv) cells,
@@ -255,10 +284,57 @@ Resume extrequest_tuple_prefix_endpoint[frames]:
   conj_tac
   >- (rpt strip_tac >>
       fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
-  rpt strip_tac >>
-  `aid < sn.cs_next_id /\ FLOOKUP q.vs_allocas aid = SOME (p,k)` by
-    (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
-  metis_tac[])
+  conj_tac
+  >- (rpt strip_tac >>
+      `aid < sn.cs_next_id /\ FLOOKUP q.vs_allocas aid = SOME (p,k)` by
+        (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+      metis_tac[]) >>
+  suspend "history")
+QED
+
+Resume extrequest_tuple_prefix_endpoint[history]:
+  markerLib.RESUME_TAC >>
+  `sn.cs_next_var <= sp.cs_next_var /\ sn.cs_next_id <= sp.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `safe_operand sp buf.buf_operand` by metis_tac[safe_operand_mono] >>
+  `!aid p k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+     compileEnv$regions_disjoint (w2n w) (MAX abisz retsz+32) p k` by
+    (rpt strip_tac >>
+     `FLOOKUP q.vs_allocas aid = SOME (p,k)` by
+       (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+     `allocas_non_overlapping q` by
+       fs[stmt_state_rel_def, state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+     fs[venomMemDefsTheory.allocas_non_overlapping_def, regions_disjoint_def] >>
+     first_x_assum (qspecl_then [`sa.cs_next_id`, `aid`, `w2n w`,
+       `MAX abisz retsz+32`, `p`, `k`] mp_tac) >> simp[]) >>
+  `extrequest_history_frame ce cx ee sa s ee sp t` by
+    (rewrite_tac[exprExtRequestHistoryTheory.extrequest_history_frame_def] >>
+     rpt conj_tac
+     >- simp[exprExtRequestReadProbeTheory.extrequest_read_frame_def]
+     >- (fs[ci_mono_def] >> decide_tac)
+     >- (fs[ci_mono_def] >> decide_tac)
+     >- simp[]
+     >- simp[]
+     >- first_assum MATCH_ACCEPT_TAC
+     >- (rpt strip_tac >>
+         `FLOOKUP q.vs_allocas aid = SOME b` by
+           (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+         metis_tac[])
+     >- (rpt strip_tac >>
+         `local_region ce ee.scopes q n b sz` by
+           metis_tac[exprExtRequestHistoryTheory.extrequest_history_local_regions] >>
+         fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[])
+     >- (rpt strip_tac >>
+         `aid < sn.cs_next_id /\ FLOOKUP q.vs_allocas aid = SOME (b,sz)` by
+           (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+         `compileEnv$regions_disjoint (w2n w) (MAX abisz retsz+32) b sz` by
+           metis_tac[] >>
+         `mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz q.vs_memory` by
+           metis_tac[] >>
+         fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[])
+     >> (rpt strip_tac >>
+         fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[])) >>
+  simp[] >> drule extrequest_history_writeback >> simp[]
 QED
 
 Finalise extrequest_tuple_prefix_endpoint

@@ -84,7 +84,8 @@ Theorem extrequest_empty_payload_endpoint:
     w2n w + sz < dimword (:256) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    local_ptrs_reserved ce sb /\ safe_operand sb offset
+    local_ptrs_reserved ce sb /\ safe_operand sb offset /\
+    eval_operand buf.buf_operand t = SOME w
 Proof
   strip_tac >> drule_all extrequest_alloc_selector_endpoint >> strip_tac >>
   rename1 `gas_marked_path F ctx func s 0 (OK u)` >>
@@ -105,6 +106,14 @@ Proof
     (qpat_assum `gas_marked_path F ctx func s 0 (OK u)`
        (mp_then Any mp_tac gas_marked_path_then) >>
      disch_then (qspecl_then [`OK t`, `0`] mp_tac) >> simp[]) >>
+  `safe_operand sn buf.buf_operand` by
+    (drule compile_alloc_buffer_parts >> strip_tac >>
+     qpat_assum `emit_void MSTORE _ sm = ((),sn)`
+       (mp_then Any mp_tac emitted_insts_emit_void) >> strip_tac >>
+     simp[safe_operand_def] >> rpt strip_tac >>
+     irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sm` >> simp[]) >>
+  `eval_operand buf.buf_operand t = SOME w` by
+    (drule_all extrequest_history_operand >> simp[]) >>
   qexistsl_tac [`t`, `w`] >> simp[]
 QED
 
@@ -150,6 +159,8 @@ Theorem extrequest_encoder_calldata_endpoint:
       mem_bytes_at p (type_memory_size tv) t.vs_memory =
         mem_bytes_at p (type_memory_size tv) s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    (!aid r. FLOOKUP s.vs_allocas aid = SOME r ==>
+       FLOOKUP t.vs_allocas aid = SOME r) /\
     (!aid p k. aid < st.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
       FLOOKUP t.vs_allocas aid = SOME (p,k) /\
       (!a n. p <= a /\ a + n <= p + k /\
@@ -199,6 +210,9 @@ Proof
      irule exprExtRequestEncoderWindowsTheory.extrequest_encoder_immutable_window >>
      qpat_assum `abi_encoder_registered_effect _ _ s t` (irule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `!aid r. FLOOKUP s.vs_allocas aid = SOME r ==>
+     FLOOKUP t.vs_allocas aid = SOME r` by
+    (fs[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def]) >>
   qexists_tac `t` >> simp[] >>
   conj_tac >- first_assum MATCH_ACCEPT_TAC >>
   conj_tac >- first_assum MATCH_ACCEPT_TAC >>
@@ -377,6 +391,8 @@ Theorem extrequest_tuple_payload_endpoint:
     FLOOKUP t.vs_allocas live = SOME (b,cap) /\
     local_ptrs_reserved ce sp /\
     eval_operand buf t = SOME (n2w b) /\ 
+    (!aid r. FLOOKUP s.vs_allocas aid = SOME r ==>
+       FLOOKUP t.vs_allocas aid = SOME r) /\
     (!x z. not_fresh_at sa x /\ lookup_var x s = SOME z ==>
        lookup_var x t = SOME z) /\
     (!name p k. local_region ce ee.scopes s name p k ==>
@@ -516,6 +532,12 @@ Resume extrequest_tuple_payload_endpoint[encoder]:
        (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def, ci_mono_def] >>
         metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
      fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+  `!aid z. FLOOKUP s.vs_allocas aid = SOME z ==>
+      FLOOKUP r.vs_allocas aid = SOME z` by
+    (rpt strip_tac >>
+     `FLOOKUP u.vs_allocas aid = SOME z` by
+       (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
+     `FLOOKUP t.vs_allocas aid = SOME z` by metis_tac[] >> simp[]) >>
   qexists_tac `r` >> gvs[] >> suspend "frames"
 QED
 
@@ -531,8 +553,10 @@ Resume extrequest_tuple_payload_endpoint[frames]:
   rpt gen_tac >> strip_tac >>
   `aid < st.cs_next_id /\ FLOOKUP q.vs_allocas aid = SOME (p,k)` by
     (fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >> metis_tac[]) >>
-  qpat_x_assum `!aid p k. aid < st.cs_next_id /\ _ ==> _` drule_all >>
-  strip_tac >> simp[] >> strip_tac >>
+  `FLOOKUP t.vs_allocas aid = SOME (p,k)` by metis_tac[] >>
+  qpat_x_assum `!aid p k. aid < st.cs_next_id /\ _ ==> _`
+    (qspecl_then [`aid`, `p`, `k`] mp_tac) >>
+  simp[] >> strip_tac >> strip_tac >>
   `venomMemDefs$regions_disjoint (p,k)
     (b+32,LENGTH (enc (vyper_to_abi_type (get_tenv cx)
       (TupleT (MAP (\(e,r,vv,ty,tv,v). ty) cells))) av))` by
