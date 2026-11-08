@@ -1199,6 +1199,107 @@ Proof
   simp[]
 QED
 
+Theorem mm_local_flat_map_supply_member[local]:
+  !xs s ys t q.
+  mm_flat_map_supply f s xs = (ys,t) /\ MEM q xs /\
+  (!r out z. f r q = (out,z) ==> MEM q out) ==> MEM q ys
+Proof
+  Induct_on `xs` >> simp[mm_flat_map_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[MEM_APPEND]
+QED
+
+Theorem mm_local_flat_map_supply_order[local]:
+  !xs s ys t a b q u.
+  mm_flat_map_supply f s xs = (ys,t) /\
+  a < b /\ b < LENGTH xs /\ EL a xs = q /\ EL b xs = u /\
+  (!r out z. f r q = (out,z) ==> MEM q out) /\
+  (!r out z. f r u = (out,z) ==> MEM u out) ==>
+  ?c d. c < d /\ d < LENGTH ys /\ EL c ys = q /\ EL d ys = u
+Proof
+  Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >> simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `f s h = (out,s1)` >>
+  Cases_on `a`
+  >- (Cases_on `b` >- gvs[] >> gvs[] >>
+      `MEM h out` by metis_tac[] >>
+      `MEM (EL n xs) outs` by
+        (irule mm_local_flat_map_supply_member >>
+         metis_tac[MEM_EL]) >>
+      gvs[MEM_EL] >>
+      rename1 `c < LENGTH out` >> rename1 `d < LENGTH outs` >>
+      qexistsl [`c`, `LENGTH out + d`] >> simp[EL_APPEND_EQN] >> decide_tac) >>
+  Cases_on `b` >- gvs[] >>
+  gvs[] >>
+  qpat_x_assum `!s ys t a b. _` (qspecl_then [`s1`, `outs`, `t`, `n`, `n'`] mp_tac) >>
+  simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
+  qexistsl [`LENGTH out + c`, `LENGTH out + d`] >>
+  simp[EL_APPEND_EQN]
+QED
+
+Theorem mm_local_memzero_chunk_use[local]:
+  apply_memzero_inst_supply ns rm s i = (out,t) /\
+  j < LENGTH out /\ MEM v (venomInst$inst_uses (EL j out)) ==>
+  (EL j out = i /\ MEM v (venomInst$inst_uses i)) \/
+  (?a. a < j /\ MEM v (EL a out).inst_outputs)
+Proof
+  simp[apply_memzero_inst_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[mk_nop_from_def, mk_zero_store_inst_def,
+      mk_memzero_calldatacopy_def, venomInstTheory.inst_uses_def,
+      venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
+  `j = 0 \/ j = 1` by decide_tac >>
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
+  qexists_tac `0` >> simp[]
+QED
+
+Theorem mm_local_mode_chunk_use[local]:
+  apply_groups_inst_supply mode ns rm s i = (out,t) /\
+  j < LENGTH out /\ MEM v (venomInst$inst_uses (EL j out)) ==>
+  (EL j out = i /\ MEM v (venomInst$inst_uses i)) \/
+  (?a. a < j /\ MEM v (EL a out).inst_outputs)
+Proof
+  simp[apply_groups_inst_supply_def, AllCaseEqs()] >> strip_tac >>
+  gvs[mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
+      mk_mstore_from_load_def, venomInstTheory.inst_uses_def,
+      venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
+  `j = 0 \/ j = 1` by decide_tac >>
+  gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def] >>
+  qexists_tac `0` >> simp[]
+QED
+
+Theorem mm_local_flat_map_supply_use[local]:
+  (!s i out t j v.
+    f s i = (out,t) /\ j < LENGTH out /\
+    MEM v (venomInst$inst_uses (EL j out)) ==>
+    (EL j out = i /\ MEM v (venomInst$inst_uses i)) \/
+    (?a. a < j /\ MEM v (EL a out).inst_outputs)) ==>
+  !xs s ys t j v.
+  mm_flat_map_supply f s xs = (ys,t) /\ j < LENGTH ys /\
+  MEM v (venomInst$inst_uses (EL j ys)) ==>
+  (?i r chunk z. MEM i xs /\ f r i = (chunk,z) /\
+    MEM (EL j ys) chunk /\ EL j ys = i /\
+    MEM v (venomInst$inst_uses i)) \/
+  (?a. a < j /\ MEM v (EL a ys).inst_outputs)
+Proof
+  strip_tac >> Induct_on `xs` >- simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >>
+  simp[Once mm_flat_map_supply_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `f s h = (out,s1)` >>
+  Cases_on `j < LENGTH out`
+  >- (gvs[EL_APPEND_EQN] >>
+      qpat_x_assum `!s i out t j v. _` drule >>
+      disch_then drule >> disch_then drule >> strip_tac
+      >- (disj1_tac >> metis_tac[MEM, MEM_EL]) >>
+      disj2_tac >> qexists_tac `a` >> simp[EL_APPEND_EQN]) >>
+  `j - LENGTH out < LENGTH outs` by (gvs[] >> decide_tac) >>
+  `MEM v (venomInst$inst_uses (EL (j - LENGTH out) outs))` by
+    gvs[EL_APPEND_EQN] >>
+  first_x_assum drule >> disch_then drule >> disch_then drule >>
+  strip_tac
+  >- (disj1_tac >> gvs[EL_APPEND_EQN] >> metis_tac[MEM]) >>
+  disj2_tac >> qexists_tac `LENGTH out + a` >>
+  gvs[EL_APPEND_EQN] >> decide_tac
+QED
+
 Theorem mm_local_mode_old_use[local]:
   apply_groups_inst_supply mode ns rm s i = (out,t) ==>
   (!v. MEM v s.irs_used_vars ==> MEM v t.irs_used_vars) /\
