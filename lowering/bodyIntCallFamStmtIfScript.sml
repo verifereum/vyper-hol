@@ -7,7 +7,8 @@ Ancestors
   vyperState finite_map list exprSimHypsDefs vyperTypeEvalSoundness
   vyperTypeInvariants vyperTypeSystem vyperTypeCallGraph
   bodyStoragePreservation vyperTypeExprSoundness vyperTypeStoragePreservation
-  vyperEvalOutcomeSuffix
+  vyperEvalOutcomeSuffix stmtSimProps loweringPosts bodySim
+  fragGasPath emitHelperProps venomState venomInst compileVyper
 
 Theorem intcall_joint_res_push_scope:
   intcall_joint_res fp ce env es sa s ==>
@@ -61,6 +62,82 @@ Proof
      qexistsl [`cx`, `es`, `res`] >>
      fs[expr_sim_inv_def, runtime_consistent_def]) >>
   fs[expr_sim_inv_def] >> metis_tac[]
+QED
+
+(* Dropping a lexical scope restores the outer static compiler interface.
+   Its source typing is supplied by semantic preservation, not by restricting
+   the arbitrary typing witness of a control-exception endpoint. *)
+Theorem intcall_joint_res_pop_top_ext:
+  intcall_joint_res fp ce' env' ee sb u /\
+  cenv_top_ext ce ce' ee.scopes /\ ee.scopes = sc :: rest /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
+  expr_sim_inv ce fp.jc_cx env (ee with scopes := rest) /\
+  ce_locals_declared ce env /\ locals_alloc_ok ce env /\
+  local_ptrs_reserved ce sb /\ same_frame fp.jc_root_ce ce ==>
+  intcall_joint_res fp ce env (ee with scopes := rest) sb u
+Proof
+  strip_tac >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx
+     (ee with scopes := rest) u` by
+    (irule stmt_state_rel_pop_top_ext >>
+     conj_tac >- (qexists `sc` >> simp[]) >>
+     qexists `ce'` >> fs[intcall_joint_res_def]) >>
+  `ce'.ce_return_pc = ce.ce_return_pc /\
+   ce'.ce_return_buf = ce.ce_return_buf /\
+   ce'.ce_is_ctor = ce.ce_is_ctor /\
+   ce'.ce_module_vars = ce.ce_module_vars /\
+   ce'.ce_module = ce.ce_module` by
+    fs[cenv_top_ext_def, compile_env_component_equality] >>
+  `!n p k. local_region ce rest u n p k ==>
+           local_region ce' (sc :: rest) u n p k` by
+    (rpt strip_tac >>
+     irule local_region_pop_scope >> simp[] >>
+     fs[local_region_def, cenv_top_ext_def] >>
+     metis_tac[optionTheory.NOT_SOME_NONE]) >>
+  fs[intcall_joint_res_def, ret_pc_ok_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (Cases_on `fp.jc_rb` >> fs[return_buf_frame_def] >>
+     rename1 `fp.jc_rb = SOME rb` >> PairCases_on `rb` >>
+     fs[return_buf_frame_def]) >>
+  metis_tac[]
+QED
+
+(* Only normal completion takes the branch's trailing JMP.  Break and
+   continue have already landed at their loop targets. *)
+Theorem intcall_if_branch_join:
+  intcall_joint_res fp ce env ee last t /\
+  stmt_lands lctx last res t /\ ~t.vs_halted /\
+  (res = INL () ==> ~block_is_terminated last) /\
+  last.cs_next_var <= sb.cs_next_var /\
+  (~block_is_terminated last ==>
+    emit_inst JMP [Label xl] [] last = ((),after) /\
+    fn_has_code last after fp.jc_func /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = []) ==>
+  ?u. gas_path fp.jc_ctx fp.jc_func t 0 (OK u) /\
+      stmt_lands lctx sb res u /\ ~u.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb) /\
+      intcall_joint_res fp ce env ee sb u /\
+      u.vs_vars = t.vs_vars /\ u.vs_allocas = t.vs_allocas /\
+      u.vs_alloca_next = t.vs_alloca_next
+Proof
+  strip_tac >>
+  `intcall_joint_res fp ce env ee sb t` by
+    (irule intcall_joint_res_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `res = INL ()`
+  >- (fs[] >>
+      `t.vs_current_bb = last.cs_current_bb /\
+       t.vs_inst_idx = LENGTH last.cs_current_insts` by fs[stmt_lands_def] >>
+      `gas_path fp.jc_ctx fp.jc_func t 0 (OK (jump_to xl t))` by
+        (irule emit_jump_zero_path >> simp[] >>
+         qexistsl [`last`, `after`] >>
+         metis_tac[emit_inst_extends]) >>
+      qexists `jump_to xl t` >>
+      simp[intcall_joint_res_jump_to, stmt_lands_def, jump_to_def,
+           block_is_terminated_def]) >>
+  qexists `t` >> simp[] >>
+  conj_tac >- metis_tac[gas_path_rules] >>
+  fs[stmt_lands_def]
 QED
 
 Theorem intcall_if_stmt_step:
