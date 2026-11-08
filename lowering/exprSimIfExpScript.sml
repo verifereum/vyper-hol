@@ -1948,10 +1948,12 @@ Proof
       `!tail. place_type_value cx p (ee with gas_obs := tail) =
          (pr,ee with gas_obs := tail)` by
         (Cases_on `p` >>
-         gvs[place_type_value_def, get_scopes_def, get_immutables_def,
-             get_address_immutables_def, bind_def, return_def,
-             lift_option_type_def, raise_def, AllCaseEqs()] >>
-         rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+         fs[place_type_value_def, get_scopes_def, get_immutables_def,
+            get_address_immutables_def, bind_def, return_def,
+            lift_option_type_def, raise_def,
+            vfmTypesTheory.option_CASE_rator] >>
+         rpt (BasicProvers.FULL_CASE_TAC >> fs[return_def, raise_def]) >>
+         gvs[]) >>
       simp[] >> Cases_on `pr` >> simp[] >>
       IF_CASES_TAC >> simp[return_def] >>
       Cases_on `read_place cx p ee` >>
