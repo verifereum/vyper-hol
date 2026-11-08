@@ -8,7 +8,7 @@ Ancestors
   exprLowering compileEnv vyperValue vyperTyping vyperTypeSystem
   valueEncoding words integer_word arithmeticProps list
 
-Theorem scalar_fixed_decimal_mk_op[local]:
+Theorem scalar_fixed_decimal_mk_op:
   !m. mk_convert_op (BaseT (BytesT (Fixed m))) (BaseT DecimalT) =
     ConvBytesMToDecimal m 10000000000 (-&(2**167)) (&(2**167)-1)
 Proof

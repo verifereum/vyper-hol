@@ -1499,7 +1499,7 @@ Proof
   irule ifexp_abi_members_bound >> simp[]
 QED
 
-Theorem ifexp_concat_lowered_fits[local]:
+Theorem ifexp_concat_lowered_fits:
   !ty n args.
     well_typed_builtin_app ty (Concat n) (MAP expr_type args) ==>
     is_bytestring_type ty /\
