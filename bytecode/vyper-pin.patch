@@ -1,5 +1,5 @@
 diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
-index c834b2d0..3cee26f6 100644
+index c834b2d0..61ffce76 100644
 --- a/vyper/codegen_venom/expr.py
 +++ b/vyper/codegen_venom/expr.py
 @@ -27,6 +27,8 @@ from vyper.exceptions import (
@@ -11,7 +11,7 @@ index c834b2d0..3cee26f6 100644
  from vyper.semantics.data_locations import DataLocation
  from vyper.semantics.types import (
      AddressT,
-@@ -56,6 +58,96 @@ from .context import VenomCodegenContext
+@@ -56,6 +58,124 @@ from .context import VenomCodegenContext
  from .value import VyperValue
  
  
@@ -95,6 +95,34 @@ index c834b2d0..3cee26f6 100644
 +    return _contains_risky_call(index_node)
 +
 +
++def _subscript_base_length_can_stale(base_node: vy_ast.VyperNode) -> bool:
++    # A pointer which passes through a dynamic array element anywhere in its
++    # derivation chain can be invalidated by resizing the enclosing array.
++    node = base_node
++    while isinstance(node, (vy_ast.Subscript, vy_ast.Attribute)):
++        if isinstance(node, vy_ast.Subscript):
++            parent_typ = node.value._metadata["type"]
++            if isinstance(parent_typ, DArrayT):
++                return True
++        node = node.value
++    return False
++
++
++def check_target_overlap(target: vy_ast.VyperNode) -> None:
++    """Reject a target whose subscript base can go stale while its index is
++    evaluated: the write must reach the real pointer, so it cannot be
++    snapshotted (vyperlang/vyper#5280)."""
++    node = target
++    while isinstance(node, (vy_ast.Subscript, vy_ast.Attribute)):
++        if (
++            isinstance(node, vy_ast.Subscript)
++            and _subscript_base_length_can_stale(node.value)
++            and _subscript_read_write_overlap(node.value, node.slice)
++        ):
++            raise CompilerPanic("risky overlap")
++        node = node.value
++
++
 +def _is_derived_from_pop(node: vy_ast.VyperNode) -> bool:
 +    """Return True if `node` is a `pop()` result, or a member or element of one."""
 +    while isinstance(node, (vy_ast.Subscript, vy_ast.Attribute)):
@@ -108,7 +136,7 @@ index c834b2d0..3cee26f6 100644
  @dataclass
  class _CallKwargs:
      """Keyword arguments for external calls."""
-@@ -604,11 +696,13 @@ class Expr:
+@@ -604,11 +724,13 @@ class Expr:
  
          # Case 4: Immutable - IMMUTABLES location
          if varinfo.is_immutable:
@@ -124,7 +152,7 @@ index c834b2d0..3cee26f6 100644
  
          raise CompilerPanic(f"Unknown variable: {varname}")  # pragma: nocover
  
-@@ -682,17 +776,21 @@ class Expr:
+@@ -682,17 +804,21 @@ class Expr:
              if varinfo.is_constant:
                  return Expr(varinfo.decl_node.value, self.ctx).lower()
  
@@ -148,7 +176,7 @@ index c834b2d0..3cee26f6 100644
  
          # Case 6: Interface address (x.address where x is an interface)
          if isinstance(sub_typ, InterfaceT) and attr == "address":
-@@ -834,6 +932,12 @@ class Expr:
+@@ -834,6 +960,12 @@ class Expr:
          """
          node = self.node
          assert isinstance(node, vy_ast.Subscript)
@@ -161,7 +189,23 @@ index c834b2d0..3cee26f6 100644
          base_vv = Expr(node.value, self.ctx).lower()
          base = base_vv.operand  # Extract pointer for address math
          index = Expr(node.slice, self.ctx).lower_value()  # Need the value
-@@ -1778,11 +1882,13 @@ class Expr:
+@@ -1500,6 +1632,7 @@ class Expr:
+         elem_typ = darray_typ.value_type
+ 
+         # Get the array VyperValue
++        check_target_overlap(darray_node)
+         darray_vv = Expr(darray_node, self.ctx).lower()
+         darray_ptr = darray_vv.operand
+ 
+@@ -1600,6 +1733,7 @@ class Expr:
+         elem_typ = darray_typ.value_type
+ 
+         # Get the array VyperValue
++        check_target_overlap(darray_node)
+         darray_vv = Expr(darray_node, self.ctx).lower()
+         darray_ptr = darray_vv.operand
+ 
+@@ -1778,11 +1912,13 @@ class Expr:
  
              # ABI-encode from args_buf to buf+32
              encode_dst = b.add(buf._ptr, IRLiteral(32))
@@ -178,3 +222,24 @@ index c834b2d0..3cee26f6 100644
  
          # === Contract Existence Check ===
          # If function returns nothing and skip_contract_check is False,
+diff --git a/vyper/codegen_venom/stmt.py b/vyper/codegen_venom/stmt.py
+index 916871c1..c06e2280 100644
+--- a/vyper/codegen_venom/stmt.py
++++ b/vyper/codegen_venom/stmt.py
+@@ -26,7 +26,7 @@ from vyper.venom.basicblock import IRLiteral, IROperand, IRVariable
+ from .buffer import Ptr
+ from .calling_convention import returns_stack_count
+ from .context import Constancy, VenomCodegenContext
+-from .expr import Expr
++from .expr import Expr, check_target_overlap
+ from .value import VyperValue
+ 
+ 
+@@ -433,6 +433,7 @@ class Stmt:
+ 
+         Returns Ptr with location info for dispatch.
+         """
++        check_target_overlap(target)
+         if isinstance(target, vy_ast.Name):
+             varname = target.id
+ 

@@ -28,7 +28,8 @@ only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
 Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports three upstream fixes that the HOL lowering follows:
+revision. It backports four upstream fixes, which the HOL lowering follows
+except where noted:
 
 - vyperlang/vyper#5127: an external call sends the selector and the encoded
   arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
@@ -39,14 +40,21 @@ revision. It backports three upstream fixes that the HOL lowering follows:
 - vyperlang/vyper#5350: an array subscript whose base is a `pop()` result is
   rejected (`CompilerPanic("risky overlap")`) when the index can write a
   variable the base reads, or makes a risky call.
+- vyperlang/vyper#5280: an assignment or augmented-assignment target, or the
+  array of an `append` or `pop`, is rejected the same way when one of its
+  subscripts has a base that passes through a dynamic-array element and an
+  index that can write a variable that base reads, or makes a risky call.
+  Upstream gets this by lowering such targets through the subscript overlap
+  check; the pin has no such check, so the patch walks the target instead.
+  The HOL lowering does not reject these targets yet.
 
 The pin has no subscript overlap check at all, so the patch brings
-`_subscript_read_write_overlap` and its helpers over from a later upstream
-revision (577d2534), unchanged, and uses them only for this rejection: the
-pin still copies no subscript base.
+`_subscript_read_write_overlap`, `_subscript_base_length_can_stale` and their
+helpers over from a later upstream revision (577d2534), unchanged, and uses
+them only for these two rejections: the pin still copies no subscript base.
 
-Only fixtures with external calls that take arguments change; the rejection
-changes none. The provenance's `vyper_commit` names the unpatched base
+Only fixtures with external calls that take arguments change; the rejections
+change none. The provenance's `vyper_commit` names the unpatched base
 revision.
 
 HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with

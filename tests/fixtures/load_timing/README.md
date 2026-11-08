@@ -2,14 +2,14 @@
 
 These contracts make assignment and call load timing observable through a return value.
 `pop_refill` returns 9 because the target's internal call refills the popped
-storage slot before assignment reads it. `conditional_snapshot` returns 5 for
-either flag because selecting a storage aggregate copies it before the target's
-internal call changes the source.
+storage slot before assignment reads it. That is the behaviour at `VYPER_PIN`;
+vyperlang/vyper#5282, which snapshots the source when the target can change
+it, is not backported, so the value changes only with a repin past that fix.
+`conditional_snapshot` returns 5 for either flag because selecting a storage
+aggregate copies it before the target's internal call changes the source.
 `conditional_memory_view` returns 1 for either flag because selecting a memory
 array retains its location: the target's pop shortens that array before the
 assignment copies it. Copying at conditional selection instead would return 2.
-`nested_retained_pop` returns 5 after an index expression pops the enclosing
-array: the previously captured inner location still contains the array to pop.
 `call_storage_read` returns 10 because internal calls capture every argument
 before reading the storage scalar changed by the later argument.
 `call_memory_pop` returns 1 because the later argument pops the memory array
