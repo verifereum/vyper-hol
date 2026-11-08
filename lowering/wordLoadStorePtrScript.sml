@@ -20,8 +20,7 @@ Proof
        eval_operand_def] >>
   conj_tac >- (rpt strip_tac >> gvs[] >> simp[mem_read_ops_def] >> metis_tac[]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_read1_def, eval_operand_def, AllCaseEqs(), mload_def,
        update_var_def] >> rpt strip_tac >> gvs[]
 QED
@@ -142,8 +141,7 @@ Proof
     (first_x_assum drule >> simp[ptr_covers_def] >> metis_tac[]) >>
   qexists_tac `update_var tmp (mload (w2n a) s) s` >>
   conj_tac >-
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+    (simp[mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def]) >>
   simp[update_var_def] >> conj_tac
   >- (rpt strip_tac >> irule (SRULE [mk_inst_def] ptr_inst_ok_mload) >> metis_tac[]) >>
   first_x_assum drule >> simp[mk_inst_def, update_var_def]
@@ -168,8 +166,7 @@ Proof
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   qexists_tac `mstore (w2n a) w s` >>
   conj_tac >-
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+    (simp[mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def]) >>
   simp[mstore_def] >> rpt strip_tac >>
   irule ptr_inst_ok_mstore >> simp[]
 QED
