@@ -163,16 +163,17 @@ QED
 Resume body_for_range_mem[active]:
   rpt strip_tac >>
   `eval_iterator cx (Range e1 e2) (es with gas_obs := gs) =
-   (INL (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))), es2)` by
+   (INL (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))), es2)` by
     (gvs[bind_def, AllCaseEqs()] >>
      simp[Once evaluate_def, bind_def, get_range_limits_def,
           lift_sum_def, return_def]) >>
   first_x_assum (qspecl_then [`es`, `tyv`, `es`, `es with gas_obs := gs`,
-    `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))`, `es2`, `es`, `es`]
+    `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))`, `es2`, `es`, `es`]
     mp_tac) >>
   simp[lift_option_type_def, return_def, check_def, assert_def,
        compatible_bound_def, body_for_mem_ok_def, GENLIST_EQ_NIL] >>
-  Cases_on `n2 = n1` >> gvs[]
+  Cases_on `n2 = n1` >> gvs[] >>
+  Cases_on `Num (n2 - n1)` >> gvs[GENLIST_CONS, read_result_def, return_def]
 QED
 
 Resume body_for_range_mem[body]:

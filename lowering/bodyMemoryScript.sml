@@ -139,7 +139,7 @@ Proof
     (* 25 *) rw[body_iterator_mem_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_mem_ok_def],
     (* 27 *) rw[body_for_mem_ok_def] >> first_x_assum irule >>
-             simp[push_scope_with_var_def, return_def],
+             simp[push_scope_with_var_def, return_def] >> metis_tac[],
     (* 28 *) simp[body_name_mem_ok],
     (* 29 *) simp[body_toplevel_mem_ok],
     (* 30 *) simp[body_flag_member_mem_case],

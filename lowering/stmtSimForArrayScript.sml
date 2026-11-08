@@ -7,7 +7,7 @@ Ancestors
   compileEnv valueEncodingProps valueEncodingProofs valueCopy stmtLowering
   emitHelperProps exprLoweringProps venomState emitHelper rich_list
   immutableMemoryFrame stmtSimDeclStore loweringSlice localPtrsProps
-  stmtSimForArrayFrame valueEncodingTyping list alist pair
+  stmtSimForArrayFrame valueEncodingTyping memoryValueEncoding list alist pair
   exprSimHypsDefs exprSimProps
 
 Theorem array_for_hypotheses:
@@ -50,11 +50,11 @@ Theorem eval_iterator_fixed_name:
     evaluate_type (get_tenv cx) (ArrayT ty (Fixed n)) =
       SOME (ArrayTV elem_tv (Fixed n)) ==>
     eval_iterator cx (Array (Name (ArrayT ty (Fixed n)) name)) es =
-      (INL (array_elements (ArrayTV elem_tv (Fixed n)) av), es)
+      (INL (MAP Value (array_elements (ArrayTV elem_tv (Fixed n)) av)), es)
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def] >> simp[Once evaluate_def] >>
-  simp[read_result_def, read_place_def,
+  simp[array_iterator_results_def, read_result_def, read_place_def,
        read_memory_path_def, evaluate_subscripts_def, get_scopes_def,
        type_check_def, vyperStateTheory.assert_def, lift_option_type_def, lift_sum_def,
        ignore_bind_def, vyperStateTheory.bind_def, vyperStateTheory.return_def,
@@ -294,13 +294,15 @@ Theorem array_iter_copy_declare_rel:
     (!b len. b + len <= w2n w \/ w2n w + type_memory_size tv <= b ==>
       mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    type_memory_size tv <= sz /\ val_wf tv v /\
+    type_memory_size tv <= sz /\ val_wf tv v /\ value_has_type tv v /\
     val_in_memory tv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tv; value := v; popped := []|>)) :: rest) t
 Proof
   rpt gen_tac >> strip_tac >>
+  `memory_value_rel tv v (w2n w) t.vs_memory` by
+    metis_tac[val_in_memory_memory_value_rel] >>
   `!n b len. n <> id /\ local_region cenv es.scopes s n b len ==>
       mem_bytes_at b len s.vs_memory = mem_bytes_at b len t.vs_memory` by
     (rpt strip_tac >>
@@ -343,6 +345,7 @@ Theorem array_snapshot_memory:
   lookup_scopes name ei.scopes = SOME entry /\
   entry.type = ArrayTV tv (Fixed n) /\
   entry.value = ArrayV (SArrayV al) /\
+  value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV al)) /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
   stmt_state_rel ctx func cenv cx ei s ==>
   ?base. eval_operand (Var ptr) s = SOME base /\
@@ -360,6 +363,8 @@ Proof
   simp[local_ptrs_rel_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   rename1 `lookup_var p s = SOME w0` >>
+  `val_in_memory (ArrayTV tv (Fixed n)) (ArrayV (SArrayV al)) (w2n w0)
+     s.vs_memory` by metis_tac[memory_value_rel_val_in_memory] >>
   qexists_tac `w0` >> simp[eval_operand_def] >>
   rpt strip_tac
   >- (irule fixed_array_element_in_memory >> metis_tac[]) >>

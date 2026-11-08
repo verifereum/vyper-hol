@@ -875,15 +875,15 @@ Proof
   map_every qx_gen_tac [`cx`, `id`, `typ`, `e1`, `e2`, `bound`, `stmts`, `tyv`] >>
   rpt gen_tac >> strip_tac >>
   `eval_iterator cx (Range e1 e2) es0 =
-   (INL (GENLIST (\j. IntV (lo + &j)) (Num (hi - lo))), es2)` by
+   (INL (GENLIST (\j. Value (IntV (lo + &j))) (Num (hi - lo))), es2)` by
     (gvs[bind_def, AllCaseEqs()] >>
      simp[Once evaluate_def, bind_def, get_range_limits_def,
           lift_sum_def, return_def]) >>
   gvs[lift_option_type_def, return_def, check_def, assert_def,
       compatible_bound_def] >>
   first_x_assum drule >>
-  simp[body_for_ok_def, GENLIST_EQ_NIL] >>
-  Cases_on `hi = lo` >> gvs[]
+  simp[body_for_ok_def] >>
+  Cases_on `Num (hi - lo)` >> fs[GENLIST_CONS, read_result_def, return_def]
 QED
 
 (* The enclosing For carries both traversal and allocation safety for its body. *)
@@ -1148,19 +1148,20 @@ Proof
         env_scopes_consistent_def] >> metis_tac[]) >>
   `!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
           (es with gas_obs := gs) =
-        (INL (array_elements (ArrayTV tv (Fixed n)) (SArrayV al)),
+        (INL (MAP Value (array_elements (ArrayTV tv (Fixed n)) (SArrayV al))),
          es with gas_obs := gs)` by
     (gen_tac >> irule eval_iterator_fixed_name >> simp[]) >>
   drule_all eval_iterator_fixed_name >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `INL vs` >>
+  qmatch_asmsub_abbrev_tac `INL (MAP Value vs)` >>
   `LENGTH vs = n` by simp[Abbr `vs`, fixed_array_elements_length] >>
-  `body_for_ok cx tv id stmts vs` by
+  `body_for_ok cx tv id stmts (MAP Value vs)` by
     (qpat_x_assum `!s tyv t s3 vs t3 s4 t4. _` mp_tac >>
      simp[lift_option_type_def, return_def, check_def, assert_def,
           compatible_bound_def] >> disch_then irule >> simp[] >>
      qexistsl_tac [`es`, `es`] >> simp[]) >>
   `body_stmts_ok cx stmts` by
-    (fs[body_for_ok_def] >> `vs <> []` by (strip_tac >> gvs[]) >> metis_tac[]) >>
+    (fs[body_for_ok_def] >> `vs <> []` by (strip_tac >> gvs[]) >>
+     Cases_on `vs` >> gvs[read_result_def, return_def]) >>
   `FLOOKUP cenv.ce_vars id = NONE` by
     (irule declared_name_unbound >> metis_tac[]) >>
   `lookup_scopes id es.scopes = NONE` by

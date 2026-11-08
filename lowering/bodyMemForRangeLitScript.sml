@@ -67,14 +67,15 @@ Proof
   `!k. well_typed_literal typ (IntL k) ==> value_has_type tyv (IntV k)` by
     (rpt strip_tac >> drule_all well_typed_literal_sound >>
      simp[vyperValueOperationTheory.evaluate_literal_def]) >>
-  `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)) <> [] ==>
+  `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)) <> [] ==>
    body_stmts_mem_ok cx stmts` by
     (strip_tac >>
      first_x_assum (qspecl_then [`es`, `tyv`, `es`, `es`,
-       `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))`, `es`, `es`,
+       `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))`, `es`, `es`,
        `es`] mp_tac) >>
      simp[lift_option_type_def, return_def, eval_iterator_range_lit,
-          check_def, assert_def, compatible_bound_def, body_for_mem_ok_def]) >>
+          check_def, assert_def, compatible_bound_def, body_for_mem_ok_def] >>
+     Cases_on `Num (n2 - n1)` >> fs[GENLIST_CONS, read_result_def, return_def]) >>
   `Num (n2 - n1) < dimword (:256)` by metis_tac[range_end_words] >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
   `lookup_scopes id es.scopes = NONE` by
@@ -85,6 +86,9 @@ Proof
     (Cases_on `typ` >> gvs[is_int_type_def] >> rename1 `BaseT bt` >>
      Cases_on `bt` >> gvs[is_int_type_def, is_word_type_def]) >>
   drule_all word_type_sizes >> disch_then (qspec_then `cenv` strip_assume_tac) >>
+  `word_memory_type tyv` by
+    (qspecl_then [`get_tenv cx`, `typ`, `tyv`] mp_tac
+       loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `call_evaluation_safe cx (int_calls_stmts stmts)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   `EVERY (stmt_exprs_ok cenv) stmts /\ type_memory_bytes cenv typ < 2 ** 64` by

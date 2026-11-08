@@ -7,6 +7,7 @@
  *                     counted outcome when every round from a state of the
  *                     loop invariant has one, and the invariant after the
  *                     last value reaches the loop's exit without GAS reads
+ *   eval_for_value_rounds — the same for a loop over copied values
  *)
 
 Theory stmtSimForRounds
@@ -17,14 +18,27 @@ Libs
   monadsyntax
 
 Theorem eval_for_cons_round:
-  !cx tyv nm body v vs.
-  eval_for cx tyv nm body (v::vs) =
+  !cx tyv nm body r rs.
+  eval_for cx tyv nm body (r::rs) =
+  bind (do v <- read_result cx r;
+           push_scope_with_var nm tyv v;
+           finally (try (do eval_stmts cx body; return F od)
+                        handle_loop_exception) pop_scope od)
+       (\b. if b then return () else eval_for cx tyv nm body rs)
+Proof
+  simp[Once evaluate_def, ignore_bind_def, bind_assoc]
+QED
+
+(* A copied element is already a value: its round reads nothing. *)
+Theorem eval_for_cons_value_round:
+  !cx tyv nm body v rs.
+  eval_for cx tyv nm body (Value v::rs) =
   bind (do push_scope_with_var nm tyv v;
            finally (try (do eval_stmts cx body; return F od)
                         handle_loop_exception) pop_scope od)
-       (\b. if b then return () else eval_for cx tyv nm body vs)
+       (\b. if b then return () else eval_for cx tyv nm body rs)
 Proof
-  simp[Once evaluate_def, ignore_bind_def, bind_assoc]
+  rewrite_tac[eval_for_cons_round, read_result_def, bind_return] >> simp[]
 QED
 
 Theorem gas_admissible_bind_tail:
@@ -139,19 +153,21 @@ Resume gas_outcome_bool_round[exempt]:
 QED
 Finalise gas_outcome_bool_round
 
-(* A round is eval_for's step for one value: the loop variable's scope,
-   the body, and the break/continue handling, up to the boolean telling
-   whether the loop broke.  Inv k holds at the loop head before the k-th
-   round; Done holds where the loop leaves, after a break or after the
-   last round.  ok is the admissibility the enclosing statement supplies
-   for the remaining loop.  Exceptional exits keep their exception. *)
+(* A round is eval_for's step for one element: reading its value, the
+   loop variable's scope, the body, and the break/continue handling, up
+   to the boolean telling whether the loop broke.  Inv k holds at the
+   loop head before the k-th round; Done holds where the loop leaves,
+   after a break or after the last round.  ok is the admissibility the
+   enclosing statement supplies for the remaining loop.  Exceptional
+   exits keep their exception. *)
 Theorem eval_for_rounds:
   !memory tops ctx func cx tyv nm body vs ok Inv Done R.
     (!k es s.
        k < LENGTH vs /\ Inv k es s /\
        gas_admissible (eval_for cx tyv nm body (DROP k vs)) ok es ==>
        gas_outcome memory tops (ctx, func)
-         (do push_scope_with_var nm tyv (EL k vs);
+         (do v <- read_result cx (EL k vs);
+             push_scope_with_var nm tyv v;
              finally
                (try (do eval_stmts cx body; return F od)
                   handle_loop_exception)
@@ -196,4 +212,38 @@ Proof
   drule_all gas_admissible_bind_tail >> simp[] >> strip_tac >>
   qpat_x_assum `!y. _` (qspec_then `SUC k` mp_tac) >>
   simp[]
+QED
+
+(* eval_for_rounds for a loop over copied values: a round binds the k-th
+   value directly. *)
+Theorem eval_for_value_rounds:
+  !memory tops ctx func cx tyv nm body vs ok Inv Done R.
+    (!k es s.
+       k < LENGTH vs /\ Inv k es s /\
+       gas_admissible (eval_for cx tyv nm body (MAP Value (DROP k vs))) ok es ==>
+       gas_outcome memory tops (ctx, func)
+         (do push_scope_with_var nm tyv (EL k vs);
+             finally
+               (try (do eval_stmts cx body; return F od)
+                  handle_loop_exception)
+               pop_scope
+          od) (es, s)
+         (\res ee t. ?broke. res = INL broke /\
+            (broke ==> Done ee t) /\ (~broke ==> Inv (SUC k) ee t))
+         (\res ee r. ?ex. res = INR ex /\ R ex ee r)) /\
+    (!es s. Inv (LENGTH vs) es s ==>
+       ?t. gas_marked_path memory ctx func s 0 (OK t) /\
+           Done (es with gas_obs := []) t) ==>
+    !k es s.
+      k <= LENGTH vs /\ Inv k es s /\
+      gas_admissible (eval_for cx tyv nm body (MAP Value (DROP k vs))) ok es ==>
+      gas_outcome memory tops (ctx, func)
+        (eval_for cx tyv nm body (MAP Value (DROP k vs))) (es, s)
+        (\res ee t. res = INL () /\ Done ee t)
+        (\res ee r. ?ex. res = INR ex /\ R ex ee r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`memory`, `tops`, `ctx`, `func`, `cx`, `tyv`, `nm`, `body'`,
+    `MAP Value vs`, `ok`, `Inv`, `Done`, `R`] mp_tac eval_for_rounds >>
+  simp[GSYM MAP_DROP, EL_MAP, read_result_def, bind_return]
 QED

@@ -686,16 +686,16 @@ Theorem array_code_loop_outcome_mem:
   !k es s. k <= LENGTH vs /\
     array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
       ainst cond caller orig k es s /\
-    gas_admissible (eval_for cx tv id stmts (DROP k vs)) ok es ==>
+    gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) ok es ==>
     gas_outcome T (cx_tops cx) (ctx,func)
-      (eval_for cx tv id stmts (DROP k vs)) (es,s)
+      (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
       (\res ee t. res = INL () /\
         array_round_done d ctx func cenv cx caller orig exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
 Proof
   strip_tac >>
-  ho_match_mp_tac stmtSimForRoundsTheory.eval_for_rounds >>
+  ho_match_mp_tac stmtSimForRoundsTheory.eval_for_value_rounds >>
   conj_tac >- suspend "round" >>
   suspend "last"
 QED

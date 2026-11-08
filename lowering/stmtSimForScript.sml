@@ -37,7 +37,7 @@ Theorem eval_stmt_for_range_lit_action[local]:
     (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
        bound stmts) =
   eval_for cx tyv id stmts
-    (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)))
+    (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1)))
 Proof
   strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, LET_THM,
@@ -338,7 +338,7 @@ Resume compile_for_range_frag[loop]:
      qexistsl_tac [`sa`, `sa with cs_next_var := sa.cs_next_var + 1`] >>
      first_assum ACCEPT_TAC) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
-     (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))))
+     (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))))
      (es,cc)
      (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
        s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\

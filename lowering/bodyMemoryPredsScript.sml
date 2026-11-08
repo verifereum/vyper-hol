@@ -77,8 +77,10 @@ Definition body_iterator_mem_ok_def:
 End
 
 Definition body_for_mem_ok_def:
-  body_for_mem_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
-  <=> vs <> [] ==> body_stmts_mem_ok cx body
+  body_for_mem_ok cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_mem_ok cx body
 End
 
 Definition body_base_target_mem_ok_def:

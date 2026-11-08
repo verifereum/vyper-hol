@@ -259,7 +259,7 @@ Theorem for_iteration_mem:
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
                             value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
                    gas_obs := [] |>) /\
-    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+    gas_admissible (eval_for cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
       (stmt_res_ok lctx) esk ==>
     gas_outcome T (cx_tops cx) (ctx, func)
       (do push_scope_with_var id tyv (IntV (n1 + &k));
@@ -387,7 +387,7 @@ Theorem for_loop_mem:
        es2.scopes = sc :: rest ==> P (es2 with scopes := rest)) /\
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     k + m = Num (n2 - n1) /\
-    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (stmt_res_ok lctx) esk /\
     P (esk with gas_obs := []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
@@ -396,7 +396,7 @@ Theorem for_loop_mem:
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
     gas_outcome T (cx_tops cx) (ctx, func)
-      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m)) (esk, cc)
+      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m)) (esk, cc)
       (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
          s.vs_inst_idx = 0 /\ ~s.vs_halted /\
          stmt_state_rel ctx func cenv cx ee s /\
@@ -454,8 +454,8 @@ Resume for_loop_mem[step]:
   qpat_x_assum `!k esk cc w. for_code _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _ ==> _` (mk_asm "ih") >>
   qpat_x_assum `!ei j gs r2 es2 sc rest. _` (mk_asm "preserve") >>
   `k < Num (n2 - n1)` by decide_tac >>
-  `GENLIST (\j. IntV (n1 + &(k + j))) (SUC m) =
-     IntV (n1 + &k) :: GENLIST (\j. IntV (n1 + &((k + 1) + j))) m` by
+  `GENLIST (\j. Value (IntV (n1 + &(k + j)))) (SUC m) =
+     Value (IntV (n1 + &k)) :: GENLIST (\j. Value (IntV (n1 + &((k + 1) + j)))) m` by
     (simp[rich_listTheory.GENLIST_CONS] >>
      irule listTheory.GENLIST_CONG >> simp[combinTheory.o_DEF]) >>
   `stmt_frag_mem d ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
@@ -475,7 +475,7 @@ Resume for_loop_mem[step]:
      impl_tac >- simp[] >> disch_tac >> gvs[]) >>
   `not_local_ptr bc (FEMPTY :: esk.scopes) p` by simp[] >>
   `gas_admissible (eval_for cx tyv id stmts
-      (IntV (n1 + &k) :: GENLIST (\j. IntV (n1 + &((k + 1) + j))) m))
+      (Value (IntV (n1 + &k)) :: GENLIST (\j. Value (IntV (n1 + &((k + 1) + j)))) m))
      (stmt_res_ok lctx) esk` by gvs[] >>
   drule_all for_iteration_mem >> strip_tac >>
   qmatch_goalsub_abbrev_tac `gas_outcome T tops cf source start Final Exit` >>
@@ -492,7 +492,7 @@ Resume for_loop_mem[step]:
      simp[Abbr `Done`, Abbr `Final`, Abbr `R`, Abbr `Exit`] >>
      rpt gen_tac >> strip_tac >> gvs[]) >>
   simp[Abbr `source`, Abbr `start`, Abbr `cf`, Abbr `tops`,
-       eval_for_cons_round] >>
+       eval_for_cons_value_round] >>
   irule gas_outcome_bool_round >>
   qexists_tac `Next` >> reverse conj_tac
   >- (irule for_outcome_consequence_mem >>
@@ -525,11 +525,11 @@ Resume for_loop_mem[step]:
     (qpat_x_assum `(es2 with scopes := rest) = _` mp_tac >>
      simp[Once evaluation_state_component_equality] >> strip_tac >> gvs[]) >>
   `gas_admissible (eval_for cx tyv id stmts
-       (GENLIST (\j. IntV (n1 + &((k + 1) + j))) m))
+       (GENLIST (\j. Value (IntV (n1 + &((k + 1) + j)))) m))
        (stmt_res_ok lctx) (mid with gas_obs := [])` by
     (asm_x "ih" kall_tac >> asm_x "preserve" kall_tac >>
      qpat_x_assum `gas_admissible _ _ esk` mp_tac >>
-     rewrite_tac[eval_for_cons_round] >> disch_tac >>
+     rewrite_tac[eval_for_cons_value_round] >> disch_tac >>
      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[gas_marked_exec_def] >> strip_tac >>
      drule_all gas_admissible_bind_tail >> simp[]) >>
@@ -542,8 +542,8 @@ Resume for_loop_mem[step]:
   (impl_tac
    >- (simp[] >> asm "preserve" ACCEPT_TAC)) >>
   disch_tac >>
-  `GENLIST (\j. IntV (n1 + &(k + 1 + j))) m =
-   GENLIST (\j. IntV (n1 + &(j + (k + 1)))) m` by simp[arithmeticTheory.ADD_COMM] >>
+  `GENLIST (\j. Value (IntV (n1 + &(k + 1 + j)))) m =
+   GENLIST (\j. Value (IntV (n1 + &(j + (k + 1))))) m` by simp[arithmeticTheory.ADD_COMM] >>
   fs[] >>
   irule for_outcome_consequence_mem >>
   qpat_x_assum `gas_outcome _ _ _ (eval_for _ _ _ _ _) _ _ _` (irule_at Any) >>

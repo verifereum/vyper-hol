@@ -109,8 +109,8 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
    bind (bind (eval_expr cx e2) (read_result cx)) (\v2.
    bind (lift_sum (get_range_limits v1 v2)) (\rl.
    bind (check (compatible_bound (Dynamic bound) (LENGTH
-      (GENLIST (\j. IntV (FST rl + &j)) (SND rl)))) "For too long") (\u.
-   eval_for cx tyv id stmts (GENLIST (\j. IntV (FST rl + &j)) (SND rl))))))` by
+      (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)))) "For too long") (\u.
+   eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl))))))` by
     (pure_once_rewrite_tac[evaluate_def] >>
      pure_once_rewrite_tac[evaluate_def] >>
      simp[lift_option_type_def, ignore_bind_def, bind_assoc, bind_return]) >>
@@ -386,6 +386,14 @@ Resume compile_for_range_checked_frag_active_mem[valid_bound]:
   `s2.cs_next_var + 9 <= sj.cs_next_var` by
     (qpat_assum `!c lc sa sb. compile_stmts _ _ _ _ _ = _ ==> _`
        (qspecl_then [`bc`,`InLoop exit_lbl incr_lbl`,`sb0`,`sb1`] mp_tac) >> simp[]) >>
+  `word_memory_type tyv` by
+    (qpat_x_assum `is_int_type fty` mp_tac >>
+     qpat_x_assum `evaluate_type _ fty = SOME tyv` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     `is_word_type fty` by
+       (Cases_on `fty` >> gvs[is_int_type_def] >> rename1 `BaseT bt` >>
+        Cases_on `bt` >> gvs[is_int_type_def, is_word_type_def]) >>
+     drule_all loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `for_code func cenv bc ty stmts id tyv p (type_memory_bytes cenv fty) aa cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl (s2.cs_next_id + 12) (s2.cs_next_id + 13)
     (s2.cs_next_id + 14) bbb sj.cs_next_id (sj.cs_next_id + 1) (sj.cs_next_id + 2)
@@ -428,7 +436,7 @@ Resume compile_for_range_checked_frag_active_mem[loop_ready]:
      qpat_x_assum `!st0 c st1 ex inc ei n1 j. _` irule >> simp[] >>
      qexistsl_tac [`s2`,`s2 with cs_next_var := s2.cs_next_var + 1`] >> simp[]) >>
   `gas_admissible
-    (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))))
+    (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2-n1))))
     (stmt_res_ok lctx) ee2` by
     (simp[gasContextTheory.gas_admissible_def] >> rpt gen_tac >> strip_tac >>
      qpat_assum `!tail. ?gs. _ = (INL v2,_)`
@@ -439,7 +447,7 @@ Resume compile_for_range_checked_frag_active_mem[loop_ready]:
      simp[bind_def, get_range_limits_def, lift_sum_def, return_def,
        compatible_bound_def, check_def, assert_def]) >>
   `gas_outcome T (cx_tops cx) (ctx,func)
-    (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(0+j))) (Num (n2-n1)))) (ee2,cc)
+    (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(0+j)))) (Num (n2-n1)))) (ee2,cc)
     (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
       s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\
       return_buf_frame d cenv s2 s /\ alloca_history func s /\
@@ -463,8 +471,8 @@ Resume compile_for_range_checked_frag_active_mem[finish_loop]:
   `bind (return (n1,Num (n2-n1))) (\rl.
      bind (assert (SND rl <= bound) (Error (RuntimeError "For too long")))
        (\u. eval_for cx tyv id stmts
-         (GENLIST (\j. IntV (FST rl + &j)) (SND rl)))) =
-   eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1)))` by
+         (GENLIST (\j. Value (IntV (FST rl + &j))) (SND rl)))) =
+   eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2-n1)))` by
     simp[FUN_EQ_THM, bind_def, return_def, assert_def] >>
   asm_rewrite_tac [] >>
   qpat_x_assum `gas_outcome T _ _ _ _ _ _` mp_tac >> simp[] >>

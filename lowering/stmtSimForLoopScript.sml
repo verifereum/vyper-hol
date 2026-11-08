@@ -229,7 +229,7 @@ QED
 
 Theorem for_body_gas_admissible[local]:
   !cx tyv id stmts v vs lctx es exit_lbl incr_lbl.
-    gas_admissible (eval_for cx tyv id stmts (v::vs))
+    gas_admissible (eval_for cx tyv id stmts (Value v::vs))
       (stmt_res_ok lctx) es /\ lookup_scopes id es.scopes = NONE ==>
     gas_admissible (eval_stmts cx stmts)
       (stmt_res_ok (InLoop exit_lbl incr_lbl))
@@ -241,7 +241,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[gas_admissible_def] >> rpt gen_tac >> strip_tac >>
   rename1 `eval_stmts cx stmts _ = (res, ee)` >>
-  Cases_on `eval_for cx tyv id stmts (v::vs) (es with gas_obs := gs)` >>
+  Cases_on `eval_for cx tyv id stmts (Value v::vs) (es with gas_obs := gs)` >>
   rename1 `_ = (lr, le)` >>
   `stmt_res_ok lctx lr` by
     (gvs[gas_admissible_def] >> metis_tac[]) >>
@@ -1183,15 +1183,15 @@ Proof
 QED
 
 Resume for_loop_alloca[round]:
-  rpt gen_tac >> simp[EL_GENLIST] >> strip_tac >>
+  rpt gen_tac >> simp[EL_GENLIST, read_result_def, bind_return] >> strip_tac >>
   fs[Abbr `Inv`] >>
   `j + k < Num (n2 - n1)` by decide_tac >>
-  `DROP j (GENLIST (\h. IntV (n1 + &(h+k))) m) =
-    IntV (n1 + &(j+k)) :: DROP (SUC j) (GENLIST (\h. IntV (n1 + &(h+k))) m)` by
-    (qspecl_then [`j`, `GENLIST (\h. IntV (n1 + &(h+k))) m`] mp_tac
+  `DROP j (GENLIST (\h. Value (IntV (n1 + &(h+k)))) m) =
+    Value (IntV (n1 + &(j+k))) :: DROP (SUC j) (GENLIST (\h. Value (IntV (n1 + &(h+k)))) m)` by
+    (qspecl_then [`j`, `GENLIST (\h. Value (IntV (n1 + &(h+k)))) m`] mp_tac
        DROP_CONS_EL >> simp[EL_GENLIST]) >>
   `gas_admissible (eval_for cx tyv id stmts
-    (IntV (n1 + &(j+k)) :: DROP (SUC j) (GENLIST (\h. IntV (n1 + &(h+k))) m)))
+    (Value (IntV (n1 + &(j+k))) :: DROP (SUC j) (GENLIST (\h. Value (IntV (n1 + &(h+k)))) m)))
     (stmt_res_ok lctx) es` by metis_tac[] >>
   `not_local_ptr bc (FEMPTY :: es.scopes) p` by metis_tac[] >>
   `stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc

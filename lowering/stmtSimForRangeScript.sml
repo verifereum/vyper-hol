@@ -1341,6 +1341,12 @@ Resume for_range_checked_tail_outcome[loop_code]:
      irule declare_local_reserved >> metis_tac[]) >>
   `type_memory_size tyv = 32` by
     (drule_all is_int_type_memory_size >> simp[]) >>
+  `word_memory_type tyv` by
+    (qpat_x_assum `is_int_type fty` mp_tac >>
+     qpat_x_assum `evaluate_type _ fty = SOME tyv` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     `is_word_type fty` by (fs[is_int_type_cases] >> gvs[is_word_type_def]) >>
+     drule_all loweringSliceTheory.evaluate_word_memory_type >> simp[]) >>
   `(!scs. not_local_ptr cenv scs cv) /\ (!scs. not_local_ptr cenv scs dv) /\
    (!scs. not_local_ptr cenv scs nv)` by
     (rpt conj_tac >> gen_tac >>
