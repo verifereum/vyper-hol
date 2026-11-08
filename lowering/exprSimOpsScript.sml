@@ -642,10 +642,78 @@ Proof
     simp[int_and_def, int_or_def, int_xor_def, within_int_bound_int_bitwise] >>
   (* one operation at a time, each unfolding a third of the value pairs *)
   gvs[]
-  >>~- ([`bop_result _ _ And tys _ _ _`], bop_bitwise_tac)
-  >>~- ([`bop_result _ _ Or tys _ _ _`], bop_bitwise_tac) >>
-  bop_bitwise_tac
+  >>~- ([`bop_result _ _ And tys _ _ _`], suspend "bitwise_and")
+  >>~- ([`bop_result _ _ Or tys _ _ _`], suspend "bitwise_or") >>
+  suspend "bitwise_xor"
 QED
+
+Resume bop_result_bitwise[bitwise_and]:
+  fs[bop_result_def] >>
+   fs[evaluate_builtin_def] >>
+   Cases_on `v1` >> Cases_on `v2` >>
+   gvs[SIMP_RULE (srw_ss()) []
+         (Q.SPECL [`v2`, `v1`, `u`, `tv`, `And`] evaluate_binop_def),
+       expr_res_ok_def, bounded_int_op_def,
+       val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
+       word_value_def] >>
+   FIRST [
+     (* flags *)
+     qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+     `~(z < 0)` by
+       simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
+     `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+     pop_assum SUBST1_TAC >>
+     simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
+     (* booleans *)
+     rpt (IF_CASES_TAC >> gvs[]) >>
+     simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]
+QED
+
+Resume bop_result_bitwise[bitwise_or]:
+  fs[bop_result_def] >>
+   fs[evaluate_builtin_def] >>
+   Cases_on `v1` >> Cases_on `v2` >>
+   gvs[SIMP_RULE (srw_ss()) []
+         (Q.SPECL [`v2`, `v1`, `u`, `tv`, `Or`] evaluate_binop_def),
+       expr_res_ok_def, bounded_int_op_def,
+       val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
+       word_value_def] >>
+   FIRST [
+     (* flags *)
+     qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+     `~(z < 0)` by
+       simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
+     `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+     pop_assum SUBST1_TAC >>
+     simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
+     (* booleans *)
+     rpt (IF_CASES_TAC >> gvs[]) >>
+     simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]
+QED
+
+Resume bop_result_bitwise[bitwise_xor]:
+  fs[bop_result_def] >>
+   fs[evaluate_builtin_def] >>
+   Cases_on `v1` >> Cases_on `v2` >>
+   gvs[SIMP_RULE (srw_ss()) []
+         (Q.SPECL [`v2`, `v1`, `u`, `tv`, `XOr`] evaluate_binop_def),
+       expr_res_ok_def, bounded_int_op_def,
+       val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
+       word_value_def] >>
+   FIRST [
+     (* flags *)
+     qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+     `~(z < 0)` by
+       simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
+     `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+     pop_assum SUBST1_TAC >>
+     simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
+     (* booleans *)
+     rpt (IF_CASES_TAC >> gvs[]) >>
+     simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]
+QED
+
+Finalise bop_result_bitwise
 
 (* The lowering emits the word operation, one instruction. *)
 Theorem compile_bitwise_sim:
@@ -749,7 +817,11 @@ Proof
   Cases_on `v1` >> gvs[value_has_type_def] >>
   Cases_on `v2` >> gvs[value_has_type_def] >>
   rename1 `bop_result _ _ _ tys (FlagV k1) (FlagV k2) _` >>
-  gvs[bop_result_def, evaluate_membership_def, evaluate_binop_def,
+  gvs[bop_result_def, evaluate_membership_def] >>
+  gvs[SIMP_RULE (srw_ss()) []
+        (Q.SPECL [`v2`, `v1`, `u`, `tv`, `In`] evaluate_binop_def),
+      SIMP_RULE (srw_ss()) []
+        (Q.SPECL [`v2`, `v1`, `u`, `tv`, `NotIn`] evaluate_binop_def),
       binop_negate_def, val_to_w256_def, AllCaseEqs(), expr_res_ok_def] >>
   `k1 < 2 ** 256 /\ k2 < 2 ** 256` by
     (`2 ** m <= 2 ** 256` by simp[] >> conj_tac >>
@@ -819,7 +891,12 @@ Proof
     (fs[within_int_bound_def] >>
      `?k. i2 = &k` by metis_tac[NUM_POSINT_EXISTS] >>
      gvs[i2w_pos, w2n_n2w, dimword_def]) >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+  gvs[bop_result_def] >>
+  gvs[evaluate_builtin_def] >>
+  gvs[SIMP_RULE (srw_ss()) []
+        (Q.SPECL [`v2`, `v1`, `u`, `tv`, `ShL`] evaluate_binop_def),
+      SIMP_RULE (srw_ss()) []
+        (Q.SPECL [`v2`, `v1`, `u`, `tv`, `ShR`] evaluate_binop_def),
       val_to_w256_def, word_value_def] >>
   Cases_on `is_signed_type ty` >> gvs[] >>
   FIRST [
