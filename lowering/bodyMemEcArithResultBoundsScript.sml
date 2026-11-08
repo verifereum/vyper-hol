@@ -12,8 +12,12 @@ Theorem ec_result_vv_store_bound:
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es'
     (Value v) (LocatedValue (expr_type e) p) t
 Proof
-  strip_tac >> Cases_on `p.ptr_location = LocMemory`
-  >- (drule vv_store_bound_capacity >> simp[] >>
+  strip_tac >>
+  qpat_assum `lowered_value_type _ _ = _`
+    (assume_tac o MATCH_MP post_value_type_lowered) >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (drule vv_store_bound_capacity >>
+      qpat_assum `post_value_type _ _ = _` (fn th => simp[th]) >>
       disch_then irule >>
       simp[evaluate_type_def, type_slot_size_def, wordsTheory.dimword_def] >>
       qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
