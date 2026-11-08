@@ -7,6 +7,8 @@ Ancestors
   exprOperandVar
 
 Theorem ifexp_expr_post_same_type:
+  post_value_type ce e = expr_type e /\
+  post_value_type ce f = expr_type f /\
   expr_type e = expr_type f ==>
   (expr_post ctx fn ce cx e es sa sb s0 ee v op s <=>
    expr_post ctx fn ce cx f es sa sb s0 ee v op s)
@@ -18,6 +20,9 @@ Theorem ifexp_nonword_arm_suffix:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   ~is_word_type ty /\ ~ce.ce_is_ctor /\
   compile_expr ce rty arm sa = (vv,sm) /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\
@@ -50,7 +55,8 @@ Proof
   drule_all ifexp_residual_allocating_arm_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`q`, `Gf`, `tnf`] >> simp[] >>
-  metis_tac[ifexp_expr_post_same_type, expr_type_def]
+  metis_tac[ifexp_expr_post_same_type, expr_type_def,
+            post_value_type_def]
 QED
 
 Resume ifexp_nonword_arm_suffix[same]:

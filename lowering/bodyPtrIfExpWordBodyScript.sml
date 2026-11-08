@@ -188,7 +188,10 @@ Resume ifexp_word_framed_vv_ptr[normal]:
   goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >> simp[] >>
-  qexistsl_tac [`tops`,`env`,`d`] >> simp[expr_type_def] >> metis_tac[]
+  qexistsl_tac [`tops`,`env`,`d`] >> simp[expr_type_def] >>
+  `post_value_type cenv c = expr_type c` by
+    (irule loweringPostsTheory.post_value_type_word >> simp[expr_type_def, compileEnvTheory.is_word_type_def]) >>
+  gvs[] >> metis_tac[]
 QED
 
 Finalise ifexp_word_framed_vv_ptr

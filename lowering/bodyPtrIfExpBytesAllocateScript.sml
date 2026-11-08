@@ -7,6 +7,8 @@ Ancestors
   venomState venomInst finite_map words rich_list loweringHalt
 
 Theorem ifexp_allocate_unwrap_bytes:
+  post_value_type ce arm = expr_type arm /\
+  post_value_type ce result = expr_type result /\
   vv_post ctx fn ce cx arm es sa sb s0 ee raw vv s /\
   stmt_state_rel ctx fn ce cx es s0 /\
   ghost_inv d ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\

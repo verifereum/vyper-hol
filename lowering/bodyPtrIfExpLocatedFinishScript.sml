@@ -5,6 +5,7 @@ Ancestors
   gasSummaryComposePtr
 
 Theorem ifexp_located_vv_post_read:
+  post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\
   expr_post ctx fn ce cx e es sa sb s0 ee v (Var rv) s /\
   read_result cx tv ee = (INL v,ee) ==>
@@ -12,7 +13,7 @@ Theorem ifexp_located_vv_post_read:
     (LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
 Proof
   strip_tac >> drule vv_post_read_result >> disch_then (fn th => fs[th]) >>
-  drule vv_post_of_expr_post >> simp[]
+  drule_all vv_post_of_expr_post >> simp[]
 QED
 
 Theorem ifexp_located_ptr_vv_read:
@@ -24,6 +25,7 @@ Proof
 QED
 
 Theorem ifexp_stack_to_located_post:
+  post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\
   vv_post ctx fn ce cx e es sa sb s0 ee tv (StackValue tag (Var rv)) s ==>
   vv_post ctx fn ce cx e es sa sb s0 ee tv
@@ -37,6 +39,7 @@ Proof
 QED
 
 Theorem ifexp_stack_to_located_outcome_ptr:
+  post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\
   gas_outcome_ptr D tops (ctx,fn) PG source (es1,z,G1,tn1)
     (\res ee G tn u. ?tv. res = INL tv /\
@@ -65,6 +68,7 @@ QED
 
 Theorem ifexp_located_arm_finish_ptr:
   expr_post ctx fn ce cx c es sa s1 s0 es1 v1 cop tt /\
+  post_value_type ce e = expr_type e /\
   expr_type e = t /\ ~is_word_type t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved ce sa /\ stmt_state_rel ctx fn ce cx es s0 /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

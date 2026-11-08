@@ -33,8 +33,9 @@ Theorem ifexp_word_unwrap_dispatch:
       p.ptr_location p.ptr_operand
 Proof
   strip_tac >>
-  `ty = expr_type e` by fs[loweringPostsTheory.vv_post_def,
-                          loweringPostsTheory.vv_holds_def] >>
+  `ty = expr_type e` by
+    (fs[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
   `p.ptr_location <> LocCalldata` by metis_tac[exprSimUnwrapTheory.vv_post_calldata] >>
   simp[unwrap_value_def]
 QED

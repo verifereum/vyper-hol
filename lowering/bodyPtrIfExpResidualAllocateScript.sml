@@ -10,6 +10,9 @@ Theorem ifexp_residual_allocating_arm_ptr:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty cond a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   compile_expr ce rty arm sa = (vv,sb) /\
   eval_expr cx arm es = (INL raw,ee) /\ read_result cx raw ee = (INL v,er) /\
   ~is_word_type ty /\ ~same_memory_layout ce (lowered_value_type ce arm) ty /\
@@ -75,6 +78,8 @@ Resume ifexp_residual_allocating_arm_ptr[apply]:
    evaluate_type (get_tenv cx) (expr_type (IfExp ty cond a b)) = SOME tv /\
    type_memory_bytes ce (lowered_value_type ce (IfExp ty cond a b)) <= type_memory_bytes ce ty` by
     simp[expr_type_def, lowered_value_type_def] >>
+  `post_value_type ce (IfExp ty cond a b) = expr_type (IfExp ty cond a b)` by
+    simp[loweringPostsTheory.post_value_type_def] >>
   drule_all ifexp_allocate_unwrap_bytes >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `q`] >> gvs[expr_type_def]
