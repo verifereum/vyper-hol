@@ -2,6 +2,7 @@
 Theory typedArrayCopyPathsMem
 Ancestors
   typedCopyOperationalPaths typedArrayBoundControlMem typedArrayLoopLayoutMem typedArrayLoopControlMem
+  typedNormalizeDynarrayLoop venomExecProps
   fragGasSeqMem fragGasPathMem venomExecSemantics venomState venomInst
   emitHelperProps exprLoweringProps typedNormalizeLoop typedNormalizeContinuation compileEnv
   words arithmetic list rich_list
@@ -498,3 +499,258 @@ Resume typed_dynarray_header_successor_path_mem[finish]:
   asm_rewrite_tac[] >> metis_tac[]
 QED
 Finalise typed_dynarray_header_successor_path_mem
+
+Theorem typed_dynarray_header_iteration_path_mem[local]:
+  lookup_block hdr fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      [mk_inst hid LT [Var ("%" ++ toString sm.cs_next_var); bound]
+         ["%" ++ toString (sm.cs_next_var+1)];
+       mk_inst (hid+1) ISZERO [Var ("%" ++ toString (sm.cs_next_var+1))]
+         ["%" ++ toString (sm.cs_next_var+2)];
+       mk_inst (hid+2) JNZ [Var ("%" ++ toString (sm.cs_next_var+2));
+         Label exit_lbl; Label sc.cs_current_bb] []]|> /\
+  sc.cs_current_insts =
+    [mk_inst id MUL [Var ("%" ++ toString sm.cs_next_var); Lit (n2w ss)]
+       ["%" ++ toString (sm.cs_next_var+3)];
+     mk_inst (id+1) MUL [Var ("%" ++ toString sm.cs_next_var); Lit (n2w ds)]
+       ["%" ++ toString (sm.cs_next_var+4)];
+     mk_inst (id+2) ADD [src; Var ("%" ++ toString (sm.cs_next_var+3))]
+       ["%" ++ toString (sm.cs_next_var+5)];
+     mk_inst (id+3) ADD [dst; Var ("%" ++ toString (sm.cs_next_var+4))]
+       ["%" ++ toString (sm.cs_next_var+6)]] /\
+  sc.cs_next_var = sm.cs_next_var+7 /\ ci_mono sc ec /\
+  lookup_block sc.cs_current_bb fn.fn_blocks = SOME body_bb /\
+  isPREFIX sc.cs_current_insts body_bb.bb_instructions /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  lookup_block ec.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := ec.cs_current_bb; bb_instructions := ec.cs_current_insts ++
+      typed_sa_backedge_insts ec.cs_next_id ("%" ++ toString sm.cs_next_var)
+        ("%" ++ toString ec.cs_next_var) hdr|> /\
+  (!x. src = Var x \/ dst = Var x \/ bound = Var x ==> not_fresh_at sm x) /\
+  eval_operand src s = SOME (n2w a) /\ eval_operand dst s = SOME (n2w b) /\
+  eval_operand (Var ("%" ++ toString sm.cs_next_var)) s = SOME (n2w i) /\
+  eval_operand bound s = SOME (n2w n) /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\ s.vs_current_bb = hdr /\
+  i <= n /\ n < dimword(:256) /\
+  a+ss*n <= s.vs_alloca_next /\ b+ds*n <= s.vs_alloca_next /\
+  (a+ss*n <= b \/ b+ds*n <= a) /\
+  (!j addr m m'. j < n /\ mem_bytes_at addr ss m = mem_bytes_at addr ss m' ==>
+    (Src j addr m <=> Src j addr m')) /\
+  (!j addr m m'. j < n /\ mem_bytes_at addr ds m = mem_bytes_at addr ds m' ==>
+    (D j addr m <=> D j addr m')) /\
+  (!j. j < n ==> Src j (a+ss*j) s.vs_memory) /\
+  (!j. j < i ==> D j (b+ds*j) s.vs_memory) /\
+  (!j u. j < n /\ ~u.vs_halted /\
+    u.vs_current_bb = sc.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    eval_operand (Var ("%" ++ toString (sm.cs_next_var+5))) u = SOME (n2w (a+ss*j)) /\
+    eval_operand (Var ("%" ++ toString (sm.cs_next_var+6))) u = SOME (n2w (b+ds*j)) /\
+    a+ss*n <= u.vs_alloca_next /\ b+ds*n <= u.vs_alloca_next /\
+    Src j (a+ss*j) u.vs_memory ==>
+    ?count v. gas_path_mem ctx fn u count (OK v) /\ ~v.vs_halted /\
+      v.vs_current_bb = ec.cs_current_bb /\
+      v.vs_inst_idx = LENGTH ec.cs_current_insts /\ D j (b+ds*j) v.vs_memory /\
+      (!p k. p+k <= b+ds*j \/ b+ds*j+ds <= p ==>
+        mem_bytes_at p k v.vs_memory = mem_bytes_at p k u.vs_memory) /\
+      (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+        vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
+        vs_prev_bb := u.vs_prev_bb|>) = u /\
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+  ?count t. gas_path_mem ctx fn s count (OK t) /\ ~t.vs_halted /\
+    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    eval_operand (Var ("%" ++ toString sm.cs_next_var)) t = SOME (n2w n) /\
+    eval_operand bound t = SOME (n2w n) /\
+    (!j. j < n ==> Src j (a+ss*j) t.vs_memory) /\
+    (!j. j < n ==> D j (b+ds*j) t.vs_memory) /\
+    mem_bytes_at a (ss*n) t.vs_memory = mem_bytes_at a (ss*n) s.vs_memory /\
+    (!p k. p+k <= b \/ b+ds*n <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `Inv = \j u.
+    ~u.vs_halted /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 /\
+    eval_operand (Var ("%" ++ toString sm.cs_next_var)) u = SOME (n2w j) /\
+    eval_operand bound u = SOME (n2w n) /\
+    (!k. k < n ==> Src k (a+ss*k) u.vs_memory) /\
+    (!k. k < j ==> D k (b+ds*k) u.vs_memory) /\
+    mem_bytes_at a (ss*n) u.vs_memory = mem_bytes_at a (ss*n) s.vs_memory /\
+    (!p k. p+k <= b \/ b+ds*n <= p ==>
+      mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s)` >>
+  `Inv i s` by
+    (simp_tac bool_ss [Abbr `Inv`] >> asm_rewrite_tac[] >>
+     simp[venom_state_component_equality]) >>
+  `!j u. Inv j u /\ j < n ==>
+     ?count v. gas_path_mem ctx fn u count (OK v) /\ Inv (SUC j) v /\ ~v.vs_halted` by
+    suspend "iteration_step" >>
+  `?count t. gas_path_mem ctx fn s count (OK t) /\ Inv n t /\ ~t.vs_halted` by
+    (irule gas_path_mem_finite_iteration >>
+     simp[] >> qexists_tac `i` >> simp[]) >>
+  qpat_x_assum `gas_path_mem ctx fn s _ (OK t)`
+    (fn th => irule_at (Pos hd) th) >>
+  qpat_x_assum `Inv n t` mp_tac >> simp_tac bool_ss [Abbr `Inv`] >>
+  strip_tac >> first_assum ACCEPT_TAC
+QED
+Resume typed_dynarray_header_iteration_path_mem[iteration_step]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `Inv j u` mp_tac >> simp_tac bool_ss [Abbr `Inv`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `u.vs_alloca_next = s.vs_alloca_next /\ u.vs_labels = s.vs_labels` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _;
+      vs_current_bb := _; vs_inst_idx := _; vs_prev_bb := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `eval_operand src u = SOME (n2w a) /\ eval_operand dst u = SOME (n2w b)` by
+    (qpat_x_assum `!x. not_fresh_at sm x ==> lookup_var x u = _` mp_tac >>
+     qpat_x_assum `!x. src = Var x \/ _ ==> _` mp_tac >>
+     qpat_x_assum `eval_operand src s = _` mp_tac >>
+     qpat_x_assum `eval_operand dst s = _` mp_tac >>
+     qpat_x_assum `u.vs_labels = s.vs_labels` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `src` >> Cases_on `dst` >> fs[eval_operand_def] >> metis_tac[]) >>
+  `a+ss*n <= u.vs_alloca_next /\ b+ds*n <= u.vs_alloca_next` by simp[] >>
+  drule_all typed_dynarray_header_successor_path_mem >>
+  disch_then (qx_choose_then `ngas` (qx_choose_then `t` strip_assume_tac)) >>
+  qpat_x_assum `!j u. _ ==> ?count v. _` kall_tac >>
+  qpat_x_assum `sc.cs_current_insts = _` kall_tac >>
+  suspend "iteration_frame"
+QED
+Resume typed_dynarray_header_iteration_path_mem[iteration_frame]:
+  qexistsl_tac [`ngas`, `t`] >> conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  ntac 7 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (qpat_x_assum `!p k. _ ==> mem_bytes_at p k t.vs_memory = _` mp_tac >>
+      qpat_x_assum `!p k. _ ==> mem_bytes_at p k u.vs_memory = _` mp_tac >>
+      rpt (pop_assum kall_tac) >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `t with <|vs_vars := _; vs_memory := _;
+        vs_current_bb := _; vs_inst_idx := _; vs_prev_bb := _|> = u` mp_tac >>
+      qpat_x_assum `u with <|vs_vars := _; vs_memory := _;
+        vs_current_bb := _; vs_inst_idx := _; vs_prev_bb := _|> = s` mp_tac >>
+      rpt (pop_assum kall_tac) >> simp[venom_state_component_equality] >>
+      rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >>
+  `lookup_var x t = lookup_var x u` by metis_tac[] >>
+  `lookup_var x u = lookup_var x s` by metis_tac[] >> simp[]
+QED
+Finalise typed_dynarray_header_iteration_path_mem
+
+Theorem typed_dynarray_compiler_iteration_path_mem:
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\ dt = st) /\
+  compile_copy_dynarray_typed ce dst dt cap src st sa = ((),sb) /\
+  fn_has_code sa sb fn /\ sm.cs_next_var = sa.cs_next_var+5 /\
+  eval_operand (Var ("%" ++ toString (sa.cs_next_var+3))) s = SOME (n2w a) /\
+  eval_operand (Var ("%" ++ toString (sa.cs_next_var+4))) s = SOME (n2w b) /\
+  eval_operand (Var ("%" ++ toString (sa.cs_next_var+5))) s = SOME (n2w i) /\
+  eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w n) /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  s.vs_current_bb = fresh_label_output "typed_dyn_cond" sa.cs_next_label /\
+  i <= n /\ n < dimword(:256) /\
+  a+type_memory_bytes ce st*n <= s.vs_alloca_next /\
+  b+type_memory_bytes ce dt*n <= s.vs_alloca_next /\
+  (a+type_memory_bytes ce st*n <= b \/ b+type_memory_bytes ce dt*n <= a) /\
+  (!j addr m m'. j < n /\
+    mem_bytes_at addr (type_memory_bytes ce st) m =
+    mem_bytes_at addr (type_memory_bytes ce st) m' ==> (Src j addr m <=> Src j addr m')) /\
+  (!j addr m m'. j < n /\
+    mem_bytes_at addr (type_memory_bytes ce dt) m =
+    mem_bytes_at addr (type_memory_bytes ce dt) m' ==> (D j addr m <=> D j addr m')) /\
+  (!j. j < n ==> Src j (a+type_memory_bytes ce st*j) s.vs_memory) /\
+  (!j. j < i ==> D j (b+type_memory_bytes ce dt*j) s.vs_memory) /\
+  (!sc ec. compile_store_memory_typed ce
+      (Var ("%" ++ toString (sa.cs_next_var+11))) dt
+      (Var ("%" ++ toString (sa.cs_next_var+10))) st sc = ((),ec) /\
+    fn_has_code sc ec fn /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+10)) /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+11)) /\
+    phi_prefix_length sc.cs_current_insts = 0 /\
+    (?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+      phi_prefix_length entry.bb_instructions = 0) ==>
+    !j u. j < n /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sc.cs_current_insts /\
+      eval_operand (Var ("%" ++ toString (sa.cs_next_var+10))) u =
+        SOME (n2w (a+type_memory_bytes ce st*j)) /\
+      eval_operand (Var ("%" ++ toString (sa.cs_next_var+11))) u =
+        SOME (n2w (b+type_memory_bytes ce dt*j)) /\
+      a+type_memory_bytes ce st*n <= u.vs_alloca_next /\
+      b+type_memory_bytes ce dt*n <= u.vs_alloca_next /\
+      Src j (a+type_memory_bytes ce st*j) u.vs_memory ==>
+      ?count v. gas_path_mem ctx fn u count (OK v) /\ ~v.vs_halted /\
+        v.vs_current_bb = ec.cs_current_bb /\
+        v.vs_inst_idx = LENGTH ec.cs_current_insts /\
+        D j (b+type_memory_bytes ce dt*j) v.vs_memory /\
+        (!p k. p+k <= b+type_memory_bytes ce dt*j \/
+          b+type_memory_bytes ce dt*j+type_memory_bytes ce dt <= p ==>
+          mem_bytes_at p k v.vs_memory = mem_bytes_at p k u.vs_memory) /\
+        (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+          vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
+          vs_prev_bb := u.vs_prev_bb|>) = u /\
+        (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+  ?count t. gas_path_mem ctx fn s count (OK t) /\ ~t.vs_halted /\
+    t.vs_current_bb = fresh_label_output "typed_dyn_cond" sa.cs_next_label /\
+    t.vs_inst_idx = 0 /\
+    eval_operand (Var ("%" ++ toString (sa.cs_next_var+5))) t = SOME (n2w n) /\
+    eval_operand (Var ("%" ++ toString sa.cs_next_var)) t = SOME (n2w n) /\
+    (!j. j < n ==> Src j (a+type_memory_bytes ce st*j) t.vs_memory) /\
+    (!j. j < n ==> D j (b+type_memory_bytes ce dt*j) t.vs_memory) /\
+    mem_bytes_at a (type_memory_bytes ce st*n) t.vs_memory =
+      mem_bytes_at a (type_memory_bytes ce st*n) s.vs_memory /\
+    (!p k. p+k <= b \/ b+type_memory_bytes ce dt*n <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all typed_dynarray_child_states >> strip_tac >>
+  `sb.cs_blocks =
+    <|bb_label := ec.cs_current_bb; bb_instructions := ec.cs_current_insts ++
+      typed_sa_backedge_insts ec.cs_next_id ("%" ++ toString (sa.cs_next_var+5))
+        ("%" ++ toString ec.cs_next_var)
+        (fresh_label_output "typed_dyn_cond" sa.cs_next_label)|> :: ec.cs_blocks` by simp[] >>
+  `!k:num. (k+12)+1 = k+13 /\ (k+12)+2 = k+14 /\ (k+12)+3 = k+15` by decide_tac >>
+  qpat_x_assum `!k:num. _` (fn offsets =>
+    drule_all (SIMP_RULE (pure_ss ++ numSimps.REDUCE_ss) [offsets]
+      (Q.INST [`i` |-> `sa.cs_next_id+12`] typed_dynarray_child_block_code))) >> strip_tac >>
+  rename1 `lookup_block sc.cs_current_bb fn.fn_blocks = SOME body_bb` >>
+  `phi_prefix_length sc.cs_current_insts = 0` by
+    simp[phi_prefix_length_def, mk_inst_def] >>
+  `not_fresh_at sc ("%" ++ toString (sa.cs_next_var+10)) /\
+   not_fresh_at sc ("%" ++ toString (sa.cs_next_var+11))` by
+    (simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> decide_tac) >>
+  `?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+    phi_prefix_length entry.bb_instructions = 0` by
+    (drule_all normalize_typed_backedge_entry >> simp[]) >>
+  qpat_x_assum `!sc ec. _` (qspecl_then [`sc`, `ec`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[] >> goal_assum (drule_at Any) >> simp[])) >>
+  disch_then assume_tac >>
+  `backedge.bb_label = ec.cs_current_bb` by metis_tac[lookup_block_label] >>
+  qpat_assum `sm.cs_next_var = _` (fn th => rewrite_tac[GSYM th]) >>
+  irule typed_dynarray_header_iteration_path_mem >>
+  asm_rewrite_tac[] >>
+  conj_tac >- (qexists_tac `i` >> simp[]) >>
+  qexistsl_tac [`body_bb`, `Var ("%" ++ toString (sa.cs_next_var+4))`, `ec`,
+    `fresh_label_output "typed_dyn_exit" (sa.cs_next_label+2)`,
+    `sa.cs_next_id+9`, `sa.cs_next_id+12`, `sc`,
+    `Var ("%" ++ toString (sa.cs_next_var+3))`] >>
+  asm_rewrite_tac[] >>
+  simp_tac (pure_ss ++ numSimps.REDUCE_ss)
+    [DECIDE ``!k:num. (k+5)+1=k+6 /\ (k+5)+2=k+7 /\ (k+5)+3=k+8 /\
+      (k+5)+4=k+9 /\ (k+5)+5=k+10 /\ (k+5)+6=k+11 /\ (k+5)+7=k+12 /\
+      (k+9)+1=k+10 /\ (k+9)+2=k+11 /\
+      (k+12)+1=k+13 /\ (k+12)+2=k+14 /\ (k+12)+3=k+15``] >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `Var _ = Var x` mp_tac >>
+    simp[not_fresh_at_def] >> disch_then (SUBST1_TAC o SYM) >>
+    simp[ASCIInumbersTheory.toString_inj]) >>
+  gvs[basic_block_component_equality]
+QED
