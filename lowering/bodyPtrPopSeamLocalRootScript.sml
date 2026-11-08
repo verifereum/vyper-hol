@@ -10,6 +10,7 @@
 Theory bodyPtrPopSeamLocalRoot
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs vyperAST
+  bodyPtrPopLocalRootOutcome exprSimSource vyperTypeCallGraph
 
 (* Hints, not part of the statement:
    - compile_expr runs compile_get_target_ptr on the local (its PtrVar
@@ -39,5 +40,6 @@ Theorem pop_local_root_vv_ptr:
     expr_body_pre cenv cx env (Pop ann (NameTarget id)) es ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann (NameTarget id)) es
 Proof
-  cheat
+  rpt strip_tac >> irule pop_local_expr_vv_ptr >>
+  qexists_tac `env` >> simp[expr_sim_pre_body, int_calls_expr_def]
 QED
