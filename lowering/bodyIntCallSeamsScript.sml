@@ -25,13 +25,13 @@ Libs
    (body_intcall_source_selection). *)
 Definition intcall_rest_def:
   intcall_rest cx name mut nr ss prev rtv =
-    do rv <- finally
-         (try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
-                  return NoneV
-               od) handle_function)
-         (do pop_function prev;
-             unlock_if_nr cx nr (is_view_mut mut)
-          od);
+    do rv <- finally_unless_halt
+         (finally
+            (try (do eval_stmts (cx with stk updated_by CONS (NONE,name)) ss;
+                     return NoneV
+                  od) handle_function)
+            (pop_function prev))
+         (unlock_if_nr cx nr (is_view_mut mut));
        crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
        return (Value crv)
     od
