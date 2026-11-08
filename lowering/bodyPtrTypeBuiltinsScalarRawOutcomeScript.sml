@@ -302,3 +302,88 @@ Proof
   `!w:bytes32. w << 0 = w` by wordsLib.WORD_DECIDE_TAC >>
   gvs[GSYM typed_val_to_w256_def, convertScalarEncodingTheory.scalar_flag_to_bytes32]
 QED
+
+Theorem scalar_address_uint_actual_outcome:
+  LENGTH bs = 20 /\ 0 < bits /\ bits <= 256 /\
+  compile_type_convert x (ConvIntToInt F 160 F bits) sa = (out,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (BaseT AddressT) (BaseT (UintT bits)) (BytesV bs) = INL vout /\
+    expr_val_rel cx (BaseT (UintT bits)) vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx (BaseT AddressT) (BaseT (UintT bits)) (BytesV bs)) (Abort err t))
+Proof
+  strip_tac >>
+  qabbrev_tac `i:int = &w2n (word_of_bytes_be (PAD_LEFT 0w 32 bs):bytes32)` >>
+  `within_int_bound (Unsigned 160) i` by
+    (simp[Abbr `i`, within_int_bound_ineq] >>
+     drule convertScalarBytesRunTheory.scalar_bytes_unsigned_bound >> simp[]) >>
+  `typed_val_to_w256 (BaseTV AddressT) (BytesV bs) = i2w i` by
+    simp[Abbr `i`, typed_val_to_w256_def, integer_wordTheory.i2w_pos] >>
+  drule (SRULE [] (Q.INST [`si` |-> `F`, `bi` |-> `160`, `so` |-> `F`]
+    scalar_integer_actual_run)) >>
+  disch_then (qspecl_then [`s`, `i`] mp_tac) >> simp[] >>
+  Cases_on `within_int_bound (Unsigned bits) i` >> simp[] >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`sf`, `IntV i`] >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def, Abbr `i`]) >>
+  disj2_tac >> qexistsl_tac [`Revert_abort`, `sf`] >>
+  simp[expr_exit_def, convert_result_def,
+    vyperValueOperationTheory.evaluate_convert_from_def,
+    vyperValueOperationTheory.evaluate_convert_def, Abbr `i`]
+QED
+
+Theorem scalar_flag_integer_actual_outcome:
+  m < 2 ** 256 /\ 0 < bits /\ (sg ==> 1 < bits) /\ bits <= 256 /\
+  compile_type_convert x (ConvIntToInt F 256 sg bits) sa = (out,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (typed_val_to_w256 (FlagTV k) (FlagV m)) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (FlagT name) (BaseT (if sg then IntT bits else UintT bits)) (FlagV m) = INL vout /\
+    expr_val_rel cx (BaseT (if sg then IntT bits else UintT bits)) vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx (FlagT name) (BaseT (if sg then IntT bits else UintT bits)) (FlagV m)) (Abort err t))
+Proof
+  strip_tac >>
+  `within_int_bound (Unsigned 256) (&m)` by simp[within_int_bound_ineq] >>
+  `eval_operand x s = SOME (i2w (&m))` by
+    simp[GSYM typed_val_to_w256_def, integer_wordTheory.i2w_pos,
+      typed_val_to_w256_def, val_to_w256_def] >>
+  drule (SRULE [] (Q.INST [`si` |-> `F`, `bi` |-> `256`]
+    scalar_integer_actual_run)) >>
+  disch_then (qspecl_then [`s`, `&m`] mp_tac) >> simp[] >>
+  Cases_on `within_int_bound (if sg then Signed bits else Unsigned bits) (&m)` >>
+  simp[] >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`sf`, `IntV (&m)`] >> Cases_on `sg` >>
+      gvs[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_def,
+        vyperValueOperationTheory.evaluate_convert_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def]) >>
+  disj2_tac >> qexistsl_tac [`Revert_abort`, `sf`] >> Cases_on `sg` >>
+  gvs[expr_exit_def, convert_result_def,
+    vyperValueOperationTheory.evaluate_convert_from_def,
+    vyperValueOperationTheory.evaluate_convert_def]
+QED
+
+Theorem scalar_uint_flag_actual_outcome:
+  FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) /\ n <= 256 /\
+  within_int_bound (Unsigned 256) i /\
+  compile_type_convert x (ConvToFlag n) sa = (out,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\ eval_operand x s = SOME (i2w i) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (BaseT (UintT 256)) (FlagT name) (IntV i) = INL vout /\
+    expr_val_rel cx (FlagT name) vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx (BaseT (UintT 256)) (FlagT name) (IntV i)) (Abort err t))
+Proof
+  strip_tac >> drule_all scalar_flag_semantic_actual >>
+  disch_tac >> irule scalar_typed_packet_outcome >>
+  simp[is_word_type_def] >>
+  qexistsl_tac [`\t. (t with vs_vars := s.vs_vars) = s /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)`, `FlagTV n`] >>
+  simp[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `convert_result cx (BaseT (UintT 256)) (FlagT name) (IntV i)` >> gvs[]
+QED
