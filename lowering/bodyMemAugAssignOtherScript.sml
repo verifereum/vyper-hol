@@ -5,7 +5,7 @@
    attributes and subscripts. *)
 Theory bodyMemAugAssignOther
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemImmutableDeploy bodyMemAugAssignPlace bodyMemAugAssignEffectfulIndex
 
 Theorem body_augassign_other_mem:
   !cx ty t bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
@@ -35,5 +35,18 @@ Theorem body_augassign_other_mem:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `immutable_root cx t`
+  >- (qspecl_then [`cx`,`ty`,`t`,`bop`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_augassign_immutable_deploy_mem >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+  Cases_on `(~supported_target_pure tops t /\
+            ~(?id. target_root t = NameTarget id))`
+  >- (pop_assum strip_assume_tac >>
+      qspecl_then [`cx`,`ty`,`t`,`bop`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_augassign_effectful_index_mem >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+  (qspecl_then [`cx`,`ty`,`t`,`bop`,`e`,`d`,`tops`,`bindings`,`ctx`,`func`,`cenv`,`env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] mp_tac body_augassign_place_mem_case >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC)
 QED
