@@ -416,7 +416,15 @@ Theorem analyzed_native_slot_state_replay:
     (!v. MEM v (live_vars_at (liveness_analyze fn) lbl
         (LENGTH (collect_phis bb.bb_instructions))) ==> MEM (Var v) suffix) /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) lbl
-        (LENGTH (collect_phis bb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1)
+        (LENGTH (collect_phis bb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1) /\
+    (!v. (!inst. MEM inst (collect_phis bb.bb_instructions) ==> ~MEM v inst.inst_outputs) /\
+      ~MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (collect_phis bb.bb_instructions))) /\
+      MEM v (input_vars_from p bb.bb_instructions
+        (live_vars_at (liveness_analyze fn) lbl 0)) /\
+      LIST_ELEM_COUNT (Var v) ps.ps_stack +
+        (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1 ==>
+      ~MEM (Var v) (prefixP ++ suffix) /\ Var v NOTIN FDOM ps.ps_spilled)
 Proof
   strip_tac >> drule_all analyzed_native_slot_schedule_extinction >>
   disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
@@ -424,14 +432,29 @@ Proof
     (irule phi_common_cells_projection >> simp[]) >>
   drule_all phi_origin_schedule_state_replay >> strip_tac >>
   qexistsl_tac [`MAP (phi_cell_value T) cells_end`, `ops`, `al`] >>
-  simp[] >> rpt strip_tac >>
-  `MEM (Var v) (MAP (phi_cell_value T) cells_end)` by metis_tac[] >>
-  `LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1` by metis_tac[] >>
-  gvs[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM] >>
-  qpat_x_assum `!v'. LIST_ELEM_COUNT (Var v') _ <= 1`
-    (qspec_then `v` mp_tac) >>
-  qpat_x_assum `!v'. LIST_ELEM_COUNT v' _ > 0 ==> _`
-    (qspec_then `v` mp_tac) >> simp[] >> decide_tac
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM (Var v) (MAP (phi_cell_value T) cells_end)` by metis_tac[] >>
+      `LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1` by metis_tac[] >>
+      gvs[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM] >>
+      qpat_x_assum `!v'. LIST_ELEM_COUNT (Var v') _ <= 1`
+        (qspec_then `v` mp_tac) >>
+      qpat_x_assum `!v'. LIST_ELEM_COUNT v' _ > 0 ==> _`
+        (qspec_then `v` mp_tac) >> simp[] >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  `~MEM (Var v) (MAP (phi_cell_value T) cells_end)` by metis_tac[] >>
+  `MEM (Var v) (MAP (phi_cell_value T) cells)` by
+    (asm_rewrite_tac[] >> simp[MEM_MAP]) >>
+  `LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells) > 0` by
+    metis_tac[rich_listTheory.LIST_ELEM_COUNT_MEM] >>
+  `LIST_ELEM_COUNT (Var v) prefixP = 0 /\ Var v NOTIN FDOM ps.ps_spilled` by
+    (qpat_x_assum `LIST_ELEM_COUNT _ _ + _ <= 1` mp_tac >>
+     qpat_x_assum `LIST_ELEM_COUNT _ _ > 0` mp_tac >>
+     asm_rewrite_tac[] >> simp[rich_listTheory.LIST_ELEM_COUNT_THM] >>
+     Cases_on `Var v IN FDOM ps.ps_spilled` >> simp[] >> decide_tac) >>
+  simp[MEM_APPEND] >>
+  qpat_x_assum `LIST_ELEM_COUNT _ prefixP = 0` mp_tac >>
+  simp[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM]
 QED
 
 Theorem successful_join_edges_phi_schedule_ready:
