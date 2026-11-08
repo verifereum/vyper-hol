@@ -45,6 +45,7 @@ Theorem abi_encoder_window_run_fmp:
       t.vs_alloca_next + pending_alloca_size func t <=
         s.vs_alloca_next + pending_alloca_size func s /\
       t.vs_fmp = s.vs_fmp /\ t.vs_call_ctx = s.vs_call_ctx /\
+      t.vs_outcomes = s.vs_outcomes /\ t.vs_immutables = s.vs_immutables /\
       t.vs_data_section = s.vs_data_section /\
       LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
