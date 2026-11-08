@@ -5,7 +5,7 @@
    describe a widened call's value at its lowered type. *)
 Theory bodyMemMakeArrayWidened
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds typedCopyControlPathMem
 
 Theorem body_make_array_widened_call_elem_mem:
   !cx ty t n es.
