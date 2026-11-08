@@ -2,7 +2,8 @@
 Theory bodyIntCallJointCall
 Ancestors
   bodyIntCallJointContract supportedExprs bodyIntCallSemanticEntry
-  bodySimAugPlaceScopes stmtSimAugAssignPlaceStorage
+  bodySimAugPlaceScopes stmtSimAugAssignPlaceStorage bodyIntCallJointCallSource
+  exprSimExtCallCase
 
 Theorem internal_prologue_module_pins:
   compile_internal_prologue ce params has_rb ret sa = ((ce',pc),sb) /\
@@ -187,6 +188,22 @@ Theorem intcall_pure_results_memory_read:
 Proof
   strip_tac >> irule intcall_memory_read_scopes >>
   drule_all aug_place_pure_results_scopes >> simp[]
+QED
+
+(* A pure child may write its fresh allocations, but not an earlier window. *)
+Theorem intcall_pure_below_frontier_memory:
+  vv_post ctx func ce cx e es sa sb s0 ee tv vv u /\
+  ~expr_has_effect e /\ off + len <= s0.vs_alloca_next /\
+  (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     sa.cs_next_id <= inst.inst_id /\
+     FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
+     s0.vs_alloca_next <= b) ==>
+  mem_bytes_at off len u.vs_memory = mem_bytes_at off len s0.vs_memory
+Proof
+  strip_tac >> drule_all vv_post_pure_memory_frame >> strip_tac >>
+  first_x_assum irule >> rpt strip_tac >>
+  simp[compileEnvTheory.regions_disjoint_def] >>
+  first_x_assum drule_all >> decide_tac
 QED
 
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
