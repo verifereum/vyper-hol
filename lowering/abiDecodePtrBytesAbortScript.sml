@@ -211,6 +211,15 @@ Resume abi_decode_bytes_member_abort_ptr[payload_setup]:
 QED
 
 Resume abi_decode_bytes_member_abort_ptr[payload_guard]:
+  `?E. bop_scalar_seq {x | not_fresh_at c4 x}
+    {head;cnt;hi} (emitted_insts c4 c5) E /\ {head;cnt;hi} SUBSET E` by
+    (irule (abi_decode_bytes_payload_scalar |> Q.INST
+       [`A` |-> `{head;cnt;hi}`, `R` |-> `{x | not_fresh_at c4 x}`]) >>
+     simp_tac (srw_ss()) [IN_GSPEC] >> metis_tac[]) >>
+  suspend "payload_clean"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_clean]:
   cheat
 QED
 
