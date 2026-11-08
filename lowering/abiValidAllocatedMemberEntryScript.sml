@@ -4,12 +4,12 @@ Ancestors
   abiValidAllocatedNavigate abiValidAllocatedMembers abiValidAllocatedSource
   abiValidAllocatedMemberSetup
   abiDecoderSequenceReach abiDecoderMemberCode exprSimDefs
-  abiDecoderTypedCompose fragExec abiValidAllocatedContract
+  abiDecoderTypedCompose fragExec abiValidAllocatedContract abiMalformedMemberSetup
   exprLoweringProps instIdxIndep
   abiDecoderMemberCons abiDecoderMemberSetup abiDecoderCoherence abiDecoderContract
   abiMalformedRecursiveInterface abiMalformedMembers abiDecoderMemberInfos
   abiEncoder compileEnv venomState vyperABI contractABI valueEncoding
-  words list arithmetic pred_set abiDecodeRanges abiValidMembers
+  words list rich_list arithmetic pred_set abiDecodeRanges abiValidMembers
 
 Theorem abi_valid_allocated_members_head_entry:
   abi_valid_allocated_members_entry ce env sf (ty::tys) (tv::tvs) vs
@@ -92,4 +92,67 @@ Proof
   >- metis_tac[]
   >- (qexistsl_tac [`inst`, `q`] >> simp[]) >>
   metis_tac[]
+QED
+
+Theorem abi_valid_allocated_members_tail_entry:
+  abi_valid_allocated_members_entry ce env sf (ty::tys) (tv::tvs) (v::rest)
+    ctx func cenv cx es st en base_op hi src dst B L xs p d outsz ao vo dstid live ceiling s /\
+  abi_decode_member_setup dst src MLOAD base_op hi
+    (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND ops) (FST ops) MLOAD base_op hi
+    (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
+  compile_abi_decode_complex_elems dst src MLOAD base_op hi
+    (abi_decoder_member_infos sf ce tys)
+    (ao + abi_embedded_static_size ce.ce_struct_fields ty)
+    (vo + type_memory_bytes ce ty) end_st = ((),en) /\
+  abi_malformed_resource_post ctx func cenv cx es st.cs_next_var
+    (abi_malformed_scratch_sites st en func) dstid s u /\
+  abi_valid_allocated_post tv v ctx func cenv cx es middle end_st ceiling dstid
+    (d+vo) (type_memory_bytes ce ty) u t ==>
+  abi_valid_allocated_members_entry ce env sf tys tvs rest
+    ctx func cenv cx es end_st en base_op hi src dst B L xs p d outsz
+    (ao + abi_embedded_static_size ce.ce_struct_fields ty)
+    (vo + type_memory_bytes ce ty) dstid live ceiling t
+Proof
+  strip_tac >>
+  qhdtm_assum `abi_valid_allocated_members_entry`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_valid_allocated_members_entry_def]) >>
+  qhdtm_assum `abi_valid_allocated_post`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_valid_allocated_post_def]) >>
+  fs[LIST_REL_CONS1] >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_member_cons_code >> strip_tac >>
+  `abi_malformed_scratch_sites middle end_st func SUBSET
+   abi_malformed_scratch_sites st en func /\
+   abi_malformed_scratch_sites end_st en func SUBSET
+   abi_malformed_scratch_sites st en func` by
+    (conj_tac >> irule abi_malformed_scratch_sites_nested >> decide_tac) >>
+  `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var
+    (abi_malformed_scratch_sites st en func) dstid u t` by
+    (irule abi_malformed_resource_weaken >>
+     qexistsl_tac [`middle.cs_next_var`, `abi_malformed_scratch_sites middle end_st func`] >> simp[]) >>
+  `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var
+    (abi_malformed_scratch_sites st en func) dstid s t` by
+    (irule abi_malformed_resource_trans >> qexists_tac `u` >> simp[]) >>
+  `local_ptrs_reserved cenv end_st` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
+     fs[abi_malformed_entry_def] >> decide_tac) >>
+  `abi_malformed_entry ctx func cenv cx es end_st
+    (abi_malformed_scratch_sites end_st en func) dstid live
+    base_op hi src dst B L xs p d outsz t` by
+    (irule abi_malformed_aggregate_reentry >>
+     simp[] >> qexistsl_tac [`s`, `abi_malformed_scratch_sites st en func`, `st`] >>
+     simp[] >> decide_tac) >>
+  drule abi_decoder_coherent_header >> strip_tac >>
+  drule (SIMP_RULE bool_ss [MAP] abi_valid_source_cons_values) >> strip_tac >>
+  fs[abi_decoder_header_def, type_memory_size_def] >>
+  `abi_member_head_size (vyper_to_abi_type env ty) + (ao+p) =
+   ao + (p + abi_member_head_size (vyper_to_abi_type env ty))` by decide_tac >>
+  fs[DROP_DROP] >>
+  simp[abi_valid_allocated_members_entry_def] >>
+  `!n. n+(ao+p) = ao+(p+n)` by decide_tac >>
+  Cases_on `is_dynamic (vyper_to_abi_type env ty)` >>
+  fs[vyper_decode_valid_enc_def, abi_member_head_size_def,
+     abi_decoder_header_def] >>
+  gvs[DROP_DROP_T]
 QED
