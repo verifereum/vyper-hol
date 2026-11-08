@@ -23,19 +23,7 @@ Ancestors
   exprSimSliceOrdinary exprSimSliceExtcodeTyped
   exprSimDefs vyperState exprLoweringProps exprBopLowering
 
-Definition slice_extcode_case_def:
-  slice_extcode_case nocalls ctx func cenv cx args <=>
-    !ct a start len.
-      args = [Builtin ct (Acc Code) [a]; start; len] ==>
-      exprs_case nocalls ctx func cenv cx [start; len] /\
-      ((?s vs t. eval_exprs cx [start; len] s = (INL vs, t)) ==>
-       expr_sim_case nocalls ctx func cenv cx a /\
-       expr_vv_case nocalls ctx func cenv cx a)
-End
-
-
 Theorem compile_slice_extcode_case[local]:
-  exprs_case nocalls ctx func cenv cx args /\
   slice_extcode_case nocalls ctx func cenv cx args /\
   is_extcode (HD args) /\ ~is_self_code (HD args) ==>
   expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
@@ -88,13 +76,18 @@ QED
 Theorem compile_slice_nonself_case:
   !nocalls ctx func cenv cx ann n args.
     ~is_self_code (HD args) /\
-    exprs_case nocalls ctx func cenv cx args /\
+    (code_slice_source (Slice n) args = NONE ==>
+     exprs_case nocalls ctx func cenv cx args) /\
     slice_extcode_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
 Proof
   rpt strip_tac >> Cases_on `is_extcode (HD args)`
   >- (irule compile_slice_extcode_case >> simp[]) >>
-  irule compile_slice_ordinary_case >> simp[]
+  irule compile_slice_ordinary_case >> simp[] >>
+  first_x_assum irule >>
+  Cases_on `code_slice_source (Slice n) args` >> simp[] >>
+  PairCases_on `x` >>
+  gvs[vyperInterpreterTheory.code_slice_source_SOME, is_extcode_def]
 QED
 
 (* An operand list below the induction's size bound meets slice_extcode_case:
@@ -115,7 +108,8 @@ QED
 
 Theorem compile_slice_case:
   !nocalls ctx func cenv cx ann n args.
-    exprs_case nocalls ctx func cenv cx args /\
+    (code_slice_source (Slice n) args = NONE ==>
+     exprs_case nocalls ctx func cenv cx args) /\
     slice_extcode_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
 Proof

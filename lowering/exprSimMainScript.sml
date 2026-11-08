@@ -41,7 +41,8 @@ Theorem compile_builtin_case:
   !nocalls ctx func cenv cx ann bi args.
     (!bop. bi <> Bop bop) /\ (!t n. bi <> MakeArray t n) /\
     bi <> ECAdd /\ bi <> ECMul /\
-    exprs_case nocalls ctx func cenv cx args /\
+    (code_slice_source bi args = NONE ==>
+     exprs_case nocalls ctx func cenv cx args) /\
     (!m. bi = Slice m ==> slice_extcode_case nocalls ctx func cenv cx args) ==>
     expr_sim_case nocalls ctx func cenv cx (Builtin ann bi args) /\
     expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)
