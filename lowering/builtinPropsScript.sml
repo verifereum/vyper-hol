@@ -697,12 +697,12 @@ Proof
 QED
 
 val pure_chain_pure_tac =
-  simp[Once step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   FIRST [irule exec_pure2_update_ok, irule exec_pure1_update_ok] >>
   simp[];
 
 val pure_chain_assign_tac =
-  simp[Once step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   gvs[listTheory.LENGTH_EQ_NUM_compute, listTheory.EVERY_DEF] >>
   Cases_on `eval_operand h ss` >> gvs[] >>
   metis_tac[];
@@ -1771,7 +1771,7 @@ Theorem step_TLOAD_result[local]:
      | Error e => Error e) =
       OK (update_var out (tload v1 ss) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]
 QED
 
 Theorem step_CALLDATALOAD_result[local]:
@@ -1801,7 +1801,7 @@ Theorem step_ILOAD_result[local]:
      | Error e => Error e) =
       OK (update_var out (mload (w2n v1) ss) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]
 QED
 
 Theorem step_DLOAD_result[local]:
@@ -1817,7 +1817,7 @@ Theorem step_DLOAD_result[local]:
         (word_of_bytes T (0w:bytes32)
            (TAKE 32 (DROP (w2n v1) ss.vs_data_section ++ REPLICATE 32 0w))) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]
 QED
 
 (* len for dynarray: reads stored length *)
