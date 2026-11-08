@@ -11,7 +11,7 @@ Theorem abi_scratch_step_alloca:
   inst.inst_opcode = ALLOCA /\ step_inst_base inst s = OK t ==>
   ?asz:bytes32. exec_alloca inst s asz = OK t
 Proof
-  strip_tac >> gvs[Once step_inst_base_def, AllCaseEqs()] >>
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
   rename1 `exec_alloca inst s alloc_size = OK t` >>
   qexists_tac `alloc_size` >> simp[]
 QED

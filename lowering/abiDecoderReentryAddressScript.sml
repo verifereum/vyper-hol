@@ -65,9 +65,9 @@ Proof
   `st.cs_next_var < limit_st.cs_next_var` by decide_tac >>
   drule_all abi_decoder_register_update >> strip_tac >>
   `run_inst_seq (emitted_insts st allocation_st) s = OK t` by
-    (simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def] >>
+    (simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
      qpat_x_assum `exec_alloca alloc_inst s 32w = OK t` mp_tac >>
-     simp[Abbr`alloc_inst`, mk_inst_def]) >>
+     simp[Abbr`alloc_inst`, mk_inst_def, step_inst_base_opcode_eqs]) >>
   qexistsl_tac [`t`, `p`] >>
   gvs[Abbr`alloc_inst`, mk_inst_def, eval_operand_def]
 QED
