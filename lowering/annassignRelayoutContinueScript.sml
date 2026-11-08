@@ -48,6 +48,9 @@ Theorem annassign_relayout_effect_path[local]:
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                      FLOOKUP t.vs_allocas aid = SOME entry) /\
+        (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+                     aid <> inst.inst_id ==>
+                     mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory) /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
@@ -65,7 +68,19 @@ Proof
   drule typed_copy_effect_endpoint >> strip_tac >> simp[] >>
   conj_tac >- metis_tac[typed_copy_effect_lookup] >>
   conj_tac >- metis_tac[typed_copy_effect_allocas] >>
-  metis_tac[typed_copy_effect_path]
+  reverse conj_tac >- metis_tac[typed_copy_effect_path] >>
+  rpt strip_tac >>
+  `venomMemDefs$allocas_non_overlapping s` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ s` (strip_assume_tac o
+       REWRITE_RULE [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
+  `off + z <= w2n w \/ w2n w + sz <= off` by
+    (qpat_assum `venomMemDefs$allocas_non_overlapping s`
+       (mp_tac o REWRITE_RULE [venomMemDefsTheory.allocas_non_overlapping_def]) >>
+     disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (off,z)`)) >>
+     disch_then (qspecl_then [`inst.inst_id`, `w2n w`, `sz`] mp_tac) >>
+     simp[]) >>
+  metis_tac[typed_copy_effect_bytes]
 QED
 
 Theorem annassign_relayout_store_post_path:
@@ -109,10 +124,14 @@ Theorem annassign_relayout_store_post_path:
             (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t /\
         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+        (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                lookup_var x t = SOME u) /\
         (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                      FLOOKUP t.vs_allocas aid = SOME entry) /\
+        (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+                     aid <> inst.inst_id /\ aid < sb.cs_next_id ==>
+                     mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory) /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
@@ -138,7 +157,7 @@ Proof
 QED
 
 Resume annassign_relayout_store_post_path[direct]:
-  markerLib.RESUME_TAC >> rpt strip_tac >>
+  markerLib.RESUME_TAC >> (rpt strip_tac >>
   `compile_store_memory cenv op (Var p) dty sty sb = ((),sf)` by
     gvs[compile_assign_value_def] >>
   drule annassign_relayout_effect_path >>
@@ -153,11 +172,16 @@ Resume annassign_relayout_store_post_path[direct]:
   simp[] >> disch_then drule >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> simp[] >>
-  gnvs[expr_post_def] >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sb x` by
+        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      fs[expr_post_def] >> metis_tac[]) >>
+  conj_tac
+  >- (fs[expr_post_def] >> metis_tac[]) >>
   rpt strip_tac >>
-  `not_fresh_at sb x` by
-    (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  metis_tac[]
+  qpat_assum `!aid off z. _ ==> mem_bytes_at off z t.vs_memory = _`
+    (qspecl_then [`aid`, `off`, `z`] mp_tac) >> simp[])
 QED
 
 Resume annassign_relayout_store_post_path[staged]:
@@ -227,6 +251,37 @@ Resume annassign_relayout_store_post_path[staged]:
        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
      conj_tac >- (irule not_fresh_at_mono >> qexists_tac `sb` >> simp[]) >>
      metis_tac[]) >>
+  `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+       aid <> inst.inst_id /\ aid < sb.cs_next_id ==>
+       mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (rpt strip_tac >>
+     `FLOOKUP u.vs_allocas aid = SOME (off,z)` by metis_tac[] >>
+     `aid <> sx.cs_next_id` by simp[] >>
+     `venomMemDefs$allocas_non_overlapping u` by
+       (qpat_assum `stmt_state_rel _ _ _ _ _ u` (strip_assume_tac o
+          REWRITE_RULE [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+        first_assum ACCEPT_TAC) >>
+     `off + z <= w2n uw \/ w2n uw + type_memory_bytes cenv sty <= off` by
+       (qpat_assum `venomMemDefs$allocas_non_overlapping u`
+          (mp_tac o REWRITE_RULE [venomMemDefsTheory.allocas_non_overlapping_def]) >>
+        disch_then (drule_at (Pat `FLOOKUP _ _ = SOME (off,z)`)) >>
+        disch_then (qspecl_then [`sx.cs_next_id`, `w2n uw`, `type_memory_bytes cenv sty`] mp_tac) >>
+        simp[]) >>
+     `mem_bytes_at off z u.vs_memory = mem_bytes_at off z s.vs_memory` by
+       (qpat_assum `!off len. _ ==> mem_bytes_at off len u.vs_memory = _`
+          (qspecl_then [`off`, `z`] mp_tac) >> simp[]) >>
+     `mem_bytes_at off z t.vs_memory = mem_bytes_at off z u.vs_memory` by
+       (qpat_assum `!aid off z. _ ==> mem_bytes_at off z t.vs_memory = _`
+          (qspecl_then [`aid`, `off`, `z`] mp_tac) >> simp[]) >>
+     simp[]) >>
+  `!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at ss x` by
+       (irule not_fresh_at_mono >> qexists_tac `sb` >> simp[]) >>
+     `x <> q` by metis_tac[] >>
+     `lookup_var x t = lookup_var x u` by
+       (qpat_assum `!x. not_fresh_at ss x ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
+     simp[]) >>
   qexists_tac `t` >> simp[] >>
   gnvs[expr_post_def] >> RULE_L_ASSUM_TAC CONJUNCTS >>
   rpt strip_tac >> metis_tac[]
