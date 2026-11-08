@@ -284,6 +284,8 @@ Resume checked_compile_saved_log_statement[endpoint]:
      fs[EVERY_MEM] >> rpt strip_tac >> irule log_before_no_labels_old >> simp[]) >>
   `fragment_path ctx func ss allocated` by
     (irule fragment_path_trans >> qexists_tac `middle` >> simp[]) >>
+  `~allocated.vs_call_ctx.cc_static` by
+    (qpat_assum `fragment_path ctx func ss allocated` (mp_tac o MATCH_MP fragment_path_call_ctx) >> fs[]) >>
   `eval_operand data_buf.buf_operand allocated = SOME (memory_snapshot_addr topic_cut.cs_next_id ss)` by
     (qpat_assum `eval_operand data_buf.buf_operand allocated = _` mp_tac >> simp[]) >>
   `log_args_safe args atvs allocated (w2n (memory_snapshot_addr topic_cut.cs_next_id ss))
