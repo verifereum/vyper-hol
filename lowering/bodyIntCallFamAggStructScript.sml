@@ -2,6 +2,7 @@
 Theory bodyIntCallFamAggStruct
 Ancestors
   bodyIntCallJointContract bodyIntCallFamAggStructFields
+  bodyIntCallFamAggStructSource bodyIntCallFamAggStructCode
 
 Theorem intcall_struct_literal_step:
   (!e'. expr_size e' < expr_size e ==>
