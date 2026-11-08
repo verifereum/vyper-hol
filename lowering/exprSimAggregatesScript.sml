@@ -696,7 +696,7 @@ QED
 
 (* empty(T)'s buffer code reads no gas: its run is a gas path of no
    readings. *)
-Theorem empty_complex_gas_path[local]:
+Theorem empty_complex_gas_path:
   !sz header sa buf sb ctx func s t.
     compile_builtin_empty_complex sz header sa = (buf,sb) /\
     fn_has_code sa sb func /\ ~s.vs_halted /\

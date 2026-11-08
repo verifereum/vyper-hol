@@ -1,7 +1,8 @@
 (* Seam 2 joint induction step: aggregate constructors and memory subplaces. *)
 Theory bodyIntCallJointAgg
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodyIntCallFamAggTuple bodyIntCallFamAggArray
+  bodyIntCallFamAggStruct bodyIntCallFamAggAttribute bodyIntCallFamAggSubscript
 
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
    literals (MakeArray NONE), array literals (MakeArray (SOME _)), struct
@@ -18,5 +19,11 @@ Theorem intcall_aggregate_producer_step:
    (?a base idx. e = Subscript a base idx)) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  cheat
+  disch_then strip_assume_tac
+  >- (Cases_on `t`
+      >- (irule intcall_tuple_literal_step >> metis_tac[])
+      >> irule intcall_array_literal_step >> metis_tac[])
+  >- (irule intcall_struct_literal_step >> metis_tac[])
+  >- (irule intcall_attribute_step >> metis_tac[])
+  >> irule intcall_subscript_step >> metis_tac[]
 QED

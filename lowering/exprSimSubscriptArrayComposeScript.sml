@@ -140,7 +140,7 @@ Proof
        exprLoweringPropsTheory.immutable_alloca_sep_def]
 QED
 
-Theorem vv_at_source_gas[local]:
+Theorem vv_at_source_gas:
   vv_at cenv cx ty sa sb (ee with gas_obs := gs) r vv s <=>
   vv_at cenv cx ty sa sb ee r vv s
 Proof
@@ -159,7 +159,7 @@ Proof
   simp[vyperStateTheory.read_result_def, vyperStateTheory.read_place_def]
 QED
 
-Theorem vv_holds_source_gas[local]:
+Theorem vv_holds_source_gas:
   vv_holds cenv cx ty r vv (ee with gas_obs := gs) s <=>
   vv_holds cenv cx ty r vv ee s
 Proof
@@ -171,7 +171,7 @@ Proof
        read_storage_success_gas_iff, vyperStorageBackendTheory.get_storage_def]
 QED
 
-Theorem vv_own_source_gas[local]:
+Theorem vv_own_source_gas:
   vv_own cenv cx ty sa sb (ee with gas_obs := gs) r vv s <=>
   vv_own cenv cx ty sa sb ee r vv s
 Proof
