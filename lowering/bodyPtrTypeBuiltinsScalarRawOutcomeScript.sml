@@ -3,7 +3,8 @@ Ancestors
   bodyPtrTypeBuiltinsScalarSemantic bodyPtrTypeBuiltinsIntegerSemantic
   exprLowering exprLoweringProps compileEnv venomExecSemantics exprSimDefs
   valueEncoding loweringPosts exprSimConvert convertScalarBytes convertScalarOutputs
-  convertScalarDecimalRun convertScalarTyping
+  convertScalarDecimalRun convertScalarTyping convertScalarProps fragGasFresh varsExt
+  appendStorageStageTransportPtr freshWrites
 
 Theorem scalar_identity_actual_outcome:
   valid_conversion src dst /\ ~is_bytestring_type src /\
@@ -786,7 +787,7 @@ Proof
   strip_tac >> irule scalar_flag_source_actual_outcome >> metis_tac[]
 QED
 
-Theorem scalar_raw_actual_outcome:
+Theorem scalar_raw_clean_outcome[local]:
   valid_conversion src dst /\ ~is_bytestring_type src /\
   evaluate_type (get_tenv cx) src = SOME tv /\
   evaluate_type (get_tenv cx) dst = SOME tout /\ value_has_type tv v /\
@@ -814,4 +815,58 @@ Proof
   fs[typed_val_to_w256_def, val_to_w256_def] >>
   irule scalar_uint_flag_actual_outcome >> simp[vyperValueTheory.within_int_bound_def] >>
   metis_tac[]
+QED
+
+Theorem scalar_dispatch_straight_fresh:
+  valid_conversion src dst /\ ~is_bytestring_type src ==>
+  straight_fresh (compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst))
+Proof
+  strip_tac >> drule_all scalar_source_dispatch_partition >>
+  disch_then (qspec_then `cenv` mp_tac) >>
+  qmatch_goalsub_abbrev_tac `straight_fresh (compile_type_convert x conv)` >>
+  Cases_on `conv` >> simp[straight_fresh_convert, straight_fresh_convert_scalar] >>
+  simp[compile_type_convert_def, straight_fresh_return]
+QED
+
+Theorem scalar_raw_actual_outcome:
+  valid_conversion src dst /\ ~is_bytestring_type src /\
+  evaluate_type (get_tenv cx) src = SOME tv /\
+  evaluate_type (get_tenv cx) dst = SOME tout /\ value_has_type tv v /\
+  (!name n. FLOOKUP (get_tenv cx) name = SOME (FlagArgs n) ==>
+    cenv.ce_flag_n_members (nsid_to_string name) = n) /\
+  compile_type_convert x (case dst of FlagT name =>
+    ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
+    | _ => mk_convert_op src dst) sa = (out,sb) /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
+  eval_operand x s = SOME (typed_val_to_w256 tv v) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx src dst v = INL vout /\ expr_val_rel cx dst vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx src dst v) (Abort err t))
+Proof
+  strip_tac >>
+  `is_word_type dst` by (irule (cj 2 scalar_source_word_types) >>
+    metis_tac[optionTheory.IS_SOME_DEF]) >>
+  `eval_operand x (drop_fresh sa s) = SOME (typed_val_to_w256 tv v)` by
+    metis_tac[eval_operand_drop_fresh] >>
+  `(?t vout. run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = OK t /\
+      convert_result cx src dst v = INL vout /\ expr_val_rel cx dst vout out t) \/
+    (?err t. run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = Abort err t /\
+      expr_exit (convert_result cx src dst v) (Abort err t))` by
+    (irule scalar_raw_clean_outcome >> simp[fresh_vars_wrt_drop_fresh] >> metis_tac[]) >>
+  `writes_fresh sa (emitted_insts sa sb)` by
+    (drule_all scalar_dispatch_straight_fresh >>
+     simp[straight_fresh_def] >> metis_tac[]) >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sb) (drop_fresh sa s))
+    (run_inst_seq (emitted_insts sa sb) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+     drule writes_fresh_path_opcodes >> simp[listTheory.EVERY_MEM]) >>
+  pop_assum mp_tac >> pop_assum kall_tac >>
+  pop_assum strip_assume_tac >> simp[vars_ext_result_def] >> strip_tac
+  >- (goal_assum (drule_at Any) >> simp[] >>
+      fs[expr_val_rel_def] >> metis_tac[vars_ext_eval_operand]) >>
+  disj2_tac >> goal_assum (drule_at Any) >>
+  gvs[oneline expr_exit_def, AllCaseEqs()]
 QED

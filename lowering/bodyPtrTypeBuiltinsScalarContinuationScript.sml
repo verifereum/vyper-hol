@@ -62,7 +62,7 @@ Theorem scalar_convert_suffix_outcome_ptr:
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op src dst) /\
   compile_type_convert x conv sa = (out,sb) /\
-  (!z. x = Var z ==> not_fresh_at sa z) /\ fresh_vars_wrt sa s /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME (typed_val_to_w256 tv v) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -174,7 +174,7 @@ Theorem scalar_convert_modern_outcome_ptr:
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op (expr_type e) dst) /\
   compile_type_convert x conv sa = (out,sb) /\
-  (!z. x = Var z ==> not_fresh_at sa z) /\ fresh_vars_wrt sa s /\
+  (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME (typed_val_to_w256 tv v) /\
   op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
