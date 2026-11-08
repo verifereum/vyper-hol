@@ -121,7 +121,8 @@ QED
 Theorem compile_return_unlock_frag:
   !cenv sa sb ctx sv.
     compile_return_unlock cenv sa = ((),sb) /\
-    sv.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    sv.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    ~sv.vs_call_ctx.cc_static ==>
     frag_exec ctx sa sb (\s. s = sv)
       (\s. s = return_unlock_state cenv sv) (\r. F)
 Proof

@@ -237,6 +237,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
   rename1 `stmt_state_rel ctx func cenv cx (es with scopes := []) s0` >>
+  `~s0.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule compile_return_unlock_shape >> strip_tac >>
   `(!x. val_op = Var x ==> not_fresh_at su x) /\
    (!x. buf_op = Var x ==> not_fresh_at su x) /\

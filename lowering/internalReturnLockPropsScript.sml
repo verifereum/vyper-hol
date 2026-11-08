@@ -8,7 +8,7 @@ Ancestors
   vyperAST list rich_list transientLockFrameProps
 
 Theorem compile_return_unlock_source_correct:
-  state_rel func cenv cx vs ss /\ ~ss.vs_call_ctx.cc_static /\
+  state_rel func cenv cx vs ss /\
   cenv.ce_nonreentrant = (T,key,T,is_view) /\
   compile_return_unlock cenv st = ((),st') ==>
   ?vs' ss'.
