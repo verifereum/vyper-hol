@@ -885,6 +885,12 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fallback,ctor)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule loweringShapePropsTheory.supported_program_no_external_defaults >>
+     qpat_assum `classify_functions tops = _` (fn th => simp[th])) >>
+  qpat_x_assum `(if EXISTS external_has_defaults exts then _ else _) = _`
+    mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)` by
     simp[loweringShapePropsTheory.build_selectors_fn_labels] >>
