@@ -120,6 +120,12 @@ vyper --experimental-codegen --optimize none --evm-version prague \
   -f ir_runtime external-entries/sources/dflt_one_lit.vy
 ```
 
+`nr_internal_return` follows the DFT abort-ordering fix in
+[vyperlang/vyper#5336](https://github.com/vyperlang/vyper/pull/5336), which the
+pinned oracle predates. Its kernel check proves exact bytes from pinned Python
+with that fix, compilation success, and inequality to the retained `.hex`
+oracle for unpatched pinned Python.
+
 ## Fixture format
 
 Each `.hex` file contains canonical lowercase, even-length hexadecimal:

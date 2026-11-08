@@ -1,4 +1,4 @@
-(* Exact parity for a nonreentrant internal callee reached from an external call. *)
+(* Exact upstream DFT bytes for a nonreentrant internal callee. *)
 Theory evalCompilerBytecodeNonreentrantInternalReturn
 Ancestors
   compileVyper concretizeMemLocDefs alist byte integer_word option
@@ -21,11 +21,30 @@ Definition nr_internal_return_program_def:
   nr_internal_return_program = ^(checked_entry_fixture "nr_internal_return")
 End
 
-Theorem nr_internal_return_matches_python_oracle:
+(* DFT abort-run ordering follows https://github.com/vyperlang/vyper/pull/5336.
+   Expected bytes: VYPER_PIN 577d2534 with upstream 56e7bc32's dft.py patch,
+   using the external-entry corpus settings. The pinned oracle stays intact. *)
+val nr_internal_return_upstream_dft_bytes = pairSyntax.mk_pair
+  (evalCompilerBytecodeLib.hex_bytes_tm
+    ("5b60b15f9081610013903960b190f35b5f80fd5b60043610156100175761000e" ^
+     "565b610013565b5f5ffd5b5f3560e01c63b3de648b146100305761002b565b61" ^
+     "0013565b3415156100ad576024361015156100ad575f60040135606090815280" ^
+     "5161005561008b565b604090815f015251604090815251905161006d61008b56" ^
+     "5b81905f90815f01525191910190811015156100ad575f908152602090f35b90" ^
+     "6020505f5c60011415156100ad575f90815280515f5560015f5d5f5f5d519056" ^
+     "5b5f80fd"),
+   evalCompilerBytecodeLib.hex_bytes_tm
+    ("5b60043610156100175761000e565b610013565b5f5ffd5b5f3560e01c63b3de" ^
+     "648b146100305761002b565b610013565b3415156100ad576024361015156100" ^
+     "ad575f600401356060908152805161005561008b565b604090815f0152516040" ^
+     "90815251905161006d61008b565b81905f90815f015251919101908110151561" ^
+     "00ad575f908152602090f35b906020505f5c60011415156100ad575f90815280" ^
+     "515f5560015f5d5f5f5d5190565b5f80fd"));
+
+Theorem nr_internal_return_matches_upstream_dft:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     nr_internal_return_program =
-    SOME ^(evalCompilerBytecodeLib.read_hex_bytes
-      "../external-entries/oracle/nr_internal_return.hex")
+    SOME ^nr_internal_return_upstream_dft_bytes
 Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >> simp_tac pure_ss [optionTheory.option_case_def] >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
@@ -175,4 +194,20 @@ Proof
   entry_guard "spill_plan_in_region" >> entry_plan_admin >>
   entry_stage "OPTION_MAP" >> entry_admin >>
   CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
+QED
+
+Theorem nr_internal_return_compiles:
+  IS_SOME (compile_vyper (K SOME) (o1_policy all_capabilities)
+    nr_internal_return_program)
+Proof
+  PURE_REWRITE_TAC [nr_internal_return_matches_upstream_dft] >> EVAL_TAC
+QED
+
+Theorem nr_internal_return_differs_from_pinned_dft:
+  compile_vyper (K SOME) (o1_policy all_capabilities)
+    nr_internal_return_program <>
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes
+      "../external-entries/oracle/nr_internal_return.hex")
+Proof
+  PURE_REWRITE_TAC [nr_internal_return_matches_upstream_dft] >> EVAL_TAC
 QED
