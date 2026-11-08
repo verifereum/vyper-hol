@@ -3,7 +3,46 @@ Theory mmLocalScanProofs
 Ancestors
   mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner
-  venomWf stateEquiv
+  venomWf stateEquiv rich_list
+
+Definition mm_local_phase_def:
+  mm_local_phase dfg phase (b,t) =
+    case phase of
+      NONE => transform_block_memzero_supply dfg t b
+    | SOME m => transform_block_mode_supply dfg m t b
+End
+
+Definition mm_local_prefix_def:
+  mm_local_prefix fn0 supply index k =
+    FOLDL (\bt phase. mm_local_phase (dfg_build_function fn0) phase bt)
+      (EL index fn0.fn_blocks,supply)
+      (TAKE k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+End
+
+Theorem mm_local_prefix_zero[local]:
+  mm_local_prefix fn0 supply index 0 = (EL index fn0.fn_blocks,supply)
+Proof
+  simp[mm_local_prefix_def]
+QED
+
+Theorem mm_local_prefix_suc[local]:
+  k < 4 ==>
+  mm_local_prefix fn0 supply index (SUC k) =
+  mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (mm_local_prefix fn0 supply index k)
+Proof
+  simp[mm_local_prefix_def, TAKE_SUC_BY_TAKE, FOLDL_SNOC]
+QED
+
+Theorem mm_local_phase_label[local]:
+  mm_local_phase dfg phase (bb,s) = (cc,t) ==> cc.bb_label = bb.bb_label
+Proof
+  Cases_on `phase` >>
+  simp[mm_local_phase_def, transform_block_memzero_supply_def,
+       transform_block_mode_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
 
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
