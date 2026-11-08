@@ -131,3 +131,51 @@ Proof
        check_def, assert_def, return_def, raise_def, write_storage_slot_eq,
        encode_value_def, encode_base_to_slot_def, integer_wordTheory.i2w_def]
 QED
+
+Theorem pop_storage_positive_vv_post:
+  target_post ctx func cenv cx es0 sa sm s0 es
+    (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic cap))))
+    (Type (ArrayT ann (Dynamic cap))) (hdr,loc,pt) s /\
+  ci_mono sa sm /\ local_ptrs_reserved cenv sa /\
+  declared_storage_region cx mid name keys = SOME (tr,root,root_tv) /\
+  storage_subregion root_tv path delta (ArrayTV tv (Dynamic cap)) /\
+  w2n slot = w2n root + delta /\
+  storage_range_agree (get_storage cx es tr)
+    (if tr then contract_transient s else contract_storage s)
+    slot (ArrayTV tv (Dynamic cap)) /\
+  slots_in_range (get_storage cx es tr) (w2n slot) (ArrayTV tv (Dynamic cap)) /\
+  len = w2n (lookup_storage slot (get_storage cx es tr)) /\ 0 < len /\
+  u = (if tr then tstore slot (n2w (len-1)) s
+       else sstore slot (n2w (len-1)) s) with vs_vars := u.vs_vars /\
+  (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+  lookup_var out u = SOME (slot + n2w (1 + (len-1) * type_slot_size tv)) ==>
+  vv_post ctx func cenv cx (Pop ann bt) es0 sa sb s0
+    (set_storage cx es tr (apply_writes slot [(0,n2w (len-1))] (get_storage cx es tr)))
+    (PlaceR (StoragePlace tr (slot + n2w (1 + (len-1) * type_slot_size tv)) tv))
+    (LocatedValue ann (mk_ptr (Var out) (if tr then LocTransient else LocStorage))) u
+Proof
+  strip_tac >> drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[ci_mono_def, not_fresh_at_def] >> decide_tac) >>
+  `stmt_state_rel ctx func cenv cx
+    (set_storage cx es tr (apply_writes slot
+      [(0,n2w (w2n (lookup_storage slot (get_storage cx es tr))-1))]
+      (get_storage cx es tr))) u` by
+    (irule nested_pop_updated_state_rel >> simp[] >> metis_tac[]) >>
+  `storage_holds cx tr ann
+    (PlaceR (StoragePlace tr (slot + n2w (1 + (w2n (lookup_storage slot
+       (get_storage cx es tr))-1) * type_slot_size tv)) tv))
+    (slot + n2w (1 + (w2n (lookup_storage slot (get_storage cx es tr))-1) * type_slot_size tv))
+    (set_storage cx es tr (apply_writes slot
+      [(0,n2w (w2n (lookup_storage slot (get_storage cx es tr))-1))]
+      (get_storage cx es tr))) u` by
+    (irule nested_pop_positive_holds >> simp[] >> metis_tac[]) >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `u = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     Cases_on `tr` >> simp_tac (srw_ss()) [NoAsms, sstore_def, tstore_def, LET_THM]) >>
+  irule nested_pop_suffix_vv_post >>
+  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  gvs[]
+QED
+
