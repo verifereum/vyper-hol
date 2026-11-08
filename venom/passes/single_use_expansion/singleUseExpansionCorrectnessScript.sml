@@ -1,6 +1,6 @@
 Theory singleUseExpansionCorrectness
 Ancestors
-  singleUseExpansionProofs venomWf
+  singleUseExpansionProofs singleUseExpansionSupplySim venomWf irSupply
 
 (* Semantic correctness: running a function after SUE expansion gives an
    equivalent result (up to fresh variable names) to the original. *)
@@ -36,18 +36,22 @@ Proof
   ACCEPT_TAC sue_establishes_single_use_form
 QED
 
-(* CHEATED — not yet proved; needs structural argument that fresh vars
-   get unique ASSIGN outputs and original outputs are unchanged. *)
+(* The dispatched supply pass allocates fresh outputs outside the input. *)
 Theorem sue_preserves_ssa_form:
-  ∀fn. ssa_form fn ⇒ ssa_form (sue_expand_function fn)
+  ∀s fn fn' s'.
+    ssa_form fn ∧ ir_supply_covers_fn s fn ∧
+    sue_expand_function_supply s fn = (fn',s') ⇒
+    ssa_form fn'
 Proof
-  cheat
+  metis_tac[sue_supply_replay, sue_expand_function_supply_ssa_form]
 QED
 
-(* CHEATED — not yet proved; needs to show block labels, non-empty blocks,
-   and terminator placement are preserved by sue_expand_block. *)
+(* Replay supplies the instruction-id invariant without an extra premise. *)
 Theorem sue_preserves_wf_function:
-  ∀fn. wf_function fn ⇒ wf_function (sue_expand_function fn)
+  ∀s fn fn' s'.
+    wf_function fn ∧ ir_supply_covers_fn s fn ∧
+    sue_expand_function_supply s fn = (fn',s') ⇒
+    wf_function fn'
 Proof
-  cheat
+  metis_tac[sue_supply_replay, sue_expand_function_supply_wf_function]
 QED
