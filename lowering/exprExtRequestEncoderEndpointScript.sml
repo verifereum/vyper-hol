@@ -30,6 +30,7 @@ Theorem extrequest_encoder_run_resources:
       s.vs_alloca_next + pending_alloca_size func s /\
     t.vs_fmp = s.vs_fmp /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_data_section = s.vs_data_section /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_immutables = s.vs_immutables /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     FLOOKUP t.vs_allocas owner = SOME (baddr,sz) /\
     mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory
