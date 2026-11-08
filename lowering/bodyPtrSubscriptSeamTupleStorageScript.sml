@@ -2,14 +2,7 @@
 Theory bodyPtrSubscriptSeamTupleStorage
 Ancestors
   accountsRelProps compileEnv vyperValue vyperLookupStorage vyperStorage
-  targetPlaceLive exprSimPopNestedBase list words
-
-Theorem tuple_slot_size_append:
-  !pre rest. type_slot_size_list (pre ++ rest) =
-    type_slot_size_list pre + type_slot_size_list rest
-Proof
-  Induct >> simp[type_slot_size_def]
-QED
+  targetPlaceLive exprSimPopNestedBase vyperStorageRegionWrite list words
 
 Theorem tuple_dead_suffix:
   !pre rest st start j b.
@@ -34,7 +27,7 @@ Proof
   >- (simp[storage_range_agree_def, type_slot_size_def] >>
       rpt strip_tac >> gvs[] >> qspec_then `w + n2w (type_slot_size_list pre)` mp_tac
         wordsTheory.w2n_lt >> simp[]) >>
-  gvs[storage_range_agree_def, type_slot_size_def, tuple_slot_size_append] >>
+  gvs[storage_range_agree_def, type_slot_size_def, type_slot_size_list_append] >>
   `w2n w + type_slot_size_list pre < dimword (:256)` by decide_tac >>
   `w2n (w + n2w (type_slot_size_list pre)) =
     w2n w + type_slot_size_list pre` by
@@ -61,7 +54,7 @@ Proof
   qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
   rewrite_tac[storage_read_live_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
-  gvs[type_slot_size_def, tuple_slot_size_append] >>
+  gvs[type_slot_size_def, type_slot_size_list_append] >>
   `w2n w + type_slot_size_list pre < dimword (:256)` by decide_tac >>
   `w2n (w + n2w (type_slot_size_list pre)) =
     w2n w + type_slot_size_list pre` by
