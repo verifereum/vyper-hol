@@ -142,7 +142,14 @@ Proof
      Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def,
        not_fresh_at_def] >> metis_tac[]) >>
-  drule ctorDeployLoweringEntryMemberTheory.deploy_ctor_complex_head_bound >> strip_tac >>
+  `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys) <=
+    LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs))` by
+    (qpat_x_assum `LIST_REL _ _ _` kall_tac >>
+     drule abi_decoder_members_relations >> strip_tac >>
+     drule abi_decoder_member_infos_layout >> strip_tac >>
+     `has_types (MAP (vyper_to_abi_type env) tys) avs` by fs[has_types_LIST_REL] >>
+     drule canonical_tuple_length >> strip_tac >>
+     gvs[Excl "enc_def"] >> decide_tac) >>
   mp_tac (Q.INST [`st'` |-> `middle`, `head_sz` |->
     `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys)`]
     ctor_checked_complex_guard_labels) >>
@@ -170,7 +177,7 @@ Proof
   `frag_ids middle final SUBSET ids` by
     (qpat_x_assum `LIST_REL _ _ _` kall_tac >>
      gvs[frag_ids_def, SUBSET_DEF, IN_COUNT, IN_DIFF] >> decide_tac) >>
-  drule ctorDeployLoweringEntryMemberTheory.deploy_ctor_members_run >>
+  drule ctor_checked_members_run_from >>
   disch_then (mp_tac o SIMP_RULE bool_ss [MAP, SUM, APPEND, ADD_CLAUSES] o
     Q.INST [`st` |-> `middle`, `initial` |-> `prepared:venom_state`,
       `pretys` |-> `[]`, `pretvs` |-> `[]`, `preavs` |-> `[]`, `prevs` |-> `[]`] o SPEC_ALL o BETA_RULE) >>
