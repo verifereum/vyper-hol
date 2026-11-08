@@ -1,6 +1,8 @@
 Theory exprSimAbiEncodeTupleCounted
 Ancestors
   exprSimAbiEncodeTupleSuccess exprSimAbiEncodeTupleResources
+  exprSimAbiEncodeTupleZero exprSimAbiEncodeStagedRawObserver
+  exprSimAbiEncodeTranslatedZero abiEncodeArgsSim
   exprSimAbiEncodeStagedObserver exprSimAbiEncodeTranslatedNoBlock
   abiEncoderCounters abiBuiltinEncodeCode abiBuiltinEncodeContext abiBuiltinEncodeWord
   exprSimAbiEncodeRelabelObserver exprLoweringProps
@@ -270,3 +272,82 @@ Resume abi_encode_tuple_relabel_observer[phases]:
 QED
 
 Finalise abi_encode_tuple_relabel_observer
+
+Theorem abi_encode_tuple_raw_phases:
+  expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode ensure mid0) target args) es /\
+  ~(LENGTH args = 1 /\ ~ensure) /\ mid = OPTION_MAP bytes_method_id_word mid0 /\
+  eval_exprs cx args es = (INL vs,es') /\
+  vyper_to_abi_list (get_tenv cx) (MAP expr_type args) vs = SOME avs /\
+  abi_args_post ctx func ce cx es origin st s0 es' args values vs initial /\
+  compile_alloc_buffer (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) st = (buf,allocated) /\
+  compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (values,MAP expr_type args)) allocated = ((),staged) /\
+  s.vs_allocas = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_allocas /\
+  s.vs_alloca_next = (abi_builtin_allocate_state st.cs_next_id
+    (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) initial).vs_alloca_next /\
+  eval_operand buf.buf_operand s = SOME (n2w sb) /\
+  FLOOKUP s.vs_allocas st.cs_next_id = SOME (sb,abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) /\
+  abi_encoder_open_input ei ct rv sb (abi_tuple_bytes ce (ZIP (values,MAP expr_type args))) s.vs_memory /\
+  enc ct rv = enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP expr_type args))) (ListV avs) /\
+  ei = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)) /\
+  abi_builtin_encode_setup mid (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args)))
+    staged = (ops,ready) /\
+  compile_abi_encode_to_buf (SND ops) buf.buf_operand ei ready = (len,body_end) /\
+  abi_builtin_encode_finish (FST ops) len (case mid of NONE => 0 | SOME _ => 4)
+    body_end = ((),final) /\
+  fn_has_code st allocated func /\ fn_has_code staged ready func /\
+  fn_has_code ready body_end func /\ fn_has_code body_end final func /\ fn_inst_ids_distinct func /\
+  staged.cs_blocks = final.cs_blocks /\
+  local_ptrs_reserved ce st /\ local_ptrs_reserved ce staged /\
+  stmt_state_rel ctx func ce cx es' s /\ abi_encoder_admissible ei /\
+  (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
+  ~s.vs_halted /\ s.vs_current_bb = staged.cs_current_bb /\
+  s.vs_inst_idx = LENGTH staged.cs_current_insts ==>
+  ?p raw. run_inst_seq (emitted_insts staged final) s = OK raw /\
+    let actual = raw with vs_inst_idx := LENGTH final.cs_current_insts in
+    ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    abi_encode_exec_frame func s actual /\
+    abi_encode_staged_observation ctx func ce cx es' staged (FST ops) mid
+      (32+32*word_size (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))+
+        (case mid of NONE => 0 | SOME _ => 4))) p ct rv s actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `!j. MEM j (fn_insts func) /\ j.inst_opcode <> STOP /\ j.inst_opcode <> NOP ==>
+    MEM j (fn_insts func)` by simp[] >>
+  drule_at (Pat `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`) abi_encode_args_phase_resources >>
+  disch_then (drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `fn_has_code ready body_end _`)) >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_encoder_open_input _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
+  disch_then (drule_at (Pat `vyper_to_abi_list _ _ _ = _`)) >>
+  (impl_tac >- asm_rewrite_tac []) >>
+  simp_tac bool_ss [LET_THM] >>
+  disch_then (qx_choose_then `p` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  drule_all abi_encode_args_numerical_capacity >> simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_encode_translated_operand_liveness >> strip_tac >>
+  drule abi_builtin_encode_setup_shape >> strip_tac >>
+  drule abi_encoder_counters >> strip_tac >>
+  `staged.cs_next_var <= ready.cs_next_var /\ staged.cs_next_var <= body_end.cs_next_var` by
+    (qpat_assum `ready.cs_next_var = _` mp_tac >> Cases_on `mid` >> simp_tac arith_ss [] >> decide_tac) >>
+  `abi_tuple_bytes ce (ZIP (values,MAP expr_type args)) = 0 ==>
+    (ei = AbiCopy 0 \/ ei = AbiComplex []) /\ enc ct rv = []` by
+    (strip_tac >> drule abi_args_post_lengths >> strip_tac >>
+     drule_all abi_encode_tuple_zero_descriptor >> disch_then assume_tac >>
+     metis_tac[abi_encode_translated_zero_open_bytes]) >>
+  qpat_x_assum `mid = OPTION_MAP _ _` kall_tac >>
+  qpat_x_assum `enc ct rv = _` (fn th => rule_assum_tac (PURE_REWRITE_RULE [GSYM th])) >>
+  drule_at (Pat `abi_builtin_encode_setup _ _ _ = _`) abi_encode_staged_raw_observer >>
+  disch_then (drule_at (Pat `compile_abi_encode_to_buf _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_builtin_encode_finish _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_encoder_window_input _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `alloca_room _ _ _`)) >>
+  disch_then (qspecl_then [`case mid of NONE => 0 | SOME _ => 32`, `p`,
+    `p+32+(case mid of NONE => 0 | SOME _ => 4)`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac [] >> rpt conj_tac >> decide_tac)) >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  qexistsl [`p`, `raw`] >> asm_rewrite_tac []
+QED
