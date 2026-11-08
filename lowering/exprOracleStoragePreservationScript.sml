@@ -397,6 +397,7 @@ Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
     vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
   imp_res_tac precompile_call_success_state >> gvs[] >>
   rpt strip_tac >> gvs[] >>
+  imp_res_tac precompile_call_success_state >> gvs[] >>
   irule contract_storage_well_formed_storage_frame >>
   qexists_tac `args_st` >> simp[] >>
   Cases >> simp[vyperStorageBackendTheory.get_storage_def]
