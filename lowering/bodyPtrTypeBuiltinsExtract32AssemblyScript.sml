@@ -294,3 +294,26 @@ Proof
   qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED
+
+Theorem extract32_saved_source_view:
+  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
+  expr_type src = BaseT (BytesT (Dynamic m)) /\
+  evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
+  expr_post ctx func cenv cx off es1 sm sb s1 es2 v offop s2 /\
+  (!z. srcop = Var z ==> not_fresh_at sm z) /\ (!l. srcop <> Label l) /\
+  ptr_mem_ok cx (expr_type src) (BytesV bs) srcop G tn s2 /\
+  eval_operand srcop s2 = SOME (n2w p) /\
+  eval_operand dataop s2 = SOME (n2w (p+32)) ==>
+  ?q. eval_operand srcop s2 = SOME (n2w q) /\
+    eval_operand dataop s2 = SOME (n2w (q+32)) /\
+    val_in_memory (BaseTV (BytesT (Dynamic m))) (BytesV bs) q s2.vs_memory /\
+    LENGTH bs < dimword(:256) /\ q+32+LENGTH bs < dimword(:256)
+Proof
+  strip_tac >> drule_all extract32_saved_source_nonwrap >> strip_tac >>
+  qexists_tac `w2n (n2w p:bytes32)` >> simp[] >>
+  `n2w (w2n (n2w p:bytes32)+32):bytes32 = n2w (p+32)` by
+    (rewrite_tac[GSYM word_add_n2w] >> simp[]) >> simp[] >>
+  qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
+  simp[ptr_mem_ok_def] >> strip_tac >> first_x_assum irule >>
+  simp[mem_agree_outside_def]
+QED
