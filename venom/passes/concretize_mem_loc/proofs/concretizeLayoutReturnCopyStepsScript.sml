@@ -29,7 +29,10 @@ Theorem return_copy_dispatch:
     step_inst_base inst t = OK (write_memory_with_expansion (w2n dT)
       (TAKE (w2n n) (DROP (w2n src) t.vs_returndata)) t))
 Proof
-  strip_tac >> simp[step_inst_base_def]
+  (* unfold, then pin the opcode and operands before simplifying: the
+     whole opcode case under simp was over the step limit *)
+  strip_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  pure_asm_rewrite_tac[] >> simp[]
 QED
 
 Theorem return_copy_taint:
