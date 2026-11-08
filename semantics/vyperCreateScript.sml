@@ -588,6 +588,7 @@ Definition eval_create_def:
     (* copy-of/blueprint ASSERTs are emitted before CREATE and always revert. *)
     check code_info.cc_source_ok "create source has no deployable code";
     check code_info.cc_size_ok "create initcode too large";
+    check_not_static cx;
     oracle_mode <- (\st. (INL (IS_SOME st.outcomes), st));
     if oracle_mode then
       create_oracle_result ops.co_salt ops.co_value code_info.cc_initcode rof

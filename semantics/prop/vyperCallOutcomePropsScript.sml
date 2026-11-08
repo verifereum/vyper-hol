@@ -59,15 +59,17 @@ Proof
 QED
 
 Theorem take_call_outcome_computed_valid:
-  st.outcomes = SOME os /\
+  st.outcomes = SOME (outcome::rest) /\
   rq = call_outcome_request target calldata value_opt st /\
   rq.cr_value = 0 /\
   precompile_result rq.cr_target rq.cr_data = SOME (SOME bs) ==>
   take_call_outcome target calldata value_opt st =
-    (if ~rq.cr_static /\ ~accounts_runtime_well_typed st.accounts
+    (if ~outcome.co_success then INL (rq, failed_outcome rq)
+     else if ~rq.cr_static /\ ~accounts_runtime_well_typed st.accounts
      then INR (Error (RuntimeError "call outcome accounts"))
      else INL (rq, failed_outcome rq with
-                       <|co_success := T; co_returnData := bs|>), st)
+                       <|co_success := T; co_returnData := bs|>),
+     st with outcomes := SOME rest)
 Proof
   rpt strip_tac >>
   gvs[take_call_outcome_def, take_outcome_def, record_request_def,
@@ -79,9 +81,10 @@ Theorem take_call_outcome_computed_invalid:
   st.outcomes = SOME os /\
   rq = call_outcome_request target calldata value_opt st /\
   rq.cr_value = 0 /\ precompile_result rq.cr_target rq.cr_data = SOME NONE ==>
-  take_call_outcome target calldata value_opt st = (INL (rq, failed_outcome rq), st)
+  take_call_outcome target calldata value_opt st =
+    (INL (rq, failed_outcome rq), st with outcomes := SOME (DROP 1 os))
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> Cases_on `os` >>
   gvs[take_call_outcome_def, take_outcome_def, record_request_def,
       computed_precompile_def, call_outcome_request_def, evaluation_state_component_equality]
 QED
@@ -154,12 +157,13 @@ Theorem take_call_outcome_suffix:
   ?rest prefix. st'.outcomes = SOME rest /\ os = prefix ++ rest /\
     LENGTH prefix <= 1 /\
     (computed_precompile (call_outcome_request target calldata value_opt st) ==>
-       prefix = [] /\ st'.requests = st.requests)
+       st'.requests = st.requests)
 Proof
   rpt strip_tac >> gvs[take_call_outcome_def] >> pairarg_tac >>
-  gvs[AllCaseEqs(), take_outcome_def, record_request_def] >>
-  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
-  rename1 `os = head::tail` >> qexists_tac `[head]` >> simp[]
+  `rest = DROP 1 os` by metis_tac[take_outcome_rest, SND] >>
+  gvs[AllCaseEqs(), record_request_def] >>
+  Cases_on `os` >> simp[] >>
+  rename1 `head::tail` >> qexists_tac `[head]` >> simp[]
 QED
 
 Theorem take_adopt_call_outcome_typed:

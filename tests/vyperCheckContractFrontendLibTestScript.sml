@@ -241,7 +241,7 @@ fun constant_default alias =
       "VALUE" NONE NONE NONE JMissingSource (JT_Integer 256 F)``;
 val default_constants =
   ``[JTL_VariableDecl "VALUE" (JT_Integer 256 F) (JTA_Integer 256 F)
-      F F F (SOME (JE_Int 7 (JT_Integer 256 F)))]``;
+      F F F F (SOME (JE_Int 7 (JT_Integer 256 F)))]``;
 val alias_abstract = default_u256_fn ``["abstract"]`` ``[] : string list``
   (constant_default ``"c1"``);
 val alias_override = default_u256_fn ``["override"]`` ``["base"]``
@@ -341,8 +341,8 @@ val _ = expect_source_conflict "main module collision" (fn () =>
 val _ = expect_source_conflict "slot annotation must not erase a conflict"
   (fn () => prepare_sources
     ``[(NONE, []);
-       (SOME 7, [VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 1)]);
-       (SOME 7, [VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 2)])]``);
+       (SOME 7, [VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 1)]);
+       (SOME 7, [VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 2)])]``);
 
 fun repeated_interface_ast first_body second_body =
   ``JAnnotatedAST (JModule 0 F [])
@@ -557,6 +557,27 @@ val _ =
    handle Fail message =>
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
+
+(* Issue 565: the public getter flag follows the pragma, except for explicit
+   reentrant, constant and immutable declarations (g37/g38/g39 controls). *)
+Theorem translated_public_variable_getter_flag:
+  (case translate_toplevel ni im ec tc nr_default
+     (JTL_VariableDecl name ty ann T imm trans reentrant const_val) of
+     SOME (VariableDecl vis _ _ _ _) => vis
+   | _ => Private) =
+  Public (nr_default /\ ~reentrant /\ ~imm /\ const_val = NONE)
+Proof
+  simp[jsonToVyperTopLevelTheory.translate_toplevel_def]
+QED
+
+Theorem translated_public_hashmap_getter_flag:
+  (case translate_toplevel ni im ec tc nr_default
+     (JTL_HashMapDecl name kt vt T trans reentrant) of
+     SOME (HashMapDecl vis _ _ _ _ _) => vis
+   | _ => Private) = Public (nr_default /\ ~reentrant)
+Proof
+  simp[jsonToVyperTopLevelTheory.translate_toplevel_def]
+QED
 
 (* Without bound=, range endpoints are folded to literals; with it, they stay
    the translated expressions. *)

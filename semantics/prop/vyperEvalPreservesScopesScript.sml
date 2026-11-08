@@ -1,6 +1,7 @@
 Theory vyperEvalPreservesScopes
 Ancestors
   pair vyperCallFrame vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
+  vyperImmutableMetadataFrame
   vyperTypeInvariants
   vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
@@ -42,34 +43,6 @@ QED
 (* ------------------------------------------------------------------------
    Helper Lemmas for Individual Statement Cases
    ------------------------------------------------------------------------ *)
-
-Theorem case_Pass_dom[local]:
-  ∀cx st res st'.
-    eval_stmt cx Pass st = (res, st') ⇒ preserves_scopes_dom st st'
-Proof
-  simp[evaluate_def, return_def, preserves_scopes_dom_def]
-QED
-
-Theorem case_Continue_dom[local]:
-  ∀cx st res st'.
-    eval_stmt cx Continue st = (res, st') ⇒ preserves_scopes_dom st st'
-Proof
-  simp[evaluate_def, raise_def, preserves_scopes_dom_def]
-QED
-
-Theorem case_Break_dom[local]:
-  ∀cx st res st'.
-    eval_stmt cx Break st = (res, st') ⇒ preserves_scopes_dom st st'
-Proof
-  simp[evaluate_def, raise_def, preserves_scopes_dom_def]
-QED
-
-Theorem case_Return_NONE_dom[local]:
-  ∀cx st res st'.
-    eval_stmt cx (Return NONE) st = (res, st') ⇒ preserves_scopes_dom st st'
-Proof
-  simp[evaluate_def, raise_def, preserves_scopes_dom_def]
-QED
 
 Theorem map_fdom_eq_preserves_dom[local]:
   ∀st st'. MAP FDOM st.scopes = MAP FDOM st'.scopes ⇒ preserves_scopes_dom st st'
@@ -189,7 +162,8 @@ Theorem case_Log_dom[local]:
       eval_stmt cx (Log id es) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
-  gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  gvs[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  imp_res_tac check_state >>
   imp_res_tac lift_option_scopes >>
   imp_res_tac push_log_scopes >> gvs[]
 QED
@@ -473,13 +447,6 @@ Proof
   Cases_on `s'³'.scopes` >> gvs[]
 QED
 
-Theorem case_eval_stmts_nil_dom[local]:
-  ∀cx st res st'.
-    eval_stmts cx [] st = (res, st') ⇒ preserves_scopes_dom st st'
-Proof
-  simp[evaluate_def, return_def, preserves_scopes_dom_def]
-QED
-
 Theorem case_eval_stmts_cons_dom[local]:
   ∀cx s ss.
     (* IH for ss: conditional on eval_stmt succeeding *)
@@ -510,13 +477,6 @@ Proof
 QED
 
 (* === Category 6: eval_for (iteration) === *)
-
-Theorem case_eval_for_nil_dom[local]:
-  ∀cx tyv nm body st res st'.
-    eval_for cx tyv nm body [] st = (res, st') ⇒ preserves_scopes_dom st st'
-Proof
-  simp[evaluate_def, return_def, preserves_scopes_dom_def]
-QED
 
 Theorem try_body_preserves_tl_dom[local]:
   ∀cx body nm tyv v st0.
@@ -772,42 +732,12 @@ Proof
   (* === eval_for cases === *)
   (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
   (* v::vs *) >- (drule case_eval_for_cons_dom >> metis_tac[])
-  (* === Expression cases - use eval_expr_preserves_scopes_dom === *)
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  (* chain interaction builtins *)
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
-  >- drule_all_then ACCEPT_TAC eval_exprs_preserves_scopes_dom
-  >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
-  >- metis_tac[eval_base_place_preserves_scopes_dom]
-  >- metis_tac[eval_base_place_preserves_scopes_dom]
-  >- metis_tac[eval_base_place_preserves_scopes_dom]
-  >- metis_tac[eval_base_place_preserves_scopes_dom]
-  >- metis_tac[eval_target_place_preserves_scopes_dom]
-  >- metis_tac[place_evaluators_scopes_dom]
-  >- metis_tac[place_evaluators_scopes_dom]
-  >- metis_tac[place_evaluators_scopes_dom]
-  >- metis_tac[place_evaluators_scopes_dom]
-  >- gvs[Once evaluate_def, raise_def]
-  >- gvs[Once evaluate_def, raise_def]
-  >> metis_tac[eval_expr_results_preserves_scopes_dom]
+  (* === Expression-level evaluators and assignment targets === *)
+  >> FIRST (map (fn th => drule th >> simp[] >> NO_TAC)
+       [eval_expr_preserves_scopes_dom, eval_exprs_preserves_scopes_dom,
+        eval_base_place_preserves_scopes_dom, eval_target_place_preserves_scopes_dom,
+        eval_expr_results_preserves_scopes_dom,
+        cj 1 place_evaluators_scopes_dom, cj 2 place_evaluators_scopes_dom])
 QED
 
 (* ------------------------------------------------------------------------
@@ -1003,8 +933,9 @@ Proof
     rpt strip_tac >>
     `MAP FDOM st.scopes = MAP FDOM st'.scopes` by (
       qpat_x_assum`eval_stmt _ _ _ = _`mp_tac >>
-      simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
       rpt strip_tac >>
+      imp_res_tac check_state >>
       imp_res_tac eval_exprs_preserves_scopes_dom >>
       imp_res_tac lift_option_scopes >>
       imp_res_tac push_log_scopes >> gvs[]) >>
@@ -1123,27 +1054,6 @@ Proof
        goal_assum $ drule_at Any >> rw[] >>
        metis_tac[scopes_dom_extended]) >>
     Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
-  >> conj_tac >- simp[] (* Name: T *)
-  >> conj_tac >- simp[] (* TopLevelName: T *)
-  >> conj_tac >- simp[] (* FlagMember: T *)
-  >> conj_tac >- simp[] (* IfExp: T *)
-  >> conj_tac >- simp[] (* Literal: T *)
-  >> conj_tac >- simp[] (* StructLit: T *)
-  >> conj_tac >- simp[] (* Subscript: T *)
-  >> conj_tac >- simp[] (* Attribute: T *)
-  >> conj_tac >- simp[] (* Builtin: T *)
-  >> conj_tac >- simp[] (* Pop: T *)
-  >> conj_tac >- simp[] (* TypeBuiltin: T *)
-  >> conj_tac >- simp[] (* Send: T *)
-  >> conj_tac >- simp[] (* ExtCall: T *)
-  >> conj_tac >- simp[] (* IntCall: T *)
-  >> conj_tac >- simp[] (* RawCallTarget: T *)
-  >> conj_tac >- simp[] (* RawCallCalldataTarget: T *)
-  >> conj_tac >- simp[] (* RawLog: T *)
-  >> conj_tac >- simp[] (* RawRevert: T *)
-  >> conj_tac >- simp[] (* SelfDestructTarget: T *)
-  >> conj_tac >- simp[] (* CreateTarget: T *)
-  >> conj_tac >- simp[] (* exprs []: T *)
   >> simp[] (* remaining expression/list/resolver/tuple clauses are vacuous *)
 QED
 
@@ -1239,6 +1149,13 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_outcomes[simp]:
+  ∀cx st st' os.
+    preserves_tv cx st (st' with outcomes := os) ⇔ preserves_tv cx st st'
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_txn_eq:
   ∀cx cx' st st'.
     cx.txn = cx'.txn ⇒
@@ -1264,6 +1181,66 @@ Theorem preserves_tv_eq:
     preserves_tv cx st st'
 Proof
   simp[preserves_tv_def]
+QED
+
+(* Expression-level evaluators change scopes only by a pop trace and keep
+   immutable metadata, so preserves_tv follows from those two frames. *)
+Theorem scope_pop_effect_preserves_tv[local]:
+  f st = (res,st') ==>
+  scope_pop_effect f /\ immutable_metadata_frame st st' ==>
+  preserves_tv cx st st'
+Proof
+  rw[scope_pop_effect_def] >> first_x_assum drule >> strip_tac >>
+  drule scope_pop_trace_frames >> simp[listTheory.LIST_REL_EL_EQN] >>
+  strip_tac >> simp[preserves_tv_def] >> rpt conj_tac >~
+  [`get_source_immutables`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `immutable_metadata_frame _ _` mp_tac >>
+      simp[immutable_metadata_frame_def] >> strip_tac >>
+      qpat_x_assum `!addr. IS_SOME _ <=> _`
+        (qspec_then `cx.txn.target` assume_tac) >>
+      Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+      Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+      first_x_assum drule >> disch_then drule >>
+      disch_then (qspecl_then [`src`,`id`] mp_tac) >> simp[] >>
+      strip_tac >> PairCases_on `z` >> gvs[]) >>
+  fs[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+val EXPR_TV_TAC =
+  rpt strip_tac >> drule scope_pop_effect_preserves_tv >> disch_then irule >>
+  imp_res_tac eval_metadata_frame_with_results >>
+  fs[eval_mutual_scope_pop_effect, eval_expr_results_scope_pop_effect];
+
+Theorem eval_expr_preserves_tv:
+  eval_expr cx e st = (res,st') ==> preserves_tv cx st st'
+Proof
+  EXPR_TV_TAC
+QED
+
+Theorem eval_exprs_preserves_tv:
+  eval_exprs cx es st = (res,st') ==> preserves_tv cx st st'
+Proof
+  EXPR_TV_TAC
+QED
+
+Theorem eval_base_place_preserves_tv:
+  eval_base_place cx t st = (res,st') ==> preserves_tv cx st st'
+Proof
+  EXPR_TV_TAC
+QED
+
+Theorem eval_target_place_preserves_tv:
+  eval_target_place cx t st = (res,st') ==> preserves_tv cx st st'
+Proof
+  EXPR_TV_TAC
+QED
+
+Theorem eval_expr_results_preserves_tv:
+  eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
+Proof
+  EXPR_TV_TAC
 QED
 
 Theorem replace_memory_entry_metadata[local]:
@@ -1317,19 +1294,6 @@ Proof
   simp[]
 QED
 
-Theorem preserves_tv_stk_update[local]:
-  ∀cx f st st'.
-    preserves_tv (cx with stk updated_by f) st st' ⇔ preserves_tv cx st st'
-Proof
-  simp[preserves_tv_def]
-QED
-Theorem preserves_tv_restore_scopes[local]:
-  ∀cx st st' scopes.
-    preserves_tv cx (st with scopes := scopes) st' ⇒
-    preserves_tv cx st (st' with scopes := st.scopes)
-Proof
-  rw[preserves_tv_def]
-QED
 (* ===== Scope type value preservation ===== *)
 (* If id is not in the head scope before eval_stmts, and eval_stmts
    preserves scopes dom, and new head entries aren't in tail,
@@ -1466,35 +1430,8 @@ QED
 Theorem pop_place_preserves_tv:
   pop_place cx p st = (res,st') ==> preserves_tv cx st st'
 Proof
-  Cases_on `p`
-  >- (strip_tac >> irule preserves_tv_eq >>
-      metis_tac[pop_storage_place_scopes_immutables])
-  >- (rename1 `MemoryPlace id path` >> strip_tac >>
-      Cases_on `find_containing_scope id st.scopes` >>
-      gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
-          return_def, raise_def] >> PairCases_on `x` >>
-      gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
-          check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
-      fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
-      imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >> gvs[] >>
-      pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def, return_def] >>
-      drule find_containing_scope_structure >> strip_tac >> gvs[] >>
-      gvs[preserves_tv_def] >> rpt gen_tac >> strip_tac >>
-      Cases_on `i < LENGTH x0` >> gvs[rich_listTheory.EL_APPEND1] >>
-      Cases_on `i > LENGTH x0` >>
-      gvs[rich_listTheory.EL_APPEND, rich_listTheory.EL_CONS,
-          arithmeticTheory.PRE_SUB1] >>
-      `i = LENGTH x0` by decide_tac >>
-      gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-       get_immutables_def, get_address_immutables_def, set_immutable_def,
-       set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[] >>
-  gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
-      get_source_immutables_def, set_source_immutables_def] >>
-  rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[alistTheory.ALOOKUP_ADELKEY]
+  strip_tac >> drule scope_pop_effect_preserves_tv >> disch_then irule >>
+  imp_res_tac pop_place_metadata_frame >> fs[pop_place_scope_effect]
 QED
 (* TODO(cleanup): this generic handle_function state-frame fact belongs with
    the interpreter/function-call support lemmas once those are split out. *)
@@ -1503,121 +1440,6 @@ Theorem handle_function_state:
 Proof
   simp[oneline handle_function_def]
   >> CASE_TAC >> rw[raise_def, return_def]
-QED
-
-Theorem acquire_nonreentrant_lock_immutables[local]:
-  ∀addr slot is_view st res st'.
-    acquire_nonreentrant_lock addr slot is_view st = (res, st') ⇒
-    st'.immutables = st.immutables
-Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
-QED
-
-Theorem release_nonreentrant_lock_immutables[local]:
-  ∀addr slot st res st'.
-    release_nonreentrant_lock addr slot st = (res, st') ⇒
-    st'.immutables = st.immutables
-Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
-     get_transient_storage_def, update_transient_def,
-     return_def, raise_def, LET_THM]
-  \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
-QED
-
-Theorem lock_acquire_cond_scopes_immutables[local]:
-  ∀nr slot_opt addr is_view s res s'.
-    (if nr then
-       case slot_opt of
-         NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock addr slot is_view
-     else return ()) s = (res, s') ⇒
-    s'.scopes = s.scopes ∧ s'.immutables = s.immutables
-Proof
-  rpt gen_tac \\ strip_tac
-  \\ Cases_on `nr` \\ gvs[return_def]
-  \\ Cases_on `slot_opt` \\ gvs[raise_def]
-  \\ imp_res_tac acquire_nonreentrant_lock_scopes
-  \\ imp_res_tac acquire_nonreentrant_lock_immutables
-  \\ gvs[]
-QED
-
-Theorem lock_release_cond_scopes_immutables[local]:
-  ∀nr is_view slot_opt addr s res s'.
-    (if nr ∧ ¬is_view then
-       case slot_opt of
-         NONE => return ()
-       | SOME slot => release_nonreentrant_lock addr slot
-     else return ()) s = (res, s') ⇒
-    s'.scopes = s.scopes ∧ s'.immutables = s.immutables
-Proof
-  rpt gen_tac \\ strip_tac
-  \\ Cases_on `nr` \\ gvs[return_def]
-  \\ Cases_on `is_view` \\ gvs[return_def]
-  \\ Cases_on `slot_opt` \\ gvs[return_def]
-  \\ imp_res_tac release_nonreentrant_lock_scopes
-  \\ imp_res_tac release_nonreentrant_lock_immutables
-  \\ gvs[]
-QED
-
-(* Helper: preserves_tv composes when scopes are restored to an intermediate
-   state and immutables chain through a later state (e.g. function calls
-   where pop_function restores scopes but body modifies immutables) *)
-Theorem preserves_tv_scope_restore[local]:
-  preserves_tv cx s1 s2 ∧ preserves_tv cx s2 s3 ∧
-  (s4.scopes = s2.scopes) ∧ (s4.immutables = s3.immutables) ⇒
-  preserves_tv cx s1 s4
-Proof
-  rw[preserves_tv_def] >> metis_tac[]
-QED
-
-(* Helper: preserves_tv composes for function calls where cleanup restores
-   scopes to pre-call state but immutables chain through the body.
-   st_mid = post-eval_exprs, st_push = post-push_function, st_body = post-body *)
-Theorem preserves_tv_function_call[local]:
-  preserves_tv cx st st_mid /\
-  preserves_tv cx' st_push st_body /\
-  (cx.txn = cx'.txn) /\
-  (st_push.immutables = st_mid.immutables) /\
-  (st'.scopes = st_mid.scopes) /\
-  (st'.immutables = st_body.immutables) ==>
-  preserves_tv cx st st'
-Proof
-  rw[preserves_tv_def] >> metis_tac[preserves_tv_txn_eq]
-QED
-
-(* finally preserves immutables through cleanup to the state after f *)
-Theorem finally_immutables[local]:
-  !f g st res st'.
-    finally f g st = (res, st') /\
-    (!st0 res0 st0'. g st0 = (res0, st0') ==> st0'.immutables = st0.immutables) ==>
-    st'.immutables = (SND (f st)).immutables
-Proof
-  rpt strip_tac >>
-  gvs[finally_def] >>
-  Cases_on `f st` >> Cases_on `q` >>
-  gvs[ignore_bind_apply] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def] >>
-  res_tac >> gvs[]
-QED
-
-(* Combined: finally with pop_function+g gives scopes=prev AND immutables from f,
-   when g preserves both scopes and immutables *)
-Theorem finally_pop_function_then_facts[local]:
-  !f g prev st res st'.
-    finally f (do pop_function prev; g od) st = (res, st') /\
-    (!st0 res0 st0'. g st0 = (res0, st0') ==>
-       st0'.scopes = st0.scopes /\ st0'.immutables = st0.immutables) ==>
-    st'.scopes = prev /\ st'.immutables = (SND (f st)).immutables
-Proof
-  rpt strip_tac >> gvs[finally_def] >>
-  Cases_on `f st` >> Cases_on `q` >>
-  gvs[ignore_bind_apply, bind_def, ignore_bind_def,
-      pop_function_def, set_scopes_def, return_def, raise_def] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[return_def, raise_def] >>
-  res_tac >> fs[]
 QED
 
 val PLACE_TV_TAC =
@@ -1633,6 +1455,37 @@ val PLACE_TV_TAC =
   gvs[get_scopes_def, return_def] >>
   rpt (first_x_assum drule_all >> strip_tac >> gvs[]) >>
   metis_tac[preserves_tv_trans];
+
+Theorem assign_targets_preserves_tv[local]:
+  (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==>
+     preserves_tv cx st st') /\
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
+     preserves_tv cx st st')
+Proof
+  `(!(cx:evaluation_context) (s:stmt). T) /\
+   (!(cx:evaluation_context) (ss:stmt list). T) /\
+   (!(cx:evaluation_context) (it:iterator). T) /\
+   (!(cx:evaluation_context) (ty:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
+   (!(cx:evaluation_context) (e:expr). T) /\
+   (!(cx:evaluation_context) (es:expr list). T) /\
+   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==>
+      preserves_tv cx st st') /\
+   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
+      preserves_tv cx st st') /\
+   (!(cx:evaluation_context) (es:expr list). T)` suffices_by metis_tac[] >>
+  ho_match_mp_tac evaluate_ind >> simp[] >> rpt conj_tac >> rpt strip_tac >>
+  pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >> imp_res_tac write_place_preserves_tv >>
+  imp_res_tac eval_target_place_preserves_tv >> gvs[] >>
+  rpt (first_x_assum drule_all >> strip_tac >> gvs[])
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  >- (Cases_on `v` >> gvs[raise_def] >> Cases_on `a` >>
+      gvs[raise_def] >> first_x_assum drule >> simp[])
+  >> irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]
+QED
 
 Theorem eval_preserves_tv_with_results:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
@@ -1736,7 +1589,9 @@ Proof
     first_x_assum drule_all >> rw[] >>
     metis_tac[preserves_tv_trans] ) >>
   conj_tac >- (
-    rw[evaluate_def, bind_apply, AllCaseEqs(), push_log_def, return_def] >>
+    rw[evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), push_log_def,
+       return_def] >>
+    imp_res_tac check_state >>
     imp_res_tac lift_option_state >> gvs[] >>
     first_x_assum drule >>
     gvs[preserves_tv_def] ) >>
@@ -1887,532 +1742,13 @@ Proof
     first_x_assum drule >> rw[] >>
     drule eval_stmts_scope_bracket_gen_preserves_tv >>
     rw[]) >>
-  (* Name *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(),
-         get_scopes_def, return_def, raise_def,
-         lift_option_type_def, option_CASE_rator, ignore_bind_def] >>
-    imp_res_tac type_check_state >> gvs[bind_def, return_def]) >>
-  (* TopLevelName *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def] >>
-    imp_res_tac lookup_global_state >> gvs[]) >>
-  (* FlagMember *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac lookup_flag_mem_state >> gvs[]) >>
-  (* IfExp *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, AllCaseEqs(),
-         switch_BoolV_def, COND_RATOR, return_def, raise_def] >>
-    imp_res_tac read_result_state >>
-    imp_res_tac conditional_result_state >> gvs[] >>
-    rpt (first_x_assum drule_all >> strip_tac) >>
-    metis_tac[preserves_tv_trans]) >>
-  (* Literal *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, return_def, bind_apply, AllCaseEqs()] >>
-    imp_res_tac lift_option_type_state >> gvs[]) >>
-  (* StructLit *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, return_def, bind_apply, AllCaseEqs()] >>
-    imp_res_tac lift_option_type_state >> gvs[] >>
-    first_x_assum drule >> rw[]) >>
-  (* Subscript expr *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, return_def, bind_apply,
-        ignore_bind_apply, AllCaseEqs(), sum_CASE_rator,
-         prod_CASE_rator] >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac select_result_state >>
-    imp_res_tac lift_sum_state >>
-    imp_res_tac read_result_state >>
-    imp_res_tac read_storage_slot_state >> gvs[] >>
-    rpt (first_x_assum drule) >> rw[] >>
-    irule preserves_tv_trans
-    >> goal_assum drule
-    >> first_x_assum drule
-    >> rw[]) >>
-  (* Attribute expr *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, return_def, AllCaseEqs()] >>
-    imp_res_tac lift_option_type_state >> gvs[] >>
-    imp_res_tac lift_sum_state >> gvs[] >>
-    imp_res_tac select_result_state >> gvs[] >>
-    first_x_assum drule >> rw[]) >>
-  (* Builtin *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply,
-        AllCaseEqs(), COND_RATOR, return_def] >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_sum_state >>
-    imp_res_tac read_result_state >>
-    imp_res_tac result_array_length_state >>
-    imp_res_tac lift_option_type_state >> gvs[] >>
-    imp_res_tac next_gas_reading_state >> gvs[] >>
-    rpt(first_x_assum drule >> rw[]) >>
-    gvs[get_accounts_def, return_def]) >>
-  (* Pop *)
-  conj_tac >- (
-    rpt strip_tac >>
-    qpat_x_assum `eval_expr _ (Pop _ _) _ = _` mp_tac >>
-    simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-    imp_res_tac pop_place_preserves_tv >>
-    rpt (first_x_assum drule_all >> strip_tac) >>
-    metis_tac[preserves_tv_trans]) >>
-  (* TypeBuiltin *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, AllCaseEqs(),
-        ignore_bind_apply, return_def] >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_sum_state >> gvs[] >>
-    first_x_assum drule_all >> rw[]) >>
-  (* Send and ExtCall: operands, then eval_send / eval_ext_call, which
-     preserve scopes and immutables. *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-        return_def] >>
-    imp_res_tac type_check_state >>
-    imp_res_tac eval_send_preserves_non_accounts >> gvs[] >>
-    qpat_x_assum `!s'' t. type_check _ _ _ = _ ==> _` drule >>
-    disch_then drule >> rw[] >> gvs[preserves_tv_def]) >>
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, AllCaseEqs(), return_def] >>
-    imp_res_tac eval_ext_call_preserves_non_accounts >>
-    imp_res_tac read_results_state >> gvs[] >>
-    rpt (qpat_x_assum `∀a b c d e f. _` drule_all >> strip_tac) >>
-    rpt (qpat_x_assum `∀a b c. _` drule_all >> strip_tac) >>
-    imp_res_tac preserves_tv_eq >>
-    metis_tac[preserves_tv_trans]) >>
-  (* IntCall *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    pop_assum mp_tac >>
-    simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply,
-                     lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
-    (* check recursion *)
-    BasicProvers.TOP_CASE_TAC >>
-    imp_res_tac type_check_state >>
-    imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
-    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
-    (* lift_option_type get_module_code *)
-    BasicProvers.TOP_CASE_TAC >>
-    imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
-    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
-    (* lift_option_type lookup_callable_function *)
-    BasicProvers.TOP_CASE_TAC >>
-    imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
-    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
-    (* LET bindings + consume 3 IHs *)
-    BasicProvers.LET_ELIM_TAC >>
-    BasicProvers.VAR_EQ_TAC >>
-    first_x_assum $ funpow 2 drule_then drule >>
-    simp_tac std_ss [] >> strip_tac >>
-    first_x_assum $ funpow 2 drule_then drule >>
-    simp_tac std_ss [] >> strip_tac >>
-    first_x_assum $ funpow 2 drule_then drule >>
-    simp_tac std_ss [] >> strip_tac >>
-    qpat_x_assum`_ = (_ ,_)`mp_tac >>
-    simp_tac std_ss [ignore_bind_apply] >>
-    (* type_check *)
-    BasicProvers.TOP_CASE_TAC >>
-    imp_res_tac type_check_state >> BasicProvers.VAR_EQ_TAC >>
-    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
-    (* eval_exprs cx es — consume IH *)
-    simp_tac std_ss [bind_apply] >>
-    BasicProvers.TOP_CASE_TAC >>
-    rev_full_simp_tac std_ss [] >>
-    first_x_assum drule >> strip_tac >>
-    first_x_assum drule >> strip_tac >>
-    first_x_assum drule_all >> strip_tac >>
-    reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
-    BasicProvers.LET_ELIM_TAC >>
-    qpat_x_assum`_ = (_ ,_)`mp_tac >>
-    simp_tac std_ss [bind_apply] >>
-    (* eval_exprs cxd needed_dflts — consume IH *)
-    BasicProvers.TOP_CASE_TAC >>
-    gvs[get_scopes_def, return_def, bind_apply, ignore_bind_apply,
-        finally_def, set_scopes_def, return_def] >>
-    Cases_on `eval_exprs cxd needed_dflts (r' with scopes := [FEMPTY])` >>
-    Cases_on `q` >> gvs[return_def, raise_def] >>
-    first_x_assum drule_all >> strip_tac >>
-    (* Derive preserves_tv cx from preserves_tv cxd via txn_eq *)
-    drule preserves_tv_restore_scopes >>
-    disch_then assume_tac >>
-    qpat_x_assum `preserves_tv cxd r' (r'' with scopes := r'.scopes)` mp_tac >>
-    simp[Abbr`cxd`, preserves_tv_stk_update] >> strip_tac >>
-    suspend "IntCall_ptv") >>
-  (* Shared approach: IH gives preserves_tv for eval_exprs.
-     Remaining ops preserve scopes+immutables, so preserves_tv_eq +
-     preserves_tv_trans finishes. *)
-  (* Both raw_call input forms preserve scopes and immutables after operands. *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), return_def] >>
-    imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
-    imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >>
-    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), return_def] >>
-    imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
-    imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >>
-    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
-  (* RawLog *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-         return_def] >>
-    imp_res_tac check_state >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac push_log_scopes >>
-    imp_res_tac push_log_immutables >> gvs[] >>
-    first_x_assum drule >> rw[] >>
-    gvs[preserves_tv_def]) >>
-  (* RawRevert *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-         return_def, raise_def] >>
-    imp_res_tac type_check_state >>
-    imp_res_tac check_state >> gvs[] >>
-    first_x_assum drule >> rw[] >>
-    gvs[preserves_tv_def]) >>
-  (* SelfDestructTarget *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-         return_def] >>
-    imp_res_tac check_state >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac get_accounts_state >>
-    imp_res_tac transfer_value_scopes >>
-    imp_res_tac transfer_value_immutables >> gvs[] >>
-    first_x_assum drule >> rw[] >>
-    gvs[preserves_tv_def]) >>
-  (* CreateTarget *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    Cases_on `kind` >> gvs[] >>
-    gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
-    imp_res_tac check_create_blueprint_result_state >>
-    imp_res_tac read_results_state >> gvs[] >>
-    res_tac >>
-    imp_res_tac eval_create_preserves_scopes_immutables >>
-    metis_tac[preserves_tv_trans, preserves_tv_eq]) >>
-  (* eval_exprs [] *)
-  conj_tac >- rw[evaluate_def, return_def] >>
-  (* eval_exprs e::es *)
-  conj_tac >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-   gvs[Once evaluate_def, bind_apply, AllCaseEqs()] >>
-   imp_res_tac read_result_state >> gvs[] >>
-   TRY (first_x_assum drule >> rw[] >> NO_TAC) >>
-   first_x_assum drule_all >> strip_tac >>
-   first_x_assum drule_all >> strip_tac >>
-   irule preserves_tv_trans >> first_assum (irule_at Any) >>
-   gvs[return_def]) >>
-  rpt conj_tac >> rpt strip_tac >> pop_assum mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
-  rpt strip_tac >>
-  imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
-  imp_res_tac read_result_state >> imp_res_tac get_place_state >>
-  imp_res_tac extend_place_state >> imp_res_tac lookup_global_state >>
-  imp_res_tac read_result_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac read_result_state >>
-  imp_res_tac write_place_preserves_tv >> imp_res_tac type_check_state >>
-  gvs[get_scopes_def, return_def] >>
-  rpt (first_x_assum drule_all >> strip_tac >> gvs[]) >>
-  imp_res_tac lift_option_type_state >> gvs[]
-  (* Subscript success, read failure, and expression failure. *)
-  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
-  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
-  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
-  (* Single tuple target: evaluate the place, then write. *)
-  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
-  (* Tuple targets require constructor analysis before applying the IH. *)
-  >- (Cases_on `v` >> gvs[raise_def] >> Cases_on `a` >>
-      gvs[raise_def] >> first_x_assum drule >> simp[])
-  (* Target-list head followed by its tail. *)
-  >> irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]
+  (* Expression-level evaluators and assignment targets: corollaries above. *)
+  rpt conj_tac >> rpt strip_tac >>
+  FIRST (map (fn th => drule th >> simp[] >> NO_TAC)
+    [eval_expr_preserves_tv, eval_exprs_preserves_tv, eval_base_place_preserves_tv,
+     eval_target_place_preserves_tv, eval_expr_results_preserves_tv,
+     cj 1 assign_targets_preserves_tv, cj 2 assign_targets_preserves_tv])
 QED
-
-Theorem try_handle_function_state[local]:
-  !f s. SND (try f handle_function s) = SND (f s)
-Proof
-  rw[try_def, bind_def, return_def] >>
-  Cases_on `f s` >> Cases_on `q` >>
-  rw[handle_function_def, return_def, raise_def] >>
-  Cases_on `y` >> gvs[return_def, raise_def, handle_function_def]
-QED
-
-Theorem bind_return_snd[local]:
-  !f (v:'a) s. SND (do x <- f; return v od s) = SND (f s)
-Proof
-  rw[bind_def, return_def] >> Cases_on `f s` >> Cases_on `q` >> rw[]
-QED
-
-Theorem ignore_bind_return_snd[local]:
-  !f (v:'a) s. SND (do f; return v od s) = SND (f s)
-Proof
-  rw[ignore_bind_def, bind_def, return_def] >>
-  Cases_on `f s` >> Cases_on `q` >> rw[]
-QED
-
-Theorem intcall_body_ih_pack[local]:
-  (!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st res st'.
-     ((eval_exprs cx es s6 = (INL vs,t4) /\
-       (case eval_exprs cxf needed_dflts (s8 with scopes := [FEMPTY]) of
-          (INL x,s'') => (INL x,s'' with scopes := s7.scopes)
-        | (INR e,s'') => (INR e,s'' with scopes := s7.scopes)) = (INL dflt_vs,t6) /\
-       lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
-         "IntCall bind_arguments" s9 = (INL env,t7) /\
-       lift_option_type (evaluate_type (get_tenv cx) ret)
-         "IntCall eval ret" s10 = (INL rtv,t8) /\
-       (if nr then
-          case cx.nonreentrant_slot of
-            NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-        else return ()) s11 = (INL (),t9)) /\
-      eval_stmts cxf body st = (res,st')) ==>
-     preserves_tv cxf st st') ==>
-  eval_exprs cx es r = (INL vs0,r1) ==>
-  eval_exprs cxf needed_dflts (r1 with scopes := [FEMPTY]) = (INL dflt_vs0,r2) ==>
-  lift_option_type (bind_arguments (get_tenv cx) args (vs0 ++ dflt_vs0))
-    "IntCall bind_arguments" (r2 with scopes := r1.scopes) =
-    (INL env0,r2 with scopes := r1.scopes) ==>
-  lift_option_type (evaluate_type (get_tenv cx) ret)
-    "IntCall eval ret" (r2 with scopes := r1.scopes) =
-    (INL rtv0,r2 with scopes := r1.scopes) ==>
-  (if nr then
-     case cx.nonreentrant_slot of
-       NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-   else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
-  !st res st'. eval_stmts cxf body st = (res,st') ==> preserves_tv cxf st st'
-Proof
-  rpt strip_tac >>
-  qpat_assum `!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st0 res0 st1.
-    _ ==> preserves_tv cxf st0 st1`
-    (qspecl_then [`r`, `vs0`, `r1`, `r1`, `r1`, `dflt_vs0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `env0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `rtv0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `r_lock`,
-      `st`, `res`, `st'`] mp_tac) >>
-  simp[]
-QED
-
-Theorem intcall_body_ih_resume_pack[local]:
-  (!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st res st'.
-     ((eval_exprs cx es s6 = (INL vs,t4) /\
-       (case eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
-              (s8 with scopes := [FEMPTY]) of
-          (INL x,s'') => (INL x,s'' with scopes := s7.scopes)
-        | (INR e,s'') => (INR e,s'' with scopes := s7.scopes)) = (INL dflt_vs,t6) /\
-       lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
-         "IntCall bind_arguments" s9 = (INL env,t7) /\
-       lift_option_type (evaluate_type (get_tenv cx) ret)
-         "IntCall eval ret" s10 = (INL rtv,t8) /\
-       (if nr then
-          case cx.nonreentrant_slot of
-            NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-        else return ()) s11 = (INL (),t9)) /\
-      eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st')) ==>
-     preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st') ==>
-  eval_exprs cx es r = (INL vs0,r1) ==>
-  eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) needed_dflts
-    (r1 with scopes := [FEMPTY]) = (INL dflt_vs0,r2) ==>
-  lift_option_type (bind_arguments (get_tenv cx) args (vs0 ++ dflt_vs0))
-    "IntCall bind_arguments" (r2 with scopes := r1.scopes) =
-    (INL env0,r2 with scopes := r1.scopes) ==>
-  lift_option_type (evaluate_type (get_tenv cx) ret)
-    "IntCall eval ret" (r2 with scopes := r1.scopes) =
-    (INL rtv0,r2 with scopes := r1.scopes) ==>
-  (if nr then
-     case cx.nonreentrant_slot of
-       NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
-   else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
-  !st res st'.
-    eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st') ==>
-    preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st st'
-Proof
-  rpt strip_tac >>
-  qpat_assum `!s6 vs t4 s7 s8 dflt_vs t6 s9 env t7 s10 rtv t8 s11 t9 st0 res0 st1.
-    _ ==> preserves_tv (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1`
-    (qspecl_then [`r`, `vs0`, `r1`, `r1`, `r1`, `dflt_vs0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `env0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `rtv0`,
-      `r2 with scopes := r1.scopes`, `r2 with scopes := r1.scopes`, `r_lock`,
-      `st`, `res`, `st'`] mp_tac) >>
-  simp[]
-QED
-
-(* Standalone lemma: preserves_tv through the IntCall finally+safe_cast chain.
-   Abstracts away variable names so we can prove it with hol_state_at. *)
-Theorem intcall_ptv_chain[local]:
-  preserves_tv cx r r_mid /\
-  (r_lock.scopes = r_mid.scopes) /\
-  (r_lock.immutables = r_mid.immutables) /\
-  (!st res st'. eval_stmts cxf body st = (res, st') ==>
-     preserves_tv cxf st st') /\
-  (cx.txn = cxf.txn) /\
-  (!st0 (res0:unit + exception) st0'. cleanup st0 = (res0, st0') ==>
-     st0'.scopes = st0.scopes /\ st0'.immutables = st0.immutables) /\
-  (case
-     finally
-       (try (do eval_stmts cxf body; return NoneV od) handle_function)
-       (do pop_function r_mid.scopes; cleanup od)
-       (r_lock with scopes := [env])
-   of
-     (INL rv, s'') =>
-       (case lift_option_type (safe_cast rtv rv) msg s'' of
-          (INL crv, s'') => (INL (Value crv), s'')
-        | (INR e, s'') => (INR e, s''))
-   | (INR e, s'') => (INR e, s'')) = (res, st') ==>
-  preserves_tv cx r st'
-Proof
-  strip_tac >>
-  (* Name the finally result *)
-  `?fres fst. finally
-     (try (do eval_stmts cxf body; return NoneV od) handle_function)
-     (do pop_function r_mid.scopes; cleanup od)
-     (r_lock with scopes := [env]) = (fres, fst)` by
-    metis_tac[pairTheory.PAIR] >>
-  (* Get facts from finally_pop_function_then_facts *)
-  `fst.scopes = r_mid.scopes /\
-   fst.immutables = (SND (try (do eval_stmts cxf body; return NoneV od)
-     handle_function (r_lock with scopes := [env]))).immutables` by (
-    qpat_x_assum `finally _ _ _ = _`
-      (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
-        finally_pop_function_then_facts)) >>
-    impl_tac >- simp[] >>
-    simp[]) >>
-  (* Simplify immutables through try+handle_function+bind *)
-  `(SND (try (do eval_stmts cxf body; return NoneV od) handle_function
-     (r_lock with scopes := [env]))).immutables =
-   (SND (eval_stmts cxf body (r_lock with scopes := [env]))).immutables` by
-    simp[try_handle_function_state, ignore_bind_return_snd] >>
-  (* Get preserves_tv cxf for the body via IH *)
-  `preserves_tv cxf (r_lock with scopes := [env])
-     (SND (eval_stmts cxf body (r_lock with scopes := [env])))` by (
-    first_x_assum irule >>
-    Cases_on `eval_stmts cxf body (r_lock with scopes := [env])` >> simp[]) >>
-  (* Reduce st' to fst: case split on the outer case expression *)
-  qpat_x_assum `_ = (res, st')` mp_tac >>
-  simp[] >>
-  Cases_on `fres` >> simp[] >| [
-    (* INL: safe_cast chain *)
-    Cases_on `lift_option_type (safe_cast rtv x) msg fst` >>
-    Cases_on `q` >> simp[] >>
-    strip_tac >> gvs[] >>
-    imp_res_tac lift_option_type_state >> gvs[],
-    (* INR: error, st' = fst *)
-    strip_tac >> gvs[]
-  ] >>
-  (* In all cases st' = fst. Apply preserves_tv_function_call *)
-  irule preserves_tv_function_call >>
-  first_assum (irule_at Any) >>
-  qexists_tac `r_mid` >>
-  simp[]
-QED
-
-Resume eval_preserves_tv_with_results[IntCall_ptv]:
-  markerLib.RESUME_TAC >- (
-    strip_tac >> gvs[] >>
-    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-  strip_tac >>
-  (* Unfold the do...od assumption *)
-  qpat_x_assum `do _ od _ = _` mp_tac >>
-  simp_tac std_ss [bind_apply, get_scopes_def, return_def] >>
-  BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac read_results_state >>
-  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >- (
-    strip_tac >> gvs[] >>
-    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-  BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >- (
-    strip_tac >> gvs[] >>
-    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-  BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >- (
-    strip_tac >> gvs[] >>
-    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-  simp_tac std_ss [ignore_bind_apply, bind_apply] >>
-  (* Reentrancy lock -- split pair, then INL/INR *)
-  BasicProvers.TOP_CASE_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC >- (
-    (* INR from lock -- lock failed, state preserved *)
-    strip_tac >> gvs[] >>
-    imp_res_tac lock_acquire_cond_scopes_immutables >>
-    fs[preserves_tv_def]) >>
-  (* INL from lock -- lock succeeded *)
-  strip_tac >>
-  imp_res_tac lock_acquire_cond_scopes_immutables >>
-  qpat_x_assum `do _ od _ = _` mp_tac >>
-  simp_tac std_ss [bind_apply, push_function_def, return_def] >>
-  simp_tac (std_ss ++ sumSimps.SUM_ss ++ pairSimps.PAIR_ss)
-    [bind_apply, push_function_def, return_def] >>
-  strip_tac >>
-  gvs[push_function_def, return_def] >>
-  (* Cut the body IH before entering the large tail-chain residual goal. *)
-  `!st res st'.
-     eval_stmts (cx with stk updated_by CONS (src_id_opt, fn)) body' st = (res,st') ==>
-     preserves_tv (cx with stk updated_by CONS (src_id_opt, fn)) st st'` by (
-    rpt strip_tac >>
-    qpat_x_assum `!a b c d e f. _`
-      (qspecl_then [`r`, `x'4'`, `r'`, `r'`, `r'`] mp_tac) >>
-    simp[] >> disch_then drule_all >> simp[]
-  ) >>
-  qpat_x_assum `!a b c d e f. _` kall_tac >>
-  qmatch_asmsub_rename_tac
-    `lift_option_type (bind_arguments _ _ _) _ _ = (INL call_env,_)` >>
-  qmatch_asmsub_rename_tac
-    `lift_option_type (evaluate_type _ _) _ _ = (INL runtime_ret,_)` >>
-  qmatch_asmsub_rename_tac
-    `(if nr then _ else _) _ = (INL (),lockst)` >>
-  irule intcall_ptv_chain >>
-  qexistsl_tac [`body'`,
-    `if nr /\ mut <> View /\ mut <> Pure then
-       case cx.nonreentrant_slot of NONE => return ()
-       | SOME slot => release_nonreentrant_lock cx.txn.target slot
-     else return ()`,
-    `cx with stk updated_by CONS (src_id_opt, fn)`,
-    `call_env`, `"IntCall cast ret"`, `lockst`, `r'' with scopes := r'.scopes`, `res`, `runtime_ret`] >>
-  simp[] >> conj_tac >- (
-    rpt gen_tac >>
-    IF_CASES_TAC >> simp[return_def] >>
-    Cases_on `cx.nonreentrant_slot` >> simp[return_def] >>
-    strip_tac >>
-    imp_res_tac release_nonreentrant_lock_scopes >>
-    imp_res_tac release_nonreentrant_lock_immutables >> simp[]
-  ) >>
-  conj_tac >- (
-    qpat_x_assum `(case _ of (INL rv,s'') => _ | (INR e,s'') => _) = (res,st')` mp_tac >>
-    simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def]
-  ) >>
-  irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
-QED
-
-Finalise eval_preserves_tv_with_results
 
 Theorem eval_preserves_tv:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒
@@ -2434,12 +1770,6 @@ Theorem eval_preserves_tv:
 Proof
   ACCEPT_TAC (LIST_CONJ
     (List.take (CONJUNCTS eval_preserves_tv_with_results, 10)))
-QED
-
-Theorem eval_expr_results_preserves_tv:
-  eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
-Proof
-  MATCH_ACCEPT_TAC (cj 11 eval_preserves_tv_with_results)
 QED
 
 Theorem eval_stmt_preserves_tv:
@@ -2466,40 +1796,16 @@ Proof
   metis_tac[cj 4 eval_preserves_tv]
 QED
 
-Theorem eval_expr_preserves_tv:
-  eval_expr cx e st = (res,st') ==> preserves_tv cx st st'
-Proof
-  metis_tac[cj 5 eval_preserves_tv]
-QED
-
-Theorem eval_exprs_preserves_tv:
-  eval_exprs cx es st = (res,st') ==> preserves_tv cx st st'
-Proof
-  metis_tac[cj 6 eval_preserves_tv]
-QED
-
-Theorem eval_base_place_preserves_tv:
-  eval_base_place cx t st = (res,st') ==> preserves_tv cx st st'
-Proof
-  metis_tac[cj 7 eval_preserves_tv]
-QED
-
-Theorem eval_target_place_preserves_tv:
-  eval_target_place cx t st = (res,st') ==> preserves_tv cx st st'
-Proof
-  metis_tac[cj 8 eval_preserves_tv]
-QED
-
 Theorem assign_tuple_targets_preserves_tv:
   assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st'
 Proof
-  metis_tac[cj 9 eval_preserves_tv]
+  metis_tac[assign_targets_preserves_tv]
 QED
 
 Theorem assign_tuple_target_list_preserves_tv:
   assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st'
 Proof
-  metis_tac[cj 10 eval_preserves_tv]
+  metis_tac[assign_targets_preserves_tv]
 QED
 
 val () = List.app (fn (name,th) =>

@@ -205,6 +205,7 @@ Definition run_deployment_def:
           ; gas_price := dt.gasPrice
           ; chain_id := dt.chainId
           ; is_creation := T
+          ; is_static := F
           ; coinbase := 0w
           ; gas_limit := 0
           ; base_fee := 0
@@ -235,6 +236,7 @@ Definition call_trace_txn_def:
      ; gas_price := ct.gasPrice
      ; chain_id := ct.chainId
      ; is_creation := F
+     ; is_static := ct.static
      ; coinbase := 0w
      ; gas_limit := ct.gasLimit
      ; base_fee := 0
@@ -381,12 +383,12 @@ Definition run_call_def:
           ; gas_price := ct.gasPrice
           ; chain_id := ct.chainId
           ; is_creation := F
+          ; is_static := ct.static
           ; coinbase := 0w
           ; gas_limit := ct.gasLimit
           ; base_fee := 0
           ; prev_randao := 0
           ; origin := ct.sender |>;
-    (* TODO(test-semantics): set static-call context based on ct.static. *)
     (* TODO(test-semantics): thread additional environment data from the trace. *)
     (* Whether the callee returns raw bytes or an ABI encoding, and hence how
        its EVM returndata must be read back, is decided by the interpreter

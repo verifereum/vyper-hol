@@ -249,16 +249,19 @@ Theorem assign_subscripts_replace_type_metadata:
 Proof
   Induct >> simp[subscripts_type_def, Once assign_subscripts_def] >>
   gen_tac >> Cases_on `h`
-  >- (Cases_on `v` >> simp[subscripts_type_def, Once assign_subscripts_def] >>
-      rpt gen_tac >> strip_tac >>
+  >- (rpt gen_tac >> strip_tac >>
       gvs[subscripts_type_def, AllCaseEqs()] >>
+      drule subscript_type_value_int_shape >> strip_tac >> gvs[] >>
+      gvs[Once assign_subscripts_def, AllCaseEqs()] >>
       rename1 `subscript_type root_tv (ValueSubscript (IntV i)) = SOME etv` >>
+      qmatch_asmsub_rename_tac `array_index _ _ _ = SOME elem_value` >>
+      qmatch_asmsub_rename_tac `assign_subscripts _ _ _ (Replace replacement) = INL vj` >>
       `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
-      `value_has_type etv v'` by metis_tac[array_index_type_metadata] >>
+      `value_has_type etv elem_value` by metis_tac[array_index_type_metadata] >>
       `value_has_type etv vj` by
         (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
          qmatch_asmsub_abbrev_tac `assign_subscripts child_mtv _ _ _` >>
-         qexistsl_tac [`v'`, `child_mtv`, `v`] >> simp[] >>
+         qexistsl_tac [`elem_value`, `child_mtv`, `replacement`] >> simp[] >>
          Cases_on `root_tv` >> gvs[subscript_type_def, Abbr `child_mtv`]) >>
       irule array_set_index_type_metadata >> goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>

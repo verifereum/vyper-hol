@@ -671,8 +671,7 @@ Definition evaluate_convert_def:
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV uint bound")) ∧
   evaluate_convert _ (BytesV bs) (BaseT (IntT n)) =
-    (if bs = [] then INR (RuntimeError "convert empty bytes to signed") else
-     let i = w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
+    (let i = w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
                   (8 * (32 - LENGTH bs))) in
      if within_int_bound (Signed n) i
      then INL $ IntV i
@@ -741,10 +740,9 @@ Definition evaluate_convert_def:
      then INL $ BytesV (MAP (n2w o ORD) s)
      else INR (RuntimeError "convert string bytes")) ∧
   evaluate_convert _ (BytesV bs) (BaseT DecimalT) =
-    (if bs = [] then INR (RuntimeError "convert empty bytes to signed") else
-     bounded_decimal_op (w2i
+    bounded_decimal_op (w2i
       ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
-       (8 * (32 - LENGTH bs))))) ∧
+       (8 * (32 - LENGTH bs)))) ∧
   evaluate_convert _ (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * decimal_scale) ∧
   (* Check exact scaled bounds BEFORE truncation. Signed division truncates

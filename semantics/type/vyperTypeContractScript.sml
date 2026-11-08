@@ -175,9 +175,9 @@ End
 Definition external_name_keys_toplevel_def:
   external_name_keys_toplevel src
     (FunctionDecl External _ _ _ name _ _ _ _) = [(src,name)] /\
-  external_name_keys_toplevel src (VariableDecl Public _ name _ _) =
+  external_name_keys_toplevel src (VariableDecl (Public nr) _ name _ _) =
     [(src,name)] /\
-  external_name_keys_toplevel src (HashMapDecl Public _ name _ _ _) =
+  external_name_keys_toplevel src (HashMapDecl (Public nr) _ name _ _ _) =
     [(src,name)] /\
   external_name_keys_toplevel _ _ = []
 End
@@ -901,12 +901,6 @@ Termination
   simp[value_type_size_def]
 End
 
-Definition event_indexable_type_def:
-  event_indexable_type (BaseT _) = T /\
-  event_indexable_type (FlagT _) = T /\
-  event_indexable_type _ = F
-End
-
 (* Header checks apply in both checking modes, including constructors whose
    bodies are checked only in deployment mode. *)
 Definition function_header_ok_def:
@@ -924,6 +918,12 @@ Definition function_header_ok_def:
     (vis = External /\ name = "__default__" ==> NULL args)
 End
 
+Definition event_indexable_type_def:
+  event_indexable_type (BaseT _) = T /\
+  event_indexable_type (FlagT _) = T /\
+  event_indexable_type _ = F
+End
+
 Definition check_toplevel_decl_def:
   check_toplevel_decl mods art src tl =
     let tenv = type_env_all_modules mods in
@@ -933,11 +933,11 @@ Definition check_toplevel_decl_def:
         assignable_type tenv typ
     | VariableDecl _ Transient id typ _ =>
         assignable_type tenv typ
-    | VariableDecl _ Immutable id typ _ =>
-        assignable_type tenv typ
-    | VariableDecl _ (Constant e) id typ _ =>
-        assignable_type tenv typ /\ well_typed_expr env e /\ expr_type e = typ /\
-        constant_expr mods e
+    | VariableDecl vis Immutable id typ _ =>
+        vis <> Public T /\ assignable_type tenv typ
+    | VariableDecl vis (Constant e) id typ _ =>
+        vis <> Public T /\ assignable_type tenv typ /\
+        well_typed_expr env e /\ expr_type e = typ /\ constant_expr mods e
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
@@ -986,6 +986,12 @@ Definition check_toplevel_body_def:
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
         check_function_body layouts addr mods art src vis mut nr args dflts ret body
+    | VariableDecl (Public nr) _ fn _ _ =>
+        function_live layouts addr mods live (src,fn) ==>
+        (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0)
+    | HashMapDecl (Public nr) _ fn _ _ _ =>
+        function_live layouts addr mods live (src,fn) ==>
+        (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0)
     | _ => T
 End
 

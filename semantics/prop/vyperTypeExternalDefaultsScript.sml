@@ -151,6 +151,36 @@ Proof
   first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >> simp[]
 QED
 
+Theorem body_entry_ready_nil_defaults:
+  body_entry_ready art cx scope st ==>
+  eval_external_defaults cx [] st = (INL [],st) /\
+  body_entry_ready art cx scope st
+Proof
+  simp[]
+QED
+
+(* In particular an internal-call default may change accounts.  Its effects
+   are retained, while only the caller's local scopes are restored. *)
+Theorem external_default_internal_call_effects:
+  eval_expr cx (Call ty (IntCall fn) args NONE)
+      (st with scopes := [FEMPTY]) = (INL (Value v), changed) ==>
+  eval_external_defaults cx [Call ty (IntCall fn) args NONE] st =
+      (INL [v], changed with scopes := st.scopes) /\
+  (SND (eval_external_defaults cx [Call ty (IntCall fn) args NONE] st)).accounts =
+      changed.accounts
+Proof
+  strip_tac >>
+  simp[eval_external_defaults_cons, read_result_def, evaluate_def,
+       bind_def, return_def]
+QED
+
+(* Fail rather than silently export an admitted prerequisite. *)
+val () = List.app (fn (_, th) =>
+  if List.null (List.filter (fn s => s <> "DISK_THM")
+      (#1 (Tag.dest_tag (Thm.tag th)))) then ()
+  else raise Fail "stateful external-default boundary has oracle dependencies")
+  (DB.thms "vyperTypeExternalDefaults");
+
 (* Entry phases expose the actual post-transfer and post-default states.  A
    successful body result (including return) cannot originate in the defaults. *)
 Theorem external_entry_send_no_control:
@@ -240,7 +270,7 @@ Theorem call_external_function_success_phases:
        (if nr then
           case cx.nonreentrant_slot of
             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+          | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot ((mut = View \/ mut = Pure) \/ cx.txn.is_static); if (mut = View \/ mut = Pure) then return () else check_not_static cx od
         else return ());
        eval_stmts cx body
      od) (s2 with scopes := [env]) = (res,st_body) /\

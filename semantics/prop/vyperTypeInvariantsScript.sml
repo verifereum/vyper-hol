@@ -312,6 +312,19 @@ Proof
        env_immutables_consistent_def, env_consistent_def]
 QED
 
+(* Call outcomes are outside the typing/scopes/immutable invariants. *)
+Theorem outcomes_type_invariants[simp]:
+  (state_well_typed (st with outcomes := os) <=> state_well_typed st) /\
+  (env_scopes_consistent env cx (st with outcomes := os) <=>
+   env_scopes_consistent env cx st) /\
+  (env_immutables_consistent env cx (st with outcomes := os) <=>
+   env_immutables_consistent env cx st) /\
+  (env_consistent env cx (st with outcomes := os) <=> env_consistent env cx st)
+Proof
+  simp[state_well_typed_def, env_scopes_consistent_def,
+       env_immutables_consistent_def, env_consistent_def]
+QED
+
 Theorem env_consistent_bare_global_find_NONE:
   env_consistent env cx st /\
   FLOOKUP env.bare_globals (src,id) = SOME ty ==>

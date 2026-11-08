@@ -87,7 +87,7 @@ Proof
 QED
 
 Theorem machine_frame_primitives:
-  state_rel_frame machine_frame (vyperState$return v) /\
+  state_rel_frame machine_frame (vyperState$return x) /\
   state_rel_frame machine_frame (vyperState$raise e) /\
   state_rel_frame machine_frame (assert b ex) /\
   state_rel_frame machine_frame (check b msg) /\
@@ -118,6 +118,13 @@ Theorem machine_frame_next_gas_reading:
 Proof
   simp[state_rel_frame_def, next_gas_reading_def] >> rpt strip_tac >>
   CASE_TAC >> simp[raise_def, return_def, machine_frame_def]
+QED
+
+Theorem machine_frame_precompile_call_success:
+  state_rel_frame machine_frame (precompile_call_success bt)
+Proof
+  rw[state_rel_frame_def] >> Cases_on `precompile_call_success bt st` >>
+  drule precompile_call_success_state >> rw[] >> simp[machine_frame_def]
 QED
 
 Theorem machine_frame_view_lock:
@@ -196,6 +203,39 @@ Theorem machine_frame_lookup_global:
 Proof
   simp[state_rel_frame_result] >> rpt strip_tac >>
   drule lookup_global_state >> simp[]
+QED
+
+Theorem machine_frame_push_function:
+  state_rel_frame machine_frame (push_function src_fn sc cx)
+Proof
+  simp[state_rel_frame_def, push_function_def, return_def]
+QED
+
+Theorem machine_frame_pop_function:
+  state_rel_frame machine_frame (pop_function prev)
+Proof
+  simp[pop_function_def, machine_frame_primitives]
+QED
+
+Theorem machine_frame_reads:
+  state_rel_frame machine_frame (lookup_global cx src id) /\
+  state_rel_frame machine_frame (lookup_flag_mem cx nsid mid) /\
+  state_rel_frame machine_frame (read_storage_slot cx tr slot ty) /\
+  state_rel_frame machine_frame (result_array_length cx r)
+Proof
+  simp[state_rel_frame_result] >> metis_tac[lookup_global_state,
+    lookup_flag_mem_state, read_storage_slot_state,
+    result_array_length_state, machine_frame_refl]
+QED
+
+Theorem machine_frame_unchanged_reads:
+  state_rel_frame machine_frame (conditional_result cx r) /\
+  state_rel_frame machine_frame (check_not_static cx) /\
+  state_rel_frame machine_frame (check_create_blueprint has_salt vs)
+Proof
+  simp[state_rel_frame_result] >>
+  metis_tac[conditional_result_state, vyperCreateTheory.check_create_blueprint_state,
+    check_not_static_eq, pairTheory.PAIR_EQ, pairTheory.SND, machine_frame_refl]
 QED
 
 Theorem machine_frame_get_place:
@@ -287,14 +327,17 @@ QED
 Theorem machine_frame_pop_memory_place:
   state_rel_frame machine_frame (pop_place cx (MemoryPlace id path))
 Proof
-  simp[pop_place_def, state_rel_frame_def, get_scopes_def, bind_def,
-       ignore_bind_def, lift_option_type_def, lift_sum_def,
-       type_check_def, check_def, assert_def, set_scopes_def, return_def] >>
-  gen_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  PairCases_on `x` >>
-  gvs[bind_def, ignore_bind_def, assert_def, set_scopes_def,
-      lift_sum_def, return_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def]
+  simp[pop_place_def] >>
+  match_mp_tac machine_frame_bind >> conj_tac
+  >- simp[machine_frame_primitives] >>
+  gen_tac >> simp[] >> match_mp_tac machine_frame_bind >> conj_tac
+  >- simp[machine_frame_primitives] >>
+  qx_gen_tac `scope_parts` >> PairCases_on `scope_parts` >>
+  simp[ignore_bind_def] >>
+  rpt (simp[] >> match_mp_tac machine_frame_bind >> conj_tac
+       >- simp[machine_frame_primitives] >> gen_tac) >>
+  qmatch_goalsub_abbrev_tac `UNCURRY continuation parts` >>
+  PairCases_on `parts` >> simp[Abbr `continuation`] >>
+  match_mp_tac machine_frame_bind >>
+  simp[machine_frame_primitives, state_rel_frame_def, return_def]
 QED

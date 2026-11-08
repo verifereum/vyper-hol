@@ -319,13 +319,15 @@ fun mk_JTL_FunctionDef
      func_type,
      ret_ann,
      mk_list(body, json_stmt_ty)])
-fun mk_JTL_VariableDecl (name, ty, ann_ty, is_public, is_immutable, is_transient, valopt) =
+fun mk_JTL_VariableDecl (name, ty, ann_ty, is_public, is_immutable, is_transient, is_reentrant, valopt) =
   list_mk_comb(JTL_VariableDecl_tm,
     [fromMLstring name, ty, ann_ty, mk_bool is_public, mk_bool is_immutable,
-     mk_bool is_transient, lift_option json_expr_ty I valopt])
-fun mk_JTL_HashMapDecl (name, kt, vt, is_public, is_transient) =
+     mk_bool is_transient, mk_bool is_reentrant,
+     lift_option json_expr_ty I valopt])
+fun mk_JTL_HashMapDecl (name, kt, vt, is_public, is_transient, is_reentrant) =
   list_mk_comb(JTL_HashMapDecl_tm,
-    [fromMLstring name, kt, vt, mk_bool is_public, mk_bool is_transient])
+    [fromMLstring name, kt, vt, mk_bool is_public, mk_bool is_transient,
+     mk_bool is_reentrant])
 val event_arg_ty = mk_prod(json_arg_ty, bool_ty)
 fun mk_JTL_EventDef (name, args) =
   list_mk_comb(JTL_EventDef_tm, [fromMLstring name, mk_list(args, event_arg_ty)])
@@ -1269,8 +1271,8 @@ val json_toplevel : term decoder = achoose "toplevel" [
   check_ast_type "VariableDecl" $
     check (field "target" $ field "type" $ field "typeclass" string)
           (fn s => s = "hashmap") "not hashmap" $
-    JSONDecode.map (fn (n, k, (v, p), t) =>
-      mk_JTL_HashMapDecl(n, k, v, p, t)) $
+    JSONDecode.map (fn (n, k, (v, p), (t, r)) =>
+      mk_JTL_HashMapDecl(n, k, v, p, t, r)) $
     tuple4 (
       field "target" $ check_ast_type "Name" $ field "id" string,
       field "target" $ field "type" $ field "key_type" json_type,
@@ -1278,13 +1280,14 @@ val json_toplevel : term decoder = achoose "toplevel" [
         field "target" $ field "type" $ field "value_type" json_value_type,
         field "is_public" bool
       ),
-      field "is_transient" bool
+      tuple2 (field "is_transient" bool,
+        fieldD "is_reentrant" bool false)
     ),
 
   (* VariableDecl (non-hashmap) *)
   check_ast_type "VariableDecl" $
-    JSONDecode.map (fn ((n, t), ann_ty, (p, i), (tr, v)) =>
-      mk_JTL_VariableDecl(n, t, ann_ty, p, i, tr, v)) $
+    JSONDecode.map (fn ((n, t), ann_ty, (p, i), ((tr, r), v)) =>
+      mk_JTL_VariableDecl(n, t, ann_ty, p, i, tr, r, v)) $
     tuple4 (
       tuple2 (
         field "target" $ check_ast_type "Name" $ field "id" string,
@@ -1293,7 +1296,8 @@ val json_toplevel : term decoder = achoose "toplevel" [
       fieldD "annotation" ast_type JTA_None_tm,
       tuple2 (field "is_public" bool, field "is_immutable" bool),
       tuple2 (
-        field "is_transient" bool,
+        tuple2 (field "is_transient" bool,
+          fieldD "is_reentrant" bool false),
         andThen (field "is_constant" bool) (fn is_const =>
           if is_const
           then JSONDecode.map SOME (field "value" json_expr)

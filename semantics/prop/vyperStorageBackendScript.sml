@@ -173,13 +173,16 @@ QED
 Theorem write_storage_slot_eq:
   ∀cx is_t slot tv v st.
     write_storage_slot cx is_t slot tv v st =
+    if cx.txn.is_static then
+      (INR (Error (RuntimeError "write in static context")), st)
+    else
     (case encode_value tv v of
      | SOME writes =>
          (INL (), set_storage cx st is_t
            (apply_writes slot writes (get_storage cx st is_t)))
      | NONE => (INR (Error (TypeError "write_storage_slot encode")), st))
 Proof
-  rw[write_storage_slot_def, bind_def, get_storage_backend_eq,
+  rw[write_storage_slot_def, bind_def, ignore_bind_def, get_storage_backend_eq,
      lift_option_def, return_def, raise_def, set_storage_backend_eq] >>
   Cases_on `encode_value tv v` >>
   simp[return_def, raise_def, bind_def, set_storage_backend_eq]

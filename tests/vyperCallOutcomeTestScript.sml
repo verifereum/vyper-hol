@@ -71,13 +71,17 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* A computed call consumes one outcome for its success bit, records no
+   request, and keeps the request's state. *)
 Theorem outcome_exhausted_computed_cv:
   outcome_test_take_adopt 9w [] (SOME 0) [] 3 4w 1 2 0 /\
   outcome_test_take_adopt 2w [] (SOME 0)
-    [outcome_test_outcome F (2 ** 256)] 3 4w 1 1 1 /\
+    [outcome_test_outcome F (2 ** 256)] 3 4w 1 1 0 /\
+  outcome_test_take_adopt 2w [] (SOME 0)
+    [outcome_test_outcome T 17; outcome_test_outcome T 17] 3 4w 1 1 1 /\
   outcome_test_take_adopt 1w [] NONE [] 3 4w 1 1 0 /\
   outcome_test_take_adopt 6w (REPLICATE 63 0w ++ [1w]) (SOME 0)
-    [outcome_test_outcome T 17] 3 4w 1 1 1
+    [outcome_test_outcome T 17] 3 4w 1 1 0
 Proof
   CONV_TAC cv_eval
 QED
@@ -99,7 +103,7 @@ Definition outcome_test_error_observations_def:
          <|accounts := (outcome_test_outcome T (2 ** 256)).co_accounts;
            outcomes := SOME [outcome_test_outcome T 17]|>) of
        (INR exc,st) => exc = Error (RuntimeError "call outcome accounts") /\
-         outcome_test_snapshot (2 ** 256) 4w 1 1 1 st
+         outcome_test_snapshot (2 ** 256) 4w 1 1 0 st
      | _ => F))
 End
 val () = cv_auto_trans outcome_test_error_observations_def;

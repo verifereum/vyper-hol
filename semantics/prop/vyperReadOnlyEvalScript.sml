@@ -265,11 +265,7 @@ Resume evaluate_read_only[expr_if]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> BETA_TAC >> match_mp_tac machine_frame_bind >> conj_tac
       >- (irule machine_frame_switch_BoolV >> metis_tac[]) >>
-      qx_gen_tac `res` >> simp[] >> Cases_on `res` >>
-      simp[conditional_result_def, machine_frame_primitives] >>
-      match_mp_tac machine_frame_bind >> simp[machine_frame_place_type_value] >>
-      gen_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
-      match_mp_tac machine_frame_bind >> simp[machine_frame_read_place]) >>
+      simp[machine_frame_unchanged_reads]) >>
   metis_tac[]
 QED
 
@@ -501,8 +497,9 @@ Resume evaluate_read_only[builtin_other]:
           simp[machine_frame_primitives]) >>
       gvs[SF ETA_ss] >> metis_tac[]) >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-      simp[machine_frame_def, machine_frame_reads, machine_frame_primitives]) >>
+  >- rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+          simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
+               machine_frame_precompile_call_success]) >>
   gvs[SF ETA_ss] >> metis_tac[]
 QED
 
@@ -564,7 +561,8 @@ Resume evaluate_read_only[intcall_after_defaults]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- suspend "intcall_after_lock" >>
   qpat_x_assum `mut = View \/ mut = Pure` strip_assume_tac >>
-  simp[machine_frame_internal_lock]
+  simp[machine_frame_internal_lock,
+       REWRITE_RULE [ignore_bind_def] machine_frame_internal_lock]
 QED
 
 Resume evaluate_read_only[intcall_after_lock]:
@@ -582,7 +580,8 @@ Resume evaluate_read_only[intcall_after_lock]:
   impl_tac
   >- (conj_tac >- (
         qpat_x_assum `push_function _ _ cx _ = _` mp_tac >>
-        simp[push_function_def, return_def] >> rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+        simp[push_function_def, return_def] >> strip_tac >>
+        qpat_x_assum `cx with stk updated_by _ = _` (fn th => REWRITE_TAC [GSYM th]) >>
         qpat_x_assum `read_only_context mods cx` mp_tac >> simp[read_only_context_def]) >>
       simp[]) >>
   strip_tac >>

@@ -69,3 +69,5 @@ Ancestors
   vyperImportedEventRegression
   (* typing of raw/system builtins, pop receivers and argument writes *)
   vyperRawSystemTypingTest vyperPopTypingTest vyperArgWriteTypingTest
+  (* ABI decode typing, constructor ABI domain *)
+  abiDecodeTypingTest ctorAbiDomainWitness
