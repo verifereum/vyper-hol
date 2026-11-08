@@ -747,7 +747,10 @@ Proof
         (qspecl_then [`src`,`id`,`kt`,`hv`] mp_tac) >>
       simp[] >> rw[] >> metis_tac[]) >>
   rw[] >>
-  first_x_assum drule_all >> simp[] >>
+  first_x_assum drule_all >> simp[]
+  >~ [`stmts_no_control_escape fn_body`]
+  >- (strip_tac >> qexistsl [`env_body`, `ret_tv`, `env_after`] >>
+      simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   Cases_on `vt` >> gvs[]
   >- (rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty)` >>

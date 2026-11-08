@@ -941,18 +941,18 @@ Definition check_toplevel_decl_def:
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
-        ALL_DISTINCT (MAP FST fields) /\
+        fields <> [] /\ ALL_DISTINCT (MAP FST fields) /\
         EVERY (\(_,ty). assignable_type tenv ty) fields
     | FlagDecl id members => T
     | InterfaceDecl id funcs =>
         EVERY (\(fn,args,ret,mut).
-          params_ok tenv args /\ well_formed_type tenv ret) funcs
+          params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret)) funcs
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty /\
                                   (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args
     | FunctionDecl vis mut nr rr name args dflts ret body =>
-        params_ok tenv args /\ well_formed_type tenv ret /\
+        params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret) /\
         function_header_ok vis mut nr rr name args dflts ret /\
         function_mutability_ok mods vis mut nr dflts body
 End
@@ -1122,6 +1122,21 @@ Theorem check_contract_function_header:
   MEM (src,tls) mods /\
   MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
   function_header_ok vis mut nr rr name args dflts ret
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_function_return_type:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
+  ret = NoneT \/ assignable_type (type_env_all_modules mods) ret
 Proof
   strip_tac >>
   qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
