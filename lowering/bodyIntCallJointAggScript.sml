@@ -666,6 +666,35 @@ Proof
   Cases_on `ce.ce_func_return_type (nsid_to_string fid) = NoneT` >> gvs[]
 QED
 
+(* An old root survives a child and remains clear of its live locals. *)
+Theorem intcall_expr_cont_root:
+  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_cont fp ce env es sa s ee sb u /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  FLOOKUP s.vs_allocas rid = SOME (b,k) /\ rid < sa.cs_next_id /\
+  eval_operand buf s = SOME w /\ (!lbl. buf <> Label lbl) /\
+  (!x. buf = Var x ==> not_fresh_at sa x) /\
+  (!n a z. local_region ce es.scopes s n a z ==>
+           regions_disjoint b k a z) ==>
+  FLOOKUP u.vs_allocas rid = SOME (b,k) /\
+  eval_operand buf u = SOME w /\
+  mem_bytes_at b k u.vs_memory = mem_bytes_at b k s.vs_memory /\
+  (!n a z. local_region ce ee.scopes u n a z ==>
+           regions_disjoint b k a z)
+Proof
+  rpt strip_tac
+  >- (fs[intcall_expr_cont_def] >> metis_tac[])
+  >- (Cases_on `buf` >> fs[intcall_expr_cont_def, eval_operand_def] >> metis_tac[])
+  >- (fs[intcall_expr_cont_def, regions_disjoint_def] >> metis_tac[]) >>
+  `local_region ce es.scopes s n a z` by
+    (irule exprSimPropsTheory.local_region_frame >> conj_tac
+     >- (qexists_tac `fp.jc_func` >>
+         fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def]) >>
+     qexistsl_tac [`sa`, `ee.scopes`, `u`] >>
+     fs[intcall_joint_res_def, intcall_expr_cont_def]) >>
+  metis_tac[]
+QED
+
 (* L-agg (C1.3.14.2.3), a step of the induction on expr_size: tuple
    literals (MakeArray NONE), array literals (MakeArray (SOME _)), struct
    literals, attributes and subscripts (every place_type case: tuple and
