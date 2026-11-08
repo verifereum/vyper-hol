@@ -235,6 +235,137 @@ Proof
   EVAL_TAC
 QED
 
+Definition mm_local_pin_fn_def:
+  mm_local_pin_fn = mk_raw_function "f"
+    [<| bb_label := "entry"; bb_instructions :=
+      [mk_inst 1 MLOAD [Lit 0w] ["a"];
+       mk_inst 2 MSTORE [Lit 128w; Var "a"] [];
+       mk_inst 3 STOP [] []] |>]
+End
+
+Theorem mm_local_pin_input[local]:
+  fn_inst_wf mm_local_pin_fn /\ wf_function mm_local_pin_fn /\
+  wf_ssa mm_local_pin_fn /\
+  ir_supply_covers_fn (mm_local_probe_supply mm_local_pin_fn) mm_local_pin_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem mm_local_pin_computed[local]:
+  FST (mm_local_probe_after mm_local_pin_fn 3) =
+    EL 0 mm_local_pin_fn.fn_blocks
+Proof
+  EVAL_TAC
+QED
+
+Theorem mm_local_pin_output[local]:
+  let bt = mm_local_probe_after mm_local_pin_fn 3 in
+  let fn' = mm_local_pin_fn with fn_blocks := [FST bt] in
+    fn_inst_wf fn' /\ wf_function fn' /\ wf_ssa fn' /\
+    ir_supply_covers_fn (SND bt) fn' /\
+    fn_entry_label fn' = fn_entry_label mm_local_pin_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition mm_local_external_fn_def:
+  mm_local_external_fn = mk_raw_function "f"
+    [<| bb_label := "entry"; bb_instructions :=
+      [mk_inst 1 DLOAD [Lit 0w] ["a"];
+       mk_inst 2 MSTORE [Lit 128w; Var "a"] [];
+       mk_inst 3 DLOAD [Lit 32w] ["b"];
+       mk_inst 4 MSTORE [Lit 160w; Var "b"] [];
+       mk_inst 5 JMP [Label "exit"] []] |>;
+     <| bb_label := "exit"; bb_instructions :=
+      [mk_inst 6 ASSIGN [Var "a"] ["retained"];
+       mk_inst 7 STOP [] []] |>]
+End
+
+Theorem mm_local_external_input[local]:
+  fn_inst_wf mm_local_external_fn /\ wf_function mm_local_external_fn /\
+  wf_ssa mm_local_external_fn /\
+  ir_supply_covers_fn (mm_local_probe_supply mm_local_external_fn) mm_local_external_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem mm_local_external_computed[local]:
+  MAP (\i. (i.inst_id,i.inst_opcode,i.inst_operands,i.inst_outputs))
+    (FST (mm_local_probe_after mm_local_external_fn 2)).bb_instructions =
+  [(1,DLOAD,[Lit 0w],["a"]);
+   (2,NOP,[],[]);
+   (3,NOP,[],[]);
+   (4,DLOADBYTES,[Lit 128w; Lit 0w; Lit 64w],[]);
+   (5,JMP,[Label "exit"],[])]
+Proof
+  EVAL_TAC
+QED
+
+Theorem mm_local_external_output[local]:
+  let bt = mm_local_probe_after mm_local_external_fn 2 in
+  let fn' = mm_local_external_fn with fn_blocks :=
+    LUPDATE (FST bt) 0 mm_local_external_fn.fn_blocks in
+    fn_inst_wf fn' /\ wf_function fn' /\ wf_ssa fn' /\
+    ir_supply_covers_fn (SND bt) fn' /\
+    fn_entry_label fn' = fn_entry_label mm_local_external_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem mm_local_pin_group_pins[local]:
+  let dfg = dfg_build_function mm_local_pin_fn in
+  let bb = FST (mm_local_prefix mm_local_pin_fn
+    (mm_local_probe_supply mm_local_pin_fn) 0 3) in
+  let groups = (scan_block dfg Mem2Mem bb).ss_flushed in
+    groups <> [] /\
+    (!cg. MEM cg groups ==>
+      ?rep. rep_of_group bb.bb_instructions cg = SOME (rep,cg) /\
+            rep_pin_id dfg Mem2Mem rep cg = SOME 1)
+Proof
+  EVAL_TAC >> gen_tac >> disch_then SUBST1_TAC >> EVAL_TAC >> simp[]
+QED
+
+Theorem mm_local_external_group_outside_user[local]:
+  let dfg = dfg_build_function mm_local_external_fn in
+  let bb = FST (mm_local_prefix mm_local_external_fn
+    (mm_local_probe_supply mm_local_external_fn) 0 2) in
+  let groups = (scan_block dfg DloadMerge bb).ss_flushed in
+    groups <> [] /\
+    (!cg. MEM cg groups ==>
+      ?u. MEM u (dfg_get_uses dfg "a") /\
+          u.inst_id = 6 /\ ~MEM u.inst_id cg.cg_inst_ids)
+Proof
+  EVAL_TAC >> rw[] >>
+  qexists_tac `mk_inst 6 ASSIGN [Var "a"] ["retained"]` >> EVAL_TAC
+QED
+
+Theorem mm_local_pin_protected[local]:
+  let dfg = dfg_build_function mm_local_pin_fn in
+  let bb = FST (mm_local_prefix mm_local_pin_fn
+    (mm_local_probe_supply mm_local_pin_fn) 0 3) in
+    ~MEM 1 (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block dfg Mem2Mem bb).ss_flushed)
+Proof
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  irule mm_local_load_protected >>
+  qexistsl_tac [`mk_inst 1 MLOAD [Lit 0w] ["a"]`, `"a"`] >>
+  EVAL_TAC >> gen_tac >> disch_then SUBST1_TAC >> EVAL_TAC >> simp[]
+QED
+
+Theorem mm_local_external_protected[local]:
+  let dfg = dfg_build_function mm_local_external_fn in
+  let bb = FST (mm_local_prefix mm_local_external_fn
+    (mm_local_probe_supply mm_local_external_fn) 0 2) in
+    ~MEM 1 (nop_ids_of_groups dfg DloadMerge bb.bb_instructions
+      (scan_block dfg DloadMerge bb).ss_flushed)
+Proof
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  irule mm_local_load_protected >>
+  qexistsl_tac [`mk_inst 1 DLOAD [Lit 0w] ["a"]`, `"a"`] >>
+  EVAL_TAC >> gen_tac >> disch_then SUBST1_TAC >> EVAL_TAC >> simp[] >>
+  qexists_tac `mk_inst 6 ASSIGN [Var "a"] ["retained"]` >> EVAL_TAC
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\
