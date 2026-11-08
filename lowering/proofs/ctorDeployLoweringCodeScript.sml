@@ -1,7 +1,8 @@
 (* Constructor code containment for deploy_unit_execution_correct. *)
 Theory ctorDeployLoweringCode
 Ancestors
-  ctorDeployLoweringDefs ctorDeployDefs compileVyper vyperCompiler
+  ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs vyperTypeContract
+  compileVyper vyperCompiler
   moduleLowering compileEnv context emitHelper loweringShapeProps
   loweringShapeDefs supportedProgram loweringShapeSource
   ctorDeployLoweringCodeShape loweringShapeRules list ctorUnitShape
@@ -69,6 +70,32 @@ Proof
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
+(* Vyper rejects view and pure constructors, so the lock flag the
+   constructor's package carries is F. *)
+Theorem deploy_constructor_package_not_view:
+  !tops exts ints fb cf target cenv args pay nr key ut body ret am tx.
+    deploy_source_ok tops am tx /\
+    classify_functions tops = (exts,ints,fb,SOME cf) /\
+    set_constructor_package_target target
+      (package_constructor tops T (K global_nonreentrant_slot) cf) =
+      (cenv,args,pay,nr,key,ut,body,ret) ==>
+    cenv.ce_nonreentrant = (nr,key,ut,F)
+Proof
+  rpt gen_tac >> strip_tac >> PairCases_on `cf` >>
+  `MEM (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7) tops` by
+    (irule deploy_classify_constructor_mem >> simp[]) >>
+  `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
+    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+  `check_toplevel_decl [(NONE,tops)] art NONE
+     (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7)` by
+    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+     simp[check_contract_def, check_module_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  gvs[check_toplevel_decl_def, function_mutability_ok_def,
+    package_constructor_def, set_constructor_package_target_def,
+    update_cenv_nonreentrant_def]
+QED
+
 Theorem deploy_internal_package_certificates:
   !tops target ut key is_ctor cap ifns.
     supported_program tops /\
@@ -82,9 +109,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bodies_shape_ok tops` by
     metis_tac[supported_program_runtime_bodies_shape_ok] >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    fs[supported_program_def, supportedNamesTheory.supported_declaration_names_def] >>
-  drule supported_names_internal_names_distinct >> strip_tac >>
+  drule supported_program_internal_names >> strip_tac >>
+  drule classified_internal_names_distinct >> strip_tac >>
   drule internal_descriptors_ok >>
   disch_then (qspec_then `is_ctor` strip_assume_tac) >>
   gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
@@ -193,6 +219,12 @@ Proof
   metis_tac[fn_has_code_split, cs_extends_trans]
 QED
 
+Theorem ctor_lock_flag_select[local]:
+  !p f. (\(a:bool,b:num,c:bool,d:bool). f d) p = f (SND (SND (SND p)))
+Proof
+  PairCases >> simp[]
+QED
+
 Theorem deploy_ctor_lowering_trace:
   lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
   classify_functions tops = (exts, ints, fb, SOME cf) ==>
@@ -213,16 +245,18 @@ Theorem deploy_ctor_lowering_trace:
       (cenv0 with ce_imm_alloca :=
         (if imm_len tops > 0 then SOME imm else NONE)) pos_args 0 0 st1 =
       (cenv1,st2) /\
-    (if nr then compile_nonreentrant_lock nkey ut F else comp_return ()) st2 =
-      ((),st3) /\
+    (if nr then
+       compile_nonreentrant_lock nkey ut (SND (SND (SND cenv0.ce_nonreentrant)))
+     else comp_return ()) st2 = ((),st3) /\
     fresh_label "ctor_exit" st3 = (exit_lbl,sa) /\
     compile_stmts (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
       NoLoop NoneT body sa = ((),sb) /\
     (if block_is_terminated sb then comp_return ()
      else emit_inst JMP [Label exit_lbl] []) sb = ((),sj) /\
     new_block exit_lbl sj = (old_bb,st_exit) /\
-    (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
-      st_exit = ((),st_epilogue) /\
+    (if nr then
+       compile_nonreentrant_unlock nkey ut (SND (SND (SND cenv0.ce_nonreentrant)))
+     else comp_return ()) st_exit = ((),st_epilogue) /\
     compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm
       st_epilogue = ((),st_final) /\
     compile_internal_fn_bodies
@@ -253,7 +287,7 @@ Proof
   qpat_x_assum `fn_allocs_ok _ _` kall_tac >>
   qpat_x_assum `compile_generate_deploy _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   rewrite_tac [compile_generate_deploy_def, comp_ignore_bind_def,
-    comp_bind_def, comp_get_def, LET_THM] >>
+    comp_bind_def, comp_get_def, LET_THM, ctor_lock_flag_select] >>
   rpt (pairarg_tac >> gvs[comp_bind_def, comp_get_def, LET_THM]) >>
   strip_tac >>
   Cases_on `ctor_payable` >> gvs[] >>
@@ -285,6 +319,9 @@ Proof
     fs[deploy_phases_def] >>
   drule_all deploy_ctor_lowering_trace >> strip_tac >>
   drule_all deploy_constructor_package_shape >> strip_tac >>
+  drule_all deploy_constructor_package_not_view >> strip_tac >>
+  qpat_x_assum `cenv0.ce_nonreentrant = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [th, pairTheory.SND])) >>
   drule_all ctor_code_setup_extension >> strip_tac >>
   drule_all ctor_code_tail_extensions >> strip_tac >>
   rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>

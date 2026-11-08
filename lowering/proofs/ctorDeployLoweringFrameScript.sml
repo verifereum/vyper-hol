@@ -19,33 +19,16 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem deploy_frame_supported_constructor_nr[local]:
-  !tops env fname mut nr args dflts ret body.
-    EVERY (supported_declaration_header env) tops /\
-    lookup_function NONE fname Deploy tops =
-      SOME (mut,nr,args,dflts,ret,body) ==> ~nr
-Proof
-  Induct_on `tops` >> simp[vyperInterpreterTheory.lookup_function_def] >>
-  Cases_on `h` >>
-  simp[supported_declaration_headers_def, supported_declaration_header_def,
-       vyperInterpreterTheory.lookup_function_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs()]
-  >~ [`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _) = _`]
-  >- (Cases_on `vis` >> gvs[vyperInterpreterTheory.lookup_function_def] >> metis_tac[])
-  >~ [`lookup_function _ _ _ (HashMapDecl vis _ _ _ _ _ :: _) = _`]
-  >- (Cases_on `vis` >> gvs[vyperInterpreterTheory.lookup_function_def] >> metis_tac[]) >>
-  metis_tac[]
-QED
-
+(* The deploy state relation encodes arguments for an __init__ that is not
+   nonreentrant (constructor_args_encode), which is the constructor the
+   transaction selects. *)
 Theorem deploy_ctor_not_nonreentrant:
-  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==> ~nr
 Proof
-  pure_rewrite_tac[deploy_source_ok_def, deploy_ctor_start_def] >>
-  strip_tac >> irule deploy_frame_supported_constructor_nr >>
-  goal_assum (drule_at Any) >>
-  gvs[supported_program_def, supported_declaration_headers_def] >>
-  qexists `tops` >> simp[]
+  simp[deploy_state_rel_def, constructor_args_encode_def,
+    deploy_ctor_start_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem deploy_ctor_immutable_size:
@@ -271,8 +254,9 @@ QED
 
 Theorem deploy_ctor_immutable_epilogue:
   !tops am tx mut nr body am_c es0 rpolicy runtime_bc dunit cenv nkey ut
-   imm exit_lbl sa sb sj st_exit st_epilogue st_final func.
+   imm exit_lbl sa sb sj st_exit st_epilogue st_final func deploy_bc es.
     deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
     deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (body,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
@@ -506,8 +490,9 @@ Proof
 QED
 
 Theorem deploy_frame_source_start_setup:
-  !tops am tx mut nr body am_c es0.
+  !tops am tx mut nr body am_c es0 deploy_bc es.
   deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   ?deploy_art runtime_art args env_body env_after.
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME deploy_art /\
@@ -586,8 +571,9 @@ Proof
 QED
 
 Theorem deploy_frame_start_storage:
-  !tops am tx mut nr stmts am_c es0.
+  !tops am tx mut nr stmts am_c es0 deploy_bc es.
     deploy_source_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
     deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
     storage_layout_safe (deploy_evaluation_context tops am tx) /\
     contract_storage_well_formed (deploy_evaluation_context tops am tx) es0 /\

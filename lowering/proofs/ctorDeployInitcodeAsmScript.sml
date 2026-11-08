@@ -36,7 +36,10 @@ Proof
     (irule run_venom_pipeline_output_shape >>
      gvs[deploy_phases_def] >> metis_tac[]) >>
   `codegen_assembly arts0 arts2.po_unit = SOME arts3 /\
-   deploy_bc = assemble arts3` by gvs[deploy_phases_def] >>
+   deploy_bc = assemble arts3` by
+    (qpat_x_assum `deploy_phases _ _ _ _` mp_tac >>
+     rewrite_tac[deploy_phases_def] >> rpt strip_tac >>
+     first_assum ACCEPT_TAC) >>
   `asm_symbols_ok arts3` by
     (qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
      simp[codegen_assembly_def, AllCaseEqs()] >> rw[] >> simp[]) >>

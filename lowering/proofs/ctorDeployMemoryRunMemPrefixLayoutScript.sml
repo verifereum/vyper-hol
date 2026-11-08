@@ -229,8 +229,8 @@ Proof
   drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                    (FST (SND (classify_functions tops))))`
-    by metis_tac[supported_names_internal_names_distinct,
-                 supported_program_names, supported_declaration_names_unique] >>
+    by metis_tac[classified_internal_names_distinct,
+                 supported_program_internal_names] >>
   qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
