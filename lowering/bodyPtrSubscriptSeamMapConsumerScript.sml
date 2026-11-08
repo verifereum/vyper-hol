@@ -97,3 +97,94 @@ Proof
      pure_rewrite_tac[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
   gvs[] >> irule select_result_hashmap_leaf >> simp[]
 QED
+
+Theorem mapping_selection_summary_ptr:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  place_type cenv obj = MapPT kt vt /\
+  gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG (eval_expr cx obj)
+    (es,s0,G0,tn0) left (INL (HashMapRef tr base_slot kt vt)) mid G1 tn1 (OK t) /\
+  gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG (bind (eval_expr cx idx) (read_result cx))
+    (mid with gas_obs := [],t,G1,tn1) right (INL kv) fin Gi tni (OK it) /\
+  storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
+  wb_frame cenv es sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
+  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel ctx fn cenv cx (mid with gas_obs := []) t /\
+  expr_post ctx fn cenv cx idx (mid with gas_obs := []) sm sn t
+    (fin with gas_obs := []) kv key it /\
+  ptr_val_ok cx (post_value_type cenv idx) kv key Gi tni it /\
+  ghost_inv d cenv cx (fin with gas_obs := []) Gi tni it /\
+  ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni /\
+  it.vs_current_bb = sn.cs_current_bb /\ it.vs_inst_idx = LENGTH sn.cs_current_insts /\
+  lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\
+  (if is_bytestring_type (expr_type idx) then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript slot hashed sp = (out,sb) /\
+  fn_has_code sn sb fn /\ fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sn /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
+  (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
+  (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sn p) /\
+  (!z. slot = Var z ==> not_fresh_at sm z) /\ (!l. slot <> Label l) /\
+  eval_operand slot t = SOME base_slot /\ op_taint tn1 slot = {} /\
+  p.ptr_location = slot_loc tr /\ p.ptr_operand = out ==>
+  gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
+    (select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt) (ValueSubscript kv))
+    (fin with gas_obs := [],it,Gi,tni)
+    (\res ef Gf tnf u. ?v. res = INL v /\
+      vv_post ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ef v
+        (LocatedValue ann p) u /\
+      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      ghost_inv d cenv cx ef Gf tnf u /\
+      ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) v
+        (LocatedValue ann p) ef Gf tnf u /\
+      (!ty op. LocatedValue ann p = StackValue ty op /\
+        ~is_word_type (post_value_type cenv (Subscript ann obj idx)) ==>
+        ptr_buf_ok cenv (Subscript ann obj idx) op Gf u) /\
+      (!ty q. LocatedValue ann p = LocatedValue ty q /\ q.ptr_location = LocMemory ==>
+        ptr_buf_ok cenv (Subscript ann obj idx) q.ptr_operand Gf u) /\
+      ghost_kept cenv es sa G0 tn0 s0 Gf tnf)
+    (\res ef gt r. expr_exit res r)
+Proof
+  strip_tac >> drule_all mapping_marked_source_leaf >> strip_tac >>
+  `~it.vs_halted` by metis_tac[bodyPtrHashBuiltinsSuffixTheory.hash_marked_ptr_normal] >>
+  `local_ptrs_rel fn cenv es.scopes s0 /\
+   local_ptrs_rel fn cenv (mid with gas_obs := []).scopes t` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def,
+        compileEnvTheory.state_rel_def, loweringPostsTheory.expr_post_def] >>
+  `eval_operand slot it = SOME base_slot /\ op_taint tni slot = {}` by
+    (qpat_assum `ghost_kept _ _ sm _ _ _ _ _`
+       (mp_then Any mp_tac bodyPtrSubscriptSeamMapInterfaceTheory.mapping_slot_index_frame) >>
+     disch_then irule >> simp[] >> gvs[loweringPostsTheory.expr_post_def]) >>
+  `!z. slot = Var z ==> not_fresh_at sn z` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  gvs[] >> drule_all mapping_index_tail_ptr >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  `wb_frame cenv (mid with gas_obs := []) sm t it` by
+    (gvs[loweringPostsTheory.expr_post_def, loweringPostsTheory.wb_frame_def] >>
+     metis_tac[]) >>
+  `wb_frame cenv (mid with gas_obs := []) sm t u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ u`)) >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ t _`)) >> simp[] >> metis_tac[]) >>
+  `wb_frame cenv es sa s0 u` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ _ u`)) >>
+     first_assum (irule_at (Pat `wb_frame _ _ _ t _`)) >> simp[] >> metis_tac[]) >>
+  `ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gu tnu` by
+    (irule bodyPtrHashBuiltinsGhostComposeTheory.hash_expr_post_ghost_kept_compose >>
+     first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `ghost_kept cenv es sa G0 tn0 s0 Gu tnu` by
+    (irule bodyPtrEnvBuiltinsGhostComposeTheory.ghost_kept_locals_trans >>
+     first_assum (irule_at (Pat `ghost_kept _ _ sa _ _ _ _ _`)) >>
+     qexists `fn` >> simp[] >>
+     gvs[loweringPostsTheory.wb_frame_def] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `storage_mapping_region cx tr
+     (hashmap_slot base_slot (encode_hashmap_key (expr_type idx) kv)) (Type ann)` by
+    metis_tac[storage_mapping_region_step] >>
+  irule (SRULE [] mapping_leaf_summary_ptr) >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl [`Gu`, `tnu`, `u`] >> gvs[]
+QED
