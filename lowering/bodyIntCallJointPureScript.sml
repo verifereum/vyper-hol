@@ -1,7 +1,7 @@
 (* Seam 2 joint induction step: every other non-call expression form. *)
 Theory bodyIntCallJointPure
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodyIntCallFamPureAtom bodyIntCallFamPureBuiltin
 
 (* L-pure (C1.3.14.3), the same step for every other non-call form: names,
    literals, top-level names, flag members, ternaries, the other builtins
@@ -19,5 +19,15 @@ Theorem intcall_pure_producer_step:
   ~(?a tgt. e = Pop a tgt) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  cheat
+  strip_tac >>
+  qsuff_tac `((?ty x. e = Name ty x) \/ (?ty n. e = TopLevelName ty n) \/
+              (?ty n m. e = FlagMember ty n m) \/ (?ty l. e = Literal ty l) \/
+              (?ty c e1 e2. e = IfExp ty c e1 e2)) \/
+             ((?a b args. e = Builtin a b args /\ !t n. b <> MakeArray t n) \/
+              (?a tb ty args. e = TypeBuiltin a tb ty args))`
+  >- (disch_then (DISJ_CASES_THEN assume_tac)
+      >- (irule intcall_pure_atom_step >> metis_tac[])
+      >> irule intcall_pure_builtin_step >> metis_tac[]) >>
+  qpat_x_assum `!e'. _` kall_tac >>
+  Cases_on `e` >> fs[]
 QED
