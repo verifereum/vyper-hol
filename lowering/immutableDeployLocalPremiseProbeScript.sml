@@ -304,3 +304,87 @@ Proof
       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   rewrite_tac[local_probe_fn_shape] >> EVAL_TAC >> rpt strip_tac >> gvs[]
 QED
+
+Theorem local_probe_fn_distinct:
+  fn_inst_ids_distinct local_probe_fn
+Proof
+  rewrite_tac[local_probe_fn_shape] >> EVAL_TAC
+QED
+
+Theorem local_probe_entry_env_fields:
+  local_probe_empty_ce.ce_vars = FEMPTY |+ ("x",PtrVar (Var "%1") 0) /\
+  local_probe_empty_ce.ce_imm_alloca = SOME (Var "%0") /\
+  local_probe_empty_ce.ce_return_pc = NONE
+Proof
+  simp[local_probe_empty_ce_def, local_probe_real_ce_shape, local_probe_ce_def,
+       compileVyperTheory.build_compile_env_def,
+       compileVyperTheory.allocate_args_def] >>
+  Cases_on `build_flag_info local_probe_tops (K (K 0)) (K 0)` >> simp[]
+QED
+
+Theorem local_probe_entry_reserved:
+  local_ptrs_reserved local_probe_empty_ce local_probe_sa
+Proof
+  simp[compileEnvTheory.local_ptrs_reserved_def, local_probe_entry_env_fields,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[] >>
+  simp[compileEnvTheory.not_fresh_at_def, local_probe_sa_shape] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `toString n = _` (mp_tac o AP_TERM ``toNum``) >>
+  simp[ASCIInumbersTheory.toNum_toString] >> EVAL_TAC >> simp[]
+QED
+
+Theorem local_probe_entry_control:
+  ret_pc_ok local_probe_empty_ce local_probe_sa local_probe_entry /\
+  ~block_is_terminated local_probe_sa /\
+  ~local_probe_entry.vs_halted /\
+  local_probe_entry.vs_current_bb = local_probe_sa.cs_current_bb /\
+  local_probe_entry.vs_inst_idx = LENGTH local_probe_sa.cs_current_insts
+Proof
+  conj_tac >- simp[loweringPostsTheory.ret_pc_ok_def, local_probe_entry_env_fields] >>
+  rewrite_tac[local_probe_sa_shape] >> EVAL_TAC
+QED
+
+Theorem local_probe_gas_admissible:
+  gas_admissible (eval_stmt local_probe_cx local_probe_empty_stmt)
+    (stmt_res_ok NoLoop) local_probe_es
+Proof
+  rewrite_tac[gasContextTheory.gas_admissible_def] >>
+  rpt gen_tac >> EVAL_TAC >> rpt strip_tac >> gvs[] >>
+  simp[stmt_res_ok_def]
+QED
+
+Theorem local_probe_joint_premises:
+  body_inv local_probe_tops local_probe_unit.cu_context
+    local_probe_empty_ce local_probe_cx /\ local_probe_cx.in_deploy /\
+  supported_immutable_type local_probe_tops (NONE,"dst") = SOME (StructT (NONE,"Empty")) /\
+  type_place_target local_probe_env (TopLevelNameTarget (NONE,"dst")) =
+    SOME (Type (StructT (NONE,"Empty"))) /\
+  type_widens_to local_probe_env.type_defs
+    (expr_type (Name (StructT (NONE,"Empty")) "x")) (StructT (NONE,"Empty")) /\
+  expr_vv_sim local_probe_unit.cu_context local_probe_fn local_probe_empty_ce
+    local_probe_cx (expr_type (Name (StructT (NONE,"Empty")) "x"))
+    (Name (StructT (NONE,"Empty")) "x") local_probe_es /\
+  expr_body_pre local_probe_empty_ce local_probe_cx local_probe_env
+    (Name (StructT (NONE,"Empty")) "x") local_probe_es /\
+  fn_has_code local_probe_sa
+    (SND (stmt_env local_probe_empty_ce NoLoop NoneT local_probe_empty_stmt local_probe_sa))
+    local_probe_fn /\
+  fn_inst_ids_distinct local_probe_fn /\
+  local_ptrs_reserved local_probe_empty_ce local_probe_sa /\
+  ret_pc_ok local_probe_empty_ce local_probe_sa local_probe_entry /\
+  ~block_is_terminated local_probe_sa /\
+  gas_admissible (eval_stmt local_probe_cx local_probe_empty_stmt)
+    (stmt_res_ok NoLoop) local_probe_es /\
+  stmt_state_rel local_probe_unit.cu_context local_probe_fn local_probe_empty_ce
+    local_probe_cx local_probe_es local_probe_entry /\
+  ~local_probe_entry.vs_halted /\
+  local_probe_entry.vs_current_bb = local_probe_sa.cs_current_bb /\
+  local_probe_entry.vs_inst_idx = LENGTH local_probe_sa.cs_current_insts
+Proof
+  simp[local_probe_body_inv, local_probe_context_metadata,
+       local_probe_target_typing, vyperASTTheory.expr_type_def,
+       local_probe_vv_sim, local_probe_body_pre, local_probe_empty_fragment_code,
+       local_probe_fn_distinct, local_probe_entry_reserved, local_probe_entry_control,
+       local_probe_gas_admissible, local_probe_entry_stmt_state_rel]
+QED
