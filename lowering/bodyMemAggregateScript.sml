@@ -39,7 +39,9 @@ Proof
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by
     metis_tac[ci_mono_compile_struct_lit_cfn, compile_expr_ci_mono, pairTheory.SND] >>
-  `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (qpat_x_assum `ci_mono sa sm` mp_tac >>
+     qpat_x_assum `ci_mono sm sb` mp_tac >> simp[ci_mono_def]) >>
   drule_all fn_has_code_split >> strip_tac >>
   `SUM (MAP (SND o SND)
     (get_struct_fields cenv.ce_struct_fields (nsid_to_string (src_id_opt,id)))) <
@@ -168,7 +170,9 @@ Resume body_make_array_nowiden_mem[tuple]:
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
-  `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (qpat_x_assum `ci_mono sa sm` mp_tac >>
+     qpat_x_assum `ci_mono sm sb` mp_tac >> simp[ci_mono_def]) >>
   drule_all fn_has_code_split >> strip_tac >>
   `SUM (MAP (type_memory_bytes cenv o expr_type) es) < dimword (:256)` by
     (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
@@ -266,7 +270,9 @@ Resume body_make_array_nowiden_mem[array]:
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `ci_mono sm sb` by
     metis_tac[ci_mono_compile_make_array_cfn, compile_expr_ci_mono, pairTheory.SND] >>
-  `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (qpat_x_assum `ci_mono sa sm` mp_tac >>
+     qpat_x_assum `ci_mono sm sb` mp_tac >> simp[ci_mono_def]) >>
   drule_all fn_has_code_split >> strip_tac >>
   `type_memory_bytes cenv (ArrayT x n) < dimword (:256)` by
     (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
