@@ -5,6 +5,10 @@ Ancestors
   vyperABIRoundtrip vyperTypeABI vyperTypeValues vyperTypeDefaults
   vyperAssignPreservesType compileEnv abiTypeBoundProps vyperABIValid
   exprExtRequestTyping memoryLocalRhsProps exprSimHypsDefs list pair
+  exprExtRequestTypedCells exprExtRequestDelayedTyping exprExtRequestStagesSource
+  exprExtRequestKwargs exprExtRequestHistory exprExtRequestReadProbe
+  exprExtRequestShape exprSimSource supportedExprTraverse exprSimHyps
+  exprExtRequestUnreadCps vyperState rich_list vyperTypeInvariants
 
 Theorem extrequest_fits_abi_type:
   (!t u. arg_type_fits t u ==>
@@ -192,4 +196,74 @@ Proof
   qpat_x_assum `LENGTH ats = LENGTH vs`
     (fn th => rewrite_tac[GSYM th, TAKE_LENGTH_ID]) >>
   simp[]
+QED
+
+(* Source reachability and delayed reads discharge all ABI adapter inputs. *)
+Theorem extrequest_call_positional_calldata:
+  expr_body_pre cenv cx env
+    (Call ann (ExtCall stat skip (fname,ats,rt) opts) (a::rest) dflt) es /\
+  (?used. !tail. vyperState$bind (eval_expr cx a) (read_result cx)
+    (es with gas_obs := used ++ tail) =
+      (INL target,start with gas_obs := tail)) /\
+  extrequest_results_success cx (TAKE (LENGTH ats) rest) start rs pos_end /\
+  extrequest_kwargs_post ctx func cenv cx rt opts (DROP (LENGTH ats) rest)
+    pos_end s2 t2 s3 value_op gas_op default_op
+    (TAKE (LENGTH ats) rest) rs arg_vvs kwvs ee t /\
+  read_results cx rs ee = (INL vs,ee) ==>
+  ?av.
+    vyper_to_abi (get_tenv cx)
+      (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest)))
+      (ArrayV (TupleV vs)) = SOME av /\
+    LENGTH (enc (vyper_to_abi_type (get_tenv cx)
+      (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest)))) av) <=
+      abi_size_bound cenv.ce_struct_fields
+        (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest))) /\
+    build_ext_calldata (get_tenv cx) fname ats vs =
+      SOME (function_selector fname (vyper_to_abi_types (get_tenv cx) ats) ++
+        enc (vyper_to_abi_type (get_tenv cx)
+          (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest)))) av)
+Proof
+  strip_tac >>
+  `?tvs. evaluate_type (get_tenv cx)
+    (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH ats) rest))) =
+      SOME (TupleTV tvs) /\
+    value_has_type (TupleTV tvs) (ArrayV (TupleV vs))` by
+    metis_tac[extrequest_call_typed_cells] >>
+  `expr_body_pre cenv cx env a es` by
+    (irule extrequest_body_pre_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+     gvs[expr_body_pre_def]) >>
+  `expr_sim_inv cenv cx env start` by
+    (qpat_x_assum `!tail. vyperState$bind (eval_expr cx a) _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     `expr_body_pre cenv cx env a (es with gas_obs := used)` by simp[] >>
+     simp[vyperStateTheory.bind_def] >> strip_tac >>
+     drule_all (SRULE [vyperStateTheory.bind_def]
+       exprSimSourceTheory.expr_body_pre_eval) >> simp[]) >>
+  `EVERY (\e. !mid. expr_sim_inv cenv cx env mid ==>
+     expr_body_pre cenv cx env e mid) (TAKE (LENGTH ats) rest)` by
+    (drule extrequest_operand_body_pre >> simp[] >> metis_tac[EVERY_TAKE]) >>
+  `EVERY (\e. ~expr_has_effect e) (TAKE (LENGTH ats) rest)` by
+    (drule extrequest_body_typed >> simp[] >> metis_tac[EVERY_TAKE]) >>
+  `LIST_REL (\e v. value_runtime_typed env (expr_type e) v /\
+    value_runtime_typed env (lowered_value_type cenv e) v)
+      (TAKE (LENGTH ats) rest) vs` by
+    (`extrequest_read_frame cx (pos_end with gas_obs := []) ee` by
+       fs[extrequest_kwargs_post_def, extrequest_history_frame_def] >>
+     qpat_x_assum `extrequest_results_success _ _ _ _ _` mp_tac >>
+     simp[extrequest_results_success_def] >> strip_tac >>
+     `extrequest_read_frame cx mid ee` by fs[extrequest_read_frame_def] >>
+     irule extrequest_delayed_results_typed >>
+     first_assum (irule_at (Pat `eval_expr_results _ _ _ = _`)) >>
+     simp[] >> metis_tac[]) >>
+  irule extrequest_positional_calldata >>
+  simp[] >>
+  reverse (rpt conj_tac) >-
+    (qexistsl_tac [`env`, `start`] >>
+     fs[EVERY_MEM, expr_body_pre_def] >> metis_tac[]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  drule extrequest_body_typed >> simp[Once well_typed_expr_def] >>
+  strip_tac >> fs[expr_body_pre_def] >> metis_tac[EVERY_TAKE]
 QED
