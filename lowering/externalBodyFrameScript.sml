@@ -1220,8 +1220,8 @@ Proof
           initial_evaluation_context_def, get_source_immutables_def] >>
       rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
-     src = (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module /\
-     ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module_vars
+     src = (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module /\
+     ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module_vars
        (src,id) = SOME (ImmutableLoc off) /\
        !tv. evaluate_type (get_tenv
          (initial_evaluation_context am.sources am.layouts tx NONE)) ty = SOME tv ==>
