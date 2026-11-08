@@ -18,7 +18,7 @@
 
 Theory taintAgree
 Ancestors
-  o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
+  o1LowerDloadRelocationKernel o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomState finite_map pred_set list
 
 (* s and t agree except at the taint tn, the dead bytes X, and memory at
@@ -39,6 +39,108 @@ Definition taint_agree_def:
     (!i. i NOTIN X /\ i NOTIN tn.t_mem /\ i < s.vs_alloca_next ==>
          read_byte i s.vs_memory = read_byte i t.vs_memory)
 End
+
+Theorem taint_agree_shared:
+  taint_agree D X tn s t ==>
+  ld_shared_agree D s.vs_call_ctx.cc_address tn s t
+Proof
+  simp[taint_agree_def]
+QED
+
+Theorem taint_agree_frame:
+  taint_agree D X tn s t ==>
+  t with <| vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+            vs_accounts := s.vs_accounts; vs_transient := s.vs_transient;
+            vs_immutables := s.vs_immutables;
+            vs_requests := s.vs_requests |> = s
+Proof
+  simp[taint_agree_def]
+QED
+
+Theorem taint_agree_labels:
+  taint_agree D X tn s t ==> s.vs_labels = t.vs_labels
+Proof
+  simp[taint_agree_def] >> rpt strip_tac >>
+  qpat_x_assum `_ = s`
+    (mp_tac o Q.AP_TERM `\u. u.vs_labels`) >> simp[]
+QED
+
+Theorem taint_agree_var_domain:
+  taint_agree D X tn s t ==> FDOM s.vs_vars = FDOM t.vs_vars
+Proof
+  simp[taint_agree_def]
+QED
+
+Theorem taint_agree_memory:
+  taint_agree D X tn s t /\ i NOTIN X /\ i NOTIN tn.t_mem /\
+  i < s.vs_alloca_next ==>
+  read_byte i s.vs_memory = read_byte i t.vs_memory
+Proof
+  simp[taint_agree_def]
+QED
+
+Theorem taint_agree_operand_defined:
+  taint_agree D X tn s t ==>
+  (IS_SOME (eval_operand op s) <=> IS_SOME (eval_operand op t))
+Proof
+  strip_tac >>
+  drule taint_agree_labels >> drule taint_agree_var_domain >>
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def, FLOOKUP_DEF] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem taint_agree_operand_value:
+  taint_agree D X tn s t /\ eval_operand op s = SOME x ==>
+  ?y. eval_operand op t = SOME y /\
+      word_agree_except (op_taint tn op) x y
+Proof
+  Cases_on `op` >>
+  simp[eval_operand_def, lookup_var_def, op_taint_def]
+  >- (rpt strip_tac >> gvs[] >> simp[word_agree_except_def])
+  >- (simp[taint_agree_def, FLOOKUP_DEF] >> rpt strip_tac >>
+      gvs[op_taint_def, FLOOKUP_DEF]) >>
+  strip_tac >> drule taint_agree_labels >>
+  disch_tac >> qexists_tac `x` >> gvs[word_agree_except_def]
+QED
+
+Theorem taint_agree_operand_clean:
+  taint_agree D X tn s t /\ op_taint tn op = {} ==>
+  eval_operand op s = eval_operand op t
+Proof
+  strip_tac >> drule taint_agree_operand_defined >>
+  disch_then (qspec_then `op` assume_tac) >>
+  Cases_on `eval_operand op s`
+  >- (Cases_on `eval_operand op t` >> gvs[]) >>
+  drule_all taint_agree_operand_value >> strip_tac >> gvs[] >>
+  `x = y` by
+    (irule ld_value_agree_clean >>
+     simp[ld_value_agree_scalar] >> goal_assum (drule_at Any)) >>
+  simp[]
+QED
+
+Theorem taint_agree_update_var:
+  taint_agree D X tn s t /\ word_agree_except m x y ==>
+  taint_agree D X
+    (tn with t_var := set_var_taint tn.t_var [out] m)
+    (update_var out x s) (update_var out y t)
+Proof
+  simp[taint_agree_def, update_var_def, set_var_taint_def,
+       ld_shared_agree_def, op_taint_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> simp[]
+  >- gvs[venom_state_component_equality] >>
+  Cases_on `v = out` >> gvs[FAPPLY_FUPDATE_THM]
+QED
+
+Theorem taint_agree_bind_output:
+  taint_agree D X tn s t /\ word_agree_except m x y /\
+  bind_outputs [out] [x] s = SOME s' ==>
+  ?t'. bind_outputs [out] [y] t = SOME t' /\
+       taint_agree D X
+         (tn with t_var := set_var_taint tn.t_var [out] m) s' t'
+Proof
+  simp[bind_outputs_def] >> rpt strip_tac >> gvs[] >>
+  irule taint_agree_update_var >> goal_assum (drule_at Any) >> simp[]
+QED
 
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
    no taint, so taint_agree evaluates it equally in t; access_ok puts
