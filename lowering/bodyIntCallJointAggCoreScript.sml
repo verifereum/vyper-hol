@@ -235,7 +235,8 @@ Proof
   `intcall_joint_res fp ce env es si s` by fs[intcall_expr_cont_def] >>
   `!a k. fp.jc_prot a k ==> regions_disjoint a k dst len` by
     (fs[intcall_frame_ok_def, regions_disjoint_def] >> rpt strip_tac >>
-     disj1_tac >> first_x_assum drule >> decide_tac) >>
+     disj1_tac >> qpat_x_assum `!a k. fp.jc_prot a k ==> _ <= fp.jc_lo` drule >>
+     decide_tac) >>
   `intcall_joint_res fp ce env es sb u` by
     (drule_all intcall_joint_res_copy >> simp[]) >>
   drule_all intcall_expr_cont_copy >> simp[]
