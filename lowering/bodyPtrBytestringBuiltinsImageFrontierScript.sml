@@ -7,7 +7,7 @@ Ancestors bodyPtrBytestringBuiltinsImageBoundary compileEnv emitHelper
 
 Definition image_bad_def:
   image_bad xs <=>
-    ?p q i0 i1 i2 i3 w b data off.
+    ?i0 i1 i2 i3 w b data off p q.
       xs = p ++ [mk_inst i0 ALLOCA [Lit w] [b];
                  mk_inst i1 ADD [Var b; Lit 32w] [data];
                  mk_inst i2 ALLOCA [Lit 64w] [off];
