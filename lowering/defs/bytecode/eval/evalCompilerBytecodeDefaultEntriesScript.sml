@@ -35,7 +35,7 @@ Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >>
   simp_tac pure_ss [optionTheory.option_case_def] >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
-  entry_choose_grouped_path >> entry_guard "EVERY" >> entry_admin >> entry_stage "package_external_group" >> entry_stage "run_grouped_lowering" >>
+  entry_choose_grouped_path >> entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >> entry_stage "package_external_group" >> entry_stage "run_grouped_lowering" >>
   simp_tac pure_ss [NOT_CLAUSES, OR_CLAUSES, COND_CLAUSES,
     optionTheory.option_case_def, checked_unit_pipeline_def] >>
   simp_tac pure_ss [venomPipelineDriverTheory.run_venom_pipeline_def] >> entry_stage "pipeline_spec_wf" >>
@@ -71,8 +71,8 @@ Proof
    entry_open_codegen_ready >> entry_guard "canonical_param_prefix" >>
    entry_guard "wf_function" >> entry_guard "fn_inst_wf" >>
    entry_guard "ssa_form" >> entry_guard "def_dominates_uses" >>
-   entry_guard "single_use_form" >> entry_guard "cfg_is_normalized" >>
-   entry_guard "EVERY" >> entry_admin >>
+   entry_guard "single_use_form" >> entry_guard "cfg_is_normalized" >> entry_codegen_ready_guards >>
+   entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >>
    entry_open_codegen >> entry_guard "target_capabilities_wf" >>
    entry_guard "context_target_safe" >> entry_admin >>
    simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def,

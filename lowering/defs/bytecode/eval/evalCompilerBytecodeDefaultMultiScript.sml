@@ -57,7 +57,7 @@ Theorem dflt_multi_matches_python_oracle:
 Proof
   simp_tac pure_ss [compile_vyper_def, compile_vyper_with_def] >> entry_stage "resolve_o1_policy" >> simp_tac pure_ss [optionTheory.option_case_def] >>
   entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >> entry_chunk 50 >>
-  entry_chunk 50 >> entry_chunk 50 >> entry_choose_grouped_path >> entry_guard "EVERY" >> entry_admin >> entry_stage "package_external_group" >> entry_stage "run_grouped_lowering" >>
+  entry_chunk 50 >> entry_chunk 50 >> entry_choose_grouped_path >> entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >> entry_stage "package_external_group" >> entry_stage "run_grouped_lowering" >>
   entry_open_pipeline >> entry_stage "pipeline_spec_wf" >> entry_stage "unit_wf" >> entry_stage "raw_static_inputs_wf" >> simp_tac pure_ss [NOT_CLAUSES,
   COND_CLAUSES, combinTheory.K_THM] >> entry_stage "init_ir_supply" >> simp[venomPassScheduleTheory.o1_pipeline_spec_def] >> entry_begin_mapped_stage >>
   entry_pass_begin >> entry_execute_pass >> entry_admin >> entry_guard "fn_pass_effects_hold" >> entry_guard "introduces_no_invoke_edges" >>
@@ -2007,8 +2007,8 @@ Proof
   entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk
   >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >>
   entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk
-  >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_finish >> entry_guard "cfg_is_normalized" >>
-  entry_guard "EVERY" >> entry_admin >> entry_open_codegen >> entry_guard "target_capabilities_wf" >> entry_guard "context_target_safe" >> entry_admin >>
+  >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_chunk >> entry_single_use_finish >> entry_guard "cfg_is_normalized" >> entry_codegen_ready_guards >>
+  entry_guard "EVERY" >> entry_immutables_guard >> entry_admin >> entry_open_codegen >> entry_guard "target_capabilities_wf" >> entry_guard "context_target_safe" >> entry_admin >>
   simp_tac pure_ss [stackPlanGenTheory.generate_context_plan_def, LET_THM,
     stackPlanGenTheory.generate_context_plan_with_def] >>
   entry_stage "fcg_analyze" >>

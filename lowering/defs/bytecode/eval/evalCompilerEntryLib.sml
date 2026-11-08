@@ -85,6 +85,29 @@ in
     (computeLib.WEAK_CBV_CONV (computeLib.the_compset())) tm
 end))
 
+(* The runtime lowering guard also bounds the immutable section
+   (compute_immutables_len ... < 0x6000); decide that closed comparison
+   alongside the EVERY guards. Other EVERY guards carry no such bound. *)
+val entry_immutables_guard = TRY (CONV_TAC (LAND_CONV (CHANGED_CONV (ONCE_DEPTH_CONV (fn tm =>
+  let val is_bound = numSyntax.is_less tm andalso
+        (case total (fst o strip_comb o fst o numSyntax.dest_less) tm of
+           SOME h => is_const h andalso
+                     #Name (dest_thy_const h) = "compute_immutables_len"
+         | NONE => false) andalso
+        List.null (free_vars tm)
+  in if is_bound then let
+       val th = computeLib.EVAL_CONV tm
+       val result = rhs (concl th)
+     in if aconv result boolSyntax.T orelse aconv result boolSyntax.F then th
+        else raise Fail "incomplete immutables bound computation" end
+     else NO_CONV tm
+  end)))))
+
+(* codegen_ready_fn's readiness conjuncts after cfg_is_normalized. *)
+val entry_codegen_ready_guards =
+  entry_guard "block_entries_ready" >> entry_guard "phi_operands_ready" >>
+  entry_guard "offset_outputs_used" >> entry_guard "phis_at_joins"
+
 val entry_admin_rules =
   [LET_THM, optionTheory.option_case_def, pairTheory.pair_case_thm,
     pairTheory.UNCURRY_DEF,
