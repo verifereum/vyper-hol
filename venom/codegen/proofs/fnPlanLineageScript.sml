@@ -416,6 +416,50 @@ Proof
   metis_tac[]
 QED
 
+Theorem dfs_block_state_native_ordinary_boundary:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (non_param_insts bb) ps k qs /\
+  LENGTH (collect_phis bb.bb_instructions) <= k /\
+  k <= PRE (LENGTH bb.bb_instructions) ==>
+  native_live_boundary fn bb k qs
+Proof
+  strip_tac >> drule_all dfs_block_state_native_incoming >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  metis_tac[incoming_join_native_ordinary_prefix]
+QED
+
+Theorem dfs_block_state_native_ordinary_suffix_exclusion:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (non_param_insts bb) ps k qs /\
+  LENGTH (collect_phis bb.bb_instructions) <= k /\
+  k <= PRE (LENGTH bb.bb_instructions) /\
+  qs.ps_stack = prefix ++ suffix /\
+  (!v. MEM v (live_vars_at (liveness_analyze fn) lbl k) ==> MEM (Var v) suffix) ==>
+  !v. MEM v (live_vars_at (liveness_analyze fn) lbl k) ==>
+    ~MEM (Var v) prefix /\ Var v NOTIN FDOM qs.ps_spilled /\
+    LIST_ELEM_COUNT (Var v) suffix = 1
+Proof
+  strip_tac >> drule_all dfs_block_state_native_ordinary_boundary >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  metis_tac[native_live_boundary_suffix_exclusion]
+QED
+
 Theorem dfs_block_state_unique:
   fn_entry_label fn = SOME entry /\
   generate_fn_plan_aux lv dfg cfg fn [entry] [] ps0 = SOME result /\
