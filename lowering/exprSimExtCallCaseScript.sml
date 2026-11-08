@@ -20,6 +20,8 @@
  *     allocations.  It lets a positional memory
  *     or immutable operand, read only after the later operands, keep its
  *     value.  Held for the posts-interface round.
+ *   vv_post_call_memory_frame — the same frame for a call that isn't
+ *     internal, below the allocation frontier.  Held with it.
  *
  * Why it holds: the call request agrees with the source's.  The selector is
  * cenv.ce_method_id, which expr_sim_inv pins to function_selector of the
@@ -84,6 +86,34 @@ Theorem vv_post_pure_memory_frame:
 Proof
   (* Held for the posts-interface round: follows from vv_post_def once it
      frames an effect-free operand's memory writes to its own allocations. *)
+  cheat
+QED
+
+(* The same frame for a call that isn't internal (extcall, staticcall, send,
+   raw_call and the other builtin calls), below the allocation frontier:
+   such a call writes memory only inside allocations its own ALLOCA
+   instructions make and in scratch at or above vs_fmp, which a call that
+   uses it puts above the frontier (its DALLOCA makes fmp_room hold), so
+   the live locals and every region below the frontier clear of those
+   allocations keep their bytes. *)
+Theorem vv_post_call_memory_frame:
+  !ctx func cenv cx ann ct args dflt es sa sb s0 es' tv vv s.
+    vv_post ctx func cenv cx (Call ann ct args dflt) es sa sb s0 es' tv vv s /\
+    (!nsid. ct <> IntCall nsid) ==>
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    (!off len.
+       off + len <= s0.vs_alloca_next /\
+       (!inst b sz.
+          MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+          compileEnv$regions_disjoint off len b sz) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
+Proof
+  (* Held for the posts-interface round with vv_post_pure_memory_frame:
+     follows from vv_post_def once it frames a call's memory writes to its
+     own allocations and the scratch above the frontier. *)
   cheat
 QED
 
