@@ -219,7 +219,12 @@ Definition source_unit_execution_correct_def:
   source_unit_execution_correct tops ret am tx unit vs <=>
     ?marks. source_unit_execution_correct_at
               (gas_explicit marks vs.vs_gas_readings)
-              tops ret am tx unit vs
+              tops ret am tx unit vs /\
+      !tail.
+        call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings ++ tail) am tx =
+        call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx
 End
 
 (* ===== S1 halt bridge (#640) ===== *)
