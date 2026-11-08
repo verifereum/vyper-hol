@@ -125,7 +125,8 @@ Proof
      strip_tac >>
      qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) r s0
                     with vs_inst_idx := LENGTH s1.cs_current_insts` >>
-     gvs[update_var_def, eval_operand_def, lookup_var_def]) >>
+     gvs[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     rw[] >> gvs[]) >>
   qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[unop_frag_mem_def] >>
   disch_then (qspecl_then [`s1`, `sb`, `c`, `op`, `u`] mp_tac) >>
