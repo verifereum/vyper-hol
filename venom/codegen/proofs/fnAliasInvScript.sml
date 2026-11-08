@@ -15381,6 +15381,176 @@ Proof
   simp[alias_occ_clean_events_def, clean_stack_plan_def, alias_occ_events_shadow_def]
 QED
 
+Definition alias_occ_insts_events_def:
+  (alias_occ_insts_events liveness dfg cfg fn lbl halting n_params block_len i [] ps = []) /\
+  (alias_occ_insts_events liveness dfg cfg fn lbl halting n_params block_len i (inst::rest) ps =
+    case generate_inst_plan liveness dfg cfg fn inst
+      (if rest = [] then live_vars_at liveness lbl block_len
+       else live_vars_at liveness lbl (i + n_params + 1))
+      halting (case rest of [] => F | next_i::_ => is_terminator next_i.inst_opcode) lbl ps of
+      NONE => []
+    | SOME (ops,ps') =>
+        alias_occ_inst_events i liveness dfg fn lbl inst
+          (if rest = [] then live_vars_at liveness lbl block_len
+           else live_vars_at liveness lbl (i + n_params + 1))
+          halting (case rest of [] => F | next_i::_ => is_terminator next_i.inst_opcode) ps ++
+        alias_occ_insts_events liveness dfg cfg fn lbl halting n_params block_len (i+1) rest ps')
+End
+
+Theorem alias_occ_insts_events_align:
+  !insts i ps s ops final.
+  alias_occ_align s ps /\
+  generate_block_insts_plan liveness dfg cfg fn lbl halting n_params block_len i insts ps =
+    SOME (ops,final) ==>
+  alias_occ_align
+    (alias_occ_events_shadow
+      (alias_occ_insts_events liveness dfg cfg fn lbl halting n_params block_len i insts ps) s)
+    final
+Proof
+  Induct >> simp[generate_block_insts_plan_def, alias_occ_insts_events_def]
+  >- (rpt strip_tac >> gvs[alias_occ_events_shadow_def]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  simp[alias_occ_events_append] >>
+  first_x_assum irule >> conj_tac
+  >- metis_tac[] >>
+  irule alias_occ_inst_events_align >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Definition alias_occ_block_events_def:
+  alias_occ_block_events liveness dfg cfg fn bb ps =
+    let ps1 = if bb = HD fn.fn_blocks then SND (prepare_params_plan liveness fn ps) else ps in
+    let ps2 = if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+      then SND (clean_stack_plan liveness cfg fn bb ps1) else ps1 in
+    (if bb = HD fn.fn_blocks then alias_occ_prepare_params_events liveness fn ps else []) ++
+    (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
+     then alias_occ_clean_events 0 liveness cfg fn bb ps1 else []) ++
+    alias_occ_insts_events liveness dfg cfg fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions) 0 (non_param_insts bb) ps2
+End
+
+Theorem alias_occ_block_events_align:
+  alias_occ_align s ps /\ generate_block_plan liveness dfg cfg fn bb ps = SOME (ops,final) ==>
+  alias_occ_align
+    (alias_occ_events_shadow (alias_occ_block_events liveness dfg cfg fn bb ps) s) final
+Proof
+  simp[generate_block_plan_def, pairTheory.ELIM_UNCURRY] >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  simp[alias_occ_block_events_def, alias_occ_events_append] >>
+  irule alias_occ_insts_events_align >>
+  conj_tac
+  >- (Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >>
+      Cases_on `bb = HD fn.fn_blocks` >> gvs[] >> metis_tac[]) >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> simp[]
+  >- (irule alias_occ_clean_align >>
+      Cases_on `bb = HD fn.fn_blocks` >>
+      simp[alias_occ_events_shadow_def, alias_occ_prepare_params_align]) >>
+  Cases_on `bb = HD fn.fn_blocks` >>
+  simp[alias_occ_events_shadow_def, alias_occ_prepare_params_align]
+QED
+
+Theorem alias_occ_events_origin:
+  !evs s. alias_occ_wf s /\
+  (at,id) IN alias_occ_residents (alias_occ_events_shadow evs s) ==>
+  (at,id) IN alias_occ_residents s \/
+  ?incoming ev. MEM (incoming,ev) (alias_occ_event_contexts evs s) /\
+    (alias_occ_event_birth ev incoming at id \/ alias_occ_event_rename ev incoming at id)
+Proof
+  Induct >> simp[alias_occ_events_shadow_def, alias_occ_event_contexts_def] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `alias_occ_event_shadow h s` mp_tac) >>
+  simp[alias_occ_event_wf] >> strip_tac
+  >- (drule_all alias_occ_event_origin >> strip_tac >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem alias_occ_event_old_id_origin:
+  alias_occ_wf s /\ id < s.alias_next /\
+  (at,id) IN alias_occ_residents (alias_occ_event_shadow ev s) ==>
+  ?old. (old,id) IN alias_occ_residents s
+Proof
+  Cases_on `ev`
+  >- (simp[alias_occ_event_shadow_def] >> metis_tac[alias_occ_command_old_origin]) >>
+  strip_tac >> drule_all alias_occ_event_origin >>
+  simp[alias_occ_event_birth_def] >>
+  metis_tac[GEN_ALL alias_occ_event_rename_parent]
+QED
+
+Theorem alias_occ_events_old_id_origin:
+  !evs s at. alias_occ_wf s /\ id < s.alias_next /\
+  (at,id) IN alias_occ_residents (alias_occ_events_shadow evs s) ==>
+  ?old. (old,id) IN alias_occ_residents s
+Proof
+  Induct >> simp[alias_occ_events_shadow_def] >> rpt strip_tac
+  >- metis_tac[] >>
+  `id < (alias_occ_event_shadow h s).alias_next` by
+    (mp_tac (Q.INST [`ev` |-> `h`] alias_occ_event_next_mono) >> simp[]) >>
+  first_x_assum (qspecl_then [`alias_occ_event_shadow h s`, `at`] mp_tac) >>
+  simp[alias_occ_event_wf] >> strip_tac >>
+  drule_all alias_occ_event_old_id_origin >> simp[]
+QED
+
+Theorem alias_occ_events_no_reappearance:
+  alias_occ_wf s /\ id < s.alias_next /\
+  ~(?at. (at,id) IN alias_occ_residents s) ==>
+  ~(?at. (at,id) IN alias_occ_residents (alias_occ_events_shadow evs s))
+Proof
+  metis_tac[alias_occ_events_old_id_origin]
+QED
+
+Theorem alias_occ_block_events_wf:
+  alias_occ_wf s ==>
+  alias_occ_wf (alias_occ_events_shadow (alias_occ_block_events liveness dfg cfg fn bb ps) s)
+Proof
+  simp[alias_occ_events_wf]
+QED
+
+Theorem alias_occ_block_events_next_mono:
+  s.alias_next <=
+  (alias_occ_events_shadow (alias_occ_block_events liveness dfg cfg fn bb ps) s).alias_next
+Proof
+  simp[alias_occ_events_next_mono]
+QED
+
+Theorem alias_occ_events_id_origin:
+  !evs s at. alias_occ_wf s /\
+  (at,id) IN alias_occ_residents (alias_occ_events_shadow evs s) ==>
+  (?old. (old,id) IN alias_occ_residents s) \/
+  ?incoming ev born. MEM (incoming,ev) (alias_occ_event_contexts evs s) /\
+    alias_occ_event_birth ev incoming born id
+Proof
+  Induct >> simp[alias_occ_events_shadow_def, alias_occ_event_contexts_def] >>
+  rpt strip_tac
+  >- metis_tac[] >>
+  first_x_assum (qspecl_then [`alias_occ_event_shadow h s`, `at`] mp_tac) >>
+  simp[alias_occ_event_wf] >> strip_tac
+  >- (drule_all alias_occ_event_id_origin >> strip_tac >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem alias_occ_events_new_birth:
+  alias_occ_wf s /\ s.alias_next <= id /\
+  (at,id) IN alias_occ_residents (alias_occ_events_shadow evs s) ==>
+  ?incoming ev born. MEM (incoming,ev) (alias_occ_event_contexts evs s) /\
+    alias_occ_event_birth ev incoming born id
+Proof
+  strip_tac >> drule_all alias_occ_events_id_origin >> strip_tac
+  >- (drule_all alias_occ_resident_bound >> simp[]) >> metis_tac[]
+QED
+
+Theorem alias_occ_events_context_origin:
+  !evs s. alias_occ_wf s ==>
+  EVERY (\(incoming,ev).
+    !at id. (at,id) IN alias_occ_residents (alias_occ_event_shadow ev incoming) ==>
+      (at,id) IN alias_occ_residents incoming \/
+      alias_occ_event_birth ev incoming at id \/ alias_occ_event_rename ev incoming at id)
+    (alias_occ_event_contexts evs s)
+Proof
+  Induct >> simp[alias_occ_event_contexts_def] >> rpt strip_tac
+  >- metis_tac[alias_occ_event_origin] >>
+  first_x_assum irule >> simp[alias_occ_event_wf]
+QED
+
 (* In this ready fixture the dead a disappears at its own regular ASSIGN
    post-processing, before b is defined, not at the branch, backedge or PHI.
    This finite deletion result does not establish universal root freshness. *)
