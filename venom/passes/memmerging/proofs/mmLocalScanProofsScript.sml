@@ -4,7 +4,7 @@ Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
-  simplifyCfgPhiSemantics
+  simplifyCfgPhiSemantics basePtrProofs
 Libs
   wordsLib finite_mapLib
 
@@ -2637,6 +2637,112 @@ Proof
     (qpat_x_assum `MEM def_bb fn.fn_blocks` mp_tac >> simp[MEM_LUPDATE] >> metis_tac[]) >>
   qpat_x_assum `fn' = _` kall_tac >>
   simp[def_available_at_def] >> qexistsl [`def_bb`, `def_inst`] >> gvs[]
+QED
+
+Theorem mm_local_prefix_phase_endpoint_available[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k < 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
+  fn_inst_wf fn /\ wf_function fn /\
+  mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (bb,sk) = (bb',sk') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks /\
+  (!d n. fn_dominates fn d n ==> fn_dominates fn' d n) /\
+  target'.bb_label = target.bb_label /\
+  MEM v (venomInst$inst_uses u) /\
+  ((MEM u (fn_insts fn0) /\
+     ~MEM u (EL index fn0.fn_blocks).bb_instructions) \/
+   (MEM u bb'.bb_instructions /\ u.inst_opcode = PHI)) /\
+  def_available_at fn target NONE v ==>
+  def_available_at fn' target' NONE v
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EVERY (\i. i.inst_id < supply.irs_next_inst)
+      (EL index fn0.fn_blocks).bb_instructions` by
+    (gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+      irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM, MEM_MAP]) >>
+  `bb.bb_label = (EL index fn0.fn_blocks).bb_label` by
+    metis_tac[mm_local_prefix_wf_last, wf_ssa_def, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+  `bb'.bb_label = bb.bb_label` by metis_tac[mm_local_phase_label] >>
+  `MEM bb fn.fn_blocks` by
+    (simp[] >> metis_tac[MEM_LUPDATE, EL_MEM, EL_LUPDATE, LENGTH_LUPDATE]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[wf_function_def, mmWfProofsTheory.fn_inst_ids_distinct_block] >>
+  irule mm_local_available_endpoint_transport >>
+  goal_assum (drule_at (Pat `def_available_at _ _ _ _`)) >> simp[] >>
+  rpt strip_tac >>
+  Cases_on `db = bb`
+  >- (qexists_tac `bb'` >> simp[] >>
+      conj_tac >- (simp[] >> metis_tac[MEM_LUPDATE, EL_MEM, EL_LUPDATE, LENGTH_LUPDATE]) >>
+      irule mm_local_prefix_phase_producer_retained >>
+      (conj_tac >- metis_tac[fn_inst_wf_def, EVERY_MEM]) >>
+      goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `MEM _ (venomInst$inst_uses _)`)) >>
+      gvs[] >> metis_tac[]) >>
+  qexists_tac `db` >> simp[] >>
+  metis_tac[MEM_LUPDATE]
+QED
+
+Theorem mm_local_prefix_phase_phi_transport[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\ k < 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
+  fn_inst_wf fn /\ wf_function fn /\
+  mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (bb,sk) = (bb',sk') /\
+  fn' = fn0 with fn_blocks := LUPDATE bb' index fn0.fn_blocks /\
+  (!d n. fn_dominates fn d n ==> fn_dominates fn' d n) /\
+  fn_cfg_edge fn' = fn_cfg_edge fn /\
+  target'.bb_label = target.bb_label /\
+  ((MEM u (fn_insts fn0) /\
+     ~MEM u (EL index fn0.fn_blocks).bb_instructions) \/
+   (MEM u bb'.bb_instructions /\ u.inst_opcode = PHI)) /\
+  phi_edge_uses_wf fn target u ==>
+  phi_edge_uses_wf fn' target' u
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `EVERY (\i. i.inst_id < supply.irs_next_inst)
+      (EL index fn0.fn_blocks).bb_instructions` by
+    (gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+      irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM, MEM_MAP]) >>
+  `bb.bb_label = (EL index fn0.fn_blocks).bb_label` by
+    metis_tac[mm_local_prefix_wf_last, wf_ssa_def, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+  `bb'.bb_label = bb.bb_label` by metis_tac[mm_local_phase_label] >>
+  qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
+  pure_rewrite_tac[phi_edge_uses_wf_def] >> strip_tac >>
+  pure_rewrite_tac[phi_edge_uses_wf_def] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- metis_tac[] >> rpt gen_tac >> strip_tac >>
+  `MEM v (venomInst$inst_uses u)` by
+    (simp[venomInstTheory.inst_uses_def] >>
+     irule basePtrProofsTheory.phi_pairs_mem_operand_vars >>
+     simp[MEM_MAP] >> metis_tac[pairTheory.SND]) >>
+  first_x_assum (drule_at (Pat `MEM _ (phi_pairs _)`)) >> strip_tac >>
+  Cases_on `pred_bb = bb`
+  >- (qexists_tac `bb'` >>
+      `MEM bb' fn'.fn_blocks` by
+        (simp[] >> metis_tac[MEM_LUPDATE, EL_MEM, EL_LUPDATE, LENGTH_LUPDATE]) >>
+      simp[] >>
+      conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+      irule mm_local_prefix_phase_endpoint_available >>
+      goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `MEM _ (venomInst$inst_uses _)`)) >>
+      simp[] >> metis_tac[]) >>
+  qexists_tac `pred_bb` >>
+  `MEM pred_bb fn'.fn_blocks` by
+    (qpat_x_assum `MEM pred_bb fn.fn_blocks` mp_tac >>
+     simp[MEM_LUPDATE] >> metis_tac[]) >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  irule mm_local_prefix_phase_endpoint_available >>
+  goal_assum (drule_at (Pat `mm_local_prefix _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `MEM _ (venomInst$inst_uses _)`)) >>
+  simp[] >> metis_tac[]
 QED
 
 (* Essential counterexample evidence: a variable-free unreachable block. *)
