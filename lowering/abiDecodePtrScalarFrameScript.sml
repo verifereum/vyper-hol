@@ -58,3 +58,22 @@ Proof
   rpt strip_tac >> irule abi_decode_ptr_window_frame >>
   qexistsl_tac [`G`, `s`, `tn`] >> simp[]
 QED
+
+Theorem abi_decode_scalar_clean_set_transport:
+  (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  (!op. op IN A ==> !x. op = Var x ==> x IN R) /\
+  (!op. (!x. op = Var x ==> x IN R) ==>
+    op_prov H op = op_prov G op /\ op_taint tm op = op_taint tn op) ==>
+  (!op. op IN A ==> op_prov H op = NONE /\ op_taint tm op = {})
+Proof
+  metis_tac[]
+QED
+
+Theorem abi_decode_scalar_clean_set_literals:
+  (!op. op IN A ==> op_prov G op = NONE /\ op_taint tn op = {}) ==>
+  (!op. op IN A UNION IMAGE Lit UNIV ==>
+    op_prov G op = NONE /\ op_taint tn op = {})
+Proof
+  simp_tac (srw_ss()) [IN_UNION, IN_IMAGE, IN_UNIV] >>
+  rpt strip_tac >> gvs[op_prov_def, op_taint_def]
+QED
