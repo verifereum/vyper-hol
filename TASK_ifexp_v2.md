@@ -81,3 +81,11 @@ All paths are relative to this directory (the vyper-hol project root).
 ## Your own helper theories (added 2026-11-06)
 
 The theory files listed in `OWNED_FILES.txt` (at the project root) were written by earlier runs on this task. They are yours: you may edit, restate, split or delete any theorem in them, and repair their proofs, notwithstanding any "do not edit existing theories" rule above. That rule applies only to theories not in that list. Some of them predate the tip merge (word values now carry no provenance: `ptr_val_ok` at a word type includes `op_prov G op = NONE`) and need proof repairs.
+
+## Rebase onto the branch tip (owner note, 2026-11-08)
+
+The proof you finished was merged onto the current s3-ptr tip (`2036cf0cb`, merge commit in this worktree). On that tip `lowered_value_type_def` (`lowering/defs/exprLoweringScript.sml`) has a new clause: `lowered_value_type cenv (Builtin ty (Concat _) args) = concat_buffer_type ty (SUM (MAP (concat_payload_capacity o expr_type) args))`. So a `Concat` arm can now have `lowered_value_type ce arm <> expr_type arm`.
+
+As a result `bodyPtrIfExpRepresentationCases.lowered_value_type_exceptions` is false as stated (its `TypeBuiltin` branch fails at line 18 on the goal `lowered_value_type ce (Builtin t b l) = expr_type (Builtin t b l)`). It is your own helper: add the `Concat` disjunct (and the matching premise in `lowered_value_type_ordinary`), then handle a `Concat` arm wherever the allocating-arm case split (`bodyPtrIfExpResidual.ifexp_allocating_arm_exceptions` and its consumers) needs it. A `Concat` result is a dynamic bytestring in a fresh memory buffer, like the dynamic bytes literal case; the pointer predicates on dynamic bytestrings don't depend on the capacity bound.
+
+Done when `bodyPtrIfExpTheory` builds again with `ifexp_expr_ptr_ok` unchanged and no new admission. Other tip changes may break further helpers; repair them the same way (proof-only, or restating your own helper theories). Theorems outside your own `bodyPtrIfExp*` files are not yours to restate.
