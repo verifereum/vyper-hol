@@ -197,7 +197,7 @@ Theorem epilogue_return_not_OK[local]:
     step_inst_base (mk_inst id RETURN [dst;szop] []) s <> OK u
 Proof
   rpt gen_tac >>
-  simp[mk_inst_def, Once step_inst_base_def, AllCaseEqs()]
+  simp[mk_inst_def, step_inst_base_opcode_eqs, AllCaseEqs()]
 QED
 
 Theorem epilogue_mem_ok_index[local]:
