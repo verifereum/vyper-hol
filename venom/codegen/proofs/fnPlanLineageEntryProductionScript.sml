@@ -640,6 +640,63 @@ Proof
   qexistsl_tac [`cfg_analyze fn`,`fn`,`ops`] >> simp[]
 QED
 
+(* Factor the actual worker, retaining its full-tail lookahead. *)
+Theorem native_worker_prefix_split:
+  !j rest lv dfg cfg fn label halt n len i ps ops after xs ps0.
+    j <= LENGTH rest /\ DROP i xs = rest /\
+    native_inst_prefix lv dfg cfg fn label halt n len xs ps0 i ps /\
+    generate_block_insts_plan lv dfg cfg fn label halt n len i rest ps =
+      SOME (ops,after) ==>
+    ?mid suffix_ops.
+      native_inst_prefix lv dfg cfg fn label halt n len xs ps0 (i+j) mid /\
+      generate_block_insts_plan lv dfg cfg fn label halt n len (i+j)
+        (DROP (i+j) xs) mid = SOME (suffix_ops,after)
+Proof
+  Induct >- (rpt strip_tac >> qexistsl_tac [`ps`,`ops`] >> simp[]) >>
+  Cases_on `rest` >- simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once generate_block_insts_plan_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  `DROP (i+1) xs = t` by
+    (`DROP (i+1) xs = DROP 1 (DROP i xs)` by simp[DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
+     pop_assum SUBST1_TAC >> asm_rewrite_tac[] >> simp[]) >>
+  `native_inst_prefix lv dfg cfg fn label halt n len xs ps0 (i+1) ps'` by
+    (`i+1 = SUC i` by simp[] >> pop_assum SUBST1_TAC >>
+     irule (cj 2 native_inst_prefix_rules) >> goal_assum (drule_at Any) >>
+     qexistsl_tac [`h`,`step_ops`,`t`] >> simp[]) >>
+  `i + SUC j = (i+1)+j` by simp[] >> pop_assum SUBST1_TAC >>
+  first_x_assum irule >> simp[] >> conj_tac
+  >- (qpat_x_assum `DROP (i+1) xs = t`
+        (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  qexistsl_tac [`rest_ops`,`ps'`] >> simp[]
+QED
+
+Theorem native_worker_prefix_boundary:
+  !lv dfg cfg fn label halt n len xs ps ops after k.
+    generate_block_insts_plan lv dfg cfg fn label halt n len 0 xs ps =
+      SOME (ops,after) /\ k <= LENGTH xs ==>
+    ?mid suffix_ops.
+      native_inst_prefix lv dfg cfg fn label halt n len xs ps k mid /\
+      generate_block_insts_plan lv dfg cfg fn label halt n len k
+        (DROP k xs) mid = SOME (suffix_ops,after)
+Proof
+  rpt strip_tac >>
+  drule_at (Pos last) native_worker_prefix_split >>
+  disch_then (qspec_then `k` mp_tac) >>
+  simp[native_inst_prefix_zero]
+QED
+
+Theorem native_worker_prefix_endpoint:
+  !lv dfg cfg fn label halt n len xs ps ops after.
+    generate_block_insts_plan lv dfg cfg fn label halt n len 0 xs ps =
+      SOME (ops,after) ==>
+    native_inst_prefix lv dfg cfg fn label halt n len xs ps (LENGTH xs) after
+Proof
+  rpt strip_tac >> drule native_worker_prefix_boundary >>
+  disch_then (qspec_then `LENGTH xs` mp_tac) >>
+  simp[generate_block_insts_plan_def] >> metis_tac[]
+QED
+
 Theorem native_worker_terminal_prefix:
   !rest lv dfg cfg fn label halt n len k ps ops qs xs ps0.
     rest <> [] /\ DROP k xs = rest /\ k + LENGTH rest = LENGTH xs /\
