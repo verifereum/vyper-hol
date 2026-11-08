@@ -125,7 +125,7 @@ Proof
   irule origin_local_flow_phis >> simp[] >>
   drule venomExecProofsTheory.lookup_block_MEM >>
   simp[EVERY_MEM, fn_insts_def,
-    removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+    venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
   metis_tac[]
 QED
 
@@ -171,7 +171,7 @@ Proof
          metis_tac[]) >>
       `!w. op2 = Var w ==> w NOTIN fn_pv P fn` by
         (gvs[fn_ptr_ok_def, affine_pointer_ops_def, fn_pv_def,
-             fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+             fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
              MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
       Cases_on `op1` >> Cases_on `op2` >>
       gvs[bp_descriptor_def] >> metis_tac[]) >>

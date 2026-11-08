@@ -136,7 +136,7 @@ Resume origin_frame_argument_invariant[next]:
   `inst.inst_opcode <> DALLOCA` by
     (gvs[ctx_has_dalloca_def, EXISTS_MEM] >>
      gvs[active_inst_def, fn_insts_def,
-         removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
      metis_tac[MEM_EL]) >>
   metis_tac[argument_frame_step]
 QED

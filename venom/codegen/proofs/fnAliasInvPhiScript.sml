@@ -265,7 +265,7 @@ Proof
      `phi_well_formed inst.inst_operands` by metis_tac[phi_codegen_inst_shape] >>
      `?src. resolve_phi pred inst.inst_operands = SOME (Var src)` by
        (gvs[venomExecSemanticsTheory.eval_one_phi_def, AllCaseEqs()] >>
-        metis_tac[phiWellFormedTheory.resolve_phi_well_formed]) >>
+        metis_tac[venomWfPropsTheory.resolve_phi_well_formed]) >>
      drule_all lineage_entry_actual_phi_source >> strip_tac >>
      Cases_on `op` >> gvs[stackPlanTypesTheory.is_var_operand_def] >> metis_tac[]) >>
   drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`)

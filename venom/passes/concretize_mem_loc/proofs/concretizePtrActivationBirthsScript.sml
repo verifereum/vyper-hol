@@ -117,7 +117,7 @@ Proof
     metis_tac[ptr_owner_frame_active] >>
   `MEM a.po_inst (fn_insts a.po_fn)` by
     (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-      removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+      venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
      metis_tac[MEM_EL]) >>
   gvs[EVERY_MEM] >> metis_tac[]
 QED

@@ -101,7 +101,7 @@ Proof
   gvs[ptr_observe_def, ptr_activation_tokens_def]
   >- (gen_tac >> irule ptr_tag_roots_step >> simp[] >>
       gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-        removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+        venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
       metis_tac[MEM_EL])
   >- metis_tac[ptr_tag_roots_entry]
   >- (conj_tac >- simp[ptr_site_supported_def] >>
@@ -211,7 +211,7 @@ Proof
   >- (rpt strip_tac >>
       `inst_wf i` by
         (gvs[fn_inst_wf_def, fn_insts_def,
-          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
          metis_tac[]) >>
       gvs[inst_wf_def]) >>
   qexistsl [`PT`, `TG`, `tok`] >> simp[] >> metis_tac[]

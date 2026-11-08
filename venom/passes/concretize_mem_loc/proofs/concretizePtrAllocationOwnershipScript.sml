@@ -206,7 +206,7 @@ Proof
       simp[] >> strip_tac >>
       `MEM inst (fn_insts fn)` by
         (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
          metis_tac[MEM_EL]) >>
       `inst.inst_opcode <> DALLOCA` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `ptr_active_alloc_geometry (s' :: MAP (\f. f.cf_state) stk)` by

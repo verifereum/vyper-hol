@@ -103,7 +103,7 @@ Proof
       first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
       `MEM inst (fn_insts fn)` by
         (gvs[active_inst_def, fn_insts_def,
-          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
          metis_tac[MEM_EL]) >>
       simp[] >> irule ptr_static_step >> fs[EVERY_MEM] >> metis_tac[])
   >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
@@ -113,7 +113,7 @@ Proof
       first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
       `MEM inst (fn_insts fn)` by
         (gvs[active_inst_def, fn_insts_def,
-          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
          metis_tac[MEM_EL]) >>
       simp[] >> conj_tac >- metis_tac[lookup_function_MEM] >>
       irule ptr_static_invoke_params >> fs[EVERY_MEM] >> metis_tac[])

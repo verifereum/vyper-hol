@@ -256,7 +256,7 @@ Proof
   qexistsl [`\fn. MAP (\i. i.inst_id) (fn_insts fn)`,
             `i.inst_id`,`C.ctx_functions`] >>
   simp[MEM_MAP] >> conj_tac
-  >- (gvs[ctx_inst_ids_distinct_def, fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
+  >- (gvs[ctx_inst_ids_distinct_def, fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
   conj_tac >- metis_tac[] >> metis_tac[]
 QED
 

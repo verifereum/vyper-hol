@@ -97,7 +97,7 @@ Proof
       qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
       `MEM inst (fn_insts fn)` by
         (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
          metis_tac[MEM_EL]) >>
       simp[] >> gen_tac >> irule ptr_frame_current_table_step >>
       fs[EVERY_MEM] >> metis_tac[])

@@ -190,7 +190,7 @@ Resume frame_allocation_ownership[next]:
   `inst.inst_opcode <> DALLOCA` by
     (gvs[ctx_has_dalloca_def, EXISTS_MEM] >>
      gvs[active_inst_def, fn_insts_def,
-         removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
      metis_tac[MEM_EL]) >>
   simp[] >> metis_tac[frame_sites_step]
 QED

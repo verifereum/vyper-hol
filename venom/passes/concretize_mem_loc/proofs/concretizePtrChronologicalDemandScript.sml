@@ -73,7 +73,7 @@ Theorem ptr_frame_operand_instructions:
 Proof
   ho_match_mp_tac frame_reachable_ind >> rpt strip_tac >> gvs[] >>
   gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-    removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+    venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
   metis_tac[MEM_EL]
 QED
 
