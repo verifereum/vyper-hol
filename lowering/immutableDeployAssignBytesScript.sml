@@ -120,6 +120,22 @@ Proof
   fs[]
 QED
 
+Theorem tuple_mask_length[local]:
+  !tvs vs. LENGTH (immutable_tuple_mask tvs vs) = type_memory_size_list tvs
+Proof
+  Induct >> gen_tac >> Cases_on `vs` >>
+  simp[Once immutable_value_mask_def, type_memory_size_def]
+QED
+
+Theorem fields_mask_length[local]:
+  !fts vs. LENGTH (immutable_fields_mask fts vs) = type_memory_size_fields fts
+Proof
+  Induct >> gen_tac >> simp[Once immutable_value_mask_def, type_memory_size_def] >>
+  PairCases_on `h` >> Cases_on `vs` >>
+  simp[Once immutable_value_mask_def, type_memory_size_def] >>
+  PairCases_on `h` >> simp[]
+QED
+
 Theorem immutable_memory_bytes_mutual:
   (!tv v off mem.
     well_formed_type_value tv /\ immutable_value_admissible tv v /\
@@ -170,9 +186,7 @@ Proof
 QED
 
 Resume immutable_memory_bytes_mutual[tuple_value]:
-  `!tvs vs. LENGTH (immutable_tuple_mask tvs vs) = type_memory_size_list tvs` by
-    (Induct >> gen_tac >> Cases_on `vs` >>
-     simp[Once immutable_value_mask_def, type_memory_size_def]) >>
+  assume_tac tuple_mask_length >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `v` >>
   simp[immutable_value_admissible_def] >> Cases_on `a` >>
   simp[immutable_value_admissible_def, val_in_memory_def,
@@ -184,11 +198,7 @@ Resume immutable_memory_bytes_mutual[tuple_value]:
 QED
 
 Resume immutable_memory_bytes_mutual[struct_value]:
-  `!fts vs. LENGTH (immutable_fields_mask fts vs) = type_memory_size_fields fts` by
-    (Induct >> gen_tac >> simp[Once immutable_value_mask_def, type_memory_size_def] >>
-     PairCases_on `h` >> Cases_on `vs` >>
-     simp[Once immutable_value_mask_def, type_memory_size_def] >>
-     PairCases_on `h` >> simp[]) >>
+  assume_tac fields_mask_length >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `v` >>
   simp[immutable_value_admissible_def, val_in_memory_def,
        immutable_value_bytes_rel_def, immutable_value_mask_def,
@@ -199,9 +209,7 @@ Resume immutable_memory_bytes_mutual[struct_value]:
 QED
 
 Resume immutable_memory_bytes_mutual[tuple_cons]:
-  `!tvs vs. LENGTH (immutable_tuple_mask tvs vs) = type_memory_size_list tvs` by
-    (Induct >> gen_tac >> Cases_on `vs` >>
-     simp[Once immutable_value_mask_def, type_memory_size_def]) >>
+  assume_tac tuple_mask_length >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `vs` >>
   simp[immutable_value_admissible_def, val_in_memory_def,
        immutable_value_mask_def, encode_immutable_value_def, type_memory_size_def] >>
@@ -213,11 +221,7 @@ Resume immutable_memory_bytes_mutual[tuple_cons]:
   gvs[immutable_value_bytes_rel_def]
 QED
 Resume immutable_memory_bytes_mutual[fields_cons]:
-  `!fts vs. LENGTH (immutable_fields_mask fts vs) = type_memory_size_fields fts` by
-    (Induct >> gen_tac >> simp[Once immutable_value_mask_def, type_memory_size_def] >>
-     PairCases_on `h` >> Cases_on `vs` >>
-     simp[Once immutable_value_mask_def, type_memory_size_def] >>
-     PairCases_on `h` >> simp[]) >>
+  assume_tac fields_mask_length >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> Cases_on `vs` >>
   simp[immutable_value_admissible_def] >> PairCases_on `h` >>
   simp[immutable_value_admissible_def, val_in_memory_def,
