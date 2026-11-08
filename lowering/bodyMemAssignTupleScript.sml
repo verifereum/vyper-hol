@@ -20,7 +20,20 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `lowered_value_type cenv e = expr_type e`
   >- suspend "same" >>
-  drule_all body_assign_tuple_widened_call_mem >> simp[]
+  Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                                FLOOKUP env.var_types id = SOME ty /\
+                                0 < type_memory_bytes cenv ty) \/
+                       (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                               supported_scalar_target tops nsid) \/
+                       (?nsid fld fty.
+                          g = BaseTarget
+                                (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                          supported_storage_field_write tops nsid fld /\
+                          type_place_target env
+                            (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                            SOME (Type fty) /\ is_word_type fty)) gs`
+  >- (drule_all body_assign_tuple_widened_call_mem >> simp[]) >>
+  drule_all body_assign_tuple_widened_other_mem >> simp[]
 QED
 
 Resume body_assign_tuple_mem_case[same]:
