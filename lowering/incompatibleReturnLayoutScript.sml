@@ -134,8 +134,9 @@ Proof
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   gvs[lowered_value_type_def] >>
-  conj_tac >- (strip_tac >> metis_tac[typedMemoryCopyTheory.typed_copy_word_widening]) >>
-  strip_tac >>
+  `~is_word_type ann` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_word_widening] >>
+  simp[] >> strip_tac >>
   `is_bytestring_type (ce.ce_func_return_type (nsid_to_string fid))` by
     metis_tac[typedMemoryCopyTheory.typed_copy_bytestring_source] >>
   gvs[type_widens_to_def]
