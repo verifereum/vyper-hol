@@ -3,7 +3,7 @@ Theory mmLocalScanProofs
 Ancestors
   mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner
-  venomWf stateEquiv rich_list
+  venomWf stateEquiv rich_list mmTransform mmScan list
 Libs
   wordsLib finite_mapLib
 
@@ -44,6 +44,62 @@ Proof
   simp[mm_local_phase_def, transform_block_memzero_supply_def,
        transform_block_mode_supply_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
+QED
+
+Theorem mm_local_deleted_unpinned[local]:
+  MEM id (nop_ids_of_group dfg mode insts cg) ==>
+  ?rep. rep_of_group insts cg = SOME (rep,cg) /\
+        rep_pin_id dfg mode rep cg <> SOME id
+Proof
+  simp[nop_ids_of_group_def, rep_of_group_def] >>
+  Cases_on `REVERSE (sort_ids_by_block insts cg.cg_inst_ids)` >>
+  simp[MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem mm_local_deleted_load_users[local]:
+  dfg_get_inst_by_id dfg id = SOME load /\
+  load.inst_opcode IN {MLOAD; CALLDATALOAD; DLOAD} /\
+  load.inst_outputs = [v] /\
+  MEM id (nop_ids_of_group dfg mode insts cg) ==>
+  EVERY (\u. MEM u.inst_id cg.cg_inst_ids) (dfg_get_uses dfg v)
+Proof
+  simp[nop_ids_of_group_def] >>
+  Cases_on `REVERSE (sort_ids_by_block insts cg.cg_inst_ids)` >>
+  simp[MEM_FILTER, load_safe_to_nop_def] >> strip_tac >> gvs[]
+QED
+
+Theorem mm_local_deleted_load_certificate[local]:
+  dfg_get_inst_by_id dfg id = SOME load /\
+  load.inst_opcode IN {MLOAD; CALLDATALOAD; DLOAD} /\
+  load.inst_outputs = [v] /\
+  MEM id (nop_ids_of_groups dfg mode insts groups) ==>
+  ?cg rep. MEM cg groups /\
+    rep_of_group insts cg = SOME (rep,cg) /\
+    rep_pin_id dfg mode rep cg <> SOME id /\
+    EVERY (\u. MEM u.inst_id cg.cg_inst_ids) (dfg_get_uses dfg v)
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM id (nop_ids_of_groups _ _ _ _)` mp_tac >>
+  simp[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >> strip_tac >> gvs[] >>
+  drule mm_local_deleted_load_users >> simp[] >> strip_tac >>
+  drule mm_local_deleted_unpinned >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem mm_local_load_protected[local]:
+  dfg_get_inst_by_id dfg id = SOME load /\
+  load.inst_opcode IN {MLOAD; CALLDATALOAD; DLOAD} /\
+  load.inst_outputs = [v] /\
+  (!cg. MEM cg groups ==>
+    (?rep. rep_of_group insts cg = SOME (rep,cg) /\
+           rep_pin_id dfg mode rep cg = SOME id) \/
+    (?u. MEM u (dfg_get_uses dfg v) /\ ~MEM u.inst_id cg.cg_inst_ids)) ==>
+  ~MEM id (nop_ids_of_groups dfg mode insts groups)
+Proof
+  strip_tac >> strip_tac >>
+  drule_all mm_local_deleted_load_certificate >> strip_tac >>
+  qpat_x_assum `!cg. MEM cg groups ==> _` drule >>
+  strip_tac >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
 Definition mm_local_zero_fn_def:
