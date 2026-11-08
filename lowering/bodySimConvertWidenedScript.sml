@@ -1,6 +1,6 @@
 (*
- * HELD for the posts-interface (post_value_type) wave: the conversion of
- * an internal call whose type widens its callee's return type.
+ * The conversion of an internal call whose type widens its callee's
+ * return type.
  *
  * body_convert_widened_call_arg, the case bodySimExprCases'
  * body_type_builtin_case splits off for compile_type_builtin_case.
