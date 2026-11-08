@@ -81,6 +81,35 @@ Definition fn_sim_below_def:
                                        (run_blocks m C' fn' t)
 End
 
+(* The big-step semantics stays inside frame_reachable: a block run from
+   a reachable instruction ends, on OK, at a reachable block boundary, and
+   on internal return at a reachable return instruction; a function run
+   from a reachable boundary returns from a reachable return instruction.
+   Pass proofs use it to know their INVOKE sites and block ends reachable. *)
+Theorem frame_reachable_walk:
+  (!fuel C bb s vs stk PG G tn fn r.
+     frame_reachable vs C stk PG G tn fn
+       (EL s.vs_inst_idx bb.bb_instructions) s /\
+     MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
+     s.vs_inst_idx < LENGTH bb.bb_instructions /\
+     exec_block fuel C bb s = r ==>
+     (!s'. r = OK s' ==> ?G' tn'. block_reach vs C stk PG G' tn' fn s') /\
+     (!v se. r = IntRet v se ==>
+        ?G' tn' rinst sr fuel'.
+          frame_reachable vs C stk PG G' tn' fn rinst sr /\
+          active_inst fn rinst sr /\
+          step_inst fuel' C rinst sr = IntRet v se)) /\
+  (!fuel C fn s vs stk PG G tn v se.
+     block_reach vs C stk PG G tn fn s /\
+     run_blocks fuel C fn s = IntRet v se ==>
+     ?G' tn' rinst sr fuel'.
+       frame_reachable vs C stk PG G' tn' fn rinst sr /\
+       active_inst fn rinst sr /\
+       step_inst fuel' C rinst sr = IntRet v se)
+Proof
+  cheat
+QED
+
 (* A block that stops the run (halted OK, Halt, Abort, IntRet) stops both
    function runs alike. *)
 Theorem run_blocks_stop_sim[local]:
