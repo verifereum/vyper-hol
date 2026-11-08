@@ -32,6 +32,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixEntrySeparation
   ctorDeployMemoryRunPtrPrefixEntryBase ctorDeployMemoryRunPtrPrefixEntryAmbient
   ctorDeployLoweringEntryRoom ctorDeployLoweringEntryFmp
+  ctorDeployLoweringEntryBodyResources
   ctorDeployMemoryRunPtrPrefixEntrySemantic ctorDeployMemoryRunPtrPrefixEntryImmutable
   valueEncoding codegenRel
 
@@ -620,10 +621,22 @@ Proof
     (`local_ptrs_rel func ce es0.scopes actual` by simp[] >>
      drule_all deploy_ptr_entry_actual_state_rel >> simp[]) >>
 
+  `!p. p < imm_len tops ==>
+     mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 []` by
+    (rpt strip_tac >>
+     qpat_x_assum `!a. a < imm_len tops ==> read_byte _ _ = _` drule >>
+     disch_tac >> irule listTheory.LIST_EQ >>
+     simp[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
+     rpt strip_tac >>
+     rewrite_tac[GSYM listTheory.EL] >>
+     simp[valueEncodingProofsTheory.EL_mem_bytes_at] >> fs[read_byte_def]) >>
+  `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
+     es0 actual` by
+    (drule (cj 2 deploy_ctor_entry_immutable_resources) >>
+     disch_then irule >> fs[allocas_from_def] >> metis_tac[]) >>
   `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
      (es0 with outcomes := SOME vs.vs_outcomes) actual` by
-    ((`!id b sz. local_region ce es0.scopes actual id b sz ==> imm_len tops <= b` by metis_tac[]) >>
-     drule_all prefix_entry_source_immutable_separation >> simp[]) >>
+    fs[immutable_alloca_sep_def] >>
   `immutable_base_zero ce actual` by
     (drule_all prefix_entry_immutable_base >> simp[]) >>
   `alloca_room unit.cu_context func actual` by
