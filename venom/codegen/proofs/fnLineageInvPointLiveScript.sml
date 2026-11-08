@@ -37,8 +37,8 @@ Resume analyzed_output_live_point_to_after[different_blocks]:
      metis_tac[APPEND_FRONT_LAST]) >>
   gvs[] >>
   `is_fn_path fn (SNOC p (d::pre))` by simp[SNOC_APPEND] >>
-  drule removeUnusedSsaProofsTheory.is_fn_path_init >> strip_tac >>
-  drule removeUnusedSsaProofsTheory.is_fn_path_last_edge >> simp[] >> strip_tac >>
+  drule venomWfPropsTheory.is_fn_path_init >> strip_tac >>
+  drule venomWfPropsTheory.is_fn_path_last_edge >> simp[] >> strip_tac >>
   `EVERY (\inst. ~MEM v (inst_defs inst)) pb.bb_instructions` by
     (simp[EVERY_EL, inst_defs_def] >> rpt strip_tac >>
      `p = d` by metis_tac[ssa_output_position_unique] >> gvs[]) >>
@@ -162,7 +162,7 @@ Resume analyzed_offset_output_live_after[ordinary_use]:
      metis_tac[livenessTransferProofsTheory.collect_phis_mem, EL_MEM]) >>
   `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label u)` by
     (`MEM v (inst_uses use)` by
-       (irule removeUnusedSsaProofsTheory.operand_var_in_inst_uses >> simp[]) >>
+       (irule venomWfPropsTheory.operand_var_in_inst_uses >> simp[]) >>
      drule livenessAnalysisPropsTheory.live_vars_at_uses >>
      disch_then (qspecl_then [`ub.bb_label`, `ub`, `u`, `v`] mp_tac) >> simp[]) >>
   irule analyzed_output_live_point_to_after >> simp[] >>

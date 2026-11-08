@@ -10,6 +10,8 @@
  *)
 Theory dftGasOracleInv
 Ancestors
+  dftGasInvMemoryRanges dftGasInvForwardActive dftGasInvCrossingProbe
+  dftGasInvPairedHistory
   dftGasOracleDefs dftRunRel dftScheduleOrder dftDefs o1PassContract
   unitMemInv unitShapeDefs contextCodegenRel venomExecSemantics
 
@@ -27,5 +29,24 @@ Theorem dft_ev_lowered_inv:
   !p d fn inst t. ev_reachable orc s C' p d fn inst t ==>
     lowered_mem_fact eom C' fn inst t
 Proof
-  cheat
+  rpt strip_tac >> rename1 `ev_reachable orc s C' p d fn' inst t` >>
+  `active_inst fn' inst t` by
+    (qpat_x_assum `ev_reachable orc s C' p d fn' inst t` mp_tac >>
+     rewrite_tac[Once ev_reachable_cases] >> metis_tac[]) >>
+  Cases_on `inv_memory_observation inst.inst_opcode`
+  >- (drule_all inv_reachable_memory_ranges >> strip_tac >>
+      `lowered_mem_fact eom C fn inst sS` by metis_tac[] >>
+      `active_inst fn inst sS` by
+        (qpat_x_assum `ev_reachable orc s C p d fn inst sS` mp_tac >>
+         rewrite_tac[Once ev_reachable_cases] >> metis_tac[]) >>
+      qpat_x_assum `lowered_mem_fact eom C fn inst sS` mp_tac >>
+      simp[lowered_mem_fact_def, lowered_mem_ok_def] >> strip_tac
+      >- (simp[lowered_mem_fact_def, lowered_mem_ok_def] >> disj1_tac >>
+          irule inv_forward_active >> metis_tac[]) >>
+      simp[lowered_mem_fact_def, lowered_mem_ok_def]) >>
+  drule inv_paired_history >> disch_then (qspec_then `C` mp_tac) >>
+  simp[] >> strip_tac >>
+  `inst_shape_ok inst` by (irule inv_target_active_shape >> metis_tac[]) >>
+  `inst_mem_ranges inst t = []` by metis_tac[inv_memory_observation_covers_ranges] >>
+  simp[lowered_mem_fact_def, lowered_mem_ok_def]
 QED

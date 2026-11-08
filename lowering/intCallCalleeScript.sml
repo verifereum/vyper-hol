@@ -59,7 +59,7 @@ Theory intCallCallee
 Ancestors
   list rich_list finite_map
   fragExec localPtrsProps exprLoweringProps
-  compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv
+  compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv loweringStateRelDefs
   valueEncoding valueEncodingProps venomMemDefs
   venomExecSemantics venomInst venomState venomMemProps vyperState
 
@@ -481,7 +481,7 @@ Theorem regions_disjoint_sym[local]:
   !b1 s1 b2 s2.
     regions_disjoint b1 s1 b2 s2 <=> regions_disjoint b2 s2 b1 s1
 Proof
-  rw[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+  rw[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
 QED
 
 (* A live local's region lies below the frontier. *)
@@ -717,7 +717,7 @@ Theorem caller_buffer_backed[local]:
 Proof
   rpt strip_tac >> simp[local_backed_def] >> disj2_tac >>
   rpt strip_tac >> first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Theorem materialize_memory_bind[local]:
@@ -746,7 +746,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!n b size. local_region _ _ _ _ _ _ ==> _` drule >>
   strip_tac
-  >- simp[compileEnvTheory.regions_disjoint_def] >>
+  >- simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!n1 n2 b1 sz1 b2 sz2. _` irule >> metis_tac[]
 QED
 
@@ -2322,11 +2322,11 @@ Resume internal_prologue_run[separation]:
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid b sz. _` drule >>
-      simp[compileEnvTheory.regions_disjoint_def]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   rpt strip_tac >>
   `local_region cenv2 [env] t' id b sz` by fs[local_region_def] >>
   qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >>
-  strip_tac >- simp[compileEnvTheory.regions_disjoint_def] >>
+  strip_tac >- simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!n b sz. mr n = _ <=> _` (drule o iffLR) >>
   strip_tac >> gvs[] >>
   qpat_x_assum `!i po psz name tv iv io. _` irule >>

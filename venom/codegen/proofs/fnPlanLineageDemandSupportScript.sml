@@ -1,6 +1,6 @@
 Theory fnPlanLineageDemandSupport
 Ancestors
-  livenessBlockProofs livenessTransferProofs venomExecProps venomExecProofs passSharedDefs finite_map indexedLists list rich_list
+  livenessBlockProofs livenessTransferProofs venomWfProps venomExecProps venomExecProofs passSharedDefs finite_map indexedLists list rich_list
 Libs
   venomInstTheory venomWfTheory livenessDefsTheory pairTheory
 
@@ -196,14 +196,6 @@ Proof
   qexistsl_tac [`db`, `di`] >> simp[] >> strip_tac >> gvs[] >>
   `k <> i` by metis_tac[] >>
   qexists_tac `k` >> simp[]
-QED
-
-Theorem phi_well_formed_uses_pairs:
-  !ops. phi_well_formed ops ==>
-    operand_vars ops = MAP SND (phi_pairs ops)
-Proof
-  Induct_on `ops` using phi_well_formed_ind >>
-  simp[phi_well_formed_def, operand_vars_def, operand_var_def, phi_pairs_def]
 QED
 
 Theorem collect_phis_all_prefix:

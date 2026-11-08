@@ -5,7 +5,7 @@ Ancestors
   livenessConvergenceProofs livenessDefs livenessBlockProofs
   codegenReadyCompute pred_set livenessProofs venomInst basePtrProofs finite_map
   fnFrameStepsPhi
-  removeUnusedSsaProofs
+  removeUnusedSsaProofs venomWfProps
 
 Theorem ready_output_location_unique:
   !fn db k ub j v.

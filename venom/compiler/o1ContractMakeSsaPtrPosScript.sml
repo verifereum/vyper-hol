@@ -7,8 +7,8 @@
  *)
 Theory o1ContractMakeSsaPtrPos
 Ancestors
-  makeSsaCurrentLockstep makeSsaCurrentDefs makeSsaCurrentProps
-  makeSsaCurrentCfg makeSsaCurrentRevertForward makeSsaDefs o1FrameLockstep
+  makeSsaCurrentLockstep makeSsaDefs makeSsaCurrentProps
+  makeSsaCurrentCfg makeSsaCurrentRevertForward o1FrameLockstep
   ptrDiscipline contextCodegenRel o1PassContract venomWf venomInst
   o1ContractMakeSsaSrcOpcodes cfgTransform venomExecProofs makeSsaCurrentInduct
 
@@ -370,12 +370,6 @@ Proof
      EL (PRE (LENGTH bb'.bb_instructions)) bb'.bb_instructions` by
     (irule listTheory.LAST_EL >> Cases_on `bb'.bb_instructions` >> gvs[]) >>
   metis_tac[]
-QED
-
-Theorem make_ssa_pos_suc[local]:
-  make_ssa_pos fn fn' l (SUC k) = SUC (make_ssa_pos fn fn' l k)
-Proof
-  simp[make_ssa_pos_def]
 QED
 
 (* A paired state of a MakeSSA lockstep sits at make_ssa_pos in the block

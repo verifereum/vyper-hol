@@ -10,9 +10,9 @@ Theorem tuple_in_memory_from_elements:
         (base + SUM (MAP type_memory_size (TAKE i tvs))) mem) ==>
     tuple_in_memory vals tvs base mem
 Proof
-  Induct >> Cases_on `vals` >> simp[valueEncodingTheory.val_in_memory_def] >>
+  Induct >> Cases_on `vals` >> simp[valueEncodingDefsTheory.val_in_memory_def] >>
   rpt gen_tac >> strip_tac >>
-  simp[Once valueEncodingTheory.val_in_memory_def] >>
+  simp[Once valueEncodingDefsTheory.val_in_memory_def] >>
   conj_tac
   >- (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   first_x_assum irule >> simp[] >>

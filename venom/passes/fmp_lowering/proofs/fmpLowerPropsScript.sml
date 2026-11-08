@@ -2,7 +2,37 @@
 
 Theory fmpLowerProps
 Ancestors
-  fmpLowerDefs fmpAnalysisProps fmpWfProps
+  fmpLowerDefs fmpAnalysisProps fmpWfProps venomExecProps
+
+Theorem MEM_fmp_plan_to_alist:
+  MEM (p,target) (fmp_plan_to_alist fn plan) <=>
+    FLOOKUP plan p = SOME target /\
+    EXISTS (\bb. bb.bb_label = FST p /\ SND p < LENGTH bb.bb_instructions)
+      fn.fn_blocks
+Proof
+  PairCases_on `p` >>
+  simp[fmp_plan_to_alist_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+       listTheory.MEM_GENLIST, listTheory.EXISTS_MEM, PULL_EXISTS] >>
+  eq_tac >> rw[]
+  >- (Cases_on `FLOOKUP plan (bb.bb_label,k)` >> gvs[] >> metis_tac[])
+  >> qexistsl [`bb`, `p1`] >> simp[]
+QED
+
+(* Under the lowering's input check the walk lists exactly the plan. *)
+Theorem MEM_fmp_plan_to_alist_FLOOKUP:
+  fmp_reclaim_input fn plan ==>
+  (MEM (p,target) (fmp_plan_to_alist fn plan) <=> FLOOKUP plan p = SOME target)
+Proof
+  rw[MEM_fmp_plan_to_alist, fmp_reclaim_input_def] >> eq_tac >> rw[] >>
+  first_x_assum drule >>
+  simp[fmpReclaimDefsTheory.fmp_point_well_located_def,
+       listTheory.EXISTS_MEM] >>
+  Cases_on `lookup_block (FST p) fn.fn_blocks` >> simp[] >>
+  strip_tac >> rename1 `lookup_block _ _ = SOME bb` >>
+  qexists `bb` >>
+  metis_tac[venomExecPropsTheory.lookup_block_MEM,
+            venomExecPropsTheory.lookup_block_label]
+QED
 
 Theorem fmp_lower_inst_no_raw:
   fmp_lower_inst infos ctx runner s inst = SOME (out,s') ==>

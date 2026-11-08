@@ -11,7 +11,7 @@ Ancestors
   fnLineageInvSupport fnLineageInvOwnerOrigin fnLineageInvEdgeFacts
   livenessConvergenceProofs livenessBlockProofs livenessDefs
   fnFrameStepsPhi
-  removeUnusedProofs fnPlanLineageLiveness
+  removeUnusedProofs fnPlanLineageLiveness venomWfProps
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
     dfs_aux_call lv dfg cfg fn ps0 wl visited pg ==>

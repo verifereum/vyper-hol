@@ -6,7 +6,7 @@ Ancestors
   bodyCopyMemory bodyMemoryDefs stmtSimDeclMem localPtrsProps stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes exprOperandVar freshWrites
   valueTypingMemoryProps vyperTyping exprSimDefs stmtSimDefs venomState
-  valueEncoding valueEncodingProofs intCallResult compileEnv exprLoweringProps
+  valueEncoding valueEncodingProofs intCallResult compileEnv loweringStateRelDefs exprLoweringProps
   loweringSlice exprLowering exprSimBufferStore valueEncodingProofs
   words venomExecSemantics stmtLowering context fragExec fragExecMem
   allocaHistoryFragment list rich_list emitHelper emitHelperProps venomInst

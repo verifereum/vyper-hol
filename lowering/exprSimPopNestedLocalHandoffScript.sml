@@ -2,7 +2,7 @@ Theory exprSimPopNestedLocalHandoff
 Ancestors
   exprSimPopNestedLocalSource exprSimSource gasSummary targetPlaceSim
   stmtSimForArrayFrame vyperReadOnlyTargets vyperTypeContract vyperTypeSystem
-  loweringPosts vyperState exprSimProps exprLoweringProps compileEnv
+  loweringPosts vyperState exprSimProps exprLoweringProps compileEnv loweringStateRelDefs
   exprSimAttributeFields valueEncoding finite_map words exprSimHypsDefs
   vyperTypeInvariants
 

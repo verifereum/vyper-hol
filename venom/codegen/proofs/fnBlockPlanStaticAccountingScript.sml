@@ -2,7 +2,7 @@ Theory fnBlockPlanStaticAccounting
 Ancestors
   fnBlockPlanStaticBalance fnBlockPlanStaticBodyPrefix list venomWf
   asmIR stackPlanGen venomInst removeUnusedSsaProofs livenessTransferProofs
-  rich_list fnPlanPrefix
+  rich_list fnPlanPrefix venomWfProps
 
 Definition instruction_correction_def:
   instruction_correction inst =

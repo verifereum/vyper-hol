@@ -2,7 +2,7 @@ Theory fnPlanLineageEntryWitness
 Ancestors
   venomExecProofs venomWf list relation
   simplifyCfgPhiRepair removeUnusedSsaProofs
-  livenessAnalysisProps codegenReadyCompute cfgAnalysisProps venomInst
+  livenessAnalysisProps codegenReadyCompute cfgAnalysisProps venomInst venomWfProps
 
 Theorem is_fn_path_first_entry:
   !path lbl.

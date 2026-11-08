@@ -3,7 +3,7 @@ Ancestors
   abiEncoderMemberSourceAdapter abiEncoderChildContext abiEncoderAddressReach abiEncoderChildInputs abiEncoderChildCode abiEncoderCorrect
   abiEncoderChildFrames abiEncoderAppend abiEncoderCounters abiEncoder abiDecoderEffect
   abiDecoderArrayInitExec abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract
-  abiDecoderLoop fragExec emitHelperProps compileEnv valueEncoding venomState words list
+  abiDecoderLoop fragExec emitHelperProps compileEnv valueEncoding valueEncodingDefs venomState words list
   arithmetic abiEncoderAdmissible abiEncoderCorrectLeaves abiEncoderLeafCode
   abiDecoderAllocation contractABI abiEncoderInput abiEncoderMemory abiStaticAggregateProps
   abiStaticSparseProps valueEncodingProps vyperABI rich_list

@@ -140,8 +140,9 @@ Proof
   strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_decode_backedge_insts_def,
        listTheory.EL_APPEND_EQN] >>
-  simp[step_inst_def, step_inst_base_opcode_eqs, mk_inst_def, is_terminator_def,
-       jump_to_def, mstore_def, update_var_def]
+  simp[step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, is_terminator_def] >>
+  simp[jump_to_def, mstore_def, update_var_def]
 QED
 
 Theorem abi_decode_header_observations:
@@ -484,3 +485,247 @@ QED
    bytes/count; metadata compatibility and nonwrap/capacity obligations for
    each translated child remain required. These conditional shell results
    do not discharge any of those recursive obligations. *)
+
+(* Position-aware header descriptions.  The optional address register follows
+   the index register; all later outputs shift by one in that branch. *)
+Definition abi_decode_position_header_delta_def:
+  abi_decode_position_header_delta base_op = if base_op = Lit 0w then 0 else 1
+End
+
+Definition abi_decode_position_header_insts_def:
+  abi_decode_position_header_insts id ip src opc base_op first body_lbl exit =
+    let delta = abi_decode_position_header_delta base_op;
+        iv = STRING #"%" (toString first);
+        addr = STRING #"%" (toString (first + 1));
+        cv = STRING #"%" (toString (first + 1 + delta));
+        cmp = STRING #"%" (toString (first + 2 + delta));
+        done = STRING #"%" (toString (first + 3 + delta))
+    in
+      [mk_inst id MLOAD [ip] [iv]] ++
+      (if base_op = Lit 0w then [] else
+        [mk_inst (id+1) ADD [base_op;src] [addr]]) ++
+      [mk_inst (id+1+delta) opc
+         [if base_op = Lit 0w then src else Var addr] [cv];
+       mk_inst (id+2+delta) LT [Var iv;Var cv] [cmp];
+       mk_inst (id+3+delta) ISZERO [Var cmp] [done];
+       mk_inst (id+4+delta) JNZ [Var done;Label exit;Label body_lbl] []]
+End
+
+Definition abi_decode_position_header_state_def:
+  abi_decode_position_header_state base_op first B sb i ncount s =
+    let delta = abi_decode_position_header_delta base_op;
+        iv = STRING #"%" (toString first);
+        addr = STRING #"%" (toString (first + 1));
+        cv = STRING #"%" (toString (first + 1 + delta));
+        cmp = STRING #"%" (toString (first + 2 + delta));
+        done = STRING #"%" (toString (first + 3 + delta));
+        indexed = update_var iv (n2w i) s;
+        addressed = if base_op = Lit 0w then indexed else
+          update_var addr (n2w (B + sb)) indexed
+    in update_var done (bool_to_word (~(i < ncount)))
+         (update_var cmp (bool_to_word (i < ncount))
+           (update_var cv (n2w ncount) addressed))
+End
+
+Theorem abi_decode_position_header_length:
+  LENGTH (abi_decode_position_header_insts id ip src opc base_op first body_lbl exit) =
+    5 + abi_decode_position_header_delta base_op
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_position_header_insts_def, abi_decode_position_header_delta_def]
+QED
+
+Theorem abi_decode_position_header_zero:
+  abi_decode_position_header_insts id ip src opc (Lit 0w) first body_lbl exit =
+    abi_decode_header_insts id ip src opc
+      (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
+      (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3))) body_lbl exit /\
+  abi_decode_position_header_state (Lit 0w) first B sb i ncount s =
+    abi_decode_header_state
+      (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
+      (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3))) i ncount s
+Proof
+  simp[abi_decode_position_header_insts_def, abi_decode_position_header_state_def,
+       abi_decode_position_header_delta_def, abi_decode_header_insts_def,
+       abi_decode_header_state_def]
+QED
+
+Theorem abi_decode_position_header_observations:
+  abi_decode_footprint_frame fp s
+    (abi_decode_position_header_state base_op first B sb i ncount s) /\
+  mload p (abi_decode_position_header_state base_op first B sb i ncount s) = mload p s /\
+  abi_decode_load opc srcaddr
+    (abi_decode_position_header_state base_op first B sb i ncount s) =
+      abi_decode_load opc srcaddr s
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_position_header_state_def, abi_decode_footprint_frame_def,
+       abi_decode_load_def, abi_decode_source_def, mload_def, update_var_def]
+QED
+
+Theorem abi_decode_position_header_prefix:
+  abi_decode_source_opcode opc /\
+  src <> Var (STRING #"%" (toString first)) /\
+  base_op <> Var (STRING #"%" (toString first)) /\
+  eval_operand ip s = SOME p /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  mload (w2n p) s = n2w i /\
+  abi_decode_load opc (n2w (B+sb):bytes32) s = n2w ncount /\
+  i <= ncount /\ ncount < dimword(:256) ==>
+  run_inst_seq (TAKE (4 + abi_decode_position_header_delta base_op)
+    (abi_decode_position_header_insts id ip src opc base_op first body_lbl exit)) s =
+  OK (abi_decode_position_header_state base_op first B sb i ncount s)
+Proof
+  strip_tac >>
+  Cases_on `base_op = Lit 0w`
+  >- (`(n2w B : bytes32) = 0w` by gvs[eval_operand_def] >>
+      `n2w (B+sb) = (n2w sb : bytes32)` by
+        (rewrite_tac[GSYM wordsTheory.word_add_n2w] >> asm_rewrite_tac[wordsTheory.WORD_ADD_0]) >>
+      qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >>
+      asm_rewrite_tac[] >> disch_tac >>
+      simp[abi_decode_position_header_delta_def, abi_decode_position_header_zero] >>
+      irule abi_decode_header_prefix >>
+      simp[ASCIInumbersTheory.toString_11] >> metis_tac[]) >>
+  `eval_operand src (update_var (STRING #"%" (toString first)) (n2w i) s) = SOME (n2w sb)` by
+    (Cases_on `src` >> gvs[eval_operand_def, lookup_var_update_var]) >>
+  `eval_operand base_op (update_var (STRING #"%" (toString first)) (n2w i) s) = SOME (n2w B)` by
+    (Cases_on `base_op` >> gvs[eval_operand_def, lookup_var_update_var]) >>
+  `step_inst_base (mk_inst (id+2) opc
+      [Var (STRING #"%" (toString (first+1)))] [STRING #"%" (toString (first+2))])
+      (update_var (STRING #"%" (toString (first+1))) (n2w (B+sb))
+        (update_var (STRING #"%" (toString first)) (n2w i) s)) =
+    OK (update_var (STRING #"%" (toString (first+2))) (n2w ncount)
+      (update_var (STRING #"%" (toString (first+1))) (n2w (B+sb))
+        (update_var (STRING #"%" (toString first)) (n2w i) s)))` by
+    (drule abi_decode_read_step >>
+     disch_then (qspecl_then [`Var (STRING #"%" (toString (first+1)))`,
+       `update_var (STRING #"%" (toString (first+1))) (n2w (B+sb))
+          (update_var (STRING #"%" (toString first)) (n2w i) s)`,
+       `n2w (B+sb)`] mp_tac) >>
+     simp[eval_operand_def, lookup_var_update_var, abi_decode_load_update]) >>
+  qpat_x_assum `step_inst_base _ _ = _`
+    (assume_tac o REWRITE_RULE [mk_inst_def]) >>
+  simp[abi_decode_position_header_delta_def, abi_decode_position_header_insts_def,
+       run_inst_seq_def] >>
+  simp[Once step_inst_base_def, exec_read1_def, mk_inst_def] >>
+  simp[Once step_inst_base_def, exec_pure2_def, mk_inst_def, wordsTheory.word_add_n2w] >>
+  simp[SIMP_RULE (srw_ss()) [mk_inst_def] abi_decode_read_step,
+       eval_operand_def, lookup_var_update_var, abi_decode_load_update] >>
+  `i < dimword(:256)` by decide_tac >>
+  simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def,
+       lookup_var_update_var, ASCIInumbersTheory.toString_11, w2n_n2w] >>
+  simp[Once step_inst_base_def, exec_pure1_def, eval_operand_def,
+       lookup_var_update_var, abi_decode_position_header_state_def,
+       abi_decode_position_header_delta_def] >>
+  Cases_on `i < ncount` >> simp[bool_to_word_def]
+QED
+
+Theorem abi_decode_position_header_control:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  abi_decode_source_opcode opc /\
+  src <> Var (STRING #"%" (toString first)) /\
+  base_op <> Var (STRING #"%" (toString first)) /\
+  eval_operand ip s = SOME p /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand base_op s = SOME (n2w B) /\
+  mload (w2n p) s = n2w i /\
+  abi_decode_load opc (n2w (B+sb):bytes32) s = n2w ncount /\
+  i <= ncount /\ ncount < dimword(:256) ==>
+  exec_block fuel ctx
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_position_header_insts id ip src opc base_op first body_lbl exit_lbl|> s =
+  OK (jump_to (if i < ncount then body_lbl else exit_lbl)
+    (abi_decode_position_header_state base_op first B sb i ncount s))
+Proof
+  strip_tac >>
+  `opc <> INVOKE /\ ~is_terminator opc` by
+    gvs[abi_decode_source_opcode_def, is_terminator_def] >>
+  drule_all abi_decode_position_header_prefix >> strip_tac >>
+  qspecl_then [`TAKE (4 + abi_decode_position_header_delta base_op)
+      (abi_decode_position_header_insts id ip src opc base_op first body_lbl exit_lbl)`,
+    `s`, `fuel`, `ctx`,
+    `<|bb_label := hdr; bb_instructions :=
+      abi_decode_position_header_insts id ip src opc base_op first body_lbl exit_lbl|>`]
+    mp_tac exec_block_run_inst_seq >>
+  Cases_on `base_op = Lit 0w` >>
+  simp[abi_decode_position_header_insts_def, abi_decode_position_header_delta_def,
+       mk_inst_def, is_terminator_def, abi_decode_source_opcode_def] >>
+  strip_tac >> simp[] >>
+  simp[Once exec_block_def, get_instruction_def,
+       abi_decode_position_header_insts_def, abi_decode_position_header_delta_def] >>
+  qpat_x_assum `run_block_non_phis _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `!id exit body_lbl. _` kall_tac >>
+  simp[is_terminator_def] >>
+  simp[step_inst_def, Once step_inst_base_def, mk_inst_def] >>
+  simp[abi_decode_position_header_state_def, abi_decode_position_header_delta_def,
+       eval_operand_def, lookup_var_update_var] >>
+  Cases_on `i < ncount` >>
+  simp[bool_to_word_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, jump_to_def, is_terminator_def]
+QED
+
+Definition abi_decode_position_loop_ready_def:
+  abi_decode_position_loop_ready hdr ip src opc base_op B sb p ncount j s <=>
+    s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    eval_operand ip s = SOME p /\ eval_operand src s = SOME (n2w sb) /\
+    eval_operand base_op s = SOME (n2w B) /\
+    mload (w2n p) s = n2w j /\
+    abi_decode_load opc (n2w (B+sb):bytes32) s = n2w ncount /\ j <= ncount
+End
+
+Definition abi_decode_position_loop_cfg_def:
+  abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl id ip src opc base_op first <=>
+    hdr <> body_lbl /\ hdr <> exit_lbl /\ body_lbl <> exit_lbl /\
+    lookup_block hdr fn.fn_blocks = SOME
+      <|bb_label := hdr; bb_instructions :=
+        abi_decode_position_header_insts id ip src opc base_op first body_lbl exit_lbl|> /\
+    (?bb. lookup_block body_lbl fn.fn_blocks = SOME bb /\
+          phi_prefix_length bb.bb_instructions = 0) /\
+    (?bb. lookup_block exit_lbl fn.fn_blocks = SOME bb /\
+          phi_prefix_length bb.bb_instructions = 0)
+End
+
+Theorem abi_decode_position_ready_header_sim:
+  abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl id ip src opc base_op first /\
+  abi_decode_position_loop_ready hdr ip src opc base_op B sb p ncount j s /\
+  abi_decode_source_opcode opc /\
+  src <> Var (STRING #"%" (toString first)) /\
+  base_op <> Var (STRING #"%" (toString first)) /\
+  ncount < dimword(:256) ==>
+  abi_decode_sim ctx fn s
+    (jump_to (if j < ncount then body_lbl else exit_lbl)
+      (abi_decode_position_header_state base_op first B sb j ncount s))
+Proof
+  strip_tac >>
+  gvs[abi_decode_position_loop_cfg_def, abi_decode_position_loop_ready_def] >>
+  irule abi_decode_edge_sim >>
+  Cases_on `base_op = Lit 0w` >>
+  (simp[jump_to_def, abi_decode_position_header_state_def, update_var_def] >>
+   conj_tac
+   >- (gen_tac >> drule_all abi_decode_position_header_control >>
+       simp[jump_to_def, abi_decode_position_header_state_def, update_var_def]) >>
+   Cases_on `j < ncount` >> simp[])
+QED
+
+Theorem abi_decode_emitted_position_header:
+  emit_op MLOAD [ip] st0 = (iop,st1) /\
+  compile_abi_dec_addr base_op src st1 = (addr,st2) /\
+  emit_op opc [addr] st2 = (cop,st3) /\
+  emit_op LT [iop;cop] st3 = (test,st4) /\
+  emit_op ISZERO [test] st4 = (done_op,st5) /\
+  emit_inst JNZ [done_op;Label exit_lbl;Label body_lbl] [] st5 = ((),st6) ==>
+  iop = Var (STRING #"%" (toString st0.cs_next_var)) /\
+  st6.cs_current_insts = st0.cs_current_insts ++
+    abi_decode_position_header_insts st0.cs_next_id ip src opc base_op st0.cs_next_var
+      body_lbl exit_lbl /\
+  st6.cs_next_var = st0.cs_next_var + 4 + abi_decode_position_header_delta base_op /\
+  st6.cs_next_id = st0.cs_next_id + 5 + abi_decode_position_header_delta base_op /\
+  st6.cs_blocks = st0.cs_blocks /\ st6.cs_current_bb = st0.cs_current_bb
+Proof
+  Cases_on `base_op = Lit 0w` >>
+  simp[abiEncoderTheory.compile_abi_dec_addr_def, emit_op_def, emit_inst_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+       fresh_var_def, emit_def] >>
+  rpt strip_tac >>
+  gvs[abi_decode_position_header_insts_def, abi_decode_position_header_delta_def,
+      listTheory.APPEND_ASSOC]
+QED

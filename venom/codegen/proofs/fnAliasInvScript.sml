@@ -122,7 +122,7 @@ Proof
   `fn_reachable fn bb.bb_label` by
     metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze] >>
   `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
-    metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+    metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
   drule_all regional_canonical_body_layout >> strip_tac >>
   Cases_on `bb = HD fn.fn_blocks`
   >- (qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>

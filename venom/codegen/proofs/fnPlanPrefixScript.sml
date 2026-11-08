@@ -26,7 +26,7 @@ Theory fnPlanPrefix
 Ancestors
   callLayoutDefs fnLiveDefDom removeUnusedSsaProofs dominatorProofs dominatorAnalysisProps
   livenessDefs livenessProofs codegenReadyCompute venomExecProofs
-  stackPlanOps alist fnPlanLineageReorder genBlockSim stackPlanGen stackPlanTypes venomInst rich_list list arithmetic cfgAnalysisProps venomWf simplifyCfgDefs
+  stackPlanOps alist fnPlanLineageReorder genBlockSim stackPlanGen stackPlanTypes venomInst rich_list list arithmetic cfgAnalysisProps venomWf simplifyCfgDefs venomWfProps
 
 Definition generate_block_insts_prefix_def:
   generate_block_insts_prefix liveness dfg cfg fn bb_label is_halting

@@ -2,7 +2,7 @@ Theory fnBlockPlanStaticBodyPrefix
 Ancestors
   fnBlockPlanStaticRegion fnPlanPrefix genBlockSim stackPlanGen asmIR
   venomInst venomWf livenessProofs livenessTransferProofs livenessDefs dfgDefs
-  removeUnusedSsaProofs callLayoutDefs stackPlanTypes list rich_list arithmetic finite_map pred_set
+  removeUnusedSsaProofs callLayoutDefs stackPlanTypes list rich_list arithmetic finite_map pred_set venomWfProps
 
 Definition regional_body_lower_inv_def:
   regional_body_lower_inv lv dfg sb bb i ps <=>

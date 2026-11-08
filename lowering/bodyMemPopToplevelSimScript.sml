@@ -2,37 +2,11 @@ Theory bodyMemPopToplevelSim
 Ancestors
   bodyMemPopToplevelPath exprSimMemDefs exprSimPopStorage
   exprSimDefs exprSimProps loweringPosts exprSimLen exprSimTopLevelProps
-  exprSimHyps exprSimHypsDefs exprLoweringProps exprLowering compileEnv
+  exprSimHyps exprSimHypsDefs exprLoweringProps exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperStorageBackend vyperStorageLayoutSafety vyperStorage
   vyperState venomState venomExecSemantics venomInst accountsRelProps
   gasOutcome gasSummary fragGasMode fragGasPathMem
   list words finite_map fragExec
-
-Theorem pop_mem_storage_gas_obs[local]:
-  get_storage cx (es with gas_obs := g) tr = get_storage cx es tr /\
-  set_storage cx (es with gas_obs := g) tr X =
-    set_storage cx es tr X with gas_obs := g
-Proof
-  Cases_on `tr` >> simp[get_storage_def, set_storage_def]
-QED
-
-Theorem pop_mem_ssr_gas_obs[local]:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx (es with gas_obs := g) s
-Proof
-  strip_tac >> drule msg_gas_state_frame >>
-  disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `g`] mp_tac) >>
-  simp[NoAsms]
-QED
-
-Theorem pop_mem_storage_holds_gas_obs[local]:
-  storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w es s ==>
-  storage_holds cx tr t (PlaceR (StoragePlace tr' sl tvv)) w
-    (es with gas_obs := g) s
-Proof
-  rw[storage_holds_def, read_result_def, read_place_def] >>
-  qexistsl_tac [`tvt`, `v`] >> simp[len_rss_obs, pop_mem_storage_gas_obs]
-QED
 
 Theorem pop_mem_updated_state_rel_cursor:
   stmt_state_rel ctx func cenv cx es s /\
@@ -108,7 +82,7 @@ Proof
       qexistsl_tac [`INR (Error (RuntimeError "pop empty storage array"))`,
                     `es`, `Abort a t`] >>
       simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def,
-           expr_exit_def, LET_THM, pop_mem_storage_gas_obs]) >>
+           expr_exit_def, LET_THM, pop_storage_gas_obs]) >>
   suspend "positive"
 QED
 Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
@@ -148,7 +122,7 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
     (irule pop_storage_vv_post >> simp[] >>
      conj_tac
      >- (irule pop_mem_updated_state_rel_cursor >> metis_tac[]) >>
-     irule pop_mem_storage_holds_gas_obs >>
+     irule pop_storage_holds_gas_obs >>
      irule pop_mem_positive_holds_cursor >>
      simp[Abbr `elem`] >> conj_tac
      >- metis_tac[] >>
@@ -162,7 +136,7 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
        [(0,n2w (w2n (lookup_storage (n2w slot) (get_storage cx es tr)) - 1))]
        (get_storage cx es tr))`, `OK t`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, LET_THM,
-       pop_mem_storage_gas_obs, Abbr `post`] >>
+       pop_storage_gas_obs, Abbr `post`] >>
   conj_tac
   >- (simp[Abbr `elem`] >> AP_TERM_TAC >> AP_TERM_TAC >>
       once_rewrite_tac[arithmeticTheory.MULT_COMM] >> decide_tac) >>

@@ -2,7 +2,7 @@ Theory fnPlanLineagePath
 Ancestors
   fnPlanLineagePhiActivation fnPlanLineageLiveness fnPlanLineageDemandSupport stackPlanGen livenessDefs
   livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
-  removeUnusedSsaProofs codegenReadyCompute
+  removeUnusedSsaProofs codegenReadyCompute venomWfProps
 
 Theorem analyzed_ready_live_through_edge:
   !fn lbl bb pred pred_bb v.

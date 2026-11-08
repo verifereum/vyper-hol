@@ -1315,7 +1315,7 @@ Proof
   `MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
     metis_tac[lookup_block_MEM, listTheory.EL_MEM] >>
   `MEM inst (fn_insts fn)` by
-    (simp[fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+    (simp[fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
        listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
   drule_all regional_canonical_body_layout >> strip_tac >>
   `MEM inst (DROP (LENGTH (get_params bb.bb_instructions)) bb.bb_instructions)` by

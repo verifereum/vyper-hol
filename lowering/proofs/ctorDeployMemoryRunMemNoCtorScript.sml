@@ -81,16 +81,18 @@ Proof
   simp[Once mem_safe_block_def, Abbr `bb`, Abbr `st`, get_instruction_def,
        mem_safe_step_non_invoke, inst_dload_in_section_other,
        inst_mem_below_frontier_def, source_memory_read_ranges_def,
-       source_memory_write_ranges_def, step_inst_def, step_inst_base_def,
-       exec_alloca_def, eval_operand_def, update_var_def] >>
-  simp[is_terminator_def] >> conj_tac
+       source_memory_write_ranges_def, step_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_alloca_def, eval_operand_def, update_var_def, is_terminator_def] >> conj_tac
   >- (simp[Once mem_safe_block_def, get_instruction_def,
            mem_safe_step_non_invoke, inst_dload_in_section_other,
            inst_mem_below_frontier_def, source_memory_read_ranges_def,
-           source_memory_write_ranges_def, eval_operand_def, lookup_var_def] >>
-      simp[sized_source_write_range_def, eval_operand_def, lookup_var_def,
+           source_memory_write_ranges_def, eval_operand_def, lookup_var_def,
+           sized_source_write_range_def,
            wordsTheory.w2n_n2w, arithmeticTheory.MOD_LESS_EQ,
-           step_inst_def, step_inst_base_def] >>
+           step_inst_def] >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      simp[eval_operand_def, lookup_var_def] >>
       Cases_on `FLOOKUP s.vs_labels "runtime_begin"` >>
       simp[finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def] >>
       `s.vs_alloca_next MOD dimword (:256) <= s.vs_alloca_next` by
@@ -105,12 +107,16 @@ Proof
            source_memory_write_ranges_def, memory_range_of_operands_def,
            eval_operand_def, lookup_var_def,
            finite_mapTheory.FLOOKUP_UPDATE, wordsTheory.w2n_n2w,
-           step_inst_def, step_inst_base_def]) >>
-  simp[Once exec_block_def, get_instruction_def,
-       step_inst_def, step_inst_base_def, exec_alloca_def,
-       eval_operand_def, update_var_def, is_terminator_def] >>
-  simp[Once exec_block_def, get_instruction_def,
-       step_inst_def, step_inst_base_def, eval_operand_def, lookup_var_def,
+           step_inst_def] >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      simp[eval_operand_def, lookup_var_def,
+           finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def]) >>
+  simp[Once exec_block_def, get_instruction_def, step_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_alloca_def, eval_operand_def, update_var_def, is_terminator_def] >>
+  simp[Once exec_block_def, get_instruction_def, step_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[eval_operand_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def] >>
   Cases_on `FLOOKUP s.vs_labels "runtime_begin"` >> simp[] >>
   qmatch_goalsub_abbrev_tac `write_memory_with_expansion off bytes ast` >>
@@ -118,7 +124,8 @@ Proof
   qmatch_goalsub_abbrev_tac `ast with <|vs_memory := mem; vs_inst_idx := 2|>` >>
   simp[Abbr `ast`, Once run_block_non_phis_def, get_instruction_def,
        step_inst_non_invoke] >>
-  simp[step_inst_base_def, eval_operand_def, lookup_var_def,
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[eval_operand_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE, is_terminator_def]
 QED
 

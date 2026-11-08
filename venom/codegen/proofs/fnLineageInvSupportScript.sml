@@ -1,6 +1,6 @@
 Theory fnLineageInvSupport
 Ancestors
-  fnLineageInvBoundary fnPlanLineageDemandSupport fnPlanLineagePhiMaps phiBlock fnLineageInvPhi fnPlanLineagePhiClasses cfgNormBase fnPlanLineagePhiActivation venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf
+  fnLineageInvBoundary fnPlanLineageDemandSupport fnPlanLineagePhiMaps phiBlock fnLineageInvPhi fnPlanLineagePhiClasses cfgNormBase fnPlanLineagePhiActivation venomExecProps rich_list fnPlanLineageEdge fnPlanLineageLiveness planWfMarked fnPlanPrefix fnPlanLineageInventory fnPlanLineageSuffix fnPlanLineageCallers fnPlanLineagePath fnPlanLineageSetup fnPlanLineageDemand livenessProofs cfgAnalysisProps venomWf venomWfProps
   stackPlanTypes stackModel stackPlanGen asmIR venomInst passSharedDefs codegenReadyCompute unitShapeDefs list pred_set
 
 Theorem inst_uses_compute_operands_nonlog:
@@ -1406,7 +1406,7 @@ Proof
  rpt gen_tac >> strip_tac >>
  `wf_function fn` by gvs[codegen_ready_fn_def] >>
  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
-   metis_tac[removeUnusedSsaProofsTheory.fn_reachable_in_cfg_dfs_pre] >>
+   metis_tac[venomWfPropsTheory.fn_reachable_in_cfg_dfs_pre] >>
  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
  qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
  `!k. k < j ==> EL k bb.bb_instructions = EL k (collect_phis bb.bb_instructions)` by

@@ -2,7 +2,7 @@ Theory fnAliasInvBody
 Ancestors
   fnAliasStep fnBlockPlanStatic fnBlockPlanStaticBodyPrefix
   venomExecProps venomExecSemantics venomWf venomInst stackPlanGen livenessTransferProofs
-  removeUnusedSsaProofs list rich_list
+  removeUnusedSsaProofs list rich_list venomWfProps
 
 (* The lower invariant discharges the static premises of alias transport,
    including the pending inventory at a final jump. *)

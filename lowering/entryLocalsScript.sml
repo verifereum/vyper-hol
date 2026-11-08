@@ -35,7 +35,7 @@
 Theory entryLocals
 Ancestors
   list finite_map
-  compileEnv compileVyper moduleLowering context abiEncoder emitHelper
+  compileEnv loweringStateRelDefs compileVyper moduleLowering context abiEncoder emitHelper
   exprLoweringProps loweringHalt intCallCallee
 Libs
   monadsyntax
@@ -59,12 +59,12 @@ Proof
 QED
 
 Theorem compile_abi_decode_to_buf_next_var[local]:
-  !dst src opc hi info st x st'.
-    compile_abi_decode_to_buf dst src opc hi info st = (x, st') ==>
+  !dst src opc base_op hi info st x st'.
+    compile_abi_decode_to_buf dst src opc base_op hi info st = (x, st') ==>
     st.cs_next_var <= st'.cs_next_var
 Proof
   rpt strip_tac >>
-  qspecl_then [`dst`, `src`, `opc`, `hi`, `info`, `st`] mp_tac
+  qspecl_then [`dst`, `src`, `opc`, `base_op`, `hi`, `info`, `st`] mp_tac
     (cj 1 ci_mono_compile_abi_decode) >>
   simp[ci_mono_def]
 QED
