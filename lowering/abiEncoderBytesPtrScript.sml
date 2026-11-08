@@ -1,6 +1,6 @@
 (* Pointer execution of the bytestring encoder phases. *)
 Theory abiEncoderBytesPtr
-Ancestors
+Ancestors wordLoadStorePtr
   abiEncoderBytesCode abiEncoderRounding abiEncoderMemory typedCopyPtr decoderNavigationPtr
   bodyPtrDefs fragExecPtr ghostPcTransportPtr emitHelperProps exprLoweringProps ptrDiscipline venomState
   venomExecSemantics finite_map pred_set words arithmetic list rich_list venomInst codegenRel context emitHelper compileEnv

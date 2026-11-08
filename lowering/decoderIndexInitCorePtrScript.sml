@@ -1,6 +1,6 @@
 (* Allocation and zero-store share one endpoint ghost and continuation. *)
 Theory decoderIndexInitCorePtr
-Ancestors decoderBudgetAllocaCorePtr decoderSetupStepPtr ptrSafetyTransport decoderAllocationBoundsPtr
+Ancestors wordLoadStorePtr decoderBudgetAllocaCorePtr decoderSetupStepPtr ptrSafetyTransport decoderAllocationBoundsPtr
   abiDecoderIndexInit abiDecoderAllocation allocationPtr typedCopyPtr fragExecPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv context emitHelper emitHelperProps
   loweringHalt localPtrsProps exprLoweringProps venomExecSemantics venomMemProps venomState venomInst finite_map

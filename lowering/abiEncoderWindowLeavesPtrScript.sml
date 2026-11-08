@@ -1,6 +1,6 @@
 (* Robust ABI windows expose clean read bytes, not clean unused capacity. *)
 Theory abiEncoderWindowLeavesPtr
-Ancestors abiEncoderRobustWindowPtr abiEncoderBytesPtr representationCleanPtr
+Ancestors wordLoadStorePtr abiEncoderRobustWindowPtr abiEncoderBytesPtr representationCleanPtr
   abiEncoderWindowLeaves abiEncoderWindowContract abiEncoderWindow
   abiEncoderInput bodyPtrDefs valueEncoding contractABI list arithmetic
   straightFragmentFramePtr abiEncoderBytes abiEncoderBytesCode abiDecoderContract

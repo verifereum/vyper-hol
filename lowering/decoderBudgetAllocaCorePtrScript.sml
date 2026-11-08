@@ -1,6 +1,6 @@
 (* Supplied-success allocation endpoint with the same ghost continuation. *)
 Theory decoderBudgetAllocaCorePtr
-Ancestors ptrSafetyTransport decoderSetupStepPtr
+Ancestors wordLoadStorePtr ptrSafetyTransport decoderSetupStepPtr
   abiDecoderIndexInit abiDecoderAllocation allocationPtr typedCopyPtr fragExecPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun compileEnv context emitHelper emitHelperProps
   loweringHalt localPtrsProps exprLoweringProps venomExecSemantics venomMemProps venomState venomInst finite_map

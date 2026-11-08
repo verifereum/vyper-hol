@@ -1,6 +1,6 @@
 (* Deterministic instruction ghosts shared by array setup consumers. *)
 Theory decoderSetupStepPtr
-Ancestors typedCopyPtr entryDispatchPtr ptrSafetyTransport decoderGhostFramePtr
+Ancestors wordLoadStorePtr typedCopyPtr entryDispatchPtr ptrSafetyTransport decoderGhostFramePtr
   fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline venomExecSemantics venomInst
   venomState compileEnv emitHelper emitHelperProps exprLoweringProps
   words finite_map pred_set list arithmetic codegenRel fragExec contextCodegenRel

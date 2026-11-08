@@ -1,6 +1,6 @@
 (* Same-witness frames for the decoder loop backedge. *)
 Theory decoderLoopBackedgeCorePtr
-Ancestors abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
+Ancestors wordLoadStorePtr abiDecoderContract instIdxIndep ghostPcTransportPtr memLocDefs bodyPtrDefs decoderGhostFramePtr decoderProtectedScratchPtr typedCopyPtr abiDecoderExecution abiDecoderFrame
   entryDispatchPtr typedCopyArrayPtr ptrSafeRun ptrDiscipline
   codegenRel emitHelperProps contextCodegenRel exprLoweringProps
   venomExecSemantics venomState venomInst finite_map pred_set words list arithmetic

@@ -1,6 +1,6 @@
 (* Concrete copy witnesses, including the allocator frame. *)
 Theory typedCopyAmbientEffectsPtr
-Ancestors typedCopyPtr typedCopyLoopHeaderPtr
+Ancestors wordLoadStorePtr typedCopyPtr typedCopyLoopHeaderPtr
 
 Theorem emit_copy_len_binop_effects_frag_ptr:
   !opc f G cx ctx PG R sa sb left right out tn s a b.

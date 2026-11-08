@@ -1,6 +1,6 @@
 (* Actual fragment endpoints for normalization allocation. *)
 Theory normalizationAllocExecPtr
-Ancestors normalizationAllocPtr typedCopyPtr fragExecPtr instIdxIndep
+Ancestors wordLoadStorePtr normalizationAllocPtr typedCopyPtr fragExecPtr instIdxIndep
 
 Theorem alloca_step_old_register_frame:
   step_inst_base (mk_inst id ALLOCA [Lit n] [out]) s = OK s1 ==>

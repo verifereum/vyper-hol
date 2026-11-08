@@ -1,6 +1,6 @@
 (* Scalar guard validation at a common ghost endpoint. *)
 Theory decoderGuardClampCorePtr
-Ancestors decoderCountComparisonCorePtr decoderSetupStepPtr calldataClampPtr
+Ancestors wordLoadStorePtr decoderCountComparisonCorePtr decoderSetupStepPtr calldataClampPtr
   decoderNavigationPtr typedCopyPtr bodyPtrDefs compileEnv emitHelper venomInst
   venomExecSemantics venomState words list rich_list arithmetic finite_map
   ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
