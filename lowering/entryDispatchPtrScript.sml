@@ -14,10 +14,11 @@ Proof
   strip_tac >>
   simp[ptr_safe_run_def, Once ptr_safe_block_def] >>
   conj_tac
-  >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
-           mk_inst_def, source_memory_write_ranges_def,
-           source_memory_read_ranges_def, step_inst_non_invoke,
-           step_inst_base_def, jump_to_def, op_taint_def]) >>
+  >- (simp[ptr_safe_step_def, ptr_inst_ok_def] >>
+      simp[access_ok_def, taint_ok_def] >>
+      simp[source_memory_write_ranges_def, source_memory_read_ranges_def,
+           step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+           jump_to_def, op_taint_def]) >>
   simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
        is_terminator_def]
 QED
