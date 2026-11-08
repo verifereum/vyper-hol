@@ -924,6 +924,62 @@ Definition function_header_ok_def:
     (vis = External /\ name = "__default__" ==> NULL args)
 End
 
+(* ===== Loop iterables written by internal callees ===== *)
+
+(* Vyper counts as writes of an internal call the state variables its callee
+   writes, directly or through further internal calls (the
+   func_type.is_internal case of the call visitor in
+   vyper/semantics/analysis/local.py), so a for loop whose body calls a
+   function that writes the iterated place is rejected too ("Cannot modify
+   loop variable").  iterator_unmodified checks the body's own writes; these
+   check its calls. *)
+
+(* A callee's write w leaves place p alone.  Only writes to top-level
+   bindings count: a callee's locals are its own. *)
+Definition callee_write_ok_def:
+  callee_write_ok p w <=>
+    case FST (place_access w []) of
+    | TopLevelNameTarget _ => ~place_contains w p
+    | _ => T
+End
+
+(* No function reachable from callee, callee included, writes p, in its
+   body or in the default arguments a call evaluates. *)
+Definition callee_writes_ok_def:
+  callee_writes_ok mods p callee <=>
+    let reached = callee :: reachable_nodes (contract_call_edges mods)
+                              (LENGTH (contract_call_nodes mods)) callee in
+      EVERY (\(src,tls).
+        EVERY (\tl. case tl of
+          | FunctionDecl _ _ _ _ fn _ dflts _ body =>
+              MEM (src,fn) reached ==>
+              EVERY (expr_writes_ok (callee_write_ok p)) dflts /\
+              stmts_writes_ok (callee_write_ok p) body
+          | _ => T) tls) mods
+End
+
+Definition stmt_loop_calls_ok_def:
+  stmt_loop_calls_ok mods (For _ _ it _ body) =
+    ((case it of
+      | Array e =>
+          (case expr_place e of
+           | SOME p => EVERY (callee_writes_ok mods p) (int_calls_stmts body)
+           | NONE => T)
+      | Range _ _ => T) /\
+     stmts_loop_calls_ok mods body) /\
+  stmt_loop_calls_ok mods (If _ yes no) =
+    (stmts_loop_calls_ok mods yes /\ stmts_loop_calls_ok mods no) /\
+  stmt_loop_calls_ok mods _ = T /\
+  stmts_loop_calls_ok mods [] = T /\
+  stmts_loop_calls_ok mods (s::ss) =
+    (stmt_loop_calls_ok mods s /\ stmts_loop_calls_ok mods ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,s) => stmt_size s
+    | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[]
+End
+
 Definition check_toplevel_decl_def:
   check_toplevel_decl mods art src tl =
     let tenv = type_env_all_modules mods in
@@ -954,7 +1010,8 @@ Definition check_toplevel_decl_def:
     | FunctionDecl vis mut nr rr name args dflts ret body =>
         params_ok tenv args /\ well_formed_type tenv ret /\
         function_header_ok vis mut nr rr name args dflts ret /\
-        function_mutability_ok mods vis mut nr dflts body
+        function_mutability_ok mods vis mut nr dflts body /\
+        stmts_loop_calls_ok mods body
 End
 
 (* ===== Callable-body checks ===== *)
