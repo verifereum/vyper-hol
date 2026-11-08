@@ -6866,7 +6866,7 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
   drule intcall_call_evaluation_safe_target_not_mem >> strip_tac >>
   qpat_x_assum `well_typed_expr env (Call _ (IntCall _) _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE (pure_ss ++ boolSimps.UNWIND_ss)
+  RULE_ASSUM_TAC (REWRITE_RULE
     [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def]) >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   rewrite_tac[Once evaluate_def] >>
@@ -6920,7 +6920,15 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
         LENGTH (FST (SND (SND (SND x'')))))
      "IntCall args length" r = (INL tc_ok,tc_st)` by
     (qpat_x_assum `type_check _ "IntCall args length" _ = _` mp_tac >> simp[]) >>
-  first_x_assum (drule_all o cj 1) >> strip_tac >>
+  qpat_x_assum `!s0 x0 t0 s1 ts t1 s2 tup t2 mut stup nr stup2 args
+                sstup dflts sstup2 ret body s3 x3 t3.
+    _ ==> ((!env st res st'. _ ==> _ /\ _ /\ _ /\ _ /\
+      (case res of INL results => expr_results_typed _ _ results | INR _ => T)) /\ _)`
+    (drule o cj 1) >>
+  disch_then drule >>
+  disch_then (drule o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss ++ boolSimps.UNWIND_ss) []) >>
+  disch_then (drule_all o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss ++ boolSimps.UNWIND_ss) []) >>
+  strip_tac >>
   reverse (Cases_on `args_res`) >- (
     rpt (qpat_x_assum `!a b c. _` kall_tac) >>
     gvs[no_type_error_result_def] >> strip_tac >> gvs[no_type_error_result_def]) >>
@@ -6946,7 +6954,8 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
   `set_scopes [FEMPTY] args_st = (INL (),args_st with scopes := [FEMPTY])` by
     simp[set_scopes_def, return_def] >>
   first_x_assum (drule o cj 1) >>
-  ntac 6 (disch_then (drule o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss) [])) >>
+  ntac 6 (disch_then (drule o SIMP_RULE
+    (pure_ss ++ pairSimps.PAIR_ss ++ boolSimps.UNWIND_ss) [])) >>
   disch_then (mk_asm "default_sound") >>
   drule_all intcall_default_env_side_conditions >>
   disch_then (qspec_then `fn` strip_assume_tac) >>
@@ -7026,9 +7035,56 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_IntCall]:
               `push_function (src_id_opt,fn) call_env cx lock_st =
                 (INL (cx with stk updated_by CONS (src_id_opt,fn)),
                  lock_st with scopes := [call_env])` by simp[push_function_def, return_def] >>
-              first_x_assum drule >>
-              ntac 11 (disch_then (drule o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss) [])) >>
-              disch_then (mk_asm "body_sound") >>
+              `!env ret_ty env' st res st'.
+                 type_stmts env ret_ty x''5 = SOME env' /\
+                 env_consistent env (cx with stk updated_by CONS (src_id_opt,fn)) st /\
+                 state_well_typed st /\
+                 context_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+                 accounts_well_typed st.accounts /\
+                 functions_well_typed (cx with stk updated_by CONS (src_id_opt,fn)) /\
+                 call_evaluation_safe (cx with stk updated_by CONS (src_id_opt,fn))
+                   (int_calls_stmts x''5) /\
+                 eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) x''5 st = (res,st') ==>
+                 state_well_typed st' /\ accounts_well_typed st'.accounts /\
+                 no_type_error_result res /\
+                 (case res of INL _ => env_consistent env' (cx with stk updated_by CONS (src_id_opt,fn)) st'
+                  | INR exn => ?env_exn. env_extends env env_exn /\
+                      env_consistent env_exn (cx with stk updated_by CONS (src_id_opt,fn)) st' /\
+                      return_exception_typed env_exn ret_ty exn)` by
+                (qpat_x_assum `!a b c. _` mp_tac >>
+                 qpat_x_assum `type_check _ "recursion" _ = _` mp_tac >>
+                 qpat_x_assum `lift_option_type _ "IntCall get_module_code" _ = _` mp_tac >>
+                 qpat_x_assum `lift_option_type _ "IntCall lookup_function" _ = _` mp_tac >>
+                 qpat_x_assum `type_check (_ /\ _ - _ <= _) "IntCall args length" _ = _` mp_tac >>
+                 qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
+                 qpat_x_assum `get_scopes _ = _` mp_tac >>
+                 qpat_x_assum `finally _ _ _ = _` mp_tac >>
+                 qpat_x_assum `read_results _ _ _ = _` mp_tac >>
+                 qpat_x_assum `lift_option_type _ "IntCall bind_arguments" _ = _` mp_tac >>
+                 qpat_x_assum `lift_option_type _ "IntCall eval ret" _ = _` mp_tac >>
+                 qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+                 qpat_x_assum `push_function _ _ _ _ = _` mp_tac >>
+                 POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+                 rpt gen_tac >> strip_tac >>
+                 first_x_assum irule >>
+                 simp[] >>
+                 conj_tac >- (goal_assum (drule_at Any) >> simp[]) >>
+                 gvs[] >>
+                 qpat_assum `lift_option_type _ "IntCall lookup_function" _ = _` (irule_at Any) >>
+                 simp[] >>
+                 qpat_assum `eval_stmts _ _ _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `lift_option_type _ "IntCall get_module_code" _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `eval_expr_results _ _ _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `push_function _ _ _ _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `lift_option_type _ "IntCall bind_arguments" _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `get_scopes _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `finally _ _ _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `read_results _ _ _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `type_check _ "IntCall args length" _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `(if _ then _ else _) _ = _` (irule_at Any) >> simp[] >>
+                 qpat_assum `lift_option_type _ "IntCall eval ret" _ = _` (irule_at Any) >> simp[]) >>
+              pop_assum (mk_asm "body_sound") >>
+              qpat_x_assum `!a b c. _` kall_tac >>
               asm_x "default_sound" kall_tac >>
               `env_immutables_consistent env_body
                  (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st` by
@@ -7053,9 +7109,9 @@ Resume eval_scc_type_sound_results_mutual[IntCall_semantic_tail]:
     accounts_well_typed st'.accounts /\ no_type_error_result res /\
     (case res of INL pv => expr_result_typed env
       (Call v16 (IntCall (src_id_opt,fn)) es v17) pv | INR _ => T)`
-  >- (disch_tac >> Cases_on `res` >>
-      gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
-          eval_result_typed_def]) >>
+  >- (POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `res` >>
+      simp[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def,
+           eval_result_typed_def] >> rpt strip_tac >> gvs[]) >>
   irule intcall_post_read_continuation_sound >>
   simp[] >> conj_tac
   >- (simp[Once well_typed_expr_def] >> metis_tac[]) >>
@@ -7545,7 +7601,9 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp[] >>
+    rpt (qpat_x_assum `_ ==> (_ /\ _)` kall_tac) >>
+    qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _` kall_tac >>
+    simp[NoAsms] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
@@ -8282,11 +8340,19 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
        return_def, raise_def, get_scopes_def, AllCaseEqs()] >>
   strip_tac >> imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
   simp[NoAsms, typed_scope_transition_refl] >>
-  pop_last_assum mp_tac >>
-  simp[NoAsms, type_check_def, assert_def, return_def, raise_def,
-       lift_option_type_INL_eq] >>
-  imp_res_tac lift_option_type_INL_eq >>
-  disch_then drule_all >> strip_tac >>
+  `type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL (),s'')` by
+    simp[type_check_def, assert_def, return_def] >>
+  `type_check
+     (LENGTH es <= LENGTH (FST (SND (SND tup))) /\
+      LENGTH (FST (SND (SND tup))) - LENGTH es <=
+        LENGTH (FST (SND (SND (SND tup)))))
+     "IntCall args length" s'' = (INL (),s'')` by
+    simp[type_check_def, assert_def, return_def] >>
+  pop_last_assum (drule o cj 2) >>
+  disch_then drule >>
+  disch_then (drule o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss ++ boolSimps.UNWIND_ss) []) >>
+  disch_then (drule o SIMP_RULE (pure_ss ++ pairSimps.PAIR_ss ++ boolSimps.UNWIND_ss) []) >>
+  strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by
     (qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
      simp[NoAsms, call_evaluation_safe_def] >> metis_tac[]) >>
