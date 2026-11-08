@@ -430,6 +430,113 @@ Proof
   metis_tac[frame_asm_group_observers, MEM]
 QED
 
+Theorem frame_asm_terminal_primitives[local]:
+  MEM r [asm_binop f a; asm_unop g a; asm_ternop h a;
+    asm_push_val w a; asm_pop a; asm_dup n a; asm_swap n a;
+    asm_state_unop k a; asm_mload a; asm_mstore a; asm_mstore8 a;
+    asm_sload a; asm_sstore a; asm_tload a; asm_tstore a;
+    asm_jump pc a; asm_jumpi pc a; asm_return_op a; asm_revert_op a;
+    asm_log n a; asm_sha3 a; asm_copy_to_mem bytes a;
+    asm_returndatacopy a; asm_extcodecopy a; asm_mcopy a] /\
+  (r = AsmRevert a1 \/ r = AsmFault a1) ==>
+  a1.as_gas_readings = a.as_gas_readings
+Proof
+  simp[MEM] >> strip_tac >>
+  gvs[asm_binop_def, asm_unop_def, asm_ternop_def, asm_push_val_def,
+    asm_pop_def, asm_dup_def, asm_swap_def, asm_state_unop_def,
+    asm_mload_def, asm_mstore_def, asm_mstore8_def, asm_sload_def,
+    asm_sstore_def, asm_tload_def, asm_tstore_def, asm_jump_def,
+    asm_jumpi_def, asm_return_op_def, asm_revert_op_def, asm_log_def,
+    asm_sha3_def, asm_copy_to_mem_def, asm_returndatacopy_def,
+    asm_extcodecopy_def, asm_mcopy_def, asm_expand_memory_def,
+    asm_next_def, AllCaseEqs()]
+QED
+
+Theorem frame_asm_terminal_groups[local]:
+  name <> "GAS" /\ ~is_evm_call_name name /\ name <> "SELFDESTRUCT" /\
+  MEM (SOME r) [asm_step_arith name a; asm_step_compare name a;
+    asm_step_bitwise name a; asm_step_memory name a;
+    asm_step_control pc name a; asm_step_extcall name a;
+    asm_step_copy name a; asm_step_context name a] /\
+  (r = AsmRevert a1 \/ r = AsmFault a1) ==>
+  a1.as_gas_readings = a.as_gas_readings
+Proof
+  simp[MEM, is_evm_call_name_def] >> strip_tac >>
+  all_tac
+  >- suspend "arith" >- suspend "arith"
+  >- suspend "compare" >- suspend "compare"
+  >- suspend "bitwise" >- suspend "bitwise"
+  >- suspend "memory" >- suspend "memory"
+  >- suspend "control" >- suspend "control"
+  >- suspend "extcall" >- suspend "extcall"
+  >- suspend "copy" >- suspend "copy"
+  >- suspend "context" >> suspend "context"
+QED
+Resume frame_asm_terminal_groups[arith]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_arith_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[compare]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_compare_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[bitwise]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_bitwise_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[memory]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_memory_def, asm_pop_def, asm_push_val_def,
+    asm_next_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[control]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_control_def, asm_next_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[extcall]:
+  markerLib.RESUME_TAC >> rpt strip_tac >> gvs[asm_step_extcall_def]
+QED
+Resume frame_asm_terminal_groups[copy]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  gvs[asm_step_copy_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_primitives, MEM]
+QED
+Resume frame_asm_terminal_groups[context]:
+  markerLib.RESUME_TAC >>
+  qspec_then `\v. !r a1. v = SOME r /\
+    (r = AsmRevert a1 \/ r = AsmFault a1) ==>
+    a1.as_gas_readings = a.as_gas_readings` mp_tac frame_context_pred >>
+  disch_then (qspecl_then [`name`,`a`] mp_tac) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  (impl_tac >-
+    (conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[] >>
+     conj_tac >> simp_tac std_ss [] >>
+     metis_tac[frame_asm_terminal_primitives, MEM])) >>
+  disch_then (qspecl_then [`r`,`a1`] mp_tac) >> simp[]
+QED
+Finalise frame_asm_terminal_groups[local]
+
+Theorem frame_asm_terminal_readings[local]:
+  (!name. inst = AsmOp name ==>
+    ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT") /\
+  (asm_step labels pc inst a = AsmRevert a1 \/
+   asm_step labels pc inst a = AsmFault a1) ==>
+  a1.as_gas_readings = a.as_gas_readings
+Proof
+  Cases_on `inst` >> simp[asm_step_def] >> strip_tac >>
+  gvs[asm_next_def, AllCaseEqs()] >>
+  gvs[asm_step_op_def, AllCaseEqs()] >>
+  gvs[asm_dup_def, asm_swap_def, asm_log_def, asm_expand_memory_def,
+      asm_next_def, AllCaseEqs()] >>
+  metis_tac[frame_asm_terminal_groups, MEM]
+QED
+
 Theorem frame_plain_singleton_sim[local]:
   asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 a es /\
   es.contexts = (c,rb)::rest /\
@@ -522,11 +629,25 @@ Resume frame_plain_step[revert]:
   drule (SRULE [MEM] frame_terminal_rel_lift) >>
   disch_then drule >> simp[vfm_abort_def] >>
   strip_tac >> first_x_assum drule >> strip_tac >>
-  disj2_tac >> metis_tac[]
+  `!name. EL a.as_pc prog = AsmOp name ==>
+    ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT"` by
+    (drule_all frame_local_instruction >> strip_tac >>
+     gvs[asm_frame_prog_ok_def] >> metis_tac[]) >>
+  `a'.as_gas_readings = a.as_gas_readings` by
+    (irule frame_asm_terminal_readings >> metis_tac[]) >>
+  disj2_tac >> goal_assum (drule_at Any) >>
+  gvs[asm_frame_rel_def] >> metis_tac[]
 QED
 Resume frame_plain_step[fault]:
   drule_all (SRULE [MEM] frame_terminal_lift) >> strip_tac >>
-  disj2_tac >> metis_tac[]
+  `!name. EL a.as_pc prog = AsmOp name ==>
+    ~is_evm_call_name name /\ name <> "GAS" /\ name <> "SELFDESTRUCT"` by
+    (drule_all frame_local_instruction >> strip_tac >>
+     gvs[asm_frame_prog_ok_def] >> metis_tac[]) >>
+  `a'.as_gas_readings = a.as_gas_readings` by
+    (irule frame_asm_terminal_readings >> metis_tac[]) >>
+  disj2_tac >> goal_assum (drule_at Any) >>
+  gvs[asm_frame_rel_def] >> metis_tac[]
 QED
 Finalise frame_plain_step[local]
 
