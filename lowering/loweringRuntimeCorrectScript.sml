@@ -310,6 +310,27 @@ QED
 
 (* ===== The body's run ===== *)
 
+Theorem call_external_body_gas_suffix[local]:
+  es0.scopes = [env] /\
+  (!tail. eval_stmts cx fbody (es0 with gas_obs := gs ++ tail) =
+    (res, es' with gas_obs := tail)) ==>
+  !tail.
+    call_external_body am cx F mut tenv
+      (es0 with gas_obs := gs ++ tail) env fbody ret =
+    call_external_body am cx F mut tenv
+      (es0 with gas_obs := gs) env fbody ret
+Proof
+  strip_tac >>
+  qpat_x_assum `!tail. eval_stmts _ _ _ = _`
+    (fn th => assume_tac th >> assume_tac (SIMP_RULE list_ss [] (Q.SPEC `[]` th))) >>
+  `!readings. (es0 with gas_obs := readings) with scopes := [env] =
+     es0 with gas_obs := readings` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
+  simp[call_external_body_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.set_scopes_def, abstract_machine_from_state_gas_obs]
+QED
+
 (* The guarded body's code from sa: the body's statements to sb, then (if
    the block is still open) the end, to st'. *)
 Theorem guarded_body_code:
@@ -457,6 +478,16 @@ Proof
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
       qabbrev_tac `gx = gas_explicit marks s0.vs_gas_readings` >>
+      `!tail. call_external_body am cx F mut (type_env (cx_tops cx))
+         (es0 with gas_obs := gx ++ tail) env fbody ret =
+         call_external_body am cx F mut (type_env (cx_tops cx))
+         (es0 with gas_obs := gx) env fbody ret` by
+        (irule (Q.INST [`res` |-> `res`, `es'` |-> `es_end`]
+                  call_external_body_gas_suffix) >> simp[] >>
+         fs[gas_marked_exec_def, Abbr `gx`] >>
+         qexistsl_tac [`es_end`, `res`] >> simp[]) >>
+      `!tail. call_external (SOME vs.vs_outcomes) (gx ++ tail) am tx =
+         call_external (SOME vs.vs_outcomes) gx am tx` by simp[] >>
       `eval_stmts cx fbody (es0 with gas_obs := gx) =
          (res, es_end with gas_obs := []) /\
        gas_path unit.cu_context func s0 (LENGTH marks) r` by
@@ -473,13 +504,16 @@ Proof
                    `es0 with gas_obs := gx`, `res`, `es'`] mp_tac
         call_external_body_run >>
       impl_tac >- simp[] >> strip_tac >>
-      simp[source_unit_execution_correct_def,
-           source_unit_execution_correct_at_def] >>
+      pure_rewrite_tac[source_unit_execution_correct_def,
+                       source_unit_execution_correct_at_def] >>
       qexists_tac `marks` >>
       `gas_explicit marks vs.vs_gas_readings = gx` by
         (qpat_assum `s0.vs_gas_readings = _`
            (fn th => simp[Abbr `gx`, th])) >>
-      pop_assum SUBST1_TAC >> disj2_tac >> simp[]
+      pop_assum SUBST1_TAC >> conj_tac
+      >~ [`!tail. call_external _ (gs ++ tail) _ _ = _ (* g *)`]
+      >- first_assum ACCEPT_TAC >>
+      disj2_tac >> simp[]
       >- ((* the body falls off its end *)
           gvs[stmt_post_def, stmt_lands_def] >>
           `~lookup_raw_return_or_F (NONE : num option) tx.function_name
@@ -535,26 +569,43 @@ Proof
       (* a return *)
       gvs[Abbr`RetQ`, Abbr`es'`, abstract_machine_from_state_def]) >>
   (* the body fails with an exempt error *)
+  rename1 `gas_exempt_cert _ _ _ _ _ _ (err, ee) _` >>
   drule gasExemptCertTheory.gas_exempt_cert_execution >> strip_tac >>
   qabbrev_tac `gx = gas_explicit marks s0.vs_gas_readings` >>
-  `?ee'. eval_stmts cx fbody (es0 with gas_obs := gx) =
-           (INR (Error err), ee')` by
-    (qpat_x_assum `!tail. _` (qspec_then `[]` mp_tac) >>
+  `!tail. eval_stmts cx fbody (es0 with gas_obs := gx ++ tail) =
+     (INR (Error err), ee with gas_obs := tail)` by
+    (gen_tac >> qpat_x_assum `!tail. _` (qspec_then `tail` mp_tac) >>
      simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
           vyperStateTheory.return_def] >>
-     Cases_on `eval_stmts cx fbody (es0 with gas_obs := gx)` >>
+     Cases_on `eval_stmts cx fbody (es0 with gas_obs := gx ++ tail)` >>
      Cases_on `q` >> simp[]) >>
+  `!tail. call_external_body am cx F mut (type_env (cx_tops cx))
+     (es0 with gas_obs := gx ++ tail) env fbody ret =
+     call_external_body am cx F mut (type_env (cx_tops cx))
+     (es0 with gas_obs := gx) env fbody ret` by
+    (irule (Q.INST [`res` |-> `INR (Error err)`, `es'` |-> `ee`]
+              call_external_body_gas_suffix) >> simp[]) >>
+  `!tail. call_external (SOME vs.vs_outcomes) (gx ++ tail) am tx =
+     call_external (SOME vs.vs_outcomes) gx am tx` by simp[] >>
+  `?ee'. eval_stmts cx fbody (es0 with gas_obs := gx) =
+           (INR (Error err), ee')` by
+    (qexists_tac `ee with gas_obs := []` >>
+     qpat_x_assum `!tail. eval_stmts _ _ _ = _`
+       (qspec_then `[]` mp_tac) >> simp[]) >>
   qspecl_then [`am`, `cx`, `mut`, `type_env (cx_tops cx)`, `env`, `fbody`, `ret`,
                `es0 with gas_obs := gx`, `INR (Error err)`, `ee'`] mp_tac
     call_external_body_run >>
   impl_tac >- simp[] >> strip_tac >>
-  simp[source_unit_execution_correct_def,
-       source_unit_execution_correct_at_def] >>
+  pure_rewrite_tac[source_unit_execution_correct_def,
+                   source_unit_execution_correct_at_def] >>
   qexists_tac `marks` >>
   `gas_explicit marks vs.vs_gas_readings = gx` by
     (qpat_assum `s0.vs_gas_readings = _`
        (fn th => simp[Abbr `gx`, th])) >>
-  pop_assum SUBST1_TAC >> disj1_tac >> gvs[source_exempt_def]
+  pop_assum SUBST1_TAC >> conj_tac
+  >~ [`!tail. call_external _ (gs ++ tail) _ _ = _ (* g *)`]
+      >- first_assum ACCEPT_TAC >>
+  disj1_tac >> gvs[source_exempt_def]
 QED
 
 (* S1, the lowering of an external call the source selects: the call's
