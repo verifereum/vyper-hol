@@ -253,6 +253,10 @@ Theorem tuple_target_allocated_path:
   ?r p. gas_marked_path F (tuple_target_context name ctx) fn s 0
     (OK (r with <| vs_memory := (tuple_target_writes p r).vs_memory;
                    vs_inst_idx := LENGTH sb.cs_current_insts |>)) /\
+    stmt_state_rel (tuple_target_context name ctx) fn ce cx es r /\
+    sa.cs_next_id < sm.cs_next_id /\
+    ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+    r.vs_inst_idx = LENGTH sm.cs_current_insts /\
     eval_operand buf.buf_operand r = SOME p /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n p,128) /\
     w2n p + 128 < dimword (:256) /\ r.vs_memory = s.vs_memory /\
