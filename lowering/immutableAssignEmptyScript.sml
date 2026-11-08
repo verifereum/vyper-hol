@@ -10,6 +10,7 @@ Ancestors
   alist immutableDeployOperandTransfer immutableCopyExecution venomMemProps
   placeTypedCopyPath exprLoweringProps compileEnv stmtSimProps valueEncoding
   stmtLoweringMono stmtLowering context emitHelper venomInst
+  immutableDeployAssignFacts stmtSimDefs gasOutcome gasSummary loweringPosts
 
 Theorem immutable_assign_empty_representation:
   has_length_word ty /\ evaluate_type tenv ty = SOME tv /\
@@ -151,4 +152,79 @@ Proof
           arithmeticTheory.SUB_PLUS, mk_inst_def, is_terminator_def]) >>
   drule_all place_copy_seq_path >> strip_tac >>
   qexists_tac `q` >> simp[]
+QED
+
+Theorem immutable_assign_header_alloca_frame:
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  ce.ce_is_ctor /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ 32 <= type_memory_size tv /\
+  ee.scopes = es.scopes /\ q.vs_memory = (mstore off 0w s).vs_memory /\
+  (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) ==>
+  alloca_frame ce es sa s ce ee q
+Proof
+  strip_tac >> drule_all immutable_assign_declared_region >> strip_tac >>
+  irule alloca_frame_of_mem_frame >>
+  simp[] >> reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  irule mstore_mem_bytes_at_disjoint >>
+  `regions_disjoint off (type_memory_size tv) off' sz` by metis_tac[] >>
+  fs[regions_disjoint_def] >> decide_tac
+QED
+
+Theorem immutable_assign_empty_stmt_frag:
+  body_inv tops ctx ce cx /\ cx.in_deploy /\
+  supported_immutable_type tops (src,id) = SOME ity /\
+  expr_body_pre ce cx env e es /\ has_length_word (expr_type e) /\
+  is_empty_value_expr e /\ type_widens_to env.type_defs (expr_type e) ity /\
+  evaluate_type (get_tenv cx) ity = SOME tv ==>
+  stmt_frag ctx func cx lctx RetQ ce
+    (stmt_env ce lctx ty (Assign (BaseTarget (TopLevelNameTarget (src,id))) e))
+    (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget (src,id))) e)) es
+Proof
+  strip_tac >>
+  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  drule_all immutable_assign_bare_global >> strip_tac >>
+  drule_all immutable_assign_target_layout >>
+  disch_then (qspec_then `compile_expr` strip_assume_tac) >> gvs[] >>
+  `has_length_word ity` by metis_tac[type_widens_to_has_length_word] >>
+  drule_all immutable_assign_empty_source >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  drule_all immutable_assign_empty_code >> strip_tac >> gvs[] >>
+  `!region. ce.ce_imm_alloca = SOME region ==> eval_operand region s0 = SOME 0w` by
+    (fs[stmt_state_rel_def, state_rel_def, immutable_base_zero_def]) >>
+  `off < dimword (:256)` by metis_tac[arithmeticTheory.LESS_EQ_LESS_TRANS,
+    arithmeticTheory.LE_ADD] >>
+  drule_all immutable_assign_empty_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `q.vs_prev_bb = s0.vs_prev_bb /\ q.vs_current_bb = s0.vs_current_bb /\
+   q.vs_inst_idx = s0.vs_inst_idx /\ q.vs_halted = s0.vs_halted /\
+   q.vs_allocas = s0.vs_allocas` by
+    (qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = _`
+       mp_tac >> simp[venom_state_component_equality]) >>
+  `stmt_state_rel ctx func ce cx ee q` by
+    (irule immutable_assign_empty_store_restore >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`env`, `es`, `id`, `off`, `s0`, `sa`, `tv`, `ity`] >>
+     simp[venom_state_component_equality] >>
+     qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_immutables := _|> = _`
+       mp_tac >> simp[venom_state_component_equality]) >>
+  `ee.scopes = es.scopes` by
+    metis_tac[vyperPlaceFramesTheory.write_immutable_place_scopes] >>
+  `32 <= type_memory_size tv` by
+    (qspec_then `get_tenv cx` mp_tac memory_length_word_layout >>
+     disch_then (qspecl_then [`ity`, `tv`, `off`, `(mstore off 0w s0).vs_memory`] mp_tac) >>
+     simp[mstore_mem_word_at_same]) >>
+  `alloca_frame ce es sa s0 ce ee q` by
+    (irule immutable_assign_header_alloca_frame >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL ()`, `ee`, `OK (q with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  conj_tac >- simp[gas_marked_exec_def] >>
+  disj1_tac >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
+       stmt_state_rel_inst_idx, same_blocks_def] >>
+  gvs[same_blocks_def, lookup_var_def] >>
+  irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
 QED
