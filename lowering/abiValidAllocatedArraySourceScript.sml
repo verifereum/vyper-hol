@@ -102,3 +102,33 @@ Proof
   (impl_tac >- simp[]) >>
   strip_tac >> gvs[]
 QED
+
+(* Parent coherence supplies output capacity independently of ABI capacity. *)
+Theorem abi_valid_allocated_array_memory_size:
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn))
+    (ArrayTV tv (Dynamic maxn)) ==>
+  type_memory_bytes ce (ArrayT ty (Dynamic maxn)) =
+    32 + maxn * type_memory_size tv
+Proof
+  strip_tac >> drule abi_decoder_coherent_header >>
+  simp[abi_decoder_header_def, type_memory_size_def]
+QED
+
+Theorem abi_valid_allocated_array_output_bounds:
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn))
+    (ArrayTV tv (Dynamic maxn)) /\
+  n <= maxn /\ outsz = type_memory_bytes ce (ArrayT ty (Dynamic maxn)) ==>
+  32 + n * type_memory_size tv <= outsz /\
+  (!k. k < n ==> d+32+k*type_memory_size tv+type_memory_size tv <= d+outsz)
+Proof
+  strip_tac >> drule abi_valid_allocated_array_memory_size >> strip_tac >>
+  `n * type_memory_size tv <= maxn * type_memory_size tv` by
+    (irule LESS_MONO_MULT2 >> simp[]) >>
+  conj_tac >- decide_tac >>
+  rpt strip_tac >>
+  `SUC k * type_memory_size tv <= n * type_memory_size tv` by
+    (irule LESS_MONO_MULT2 >> decide_tac) >>
+  qpat_x_assum `SUC k * _ <= _` mp_tac >>
+  qpat_x_assum `n * _ <= _` mp_tac >>
+  simp_tac bool_ss [MULT_CLAUSES] >> decide_tac
+QED
