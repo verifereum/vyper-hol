@@ -415,6 +415,19 @@ Proof
           cs_appends_return])
 QED
 
+(* A literal compiles either to a plain return or to one bytelike buffer
+   allocation; splitting on the type here keeps the goals small. *)
+Theorem ctor_literal_vv_shape[local]:
+  !ty lit. (?v. compile_literal_vv ty lit = comp_return v) \/
+    ?bs n. compile_literal_vv ty lit =
+      do buf <- compile_bytelike_literal bs n;
+         comp_return (LocatedValue ty (base_ptr buf)) od
+Proof
+  ntac 2 gen_tac >> Cases_on `lit` >> TRY (rename1 `BoolL flag` >> Cases_on `flag`) >>
+  simp_tac (srw_ss()) [compile_literal_vv_def] >>
+  BasicProvers.every_case_tac >> metis_tac[]
+QED
+
 Theorem ctor_literal_vv_first_emission:
   !ty lit a x b. compile_literal_vv ty lit a = (x,b) ==>
     cs_extends a b /\
@@ -425,18 +438,15 @@ Theorem ctor_literal_vv_first_emission:
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\
        i.inst_opcode <> PHI))
 Proof
-  ntac 2 gen_tac >> Cases_on `lit`
-  >- (rename1 `BoolL flag` >> Cases_on `flag` >>
-      simp_tac (srw_ss()) [compile_literal_vv_def] >>
-      (simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl] >> NO_TAC)) >>
-  simp_tac (srw_ss()) [compile_literal_vv_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp_tac (srw_ss()) []) >>
-  FIRST [(simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl] >> NO_TAC),
-    ho_match_mp_tac first_emission_strong >>
-    ho_match_mp_tac first_emission_strong_bind >> conj_tac
-    >- metis_tac[ctor_bytelike_literal_first_emission] >>
-    rewrite_tac[GSYM cs_appends_def] >>
-    CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[cs_appends_return]]
+  ntac 2 gen_tac >>
+  strip_assume_tac (Q.SPECL [`ty`, `lit`] ctor_literal_vv_shape) >>
+  pop_assum SUBST1_TAC
+  >- (simp[comp_return_def] >> rpt strip_tac >> gvs[cs_extends_refl]) >>
+  ho_match_mp_tac first_emission_strong >>
+  ho_match_mp_tac first_emission_strong_bind >> conj_tac
+  >- metis_tac[ctor_bytelike_literal_first_emission] >>
+  rewrite_tac[GSYM cs_appends_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[cs_appends_return]
 QED
 
 Theorem ctor_name_vv_first_emission:
