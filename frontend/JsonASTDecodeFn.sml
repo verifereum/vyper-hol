@@ -690,7 +690,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "List" $
     JSONDecode.map (fn (es, ty) => mk_JE_List(es, ty)) $
     tuple2 (field "elements" (array (delay d_json_expr)),
-            field "type" json_type),
+            orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Call - preserve any explicit declaration source ID from the function
      metadata; jsonToVyper interprets source IDs. *)
@@ -1238,15 +1238,35 @@ fun validate_legacy_calls decls t =
       else true
   in signature_ok andalso List.all (validate_legacy_calls decls) xs end
 
+(* An interface stub is a function whose body is `...` and that is not
+   @abstract, as in a .vyi. Vyper never analyses one, so its defaults carry
+   no types, and jsonToVyper drops it. *)
+val interface_stub : bool decoder =
+  JSONDecode.map (fn (decorators, ellipsis_body) =>
+      ellipsis_body andalso
+      not (List.exists (fn (d, _) => d = "abstract") decorators)) $
+  tuple2 (field "decorator_list" (array function_decorator),
+          orElse (field "body" $
+                    check (array raw) (fn ss => length ss = 1) "not one stmt" $
+                    sub 0 $ check_ast_type "Expr" $ field "value" $
+                    check_ast_type "Ellipsis" $ succeed true,
+                  succeed false))
+
+(* Defaults of an interface stub may be untyped; they are not needed. *)
+fun function_defaults stub =
+  if stub then orElse (fieldD "defaults" (array json_expr) [], succeed [])
+  else fieldD "defaults" (array json_expr) []
+
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
+    andThen interface_stub (fn stub =>
     andThen (tuple3 (
       tuple2 (field "name" string,
               field "decorator_list" (array function_decorator)),
       tuple2 (tuple2 (field "args" $ check_ast_type "arguments" $
                         tuple2 (field "args" (array json_arg),
-                                fieldD "defaults" (array json_expr) []),
+                                function_defaults stub),
                       field "func_type" json_func_type),
               fieldD "returns" ast_type JTA_None_tm),
       field "body" (array json_stmt)))
@@ -1263,7 +1283,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
           (List.concat (List.map collect_function_decls (a @ b))) then
           succeed decoded
         else fail "legacy interface argument type disagrees with callsite"
-      end),
+      end)),
 
   (* VariableDecl for HashMaps *)
   check_ast_type "VariableDecl" $
