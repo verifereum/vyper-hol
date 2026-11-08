@@ -155,7 +155,7 @@ Proof
   `(entry_venom_state prog cplan es).vs_params = []` by
     simp[entry_venom_state_def, venomStateTheory.init_venom_state_def] >>
   gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def,
-      initial_ctx_rel_def, entry_venom_state_fresh,
+      initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def, entry_venom_state_fresh,
       entry_venom_state_frame_fields]
 QED
 

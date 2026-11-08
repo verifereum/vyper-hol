@@ -101,7 +101,7 @@ Theorem initial_ctx_rel_trace_and_gas_boundary:
   ~initial_ctx_rel cp prog ctx
     (vs with vs_outcomes := MAP SND (call_trace es) ++ [outcome]) es
 Proof
-  simp[initial_ctx_rel_def, initial_state_rel_def, msg_ctx_rel_def,
+  simp[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def, initial_state_rel_def, msg_ctx_rel_def,
        blockhash_rel_def, initial_codegen_state_rel_def, stack_params_rel_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
@@ -114,7 +114,7 @@ Theorem saved_snapshot_cannot_replace_live_state:
    rb.tStorage = vs.vs_transient /\ es.rollback.tStorage <> vs.vs_transient)
   ==> ~initial_ctx_rel cp prog ctx vs es
 Proof
-  simp[initial_ctx_rel_def, initial_state_rel_def] >> rpt strip_tac >> gvs[]
+  simp[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def, initial_state_rel_def] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem initial_ctx_rel_empty_and_static_rejected:
@@ -124,7 +124,7 @@ Theorem initial_ctx_rel_empty_and_static_rejected:
     (es with contexts :=
       [(ctxt with msgParams := ctxt.msgParams with static := T, rb)])
 Proof
-  simp[initial_ctx_rel_def]
+  simp[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def]
 QED
 
 (* Nested success returns to the parent, with short-write splice and combined
@@ -215,7 +215,7 @@ Theorem initial_ctx_rel_fresh_nonvacuity:
     frame_probe_prog (mk_venom_context [frame_probe_fn] (SOME "entry"))
     frame_probe_vs frame_probe_es
 Proof
-  simp[initial_ctx_rel_def, frame_probe_fn_def, mk_venom_context_def,
+  simp[initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def, frame_probe_fn_def, mk_venom_context_def,
        frame_probe_vs_def, frame_probe_es_def, make_asm_call_state_def,
        asm_oracle_initial_def, frame_probe_encoding, frame_probe_trace,
        initial_state_rel_def, initial_codegen_state_rel_def,
