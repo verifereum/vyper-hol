@@ -1317,7 +1317,7 @@ QED
 Theorem phi_origin_stage_every:
   !P inst next halting p q cells cells1.
     phi_origin_stage inst next halting p q cells cells1 /\
-    EVERY P cells /\ (!op. P (PhiCommon op)) ==>
+    EVERY P cells /\ P (PhiCommon (Var (HD inst.inst_outputs))) ==>
     EVERY P cells1
 Proof
   rpt gen_tac >> rewrite_tac[phi_origin_stage_def] >> strip_tac >>
@@ -1326,6 +1326,36 @@ Proof
   Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
   >- (gvs[] >> irule phi_origin_pop_every >> simp[]) >>
   gvs[]
+QED
+
+Theorem phi_origin_schedule_every:
+  !steps p q cells cells_end P.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    EVERY P cells /\
+    (!inst next halting. MEM (inst,next,halting) steps ==>
+      P (PhiCommon (Var (HD inst.inst_outputs)))) ==>
+    EVERY P cells_end
+Proof
+  Induct >> simp[phi_origin_schedule_ready_def] >>
+  gen_tac >> PairCases_on `h` >>
+  simp[phi_origin_schedule_ready_def] >> rpt strip_tac >>
+  first_x_assum irule >> rpt (goal_assum (drule_at Any)) >>
+  metis_tac[phi_origin_stage_every]
+QED
+
+Theorem phi_origin_schedule_common_origin:
+  !steps p q cells cells_end op.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    (!inst next halting. MEM (inst,next,halting) steps ==>
+      op <> Var (HD inst.inst_outputs)) /\
+    MEM (PhiCommon op) cells_end ==>
+    MEM (PhiCommon op) cells
+Proof
+  rpt strip_tac >>
+  `EVERY (\c. c = PhiCommon op ==> MEM (PhiCommon op) cells) cells_end` by
+    (irule phi_origin_schedule_every >> rpt (goal_assum (drule_at Any)) >>
+     simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  gvs[listTheory.EVERY_MEM]
 QED
 
 Theorem phi_origin_stage_selected_extinction:
@@ -1597,7 +1627,7 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem phi_origin_tagged_schedule_projection:
+Theorem phi_origin_tagged_schedule_common:
   !steps n class_of cells p q cells_end.
     phi_origin_schedule_ready steps p q cells cells_end /\
     phi_origin_tagged class_of cells /\
@@ -1609,7 +1639,7 @@ Theorem phi_origin_tagged_schedule_projection:
       (!op. class_of op = SOME (n+i) ==> ~MEM (operand_to_string op) next)) /\
     EVERY (\c. !k a b. c = PhiOriginal k a b ==>
       ?i. i < LENGTH steps /\ k = n+i) cells ==>
-    MAP (phi_cell_value T) cells_end = MAP (phi_cell_value F) cells_end
+    EVERY (\c. ?op. c = PhiCommon op) cells_end
 Proof
   rpt gen_tac >> strip_tac >>
   `!i. i < LENGTH steps ==> phi_origin_count (n+i) cells_end = 0` by
@@ -1624,11 +1654,19 @@ Proof
         gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
      drule phi_origin_schedule_count_le >> disch_then (qspec_then `k` mp_tac) >>
      simp[]) >>
-  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >> Cases_on `x`
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >> Cases_on `c`
   >- (qpat_x_assum `!k. phi_origin_count k cells_end = 0`
         (qspec_then `n'` mp_tac) >>
       simp[phi_origin_count_zero, listTheory.EVERY_MEM] >> metis_tac[]) >>
-  simp[phi_cell_value_def]
+  simp[]
+QED
+
+Theorem phi_common_cells_projection:
+  !cells. EVERY (\c. ?op. c = PhiCommon op) cells ==>
+    MAP (phi_cell_value T) cells = MAP (phi_cell_value F) cells
+Proof
+  rpt strip_tac >> irule listTheory.MAP_CONG >>
+  gvs[listTheory.EVERY_MEM, phi_cell_value_def] >> metis_tac[phi_cell_value_def]
 QED
 
 (* Demand support: a retained write changes only the newly duplicated top. *)

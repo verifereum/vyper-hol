@@ -5,6 +5,7 @@ Ancestors
   fnPlanLineagePhiActivation fnPlanLineagePhiMaps venomExecProps venomWf stackPlanGen
   codegenReadyCompute livenessTransferProofs fnPlanLineageCallers
   livenessDefs venomInst list fnPlanLineageLiveness fnPlanLineagePhiSuffixResources
+  fnPlanLineageNativeTargets
 
 Theorem reachable_native_phi_cells_coverage:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
@@ -260,6 +261,61 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem analyzed_native_phi_schedule_observer_support:
+  codegen_ready_fn fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MAP (phi_cell_value T) cells = MAP Var
+    (input_vars_from p bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+  phi_origin_tagged (native_phi_class p (collect_phis bb.bb_instructions)) cells /\
+  phi_origin_schedule_ready
+    (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
+      (collect_phis bb.bb_instructions)) prefixP prefixQ cells cells_end /\
+  EVERY (\c. ?op. c = PhiCommon op) cells_end /\
+  (!inst. MEM inst (collect_phis bb.bb_instructions) ==> ~MEM v inst.inst_outputs) /\
+  MEM (Var v) (MAP (phi_cell_value T) cells_end) ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `MEM (PhiCommon (Var v)) cells_end` by
+    (gvs[listTheory.MEM_MAP, listTheory.EVERY_MEM] >>
+     metis_tac[phi_cell_value_def]) >>
+  `MEM (PhiCommon (Var v)) cells` by
+    (irule phi_origin_schedule_common_origin >>
+     rpt (goal_assum (drule_at Any)) >>
+     simp[indexedListsTheory.MEM_MAPi] >> rpt strip_tac >> gvs[] >>
+     `MEM (EL i (collect_phis bb.bb_instructions)) (collect_phis bb.bb_instructions)` by
+       simp[listTheory.EL_MEM] >>
+     `MEM bb fn.fn_blocks /\ fn_inst_wf fn` by
+       metis_tac[lookup_block_MEM, codegen_ready_fn_def] >>
+     `inst_wf (EL i (collect_phis bb.bb_instructions)) /\
+      (EL i (collect_phis bb.bb_instructions)).inst_opcode = PHI` by
+       (gvs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[collect_phis_mem]) >>
+     gvs[inst_wf_def] >>
+     Cases_on `(EL i (collect_phis bb.bb_instructions)).inst_outputs` >>
+     gvs[] >> metis_tac[listTheory.MEM]) >>
+  `FLOOKUP (FST (build_phi_maps p (collect_phis bb.bb_instructions))) v = NONE` by
+    (qpat_x_assum `phi_origin_tagged _ _` mp_tac >>
+     simp[phi_origin_tagged_def, listTheory.EVERY_MEM] >>
+     disch_then (qspec_then `PhiCommon (Var v)` mp_tac) >>
+     simp[native_phi_class_def]) >>
+  `MEM (Var v) (MAP (phi_cell_value T) cells)` by
+    (simp[listTheory.MEM_MAP] >> qexists_tac `PhiCommon (Var v)` >>
+     simp[phi_cell_value_def]) >>
+  `LIST_ELEM_COUNT v (input_vars_from p bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0)) =
+   LIST_ELEM_COUNT v (live_vars_at (liveness_analyze fn) lbl 0)` by
+    (irule input_vars_from_residual_count >> simp[] >>
+     metis_tac[lookup_block_MEM, ready_block_phi_uses_disjoint]) >>
+  `MEM v (input_vars_from p bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0))` by
+    (qpat_x_assum `MEM (Var v) (MAP (phi_cell_value T) cells)` mp_tac >>
+     asm_rewrite_tac[] >> simp[listTheory.MEM_MAP]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl 0)` by
+    metis_tac[rich_listTheory.LIST_ELEM_COUNT_MEM] >>
+  metis_tac[ready_unrenamed_phi_partition]
+QED
+
 Theorem analyzed_native_slot_schedule_extinction:
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
   fn_reachable fn lbl /\ lbl <> entry /\
@@ -280,11 +336,15 @@ Theorem analyzed_native_slot_schedule_extinction:
   ?cells_end. phi_origin_schedule_ready
     (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
       (collect_phis bb.bb_instructions)) prefixP prefixQ cells cells_end /\
-    MAP (phi_cell_value T) cells_end = MAP (phi_cell_value F) cells_end /\
+    EVERY (\c. ?op. c = PhiCommon op) cells_end /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) lbl
         (LENGTH (collect_phis bb.bb_instructions))) ==>
       MEM (Var v) (MAP (phi_cell_value T) cells_end)) /\
-    (!v. LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1)
+    (!v. LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1) /\
+    (!v. (!inst. MEM inst (collect_phis bb.bb_instructions) ==> ~MEM v inst.inst_outputs) /\
+      ~MEM v (live_vars_at (liveness_analyze fn) lbl
+        (LENGTH (collect_phis bb.bb_instructions))) ==>
+      ~MEM (Var v) (MAP (phi_cell_value T) cells_end))
 Proof
   strip_tac >>
   `phi_origin_tagged (native_phi_class p (collect_phis bb.bb_instructions)) cells` by
@@ -293,29 +353,35 @@ Proof
     metis_tac[phi_origin_tagged_classes] >>
   drule_all analyzed_native_phi_schedule_ready >>
   disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
-  qexists_tac `cells_end` >> simp[] >> reverse conj_tac
-  >- (conj_tac
-      >- (rpt strip_tac >> irule analyzed_native_phi_schedule_live_member >>
-          rpt (goal_assum (drule_at Any)) >> simp[]) >>
-      gen_tac >> irule analyzed_phi_schedule_value_count_le_one >>
-      rpt (goal_assum (drule_at Any)) >> metis_tac[]) >>
-  irule phi_origin_tagged_schedule_projection >>
-  goal_assum (drule_at Any) >>
-  qexistsl_tac [`native_phi_class p (collect_phis bb.bb_instructions)`, `0`] >>
-  simp[indexedListsTheory.LENGTH_MAPi] >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> irule analyzed_native_phi_schedule_classes >>
+  qexists_tac `cells_end` >> simp[] >> conj_asm1_tac
+  >- (irule phi_origin_tagged_schedule_common >>
       goal_assum (drule_at Any) >>
-      qexistsl_tac [`entry`, `fn`, `halting'`, `halting`, `lbl`] >> simp[]) >>
-  conj_tac >- (gvs[] >> simp[phi_slot_trace_origin_unique]) >>
-  qpat_assum `cells = _` SUBST1_TAC >>
-  simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
-  rpt gen_tac >> strip_tac >> Cases_on `x` >> simp[phi_slot_cell_def] >>
-  rpt strip_tac >> gvs[] >>
-  rename1 `MEM (INR k) (phi_slot_trace _ _)` >>
-  `?v. MEM v livebase /\
-    FLOOKUP (FST (build_phi_maps p (collect_phis bb.bb_instructions))) v = SOME k` by
-    (qpat_x_assum `MEM (INR k) _` mp_tac >> simp[phi_slot_trace_inr_mem]) >>
-  metis_tac[build_phi_maps_operand_range]
+      qexistsl_tac [`native_phi_class p (collect_phis bb.bb_instructions)`, `0`] >>
+      simp[indexedListsTheory.LENGTH_MAPi] >> conj_tac
+      >- (rpt gen_tac >> strip_tac >> irule analyzed_native_phi_schedule_classes >>
+          goal_assum (drule_at Any) >>
+          qexistsl_tac [`entry`, `fn`, `halting'`, `halting`, `lbl`] >> simp[]) >>
+      conj_tac >- (gvs[] >> simp[phi_slot_trace_origin_unique]) >>
+      qpat_assum `cells = _` SUBST1_TAC >>
+      simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
+      rpt gen_tac >> strip_tac >> Cases_on `x` >> simp[phi_slot_cell_def] >>
+      rpt strip_tac >> gvs[] >>
+      rename1 `MEM (INR k) (phi_slot_trace _ _)` >>
+      `?v. MEM v livebase /\
+        FLOOKUP (FST (build_phi_maps p (collect_phis bb.bb_instructions))) v = SOME k` by
+        (qpat_x_assum `MEM (INR k) _` mp_tac >> simp[phi_slot_trace_inr_mem]) >>
+      metis_tac[build_phi_maps_operand_range]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule analyzed_native_phi_schedule_live_member >>
+      rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  conj_tac
+  >- (gen_tac >> irule analyzed_phi_schedule_value_count_le_one >>
+      rpt (goal_assum (drule_at Any)) >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl
+      (LENGTH (collect_phis bb.bb_instructions)))` by
+    (irule analyzed_native_phi_schedule_observer_support >>
+     rpt (goal_assum (drule_at Any)) >> simp[]) >> simp[]
 QED
 
 Theorem analyzed_native_slot_state_replay:
@@ -354,14 +420,18 @@ Theorem analyzed_native_slot_state_replay:
 Proof
   strip_tac >> drule_all analyzed_native_slot_schedule_extinction >>
   disch_then (qspecl_then [`prefixQ`, `prefixP`, `halting`] strip_assume_tac) >>
+  `MAP (phi_cell_value T) cells_end = MAP (phi_cell_value F) cells_end` by
+    (irule phi_common_cells_projection >> simp[]) >>
   drule_all phi_origin_schedule_state_replay >> strip_tac >>
   qexistsl_tac [`MAP (phi_cell_value T) cells_end`, `ops`, `al`] >>
   simp[] >> rpt strip_tac >>
   `MEM (Var v) (MAP (phi_cell_value T) cells_end)` by metis_tac[] >>
   `LIST_ELEM_COUNT (Var v) (MAP (phi_cell_value T) cells_end) <= 1` by metis_tac[] >>
   gvs[GSYM rich_listTheory.LIST_ELEM_COUNT_MEM] >>
-  first_x_assum (qspec_then `v` mp_tac) >>
-  first_x_assum (qspec_then `v` mp_tac) >> simp[] >> decide_tac
+  qpat_x_assum `!v'. LIST_ELEM_COUNT (Var v') _ <= 1`
+    (qspec_then `v` mp_tac) >>
+  qpat_x_assum `!v'. LIST_ELEM_COUNT v' _ > 0 ==> _`
+    (qspec_then `v` mp_tac) >> simp[] >> decide_tac
 QED
 
 Theorem successful_join_edges_phi_schedule_ready:
