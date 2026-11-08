@@ -20,8 +20,9 @@ Ancestors
   stackPlanGen stackPlanTypes livenessDefs dfgDefs
   codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
   relation list finite_map dominatorProofs cfgAnalysisProps
-  removeUnusedSsaProofs cfgNormBase livenessProofs livenessTransferProofs
+  cfgNormBase livenessProofs livenessTransferProofs
   fnFrameStepsRevertForward dominatorAnalysisProps dfgAnalysisProps
+  venomWfProps
 
 Theorem lineage_state_entry_cases[local]:
   lineage_state liveness dfg cfg fn ps0 lbl ps ==>
@@ -578,25 +579,24 @@ Proof
   `!v j. FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME j <=>
      j < LENGTH (collect_phis instrs) /\
      MEM v (MAP SND (phi_pairs (EL j (collect_phis instrs)).inst_operands))`
-    by metis_tac[build_phi_owner_lookup] >>
+    by (rpt gen_tac >> drule build_phi_owner_lookup >> simp[]) >>
   `?seed. MEM seed live /\ MEM seed (MAP SND (phi_pairs phi.inst_operands))`
     by metis_tac[] >>
   `~NULL (collect_phis instrs)` by (Cases_on `collect_phis instrs` >> gvs[]) >>
   `MEM chosen (input_vars_from pred instrs live)`
-    by (drule input_vars_placement_mem >>
-        disch_then (qspecl_then [`chosen`, `pred`, `live`] mp_tac) >>
-        metis_tac[]) >>
+    by (simp[input_vars_placement_mem] >>
+        disj2_tac >> qexistsl_tac [`i`, `seed`] >> gvs[]) >>
   `!v. MEM (Var v) phi.inst_operands /\
        MEM v (input_vars_from pred instrs live) ==> v = chosen` suffices_by
     (simp[EXISTS_UNIQUE_THM] >> metis_tac[]) >>
   qx_gen_tac `v` >> strip_tac >>
   `MEM v (MAP SND (phi_pairs phi.inst_operands))` by metis_tac[] >>
   `FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME i`
-    by metis_tac[] >>
+    by gvs[] >>
   drule_all input_vars_placement_mem >>
   disch_then (qspecl_then [`v`, `pred`, `live`] mp_tac) >> simp[] >>
   disch_then (qx_choose_then `j` (qx_choose_then `w` strip_assume_tac)) >>
-  `j < LENGTH (collect_phis instrs)` by metis_tac[] >>
+  `j < LENGTH (collect_phis instrs)` by gvs[] >>
   drule build_phi_selected_lookup >> disch_then (qspec_then `pred` mp_tac) >>
   simp[] >> strip_tac >>
   rename1 `FIND _ _ = SOME selected` >> PairCases_on `selected` >> gs[] >>

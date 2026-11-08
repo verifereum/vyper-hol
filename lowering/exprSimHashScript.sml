@@ -2655,7 +2655,7 @@ Proof
   Cases_on `call_outcome_success outcome` >> gvs[return_def]
 QED
 
-Theorem expr_exit_INR_cast[local]:
+Theorem expr_exit_INR_cast:
   expr_exit (INR exc : value + exception) r ==>
   expr_exit (INR exc : eval_result + exception) r
 Proof

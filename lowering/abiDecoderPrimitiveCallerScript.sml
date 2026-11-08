@@ -87,13 +87,13 @@ QED
 (* Complete primitive-word decoder correctness for every coherent ABI base type. *)
 Theorem abi_decoder_primitive_source:
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi src_base sb d b cap s ==>
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v /\
-  sb < dimword (:256) /\
-  mem_bytes_at sb 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av /\
+  src_base + sb < dimword (:256) /\
+  mem_bytes_at (src_base + sb) 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av /\
   type_memory_bytes ce ty = 32
 Proof
   pure_rewrite_tac [abi_decoder_recursive_pre_def, abi_decoder_pre_def] >> strip_tac >>
@@ -105,18 +105,18 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
   `LENGTH (enc (vyper_to_abi_type env ty) av) = 32` by
     (drule_all abi_decoder_descended_encoding_length >> asm_simp_tac bool_ss []) >>
-  `mem_bytes_at sb 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av`
+  `mem_bytes_at (src_base + sb) 32 (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av`
     by metis_tac[] >>
-  `sb < dimword (:256)` by
-    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  `src_base + sb < dimword (:256)` by
+    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac [abi_decoder_ranges_def] >> rpt strip_tac >> gvs[] >> decide_tac) >>
   asm_simp_tac bool_ss []
 QED
 
 Theorem abi_decoder_typed_primitive_word_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post tv v st' d 32 b cap s t
 Proof
@@ -126,9 +126,9 @@ Proof
 QED
 
 Theorem abi_decoder_typed_primitive_word_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-    st last src dst opc hi sb d b cap initial ==>
+    st last src dst opc base_op hi src_base sb d b cap initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post tv v st' d 32 b cap initial) (K F)
 Proof
@@ -138,12 +138,12 @@ Proof
 QED
 
 Theorem abi_decoder_typed_primitive_word_fragment:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src opc base_op hi (DecPrimWord clamp) st = ((),st') ==>
   frag_exec ctx st st'
     (abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-      st last src dst opc hi sb d b cap)
+      st last src dst opc base_op hi src_base sb d b cap)
     (\t. ?s. abi_decoder_recursive_pre ce env sf ty tv (DecPrimWord clamp) av v
-       st last src dst opc hi sb d b cap s /\
+       st last src dst opc base_op hi src_base sb d b cap s /\
        abi_decoder_post tv v st' d 32 b cap s t)
     (K F)
 Proof
@@ -212,10 +212,10 @@ Theorem abi_decoder_base_word_recursive_pre:
   is_word_type (BaseT bt) /\
   abi_decoder_pre ce env (BaseT bt) (BaseTV bt)
     (type_to_abi_dec_info ce.ce_struct_fields ce (BaseT bt)) av v
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi src_base sb d b cap s ==>
   abi_decoder_recursive_pre ce env ce.ce_struct_fields (BaseT bt) (BaseTV bt)
     (DecPrimWord (type_to_abi_clamp (BaseT bt))) av v
-    st last src dst opc hi sb d b cap s
+    st last src dst opc base_op hi src_base sb d b cap s
 Proof
   strip_tac >>
   `abi_decoder_metadata ce env (BaseT bt) (BaseTV bt)
@@ -232,12 +232,12 @@ Proof
 QED
 
 Theorem abi_decoder_typed_base_word_sequence:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecPrimWord (type_to_abi_clamp (BaseT bt))) st = ((),st') /\
   is_word_type (BaseT bt) /\
   abi_decoder_pre ce env (BaseT bt) (BaseTV bt)
     (type_to_abi_dec_info ce.ce_struct_fields ce (BaseT bt)) av v
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post (BaseTV bt) v st' d 32 b cap s t
 Proof
@@ -246,12 +246,12 @@ Proof
 QED
 
 Theorem abi_decoder_typed_base_word_from_state:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecPrimWord (type_to_abi_clamp (BaseT bt))) st = ((),st') /\
   is_word_type (BaseT bt) /\
   abi_decoder_pre ce env (BaseT bt) (BaseTV bt)
     (type_to_abi_dec_info ce.ce_struct_fields ce (BaseT bt)) av v
-    st last src dst opc hi sb d b cap initial ==>
+    st last src dst opc base_op hi src_base sb d b cap initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post (BaseTV bt) v st' d 32 b cap initial) (K F)
 Proof

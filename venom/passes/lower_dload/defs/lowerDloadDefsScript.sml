@@ -36,7 +36,7 @@
 
 Theory lowerDloadDefs
 Ancestors
-  passSimulationDefs venomExecSemantics venomInst irSupply
+  passTransform venomExecSemantics venomInst irSupply
 (* ===== Fresh Variable Names ===== *)
 
 (* Fresh variable for alloca output.

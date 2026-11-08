@@ -10,6 +10,7 @@ Ancestors
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
   venomPipelineData venomPipelineDriver venomPipelineRunner venomFnScheduleRunner
   unitLabelMap fcgPruning
+  fcgDefs
 
 Theorem no_ctor_lookup:
   !tops exts ints fb.
@@ -70,9 +71,9 @@ Proof
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
   simp[deploy_state_rel_def] >> strip_tac >>
   drule_all no_ctor_args >> strip_tac >>
-  qpat_x_assum `gas_variant _ _` mp_tac >>
-  simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-       venom_state_component_equality]
+  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_code, s.vs_labels)`) >>
+  simp[deploy_entry_state_def, entry_venom_state_def]
 QED
 
 Theorem no_ctor_simple_data:
@@ -389,7 +390,7 @@ Proof
 QED
 
 Theorem no_ctor_make_ssa:
-  makeSsaCurrentDefs$make_ssa_current_fn s
+  makeSsaDefs$make_ssa_current_fn s
     (mk_raw_function "__deploy"
       [<| bb_label := "__deploy"; bb_instructions :=
         [mk_inst 0 ALLOCA [Lit n] ["%0"];
@@ -669,7 +670,7 @@ Theorem no_ctor_late_make_ssa:
     <| fn_eom := SOME e; fn_mems_used := mems;
        fn_fmp_signature := SOME
          <| fms_has_fmp_param := F; fms_publishes := F |> |> ==>
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s)
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s)
 Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED
@@ -1669,7 +1670,7 @@ Proof
 QED
 
 Theorem no_ctor_late_fold:
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s) /\
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s) /\
   simplifyCfgDefs$simplify_cfg_fn_with_labels fn = (fn,[]) /\
   singleUseExpansionDefs$sue_expand_function_supply s fn = (expanded,t) /\
   dftDefs$dft_fn expanded = ordered /\
@@ -1977,9 +1978,10 @@ Proof
     (s with <| vs_allocas := s.vs_allocas |+ (id, (s.vs_alloca_next, LENGTH bytes));
                vs_alloca_next := s.vs_alloca_next + LENGTH bytes |>)` >>
   `step_inst_base (mk_inst id ALLOCA [Lit (n2w (LENGTH bytes))] [buf]) s = OK t` by
-    simp[Abbr `t`, venomInstTheory.mk_inst_def,
-         venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_alloca_def,
-         eval_operand_def, wordsTheory.w2n_n2w] >>
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[Abbr `t`, venomInstTheory.mk_inst_def,
+          venomExecSemanticsTheory.exec_alloca_def,
+          eval_operand_def, wordsTheory.w2n_n2w]) >>
   `eval_operand (Var buf) t = SOME (n2w s.vs_alloca_next) /\
    FLOOKUP t.vs_labels "runtime_begin" = SOME (n2w codepos) /\
    TAKE (LENGTH bytes)
@@ -2014,9 +2016,9 @@ Proof
   `imm_len tops < dimword(:256) /\
    LENGTH runtime_bc + imm_len tops < dimword(:256)` by decide_tac >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
-     simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          venom_state_component_equality, init_venom_state_def]) >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
   irule (no_ctor_fresh_sequence |>
     Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`, `id` |-> `0`] |>
     SRULE [listTheory.LENGTH_APPEND, rich_listTheory.LENGTH_REPLICATE]) >>
@@ -2067,10 +2069,10 @@ Proof
            Lit (n2w (LENGTH bytes))] []]`] |> SRULE []) >>
   disch_then (qspecl_then [`0`, `ctx`, `bb`] mp_tac) >>
   (impl_tac >-
-    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def] >>
-     simp[venomInstTheory.is_terminator_def,
-          venomExecSemanticsTheory.step_inst_base_def,
-          venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
+    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
   strip_tac >> qexists_tac `final'` >>
   `run_context 1 ctx s = Halt final'` by
     (qpat_assum `run_block_non_phis 0 ctx bb t = _` mp_tac >>
@@ -2107,9 +2109,9 @@ Proof
   `imm_len tops < dimword(:256) /\
    LENGTH runtime_bc + imm_len tops < dimword(:256)` by decide_tac >>
   `vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = imm_len tops` by
-    (qpat_x_assum `gas_variant _ _` mp_tac >>
-     simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-          venom_state_component_equality, init_venom_state_def]) >>
+    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+     disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_allocas, s.vs_alloca_next)`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]) >>
   qexists_tac `1` >> asm_rewrite_tac[] >>
   mp_tac (no_ctor_simple_context_execution |>
     Q.INST [`bytes` |-> `runtime_bc ++ REPLICATE (imm_len tops) 0w`,
@@ -2623,9 +2625,9 @@ Proof
   strip_tac >>
   qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
   simp[deploy_state_rel_def] >> strip_tac >>
-  qpat_x_assum `gas_variant _ _` mp_tac >>
-  simp[gas_variant_def, deploy_entry_state_def, entry_venom_state_def,
-       venom_state_component_equality, init_venom_state_def] >>
+  qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
+  disch_then (mp_tac o Q.AP_TERM `\s. (s.vs_accounts, s.vs_transient, s.vs_logs)`) >>
+  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
   metis_tac[]
 QED
 

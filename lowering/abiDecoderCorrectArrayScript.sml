@@ -12,15 +12,15 @@ Theorem abi_decoder_correct_array:
 Proof
   strip_tac >> simp_tac bool_ss [abi_decoder_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o
       PURE_REWRITE_RULE [abi_decoder_recursive_pre_def, abi_decoder_pre_def]) >>
-  drule abi_decoder_dynarray_metadata_shape >> strip_tac >> gvs[Excl "enc_def"] >>
+  drule abi_decoder_dynarray_metadata_shape >> strip_tac >> gnvs[Excl "enc_def"] >>
   (`type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn)) =
     DecDynArray (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) (is_abi_dynamic ce.ce_struct_fields ty) maxn`
     by simp[Once type_to_abi_dec_info_def] >>
-  gvs[Excl "enc_def"] >>
+  gnvs[Excl "enc_def"] >>
   ASM_CASES_TAC ``is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info
       (sf:string |-> (string # vyperAST$type # num) list) ce ty)``
@@ -30,7 +30,8 @@ Proof
         phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
       drule_all abi_decoder_recursive_array_execute >>
       disch_then (qspec_then `ctx` mp_tac) >> simp[]) >>
-  gvs[Excl "enc_def"] >>
+  gnvs[Excl "enc_def"] >>
+  qpat_x_assum `~is_abi_dynamic _ _ /\ _` strip_assume_tac >>
   drule_all abi_decoder_bulk_reentry_protected >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `t` >>
   gvs[abi_decoder_effect_def, abi_decoder_scratch_frame_def, abi_decoder_ids_def,

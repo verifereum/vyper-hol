@@ -1190,13 +1190,11 @@ Theorem toplevel_copy_counter_suffix_ghost:
 Proof
   strip_tac >>
   Cases_on `lookup_var cv s`
-  >- (qpat_x_assum `run_inst_seq _ _ = OK _` mp_tac >>
-      PURE_ONCE_REWRITE_TAC[exprLoweringPropsTheory.run_inst_seq_def] >>
-      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      PURE_REWRITE_TAC[mk_inst_def, instruction_accessors,
-                       instruction_accfupds, combinTheory.K_THM,
-                       opcode_case_def] >>
-      simp[exec_pure2_def, eval_operands_def, eval_operand_def]) >>
+  (* The per-opcode equations: unfolding the whole step_inst_base dispatch
+     took more than 2.5 s. *)
+  >- gvs[exprLoweringPropsTheory.run_inst_seq_def,
+         venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+         exec_pure2_def, mk_inst_def, eval_operands_def, eval_operand_def] >>
   rename1 `lookup_var cv s = SOME w` >>
   qabbrev_tac `i = mk_inst id ADD [Var cv;Lit 1w] [nv]` >>
   qabbrev_tac `j = mk_inst (id+1) ASSIGN [Var nv] [cv]` >>

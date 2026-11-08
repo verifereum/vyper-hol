@@ -24,12 +24,12 @@ QED
 Theorem abi_decoder_primitive_dynarray_pre_facts:
   abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (DecDynArray (DecPrimWord clamp) 32 32 F maxn) (ListV avs) (ArrayV (DynArrayV vs))
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi B sb d b cap s ==>
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   type_memory_size tv = 32 /\ type_memory_bytes ce (ArrayT ty (Dynamic maxn)) = 32 + maxn * 32 /\
   LENGTH avs = LENGTH vs /\ LENGTH vs <= maxn /\ maxn < dimword (:256) /\
   LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) = 32 + LENGTH vs * 32 /\
-  abi_decode_load opc (n2w sb:bytes32) s = n2w (LENGTH vs) /\
+  abi_decode_load opc (n2w (B + sb):bytes32) s = n2w (LENGTH vs) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
     sb + 32 + LENGTH vs * 32 <= h /\ h < dimword (:256))
 Proof
@@ -51,7 +51,7 @@ Proof
     by (drule_all abi_decoder_static_word_array_length >> simp[]) >>
   `maxn < dimword (:256)` by
     (irule abi_decoder_primitive_count_bound >> qexists_tac `d` >> gvs[Excl "enc_def"]) >>
-  `abi_decode_load opc (n2w sb:bytes32) s = n2w (LENGTH avs)` by
+  `abi_decode_load opc (n2w (B + sb):bytes32) s = n2w (LENGTH avs)` by
     (irule canonical_dynamic_array_count_load >> qexists_tac `vyper_to_abi_type env ty` >>
      gvs[Once vyper_to_abi_type_def, Excl "enc_def"]) >>
   gvs[Once vyper_to_abi_type_def, Excl "enc_def"] >>

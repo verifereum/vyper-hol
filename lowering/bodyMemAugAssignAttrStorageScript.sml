@@ -492,14 +492,14 @@ Proof
   qspecl_then [`ADD`, `[Lit kb; Lit ko]`, `sa`, `dst`, `sn`, `kb + ko`, `s0`,
     `ctx`, `func`, `cenv`, `cx`, `es`] mp_tac emit_op_word_path_mem >>
   impl_tac
-  >- simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def,
+  >- simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def,
           wordsTheory.WORD_ADD_COMM] >>
   strip_tac >> rename1 `gas_marked_path T ctx func s0 0 (OK t1)` >>
   qspecl_then [`if tr then TLOAD else SLOAD`, `[dst]`, `sn`, `op`, `sb`,
     `if tr then tload (kb + ko) t1 else sload (kb + ko) t1`, `t1`,
     `ctx`, `func`, `cenv`, `cx`, `es`] mp_tac emit_op_word_path_mem >>
   impl_tac
-  >- (Cases_on `tr` >> gvs[step_inst_base_def, mk_inst_def, exec_read1_def]) >>
+  >- (Cases_on `tr` >> FIRST [gvs[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]]) >>
   strip_tac >> rename1 `gas_marked_path T ctx func t1 0 (OK t2)` >>
   `(if tr then tload (kb + ko) t1 else sload (kb + ko) t1) =
    typed_val_to_w256 tvt v` by
@@ -546,7 +546,7 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
      [kop; op] []) s = OK u` by
     (Cases_on `tr` >>
-     gvs[Abbr `u`, step_inst_base_def, exec_write2_def, mk_inst_def]) >>
+     FIRST [gvs[Abbr `u`, step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def]]) >>
   `run_inst_seq (emitted_insts st st') s = OK u` by
     simp[run_inst_seq_def] >>
   `run_inst_seq_mem_ok (emitted_insts st st') s` by

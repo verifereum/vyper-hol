@@ -49,7 +49,7 @@ inherits precisely S1–S7 below.
 ## All seven public premises
 
 Definitions are in [`e2eDefs`](../lowering/e2eDefsScript.sml), except the compiler
-and [`supportedProgram`](../lowering/supported/supportedProgramScript.sml).
+and [`supportedProgram`](../lowering/proofs/supported/supportedProgramScript.sml).
 “Producer” means a named result establishing the fact, not merely a definition
 or a theorem that consumes it.
 

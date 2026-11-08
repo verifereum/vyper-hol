@@ -31,13 +31,13 @@ Proof
 QED
 
 Theorem abi_decoder_singleton_setup_fragment:
-  abi_decode_singleton_setup dst src opc hi st = ((child_src,child_dst),middle) /\
+  abi_decode_singleton_setup dst src opc base_op hi st = ((child_src,child_dst),middle) /\
   abi_decoder_recursive_pre ce env sf (TupleT [ty]) (TupleTV [tv]) di
-    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap initial /\
+    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap initial /\
   is_dynamic (vyper_to_abi_type env ty) ==>
   frag_exec ctx st middle (\s. s = initial)
     (\mid. abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty)
-       av v middle last child_src child_dst opc hi (sb + 32) d b cap mid /\
+       av v middle last child_src child_dst opc base_op hi B (sb + 32) d b cap mid /\
        abi_decoder_pure_prefix initial mid) (K F)
 Proof
   strip_tac >>
@@ -70,27 +70,27 @@ QED
 
 Theorem abi_decoder_offset_singleton_child_compile:
   dec_info_needs_offset di /\
-  compile_abi_decode_to_buf dst src opc hi (DecComplex T [(di,32,mem_sz)]) st = ((),st') /\
-  abi_decode_singleton_setup dst src opc hi st = ((child_src,child_dst),middle) ==>
-  compile_abi_decode_to_buf child_dst child_src opc hi di middle = ((),st')
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex T [(di,32,mem_sz)]) st = ((),st') /\
+  abi_decode_singleton_setup dst src opc base_op hi st = ((child_src,child_dst),middle) ==>
+  compile_abi_decode_to_buf child_dst child_src opc base_op hi di middle = ((),st')
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qhdtm_x_assum `compile_abi_decode_to_buf` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_dynamic_singleton_phases, comp_bind_def, LET_THM,
                        pairTheory.FST, pairTheory.SND, pairTheory.UNCURRY_DEF]
 QED
 
 Theorem abi_decoder_offset_singleton_fragment:
-  compile_abi_decode_to_buf dst src opc hi
+  compile_abi_decode_to_buf dst src opc base_op hi
     (DecComplex T [(type_to_abi_dec_info sf ce ty,32,mem_sz)]) st = ((),st') /\
   abi_decoder_recursive_pre ce env sf (TupleT [ty]) (TupleTV [tv])
     (DecComplex T [(type_to_abi_dec_info sf ce ty,32,mem_sz)])
-    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc hi sb d b cap initial /\
+    (ListV [av]) (ArrayV (TupleV [v])) st last src dst opc base_op hi B sb d b cap initial /\
   dec_info_needs_offset (type_to_abi_dec_info sf ce ty) /\
   (!child_src child_dst middle mid.
-    abi_decode_singleton_setup dst src opc hi st = ((child_src,child_dst),middle) /\
+    abi_decode_singleton_setup dst src opc base_op hi st = ((child_src,child_dst),middle) /\
     abi_decoder_recursive_pre ce env sf ty tv (type_to_abi_dec_info sf ce ty)
-      av v middle last child_src child_dst opc hi (sb + 32) d b cap mid ==>
+      av v middle last child_src child_dst opc base_op hi B (sb + 32) d b cap mid ==>
     frag_exec ctx middle st' (\s. s = mid)
       (abi_decoder_post tv v st' d (type_memory_bytes ce ty) b cap mid) (K F)) ==>
   frag_exec ctx st st' (\s. s = initial)
@@ -98,20 +98,20 @@ Theorem abi_decoder_offset_singleton_fragment:
        st' d (type_memory_bytes ce ty) b cap initial) (K F)
 Proof
   strip_tac >>
-  qpat_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_decoder_recursive_pre`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_recursive_pre_def]) >>
   drule_all abi_decoder_coherent_singleton_dynamic >> strip_tac >>
   `abi_decoder_coherent ce env sf ty tv` by
     fs[abi_decoder_recursive_pre_def, abi_decoder_coherent_tuple_iff] >>
   `abi_decoder_dynamic (type_to_abi_dec_info sf ce ty)` by
     (drule_all abi_decoder_coherent_dynamic >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qhdtm_x_assum `compile_abi_decode_to_buf` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_dynamic_singleton_phases, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >>
-  rename1 `abi_decode_singleton_setup dst src opc hi st = (child_ops,middle)` >>
+  rename1 `abi_decode_singleton_setup dst src opc base_op hi st = (child_ops,middle)` >>
   PairCases_on `child_ops` >> gvs[] >>
-  rename1 `abi_decode_singleton_setup dst src opc hi st = ((child_src,child_dst),middle)` >>
-  `compile_abi_decode_to_buf child_dst child_src opc hi
+  rename1 `abi_decode_singleton_setup dst src opc base_op hi st = ((child_src,child_dst),middle)` >>
+  `compile_abi_decode_to_buf child_dst child_src opc base_op hi
      (type_to_abi_dec_info sf ce ty) middle = ((),st')` by
     (qpat_x_assum `_ = ((),st')` mp_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF]) >>
   drule_all abi_decoder_singleton_setup_fragment >> strip_tac >>
@@ -122,7 +122,7 @@ Proof
   `cs_extends middle st'` by (drule_all cs_extends_abi_decode >> simp[]) >>
   irule frag_exec_initial_seq >>
   qexistsl_tac [`\mid. abi_decoder_recursive_pre ce env sf ty tv
-     (type_to_abi_dec_info sf ce ty) av v middle last child_src child_dst opc hi
+     (type_to_abi_dec_info sf ce ty) av v middle last child_src child_dst opc base_op hi B
      (sb + 32) d b cap mid /\ abi_decoder_pure_prefix initial mid`, `middle`] >>
   simp[] >> rpt strip_tac >>
   irule abi_decoder_singleton_child_fragment >> conj_tac

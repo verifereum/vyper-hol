@@ -532,7 +532,11 @@ Proof
   qpat_x_assum `evaluate_type _ (expr_type idx) = _` kall_tac >>
   `cs_extends sc sd /\ sc.cs_next_var <= sd.cs_next_var /\
    sc.cs_next_id <= sd.cs_next_id` by
-    (irule array_subscript_grows >> goal_assum (drule_at Any) >>
+    (qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ sc = _`
+       (mp_tac o Q.AP_TERM `SND`) >>
+     simp[] >> disch_then (SUBST1_TAC o SYM) >>
+     rewrite_tac[GSYM exprLoweringPropsTheory.ci_mono_def] >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
      simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
   `!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\

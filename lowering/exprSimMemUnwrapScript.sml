@@ -150,7 +150,7 @@ Proof
   >- (rw[is_terminator_def, Abbr `ld`] >>
       TRY (irule below_frontier_no_ranges >> simp[mk_inst_def] >> NO_TAC) >>
       TRY (simp[inst_dload_in_section_def, mk_inst_def] >> NO_TAC) >>
-      gvs[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
+      FIRST [simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]]) >>
   strip_tac >> rename1 `gas_path_mem _ _ s 0 (OK u)` >>
   qexists_tac `u` >> simp[] >>
   irule expr_post_of_vv_post_load_physical >> simp[] >>
@@ -246,7 +246,7 @@ Proof
         `mload (w2n w) s0`] mp_tac) >>
       impl_tac
       >- (simp[is_terminator_def, below_frontier_ILOAD] >>
-          simp[inst_dload_in_section_def, step_inst_base_def,
+          simp[inst_dload_in_section_def, step_inst_base_opcode_eqs,
                exec_read1_def, mk_inst_def]) >>
       strip_tac >> goal_assum drule >> simp[]) >>
   rename1 `cenv.ce_imm_alloca = SOME ib` >>
@@ -271,7 +271,7 @@ Proof
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac >>
       TRY (irule below_frontier_no_ranges >> simp[mk_inst_def] >> NO_TAC) >>
-      simp[inst_dload_in_section_def, step_inst_base_def, exec_pure2_def,
+      simp[inst_dload_in_section_def, step_inst_base_opcode_eqs, exec_pure2_def,
            mk_inst_def, wordsTheory.WORD_ADD_0]) >>
   strip_tac >> rename1 `gas_path_mem _ _ s0 0 (OK s1)` >>
   `~s1.vs_halted` by metis_tac[gas_path_mem_exec, gas_path_normal] >>
@@ -281,7 +281,7 @@ Proof
     `mload (w2n w) s1`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def, below_frontier_ILOAD] >>
-      simp[inst_dload_in_section_def, step_inst_base_def,
+      simp[inst_dload_in_section_def, step_inst_base_opcode_eqs,
            exec_read1_def, mk_inst_def]) >>
   strip_tac >> rename1 `gas_path_mem _ _ s1 0 (OK s2)` >>
   qexists_tac `s2` >> gvs[mload_def] >>
@@ -362,7 +362,7 @@ Proof
 QED
 
 (* Straight-line code without GAS, memory-checked, keeping the history. *)
-Theorem straight_path_mem[local]:
+Theorem straight_path_mem:
   fn_has_code sa sb func /\ same_blocks sa sb /\
   sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
   EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
@@ -403,7 +403,7 @@ Proof
 QED
 
 (* The buffer's ALLOCA, memory-checked. *)
-Theorem alloc_buffer_source_path_mem[local]:
+Theorem alloc_buffer_source_path_mem:
   !ctx func cenv cx es sm mid buf sz s src a.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
     stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -449,7 +449,7 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   `s.vs_alloca_next <= t.vs_alloca_next` by
     (qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
-     simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
           exec_alloca_def, eval_operand_def] >>
      Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id` >>
      simp[update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
@@ -624,7 +624,7 @@ Proof
   metis_tac[alloca_history_jump]
 QED
 
-Theorem storage_unwrap_typed_suffix_path_mem[local]:
+Theorem storage_unwrap_typed_suffix_path_mem:
   !loc tv src dst mid result sb ctx func cenv cx es u t v a w.
   (loc = LocStorage \/ loc = LocTransient) /\
   (if type_slot_size tv = 1 then
@@ -673,7 +673,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem storage_unwrap_layout_facts[local]:
+Theorem storage_unwrap_layout_facts:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   ~is_word_type t /\ fn_has_code sm sb func ==>
@@ -720,7 +720,7 @@ Proof
   gvs[comp_ignore_bind_def, ci_mono_def] >> metis_tac[fn_has_code_split]
 QED
 
-Theorem storage_unwrap_type_facts[local]:
+Theorem storage_unwrap_type_facts:
   post_value_type cenv e = expr_type e /\
   vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
@@ -754,7 +754,7 @@ Proof
 QED
 
 (* expr_post of a value copied into a fresh buffer. *)
-Theorem buffer_post_transport[local]:
+Theorem buffer_post_transport:
   !ctx func cenv cx e es sa sm mid sb s0 es' v t p s u z tv buf w.
     vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     local_ptrs_reserved cenv sa /\
@@ -899,7 +899,7 @@ QED
 
 (* ----- code ----- *)
 
-Theorem code_copy_path_mem[local]:
+Theorem code_copy_path_mem:
   !imm src dst n off sa sb func s a b ctx.
   compile_imm_copy_to_memory F imm src dst n off sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -960,7 +960,7 @@ Proof
   gvs[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last] >> rpt conj_tac >>
   TRY (irule below_frontier_no_ranges >> simp[mk_inst_def] >> NO_TAC) >>
   TRY (simp[inst_dload_in_section_def, mk_inst_def] >> NO_TAC) >>
-  gvs[step_inst_base_def, exec_pure2_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_pure2_def, mk_inst_def] >>
   gvs[unitTransformDefsTheory.inst_mem_below_frontier_def,
       contextCodegenRelTheory.source_memory_read_ranges_def,
       codegenRelTheory.source_memory_write_ranges_def,
@@ -1084,7 +1084,7 @@ Proof
   irule body_copy_frame_mem_append >> metis_tac[]
 QED
 
-Theorem ctor_code_copy_path_mem[local]:
+Theorem ctor_code_copy_path_mem:
   !imm src dst n off sa sb func s a b ctx.
   compile_imm_copy_to_memory T imm src dst n off sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -1140,7 +1140,7 @@ Proof
 QED
 
 (* Runtime transfers leave memory outside the buffer alone. *)
-Theorem runtime_copy_frame_facts[local]:
+Theorem runtime_copy_frame_facts:
   w2n a + type_memory_size tv < dimword (:256) /\
   w2n w + type_memory_size tv < dimword (:256) /\
   zm = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory ==>

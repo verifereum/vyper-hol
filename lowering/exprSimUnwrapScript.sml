@@ -943,7 +943,7 @@ Proof
 QED
 
 (* compile_imm_load_word_ctor_frag's counted form. *)
-Theorem compile_imm_load_word_ctor_path[local]:
+Theorem compile_imm_load_word_ctor_path:
   !ctx func cenv cx es pop sm op sb s0 w.
     compile_imm_load_word T cenv.ce_imm_alloca pop sm = (op, sb) /\
     local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\

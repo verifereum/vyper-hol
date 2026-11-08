@@ -1,7 +1,7 @@
 (* Finite-tree distinctness slice from the proved MakeSSA reference. *)
 Theory makeSsaRfDomDistinct
 Ancestors dominatorQueryProofs dominatorRankProofs makeSsaCurrentAnalysis makeSsaCurrentTree makeSsaCurrentTreeTrace
-  makeSsaCurrentDefs makeSsaCurrentInduct makeSsaDefs
+  makeSsaDefs makeSsaCurrentInduct
   dominatorDefs relation list sorting combin cfgAnalysisProps cfgHelpers
   dominatorAnalysisProps venomWf cfgWf cfgDefs venomInst venomExecProps
 

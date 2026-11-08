@@ -218,3 +218,50 @@ Theorem abi_scratch_effect_alloca_next_mono:
 Proof
   simp[abi_scratch_effect_def, abi_scratch_evolution_def]
 QED
+
+Theorem abi_scratch_effect_trans_tail:
+  abi_scratch_effect first last lo hi next limit_st d sz b cap initial middle /\
+  abi_scratch_effect first last tail_lo tail_hi tail_next limit_st d sz b cap middle actual /\
+  first <= tail_lo /\ tail_hi <= last /\
+  lo <= tail_lo /\ tail_hi <= hi /\ next <= tail_next ==>
+  abi_scratch_effect first last lo hi next limit_st d sz b cap initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ initial middle`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_effect_def]) >>
+  qpat_assum `abi_scratch_effect _ _ _ _ _ _ _ _ _ _ middle actual`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_effect_def]) >>
+  `abi_scratch_evolution (abi_decoder_ids first last) b cap initial actual` by
+    (drule_all abi_scratch_evolution_trans >> simp[]) >>
+  `abi_decoder_ids tail_lo tail_hi SUBSET abi_decoder_ids first last /\
+   abi_decoder_ids tail_lo tail_hi SUBSET abi_decoder_ids lo hi` by
+    (simp[SUBSET_DEF, abi_decoder_ids_def] >> decide_tac) >>
+  `abi_scratch_evolution (abi_decoder_ids tail_lo tail_hi) b cap initial middle` by
+    (irule abi_scratch_evolution_subset >> qexists_tac `abi_decoder_ids first last` >> simp[]) >>
+  `abi_decode_footprint_frame
+    ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids tail_lo tail_hi) b cap initial) middle actual` by
+    (mp_tac (Q.INST [`ids` |-> `abi_decoder_ids tail_lo tail_hi`,
+       `s` |-> `initial:venom_state`, `t` |-> `middle:venom_state`,
+       `u` |-> `actual:venom_state`] abi_scratch_frame_advance) >>
+     asm_simp_tac (srw_ss()) []) >>
+  `abi_decode_footprint_frame
+    ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial) middle actual` by
+    (qpat_x_assum `abi_decode_footprint_frame
+       ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids tail_lo tail_hi) b cap initial) middle actual`
+       (mp_tac o PURE_REWRITE_RULE [abi_decode_footprint_frame_def]) >>
+     simp_tac bool_ss [abi_decode_footprint_frame_def] >> strip_tac >>
+     asm_simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >>
+     first_x_assum irule >>
+     gvs[abi_scratch_disjoint_cons] >>
+     irule abi_scratch_disjoint_subset >> qexists_tac `abi_decoder_ids lo hi` >> simp[]) >>
+  `abi_decode_footprint_frame
+    ((d,sz)::abi_decoder_child_scratch (abi_decoder_ids lo hi) b cap initial) initial actual` by
+    (drule_all abi_decode_footprint_frame_trans >> simp[]) >>
+  asm_simp_tac bool_ss [abi_scratch_effect_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `abi_decoder_operand_live tail_next op` by
+        (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `id < tail_lo \/ tail_hi <= id` by decide_tac >> metis_tac[]
+QED

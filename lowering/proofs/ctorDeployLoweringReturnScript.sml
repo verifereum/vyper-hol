@@ -656,10 +656,10 @@ QED
 
 Theorem deploy_assembled_size_bound[local]:
   deploy_phases policy tops (deploy_bc,runtime_bc)
-    (rpolicy,dunit,dout,prog,cplan) ==>
+    (rpolicy,dunit,dout,prog,cplan) /\ deploy_source_ok tops am tx ==>
   LENGTH (assemble prog) < 65536
 Proof
-  strip_tac >> drule deploy_bc_size_bounded >>
+  strip_tac >> drule_all deploy_bc_size_bounded >>
   gvs[deploy_phases_def]
 QED
 
@@ -669,8 +669,6 @@ Theorem deploy_assembly_encoding_wf[local]:
   asm_encoding_wf prog
 Proof
   strip_tac >>
-  `LENGTH (assemble prog) < 65536` by
-    (irule deploy_assembled_size_bound >> metis_tac[]) >>
   drule_all deploy_unit_shape_ok >> strip_tac >>
   drule_all deploy_unit_defs_reach_uses >> strip_tac >>
   `unit_shape_ok dout.po_unit` by
@@ -678,17 +676,6 @@ Proof
      gvs[deploy_phases_def] >> metis_tac[]) >>
   irule codegen_assembly_asm_encoding_wf >>
   gvs[deploy_phases_def] >> metis_tac[]
-QED
-
-Theorem deploy_encoding_total_length[local]:
-  asm_encoding_wf prog ==>
-  LENGTH (assemble prog) = SUM (MAP asm_inst_size prog)
-Proof
-  strip_tac >> Cases_on `compute_label_offsets prog` >>
-  simp[assemble_def, LENGTH_FLAT, MAP_MAP_o] >>
-  AP_TERM_TAC >> irule MAP_CONG >> simp[MEM_EL] >>
-  rpt strip_tac >> irule ewi_length >>
-  drule_all asm_encoding_wf_el >> gvs[]
 QED
 
 Theorem deploy_numeric_label_bound[local]:

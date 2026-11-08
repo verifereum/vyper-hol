@@ -28,7 +28,7 @@
 
 Theory dfgDefs
 Ancestors
-  list finite_map
+  list finite_map pred_set
   venomState venomInst
 
 (* ==========================================================================
@@ -166,6 +166,22 @@ End
 Definition dfg_def_ids_def:
   dfg_def_ids dfg = IMAGE (\inst. inst.inst_id) (FRANGE dfg.dfg_defs)
 End
+
+(* --------------------------------------------------------------------------
+   Finiteness/termination helpers (used by the passes' termination proofs)
+   -------------------------------------------------------------------------- *)
+
+Theorem dfg_def_ids_finite:
+  !dfg. FINITE (dfg_def_ids dfg)
+Proof
+  rw[dfg_def_ids_def, IMAGE_FINITE, FINITE_FRANGE]
+QED
+
+Theorem dfg_get_def_implies_dfg_def_ids:
+  !dfg v inst. dfg_get_def dfg v = SOME inst ==> inst.inst_id IN dfg_def_ids dfg
+Proof
+  metis_tac[dfg_def_ids_def, IN_IMAGE, IN_FRANGE_FLOOKUP, dfg_get_def_def]
+QED
 
 (* ==========================================================================
    Assign chain traversal
