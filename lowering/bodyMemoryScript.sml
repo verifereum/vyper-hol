@@ -89,7 +89,7 @@ Proof
      simp[Once body_exprs_mem_ok_def, bodyMemBiAccTheory.body_acc_code_mem]) >>
   qpat_x_assum `!s'' x t v code_ty addr s3 tail_vs t'. _` kall_tac >>
   qpat_x_assum `!s'' x t v code_ty addr. _` kall_tac >>
-  qpat_x_assum `!s'' x t. _ /\ code_slice_source bt es = NONE ==> _` kall_tac >>
+  qpat_x_assum `!s'' x t. _ /\ _ /\ _ /\ code_slice_source bt es = NONE ==> _` kall_tac >>
   `builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\ bt <> Env MsgGas ==>
    body_exprs_mem_ok cx es` by
     (strip_tac >> first_x_assum irule >> simp[type_check_def, assert_def]) >>
