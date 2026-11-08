@@ -374,6 +374,338 @@ Proof
   simp[add_copy_def, mm_local_merge_ids_exact, mm_local_insert_ids_perm]
 QED
 
+Theorem mm_local_partition_ids_perm[local]:
+  !cs. PERM (mm_local_group_ids (FILTER Q cs) ++
+             mm_local_group_ids (FILTER (\cg. ~Q cg) cs))
+            (mm_local_group_ids cs)
+Proof
+  Induct_on `cs` >> simp[mm_local_group_ids_def] >>
+  Cases_on `Q h`
+  >- (simp[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, PERM_APPEND_IFF] >>
+      gvs[mm_local_group_ids_def]) >>
+  simp[] >> irule PERM_TRANS >>
+  qexists `h.cg_inst_ids ++
+    (FLAT (MAP (\cg. cg.cg_inst_ids) (FILTER Q cs)) ++
+     FLAT (MAP (\cg. cg.cg_inst_ids) (FILTER (\cg. ~Q cg) cs)))` >>
+  conj_tac >- simp[PERM_SWAP_L_AT_FRONT] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, PERM_APPEND_IFF] >>
+  gvs[mm_local_group_ids_def]
+QED
+
+Theorem mm_local_flush_ids_perm[local]:
+  PERM (mm_local_group_ids (flush_copies ss (FILTER Q ss.ss_copies)).ss_flushed ++
+        mm_local_group_ids (flush_copies ss (FILTER Q ss.ss_copies)).ss_copies)
+       (mm_local_group_ids ss.ss_flushed ++ mm_local_group_ids ss.ss_copies)
+Proof
+  simp[flush_copies_def, mm_local_group_ids_append, MEM_FILTER] >>
+  `FILTER (\cg. ~(Q cg /\ MEM cg ss.ss_copies)) ss.ss_copies =
+   FILTER (\cg. ~Q cg) ss.ss_copies` by
+    (simp[rich_listTheory.FILTER_EQ]) >>
+  simp[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, PERM_APPEND_IFF] >>
+  gvs[mm_local_partition_ids_perm]
+QED
+
+Definition mm_local_scan_unique_def:
+  mm_local_scan_unique proj todo ss <=>
+    ALL_DISTINCT (FILTER proj (mm_local_group_ids ss.ss_flushed ++
+                               mm_local_group_ids ss.ss_copies ++ todo))
+End
+
+Theorem mm_local_unique_perm[local]:
+  PERM a b ==> (ALL_DISTINCT (FILTER proj (a ++ todo)) =
+                 ALL_DISTINCT (FILTER proj (b ++ todo)))
+Proof
+  strip_tac >> irule ALL_DISTINCT_PERM >>
+  irule PERM_FILTER >> simp[PERM_APPEND_IFF]
+QED
+
+Theorem mm_local_flush_unique[local]:
+  mm_local_scan_unique proj todo (flush_copies ss (FILTER Q ss.ss_copies)) =
+  mm_local_scan_unique proj todo ss
+Proof
+  simp[mm_local_scan_unique_def, APPEND_ASSOC] >>
+  irule mm_local_unique_perm >> irule mm_local_flush_ids_perm
+QED
+
+Theorem mm_local_barrier_unique[local]:
+  mm_local_scan_unique proj todo (hard_barrier ss) = mm_local_scan_unique proj todo ss
+Proof
+  simp[mm_local_scan_unique_def, hard_barrier_def,
+       mm_local_group_ids_append, mm_local_group_ids_def, APPEND_ASSOC]
+QED
+
+Theorem mm_local_invalidate_unique[local]:
+  mm_local_scan_unique proj todo (invalidate_loads ss iv) = mm_local_scan_unique proj todo ss
+Proof
+  simp[mm_local_scan_unique_def, invalidate_loads_def]
+QED
+
+Theorem mm_local_hazards_unique[local]:
+  mm_local_scan_unique proj todo (flush_hazards mode ss cg) =
+  mm_local_scan_unique proj todo ss
+Proof
+  simp[flush_hazards_def, waw_hazards_def, raw_hazards_def, war_hazards_def,
+       copies_that_overwrite_def] >>
+  rpt IF_CASES_TAC >> simp[mm_local_flush_unique]
+QED
+
+Theorem mm_local_add_unique[local]:
+  ALL_DISTINCT (FILTER proj (cg.cg_inst_ids ++ mm_local_group_ids ss.ss_flushed ++
+                            mm_local_group_ids ss.ss_copies ++ todo)) ==>
+  mm_local_scan_unique proj todo (ss with ss_copies := add_copy ss.ss_copies cg)
+Proof
+  strip_tac >> simp[mm_local_scan_unique_def] >>
+  `PERM (mm_local_group_ids ss.ss_flushed ++
+         mm_local_group_ids (add_copy ss.ss_copies cg))
+        (cg.cg_inst_ids ++ mm_local_group_ids ss.ss_flushed ++
+         mm_local_group_ids ss.ss_copies)` by
+    (irule PERM_TRANS >>
+     qexists `mm_local_group_ids ss.ss_flushed ++
+       (cg.cg_inst_ids ++ mm_local_group_ids ss.ss_copies)` >>
+     conj_tac >- simp[PERM_APPEND_IFF, mm_local_add_ids_perm] >>
+     simp[PERM_SWAP_L_AT_FRONT]) >>
+  drule mm_local_unique_perm >>
+  simp[]
+QED
+
+Theorem mm_local_unique_drop[local]:
+  mm_local_scan_unique proj (id::todo) ss ==> mm_local_scan_unique proj todo ss
+Proof
+  simp[mm_local_scan_unique_def, FILTER_APPEND_DISTRIB, ALL_DISTINCT_APPEND] >>
+  Cases_on `proj id` >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_add_current_unique[local]:
+  mm_local_scan_unique proj (id::todo) ss /\
+  FILTER proj cg.cg_inst_ids = FILTER proj [id] ==>
+  mm_local_scan_unique proj todo (ss with ss_copies := add_copy ss.ss_copies cg)
+Proof
+  strip_tac >> irule mm_local_add_unique >>
+  gvs[mm_local_scan_unique_def, FILTER_APPEND_DISTRIB, ALL_DISTINCT_APPEND] >>
+  Cases_on `proj id` >> gvs[MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem mm_local_loads_update_unique[local]:
+  mm_local_scan_unique proj todo (ss with ss_loads := loads) =
+  mm_local_scan_unique proj todo ss
+Proof
+  simp[mm_local_scan_unique_def]
+QED
+
+Theorem mm_local_load_unique[local]:
+  mm_local_scan_unique proj todo ss ==>
+  mm_local_scan_unique proj todo (scan_load mode ss inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >- simp[scan_load_def, mm_local_barrier_unique] >>
+  rename1 `inst.inst_operands = src::ops` >>
+  Cases_on `ops`
+  >- (
+    Cases_on `operand_lit_val src`
+    >- simp[scan_load_def, mm_local_barrier_unique] >>
+    Cases_on `inst.inst_outputs`
+    >- simp[scan_load_def, mm_local_barrier_unique] >>
+    rename1 `inst.inst_outputs = out::outs` >>
+    Cases_on `outs` >> simp[scan_load_def, mm_local_barrier_unique] >>
+    rpt IF_CASES_TAC >>
+    simp[mm_local_loads_update_unique, copies_that_overwrite_def,
+         mm_local_flush_unique]) >>
+  simp[scan_load_def, mm_local_barrier_unique]
+QED
+
+Theorem mm_local_store_unique[local]:
+  mm_local_scan_unique proj (inst.inst_id::todo) ss /\
+  (!v li. dfg_get_def dfg v = SOME li ==> ~proj li.inst_id) ==>
+  mm_local_scan_unique proj todo (scan_store dfg mode ss inst)
+Proof
+  strip_tac >>
+  `mm_local_scan_unique proj todo ss` by metis_tac[mm_local_unique_drop] >>
+  Cases_on `inst.inst_operands`
+  >- simp[scan_store_def, mm_local_barrier_unique] >>
+  rename1 `inst.inst_operands = dst::ops` >>
+  Cases_on `ops` >- simp[scan_store_def, mm_local_barrier_unique] >>
+  rename1 `inst.inst_operands = dst::value::ops` >>
+  Cases_on `ops`
+  >- (
+    Cases_on `dst` >> Cases_on `value` >>
+    simp[scan_store_def, operand_var_name_def, operand_lit_val_def,
+         mm_local_barrier_unique] >>
+    rename1 `inst.inst_operands = [Lit addr; Var v]` >>
+    Cases_on `FLOOKUP ss.ss_loads v`
+    >- simp[mm_local_barrier_unique] >>
+    simp[] >> irule mm_local_add_current_unique >>
+    qexists `inst.inst_id` >>
+    conj_tac
+    >- (Cases_on `dfg_get_def dfg v` >> simp[] >>
+        rename1 `dfg_get_def dfg v = SOME li` >>
+        `~proj li.inst_id` by metis_tac[] >> simp[]) >>
+    simp[mm_local_hazards_unique] >>
+    IF_CASES_TAC >> simp[mm_local_invalidate_unique]) >>
+  simp[scan_store_def, mm_local_barrier_unique]
+QED
+
+Theorem mm_local_bulk_unique[local]:
+  mm_local_scan_unique proj (inst.inst_id::todo) ss ==>
+  mm_local_scan_unique proj todo (scan_bulk_copy mode ss inst)
+Proof
+  strip_tac >>
+  `mm_local_scan_unique proj todo ss` by metis_tac[mm_local_unique_drop] >>
+  Cases_on `inst.inst_operands`
+  >- simp[scan_bulk_copy_def, mm_local_barrier_unique] >>
+  rename1 `inst.inst_operands = dst::ops` >>
+  Cases_on `ops` >- simp[scan_bulk_copy_def, mm_local_barrier_unique] >>
+  rename1 `inst.inst_operands = dst::src::ops` >>
+  Cases_on `ops` >- simp[scan_bulk_copy_def, mm_local_barrier_unique] >>
+  rename1 `inst.inst_operands = dst::src::len::ops` >>
+  Cases_on `ops`
+  >- (
+    Cases_on `dst` >>
+    simp[scan_bulk_copy_def, operand_lit_val_def, mm_local_barrier_unique] >>
+    Cases_on `src` >> simp[operand_lit_val_def, mm_local_barrier_unique] >>
+    Cases_on `len` >> simp[operand_lit_val_def, mm_local_barrier_unique] >>
+    irule mm_local_add_current_unique >> qexists `inst.inst_id` >>
+    simp[mm_local_hazards_unique] >>
+    IF_CASES_TAC >> simp[mm_local_invalidate_unique]) >>
+  simp[scan_bulk_copy_def, mm_local_barrier_unique]
+QED
+
+Theorem mm_local_inst_unique[local]:
+  mm_local_scan_unique proj (inst.inst_id::todo) ss /\
+  (!v li. dfg_get_def dfg v = SOME li ==> ~proj li.inst_id) ==>
+  mm_local_scan_unique proj todo (scan_inst dfg mode ss inst)
+Proof
+  strip_tac >> simp[scan_inst_def] >> rpt IF_CASES_TAC >>
+  metis_tac[mm_local_store_unique, mm_local_bulk_unique,
+            mm_local_load_unique, mm_local_unique_drop, mm_local_barrier_unique]
+QED
+
+Theorem mm_local_fold_unique[local]:
+  !xs ss. mm_local_scan_unique proj (MAP (\i. i.inst_id) xs ++ todo) ss /\
+  (!v li. dfg_get_def dfg v = SOME li ==> ~proj li.inst_id) ==>
+  mm_local_scan_unique proj todo (FOLDL (scan_inst dfg mode) ss xs)
+Proof
+  Induct_on `xs` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> metis_tac[mm_local_inst_unique]
+QED
+
+Theorem mm_local_scan_projected_unique[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  (!v li. dfg_get_def dfg v = SOME li ==> ~proj li.inst_id) ==>
+  ALL_DISTINCT (FILTER proj
+    (mm_local_group_ids (scan_block dfg mode bb).ss_flushed))
+Proof
+  strip_tac >>
+  `mm_local_scan_unique proj [] (scan_block dfg mode bb)` by
+    (simp[scan_block_def, mm_local_barrier_unique] >>
+     irule mm_local_fold_unique >>
+     simp[mm_local_scan_unique_def, empty_scan_state_def,
+          mm_local_group_ids_def] >> metis_tac[FILTER_ALL_DISTINCT]) >>
+  gvs[mm_local_scan_unique_def, FILTER_APPEND_DISTRIB, ALL_DISTINCT_APPEND]
+QED
+
+Theorem mm_local_projected_owner[local]:
+  !groups a b. ALL_DISTINCT (FILTER proj (mm_local_group_ids groups)) /\
+  proj id /\ MEM a groups /\ MEM b groups /\
+  MEM id a.cg_inst_ids /\ MEM id b.cg_inst_ids ==> a = b
+Proof
+  Induct_on `groups` >> simp[mm_local_group_ids_def,
+    FILTER_APPEND_DISTRIB, ALL_DISTINCT_APPEND, MEM_FILTER, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >> metis_tac[mm_local_group_ids_def]
+QED
+
+Theorem mm_local_scan_group_owner[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  (!v li. dfg_get_def dfg v = SOME li ==> ~proj li.inst_id) /\
+  proj id /\ MEM a (scan_block dfg mode bb).ss_flushed /\
+  MEM b (scan_block dfg mode bb).ss_flushed /\
+  MEM id a.cg_inst_ids /\ MEM id b.cg_inst_ids ==> a = b
+Proof
+  metis_tac[mm_local_scan_projected_unique, mm_local_projected_owner]
+QED
+
+Theorem mm_local_rep_member[local]:
+  rep_of_group xs cg = SOME (id,other) ==>
+  other = cg /\ MEM id cg.cg_inst_ids /\ MEM id (MAP (\i. i.inst_id) xs)
+Proof
+  simp[rep_of_group_def] >>
+  Cases_on `REVERSE (sort_ids_by_block xs cg.cg_inst_ids)` >> simp[] >>
+  strip_tac >> gvs[] >>
+  rename1 `REVERSE (sort_ids_by_block xs cg.cg_inst_ids) = rep::tail` >>
+  `MEM rep (REVERSE (sort_ids_by_block xs cg.cg_inst_ids))` by metis_tac[MEM] >>
+  gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER]
+QED
+
+Theorem mm_local_rep_lookup[local]:
+  !groups cg. ALL_DISTINCT (FILTER proj (mm_local_group_ids groups)) /\
+  proj id /\ MEM cg groups /\ rep_of_group xs cg = SOME (id,cg) ==>
+  ALOOKUP (rep_map_of_groups xs groups) id = SOME cg
+Proof
+  Induct_on `groups` >- simp[] >>
+  rpt gen_tac >> strip_tac >> Cases_on `cg = h`
+  >- gvs[rep_map_of_groups_def] >>
+  `MEM cg groups` by gvs[] >>
+  `ALOOKUP (rep_map_of_groups xs groups) id = SOME cg` by
+    (first_x_assum irule >>
+     gvs[mm_local_group_ids_def, FILTER_APPEND_DISTRIB, ALL_DISTINCT_APPEND]) >>
+  Cases_on `rep_of_group xs h`
+  >- gvs[rep_map_of_groups_def] >>
+  rename1 `rep_of_group xs h = SOME result` >>
+  PairCases_on `result` >>
+  drule mm_local_rep_member >> strip_tac >> gvs[] >>
+  `result0 <> id` by
+    (strip_tac >> gvs[] >>
+     imp_res_tac mm_local_rep_member >>
+     `h = cg` by (irule mm_local_projected_owner >>
+       qexistsl [`h::groups`, `id`, `proj`] >> simp[]) >> gvs[]) >>
+  gvs[rep_map_of_groups_def]
+QED
+
+Theorem mm_local_scan_rep_lookup[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  (!v li. dfg_get_def dfg v = SOME li ==> ~proj li.inst_id) /\
+  proj id /\ MEM cg (scan_block dfg mode bb).ss_flushed /\
+  rep_of_group bb.bb_instructions cg = SOME (id,cg) ==>
+  ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block dfg mode bb).ss_flushed) id = SOME cg
+Proof
+  metis_tac[mm_local_scan_projected_unique, mm_local_rep_lookup]
+QED
+
+Theorem mm_local_retained_store_rep_or_pin[local]:
+  MEM st xs /\ st.inst_opcode = MSTORE /\
+  dfg_get_inst_by_id dfg st.inst_id = SOME st /\
+  MEM cg groups /\ MEM st.inst_id cg.cg_inst_ids /\
+  ~MEM st.inst_id (nop_ids_of_groups dfg mode xs groups) ==>
+  ?rep. rep_of_group xs cg = SOME (rep,cg) /\
+    (rep = st.inst_id \/ rep_pin_id dfg mode rep cg = SOME st.inst_id)
+Proof
+  strip_tac >>
+  `MEM st.inst_id (sort_ids_by_block xs cg.cg_inst_ids)` by
+    (simp[sort_ids_by_block_def, MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+  `~MEM st.inst_id (nop_ids_of_group dfg mode xs cg)` by
+    (gvs[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  Cases_on `REVERSE (sort_ids_by_block xs cg.cg_inst_ids)`
+  >- metis_tac[MEM_REVERSE, MEM] >>
+  rename1 `REVERSE (sort_ids_by_block xs cg.cg_inst_ids) = rep::earlier` >>
+  qexists `rep` >> simp[rep_of_group_def] >>
+  Cases_on `rep = st.inst_id` >- simp[] >>
+  `MEM st.inst_id earlier` by metis_tac[MEM_REVERSE, MEM] >>
+  qpat_x_assum `~MEM _ (nop_ids_of_group _ _ _ _)` mp_tac >>
+  simp[nop_ids_of_group_def, MEM_FILTER, MEM_REVERSE] >>
+  gvs[]
+QED
+
+Theorem mm_local_retained_store_rep[local]:
+  MEM st xs /\ st.inst_opcode = MSTORE /\
+  dfg_get_inst_by_id dfg st.inst_id = SOME st /\
+  MEM cg groups /\ MEM st.inst_id cg.cg_inst_ids /\
+  ~MEM st.inst_id (nop_ids_of_groups dfg mode xs groups) /\
+  (!rep. rep_pin_id dfg mode rep cg <> SOME st.inst_id) ==>
+  rep_of_group xs cg = SOME (st.inst_id,cg)
+Proof
+  metis_tac[mm_local_retained_store_rep_or_pin]
+QED
+
 Theorem mm_local_deleted_unpinned[local]:
   MEM id (nop_ids_of_group dfg mode insts cg) ==>
   ?rep. rep_of_group insts cg = SOME (rep,cg) /\
