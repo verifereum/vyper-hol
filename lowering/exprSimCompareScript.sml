@@ -109,8 +109,14 @@ Proof
      covers a quarter of the value pairs *)
   >>~- ([`value_has_type _ (IntV _)`],
         Cases_on `v2` >>
-        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-            expr_res_ok_def, binop_negate_def] >>
+        fs[bop_result_def] >>
+        fs[SIMP_RULE (srw_ss()) []
+          (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+            evaluate_builtin_def)] >>
+        gvs (map (fn opq => SIMP_RULE (srw_ss()) []
+          (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+          [`Lt`, `Gt`, `Eq`, `NotEq`, `LtE`, `GtE`] @
+          [expr_res_ok_def, binop_negate_def]) >>
         qspecl_then [`ty`, `tv`, `n`] mp_tac int_word_cmp >>
         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
         qspecl_then [`ty`, `tv`, `i`] mp_tac int_word_cmp >>
@@ -119,8 +125,14 @@ Proof
         word_cmp_tac)
   >>~- ([`value_has_type _ (DecimalV _)`],
         Cases_on `v2` >>
-        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-            expr_res_ok_def, binop_negate_def] >>
+        fs[bop_result_def] >>
+        fs[SIMP_RULE (srw_ss()) []
+          (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+            evaluate_builtin_def)] >>
+        gvs (map (fn opq => SIMP_RULE (srw_ss()) []
+          (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+          [`Lt`, `Gt`, `Eq`, `NotEq`, `LtE`, `GtE`] @
+          [expr_res_ok_def, binop_negate_def]) >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
         rename1 `BaseTV bt` >> Cases_on `bt` >> gvs[value_has_type_def] >>
         `w2i (i2w n : bytes32) = n /\ w2i (i2w i : bytes32) = i` by
@@ -129,8 +141,14 @@ Proof
         fs[eval_compare_def, val_to_w256_def] >> word_cmp_tac)
   >>~- ([`value_has_type _ (FlagV _)`],
         Cases_on `v2` >>
-        gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-            expr_res_ok_def, binop_negate_def] >>
+        fs[bop_result_def] >>
+        fs[SIMP_RULE (srw_ss()) []
+          (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+            evaluate_builtin_def)] >>
+        gvs (map (fn opq => SIMP_RULE (srw_ss()) []
+          (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+          [`Lt`, `Gt`, `Eq`, `NotEq`, `LtE`, `GtE`] @
+          [expr_res_ok_def, binop_negate_def]) >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
         `k < 2 ** 256 /\ n < 2 ** 256` by
           (rename1 `k < 2 ** m` >> `2 ** m <= 2 ** 256` by simp[] >>
@@ -141,8 +159,14 @@ Proof
            arithmeticTheory.LESS_MOD]) >>
   (* booleans *)
   Cases_on `v2` >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      expr_res_ok_def, binop_negate_def] >>
+  fs[bop_result_def] >>
+  fs[SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+      evaluate_builtin_def)] >>
+  gvs (map (fn opq => SIMP_RULE (srw_ss()) []
+    (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+    [`Lt`, `Gt`, `Eq`, `NotEq`, `LtE`, `GtE`] @
+    [expr_res_ok_def, binop_negate_def]) >>
   rw[eval_compare_def, val_to_w256_def]
 QED
 
@@ -287,8 +311,13 @@ Proof
   `(w1 = w2 <=> b1 = b2)` by
     (unabbrev_all_tac >> irule typed_val_to_w256_bytes_11 >> simp[]) >>
   irule compile_compare_words_sim >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      binop_negate_def, eval_compare_def]
+  gvs[] >> fs[bop_result_def] >>
+  fs[SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+      evaluate_builtin_def)] >>
+  gvs (map (fn opq => SIMP_RULE (srw_ss()) []
+    (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+    [`Eq`, `NotEq`] @ [binop_negate_def, eval_compare_def])
 QED
 
 (* ===== Min and Max ===== *)
@@ -321,10 +350,14 @@ Theorem bop_result_minmax_select[local]:
 Proof
   strip_tac >> gvs[] >>
   fs[word_value_def] >> gvs[] >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      expr_res_ok_def] >>
+  fs[bop_result_def] >>
+  fs[SIMP_RULE (srw_ss()) []
+    (Q.SPECL [`cx`, `acc`, `ann`, `Bop bop`, `tys`, `vs`]
+      evaluate_builtin_def)] >>
   Cases_on `v2` >>
-  gvs[evaluate_binop_def, expr_res_ok_def] >>
+  gvs (map (fn opq => SIMP_RULE (srw_ss()) []
+    (Q.SPECL ([`v2`, `v1`, `u`, `tv`] @ [opq]) evaluate_binop_def))
+    [`Min`, `Max`, `Lt`, `Gt`] @ [expr_res_ok_def]) >>
   rpt IF_CASES_TAC >> gvs[word_value_def] >>
   `n = i` by ARITH_TAC >> simp[]
 QED
