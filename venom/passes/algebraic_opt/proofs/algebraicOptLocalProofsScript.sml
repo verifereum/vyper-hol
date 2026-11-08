@@ -69,22 +69,39 @@ Theorem ao_opt_addsub_correct:
     step_inst_base out s = OK t
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_operands` >> gvs[ao_opt_addsub_def] >>
+  (Cases_on `inst.inst_operands` >> gvs[ao_opt_addsub_def] >>
   rename1 `inst.inst_operands = a::rest` >>
   Cases_on `rest` >> gvs[ao_opt_addsub_def] >>
   rename1 `inst.inst_operands = a::b::tail` >>
   Cases_on `tail` >> gvs[ao_opt_addsub_def] >>
-  gvs[AllCaseEqs()] >>
-  gvs (local_opcode_eqs [``ADD``, ``SUB``, ``XOR``, ``ASSIGN``, ``NOT``]) >>
-  gvs[exec_pure2_def, AllCaseEqs()] >>
-  Cases_on `a` >> Cases_on `b` >>
-  gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, AllCaseEqs()] >>
-  cheat >>
-  gvs (local_opcode_eqs [``ADD``, ``SUB``, ``XOR``, ``ASSIGN``, ``NOT``]) >>
-  gvs[exec_pure1_def, eval_operand_def,
-      wordsTheory.WORD_SUB_REFL, wordsTheory.WORD_XOR_CLAUSES,
-      wordsTheory.WORD_SUB_LZERO, wordsTheory.WORD_NEG_1] >>
-  cheat
+  Cases_on `(inst.inst_opcode = SUB \/ inst.inst_opcode = XOR) /\ a = b`
+  >- (gvs[ao_opt_addsub_def] >>
+      gvs (local_opcode_eqs [``SUB``, ``XOR``, ``ASSIGN``]) >>
+      gvs[exec_pure2_def, AllCaseEqs(), exec_pure1_def, eval_operand_def,
+          wordsTheory.WORD_SUB_REFL, wordsTheory.WORD_XOR_CLAUSES]) >>
+  Cases_on `lit_eq b 0w`
+  >- (gvs[ao_opt_addsub_def] >>
+      gvs (local_opcode_eqs [``ADD``, ``SUB``, ``XOR``, ``ASSIGN``]) >>
+      gvs[exec_pure2_def, AllCaseEqs()] >>
+      Cases_on `b` >>
+      gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, exec_pure1_def,
+          wordsTheory.WORD_XOR_CLAUSES]) >>
+  Cases_on `inst.inst_opcode = SUB /\ lit_eq a (0w - 1w)`
+  >- (gvs[ao_opt_addsub_def, wordsTheory.WORD_SUB_LZERO] >>
+      gvs (local_opcode_eqs [``SUB``, ``NOT``]) >>
+      gvs[exec_pure2_def, AllCaseEqs()] >>
+      Cases_on `a` >>
+      gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, exec_pure1_def,
+          wordsTheory.WORD_SUB_LZERO] >>
+      simp[wordsTheory.WORD_NOT]) >>
+  Cases_on `inst.inst_opcode = XOR /\ lit_eq b (0w - 1w)`
+  >- (gvs[ao_opt_addsub_def, wordsTheory.WORD_SUB_LZERO] >>
+      gvs (local_opcode_eqs [``XOR``, ``NOT``]) >>
+      gvs[exec_pure2_def, AllCaseEqs()] >>
+      Cases_on `b` >>
+      gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def, exec_pure1_def,
+          wordsTheory.WORD_XOR_CLAUSES]) >>
+  gvs[ao_opt_addsub_def])
 QED
 
 Theorem ao_opt_exp_correct:
@@ -297,4 +314,42 @@ Proof
   >> simp[passSharedDefsTheory.word_log2_def, wordsTheory.w2n_n2w,
           wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
      EVAL_TAC
+QED
+
+Theorem ao_opt_muldiv_correct:
+  !inst s t out.
+    (inst.inst_opcode = MUL \/ inst.inst_opcode = Div \/
+     inst.inst_opcode = SDIV \/ inst.inst_opcode = Mod \/
+     inst.inst_opcode = SMOD) /\
+    step_inst_base inst s = OK t /\ MEM out (ao_opt_muldiv inst) ==>
+    step_inst_base out s = OK t
+Proof
+  rpt gen_tac >> strip_tac >>
+  (Cases_on `inst.inst_operands` >> gvs[ao_opt_muldiv_def] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[ao_opt_muldiv_def] >>
+  rename1 `inst.inst_operands = a::b::tail` >>
+  Cases_on `tail` >> gvs[ao_opt_muldiv_def] >>
+  Cases_on `lit_eq a 0w \/ lit_eq b 0w`
+  >- (gvs[ao_opt_muldiv_def] >>
+      gvs (local_opcode_eqs [``MUL``, ``Div``, ``SDIV``, ``Mod``, ``SMOD``, ``ASSIGN``]) >>
+      gvs[exec_pure2_def, AllCaseEqs()] >>
+      gvs[passSharedDefsTheory.lit_eq_def, AllCaseEqs()] >>
+      Cases_on `a` >> Cases_on `b` >>
+      gvs[eval_operand_def, exec_pure1_def,
+          ao_safe_arithmetic_zero_one]) >>
+  Cases_on `lit_eq b 1w`
+  >- (gvs[ao_opt_muldiv_def] >>
+      gvs (local_opcode_eqs [``MUL``, ``Div``, ``SDIV``, ``Mod``, ``SMOD``, ``ASSIGN``]) >>
+      gvs[exec_pure2_def, AllCaseEqs()] >>
+      Cases_on `b` >>
+      gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def,
+          exec_pure1_def, ao_safe_arithmetic_zero_one]) >>
+  Cases_on `b` >> gvs[ao_opt_muldiv_def, passSharedDefsTheory.lit_eq_def] >>
+  rename1 `inst.inst_operands = [a; Lit w]` >>
+  Cases_on `is_power_of_two w` >> gvs[] >>
+  gvs (local_opcode_eqs [``MUL``, ``Div``, ``SDIV``, ``Mod``, ``SMOD``,
+                         ``SHL``, ``SHR``, ``AND``]) >>
+  gvs[exec_pure2_def, eval_operand_def, AllCaseEqs()] >>
+  simp[ao_power_of_two_mul, ao_power_of_two_div, ao_power_of_two_mod])
 QED
