@@ -1,7 +1,7 @@
 Theory fnAliasInvPhi
 Ancestors
   fnFrameStepsPhi fnPlanPrefix stackPlanGen
-  fnBlockPlanStaticRegion fnLineageStatic
+  fnBlockPlanStaticRegion fnLineageStatic fnBlockPlanStaticBodyPrefix
 
 (* The value boundary depends on planner provenance, not assembly execution. *)
 Theorem phi_provenance_final_alias:
@@ -162,4 +162,114 @@ Proof
   drule_all lineage_entry_selected_phi_start >>
   simp[regional_selected_phi_inv_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >> metis_tac[]
+QED
+
+Theorem lineage_phi_prefix_lower_inv:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth sb ctr) pred lbl ps /\
+  collect_phis bb.bb_instructions <> [] /\
+  generate_block_insts_prefix (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn bb.bb_label halt 0 (LENGTH bb.bb_instructions) 0
+    (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+    SOME (ops,qs) ==>
+  regional_body_lower_inv (liveness_analyze fn) (dfg_build_function fn) sb bb
+    (LENGTH (collect_phis bb.bb_instructions)) qs
+Proof
+  strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  drule_all fnLineageStaticTheory.lineage_entry_edge >> strip_tac >>
+  drule_all lineage_entry_selected_phi_start >> strip_tac >>
+  irule regional_selected_phi_exit_lower_inv >>
+  `regional_selected_phi_inv (liveness_analyze fn) (dfg_build_function fn) sb bb 0
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)` by
+    simp[regional_selected_phi_inv_cleanup_fields] >>
+  irule (GEN_ALL (SRULE []
+    (Q.INST [`i` |-> `0`] (SPEC_ALL
+      (INST_TYPE [``:'a`` |-> ``:cfg_analysis``] regional_selected_phi_inv_prefix))))) >>
+  simp[] >>
+  qexistsl_tac [`cfg_analyze fn`, `halt`, `ops`,
+    `ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>`] >>
+  gvs[]
+QED
+
+Theorem lineage_phi_context_unselected_fresh:
+  phi_run_context fn bb pred ps source final /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth sb ctr) edge lbl ps /\
+  collect_phis bb.bb_instructions <> [] ==>
+  !op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    ~(MEM op ps.ps_stack /\ ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+      resolve_phi pred inst.inst_operands = SOME op) /\
+    (op = Var v \/ normalize_operand (dfg_build_function fn) [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  strip_tac >>
+  `codegen_ready_fn fn` by gvs[phi_run_context_def] >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `~(LENGTH (cfg_preds_of (cfg_analyze fn) lbl) <= 1)` by
+    metis_tac[ready_small_preds_no_phis] >>
+  `ps.ps_spilled = FEMPTY` by
+    (irule phi_join_entry_spill_empty >> simp[] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  rpt gen_tac >> strip_tac >>
+  `?w. op = Var w` by
+    (Cases_on `op` >> gvs[dfgDefsTheory.normalize_operand_def]) >>
+  `~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+    (collect_phis bb.bb_instructions)))` by
+    (gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP, phi_run_context_def] >>
+     metis_tac[stackPlanTypesTheory.is_var_operand_def]) >>
+  metis_tac[fnLineageStaticTheory.lineage_entry_non_phi_fresh]
+QED
+
+Theorem lineage_phi_prefix_alias:
+  phi_run_context fn bb pred
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) source final /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_entry (liveness_analyze fn) (dfg_build_function fn) (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth sb ctr) edge lbl ps /\
+  collect_phis bb.bb_instructions <> [] /\
+  generate_block_insts_prefix (liveness_analyze fn) (dfg_build_function fn)
+    (cfg_analyze fn) fn bb.bb_label halt 0 (LENGTH bb.bb_instructions) 0
+    (LENGTH (collect_phis bb.bb_instructions)) bb.bb_instructions
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
+    SOME (ops,qs) /\
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val (frame_view fn ra source) lo at =
+    operand_val (frame_view fn ra source) lo
+      (normalize_operand (dfg_build_function fn) [] at)) ==>
+  !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+    operand_val (frame_view fn ra final) lo at =
+    operand_val (frame_view fn ra final) lo
+      (normalize_operand (dfg_build_function fn) [] at)
+Proof
+  strip_tac >>
+  `codegen_ready_fn fn` by gvs[phi_run_context_def] >>
+  `generated_plan_state_wf_marked sb ps` by
+    metis_tac[fnLineageStaticTheory.lineage_entry_marked] >>
+  `generated_plan_state_wf_marked sb
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)` by
+    simp[wf_marked_cleanup_fields] >>
+  `phi_run_context fn bb pred ps source final` by
+    (gvs[phi_run_context_def] >> metis_tac[]) >>
+  drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`)
+    lineage_phi_context_unselected_fresh >>
+  disch_then (drule_at (Pat `phi_run_context _ _ _ _ _ _`)) >>
+  simp[] >> strip_tac >>
+  `phi_stack_provenance sb pred
+    (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>)
+    (collect_phis bb.bb_instructions) [] qs` by
+    (irule (GEN_ALL (SRULE [] (Q.INST [`i` |-> `0`,
+      `j` |-> `LENGTH (collect_phis bb.bb_instructions)`]
+      (SPEC_ALL (INST_TYPE [``:'a`` |-> ``:cfg_analysis``] phi_provenance_prefix))))) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[phi_stack_provenance_init]) >>
+  rpt gen_tac >> disch_tac >>
+  irule phi_provenance_final_alias >>
+  simp[] >>
+  goal_assum (drule_at (Pat `phi_stack_provenance _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `phi_run_context _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
 QED
