@@ -132,9 +132,10 @@ Proof
       gvs (local_opcode_eqs [``ASSIGN``]) >>
       Cases_on `b` >>
       gvs[passSharedDefsTheory.lit_eq_def, eval_operand_def] >>
-      gvs[exec_pure1_def, eval_operand_def,
-          wordsTheory.WORD_SUB_LZERO, wordsTheory.WORD_NEG_1,
-          wordsTheory.WORD_OR_CLAUSES] >> metis_tac[]) >>
+      qexistsl [`-1w`, `-1w`] >>
+      simp[exec_pure1_def, eval_operand_def,
+           wordsTheory.WORD_SUB_LZERO, wordsTheory.WORD_NEG_1,
+           wordsTheory.WORD_OR_CLAUSES]) >>
   Cases_on `ao_all_truthy dfg inst /\ is_lit_op b /\ ~lit_eq b 0w`
   >- (gvs[ao_opt_or_def] >>
       gvs (local_opcode_eqs [``ASSIGN``]) >>
@@ -180,13 +181,20 @@ Proof
     (mp_tac (Q.SPECL [`w2n (w:bytes32)`, `LOG2 (w2n (w:bytes32))`]
       (INST_TYPE [alpha |-> ``:256``] wordsTheory.word_index_n2w)) >>
      simp[fcpLib.INDEX_CONV ``dimindex(:256)``, bitTheory.BIT_LOG2]) >>
+  `(n2w (w2n w - 1):bytes32) ' (LOG2 (w2n w)) =
+     BIT (LOG2 (w2n w)) (w2n w - 1)` by
+    (mp_tac (Q.SPECL [`w2n (w:bytes32) - 1`, `LOG2 (w2n (w:bytes32))`]
+      (INST_TYPE [alpha |-> ``:256``] wordsTheory.word_index_n2w)) >>
+     simp[fcpLib.INDEX_CONV ``dimindex(:256)``]) >>
   `~BIT (LOG2 (w2n w)) (w2n w - 1)` by
     (qpat_x_assum `word_and _ _ = _` (mp_tac o
-      Q.AP_TERM `word_bit (LOG2 (w2n w))`) >>
+      Q.AP_TERM `word_bit (LOG2 (w2n (w:bytes32)))`) >>
      simp[wordsTheory.word_bit_def, wordsTheory.word_and_def,
           fcpLib.INDEX_CONV ``dimindex(:256)``,
           fcpTheory.FCP_BETA, wordsTheory.word_index,
-          wordsTheory.word_index_n2w, bitTheory.BIT_LOG2, bitTheory.BIT_ZERO]) >>
+          wordsTheory.word_index_n2w, bitTheory.BIT_LOG2, bitTheory.BIT_ZERO] >>
+     pure_rewrite_tac[GSYM wordsTheory.word_sub_def] >>
+     asm_rewrite_tac[]) >>
   spose_not_then assume_tac >>
   `2 ** LOG2 (w2n w) <= w2n w - 1` by decide_tac >>
   `0 < w2n w - 1` by
@@ -273,4 +281,20 @@ Proof
   simp[wordsTheory.word_div_def, wordsTheory.word_mod_def,
        wordsTheory.WORD_NEG_NEG, wordsTheory.w2n_eq_0,
        fcpLib.INDEX_CONV ``dimindex(:256)``, bitTheory.BIT_DEF]
+QED
+
+Theorem ao_power_of_two_edges[local]:
+  is_power_of_two (1w:bytes32) /\
+  passSharedDefs$word_log2 (1w:bytes32) = 0w /\
+  is_power_of_two (n2w (2 ** 255):bytes32) /\
+  passSharedDefs$word_log2 (n2w (2 ** 255):bytes32) = 255w
+Proof
+  rpt conj_tac
+  >- simp[passSharedDefsTheory.is_power_of_two_def]
+  >- (simp[passSharedDefsTheory.word_log2_def] >> EVAL_TAC)
+  >- (rewrite_tac[passSharedDefsTheory.is_power_of_two_def] >>
+      CONV_TAC wordsLib.WORD_EVAL_CONV)
+  >> simp[passSharedDefsTheory.word_log2_def, wordsTheory.w2n_n2w,
+          wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+     EVAL_TAC
 QED
