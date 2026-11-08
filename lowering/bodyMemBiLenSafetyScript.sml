@@ -68,12 +68,15 @@ Proof
       simp[] >> fs[vv_operand_def] >> metis_tac[]) >>
   gvs[vv_location_def, vv_operand_def, vv_holds_def] >>
   Cases_on `p.ptr_location` >> gvs[]
-  >- (irule (Q.INST [`loc` |-> `LocMemory`] rest_word_ptr_load_mem_ok) >>
-      simp[] >> metis_tac[])
-  >- (irule (Q.INST [`loc` |-> `LocStorage`] rest_word_ptr_load_mem_ok) >>
-      simp[] >> metis_tac[])
-  >- (irule (Q.INST [`loc` |-> `LocTransient`] rest_word_ptr_load_mem_ok) >>
-      simp[] >> metis_tac[]) >>
+  >>~- ([`p.ptr_location = LocMemory`],
+        irule (Q.INST [`loc` |-> `LocMemory`] rest_word_ptr_load_mem_ok) >>
+        simp[] >> metis_tac[])
+  >>~- ([`p.ptr_location = LocStorage`],
+        irule (Q.INST [`loc` |-> `LocStorage`] rest_word_ptr_load_mem_ok) >>
+        simp[] >> metis_tac[])
+  >>~- ([`p.ptr_location = LocTransient`],
+        irule (Q.INST [`loc` |-> `LocTransient`] rest_word_ptr_load_mem_ok) >>
+        simp[] >> metis_tac[]) >>
   drule_all rest_word_immutable_region_bound >> strip_tac >>
   `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
     eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
