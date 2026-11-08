@@ -206,6 +206,76 @@ Proof
   first_x_assum drule_all >> decide_tac
 QED
 
+(* An earlier located result is framed by its actual allocation or local
+   witness; reused allocation sites in the child need no frontier bound. *)
+Theorem intcall_pure_child_located_memory:
+  vv_at ce cx ty a b es r (LocatedValue vt p) s /\
+  p.ptr_location = LocMemory /\
+  read_result cx r es = (INL v,es) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_operand p.ptr_operand s = SOME w /\
+  b.cs_next_id <= c.cs_next_id /\
+  intcall_expr_cont fp ce env es c s ee d u /\
+  vv_post fp.jc_ctx fp.jc_func ce cx child es c d s ee child_r child_vv u /\
+  ~expr_has_effect child /\ cx = fp.jc_cx ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) u.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[loweringPostsTheory.vv_at_def] >>
+  strip_tac >> gvs[]
+  >- (rename1 `FLOOKUP s.vs_allocas aid = SOME (off,sz)` >>
+      `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory` by
+        (fs[intcall_expr_cont_def] >> first_x_assum irule >>
+         goal_assum (drule_at Any) >> simp[] >>
+         qexists `aid` >> simp[] >> decide_tac) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >> sym_tac >> first_x_assum irule >> simp[])
+  >- (drule_all vv_post_pure_memory_frame >> strip_tac >>
+      rename1 `local_region ce es.scopes s n off sz` >>
+      `mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory` by
+        (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` irule >>
+         goal_assum (drule_at Any)) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >> sym_tac >> first_x_assum irule >> simp[]) >>
+  simp[valueEncodingTheory.mem_bytes_at_def]
+QED
+
+(* Deferred reads depend only on the source places, not on gas observations. *)
+Theorem intcall_read_result_source_frame:
+  ee.scopes = es.scopes /\ ee.immutables = es.immutables /\
+  (!tr. get_storage cx ee tr = get_storage cx es tr) ==>
+  FST (read_result cx r ee) = FST (read_result cx r es)
+Proof
+  strip_tac >>
+  Cases_on `?tr slot tv. r = PlaceR (StoragePlace tr slot tv)`
+  >- (gvs[vyperStateTheory.read_result_def, vyperStateTheory.read_place_def,
+          vyperStorageBackendTheory.read_storage_slot_eq] >>
+      Cases_on `decode_value (get_storage cx es tr) (w2n slot) tv` >> simp[]) >>
+  irule exprSimSubscriptArraySourceTheory.read_result_nonstorage_frame >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem intcall_pure_child_read_result:
+  supported_pure_expr tops child /\
+  eval_expr cx child es = (res,ee) /\
+  read_result cx r es = (INL v,es) ==>
+  read_result cx r ee = (INL v,ee)
+Proof
+  strip_tac >>
+  `ee.scopes = es.scopes` by
+    (drule_all aug_place_pure_expr_scopes >> simp[]) >>
+  `ee.immutables = es.immutables` by
+    (drule_all intcall_pure_expr_immutables >> simp[]) >>
+  `!tr. get_storage cx ee tr = get_storage cx es tr` by
+    (gen_tac >> drule_all aug_place_pure_eval_storage >> simp[]) >>
+  drule_all intcall_read_result_source_frame >>
+  disch_then (qspec_then `r` mp_tac) >>
+  Cases_on `read_result cx r ee` >>
+  drule vyperStateTheory.read_result_state >> simp[]
+QED
+
 (* L-call (C1.3.15): calls (internal, external, send) and pops, given the
    smaller expressions' producers and, by call-graph descent
    (callable_graph_descent), the statement producer of every frame whose
