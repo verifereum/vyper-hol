@@ -158,3 +158,75 @@ Proof
   gvs[exec_read0_def, AllCaseEqs(), update_var_def,
       finite_mapTheory.FLOOKUP_UPDATE]
 QED
+
+Theorem ao_main_environment_producer_chunk:
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+  ao_source_trace ctx fn trace /\ LAST trace = (h,F,s) /\
+  (!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs ==>
+    lookup_var x (SND (SND (HD trace))) = NONE) /\
+  MEM inst (fn_insts fn) /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  MEM inst.inst_opcode [BALANCE; EXTCODESIZE] /\ step_inst_base inst s = OK t /\
+  ao_main_observations fn V s r /\ s.vs_labels = r.vs_labels /\
+  s.vs_accounts = r.vs_accounts /\ s.vs_call_ctx = r.vs_call_ctx /\
+  (!i x. MEM i (fn_insts fn) /\
+     (MEM (Var x) i.inst_operands \/ MEM x i.inst_outputs) ==> x IN V) ==>
+  ?u. ao_cmp_exec_chunk fuel ctx
+        (ao_transform_inst (dfg_build_function fn) ra lbl idx
+          (ao_compute_fn_iszero_targets fn) fr inst) r = OK u /\
+      ao_main_observations fn V t u /\
+      (u with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+      u.vs_inst_idx = r.vs_inst_idx + LENGTH
+        (ao_transform_inst (dfg_build_function fn) ra lbl idx
+          (ao_compute_fn_iszero_targets fn) fr inst)
+Proof
+  let
+    val finish =
+      reverse conj_tac >- simp[update_var_def] >>
+      qmatch_goalsub_abbrev_tac `update_var y z s` >>
+      `ao_main_observations fn V (update_var y z s) (update_var y z r)` by
+        (irule ao_main_observations_update >> simp[]) >>
+      gvs[ao_main_observations_def, lookup_var_def, update_var_def]
+    val unchanged =
+      qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+      simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >> gvs[] >>
+      simp[ao_cmp_exec_chunk_single, ao_post_flip_inst_def, step_inst_non_invoke,
+           step_inst_base_opcode_eqs, exec_read1_def] >> finish
+    val address =
+      `w = w2w s.vs_call_ctx.cc_address` by
+        (irule ao_source_address_value >> asm_rewrite_tac[] >>
+         gvs[eval_operand_def] >> metis_tac[]) >>
+      qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+      simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >> gvs[] >>
+      simp[ao_cmp_exec_chunk_single, step_inst_non_invoke,
+           step_inst_base_opcode_eqs, exec_read0_def] >>
+      `w2w (w2w r.vs_call_ctx.cc_address : bytes32) = r.vs_call_ctx.cc_address` by
+        wordsLib.WORD_DECIDE_TAC >> asm_rewrite_tac[] >> finish
+  in
+    strip_tac >>
+    `?a w y. inst.inst_operands = [a] /\ eval_operand a s = SOME w /\
+      inst.inst_outputs = [y]` by
+      (qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+       gvs[MEM] >> simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()] >>
+       metis_tac[]) >>
+    `ao_main_observations fn V s s` by simp[ao_main_observations_def] >>
+    `eval_operand (ao_resolve_iszero_op (ao_compute_fn_iszero_targets fn)
+       inst.inst_opcode a) r = SOME w /\
+     eval_operand (ao_resolve_iszero_op (ao_compute_fn_iszero_targets fn)
+       inst.inst_opcode a) s = SOME w` by
+      (conj_tac >> irule ao_source_resolved_operand_exact >>
+       simp[is_truthy_inst_def] >> gvs[MEM] >> metis_tac[]) >>
+    gvs[MEM] >>
+    simp[ao_transform_inst_def, ao_resolve_iszero_inst_def,
+         ao_opt_producer_def, ao_post_flip_inst_def]
+    >~ [`inst.inst_opcode = EXTCODESIZE`] >- unchanged >>
+    Cases_on `ao_resolve_iszero_op (ao_compute_fn_iszero_targets fn) BALANCE a` >>
+    simp[ao_post_flip_inst_def]
+    >~ [`ao_resolve_iszero_op _ BALANCE a = Var x`]
+    >- (Cases_on `dfg_get_def (dfg_build_function fn) x` >>
+        simp[ao_post_flip_inst_def]
+        >~ [`dfg_get_def _ x = SOME producer`]
+        >- (Cases_on `producer.inst_opcode = ADDRESS` >> simp[ao_post_flip_inst_def]
+            >- address >> unchanged) >> unchanged) >> unchanged
+  end
+QED
