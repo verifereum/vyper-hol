@@ -78,7 +78,7 @@ Proof
     `compiler_alloca_ids cs final_cut`, `compiler_alloca_ids load_cut final_cut`, `~exprs_can_mutate cenv (e::suffix)`,
     `~exprs_can_mutate cenv suffix`, `cs.cs_next_var`, `load_cut.cs_next_var`, `semantic_writes`]
     mp_tac log_argument_load_origins_state >>
-  impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[EVERY_DEF]]) >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[EVERY_DEF, expr_can_mutate_def]]) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   `!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before load_cut.cs_next_var (Var x)` by
     (rpt strip_tac >> MATCH_MP_TAC abi_operand_before_mono >> qexists_tac `cs.cs_next_var` >>
