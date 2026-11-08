@@ -54,9 +54,13 @@ Definition mm_local_group_roles_def:
       (?cp dst src len. MEM cp xs /\ cp.inst_id = id /\
         cp.inst_opcode = mode_copy_opcode mode /\
         cp.inst_operands = [Lit dst; Lit src; Lit len]) \/
-      (?st dst v li. MEM st xs /\ st.inst_opcode = MSTORE /\
-        st.inst_operands = [Lit dst; Var v] /\ dfg_get_def dfg v = SOME li /\
-        li.inst_id = id /\ MEM st.inst_id cg.cg_inst_ids)
+      (?pre q mid st post v addr dst li.
+        xs = pre ++ [q] ++ mid ++ [st] ++ post /\
+        q.inst_opcode = mode_load_opcode mode /\
+        q.inst_operands = [Lit addr] /\ q.inst_outputs = [v] /\
+        st.inst_opcode = MSTORE /\ st.inst_operands = [Lit dst; Var v] /\
+        dfg_get_def dfg v = SOME li /\ li.inst_id = id /\
+        MEM st.inst_id cg.cg_inst_ids)
 End
 
 Theorem mm_local_roles_merge[local]:
@@ -150,7 +154,10 @@ QED
 
 Theorem mm_local_store_group_roles[local]:
   MEM inst xs /\ inst.inst_opcode = MSTORE /\
-  inst.inst_operands = [Lit dst; Var v] ==>
+  inst.inst_operands = [Lit dst; Var v] /\
+  (?pre q mid post addr. xs = pre ++ [q] ++ mid ++ [inst] ++ post /\
+    q.inst_opcode = mode_load_opcode mode /\
+    q.inst_operands = [Lit addr] /\ q.inst_outputs = [v]) ==>
   mm_local_group_roles dfg mode xs
     <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
        cg_inst_ids := inst.inst_id ::
@@ -163,6 +170,10 @@ QED
 
 Theorem mm_local_store_roles[local]:
   MEM inst xs /\ inst.inst_opcode = MSTORE /\
+  (!v a. FLOOKUP ss.ss_loads v = SOME a ==>
+    ?pre q mid post addr. xs = pre ++ [q] ++ mid ++ [inst] ++ post /\
+      q.inst_opcode = mode_load_opcode mode /\
+      q.inst_operands = [Lit addr] /\ q.inst_outputs = [v]) /\
   mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
   mm_local_scan_every (mm_local_group_roles dfg mode xs)
     (scan_store dfg mode ss inst)
@@ -184,7 +195,8 @@ Proof
     simp[] >>
     qmatch_goalsub_abbrev_tac `flush_hazards mode ss0 cg` >>
     `mm_local_group_roles dfg mode xs cg` by
-      (simp[Abbr `cg`] >> irule mm_local_store_group_roles >> simp[]) >>
+      (simp[Abbr `cg`] >> irule mm_local_store_group_roles >>
+       simp[] >> metis_tac[]) >>
     `mm_local_scan_every (mm_local_group_roles dfg mode xs) ss0` by
       (simp[Abbr `ss0`] >> IF_CASES_TAC >>
        simp[mm_local_invalidate_every]) >>
@@ -231,7 +243,12 @@ Proof
 QED
 
 Theorem mm_local_inst_roles[local]:
-  MEM inst xs /\ mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
+  MEM inst xs /\
+  (!v a. FLOOKUP ss.ss_loads v = SOME a ==>
+    ?pre q mid post addr. xs = pre ++ [q] ++ mid ++ [inst] ++ post /\
+      q.inst_opcode = mode_load_opcode mode /\
+      q.inst_operands = [Lit addr] /\ q.inst_outputs = [v]) /\
+  mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
   mm_local_scan_every (mm_local_group_roles dfg mode xs)
     (scan_inst dfg mode ss inst)
 Proof
@@ -241,41 +258,6 @@ Proof
             mm_local_bulk_roles, mm_local_barrier_every]
 QED
 
-Theorem mm_local_fold_roles[local]:
-  !is ss. EVERY (\i. MEM i xs) is /\
-  mm_local_scan_every (mm_local_group_roles dfg mode xs) ss ==>
-  mm_local_scan_every (mm_local_group_roles dfg mode xs)
-    (FOLDL (scan_inst dfg mode) ss is)
-Proof
-  Induct_on `is` >> simp[] >> metis_tac[mm_local_inst_roles]
-QED
-
-Theorem mm_local_scan_group_roles[local]:
-  MEM cg (scan_block dfg mode bb).ss_flushed ==>
-  mm_local_group_roles dfg mode bb.bb_instructions cg
-Proof
-  `mm_local_scan_every (mm_local_group_roles dfg mode bb.bb_instructions)
-    (scan_block dfg mode bb)` by
-    (simp[scan_block_def] >> irule mm_local_barrier_every >>
-     irule mm_local_fold_roles >>
-     simp[EVERY_MEM, mm_local_scan_every_def, empty_scan_state_def]) >>
-  gvs[mm_local_scan_every_def, EVERY_MEM]
-QED
-
-Theorem mm_local_scan_group_roles_elim[local]:
-  MEM cg (scan_block dfg mode bb).ss_flushed /\ MEM id cg.cg_inst_ids ==>
-  (?st dst v. MEM st bb.bb_instructions /\ st.inst_id = id /\
-    st.inst_opcode = MSTORE /\ st.inst_operands = [Lit dst; Var v]) \/
-  (?cp dst src len. MEM cp bb.bb_instructions /\ cp.inst_id = id /\
-    cp.inst_opcode = mode_copy_opcode mode /\
-    cp.inst_operands = [Lit dst; Lit src; Lit len]) \/
-  (?st dst v li. MEM st bb.bb_instructions /\ st.inst_opcode = MSTORE /\
-    st.inst_operands = [Lit dst; Var v] /\ dfg_get_def dfg v = SOME li /\
-    li.inst_id = id /\ MEM st.inst_id cg.cg_inst_ids)
-Proof
-  strip_tac >> drule mm_local_scan_group_roles >>
-  simp[mm_local_group_roles_def]
-QED
 
 Definition mm_local_zero_every_def:
   mm_local_zero_every P mz <=>
@@ -1328,6 +1310,55 @@ Theorem mm_local_scan_lookup_origin[local]:
 Proof
   strip_tac >> drule mm_local_scan_lookup_fold >>
   simp[empty_scan_state_def]
+QED
+
+Theorem mm_local_fold_roles[local]:
+  !is pre post xs. xs = pre ++ is ++ post /\
+  mm_local_scan_every (mm_local_group_roles dfg mode xs)
+    (FOLDL (scan_inst dfg mode) empty_scan_state pre) ==>
+  mm_local_scan_every (mm_local_group_roles dfg mode xs)
+    (FOLDL (scan_inst dfg mode) empty_scan_state (pre ++ is))
+Proof
+  Induct_on `is` >- (rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`pre ++ [h]`, `post`, `xs`] mp_tac) >>
+  simp[APPEND_ASSOC, FOLDL_APPEND] >> disch_then irule >>
+  irule mm_local_inst_roles >> simp[MEM_APPEND] >>
+  reverse conj_tac >- metis_tac[GSYM APPEND_ASSOC] >>
+  rpt strip_tac >> drule mm_local_scan_lookup_origin >> strip_tac >>
+  gvs[MEM_SPLIT] >> metis_tac[APPEND_ASSOC, APPEND]
+QED
+
+Theorem mm_local_scan_group_roles[local]:
+  MEM cg (scan_block dfg mode bb).ss_flushed ==>
+  mm_local_group_roles dfg mode bb.bb_instructions cg
+Proof
+  `mm_local_scan_every (mm_local_group_roles dfg mode bb.bb_instructions)
+    (scan_block dfg mode bb)` by
+    (simp[scan_block_def] >> irule mm_local_barrier_every >>
+     mp_tac (Q.SPECL [`bb.bb_instructions`, `[]`, `[]`, `bb.bb_instructions`]
+       mm_local_fold_roles) >>
+     simp[mm_local_scan_every_def, empty_scan_state_def]) >>
+  gvs[mm_local_scan_every_def, EVERY_MEM]
+QED
+
+Theorem mm_local_scan_group_roles_elim[local]:
+  MEM cg (scan_block dfg mode bb).ss_flushed /\ MEM id cg.cg_inst_ids ==>
+  (?st dst v. MEM st bb.bb_instructions /\ st.inst_id = id /\
+    st.inst_opcode = MSTORE /\ st.inst_operands = [Lit dst; Var v]) \/
+  (?cp dst src len. MEM cp bb.bb_instructions /\ cp.inst_id = id /\
+    cp.inst_opcode = mode_copy_opcode mode /\
+    cp.inst_operands = [Lit dst; Lit src; Lit len]) \/
+  (?pre q mid st post v addr dst li.
+    bb.bb_instructions = pre ++ [q] ++ mid ++ [st] ++ post /\
+    q.inst_opcode = mode_load_opcode mode /\
+    q.inst_operands = [Lit addr] /\ q.inst_outputs = [v] /\
+    st.inst_opcode = MSTORE /\ st.inst_operands = [Lit dst; Var v] /\
+    dfg_get_def dfg v = SOME li /\ li.inst_id = id /\
+    MEM st.inst_id cg.cg_inst_ids)
+Proof
+  strip_tac >> drule mm_local_scan_group_roles >>
+  simp[mm_local_group_roles_def]
 QED
 
 Theorem mm_local_stage_correct:
