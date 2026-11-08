@@ -123,8 +123,10 @@ Theorem aug_place_replace_read_error:
 Proof
   Induct_on `path` >- simp[assign_subscripts_def] >>
   rpt gen_tac >> Cases_on `h`
-  >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
-      Cases_on `a` >>
+  >- (rename1 `ValueSubscript key` >>
+      reverse (Cases_on `?i. key = IntV i`)
+      >- (Cases_on `key` >> fs[] >> simp[Once evaluate_subscripts_def]) >>
+      fs[] >>
       simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
       simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
       >~ [`array_set_index _ _ _ _ = INR _`]
