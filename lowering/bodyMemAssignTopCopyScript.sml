@@ -61,6 +61,12 @@ Proof
     fs[expr_sim_inv_def] >>
   Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)`
   >- (`acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+      `!name fields.
+         FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+         ALL_DISTINCT (MAP FST fields) /\
+         EVERY (\(fname, fty, sz). !tv.
+           evaluate_type (get_tenv cx) fty = SOME tv ==>
+           sz = type_memory_size tv) fields` by fs[expr_sim_inv_def] >>
       irule compile_assign_storage_sparse_stmt_frag_mem >>
       goal_assum (drule_at Any) >> simp[] >>
       rpt strip_tac >> metis_tac[topcopy_rhs_value_typed, pairTheory.PAIR_EQ]) >>

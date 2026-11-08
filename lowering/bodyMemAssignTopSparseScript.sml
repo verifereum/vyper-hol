@@ -21,6 +21,12 @@ Theorem compile_assign_storage_sparse_stmt_frag_mem:
     (!elem n. typ <> ArrayT elem (Dynamic n)) /\
     sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
+    (!name fields.
+       FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+       ALL_DISTINCT (MAP FST fields) /\
+       EVERY (\(fname, fty, sz). !tv.
+         evaluate_type (get_tenv cx) fty = SOME tv ==>
+         sz = type_memory_size tv) fields) /\
     is_abi_dynamic cenv.ce_struct_fields typ /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     0 < type_slot_size tvt /\
