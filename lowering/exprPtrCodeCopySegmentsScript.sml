@@ -25,7 +25,7 @@ Proof
   strip_tac >>
   `step_inst_base (mk_inst id ADD [src; Lit (n2w off)] [out]) s =
      OK (update_var out (a+n2w off) s)` by
-    simp[step_inst_base_def, mk_inst_def, exec_pure2_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   gvs[run_inst_seq_def] >>
   qexistsl [`step_prov PG G (mk_inst id ADD [src; Lit (n2w off)] [out])
       (update_var out (a+n2w off) s)`,

@@ -23,7 +23,7 @@ Proof
     (simp[] >> irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
   `exec_alloca (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s (n2w nb : bytes32) = OK u` by
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-     simp[step_inst_base_def, mk_inst_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
   drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
   gvs[mk_inst_def] >> disch_then drule_all >>
   simp[stmt_state_rel_inst_idx, w2n_n2w, LESS_MOD]
