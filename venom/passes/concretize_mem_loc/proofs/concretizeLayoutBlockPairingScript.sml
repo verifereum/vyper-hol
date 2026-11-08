@@ -1,5 +1,5 @@
 Theory concretizeLayoutBlockPairing
-Ancestors concretizeStepStructure passSharedProps passSharedDefs passSimulationDefs
+Ancestors passTransform concretizeStepStructure passSharedProps passSharedDefs passSimulationDefs
   venomExecSemantics venomInst analysisSimProofsBase indexedLists
   list rich_list arithmetic venomWf
 

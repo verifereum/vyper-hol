@@ -1,5 +1,5 @@
 Theory concretizePtrPairedRoot
-Ancestors
+Ancestors passTransform
   concretizePtrPairedPrefixProbe concretizePtrMixedPhi
   concretizePtrPairedPrefix concretizePtrStructuralTranscript concretizePtrActivationBirths
   concretizePtrChronologicalHistory o1PassContract

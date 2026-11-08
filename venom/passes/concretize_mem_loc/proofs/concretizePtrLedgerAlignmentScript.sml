@@ -1,5 +1,5 @@
 Theory concretizePtrLedgerAlignment
-Ancestors
+Ancestors passTransform
   concretizePtrPrefixLedger concretizeMemLocDefs removeUnusedStructProofs
   list rich_list arithmetic pred_set passSharedDefs passSimulationDefs
 

@@ -1,5 +1,5 @@
 Theory concretizePtrPairedCallEntry
-Ancestors
+Ancestors passTransform
   concretizePtrPairedEntry concretizePtrPairedFields concretizePtrValueSelection
   o1PassLift analysisSimProofsBase unitShapeDefs passSimulationProps
   passSharedDefs passSimulationDefs

@@ -1,5 +1,5 @@
 Theory concretizeAllocationFree
-Ancestors
+Ancestors passTransform
   o1PassContract venomPassDispatcher
   concretizeMemLocDefs concretizeMemLocTransitionProofs
   staticLayoutAllocatorProofs ptrDisciplineEmptyTaint ptrDiscipline

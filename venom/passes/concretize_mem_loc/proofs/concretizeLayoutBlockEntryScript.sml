@@ -1,5 +1,5 @@
 Theory concretizeLayoutBlockEntry
-Ancestors concretizeLayoutLocalPhi concretizeStepStructure concretizeStageShape
+Ancestors passTransform concretizeLayoutLocalPhi concretizeStepStructure concretizeStageShape
   frameRelocationBinding frameRelocationDemand frameJointDemand
   frameJointTransition frameJointTrace frameResolvedTrace
   frameResolvedOrigins contextCodegenRel venomExecProofs venomWf

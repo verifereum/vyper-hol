@@ -1,5 +1,5 @@
 Theory concretizePtrMixedPhi
-Ancestors
+Ancestors passTransform
   concretizePtrOpaqueRetpc concretizePtrSharedFields concretizePtrValueSelection
   concretizePtrValueTransport ptrDiscipline unitShapeDefs
   venomExecSemantics venomState finite_map list
