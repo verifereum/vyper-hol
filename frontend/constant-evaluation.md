@@ -1,10 +1,14 @@
 # Constant evaluation
 
-The legacy JSON frontend consumes compiler-provided `folded_value` in several
-places, including annotation bounds. `jsonConstASTLib` and `jsonConstEvalTheory`
-provide a strict first-stage frontend for an integer fragment: they retain the
-original bound expressions and evaluate constants before resolving types.
-This is a first milestone for [#135](https://github.com/verifereum/vyper-hol/issues/135).
+Vyper programs use values that must be known at compile time: array and string
+bounds in type annotations, `range` bounds, tuple indices, the length of a
+`msg.data` slice, `raw_call` flags and `max_outsize`, a `method_id` selector,
+the `ensure_tuple`/`unwrap_tuple` flags of ABI calls, and constant exponents.
+The compiler's annotated AST also records its own folded result at many nodes
+(`folded_value`). Taking those results on trust would make every translated
+program depend on an unverified folder. The frontend therefore computes each
+of these values itself from the source expression, with the interpreter's own
+operations, and never reads `folded_value`.
 
 ## Example
 
@@ -17,99 +21,110 @@ def power(x: uint256, values: uint256[N]) -> uint256:
     return x ** N
 ```
 
-The frontend produces an array parameter of length 3 and an exponent expression
-`Literal (BaseT (UintT 256)) (IntL 3)`. The constant declaration retains its
-elaborated addition initializer.
+`values` gets type `ArrayT (BaseT (UintT 256)) (Fixed 3)` and the return
+expression becomes `Builtin _ (Bop Exp) [Name _ "x"; Literal _ (IntL 3)]`.
 
-From a HOL script with `jsonConstEval` as an ancestor and
-`vyperCheckContractFrontendLib` as a library:
+## The evaluator
 
-```sml
-val checked = vyperCheckContractFrontendLib.check_constant_contract_file
-  {address = ``0w : address``, path = "constant_bound.json"};
+`eval_constant` (`vyperConstEvalScript.sml`) computes the value of a closed
+expression of the Vyper AST: a literal, `max_value`/`min_value` of an integer
+type, or a builtin applied to closed expressions, where the builtin is a binary
+operator other than `in`/`not in`, `not`, unary minus, or `method_id`. It
+applies the interpreter's `evaluate_literal`, `evaluate_max_value`,
+`evaluate_min_value` and `evaluate_builtin` directly, in an empty context. Any
+other expression, a decimal, or an operation the interpreter rejects (division
+by zero, overflow) has no value (`NONE`).
+
+`eval_constant_sound` states that a computed value is what the interpreter
+returns for the expression in any context and state, leaving the state
+unchanged:
+
+```
+eval_constant e = SOME v ==> eval_expr cx e st = (INL (Value v), st)
 ```
 
-The input is Vyper's `-f annotated_ast` output. The returned theorem certifies
-`check_contract` success for the translated module. For translation alone,
-decode with `jsonConstASTLib.annotated_ast` and evaluate
-`translate_constant_module` on the resulting declaration list.
+So replacing such an expression by its value never changes what a program
+does. `eval_constant` is translated to `cv_compute`, and `vyperConstEvalLib`
+makes `EVAL` compute it with `cv_eval`, which is what makes `method_id`'s
+Keccak hash fast enough to translate with; theories that translate contracts
+load that library. Arithmetic is the interpreter's: bounded, with the result type's
+wrapping where the interpreter wraps (shifts). Where the compiler's unbounded
+folding disagrees, the translation follows the semantics; see Validation.
 
-## Evaluation order
+## Translation
 
-1. Decode source integer expressions and annotations into `jsonConstAST`.
-   `CA_Array` contains a bound expression, not a folded number. The decoder never
-   reads `folded_value` or inferred `type` fields.
-2. Process declarations in order. Elaborate each constant's integer expression
-   using its declared type and previously evaluated constants. Check literal
-   ranges and evaluate the closed expression with `eval_pure_expr`. Before
-   accepting a closed shift, check that its count lies in 0–256 and that a
-   left shift's unwrapped result fits the result type. This prevents runtime
-   wrapping from changing a source constant's value.
-3. Evaluate array bounds in the same environment, require positive results,
-   and construct the resolved parameter/result types. Elaborate function
-   expressions with parameter types and literal constant substitutions.
-4. Run the existing contract checker on the resulting module.
+Constant evaluation happens on the translated expression, after `translate_expr`
+has given every name and operator its meaning, so the evaluator sees exactly
+what the interpreter would run.
 
-## Correctness
+1. Constants are evaluated in passes over every module, imported modules
+   first (`annotated_constants`). Each pass evaluates the initializers not yet
+   evaluated, using the constants evaluated so far, and records the value of
+   each one that evaluates under its `(module, name)` key. Passes repeat until
+   one evaluates nothing new, since a constant may refer to one declared after
+   it. Initializers that never evaluate (arrays, decimals, calls) stay
+   top-level names for the semantics to evaluate at runtime.
+2. A reference to an evaluated constant, bare or through a module, translates
+   to its value as a literal of the type the compiler gives the reference,
+   which is the type its position expects (`top_level_ref`): with
+   `B: constant(Bytes[5]) = b"abc"`, the reference `B` in
+   `A: constant(Bytes[10]) = B` is a `Bytes[10]`.
+3. Each compile-time position evaluates its translated expression: annotation
+   bounds (`annotation_bound`), `range` counts (`get_iter_bound`), the
+   endpoints of a `range` without `bound=` (`translate_iter`), keyword
+   flags (`kwarg_bool`, `kwarg_num`, `kwarg_method_id`), the slice length,
+   tuple indices, exponents and `method_id` (`fold_constant`).
+4. A position whose value must be known at compile time but does not
+   evaluate is rejected, never given a default: a declaration with such an
+   annotation bound or `range` bound fails validation (`bound_resolved`,
+   `iter_bound_resolved`), and a call with such a keyword or slice length
+   translates to an expression the type checker rejects (`kwargs_checked`,
+   `rejected_expr`). Rejection is the cost of an evaluator smaller than the
+   compiler's folder: `True or False` as a flag, or a `range` count defined by
+   `uint256_addmod`, is accepted by the compiler and rejected here.
 
-`eval_integer_constant_sound` proves that every successful evaluation agrees
-with `eval_expr` in **any** runtime context and state, leaving that state
-unchanged. Its proof establishes context independence for the supported closed
-integer expressions, then uses `eval_pure_expr_to_eval_expr_some`.
+Annotation nodes carry no compiler types, and neither do the functions of an
+imported module that nothing calls. So in a count (an annotation bound, a
+`range` bound) the decoder gives `max_value(T)` and `min_value(T)` the type
+`T`, and other integer expressions type `uint256` (`jsonASTLib.count_expr`).
+A module path
+in them (`uint256[lib.N]`, `uint256[outer.inner.N + 1]`) is resolved through
+the import maps of the modules it passes (`resolve_module_expr`). An
+annotation that is present but does not decode fails the decoding; reading it
+as absent would trust the compiler's inferred type. The one exception is an
+interface stub's `String[...]` or `Bytes[...]`, which states no bound, so the
+compiler's inferred type (unbounded) says no more than it does.
 
-`evaluate_constant_sound` applies this result to source-expression elaboration.
-`evaluate_constant_literal_equivalent` proves equivalence of the elaborated
-initializer and its replacement literal. `resolved_array_bound_sound` connects
-each resolved array bound to a positive integer computed by runtime semantics.
-These are local evaluation guarantees; they do not assert correctness of the
-JSON decoder or a whole-program frontend transformation.
-
-## Supported fragment
-
-The decoder accepts non-public integer constants and external pure functions
-with one return statement. Annotations support signed/unsigned integers of
-width 8, 16, …, 256 and nested static arrays. Expressions support integer
-literals, names, and integer
-binary operators. Constant references must name an earlier declaration;
-function expressions can additionally use parameters. Shift counts have their
-own unsigned type, inferred from local operands when present, otherwise
-`uint256`. For example, `x: int256` can be shifted by `n: uint8` or `n: uint256`;
-`x >> (1 + n)` uses the type of `n` for the count expression.
-
-Imports, other statements, calls, unary expressions, defaults, public getters,
-and default nonreentrancy are rejected by the decoder. Unresolved names, duplicate
-declarations/parameters, invalid widths, nonpositive bounds, and unsuccessful
-arithmetic return `NONE` during formal translation. Arithmetic uses the existing
-bounded runtime operations, so an overflowing intermediate result is rejected
-even if a compiler's unbounded constant folder could simplify the full expression.
-In particular, `uint256[((1 << 256) >> 255) + 1]` is rejected: the pinned compiler
-resolves it to length 3, but runtime shifts would produce length 1. Supporting
-that expression requires evaluation beyond this bounded fragment. Runtime
-shifts with nonconstant operands retain their existing wrapping semantics.
-
-The legacy `jsonASTLib` / `translate_annotated_ast` entry point is unchanged.
-The strict entry point never falls back to it. Broader expression and module
-support, range bounds, and the other legacy uses of folded metadata remain work
-for #135.
+The original `.vy` source is not needed: the annotated AST keeps the original
+expression under every node that also carries a `folded_value`.
 
 ## Validation
 
-`jsonConstEvalWitnessTheory` imports a fixture produced at `VYPER_PIN`, checks the
-exact array-bound/exponent translation, and proves contract-checker success.
-It repeats decoding with folding/type metadata deleted and with invalid strings
-in every such field, and requires identical source terms. It also checks failure
-on arithmetic errors, unsupported expressions, invalid bounds, and invalid
-constant dependencies. Two additional pinned fixtures check rejection of the
-overflowing shift bound and acceptance of signed shifts with unsigned counts,
-including a count expression and an array bound from a safe constant shift.
-Those fixtures are also decoded with metadata removed and poisoned. Width
-tests include nonmultiples of 8 and the supported endpoints.
-The witness is a default build root.
+`vyperConstEvalWitnessTheory` (default build) translates the fixtures
+`constant_bound`, `constant_shifts`, `constant_shift_overflow`, `constant_refs`
+(a forward reference and a module constant in a bound), `constant_nested`
+(constants of an imported module's import in bounds), `constant_widened`
+(a `Bytes[5]` constant referenced as a `Bytes[10]`), `constant_minmax_bound`
+(`int8[max_value(int8)]` and a `min_value` constant), `constant_interface_stub`
+(the builtin `IERC20Detailed` interface's `String[...]`), the two
+`constant_unevaluated_*` rejections, `constant_undecodable_bound` and
+`constant_undecodable_import` (an undecodable annotation in the main or an
+imported module) from
+`tests/fixtures/check_contract`. It decodes each one again with every
+`folded_value` deleted, and again with every one replaced by junk, and requires
+identical terms. In `constant_shift_overflow`, `uint256[((1 << 256) >> 255) + 1]`
+is 3 for the compiler but 1 under uint256 shifts; the elaborated parameter
+type then disagrees with the compiler's inferred type and the contract is
+rejected rather than translated with the wrong bound.
 
-The implementation introduces two datatypes (`const_annotation` and
-`const_declaration`) and ten definitions: `closed_integer`,
-`eval_integer_constant`, `integer_local_type`, `constant_shift_ok`,
-`elaborate_integer`, `evaluate_constant`,
-`resolve_constant_annotation`, `resolve_constant_args`,
-`translate_constant_declarations`, and `translate_constant_module`.
-There are no new axioms or cheats and no changes to existing theorem statements.
+`frontendConstantParityTheory` is an opt-in check, outside the default build
+and run by its own CI job. Over every checked-in annotated-AST fixture, it
+evaluates each non-literal node that has a `folded_value` and requires the
+computed value to equal the compiler's. It reports how many nodes the
+evaluator leaves alone, by kind (lists, tuples, comparisons), and lists the
+known differences, which do not fail it: the shift in `constant_shift_overflow`
+above (with its subexpressions) is the only one. Build it with
+
+```sh
+holbuild build frontendConstantParityTheory
+```

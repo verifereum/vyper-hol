@@ -174,7 +174,7 @@ Proof
 QED
 
 (* Helper: EL through asm_expand_memory equals read_byte *)
-Theorem el_expand_read_byte[local]:
+Theorem el_expand_read_byte:
   !i n mem. i < LENGTH (asm_expand_memory n mem) ==>
     EL i (asm_expand_memory n mem) =
     (if i < LENGTH mem then EL i mem else 0w)

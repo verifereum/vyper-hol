@@ -50,7 +50,7 @@ Theorem eval_mutual_preserves_scopes_dom[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
   (!cx:evaluation_context. !it:iterator. T) /\
-  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:value list. T) /\
+  (!cx:evaluation_context. !tv:type_value. !id:string. !body:stmt list. !vs:eval_result list. T) /\
   (!cx e st res st'. eval_expr cx e st = (res,st') ==>
     MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx es st res st'. eval_exprs cx es st = (res,st') ==>
@@ -157,12 +157,16 @@ Proof
       strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
-          raise_def, check_def, type_check_def, assert_def] >> metis_tac[])
+          raise_def, check_def, type_check_def, assert_def,
+          lift_option_type_def, option_CASE_rator] >> metis_tac[])
   >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
            raise_def, check_def, type_check_def, assert_def, lift_option_def,
-           lift_option_type_def, get_accounts_def, option_CASE_rator] >>
-      strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+           lift_option_type_def, get_accounts_def, update_accounts_def,
+           update_pending_deletions_def, option_CASE_rator] >>
+      strip_tac >>
+      gvs[update_accounts_def, update_pending_deletions_def, bind_def,
+          ignore_bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
       imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[])
   >- suspend "CreateTarget"
   >- simp[Once evaluate_def, return_def]
@@ -210,16 +214,15 @@ QED
    Uses ≠ form because simp normalizes ¬(A ∨ B) to ¬A ∧ ¬B. *)
 Theorem finally_intcall_handler_scopes[local]:
   ∀f nr mut cx prev s res s'.
-    finally f
-      (bind (set_scopes prev) (λx.
-          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+    finally_unless_halt (finally f (set_scopes prev))
+      (if nr ∧ mut ≠ View ∧ mut ≠ Pure then
             case cx.nonreentrant_slot of
             | NONE => return ()
             | SOME slot => release_nonreentrant_lock cx.txn.target slot
-          else return ())) s = (res, s') ⇒
+       else return ()) s = (res, s') ⇒
     MAP FDOM s'.scopes = MAP FDOM prev
 Proof
-  rw[finally_def, bind_def, ignore_bind_def,
+  rw[finally_unless_halt_def, finally_def, bind_def, ignore_bind_def,
      set_scopes_def, return_def, raise_def, AllCaseEqs()]
   \\ gvs[]
   \\ Cases_on `cx.nonreentrant_slot` \\ gvs[return_def]

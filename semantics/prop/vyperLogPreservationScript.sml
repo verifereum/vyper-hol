@@ -132,8 +132,7 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def, AllCaseEqs(), log_extends_def] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac read_result_state >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
+  imp_res_tac array_iterator_results_state >> gvs[] >>
   first_x_assum drule >> simp[] >> strip_tac >>
   qpat_x_assum `log_extends _ _` mp_tac >>
   simp[log_extends_def]
@@ -242,43 +241,55 @@ Proof
 QED
 
 Theorem case_eval_for_cons_logs[local]:
-  (!s0 x s1 s2 broke s3.
-     push_scope_with_var nm tyv v s0 = (INL x,s1) /\
+  (!s0 v s1 s2 x s3 s4 broke s5.
+     read_result cx r s0 = (INL v,s1) /\
+     push_scope_with_var nm tyv v s2 = (INL x,s3) /\
      finally (try (do eval_stmts cx body; return F od)
-                    handle_loop_exception) pop_scope s2 = (INL broke,s3) /\
+                    handle_loop_exception) pop_scope s4 = (INL broke,s5) /\
      ~broke ==>
      !st res st'. eval_for cx tyv nm body vs st = (res,st') ==>
        log_extends st st') /\
-  (!s0 x s1. push_scope_with_var nm tyv v s0 = (INL x,s1) ==>
+  (!s0 v s1 s2 x s3.
+     read_result cx r s0 = (INL v,s1) /\
+     push_scope_with_var nm tyv v s2 = (INL x,s3) ==>
      !st res st'. eval_stmts cx body st = (res,st') ==>
        log_extends st st') ==>
-  !st res st'. eval_for cx tyv nm body (v::vs) st = (res,st') ==>
+  !st res st'. eval_for cx tyv nm body (r::vs) st = (res,st') ==>
     log_extends st st'
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >>
-  imp_res_tac push_scope_with_var_log_extends >>
-  `!sb rb sb'. eval_stmts cx body sb = (rb,sb') ==>
-               log_extends sb sb'` by
-    (rpt strip_tac >>
-     qpat_x_assum `!s0 s1. push_scope_with_var _ _ _ s0 = _ ==> _`
-       (qspecl_then [`st`, `s''`] mp_tac) >>
-     simp[] >> strip_tac >>
-     first_x_assum drule >> simp[]) >>
-  `log_extends s'' s'³'` by
-    (drule finally_try_body_log_extends >>
-     disch_then drule >> simp[]) >>
-  `log_extends st s'³'` by
-    (irule log_extends_trans >> qexists_tac `s''` >> simp[]) >>
-  Cases_on `broke` >> gvs[vyperStateTheory.return_def] >>
-  qpat_x_assum `!s0 s1 s2 s3. _`
-    (qspecl_then [`st`, `s''`, `s''`, `s'³'`] mp_tac) >>
-  simp[vyperStateTheory.ignore_bind_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  irule log_extends_trans >> qexists_tac `s'³'` >> simp[]
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def] >>
+  Cases_on `read_result cx r st` >> Cases_on `q` >> simp[]
+  >- (
+    rename1 `read_result cx r st = (INL v, s1)` >>
+    `s1 = st` by metis_tac[read_result_state] >>
+    qpat_x_assum `s1 = st` SUBST_ALL_TAC >>
+    Cases_on `push_scope_with_var nm tyv v st` >> Cases_on `q` >> simp[]
+    >- (
+      rename1 `push_scope_with_var nm tyv v st = (INL x, s2)` >>
+      `log_extends st s2` by metis_tac[push_scope_with_var_log_extends] >>
+      `!sb rb sb'. eval_stmts cx body sb = (rb,sb') ==> log_extends sb sb'` by
+        (rpt strip_tac >>
+         qpat_x_assum `!s0 v s1 s2 x s3. _ ==> !st res st'. eval_stmts _ _ _ = _ ==> _`
+           (qspecl_then [`st`, `v`, `st`, `st`, `x`, `s2`] mp_tac) >>
+         simp[] >> disch_then drule >> simp[]) >>
+      qmatch_goalsub_abbrev_tac `finally lb pop_scope s2` >>
+      Cases_on `finally lb pop_scope s2` >> rename1 `_ = (fres, s3)` >>
+      qunabbrev_tac `lb` >>
+      `log_extends s2 s3` by (drule finally_try_body_log_extends >> simp[]) >>
+      `log_extends st s3` by metis_tac[log_extends_trans] >>
+      Cases_on `fres` >> simp[] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+      rename1 `INL broke` >> Cases_on `broke` >>
+      simp[vyperStateTheory.return_def] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+      strip_tac >>
+      qpat_x_assum `!s0 v s1 s2 x s3 s4 broke s5. _`
+        (qspecl_then [`st`, `v`, `st`, `st`, `x`, `s2`, `s2`, `F`, `s3`] mp_tac) >>
+      simp[vyperStateTheory.ignore_bind_def] >> disch_then drule >> strip_tac >>
+      irule log_extends_trans >> qexists_tac `s3` >> simp[]) >>
+    strip_tac >> gvs[] >> metis_tac[push_scope_with_var_log_extends]) >>
+  strip_tac >> gvs[] >> imp_res_tac read_result_state >> gvs[log_extends_refl]
 QED
 
 Theorem update_accounts_logs[local]:
@@ -963,12 +974,33 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, update_accounts_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >>
   gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
+
+Theorem eval_raw_call_log_extends:
+  eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
+  log_extends st st'
+Proof
+  Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` >>
+  Cases_on `IS_SOME st.outcomes /\ ~flags.rcf_is_delegate` >>
+  Cases_on `flags.rcf_revert_on_failure` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >>
+  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
 
 Theorem case_expr_send_logs[local]:
   (!s0 s1. type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s0 =
@@ -1005,9 +1037,12 @@ Proof
   rpt strip_tac >> gvs[log_extends_refl] >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   imp_res_tac transfer_value_logs >> gvs[] >>
-  first_x_assum drule >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_eq_logs >> gvs[]
+  Cases_on `cx.txn.created_in_tx` >>
+  gvs[vyperStateTheory.update_accounts_def,
+      vyperStateTheory.update_pending_deletions_def,
+      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      vyperStateTheory.return_def] >>
+  first_x_assum drule >> simp[log_extends_def]
 QED
 
 Theorem finally_log_extends[local]:
@@ -1031,6 +1066,20 @@ Proof
   simp[vyperStateTheory.set_scopes_def, vyperStateTheory.return_def] >>
   rpt strip_tac >> gvs[] >>
   irule log_extends_eq_logs >> simp[]
+QED
+
+Theorem finally_unless_halt_log_extends[local]:
+  finally_unless_halt f g st = (res,st') ==>
+  (!r s1. f st = (r,s1) ==> log_extends st s1) ==>
+  (!s0 r s1. g s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  simp[finally_unless_halt_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]
 QED
 
 Theorem acquire_nonreentrant_lock_log_extends[local]:
@@ -1241,24 +1290,31 @@ Proof
   first_assum MATCH_ACCEPT_TAC
 QED
 Theorem intcall_body_finally_exact_log_extends[local]:
-  finally (try (do x <- eval_stmts cxf body; return NoneV od) handle_function)
-    (do x <- pop_function prev;
-        if nr /\ mut <> View /\ mut <> Pure then
+  finally_unless_halt
+               (finally (try (do x <- eval_stmts cxf body; return NoneV od) handle_function) (pop_function prev))
+               (if nr /\ mut <> View /\ mut <> Pure then
           case cx.nonreentrant_slot of
             NONE => return ()
           | SOME slot => release_nonreentrant_lock cx.txn.target slot
-        else return ()
-     od) st = (res,st') ==>
+        else return ()) st = (res,st') ==>
   (!s0 r s1. eval_stmts cxf body s0 = (r,s1) ==> log_extends s0 s1) ==>
   log_extends st st'
 Proof
   rpt strip_tac >>
-  drule finally_log_extends >> disch_then irule >>
-  conj_tac >-
-    (rpt strip_tac >> drule intcall_cleanup_exact_log_extends >> simp[]) >>
-  rpt strip_tac >>
-  drule intcall_try_body_exact_log_extends >> disch_then irule >>
-  first_assum MATCH_ACCEPT_TAC
+  drule finally_unless_halt_log_extends >> disch_then irule >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `nr /\ mut <> View /\ mut <> Pure` >>
+      gvs[vyperStateTheory.return_def, log_extends_refl] >>
+      Cases_on `cx.nonreentrant_slot` >>
+      gvs[vyperStateTheory.return_def, log_extends_refl] >>
+      drule release_nonreentrant_lock_log_extends >> simp[]) >>
+  rpt strip_tac >> drule finally_log_extends >> disch_then irule >>
+  conj_tac
+  >- (rpt strip_tac >>
+      gvs[pop_function_def] >> drule set_scopes_log_extends >> simp[]) >>
+  rpt strip_tac >> drule intcall_try_body_exact_log_extends >>
+  disch_then irule >> first_assum MATCH_ACCEPT_TAC
 QED
 Theorem intcall_needed_dflts_index[local]:
   e <= a /\ a <= e + d ==> d - (a - e) = e + d - a
@@ -1289,17 +1345,15 @@ Theorem intcall_post_defaults_log_extends[local]:
                    (mut = View \/ mut = Pure)
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
-      rv <- finally
-              (try (do x <- eval_stmts cxf body; return NoneV od)
-                   handle_function)
-              (do x <- pop_function prev;
-                  if nr /\ mut <> View /\ mut <> Pure then
+      rv <- finally_unless_halt
+               (finally (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function) (pop_function prev))
+               (if nr /\ mut <> View /\ mut <> Pure then
                     case cx.nonreentrant_slot of
                       NONE => return ()
                     | SOME slot =>
                         release_nonreentrant_lock cx.txn.target slot
-                  else return ()
-               od);
+                  else return ());
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv)
    od) st = (res,st') ==>
@@ -1324,7 +1378,7 @@ Proof
      imp_res_tac acquire_nonreentrant_lock_log_extends >>
      gvs[log_extends_refl]) >>
   `log_extends (s'⁴' with scopes := [env]) s'⁵'` by
-    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+    (qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
      strip_tac >>
      drule intcall_body_finally_exact_log_extends >>
      simp[]) >>
@@ -1349,17 +1403,15 @@ Theorem intcall_post_defaults_guarded_log_extends[local]:
                    (mut = View \/ mut = Pure)
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
-      rv <- finally
-              (try (do x <- eval_stmts cxf body; return NoneV od)
-                   handle_function)
-              (do x <- pop_function prev;
-                  if nr /\ mut <> View /\ mut <> Pure then
+      rv <- finally_unless_halt
+               (finally (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function) (pop_function prev))
+               (if nr /\ mut <> View /\ mut <> Pure then
                     case cx.nonreentrant_slot of
                       NONE => return ()
                     | SOME slot =>
                         release_nonreentrant_lock cx.txn.target slot
-                  else return ()
-               od);
+                  else return ());
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv)
    od) sg2 = (res,st') ==>
@@ -1402,7 +1454,7 @@ Proof
   all_tac >~ [`push_function _ _ _ _ = (INR _,_)`] >-
     metis_tac[log_extends_trans] >>
   `log_extends s'⁵' s'⁶'` by
-    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+    (qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
      strip_tac >>
      drule intcall_body_finally_exact_log_extends >> simp[]) >>
   metis_tac[log_extends_trans]
@@ -1427,17 +1479,15 @@ Theorem intcall_success_continuation_guarded_log_extends[local]:
                                 (mut = View \/ mut = Pure)
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
-      rv <- finally
-              (try (do x <- eval_stmts cxf body; return NoneV od)
-                   handle_function)
-              (do x <- pop_function prev;
-                  if nr /\ mut <> View /\ mut <> Pure then
+      rv <- finally_unless_halt
+               (finally (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function) (pop_function prev))
+               (if nr /\ mut <> View /\ mut <> Pure then
                     case cx.nonreentrant_slot of
                       NONE => return ()
                     | SOME slot =>
                         release_nonreentrant_lock cx.txn.target slot
-                  else return ()
-               od);
+                  else return ());
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv)
    od) st = (res,st') ==>
@@ -1506,17 +1556,15 @@ Theorem intcall_success_continuation_log_extends[local]:
                                 (mut = View \/ mut = Pure)
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
-      rv <- finally
-              (try (do x <- eval_stmts cxf body; return NoneV od)
-                   handle_function)
-              (do x <- pop_function prev;
-                  if nr /\ mut <> View /\ mut <> Pure then
+      rv <- finally_unless_halt
+               (finally (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function) (pop_function prev))
+               (if nr /\ mut <> View /\ mut <> Pure then
                     case cx.nonreentrant_slot of
                       NONE => return ()
                     | SOME slot =>
                         release_nonreentrant_lock cx.txn.target slot
-                  else return ()
-               od);
+                  else return ());
       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
       return (Value crv)
    od) st = (res,st') ==>
@@ -1578,11 +1626,18 @@ Proof
        vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
        append_logs_def, adopt_call_outcome_equation] >>
-  rpt strip_tac >> rpt CASE_TAC >>
-  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+  rpt strip_tac >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(), COND_RAND,
       vyperStateTheory.return_def, vyperStateTheory.raise_def,
-      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      log_extends_def, rich_listTheory.IS_PREFIX_APPEND3,
       rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem log_monad_update_pending_deletions[local]:
+  log_monad (update_pending_deletions deletions_upd)
+Proof
+  rw[log_monad_def, update_pending_deletions_def, vyperStateTheory.return_def,
+     log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 
 Theorem log_monad_take[local]:
@@ -1603,7 +1658,8 @@ val EXTCALL_LOG_MONAD_LEAF_TAC =
        MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
     val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
-      (log_monad_take :: CONJUNCTS log_monad_primitives)
+      (log_monad_take :: log_monad_update_pending_deletions ::
+       CONJUNCTS log_monad_primitives)
   in
     fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
   end;
@@ -1695,6 +1751,7 @@ Theorem raw_call_tail_log_extends[local]:
   (do x <- update_accounts (K accounts');
       x <- update_transient (K tStorage');
       x <- append_logs emitted_logs;
+      update_pending_deletions (APPEND deletions);
       if flags.rcf_revert_on_failure then do
         x <- if success then return () else raise (Error (RevertData returnData));
         if flags.rcf_max_outsize = 0 then return (Value NoneV)
@@ -1708,33 +1765,11 @@ Proof
   Cases_on `flags.rcf_max_outsize = 0` >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
-       vyperStateTheory.append_logs_def, vyperStateTheory.check_def,
+       vyperStateTheory.append_logs_def, update_pending_deletions_def, vyperStateTheory.check_def,
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
        log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
   rpt strip_tac >> gvs[rich_listTheory.IS_PREFIX_APPEND]
-QED
-
-Theorem eval_raw_call_log_extends:
-  eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
-  log_extends st st'
-Proof
-  Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
-    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` >>
-  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, log_extends_refl] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def, log_extends_refl] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
-  PairCases_on `call_result` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  rpt strip_tac >> gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem case_expr_raw_call_logs[local]:
@@ -1797,7 +1832,8 @@ Proof
        vyperStateTheory.ignore_bind_def, vyperStateTheory.raise_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac type_check_state >> imp_res_tac raise_state >> gvs[] >>
+  imp_res_tac type_check_state >> imp_res_tac raise_state >>
+  imp_res_tac lift_option_type_state >> gvs[] >>
   first_x_assum drule >> simp[]
 QED
 
@@ -2183,7 +2219,7 @@ Proof
           PRED_ASSUM is_guarded_eval_exprs_ih kall_tac >>
           simp[push_function_def, return_def] >>
           BasicProvers.TOP_CASE_TAC >>
-          qmatch_asmsub_rename_tac `finally _ _ _ = (body_res,after_body)` >>
+          qmatch_asmsub_rename_tac `finally_unless_halt _ _ _ = (body_res,after_body)` >>
           `log_extends (after_lock with scopes := [x'⁴']) after_body` by
             (drule intcall_body_finally_exact_log_extends >>
              disch_then irule >> simp[Abbr `cxd`]) >>
@@ -2271,6 +2307,7 @@ Theorem eval_expr_log_extends:
 Proof
   metis_tac[eval_mutual_log_extends]
 QED
+
 
 Theorem eval_exprs_log_extends:
   !cx es st res st'.
@@ -2482,7 +2519,49 @@ Proof
   gvs[machine_log_extends_def, vyperInterpreterTheory.finalize_pending_deletions_def]
 QED
 
+Theorem call_external_function_halt_log_extends:
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    (INR HaltException,am',rqs) ==>
+  machine_log_extends am am'
+Proof
+  strip_tac >> drule call_external_function_halt_cases >> strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac send_call_value_logs >>
+  imp_res_tac eval_external_defaults_log_extends >>
+  `am_c.logs = am.logs` by
+    (Cases_on `cx.in_deploy` >> gvs[] >>
+     imp_res_tac evaluate_all_constants_logs >> gvs[]) >>
+  gvs[machine_log_extends_def, log_extends_def,
+      vyperInterpreterTheory.initial_state_def,
+      vyperInterpreterTheory.abstract_machine_from_state_def]
+  >~ [`bind_arguments _ _ _`]
+  >- (qpat_x_assum `_ = (INR HaltException,st_body)` mp_tac >>
+      Cases_on `bind_arguments (type_env_all_modules all_mods) args (vals ++ dvs)` >>
+      simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+           vyperStateTheory.set_scopes_def, vyperStateTheory.return_def,
+           vyperStateTheory.raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac entry_lock_action_logs >>
+      imp_res_tac eval_stmts_log_extends >>
+      gvs[log_extends_def] >>
+      metis_tac[rich_listTheory.IS_PREFIX_TRANS]) >>
+  metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
+Theorem call_external_halt_log_extends:
+  call_external orc gobs am tx = (INR HaltException,am',rqs) ==>
+  machine_log_extends am am'
+Proof
+  rw[call_external_def] >> gvs[AllCaseEqs()] >>
+  imp_res_tac call_external_function_halt_log_extends >>
+  gvs[machine_log_extends_def, finalize_pending_deletions_def]
+QED
+
 Theorem call_external_function_error_logs_rollback:
+  e <> HaltException /\
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
     (INR e,am',rqs) ==>
   am'.logs = am.logs
@@ -2491,6 +2570,7 @@ Proof
 QED
 
 Theorem call_external_error_logs_rollback:
+  e <> HaltException /\
   call_external orc gobs am tx = (INR e,am',rqs) ==> am'.logs = am.logs
 Proof
   strip_tac >> imp_res_tac call_external_error_rollback >> gvs[]
@@ -2501,6 +2581,9 @@ Theorem call_external_log_extends:
 Proof
   Cases_on `res` >> strip_tac >-
     (imp_res_tac call_external_success_log_extends) >>
+  rename1 `call_external orc gobs am tx = (INR exc,am',rqs)` >>
+  Cases_on `exc = HaltException`
+  >- (gvs[] >> drule call_external_halt_log_extends >> simp[]) >>
   imp_res_tac call_external_error_logs_rollback >>
   simp[machine_log_extends_eq_logs]
 QED

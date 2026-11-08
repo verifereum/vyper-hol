@@ -342,8 +342,8 @@ Theorem expr_body_pre_word_type_result:
         ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               value_has_type tyv v
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (drule_all expr_body_pre_eval >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >> asm_rewrite_tac[] >>
   rw[] >> drule_all expr_body_pre_word_value >> simp[]
 QED
 

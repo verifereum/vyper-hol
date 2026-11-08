@@ -170,6 +170,7 @@ Theorem metadata_frame_reads[local]:
   state_rel_frame immutable_metadata_frame (lookup_flag_mem cx nsid mid) /\
   state_rel_frame immutable_metadata_frame (read_storage_slot cx b slot ty) /\
   state_rel_frame immutable_metadata_frame (result_array_length cx tv) /\
+  state_rel_frame immutable_metadata_frame (array_iterator_results cx arr_ty tv) /\
   state_rel_frame immutable_metadata_frame (lift_sum z) /\
   state_rel_frame immutable_metadata_frame (get_immutables cx src) /\
   state_rel_frame immutable_metadata_frame (get_place pv) /\
@@ -185,7 +186,8 @@ Proof
     drule_all conditional_result_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
     drule_all read_storage_slot_state,
-    drule_all result_array_length_state, drule_all lift_sum_state,
+    drule_all result_array_length_state, drule_all array_iterator_results_state,
+    drule_all lift_sum_state,
     drule_all get_immutables_state, drule_all get_place_state,
     drule_all read_place_state, drule_all place_type_value_state,
     drule_all extend_place_state,
@@ -286,6 +288,24 @@ Proof
   metis_tac[immutable_metadata_frame_trans]
 QED
 
+Theorem metadata_frame_finally_unless_halt[local]:
+  state_rel_frame immutable_metadata_frame f /\
+  state_rel_frame immutable_metadata_frame g ==>
+  state_rel_frame immutable_metadata_frame (finally_unless_halt f g)
+Proof
+  simp[state_rel_frame_def, finally_unless_halt_def] >> rpt strip_tac >>
+  qpat_x_assum `!st. immutable_metadata_frame st (SND (f st))`
+    (qspec_then `st` assume_tac) >>
+  Cases_on `f st` >>
+  qpat_x_assum `!st. immutable_metadata_frame st (SND (g st))`
+    (qspec_then `r` assume_tac) >>
+  Cases_on `g r` >> Cases_on `q` >>
+  gvs[ignore_bind_def, bind_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[ignore_bind_def, bind_def, return_def, raise_def]) >>
+  metis_tac[immutable_metadata_frame_trans]
+QED
+
 Theorem metadata_frame_handlers[local]:
   state_rel_frame immutable_metadata_frame (handle_loop_exception e) /\
   state_rel_frame immutable_metadata_frame (handle_function e)
@@ -300,7 +320,8 @@ val METADATA_TAKE = MATCH_MP state_rel_frame_locals_take metadata_frame_locals;
 (* Index only the exposed operation, never continuation arguments. *)
 val metadata_frame_net =
   let
-    val rules = [metadata_frame_bind, metadata_frame_try, metadata_frame_finally]
+    val rules = [metadata_frame_bind, metadata_frame_try, metadata_frame_finally,
+                 metadata_frame_finally_unless_halt]
     val leaves = metadata_frame_reads :: metadata_frame_primitives ::
       metadata_frame_next_gas_reading ::
       metadata_frame_storage :: metadata_frame_mutations :: metadata_frame_write ::

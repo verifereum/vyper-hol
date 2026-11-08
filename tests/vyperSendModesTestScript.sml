@@ -33,11 +33,13 @@ Definition send_concrete_backend_def:
     success <<- FST result; result1 <<- SND result;
     result2 <<- SND result1;
     accounts' <<- FST result2; result3 <<- SND result2;
-    tStorage' <<- FST result3; emitted_logs <<- SND result3;
+    tStorage' <<- FST result3; result4 <<- SND result3;
+    emitted_logs <<- FST result4; deletions <<- SND result4;
     check success "send failed";
     update_accounts (K accounts');
     update_transient (K tStorage');
     append_logs emitted_logs;
+    update_pending_deletions (APPEND deletions);
     return (Value NoneV)
   od
 End

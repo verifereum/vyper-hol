@@ -177,10 +177,12 @@ End
 
 Definition bare_global_assignable_complete_def:
   bare_global_assignable_complete bare_global_assignable cx <=>
-    !src ts vis id ty init.
-      get_module_code cx src = SOME ts /\
-      MEM (VariableDecl vis Immutable id ty init) ts ==>
-      FLOOKUP bare_global_assignable (src,id) = SOME ty
+    (cx.in_deploy ==>
+     !src ts vis id ty init.
+       get_module_code cx src = SOME ts /\
+       MEM (VariableDecl vis Immutable id ty init) ts ==>
+       FLOOKUP bare_global_assignable (src,id) = SOME ty) /\
+    (~cx.in_deploy ==> bare_global_assignable = FEMPTY)
 End
 
 Definition flag_members_complete_def:
@@ -376,17 +378,18 @@ Definition functions_well_typed_def:
           env_body.toplevel_vtypes = toplevel_vtypes /\
           env_body.flag_members = flag_members /\
           evaluate_type (get_tenv cx) ret = SOME ret_tv /\
+          (ret <> NoneT ==> assignable_type (get_tenv cx) ret) /\
           type_stmts env_body ret body = SOME env_after /\
           (ret = NoneT \/ stmts_no_fallthrough body) /\
           stmts_no_control_escape body /\
           well_typed_exprs (defaults_env env_body) dflts /\
           (!id typ. MEM (id,typ) args ==>
              FLOOKUP env_body.var_types id = SOME typ /\
-             FLOOKUP env_body.var_assignable id = SOME T) /\
+             IS_SOME (FLOOKUP env_body.var_assignable id)) /\
           (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
              ?id. MEM (id,ty) args /\ n = id) /\
           (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-             ?id typ. MEM (id,typ) args /\ n = id /\ b = T) /\
+             ?id typ. MEM (id,typ) args /\ n = id) /\
           MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 

@@ -62,7 +62,7 @@ Theorem body_oracle_storage_mutual:
     eval_iterator cx it st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tyv id body vs. !tops env ret_ty ty env_after st res st'.
     evaluate_type env.type_defs ty = SOME tyv /\
-    EVERY (value_has_type tyv) vs /\ id NOTIN FDOM env.var_types /\
+    EVERY (iterator_result_typed tyv) vs /\ id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root body /\
@@ -572,8 +572,8 @@ Resume body_oracle_storage_mutual[for_cons]:
       rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
       gvs[] >> first_assum match_mp_tac >> rpt (goal_assum (drule_at Any))) >>
   rpt gen_tac >> strip_tac >>
-  rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
-  first_assum drule >> simp[]
+  qpat_x_assum `!s v t s3 t'. read_result _ _ _ = _ /\ push_scope_with_var _ _ _ _ = _ ==> _`
+    (drule_then drule) >> simp[]
 QED
 
 Resume body_oracle_storage_mutual[assign_base]:
@@ -833,7 +833,7 @@ Resume body_oracle_storage_mutual[intcall_return]:
         vyperStorageBackendTheory.get_storage_def]) >>
    simp_tac (srw_ss()) [Once push_function_def, return_def,
      Excl "unlock_if_nr_def", Excl "lock_if_nr_def", Excl "lift_option_type_def"] >> strip_tac >>
-   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_return_storage) >>
+   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_actual_return_storage) >>
    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
    simp_tac bool_ss [GSYM ignore_bind_def] >>
    qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')`

@@ -15,10 +15,14 @@
  *
  * Unprovable as the definitions stand (for raw_call and the creates, once
  * expr_sim_pre's exclusion of them, below, is lifted):
- *   - compile_raw_log_sim and compile_selfdestruct_sim:
- *     compile_call lowers RawLog and SelfDestructTarget to
- *     INVALID, where
- *     the source can succeed.
+ *   - compile_selfdestruct_sim: Venom's SELFDESTRUCT predates EIP-6780.
+ *     It never adds a pending deletion, zeroes the balance even when the
+ *     beneficiary is the executing account, and keeps the return data,
+ *     where the source follows EIP-6780 (#1142).  It also adds the
+ *     balance unchecked, where the source's transfer_value fails when the
+ *     beneficiary's balance plus the transferred one reaches 2 ** 256, and
+ *     expr_sim_pre doesn't bound that sum; the simulation needs that bound
+ *     as a premise local to the lowering proof.
  *   - compile_raw_call_sim and compile_raw_call_calldata_sim: the source
  *     raw_call runs the callee on the EVM even with the outcome oracle,
  *     where the lowered CALL/STATICCALL consumes an oracle outcome. With
@@ -33,6 +37,13 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
+ *
+ * RawLog, RawRevert, SelfDestructTarget, both raw_call forms and the
+ * creates are wired into compile_call.
+ * Their case lemmas remain admitted.  For SelfDestructTarget, expr_exit
+ * now covers HaltException by Halt with empty returndata only; full
+ * terminal effects correctness is the separate loweringHalt/e2e bridge's
+ * responsibility.
  *
  * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e), so
  * compile_raw_call_sim, compile_raw_call_calldata_sim and

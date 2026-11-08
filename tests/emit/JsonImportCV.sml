@@ -27,6 +27,8 @@ structure JsonImportCV = struct
   fun word_literal (bits,n) = WordValue (bits,IntInf.mod (n,IntInf.pow (2,bits)))
   fun natural n = if n < 0 then raise Fail "negative natural number" else Natural n
   val integer = Integer
+  fun dest_integer (Integer n) = n
+    | dest_integer _ = raise Fail "expected imported integer"
   val fromMLstring = StringValue
   val mk_bool = BoolValue
   val mk_comb = Apply
@@ -55,6 +57,18 @@ structure JsonImportCV = struct
   fun dest_list (ListValue pair) = pair
     | dest_list _ = raise Fail "expected imported list"
   val mk_record = RecordValue
+  fun replace_subterm (from,to) tm = let
+    fun go t =
+      if aconv t from then to
+      else case t of
+             Apply (f,a) => Apply (go f,go a)
+           | ListValue (xs,ty) => ListValue (List.map go xs,ty)
+           | PairValue (a,b) => PairValue (go a,go b)
+           | SomeValue x => SomeValue (go x)
+           | RecordValue (ty,fs) =>
+               RecordValue (ty,List.map (fn (k,v) => (k,go v)) fs)
+           | _ => t
+  in go tm end
 
   fun key_of (Named name) = name
     | key_of (Applied (name,[])) = "jsonAST." ^ name

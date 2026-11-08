@@ -81,6 +81,20 @@ Proof
   Cases_on `res` >> simp[ignore_bind_def, bind_def, return_def, raise_def]
 QED
 
+Theorem outcomes_frame_finally_unless_halt[simp]:
+  outcomes_frame f /\ outcomes_frame g ==>
+  outcomes_frame (finally_unless_halt f g)
+Proof
+  simp[outcomes_frame_def] >> rpt strip_tac >>
+  Cases_on `f st` >> rename1 `f st = (result,mid)` >>
+  `mid.outcomes = st.outcomes` by metis_tac[SND] >>
+  `(SND (g mid)).outcomes = mid.outcomes` by metis_tac[] >>
+  Cases_on `result` >> TRY (rename1 `INR error` >> Cases_on `error`) >>
+  simp[finally_unless_halt_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `g mid` >> rename1 `g mid = (cleanup_result,post)` >>
+  Cases_on `cleanup_result` >> gvs[]
+QED
+
 Theorem outcomes_frame_state_preserving[local]:
   (!st res st'. f st = (res,st') ==> st' = st) ==> outcomes_frame f
 Proof
@@ -103,6 +117,7 @@ Theorem outcomes_frame_reads[simp]:
   outcomes_frame (lookup_flag_mem cx nsid mid) /\
   outcomes_frame (read_storage_slot cx b slot ty) /\
   outcomes_frame (result_array_length cx tv) /\
+  outcomes_frame (array_iterator_results cx arr_ty tv) /\
   outcomes_frame (lift_option_type x msg) /\
   outcomes_frame (lift_option y msg) /\
   outcomes_frame (lift_sum z) /\ outcomes_frame (lift_sum_runtime zr)
@@ -114,7 +129,8 @@ Proof
     drule_all get_transient_storage_state,
     drule_all lookup_global_state, drule_all lookup_flag_mem_state,
     drule_all read_storage_slot_state,
-    drule_all result_array_length_state, drule_all lift_option_type_state,
+    drule_all result_array_length_state, drule_all array_iterator_results_state,
+    drule_all lift_option_type_state,
     drule_all lift_option_state, drule_all lift_sum_state,
     drule_all lift_sum_runtime_state] >> simp[]
 QED
@@ -144,7 +160,7 @@ Proof
     next_gas_reading_def,
     get_scopes_def, set_scopes_def, push_scope_def, pop_scope_def,
     push_scope_with_var_def, new_variable_def, update_accounts_def,
-    update_transient_def, append_logs_def, push_log_def,
+    update_transient_def, append_logs_def, update_pending_deletions_def, push_log_def,
     get_pending_deletions_def, update_pending_deletions_def,
     get_immutables_def, get_address_immutables_def,
     set_immutable_def, set_address_immutables_def,
@@ -284,6 +300,7 @@ val OUTCOMES_FRAME_TAC =
     MATCH_MP_TAC outcomes_frame_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
     MATCH_MP_TAC outcomes_frame_finally >> conj_tac,
+    MATCH_MP_TAC outcomes_frame_finally_unless_halt >> conj_tac,
     MATCH_MP_TAC outcomes_frame_try >> conj_tac,
     CHANGED_TAC (simp_tac bool_ss [switch_BoolV_def]),
     gen_tac, strip_tac,
@@ -296,14 +313,6 @@ Proof
   simp[outcomes_frame_def, check_create_blueprint_state]
 QED
 
-
-Theorem outcomes_frame_raw_call[simp]:
-  outcomes_frame (eval_raw_call cx flags target_addr calldata amount gas)
-Proof
-  simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
-  rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
-              ASSIGN_OUTCOMES_FRAME_STEP])
-QED
 
 (* Lock primitives retain the residual outcome field, on success and error. *)
 Theorem lock_outcomes_preserved:
@@ -434,6 +443,21 @@ Proof
   drule_all outcome_suffix_trans >> simp[]
 QED
 
+Theorem outcomes_suffix_finally_unless_halt:
+  outcomes_suffix f /\ outcomes_suffix g ==>
+  outcomes_suffix (finally_unless_halt f g)
+Proof
+  simp[outcomes_suffix_def] >> rpt strip_tac >>
+  Cases_on `f st` >> rename1 `f st = (result,mid)` >>
+  `outcome_suffix st.outcomes mid.outcomes` by metis_tac[SND] >>
+  `outcome_suffix mid.outcomes (SND (g mid)).outcomes` by metis_tac[] >>
+  Cases_on `result` >> TRY (rename1 `INR error` >> Cases_on `error`) >>
+  simp[finally_unless_halt_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `g mid` >> rename1 `g mid = (cleanup_result,post)` >>
+  Cases_on `cleanup_result` >> gvs[] >>
+  drule_all outcome_suffix_trans >> simp[]
+QED
+
 Theorem outcomes_suffix_take:
   outcomes_suffix (take_call_outcome target calldata value_opt)
 Proof
@@ -449,6 +473,7 @@ Theorem outcomes_frame_adopt:
   outcomes_frame (adopt_call_outcome rq co)
 Proof
   simp[outcomes_frame_def, adopt_call_outcome_def, extCallOracleTheory.adopt_outcome_def,
+       extCallOracleTheory.adopt_outcome_deletions_def,
        return_def] >> rpt gen_tac >> CASE_TAC >> simp[]
 QED
 
@@ -507,7 +532,7 @@ val outcomes_suffix_frame_simps =
        outcomes_frame_return, outcomes_frame_raise,
        outcomes_frame_check_create_blueprint,
        outcomes_frame_resolve_array,
-       outcomes_frame_adopt, outcomes_frame_raw_call,
+       outcomes_frame_adopt,
        outcomes_frame_places, outcomes_frame_write_place,
        outcomes_frame_get_place, outcomes_frame_append_place,
        outcomes_frame_pop_place]));
@@ -534,10 +559,15 @@ val outcomes_suffix_fact_index =
   List.map (fn th => (outcomes_fact_key (concl (SPEC_ALL th)),th))
     outcomes_suffix_frame_simps;
 
+(* Share issue-567's structural rules with main's extensible fact net. *)
+val outcomes_suffix_structural_rules =
+  [outcomes_suffix_bind_guarded, outcomes_suffix_finally,
+   outcomes_suffix_finally_unless_halt, outcomes_suffix_try];
+
 fun outcomes_suffix_step facts =
   let
     val net = outcomes_frame_net facts
-      [outcomes_suffix_bind_guarded, outcomes_suffix_finally, outcomes_suffix_try]
+      outcomes_suffix_structural_rules
   in
     FIRST [
       CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac,
@@ -567,8 +597,17 @@ Proof
   rpt (outcomes_suffix_step outcomes_suffix_base_facts)
 QED
 
+(* In oracle mode a call or staticcall consumes an outcome, as extcall does. *)
+Theorem outcomes_suffix_raw_call:
+  outcomes_suffix (eval_raw_call cx flags target_addr calldata amount gas)
+Proof
+  simp_tac bool_ss [eval_raw_call_def, LET_THM] >>
+  rpt (outcomes_suffix_step outcomes_suffix_base_facts)
+QED
+
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
-  (outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
+  (outcomes_suffix_ext_call :: outcomes_suffix_send ::
+   outcomes_suffix_raw_call :: outcomes_suffix_base_facts));
 
 Theorem outcomes_suffix_create:
   outcomes_suffix (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
@@ -578,7 +617,8 @@ Proof
 QED
 
 val OUTCOMES_SUFFIX_TAC = rpt (outcomes_suffix_step
-  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send :: outcomes_suffix_base_facts));
+  (outcomes_suffix_create :: outcomes_suffix_ext_call :: outcomes_suffix_send ::
+   outcomes_suffix_raw_call :: outcomes_suffix_base_facts));
 (* The IntCall case's lock steps, unfolded in the goal and the hypotheses. *)
 val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
 

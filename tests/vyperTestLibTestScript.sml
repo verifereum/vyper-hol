@@ -1,5 +1,5 @@
 Theory vyperTestLibTest
-Ancestors vyperTestRunner
+Ancestors vyperTestShardLibTest vyperTestRunner
 Libs vyperTestLib
 
 fun source code = JSON.OBJECT [("source_code", JSON.STRING code)];
@@ -243,7 +243,14 @@ val _ = check_generated_script_inventory [] ["unrelatedScript.sml"];
    survive slicing and make each chunk reload the entire suite's CV data. *)
 val () = holbuild_extra_deps
   ["fixtures/exports/in_static_array/test_in_static_array.json",
-   "fixtures/exports/in_static_array/test_in_static_array.json.provenance"];
+   "fixtures/exports/in_static_array/test_in_static_array.json.provenance",
+   "fixtures/exports/in_static_array/test_in_static_array.py",
+   "../VYPER_PIN", "semantics-profile.json", "semantics-test-constraints.txt",
+   "semantics-build-constraints.txt",
+   "../tools/vyper_test_exports.py",
+   "../tools/vyper_test_export_plugin.py",
+   "../.github/actions/setup-vyper-test-exports/action.yml",
+   "vyper-regression"];
 val fixture = "fixtures/exports/in_static_array/test_in_static_array.json";
 fun local_names () =
   List.map (#Name o dest_thy_const) (constants (current_theory ()));

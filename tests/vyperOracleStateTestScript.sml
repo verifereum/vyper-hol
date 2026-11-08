@@ -255,7 +255,7 @@ QED
 
 Theorem oracle_empty_run_ext_call:
   run_ext_call 0w 0w [] (SOME 0) 0 empty_accounts tStorage txParams =
-    SOME (T, [], empty_accounts, tStorage, [])
+    SOME (T, [], empty_accounts, tStorage, [], [])
 Proof
   simp[run_ext_call_def, oracle_empty_call_precheck, oracle_empty_call_run] >>
   EVAL_TAC >> simp[]
@@ -289,7 +289,8 @@ Proof
        oracle_empty_run_ext_call] >>
   simp[lift_option_def, check_def, assert_def, bind_def, ignore_bind_def,
        update_accounts_def, update_transient_def, append_logs_def,
-       return_def, evaluation_state_component_equality]
+       update_pending_deletions_def, return_def,
+       evaluation_state_component_equality]
 QED
 
 Theorem oracle_empty_extcall_inert:

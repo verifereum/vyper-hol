@@ -120,7 +120,7 @@ This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.o
 
 The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-CI pins `holbuild-ref: v0.12.1` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
+CI pins `holbuild-ref: v0.13.34` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
 
 For a local build, install `holbuild` v0.12.0 or newer (`minimum_version` in `holproject.toml`) and run:
 
@@ -135,9 +135,9 @@ Release instructions, including the prebuilt holbuild archive artefact, are in [
 
 ### Frontend CV translation and benchmark
 
-`jsonToVyperCVLib.eval` returns an unconditional translation equality or fails.
 The test importer keeps `EVAL`, which was faster on all measured fixtures.
-The opt-in benchmark checks exact RHS parity and defined-input conditions:
+The frontend is total, so `cv_eval` returns an unconditional translation
+equality for every annotated AST. The opt-in benchmark checks exact RHS parity:
 
 ```bash
 holbuild -j1 build --force=theory --skip-checkpoints --no-cache jsonFrontendCVBenchmarkTheory
@@ -184,9 +184,10 @@ diagnostic CV input/result encodings.
 
 Native execution is a trusted regression check, not a kernel proof.
 `vyperJsonReplayLib.replay_file` provides kernel-checked replay. The CV frontend
-retains defined-input preconditions; the native executable does not discharge
-them for each input. CI builds the frontend, emitter, and kernel replay smoke
-theories; native MLton compilation is an explicit local step.
+translation has no preconditions, so the native executable runs the same
+translation for every input the JSON decoder accepts. CI builds the frontend,
+emitter, and kernel replay smoke theories; native MLton compilation is an
+explicit local step.
 
 ### Running the Vyper test suite
 
@@ -265,7 +266,7 @@ Then run individual generated test theories with `holbuild`, for example:
 holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
 ```
 
-The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
+The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup. Large suites split trace definitions and execution into independent chunks of at most 100 selected tests and 262144 binary-payload hex characters; an oversized case gets its own chunk. Chunks retain the original suite ID and global test indices, validate selection counts and export provenance, and decode only their own traces and fixture dependencies. CI includes every generated chunk.
 
 Local semantic regressions live as behavior-named pytests in
 [`tests/vyper-regression`](tests/vyper-regression/README.md). The pinned export

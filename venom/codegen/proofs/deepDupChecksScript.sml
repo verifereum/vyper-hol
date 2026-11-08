@@ -4,7 +4,7 @@ Theory deepDupChecks
 Ancestors stackPlanOps stackPlanTypes stackModel planExec asmSem words list byte
 Libs wordsLib
 
-val () = computeLib.upd_compset (computeLib.add_thms [set_byte_def])
+val () = computeLib.upd_compset (computeLib.add_thms [set_byte_bit_field_insert])
 
 (* Reduce one actual interpreter step, leaving its recursive continuation
    opaque. Bounded groups keep each proof fragment within the normal timeout. *)
@@ -12,18 +12,17 @@ val asm_runner = ``run_asm_aux``;
 fun DEEP_DUP_STEP_CONV tm =
   let val (head,args) = strip_comb tm
   in if same_const head asm_runner andalso length args = 5 then
-       let val unfolded = ONCE_REWRITE_CONV [run_asm_aux_def] tm
+       let val unfolded = REWR_CONV run_asm_aux_def tm
        in TRANS unfolded (computeLib.RESTR_EVAL_CONV [asm_runner]
             (rhs (concl unfolded))) end
-     else raise mk_HOL_ERR "deepDupChecks" "DEEP_DUP_STEP_CONV"
-       "not an applied assembly interpreter"
+     else ALL_CONV tm
   end;
 fun DEEP_DUP_CASE_CONV tm =
   let val (_,args) = strip_comb tm
   in (funpow (length args - 1) RATOR_CONV
         (RAND_CONV DEEP_DUP_STEP_CONV)) tm end;
 val DEEP_DUP_STEP_TAC =
-  TRY (CONV_TAC (BINDER_CONV DEEP_DUP_CASE_CONV));
+  CONV_TAC (BINDER_CONV DEEP_DUP_CASE_CONV);
 
 Definition deep_dup_input_stack_def:
   deep_dup_input_stack = GENLIST (\n. n2w n : bytes32) 40

@@ -66,6 +66,10 @@ own, and no revert of the other changes restores those fixtures.
 - `raw-calls/rc02_outsize_ret`
 - `raw-calls/rc04_static`
 - `raw-calls/rc07_rof_false_tuple`
+- `raw-system/rr_bytes`
+- `raw-system/rr_default_fn`
+- `raw-system/rr_storage`
+- `raw-system/xa_bytes_lit_return`
 - `slice-buffers/slice_storage_bytes`
 
 ## P2 (calldata argument guard)
@@ -100,6 +104,10 @@ own, and no revert of the other changes restores those fixtures.
 - `memory-stores/t11_tuple_onew_decode_mem`
 - `phi-pointers/ifexp_dynarray`
 - `raw-calls/rc25_stmt_argdata`
+- `raw-system/rl03_4topics`
+- `raw-system/rl_const_topics`
+- `raw-system/rr02_dynamic`
+- `raw-system/rr04_terminus_ret`
 
 ## P1 (ceil32) + P2 (calldata argument guard)
 
@@ -128,6 +136,9 @@ own, and no revert of the other changes restores those fixtures.
 - `phi-pointers/ifexp_string`
 - `raw-calls/rc19_dyn_data`
 - `raw-calls/rc29_delegate`
+- `raw-system/rr_arg`
+- `raw-system/rr_local`
+- `raw-system/rr_nr`
 - `slice-buffers/slice_bytes_var`
 - `slice-buffers/slice_string_lit`
 
@@ -173,6 +184,7 @@ own, and no revert of the other changes restores those fixtures.
 - `main/event_log`
 - `main/interface_calls`
 - `main/mixed_event_log`
+- `raw-system/rr03_abi`
 
 ## P1 (ceil32) + P4 (direct ABI encoder)
 

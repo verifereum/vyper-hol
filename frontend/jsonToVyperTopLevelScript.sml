@@ -97,7 +97,7 @@ Definition translate_toplevel_def:
         (JFuncType arg_tys ret_ty) ret_ann body) =
     if MEM "abstract" decs then NONE else
     let decs = effective_decorators nr_default decs in
-    let args' = translate_args_with_types nominal_index all_import_maps type_ctx args arg_tys in
+    let args' = translate_args_with_types nominal_index all_import_maps expr_ctx args arg_tys in
     let body_ctx = expr_with_local_types expr_ctx args' in
     SOME (FunctionDecl
       (translate_visibility decs)
@@ -107,7 +107,7 @@ Definition translate_toplevel_def:
       name
       args'
       (MAP (translate_expr body_ctx) defaults)
-      (canonical_decl_type nominal_index all_import_maps type_ctx ret_ty ret_ann)
+      (canonical_decl_type nominal_index all_import_maps expr_ctx ret_ty ret_ann)
       (translate_stmts nominal_index all_import_maps body_ctx body))) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
@@ -116,7 +116,7 @@ Definition translate_toplevel_def:
       (translate_var_mutability expr_ctx is_immutable is_transient
         (case const_val of SOME _ => T | NONE => F) const_val)
       name
-      (canonical_decl_type nominal_index all_import_maps type_ctx ty ann_ty)
+      (canonical_decl_type nominal_index all_import_maps expr_ctx ty ann_ty)
       NONE)) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
@@ -130,23 +130,23 @@ Definition translate_toplevel_def:
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_EventDef name args) =
     SOME (EventDecl name (MAP (λ(a,idx).
-      (translate_arg nominal_index all_import_maps type_ctx a, idx)) args))) /\
+      (translate_arg nominal_index all_import_maps expr_ctx a, idx)) args))) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default
       (JTL_ErrorDef name args) =
     SOME (ErrorDecl name
-      (MAP (translate_arg nominal_index all_import_maps type_ctx) args))) /\
+      (MAP (translate_arg nominal_index all_import_maps expr_ctx) args))) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_StructDef name args) =
     SOME (StructDecl name
-      (MAP (translate_arg nominal_index all_import_maps type_ctx) args))) /\
+      (MAP (translate_arg nominal_index all_import_maps expr_ctx) args))) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_FlagDef name members) =
     SOME (FlagDecl name members)) /\
 
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_InterfaceDef name funcs) =
     SOME (InterfaceDecl name
-      (MAP (translate_interface_func nominal_index all_import_maps type_ctx) funcs))) /\
+      (MAP (translate_interface_func nominal_index all_import_maps expr_ctx) funcs))) /\
 
   (* Module declarations are compiled away - the imported content is already inlined *)
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_Import _) = NONE) /\

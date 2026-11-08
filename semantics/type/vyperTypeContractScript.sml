@@ -55,9 +55,13 @@ Definition artifact_env_def:
        event_fields := art.cta_event_fields |>
 End
 
+(* Vyper rejects writes to the arguments of external and deploy functions
+   ("Cannot write to calldata", _handle_modification in
+   vyper/semantics/analysis/local.py); internal-function arguments are
+   writable. *)
 Definition function_entry_env_def:
-  function_entry_env art mods src args =
-    FOLDL (\env (id,ty). extend_local env id ty T)
+  function_entry_env art mods src vis args =
+    FOLDL (\env (id,ty). extend_local env id ty (vis = Internal))
       (artifact_env art mods src) args
 End
 
@@ -88,7 +92,7 @@ Definition add_toplevel_static_maps_def:
         art with <| cta_bare_globals updated_by
                     (flip FUPDATE ((src,id), typ));
                     cta_bare_global_assignable updated_by
-                    (flip FUPDATE ((src,id), typ));
+                    (if in_deploy then flip FUPDATE ((src,id), typ) else I);
                     cta_toplevel_vtypes updated_by
                     (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ (Constant e) id typ _ =>
@@ -909,7 +913,7 @@ Definition function_header_ok_def:
   function_header_ok vis (mut : function_mutability) (nr : bool) rr
       (name : identifier) (args : argument list)
       (dflts : expr list) ret <=>
-    (rr ==> ?n. ret = BaseT (BytesT (Dynamic n))) /\
+    (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
     (* Constructor code returns the deployed runtime, not an ABI value. *)
     (vis = Deploy ==> NULL dflts /\ ret = NoneT) /\
     (* The source treats Pure as a read-only guard, while the compiler's
@@ -918,6 +922,62 @@ Definition function_header_ok_def:
     (mut = Pure ==> ~nr) /\
     (* The fallback has no ABI argument-decoding entry block. *)
     (vis = External /\ name = "__default__" ==> NULL args)
+End
+
+(* ===== Loop iterables written by internal callees ===== *)
+
+(* Vyper counts as writes of an internal call the state variables its callee
+   writes, directly or through further internal calls (the
+   func_type.is_internal case of the call visitor in
+   vyper/semantics/analysis/local.py), so a for loop whose body calls a
+   function that writes the iterated place is rejected too ("Cannot modify
+   loop variable").  iterator_unmodified checks the body's own writes; these
+   check its calls. *)
+
+(* A callee's write w leaves place p alone.  Only writes to top-level
+   bindings count: a callee's locals are its own. *)
+Definition callee_write_ok_def:
+  callee_write_ok p w <=>
+    case FST (place_access w []) of
+    | TopLevelNameTarget _ => ~place_contains w p
+    | _ => T
+End
+
+(* No function reachable from callee, callee included, writes p, in its
+   body or in the default arguments a call evaluates. *)
+Definition callee_writes_ok_def:
+  callee_writes_ok mods p callee <=>
+    let reached = callee :: reachable_nodes (contract_call_edges mods)
+                              (LENGTH (contract_call_nodes mods)) callee in
+      EVERY (\(src,tls).
+        EVERY (\tl. case tl of
+          | FunctionDecl _ _ _ _ fn _ dflts _ body =>
+              MEM (src,fn) reached ==>
+              EVERY (expr_writes_ok (callee_write_ok p)) dflts /\
+              stmts_writes_ok (callee_write_ok p) body
+          | _ => T) tls) mods
+End
+
+Definition stmt_loop_calls_ok_def:
+  stmt_loop_calls_ok mods (For _ _ it _ body) =
+    ((case it of
+      | Array e =>
+          (case expr_place e of
+           | SOME p => EVERY (callee_writes_ok mods p) (int_calls_stmts body)
+           | NONE => T)
+      | Range _ _ => T) /\
+     stmts_loop_calls_ok mods body) /\
+  stmt_loop_calls_ok mods (If _ yes no) =
+    (stmts_loop_calls_ok mods yes /\ stmts_loop_calls_ok mods no) /\
+  stmt_loop_calls_ok mods _ = T /\
+  stmts_loop_calls_ok mods [] = T /\
+  stmts_loop_calls_ok mods (s::ss) =
+    (stmt_loop_calls_ok mods s /\ stmts_loop_calls_ok mods ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,s) => stmt_size s
+    | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[]
 End
 
 Definition check_toplevel_decl_def:
@@ -937,30 +997,31 @@ Definition check_toplevel_decl_def:
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt
     | StructDecl id fields =>
-        ALL_DISTINCT (MAP FST fields) /\
+        fields <> [] /\ ALL_DISTINCT (MAP FST fields) /\
         EVERY (\(_,ty). assignable_type tenv ty) fields
     | FlagDecl id members => T
     | InterfaceDecl id funcs =>
         EVERY (\(fn,args,ret,mut).
-          params_ok tenv args /\ well_formed_type tenv ret) funcs
+          params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret)) funcs
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty /\
                                   (indexed ==> event_indexable_type ty)) fields
     | ErrorDecl id args => params_ok tenv args
     | FunctionDecl vis mut nr rr name args dflts ret body =>
-        params_ok tenv args /\ well_formed_type tenv ret /\
+        params_ok tenv args /\ (ret = NoneT \/ assignable_type tenv ret) /\
         function_header_ok vis mut nr rr name args dflts ret /\
-        function_mutability_ok mods vis mut nr dflts body
+        function_mutability_ok mods vis mut nr dflts body /\
+        stmts_loop_calls_ok mods body
 End
 
 (* ===== Callable-body checks ===== *)
 
 Definition check_function_body_def:
-  check_function_body layouts addr mods art src mut nr args dflts ret body =
+  check_function_body layouts addr mods art src vis mut nr args dflts ret body =
     let tenv = type_env_all_modules mods in
-    let env = function_entry_env art mods src args in
+    let env = function_entry_env art mods src vis args in
       params_ok tenv args /\
-      (nr ==> IS_SOME (lookup_nonreentrant_slot layouts addr)) /\
+      (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0) /\
       IS_SOME (evaluate_type tenv ret) /\
       IS_SOME (type_stmts env ret body) /\
       custom_errors_stmts_ok mods body /\
@@ -981,7 +1042,7 @@ Definition check_toplevel_body_def:
     | FunctionDecl vis mut nr _ fn args dflts ret body =>
         function_live layouts addr mods live (src,fn) /\
         check_function_body_in_mode in_deploy vis ==>
-        check_function_body layouts addr mods art src mut nr args dflts ret body
+        check_function_body layouts addr mods art src vis mut nr args dflts ret body
     | _ => T
 End
 
@@ -1118,6 +1179,21 @@ Theorem check_contract_function_header:
   MEM (src,tls) mods /\
   MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
   function_header_ok vis mut nr rr name args dflts ret
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_function_return_type:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret body) tls ==>
+  ret = NoneT \/ assignable_type (type_env_all_modules mods) ret
 Proof
   strip_tac >>
   qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>

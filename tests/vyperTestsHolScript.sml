@@ -4,7 +4,7 @@
 Theory vyperTestsHol
 Ancestors
   e2eSourceBoundaryCVTest
-  jsonConstEvalWitness
+  vyperConstEvalWitness
   livenessProofIntegrity
   vyperAccountCodehashTest
   vyperAssignmentOrderAudit
@@ -15,6 +15,7 @@ Ancestors
   vyperCalldataSliceTest
   vyperCheckContractFrontendLibTest
   vyperCheckContractLibTest
+  rawReturnDeclarationTest
   vyperCheckContractTraceLibTest
   vyperCreateSelfdestruct
   vyperCreateStorageTest
@@ -32,6 +33,7 @@ Ancestors
   vyperExtCallCpsEquivalenceTest
   vyperExtCallModesTest
   vyperFixedBytesConvertTest
+  vyperForStorageReadsTest
   vyperInStaticArrayTest
   vyperInvertTest
   vyperLoadTimingTest
@@ -46,6 +48,7 @@ Ancestors
   vyperStorageOutcomeTest
   vyperStoragePopTest
   vyperStringScopeTest
+  vyperSystemHaltTest
   vyperTestEmit
   vyperTestEmitSmoke
   vyperTestLibTest
@@ -65,3 +68,5 @@ Ancestors
   vyperPlaceProbesTest vyperPlaceSanityTest
   (* events declared in imported modules *)
   vyperImportedEventRegression
+  (* typing of raw/system builtins, pop receivers and argument writes *)
+  vyperRawSystemTypingTest vyperPopTypingTest vyperArgWriteTypingTest

@@ -2,7 +2,7 @@
    supported-program boundaries, exact bytecode parity and interpreter results. *)
 Theory evalAssignmentOrder
 Ancestors
-  vyperInterpreter vyperTypeSystem jsonToVyper jsonConstEval
+  vyperInterpreter vyperTypeSystem jsonToVyper
   compileVyper concretizeMemLocDefs supportedProgram supportedStmts
   vyperSmallStep vyperStorageBackend finite_map While alist byte integer_word option
 Libs
