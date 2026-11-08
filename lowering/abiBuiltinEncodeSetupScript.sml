@@ -5,7 +5,7 @@ Ancestors
   abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderContract abiDecoderLoop fragExec
   instIdxIndep compileEnv loweringStateRelDefs emitHelperProps exprLoweringProps venomState venomExecSemantics
   finite_map words list arithmetic abiEncoderInputFrame abiEncoderInput abiDecoderArrayInitExec
-  abiDecoderAllocation abiDecoderFrameCompose
+  abiDecoderAllocation abiDecoderFrameCompose abiDecoderRange
 
 (* ===== Builtin Encode Setup ===== *)
 

@@ -179,10 +179,12 @@ Proof
   drule classify_functions_ctor_mem >> strip_tac >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
+  qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, ctor_prefix_env_return_pc] >>
-  simp[cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  simp[cenv_static_ok_def, ctor_prefix_env_return_pc] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem package_internal_fn_ctor_shape_ok[local]:
@@ -197,10 +199,12 @@ Proof
   drule (iffLR MEM_classify_internal) >> strip_tac >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
+  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ctor_prefix_lowering_run[local]:

@@ -17,8 +17,8 @@ Proof
   >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
            mk_inst_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
-           step_inst_base_def, jump_to_def, op_taint_def]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+           step_inst_base_opcode_eqs, jump_to_def, op_taint_def]) >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
        is_terminator_def]
 QED
 
@@ -40,11 +40,11 @@ Proof
   >- (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
            mk_inst_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
-           step_inst_base_def, jump_to_def, op_taint_def] >>
+           step_inst_base_opcode_eqs, jump_to_def, op_taint_def] >>
       Cases_on `v = 0w` >> simp[jump_to_def] >>
       rpt strip_tac >> Cases_on `op'` >> gvs[op_taint_def] >>
       strip_tac >> gvs[]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def,
        is_terminator_def] >>
   Cases_on `v = 0w` >> gvs[]
 QED
@@ -273,7 +273,7 @@ Proof
   qmatch_asmsub_abbrev_tac `get_instruction bb (LENGTH _) = SOME eqi` >>
   `step_inst fuel ctx eqi ss = OK (update_var out v ss)` by
     simp[Abbr `eqi`, Abbr `v`, step_inst_non_invoke, mk_inst_def,
-         step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+         step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
   irule ptr_safe_run_scalar_continuation >>
   qexistsl_tac [`bb`, `eqi`, `update_var out v ss`] >>
   simp[Abbr `eqi`, is_terminator_def, mk_inst_def, update_var_def] >>
@@ -482,7 +482,7 @@ Proof
   qmatch_asmsub_abbrev_tac `get_instruction b0 (LENGTH _) = SOME i0` >>
   `step_inst fuel ctx i0 ss = OK (update_var o0 (n2w (LENGTH cd)) ss)` by
     simp[Abbr `i0`, Abbr `o0`, Abbr `cd`, step_inst_non_invoke, mk_inst_def,
-         step_inst_base_def, exec_read0_def] >>
+         step_inst_base_opcode_eqs, exec_read0_def] >>
   irule ptr_safe_run_scalar_continuation >>
   qexistsl_tac [`b0`, `i0`, `update_var o0 (n2w (LENGTH cd)) ss`] >>
   simp[Abbr `i0`, is_terminator_def, mk_inst_def, update_var_def] >>
@@ -517,7 +517,7 @@ Resume compile_selector_dispatch_linear_ptr_continuation[dispatch_lt]:
   qmatch_asmsub_abbrev_tac `get_instruction b0 (SUC (LENGTH _)) = SOME i1` >>
   `step_inst fuel ctx i1 u1 = OK (update_var o1 (bool_to_word (LENGTH cd < 4)) u1)` by
     simp[Abbr `i1`, Abbr `o1`, step_inst_non_invoke, mk_inst_def,
-         step_inst_base_def, exec_pure2_def, eval_operand_def, dimword_def] >>
+         step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def, dimword_def] >>
   irule ptr_safe_run_scalar_continuation >>
   qexistsl_tac [`b0`, `i1`, `update_var o1 (bool_to_word (LENGTH cd < 4)) u1`] >>
   simp[Abbr `i1`, is_terminator_def, mk_inst_def, update_var_def] >>
@@ -561,7 +561,7 @@ Resume compile_selector_dispatch_linear_ptr_continuation[dispatch_iszero]:
   qmatch_asmsub_abbrev_tac `get_instruction b0 (SUC (SUC (LENGTH _))) = SOME i2` >>
   `step_inst fuel ctx i2 u2 = OK (update_var o2 (bool_to_word (4 <= LENGTH cd)) u2)` by
     (simp[Abbr `i2`, Abbr `o2`, step_inst_non_invoke, mk_inst_def,
-          step_inst_base_def, exec_pure1_def] >>
+          step_inst_base_opcode_eqs, exec_pure1_def] >>
      Cases_on `LENGTH cd < 4` >> simp[bool_to_word_def]) >>
   irule ptr_safe_run_scalar_continuation >>
   qexistsl_tac [`b0`, `i2`, `update_var o2 (bool_to_word (4 <= LENGTH cd)) u2`] >>
@@ -634,7 +634,7 @@ Resume compile_selector_dispatch_linear_ptr_continuation[dispatch_load]:
   qmatch_asmsub_abbrev_tac `get_instruction bd 0 = SOME i3` >>
   `step_inst k ctx i3 s4 = OK (update_var o3 w s4)` by
     simp[Abbr `i3`, Abbr `w`, Abbr `o3`, step_inst_non_invoke,
-         mk_inst_def, step_inst_base_def, exec_read1_def, eval_operand_def] >>
+         mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def, eval_operand_def] >>
   irule ptr_safe_run_scalar_continuation >>
   qexistsl_tac [`bd`, `i3`, `update_var o3 w s4`] >>
   simp[Abbr `i3`, is_terminator_def, mk_inst_def, update_var_def] >>
@@ -676,7 +676,7 @@ Resume compile_selector_dispatch_linear_ptr_continuation[dispatch_shift]:
   qmatch_asmsub_abbrev_tac `get_instruction bd 1 = SOME i4` >>
   `step_inst k ctx i4 u5 = OK (update_var o4 (calldata_method_id cd) u5)` by
     (simp[Abbr `i4`, Abbr `o4`, step_inst_non_invoke, mk_inst_def,
-          step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+          step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
      simp[Abbr `w`, dimword_def, calldataload_0_shr_224]) >>
   irule ptr_safe_run_scalar_continuation >>
   qexistsl_tac [`bd`, `i4`, `update_var o4 (calldata_method_id cd) u5`] >>

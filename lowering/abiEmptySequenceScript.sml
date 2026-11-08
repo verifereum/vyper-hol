@@ -1,5 +1,6 @@
 Theory abiEmptySequence
 Ancestors
+  abiDecoderRange
   builtinSimple abiTupleProps abiTupleEncodeSlot exprLoweringProps emitHelperProps compileEnv
   context emitHelper venomState venomInst words list rich_list arithmetic abiTupleEncodeInput
   abiEncoderInput abiEncoderMemory abiDecoderReentry abiDecoderContract exprLowering

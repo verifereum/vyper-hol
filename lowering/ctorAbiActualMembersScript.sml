@@ -6,7 +6,7 @@ Ancestors
   valueEncoding valueEncodingDefs venomState list
 
 Theorem ctor_actual_members_nil:
-  compile_abi_decode_complex_elems dst src DLOAD hi
+  compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi
     (abi_decoder_member_infos sf ce []) ao vo st = ((),st') /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>

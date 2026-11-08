@@ -159,7 +159,7 @@ Proof
   simp[ vv_post_inst_idx] >> metis_tac[vv_post_update_var]
 QED
 
-Theorem vv_store_bound_frame_mem_src[local]:
+Theorem vv_store_bound_frame_mem_src:
   vv_store_bound cx ty lt es tv vv s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
   s.vs_alloca_next <= t.vs_alloca_next ==>
@@ -196,7 +196,7 @@ Proof
      (mk_inst sm.cs_next_id ADD [Lit kb; Lit ko]
        [STRING #"%" (toString sm.cs_next_var)]) s =
      OK (update_var (STRING #"%" (toString sm.cs_next_var)) (kb + ko) s)` by
-    simp[step_inst_base_def, venomInstTheory.mk_inst_def, exec_pure2_def,
+    simp[step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, exec_pure2_def,
          eval_operand_def, wordsTheory.WORD_ADD_COMM] >>
   drule_at (Pat `emit_op _ _ _ = _`) emit_op_word_path_frame_mem >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
@@ -209,11 +209,8 @@ Proof
       simp[] >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
   irule vv_store_bound_frame_mem_src >> goal_assum (drule_at Any) >>
   simp[] >> gvs[] >>
-  irule literal_operand_frame >>
-  reverse conj_tac >- simp[update_var_def] >>
-  qexists_tac `sm` >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+  rw[] >> first_x_assum drule >>
+  simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
 QED
 
 Theorem vv_post_add_read_mem_src[local]:

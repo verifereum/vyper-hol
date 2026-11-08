@@ -62,13 +62,13 @@ Proof
       >- (simp[select_result_def, extend_place_def, place_type_value_def,
                read_place_def, get_scopes_def, bind_def, ignore_bind_def,
                lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-          rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+          rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def])) >>
       simp[select_result_def, extend_place_def, place_type_value_def,
            read_place_def, get_immutables_def, get_address_immutables_def,
            bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            return_def, raise_def] >>
       rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[bind_def, return_def, raise_def])) >>
+           simp[bind_def, return_def, raise_def])) >>
   simp[select_result_def, extend_place_def, raise_def]
 QED
 

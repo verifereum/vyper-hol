@@ -1,7 +1,7 @@
 (* Current-analysis adapters used by the supply-aware SSA proof. *)
 Theory makeSsaCurrentAnalysis
 Ancestors
-  makeSsaCurrentDefs makeSsaDefs cfgAnalysisProps cfgHelpers dominatorAnalysisProps
+  makeSsaDefs cfgAnalysisProps cfgHelpers dominatorAnalysisProps
   dominatorQueryProofs dominatorRankProofs makeSsaCurrentTree dominatorDefs
   venomWf cfgWf cfgDefs venomInst venomExecProps relation list sorting
 

@@ -86,7 +86,7 @@ Ancestors
   exprLoweringProps
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
-Theorem aggregate_alloca_immutable_sep[local]:
+Theorem aggregate_alloca_immutable_sep:
   stmt_state_rel ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>

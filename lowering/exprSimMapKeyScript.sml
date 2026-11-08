@@ -78,24 +78,6 @@ Proof
   qexistsl_tac [`b`, `bs`] >> gvs[encode_hashmap_key_def, wordsTheory.dimword_def]
 QED
 
-Theorem hashmap_fixed_key_alignment_probe[local]:
-  encode_hashmap_key (BaseT (BytesT (Fixed 1))) (BytesV [1w]) =
-    (n2w (2 ** 248):bytes32) /\
-  encode_hashmap_key (BaseT (BytesT (Fixed 32)))
-    (BytesV (1w :: REPLICATE 31 0w)) = (n2w (2 ** 248):bytes32)
-Proof
-  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
-QED
-
-Theorem hashmap_empty_dynamic_key_probe[local]:
-  encode_hashmap_key (BaseT (BytesT (Dynamic 0))) (BytesV []) =
-    word_of_bytes_be (Keccak_256_w64 []) /\
-  encode_hashmap_key (BaseT (StringT 0)) (StringV "") =
-    word_of_bytes_be (Keccak_256_w64 [])
-Proof
-  CONV_TAC (computeLib.RESTR_EVAL_CONV [``Keccak_256_w64``])
-QED
-
 Theorem emit_ADD_frame:
   emit_op ADD [a;b] sa = (op,sb) /\
   eval_operand a s = SOME u /\ eval_operand b s = SOME v ==>

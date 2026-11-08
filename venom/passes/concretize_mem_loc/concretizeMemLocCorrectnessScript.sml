@@ -148,7 +148,7 @@ Proof
   Induct_on `blocks`
   >- simp[]
   >> simp[fn_insts_blocks_def,
-          passSimulationDefsTheory.block_map_transform_def] >> rpt strip_tac >>
+          passTransformTheory.block_map_transform_def] >> rpt strip_tac >>
   `MAP (concretize_inst_with_positions positions) h.bb_instructions =
    MAP (concretize_inst amap) h.bb_instructions` by
     (irule MAP_EQ_MEM >> simp[]) >>
@@ -166,7 +166,7 @@ Theorem concretize_function_positions_adapter:
 Proof
   strip_tac >>
   simp[concretize_function_with_positions_def, concretize_function_def,
-       passSimulationDefsTheory.function_map_transform_def] >>
+       passTransformTheory.function_map_transform_def] >>
   `MAP (block_map_transform (concretize_inst_with_positions positions))
        fn.fn_blocks =
    MAP (block_map_transform (concretize_inst amap)) fn.fn_blocks` by

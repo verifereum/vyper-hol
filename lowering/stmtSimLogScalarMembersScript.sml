@@ -1,6 +1,7 @@
 (* Budget-free semantic transport for the scalar member execution. *)
 Theory stmtSimLogScalarMembers
 Ancestors
+  abiDecoderRange
   stmtSimLogEncodeLayout abiEncoder emitHelper compileEnv abiEncoderInputFrame abiEncoderMembersStep
   abiEncoderTuple abiEncoderOpenPrefix abiDecoderFrame abiDecoderFrameCompose abiDecoderContract
   abiEncoderInput abiDecodeRanges valueEncoding valueEncodingDefs valueEncodingProps contractABI list arithmetic

@@ -1,5 +1,6 @@
 Theory abiBuiltinEncodeWord
 Ancestors
+  abiDecoderRange
   abiBuiltinEncodeCode abiEncoderAppend abiEncoderCounters abiDecoderAppend fragExec compileEnv loweringStateRelDefs
   words list arithmetic abiBuiltinDispatchCorrect exprLowering builtinAbi context
   abiBuiltinEncodeSource abiBuiltinEncodeInput abiBuiltinEncodeEffect abiDecoderContract

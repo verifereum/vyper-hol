@@ -1070,17 +1070,19 @@ End
 (* The lowered unit's functions and their reachable parts are
    pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
    the return buffer, if any, and the arguments passed in memory:
-   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound for a
+   unit without DALLOCA. *)
 Theorem lower_vyper_runtime_unit_fn_ptr_ok:
   !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    ~ctx_has_dalloca unit.cu_context ==>
     ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
         EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
 Proof
   rpt strip_tac >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   drule run_lowering_context_ok >> simp[lowering_context_ok_def] >>
-  strip_tac >> drule ptr_ok_check_sound >> strip_tac >>
+  strip_tac >> drule_all ptr_ok_check_sound >> strip_tac >>
   qexists_tac `\nm. set (ctx_ptr_param_list unit.cu_context nm)` >>
   fs[listTheory.EVERY_MEM]
 QED

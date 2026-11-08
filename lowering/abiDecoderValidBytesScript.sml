@@ -2,17 +2,41 @@
    TOP-LEVEL: pure source contract and sequence execution with allocation frame. *)
 Theory abiDecoderValidBytes
 Ancestors
-  abiValidBytes abiDecoderBytes abiDecoderBytesTyped abiDecoderBytesFrame
+  abiCanonicalHeadSize abiValidBytes abiDecoderBytes abiDecoderBytesTyped abiDecoderBytesFrame
   abiDecoderString abiDecoderVarSequence abiDecoderContract abiDecoderFrame abiDecoderReservation
   valueEncoding valueEncodingDefs valueEncodingProps abiEncoder emitHelper compileEnv
   venomExecSemantics venomState contractABI words list arithmetic
 
+Theorem abi_decoder_bytes_runtime_value:
+  val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) a source /\
+  mem_bytes_at d (32 + LENGTH payload) target =
+    mem_bytes_at a (32 + LENGTH payload) source ==>
+  val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) d target
+Proof
+  strip_tac >>
+  `mem_bytes_at d 32 target = mem_bytes_at a 32 source` by
+    (mp_tac (Q.SPECL [`d`, `0`, `32`, `32 + LENGTH (payload:word8 list)`, `target`]
+       mem_bytes_at_window) >>
+     mp_tac (Q.SPECL [`a`, `0`, `32`, `32 + LENGTH (payload:word8 list)`, `source`]
+       mem_bytes_at_window) >> simp[] >> metis_tac[]) >>
+  `mem_bytes_at (d + 32) (LENGTH payload) target =
+     mem_bytes_at (a + 32) (LENGTH payload) source` by
+    (mp_tac (Q.SPECL [`d`, `32`, `LENGTH (payload:word8 list)`, `32 + LENGTH (payload:word8 list)`, `target`]
+       mem_bytes_at_window) >>
+     mp_tac (Q.SPECL [`a`, `32`, `LENGTH (payload:word8 list)`, `32 + LENGTH (payload:word8 list)`, `source`]
+       mem_bytes_at_window) >> simp[] >> metis_tac[]) >>
+  gvs[val_in_memory_def, mem_word_at_def, GSYM mem_bytes_at_def]
+QED
+
 Definition abi_decoder_valid_bytes_pre_def:
-  abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d s <=>
+  abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d s <=>
     (at = Bytes NONE \/ at = String) /\ vyper_decode_valid_enc at bs /\
     dec at bs = contractABI$BytesV payload /\ LENGTH payload <= n /\
-    mem_bytes_at sb (LENGTH bs) (abi_decode_source opc s) = bs /\
-    n < dimword (:256) /\ sb + LENGTH bs < dimword (:256) /\
+    mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc s) = bs /\
+    n < dimword (:256) /\ B + sb + LENGTH bs < dimword (:256) /\
+    eval_operand base_op s = SOME (n2w B) /\
+    (base_op <> Lit 0w ==>
+      B + sb + 32 + LENGTH payload <= d \/ d + abi_decode_bytes_copy_size n <= B + sb) /\
     d + abi_decode_bytes_copy_size n < dimword (:256) /\
     eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
     abi_decode_source_opcode opc /\ fresh_vars_wrt st s /\
@@ -21,12 +45,13 @@ Definition abi_decoder_valid_bytes_pre_def:
 End
 
 Theorem abi_decoder_valid_bytes_facts:
-  abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d s ==>
-  abi_decode_load opc (n2w sb:bytes32) s = n2w (LENGTH payload) /\
+  abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d s ==>
+  abi_decode_load opc (n2w (B + sb):bytes32) s = n2w (LENGTH payload) /\
   val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload)
-    sb (abi_decode_source opc s) /\
+    (B + sb) (abi_decode_source opc s) /\
   val_wf (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) /\
-  sb < dimword (:256) /\ d < dimword (:256) /\
+  B < dimword (:256) /\ sb < dimword (:256) /\ B + sb < dimword (:256) /\
+  LENGTH payload + 31 < dimword (:256) /\ d < dimword (:256) /\
   abi_decode_bytes_copy_size n < dimword (:256) /\
   (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
     sb + 32 + LENGTH payload <= h /\ h < dimword (:256))
@@ -34,7 +59,7 @@ Proof
   simp_tac bool_ss [abi_decoder_valid_bytes_pre_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_valid_bytes_decode >> strip_tac >>
-  `sb < dimword (:256)` by decide_tac >>
+  `B + sb < dimword (:256)` by decide_tac >>
   drule_all abi_valid_bytes_count_load >> strip_tac >>
   drule_all abi_valid_bytes_source_layout >> strip_tac >>
   mp_tac (cj 3 abi_decoder_bytes_copy_size) >> strip_tac >>
@@ -46,8 +71,9 @@ Proof
 QED
 
 Theorem abi_decoder_valid_bytes_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
-  abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d s ==>
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) d t.vs_memory /\
     val_in_memory (BaseTV (StringT n)) (StringV (MAP (CHR o w2n) payload)) d t.vs_memory /\
@@ -56,17 +82,26 @@ Theorem abi_decoder_valid_bytes_sequence:
     fresh_vars_wrt st' t /\
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
 Proof
-  strip_tac >> drule abi_decoder_valid_bytes_facts >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _`
+  drule abi_decoder_valid_bytes_facts >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qhdtm_x_assum `abi_decoder_valid_bytes_pre`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_bytes_pre_def]) >>
+  `base_op <> Lit 0w ==>
+     LENGTH payload + 31 < dimword (:256) /\ B + sb < dimword (:256) /\
+     d + abi_decode_bytes_copy_size n < dimword (:256) /\
+     (B + sb + 32 + LENGTH payload <= d \/ d + abi_decode_bytes_copy_size n <= B + sb)`
+    by simp[] >>
   drule_all abi_decode_bytes_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st') s = OK t` >>
   `val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV payload) d t.vs_memory` by
-    (irule val_in_memory_relocate >> asm_simp_tac bool_ss [] >>
-     qexistsl_tac [`abi_decode_source opc s`, `abi_decode_bytes_copy_size n`, `sb`] >>
-     asm_simp_tac bool_ss [cj 2 abi_decoder_bytes_copy_size, LESS_EQ_REFL, EQ_SYM_EQ]) >>
-  drule_all abi_decoder_bytes_reentry_code >> strip_tac >>
-  drule_all abi_decode_sequence_allocation_frame >> strip_tac >>
+    (Cases_on `base_op = Lit 0w`
+     >- (`B = 0` by gvs[eval_operand_def, n2w_11] >>
+         gvs[] >> irule val_in_memory_relocate >> asm_simp_tac bool_ss [] >>
+         qexistsl_tac [`abi_decode_source opc s`, `abi_decode_bytes_copy_size n`, `sb`] >>
+         asm_simp_tac bool_ss [cj 2 abi_decoder_bytes_copy_size, LESS_EQ_REFL, EQ_SYM_EQ]) >>
+     `opc = MLOAD` by metis_tac[] >> fs[abi_decode_source_def] >>
+     irule abi_decoder_bytes_runtime_value >>
+     qexistsl_tac [`B + sb`, `s.vs_memory`] >> simp[]) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [abi_decoder_string_memory]
 QED

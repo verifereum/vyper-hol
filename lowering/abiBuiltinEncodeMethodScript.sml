@@ -1,5 +1,6 @@
 Theory abiBuiltinEncodeMethod
 Ancestors
+  abiDecoderRange
   abiBuiltinEncodeCode abiBuiltinEncodeCorrect abiBuiltinPrefix abiEncoderWrites
   abiDecoderReentry abiDecoderDynamicLoopSetup abiDecoderGuards abiDecoderFrameCompose
   abiDecoderContract compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps venomInst

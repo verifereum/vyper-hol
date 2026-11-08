@@ -6,7 +6,7 @@ Ancestors
   abiDecoderArrayHeader emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs emitHelper
   venomExecSemantics venomState venomInst abiDecoderLoop fragExec instIdxIndep
   abiEncoderChildInputs abiDecoderArraySlice abiEncoderAdmissible abiEncoderLeafCode
-  abiEncoderChildContext abiEncoderAppend abiEncoderCounters abiEncoder
+  abiEncoderChildContext abiEncoderAppend abiEncoderCounters abiEncoder abiDecoderRange
 
 (* Uniform semantic layout and complete source slots for dynamic-array encoding. *)
 Theorem abi_encoder_have_type_every:

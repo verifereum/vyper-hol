@@ -14,6 +14,7 @@ Ancestors
   stateEquivProps execEquivParamProps venomInstProps venomExecProps
   dfgAnalysisProps venomState venomWf venomExecSemantics venomExecProofs
   pred_set arithmetic list rich_list finite_map
+  passTransform
 
 (* Select only the proved dispatch equations used by this pass. *)
 val step_inst_base_opcode_rewrites = let

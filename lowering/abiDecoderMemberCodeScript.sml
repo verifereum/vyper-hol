@@ -3,12 +3,12 @@
    Helpers: emitted syntax and initial-state fragment. *)
 Theory abiDecoderMemberCode
 Ancestors
-  abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderLoop
+  abiDecoderRange abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderLoop
   abiDecoderContract fragExec instIdxIndep abiEncoder compileEnv loweringStateRelDefs emitHelper
   emitHelperProps exprLoweringProps venomState venomExecSemantics venomInst words list rich_list arithmetic
 
 Theorem abi_decode_member_setup_shape:
-  abi_decode_member_setup dst src opc hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo st = (ops,st') /\
   abi_decode_source_opcode opc ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\ st.cs_next_id < st'.cs_next_id /\
@@ -19,8 +19,9 @@ Theorem abi_decode_member_setup_shape:
       [STRING #"%" (toString st.cs_next_var)] :: rest
 Proof
   strip_tac >> Cases_on `dyn` >> gvs[abi_decode_source_opcode_def] >>
-  Cases_on `hi = Lit 0w` >>
+  Cases_on `hi = Lit 0w` >> Cases_on `base_op = Lit 0w` >>
   gvs[abi_decode_member_setup_def, compile_getelemptr_abi_def,
+    compile_abi_dec_addr_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
     emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def,
     IS_PREFIX_APPEND] >>
@@ -29,12 +30,14 @@ Proof
 QED
 
 Theorem abi_decode_member_setup_from_state:
-  abi_decode_member_setup dst src opc hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo st = (ops,st') /\
   abi_decode_source_opcode opc /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  (dyn ==> abi_decode_load opc (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
+  (dyn ==> eval_operand base_op initial = SOME (n2w B) /\
+    abi_decode_load opc (n2w (B + (sb + ao)) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (\t. eval_operand (FST ops) t = SOME (n2w (sb + if dyn then payload_off else ao)) /\
@@ -52,12 +55,14 @@ Proof
 QED
 
 Theorem abi_decode_member_setup_reach:
-  abi_decode_member_setup dst src opc hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src opc base_op hi dyn ao vo st = (ops,st') /\
   fn_has_code st st' func /\ abi_decode_source_opcode opc /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  (dyn ==> abi_decode_load opc (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
+  (dyn ==> eval_operand base_op initial = SOME (n2w B) /\
+    abi_decode_load opc (n2w (B + (sb + ao)) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>

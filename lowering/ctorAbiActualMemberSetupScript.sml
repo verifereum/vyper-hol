@@ -8,11 +8,12 @@ Ancestors
   exprLoweringProps venomExecSemantics venomState venomInst words list rich_list arithmetic
 
 Theorem ctor_actual_member_setup_opcodes:
-  abi_decode_member_setup dst src DLOAD hi dyn ao vo st = (ops,st') ==>
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi dyn ao vo st = (ops,st') ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')
 Proof
   Cases_on `dyn` >> Cases_on `hi = Lit 0w` >>
   simp[abi_decode_member_setup_def, compile_getelemptr_abi_def,
+    compile_abi_dec_addr_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
     emit_void_def, fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
   strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
@@ -20,7 +21,7 @@ Proof
 QED
 
 Theorem ctor_actual_member_setup_fragment:
-  abi_decode_member_setup dst src DLOAD hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi dyn ao vo st = (ops,st') /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
@@ -39,7 +40,13 @@ Proof
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts st st')` by fs[EVERY_CONJ] >>
   irule frag_exec_run_inst_seq >> simp[] >>
-  drule_all abi_decode_member_setup_reentry >> strip_tac >>
+  `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
+  `dyn ==> eval_operand (Lit 0w) initial = SOME (n2w 0) /\
+    abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) initial = n2w payload_off /\
+    sb + payload_off < dimword (:256)` by
+    (Cases_on `dyn` >> gvs[eval_operand_def, ADD_COMM]) >>
+  drule_all (Q.INST [`B` |-> `0:num`] abi_decode_member_setup_reentry) >> strip_tac >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
   qexists `t` >>
   gvs[abi_decoder_address_frame_def, abi_encoder_registered_effect_def,
@@ -54,7 +61,7 @@ Theorem ctor_actual_member_setup:
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))) (ListV (preavs ++ av::avs)) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs))) < dimword (:256) /\
-  abi_decode_member_setup dst src DLOAD hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = (ops,middle) /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\

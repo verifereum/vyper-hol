@@ -8,7 +8,7 @@ Ancestors
   compileEnv loweringStateRelDefs valueEncoding words list arithmetic finite_map venomMemDefs
 
 Theorem ctor_actual_bytestring_labels_fragment:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -49,7 +49,7 @@ Proof
 QED
 
 Theorem ctor_actual_bytestring_labels_run:
-  compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_coherent ce env sf ty tv /\ abi_decoder_metadata ce env ty tv root_di av v /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -92,7 +92,7 @@ Proof
     (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
+  `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st')` by metis_tac[] >>
   drule_all ctor_actual_bytestring_labels_fragment >>
   disch_then (qspecl_then [`site`, `func`, `ctx`] assume_tac) >>
   drule abi_decode_sim_from_fragment >> disch_then drule >> simp[] >> strip_tac >>

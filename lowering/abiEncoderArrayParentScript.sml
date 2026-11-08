@@ -1,5 +1,6 @@
 Theory abiEncoderArrayParent
 Ancestors
+  abiDecoderRange
   abiEncoderArrayPhases abiEncoderComplexCode abiDecoderIndexInit abiDecoderArrayHeader
   compileEnv loweringStateRelDefs emitHelper words list abiEncoderArrayContext abiEncoderCursorStoreLoad
   abiEncoderBytesPrefix abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry

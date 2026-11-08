@@ -1,6 +1,6 @@
 Theory abiDecoderPrimitiveLoopFragment
 Ancestors
-  abiDecoderArrayAdvance abiDecoderArrayPrefix abiDecoderPrimitiveMemory
+  abiDecoderRange abiDecoderArrayAdvance abiDecoderArrayPrefix abiDecoderPrimitiveMemory
   abiDecoderStaticLoopSetup abiDecoderReentry abiDecoderGuards abiDecoderFrameCompose
   abiDecoderContract abiDecoderCoherence abiDecoderTypedContract abiDecoderDynamic
   abiDecoderLoopSetup exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs valueEncoding venomState
@@ -10,9 +10,9 @@ Ancestors
 (* Actual address setup followed by the typed primitive child. The returned
    index remains available to the generated backedge on every iteration. *)
 Theorem abi_decoder_primitive_loop_body:
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -21,10 +21,12 @@ Theorem abi_decoder_primitive_loop_body:
   abi_decode_source_opcode opc /\ eval_operand ip initial = SOME p /\
   mload (w2n p) initial = n2w (LENGTH pre) /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+  eval_operand base_op initial = SOME (n2w B) /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  mem_bytes_at (B + sb) (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
     (ListV (pre ++ av::post)))) (abi_decode_source opc initial) =
     enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post)) /\
-  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+  B + sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
     (ListV (pre ++ av::post))) < dimword (:256) /\
   d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -48,9 +50,15 @@ Proof
   `~dec_info_needs_offset (DecPrimWord clamp)` by simp[abiEncoderTheory.dec_info_needs_offset_def] >>
   drule_all abi_decode_static_element_setup_reentry >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st middle) initial = OK prepared` >>
-  `mem_bytes_at (sb + 32 + LENGTH pre * 32) 32 (abi_decode_source opc prepared) =
+  `abi_decode_source opc prepared = abi_decode_source opc initial` by
+    asm_simp_tac bool_ss [abi_decode_source_def] >>
+  `mem_bytes_at (B + (sb + 32 + LENGTH pre * 32)) 32 (abi_decode_source opc prepared) =
     enc (vyper_to_abi_type env ty) av` by
-    gvs[abi_decode_source_def, Excl "enc_def"] >>
+    (rewrite_tac [ADD_ASSOC] >> metis_tac[]) >>
+  `abi_decoder_operand_live middle.cs_next_var base_op` by
+    (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >>
+     drule_all abi_decode_static_element_setup_operands >> simp[]) >>
+  `eval_operand base_op prepared = SOME (n2w B)` by metis_tac[] >>
   mp_tac (Q.INST [`dst` |-> `SND (SND (ops:operand # operand # operand))`,
     `src` |-> `FST (SND (ops:operand # operand # operand))`,
     `st` |-> `middle`, `initial` |-> `prepared`,
@@ -58,7 +66,7 @@ Proof
     `d` |-> `d + 32 + LENGTH (pre:abi_value list) * 32`,
     `root_di` |-> `type_to_abi_dec_info ce.ce_struct_fields ce ty`]
     abi_decoder_primitive_memory_reentry) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+  impl_tac >- (asm_simp_tac bool_ss [ADD_ASSOC] >> metis_tac[]) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts middle st') prepared = OK actual` >>
   `run_inst_seq (emitted_insts st st') initial = OK actual /\ inst_extends st st'` by
     (irule abi_decode_sequence_chain >> qexistsl_tac [`prepared`, `middle`] >> simp[]) >>
@@ -84,9 +92,9 @@ QED
 
 (* Package the concrete primitive array body for the finite decoder-loop shell. *)
 Theorem abi_decoder_primitive_loop_body_shape:
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st') /\ abi_decode_source_opcode opc ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -106,9 +114,9 @@ Proof
 QED
 
 Theorem abi_decoder_primitive_loop_body_from_state:
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -117,10 +125,12 @@ Theorem abi_decoder_primitive_loop_body_from_state:
   abi_decode_source_opcode opc /\ eval_operand ip initial = SOME p /\
   mload (w2n p) initial = n2w (LENGTH pre) /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+  eval_operand base_op initial = SOME (n2w B) /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  mem_bytes_at (B + sb) (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
     (ListV (pre ++ av::post)))) (abi_decode_source opc initial) =
     enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post)) /\
-  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
+  B + sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
     (ListV (pre ++ av::post))) < dimword (:256) /\
   d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
