@@ -77,13 +77,19 @@ Proof
   `?exts ints fb cfo. classify_functions tops = (exts, ints, fb, cfo)` by
     metis_tac[pairTheory.ABS_PAIR_THM] >>
   Cases_on `cfo`
-  >- (drule_all deploy_no_ctor_correct >> simp[]) >>
+  >- (drule_all deploy_no_ctor_correct >>
+      disch_then (qx_choose_then `marks` assume_tac) >>
+      qexists_tac `marks` >> conj_tac
+      >- metis_tac[deploy_no_ctor_source_readings] >>
+      asm_rewrite_tac[]) >>
   drule_all deploy_ctor_code_exists >> strip_tac >>
   `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
   reverse (Cases_on `?mut nr' body' am_c es0.
                        deploy_ctor_start tops am tx (mut, nr', body', am_c, es0)`)
   >- (fs[] >> drule_all deploy_ctor_prefix_fail >> strip_tac >>
-      qexists_tac `[]` >> disj2_tac >> qexists_tac `fuel` >> simp[]) >>
+      qexists_tac `[]` >> conj_tac
+      >- metis_tac[deploy_ctor_prefix_source_readings] >>
+      disj2_tac >> qexists_tac `fuel` >> simp[]) >>
   pop_assum strip_assume_tac >>
   drule_all deploy_ctor_entry_reaches_body >> strip_tac >>
   rpt BasicProvers.VAR_EQ_TAC >>
@@ -147,11 +153,19 @@ Proof
       `load_contract NONE gx am tx [(NONE, tops)] [] =
          deploy_ctor_finish tops tx cx nr mut am_c res es'` by
         metis_tac[deploy_ctor_source_run] >>
-      qexists_tac `marks` >> disj2_tac >>
+      `!tail. load_contract NONE (gx ++ tail) am tx [(NONE,tops)] [] =
+        load_contract NONE gx am tx [(NONE,tops)] []` by
+        (irule deploy_ctor_source_suffix >>
+         fs[gas_marked_exec_def, Abbr `gx`, Abbr `cx`] >>
+         goal_assum (drule_at Any) >>
+         qexistsl_tac [`es_end`, `SOME vs.vs_outcomes`, `res`] >> metis_tac[]) >>
+      qexists_tac `marks` >>
+      (conj_tac >- (gvs[Abbr `gx`] >> metis_tac[])) >> disj2_tac >>
       `gas_explicit marks vs.vs_gas_readings = gx` by
         (qpat_assum `s0.vs_gas_readings = _`
            (fn th => simp[Abbr `gx`, th])) >>
-      pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
+      pop_assum SUBST1_TAC >>
+      qpat_x_assum `load_contract NONE gx _ _ _ _ = _` SUBST1_TAC >>
       fs[]
       >- ((* the body falls off its end *)
           gvs[stmt_post_def, stmt_lands_def] >>
@@ -207,11 +221,29 @@ Proof
   `load_contract NONE gx am tx [(NONE, tops)] [] =
      deploy_ctor_finish tops tx cx nr mut am_c (INR (Error err)) ee'` by
     metis_tac[deploy_ctor_source_run] >>
-  qexists_tac `marks` >> disj1_tac >>
+  `!tail. eval_stmts cx body
+    (es0 with <|gas_obs := gx ++ tail; outcomes := SOME vs.vs_outcomes|>) =
+      (INR (Error err), ee with gas_obs := tail)` by
+    (gen_tac >>
+     qpat_x_assum `!tail. _` (qspec_then `tail` mp_tac) >>
+     simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+          vyperStateTheory.return_def] >>
+     Cases_on `eval_stmts cx body
+       (es0 with <|outcomes := SOME vs.vs_outcomes; gas_obs := gx ++ tail|>)` >>
+     Cases_on `q` >> simp[]) >>
+  `!tail. load_contract NONE (gx ++ tail) am tx [(NONE,tops)] [] =
+    load_contract NONE gx am tx [(NONE,tops)] []` by
+    (irule deploy_ctor_source_suffix >> simp[GSYM deploy_cx_tops, Abbr `cx`] >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`ee`, `SOME vs.vs_outcomes`, `INR (Error err)`] >>
+     gvs[]) >>
+  qexists_tac `marks` >> conj_tac
+  >- (gvs[Abbr `gx`] >> metis_tac[]) >> disj1_tac >>
   `gas_explicit marks vs.vs_gas_readings = gx` by
     (qpat_assum `s0.vs_gas_readings = _`
        (fn th => simp[Abbr `gx`, th])) >>
-  pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
+  pop_assum SUBST1_TAC >>
+  qpat_x_assum `load_contract NONE gx _ _ _ _ = _` SUBST1_TAC >>
   gvs[deploy_ctor_finish_def, deploy_source_exempt_def, Abbr `cx`,
       deploy_cx_tops]
 QED
@@ -235,5 +267,5 @@ Theorem deploy_unit_execution_correct:
                (run_context fuel dunit.cu_context vs)
 Proof
   rpt strip_tac >> drule_all deploy_unit_execution_correct_suffix >>
-  strip_tac >> qexists_tac `marks` >> asm_rewrite_tac[]
+  strip_tac >> qexists_tac `marks` >> metis_tac[]
 QED
