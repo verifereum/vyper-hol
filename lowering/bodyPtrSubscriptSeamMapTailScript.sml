@@ -107,3 +107,21 @@ Proof
   simp[venomStateTheory.venom_state_component_equality] >>
   strip_tac >> gvs[venomStateTheory.lookup_var_def]
 QED
+
+Theorem mapping_encoding_slot_frame:
+  (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+  (!z. not_fresh_at sn z ==> lookup_var z u = lookup_var z s) /\
+  ghost_kept cenv ee sn G tn s G' tn' /\
+  (!z. slot = Var z ==> not_fresh_at sn z) /\
+  eval_operand slot s = SOME base_slot /\ op_taint tn slot = {} ==>
+  eval_operand slot u = SOME base_slot /\ op_taint tn' slot = {}
+Proof
+  strip_tac >>
+  `u.vs_labels = s.vs_labels` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = s`
+      (mp_tac o Q.AP_TERM `\v. v.vs_labels`) >> simp[]) >>
+  Cases_on `slot` >>
+  gvs[venomStateTheory.eval_operand_def,
+      bodyPtrDefsTheory.ghost_kept_def, ptrDisciplineTheory.op_taint_def] >>
+  metis_tac[]
+QED
