@@ -260,7 +260,7 @@ Theorem step_DLOAD:
                          REPLICATE 32 0w))) ss)
 Proof
   rpt strip_tac >>
-  simp[Once venomExecSemanticsTheory.step_inst_base_def, mk_inst_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def] >>
   simp[venomExecSemanticsTheory.exec_read1_def]
 QED
 
@@ -473,7 +473,7 @@ Proof
   impl_tac
   >- (rpt conj_tac >- first_assum ACCEPT_TAC >- simp[]
       >- simp[is_terminator_def] >>
-      rpt strip_tac >> gvs[step_inst_base_def, exec_read1_def]) >>
+      rpt strip_tac >> gvs[step_inst_base_opcode_eqs, exec_read1_def]) >>
   strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
   simp[] >> rpt strip_tac
   >~ [`expr_post`] >- (
