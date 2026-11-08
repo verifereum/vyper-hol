@@ -199,6 +199,7 @@ QED
 
 Resume compile_log_ready_stmt_frag[args_value]:
   gvs[Excl "enc_def"] >>
+  qabbrev_tac `xs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, Excl "enc_def"] >>
