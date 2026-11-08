@@ -65,7 +65,7 @@ Theorem struct_field_robust_memory:
 Proof
   rpt strip_tac >> irule fields_in_memory_field >>
   goal_assum (drule_at Any) >> simp[] >>
-  first_x_assum drule >> simp[valueEncodingTheory.val_in_memory_def] >>
+  first_x_assum drule >> simp[valueEncodingDefsTheory.val_in_memory_def] >>
   strip_tac >> qexists_tac `vals` >> simp[]
 QED
 

@@ -229,7 +229,7 @@ Resume raw_call_tuple_build_no_restore_run[separation]:
      w2n w + (32 + sz) <= lb \/ lb + lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32 + sz) lb lsz` suffices_by
-       simp[compileEnvTheory.regions_disjoint_def] >>
+       simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      simp[mk_inst_def] >>
@@ -1006,7 +1006,7 @@ Proof
   pure_rewrite_tac[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.allocas_non_overlapping_def] >>
   strip_tac >> first_x_assum drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_outbuf_steps[local]:
@@ -3933,7 +3933,7 @@ Proof
     (fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
          venomMemDefsTheory.allocas_non_overlapping_def] >>
      metis_tac[]) >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_output_local_sep[local]:
@@ -3945,7 +3945,7 @@ Theorem raw_call_output_local_sep[local]:
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem raw_call_oracle_frame[local]:
@@ -3966,7 +3966,7 @@ Proof
     mem_bytes_at b sz s.vs_memory` by
     (rpt strip_tac >> simp[update_var_def] >>
      asm_rewrite_tac[] >> irule hash_write_memory_disjoint >>
-     fs[compileEnvTheory.regions_disjoint_def]) >>
+     fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   fs[wb_frame_def] >> conj_tac
   >- (rpt strip_tac >> simp[lookup_var_def, update_var_def] >>
       `x <> out` by metis_tac[] >>
@@ -3993,7 +3993,7 @@ Proof
   `local_region cenv es'.scopes t name b sz` by
     (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`s0`, `sa`, `es.scopes`] >> fs[wb_frame_def]) >>
-  first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def] >>
+  first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   decide_tac
 QED
 
@@ -4074,7 +4074,7 @@ Resume raw_call_oracle_path[frame]:
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
   suspend "post"
 QED
 
@@ -4196,7 +4196,7 @@ Resume raw_call_allocated_tail_frag_aged[frame]:
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
   suspend "finish"
 QED
 
@@ -4519,9 +4519,9 @@ Resume raw_call_outbuf_zero_tail_vv_path[call]:
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
-  impl_tac >- (fs[compileEnvTheory.regions_disjoint_def] >>
+  impl_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
     rpt conj_tac >> metis_tac[]) >>
   strip_tac >>
   `cs_extends sm sc` by fs[ci_mono_def] >>
@@ -4742,9 +4742,9 @@ Resume raw_call_outbuf_positive_tail_vv_path[call]:
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
-  simp[compileEnvTheory.regions_disjoint_def] >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
-  impl_tac >- (fs[compileEnvTheory.regions_disjoint_def] >>
+  impl_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
     conj_tac
     >- (rpt strip_tac >>
         qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _ /\ _`
@@ -4819,7 +4819,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[revert_positive]:
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32*((flags.rcf_max_outsize+31) DIV 32)+32) lb lsz`
-       suffices_by simp[compileEnvTheory.regions_disjoint_def] >>
+       suffices_by simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
@@ -4871,7 +4871,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[bytes_post]:
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32*((flags.rcf_max_outsize+31) DIV 32)+32) lb lsz`
-       suffices_by simp[compileEnvTheory.regions_disjoint_def] >>
+       suffices_by simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
@@ -5042,7 +5042,7 @@ Resume raw_call_outbuf_tail_vv_frag[zero_tail]:
      pure_rewrite_tac[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
           venomMemDefsTheory.allocas_non_overlapping_def] >>
      strip_tac >> first_x_assum drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `cenv.ce_is_ctor ==> !name tv v off.
       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
@@ -5096,7 +5096,7 @@ Resume raw_call_outbuf_tail_vv_frag[zero_finish]:
       local_region cenv es.scopes t name b sz` by simp[Abbr `entry`, local_region_def, lookup_var_def] >>
      asm_rewrite_tac[] >> strip_tac >>
      first_assum (drule_then mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   `!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
       regions_disjoint (w2n w) 0 b sz` by metis_tac[] >>
   `!aid b sz. aid < initial.cs_next_id /\ FLOOKUP entry.vs_allocas aid = SOME (b,sz) ==>
@@ -5111,7 +5111,7 @@ Resume raw_call_outbuf_tail_vv_frag[zero_finish]:
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   simp[] >> impl_tac
-  >- (fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]) >>
+  >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   simp[] >> rpt strip_tac >> gvs[] >>
   irule raw_call_none_post >> simp[]
@@ -5220,10 +5220,10 @@ Resume raw_call_outbuf_tail_vv_frag[positive_finish]:
       >- (Cases_on `value_opt` >> gvs[])
       >- (rpt strip_tac >>
           qpat_x_assum `!name b sz. local_region cenv es.scopes t name b sz ==> _ /\ _`
-            drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)
+            drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
       >- (rpt strip_tac >>
           qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-          disch_then drule_all >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac)
+          disch_then drule_all >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac)
       >- metis_tac[]
       >- metis_tac[]
       >- suspend "positive_header_witness"
@@ -5243,7 +5243,7 @@ Resume raw_call_outbuf_tail_vv_frag[positive_header_witness]:
       fs[MEM_APPEND, mk_inst_def] >> metis_tac[]) >>
   rpt strip_tac >>
   qpat_x_assum `!name b len. local_region cenv es.scopes t name b len ==> _`
-    drule >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+    drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Resume raw_call_outbuf_tail_vv_frag[positive_post]:
@@ -5270,7 +5270,7 @@ Resume raw_call_outbuf_tail_vv_frag[positive_post]:
   rpt strip_tac >>
   `local_region cenv es.scopes t n lb lsz` by metis_tac[] >>
   qpat_x_assum `!name b len. local_region cenv es.scopes t name b len ==> _` drule >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Finalise raw_call_outbuf_tail_vv_frag
