@@ -460,7 +460,7 @@ Proof
                        vs_inst_idx := s.vs_inst_idx + 2` >>
   `step_inst_base (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) s1'
    = OK (mcopy (w2n a) (w2n p) m s1')` by
-    simp[step_inst_base_def, mk_inst_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
   `run_from fuel ctx fn s1' = run_from fuel ctx fn s2'` by
     (qspecl_then [`fuel`, `ctx`, `fn`, `s1'`, `bb`,
                   `mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []`,
@@ -1264,8 +1264,7 @@ Proof
   gvs[exprLoweringPropsTheory.emitted_insts_def,
       exprLoweringPropsTheory.run_inst_seq_def, DROP_LENGTH_APPEND] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_write2_def, eval_operand_def]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def]
 QED
 
 (* A return without a value, or a fallthrough, in an external function:
