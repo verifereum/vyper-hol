@@ -132,17 +132,21 @@ Theorem le_two_distinct_find_join_aux:
   EVERY (\l. ?bb. MEM bb fn.fn_blocks /\ bb.bb_label = l) xs /\
   fn_entry_label fn = SOME (HD xs) /\
   FLOOKUP (unwrap_load_lattice (df_boundary NONE (load_analyze ctx fn) (LAST xs))) k = SOME ops /\
-  MEM a ops /\ MEM b ops /\ a <> b ==>
-  MEM (find_join_block (cfg_analyze fn) visited (LAST xs)) xs \/
-  find_join_block (cfg_analyze fn) visited (LAST xs) IN visited
+  MEM a ops /\ MEM b ops /\ a <> b /\
+  (!l. l IN visited ==> fn_entry_label fn <> SOME l) ==>
+  (MEM (find_join_block (cfg_analyze fn) visited (LAST xs)) xs \/
+   find_join_block (cfg_analyze fn) visited (LAST xs) IN visited) /\
+  fn_entry_label fn <> SOME (find_join_block (cfg_analyze fn) visited (LAST xs))
 Proof
   Induct using SNOC_INDUCT >- simp[] >> rpt gen_tac >> strip_tac >>
   Cases_on `xs = []`
   >- (gvs[SNOC] >> metis_tac[le_two_distinct_boundary_nonentry]) >>
   gvs[le_pred_path_snoc, EVERY_SNOC] >>
   `HD (SNOC bb.bb_label xs) = HD xs` by (Cases_on `xs` >> gvs[SNOC]) >>
+  `fn_entry_label fn <> SOME bb.bb_label` by
+    metis_tac[le_two_distinct_boundary_nonentry] >>
   Cases_on `bb.bb_label IN visited`
-  >- simp[Once find_join_block_def] >>
+  >- metis_tac[find_join_block_def] >>
   Cases_on `?p. cfg_preds_of (cfg_analyze fn) bb.bb_label = [p]`
   >- (pop_assum strip_assume_tac >>
       `p = LAST xs` by gvs[] >> gvs[] >>
@@ -158,9 +162,11 @@ Proof
       asm_rewrite_tac[] >>
       first_x_assum (qspecl_then [`ys`, `bb.bb_label INSERT visited`] mp_tac) >>
       simp[] >> metis_tac[]) >>
-  simp[Once find_join_block_def] >>
-  Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> simp[] >>
-  Cases_on `t` >> gvs[]
+  `find_join_block (cfg_analyze fn) visited bb.bb_label = bb.bb_label` by
+    (simp[Once find_join_block_def] >>
+     Cases_on `cfg_preds_of (cfg_analyze fn) bb.bb_label` >> simp[] >>
+     Cases_on `t` >> gvs[]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem le_two_distinct_find_join:
@@ -169,10 +175,12 @@ Theorem le_two_distinct_find_join:
   fn_entry_label fn = SOME (HD xs) /\
   FLOOKUP (unwrap_load_lattice (df_boundary NONE (load_analyze ctx fn) (LAST xs))) k = SOME ops /\
   MEM a ops /\ MEM b ops /\ a <> b ==>
-  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs
+  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs /\
+  fn_entry_label fn <> SOME (find_join_block (cfg_analyze fn) {} (LAST xs))
 Proof
-  strip_tac >> drule_all le_two_distinct_find_join_aux >>
-  disch_then (qspec_then `{}` mp_tac) >> simp[]
+  strip_tac >>
+  qspecl_then [`xs`, `ops`, `{}`] mp_tac le_two_distinct_find_join_aux >>
+  simp[]
 QED
 
 Theorem le_entry_sole_pred_boundary:
@@ -194,9 +202,10 @@ Theorem le_two_distinct_entry_find_join:
   lookup_block (LAST xs) fn.fn_blocks = SOME bb /\
   FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) (LAST xs) 0)) k = SOME ops /\
   MEM a ops /\ MEM b ops /\ a <> b ==>
-  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs
+  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs /\
+  fn_entry_label fn <> SOME (find_join_block (cfg_analyze fn) {} (LAST xs))
 Proof
-  Induct using SNOC_INDUCT >- simp[] >> rpt strip_tac >>
+  Induct using SNOC_INDUCT >- simp[] >> rpt gen_tac >> strip_tac >>
   `fn_entry_label fn <> SOME x` by metis_tac[loadElimActualGenerationTheory.le_analyze_entry_no_lookup,
       LAST_SNOC, optionTheory.NOT_NONE_SOME] >>
   Cases_on `xs = []` >- gvs[SNOC] >>
@@ -209,16 +218,19 @@ Proof
       `df_at NONE (load_analyze ctx fn) lbl 0 =
        df_boundary NONE (load_analyze ctx fn) (LAST xs)` by
         simp[le_entry_sole_pred_boundary] >>
-      `MEM (find_join_block (cfg_analyze fn) {lbl} (LAST xs)) xs \/
-       find_join_block (cfg_analyze fn) {lbl} (LAST xs) IN {lbl}` by
-        (irule le_two_distinct_find_join_aux >> metis_tac[]) >>
+      `(MEM (find_join_block (cfg_analyze fn) {lbl} (LAST xs)) xs \/
+        find_join_block (cfg_analyze fn) {lbl} (LAST xs) IN {lbl}) /\
+       fn_entry_label fn <> SOME (find_join_block (cfg_analyze fn) {lbl} (LAST xs))` by
+        (irule le_two_distinct_find_join_aux >> simp[] >> metis_tac[]) >>
       `find_join_block (cfg_analyze fn) {} lbl =
        find_join_block (cfg_analyze fn) {lbl} (LAST xs)` by
         simp[Once find_join_block_def] >>
       asm_rewrite_tac[] >> fs[] >> metis_tac[]) >>
-  simp[Once find_join_block_def] >>
-  Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> simp[] >>
-  Cases_on `t` >> gvs[]
+  `find_join_block (cfg_analyze fn) {} lbl = lbl` by
+    (simp[Once find_join_block_def] >>
+     Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> simp[] >>
+     Cases_on `t` >> gvs[]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem le_multivalue_point_find_join:
@@ -230,7 +242,8 @@ Theorem le_multivalue_point_find_join:
   n <= LENGTH bb.bb_instructions /\
   FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) (LAST xs) n)) k = SOME ops /\
   1 < LENGTH ops ==>
-  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs
+  MEM (find_join_block (cfg_analyze fn) {} (LAST xs)) xs /\
+  fn_entry_label fn <> SOME (find_join_block (cfg_analyze fn) {} (LAST xs))
 Proof
   strip_tac >>
   `is_fixpoint (df_process_block Forward NONE load_join load_transfer
