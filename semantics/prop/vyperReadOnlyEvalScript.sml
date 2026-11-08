@@ -567,17 +567,6 @@ Resume evaluate_read_only[intcall_after_defaults]:
        REWRITE_RULE [ignore_bind_def] machine_frame_internal_lock]
 QED
 
-Theorem finally_unless_halt_return[local]:
-  finally_unless_halt f (return ()) = f
-Proof
-  simp[FUN_EQ_THM, finally_unless_halt_def] >> qx_gen_tac `st` >>
-  Cases_on `f st` >> rename1 `(answer,st')` >> Cases_on `answer` >>
-  simp[ignore_bind_def, bind_def, return_def] >>
-  rename1 `f st = (INR ex,st')` >>
-  qpat_x_assum `f st = (INR ex,st')` kall_tac >>
-  Cases_on `ex` >> simp[raise_def]
-QED
-
 Resume evaluate_read_only[intcall_after_lock]:
   rpt strip_tac >> BETA_TAC >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_push_function] >>

@@ -345,7 +345,7 @@ Proof
   disch_then (qspecl_then [`ty`,`drv`] SUBST1_TAC) >>
   rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `st` >>
   simp[bind_def, ignore_bind_def, get_scopes_def, return_def,
-    lock_if_nr_def, unlock_if_nr_def] >>
+    lock_if_nr_def, unlock_if_nr_def, finally_unless_halt_return] >>
   Cases_on `eval_expr_results cx args st` >>
   rename1 `_ = (res,st1)` >> Cases_on `res` >> simp[] >>
   rename1 `read_results cx results st1` >>
