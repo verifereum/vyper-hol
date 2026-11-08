@@ -2,7 +2,8 @@ Theory dftGasSimFrameBoundary
 Ancestors
   dftGasSimDominance dftGasSimInvariant dftGasSimSuccessor dftGasOracleDefs
   dftRunRel venomExecProofs venomExecProps venomExecSemantics venomWf
-  sccpCorrectnessProofs venomInst venomState list
+  venomInst venomState list
+  venomWfProps
 
 Theorem ev_block_entry_frame_inv:
   wf_function fn /\ MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb /\
