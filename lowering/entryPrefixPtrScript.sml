@@ -215,21 +215,22 @@ QED
 Finalise compile_selector_checks_ptr_endpoint
 
 Theorem dispatch_scalar_update_ptr_endpoint:
-  inst = mk_inst id opc ops [out] /\
+  (!fuel. step_inst fuel ctx (mk_inst id opc ops [out]) s =
+     OK (update_var out value s)) ==>
+  !fn bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc ops [out]) ==>
+  !st st_next lo PG G tn.
   MEM opc [CALLDATASIZE; CALLDATALOAD; LT; EQ; ISZERO; SHR] /\
   EVERY (\op. op_taint tn op = {}) ops /\
   (!a b. ops <> [Var a; Var b]) /\
   out = STRING #"%" (toString st.cs_next_var) /\
   st_next.cs_next_var = SUC st.cs_next_var /\
   fresh_vars_wrt st s /\ ~s.vs_halted /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME inst /\
-  (!fuel. step_inst fuel ctx inst s = OK (update_var out value s)) /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ?u G' tn'.
     u = (update_var out value s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    G' = step_prov PG G inst (update_var out value s) /\
-    tn' = step_taint inst s (update_var out value s) tn /\
+    G' = step_prov PG G (mk_inst id opc ops [out]) (update_var out value s) /\
+    tn' = step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn /\
     vars_pc_only s u /\ fresh_vars_wrt st_next u /\ ~u.vs_halted /\
     u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
     eval_operand (Var out) u = SOME value /\
@@ -240,20 +241,21 @@ Theorem dispatch_scalar_update_ptr_endpoint:
     (!D fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' u ==>
               ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  strip_tac >>
+  strip_tac >> rpt gen_tac >> strip_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   qexistsl_tac [`update_var out value s with vs_inst_idx := SUC s.vs_inst_idx`,
-    `step_prov PG G inst (update_var out value s)`,
-    `step_taint inst s (update_var out value s) tn`] >>
+    `step_prov PG G (mk_inst id opc ops [out]) (update_var out value s)`,
+    `step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn`] >>
   `vars_pc_only s (update_var out value s)` by
     simp[vars_pc_only_update_var, vars_pc_only_refl] >>
   `fresh_vars_wrt st_next (update_var out value s)` by
     (irule fresh_vars_wrt_advance >> qexistsl_tac [`st.cs_next_var`, `st`] >> simp[]) >>
-  `op_taint (step_taint inst s (update_var out value s) tn) (Var out) = {}` by
+  `op_taint (step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn) (Var out) = {}` by
     metis_tac[dispatch_scalar_output_clean] >>
-  `(step_taint inst s (update_var out value s) tn).t_mem = tn.t_mem /\
-   (step_taint inst s (update_var out value s) tn).t_stor = tn.t_stor /\
-   (step_taint inst s (update_var out value s) tn).t_trans = tn.t_trans /\
-   (step_taint inst s (update_var out value s) tn).t_imm = tn.t_imm` by
+  `(step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn).t_mem = tn.t_mem /\
+   (step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn).t_stor = tn.t_stor /\
+   (step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn).t_trans = tn.t_trans /\
+   (step_taint (mk_inst id opc ops [out]) s (update_var out value s) tn).t_imm = tn.t_imm` by
     metis_tac[dispatch_scalar_taint_frame] >>
   simp[vars_pc_only_inst_idx, control_moves_keep_vars, update_var_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
@@ -262,11 +264,11 @@ Proof
   conj_tac >- (rpt strip_tac >> fs[allocas_below_fmp_def] >> metis_tac[]) >>
   rpt strip_tac >>
   irule ptr_safe_run_scalar_continuation >>
-  qexistsl_tac [`bb`, `inst`, `update_var out value s`] >>
+  qexistsl_tac [`bb`, `mk_inst id opc ops [out]`, `update_var out value s`] >>
   simp[update_var_def] >>
   conj_tac
   >- (gvs[mk_inst_def, MEM, is_terminator_def]) >>
-  qpat_x_assum `inst = _` SUBST_ALL_TAC >>
   gvs[ptr_safe_dispatch_scalar_step]
 QED
+
 
