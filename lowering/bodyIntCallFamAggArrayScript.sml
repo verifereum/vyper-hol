@@ -141,6 +141,64 @@ Proof
   metis_tac[local_region_frame_fwd]
 QED
 
+(* The actual array prefix: allocation, then the dynamic length header
+   when present.  Its root remains fresh relative to the literal entry. *)
+Theorem intcall_array_entry:
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  (if header then emit_void MSTORE [buf.buf_operand; Lit len] sm = ((),sb)
+   else sb = sm) /\
+  fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func /\
+  fn_inst_ids_distinct fp.jc_func /\
+  sz < dimword (:256) /\ (header ==> 32 <= sz) /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u w inst. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK u) /\
+    intcall_expr_cont fp ce env es sa s es sb u /\
+    eval_operand buf.buf_operand u = SOME w /\
+    FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+    inst.inst_id = sa.cs_next_id /\ inst.inst_opcode = ALLOCA /\
+    MEM inst (fn_insts fp.jc_func) /\
+    fp.jc_lo <= w2n w /\ w2n w + sz < dimword (:256) /\
+    sa.cs_next_id < sb.cs_next_id /\ sa.cs_next_var <= sb.cs_next_var /\
+    (!name a z. local_region ce es.scopes u name a z ==>
+       regions_disjoint (w2n w) sz a z) /\
+    (!name a z. local_region ce es.scopes s name a z ==>
+       regions_disjoint (w2n w) sz a z) /\
+    (?p. buf.buf_operand = Var p /\ not_fresh_at sb p) /\
+    (header ==> mem_word_at (w2n w) u.vs_memory = len)
+Proof
+  strip_tac >> drule_all intcall_array_root_alloc >> strip_tac >>
+  Cases_on `header` >> gvs[]
+  >- (`lookup_var p u = SOME w /\ eval_operand (Lit len) u = SOME len` by
+        fs[eval_operand_def] >>
+      `FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
+       sa.cs_next_id <= inst.inst_id /\ w2n w + 32 <= w2n w + sz` by simp[] >>
+      drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)
+        intcall_owned_mstore_landing >>
+      disch_then (drule_at (Pat `emit_void _ _ _ = _`)) >>
+      disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+      simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
+      drule emitted_insts_emit_void >> strip_tac >>
+      `gas_marked_path F fp.jc_ctx fp.jc_func s 0
+        (OK (mstore (w2n w) len u with
+               vs_inst_idx := LENGTH sb.cs_current_insts))` by
+        (drule typed_copy_effect_path >>
+         metis_tac[gas_marked_path_then, arithmeticTheory.ADD]) >>
+      `mem_word_at (w2n w) (mstore (w2n w) len u).vs_memory = len` by
+        simp[mstore_mem_word_at_same] >>
+      `!name a z. local_region ce es.scopes
+          (mstore (w2n w) len u with vs_inst_idx := LENGTH sb.cs_current_insts)
+          name a z <=> local_region ce es.scopes u name a z` by
+        simp[local_region_def, lookup_var_def, mstore_def] >>
+      qexistsl_tac [`mstore (w2n w) len u with
+                       vs_inst_idx := LENGTH sb.cs_current_insts`, `w`, `inst`] >>
+      simp[not_fresh_at_def] >>
+      simp[eval_operand_def, lookup_var_def, mstore_def] >>
+      fs[not_fresh_at_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem intcall_array_literal_step:
   (!e'. expr_size e' < expr_size e ==>
         intcall_expr_producer fp e' /\ intcall_forced_producer fp e' /\
