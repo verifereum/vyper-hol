@@ -41,8 +41,8 @@ Theorem compile_abi_encode_memory_trace:
   compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode F method_id) ret_ty [e] origin =
     (vv,final) ==>
   ?out. lower_abi_encode F (OPTION_MAP bytes_method_id_word method_id) srcptr.ptr_operand
-      (type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e))
-      (abi_size_bound ce.ce_struct_fields (expr_type e)) ready = (out,final) /\
+      (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
+      (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) ready = (out,final) /\
     vv = LocatedValue vv_ty (mk_ptr out LocMemory)
 Proof
   strip_tac >>
@@ -59,8 +59,8 @@ Theorem compile_abi_encode_word_trace:
     compile_alloc_buffer 32 arg_st = (buf,allocated) /\
     emit_void MSTORE [buf.buf_operand;value_op] allocated = ((),staged) /\
     lower_abi_encode F (OPTION_MAP bytes_method_id_word method_id) buf.buf_operand
-      (type_to_abi_enc_info ce.ce_struct_fields ce (expr_type e))
-      (abi_size_bound ce.ce_struct_fields (expr_type e)) staged = (out,final) /\
+      (type_to_abi_enc_info ce.ce_struct_fields ce (lowered_value_type ce e))
+      (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)) staged = (out,final) /\
     vv = LocatedValue vv_ty (mk_ptr out LocMemory)
 Proof
   strip_tac >>
@@ -79,11 +79,11 @@ Theorem compile_abi_encode_tuple_trace:
   compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode ensure method_id) ret_ty args origin =
     (vv,final) ==>
   ?buf allocated staged out.
-    compile_alloc_buffer (type_memory_bytes ce (TupleT (MAP expr_type args))) arg_st = (buf,allocated) /\
-    compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (ops,MAP expr_type args)) allocated = ((),staged) /\
+    compile_alloc_buffer (type_memory_bytes ce (TupleT (MAP (lowered_value_type ce) args))) arg_st = (buf,allocated) /\
+    compile_store_abi_tuple ce buf.buf_operand 0 (ZIP (ops,MAP (lowered_value_type ce) args)) allocated = ((),staged) /\
     lower_abi_encode ensure (OPTION_MAP bytes_method_id_word method_id) buf.buf_operand
-      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)))
-      (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
+      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP (lowered_value_type ce) args)))
+      (abi_size_bound ce.ce_struct_fields (TupleT (MAP (lowered_value_type ce) args))) staged = (out,final) /\
     vv = LocatedValue vv_ty (mk_ptr out LocMemory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
