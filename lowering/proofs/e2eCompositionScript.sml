@@ -207,14 +207,18 @@ Proof
   qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
   `v'.vs_returndata = v.vs_returndata` by
     (irule LIST_EQ >> gvs[external_call_dead_def]) >>
-  (* The halt case has no return-bytes conjunct, so the trivial conjuncts
-     are closed first and the rest come in the same order in both cases. *)
-  (rpt conj_tac >> TRY (gvs[] >> NO_TAC)
+  (* The return and halt cases have different conjuncts; select each one
+     by the target state it mentions (v' only occurs in the conclusion). *)
+  (rpt conj_tac
+   >~ [`accounts_agree cx _ (process_deletions _ v'.vs_accounts)`]
    >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
        metis_tac[accounts_agree_except_process_deletions])
-   >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
-   gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
-   irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
+   >~ [`transient_agree cx _ v'.vs_transient`]
+   >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
+   >~ [`LIST_REL (request_agree cx) _ v'.vs_requests`]
+   >- (gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+       irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
+   gvs[])
 QED
 
 Theorem external_call_result_rel_terminal:
