@@ -26,9 +26,10 @@ Proof
            fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def,
            comp_return_def] >> strip_tac >> gvs[] >>
       qexists_tac `istore (w2n a) v s` >>
-      simp[emitted_insts_def, listTheory.DROP_APPEND, run_inst_seq_def,
-           mk_inst_def, step_inst_base_def, eval_operands_def,
-           istore_def, mstore_def, lookup_var_def]) >>
+      conj_tac
+      >- simp[emitted_insts_def, listTheory.DROP_APPEND, run_inst_seq_def,
+              mk_inst_def, step_inst_base_def, eval_operands_def] >>
+      simp[istore_def, mstore_def, lookup_var_def]) >>
   simp[] >> strip_tac >>
   `eval_operand value (update_var (STRING #"%" (toString sa.cs_next_var)) a s) = SOME v` by
     (drule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
