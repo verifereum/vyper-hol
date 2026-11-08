@@ -683,8 +683,8 @@ Proof
   drule mem_step_offset_shape >> strip_tac >> gvs[] >>
   Cases_on `a` >>
   simp[evaluate_subscripts_def, subscript_type_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
-  drule mem_field_offset_sound >> strip_tac >> gvs[]
+  imp_res_tac mem_field_offset_sound >> simp[] >>
+  rpt (CASE_TAC >> simp[])
 QED
 
 Theorem place_store_path_unread_frame:
