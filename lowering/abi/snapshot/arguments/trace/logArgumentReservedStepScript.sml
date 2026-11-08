@@ -32,6 +32,7 @@ Theorem checked_log_argument_reserved_step:
     local_ptrs_rel func cenv es.scopes before /\ source_alloca_floor cenv es.scopes ids before /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     alloca_inv before /\ alloca_inv loaded /\ allocation_growth before loaded /\ cs.cs_next_var <= load_cut.cs_next_var /\
     (fresh_vars_wrt cs before ==> fresh_vars_wrt load_cut loaded) /\
     (!arg_op. abi_operand_before cs.cs_next_var arg_op ==> eval_operand arg_op loaded = eval_operand arg_op before) /\
@@ -79,6 +80,11 @@ Proof
     mp_tac log_argument_load_origins_state >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[EVERY_DEF]]) >>
   disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
+  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before load_cut.cs_next_var (Var x)` by
+    (rpt strip_tac >> irule abi_operand_before_mono >> qexists_tac `cs.cs_next_var` >>
+     conj_tac >- (qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _` irule >>
+                  first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   qspecl_then [`tops`, `dep`, `layouts`, `addr`, `art`, `env`, `ctx`, `func`, `cenv`, `cx`, `es1`,
     `lowered_value_type cenv e`, `tv`, `v`, `src`, `suffix`, `load_cut`, `saved`, `save_cut`, `final_cut`,
     `loaded`, `prefix`, `ptvs`, `pvs`, `ids`, `reserved`, `requests`, `remaining_credit`]

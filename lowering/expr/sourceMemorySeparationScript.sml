@@ -11,13 +11,20 @@ Theorem source_pointer_operands_not_local:
   !cenv scopes var_base next_var.
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==>
-      abi_operand_before var_base (Var p)) /\ var_base <= next_var ==>
+      abi_operand_before var_base (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before var_base (Var x)) /\
+    var_base <= next_var ==>
     not_local_ptr cenv scopes (compiler_var_name next_var 0)
 Proof
-  rpt gen_tac >> strip_tac >> simp_tac bool_ss [not_local_ptr_def] >>
-  MAP_EVERY qx_gen_tac [`name`, `entry`, `region_size`] >> DISCH_TAC >> strip_tac >>
-  qpat_x_assum `!name entry p region_size. _`
-    (qspecl_then [`name`, `entry`, `compiler_var_name next_var 0`, `region_size`] mp_tac) >>
+  rpt gen_tac >> strip_tac >> simp_tac bool_ss [not_local_ptr_def] >> conj_tac
+  >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `region_size`] >> DISCH_TAC >> strip_tac >>
+      qpat_x_assum `!name entry p region_size. _`
+        (qspecl_then [`name`, `entry`, `compiler_var_name next_var 0`, `region_size`] mp_tac) >>
+      simp[] >> simp_tac bool_ss [abi_operand_before_def] >>
+      qexists_tac `next_var` >> simp[]) >>
+  strip_tac >>
+  qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _`
+    (qspec_then `compiler_var_name next_var 0` mp_tac) >>
   simp[] >> simp_tac bool_ss [abi_operand_before_def] >>
   qexists_tac `next_var` >> simp[]
 QED

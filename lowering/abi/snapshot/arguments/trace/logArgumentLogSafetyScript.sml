@@ -116,6 +116,11 @@ Proof
     (qspecl_then [`cenv`, `es.scopes`, `cs.cs_next_var`, `allocation_cs.cs_next_var`]
       mp_tac source_pointer_lifetimes_mono >>
      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
+  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before allocation_cs.cs_next_var (Var x)` by
+    (rpt strip_tac >> irule abi_operand_before_mono >> qexists_tac `cs.cs_next_var` >>
+     conj_tac >- (qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _` irule >>
+                  first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   `source_memory_separated cenv es.scopes ss (w2n (memory_snapshot_addr allocation_cs.cs_next_id ss)) byte_count` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `ss`, `capacity`, `allocation_cs`, `buf`, `cut`, `byte_count`, `ids`]
       mp_tac compile_buffer_payload_private >>

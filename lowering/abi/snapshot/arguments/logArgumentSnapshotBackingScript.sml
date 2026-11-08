@@ -56,6 +56,7 @@ Theorem compile_log_save_arg_private_window:
     source_alloca_floor cenv scopes ids out /\ MEM cs.cs_next_id ids /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     abi_allocated_window out cs.cs_next_id offset byte_count ==>
     private_value_window cenv scopes out (compiler_alloca_ids cut final_cut) offset byte_count
 Proof
@@ -85,6 +86,7 @@ Theorem compile_log_save_arg_value_backing:
     source_alloca_floor cenv scopes ids out /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = loaded) /\
     (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       MEM cs.cs_next_id ids /\ ?ptr_addr. eval_operand saved out = SOME ptr_addr /\

@@ -23,6 +23,7 @@ Theorem checked_log_argument_save_state:
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==>
       abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     alloca_inv ss /\ log_args_rel prefix ptvs pvs ss /\
     EVERY (\arg. abi_operand_before cs.cs_next_var (FST arg)) prefix /\
     (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>

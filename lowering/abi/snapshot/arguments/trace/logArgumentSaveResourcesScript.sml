@@ -87,6 +87,7 @@ Theorem compile_log_save_arg_value_origin:
     source_alloca_floor cenv scopes ids out /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     (is_word_type ty \/ ~exprs_can_mutate cenv suffix ==> out = loaded) /\
     (~is_word_type ty /\ exprs_can_mutate cenv suffix ==>
       MEM cs.cs_next_id ids /\ ?ptr_addr. eval_operand saved out = SOME ptr_addr /\

@@ -72,6 +72,11 @@ Proof
     (qspecl_then [`env`, `cx`, `es`, `es1`, `cenv`, `cs.cs_next_var`, `save_cut.cs_next_var`]
       mp_tac source_pointer_lifetimes_consistent_scopes >>
      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
+  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before save_cut.cs_next_var (Var x)` by
+    (rpt strip_tac >> irule abi_operand_before_mono >> qexists_tac `cs.cs_next_var` >>
+     conj_tac >- (qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _` irule >>
+                  first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   qexists_tac `out` >> simp_tac bool_ss [log_prefix_ready_def] >>
   rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

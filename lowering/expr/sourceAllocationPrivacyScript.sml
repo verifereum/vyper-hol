@@ -119,6 +119,7 @@ Theorem compile_buffer_payload_private:
     MEM cs.cs_next_id ids /\ byte_count <= capacity /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     abi_alloca_request_ok cs.cs_next_id capacity ss ==>
     source_memory_separated cenv scopes ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) byte_count
 Proof

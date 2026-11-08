@@ -20,6 +20,7 @@ Definition log_prefix_ready_def:
     local_ptrs_rel func cenv es.scopes ss /\ source_alloca_floor cenv es.scopes ids ss /\
     (!name entry p region_size. lookup_scopes name es.scopes = SOME entry /\
       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) /\
     log_argument_writers func cenv es.scopes ids (compiler_alloca_ids cs final_cut) /\
     alloca_inv ss /\ log_args_rel prefix ptvs pvs ss /\
     EVERY (\arg. abi_operand_before cs.cs_next_var (FST arg)) prefix /\

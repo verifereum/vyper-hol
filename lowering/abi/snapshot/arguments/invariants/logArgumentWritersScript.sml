@@ -73,7 +73,8 @@ Theorem log_argument_writers_code:
     cs_extends cs final_cut /\ fn_has_code cs final_cut func /\
     (!id. MEM id (compiler_alloca_ids cs final_cut) ==> MEM id ids) /\
     (!name entry p region_size. lookup_scopes name scopes = SOME entry /\
-      FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) ==>
+      FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) ==> abi_operand_before cs.cs_next_var (Var p)) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before cs.cs_next_var (Var x)) ==>
     log_argument_writers func cenv scopes ids (compiler_alloca_ids cs final_cut)
 Proof
   rpt gen_tac >> strip_tac >> simp_tac bool_ss [log_argument_writers_def] >> qx_gen_tac `id` >> DISCH_TAC >>
