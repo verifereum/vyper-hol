@@ -2460,7 +2460,7 @@ Proof
   rpt gen_tac >> disch_tac >> irule phi_provenance_final_alias >>
   goal_assum (drule_at Any) >>
   qpat_assum `phi_stack_provenance _ _ _ _ _ _` (irule_at Any) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  qexists_tac `source` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem phi_local_frame_transport:
