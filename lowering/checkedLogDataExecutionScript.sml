@@ -359,6 +359,7 @@ Theorem checked_compile_log_data_execution:
   cenv.ce_struct_fields = make_struct_fields_map tops /\
   cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  ~cx.txn.is_static /\
   type_stmt env ret (Log event_id exprs) = SOME env' /\
   cenv.ce_event_info (nsid_to_string event_id) = SOME (sig_hash,fts,flags) /\
   compile_log_eval_all cenv exprs begin = (args,eval_cut) /\
