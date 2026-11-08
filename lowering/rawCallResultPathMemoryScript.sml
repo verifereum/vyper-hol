@@ -74,7 +74,9 @@ Proof
   `vv_post ctx func cenv cx e es0 sf sb s0 es
     (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
-    (irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
+    (qpat_assum `lowered_value_type _ _ = _`
+       (assume_tac o MATCH_MP loweringPostsTheory.post_value_type_lowered) >>
+     irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
      fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
   `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
     (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))

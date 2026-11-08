@@ -677,6 +677,7 @@ Theorem compile_ifexp_nonword_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     ~is_word_type t /\
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!e. (e = a \/ e = b) ==> post_value_type cenv e = expr_type e) /\
     (is_word_type t ==> ?tvt. evaluate_type (get_tenv cx) t = SOME tvt) /\
     (~is_word_type t ==>
      !e. (e = a \/ e = b) ==>
@@ -806,6 +807,8 @@ Resume compile_ifexp_nonword_vv_sim_mem[converted_endpoint]:
      simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
      drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
   `expr_type (if sel then a else b) = expr_type a` by (Cases_on `sel` >> simp[]) >>
+  `post_value_type cenv (if sel then a else b) = expr_type (if sel then a else b)` by
+    (Cases_on `sel` >> simp[]) >>
   `MAP FDOM mid.scopes = MAP FDOM ee.scopes` by
     (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>

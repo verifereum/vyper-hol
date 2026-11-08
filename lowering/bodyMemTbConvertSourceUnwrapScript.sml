@@ -91,15 +91,18 @@ Theorem convert_unwrap_value_path_mem_window:
 Proof
   rpt gen_tac >> strip_tac >>
   `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   Cases_on `vv`
   >- suspend "stack" >>
   rename1 `LocatedValue t p` >>
   RULE_ASSUM_TAC (REWRITE_RULE [vv_operand_def]) >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
   Cases_on `p.ptr_location = LocCalldata`
   >- gvs[vv_post_calldata] >>
   Cases_on `p.ptr_location = LocMemory`
   >- suspend "memory" >>
+  `t = expr_type e` by
+    (Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >>
   `?u w tv. gas_path_mem ctx func s 0 (OK u) /\
       expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
       evaluate_type (get_tenv cx) t = SOME tv /\
@@ -147,6 +150,12 @@ Resume convert_unwrap_value_path_mem_window[stack]:
 QED
 
 Resume convert_unwrap_value_path_mem_window[memory]:
+  `~is_word_type t` by
+    (strip_tac >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type cenv e = _`
+       (fn th => rewrite_tac[vv_post_def, vv_holds_def, th]) >>
+     strip_tac >> gvs[is_bytestring_word_type]) >>
   gvs[unwrap_value_def, comp_return_def] >>
   qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >>
   conj_tac >- metis_tac[expr_post_of_vv_post_memory] >>

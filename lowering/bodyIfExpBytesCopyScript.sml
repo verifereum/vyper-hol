@@ -103,6 +103,13 @@ Resume ifexp_copy_post_transport[post]:
      simp_tac (srw_ss()) [venomStateTheory.venom_state_component_equality]) >>
   `stmt_state_rel ctx func cenv cx ee q` by
     metis_tac[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
+  `post_value_type cenv e <> expr_type e ==>
+   expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op q` by
+    (strip_tac >>
+     `expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op m` by
+       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ m` mp_tac >>
+        simp[loweringPostsTheory.expr_post_def]) >>
+     pop_assum mp_tac >> simp[loweringPostsTheory.expr_val_own_def]) >>
   reverse conj_tac
   >- (fs[exprSimMemDefsTheory.vv_store_bound_def, contextTheory.mk_ptr_def]) >>
   fs[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,

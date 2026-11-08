@@ -22,8 +22,12 @@ Proof
   `expr_vv_sim_mem ctx func cenv cx ty' (Builtin (BaseT (StringT n)) (Uint2Str n) [e]) es'` by
     (irule compile_uint2str_typed_vv_sim_mem >> metis_tac[]) >>
   simp[] >>
-  irule body_expr_sim_mem_of_vv_sim_mem >>
-  reverse conj_tac >- metis_tac[] >>
+  match_mp_tac body_expr_sim_mem_of_vv_sim_mem >>
+  qexists_tac `env` >>
+  rpt conj_tac
+  >- simp[]
+  >- metis_tac[]
+  >- metis_tac[] >>
   rpt gen_tac >> rewrite_tac[compile_uint2str_singleton] >>
   Cases_on `lower_value compile_expr cenv ty' e sa` >> simp[] >>
   rename1 `compile_uint2str v n sz sm` >>

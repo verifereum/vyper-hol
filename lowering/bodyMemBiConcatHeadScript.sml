@@ -117,8 +117,16 @@ Proof
     (qpat_x_assum `32 + P + SUM _ <= _` mp_tac >> simp[]) >>
   `32 + k <= bsz` by decide_tac >>
   drule_all concat_args_pre >> strip_tac >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    (qpat_assum `is_bytestring_type _ \/ _` strip_assume_tac
+     >- (irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
+     irule post_value_type_word >>
+     qpat_x_assum `evaluate_type _ (expr_type e) = SOME tv` mp_tac >>
+     simp[vyperValueTheory.evaluate_type_def, is_word_type_def,
+          optionTheory.IF_EQUALS_OPTION]) >>
+  qpat_assum `post_value_type cenv e = _` (fn pth =>
+    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [expr_post_def, pth])) >>
   `mload (w2n ow) t = n2w k` by metis_tac[] >>
   `eval_operand (Var dv) t = SOME (n2w (B + 32)) /\
    eval_operand (Var ov) t = SOME ow` by

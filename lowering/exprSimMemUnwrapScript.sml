@@ -967,6 +967,7 @@ QED
 
 Theorem unwrap_storage_copy_path_mem[local]:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
     ~is_word_type t /\
@@ -1446,6 +1447,7 @@ Finalise unwrap_code_copy_capacity_path_mem
 
 Theorem unwrap_code_copy_path_mem[local]:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ ~is_word_type t /\
     local_ptrs_reserved cenv sa /\
@@ -1474,6 +1476,7 @@ QED
    code. *)
 Theorem unwrap_copy_capacity_path_mem:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op s.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
      p.ptr_location = LocCode) /\ ~is_word_type t /\

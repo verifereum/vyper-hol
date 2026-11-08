@@ -62,6 +62,7 @@ Proof
 QED
 
 Theorem ifexp_selected_marked_endpoint_mem:
+  post_value_type ce e = expr_type e /\
   expr_type e = t /\ ~is_word_type t /\
   (~same_memory_layout ce (lowered_value_type ce e) t ==> is_bytestring_type t) /\
   compile_ifexp_arm ce t (lowered_value_type ce e) vv sm = (op,sb) /\

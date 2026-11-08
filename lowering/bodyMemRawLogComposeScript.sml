@@ -97,7 +97,8 @@ Theorem raw_log_dynamic_continuation_mem:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
-  expr_type e = NoneT /\ fn_has_code sm sb func /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
+  fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\
   b + 32 <= s.vs_alloca_next /\
   (LENGTH bs = 0 \/ b + 32 + LENGTH bs <= s.vs_alloca_next) /\
@@ -161,7 +162,8 @@ Theorem raw_log_fixed_continuation_mem:
   (!aid b sz. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\ expr_type e = NoneT /\
+     regions_disjoint (w2n p) 32 b sz) /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\ alloca_history func s /\
   w2n p + 32 <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
