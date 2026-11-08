@@ -57,3 +57,41 @@ Proof
          cj 1 no_extcode_abi_decode, no_extcode_default_return_path,
          no_extcode_extcodesize_check, no_extcode_return_value_decode])
 QED
+
+Theorem no_extcode_materialize_vv:
+  !ce ty vv s. compiler_no_extcode s ==>
+    compiler_no_extcode (SND (compile_materialize_vv ce ty vv s))
+Proof
+  rpt strip_tac >> simp[compile_materialize_vv_def] >>
+  rpt (rpt gen_tac >> rpt disch_tac >> FIRST [conj_tac,
+    irule no_extcode_bind, irule no_extcode_ignore_bind] >>
+    simp[no_extcode_alloc_buffer, no_extcode_unwrap_value,
+         no_extcode_store_memory, no_extcode_fresh_ops])
+QED
+
+Theorem no_extcode_ext_call_kwarg:
+  !cfn ce rt k e.
+  (!ty s. compiler_no_extcode s ==> compiler_no_extcode (SND (cfn ce ty e s))) ==>
+  !s. compiler_no_extcode s ==>
+    compiler_no_extcode (SND (compile_ext_call_kwarg cfn ce rt k e s))
+Proof
+  rpt strip_tac >> simp[compile_ext_call_kwarg_def] >>
+  rpt (rpt gen_tac >> rpt disch_tac >> FIRST [conj_tac,
+    irule no_extcode_bind, irule no_extcode_ignore_bind, IF_CASES_TAC] >>
+    simp[no_extcode_lower_value, no_extcode_materialize_vv, no_extcode_fresh_ops])
+QED
+
+Theorem no_extcode_ext_call_kwargs:
+  !cfn ce rt ks es.
+  (!e ty s. MEM e es /\ compiler_no_extcode s ==>
+    compiler_no_extcode (SND (cfn ce ty e s))) ==>
+  !s. compiler_no_extcode s ==>
+    compiler_no_extcode (SND (compile_ext_call_kwargs cfn ce rt ks es s))
+Proof
+  ntac 3 gen_tac >> Induct_on `ks` >> Cases_on `es` >>
+  simp[Once compile_ext_call_kwargs_def, no_extcode_fresh_ops] >>
+  rpt strip_tac >>
+  rpt (rpt gen_tac >> rpt disch_tac >> FIRST [conj_tac,
+    irule no_extcode_bind, irule no_extcode_ignore_bind, pairarg_tac] >>
+    simp[no_extcode_fresh_ops, no_extcode_ext_call_kwarg])
+QED
