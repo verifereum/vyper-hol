@@ -10,6 +10,8 @@ Theory bodyPtrBytestringBuiltins
 Ancestors
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
+  bodyPtrBytestringBuiltinsCalldataCase bodyPtrBytestringBuiltinsConcatCase
+  bodyPtrBytestringBuiltinsSliceCase bodyPtrBytestringBuiltinsUintCase
 
 val _ = Parse.hide "body";
 
@@ -20,5 +22,13 @@ Theorem bytestring_builtin_expr_ptr_ok:
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
+  >~ [`CalldataSlice`]
+  >- (irule calldata_slice_body_expr_ptr_ok >> first_assum ACCEPT_TAC)
+  >~ [`Concat`]
+  >- (irule concat_body_expr_ptr_ok >> first_assum ACCEPT_TAC)
+  >~ [`Slice`]
+  >- (irule slice_body_expr_ptr_ok >> first_assum ACCEPT_TAC)
+  >~ [`Uint2Str`]
+  >- (irule uint2str_body_expr_ptr_ok >> first_assum ACCEPT_TAC)
 QED
