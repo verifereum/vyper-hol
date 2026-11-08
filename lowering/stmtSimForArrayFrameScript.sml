@@ -167,7 +167,8 @@ Resume supported_pure_scopes_mutual[builtin]:
     (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
   Cases_on `blt = Env MsgGas` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
-      ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
+      ignore_bind_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
+      vfmTypesTheory.option_CASE_rator, AllCaseEqs(), get_accounts_def] >>
   imp_res_tac next_gas_reading_state >>
   imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
@@ -733,6 +734,12 @@ Theorem eval_for_projection_frame:
 Proof
   Induct_on `vs` >> simp[Once evaluate_def, return_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `bind (read_result _ _) _ _ = _` mp_tac >>
+  simp[Once bind_def] >>
+  Cases_on `read_result cx h es` >> rename1 `read_result cx h es = (rr,es0)` >>
+  `es0 = es` by metis_tac[read_result_state] >> pop_assum SUBST_ALL_TAC >>
+  Cases_on `rr` >> simp[] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+  strip_tac >>
   qmatch_asmsub_abbrev_tac `finally action pop_scope` >>
   qpat_x_assum `ignore_bind _ _ es = _` mp_tac >>
   pure_rewrite_tac [push_scope_with_var_def, ignore_bind_def, bind_def, return_def] >>
@@ -784,6 +791,7 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac array_iterator_results_state >>
   gvs[return_def] >> metis_tac[]
 QED
 
