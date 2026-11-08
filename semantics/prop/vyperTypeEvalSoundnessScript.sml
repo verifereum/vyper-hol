@@ -3936,7 +3936,7 @@ Resume eval_scc_type_sound_results_mutual[For_cons]:
       qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
       qexists_tac `body'` >> qexists_tac `st` >> simp[Abbr`stp`]) >>
     `accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts` by
-      simp[evaluation_state_component_equality] >>
+      (simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
     `env_consistent env cx (st_body with scopes := TL st_body.scopes)` by (
       `env_consistent env_after cx st_body` by (
         qpat_x_assum `case (INL x : unit + vyperState$exception) of INL u => _ | INR exn => _` mp_tac >>
@@ -5276,14 +5276,16 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
         rename1 `precompile_call_success bt args_st = (pc_res,pc_st)` >>
         drule precompile_call_success_state >> strip_tac >>
         Cases_on `pc_res`
-        >- (asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
+        >- (asm_simp_tac (srw_ss()) [bind_def, get_accounts_def, return_def] >>
+            strip_tac >>
             gvs[no_type_error_result_def, expr_result_typed_def,
                 expr_runtime_typed_def, expr_type_def,
                 value_result_typed_Value]) >>
         drule precompile_call_success_exception >> strip_tac >>
-        asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
-        gvs[no_type_error_result_def]) >>
-    simp_tac(srw_ss())[raise_def] >> strip_tac >>
+        asm_simp_tac (srw_ss()) [bind_def, get_accounts_def, return_def] >>
+        strip_tac >> gvs[no_type_error_result_def]) >>
+    asm_simp_tac (srw_ss()) [bind_def, get_accounts_def, return_def, raise_def] >>
+    strip_tac >>
     gvs[no_type_error_result_def] >>
     strip_tac >> spose_not_then assume_tac >> gvs[] >>
     `!item. bt = Env item ==> item <> MsgGas` by (rpt strip_tac >> gvs[]) >>
