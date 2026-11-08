@@ -125,3 +125,48 @@ Proof
     metis_tac[le_analyze_boundary_unvisited] >>
   gvs[unwrap_load_lattice_def]
 QED
+
+Theorem le_analyze_boundary_constant:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  le_fold_constant ctx bb.bb_instructions k v /\
+  FLOOKUP (unwrap_load_lattice (df_boundary NONE (load_analyze ctx fn) bb.bb_label)) k = SOME xs ==>
+  set xs SUBSET {v}
+Proof
+  metis_tac[le_analyze_boundary_provenance, le_boundary_provenance_constant]
+QED
+
+Theorem le_analyze_boundary_deleted:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  le_fold_deletes ctx bb.bb_instructions k ==>
+  FLOOKUP (unwrap_load_lattice (df_boundary NONE (load_analyze ctx fn) bb.bb_label)) k = NONE
+Proof
+  metis_tac[le_analyze_boundary_provenance, le_boundary_provenance_deleted]
+QED
+
+Theorem le_analyze_boundary_entry:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  fn_entry_label fn = SOME bb.bb_label /\
+  le_fold_preserves ctx bb.bb_instructions k ==>
+  FLOOKUP (unwrap_load_lattice (df_boundary NONE (load_analyze ctx fn) bb.bb_label)) k = NONE
+Proof
+  metis_tac[le_analyze_boundary_provenance, le_boundary_provenance_entry]
+QED
+
+Theorem le_analyze_boundary_preserving_reverse:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  fn_entry_label fn <> SOME bb.bb_label /\
+  cfg_preds_of (cfg_analyze fn) bb.bb_label = [p] /\
+  le_fold_preserves ctx bb.bb_instructions k /\
+  FLOOKUP (unwrap_load_lattice (df_boundary NONE (load_analyze ctx fn) bb.bb_label)) k = SOME xs ==>
+  ?ys. FLOOKUP (unwrap_load_lattice (df_boundary NONE (load_analyze ctx fn) p)) k = SOME ys /\
+       set xs SUBSET set ys
+Proof
+  strip_tac >> irule le_boundary_preserving_reverse >>
+  qexistsl [`bb`, `ctx`, `fn`] >>
+  simp[le_analyze_boundary_provenance] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[le_analyze_lookup_reachable] >>
+  drule le_load_analyze_fixpoint >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  simp[is_fixpoint_def] >> metis_tac[]
+QED
