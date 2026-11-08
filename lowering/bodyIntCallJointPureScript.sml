@@ -2,7 +2,7 @@
 Theory bodyIntCallJointPure
 Ancestors
   bodyIntCallJointContract bodyIntCallJointPurePath bodyIntCallJointPureSourceInv
-  bodyIntCallJointPureSuffix bodyIntCallJointPureCont
+  bodyIntCallJointPureSuffix bodyIntCallJointPureCont bodyIntCallJointPureSlot
 
 (* Audit: non-NoneT representations need not occupy any bytes. *)
 Theorem pure_empty_tuple_type_probe[local]:
