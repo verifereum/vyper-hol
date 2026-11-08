@@ -272,7 +272,7 @@ QED
 
 (* call_external_body without a lock, from es0 in the bound scope, where
    the body ran to es'. *)
-Theorem call_external_body_run[local]:
+Theorem call_external_body_run:
   !am cx mut tenv env fbody ret es0 res es'.
     es0.scopes = [env] /\
     eval_stmts cx fbody es0 = (res, es') ==>

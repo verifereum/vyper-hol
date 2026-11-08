@@ -139,16 +139,21 @@ Proof
 QED
 
 Theorem machine_frame_for_cons:
-  (!s x t. push_scope_with_var nm tyv v s = (INL x,t) ==>
+  (!s0 v s1 s x t. read_result cx r s0 = (INL v,s1) /\
+     push_scope_with_var nm tyv v s = (INL x,t) ==>
      state_rel_frame machine_frame (eval_stmts cx body)) /\
-  (!s x t u broke w.
+  (!s0 v s1 s x t u broke w.
+     read_result cx r s0 = (INL v,s1) /\
      push_scope_with_var nm tyv v s = (INL x,t) /\
      finally (try (do eval_stmts cx body; return F od)
                    handle_loop_exception) pop_scope u = (INL broke,w) /\
      ~broke ==> state_rel_frame machine_frame (eval_for cx tyv nm body vs)) ==>
-  state_rel_frame machine_frame (eval_for cx tyv nm body (v::vs))
+  state_rel_frame machine_frame (eval_for cx tyv nm body (r::vs))
 Proof
   strip_tac >> simp[Once evaluate_def, ignore_bind_def] >>
+  irule state_rel_frame_bind_guarded >>
+  simp[machine_frame_def, machine_frame_read_result] >>
+  rpt strip_tac >> BETA_TAC >>
   irule state_rel_frame_bind_guarded >>
   simp[machine_frame_def, machine_frame_primitives] >>
   suspend "loop_continuation"
@@ -158,7 +163,7 @@ Resume machine_frame_for_cons[loop_continuation]:
   rpt strip_tac >> irule state_rel_frame_bind_guarded >>
   conj_tac >- suspend "loop_tail" >>
   simp[machine_frame_def] >> irule (SRULE [ignore_bind_def] machine_frame_loop_cleanup) >>
-  qpat_x_assum `!s x t. _ ==> state_rel_frame _ (eval_stmts _ _)` drule >> simp[]
+  metis_tac[]
 QED
 
 Resume machine_frame_for_cons[loop_tail]:

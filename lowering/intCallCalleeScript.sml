@@ -60,7 +60,7 @@ Ancestors
   list rich_list finite_map
   fragExec localPtrsProps exprLoweringProps
   compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv
-  valueEncoding valueEncodingProps venomMemDefs
+  valueEncoding valueEncodingProps memoryValueDefs venomMemDefs
   venomExecSemantics venomInst venomState venomMemProps vyperState
 
 (* ===== The prologue ===== *)
@@ -253,7 +253,7 @@ End
      and a well-formed value;
    - a stack-passed parameter's slot holds at least a word, and its
      argument word is its value's encoding: a memory holding that word at
-     some offset holds the value there;
+     some offset has the complete typed layout there (memory_value_rel);
    - a memory-passed parameter's argument points into the caller's memory
      below the frontier, at a region of the slot's size holding the value,
      and these regions are pairwise disjoint (the caller stages each in a
@@ -274,10 +274,10 @@ Definition internal_args_rel_def:
          if SND (EL i params) then
            32 <= sz /\
            !b m. mem_word_at b m = EL (base + i) args ==>
-                 val_in_memory entry.type entry.value b m
+                 memory_value_rel entry.type entry.value b m
          else
            w2n (EL (base + i) args) + sz <= frontier /\
-           val_in_memory entry.type entry.value (w2n (EL (base + i) args))
+           memory_value_rel entry.type entry.value (w2n (EL (base + i) args))
              mem) /\
     (!i j offi szi offj szj.
        i < LENGTH params /\ j < LENGTH params /\ i <> j /\
@@ -504,7 +504,7 @@ Theorem local_ptrs_rel_bind_ptr:
     lookup_var p ss = SOME w /\ local_backed func p ss (w2n w) sz /\
     w2n w + sz <= ss.vs_alloca_next /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-    val_in_memory entry.type entry.value (w2n w) ss.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) ss.vs_memory /\
     (!n b sz'. n <> name /\ local_region cenv scopes ss n b sz' ==>
                regions_disjoint (w2n w) sz b sz') ==>
     local_ptrs_rel func
@@ -577,7 +577,7 @@ Theorem materialize_stack_step[local]:
     FLOOKUP env name = SOME entry /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
     32 <= sz /\
-    (!b m. mem_word_at b m = a ==> val_in_memory entry.type entry.value b m) ==>
+    (!b m. mem_word_at b m = a ==> memory_value_rel entry.type entry.value b m) ==>
     ?s1.
       run_inst_seq
         [mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -700,11 +700,11 @@ QED
 (* Stores above the call frontier cannot disturb a pending caller buffer. *)
 Theorem pending_arg_mstore[local]:
   !ty v b sz f0 dst w s.
-    val_in_memory ty v b s.vs_memory /\ val_wf ty v /\
+    memory_value_rel ty v b s.vs_memory /\ val_wf ty v /\
     type_memory_size ty <= sz /\ b + sz <= f0 /\ f0 <= dst ==>
-    val_in_memory ty v b (mstore dst w s).vs_memory
+    memory_value_rel ty v b (mstore dst w s).vs_memory
 Proof
-  rpt strip_tac >> irule mstore_keeps_val_in_memory >> simp[]
+  rpt strip_tac >> irule mstore_keeps_memory_value_rel >> simp[] >> decide_tac
 QED
 
 (* Caller buffers are backed by their separation from all frame allocations. *)
@@ -728,7 +728,7 @@ Theorem materialize_memory_bind[local]:
     lookup_var p s = SOME w /\ mr name = SOME (w2n w, sz) /\
     w2n w + sz <= f0 /\ f0 <= s.vs_alloca_next /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-    val_in_memory entry.type entry.value (w2n w) s.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) s.vs_memory /\
     (!aid b size. FLOOKUP s.vs_allocas aid = SOME (b, size) ==> f0 <= b) /\
     (!n b size. local_region cenv [env] s n b size ==>
                 f0 <= b \/ mr n = SOME (b, size)) /\
@@ -782,10 +782,10 @@ Definition mat_pending_def:
       type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
       if FST (SND c) then
         32 <= sz /\ !b m. mem_word_at b m = a ==>
-                         val_in_memory entry.type entry.value b m
+                         memory_value_rel entry.type entry.value b m
       else
         mr (FST c) = SOME (w2n a, sz) /\ w2n a + sz <= f0 /\
-        val_in_memory entry.type entry.value (w2n a) s.vs_memory) caps
+        memory_value_rel entry.type entry.value (w2n a) s.vs_memory) caps
 End
 
 Definition mat_inv_def:
@@ -839,8 +839,8 @@ Theorem mat_pending_bind[local]:
     mat_frame st s t /\
     (!x. not_fresh_at st x ==> not_fresh_at mid x) /\
     (!ty v b sz. val_wf ty v /\ type_memory_size ty <= sz /\ b + sz <= f0 /\
-                 val_in_memory ty v b s.vs_memory ==>
-                 val_in_memory ty v b t.vs_memory) ==>
+                 memory_value_rel ty v b s.vs_memory ==>
+                 memory_value_rel ty v b t.vs_memory) ==>
     mat_pending (cenv with ce_vars updated_by (\m. m |+ (name, loc)))
       env mid t f0 mr caps
 Proof
@@ -872,7 +872,7 @@ Theorem mat_inv_memory_bind[local]:
     FLOOKUP env name = SOME entry /\ lookup_var p s = SOME w /\
     mr name = SOME (w2n w, sz) /\ w2n w + sz <= f0 /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-    val_in_memory entry.type entry.value (w2n w) s.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) s.vs_memory /\
     (!n1 n2 b1 sz1 b2 sz2.
        n1 <> n2 /\ mr n1 = SOME (b1, sz1) /\ mr n2 = SOME (b2, sz2) ==>
        regions_disjoint b1 sz1 b2 sz2) ==>

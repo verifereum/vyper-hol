@@ -2,8 +2,8 @@
  * Cross-Block Simulation — Proofs
  *
  * TOP-LEVEL:
- *   resolves_to_mono_proof             — monotonicity of resolves_to
- *   resolving_block_sim_function_proof — the main lifting theorem
+ *   resolves_to_mono             — monotonicity of resolves_to
+ *   resolving_block_sim_function — the main lifting theorem
  *)
 
 Theory crossBlockSimProofs
@@ -16,7 +16,7 @@ Ancestors
 
 (* ===== resolves_to_mono ===== *)
 
-Theorem resolves_to_mono_proof:
+Theorem resolves_to_mono:
   !R_ok R_term bbs1 bbs2 n m r1 r2.
     n <= m /\
     resolves_to R_ok R_term bbs1 bbs2 n r1 r2 ==>
@@ -30,14 +30,6 @@ Proof
 QED
 
 (* ===== INVOKE at fuel 0 always returns Error ===== *)
-
-Triviality step_inst_invoke_fuel_0:
-  !ctx inst s. inst.inst_opcode = INVOKE ==>
-    ?e. step_inst 0 ctx inst s = Error e
-Proof
-  rw[step_inst_def, run_blocks_def] >>
-  BasicProvers.EVERY_CASE_TAC
-QED
 
 (* ===== General fuel monotonicity for run_blocks ===== *)
 (* This is a GENERAL property of the execution model: once run_blocks
@@ -189,18 +181,6 @@ Proof
   simp[Once run_blocks_unfold, terminates_def]
 QED
 
-Triviality run_blocks_fuel_mono_IH[local]:
-  !n ctx' fn' s' k.
-    (!m. m < SUC n ==>
-       !ctx fn s. terminates (run_blocks m ctx fn s) ==>
-       !k. run_blocks (m + k) ctx fn s = run_blocks m ctx fn s) ==>
-    terminates (run_blocks n ctx' fn' s') ==>
-    run_blocks (n + k) ctx' fn' s' = run_blocks n ctx' fn' s'
-Proof
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`n`] mp_tac) >> simp[] >> metis_tac[]
-QED
-
 Triviality terminates_run_blocks_from_run_block_OK[local]:
   !n ctx fn s bb v.
     terminates (run_blocks (SUC n) ctx fn s) /\
@@ -255,16 +235,6 @@ Proof
   gen_tac >> rpt strip_tac >> irule run_blocks_fuel_mono >> simp[]
 QED
 
-Triviality exec_block_fuel_mono:
-  !f ctx bb s.
-    (!e. exec_block f ctx bb s <> Error e) ==>
-    !k. exec_block (f + k) ctx bb s = exec_block f ctx bb s
-Proof
-  rpt strip_tac >>
-  irule (REWRITE_RULE [GSYM AND_IMP_INTRO] exec_block_fuel_mono_lem) >>
-  simp[run_blocks_fuel_mono_univ]
-QED
-
 (* ===== resolves_to helpers ===== *)
 
 (* Both sides non-continuable: resolves_to collapses to lift_result *)
@@ -276,26 +246,6 @@ Triviality resolves_to_terminal_collapses:
     lift_result R_ok R_term R_term r1 r2
 Proof
   Induct_on `n` >> rw[resolves_to_def]
-QED
-
-(* When r1 is not OK-non-halted AND terminates, lift_result r1 (Error e) = F *)
-Triviality lift_result_term_error_F:
-  !R_ok R_term r1 e.
-    terminates r1 /\
-    (!v. r1 = OK v ==> v.vs_halted) ==>
-    ~lift_result R_ok R_term R_term r1 (Error e)
-Proof
-  Cases_on `r1` >> simp[lift_result_def, terminates_def]
-QED
-
-(* Symmetric *)
-Triviality lift_result_error_term_F:
-  !R_ok R_term e r2.
-    terminates r2 /\
-    (!v. r2 = OK v ==> v.vs_halted) ==>
-    ~lift_result R_ok R_term R_term (Error e) r2
-Proof
-  Cases_on `r2` >> simp[lift_result_def, terminates_def]
 QED
 
 (* ===== inst_idx_0_lemma ===== *)
@@ -449,14 +399,6 @@ QED
 
 (* ===== Symmetry: lift_result flip ===== *)
 
-Triviality lift_result_flip:
-  !R_ok R_term r1 r2.
-    lift_result R_ok R_term R_term r1 r2 <=>
-    lift_result (\a b. R_ok b a) (\a b. R_term b a) (\a b. R_term b a) r2 r1
-Proof
-  Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def] >> metis_tac[]
-QED
-
 (* ===== resolve_left_fn: generalized left resolution ===== *)
 (* Symmetric to resolve_right_fn for the left side. *)
 
@@ -594,34 +536,6 @@ Proof
 QED
 
 (* ===== fuel_alignment: align fuels via fuel mono + same-code ===== *)
-
-Triviality fuel_alignment:
-  !R_ok R_term fn ctx s1 s2 f1 f2.
-    R_ok s1 s2 /\
-    terminates (run_blocks f1 ctx fn s1) /\
-    terminates (run_blocks f2 ctx fn s2) /\
-    (!fuel k ctx s. terminates (run_blocks fuel ctx fn s) ==>
-       run_blocks (fuel + k) ctx fn s = run_blocks fuel ctx fn s) /\
-    (!fuel ctx s1 s2. R_ok s1 s2 ==>
-       lift_result R_ok R_term R_term (run_blocks fuel ctx fn s1)
-                                (run_blocks fuel ctx fn s2))
-  ==>
-    lift_result R_ok R_term R_term (run_blocks f1 ctx fn s1)
-                             (run_blocks f2 ctx fn s2)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `!fuel ctx s1 s2. R_ok s1 s2 ==> _`
-    (qspecl_then [`f1 + f2`, `ctx`, `s1`, `s2`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `run_blocks (f1 + f2) ctx fn s1 = run_blocks f1 ctx fn s1` by
-    (qpat_x_assum `!fuel k ctx s. terminates _ ==> _`
-       (qspecl_then [`f1`, `f2`, `ctx`, `s1`] mp_tac) >> simp[]) >>
-  `run_blocks (f1 + f2) ctx fn s2 = run_blocks f2 ctx fn s2` by
-    (qpat_x_assum `!fuel k ctx s. terminates _ ==> _`
-       (qspecl_then [`f2`, `f1`, `ctx`, `s2`] mp_tac) >>
-     `f2 + f1 = f1 + f2` by simp[] >> gvs[]) >>
-  gvs[]
-QED
 
 (* ===== fwd_terminal_block: terminal block result => fn' terminates ===== *)
 (* When run_block on the original side gives a terminal result (non-OK or
@@ -1337,7 +1251,7 @@ Proof
       `resolves_to R_ok R_term fn1.fn_blocks fn2.fn_blocks nn
          (OK s1) (OK s2)` by (
         qspecl_then [`R_ok`, `R_term`, `fn1.fn_blocks`, `fn2.fn_blocks`,
-          `0`, `nn`] mp_tac resolves_to_mono_proof >>
+          `0`, `nn`] mp_tac resolves_to_mono >>
         simp[resolves_to_def, lift_result_def]) >>
       first_assum (qspecl_then [`ctx`, `s1`, `s2`] mp_tac) >> simp[]
     )
@@ -1607,7 +1521,31 @@ QED
 
 (* ===== Main theorem ===== *)
 
-Theorem resolving_block_sim_function_proof:
+(*
+ * Per-block resolving_block_sim lifts to function-level pass_correct.
+ *
+ * Preconditions:
+ *   1. valid_state_rel: R_ok/R_term satisfy closure conditions
+ *   2. Transitivity of R_ok, R_term
+ *   3. Label preservation by bt
+ *   4. Per-block resolving_block_sim (core simulation assumption)
+ *   5. Operand agreement under R_ok (for state equiv propagation)
+ *   6. Fuel monotonicity for both functions
+ *
+ * Conclusion: pass_correct (termination equiv + result equiv)
+ *
+ * Proof strategy:
+ *   Forward termination: induction on fuel. At each block step,
+ *     resolving_block_sim gives either OK/OK (IH applies) or
+ *     cross-result (resolving side terminates within n extra steps;
+ *     other side already terminal).
+ *   Backward termination: symmetric.
+ *   Result equiv: align fuels via fuel_mono, prove lift_result by
+ *     induction. OK/OK case: triangle via exec_block_preserves_R +
+ *     block sim. Cross-result case: resolution produces matching
+ *     terminal result.
+ *)
+Theorem resolving_block_sim_function:
   !(R_ok : venom_state -> venom_state -> bool)
    (R_term : venom_state -> venom_state -> bool) fn bt.
     let fn' = function_map_transform bt fn in
@@ -1670,86 +1608,6 @@ Proof
   (* Termination equivalence *)
   >- (eq_tac >> strip_tac >> res_tac >> metis_tac[]) >>
   (* lift_result at arbitrary fuels *)
-  rpt strip_tac >>
-  `?fuel_f. terminates (run_blocks fuel_f ctx
-              (function_map_transform bt fn) s) /\
-     lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
-       (run_blocks fuel_f ctx (function_map_transform bt fn) s)` by (
-    qpat_x_assum `!fuel ctx s.
-      s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-      terminates (run_blocks fuel ctx fn s) ==> _`
-      (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
-    simp[]
-  ) >>
-  `run_blocks fuel' ctx (function_map_transform bt fn) s =
-   run_blocks fuel_f ctx (function_map_transform bt fn) s` by (
-    irule fuel_mono_eq >> simp[] >> metis_tac[]
-  ) >>
-  metis_tac[]
-QED
-
-(* Version with weaker per-block sim: only requires non-halted states.
-   Strictly stronger conclusion-wise (same conclusion, weaker precondition).
-   Used by RTA and other passes where per-block sim fails for halted states. *)
-Theorem resolving_block_sim_function_v2:
-  !(R_ok : venom_state -> venom_state -> bool)
-   (R_term : venom_state -> venom_state -> bool) fn bt.
-    let fn' = function_map_transform bt fn in
-    valid_state_rel R_ok R_term /\
-    (!s1 s2 s3. R_ok s1 s2 /\ R_ok s2 s3 ==> R_ok s1 s3) /\
-    (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
-    (!bb. (bt bb).bb_label = bb.bb_label) /\
-    (!bb fuel ctx s.
-       MEM bb fn.fn_blocks /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-       resolving_block_sim R_ok R_term fn.fn_blocks fn'.fn_blocks
-         (run_block fuel ctx bb s)
-         (run_block fuel ctx (bt bb) s)) /\
-    (!bb inst x.
-       MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM (Var x) inst.inst_operands ==>
-       !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
-    (!fuel k ctx s.
-       terminates (run_blocks fuel ctx fn s) ==>
-       run_blocks (fuel + k) ctx fn s = run_blocks fuel ctx fn s) /\
-    (!fuel k ctx s.
-       terminates (run_blocks fuel ctx fn' s) ==>
-       run_blocks (fuel + k) ctx fn' s = run_blocks fuel ctx fn' s)
-  ==>
-    !ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
-    ((?fuel. terminates (run_blocks fuel ctx fn s)) <=>
-     (?fuel'. terminates (run_blocks fuel' ctx fn' s))) /\
-    (!fuel fuel'.
-       terminates (run_blocks fuel ctx fn s) /\
-       terminates (run_blocks fuel' ctx fn' s) ==>
-       lift_result R_ok R_term R_term
-         (run_blocks fuel ctx fn s)
-         (run_blocks fuel' ctx fn' s))
-Proof
-  simp[LET_THM] >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  `!fuel ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-     terminates (run_blocks fuel ctx fn s) ==>
-     ?fuel'. terminates (run_blocks fuel' ctx
-                (function_map_transform bt fn) s) /\
-       lift_result R_ok R_term R_term (run_blocks fuel ctx fn s)
-         (run_blocks fuel' ctx (function_map_transform bt fn) s)` by (
-    mp_tac
-      (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] fwd_lift)) >>
-    impl_tac >- (rpt conj_tac >> rpt (first_x_assum ACCEPT_TAC)) >>
-    simp[]
-  ) >>
-  `!fuel ctx s. s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-     terminates (run_blocks fuel ctx (function_map_transform bt fn) s) ==>
-     ?fuel'. terminates (run_blocks fuel' ctx fn s) /\
-       lift_result R_ok R_term R_term (run_blocks fuel' ctx fn s)
-         (run_blocks fuel ctx (function_map_transform bt fn) s)` by (
-    mp_tac
-      (SIMP_RULE (srw_ss()) [LET_THM] (Q.SPECL [`R_ok`, `R_term`, `fn`, `bt`] bwd_lift)) >>
-    impl_tac >- (rpt conj_tac >> rpt (first_x_assum ACCEPT_TAC)) >>
-    simp[]
-  ) >>
-  conj_tac
-  >- (eq_tac >> strip_tac >> res_tac >> metis_tac[]) >>
   rpt strip_tac >>
   `?fuel_f. terminates (run_blocks fuel_f ctx
               (function_map_transform bt fn) s) /\

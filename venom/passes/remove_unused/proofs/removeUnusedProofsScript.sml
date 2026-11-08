@@ -424,15 +424,6 @@ Proof
   >- (imp_res_tac step_inst_base_no_intret >> gvs[])
 QED
 
-(* result_equiv is exactly lift_result with the standard relations *)
-Theorem result_equiv_is_lift_result[local]:
-  !vars r1 r2.
-    result_equiv vars r1 r2 ==>
-    lift_result (state_equiv vars) (execution_equiv vars) (execution_equiv vars) r1 r2
-Proof
-  Cases_on `r1` >> Cases_on `r2` >> simp[result_equiv_def, lift_result_def]
-QED
-
 (* Shared tactic: apply block_sim IH with given V and s2 term *)
 fun apply_block_ih_tac s2_term =
   first_x_assum (qspec_then
@@ -665,25 +656,6 @@ Proof
   fs[lookup_block_def]
 QED
 
-(* If ALL_DISTINCT (FLAT (MAP f ls)) and x in f(a) and x in f(b), then a = b *)
-Theorem all_distinct_flat_map_inj[local]:
-  !f (ls:'b list) (a:'b) (b:'b) (x:'a).
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM a ls /\ MEM b ls /\
-    MEM x (f a) /\ MEM x (f b) ==> a = b
-Proof
-  Induct_on `ls` >> simp[] >> rpt strip_tac >>
-  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-  metis_tac[]
-QED
-
-(* fn_insts_blocks = FLAT of per-block instructions *)
-Theorem fn_insts_blocks_flat[local]:
-  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
 (* ALL_DISTINCT outputs → ALL_DISTINCT per-block flattened outputs *)
 Theorem ssa_form_per_block[local]:
   !fn. ssa_form fn ==>
@@ -693,7 +665,7 @@ Proof
   rpt strip_tac >>
   fs[ssa_form_def, fn_insts_def] >>
   pop_assum mp_tac >>
-  ONCE_REWRITE_TAC [fn_insts_blocks_flat] >>
+  ONCE_REWRITE_TAC [venomFnInstsProofsTheory.fn_insts_blocks_flat] >>
   simp[listTheory.MAP_FLAT, rich_listTheory.FLAT_FLAT,
        listTheory.MAP_MAP_o, combinTheory.o_DEF]
 QED
@@ -710,10 +682,10 @@ Proof
   rpt strip_tac >>
   fs[ssa_form_def, fn_insts_def] >>
   mp_tac (Q.ISPECL [
-    `\(i:instruction). i.inst_outputs`,
     `fn_insts_blocks fn.fn_blocks`,
+    `\(i:instruction). i.inst_outputs`,
     `inst1:instruction`, `inst2:instruction`, `v:string`
-  ] all_distinct_flat_map_inj) >>
+  ] venomFnInstsProofsTheory.all_distinct_flat_map_unique) >>
   simp[]
 QED
 
@@ -736,11 +708,11 @@ Theorem ssa_unique_var_defined_at[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   fs[livenessDefsTheory.var_defined_at_def, inst_defs_def] >>
-  (* bb = def_bb via all_distinct_flat_map_inj on per-block outputs *)
+  (* bb = def_bb via all_distinct_flat_map_unique on per-block outputs *)
   mp_tac (Q.ISPECL [
-    `\(bb:basic_block). FLAT (MAP (\(i:instruction). i.inst_outputs) bb.bb_instructions)`,
-    `fn.fn_blocks`, `bb:basic_block`, `def_bb:basic_block`, `v:string`
-  ] all_distinct_flat_map_inj) >>
+    `fn.fn_blocks`,
+    `\(bb:basic_block). FLAT (MAP (\(i:instruction). i.inst_outputs) bb.bb_instructions)`, `bb:basic_block`, `def_bb:basic_block`, `v:string`
+  ] venomFnInstsProofsTheory.all_distinct_flat_map_unique) >>
   (impl_tac >- (
     drule ssa_form_per_block >> simp[] >> strip_tac >>
     simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
@@ -1305,7 +1277,7 @@ Proof
 QED
 
 (* SSA outputs uniqueness: same output variable → same (block, position).
-   Combines all_distinct_flat_map_inj (cross-block) with
+   Combines all_distinct_flat_map_unique (cross-block) with
    all_distinct_outputs_unique_pos (within-block). *)
 Theorem ssa_form_position[local]:
   !fn bb1 n bb2 m v.
@@ -1320,9 +1292,9 @@ Proof
   (* Cross-block: bb1 = bb2 *)
   `bb1 = bb2` by (
     mp_tac (Q.ISPECL [
-      `\(bb:basic_block). FLAT (MAP (\(i:instruction). i.inst_outputs) bb.bb_instructions)`,
-      `fn.fn_blocks`, `bb1:basic_block`, `bb2:basic_block`, `v:string`
-    ] all_distinct_flat_map_inj) >>
+      `fn.fn_blocks`,
+      `\(bb:basic_block). FLAT (MAP (\(i:instruction). i.inst_outputs) bb.bb_instructions)`, `bb1:basic_block`, `bb2:basic_block`, `v:string`
+    ] venomFnInstsProofsTheory.all_distinct_flat_map_unique) >>
     (impl_tac >- (
       drule ssa_form_per_block >> simp[] >> strip_tac >>
       simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>

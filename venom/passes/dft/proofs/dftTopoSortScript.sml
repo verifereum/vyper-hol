@@ -236,27 +236,6 @@ Proof
   rw[inst_all_deps_def, LET_THM, MEM_nub, MEM_APPEND]
 QED
 
-(* Combined: data_deps of flip_operands ⊆ inst_all_deps of original *)
-Triviality flip_data_deps_in_all_deps[local]:
-  !bi order eda inst dep.
-    MEM dep (inst_data_deps bi order (flip_operands inst)) ==>
-    MEM dep (inst_all_deps bi order eda inst)
-Proof
-  metis_tac[flip_operands_data_deps_subset, data_deps_subset_all_deps]
-QED
-
-(* Unified: data_deps of (if cond then flip inst else inst) ⊆ all_deps.
-   Eliminates the repeated mp_tac+simp[Abbr]+IF_CASES_TAC pattern in C1/C9. *)
-Triviality maybe_flip_data_deps_in_all_deps[local]:
-  !bi order eda inst dep cond.
-    MEM dep (inst_data_deps bi order
-      (if cond then flip_operands inst else inst)) ==>
-    MEM dep (inst_all_deps bi order eda inst)
-Proof
-  rpt strip_tac >> Cases_on `cond` >> gvs[] >>
-  metis_tac[flip_data_deps_in_all_deps, data_deps_subset_all_deps]
-QED
-
 (* Unified: all_deps of (if cond then flip inst else inst) ⊆ all_deps of inst.
    flip_operands doesn't change inst_id → eda deps identical.
    flip_operands data deps ⊆ original data deps. *)
@@ -383,14 +362,6 @@ Proof
   simp[from_block_def] >> metis_tac[flip_operands_inst_id]
 QED
 
-Triviality from_block_mem_operands[local]:
-  !bi inst var. from_block bi inst /\ MEM (Var var) inst.inst_operands ==>
-    ?orig. MEM orig bi /\ MEM (Var var) orig.inst_operands /\
-           inst.inst_id = orig.inst_id
-Proof
-  simp[from_block_def] >> metis_tac[flip_operands_inst_id, flip_operands_mem_ops]
-QED
-
 (* ===== Block position ordering for stack ===== *)
 
 (* For each non-pseudo DfsProcess/DfsEmit entry on the stack,
@@ -415,15 +386,6 @@ Definition stack_pos_ordered_def:
         yi <= xi) /\
      stack_pos_ordered bi rest)
 End
-
-Triviality stack_pos_ordered_append[local]:
-  !l1 l2 bi.
-    stack_pos_ordered bi (l1 ++ l2) ==>
-    stack_pos_ordered bi l2
-Proof
-  Induct >> simp[] >>
-  Cases >> simp[stack_pos_ordered_def]
-QED
 
 Triviality stack_pos_ordered_map_process[local]:
   !entries bi. stack_pos_ordered bi (MAP DfsProcess entries)
@@ -868,20 +830,6 @@ Proof
   >> last_x_assum irule >> conj_tac
   >- metis_tac[]
   >> first_x_assum mp_tac >> rewrite_tac[GSYM APPEND_ASSOC, APPEND]
-QED
-
-(* Helper: var-operand dep has position strictly before non-pseudo user. *)
-Triviality var_dep_earlier_pos[local]:
-  !bi j var prod.
-    np_defs_before_uses bi /\
-    j < LENGTH bi /\ MEM (Var var) (EL j bi).inst_operands /\
-    ~is_pseudo (EL j bi).inst_opcode /\
-    producing_inst bi var = SOME prod ==>
-    ?dep_pos. dep_pos < j /\ dep_pos < LENGTH bi /\ EL dep_pos bi = prod
-Proof
-  rw[np_defs_before_uses_def] >>
-  first_x_assum (qspecl_then [`j`, `var`, `prod`] mp_tac) >>
-  simp[] >> strip_tac >> qexists `i` >> simp[]
 QED
 
 (* Helper: position uniqueness from ALL_DISTINCT inst_ids *)

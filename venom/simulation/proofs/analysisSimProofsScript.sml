@@ -2,7 +2,7 @@
  * Analysis-Driven Simulation — Proofs (Part 1: Transfer Soundness)
  *
  * Core theorems:
- *   cfg_dfs_pre_succs_closed, transfer_sound_step, transfer_sound_exit,
+ *   transfer_sound_step, transfer_sound_exit,
  *   transfer_sound_exit_wf, transfer_sound_exit_wf_len, term_step_base_idx_0
  *   run_block_OK_not_halted, run_block_OK_inst_idx_0,
  *   eval_phis_OK_run_block_eq, run_block_eval_phis_Error
@@ -24,72 +24,6 @@ Ancestors
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState venomWf cfgAnalysisProps execEquivProofs
   list finite_map pred_set string
-
-(* Successors of cfg_dfs_pre labels are in cfg_dfs_pre.
-   Follows from dfs_pre_walk_closure + dfs_pre_walk_visited_eq. *)
-Theorem cfg_dfs_pre_succs_closed:
-  !fn lbl.
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre ==>
-    EVERY (\t. MEM t (cfg_analyze fn).cfg_dfs_pre)
-          (cfg_succs_of (cfg_analyze fn) lbl)
-Proof
-  rw[cfgDefsTheory.cfg_analyze_def, cfgDefsTheory.cfg_succs_of_def, LET_THM] >>
-  pairarg_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >>
-  Cases_on `entry_block fn` >> gvs[] >>
-  simp[EVERY_MEM] >> rpt strip_tac >>
-  qabbrev_tac `succs = build_succs fn.fn_blocks` >>
-  qabbrev_tac `entry = x.bb_label` >>
-  `MEM lbl (SND (dfs_pre_walk succs [] entry))` by gvs[] >>
-  `MEM t (FST (dfs_pre_walk succs [] entry))` by
-    metis_tac[cj 1 cfgHelpersTheory.dfs_pre_walk_closure] >>
-  `set _0 = set pre` by (
-    `set (FST (dfs_pre_walk succs [] entry)) =
-     set [] UNION set (SND (dfs_pre_walk succs [] entry))` by
-      metis_tac[cj 1 cfgHelpersTheory.dfs_pre_walk_visited_eq] >>
-    gvs[]) >>
-  `MEM t _0` by gvs[] >>
-  metis_tac[]
-QED
-
-(* df_process_block never modifies ds_inst (only ds_boundary) *)
-Triviality df_process_block_keys:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st k.
-    k IN FDOM (df_process_block dir bottom join transfer edge_transfer
-                 ctx entry_val cfg bbs lbl st).ds_inst ==>
-    FST k = lbl \/ k IN FDOM st.ds_inst
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `k IN _` mp_tac >>
-  simp[df_process_block_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
-  IF_CASES_TAC >> simp[]
-QED
-
-(* Two-sided join FOLDL soundness: when all list elements are
-   universally sound and join preserves soundness from both sides. *)
-Triviality foldl_sound_two_sided:
-  !l (bottom : 'a) join sound.
-    (!s. sound bottom s) /\
-    (!a b s. sound a s /\ sound b s ==> sound (join a b) s) /\
-    EVERY (\v. !s. sound v s) l ==>
-    !s. sound (FOLDL join bottom l) s
-Proof
-  Induct
-  >- (rpt strip_tac >> simp_tac (srw_ss()) [] >>
-      qpat_x_assum `!s. sound bottom s` (fn th => ACCEPT_TAC (SPEC_ALL th)))
-  >> rpt strip_tac >> simp_tac (srw_ss()) [] >>
-  first_x_assum irule >> rpt conj_tac
-  >- first_assum ACCEPT_TAC
-  >- (rpt strip_tac >> qpat_assum `!a b s. _` irule >> rpt conj_tac
-      >- (qpat_x_assum `!s. sound bottom s`
-            (fn th => ACCEPT_TAC (SPEC_ALL th)))
-      >> qpat_x_assum `EVERY _ _` mp_tac >>
-      simp_tac (srw_ss()) [] >> strip_tac >>
-      qpat_x_assum `!s. sound h s` (fn th => ACCEPT_TAC (SPEC_ALL th)))
-  >> qpat_x_assum `EVERY _ _` mp_tac >>
-  simp_tac (srw_ss()) []
-QED
 
 (* Transfer-sound chain: running original block from sound entry gives
    sound exit value. Uses the same idx-0 trick as analysis_block_sim. *)

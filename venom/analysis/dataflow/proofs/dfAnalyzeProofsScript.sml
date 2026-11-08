@@ -2,18 +2,18 @@
  * Generic Dataflow Analysis — Proofs
  *
  * TOP-LEVEL:
- *   df_analyze_fixpoint_proof       — worklist converges to fixpoint
+ *   df_analyze_fixpoint       — worklist converges to fixpoint
  *   df_at_intra_transfer_proof      — within a block, transfer relates adjacent points
  *   df_at_inter_transfer_proof      — inter-block: fold input = join of neighbors
  *   df_boundary_eq_exit_proof       — boundary = exit value (proof-internal, not exported)
- *   df_analyze_invariant_proof      — lattice invariant preserved through analysis
- *   df_process_inflationary_proof   — lattice monotonicity → process inflationary
+ *   df_analyze_invariant      — lattice invariant preserved through analysis
+ *   df_process_inflationary   — lattice monotonicity → process inflationary
  *   df_process_deps_complete_proof  — CFG correctness → worklist deps complete
  *)
 
 Theory dfAnalyzeProofs
 Ancestors
-  dfAnalyzeDefs worklistProofs cfgDefs cfgHelpers venomWf latticeDefs
+  dfAnalyzeDefs worklistProofs cfgDefs cfgHelpers venomWf latticeDefs arithmetic finite_map list pred_set venomInst worklistDefs
 
 (* --- DFS lemmas: dfs_pre and dfs_post visit the same nodes --- *)
 (* Proved as SML vals using specialized induction + MP, since ho_match_mp_tac
@@ -222,7 +222,7 @@ QED
 
 
 (* Helper: FOLDL that only modifies ds_inst preserves ds_boundary *)
-Theorem foldl_inst_only_boundary[local]:
+Theorem foldl_inst_only_boundary:
   !lbls (f : 'a df_state -> string -> 'a df_state) acc.
     (!st lbl. (f st lbl).ds_boundary = st.ds_boundary) ==>
     (FOLDL f acc lbls).ds_boundary = acc.ds_boundary
@@ -293,7 +293,7 @@ Proof
   res_tac >> gvs[df_populate_inst_boundary, df_state_component_equality]
 QED
 
-Theorem df_analyze_fixpoint_proof:
+Theorem df_analyze_fixpoint:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val fn
    (leq : 'a df_state -> 'a df_state -> bool)
@@ -323,7 +323,7 @@ Proof
   simp[LET_THM, df_analyze_def] >>
   rpt strip_tac >>
   irule is_fixpoint_populate >>
-  irule wl_iterate_fixpoint_proof >>
+  irule wl_iterate_fixpoint >>
   rpt conj_tac >> TRY (fs[] >> NO_TAC)
   >- (rpt gen_tac >>
       mp_tac (SIMP_RULE std_ss [LET_THM] df_process_changed_equiv) >>
@@ -1099,7 +1099,7 @@ Proof
       rw[finite_mapTheory.FLOOKUP_DEF])
 QED
 
-Theorem populate_inst_ds_inst[local]:
+Theorem populate_inst_ds_inst:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls st.
     (df_populate_inst dir bottom join transfer edge_transfer
        ctx entry_val cfg bbs lbls st).ds_inst =
@@ -1123,7 +1123,7 @@ Proof
        df_populate_inst_def, LET_THM]
 QED
 
-Theorem fold_block_keys_disjoint[local]:
+Theorem fold_block_keys_disjoint:
   !dir transfer lbl1 lbl2 instrs1 instrs2 init1 init2.
     lbl1 <> lbl2
     ==>
@@ -1609,81 +1609,8 @@ Proof
   gen_tac >> Induct >> rw[]
 QED
 
-(* P for case xs of [] => bottom | _::_ => FOLDL join bottom xs *)
-Theorem case_foldl_P[local]:
-  !xs. P bottom /\ (!a b. P a /\ P b ==> P (join a b)) /\ EVERY P xs ==>
-    P (case xs of [] => bottom | v2::v3 => FOLDL join bottom xs)
-Proof
-  Cases >> rw[] >> irule foldl_preserves_P >> fs[]
-QED
-
 (* df_process_block preserves element-level P for inst and boundary maps *)
 (* Helper: df_process_block doesn't change ds_inst *)
-
-(* Helper: df_process_block preserves P for boundary values. *)
-Theorem df_process_P[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
-    P bottom /\
-    (case entry_val of NONE => T | SOME (lbl, v) => P v) /\
-    (!a b. P a /\ P b ==> P (join a b)) /\
-    (!inst a. P a ==> P (transfer ctx inst a)) /\
-    (!src dst a. P a ==> P (edge_transfer ctx src dst a)) /\
-    (!k v. FLOOKUP st.ds_inst k = SOME v ==> P v) /\
-    (!k v. FLOOKUP st.ds_boundary k = SOME v ==> P v)
-    ==>
-    (!k v. FLOOKUP (df_process_block dir bottom join transfer edge_transfer
-                      ctx entry_val cfg bbs lbl st).ds_inst k = SOME v
-           ==> P v) /\
-    (!k v. FLOOKUP (df_process_block dir bottom join transfer edge_transfer
-                      ctx entry_val cfg bbs lbl st).ds_boundary k = SOME v
-           ==> P v)
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[df_process_block_def, df_joined_val_def, LET_THM] >>
-  pairarg_tac >> simp[] >>
-  IF_CASES_TAC >> simp[]
-  (* THEN: unchanged, trivial *)
-  >- (rpt strip_tac >> res_tac)
-  (* ELSE: both boundary and inst updated — use old proof structure *)
-  \\ `!nbr. P (edge_transfer ctx nbr lbl (df_boundary bottom st nbr))` by
-    (rw[df_boundary_def] >>
-     Cases_on `FLOOKUP st.ds_boundary nbr` >> fs[] >> res_tac >> fs[])
-  \\ `!nbrs. EVERY P (MAP (\nbr. edge_transfer ctx nbr lbl
-      (df_boundary bottom st nbr)) nbrs)` by
-    (Induct >> rw[])
-  \\ `!l nbr. P (edge_transfer ctx nbr l (df_boundary bottom st nbr))` by
-    (rpt gen_tac >>
-     qpat_x_assum `!src dst a. P a ==> P (edge_transfer _ _ _ _)` irule >>
-     rw[df_boundary_def] >>
-     Cases_on `FLOOKUP st.ds_boundary nbr` >> fs[] >> res_tac >> fs[])
-  \\ `!l. EVERY P (MAP (\nbr. edge_transfer ctx nbr l
-       (df_boundary bottom st nbr))
-       (case dir of Forward => cfg_preds_of cfg l
-                   | Backward => cfg_succs_of cfg l))` by
-    (gen_tac >> simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM])
-  \\ qmatch_asmsub_abbrev_tac `df_fold_block _ _ _ _ joined_val`
-  \\ sg `P joined_val`
-  >- (qunabbrev_tac `joined_val` >>
-      Cases_on `entry_val` >> simp[]
-      >- (irule case_foldl_P >> fs[])
-      >> Cases_on `x` >> simp[] >>
-      IF_CASES_TAC >> simp[]
-      >- (qpat_x_assum `lbl = _` (SUBST_ALL_TAC o SYM) >>
-          qpat_x_assum `!a b. P a /\ P b ==> P (join a b)`
-            (fn th => irule th >> assume_tac th) >>
-          conj_tac
-          >- (qpat_x_assum `case _ of NONE => T | _ => _` mp_tac >> simp[])
-          >> irule case_foldl_P >> fs[] >>
-          simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM])
-      >> irule case_foldl_P >> fs[])
-  \\ drule_all df_fold_block_P >> strip_tac
-  \\ conj_tac
-  >- (rw[finite_mapTheory.FLOOKUP_FUNION] >>
-      Cases_on `FLOOKUP inst_map k` >> fs[] >> metis_tac[])
-  \\ rw[finite_mapTheory.FLOOKUP_UPDATE] >>
-     fs[df_boundary_def] >>
-     Cases_on `FLOOKUP st.ds_boundary k` >> fs[] >> metis_tac[]
-QED
 
 (* Helper: FOLDL join base ls preserves P *)
 Theorem foldl_join_P[local]:
@@ -1858,7 +1785,7 @@ QED
    ∀a b. P a ⇒ P (join a b). So P is preserved for all boundary values. *)
 
 (* Helper: df_process_block doesn't modify ds_inst *)
-Theorem df_process_block_inst_unchanged[local]:
+Theorem df_process_block_inst_unchanged:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
     (df_process_block dir bottom join transfer edge_transfer
        ctx entry_val cfg bbs lbl st).ds_inst = st.ds_inst
@@ -1930,7 +1857,7 @@ Proof
   \\ `(λst. Q st ∧ ∀lbl. P (df_boundary bottom st lbl)) swli`
      suffices_by simp[]
   \\ qunabbrev_tac`swli`
-  \\ irule wl_iterate_invariant_proof
+  \\ irule wl_iterate_invariant
   \\ simp[]
   (* 1. initial: Q st0 ∧ ∀lbl. P (df_boundary bottom st0 lbl) *)
   \\ conj_tac
@@ -2023,11 +1950,11 @@ Proof
            \\ CASE_TAC \\ simp[] \\ metis_tac[])
        (* inst *)
        \\ gvs[finite_mapTheory.FLOOKUP_DEF])
-  (* Prove combined invariant via wl_iterate_invariant_proof *)
+  (* Prove combined invariant via wl_iterate_invariant *)
   \\ `(\st. Q st /\ (!lbl. P (df_boundary bottom st lbl)) /\
             st.ds_inst = FEMPTY)
       (SND (wl_iterate changed process deps wl0 init_st))` suffices_by (strip_tac >> gvs[])
-  \\ irule wl_iterate_invariant_proof \\ simp[]
+  \\ irule wl_iterate_invariant \\ simp[]
   (* 1. initial *)
   \\ conj_tac
   >- (simp[Abbr`init_st`] >> rpt conj_tac
@@ -2076,7 +2003,7 @@ QED
 (* Lattice invariant: if P holds for bottom, is closed under join/transfer/
    edge_transfer, then P holds for all values in the analysis result.
    Requires convergence so WHILE result is well-defined. *)
-Theorem df_analyze_invariant_proof:
+Theorem df_analyze_invariant:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val fn (P : 'a -> bool)
    (leq : 'a df_state -> 'a df_state -> bool)
@@ -2224,7 +2151,7 @@ Proof
   \\ `(λst. Q st ∧ ∀lbl. P (df_boundary bottom st lbl)) swli`
      suffices_by simp[]
   \\ qunabbrev_tac`swli`
-  \\ irule wl_iterate_invariant_proof
+  \\ irule wl_iterate_invariant
   \\ simp[]
   (* 1. initial *)
   \\ conj_tac
@@ -2441,7 +2368,7 @@ QED
    is ≥ old by the upper-bound property. Other boundaries are unchanged.
    Only boundary values are tracked — inst values are overwritten
    on each processing and are fully determined by boundaries at fixpoint. *)
-Theorem df_process_inflationary_proof:
+Theorem df_process_inflationary:
   !(dir : direction) (bottom : 'a) join transfer edge_transfer ctx
    entry_val cfg bbs (elem_leq : 'a -> 'a -> bool).
     reflexive elem_leq /\
@@ -2500,47 +2427,6 @@ QED
    successors of A (which read A's boundary) need reprocessing.
    For backward: deps = preds, symmetric argument.
    Requires CFG succs/preds are inverses. *)
-(* Core congruence: when two states agree on boundaries at all neighbors
-   of lbl, processing lbl produces the same fold output (final_val, inst_map).
-   This is the key reusable fact for stable_after, self_idempotent, etc. *)
-Theorem df_process_fold_cong[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st1 st2
-   final_val1 inst_map1 final_val2 inst_map2.
-    let neighbors = (case dir of Forward => cfg_preds_of cfg lbl
-                               | Backward => cfg_succs_of cfg lbl) in
-    let instrs = (case lookup_block lbl bbs of
-                    NONE => [] | SOME bb => bb.bb_instructions) in
-    let joined1 = (case MAP (λnbr. edge_transfer ctx nbr lbl
-                                     (df_boundary bottom st1 nbr)) neighbors of
-                     [] => (case entry_val of NONE => bottom
-                            | SOME (ev_lbl,v) => if lbl = ev_lbl then v else bottom)
-                   | v4::v5 => FOLDL join bottom
-                       (MAP (λnbr. edge_transfer ctx nbr lbl
-                               (df_boundary bottom st1 nbr)) neighbors)) in
-    let joined2 = (case MAP (λnbr. edge_transfer ctx nbr lbl
-                                     (df_boundary bottom st2 nbr)) neighbors of
-                     [] => (case entry_val of NONE => bottom
-                            | SOME (ev_lbl,v) => if lbl = ev_lbl then v else bottom)
-                   | v4::v5 => FOLDL join bottom
-                       (MAP (λnbr. edge_transfer ctx nbr lbl
-                               (df_boundary bottom st2 nbr)) neighbors)) in
-      (!nbr. MEM nbr neighbors ==>
-        df_boundary bottom st1 nbr = df_boundary bottom st2 nbr) /\
-      df_fold_block dir (transfer ctx) lbl instrs joined1 = (final_val1, inst_map1) /\
-      df_fold_block dir (transfer ctx) lbl instrs joined2 = (final_val2, inst_map2)
-    ==>
-      final_val1 = final_val2 /\ inst_map1 = inst_map2
-Proof
-  rw[] >>
-  `MAP (λnbr. edge_transfer ctx nbr lbl (df_boundary bottom st1 nbr))
-       (case dir of Forward => cfg_preds_of cfg lbl
-                   | Backward => cfg_succs_of cfg lbl) =
-   MAP (λnbr. edge_transfer ctx nbr lbl (df_boundary bottom st2 nbr))
-       (case dir of Forward => cfg_preds_of cfg lbl
-                   | Backward => cfg_succs_of cfg lbl)` by
-    (irule listTheory.MAP_CONG >> rw[] >> Cases_on `dir` >> fs[]) >>
-  fs[]
-QED
 
 (* Helper: when lbl ∉ neighbors(lbl), processing lbl is idempotent.
    Similar structure to stable_after but b = lbl. *)
@@ -3011,7 +2897,7 @@ Proof
   rw[pred_setTheory.INJ_DEF]
 QED
 
-Triviality bigunion_image_card_le_sum:
+Theorem bigunion_image_card_le_sum:
   !bbs. CARD (BIGUNION (set (MAP (\bb.
      IMAGE (\i. (bb.bb_label, i))
        (count (LENGTH bb.bb_instructions + 1))) bbs))) <=
@@ -3128,15 +3014,6 @@ Proof
   res_tac
 QED
 
-(* FOLDL of constant FUPDATE on FEMPTY: any value is that constant *)
-Theorem foldl_fupdate_const:
-  !ls bot k v.
-    FLOOKUP (FOLDL (\m l. m |+ (l, bot)) FEMPTY ls) k = SOME v ==> v = bot
-Proof
-  metis_tac[foldl_fupdate_flookup, finite_mapTheory.FLOOKUP_EMPTY,
-            optionTheory.NOT_SOME_NONE]
-QED
-
 (* Init FOLDL: result is either from initial map or the constant *)
 Theorem foldl_init_flookup:
   !ls bot m k v.
@@ -3146,4 +3023,48 @@ Proof
   Induct >> rw[listTheory.FOLDL] >> res_tac >>
   fs[finite_mapTheory.FLOOKUP_UPDATE] >>
   Cases_on `k = h` >> fs[]
+QED
+
+(* Sums over lists, shared by the passes' convergence proofs *)
+
+Theorem sum_map_le:
+  !f g l. EVERY (\x. f x <= g x) l ==> SUM (MAP f l) <= SUM (MAP g l)
+Proof
+  Induct_on `l` >> simp[] >> rpt strip_tac >>
+  irule LESS_EQ_LESS_EQ_MONO >> simp[]
+QED
+
+Theorem sum_map_lt:
+  !f g l. EVERY (\x. f x <= g x) l /\
+          (?x. MEM x l /\ f x < g x) ==>
+          SUM (MAP f l) < SUM (MAP g l)
+Proof
+  Induct_on `l` >> simp[] >> rpt strip_tac >>
+  `SUM (MAP f l) <= SUM (MAP g l)` by (irule sum_map_le >> simp[])
+  >- (gvs[] >>
+      irule LESS_EQ_LESS_TRANS >>
+      qexists_tac `g h + SUM (MAP f l)` >> simp[])
+  >- (irule LESS_LESS_EQ_TRANS >>
+      qexists_tac `f h + SUM (MAP g l)` >>
+      reverse conj_tac >- simp[] >>
+      simp[LT_ADD_LCANCEL] >>
+      first_x_assum irule >> simp[] >> metis_tac[])
+QED
+
+Theorem sum_map_le_bound:
+  !f (n:num) l. EVERY (\x. f x <= n) l ==> SUM (MAP f l) <= n * LENGTH l
+Proof
+  Induct_on `l` >> rw[] >> res_tac >>
+  fs[MULT_SUC]
+QED
+
+Theorem weighted_lt_cancel:
+  !w (a:num) a' c. a < a' /\ c <= w ==> (w + 1) * a + c < (w + 1) * a'
+Proof
+  rpt strip_tac >>
+  `(w + 1) * a + c <= (w + 1) * a + w` by simp[] >>
+  `(w + 1) * a + w < (w + 1) * (a + 1)` by simp[LEFT_ADD_DISTRIB] >>
+  `a + 1 <= a'` by simp[] >>
+  `(w + 1) * (a + 1) <= (w + 1) * a'` by simp[LE_MULT_LCANCEL] >>
+  simp[]
 QED

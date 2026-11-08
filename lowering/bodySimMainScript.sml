@@ -69,7 +69,7 @@ Proof
     (* 24 *) simp[body_iterator_ok_def],
     (* 25 *) rw[body_iterator_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_ok_def],
-    (* 27 *) rw[body_for_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def],
+    (* 27 *) rw[body_for_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
     (* 28 *) rpt strip_tac >> irule body_expr_ok_intro >> simp[int_calls_expr_def],
     (* 29 *) rpt strip_tac >> irule body_expr_ok_intro >> simp[int_calls_expr_def],
     (* 30 *) rpt strip_tac >> irule body_expr_ok_intro >> simp[int_calls_expr_def],
@@ -78,7 +78,9 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_case,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case,
-    (* 36 *) MATCH_ACCEPT_TAC body_builtin_case,
+    (* 36 *) rpt strip_tac >> irule body_builtin_case >> conj_tac
+               >- (rpt strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+                   metis_tac[]) >> metis_tac[],
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case,

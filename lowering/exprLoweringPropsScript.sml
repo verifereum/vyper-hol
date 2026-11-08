@@ -17,7 +17,7 @@
  *   alloca_room_callee       — a callee, entered at the caller's frontier,
  *                              has room
  *   compile_literal_vv_correct  — word literal case
- *   compile_name_correct     — variable lookup case
+ *   compile_name_correct     — allocation-backed word variable lookup
  *   compile_expr_grows, compile_binop_grows — compile_expr, lower_value
  *                              and compile_binop only append (cs_extends)
  *                              and grow the counters
@@ -54,12 +54,12 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
+  exprLowering exprCallBounds emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
   builtinCreate context
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
+  valueEncoding valueEncodingProofs valueLoadProps localPtrsProps venomMemDefs
   vyperAST vyperTyping fcgDefs
 Libs
   pairLib BasicProvers monadsyntax
@@ -1111,48 +1111,51 @@ Proof
          emitted_insts_def, same_blocks_def, listTheory.DROP_LENGTH_NIL]
 QED
 
-(* A well-typed word value held in memory is the word at its base. *)
-Theorem word_val_in_memory_mem_word_at[local]:
-  ∀bt v off mem.
-    val_in_memory (BaseTV bt) v off mem ∧ value_has_type (BaseTV bt) v ∧
-    is_word_type (BaseT bt) ⇒
-    mem_word_at off mem = typed_val_to_w256 (BaseTV bt) v
+(* --- Name (local variable load) --- *)
+Theorem lower_value_name_memloc:
+  !cenv id offset size ty ann cs.
+  FLOOKUP cenv.ce_vars id = SOME (MemLoc offset size) ==>
+  lower_value compile_expr cenv ty (Name ann id) cs =
+    if is_word_type ann then emit_op MLOAD [Lit (n2w offset)] cs
+    else (Lit (n2w offset),cs)
 Proof
-  rpt strip_tac >> Cases_on `v` >> Cases_on `bt` >>
-  gvs[value_has_type_def, is_word_type_def]
-  >~ [`BytesT bd`]
-  >- (Cases_on `bd` >>
-      gvs[value_has_type_def, is_word_type_def,
-          valueEncodingPropsTheory.val_in_memory_fixed_bytes])
-  >~ [`BaseTV AddressT`]
-  >- gvs[valueEncodingPropsTheory.val_in_memory_address] >>
-  gvs[val_in_memory_def, typed_val_to_w256_def]
+  rpt gen_tac >> strip_tac >> PURE_REWRITE_TAC [lower_value_def, comp_bind_def] >>
+  PURE_ONCE_REWRITE_TAC [compile_expr_raw_def] >>
+  simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
+    comp_return_def, unwrap_value_def, contextTheory.mk_ptr_def,
+    contextTheory.compile_ptr_load_def, LET_THM] >>
+  IF_CASES_TAC >> simp[comp_return_def]
 QED
 
-(* --- Name (local variable load) --- *)
+Theorem lower_value_name_ptrvar:
+  !cenv id ptr size ty ann cs.
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar ptr size) ==>
+  lower_value compile_expr cenv ty (Name ann id) cs =
+    if is_word_type ann then emit_op MLOAD [ptr] cs else (ptr,cs)
+Proof
+  rpt gen_tac >> strip_tac >> PURE_REWRITE_TAC [lower_value_def, comp_bind_def] >>
+  PURE_ONCE_REWRITE_TAC [compile_expr_raw_def] >>
+  simp[compile_expr_body_def, expr_type_def, compile_name_vv_def,
+    comp_return_def, unwrap_value_def, contextTheory.mk_ptr_def,
+    contextTheory.compile_ptr_load_def, LET_THM] >>
+  IF_CASES_TAC >> simp[comp_return_def]
+QED
+
 (* v must be a primitive (word-sized) value.  The local is held through its
    pointer variable (PtrVar), which is what state_rel relates.
    Uses typed_val_to_w256 (not val_to_w256) to avoid BytesV address heuristic.
    The type_value tv from the scope correctly distinguishes address from bytesN. *)
-(* NOTE: original statement was FALSE for v = NoneV and for
-   type/value mismatches like entry.type=BaseTV BoolT with v=BytesV [1w]
-   (ruled out by value_has_type). val_in_memory (BaseTV (UintT n)) NoneV
-   offset mem = T (vacuously true) but mload offset ss is unconstrained,
-   while typed_val_to_w256 NoneV = 0w.
-   Fix: added v ≠ NoneV and value_has_type entry.type v.
-   It was also false for a non-word annotation ann: compile_name_vv tags the
-   pointer with ann, and unwrap_value loads only if is_word_type ann, else it
-   returns the pointer; eval_expr ignores ann.  Fix: added is_word_type ann. *)
+(* A well-typed word value rules out NoneV and type/value mismatches.
+   A word annotation selects MLOAD; aggregate annotations return the pointer. *)
 Theorem compile_name_correct:
-  ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
+  ∀ func cenv cx ty ann id es ss st op st' v es' p sz entry.
     state_rel func cenv cx es ss ∧
     (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
       (INL v, es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
-    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) size) ∧
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ∧
     lookup_scopes id es.scopes = SOME entry ∧
     entry.value = v ∧
-    v ≠ NoneV ∧
     value_has_type entry.type v ∧
     (∃ bt. entry.type = BaseTV bt ∧ is_word_type (BaseT bt)) ∧
     is_word_type ann
@@ -1169,25 +1172,25 @@ Proof
      simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
           type_check_def, assert_def, check_def, ignore_bind_def] >>
      metis_tac[read_result_state]) >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, compile_expr_def, expr_type_def, compile_name_vv_def,
-       unwrap_value_def, contextTheory.mk_ptr_def,
-       contextTheory.compile_ptr_load_def, comp_bind_def,
-       comp_return_def] >>
-  strip_tac >>
+  `emit_op MLOAD [Var p] st = (op,st')` by
+    (drule lower_value_name_ptrvar >> simp[] >> strip_tac >> gvs[]) >>
   drule emit_op_extends >> drule emitted_insts_emit_op_local >>
   rpt strip_tac >> gvs[] >>
   `∃w. lookup_var p ss = SOME w ∧
-       val_in_memory (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
-    (fs[state_rel_def, local_ptrs_rel_def] >> first_x_assum drule_all >>
-     strip_tac >> qexists_tac `w` >> gvs[]) >>
+       memory_value_rel (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
+    (qpat_x_assum `state_rel _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [state_rel_def]) >>
+     simp[local_ptrs_rel_def] >> strip_tac >>
+     qpat_x_assum `!name ent ptr size. P name ent ptr size ==> ?w. Q name ent ptr size w`
+       (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+     simp[] >> strip_tac >> qexists_tac `w` >> gvs[]) >>
   `eval_operand (Var p) ss = SOME w` by simp[eval_operand_def] >>
   drule step_MLOAD_local >> strip_tac >>
   simp[run_inst_seq_def, eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   `mload (w2n w) ss = mem_word_at (w2n w) ss.vs_memory` by
     simp[mload_def, mem_word_at_def] >>
-  simp[] >> irule word_val_in_memory_mem_word_at >> simp[]
+  simp[] >> irule memory_value_rel_base_word >> simp[]
 QED
 
 (* --- Not (boolean negation) --- *)
@@ -1474,7 +1477,7 @@ Proof
   simp[ci_mono_def, cs_extends_refl]
 QED
 
-Theorem ci_mono_trans[local]:
+Theorem ci_mono_trans:
   ci_mono a b ∧ ci_mono b c ⇒ ci_mono a c
 Proof
   simp[ci_mono_def] >> rpt strip_tac >> gvs[] >>
@@ -2517,41 +2520,160 @@ Proof
   simp[ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_list_membership_in[local]:
-  ∀ needle ops sa. ci_mono sa (SND (compile_list_membership_in needle ops sa))
+(* This boundary assumes callback monotonicity; it does not use the
+   admitted whole-compiler monotonicity theorem below. *)
+Theorem ci_mono_bytestring_hash_selection[local]:
+  (!ty e st. ci_mono st (SND (lower_value cfn cenv ty e st))) ==>
+  !ty e st. ci_mono st (SND
+    (case bytestring_literal_hash e of
+       SOME h => (Lit h, st)
+     | NONE => let (p, st1) = lower_value cfn cenv ty e st in
+               compile_bytestring_hash p st1))
 Proof
-  recInduct exprLoweringTheory.compile_list_membership_in_ind >>
-  rpt strip_tac >>
-  simp[exprLoweringTheory.compile_list_membership_in_def, ci_mono_comp_return, ci_mono_emit_op] >>
+  rpt strip_tac >> Cases_on `bytestring_literal_hash e` >>
+  simp[ci_mono_refl] >> pairarg_tac >> gvs[] >>
+  irule ci_mono_trans >>
+  irule_at (Pos last) ci_mono_compile_bytestring_hash >>
+  first_x_assum (qspecl_then [`ty`, `e`, `st`] mp_tac) >> simp[]
+QED
+
+Theorem ci_mono_bytestring_comparison_branch[local]:
+  (!ty e st. ci_mono st (SND (lower_value cfn cenv ty e st))) /\
+  is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq) ==>
+  ci_mono st (SND
+    (compile_builtin_dispatch_body cfn cenv ret_ty ty (Bop op) args st))
+Proof
+  strip_tac >>
+  simp[exprLoweringTheory.compile_builtin_dispatch_body_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  `ci_mono st st2` by
+    (drule ci_mono_bytestring_hash_selection >>
+     disch_then (qspecl_then [`expr_type (HD args)`, `HD args`, `st`] mp_tac) >> simp[]) >>
+  `ci_mono st2 st4` by
+    (drule ci_mono_bytestring_hash_selection >>
+     disch_then (qspecl_then [`expr_type (HD args)`, `HD (TL args)`, `st2`] mp_tac) >> simp[]) >>
+  Cases_on `emit_op EQ [h1;h2] st4` >>
+  gvs[ci_mono_as_stack_val] >>
+  `ci_mono st st4` by metis_tac[ci_mono_trans] >>
+  `ci_mono st4 r` by
+    (mp_tac (Q.SPECL [`EQ`, `[h1;h2]`, `st4`] ci_mono_emit_op) >> simp[]) >>
+  TRY (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_emit_op) >>
+  metis_tac[ci_mono_trans]
+QED
+
+Theorem ci_mono_emit_membership_eqs:
+  !ops needle sa. ci_mono sa (SND (emit_membership_eqs needle ops sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[exprLoweringTheory.emit_membership_eqs_def, ci_mono_comp_return] >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[] >>
-  rpt strip_tac >> simp[ci_mono_emit_op]
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[] >> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_fold_membership_or[local]:
+  !ops acc sa. ci_mono sa (SND (fold_membership_or acc ops sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[exprLoweringTheory.fold_membership_or_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  simp[]
+QED
+
+Theorem ci_mono_fold_membership_and[local]:
+  !ops acc sa. ci_mono sa (SND (fold_membership_and acc ops sa))
+Proof
+  Induct >> rpt gen_tac >>
+  simp[exprLoweringTheory.fold_membership_and_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_op] >> simp[]
+QED
+
+Theorem ci_mono_compile_list_membership_in[local]:
+  !needle ops sa. ci_mono sa (SND (compile_list_membership_in needle ops sa))
+Proof
+  rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_list_membership_in_def] >>
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_membership_eqs] >>
+  Cases >> simp[ci_mono_comp_return, ci_mono_fold_membership_or]
 QED
 
 Theorem ci_mono_compile_list_membership_notin[local]:
-  ∀ needle ops sa. ci_mono sa (SND (compile_list_membership_notin needle ops sa))
+  !needle ops sa. ci_mono sa (SND (compile_list_membership_notin needle ops sa))
 Proof
-  recInduct exprLoweringTheory.compile_list_membership_notin_ind >>
-  rpt strip_tac >>
-  simp[exprLoweringTheory.compile_list_membership_notin_def, ci_mono_comp_return] >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op]
+  rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_list_membership_notin_def] >>
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_membership_eqs] >>
+  Cases >> simp[ci_mono_comp_return] >> gen_tac >>
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_op] >> simp[ci_mono_fold_membership_and]
+QED
+
+(* Structural traces: these check emission order, not bytecode parity. *)
+Theorem list_membership_small_traces:
+  (!n st. compile_list_membership_in n [] st = (Lit 0w, st)) /\
+  (!n st. compile_list_membership_notin n [] st = (Lit 1w, st)) /\
+  (!n a st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_in n [a] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ]) /\
+  (!n a st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_notin n [a] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; ISZERO]) /\
+  (!n a b st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_in n [a; b] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; EQ; OR]) /\
+  (!n a b st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_notin n [a; b] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; EQ; ISZERO; ISZERO; AND]) /\
+  (!n a b c st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_in n [a; b; c] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++ [EQ; EQ; EQ; OR; OR]) /\
+  (!n a b c st. MAP (\i. i.inst_opcode)
+    (SND (compile_list_membership_notin n [a; b; c] st)).cs_current_insts =
+    MAP (\i. i.inst_opcode) st.cs_current_insts ++
+    [EQ; EQ; EQ; ISZERO; ISZERO; AND; ISZERO; AND])
+Proof
+  simp[exprLoweringTheory.compile_list_membership_in_def,
+       exprLoweringTheory.compile_list_membership_notin_def,
+       exprLoweringTheory.emit_membership_eqs_def,
+       exprLoweringTheory.fold_membership_or_def,
+       exprLoweringTheory.fold_membership_and_def,
+       emit_op_def, comp_bind_def, comp_return_def, comp_ignore_bind_def,
+       fresh_id_def, fresh_var_def, emit_def, venomInstTheory.mk_inst_def]
+QED
+
+(* Concrete structural regression probes, separate from bytecode parity. *)
+Theorem array_membership_entry_traces:
+  let st = <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+              cs_current_bb := "start"; cs_current_insts := [];
+              cs_blocks := []; cs_data_sections := [] |> in
+  let run = \bound. SND (compile_array_membership_loop
+      (Lit 7w) (Lit 128w) (Lit 3w) 32 32 (\p. emit_op MLOAD [p]) bound T st) in
+    MAP (\i. i.inst_opcode) (EL 4 (run NONE).cs_blocks).bb_instructions =
+      [ASSIGN; ASSIGN; JMP] /\
+    MAP (\i. i.inst_opcode) (EL 4 (run (SOME 4)).cs_blocks).bb_instructions =
+      [ASSIGN; ASSIGN; GT; ISZERO; ASSERT; JMP] /\
+    MAP (\i. i.inst_opcode) (EL 5 (run (SOME 4)).cs_blocks).bb_instructions =
+      [JMP]
+Proof
+  EVAL_TAC
 QED
 
 Theorem ci_mono_compile_array_membership_loop[local]:
-  ∀ needle arr_op len_op elem_size offset_base load_opc is_in sa.
+  ∀ needle arr_op len_op elem_size offset_base load_opc bound_opt is_in sa.
     (!op st. ci_mono st (SND (load_opc op st))) ==>
-    ci_mono sa (SND (compile_array_membership_loop needle arr_op len_op elem_size offset_base load_opc is_in sa))
+    ci_mono sa (SND (compile_array_membership_loop needle arr_op len_op elem_size offset_base load_opc bound_opt is_in sa))
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `bound_opt` >>
   rewrite_tac[exprLoweringTheory.compile_array_membership_loop_def, LET_THM] >> BETA_TAC >>
+  pure_rewrite_tac[optionTheory.option_case_def] >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
+       conj_tac ORELSE
+       (CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
                           ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
-                          ci_mono_comp_return]) ORELSE
+                          ci_mono_comp_return])) ORELSE
        IF_CASES_TAC ORELSE gen_tac ORELSE strip_tac) >>
   simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
        ci_mono_fresh_var, ci_mono_fresh_label, ci_mono_new_block,
@@ -2563,8 +2685,27 @@ Theorem ci_mono_compile_var_array_membership[local]:
 Proof
   rpt gen_tac >>
   simp[exprLoweringTheory.compile_var_array_membership_def, LET_THM] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- simp[ci_mono_compile_ptr_load] >> Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[] >- (Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >> rename1 `ArrayT _ sz` >> Cases_on `sz` >> simp[ci_mono_comp_return] >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> simp[ci_mono_emit_op]) >> rpt strip_tac >> simp[ci_mono_emit_inst]) >> simp[ci_mono_comp_return]) >> rpt strip_tac >> simp[ci_mono_compile_array_membership_loop, ci_mono_compile_ptr_load]
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >-
+    (rpt strip_tac >> IF_CASES_TAC >> simp[]
+     >- simp[ci_mono_compile_ptr_load] >>
+     Cases_on `rhs_ty` >> simp[ci_mono_comp_return] >>
+     rename1 `ArrayT _ sz` >> Cases_on `sz` >>
+     simp[ci_mono_comp_return]) >>
+  rpt strip_tac >> Cases_on `rhs_ty` >> simp[ci_mono_compile_array_membership_loop, ci_mono_compile_ptr_load] >>
+  rename1 `ArrayT _ sz` >> Cases_on `sz` >>
+  simp[ci_mono_compile_array_membership_loop, ci_mono_compile_ptr_load]
 QED
+
+val _ = app (fn (name, th) =>
+  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles
+     then print ("Membership proof oracle check: " ^ name ^ " clean\n")
+     else raise Fail ("Membership proof has oracle: " ^ name)
+  end)
+  [("entry traces", array_membership_entry_traces),
+   ("loop monotonicity", ci_mono_compile_array_membership_loop),
+   ("caller monotonicity", ci_mono_compile_var_array_membership)];
 
 Theorem ci_mono_compile_keccak256_bytes[local]:
   ∀ ptr_op sa. ci_mono sa (SND (compile_keccak256_bytes ptr_op sa))
@@ -3259,7 +3400,8 @@ Proof
     conj_tac >- (
       IF_CASES_TAC >> gvs[]
       >- simp[ci_mono_compile_abi_encode_dyn_static_loop]
-      >> rpt strip_tac >> first_x_assum irule) >>
+      >> rpt strip_tac >>
+         first_x_assum irule >> simp[]) >>
     rpt strip_tac >>
     rpt (ho_match_mp_tac ci_mono_bind ORELSE
          ho_match_mp_tac ci_mono_ignore_bind ORELSE
@@ -4426,15 +4568,17 @@ Theorem ci_mono_builtin_bop[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Bop op) args st))
 Proof
-  strip_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  strip_tac >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ (op = Eq \/ op = NotEq)`
+  >- (irule ci_mono_bytestring_comparison_branch >>
+      simp[ci_mono_lower_value_cfn]) >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
   IF_CASES_TAC
   >- (irule ci_mono_uncurry >> reverse conj_tac
       >- simp[ci_mono_lower_value_cfn]
       >> rpt gen_tac >> BETA_TAC >> irule (SRULE [LET_THM] ci_mono_builtin_membership) >> simp[]) >>
-  IF_CASES_TAC >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_bytestring_hash,
-               ci_mono_emit_op]
+       >- simp[ci_mono_lower_value_cfn, ci_mono_emit_op]
        >> rpt gen_tac >> BETA_TAC) >>
   rpt IF_CASES_TAC >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
@@ -4683,7 +4827,7 @@ Proof
 QED
 
 (* Derive: lower_value compile_expr preserves ci_mono *)
-Theorem ci_mono_lower_value_compile_expr[local]:
+Theorem ci_mono_lower_value_compile_expr:
   ∀ cenv ty e st.
     ci_mono st (SND (lower_value compile_expr cenv ty e st))
 Proof
@@ -4953,6 +5097,23 @@ Proof
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
 
+(* Kernel-closure audit for the membership-order change and shared typed-memory prerequisite. *)
+val () = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn s => s = "DISK_THM") oracles then
+      print ("Kernel-closed: " ^ name ^ "\n")
+    else raise Fail ("Unexpected oracle dependency: " ^ name)
+  end)
+  [("ci_mono_bytestring_hash_selection", ci_mono_bytestring_hash_selection),
+   ("ci_mono_bytestring_comparison_branch", ci_mono_bytestring_comparison_branch),
+   ("ci_mono_emit_membership_eqs", ci_mono_emit_membership_eqs),
+   ("ci_mono_fold_membership_or", ci_mono_fold_membership_or),
+   ("ci_mono_fold_membership_and", ci_mono_fold_membership_and),
+   ("ci_mono_compile_list_membership_in", ci_mono_compile_list_membership_in),
+   ("ci_mono_compile_list_membership_notin", ci_mono_compile_list_membership_notin),
+   ("list_membership_small_traces", list_membership_small_traces),
+   ("ci_mono_typed_memory_family", ci_mono_typed_memory_family)];
 (* Immutable helper monotonicity interfaces share the typed-memory family
    with aggregate construction; all must remain kernel-closed. *)
 val () = List.app (fn th =>

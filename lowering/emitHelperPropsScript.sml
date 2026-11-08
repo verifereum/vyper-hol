@@ -2173,7 +2173,8 @@ Proof
   conj_tac >- (
     gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
         emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
-  simp[write_memory_with_expansion_def, LET_THM]
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
 (* ===== ALLOCA ===== *)

@@ -15,6 +15,8 @@ Ancestors
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
   mmCopy mmScan mmEntryProofs passSharedField passSharedDefs execEquivProps
+Libs
+  stepInstBaseLib
 
 (* apply_groups_inst on non-terminators produces non-terminators/non-INVOKE *)
 Theorem apply_groups_inst_non_term[local]:

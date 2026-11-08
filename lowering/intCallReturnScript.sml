@@ -1,9 +1,9 @@
 (*
  * Internal calls: the return step (#638)
  *
- * The callee's body ends in an IntRet that result_rel accepts (intret_q:
- * a stack return, or a memory return through the caller's buffer,
- * intret_mem_q).  The caller's INVOKE then gives merge_callee_state with
+ * The callee's completed IntRet satisfies result_rel after any lock
+ * release, for a stack return or a memory return through the caller's
+ * buffer. The caller's INVOKE then gives merge_callee_state with
  * the outputs bound, and the caller's statement relation holds again at
  * the source state eval_expr's IntCall case returns: the callee's final
  * state with the caller's scopes back.
@@ -180,8 +180,8 @@ Proof
   imp_res_tac run_block_data_section >> res_tac >> gvs[]
 QED
 
-(* The caller's INVOKE of a callee whose run ends in an IntRet that
-   intret_q accepts, at the source state es2 the callee's body ends in.
+(* The caller's INVOKE of a callee whose run ends in an IntRet related
+   to the completed source state es2, after any return unlock.
    s and es are the caller's states at the INVOKE (after the arguments,
    the return buffer and the staged arguments).  The INVOKE returns s',
    in which:
@@ -232,7 +232,8 @@ Theorem invoke_intret_state_rel:
     EVERY (not_local_ptr cenv es.scopes) inst.inst_outputs /\
     stmt_state_rel ctx func cenv cx es s /\
     immutable_alloca_sep func cenv cx (es2 with scopes := es.scopes) s /\
-    intret_q callee cenv' cx' tv v (es2 with scopes := []) (IntRet ret cs') /\
+    result_rel callee tv cenv' cx'
+      (INR (ReturnException v), es2 with scopes := []) (IntRet ret cs') /\
     cx'.txn = cx.txn /\ cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
     (!n off. FLOOKUP cenv.ce_module_vars (cenv.ce_module, n) =
@@ -275,7 +276,7 @@ Proof
      Cases_on `ret.iret_adopt_fmp` >>
      gvs[lookup_var_def, adopt_return_fmp_def, merge_callee_state_def] >>
      metis_tac[]) >>
-  gvs[intret_q_def, result_rel_def, adopt_return_fmp_def] >>
+  gvs[result_rel_def, adopt_return_fmp_def] >>
   `cs.vs_data_section = s.vs_data_section` by gvs[setup_callee_def] >>
   drule run_blocks_intret_data_section >> strip_tac >>
   `immutables_rel cenv' cx.txn.target cenv.ce_module cenv.ce_is_ctor es2 cs'` by

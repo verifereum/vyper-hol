@@ -24,30 +24,6 @@ val sigma_exit_ref : thm ref = ref TRUTH;
 val func'_eq_ref : thm ref = ref TRUTH;
 val bbs2_eq_ref : thm ref = ref TRUTH;
 
-Triviality phi_prefix_bridge:
-  !phis bd P insts.
-    insts = phis ++ bd /\
-    EVERY P phis /\
-    EVERY (\x. ~P x) bd ==>
-    FILTER P insts = phis /\
-    (!i. MEM i insts /\ P i ==> MEM i phis) /\
-    (EXISTS P insts <=> phis <> [])
-Proof
-  rpt gen_tac >> strip_tac >>
-  conj_tac
-  >- (ASM_REWRITE_TAC[FILTER_APPEND_DISTRIB] >>
-      `FILTER P phis = phis` by simp[FILTER_EQ_ID] >>
-      `FILTER P bd = []` by simp[FILTER_EQ_NIL] >>
-      ASM_REWRITE_TAC[APPEND_NIL]) >>
-  conj_tac
-  >- (ASM_REWRITE_TAC[] >> rpt strip_tac >> gvs[MEM_APPEND, EVERY_MEM]) >>
-  ASM_REWRITE_TAC[] >> EQ_TAC >> strip_tac
-  >- (spose_not_then ASSUME_TAC >> gvs[EXISTS_MEM, MEM_APPEND, EVERY_MEM])
-  >> simp[EXISTS_MEM, MEM_APPEND] >>
-     Cases_on `phis` >> gvs[EVERY_DEF] >>
-     DISJ1_TAC >> qexists_tac `h` >> simp[]
-QED
-
 Triviality FILTER_MEM_IMP:
   !P l l'. FILTER P l = l' ==>
     !x. MEM x l /\ P x ==> MEM x l'
@@ -87,19 +63,6 @@ Proof
     gvs[MEM_APPEND] >>
     gvs[EVERY_MEM])
   >> simp[]
-QED
-
-Triviality phis_nonempty_prev_bb:
-  !phis bdy bb_mid_insts.
-    bb_mid_insts = phis ++ bdy /\
-    EVERY (\i. i.inst_opcode = PHI) phis /\
-    phis <> [] ==>
-    EXISTS (\i. i.inst_opcode = PHI) bb_mid_insts
-Proof
-  rpt strip_tac >>
-  simp[EXISTS_MEM, MEM_APPEND] >>
-  Cases_on `phis` >> gvs[EVERY_MEM] >>
-  qexists_tac `h` >> simp[]
 QED
 
 Triviality bb_succs_phi_prepend:
@@ -167,32 +130,6 @@ Proof
     `rs_b_entry`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[]
-QED
-
-(* Lift concrete coverage to universal form for IH.
-   Given: lookup_block lbl bbs = SOME b_known,
-          ALOOKUP al lbl = SOME rs_known,
-          !x. P b_known x ==> f rs_known x = f rs_end x
-   Derive: !x b rs. lookup_block lbl bbs = SOME b /\
-                     ALOOKUP al lbl = SOME rs /\ P b x ==> f rs x = f rs_end x *)
-Triviality coverage_lift:
-  !lbl bbs al b_known rs_known rs_end.
-    lookup_block lbl bbs = SOME b_known /\
-    ALOOKUP al lbl = SOME rs_known /\
-    (!x. (!i. MEM i b_known.bb_instructions /\ i.inst_opcode = PHI ==>
-              ~MEM x i.inst_outputs) ==>
-         latest_version rs_known x = latest_version rs_end x) ==>
-    (!x bb1 rs_b.
-       lookup_block lbl bbs = SOME bb1 /\
-       ALOOKUP al lbl = SOME rs_b /\
-       (!i. MEM i bb1.bb_instructions /\ i.inst_opcode = PHI ==>
-            ~MEM x i.inst_outputs) ==>
-       latest_version rs_b x = latest_version rs_end x)
-Proof
-  rpt strip_tac >>
-  `bb1 = b_known` by metis_tac[optionTheory.SOME_11] >>
-  `rs_b = rs_known` by metis_tac[optionTheory.SOME_11] >>
-  gvs[]
 QED
 
 (* ===== State-equiv propagation for stale variables ===== *)
@@ -695,28 +632,6 @@ Proof
     eval_phis_state_equiv_phi >> simp[] >> strip_tac >> gvs[]
 QED
 
-Triviality phi_exec_cond_inst_idx:
-  !vars s_base s_phi insts n.
-    s_phi.vs_prev_bb = s_base.vs_prev_bb /\
-    (!inst. MEM inst insts ==>
-      (inst.inst_opcode = PHI ==>
-        !v. s_base.vs_prev_bb <> NONE /\
-            resolve_phi (THE s_base.vs_prev_bb) inst.inst_operands = SOME (Var v) ==>
-            v NOTIN vars) /\
-      (inst.inst_opcode <> PHI ==>
-        !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars)) ==>
-    (!inst. MEM inst insts ==>
-      (inst.inst_opcode = PHI ==>
-        !v. (s_phi with vs_inst_idx := n).vs_prev_bb <> NONE /\
-            resolve_phi (THE ((s_phi with vs_inst_idx := n).vs_prev_bb))
-              inst.inst_operands = SOME (Var v) ==>
-            v NOTIN vars) /\
-      (inst.inst_opcode <> PHI ==>
-        !x. MEM (Var x) inst.inst_operands ==> x NOTIN vars))
-Proof
-  rw[] >> res_tac >> fs[]
-QED
-
 Triviality phi_exec_cond_after_eval:
   !vars s s_phi insts.
     eval_phis s insts = OK s_phi /\
@@ -953,150 +868,6 @@ Proof
   conj_tac >- (
     qexists_tac `safe` >> simp[] >> metis_tac[]) >>
   fs[state_equiv_def, execution_equiv_def, lookup_var_def]
-QED
-
-(* sigma_next equation for PHI base variables.
-   When bvar is a PHI base (live at block via phi_bases_live_in), the mixed
-   sigma definition picks latest_version rs_a_end regardless of version equality. *)
-Triviality sigma_mixed_phi_base:
-  !sigma_next bvar live_in lbl rs_a_end rs_b_next bbs.
-    (!y. sigma_next y =
-      if (?vs. ALOOKUP live_in lbl = SOME vs /\ MEM y vs) /\
-         latest_version rs_b_next y <> latest_version rs_a_end y
-      then latest_version rs_a_end y
-      else latest_version rs_b_next y) /\
-    (!lbl' bb inst base ver.
-      lookup_block lbl' bbs = SOME bb /\
-      MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
-      MEM (version_var base ver) inst.inst_outputs /\ colon_free base ==>
-      ?vs. ALOOKUP live_in lbl' = SOME vs /\ MEM base vs) /\
-    (?bb inst ver.
-      lookup_block lbl bbs = SOME bb /\
-      MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
-      inst.inst_outputs = [version_var bvar ver] /\ colon_free bvar) ==>
-    sigma_next bvar = latest_version rs_a_end bvar
-Proof
-  rpt strip_tac >>
-  ASM_REWRITE_TAC[] >>
-  Cases_on `latest_version rs_b_next bvar = latest_version rs_a_end bvar`
-  >- ASM_REWRITE_TAC[] >>
-  ASM_REWRITE_TAC[] >>
-  (* bvar is live via inlined phi_bases_live_in *)
-  first_x_assum (qspecl_then [`lbl`, `bb`, `inst`, `bvar`, `ver`] mp_tac) >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
-  strip_tac >>
-  `?vs. ALOOKUP live_in lbl = SOME vs /\ MEM bvar vs`
-    by (qexists_tac `vs` >> ASM_REWRITE_TAC[]) >>
-  simp[]
-QED
-
-(* sigma_next equation for non-PHI variables.
-   Coverage: when x has no PHI at successor, sigma_next x = latest_version rs_b_next x.
-   If x is live AND versions differ, valid_phi_coverage gives a PHI, contradiction. *)
-Triviality sigma_mixed_coverage:
-  !sigma_next x live_in lbl_a lbl_b rs_a_end rs_b_next rs_b_entry
-   bb_mid bb_mid_next bbs1 dtree succ_map rs0.
-    (!y. sigma_next y =
-      if (?vs. ALOOKUP live_in lbl_b = SOME vs /\ MEM y vs) /\
-         latest_version rs_b_next y <> latest_version rs_a_end y
-      then latest_version rs_a_end y
-      else latest_version rs_b_next y) /\
-    valid_phi_coverage bbs1 dtree succ_map rs0 live_in /\
-    lookup_block lbl_a bbs1 = SOME bb_mid /\
-    ALOOKUP (block_rename_states rs0 bbs1 succ_map dtree) lbl_a =
-      SOME rs_b_entry /\
-    MEM lbl_b (bb_succs bb_mid) /\
-    lookup_block lbl_b bbs1 = SOME bb_mid_next /\
-    ALOOKUP (block_rename_states rs0 bbs1 succ_map dtree) lbl_b =
-      SOME rs_b_next /\
-    rs_a_end = FST (rename_block_insts rs_b_entry bb_mid.bb_instructions) /\
-    (!i. MEM i bb_mid_next.bb_instructions /\ i.inst_opcode = PHI ==>
-         ~MEM x i.inst_outputs) ==>
-    latest_version rs_b_next x = sigma_next x
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `!y. sigma_next y = _`
-    (fn th => PURE_REWRITE_TAC [th]) >>
-  Cases_on `?vs. ALOOKUP live_in lbl_b = SOME vs /\ MEM x vs`
-  >- (
-    (* x is live — show versions equal by valid_phi_coverage contradiction *)
-    Cases_on `latest_version rs_b_next x = latest_version rs_a_end x`
-    >- simp[] >>
-    (* x live, versions differ, no PHI → contradiction *)
-    `F` suffices_by simp[] >>
-    qpat_x_assum `?vs. _` strip_assume_tac >>
-    (* Substitute rs_a_end so vpc conditions match *)
-    qpat_x_assum `rs_a_end = _` (SUBST_ALL_TAC) >>
-    qpat_x_assum `valid_phi_coverage _ _ _ _ _` mp_tac >>
-    PURE_REWRITE_TAC[valid_phi_coverage_def] >>
-    disch_then (qspecl_then [`lbl_a`, `lbl_b`,
-      `bb_mid`, `bb_mid_next`, `rs_b_entry`, `rs_b_next`] mp_tac) >>
-    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-    disch_then (qspecl_then [`x`, `vs`] mp_tac) >>
-    impl_tac >- (
-      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-    strip_tac >>
-    first_x_assum (qspec_then `i` mp_tac) >>
-    ASM_REWRITE_TAC[])
-  >- simp[]
-QED
-
-(* Wrapper: universally-quantified coverage using deterministic lookups.
-   Avoids rich-context issues by doing SOME_11 reasoning outside ok_ok_step. *)
-Triviality sigma_mixed_coverage_at_block:
-  !sigma_next live_in lbl_a lbl_b rs_a_end rs_b_next rs_b_entry
-   bb_mid bb_mid_next bbs1 dtree succ_map rs0.
-    (!y. sigma_next y =
-      if (?vs. ALOOKUP live_in lbl_b = SOME vs /\ MEM y vs) /\
-         latest_version rs_b_next y <> latest_version rs_a_end y
-      then latest_version rs_a_end y
-      else latest_version rs_b_next y) /\
-    valid_phi_coverage bbs1 dtree succ_map rs0 live_in /\
-    lookup_block lbl_a bbs1 = SOME bb_mid /\
-    ALOOKUP (block_rename_states rs0 bbs1 succ_map dtree) lbl_a =
-      SOME rs_b_entry /\
-    MEM lbl_b (bb_succs bb_mid) /\
-    lookup_block lbl_b bbs1 = SOME bb_mid_next /\
-    ALOOKUP (block_rename_states rs0 bbs1 succ_map dtree) lbl_b =
-      SOME rs_b_next /\
-    rs_a_end = FST (rename_block_insts rs_b_entry bb_mid.bb_instructions) ==>
-    !x bb1 rs_b.
-      lookup_block lbl_b bbs1 = SOME bb1 /\
-      ALOOKUP (block_rename_states rs0 bbs1 succ_map dtree) lbl_b =
-        SOME rs_b /\
-      (!i. MEM i bb1.bb_instructions /\ i.inst_opcode = PHI ==>
-           ~MEM x i.inst_outputs) ==>
-      latest_version rs_b x = sigma_next x
-Proof
-  rpt strip_tac >>
-  `bb1 = bb_mid_next` by metis_tac[optionTheory.SOME_11] >>
-  pop_assum SUBST_ALL_TAC >>
-  `rs_b = rs_b_next` by metis_tac[optionTheory.SOME_11] >>
-  pop_assum SUBST_ALL_TAC >>
-  mp_tac (Q.SPECL [`sigma_next`, `x`, `live_in`, `lbl_a`, `lbl_b`,
-    `rs_a_end`, `rs_b_next`, `rs_b_entry`,
-    `bb_mid`, `bb_mid_next`, `bbs1`, `dtree`, `succ_map`, `rs0`]
-    sigma_mixed_coverage) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[]
-QED
-
-(* sigma_next always returns version_var x n for colon_free x. *)
-Triviality sigma_mixed_version_var:
-  !sigma_next rs_a rs_b live_in lbl.
-    (!x. sigma_next x =
-      if (?vs. ALOOKUP live_in lbl = SOME vs /\ MEM x vs) /\
-         latest_version rs_b x <> latest_version rs_a x
-      then latest_version rs_a x
-      else latest_version rs_b x) ==>
-    !x. colon_free x ==> ?n:num. sigma_next x = version_var x n
-Proof
-  rpt strip_tac >>
-  first_x_assum (qspec_then `x` SUBST1_TAC) >>
-  Cases_on `(?vs. ALOOKUP live_in lbl = SOME vs /\ MEM x vs) /\
-            latest_version rs_b x <> latest_version rs_a x`
-  >- simp[latest_version_is_version_var]
-  >> simp[latest_version_is_version_var]
 QED
 
 (* SML-level terms for record field accesses that can't appear in Q.SPECL
@@ -1350,7 +1121,7 @@ Proof
   `succs_preserved bbs1 bbs2` by (
     ASM_REWRITE_TAC[] >>
     ACCEPT_TAC (Q.SPECL [`dtree`, `bbs1`, `rs0`, `succ_map`]
-      (CONJUNCT1 rename_blocks_succs_preserved_export))) >>
+      (CONJUNCT1 rename_blocks_succs_preserved))) >>
   (* bb_succs bb_mid = bb_succs bb *)
   `bb_succs bb_mid = bb_succs bb` by (
     mp_tac (Q.SPECL [`phis`, `(bb:basic_block).bb_instructions`, `bb_mid`, `bb`]

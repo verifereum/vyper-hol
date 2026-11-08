@@ -1,7 +1,7 @@
 # O1 bytecode parity fixtures
 
 This directory contains the independent Python oracle for the frozen 101-fixture
-HOL-supported-subset corpus. It includes the original 23-fixture milestone and
+HOL-supported-subset corpus (12 of them not parity-checked; see [`pending-5127-port.md`](pending-5127-port.md)). It includes the original 23-fixture milestone and
 78 subset/interaction fixtures.
 
 - `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL
@@ -10,13 +10,14 @@ HOL-supported-subset corpus. It includes the original 23-fixture milestone and
 - `python-o1-no-asm-opt/` contains the pinned Python Vyper deployment/runtime
   bytecode and its provenance record.
 - `python_o1_bytecode_oracle.py` generates the oracle.
-- `python-o1-bytecode-fixtures` reproduces it and optionally runs the HOL parity
-  theorems.
+- `python-o1-bytecode-fixtures` reproduces it.
 
 The generated provenance records the pinned Python compiler, its dependencies,
 the Vyper fixture source hashes, compilation settings, and output hashes. It
 does not hash HOL scripts: they are not Python compiler inputs, and their
-bytecode parity is checked separately by the HOL theorems.
+bytecode parity is checked separately: by the native runner in `native/`,
+and in the kernel by the three `eval/evalCompilerBytecodeScalarConvert*`
+theories and, for the assembly-optimized oracle, `eval/evalCompilerBytecodeAsmOpt`.
 
 For a public summary of what the fixtures test and what remains unverified,
 see [`docs/bytecode-fixture-coverage.md`](../../../docs/bytecode-fixture-coverage.md).
@@ -66,43 +67,22 @@ lowering/defs/bytecode/python-o1-bytecode-fixtures --update \
 
 ## HOL comparison
 
-`eval/evalCompilerBytecodeLib.sml` reads the independent oracle directly. The
-parity theories under `eval/` evaluate
+The [native runner](native/README.md) compiles each retained fixture with
+`compile_vyper (K SOME) (o1_policy all_capabilities)`, exported to ML by
+EmitML, and requires exact deployment and runtime byte equality with this
+oracle. It is a fast regression check, not a kernel-checked proof; its README
+says what a `PASS` trusts. This is finite fixture evidence, not a universal
+compiler-equivalence theorem.
 
-```sml
-compile_vyper (K SOME) (o1_policy all_capabilities) <program>
-```
-
-and requires exact deployment and runtime byte equality. The expensive fixture
-evaluation is opt-in and does not raise the normal project's 2.5-second tactic
-timeout:
-
-```sh
-lowering/defs/bytecode/python-o1-bytecode-fixtures --compare-hol \
-  --vyper-repo /path/to/vyper
-```
-
-The complete opt-in HOL rollup, including allocation-budget regressions and
-raw-context evaluator-cost measurements, is:
-
-```sh
-holbuild --max-heap 16384 -j1 --tactic-timeout 600 evalCompilerBytecodeParityTheory
-```
-
-Of the 101 retained fixtures, 98 have an exact checked theorem proved by plain
-`EVAL_TAC`; together they check 196 byte lists (deployment and runtime).
 `abi_static`, `abi_dynamic` and `interface_calls` decode ABI data with the
 bounded decoder (vyperlang/vyper#5333), which deliberately differs from the
-pinned compiler; each is checked to be supported, to compile, and to differ
-from the pinned bytes.
-Expensive fixtures use kernel-derived staged compiler evaluation certificates.
-These rederive the exact `lowering_context_ok` check, including
-`unit_alloca_budget ctx < dimword (:256)`, and never register an oracle equality
-as an evaluator rewrite. The independent oracle appears only in parity claims.
-Any byte difference or checked-compiler `NONE` result fails. No HOL-generated expected output or implementation-derived
-fallback is used. The current cached comparison and parity-theory build logs
-contain no `Saved CHEAT` tags. This is finite fixture evidence, not a universal
-compiler-equivalence theorem or a claim about unrelated existing proof debt.
+pinned compiler, so their HOL bytes differ from this oracle.
+
+No build root reaches the allocation-budget regression theory. Build it with:
+
+```sh
+holbuild build evalCompilerAllocationBudgetTheory
+```
 
 ## Supported-subset boundary
 
@@ -123,6 +103,23 @@ those denominations. Their HOL definitions remain unchanged. See the linked
 coverage document for the complete constructor census and precise distinction
 between fixture inputs and lowering-arm execution.
 
+## External-entry regressions
+
+The external-entry regression corpus in `external-entries/` retains its source,
+sanitized AST and exact bytecode oracle. With the pinned Vyper installed, check
+these artifacts with:
+
+```sh
+python external-entries/generate.py --check
+```
+
+Run this command from this directory. To inspect a fixture's runtime IR:
+
+```sh
+vyper --experimental-codegen --optimize none --evm-version prague \
+  -f ir_runtime external-entries/sources/dflt_one_lit.vy
+```
+
 ## Fixture format
 
 Each `.hex` file contains canonical lowercase, even-length hexadecimal:
@@ -134,3 +131,75 @@ runtime=<hex bytes>
 
 There is no `0x` prefix. Blank lines and `#` comments are accepted by the HOL
 fixture reader.
+
+## Event regressions (issue 570)
+
+The seven additional event sources live in `python-event-no-asm-opt-sources/`,
+with their own manifest `event-fixtures.txt`. They leave the frozen 101-fixture
+corpus above unchanged. `python-event-no-asm-opt/` contains independently
+generated deployment/runtime bytes and provenance; the corresponding sanitized
+annotated AST and layout inputs live in `tests/fixtures/check_contract/events/`.
+Three checker-only inputs, listed in `event-checker-fixtures.txt`, reproduce
+e62, m14 and m49 with their real imports; `libp.vy` is m14's imported module.
+They cover indexed bytes20 (argument and storage), the four recursive
+argument-widening cases in issue 570, and a nested struct declared before its
+member type.
+
+With an isolated installation of VYPER_PIN using Python 3.11.11 and the exact
+dependencies from `python-o1-oracle-constraints.txt`, reproduce these artifacts:
+
+```sh
+python3 lowering/defs/bytecode/event_bytecode_oracle.py \
+  --python /path/to/isolated/venv/bin/python --vyper-repo /path/to/clean/vyper
+```
+
+Add `--update` to regenerate them. The generator verifies the clean checkout,
+installed compiler commit, Python version, dependency versions and import root.
+It records source, bytecode, sanitized JSON and generator hashes. It does not
+install packages or invoke uv. It uses the same Prague/NONE/experimental/no
+metadata settings as the frozen oracle, and invokes the existing sanitizer.
+Installed compiler Python sources and builtin interfaces are compared with the
+clean checkout; provenance records the verified source count and tree hash.
+
+`vyperEventRegressionTheory` covers checker mutations, source-topic
+semantics, and the accepted event corpus.
+`vyperImportedEventRegressionTheory` checks the single-module rejection of the
+three imported-event inputs after real frontend translation, in both modes.
+`vyperEventArgumentLifetimeTheory` checks a log whose first argument is a
+dynamic array and whose second argument pops that array. It certifies both
+checker modes and execution of the emitted argument code: the earlier value
+remains `[1, 2]`, the pop returns `2`, and the local array becomes `[1]`.
+Lowering saves aggregate arguments before a later potentially effectful
+argument; pure suffixes and word arguments need no snapshot.
+`vyperEventForwardStructTheory` certifies both checker modes and actual LOG
+execution for the forward-declared nested struct, including its 32-byte value.
+
+No HOL check currently compares the event fixtures' bytes with this oracle:
+the native runner covers only the main corpus.
+
+`eventEncodingPropsTheory` proves complete encoding invariance under checked
+argument widening, with the declared signature hash. `eventTopicPropsTheory`
+relates typed word operands to source topics and proves that primitive topic
+lowering preserves the compiler state.
+`eventTopicExecPropsTheory` proves execution of bytes/string topic hashing from
+the length-prefixed memory representation, with explicit 256-bit address and
+length bounds. It preserves existing operands and all state fields except the
+new SSA variable bindings. Its saved theorems are checked for admission tags.
+
+Tuple widening uses a bulk memory copy only when `memoryLayoutDefsTheory`'s
+structural layout keys agree. That theory proves equal total footprints and
+equal field offsets; arrays retain their element stride and bound in the key.
+Other differing aggregate layouts use the typed copy path.
+
+The fixed-array widening fixture also exercises duplication below EVM's DUP16
+range. The stack planner spills the inaccessible prefix, uses DUP16, and
+restores the prefix around the duplicated value. `deepDupChecksTheory` checks
+the generated physical assembly at depths 16, 17, 31 and 32, covering both
+restoration schedules and preserving the memory below the spill region.
+`deepDupRestoreTheory` proves the interleaved restore/SWAP1 schedule for an
+arbitrary number of restores, including repeated values, with exact stack,
+memory expansion and instruction-count results in the assembly semantics.
+`doDupModelTheory` relates the interleaved logical restore sequence to ordinary
+restoration below a saved top operand, and proves that duplication preserves
+the logical spill map and absence of fresh operands. These are alignment
+lemmas; the full instruction-simulation proof remains a separate obligation.

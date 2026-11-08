@@ -340,6 +340,22 @@ Proof
   metis_tac[read_place_no_control, no_control_exc_def]
 QED
 
+Theorem array_iterator_results_no_control:
+  array_iterator_results cx ty res st = (INR exc,st') ==> no_control_exc exc
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd` >> Cases_on `tr`))) >>
+  simp[array_iterator_results_def, bind_def, ignore_bind_def,
+       result_array_length_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def, lift_option_type_def, option_CASE_rator,
+       LET_THM, AllCaseEqs()] >>
+  rw[] >> gvs[no_control_exc_def] >>
+  metis_tac[read_result_no_control, no_control_exc_def]
+QED
+
 Theorem read_results_no_control:
   !results cx st exc st'.
     read_results cx results st = (INR exc,st') ==> no_control_exc exc
@@ -603,20 +619,13 @@ val CALL_NO_CONTROL_STEP = FIRST [
   qpat_x_assum `_ = (INR _,_)` mp_tac >>
     BasicProvers.TOP_CASE_TAC >> simp[] >> strip_tac];
 
-Theorem eval_ext_call_effects_no_control[local]:
+Theorem eval_ext_call_effects_no_control:
   eval_ext_call_effects cx target_addr calldata value_opt gas accounts st =
-    (INR exc, st') ==> no_control_exc exc
+    (INR exc, st') ==>
+  no_control_exc exc
 Proof
-  Cases_on `st.outcomes` >>
-  simp[eval_ext_call_effects_def, bind_def, ignore_bind_def, return_def,
-       get_transient_storage_def, prod_CASE_rator, sum_CASE_rator,
-       UNCURRY] >>
-  strip_tac >>
-  gvs[AllCaseEqs(), update_accounts_def, update_transient_def,
-      append_logs_def, adopt_call_outcome_equation, return_def,
-      raise_def, COND_RATOR, no_control_exc_def]
-  >- (drule lift_option_no_control >> simp[no_control_exc_def])
-  >> drule take_call_outcome_error >> strip_tac >> gvs[no_control_exc_def]
+  simp_tac bool_ss [eval_ext_call_effects_def, LET_THM] >> strip_tac >>
+  rpt CALL_NO_CONTROL_STEP
 QED
 
 Theorem eval_ext_call_no_control:
@@ -927,16 +936,22 @@ QED
 Resume canonical_eval_no_control_with_results[Builtin]:
   rpt gen_tac >> strip_tac >> rpt gen_tac >>
   Cases_on `bt = Len` >> Cases_on `bt = Env MsgGas` >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
     get_accounts_def, type_check_def, assert_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   imp_res_tac result_array_length_no_control >>
   imp_res_tac next_gas_reading_no_control >>
   imp_res_tac precompile_call_success_no_control >>
+  imp_res_tac lift_option_type_no_control >>
   imp_res_tac lift_sum_no_control >>
   gvs[type_check_def, assert_def, return_def] >>
   imp_res_tac lift_sum_no_control >>
-  gvs[no_control_exc_def] >> metis_tac[]
+  FIRST [
+    simp[no_control_exc_def] >> NO_TAC,
+    gvs[no_control_exc_def] >> metis_tac[],
+    first_x_assum drule >> simp[],
+    drule lift_option_type_no_control >> simp[]]
 QED
 
 Resume canonical_eval_no_control_with_results[Pop]:

@@ -9,18 +9,18 @@ on:
     # into other branches run nothing either; their base's own PR into main
     # tests them together.
     # ready_for_review starts CI when a draft is marked ready; converted_to_draft
-    # cancels the run of a PR turned back into a draft. edited starts CI when a
-    # PR is retargeted to main; any other edit (title, description) runs no jobs.
+    # cancels the run of a PR turned back into a draft. Omit edited: title/body
+    # edits create all-skipped runs that shadow passing required checks.
+    # After retargeting a ready PR to main without a push, start CI with
+    # gh pr ready --undo && gh pr ready.
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
   push:
     branches: [main]
 
 concurrency:
-  # An edit that leaves the base alone runs no jobs, so its run gets a group of
-  # its own rather than cancelling the PR's real run.
-  group: ${{ github.workflow }}-${{ (github.event.action == 'edited' && !github.event.changes.base) && github.run_id || github.event.pull_request.number || (github.event_name == 'push' && github.sha) || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && github.sha) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -32,11 +32,7 @@ env:
 
 jobs:
   build:
-    # A skipped job passes a required check, so a no-op edit's run reports its
-    # skipped build and holbuild-success under other names than the required
-    # ones, leaving the PR's real results in place.
-    name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'build (no-op edit)' || 'build' }}
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which every
@@ -64,6 +60,12 @@ jobs:
           # The witnesses build in the witnesses jobs; build-rollup adds them.
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $(python3 tools/ci_targets.py build-roots)
 
+      - name: Check external-entry theories for cheats and axioms
+        run: |
+          for theory in vyperABIEntriesTheory vyperExternalEntryBehaviorTheory vyperExternalEntrySourceBehaviorTheory; do
+            holbuild check "$theory"
+          done
+
       - name: Verify no successful-build checkpoints remain
         run: |
           if find .holbuild/checkpoints \( -name '*.save' -o -name '*.save.ok' \) 2>/dev/null | grep -q .; then
@@ -75,7 +77,7 @@ jobs:
   compiler:
     # Builds what the witnesses load besides each other, once for all
     # witness groups.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which every
@@ -105,7 +107,7 @@ jobs:
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
 
   witnesses:
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: compiler
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 90
@@ -164,7 +166,7 @@ jobs:
   build-rollup:
     # Adds the witness groups to what build published, builds the witness
     # rollup and exports the HBX of the whole project.
-    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
+    if: (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     needs: [build, witnesses]
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
@@ -258,7 +260,7 @@ jobs:
     # Builds only what the test groups load besides their own theories, so they
     # start long before build finishes.
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base))) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 240
     # The cache login is a secret of the bazel-cache environment, which every
@@ -289,7 +291,7 @@ jobs:
 
   python-o1-oracle:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base))) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -311,7 +313,7 @@ jobs:
 
   export-vyper-tests:
     needs: tested
-    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base))) }}
+    if: ${{ !cancelled() && needs.tested.outputs.merge-group-passed != 'true' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -331,7 +333,7 @@ jobs:
   vyper-tests:
     # tested, skipped on other events than push, would skip this job through
     # the implicit success(); the result checks stand in for it.
-    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base))) }}
+    if: ${{ !cancelled() && needs.test-deps.result == 'success' && needs.export-vyper-tests.result == 'success' && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: [test-deps, export-vyper-tests]
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 90
@@ -404,8 +406,7 @@ jobs:
           fi
 
   holbuild-success:
-    name: ${{ (github.event.action == 'edited' && !github.event.changes.base) && 'holbuild-success (no-op edit)' || 'holbuild-success' }}
-    if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && (github.event.action != 'edited' || github.event.changes.base)))
+    if: always() && (github.event_name != 'pull_request' || (!github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-26.04-arm
     needs: [build, compiler, witnesses, build-rollup, tested, test-deps, python-o1-oracle, export-vyper-tests, vyper-tests]
     steps:

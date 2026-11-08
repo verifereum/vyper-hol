@@ -63,7 +63,8 @@ Ancestors
   compileEnv accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
-  vyperValueOperation valueEncoding fragExec venomState exprSimLiteralBuffer
+  vyperValueOperation valueEncoding memoryValueEncoding
+  fragExec venomState exprSimLiteralBuffer
   vyperStorageLayoutSafety vyperLookupStorage vyperTypeValues
   exprSimNameWord
   exprSimNameValue

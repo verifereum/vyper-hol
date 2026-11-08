@@ -1,6 +1,6 @@
 Theory regularCallEmitSim
 Ancestors
-  regularMemorySim venomExecSemantics venomCallOracleDefs codegenRel asmSem
+  memoryReadRel regularMemorySim venomExecSemantics venomCallOracleDefs codegenRel asmSem
   stackPlanGen contextCodegenRel venomInst asmIR
   list rich_list arithmetic venomState strongPrefixSim spillSim emitSim stackModel instSimHelpers planSpillBounds
 
@@ -28,15 +28,6 @@ Proof
   strip_tac >> drule related_tx_params >>
   gvs[venom_asm_rel_def, make_asm_delegatecall_state_def,
       make_venom_delegatecall_state_def]
-QED
-
-Theorem related_create_state:
-  venom_asm_rel lo ps vs st ==>
-  make_asm_create_state st target gas value data =
-  make_venom_create_state vs target gas value data
-Proof
-  strip_tac >> drule related_tx_params >>
-  gvs[venom_asm_rel_def, make_asm_create_state_def, make_venom_create_state_def]
 QED
 
 Theorem related_call_input_bytes:

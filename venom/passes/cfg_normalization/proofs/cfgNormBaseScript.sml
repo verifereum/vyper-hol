@@ -1553,14 +1553,6 @@ Proof
   Cases_on `inst.inst_opcode = PHI` >> simp[update_phis_for_split_def]
 QED
 
-Theorem phi_prefix_length_all_phi[local]:
-  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `i` >> simp[]
-QED
-
 Theorem phi_prefix_length_at_nonphi[local]:
   !insts. phi_prefix_length insts < LENGTH insts ==>
     (EL (phi_prefix_length insts) insts).inst_opcode <> PHI
@@ -1568,34 +1560,6 @@ Proof
   Induct_on `insts` >> simp[phi_prefix_length_def] >>
   rpt gen_tac >>
   Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
-QED
-
-(* bb_well_formed implies phi_prefix_length < LENGTH: the last instruction
-   is always a terminator (not PHI), so PHI prefix must be shorter. *)
-Theorem bb_well_formed_phi_prefix_length_lt[local]:
-  !bb. bb_well_formed bb ==>
-    phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
-Proof
-  rpt strip_tac >>
-  CCONTR_TAC >>
-  `LENGTH bb.bb_instructions <= phi_prefix_length bb.bb_instructions`
-    by simp[arithmeticTheory.NOT_LT] >>
-  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions`
-    by simp[phi_prefix_length_le] >>
-  `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions`
-    by decide_tac >>
-  fs[bb_well_formed_def] >>
-  `~is_terminator PHI` by simp[is_terminator_def] >>
-  `is_terminator
-    (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode`
-    by metis_tac[listTheory.LAST_EL] >>
-  `LENGTH bb.bb_instructions <> 0` by
-    (Cases_on `bb.bb_instructions` >> simp[]) >>
-  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions`
-    by simp[] >>
-  `bb.bb_instructions❲PRE (LENGTH bb.bb_instructions)❳.inst_opcode = PHI`
-    by metis_tac[phi_prefix_length_all_phi] >>
-  metis_tac[]
 QED
 
 (* Boundary lemma: run_block on update_phis_for_split bb = run_block on original bb
@@ -2345,7 +2309,7 @@ Theorem exec_block_update_phis_from_ppl[local]:
 Proof
   rpt strip_tac >>
   `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions`
-    by metis_tac[bb_well_formed_phi_prefix_length_lt] >>
+    by metis_tac[phi_prefix_length_lt_wf] >>
   `(EL (phi_prefix_length bb.bb_instructions) bb.bb_instructions).inst_opcode <> PHI`
     by metis_tac[phi_prefix_length_at_nonphi] >>
   irule run_block_update_phis_non_phi_suffix >>
@@ -5524,7 +5488,7 @@ Theorem phi_prefix_length_non_phi_suffix[local]:
         k < LENGTH bb.bb_instructions ==>
         (EL k bb.bb_instructions).inst_opcode <> PHI
 Proof
-  metis_tac[bb_non_phi_suffix, bb_well_formed_phi_prefix_length_lt,
+  metis_tac[bb_non_phi_suffix, phi_prefix_length_lt_wf,
             phi_prefix_length_at_nonphi]
 QED
 

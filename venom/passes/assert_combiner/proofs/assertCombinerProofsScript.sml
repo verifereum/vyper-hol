@@ -8,6 +8,7 @@
 Theory assertCombinerProofs
 Ancestors
   acFunctionSimProofs acAbortRelProofs
+  venomFnInstsProofs
   acAbortProofs acSimPrecondProofs acChainProofs acBaseProofs assertCombinerDefs
   passSimulationDefs passSimulationProps passSimulationProofs
   stateEquiv stateEquivProps execEquivProps execEquivParamProps venomInstProps venomExecProps
@@ -395,37 +396,7 @@ Proof
   disch_then (qspecl_then [`n`, `n'`] mp_tac) >> simp[EL_MAP]
 QED
 
-(* Under SSA, no instruction can use a variable it also defines.
-   Proof: def_dominates_uses gives a definer that strictly precedes
-   the user within the same block, but both have x in outputs,
-   contradicting ALL_DISTINCT on the global output list. *)
-Triviality all_distinct_flat_map_unique[local]:
-  !ls f (i1:'a) (i2:'a) (x:'b).
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM i1 ls /\ MEM x (f i1) /\
-    MEM i2 ls /\ MEM x (f i2) ==>
-    i1 = i2
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
-QED
-
-Triviality mem_fn_insts[local]:
-  !bbs bb i. MEM bb bbs /\ MEM i bb.bb_instructions ==>
-    MEM i (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >> metis_tac[]
-QED
-
-Triviality mem_fn_insts_rev[local]:
-  !bbs i. MEM i (fn_insts_blocks bbs) ==>
-    ?bb. MEM bb bbs /\ MEM i bb.bb_instructions
-Proof
-  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >> metis_tac[]
-QED
-
-(* Combine dfg_build_function_correct + fn_insts_def + mem_fn_insts_rev *)
+(* Combine dfg_build_function_correct + fn_insts_def + mem_fn_insts_blocks_rev *)
 Triviality dfg_def_in_fn_blocks[local]:
   !fn v inst.
     dfg_get_def (dfg_build_function fn) v = SOME inst ==>
@@ -433,7 +404,7 @@ Triviality dfg_def_in_fn_blocks[local]:
     ?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions
 Proof
   rpt strip_tac >> imp_res_tac dfg_build_function_correct >>
-  fs[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts_rev]
+  fs[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts_blocks_rev]
 QED
 
 (* fn_inst_ids_distinct gives per-block ALL_DISTINCT on inst_ids *)
@@ -474,9 +445,9 @@ Proof
     `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) (fn_insts fn)))`
     ASSUME_TAC >- fs[ssa_form_def]) >>
   (Q.SUBGOAL_THEN `MEM def_inst (fn_insts fn)` ASSUME_TAC >- (
-    simp[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts])) >>
+    simp[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts_blocks])) >>
   (Q.SUBGOAL_THEN `MEM i (fn_insts fn)` ASSUME_TAC >- (
-    simp[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts])) >>
+    simp[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts_blocks])) >>
   (Q.SUBGOAL_THEN `def_inst = i` ASSUME_TAC >- (
     metis_tac[all_distinct_flat_map_unique])) >>
   gvs[] >>
@@ -1189,19 +1160,6 @@ Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[ALL_DISTINCT_APPEND]
 QED
 
-(* ssa_form gives per-block ALL_DISTINCT on outputs *)
-Triviality ssa_form_block_outputs_distinct[local]:
-  !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
-Proof
-  simp[venomWfTheory.ssa_form_def, venomInstTheory.fn_insts_def] >>
-  rpt strip_tac >>
-  ntac 2 (pop_assum mp_tac) >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MAP_APPEND, FLAT_APPEND]
-QED
-
 (* state_equiv V s1 s2 ∧ x ∉ V ⟹ lookup_var x s1 = lookup_var x s2 *)
 Triviality state_equiv_lookup_var[local]:
   !V x s1 s2. state_equiv V s1 s2 /\ x NOTIN V ==>
@@ -1306,7 +1264,7 @@ Proof
   (* 11: unique definer *)
   >- (rpt strip_tac >>
       (Q.SUBGOAL_THEN `MEM i (fn_insts fn)` ASSUME_TAC
-       >- (simp[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts])) >>
+       >- (simp[venomInstTheory.fn_insts_def] >> metis_tac[mem_fn_insts_blocks])) >>
       imp_res_tac dfg_build_function_defs_complete >>
       imp_res_tac dfg_build_function_correct >>
       metis_tac[all_distinct_flat_map_unique,
@@ -1411,8 +1369,8 @@ Proof
        irule SUBSET_BIGUNION_I >> simp[MEM_MAP] >> metis_tac[] >> NO_TAC) >>
   TRY (rpt strip_tac >> res_tac >> NO_TAC) >>
   TRY (fs[ac_inv_def, EVERY_MEM] >> metis_tac[] >> NO_TAC) >>
-  TRY (metis_tac[ssa_form_block_outputs_distinct,
-         venomWfTheory.wf_ssa_def] >> NO_TAC) >>
+  TRY (metis_tac[ssa_block_outputs_all_distinct, venomInstTheory.fn_insts_def,
+         venomWfTheory.ssa_form_def, venomWfTheory.wf_ssa_def] >> NO_TAC) >>
   (* ac_sim_precond: use ac_fn_block_precond + ac_block_establishes_precond *)
   strip_tac >>
   mp_tac (Q.SPECL [`fn`, `bb`, `s`] ac_fn_block_precond) >>

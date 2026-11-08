@@ -1,4 +1,4 @@
-(* C7.2: checked frontend and exact independent pinned-Python bytecode parity. *)
+(* C7.2: checked frontend acceptance and supported_program membership. *)
 Theory evalCompilerAbiTupleString
 Ancestors
   compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
@@ -21,18 +21,10 @@ val tup_string_arg_program =
   memoryStoreWitnessLib.program fixture_root "tup_string_arg"
 val () = print "C7_2_CHECKER_ACCEPT deployment runtime\n"
 
+val tup_string_arg_supported_eval = EQT_ELIM
+  (EVAL ``supported_program ^tup_string_arg_program``)
 Theorem tup_string_arg_supported:
   supported_program ^tup_string_arg_program
 Proof
-  EVAL_TAC
-QED
-
-val tup_string_arg_term = memoryStoreWitnessLib.compile_term tup_string_arg_program
-val tup_string_arg_evaluation = EVAL tup_string_arg_term
-
-Theorem tup_string_arg_matches_python_oracle:
-  ^tup_string_arg_term =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "tup_string_arg")
-Proof
-  CONV_TAC (LAND_CONV (K tup_string_arg_evaluation)) >> EVAL_TAC
+  ACCEPT_TAC tup_string_arg_supported_eval
 QED

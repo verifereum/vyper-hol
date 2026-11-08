@@ -790,7 +790,7 @@ Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   drule_all step_inst_log_ok >> strip_tac >>
-  drule_all log_plan_decompose >> strip_tac >>
+  drule_all log_inst_plan_decompose >> strip_tac >>
   `compute_operands inst = rest` by simp[compute_operands_def] >>
   `asm_block_at prog as.as_pc
      (execute_plan initial_fmp (input_ops ++ reorder_ops))` by

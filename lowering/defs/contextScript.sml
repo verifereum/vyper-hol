@@ -31,7 +31,8 @@
 
 Theory context
 Ancestors
-  emitHelper compileEnv venomInst typedCopyDomain list pair arithmetic combin
+  emitHelper compileEnv venomInst typedCopyDomain memoryLayoutDefs
+  list pair arithmetic combin
 Libs
   monadsyntax
 
@@ -386,6 +387,12 @@ Definition compile_load_immutable_def:
 End
 
 (* ===== Nonreentrant Lock ===== *)
+(* Vyper data_positions.py allocate_global_nonreentrancy_slot reserves the
+   first transient slot for $.nonreentrant_key, shared by all functions. *)
+Definition global_nonreentrant_slot_def:
+  global_nonreentrant_slot = 0n
+End
+
 (* Mirrors Python: context.py emit_nonreentrant_lock/unlock
    is_view: T for view functions — check lock but don't acquire it.
    Python: if func_t.mutability != VIEW: STORE(key, temp_value) *)
@@ -831,12 +838,13 @@ End
 
 (* Store a primitive value or a complex memory pointer, with the source layout.
    Bytestrings always copy their runtime length, even when the types agree.
+   Tuple bulk copies retain the pinned code shape when all field layouts agree.
    Mirrors Python: context.py Context.store_memory. *)
 Definition compile_store_memory_def:
   compile_store_memory cenv src dst dst_ty src_ty =
     if is_word_type dst_ty then emit_void MSTORE [dst; src]
     else if is_bytestring_type dst_ty then compile_store_bytestring src dst
-    else if dst_ty ≠ src_ty then
+    else if dst_ty ≠ src_ty ∧ ¬tuple_memory_layout_eq dst_ty src_ty then
       compile_store_memory_typed cenv dst dst_ty src src_ty
     else compile_copy_memory dst src (type_memory_bytes cenv dst_ty)
 End

@@ -16,15 +16,8 @@ Ancestors
   stateEquiv stateEquivProps
   execEquivParamBase execEquivParamProps
   passSimulationDefs passSimulationProps passSimulationProofs
-  finite_map worklistDefs worklistProps venomState
+  finite_map worklistDefs worklistProofs venomState
   list
-
-(* state_equiv {} implies full equality of venom_state *)
-Triviality state_equiv_empty_eq[local]:
-  !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
-Proof
-  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
-QED
 
 (* Nophi invariant predicate for the function-level proof *)
 Definition nophi_inv_def:
@@ -104,54 +97,6 @@ Proof
   rpt strip_tac >>
   imp_res_tac eval_phis_flookup_not_phi_output >>
   fs[TO_FLOOKUP]
-QED
-
-(* A variable that is not a PHI output of the block is not a PHI output
-   of any instruction in the block's instruction list. *)
-Triviality not_phi_output_of_block_imp_not_phi_output_insts[local]:
-  !bbs lbl x bb.
-    lookup_block lbl bbs = SOME bb /\
-    ~is_phi_output_of_block bbs lbl x ==>
-    !inst. MEM inst bb.bb_instructions ==>
-           inst.inst_opcode = PHI ==>
-           ~MEM x inst.inst_outputs
-Proof
-  rpt strip_tac >>
-  CCONTR_TAC >>
-  fs[is_phi_output_of_block_def] >>
-  metis_tac[]
-QED
-
-(* eval_phis preserves the nophi invariant when processing a block's instructions *)
-Triviality eval_phis_preserves_nophi_inv[local]:
-  !f s s' bb.
-    nophi_inv f s /\
-    eval_phis s bb.bb_instructions = OK s' /\
-    s.vs_current_bb = bb.bb_label /\
-    lookup_block bb.bb_label f.fn_blocks = SOME bb ==>
-    nophi_inv f s'
-Proof
-  rpt strip_tac >>
-  fs[nophi_inv_def] >>
-  `s'.vs_current_bb = s.vs_current_bb` by metis_tac[eval_phis_preserves_current_bb] >>
-  conj_tac >- simp[] >>
-  conj_tac >- (
-    rpt strip_tac >>
-    `!inst. MEM inst bb.bb_instructions ==>
-            inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs`
-      by metis_tac[not_phi_output_of_block_imp_not_phi_output_insts] >>
-    `FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x`
-      by metis_tac[eval_phis_flookup_not_phi_output] >>
-    `FLOOKUP s.vs_vars x = SOME c` by metis_tac[TO_FLOOKUP] >>
-    simp[]) >>
-  rpt strip_tac >>
-  `!inst. MEM inst bb.bb_instructions ==>
-          inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs`
-    by metis_tac[not_phi_output_of_block_imp_not_phi_output_insts] >>
-  `FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x`
-    by metis_tac[eval_phis_flookup_not_phi_output] >>
-  `x IN FDOM s.vs_vars` by metis_tac[TO_FLOOKUP] >>
-  metis_tac[]
 QED
 
 (* The old sccp_function_lift_result theorem was removed after the eval_phis

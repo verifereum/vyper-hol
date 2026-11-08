@@ -763,10 +763,13 @@ End
    Returns SOME (success, returnData, accounts', tStorage', emitted_logs),
    or NONE on a model/domain failure. Failed calls (a value the caller can't
    pay, REVERT or another exceptional halt) give success = F, the original
-   accounts and transient storage, and an empty emitted-log list. *)
+   accounts and transient storage, and an empty emitted-log list.
+   Calldata of 2 ** 256 bytes or more is a model failure: the EVM's CALL
+   takes the input size as a stack word, so no real call carries it. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt gas
                accounts tStorage txParams =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     if ext_call_value_transfer_ok caller callee value_opt accounts then
       let code = (lookup_account callee accounts).code in
       let s0 = make_ext_call_state caller callee code calldata value_opt gas
@@ -835,8 +838,11 @@ End
 
 val () = cv_auto_trans make_delegate_call_state_def;
 
+(* As in run_ext_call, calldata of 2 ** 256 bytes or more is a model
+   failure. *)
 Definition run_delegate_call_def:
   run_delegate_call cx target_addr calldata gas accounts tStorage =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     let s0 = make_delegate_call_state cx target_addr calldata gas accounts tStorage in
     let outcome =
       if fIN target_addr precompile_addresses then
@@ -862,6 +868,58 @@ Definition run_raw_call_def:
 End
 
 val () = cv_auto_trans run_raw_call_def;
+
+(* Every frame the interpreter starts for an external call has calldata
+   shorter than 2 ** 256 bytes, the bound call_tx_well_typed asks of a
+   transaction: run_ext_call and run_delegate_call build their frame
+   (make_ext_call_state, make_delegate_call_state) only past the guard on
+   LENGTH calldata, and that frame's message data is the calldata. The
+   *_calldata_bound theorems give the bound from a completed call. *)
+Theorem make_ext_call_state_calldata:
+  ?ctxt rb.
+    (make_ext_call_state caller callee code calldata value_opt gas accounts
+       tStorage txParams).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_ext_call_state_def, initial_context_def, initial_msg_params_def,
+       make_evm_tx_def]
+QED
+
+Theorem make_delegate_call_state_calldata:
+  ?ctxt rb.
+    (make_delegate_call_state cx target_addr calldata gas accounts
+       tStorage).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_delegate_call_state_def] >> pairarg_tac >>
+  simp[initial_context_def, initial_msg_params_def, make_evm_tx_def]
+QED
+
+Theorem run_ext_call_calldata_bound:
+  run_ext_call caller callee calldata value_opt gas accounts tStorage
+    txParams = SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_ext_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_delegate_call_calldata_bound:
+  run_delegate_call cx target_addr calldata gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_delegate_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_raw_call_calldata_bound:
+  run_raw_call cx flags target_addr calldata amount gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  Cases_on `flags.rcf_is_delegate` >> simp[run_raw_call_def] >> strip_tac
+  >- (drule run_delegate_call_calldata_bound >> simp[])
+  >- (drule run_ext_call_calldata_bound >> simp[])
+QED
 
 (* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
    call only when no return data is expected; calls with a return type rely
@@ -1358,6 +1416,79 @@ val () = unlock_if_nr_def
 (* Unfolded by simp, so proofs about evaluate_def see the lock code inline. *)
 val () = export_rewrites ["lock_if_nr_def", "unlock_if_nr_def"];
 
+(* A storage or transient array is iterated in place, as the compiler does:
+   its length is read once at loop entry, and each element is a location
+   read at the start of its own iteration. Other iterables are copied. *)
+Definition array_iterator_results_def:
+  array_iterator_results cx arr_typ res =
+    case res of
+    | PlaceR (StoragePlace tr slot (ArrayTV etv bd)) => do
+        len <- result_array_length cx res;
+        check (compatible_bound bd len) "For storage array length";
+        first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+        return (GENLIST (λi. PlaceR (StoragePlace tr
+                  (first + n2w (i * type_slot_size etv)) etv)) len)
+      od
+    | _ => do
+        v <- read_result cx res;
+        arr_tv <- lift_option_type (evaluate_type (get_tenv cx) arr_typ)
+                    "For array type";
+        vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+        return (MAP Value vs)
+      od
+End
+
+val () = array_iterator_results_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            eval_result_CASE_rator, place_CASE_rator, type_value_CASE_rator,
+            bound_CASE_rator]
+  |> cv_auto_trans;
+
+Theorem array_iterator_results_storage:
+  array_iterator_results cx ty (PlaceR (StoragePlace tr slot (ArrayTV etv bd))) =
+  do
+    len <- result_array_length cx (PlaceR (StoragePlace tr slot (ArrayTV etv bd)));
+    check (compatible_bound bd len) "For storage array length";
+    first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+    return (GENLIST (λi. PlaceR (StoragePlace tr
+              (first + n2w (i * type_slot_size etv)) etv)) len)
+  od
+Proof
+  simp[array_iterator_results_def]
+QED
+
+Theorem array_iterator_results_copy:
+  (!tr slot etv bd. res <> PlaceR (StoragePlace tr slot (ArrayTV etv bd))) ==>
+  array_iterator_results cx ty res =
+  do
+    v <- read_result cx res;
+    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "For array type";
+    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+    return (MAP Value vs)
+  od
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv`)) >>
+  simp[array_iterator_results_def]
+QED
+
+(* Building the iteration list reads but never writes. *)
+Theorem array_iterator_results_state:
+  array_iterator_results cx ty res st = (r,st') ==> st' = st
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd` >> Cases_on `tr`))) >>
+  simp[array_iterator_results_def, bind_def, ignore_bind_def,
+       result_array_length_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def, lift_option_type_def, option_CASE_rator,
+       LET_THM, AllCaseEqs()] >>
+  rw[] >> imp_res_tac read_result_state >> gvs[]
+QED
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -1513,10 +1644,7 @@ Definition evaluate_def:
   od ∧
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
-    v <- read_result cx tv;
-    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
-    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
-    return vs
+    array_iterator_results cx (expr_type e) tv
   od ∧
   eval_iterator cx (Range e1 e2) = do
     tv1 <- eval_expr cx e1;
@@ -1525,15 +1653,16 @@ Definition evaluate_def:
     v2 <- read_result cx tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
     n1 <<- FST rl; n2 <<- SND rl;
-    return $ GENLIST (λn. IntV (n1 + &n)) n2
+    return $ GENLIST (λn. Value (IntV (n1 + &n))) n2
   od ∧
   eval_for cx tyv nm body [] = return () ∧
-  eval_for cx tyv nm body (v::vs) = do
+  eval_for cx tyv nm body (r::rs) = do
+    v <- read_result cx r;
     push_scope_with_var nm tyv v;
     broke <- finally
       (try (do eval_stmts cx body; return F od) handle_loop_exception)
       pop_scope ;
-    if broke then return () else eval_for cx tyv nm body vs
+    if broke then return () else eval_for cx tyv nm body rs
   od ∧
   eval_expr cx (Name _ id) = do
     sc <- get_scopes;
@@ -1573,6 +1702,12 @@ Definition evaluate_def:
       tv <- eval_expr cx (HD es);
       len <- result_array_length cx tv;
       return $ IntV (&len)
+    od else if bt = Bop In ∨ bt = Bop NotIn then do
+      vs <- eval_exprs cx es;
+      type_check (LENGTH vs = 2) "Membership args";
+      tv <- lift_option_type
+        (evaluate_type (get_tenv cx) (expr_type (EL 1 es))) "Membership type";
+      lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else if bt = Env MsgGas then next_gas_reading
     else do
       vs <- eval_exprs cx es;
@@ -1868,6 +2003,29 @@ Proof
   Induct >> rw[evaluate_def, return_def, bind_def] >>
   gvs[CaseEq "prod", CaseEq "sum"] >> first_x_assum irule >>
   goal_assum drule
+QED
+
+(* An iteration reads its element before binding the loop variable. *)
+Theorem eval_for_cons_read:
+  read_result cx r st = (INL v,st') ==>
+  eval_for cx tyv nm body (r::rs) st =
+  do
+    push_scope_with_var nm tyv v;
+    broke <- finally
+      (try (do eval_stmts cx body; return F od) handle_loop_exception)
+      pop_scope ;
+    if broke then return () else eval_for cx tyv nm body rs
+  od st
+Proof
+  strip_tac >> imp_res_tac read_result_state >> gvs[] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def]
+QED
+
+Theorem eval_for_cons_read_error:
+  read_result cx r st = (INR e,st') ==>
+  eval_for cx tyv nm body (r::rs) st = (INR e,st')
+Proof
+  simp[Once evaluate_def, bind_def]
 QED
 
 (* Semantics of initial state of a contract after deployment *)

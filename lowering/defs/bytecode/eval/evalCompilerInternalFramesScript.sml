@@ -3,4 +3,4 @@
    The fixtures are checked in evalCompilerInternalFrames1 and
    evalCompilerInternalFrames2, which build in parallel. *)
 Theory evalCompilerInternalFrames
-Ancestors evalCompilerInternalFramesDiamond evalCompilerInternalFramesExtCall evalCompilerInternalFrames1 evalCompilerInternalFrames2
+Ancestors evalCompilerInternalFramesDiamond evalCompilerInternalFrames1 evalCompilerInternalFrames2

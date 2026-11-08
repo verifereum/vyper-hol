@@ -457,11 +457,13 @@ Proof
           >- (first_x_assum irule >> metis_tac[]) >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       Cases_on `bt = Env MsgGas` >> simp[] >>
+      Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[] >>
       ho_match_mp_tac scope_pop_effect_bind >> conj_tac
       >- (first_x_assum irule >> metis_tac[]) >>
-      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
+      gen_tac >>
+      rpt (ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+           gen_tac) >>
+      simp[]) >> simp[]
 QED
 
 Theorem eval_typebuiltin_scope_effect[local]:
@@ -679,7 +681,7 @@ Theorem eval_mutual_scope_pop_effect_results[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. scope_pop_effect (eval_expr cx e)) /\
   (!cx es. scope_pop_effect (eval_exprs cx es)) /\
   (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\
@@ -695,7 +697,9 @@ Proof
   [`scope_pop_effect (eval_expr _ (Call _ (CreateTarget kind has_salt rof kw_order) _ _))`] >-
     suspend "Create" >~
   [`scope_pop_effect (eval_expr _ (Call _ (IntCall _) _ _))`] >-
-    suspend "IntCall" >>
+    suspend "IntCall" >~
+  [`scope_pop_effect (eval_expr _ (Builtin _ _ _))`] >-
+    suspend "Builtin" >>
   FIRST ((simp[] >> NO_TAC) :: map (fn th => FIRST
     [MATCH_ACCEPT_TAC (GEN_ALL th),
      match_mp_tac (GEN_ALL th) >> rpt conj_tac >> first_assum ACCEPT_TAC] >> NO_TAC)
@@ -764,13 +768,18 @@ Resume eval_mutual_scope_pop_effect_results[IntCall]:
   rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
 QED
 
+Resume eval_mutual_scope_pop_effect_results[Builtin]:
+  irule eval_builtin_scope_effect >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> gvs[] >> metis_tac[]
+QED
+
 Finalise eval_mutual_scope_pop_effect_results
 
 Theorem eval_mutual_scope_pop_effect:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. scope_pop_effect (eval_expr cx e)) /\
   (!cx es. scope_pop_effect (eval_exprs cx es)) /\
   (!cx bt. scope_pop_effect (eval_base_place cx bt)) /\

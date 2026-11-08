@@ -19,7 +19,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv selectorDispatch immutableSectionRel
+  supportedProgram compileEnv context selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -32,8 +32,36 @@ Definition layouts_agree_def:
       (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
                      ALOOKUP tl (NONE, id) = SOME n) /\
       (!vis tr id kt vt n. MEM (HashMapDecl vis tr id kt vt (SOME n)) tops ==>
-                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n)
+                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n) /\
+      (* The pinned frontend reserves this slot when a guard is present.
+         Ordinary contracts need not have a transient layout at all. *)
+      (!vis mut rr name args dflts ret body.
+         MEM (FunctionDecl vis mut T rr name args dflts ret body) tops ==>
+         ALOOKUP tl (NONE, "$.nonreentrant_key") =
+           SOME global_nonreentrant_slot)
 End
+
+Theorem layouts_agree_nonreentrant_slot:
+  layouts_agree tops am tx /\
+  MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops ==>
+  lookup_nonreentrant_slot am.layouts tx.target = SOME global_nonreentrant_slot
+Proof
+  strip_tac >> Cases_on `ALOOKUP am.layouts tx.target`
+  >- (fs[layouts_agree_def] >> metis_tac[]) >>
+  rename1 `ALOOKUP am.layouts tx.target = SOME lay` >>
+  PairCases_on `lay` >>
+  fs[layouts_agree_def, lookup_nonreentrant_slot_def] >> metis_tac[]
+QED
+
+Theorem layouts_agree_initial_nonreentrant_slot:
+  layouts_agree tops am tx /\
+  MEM (FunctionDecl vis mut T rr name args dflts ret stmts) tops ==>
+  (initial_evaluation_context am.sources am.layouts tx NONE).nonreentrant_slot =
+    SOME global_nonreentrant_slot
+Proof
+  simp[initial_evaluation_context_def] >>
+  metis_tac[layouts_agree_nonreentrant_slot]
+QED
 
 Definition source_deployment_rel_def:
   source_deployment_rel tops am tx <=>

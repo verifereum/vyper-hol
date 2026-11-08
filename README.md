@@ -133,6 +133,62 @@ holbuild -j"$(nproc)" build
 
 Release instructions, including the prebuilt holbuild archive artefact, are in [docs/release.md](docs/release.md).
 
+### Frontend CV translation and benchmark
+
+The test importer keeps `EVAL`, which was faster on all measured fixtures.
+The frontend is total, so `cv_eval` returns an unconditional translation
+equality for every annotated AST. The opt-in benchmark checks exact RHS parity:
+
+```bash
+holbuild -j1 build --force=theory --skip-checkpoints --no-cache jsonFrontendCVBenchmarkTheory
+```
+
+### Native JSON semantics runner
+
+The EmitML runner executes CV-translated Vyper semantics on exported JSON traces.
+With `holbuild` v0.12.0 or newer, MLton, and Python 3 on `PATH`:
+
+```bash
+./tools/demo_run_test.sh
+```
+
+The demo builds `tests/.emit/run-test` and compares exact native/HOL encoded
+inputs and results for all five fixture cases and a passing stdin trace.
+The fixture has three passing cases and two intentional failures (an output
+mismatch and an unexpected revert).
+Before writing parity expectations, the kernel smoke requires both prepared
+and replayed case names to equal the five expected names in order. Missing,
+extra, duplicate, or reordered cases therefore fail rather than allowing an
+empty or incomplete comparison to pass.
+
+Boundary regressions cover block-hash keys and ABI type dimensions beyond
+signed 32-bit range using arbitrary-precision integers. Byte decoding preserves
+the pinned importer's bounded, chunk-dependent handling of repeated lowercase
+`0x` prefixes rather than stripping them recursively; AST hex decoding retains
+its separate single-prefix rule.
+
+```bash
+# Build only; add --smoke for native/HOL parity checks:
+python3 tools/emit_run_test.py
+# Exporter JSON containing named tests and setup fixtures:
+tests/.emit/run-test tests/fixtures/run_test_json/basic.json
+# A deployment/call trace array from stdin:
+tests/.emit/run-test < traces.json
+```
+
+Each case produces one JSON line with `name`, `status`, and, on failure, `error`.
+Exit status is 0 when all cases pass, or 1 for a failed case or import error;
+import errors go to stderr. `{}` is rejected as containing no tests; `[]`
+executes an empty trace successfully. `--dump-input [export.json]` exposes
+diagnostic CV input/result encodings.
+
+Native execution is a trusted regression check, not a kernel proof.
+`vyperJsonReplayLib.replay_file` provides kernel-checked replay. The CV frontend
+translation has no preconditions, so the native executable runs the same
+translation for every input the JSON decoder accepts. CI builds the frontend,
+emitter, and kernel replay smoke theories; native MLton compilation is an
+explicit local step.
+
 ### Running the Vyper test suite
 
 The test runner expects exported JSON fixtures at `tests/vyper-test-exports`.
@@ -163,8 +219,8 @@ metadata disabled and decimals enabled by fixture pragmas. These profiles can
 evolve independently. At this pin NONE runs the O1 Venom passes but disables
 assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest
 target the pin supports), whereas the HOL EVM semantics executes Osaka.
-Metadata need not match for behavioral replay. Bytecode parity is opt-in and
-is not implied by a passing semantics replay.
+Metadata need not match for behavioral replay. Bytecode parity (checked by
+`lowering/defs/bytecode/native/`) is not implied by a passing semantics replay.
 
 Use Python 3.11.17 in an isolated environment, then run from this repository:
 
@@ -174,7 +230,7 @@ cd vyper-src
 git fetch --unshallow --tags
 git checkout --detach "$(tr -d '[:space:]' < ../VYPER_PIN)"
 git config core.abbrev 8
-SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+9362e36b \
+SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0b1 \
   PIP_CONSTRAINT="../tests/semantics-test-constraints.txt ../tests/semantics-build-constraints.txt" \
   pip install . --group test
 cd ..

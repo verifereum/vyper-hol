@@ -40,6 +40,16 @@ Proof
   simp[ops_spill_bounded_def]
 QED
 
+Theorem plan_slots_bounded_replace_alloc[local]:
+  !spill_base ps al stk.
+    plan_slots_bounded spill_base ps /\ alloc_slots_bounded spill_base al /\
+    ps.ps_alloc.sa_next_offset <= al.sa_next_offset ==>
+    plan_slots_bounded spill_base (ps with <|ps_stack := stk; ps_alloc := al|>)
+Proof
+  rpt strip_tac >> fs[plan_slots_bounded_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >> decide_tac
+QED
+
 Theorem ops_spill_bounded_append:
   !base spill_end xs ys.
     ops_spill_bounded base spill_end (xs ++ ys) <=>
@@ -251,6 +261,19 @@ Proof
   `MEM (EL i offsets) offsets` by simp[EL_MEM] >> metis_tac[]
 QED
 
+Theorem ops_spill_bounded_dup_restores[local]:
+  !base spill_end offsets idxs single.
+    ops_spill_bounded base spill_end
+      (FLAT (MAP (\i. [SORestore (EL i offsets)] ++
+        if single then [] else [SOSwap 1]) idxs)) <=>
+    ops_spill_bounded base spill_end
+      (MAP (\i. SORestore (EL i offsets)) idxs)
+Proof
+  rpt gen_tac >> Cases_on `single` >>
+  simp[ops_spill_bounded_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV SWAP_EXISTS_THM)) >> simp[]
+QED
+
 Theorem foldl_alloc_offsets_length:
   !items ops offs al.
     LENGTH (FST (SND (FOLDL (\(ops, offs, al) item.
@@ -377,59 +400,56 @@ Theorem do_dup_slots_bounded:
     plan_slots_bounded base ps' /\
     ops_spill_bounded base ps'.ps_alloc.sa_next_offset ops
 Proof
-  rpt gen_tac >> simp[do_dup_def] >>
+  rpt gen_tac >> simp[do_dup_def, top_n_def] >>
   IF_CASES_TAC >> gvs[]
   >- (rpt strip_tac >> gvs[] >>
       simp[plan_slots_bounded_def, ops_spill_bounded_def])
   >> CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   strip_tac >>
+  rename1 `plan_slots_bounded spill_base ps` >>
+  qabbrev_tac `items = TAKE (dist - 15) (REVERSE ps.ps_stack)` >>
   qabbrev_tac `res = FOLDL
     (\(ops,offs,al) item.
        (ops ++ [SOSpill (FST (alloc_spill_slot al))],
         SNOC (FST (alloc_spill_slot al)) offs,
         SND (alloc_spill_slot al)))
-    ([],[],ps.ps_alloc) (REVERSE (top_n (dist - 15) ps.ps_stack))` >>
+    ([],[],ps.ps_alloc) items` >>
   PairCases_on `res` >> gvs[] >>
-  qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`, `[]`, `[]`,
-               `ps.ps_alloc`, `base'`] mp_tac foldl_alloc_slots_bounded >>
+  qspecl_then [`items`, `[]`, `[]`,
+               `ps.ps_alloc`, `spill_base`] mp_tac foldl_alloc_slots_bounded >>
   simp[] >>
   (impl_tac >- gvs[plan_slots_bounded_def]) >>
   strip_tac >>
   `LENGTH res1 = dist - 15` by
-    (qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`, `[]`, `[]`,
+    (qspecl_then [`items`, `[]`, `[]`,
                   `ps.ps_alloc`] mp_tac foldl_alloc_offsets_length >>
      simp[] >>
-     simp[top_n_def, LENGTH_TAKE] >> decide_tac) >>
+      simp[Abbr `items`, LENGTH_TAKE, MIN_DEF] >> decide_tac) >>
   qabbrev_tac `final_al =
     FOLDL (\al off. free_spill_slot off al) res2 res1` >>
   `final_al.sa_next_offset = res2.sa_next_offset` by
     simp[Abbr `final_al`, foldl_free_next_offset] >>
-  `alloc_slots_bounded base' final_al` by
+  `alloc_slots_bounded spill_base final_al` by
     (simp[Abbr `final_al`] >> irule foldl_free_slots_bounded >> simp[]) >>
-  `plan_slots_bounded base' (ps with ps_alloc := final_al)` by
-    (simp[plan_slots_bounded_def] >>
-     rpt gen_tac >> strip_tac >>
-     qpat_x_assum `plan_slots_bounded base' ps` mp_tac >>
-     simp[plan_slots_bounded_def] >> strip_tac >>
-     first_x_assum drule >> strip_tac >> decide_tac) >>
-  qabbrev_tac `idxs = if dist - 15 <= 16 then
-    GENLIST (\i. dist - 15 - 2 - i) (dist - 15 - 1) ++ [dist - 15 - 1]
-    else GENLIST (\i. dist - 15 - 1 - i) (dist - 15)` >>
-  `EVERY (\i. i < LENGTH res1) idxs` by
-    (simp[Abbr `idxs`] >> IF_CASES_TAC >>
-     simp[EVERY_APPEND, EVERY_GENLIST] >> rpt strip_tac >> decide_tac) >>
-  `ops_spill_bounded base' res2.sa_next_offset
-     (FLAT (MAP (\idx. SORestore (EL idx res1) ::
-       (if dist - 15 <= 16 then [] else [SOSwap 1])) idxs))` by
-    (gvs[ops_spill_bounded_def, MEM_FLAT, MEM_MAP, EVERY_MEM] >>
-     rpt strip_tac >> gvs[] >>
-     Cases_on `dist <= 31` >> gvs[] >>
-     first_x_assum drule >> strip_tac >>
-     `MEM (EL idx res1) res1` by (irule EL_MEM >> simp[]) >>
-     first_x_assum drule >> simp[]) >>
-  gvs[Abbr `final_al`, Abbr `idxs`, ops_spill_bounded_append,
-      ops_spill_bounded_def, plan_slots_bounded_def] >>
-  Cases_on `dist <= 31` >> gvs[] >> metis_tac[]
+  `plan_slots_bounded spill_base (ps with
+     <|ps_stack := stack_dup dist ps.ps_stack; ps_alloc := final_al|>)` by
+    (irule plan_slots_bounded_replace_alloc >> simp[]) >>
+  `EVERY (\i. i < LENGTH res1)
+     (dup_restore_indices (dist - 15))` by
+    (simp[dup_restore_indices_bound]) >>
+  `ops_spill_bounded spill_base res2.sa_next_offset
+     (MAP (\i. SORestore (EL i res1))
+       (dup_restore_indices (dist - 15)))` by
+    (irule ops_spill_bounded_map_restore >> simp[]) >>
+  `ops_spill_bounded spill_base res2.sa_next_offset
+     (FLAT (MAP (\i. [SORestore (EL i res1)] ++
+       if dist - 15 <= 16 then [] else [SOSwap 1])
+       (dup_restore_indices (dist - 15))))` by
+    simp[ops_spill_bounded_dup_restores] >>
+  Cases_on `dist - 15 <= 16` >>
+  gvs[Abbr `final_al`, ops_spill_bounded_append,
+      ops_spill_bounded_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem reduce_depth_plan_slots_bounded:

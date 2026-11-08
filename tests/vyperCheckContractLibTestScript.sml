@@ -813,21 +813,13 @@ in assert_some (check p03_constructor_modules);
 end) [false,true];
 
 (* Event declaration regressions: indexed aggregates and duplicate event names
-   are rejected; field-name duplication and four indexed fields remain legal. *)
+   are rejected. *)
 Theorem event_declaration_regressions:
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
   check_contract F [] 0w
     [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
             EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
-  IS_SOME (check_contract F [] 0w
-    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
-                          (("b",BaseT (UintT 256)),T);
-                          (("c",BaseT (UintT 256)),T);
-                          (("d",BaseT (UintT 256)),T)]])]) /\
-  IS_SOME (check_contract F [] 0w
-    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
-                          (("a",BaseT BoolT),F)]])]) /\
   IS_SOME (check_contract F [] 0w
     [(NONE,[FlagDecl "F" ["A";"B"];
             EventDecl "E" [(("a",FlagT (NONE,"F")),T);
@@ -849,18 +841,18 @@ val () = List.app (fn mods =>
   end) event_decl_rejections;
 
 Theorem event_arg_recursive_widening_eval:
-  event_arg_compatible (BaseT (StringT 10)) (BaseT (StringT 5)) /\
-  event_arg_compatible (ArrayT (BaseT (UintT 256)) (Dynamic 5))
-    (ArrayT (BaseT (UintT 256)) (Dynamic 3)) /\
-  event_arg_compatible (ArrayT (BaseT (StringT 5)) (Dynamic 2))
-    (ArrayT (BaseT (StringT 3)) (Dynamic 2)) /\
-  event_arg_compatible (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))])
-    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))]) /\
-  event_arg_compatible (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2))
-    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2)) /\
-  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (UintT 8)) /\
-  ~event_arg_compatible (BaseT (UintT 256)) (BaseT (BytesT (Dynamic 40))) /\
-  ~event_arg_compatible (BaseT (StringT 3)) (BaseT (StringT 5))
+  arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 10)) /\
+  arg_type_fits (ArrayT (BaseT (UintT 256)) (Dynamic 3))
+    (ArrayT (BaseT (UintT 256)) (Dynamic 5)) /\
+  arg_type_fits (ArrayT (BaseT (StringT 3)) (Dynamic 2))
+    (ArrayT (BaseT (StringT 5)) (Dynamic 2)) /\
+  arg_type_fits (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 3))])
+    (TupleT [BaseT (UintT 256); BaseT (BytesT (Dynamic 5))]) /\
+  arg_type_fits (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 3)) (Fixed 2))
+    (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 5)) (Fixed 2)) /\
+  ~arg_type_fits (BaseT (UintT 8)) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (BytesT (Dynamic 40))) (BaseT (UintT 256)) /\
+  ~arg_type_fits (BaseT (StringT 5)) (BaseT (StringT 3))
 Proof
   EVAL_TAC
 QED
@@ -883,7 +875,7 @@ Theorem log_type_mismatch_rejected_eval:
     [(("a",BaseT (UintT 256)),T)])) ret
     (Log (NONE,"E") [Literal (BaseT (UintT 8)) (IntL 1)]) = NONE
 Proof
-  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def]
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def]
 QED
 
 Theorem log_literal_accepted_eval:
@@ -893,7 +885,7 @@ Theorem log_literal_accepted_eval:
   SOME (env with event_fields := FEMPTY |+ ((NONE,"E"),
     [(("a",BaseT (UintT 256)),T)]))
 Proof
-  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, event_arg_compatible_def,
+  simp[finite_mapTheory.FLOOKUP_UPDATE, type_stmt_def, vyperASTTheory.expr_type_def, arg_type_fits_def,
        well_typed_expr_def, well_typed_literal_def] >> EVAL_TAC
 QED
 
@@ -901,7 +893,7 @@ Theorem log_variable_compatibility_probe:
   FLOOKUP env.event_fields id = SOME [(("a",fty),idx)] /\
   FLOOKUP env.var_types "x" = SOME aty ==>
   (type_stmt env ret (Log id [Name aty "x"]) = SOME env <=>
-   event_arg_compatible fty aty)
+   arg_type_fits aty fty)
 Proof
   simp[type_stmt_def, well_typed_expr_def, vyperASTTheory.expr_type_def]
 QED
@@ -1725,3 +1717,21 @@ val () = check_rejects empty_layouts (iterated_write_function
        ^(op_lit u256 2)]``)
 val () = check_accepts "loop without iterated array write" false empty_layouts
   (iterated_write_function ``[] : stmt list``)
+
+(* A computed range bound must be positive and fit the loop variable's type. *)
+Theorem range_computed_bound_typing:
+  type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (UintT 256))
+      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+             (Literal (BaseT (UintT 256)) (IntL 2))) (2 ** 256) [Pass]) = NONE /\
+  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (UintT 256))
+      (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+             (Literal (BaseT (UintT 256)) (IntL 2))) 1 [Pass])) /\
+  IS_SOME (type_stmt (artifact_env empty_contract_type_artifact [] NONE) NoneT
+    (For "i" (BaseT (IntT 8))
+      (Range (Literal (BaseT (IntT 8)) (IntL (-128)))
+             (Literal (BaseT (IntT 8)) (IntL 127))) 255 [Pass]))
+Proof
+  EVAL_TAC
+QED

@@ -174,7 +174,7 @@ Proof
 QED
 
 (* Helper: EL through asm_expand_memory equals read_byte *)
-Theorem el_expand_read_byte[local]:
+Theorem el_expand_read_byte:
   !i n mem. i < LENGTH (asm_expand_memory n mem) ==>
     EL i (asm_expand_memory n mem) =
     (if i < LENGTH mem then EL i mem else 0w)
@@ -479,7 +479,7 @@ QED
    MSTORE dispatch chain: asm_step (AsmOp "MSTORE") evaluates to asm_mstore
    ========================================================================= *)
 
-Theorem asm_step_op_mstore[local]:
+Theorem asm_step_op_mstore:
   !o2pc st. asm_step_op o2pc "MSTORE" st = asm_mstore st
 Proof
   simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,

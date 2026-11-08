@@ -192,7 +192,8 @@ Theorem compile_external_return_raw_unlock_frag_mem:
             ss.vs_accounts = s.vs_accounts /\
             ss.vs_transient =
               (if nr /\ ~iv then tstore (n2w nkey) 0w s else s).vs_transient /\
-            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests ==>
+            ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
+            ss.vs_pending_deletions = s.vs_pending_deletions ==>
             R (Halt ss)) ==>
     frag_exec_mem ctx st st' P Q R
 Proof

@@ -1,13 +1,13 @@
 {
-  "export_sha256": "10707862dfdfd8deea870c3a2fdac2a36dc679ef44454cee164ba4d54e1ae867",
+  "export_sha256": "f48671de91dae4d87085af922e3febe7716238718a14ba0c8f1557e9acb675fb",
   "fixture_sources": {
     "tests/fixtures/exports/in_static_array/test_in_static_array.py": "9c45365455d50dc2f7ac21e4d3981b82127ad9ca7ebfc5323a6ca423cbf22cee"
   },
   "inputs": {
-    ".github/actions/setup-vyper-test-exports/action.yml": "624911993019df2f0c3c048b7e338c9bae6aac1ff2cd2e5b8403ed50d369dec3",
-    "VYPER_PIN": "5460d537b0b29b208fed503c90fd68313e3a90830830fe04c20db63965f723c8",
+    ".github/actions/setup-vyper-test-exports/action.yml": "f62290cb29a184f164a50dd065830bb5c5583b81da8d8c2ef3d8dbeba40a07fa",
+    "VYPER_PIN": "a3af2a30935cc0fb3b4db19080dd23a9aa6130ef95dfa6fe050ceefb346ccbb1",
     "tests/semantics-build-constraints.txt": "5ea17fa1520d1732c4efe2d93b0456c095cc417df4bcd7f1953cec37462a2e65",
-    "tests/semantics-profile.json": "22566b78f29e0d4121c15026ea9923aa4f317c081ef32587563335d035cd5669",
+    "tests/semantics-profile.json": "29e9270a19dc71a75c383afc5772e6915f4524f0d13d23a43c516e427df364bf",
     "tests/semantics-test-constraints.txt": "21849a5ae9b73cf03c7d864d18683c747ac2dd0b0789e62e148240d35a40a6f4",
     "tests/vyper-regression/abi/test_dynamic_padding.py": "f68b00935ca6f7361a3d6187ae8792ba943bb24ee41127aab57fbc458fb717bd",
     "tests/vyper-regression/abi/test_returndata_padding.py": "f39850c325f1af76fb3646c21642ad06a6e982685f67c715b5e1ce787ed46730",
@@ -31,7 +31,7 @@
       "revm"
     ],
     "python_version": "3.11.17",
-    "vyper_version": "0.5.0a4+9362e36b"
+    "vyper_version": "0.5.0b1"
   },
   "resolved_settings": [
     {

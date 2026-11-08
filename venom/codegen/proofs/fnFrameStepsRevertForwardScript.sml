@@ -1413,7 +1413,7 @@ Proof
   Cases_on `emit_input_plan opc inputs nl ps_mid` >>
   gnvs[emit_input_plan_cons] >>
   qspecl_then [`opc`, `operand_vars inputs ++ nl`, `h`, `ps`, `Var x`]
-    mp_tac emit_one_input_inventory_mono_aux >> simp[] >> strip_tac >>
+    mp_tac emit_one_input_inventory_mono >> simp[] >> strip_tac >>
   first_x_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
   disch_then (qspec_then `x` mp_tac) >> asm_rewrite_tac[] >>
   (impl_tac >-

@@ -22,6 +22,7 @@ Ancestors
   finite_map pred_set fragExec localPtrsProps loweringSlice stmtSimDeclStore
   stmtSimDecl stmtSimDeclMem valueCopyBytes stmtSimDeclCompose
   stmtSimDeclSource stmtSimDeclPath gasOutcome gasContext gasSummary
+  memoryValueEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps vyperInterpreter vyperState
   vyperValue vyperTyping venomExecSemantics venomInst venomState
@@ -112,6 +113,9 @@ Proof
    val_wf tyv (default_value tyv) /\ 32 <= type_memory_size tyv` by
     (irule memory_length_word_layout >> simp[mstore_mem_word_at_same] >>
      metis_tac[]) >>
+  `memory_value_rel tyv (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w s).vs_memory` by
+    (irule (CONJUNCT1 default_memory_layout) >> simp[]) >>
   `32 <= sz` by decide_tac >>
   `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
   drule_all annassign_word_store_path >>

@@ -1,16 +1,14 @@
 (*
  * Overflow Check Elimination — Helpers Part 2
  *
- * Pointwise DFG soundness (dfg_prefix_sound), assert_local,
- * contradiction and simulation using weak chain closure,
- * and SSA-based variable preservation lemmas.
+ * assert_local, extraction lemmas for dfg_prefix_sound, and
+ * contradiction and simulation using weak chain closure.
  *)
 
 Theory overflowElimHelpers2
 Ancestors
   overflowElimHelpers
   overflowElimDefs
-  assertElimProofs
   analysisSimDefs
   analysisSimProps
   passSimulationDefs
@@ -24,177 +22,21 @@ Ancestors
   venomInst
   venomWf
   venomInstProps
+  venomExecProofs
   venomExecProps
   execEquivParamProps
   rangeAnalysisDefs
   rangeEvalDefs
   valueRangeDefs
-  variableRangeAnalysisProps
   rangeAnalysisProofs
   dfAnalyzeWidenDefs
   dfgDefs
   dfgAnalysisProps
-  dfgSoundStep
+  dfgSoundDefs
+  dfgSoundProofs
   worklistDefs
   list
   finite_map
-
-(* dfg_prefix_sound: pointwise DFG soundness for entries at positions < idx.
-   For each tracked DFG entry v defined by instruction dinst at position k < idx
-   in block bb: if v ∈ FDOM env, then the appropriate soundness condition holds
-   (dfg_sound for ASSIGN/ISZERO/EQ/compare, dfg_arith_sound for ADD/SUB,
-   dfg_compare_full_sound for LT/GT, plus FDOM closure for operands). *)
-Definition dfg_prefix_sound_def:
-  dfg_prefix_sound dfg bb env idx <=>
-    (* For tracked entries at positions < idx: *)
-    (!v dinst k.
-       dfg_get_def dfg v = SOME dinst /\
-       k < idx /\ k < LENGTH bb.bb_instructions /\
-       EL k bb.bb_instructions = dinst /\
-       v IN FDOM env ==>
-       (* FDOM closure for operands *)
-       (!u. MEM (Var u) dinst.inst_operands /\
-            dfg_tracked_opcode dinst.inst_opcode ==> u IN FDOM env) /\
-       (* dfg_iszero entry sound — matches dfg_iszero_sound form *)
-       (dinst.inst_opcode = ISZERO ==>
-         !inp. dinst.inst_operands = [Var inp] ==>
-           !w. FLOOKUP env v = SOME w ==>
-             (w <> 0w ==> FLOOKUP env inp = SOME 0w) /\
-             (w = 0w ==> !w'. FLOOKUP env inp = SOME w' ==> w' <> 0w)) /\
-       (* dfg_arith entry sound *)
-       ((dinst.inst_opcode = ADD \/ dinst.inst_opcode = SUB) ==>
-         !op1 op2. dinst.inst_operands = [op1; op2] /\
-           (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) ==>
-           ?w1 w2.
-             eval_op_env op1 env = SOME w1 /\
-             eval_op_env op2 env = SOME w2 /\
-             FLOOKUP env v = SOME
-               (if dinst.inst_opcode = ADD
-                then word_add w1 w2 else word_sub w1 w2)) /\
-       (* dfg_compare_full entry sound *)
-       ((dinst.inst_opcode = LT \/ dinst.inst_opcode = GT) ==>
-         !op1 op2. dinst.inst_operands = [op1; op2] /\
-           (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) ==>
-           ?w1 w2.
-             eval_op_env op1 env = SOME w1 /\
-             eval_op_env op2 env = SOME w2 /\
-             FLOOKUP env v = SOME (bool_to_word
-               (if dinst.inst_opcode = LT
-                then w2n w1 < w2n w2
-                else w2n w1 > w2n w2))))
-End
-
-(* dfg_prefix_sound at 0: trivially true since no position k < 0 exists for naturals *)
-Theorem dfg_prefix_sound_0:
-  !dfg bb env. dfg_prefix_sound dfg bb env 0
-Proof
-  simp[dfg_prefix_sound_def]
-QED
-
-(* Extraction lemmas for dfg_prefix_sound *)
-Theorem dfg_prefix_iszero_sound:
-  !dfg bb env idx v inst inp k.
-    dfg_prefix_sound dfg bb env idx /\
-    dfg_get_def dfg v = SOME inst /\
-    inst.inst_opcode = ISZERO /\
-    inst.inst_operands = [Var inp] /\
-    v IN FDOM env /\
-    k < idx /\ k < LENGTH bb.bb_instructions /\
-    EL k bb.bb_instructions = inst ==>
-    !w. FLOOKUP env v = SOME w ==>
-      (w <> 0w ==> FLOOKUP env inp = SOME 0w) /\
-      (w = 0w ==> !w'. FLOOKUP env inp = SOME w' ==> w' <> 0w)
-Proof
-  simp[dfg_prefix_sound_def] >> metis_tac[]
-QED
-
-Theorem dfg_prefix_arith_sound:
-  !dfg bb env idx v inst op1 op2 k.
-    dfg_prefix_sound dfg bb env idx /\
-    dfg_get_def dfg v = SOME inst /\
-    (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
-    inst.inst_operands = [op1; op2] /\
-    (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) /\
-    v IN FDOM env /\
-    k < idx /\ k < LENGTH bb.bb_instructions /\
-    EL k bb.bb_instructions = inst ==>
-    ?w1 w2.
-      eval_op_env op1 env = SOME w1 /\
-      eval_op_env op2 env = SOME w2 /\
-      FLOOKUP env v = SOME
-        (if inst.inst_opcode = ADD then word_add w1 w2 else word_sub w1 w2)
-Proof
-  simp[dfg_prefix_sound_def] >> metis_tac[]
-QED
-
-Theorem dfg_prefix_compare_sound:
-  !dfg bb env idx v inst op1 op2 k.
-    dfg_prefix_sound dfg bb env idx /\
-    dfg_get_def dfg v = SOME inst /\
-    (inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
-    inst.inst_operands = [op1; op2] /\
-    (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) /\
-    v IN FDOM env /\
-    k < idx /\ k < LENGTH bb.bb_instructions /\
-    EL k bb.bb_instructions = inst ==>
-    ?w1 w2.
-      eval_op_env op1 env = SOME w1 /\
-      eval_op_env op2 env = SOME w2 /\
-      FLOOKUP env v = SOME (bool_to_word
-        (if inst.inst_opcode = LT
-         then w2n w1 < w2n w2
-         else w2n w1 > w2n w2))
-Proof
-  simp[dfg_prefix_sound_def] >> metis_tac[]
-QED
-
-Theorem dfg_prefix_fdom_closure:
-  !dfg bb env idx v inst u k.
-    dfg_prefix_sound dfg bb env idx /\
-    dfg_get_def dfg v = SOME inst /\
-    dfg_tracked_opcode inst.inst_opcode /\
-    MEM (Var u) inst.inst_operands /\
-    v IN FDOM env /\
-    k < idx /\ k < LENGTH bb.bb_instructions /\
-    EL k bb.bb_instructions = inst ==>
-    u IN FDOM env
-Proof
-  simp[dfg_prefix_sound_def] >> metis_tac[]
-QED
-
-(* dfg_ext_sound implies dfg_prefix_sound at any idx *)
-Theorem dfg_ext_sound_implies_prefix:
-  !dfg fn bb env idx.
-    dfg_ext_sound dfg env /\
-    dfg = dfg_build_function fn /\
-    fn_inst_wf fn /\
-    MEM bb fn.fn_blocks ==>
-    dfg_prefix_sound dfg bb env idx
-Proof
-  rw[dfg_prefix_sound_def, dfg_ext_sound_def] >>
-  rpt strip_tac >> gvs[]
-  >- metis_tac[] (* FDOM closure *)
-  >- (fs[dfg_sound_def, dfg_iszero_sound_def] >> metis_tac[])
-  >- (fs[dfg_sound_def, dfg_iszero_sound_def] >> metis_tac[])
-  (* ADD/SUB: from dfg_arith_sound *)
-  >- (qpat_x_assum `dfg_arith_sound _ _`
-        (mp_tac o REWRITE_RULE [dfg_arith_sound_def]) >>
-      disch_then (qspecl_then [`v`, `EL k bb.bb_instructions`,
-        `op1`, `op2`] mp_tac) >> simp[])
-  >- (qpat_x_assum `dfg_arith_sound _ _`
-        (mp_tac o REWRITE_RULE [dfg_arith_sound_def]) >>
-      disch_then (qspecl_then [`v`, `EL k bb.bb_instructions`,
-        `op1`, `op2`] mp_tac) >> simp[])
-  (* LT/GT: from dfg_compare_full_sound *)
-  >- (qpat_x_assum `dfg_compare_full_sound _ _`
-        (mp_tac o REWRITE_RULE [dfg_compare_full_sound_def]) >>
-      disch_then (qspecl_then [`v`, `EL k bb.bb_instructions`,
-        `op1`, `op2`] mp_tac) >> simp[])
-  >- (qpat_x_assum `dfg_compare_full_sound _ _`
-        (mp_tac o REWRITE_RULE [dfg_compare_full_sound_def]) >>
-      disch_then (qspecl_then [`v`, `EL k bb.bb_instructions`,
-        `op1`, `op2`] mp_tac) >> simp[])
-QED
 
 (* Producer locality for ASSERT operands: the DFG producer of any
    ASSERT operand in a block is in that block and at an earlier position.
@@ -214,48 +56,6 @@ Definition assert_local_def:
             i < j
 End
 
-(* Convenience wrapper of dfg_block_local *)
-Theorem dfg_block_local_elim:
-  !fn v inst u inst_u bb.
-    dfg_block_local fn /\
-    dfg_get_def (dfg_build_function fn) v = SOME inst /\
-    MEM (Var u) inst.inst_operands /\
-    dfg_tracked_opcode inst.inst_opcode /\
-    dfg_get_def (dfg_build_function fn) u = SOME inst_u /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst_u bb.bb_instructions /\
-    !i j. i < LENGTH bb.bb_instructions /\
-          j < LENGTH bb.bb_instructions /\
-          EL i bb.bb_instructions = inst_u /\
-          EL j bb.bb_instructions = inst ==>
-          i < j
-Proof
-  REWRITE_TAC[dfg_tracked_opcode_def, dfg_block_local_def] >> metis_tac[]
-QED
-
-(* Helper: derive MEM + position ordering from dfg_block_local *)
-Triviality dfg_block_local_pos[local]:
-  !fn v inst u inst_u bb j.
-    dfg_block_local fn /\
-    dfg_get_def (dfg_build_function fn) v = SOME inst /\
-    MEM (Var u) inst.inst_operands /\
-    dfg_tracked_opcode inst.inst_opcode /\
-    dfg_get_def (dfg_build_function fn) u = SOME inst_u /\
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    j < LENGTH bb.bb_instructions /\
-    EL j bb.bb_instructions = inst ==>
-    MEM inst_u bb.bb_instructions /\
-    ?i. i < j /\ i < LENGTH bb.bb_instructions /\
-        EL i bb.bb_instructions = inst_u
-Proof
-  rpt strip_tac
-  >- (drule_all dfg_block_local_elim >> simp[])
-  >> (drule_all dfg_block_local_elim >> strip_tac) >>
-  `?nn. nn < LENGTH bb.bb_instructions /\ EL nn bb.bb_instructions = inst_u` by
-    metis_tac[MEM_EL] >>
-  qexists_tac `nn` >> simp[]
-QED
-
 (* Eliminator for try_elim_add_overflow_v: extracts operand structure *)
 Theorem try_elim_add_overflow_v_elim:
   !dfg rs lt_inst.
@@ -267,10 +67,10 @@ Theorem try_elim_add_overflow_v_elim:
       add_inst.inst_operands = [add_op0; add_op1] /\
       (if add_op0 = x_op then y = add_op1
        else add_op1 = x_op /\ y = add_op0) /\
-      range_nonneg (range_get_range_v rs x_op) /\
-      range_nonneg (range_get_range_v rs y) /\
-      vr_hi (range_get_range_v rs x_op) +
-      vr_hi (range_get_range_v rs y) <= UINT256_MAX_int
+      range_nonneg (operand_range rs x_op) /\
+      range_nonneg (operand_range rs y) /\
+      vr_hi (operand_range rs x_op) +
+      vr_hi (operand_range rs y) <= UINT256_MAX_int
 Proof
   rpt strip_tac >> fs[try_elim_add_overflow_v_def] >>
   BasicProvers.every_case_tac >> fs[]
@@ -285,9 +85,9 @@ Theorem try_elim_sub_underflow_v_elim:
       get_producer dfg res_op = SOME sub_inst /\
       sub_inst.inst_opcode = SUB /\
       sub_inst.inst_operands = [x_op; sub_y] /\
-      range_nonneg (range_get_range_v rs x_op) /\
-      range_nonneg (range_get_range_v rs sub_y) /\
-      vr_lo (range_get_range_v rs x_op) >= vr_hi (range_get_range_v rs sub_y)
+      range_nonneg (operand_range rs x_op) /\
+      range_nonneg (operand_range rs sub_y) /\
+      vr_lo (operand_range rs x_op) >= vr_hi (operand_range rs sub_y)
 Proof
   rpt strip_tac >> fs[try_elim_sub_underflow_v_def] >>
   BasicProvers.every_case_tac >> fs[]
@@ -360,12 +160,12 @@ Proof
   `w1 = w1' + w2'` by fs[] >>
   `cmp_w = bool_to_word (w2n (w1' + w2') < w2n w2)` by gvs[] >>
   (* Range facts *)
-  `in_range (range_get_range_v rs add_op0) w1'` by
-    (irule range_get_range_v_sound >> metis_tac[]) >>
-  `in_range (range_get_range_v rs add_op1) w2'` by
-    (irule range_get_range_v_sound >> metis_tac[]) >>
-  `in_range (range_get_range_v rs x_op) w2` by
-    (irule range_get_range_v_sound >> metis_tac[]) >>
+  `in_range (operand_range rs add_op0) w1'` by
+    metis_tac[operand_range_sound, eval_op_env_operand] >>
+  `in_range (operand_range rs add_op1) w2'` by
+    metis_tac[operand_range_sound, eval_op_env_operand] >>
+  `in_range (operand_range rs x_op) w2` by
+    metis_tac[operand_range_sound, eval_op_env_operand] >>
   (* Contradiction: no overflow => cmp_w = 0w, contradicts cmp_w ≠ 0w *)
   Cases_on `add_op0 = x_op`
   >- (`y = add_op1` by fs[] >>
@@ -375,7 +175,7 @@ Proof
       `bool_to_word (w2n (w2 + w2') < w2n w2) = 0w` by
         (irule add_no_overflow_lt_zero >>
          MAP_EVERY qexists_tac
-           [`range_get_range_v rs x_op`, `range_get_range_v rs add_op1`] >>
+           [`operand_range rs x_op`, `operand_range rs add_op1`] >>
          fs[]) >>
       fs[])
   >- (`add_op1 = x_op /\ y = add_op0` by fs[] >>
@@ -388,7 +188,7 @@ Proof
          pop_assum SUBST1_TAC >>
          irule add_no_overflow_lt_zero >>
          MAP_EVERY qexists_tac
-           [`range_get_range_v rs x_op`, `range_get_range_v rs add_op0`] >>
+           [`operand_range rs x_op`, `operand_range rs add_op0`] >>
          fs[]) >>
       fs[])
 QED
@@ -452,14 +252,14 @@ Proof
   (* Unify: w1 = w1'-w2' via FLOOKUP injectivity *)
   RULE_ASSUM_TAC (REWRITE_RULE [eval_op_env_def]) >>
   gvs[] >>
-  `in_range (range_get_range_v rs x_op) w1'` by
-    (irule range_get_range_v_sound >> metis_tac[]) >>
-  `in_range (range_get_range_v rs sub_y) w2'` by
-    (irule range_get_range_v_sound >> metis_tac[]) >>
+  `in_range (operand_range rs x_op) w1'` by
+    metis_tac[operand_range_sound, eval_op_env_operand] >>
+  `in_range (operand_range rs sub_y) w2'` by
+    metis_tac[operand_range_sound, eval_op_env_operand] >>
   `bool_to_word (w2n (w1' - w2') > w2n w1') = 0w` by
     (irule sub_no_underflow_gt_zero >>
      MAP_EVERY qexists_tac
-       [`range_get_range_v rs x_op`, `range_get_range_v rs sub_y`] >>
+       [`operand_range rs x_op`, `operand_range rs sub_y`] >>
      fs[])
 QED
 
@@ -474,13 +274,6 @@ Theorem overflow_check_contradiction_pw:
     dfg_prefix_sound dfg bb s.vs_vars idx /\
     in_range_state rs s.vs_vars /\
     eval_operand op s = SOME 0w /\
-    (* Weak chain closure: outputs of tracked insts at positions < idx are in FDOM *)
-    (!chain_v chain_inst k.
-       dfg_get_def dfg chain_v = SOME chain_inst /\
-       dfg_tracked_opcode chain_inst.inst_opcode /\
-       k < idx /\ k < LENGTH bb.bb_instructions /\
-       EL k bb.bb_instructions = chain_inst ==>
-       chain_v IN FDOM s.vs_vars) /\
     (* ASSERT position and structure *)
     idx < LENGTH bb.bb_instructions /\
     EL idx bb.bb_instructions = v /\
@@ -558,21 +351,13 @@ Proof
         contradiction_gt) >> simp[])
 QED
 
-(* Like overflow_elim_sim but uses dfg_prefix_sound instead of dfg_ext_sound.
-   Uses weak chain closure (only for positions < idx) plus structural
-   preconditions to derive the full chain when needed. *)
+(* Per-instruction simulation: overflow_elim_inst_v drops an ASSERT only
+   when it cannot fail, given dfg_prefix_sound before the ASSERT. *)
 Theorem overflow_elim_sim_pw:
   !fn bb idx v fuel ctx inst s.
     let dfg = dfg_build_function fn in
     range_sound v s /\
     dfg_prefix_sound dfg bb s.vs_vars idx /\
-    (* Weak chain closure *)
-    (!chain_v chain_inst k.
-       dfg_get_def dfg chain_v = SOME chain_inst /\
-       dfg_tracked_opcode chain_inst.inst_opcode /\
-       k < idx /\ k < LENGTH bb.bb_instructions /\
-       EL k bb.bb_instructions = chain_inst ==>
-       chain_v IN FDOM s.vs_vars) /\
     (* Position and structure *)
     idx < LENGTH bb.bb_instructions /\
     EL idx bb.bb_instructions = inst /\
@@ -604,7 +389,7 @@ Proof
   `?op. inst.inst_operands = [op]` by
     (Cases_on `inst.inst_operands` >> fs[] >>
      Cases_on `t` >> fs[]) >>
-  mp_tac (Q.SPECL [`fuel`, `ctx`, `inst`, `s`, `op`] step_inst_assert_1) >>
+  mp_tac (Q.SPECL [`fuel`, `ctx`, `inst`, `s`] step_inst_assert) >>
   simp[] >> disch_then (fn th => REWRITE_TAC [th]) >>
   Cases_on `eval_operand op s`
   >- (DISJ1_TAC >> qexists_tac `"undefined operand"` >> simp[]) >>
@@ -619,654 +404,4 @@ Proof
   Cases_on `v` >>
   fs[range_sound_def, range_unwrap_def, in_range_state_def, FLOOKUP_DEF] >>
   metis_tac[]
-QED
-
-(* ================================================================
-   Section 6b: dfg_prefix_sound preservation through step_inst
-   ================================================================ *)
-
-(* Helper: exec_pure2 output FLOOKUP *)
-Theorem exec_pure2_flookup:
-  !f inst s s' out.
-    exec_pure2 f inst s = OK s' /\
-    inst.inst_outputs = [out] ==>
-    ?w1 w2 op1 op2. inst.inst_operands = [op1; op2] /\
-            eval_operand op1 s = SOME w1 /\
-            eval_operand op2 s = SOME w2 /\
-            FLOOKUP s'.vs_vars out = SOME (f w1 w2) /\
-            !v. v <> out ==> FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure2_def] >> BasicProvers.every_case_tac >> gvs[] >>
-  fs[update_var_def, FLOOKUP_UPDATE]
-QED
-
-(* Helper: exec_pure1 output FLOOKUP *)
-Theorem exec_pure1_flookup:
-  !f inst s s' out.
-    exec_pure1 f inst s = OK s' /\
-    inst.inst_outputs = [out] ==>
-    ?w op. inst.inst_operands = [op] /\
-           eval_operand op s = SOME w /\
-           FLOOKUP s'.vs_vars out = SOME (f w) /\
-           !v. v <> out ==> FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[exec_pure1_def] >> BasicProvers.every_case_tac >> gvs[] >>
-  fs[update_var_def, FLOOKUP_UPDATE]
-QED
-
-(* Helpers for SSA-based variable preservation *)
-Theorem ALL_DISTINCT_FLAT_IMP:
-  !l x:'a list. ALL_DISTINCT (FLAT l) /\ MEM x l ==> ALL_DISTINCT x
-Proof
-  Induct >> simp[] >> rpt strip_tac >> fs[ALL_DISTINCT_APPEND]
-QED
-
-(* Element of a block is in fn_insts *)
-Theorem fn_insts_has_block_el:
-  !fn bb k.
-    MEM bb fn.fn_blocks /\ k < LENGTH bb.bb_instructions ==>
-    MEM (EL k bb.bb_instructions) (fn_insts fn)
-Proof
-  rw[fn_insts_def] >>
-  `!bbs. MEM bb bbs /\ k < LENGTH bb.bb_instructions ==>
-    MEM (EL k bb.bb_instructions) (fn_insts_blocks bbs)` suffices_by
-    metis_tac[] >>
-  Induct >> rw[fn_insts_blocks_def, MEM_APPEND] >> metis_tac[MEM_EL]
-QED
-
-(* Two different instructions in a block with unique inst_ids cannot be equal *)
-Theorem block_distinct_insts:
-  !bb fn k1 k2.
-    wf_function fn /\ MEM bb fn.fn_blocks /\
-    k1 < LENGTH bb.bb_instructions /\ k2 < LENGTH bb.bb_instructions /\
-    k1 <> k2 ==>
-    EL k1 bb.bb_instructions <> EL k2 bb.bb_instructions
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    (fs[wf_function_def, fn_inst_ids_distinct_def] >>
-     `MEM (MAP (\i. i.inst_id) bb.bb_instructions)
-          (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)` by
-       (simp[MEM_MAP] >> metis_tac[]) >>
-     metis_tac[ALL_DISTINCT_FLAT_IMP]) >>
-  gvs[] >>
-  `EL k1 (MAP (\i. i.inst_id) bb.bb_instructions) =
-   EL k2 (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    simp[EL_MAP] >>
-  metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP]
-QED
-
-(* SSA: two different instructions in the same block have disjoint outputs *)
-Theorem block_ssa_disjoint_outputs:
-  !bb fn k1 k2 v.
-    wf_function fn /\ MEM bb fn.fn_blocks /\
-    k1 < LENGTH bb.bb_instructions /\ k2 < LENGTH bb.bb_instructions /\
-    k1 <> k2 /\
-    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) /\
-    MEM v (EL k1 bb.bb_instructions).inst_outputs ==>
-    ~MEM v (EL k2 bb.bb_instructions).inst_outputs
-Proof
-  rpt strip_tac >>
-  `EL k1 bb.bb_instructions <> EL k2 bb.bb_instructions` by
-    metis_tac[block_distinct_insts] >>
-  `MEM (EL k1 bb.bb_instructions) (fn_insts fn)` by
-    metis_tac[fn_insts_has_block_el] >>
-  `MEM (EL k2 bb.bb_instructions) (fn_insts fn)` by
-    metis_tac[fn_insts_has_block_el] >>
-  metis_tac[]
-QED
-
-(* The key step lemma: executing a non-terminator instruction preserves
-   FLOOKUP for variables that are outputs of OTHER instructions in the block. *)
-Theorem step_preserves_other_output:
-  !fn bb idx k v fuel ctx s s'.
-    wf_function fn /\ MEM bb fn.fn_blocks /\
-    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) /\
-    idx < LENGTH bb.bb_instructions /\
-    k < LENGTH bb.bb_instructions /\ k <> idx /\
-    MEM v (EL k bb.bb_instructions).inst_outputs /\
-    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-    step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
-    FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v
-Proof
-  rpt strip_tac >>
-  `~MEM v (EL idx bb.bb_instructions).inst_outputs` by
-    metis_tac[block_ssa_disjoint_outputs] >>
-  `lookup_var v s' = lookup_var v s` by
-    metis_tac[step_preserves_non_output_vars] >>
-  fs[lookup_var_def]
-QED
-
-(* eval_op_env transfers when FLOOKUP agrees on Var operands *)
-Theorem eval_op_env_transfer:
-  !op env env' w. eval_op_env op env = SOME w /\
-    (!u. op = Var u ==> FLOOKUP env' u = FLOOKUP env u) ==>
-    eval_op_env op env' = SOME w
-Proof
-  Cases >> simp[eval_op_env_def]
-QED
-
-(* For a variable u that is an operand of a tracked instruction at position k < idx:
-   executing the instruction at position idx preserves FLOOKUP u. *)
-Theorem step_preserves_operand_flookup:
-  !fn bb idx k v u fuel ctx s s'.
-    wf_function fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
-    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) /\
-    dfg_block_local fn /\
-    idx < LENGTH bb.bb_instructions /\
-    k < LENGTH bb.bb_instructions /\ k < idx /\
-    dfg_tracked_opcode (EL k bb.bb_instructions).inst_opcode /\
-    MEM (Var u) (EL k bb.bb_instructions).inst_operands /\
-    MEM v (EL k bb.bb_instructions).inst_outputs /\
-    dfg_get_def (dfg_build_function fn) v = SOME (EL k bb.bb_instructions) /\
-    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-    step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
-    FLOOKUP s'.vs_vars u = FLOOKUP s.vs_vars u
-Proof
-  rpt strip_tac >>
-  Cases_on `dfg_get_def (dfg_build_function fn) u`
-  >- (
-    `~MEM u (EL idx bb.bb_instructions).inst_outputs` by (
-      CCONTR_TAC >> gvs[] >>
-      `MEM (EL idx bb.bb_instructions) (fn_insts fn)` by
-        metis_tac[fn_insts_has_block_el] >>
-      imp_res_tac dfg_build_function_defs_complete >> gvs[]) >>
-    `lookup_var u s' = lookup_var u s` by
-      metis_tac[step_preserves_non_output_vars] >>
-    fs[lookup_var_def])
-  >- (
-    rename1 `SOME inst_u` >>
-    `MEM (EL k bb.bb_instructions) bb.bb_instructions` by
-      metis_tac[MEM_EL] >>
-    `MEM inst_u bb.bb_instructions /\
-     !i j. i < LENGTH bb.bb_instructions /\
-           j < LENGTH bb.bb_instructions /\
-           EL i bb.bb_instructions = inst_u /\
-           EL j bb.bb_instructions = EL k bb.bb_instructions ==>
-           i < j` by
-      (mp_tac dfg_block_local_elim >>
-       disch_then (qspecl_then [`fn`,`v`,`EL k bb.bb_instructions`,
-                                `u`,`inst_u`,`bb`] mp_tac) >>
-       impl_tac >- simp[] >> metis_tac[]) >>
-    `?ku. ku < LENGTH bb.bb_instructions /\ EL ku bb.bb_instructions = inst_u` by
-      metis_tac[MEM_EL] >>
-    `ku < k` by metis_tac[] >>
-    `ku <> idx` by simp[] >>
-    `MEM u inst_u.inst_outputs` by metis_tac[dfg_build_function_correct] >>
-    metis_tac[step_preserves_other_output])
-QED
-
-(* ================================================================
-   Per-opcode reduction of step_inst_base to update_var form
-   ================================================================ *)
-
-(* Reuse the proved dispatch equations rather than traversing every opcode. *)
-val step_inst_base_opcode_rewrites = let
-  fun key th = let
-    val (_, body) = strip_forall (concl th)
-    val (guard, _) = dest_imp body
-  in rhs guard end
-in map (fn th => (key th, th))
-  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
-
-fun step_inst_base_for opc =
-  #2 (valOf (List.find (fn (key, _) => aconv key opc)
-    step_inst_base_opcode_rewrites));
-
-(* Only the operand/result spine reduces: computed words, comparisons and
-   updated states must remain opaque, including in the EQ/SLT/SGT branches. *)
-val pure_step_ss = pure_ss ++ boolSimps.BOOL_ss ++
-  simpLib.type_ssfrag ``:operand list`` ++
-  simpLib.type_ssfrag ``:string list`` ++
-  simpLib.type_ssfrag ``:bytes32 option`` ++
-  simpLib.type_ssfrag ``:bytes32 option # bytes32 option`` ++
-  simpLib.type_ssfrag ``:exec_result``;
-
-val step_inst_base_opcode_tac =
-  qpat_assum `inst.inst_opcode = _` (fn eq =>
-    PURE_ONCE_REWRITE_TAC
-      [MATCH_MP (step_inst_base_for (rhs (concl eq))) eq]);
-
-val step_inst_base_value_tac =
-  strip_tac >>
-  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
-  step_inst_base_opcode_tac >>
-  asm_simp_tac pure_step_ss
-    [exec_pure1_def, exec_pure2_def, CaseEq "option"] >>
-  strip_tac >> gvs[];
-
-Theorem step_inst_base_assign:
-  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w. eval_operand op st = SOME w /\
-      st' = update_var out w st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_iszero:
-  inst.inst_opcode = ISZERO /\ inst.inst_operands = [op] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w. eval_operand op st = SOME w /\
-      st' = update_var out (bool_to_word (w = 0w)) st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_add:
-  inst.inst_opcode = ADD /\ inst.inst_operands = [op1; op2] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
-           st' = update_var out (w1 + w2) st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_sub:
-  inst.inst_opcode = SUB /\ inst.inst_operands = [op1; op2] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
-           st' = update_var out (w1 - w2) st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_lt:
-  inst.inst_opcode = LT /\ inst.inst_operands = [op1; op2] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
-           st' = update_var out (bool_to_word (w2n w1 < w2n w2)) st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_gt:
-  inst.inst_opcode = GT /\ inst.inst_operands = [op1; op2] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
-           st' = update_var out (bool_to_word (w2n w1 > w2n w2)) st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_eq:
-  inst.inst_opcode = EQ /\ inst.inst_operands = [op1; op2] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
-           st' = update_var out (bool_to_word (w1 = w2)) st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_slt:
-  inst.inst_opcode = SLT /\ inst.inst_operands = [op1; op2] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
-           st' = update_var out (bool_to_word (word_lt w1 w2)) st
-Proof
-  step_inst_base_value_tac
-QED
-
-Theorem step_inst_base_sgt:
-  inst.inst_opcode = SGT /\ inst.inst_operands = [op1; op2] /\
-  inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
-  ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
-           st' = update_var out (bool_to_word (word_gt w1 w2)) st
-Proof
-  step_inst_base_value_tac
-QED
-
-
-(* ================================================================
-   dfg_prefix_sound step lemma (promoted from overflowElimProofs)
-   ================================================================ *)
-
-(* Transfer lemma: if FLOOKUP is preserved for the output variable and all
-   operand variables, then a single entry's conditions transfer between envs. *)
-Theorem dfg_prefix_sound_entry_transfer:
-  !dfg bb env env' v dinst k idx.
-    dfg_prefix_sound dfg bb env idx /\
-    dfg_get_def dfg v = SOME dinst /\
-    k < idx /\ k < LENGTH bb.bb_instructions /\
-    EL k bb.bb_instructions = dinst /\
-    v IN FDOM env' /\
-    FLOOKUP env' v = FLOOKUP env v /\
-    (!u. MEM (Var u) dinst.inst_operands /\
-         dfg_tracked_opcode dinst.inst_opcode ==>
-         FLOOKUP env' u = FLOOKUP env u) ==>
-    (* FDOM closure *)
-    (!u. MEM (Var u) dinst.inst_operands /\
-         dfg_tracked_opcode dinst.inst_opcode ==> u IN FDOM env') /\
-    (* ISZERO *)
-    (dinst.inst_opcode = ISZERO ==>
-      !inp. dinst.inst_operands = [Var inp] ==>
-        !w. FLOOKUP env' v = SOME w ==>
-          (w <> 0w ==> FLOOKUP env' inp = SOME 0w) /\
-          (w = 0w ==> !w'. FLOOKUP env' inp = SOME w' ==> w' <> 0w)) /\
-    (* ADD/SUB *)
-    ((dinst.inst_opcode = ADD \/ dinst.inst_opcode = SUB) ==>
-      !op1 op2. dinst.inst_operands = [op1; op2] /\
-        (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) ==>
-        ?w1 w2.
-          eval_op_env op1 env' = SOME w1 /\
-          eval_op_env op2 env' = SOME w2 /\
-          FLOOKUP env' v = SOME
-            (if dinst.inst_opcode = ADD
-             then word_add w1 w2 else word_sub w1 w2)) /\
-    (* LT/GT *)
-    ((dinst.inst_opcode = LT \/ dinst.inst_opcode = GT) ==>
-      !op1 op2. dinst.inst_operands = [op1; op2] /\
-        (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) ==>
-        ?w1 w2.
-          eval_op_env op1 env' = SOME w1 /\
-          eval_op_env op2 env' = SOME w2 /\
-          FLOOKUP env' v = SOME (bool_to_word
-            (if dinst.inst_opcode = LT
-             then w2n w1 < w2n w2
-             else w2n w1 > w2n w2)))
-Proof
-  rpt gen_tac \\ strip_tac
-  \\ qpat_x_assum `dfg_prefix_sound _ _ _ _`
-       (fn th => mp_tac (REWRITE_RULE [dfg_prefix_sound_def] th))
-  \\ disch_then (qspecl_then [`v`, `dinst`, `k`] mp_tac)
-  \\ (impl_tac >- (simp[] \\ metis_tac[FDOM_FLOOKUP]))
-  \\ strip_tac
-  \\ rpt conj_tac
-  (* FDOM closure *)
-  >- (rpt strip_tac \\ res_tac \\ metis_tac[FDOM_FLOOKUP])
-  (* ISZERO *)
-  >- (rpt strip_tac
-      \\ `FLOOKUP env' inp = FLOOKUP env inp`
-           by (first_x_assum match_mp_tac
-               \\ gvs[dfg_tracked_opcode_def])
-      \\ metis_tac[])
-  (* ADD/SUB *)
-  >- (rpt strip_tac \\ fs[]
-      \\ MAP_EVERY qexists_tac [`w1`, `w2`]
-      \\ gvs[dfg_tracked_opcode_def]
-      \\ metis_tac[eval_op_env_transfer])
-  (* LT/GT *)
-  >- (rpt strip_tac \\ fs[]
-      \\ MAP_EVERY qexists_tac [`w1`, `w2`]
-      \\ gvs[dfg_tracked_opcode_def]
-      \\ metis_tac[eval_op_env_transfer])
-QED
-
-(* Operand FLOOKUP preservation: executing a different instruction
-   at position idx preserves FLOOKUP for operands of an earlier entry. *)
-Theorem operand_flookup_preserved_dinst:
-  !fn bb idx k v dinst u' fuel ctx s s'.
-    wf_function fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
-    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) /\
-    dfg_block_local fn /\
-    dfg_get_def (dfg_build_function fn) v = SOME dinst /\
-    idx < LENGTH bb.bb_instructions /\
-    k < LENGTH bb.bb_instructions /\ k < idx /\
-    EL k bb.bb_instructions = dinst /\
-    dfg_tracked_opcode dinst.inst_opcode /\
-    MEM (Var u') dinst.inst_operands /\
-    MEM v dinst.inst_outputs /\
-    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-    step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
-    FLOOKUP s'.vs_vars u' = FLOOKUP s.vs_vars u'
-Proof
-  rpt strip_tac >>
-  Cases_on `dfg_get_def (dfg_build_function fn) u'`
-  >- (
-    `~MEM u' (EL idx bb.bb_instructions).inst_outputs` by (
-      CCONTR_TAC >> gvs[] >>
-      `MEM (EL idx bb.bb_instructions) (fn_insts fn)` by
-        metis_tac[fn_insts_has_block_el] >>
-      imp_res_tac dfg_build_function_defs_complete >> gvs[]) >>
-    `lookup_var u' s' = lookup_var u' s` by
-      metis_tac[step_preserves_non_output_vars] >>
-    fs[lookup_var_def])
-  >- (
-    rename1 `SOME inst_u` >>
-    `MEM dinst bb.bb_instructions` by metis_tac[MEM_EL] >>
-    mp_tac dfg_block_local_elim >>
-    disch_then (qspecl_then [`fn`,`v`,`dinst`,`u'`,`inst_u`,`bb`] mp_tac) >>
-    (impl_tac >- fs[]) >>
-    strip_tac >>
-    `?ku. ku < LENGTH bb.bb_instructions /\ EL ku bb.bb_instructions = inst_u` by
-      metis_tac[MEM_EL] >>
-    `ku < k` by metis_tac[] >>
-    `ku <> idx` by simp[] >>
-    `MEM u' inst_u.inst_outputs` by metis_tac[dfg_build_function_correct] >>
-    metis_tac[step_preserves_other_output])
-QED
-
-(* For a tracked instruction, the output variable cannot be an operand variable. *)
-Theorem dfg_output_neq_operand_var:
-  !fn v inst u bb idx.
-    dfg_block_local fn /\
-    dfg_get_def (dfg_build_function fn) v = SOME inst /\
-    MEM (Var u) inst.inst_operands /\
-    dfg_tracked_opcode inst.inst_opcode /\
-    MEM bb fn.fn_blocks /\
-    idx < LENGTH bb.bb_instructions /\
-    EL idx bb.bb_instructions = inst ==> v <> u
-Proof
-  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
-  mp_tac dfg_block_local_elim >>
-  disch_then (qspecl_then [`fn`,`u`,`bb.bb_instructions❲idx❳`,
-    `u`,`bb.bb_instructions❲idx❳`,`bb`] mp_tac) >>
-  impl_tac >- (simp[] >> metis_tac[MEM_EL]) >>
-  strip_tac >> `idx < idx` by metis_tac[] >> DECIDE_TAC
-QED
-
-(* For tracked opcodes, if step_inst_base succeeds with single output,
-   then every operand evaluates in the pre-state. *)
-val tracked_assign_eval_tac =
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  step_inst_base_opcode_tac >> asm_simp_tac pure_step_ss [] >>
-  BasicProvers.every_case_tac >> gvs[] >> metis_tac[];
-
-val tracked_pure1_eval_tac =
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  step_inst_base_opcode_tac >> strip_tac >>
-  imp_res_tac exec_pure1_flookup >> gvs[];
-
-val tracked_pure2_eval_tac =
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  step_inst_base_opcode_tac >> strip_tac >>
-  imp_res_tac exec_pure2_flookup >> gvs[];
-
-Theorem tracked_step_operand_evaluable:
-  !inst s s' v op.
-    dfg_tracked_opcode inst.inst_opcode /\
-    inst.inst_outputs = [v] /\
-    step_inst_base inst s = OK s' /\
-    MEM op inst.inst_operands ==>
-    ?w. eval_operand op s = SOME w
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `dfg_tracked_opcode _`
-    (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def]) >> gvs[]
-  >- tracked_assign_eval_tac
-  >- tracked_pure1_eval_tac
-  >- tracked_pure2_eval_tac
-  >- tracked_pure2_eval_tac
-  >- tracked_pure2_eval_tac
-  >- tracked_pure2_eval_tac
-  >- tracked_pure2_eval_tac
-  >- tracked_pure2_eval_tac
-  >- tracked_pure2_eval_tac
-QED
-
-(* Derive step_inst_base from tracked opcode + step_inst *)
-Theorem tracked_step_inst_base:
-  !inst fuel ctx s s'.
-    dfg_tracked_opcode inst.inst_opcode /\
-    step_inst fuel ctx inst s = OK s' ==>
-    step_inst_base inst s = OK s'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `dfg_tracked_opcode _`
-    (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def]) >>
-  gvs[step_inst_non_invoke]
-QED
-
-(* Derive FLOOKUP preservation for non-output vars from tracked step *)
-Theorem tracked_step_flookup:
-  !inst v fuel ctx s s'.
-    dfg_tracked_opcode inst.inst_opcode /\
-    inst.inst_outputs = [v] /\
-    step_inst fuel ctx inst s = OK s' ==>
-    !u. u <> v ==> FLOOKUP s'.vs_vars u = FLOOKUP s.vs_vars u
-Proof
-  rpt strip_tac >>
-  `is_effect_free_op inst.inst_opcode` by
-    (qpat_x_assum `dfg_tracked_opcode _`
-       (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def]) >>
-     gvs[is_effect_free_op_def]) >>
-  `state_equiv (set inst.inst_outputs) s s'` by
-    metis_tac[step_effect_free_state_equiv] >>
-  gvs[state_equiv_def, execution_equiv_def] >>
-  `lookup_var u s = lookup_var u s'` by
-    (first_x_assum match_mp_tac >> simp[]) >>
-  fs[lookup_var_def]
-QED
-
-(* Case 2 helper: tracked opcode at k = idx *)
-Triviality dfg_prefix_sound_step_tracked[local]:
-  !fn bb idx v fuel ctx s s'.
-    dfg_prefix_sound (dfg_build_function fn) bb s.vs_vars idx /\
-    fn_inst_wf fn /\ wf_function fn /\
-    MEM bb fn.fn_blocks /\
-    (!w i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM w i1.inst_outputs /\ MEM w i2.inst_outputs ==> (i1 = i2)) /\
-    dfg_block_local fn /\
-    idx < LENGTH bb.bb_instructions /\
-    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-    step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' /\
-    v IN FDOM s'.vs_vars /\
-    dfg_get_def (dfg_build_function fn) v = SOME (EL idx bb.bb_instructions) /\
-    dfg_tracked_opcode (EL idx bb.bb_instructions).inst_opcode ==>
-    (* FDOM closure *)
-    (!u. MEM (Var u) (EL idx bb.bb_instructions).inst_operands /\
-         dfg_tracked_opcode (EL idx bb.bb_instructions).inst_opcode ==>
-         u IN FDOM s'.vs_vars) /\
-    (* ISZERO *)
-    ((EL idx bb.bb_instructions).inst_opcode = ISZERO ==>
-      !inp. (EL idx bb.bb_instructions).inst_operands = [Var inp] ==>
-        !w. FLOOKUP s'.vs_vars v = SOME w ==>
-          (w <> 0w ==> FLOOKUP s'.vs_vars inp = SOME 0w) /\
-          (w = 0w ==> !w'. FLOOKUP s'.vs_vars inp = SOME w' ==> w' <> 0w)) /\
-    (* ADD/SUB *)
-    ((EL idx bb.bb_instructions).inst_opcode = ADD \/
-     (EL idx bb.bb_instructions).inst_opcode = SUB ==>
-      !op1 op2. (EL idx bb.bb_instructions).inst_operands = [op1; op2] /\
-        (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) ==>
-        ?w1 w2.
-          eval_op_env op1 s'.vs_vars = SOME w1 /\
-          eval_op_env op2 s'.vs_vars = SOME w2 /\
-          FLOOKUP s'.vs_vars v = SOME
-            (if (EL idx bb.bb_instructions).inst_opcode = ADD
-             then word_add w1 w2 else word_sub w1 w2)) /\
-    (* LT/GT *)
-    ((EL idx bb.bb_instructions).inst_opcode = LT \/
-     (EL idx bb.bb_instructions).inst_opcode = GT ==>
-      !op1 op2. (EL idx bb.bb_instructions).inst_operands = [op1; op2] /\
-        (!lbl. op1 <> Label lbl) /\ (!lbl. op2 <> Label lbl) ==>
-        ?w1 w2.
-          eval_op_env op1 s'.vs_vars = SOME w1 /\
-          eval_op_env op2 s'.vs_vars = SOME w2 /\
-          FLOOKUP s'.vs_vars v = SOME (bool_to_word
-            (if (EL idx bb.bb_instructions).inst_opcode = LT
-             then w2n w1 < w2n w2
-             else w2n w1 > w2n w2)))
-Proof
-  rpt gen_tac \\ strip_tac
-  \\ imp_res_tac tracked_step_inst_base
-  \\ imp_res_tac tracked_step_flookup
-  \\ mp_tac dfg_tracked_inst_outputs
-  \\ disch_then (qspecl_then [`fn`, `v`, `EL idx bb.bb_instructions`] mp_tac)
-  \\ simp[]
-  \\ strip_tac
-  \\ conj_tac
-  >- (
-    rpt strip_tac
-    >> `u <> v` by metis_tac[dfg_output_neq_operand_var, MEM_EL]
-    >> `FLOOKUP s'.vs_vars u = FLOOKUP s.vs_vars u` by metis_tac[]
-    >> `?w. eval_operand (Var u) s = SOME w` by
-         metis_tac[tracked_step_operand_evaluable, MEM]
-    >> gvs[eval_operand_def, lookup_var_def]
-    >> metis_tac[FDOM_FLOOKUP]
-  )
-  >> qpat_x_assum `dfg_tracked_opcode _`
-       (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def])
-  >> gvs[]
-  >> `dfg_tracked_opcode (EL idx bb.bb_instructions).inst_opcode` by
-       simp[dfg_tracked_opcode_def]
-  >> `!u. MEM (Var u) (EL idx bb.bb_instructions).inst_operands ==> u <> v` by
-       (rpt strip_tac >>
-        `MEM (Var u) (EL idx bb.bb_instructions).inst_operands` by simp[] >>
-        `v <> u` by metis_tac[dfg_output_neq_operand_var, MEM_EL] >>
-        metis_tac[])
-  (* ISZERO *)
-  >> TRY (
-    rpt strip_tac
-    >> `inp <> v` by (first_x_assum match_mp_tac >> gvs[])
-    >> imp_res_tac step_inst_base_iszero
-    >> gvs[update_var_def, FLOOKUP_UPDATE, eval_operand_def, lookup_var_def]
-    >> CCONTR_TAC >> gvs[bool_to_word_def]
-    >> NO_TAC)
-  (* ADD/SUB/LT/GT *)
-  >> rpt strip_tac
-  >> (drule_all step_inst_base_add ORELSE drule_all step_inst_base_sub
-      ORELSE drule_all step_inst_base_lt ORELSE drule_all step_inst_base_gt)
-  >> strip_tac
-  >> MAP_EVERY qexists_tac [`w1`, `w2`]
-  >> gvs[update_var_def, FLOOKUP_UPDATE]
-  >> (Cases_on `op1` >> Cases_on `op2`
-      >> gvs[eval_op_env_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE])
-QED
-
-(* dfg_prefix_sound is preserved by executing one non-terminator instruction. *)
-Theorem dfg_prefix_sound_step:
-  !fn bb idx fuel ctx s s'.
-    dfg_prefix_sound (dfg_build_function fn) bb s.vs_vars idx /\
-    fn_inst_wf fn /\ wf_function fn /\
-    MEM bb fn.fn_blocks /\
-    (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-       MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==> (i1 = i2)) /\
-    dfg_block_local fn /\
-    idx < LENGTH bb.bb_instructions /\
-    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-    step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
-    dfg_prefix_sound (dfg_build_function fn) bb s'.vs_vars (SUC idx)
-Proof
-  rpt strip_tac
-  >> REWRITE_TAC [dfg_prefix_sound_def] >> rpt gen_tac >> strip_tac
-  >> `k < idx \/ k = idx` by DECIDE_TAC
-  (* Case 1: k < idx — transfer from prior env *)
-  >- (
-    `k < LENGTH bb.bb_instructions` by DECIDE_TAC >>
-    `k <> idx` by DECIDE_TAC >>
-    imp_res_tac dfg_build_function_correct >>
-    `FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v` by
-      metis_tac[step_preserves_other_output] >>
-    mp_tac dfg_prefix_sound_entry_transfer >>
-    disch_then (qspecl_then [`dfg_build_function fn`, `bb`,
-      `s.vs_vars`, `s'.vs_vars`, `v`, `dinst`, `k`, `idx`] mp_tac) >>
-    (impl_tac THEN1 (
-      simp[] >> rpt strip_tac >>
-      metis_tac[operand_flookup_preserved_dinst])) >>
-    simp[]
-  )
-  (* Case 2: k = idx *)
-  >- (
-    qpat_x_assum `k = idx` SUBST_ALL_TAC
-    >> qpat_x_assum `_ = dinst` (SUBST_ALL_TAC o SYM)
-    >> Cases_on `dfg_tracked_opcode (EL idx bb.bb_instructions).inst_opcode`
-    >- (drule_all_then ACCEPT_TAC dfg_prefix_sound_step_tracked)
-    >> gvs[dfg_tracked_opcode_def]
-  )
 QED

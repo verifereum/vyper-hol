@@ -42,62 +42,6 @@ Proof
   CONV_TAC (LAND_CONV (K (#evaluation u256_to_flag))) >> EVAL_TAC
 QED
 
-val bys1_to_u8 = memoryStoreWitnessLib.evaluate fixture_root "bys1_to_u8"
-Theorem bys1_to_u8_matches_python_oracle:
-  ^(#term bys1_to_u8) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys1_to_u8")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation bys1_to_u8))) >> EVAL_TAC
-QED
-
-val bys32_to_u8 = memoryStoreWitnessLib.evaluate fixture_root "bys32_to_u8"
-Theorem bys32_to_u8_matches_python_oracle:
-  ^(#term bys32_to_u8) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys32_to_u8")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation bys32_to_u8))) >> EVAL_TAC
-QED
-
-val bys32_to_i8 = memoryStoreWitnessLib.evaluate fixture_root "bys32_to_i8"
-Theorem bys32_to_i8_matches_python_oracle:
-  ^(#term bys32_to_i8) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys32_to_i8")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation bys32_to_i8))) >> EVAL_TAC
-QED
-
-val bys20_to_addr = memoryStoreWitnessLib.evaluate fixture_root "bys20_to_addr"
-Theorem bys20_to_addr_matches_python_oracle:
-  ^(#term bys20_to_addr) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys20_to_addr")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation bys20_to_addr))) >> EVAL_TAC
-QED
-
-val bys16_to_dec = memoryStoreWitnessLib.evaluate fixture_root "bys16_to_dec"
-Theorem bys16_to_dec_matches_python_oracle:
-  ^(#term bys16_to_dec) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys16_to_dec")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation bys16_to_dec))) >> EVAL_TAC
-QED
-
-val bys4_to_b4 = memoryStoreWitnessLib.evaluate fixture_root "bys4_to_b4"
-Theorem bys4_to_b4_matches_python_oracle:
-  ^(#term bys4_to_b4) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "bys4_to_b4")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation bys4_to_b4))) >> EVAL_TAC
-QED
-
-val str_to_bys = memoryStoreWitnessLib.evaluate fixture_root "str_to_bys"
-Theorem str_to_bys_matches_python_oracle:
-  ^(#term str_to_bys) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "str_to_bys")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation str_to_bys))) >> EVAL_TAC
-QED
-
 val u160_to_b20 = memoryStoreWitnessLib.evaluate fixture_root "u160_to_b20"
 Theorem u160_to_b20_matches_python_oracle:
   ^(#term u160_to_b20) =
@@ -116,8 +60,8 @@ QED
 
 (* Check the actual exported ASTs, including Vyper-invalid conversions whose
    HOL lowering and source semantics agree and therefore stay in the domain. *)
-fun check_conversion expected name = let
-  val path = "../conversions/checker-oracle/" ^ name ^ ".json"
+fun check_conversion_in dir expected name = let
+  val path = "../conversions/" ^ dir ^ "/" ^ name ^ ".json"
   val input = vyperCheckContractFrontendLib.prepare_check_input
     {in_deploy = false, address = ``0w : address``,
      annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,
@@ -135,10 +79,13 @@ fun check_conversion expected name = let
   end
 in List.app check [false, true] end
 
-val () = List.app (check_conversion false)
+val () = List.app (check_conversion_in "checker-oracle" true)
+  ["lit_300_to_u8", "lit_neg_to_u256", "lit_bys_narrow"]
+(* The pinned Vyper's type checker rejects these; their ASTs come from the
+   last pin that accepted them (see ../conversions/README.md). *)
+val () = List.app (check_conversion_in "typecheck-rejected" false)
   ["u256_to_b4", "bys33_to_bool", "bys64_to_u256", "bys8_to_b4",
    "str8_to_b4", "u256_to_bys16", "b4_to_bys2",
    "b4_to_bys", "b4_to_str", "u256_to_bys"]
-val () = List.app (check_conversion true)
-  ["i8_to_addr", "i256_to_addr", "lit_300_to_u8", "lit_neg_to_u256",
-   "lit_bys_narrow"]
+val () = List.app (check_conversion_in "typecheck-rejected" true)
+  ["i8_to_addr", "i256_to_addr"]

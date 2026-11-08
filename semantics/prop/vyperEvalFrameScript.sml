@@ -31,7 +31,8 @@ val eval_frame_net =
       machine_frame_place_type_value, machine_frame_new_variable,
       machine_frame_next_gas_reading, machine_frame_precompile_call_success,
       machine_frame_handlers, machine_frame_push_function,
-      machine_frame_pop_function, machine_frame_unchanged_reads]
+      machine_frame_pop_function, machine_frame_unchanged_reads,
+      machine_frame_array_iterator_results]
     val structural = List.foldl (fn (th,net) => Net.insert
       (snd (dest_imp (concl th)), MATCH_MP_TAC th >> rpt conj_tac) net)
       Net.empty (map SPEC_ALL rules)

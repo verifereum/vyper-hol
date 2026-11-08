@@ -28,7 +28,8 @@ Definition raw_shape_free_program_def:
     !vis mut nr rr name args dflts ret body.
       MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
       vis <> Deploy ==>
-      ~supported_stmts_expr_exists expr_raw_shape_root body
+      ~supported_stmts_expr_exists expr_raw_shape_root body /\
+      EVERY (\e. ~supported_expr_exists expr_raw_shape_root e) dflts
 End
 
 (* ===== Typing gives builtin arity ===== *)
@@ -171,6 +172,14 @@ Proof
   strip_tac >> drule ALL_DISTINCT_MAP_name_key >> simp[]
 QED
 
+Theorem well_typed_exprs_raw_shape[local]:
+  !es env. well_typed_exprs env es /\
+    EVERY (\e. ~supported_expr_exists expr_raw_shape_root e) es ==>
+    EVERY (\e. ~supported_expr_exists expr_shape_root e) es
+Proof
+  Induct >> simp[well_typed_expr_def] >> metis_tac[well_typed_expr_raw_shape]
+QED
+
 Theorem check_contract_runtime_bodies_shape_ok:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   raw_shape_free_program tops ==>
@@ -182,7 +191,7 @@ Proof
   drule check_contract_runtime_function_body_MEM >> simp[] >>
   disch_then drule_all >>
   simp[check_function_body_def, IS_SOME_EXISTS] >> strip_tac >>
-  metis_tac[type_stmt_raw_shape]
+  metis_tac[type_stmt_raw_shape, well_typed_exprs_raw_shape]
 QED
 
 (* S2 from the checker. *)
@@ -244,11 +253,19 @@ QED
 Theorem supported_program_raw_shape_free_program:
   !tops. supported_program tops ==> raw_shape_free_program tops
 Proof
-  rw[raw_shape_free_program_def] >>
+  rpt gen_tac >> strip_tac >> REWRITE_TAC [raw_shape_free_program_def] >>
+  rpt gen_tac >> strip_tac >>
   drule supported_program_runtime_bodies_shape_ok >>
-  rw[runtime_bodies_shape_ok_def] >> strip_tac >>
-  first_x_assum drule_all >> simp[] >>
-  irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
+  REWRITE_TAC [runtime_bodies_shape_ok_def] >>
+  disch_then drule_all >> strip_tac >> conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
+      simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
+      first_x_assum (irule_at Any) >>
+      simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!e. MEM e dflts ==> _` drule >> simp[] >>
+  irule (CONJUNCT1 supported_expr_exists_mono) >>
   first_x_assum (irule_at Any) >>
   simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
 QED

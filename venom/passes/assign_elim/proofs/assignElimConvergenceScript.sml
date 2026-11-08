@@ -175,14 +175,6 @@ Proof
     fs[])
 QED
 
-(* Bound SUM(MAP f l) when each f(x) <= n *)
-Triviality sum_map_le_bound[local]:
-  !f (n:num) l. EVERY (\x. f x <= n) l ==> SUM (MAP f l) <= n * LENGTH l
-Proof
-  Induct_on `l` >> rw[] >> res_tac >>
-  fs[arithmeticTheory.MULT_SUC]
-QED
-
 (* Helper: each boundary value's measure is bounded *)
 Triviality copy_val_measure_boundary_le[local]:
   !fn st lbl.
@@ -544,32 +536,6 @@ Proof
   Cases_on `fn_entry_label fn` >> simp[init_df_state_def]
 QED
 
-(* SUM(MAP f l) ≤ SUM(MAP g l) when f ≤ g pointwise on l *)
-Triviality sum_map_le[local]:
-  !f g l. EVERY (\x. f x <= g x) l ==> SUM (MAP f l) <= SUM (MAP g l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  irule LESS_EQ_LESS_EQ_MONO >> simp[]
-QED
-
-(* SUM(MAP f l) < SUM(MAP g l) when f ≤ g pointwise and strictly < at some MEM *)
-Triviality sum_map_lt[local]:
-  !f g l. EVERY (\x. f x <= g x) l /\
-          (?x. MEM x l /\ f x < g x) ==>
-          SUM (MAP f l) < SUM (MAP g l)
-Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  `SUM (MAP f l) <= SUM (MAP g l)` by (irule sum_map_le >> simp[])
-  >- (gvs[] >>
-      irule LESS_EQ_LESS_TRANS >>
-      qexists_tac `g h + SUM (MAP f l)` >> simp[])
-  >- (irule LESS_LESS_EQ_TRANS >>
-      qexists_tac `f h + SUM (MAP g l)` >>
-      reverse conj_tac >- simp[] >>
-      simp[LT_ADD_LCANCEL] >>
-      first_x_assum irule >> simp[] >> metis_tac[])
-QED
-
 (* Monotonicity: processing a dfs_pre label either leaves state unchanged or
    increases measure. *)
 (* Helper: FDOM f ⊆ s ⇒ DRESTRICT f s = f *)
@@ -675,23 +641,6 @@ Proof
   gvs[FLOOKUP_FUNION, FLOOKUP_DEF]
 QED
 
-(* Key properties of inst_map from df_fold_block *)
-Triviality df_fold_block_inst_map_props[local]:
-  !transfer lbl instrs v0 fv inst_map.
-    df_fold_block Forward transfer lbl instrs v0 = (fv, inst_map) ==>
-    (!k. k IN FDOM inst_map ==> FST k = lbl) /\
-    (lbl, 0n) IN FDOM inst_map /\
-    FLOOKUP inst_map (lbl, 0n) = SOME v0
-Proof
-  rpt strip_tac >> imp_res_tac df_fold_block_fdom
-  >- fs[IN_IMAGE, IN_COUNT]
-  >- simp[IN_IMAGE, IN_COUNT]
-  >- (qpat_x_assum `_ = (fv, inst_map)` mp_tac >>
-      simp[dfAnalyzeDefsTheory.df_fold_block_def,
-           dfAnalyzeDefsTheory.direction_case_def] >>
-      strip_tac >> imp_res_tac df_fold_forward_at >> fs[])
-QED
-
 (* C3 coherence: when ds_inst already has the right v0 at (lbl,0),
    the fold output inst_map is absorbed by FUNION. *)
 Triviality funion_fold_coherent[local]:
@@ -721,37 +670,6 @@ Proof
   (* Now show FUNION absorption *)
   simp[fmap_eq_flookup] >> gen_tac >> simp[FLOOKUP_FUNION] >>
   Cases_on `FLOOKUP inst_map x` >> simp[]
-QED
-
-Triviality ds_inst_update_literal[local]:
-  !(st : 'a df_state) X.
-    (st with ds_inst := X) = <|ds_inst := X; ds_boundary := st.ds_boundary|>
-Proof
-  simp[dfAnalyzeDefsTheory.df_state_component_equality]
-QED
-
-Triviality inst_card_mono[local]:
-  !inst_map st fn.
-    CARD (FDOM st.ds_inst INTER df_valid_inst_keys fn.fn_blocks) <=
-    CARD (FDOM (FUNION inst_map st.ds_inst) INTER
-          df_valid_inst_keys fn.fn_blocks)
-Proof
-  rpt strip_tac >>
-  irule CARD_SUBSET >> simp[FINITE_INTER, FDOM_FUNION] >>
-  simp[SUBSET_DEF, IN_INTER] >> metis_tac[IN_UNION]
-QED
-
-(* copy_prop_joined depends only on ds_boundary, and is preserved
-   when df_boundary values are unchanged *)
-Triviality copy_prop_joined_boundary_eq[local]:
-  !fn st bnd di.
-    (!x. df_boundary NONE <|ds_inst := di; ds_boundary := bnd|> x =
-         df_boundary NONE st x) ==>
-    !x. copy_prop_joined fn <|ds_inst := di; ds_boundary := bnd|> x =
-        copy_prop_joined fn st x
-Proof
-  rpt strip_tac >>
-  simp[copy_prop_joined_def, LET_THM]
 QED
 
 (* fresh_count monotonicity under FUNION when joined values are preserved *)
@@ -836,17 +754,6 @@ Proof
   fs[copy_prop_state_inv_def] >>
   first_x_assum drule >> strip_tac >>
   metis_tac[CARD_SUBSET, FINITE_LIST_TO_SET]
-QED
-
-Triviality weighted_lt_cancel[local]:
-  !w (a:num) a' c. a < a' /\ c <= w ==> (w + 1) * a + c < (w + 1) * a'
-Proof
-  rpt strip_tac >>
-  `(w + 1) * a + c <= (w + 1) * a + w` by simp[] >>
-  `(w + 1) * a + w < (w + 1) * (a + 1)` by simp[LEFT_ADD_DISTRIB] >>
-  `a + 1 <= a'` by simp[] >>
-  `(w + 1) * (a + 1) <= (w + 1) * a'` by simp[LE_MULT_LCANCEL] >>
-  simp[]
 QED
 
 Theorem copy_prop_measure_monotone:

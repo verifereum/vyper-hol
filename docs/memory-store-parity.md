@@ -21,7 +21,11 @@ the existing finite-map compset and `fmap_to_alist_FEMPTY`, `i2w_pos` and
 substitution. The diagnostic per-source bound
 was 900 seconds; the proof-step timeout was unchanged.
 
-The oracle is Vyper `0.5.0a4+9362e36b+commit.9362e36b`, pinned by `VYPER_PIN`,
+Fixtures named in [the pending list](../lowering/defs/bytecode/pending-5127-port.md)
+are out of the parity checks until the compiler changes they depend on are
+ported; their MATCH entries below hold again once they are back.
+
+The oracle is Vyper `0.5.0b1+commit.577d2534`, pinned by `VYPER_PIN`,
 with experimental codegen, no optimization, Prague and bytecode metadata disabled.
 The retained 29 JSON/bytecode fixtures and dependency provenance reproduced
 byte for byte with `prepare --check`. Diagnostic probes used holbuild 0.11.4;

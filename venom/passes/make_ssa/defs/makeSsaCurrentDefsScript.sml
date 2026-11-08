@@ -124,35 +124,6 @@ Proof
   irule MAP_CONG >> rw[]
 QED
 
-Triviality filter_add_mem_decrease_supply:
-  !U (h:'a) hp.
-    MEM h U /\ ~MEM h hp /\ ALL_DISTINCT U ==>
-    LENGTH (FILTER (\x. ~MEM x (h::hp)) U) + 1 <=
-    LENGTH (FILTER (\x. ~MEM x hp) U)
-Proof
-  Induct >> simp[ALL_DISTINCT] >> rpt strip_tac >> gvs[]
-  >- (
-    `LENGTH (FILTER (\x. x <> h /\ ~MEM x hp) U) <=
-     LENGTH (FILTER (\x. ~MEM x hp) U)` suffices_by DECIDE_TAC >>
-    irule LENGTH_FILTER_LEQ_MONO >> simp[])
-  >- (
-    Cases_on `MEM h hp`
-    >- (`~(h <> h' /\ ~MEM h hp)` by simp[] >>
-        `~(~MEM h hp)` by simp[] >>
-        simp[] >> first_x_assum drule_all >> simp[])
-    >- (`h <> h'` by metis_tac[MEM] >>
-        simp[LENGTH] >> first_x_assum drule_all >> DECIDE_TAC))
-QED
-
-Triviality filter_weaken_exclusion_supply:
-  !(U:'a list) hp1 hp2.
-    (!x. MEM x hp1 ==> MEM x hp2) ==>
-    LENGTH (FILTER (\x. ~MEM x hp2) U) <=
-    LENGTH (FILTER (\x. ~MEM x hp1) U)
-Proof
-  Induct >> rw[FILTER] >> gvs[] >> res_tac >> DECIDE_TAC
-QED
-
 Triviality process_frontiers_supply_measure:
   !fs s var pm li bbs rest hp bbs' rest' hp' s' U.
     process_frontiers_supply s var pm li bbs rest hp fs =
@@ -179,7 +150,7 @@ Proof
     (impl_tac >- simp[]) >> strip_tac >>
     `LENGTH (FILTER (\x. ~MEM x (h::hp)) U) <=
      LENGTH (FILTER (\x. ~MEM x hp) U)` by
-      (irule filter_weaken_exclusion_supply >> simp[]) >>
+      (irule filter_weaken_exclusion >> simp[]) >>
     DECIDE_TAC)
   >> rpt CASE_TAC >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
   `!f. MEM f fs ==> MEM f U` by metis_tac[] >>
@@ -188,7 +159,7 @@ Proof
   `MEM h U` by metis_tac[] >>
   `LENGTH (FILTER (\x. ~MEM x (h::hp)) U) + 1 <=
    LENGTH (FILTER (\x. ~MEM x hp) U)` by
-    (irule filter_add_mem_decrease_supply >> simp[]) >>
+    (irule filter_add_mem_decrease >> simp[]) >>
   gvs[LENGTH] >> DECIDE_TAC
 QED
 

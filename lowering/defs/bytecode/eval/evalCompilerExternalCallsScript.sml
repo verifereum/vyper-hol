@@ -2,8 +2,5 @@
 Theory evalCompilerExternalCalls
 Ancestors
   evalCompilerExternalCallSelectors
-  evalCompilerExternalCallReturns
   evalCompilerExternalCallDefaults
-  evalCompilerDftStorageOrder
   evalCompilerExternalCallKwargs
-  evalCompilerExternalCallArgTypes

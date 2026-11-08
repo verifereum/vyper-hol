@@ -8,16 +8,19 @@ Ancestors
 Theorem abi_encoder_vars_extend_fields:
   abi_decoder_vars_extend extras s t ==>
   (t.vs_memory, t.vs_allocas, t.vs_alloca_next,
-   t.vs_accounts, t.vs_transient, t.vs_logs, t.vs_requests, t.vs_pending_deletions,
+   t.vs_accounts, t.vs_transient, t.vs_logs, t.vs_requests,
+   t.vs_tx_ctx, t.vs_block_ctx, t.vs_immutables, t.vs_outcomes, t.vs_pending_deletions,
    t.vs_current_bb, t.vs_inst_idx, t.vs_halted) =
   (s.vs_memory, s.vs_allocas, s.vs_alloca_next,
-   s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_requests, s.vs_pending_deletions,
+   s.vs_accounts, s.vs_transient, s.vs_logs, s.vs_requests,
+   s.vs_tx_ctx, s.vs_block_ctx, s.vs_immutables, s.vs_outcomes, s.vs_pending_deletions,
    s.vs_current_bb, s.vs_inst_idx, s.vs_halted)
 Proof
   strip_tac >> drule abi_decoder_vars_extend_restore >>
   disch_then (mp_tac o AP_TERM ``\u:venom_state.
     (u.vs_memory,u.vs_allocas,u.vs_alloca_next,
-     u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests,u.vs_pending_deletions,
+     u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests,
+     u.vs_tx_ctx,u.vs_block_ctx,u.vs_immutables,u.vs_outcomes,u.vs_pending_deletions,
      u.vs_current_bb,u.vs_inst_idx,u.vs_halted)``) >> simp[]
 QED
 
@@ -34,6 +37,11 @@ Theorem abi_encoder_shared_restore:
     restored.vs_transient = actual.vs_transient /\
     restored.vs_logs = actual.vs_logs /\
     restored.vs_requests = actual.vs_requests /\
+    restored.vs_tx_ctx = actual.vs_tx_ctx /\
+    restored.vs_block_ctx = actual.vs_block_ctx /\
+    restored.vs_immutables = actual.vs_immutables /\
+    restored.vs_outcomes = actual.vs_outcomes /\
+    restored.vs_pending_deletions = actual.vs_pending_deletions /\
     mem_bytes_at d (LENGTH (enc at av)) restored.vs_memory = enc at av /\
     eval_operand out restored = SOME (n2w (LENGTH (enc at av))) /\
     restored.vs_current_bb = st'.cs_current_bb /\

@@ -17,7 +17,11 @@ The stock HOL contract checker accepted every source in both deployment and
 runtime modes. The multi-module probes were accepted both on the full module
 list and on the main module alone.
 
-The oracle is Vyper `0.5.0a4+9362e36b+commit.9362e36b`, pinned by `VYPER_PIN`.
+Fixtures named in [the pending list](../lowering/defs/bytecode/pending-5127-port.md)
+are out of the parity checks until the compiler changes they depend on are
+ported; their MATCH entries below hold again once they are back.
+
+The oracle is Vyper `0.5.0b1+commit.577d2534`, pinned by `VYPER_PIN`.
 It was built with experimental codegen, no optimization, the Prague EVM version,
 and bytecode metadata disabled. The 29 retained JSON/bytecode fixtures in
 `lowering/defs/bytecode/external-calls/oracle` and their dependency provenance
@@ -39,8 +43,10 @@ whitelist change, with the probe in `memory_store_witnesses.py`.
 identical. A difference cell shows the HOL/Vyper runtime lengths and the first
 differing runtime byte (zero-based). Whitelist membership (`supported_program`)
 is given as baseline → after. It does not decide whether a source is compiled.
-`P` marks the sources in `parity-fixtures.txt`, which have checked theorems
-in `evalCompilerExternalCalls`.
+`P` marks the sources that were in `parity-fixtures.txt`, with checked
+theorems in `evalCompilerExternalCalls`; those listed in
+[`pending-5127-port.md`](../lowering/defs/bytecode/pending-5127-port.md) are
+out of it until their port lands.
 
 | Source | Part | Whitelist | Baseline | After |
 |---|---|---|---|---|
@@ -122,8 +128,10 @@ These sources pass a positional argument whose type is narrower than the
 declared parameter type (#553, a06-06). Vyper lays the argument buffer out
 with the types of the lowered argument values, so the calldata length follows
 the call site; the type checker admits a bytestring or dynamic array with a
-smaller bound (`arg_type_fits`). All match the pinned Vyper bytecode exactly,
-with checked theorems in `evalCompilerExternalCallArgTypes`. A storage,
+smaller bound (`arg_type_fits`). They matched the pinned Vyper bytecode
+exactly until the v0.5.0b1 pin changed their bytes; the comparison returns
+with the ports listed in
+[`pending-5127-port.md`](../lowering/defs/bytecode/pending-5127-port.md). A storage,
 transient or immutable variable is the exception: Vyper reads it at its
 annotated type, which for a call argument is the declared parameter type.
 A narrower struct field (`self.p.name` with `name: String[5]`) is not admitted

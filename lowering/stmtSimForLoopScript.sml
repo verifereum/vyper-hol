@@ -327,7 +327,8 @@ Theorem stmt_state_rel_declare_word_alloca[local]:
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
-    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
+    word_memory_type tyv ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
@@ -344,7 +345,7 @@ Proof
      simp[] >> qexistsl_tac [`w2n w`, `func`, `inst`, `sz`] >> simp[]) >>
   irule stmt_state_rel_declare_memory >>
   simp[word_value_wf] >> qexistsl_tac [`inst`, `s`, `w`] >>
-  simp[word_value_in_memory] >> conj_tac
+  simp[word_value_memory_rel] >> conj_tac
   >- (rpt strip_tac >>
       `regions_disjoint (w2n w) sz b sz'` by
         (irule local_ptrs_rel_alloca_disjoint >>
@@ -388,7 +389,7 @@ Theorem for_body_entry_alloca[local]:
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 ==>
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel ctx func bc cx
@@ -482,7 +483,8 @@ Theorem for_body_entry:
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
-    32 <= sz /\ type_memory_size tyv = 32 /\ cap <= w2n w /\
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
+    cap <= w2n w /\
     (cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module esk cap) ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
@@ -523,7 +525,8 @@ QED
    ALLOCA ainst and its pointer p in bc, which is cenv with id bound; the
    counter cv, end ev, condition dv and next counter nv, distinct from p
    and from each other as the loop needs, and cv, dv and nv no local's
-   pointers. *)
+   pointers.  The loop variable has a scalar word layout, not merely a
+   32-byte footprint (which could also describe an aggregate). *)
 Definition for_code_def:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj <=>
@@ -562,7 +565,7 @@ Definition for_code_def:
     dv <> p /\ dv <> cv /\ dv <> ev /\ nv <> cv /\ nv <> ev /\ nv <> p /\
     cv <> ev /\ cv <> p /\ ev <> p /\
     not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
-    32 <= sz /\ type_memory_size tyv = 32
+    32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv
 End
 
 Theorem for_body_lands_path[local]:
@@ -727,7 +730,7 @@ Theorem for_round_prepare[local]:
     (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
     (esk with <| scopes := (FEMPTY |+ (id, <| assignable := F; type := tyv;
       value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes; gas_obs := [] |>) /\
-  gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+  gas_admissible (eval_for cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
     (stmt_res_ok lctx) esk ==>
   ?s2. gas_marked_exec F (ctx,func)
       (push_scope_with_var id tyv (IntV (n1 + &k))) (esk,cc) [] (INL ())
@@ -875,7 +878,7 @@ Theorem for_iteration_alloca[local]:
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
                             value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
                    gas_obs := [] |>) /\
-    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+    gas_admissible (eval_for cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
       (stmt_res_ok lctx) esk ==>
     gas_outcome F (cx_tops cx) (ctx, func)
       (do push_scope_with_var id tyv (IntV (n1 + &k));
@@ -1003,7 +1006,7 @@ Theorem for_iteration:
          (FEMPTY |+ (id, <| assignable := F; type := tyv;
                             value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
                    gas_obs := [] |>) /\
-    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+    gas_admissible (eval_for cx tyv id stmts (Value (IntV (n1 + &k)) :: vs))
       (stmt_res_ok lctx) esk ==>
     gas_outcome F (cx_tops cx) (ctx, func)
       (do push_scope_with_var id tyv (IntV (n1 + &k));
@@ -1117,7 +1120,7 @@ Theorem for_loop_alloca:
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
-    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (stmt_res_ok lctx) esk /\
     P (esk with gas_obs := []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
@@ -1127,7 +1130,7 @@ Theorem for_loop_alloca:
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
     gas_outcome F (cx_tops cx) (ctx, func)
-      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (esk, cc)
       (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
          s.vs_inst_idx = 0 /\ ~s.vs_halted /\
@@ -1157,17 +1160,18 @@ Proof
     (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b)` >>
   qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
   `(!j es s.
-      j < LENGTH (GENLIST (\j. IntV (n1 + &(k+j))) m) /\ Inv j es s /\
+      j < LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m) /\ Inv j es s /\
       gas_admissible (eval_for cx tyv id stmts
-        (DROP j (GENLIST (\j. IntV (n1 + &(k+j))) m))) (stmt_res_ok lctx) es ==>
+        (DROP j (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m))) (stmt_res_ok lctx) es ==>
       gas_outcome F (cx_tops cx) (ctx,func)
-        (do push_scope_with_var id tyv (EL j (GENLIST (\j. IntV (n1 + &(k+j))) m));
+        (do v <- read_result cx (EL j (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m));
+            push_scope_with_var id tyv v;
             finally (try (do eval_stmts cx stmts; return F od)
               handle_loop_exception) pop_scope od) (es,s)
         (\res ee t. ?broke. res = INL broke /\
           (broke ==> Done ee t) /\ (~broke ==> Inv (SUC j) ee t))
         (\res ee r. ?ex. res = INR ex /\ R ex ee r)) /\
-    (!es s. Inv (LENGTH (GENLIST (\j. IntV (n1 + &(k+j))) m)) es s ==>
+    (!es s. Inv (LENGTH (GENLIST (\j. Value (IntV (n1 + &(k+j)))) m)) es s ==>
       ?t. gas_marked_path F ctx func s 0 (OK t) /\ Done (es with gas_obs := []) t)` by
     (conj_tac >- suspend "round" >> suspend "last") >>
   drule eval_for_rounds >>
@@ -1276,7 +1280,7 @@ Theorem for_loop:
     n1 <= n2 /\ Num (n2 - n1) < dimword (:256) /\
     (* the loop from iteration k *)
     k + m = Num (n2 - n1) /\
-    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+    gas_admissible (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (stmt_res_ok lctx) esk /\
     P (esk with gas_obs := []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
@@ -1287,7 +1291,7 @@ Theorem for_loop:
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
     cap <= w2n w ==>
     gas_outcome F (cx_tops cx) (ctx, func)
-      (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m))
+      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(k + j)))) m))
       (esk, cc)
       (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
          s.vs_inst_idx = 0 /\ ~s.vs_halted /\

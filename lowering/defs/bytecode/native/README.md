@@ -2,16 +2,12 @@
 
 ## Overview
 
-The parity theories in `../eval/` prove, by `EVAL`, that `compile_vyper`
-produces exactly the deployment and runtime bytes of the pinned Python
-compiler for each of the 101 fixtures in `../python-o1-no-asm-opt/`. They are
-kernel-checked and slow, which is why the rollup is opt-in.
-
-This directory runs the same check as compiled Standard ML. The equations
-`EVAL` uses for `compile_vyper` are printed by EmitML and compiled. The
-result is trusted rather than kernel-checked. It runs all 101 fixtures in
-about half a second, so it can run on every change; the `EVAL` theories remain the
-proof.
+This runner checks that `compile_vyper` produces exactly the deployment and
+runtime bytes of the pinned Python compiler for each of the 89 retained
+fixtures in `../python-o1-no-asm-opt/`. The equations `EVAL` uses for
+`compile_vyper` are printed by EmitML and compiled, so the result is trusted
+rather than kernel-checked (see Trust below). It runs all 89 fixtures in
+about half a second.
 
 ## Files
 
@@ -38,7 +34,9 @@ cd lowering/defs/bytecode
 
 Each fixture prints `PASS` or `FAIL` with its time. The exit status is
 non-zero unless every selected fixture matches. A requested name, or a `.hex`
-file in the directory, without a compiled-in fixture also fails.
+file in the directory, without a compiled-in fixture also fails, except the
+main-corpus fixtures listed in [`pending-5127-port.md`](../pending-5127-port.md),
+which the run without names skips until their port lands.
 
 Run the `build` step first: the executable compiles `compilerNativeML.sml`,
 which the generator theory writes as an extra output rather than a declared
@@ -64,8 +62,7 @@ threshold gains nothing more.
 
 It starts from `compile_vyper (K SOME) (o1_policy all_capabilities)` and the
 fixture programs. From there it follows the constants of `EVAL`'s default
-compset (some parity theories adjust the compset before `EVAL`; every rule is
-a theorem either way):
+compset (every rule is a theorem):
 about 1700 constants and 107 datatypes. For each constant it takes the
 compset's rewrite rules that read as definitions: an unconditional equation
 whose left side applies the constant to variables, constructors and literals.
@@ -130,5 +127,4 @@ The approximations:
 - Natives are total where `EVAL` might stop. For example, `hn_fmap_eq`
   decides map equality that `EVAL` may leave unevaluated.
 
-For these reasons the native run is a fast regression check, and the `EVAL`
-parity theories are still needed for a proof.
+For these reasons the native run is a fast regression check, not a proof.

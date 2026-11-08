@@ -3,6 +3,7 @@
  *
  * TOP-LEVEL:
  *   read_hex_bytes -- read pinned-Python deploy/runtime oracle bytes into a term
+ *   read_asm_opt_hex_bytes -- the same, from the assembly-optimized oracle
  *   weak_eval -- checked evaluation preserving unused function-valued fields
  *)
 
@@ -52,12 +53,18 @@ fun fixture_line line =
          [key, value] => SOME (trim key, trim value)
        | _ => raise Fail ("bad bytecode fixture line: " ^ line))
 
-fun resolve_bytecode_fixture filename =
+fun resolve_oracle_fixture oracle_dir filename =
   let
-    val candidates =
-      [OS.Path.concat ("../python-o1-no-asm-opt", filename),
-       OS.Path.concat ("bytecode/python-o1-no-asm-opt", filename),
-       OS.Path.concat ("lowering/defs/bytecode/python-o1-no-asm-opt", filename)]
+    (* Sibling fixtures use ../external-entries/... . Collapse the intervening
+       python-o1-no-asm-opt/.. before filesystem access: isolated holbuild
+       stages need not contain the unrelated default-fixture directory.
+       The tests/ theories stage their fixtures at ../lowering/defs/bytecode,
+       so include that base as well as eval/, lowering/defs/ and the root. *)
+    val candidates = List.map OS.Path.mkCanonical
+      [OS.Path.concat ("../" ^ oracle_dir, filename),
+       OS.Path.concat ("bytecode/" ^ oracle_dir, filename),
+       OS.Path.concat ("lowering/defs/bytecode/" ^ oracle_dir, filename),
+       OS.Path.concat ("../lowering/defs/bytecode/" ^ oracle_dir, filename)]
   in
     case List.find
            (fn path => OS.FileSys.access (path, [OS.FileSys.A_READ]))
@@ -65,6 +72,9 @@ fun resolve_bytecode_fixture filename =
       SOME path => path
     | NONE => raise Fail ("missing bytecode fixture: " ^ filename)
   end
+
+fun resolve_bytecode_fixture filename =
+  resolve_oracle_fixture "python-o1-no-asm-opt" filename
 
 fun bytecode_fixture_value filename entries key =
   case List.find (fn (entry_key, _) => entry_key = key) entries of
@@ -127,6 +137,10 @@ fun read_hex_bytes_from path =
   end
 
 fun read_hex_bytes filename = read_hex_bytes_from (resolve_bytecode_fixture filename)
+
+(* Python's O1 output with the final assembly optimizer on. *)
+fun read_asm_opt_hex_bytes filename =
+  read_hex_bytes_from (resolve_oracle_fixture "python-o1-asm-opt" filename)
 
 (* Kernel-checked staged evaluation certificates only. Neither rewrite list
    may contain an oracle equality: oracle bytes are read solely in the final

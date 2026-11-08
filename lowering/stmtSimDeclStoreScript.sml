@@ -11,6 +11,7 @@
  * TOP-LEVEL:
  *   store_lays_out               — the stored word lays out the value
  *   store_lays_out_word_value, store_lays_out_typed — its two sources
+ *   store_lays_out_memory_value_rel — the store's complete layout
  *   stmt_state_rel_declare_store — a store into a new local's region binds
  *                                  it, for a word laying out a value that
  *                                  fits the region
@@ -54,7 +55,7 @@ Theorem stmt_state_rel_declare_memory:
     (!n b sz'. n <> id /\ local_region cenv es.scopes s n b sz' ==>
          mem_bytes_at b sz' s.vs_memory = mem_bytes_at b sz' t.vs_memory) /\
     type_memory_size tyv <= sz /\ val_wf tyv v /\
-    val_in_memory tyv v (w2n w) t.vs_memory ==>
+    memory_value_rel tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest) t
@@ -141,7 +142,7 @@ Theorem stmt_state_rel_declare_store:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) x s).vs_memory /\
     val_wf tyv v ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
@@ -199,14 +200,14 @@ QED
    lays v out, in one word. *)
 Definition store_lays_out_def:
   store_lays_out etv tyv v <=>
-    val_wf tyv v /\ type_memory_size tyv = 32 /\
+    val_wf tyv v /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
     !off s. val_in_memory tyv v off
               (mstore off (typed_val_to_w256 etv v) s).vs_memory
 End
 
 Theorem store_lays_out_word_value:
   !tenv t etv tyv v.
-    word_value v /\ type_memory_size tyv = 32 /\
+    word_value v /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
     is_word_type t /\ evaluate_type tenv t = SOME etv ==>
     store_lays_out etv tyv v
 Proof
@@ -223,5 +224,16 @@ Theorem store_lays_out_typed:
     store_lays_out tyv tyv v
 Proof
   rpt strip_tac >> simp[store_lays_out_def] >>
-  metis_tac[typed_word_store]
+  metis_tac[typed_word_store, evaluate_word_memory_type]
+QED
+
+(* The stored word also gives the local's complete layout, which
+   local_ptrs_rel keeps for every live local. *)
+Theorem store_lays_out_memory_value_rel:
+  !etv tyv v off s.
+    store_lays_out etv tyv v ==>
+    memory_value_rel tyv v off
+      (mstore off (typed_val_to_w256 etv v) s).vs_memory
+Proof
+  rw[store_lays_out_def, word_memory_type_memory_value_rel]
 QED

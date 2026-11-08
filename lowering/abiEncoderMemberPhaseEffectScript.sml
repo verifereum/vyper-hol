@@ -2,6 +2,7 @@
 Theory abiEncoderMemberPhaseEffect
 Ancestors
   abiEncoderMemberPhaseRaw abiEncoderPrimitiveEffect abiEncoderRegisteredEffect
+  abiEncoderLeafGlobals
   abiDecoderReentryAddress abiDecoderContract abiDecoderDynamicLoopSetup venomState venomExecSemantics
   compileEnv emitHelper emitHelperProps venomInst venomMemDefs exprLoweringProps
   abiEncoderChildCode abiEncoderChildSuffix abiEncoderLeafGlobals words list rich_list
@@ -40,8 +41,10 @@ QED
 Theorem abi_encoder_member_step_globals:
   (i.inst_opcode = ADD \/ i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) /\
   step_inst_base i s = OK t ==>
-  (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests,t.vs_pending_deletions) =
-  (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)
+  (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests,
+    t.vs_tx_ctx,t.vs_block_ctx,t.vs_immutables,t.vs_outcomes,t.vs_pending_deletions) =
+  (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,
+    s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes,s.vs_pending_deletions)
 Proof
   strip_tac >>
   `i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND}` by simp[] >>
@@ -54,14 +57,20 @@ Theorem abi_encoder_member_phase_globals:
   abi_encoder_member_phase_raw st final initial ready ==>
   ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
   ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+  ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+  ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
   ready.vs_pending_deletions = initial.vs_pending_deletions
 Proof
   strip_tac >> gvs[abi_encoder_member_phase_raw_def] >>
   rename1 `run_inst_seq (emitted_insts st final) initial = OK u` >>
-  ` (u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests,u.vs_pending_deletions) =
-    (initial.vs_accounts,initial.vs_transient,initial.vs_logs,initial.vs_requests,initial.vs_pending_deletions)` by
+  ` (u.vs_accounts,u.vs_transient,u.vs_logs,u.vs_requests,
+      u.vs_tx_ctx,u.vs_block_ctx,u.vs_immutables,u.vs_outcomes,u.vs_pending_deletions) =
+    (initial.vs_accounts,initial.vs_transient,initial.vs_logs,initial.vs_requests,
+      initial.vs_tx_ctx,initial.vs_block_ctx,initial.vs_immutables,initial.vs_outcomes,
+      initial.vs_pending_deletions)` by
     (irule (BETA_RULE (Q.ISPEC
-       `\s:venom_state. (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)`
+       `\s:venom_state. (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,
+         s.vs_tx_ctx,s.vs_block_ctx,s.vs_immutables,s.vs_outcomes,s.vs_pending_deletions)`
        run_inst_seq_preserves_field)) >>
      qexists_tac `emitted_insts st final` >> asm_rewrite_tac [] >>
      rpt strip_tac >> irule abi_encoder_member_step_globals >>
@@ -98,6 +107,8 @@ Proof
   drule_all abi_encoder_member_cursor_transport >> strip_tac >>
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
    ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+   ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
    ready.vs_pending_deletions = initial.vs_pending_deletions` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_member_suffix_opcodes >> simp[]) >>
@@ -137,6 +148,8 @@ Proof
   drule_all abi_encoder_member_prefix_transport >> strip_tac >>
   `ready.vs_accounts = initial.vs_accounts /\ ready.vs_transient = initial.vs_transient /\
    ready.vs_logs = initial.vs_logs /\ ready.vs_requests = initial.vs_requests /\
+   ready.vs_tx_ctx = initial.vs_tx_ctx /\ ready.vs_block_ctx = initial.vs_block_ctx /\
+   ready.vs_immutables = initial.vs_immutables /\ ready.vs_outcomes = initial.vs_outcomes /\
    ready.vs_pending_deletions = initial.vs_pending_deletions` by
     (irule abi_encoder_member_phase_globals >> goal_assum (drule_at Any) >>
      drule abi_encoder_member_prefix_opcodes >> simp[]) >>

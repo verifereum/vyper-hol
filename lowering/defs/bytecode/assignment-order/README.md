@@ -1,8 +1,13 @@
 # Assignment order validation
 
-`fixtures.txt` lists the 13 witnesses. `sources/` contains their Vyper sources;
-`oracle/` contains independent bytecode, annotated AST/layout exports, and
-compiler provenance. The frozen 101-fixture corpus has its own provenance.
+`fixtures.txt` lists the 10 compiled witnesses. `sources/` contains their Vyper
+sources; `oracle/` contains independent bytecode, annotated AST/layout exports,
+and compiler provenance. `codegen-rejected/` holds three augmented assignments
+whose right-hand side shrinks the target array (`aug_*_shrink*`): the pinned
+Vyper rejects them in code generation, so they have no bytecode, and their
+annotated AST/layout exports come from Vyper `9362e36b`, the last pin that
+compiled them. The interpreter regressions still check them.
+The frozen 101-fixture corpus has its own provenance.
 
 Run the HOL validation and its proof-dependency audit from the repository root:
 
@@ -30,8 +35,7 @@ uv pip install --python /tmp/assignment-order-evm/bin/python py-evm==0.12.1b1
 ```
 
 The runner checks genuine `REVERT` for x03, return data, and raw storage slots.
-The s11 external-call stub returns 7. Storage augmentation starts with length 1
-and element 5, then checks length 0 and the old element slot containing 10.
+The s11 external-call stub returns 7.
 
 Regenerate the oracle with the pinned Vyper installed in an isolated environment:
 

@@ -403,6 +403,17 @@ Definition constant_value_def:
              (case vs of
               | [v] => OPTION_MAP (\n. IntV (&n)) (constant_length v)
               | _ => NONE)
+           else if bt = Bop In \/ bt = Bop NotIn then
+             (case vs of
+              | [v1;v2] =>
+                  (case evaluate_type (type_env_all_modules mods)
+                           (expr_type (EL 1 es)) of
+                   | NONE => NONE
+                   | SOME tv =>
+                       (case evaluate_membership tv (bt = Bop NotIn) v1 v2 of
+                        | INL v => SOME v
+                        | INR _ => NONE))
+              | _ => NONE)
            else
              case evaluate_builtin (constant_context mods) empty_accounts
                     ty bt (MAP expr_type es) vs of
@@ -1045,6 +1056,71 @@ Proof
   simp[check_module_def, EVERY_MEM] >> strip_tac >>
   qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
   simp[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_event_fields:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\ MEM (EventDecl id fields) tls ==>
+  EVERY (\((_,ty),indexed).
+    assignable_type (type_env_all_modules mods) ty /\
+    (indexed ==> event_indexable_type ty)) fields
+Proof
+  strip_tac >>
+  qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+  simp[check_contract_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
+  simp[check_module_def, EVERY_MEM] >> strip_tac >>
+  qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
+  simp[check_toplevel_decl_def, EVERY_MEM]
+QED
+
+Theorem module_event_key_MEM:
+  MEM (EventDecl name fields) tls ==>
+  MEM (src,name) (FLAT (MAP (event_keys_toplevel src) tls))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `event_keys_toplevel src (EventDecl name fields)` >>
+  simp[event_keys_toplevel_def] >>
+  qexists `EventDecl name fields` >> simp[event_keys_toplevel_def]
+QED
+
+Theorem module_event_keys_unique:
+  ALL_DISTINCT (FLAT (MAP (event_keys_toplevel src) tls)) ==>
+  event_decl_unique name tls
+Proof
+  Induct_on `tls` >- simp[event_decl_unique_def] >>
+  gen_tac >> Cases_on `h` >>
+  simp[event_keys_toplevel_def, event_decl_unique_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[module_event_key_MEM, event_decl_unique_def]
+QED
+
+Theorem contract_keys_module_distinct:
+  ALL_DISTINCT (contract_keys f mods) /\ MEM (src,tls) mods ==>
+  ALL_DISTINCT (FLAT (MAP (f src) tls))
+Proof
+  Induct_on `mods` >- simp[] >>
+  Cases_on `h` >>
+  fs[contract_keys_def] >>
+  simp[ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+Theorem contract_namespaces_ok_event_decl_unique:
+  contract_namespaces_ok in_deploy mods /\ MEM (src,tls) mods ==>
+  event_decl_unique name tls
+Proof
+  rw[contract_namespaces_ok_def] >>
+  `ALL_DISTINCT (FLAT (MAP (event_keys_toplevel src) tls))` by
+    (irule contract_keys_module_distinct >> qexists_tac `mods` >> simp[]) >>
+  drule module_event_keys_unique >> simp[]
+QED
+
+Theorem check_contract_event_decl_unique:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods ==> event_decl_unique name tls
+Proof
+  rw[check_contract_def] >>
+  metis_tac[contract_namespaces_ok_event_decl_unique]
 QED
 
 Theorem check_contract_function_header:

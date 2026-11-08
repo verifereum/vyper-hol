@@ -449,24 +449,6 @@ val RAW_CALL_FINISH_TAC =
    gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
        raw_call_return_type_def] >> decide_tac);
 
-val RAW_CALL_RUN_TAC =
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[]
-  >- (strip_tac >> gvs[no_type_error_result_def]) >>
-  PairCases_on `x` >> simp[] >>
-  `accounts_well_typed x2` by (
-    fs[runtime_consistent_def] >> drule_all run_raw_call_accounts_well_typed >> simp[]) >>
-  `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
-    (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
-  `runtime_consistent env cx
-    ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by (
-    qspecl_then [`env`, `cx`, `st with <|accounts := x2; tStorage := x3|>`, `x4`]
-      mp_tac runtime_consistent_logs_append >> simp[]) >>
-  Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[] >> RAW_CALL_FINISH_TAC;
-
 Theorem frame_call_value_error[local]:
   frame_call_value cx v st = (INR e,st') ==>
   e = Error (RuntimeError "write in static context")
@@ -520,7 +502,22 @@ Proof
           simp[] >> RAW_CALL_FINISH_TAC) >>
       strip_tac >> drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
       strip_tac >> gvs[no_type_error_result_def])) >>
-  RAW_CALL_RUN_TAC
+  (Cases_on `run_raw_call cx flags target_addr calldata amount gas
+      st.accounts st.tStorage` >>
+    simp[]
+    >- (strip_tac >> gvs[no_type_error_result_def]) >>
+    PairCases_on `x` >> simp[] >>
+    `accounts_well_typed x2` by (
+      fs[runtime_consistent_def] >> drule_all run_raw_call_accounts_well_typed >> simp[]) >>
+    `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
+      (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
+    `runtime_consistent env cx
+      ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by (
+      qspecl_then [`env`, `cx`, `st with <|accounts := x2; tStorage := x3|>`, `x4`]
+        mp_tac runtime_consistent_logs_append >> simp[]) >>
+    Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
+    Cases_on `flags.rcf_max_outsize = 0` >>
+    simp[] >> RAW_CALL_FINISH_TAC)
 QED
 
 Theorem raw_log_args_runtime_typed_dest:

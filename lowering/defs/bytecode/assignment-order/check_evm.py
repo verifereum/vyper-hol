@@ -41,10 +41,6 @@ def fixtures():
          False, word(5), {m0(5): 5}),
         ("assign_nested_popped_read", "f()", [], {},
          False, b"", {m0(3): 1, m0(3) + 1: 1}),
-        ("aug_storage_shrink", "f()", [], {0: 1, 1: 5},
-         False, b"", {0: 0, 1: 10}),
-        ("aug_memory_shrink", "f()", [], {}, False, word(0), {}),
-        ("aug_memory_shrink_append", "f()", [], {}, False, word(7), {}),
     ]
 
 

@@ -617,7 +617,7 @@ Proof
   qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
   simp[builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint] >>
   Cases_on `w2n a * denomination_multiplier d < dimword (:256)` >>
-  gvs[dimword_def] 
+  gvs[dimword_def]
   >- (irule word_builtin_frag_success >>
       simp[straight_fresh_as_wei_value_int, word_value_def] >>
       rpt strip_tac >>
@@ -860,7 +860,8 @@ Theorem compile_typed_word_builtin_sim:
     expr_body_pre cenv cx env (Builtin ann bt args) es /\
     EVERY (\e. word_value_type (expr_type e)) args /\
     wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+    bt <> Len /\ bt <> Env MsgGas /\ bt <> Bop In /\ bt <> Bop NotIn /\
+    ~precompile_builtin bt /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\

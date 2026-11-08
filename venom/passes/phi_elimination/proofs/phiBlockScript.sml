@@ -223,36 +223,6 @@ QED
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
 
-(* Helper: state_equiv {} implies equality *)
-Theorem state_equiv_empty_eq[local]:
-  !s1 s2. state_equiv {} s1 s2 ==> (s1 = s2)
-Proof
-  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
-QED
-
-(* Helper: phi_single_origin always gives an origin with singleton output *)
-Theorem phi_single_origin_has_output[local]:
-  !dfg inst origin.
-    phi_single_origin dfg inst = SOME origin ==>
-    ?v. origin.inst_outputs = [v] /\ dfg_lookup dfg v = SOME origin
-Proof
-  ACCEPT_TAC phiTransformTheory.phi_single_origin_has_output
-QED
-
-(* When a PHI step succeeds, resolve_phi must have returned SOME *)
-Triviality phi_step_ok_resolve:
-  !inst s s' prev.
-    is_phi_inst inst /\
-    s.vs_prev_bb = SOME prev /\
-    step_inst_base inst s = OK s' ==>
-    ?op. resolve_phi prev inst.inst_operands = SOME op
-Proof
-  rpt strip_tac >>
-  fs[is_phi_inst_def] >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[venomExecProofsTheory.step_inst_base_phi_error]
-QED
-
 Triviality all_distinct_flat_mem:
   !ls (l:'a list). ALL_DISTINCT (FLAT ls) /\ MEM l ls ==> ALL_DISTINCT l
 Proof
@@ -295,22 +265,6 @@ Proof
   metis_tac[all_distinct_outputs_not_mem_other]
 QED
 
-Triviality wf_ir_single_origin_phi_output_not_other_output:
-  !func bb inst origin out producer.
-    wf_ir_fn func /\ MEM bb func.fn_blocks /\
-    MEM inst bb.bb_instructions /\
-    phi_single_origin (dfg_build_function func) inst = SOME origin /\
-    inst.inst_outputs = [out] /\
-    MEM producer bb.bb_instructions /\ producer <> inst ==>
-    ~MEM out producer.inst_outputs
-Proof
-  rpt strip_tac >>
-  `MEM out inst.inst_outputs` by simp[] >>
-  qspecl_then [`func`, `bb`, `inst`, `producer`, `out`]
-    mp_tac wf_ir_phi_output_not_other_output >>
-  simp[]
-QED
-
 Triviality run_insts_append:
   !xs ys fuel ctx s.
     run_insts fuel ctx (xs ++ ys) s =
@@ -343,67 +297,6 @@ Proof
   rw[EVERY_MEM, MEM_MAP, MEM_FILTER] >>
   drule transform_inst_single_origin_assign >> strip_tac >>
   simp[is_terminator_def]
-QED
-
-Triviality step_param_ok_same_vs_params:
-  !inst fuel ctx s1 s1' s2.
-    is_param_opcode inst.inst_opcode /\
-    s2.vs_params = s1.vs_params /\
-    s2.vs_return_pc_token = s1.vs_return_pc_token /\
-    step_inst fuel ctx inst s1 = OK s1' ==>
-    ?s2'. step_inst fuel ctx inst s2 = OK s2'
-Proof
-  rpt strip_tac >>
-  fs[is_param_opcode_iff] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke] >> param_dispatch_tac >>
-  param_shape_tac []
-QED
-
-Triviality step_param_preserves_input_fields:
-  !inst fuel ctx s s'.
-    is_param_opcode inst.inst_opcode /\
-    step_inst fuel ctx inst s = OK s' ==>
-    s'.vs_params = s.vs_params /\
-    s'.vs_return_pc_token = s.vs_return_pc_token
-Proof
-  rpt gen_tac >> strip_tac >>
-  fs[is_param_opcode_iff] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke] >> param_dispatch_tac >>
-  param_shape_tac [] >>
-  rpt strip_tac >>
-  qpat_x_assum `update_var _ _ _ = s'` (SUBST1_TAC o SYM) >>
-  simp_tac (param_behavior_ss ++ rewrites
-    [update_var_def, venom_state_accfupds, combinTheory.K_THM]) []
-QED
-
-Triviality run_insts_params_ok_same_vs_params:
-  !params fuel ctx s1 s1' s2.
-    EVERY (\inst. is_param_opcode inst.inst_opcode) params /\
-    s2.vs_params = s1.vs_params /\
-    s2.vs_return_pc_token = s1.vs_return_pc_token /\
-    run_insts fuel ctx params s1 = OK s1' ==>
-    ?s2'. run_insts fuel ctx params s2 = OK s2'
-Proof
-  Induct >> simp[run_insts_def] >> rpt strip_tac >>
-  Cases_on `step_inst fuel ctx h s1` >> gvs[] >>
-  rename1 `step_inst fuel ctx h s1 = OK s1_mid` >>
-  `?s2_mid. step_inst fuel ctx h s2 = OK s2_mid` by
-    (irule step_param_ok_same_vs_params >> metis_tac[]) >>
-  simp[] >>
-  first_x_assum (qspecl_then [`fuel`, `ctx`, `s1_mid`, `s1'`, `s2_mid`] mp_tac) >>
-  impl_tac >-
-    (`~is_terminator h.inst_opcode` by
-       fs[is_param_opcode_iff, is_terminator_def] >>
-     `s1_mid.vs_params = s1.vs_params /\
-      s1_mid.vs_return_pc_token = s1.vs_return_pc_token` by
-       metis_tac[step_param_preserves_input_fields] >>
-     `s2_mid.vs_params = s2.vs_params /\
-      s2_mid.vs_return_pc_token = s2.vs_return_pc_token` by
-       metis_tac[step_param_preserves_input_fields] >>
-     gvs[]) >>
-  disch_then ACCEPT_TAC
 QED
 
 (* Project just the two inputs used by parameter instructions from the frame. *)
@@ -485,40 +378,6 @@ Proof
   rename1 `step_inst fuel ctx h s2 = OK s2_mid` >>
   simp[] >>
   first_x_assum (qspecl_then [`fuel`, `ctx`, `vars`, `s1_mid`, `s1'`, `s2_mid`] mp_tac) >>
-  simp[]
-QED
-
-Triviality eval_phis_same_start_same_param_fields:
-  !s insts1 s1 insts2 s2.
-    eval_phis s insts1 = OK s1 /\
-    eval_phis s insts2 = OK s2 ==>
-    s2.vs_params = s1.vs_params /\
-    s2.vs_return_pc_token = s1.vs_return_pc_token
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_phis s insts1 = OK s1`
-    (fn th => assume_tac (MATCH_MP eval_phis_only_updates_vs_vars th)) >>
-  qpat_x_assum `eval_phis s insts2 = OK s2`
-    (fn th => assume_tac (MATCH_MP eval_phis_only_updates_vs_vars th)) >>
-  qpat_x_assum `s2 = _` SUBST1_TAC >>
-  qpat_x_assum `s1 = _` SUBST1_TAC >>
-  simp[]
-QED
-
-Triviality run_insts_params_ok_after_eval_phis:
-  !params fuel ctx s insts1 s1 insts2 s2 s1_params.
-    EVERY (\inst. is_param_opcode inst.inst_opcode) params /\
-    eval_phis s insts1 = OK s1 /\
-    eval_phis s insts2 = OK s2 /\
-    run_insts fuel ctx params s1 = OK s1_params ==>
-    ?s2_params. run_insts fuel ctx params s2 = OK s2_params
-Proof
-  rpt strip_tac >>
-  `s2.vs_params = s1.vs_params /\
-   s2.vs_return_pc_token = s1.vs_return_pc_token` by
-    metis_tac[eval_phis_same_start_same_param_fields] >>
-  qspecl_then [`params`, `fuel`, `ctx`, `s1`, `s1_params`, `s2`]
-    mp_tac run_insts_params_ok_same_vs_params >>
   simp[]
 QED
 
@@ -1377,13 +1236,6 @@ Proof
   rw[update_var_def, venom_state_component_equality, FUPDATE_COMMUTES]
 QED
 
-Triviality update_var_same:
-  !x v1 v2 s.
-    update_var x v1 (update_var x v2 s) = update_var x v1 s
-Proof
-  rw[update_var_def, venom_state_component_equality]
-QED
-
 Triviality state_equiv_update_var_remove:
   !vars x v s1 s2.
     x NOTIN vars /\
@@ -1470,13 +1322,6 @@ Proof
   Induct >> rw[phi_prefix_length_def]
 QED
 
-Triviality phi_prefix_all_phi_local:
-  !insts. EVERY (\inst. inst.inst_opcode = PHI) (TAKE (phi_prefix_length insts) insts)
-Proof
-  Induct >> simp[phi_prefix_length_def] >> rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[phi_prefix_length_def]
-QED
-
 Triviality eval_phis_take_phi_prefix_eq:
   !insts lbl s.
     bb_well_formed <|bb_label := lbl; bb_instructions := insts|> ==>
@@ -1485,7 +1330,7 @@ Proof
   rpt strip_tac >>
   `phi_prefix_length (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
     (`EVERY (\inst. inst.inst_opcode = PHI) (TAKE (phi_prefix_length insts) insts)` by
-       simp[phi_prefix_all_phi_local] >>
+       simp[analysisSimProofsBaseTheory.phi_prefix_all_phi] >>
      `LENGTH (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
        simp[venomExecProofsTheory.phi_prefix_length_le] >>
      simp[phi_prefix_length_every_phi]) >>
@@ -1502,7 +1347,7 @@ Proof
   rpt strip_tac >>
   `phi_prefix_length (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
     (`EVERY (\inst. inst.inst_opcode = PHI) (TAKE (phi_prefix_length insts) insts)` by
-       simp[phi_prefix_all_phi_local] >>
+       simp[analysisSimProofsBaseTheory.phi_prefix_all_phi] >>
      `LENGTH (TAKE (phi_prefix_length insts) insts) = phi_prefix_length insts` by
        simp[venomExecProofsTheory.phi_prefix_length_le] >>
      simp[phi_prefix_length_every_phi]) >>
@@ -1558,7 +1403,7 @@ Proof
   `eval_phis s phis = Error e` by
     (qunabbrev_tac `phis` >> metis_tac[eval_phis_take_phi_prefix_eq]) >>
   `EVERY (\inst. inst.inst_opcode = PHI) phis` by
-    (simp[Abbr `phis`, phi_prefix_all_phi_local]) >>
+    (simp[Abbr `phis`, analysisSimProofsBaseTheory.phi_prefix_all_phi]) >>
   `kept = FILTER (\inst. phi_single_origin dfg inst = NONE) phis` by
     (qunabbrev_tac `phis` >> metis_tac[kept_eq_filter_prefix]) >>
   `eliminated = FILTER ($~ o (\inst. phi_single_origin dfg inst = NONE)) phis` by
@@ -1588,7 +1433,7 @@ Proof
   `eval_phis s phis = OK s_phi` by
     (qunabbrev_tac `phis` >> metis_tac[eval_phis_take_phi_prefix]) >>
   `EVERY (\inst. inst.inst_opcode = PHI) phis` by
-    (simp[Abbr `phis`, phi_prefix_all_phi_local]) >>
+    (simp[Abbr `phis`, analysisSimProofsBaseTheory.phi_prefix_all_phi]) >>
   `kept = FILTER (\inst. phi_single_origin dfg inst = NONE) phis` by
     (qunabbrev_tac `phis` >> metis_tac[kept_eq_filter_prefix]) >>
   `eliminated = FILTER ($~ o (\inst. phi_single_origin dfg inst = NONE)) phis` by
@@ -2076,23 +1921,6 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-Triviality transform_eval_phis_ok_from_original:
-  !dfg insts lbl s s_phi.
-    bb_well_formed <|bb_label := lbl; bb_instructions := insts|> /\
-    eval_phis s insts = OK s_phi ==>
-    ?s_kept. eval_phis s (transform_insts dfg insts) = OK s_kept
-Proof
-  rpt strip_tac >>
-  qabbrev_tac `kept = FILTER (\inst. inst.inst_opcode = PHI /\ phi_single_origin dfg inst = NONE) insts` >>
-  `?s_kept. eval_phis s kept = OK s_kept` by
-    (qspecl_then [`dfg`, `insts`, `lbl`, `kept`, `s`, `s_phi`]
-       mp_tac eval_phis_kept_ok_from_original >>
-     simp[Abbr `kept`]) >>
-  qexists_tac `s_kept` >>
-  qspecl_then [`dfg`, `insts`, `lbl`] mp_tac transform_insts_phi_prefix_exact >>
-  simp[LET_DEF, Abbr `kept`]
-QED
-
 Triviality eliminated_phi_eval_one_info:
   !func bb inst s s_phi.
     let dfg = dfg_build_function func in
@@ -2137,42 +1965,6 @@ Proof
   drule_all phi_operands_direct_lookup >> strip_tac >>
   drule dfg_lookup_single_output >> simp[] >> strip_tac >>
   gvs[]
-QED
-
-Triviality eval_phis_preserves_single_origin_source:
-  !dfg inst origin src_var s phis s' out v.
-    phi_single_origin dfg inst = SOME origin /\
-    origin.inst_outputs = [src_var] /\
-    phi_well_formed inst.inst_operands /\
-    phi_operands_direct dfg inst /\
-    eval_one_phi s inst = SOME (out, v) /\
-    eval_phis s phis = OK s' /\
-    (!producer. MEM producer phis ==> producer.inst_opcode = PHI ==> ~MEM src_var producer.inst_outputs) ==>
-    lookup_var src_var s' = SOME v
-Proof
-  rpt strip_tac >>
-  drule_all eval_one_phi_single_origin_lookup >> strip_tac >>
-  `FLOOKUP s'.vs_vars src_var = FLOOKUP s.vs_vars src_var` by
-    (qspecl_then [`s`, `phis`, `src_var`, `s'`] mp_tac eval_phis_flookup_not_phi_output >>
-     simp[]) >>
-  gvs[lookup_var_def]
-QED
-
-Triviality transform_single_origin_phi_assign_step:
-  !dfg inst origin src_var s out v.
-    phi_single_origin dfg inst = SOME origin /\
-    origin.inst_outputs = [src_var] /\
-    phi_well_formed inst.inst_operands /\
-    phi_operands_direct dfg inst /\
-    eval_one_phi s inst = SOME (out, v) ==>
-    step_inst_base (transform_inst dfg inst) s = OK (update_var out v s)
-Proof
-  rpt strip_tac >>
-  drule_all eval_one_phi_single_origin_lookup >> strip_tac >>
-  `transform_inst dfg inst =
-     inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>` by
-    metis_tac[transform_inst_phi_to_assign] >>
-  simp[step_inst_base_for ``ASSIGN``, eval_operand_def]
 QED
 
 Triviality transform_single_origin_phi_assign_step_stable_lookup:
@@ -2253,35 +2045,6 @@ Proof
   `~((transform_inst (dfg_build_function func) inst).inst_opcode = INVOKE)` by
     (drule transform_inst_single_origin_assign >> strip_tac >> simp[]) >>
   simp[run_insts_def, step_inst_def]
-QED
-
-Triviality transform_single_origin_phi_assign_run_insts_after_eliminated_prefix:
-  !func bb n inst origin src_var fuel ctx s st st' out v.
-    let dfg = dfg_build_function func in
-    let prefix =
-      TAKE n (FILTER (\inst. ?origin. phi_single_origin dfg inst = SOME origin)
-        (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)) in
-      phi_elim_safe_fn func /\
-      MEM bb func.fn_blocks /\
-      MEM inst bb.bb_instructions /\
-      phi_single_origin dfg inst = SOME origin /\
-      origin.inst_outputs = [src_var] /\
-      phi_well_formed inst.inst_operands /\
-      phi_operands_direct dfg inst /\
-      eval_one_phi s inst = SOME (out, v) /\
-      lookup_var src_var st = lookup_var src_var s /\
-      run_insts fuel ctx (MAP (transform_inst dfg) prefix) st = OK st' ==>
-      run_insts fuel ctx (MAP (transform_inst dfg) prefix ++ [transform_inst dfg inst]) st =
-      OK (update_var out v st')
-Proof
-  rw[LET_DEF] >>
-  qspecl_then
-    [`func`, `bb`,
-     `TAKE n (FILTER (\inst. ?origin. phi_single_origin (dfg_build_function func) inst = SOME origin)
-       (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions))`,
-     `inst`, `origin`, `src_var`, `fuel`, `ctx`, `s`, `st`, `st'`, `out`, `v`]
-    mp_tac transform_single_origin_phi_assign_run_insts_after_prefix >>
-  simp[LET_DEF, eliminated_phi_prefix_every_for_block]
 QED
 
 Triviality transform_eliminated_phi_assign_run_insts_after_params_prefix:
@@ -2601,145 +2364,6 @@ Proof
      qpat_x_assum `eliminated = _` SUBST_ALL_TAC >>
      gvs[]) >>
   disch_then ACCEPT_TAC
-QED
-
-Triviality transform_eliminated_phi_prefix_run_insts_ok:
-  !func bb eliminated n fuel ctx s s_phi st st_params.
-    eliminated =
-      FILTER (\inst. ?origin. phi_single_origin (dfg_build_function func) inst = SOME origin)
-        (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
-    phi_elim_safe_fn func /\
-    wf_ir_fn func /\
-    MEM bb func.fn_blocks /\
-    eval_phis s bb.bb_instructions = OK s_phi /\
-    n <= LENGTH eliminated /\
-    (!phi origin src_var.
-      MEM phi eliminated /\
-      phi_single_origin (dfg_build_function func) phi = SOME origin /\
-      origin.inst_outputs = [src_var] ==>
-      lookup_var src_var st = lookup_var src_var s) /\
-    run_insts fuel ctx (FILTER (\inst. is_param_opcode inst.inst_opcode) bb.bb_instructions) st = OK st_params ==>
-    ?st'. run_insts fuel ctx
-      (MAP (transform_inst (dfg_build_function func)) (TAKE n eliminated)) st_params = OK st'
-Proof
-  Induct_on `n` >- rw[run_insts_def] >>
-  rpt gen_tac >> strip_tac >>
-  `n <= LENGTH eliminated` by decide_tac >>
-  `n < LENGTH eliminated` by decide_tac >>
-  `?st_mid. run_insts fuel ctx
-      (MAP (transform_inst (dfg_build_function func)) (TAKE n eliminated)) st_params = OK st_mid` by
-    (first_x_assum (qspecl_then [`func`, `bb`, `eliminated`, `fuel`, `ctx`, `s`, `s_phi`, `st`, `st_params`] mp_tac) >>
-     impl_tac >-
-       (rpt conj_tac >> simp[] >>
-        rpt strip_tac >>
-        qpat_x_assum `!phi origin src_var. _` (qspecl_then [`phi`, `origin`, `src_var`] mp_tac) >>
-        simp[]) >>
-     disch_then ACCEPT_TAC) >>
-  qspecl_then [`func`, `bb`, `n`, `EL n eliminated`, `fuel`, `ctx`, `s`, `s_phi`,
-                `st`, `st_params`, `st_mid`]
-    mp_tac transform_eliminated_phi_assign_run_insts_after_params_prefix >>
-  simp[LET_DEF] >>
-  qpat_x_assum `eliminated = _` (fn th => PURE_REWRITE_TAC[GSYM th]) >>
-  impl_tac >-
-    (rpt strip_tac >>
-     qpat_x_assum `!phi origin src_var. _` (qspecl_then [`phi`, `origin`, `src_var`] mp_tac) >>
-     simp[]) >>
-  strip_tac >>
-  qexists_tac `update_var out v st_mid` >>
-  `TAKE (SUC n) eliminated = TAKE n eliminated ++ [EL n eliminated]` by
-    simp[GSYM SNOC_APPEND, rich_listTheory.SNOC_EL_TAKE] >>
-  simp[MAP_APPEND]
-QED
-
-Triviality transform_eliminated_phi_prefix_after_kept_params_ok:
-  !func bb kept eliminated n fuel ctx s s_phi s_kept st_params.
-    kept = FILTER (\inst. inst.inst_opcode = PHI /\
-                   phi_single_origin (dfg_build_function func) inst = NONE)
-             bb.bb_instructions /\
-    eliminated =
-      FILTER (\inst. ?origin. phi_single_origin (dfg_build_function func) inst = SOME origin)
-        (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
-    phi_elim_safe_fn func /\
-    wf_ir_fn func /\
-    MEM bb func.fn_blocks /\
-    eval_phis s bb.bb_instructions = OK s_phi /\
-    eval_phis s kept = OK s_kept /\
-    n <= LENGTH eliminated /\
-    run_insts fuel ctx (FILTER (\inst. is_param_opcode inst.inst_opcode) bb.bb_instructions) s_kept = OK st_params ==>
-    ?st'. run_insts fuel ctx
-      (MAP (transform_inst (dfg_build_function func)) (TAKE n eliminated)) st_params = OK st'
-Proof
-  rpt strip_tac >>
-  qspecl_then [`func`, `bb`, `eliminated`, `n`, `fuel`, `ctx`, `s`, `s_phi`, `s_kept`, `st_params`]
-    mp_tac transform_eliminated_phi_prefix_run_insts_ok >>
-  simp[] >>
-  impl_tac >-
-    (rpt strip_tac >>
-     qspecl_then [`func`, `bb`, `kept`, `eliminated`, `s`, `s_phi`, `s_kept`,
-                   `phi`, `origin`, `src_var`]
-       mp_tac eval_phis_kept_preserves_eliminated_source_lookup >>
-     simp[]) >>
-  disch_then ACCEPT_TAC
-QED
-
-Triviality transform_block_prefix_ok_from_original_params_ok:
-  !func bb kept eliminated fuel ctx s s_phi s_params.
-    let dfg = dfg_build_function func in
-      kept = FILTER (\inst. inst.inst_opcode = PHI /\ phi_single_origin dfg inst = NONE)
-        bb.bb_instructions /\
-      eliminated = FILTER (\inst. ?origin. phi_single_origin dfg inst = SOME origin)
-        (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
-      phi_elim_safe_fn func /\
-      wf_ir_fn func /\
-      bb_well_formed bb /\
-      MEM bb func.fn_blocks /\
-      eval_phis s bb.bb_instructions = OK s_phi /\
-      run_insts fuel ctx (FILTER (\inst. is_param_opcode inst.inst_opcode) bb.bb_instructions) s_phi = OK s_params ==>
-      ?s_kept t_params t_elim.
-        eval_phis s (transform_insts dfg bb.bb_instructions) = OK s_kept /\
-        run_insts fuel ctx (FILTER (\inst. is_param_opcode inst.inst_opcode) bb.bb_instructions) s_kept = OK t_params /\
-        run_insts fuel ctx (MAP (transform_inst dfg) eliminated) t_params = OK t_elim
-Proof
-  rw[LET_DEF] >>
-  Cases_on `bb` >> gvs[] >>
-  rename1 `basic_block lbl insts` >>
-  qabbrev_tac `dfg = dfg_build_function func` >>
-  qabbrev_tac `params = FILTER (\inst. is_param_opcode inst.inst_opcode) insts` >>
-  qabbrev_tac `kept = FILTER (\inst. inst.inst_opcode = PHI /\ phi_single_origin dfg inst = NONE) insts` >>
-  qabbrev_tac `eliminated = FILTER (\inst. ?origin. phi_single_origin dfg inst = SOME origin)
-    (TAKE (phi_prefix_length insts) insts)` >>
-  `bb_well_formed <|bb_label := lbl; bb_instructions := insts|>` by
-    (`<|bb_label := lbl; bb_instructions := insts|> = basic_block lbl insts` by
-       simp[venomInstTheory.basic_block_component_equality] >>
-     simp[]) >>
-  `TAKE (phi_prefix_length insts) insts = FILTER (\inst. inst.inst_opcode = PHI) insts` by
-    (`TAKE (LENGTH (FILTER (\inst. inst.inst_opcode = PHI) insts)) insts =
-      FILTER (\inst. inst.inst_opcode = PHI) insts` by
-        (qspecl_then [`insts`, `lbl`] mp_tac phi_prefix_take_filter >> simp[]) >>
-     `phi_prefix_length insts = LENGTH (FILTER (\inst. inst.inst_opcode = PHI) insts)` by
-        (qspecl_then [`insts`, `lbl`] mp_tac phi_prefix_length_filter_phi >> simp[]) >>
-     simp[]) >>
-  `?s_kept. eval_phis s kept = OK s_kept` by
-    (qspecl_then [`kept`, `s`, `insts`, `s_phi`] mp_tac eval_phis_ok_phi_prefix_sublist >>
-     simp[] >>
-     impl_tac >-
-       (gvs[Abbr `kept`, EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
-     disch_then ACCEPT_TAC) >>
-  `eval_phis s (transform_insts dfg insts) = OK s_kept` by
-    (qspecl_then [`dfg`, `insts`, `lbl`] mp_tac transform_insts_phi_prefix_exact >>
-     simp[LET_DEF, Abbr `kept`]) >>
-  `?t_params. run_insts fuel ctx params s_kept = OK t_params` by
-    (qspecl_then [`params`, `fuel`, `ctx`, `s`, `insts`, `s_phi`,
-                  `kept`, `s_kept`, `s_params`]
-       mp_tac run_insts_params_ok_after_eval_phis >>
-     simp[Abbr `params`, EVERY_MEM, MEM_FILTER]) >>
-  `?t_elim. run_insts fuel ctx (MAP (transform_inst dfg) eliminated) t_params = OK t_elim` by
-    (qspecl_then [`func`, `basic_block lbl insts`, `kept`, `eliminated`, `LENGTH eliminated`,
-                  `fuel`, `ctx`, `s`, `s_phi`, `s_kept`, `t_params`]
-       mp_tac transform_eliminated_phi_prefix_after_kept_params_ok >>
-     simp[LET_DEF, Abbr `dfg`, Abbr `kept`, Abbr `eliminated`]) >>
-  qexists_tac `s_kept` >> qexists_tac `t_params` >> qexists_tac `t_elim` >>
-  simp[Abbr `params`, Abbr `eliminated`]
 QED
 
 Triviality transform_block_prefix_state_eq_from_original_params_ok:
@@ -3073,51 +2697,6 @@ Proof
      qpat_x_assum `!k. k < LENGTH elim ==> _` (qspec_then `k` mp_tac) >>
      simp[]) >>
   simp[Abbr `elim`, Abbr `eliminated`]
-QED
-
-Triviality transform_single_origin_phi_assign_run_insts:
-  !dfg inst origin src_var fuel ctx s out v.
-    phi_single_origin dfg inst = SOME origin /\
-    origin.inst_outputs = [src_var] /\
-    phi_well_formed inst.inst_operands /\
-    phi_operands_direct dfg inst /\
-    eval_one_phi s inst = SOME (out, v) ==>
-    run_insts fuel ctx [transform_inst dfg inst] s = OK (update_var out v s)
-Proof
-  rpt strip_tac >>
-  drule_all transform_single_origin_phi_assign_step >> strip_tac >>
-  `~((transform_inst dfg inst).inst_opcode = INVOKE)` by
-    (fs[transform_inst_def] >>
-     Cases_on `phi_single_origin dfg inst` >> fs[] >>
-     Cases_on `x.inst_outputs` >> fs[] >>
-     Cases_on `t` >> fs[]) >>
-  simp[run_insts_def, step_inst_def]
-QED
-
-Triviality eval_phis_single:
-  !s inst out v.
-    inst.inst_opcode = PHI /\
-    eval_one_phi s inst = SOME (out, v) ==>
-    eval_phis s [inst] = OK (update_var out v s)
-Proof
-  rw[eval_phis_def]
-QED
-
-Triviality transform_single_origin_phi_run_insts_eval_phis_single:
-  !dfg inst origin src_var fuel ctx s out v.
-    phi_single_origin dfg inst = SOME origin /\
-    origin.inst_outputs = [src_var] /\
-    phi_well_formed inst.inst_operands /\
-    phi_operands_direct dfg inst /\
-    eval_one_phi s inst = SOME (out, v) ==>
-    run_insts fuel ctx [transform_inst dfg inst] s = eval_phis s [inst]
-Proof
-  rpt strip_tac >>
-  drule_all transform_single_origin_phi_assign_run_insts >> strip_tac >>
-  `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-  `eval_phis s [inst] = OK (update_var out v s)` by
-    (irule eval_phis_single >> fs[is_phi_inst_def]) >>
-  simp[]
 QED
 
 Triviality phi_elim_run_block_exec_error:
@@ -3558,39 +3137,6 @@ Proof
          simp[]) >>
       Cases_on `run_block fuel ctx bb s` >>
       gvs[lift_result_def, state_equiv_refl, execution_equiv_refl])
-QED
-
-(* Per-step lift_result for PHI with single origin.
-   Covers OK case (transform_inst_correct + state_equiv_empty_eq)
-   and Error case (both sides error on same undefined variable).
-   Extracts per-step reasoning from the block-level proof. *)
-Triviality phi_step_lift_result[local]:
-  !dfg inst s origin prev src_var.
-    phi_single_origin dfg inst = SOME origin /\
-    origin.inst_outputs = [src_var] /\
-    s.vs_prev_bb = SOME prev /\
-    phi_well_formed inst.inst_operands /\
-    (!v. resolve_phi prev inst.inst_operands = SOME (Var v) ==>
-         dfg_lookup dfg v = SOME origin) /\
-    (!e. step_inst_base inst s = Error e ==>
-         lookup_var src_var s = NONE)
-  ==>
-    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
-      (step_inst_base inst s)
-      (step_inst_base (transform_inst dfg inst) s)
-Proof
-  rpt strip_tac >>
-  `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-  `step_inst_base inst s = Error "phi outside prefix"` by
-    (irule venomExecProofsTheory.step_inst_base_phi_error >>
-     fs[is_phi_inst_def]) >>
-  `lookup_var src_var s = NONE` by metis_tac[] >>
-  `transform_inst dfg inst =
-     inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>` by
-    metis_tac[transform_inst_phi_to_assign] >>
-  simp[lift_result_def, step_inst_base_for ``ASSIGN``, eval_operand_def] >>
-  Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
-  Cases_on `t` >> simp[lift_result_def]
 QED
 
 Theorem phi_elim_block_sim:

@@ -23,6 +23,10 @@ Ancestors
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
+  externalEntryProps constructorGuardProps
+  nonreentrantEntryEquiv internalReturnLockProps
+  transientLockFrameProps
+  selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
   e2eDeployFrame
@@ -40,6 +44,7 @@ Ancestors
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
   configuredE2ECorrectness
+  finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)

@@ -582,7 +582,8 @@ Theorem compile_decode_static_arg_calldata:
     frag_exec ctx st st' (\s. s = s0)
       (\t. dec_frame st (w2n p) (type_memory_size tv) s0 t /\
            fresh_vars_wrt st' t /\
-           val_in_memory tv (EL i vals) (w2n p) t.vs_memory)
+           val_in_memory tv (EL i vals) (w2n p) t.vs_memory /\
+           memory_value_rel tv (EL i vals) (w2n p) t.vs_memory)
       (\r. F)
 Proof
   rpt gen_tac >> strip_tac >>
