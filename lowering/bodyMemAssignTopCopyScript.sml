@@ -70,8 +70,7 @@ Proof
       irule compile_assign_storage_sparse_stmt_frag_mem >>
       goal_assum (drule_at Any) >> simp[] >>
       rpt strip_tac >> metis_tac[topcopy_rhs_value_typed, pairTheory.PAIR_EQ]) >>
-  qpat_x_assum `sfields_tenv_consistent _ _` assume_tac >>
   irule compile_assign_storage_copy_stmt_frag_mem >>
   goal_assum (drule_at Any) >> simp[] >>
-  rpt strip_tac >> metis_tac[topcopy_rhs_value_typed, pairTheory.PAIR_EQ]
+  rpt strip_tac >> drule_all topcopy_rhs_value_typed >> simp[]
 QED
