@@ -332,7 +332,7 @@ Proof
   Cases_on `MEM inst (case FLOOKUP dfg.dfg_uses h of NONE => [] | SOME uses => uses)` >> fs[]
 QED
 
-Theorem dfg_add_inst_ids_sound[local]:
+Theorem dfg_add_inst_ids_sound:
   !dfg inst0 id inst.
     dfg_get_inst_by_id (dfg_add_inst dfg inst0) id = SOME inst ==>
     dfg_get_inst_by_id dfg id = SOME inst \/
