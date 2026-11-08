@@ -29,7 +29,9 @@ Theory fnPlanLineage
 Ancestors
   stackPlanGen stackPlanTypes fnPlanLineageJoinEntry fnPlanLineageLiveness
   fnPlanLineagePhiSchedule fnPlanLineagePhiTemporal codegenReadyCompute
-  fnPlanLineageCallTrace fnPlanLineageEdge
+  fnPlanLineageCallTrace fnPlanLineageEdge fnPlanLineageNativeTrace
+  fnPlanLineageNativeOrigins fnPlanLineageEntryProduction
+  fnPlanLineageChronologicalPrefix
 
 (* ===== The calls of the DFS function planner ===== *)
 
@@ -254,6 +256,139 @@ Proof
   fs[pred_setTheory.SUBSET_DEF]
 QED
 
+Theorem lineage_state_has_entry[local]:
+  !lv dfg cfg fn ps0 lbl ps.
+    lineage_state lv dfg cfg fn ps0 lbl ps ==>
+    ?entry. fn_entry_label fn = SOME entry
+Proof
+  rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
+  ho_match_mp_tac lineage_state_ind >> metis_tac[]
+QED
+
+(* Successful initialized planning supplies a chronological trace for every
+   actual DFS block state.  Keep the prefix witness for freshness consumers. *)
+Theorem dfs_block_state_initialized_trace:
+  generate_fn_plan_with_cleanup_analyzed lv dfg cfg ch growth fn
+    spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state lv dfg cfg fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps ==>
+  ?entry result events pre post.
+    fn_entry_label fn = SOME entry /\
+    plan_aux_trace lv dfg cfg fn [entry] []
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) result events /\
+    events = pre ++ (lbl,ps)::post
+Proof
+  strip_tac >>
+  `?entry. fn_entry_label fn = SOME entry` by
+    metis_tac[dfs_block_state_lineage_state, lineage_state_has_entry] >>
+  qpat_x_assum `generate_fn_plan_with_cleanup_analyzed _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_fn_plan_with_cleanup_analyzed_def, AllCaseEqs()] >> strip_tac >>
+  drule (cj 1 plan_trace_complete) >> strip_tac >>
+  `MEM (lbl,ps) events` by metis_tac[dfs_block_state_trace_event] >>
+  metis_tac[listTheory.MEM_SPLIT]
+QED
+
+Theorem dfs_block_state_native_exit:
+  codegen_ready_fn fn /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb ps = SOME (ops,qs) ==>
+  ?pre. ~MEM lbl pre /\ chronological_support fn (lbl::pre) qs /\
+    native_live_boundary fn bb (LENGTH bb.bb_instructions) qs /\
+    cfg_reachable_of (cfg_analyze fn) lbl /\ fn_reachable fn lbl
+Proof
+  strip_tac >> drule_all dfs_block_state_initialized_trace >> strip_tac >>
+  drule_all initialized_trace_event_exit >> strip_tac >>
+  drule_all initialized_trace_event_reachable >> strip_tac >>
+  qexists_tac `MAP FST pre` >> simp[] >>
+  drule plan_aux_trace_distinct_keys >>
+  simp[listTheory.MAP_APPEND, listTheory.ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+(* The support set belongs to the chronological prefix before this block,
+   not to a run-time path.  Saved physical resources survive sibling visits. *)
+Theorem dfs_block_state_native_incoming:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps ==>
+  ?entry visited pred before pb ops after.
+    fn_entry_label fn = SOME entry /\ fn_reachable fn lbl /\
+    ~MEM lbl visited /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb before = SOME (ops,after) /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    ps.ps_stack = after.ps_stack /\ ps.ps_spilled = after.ps_spilled /\
+    chronological_support fn visited after /\
+    native_live_boundary fn pb (LENGTH pb.bb_instructions) after
+Proof
+  strip_tac >> drule_all dfs_block_state_initialized_trace >> strip_tac >>
+  drule_all initialized_trace_event_reachable >> strip_tac >>
+  drule_all plan_aux_trace_singleton_physical_ancestry >> strip_tac >> gvs[] >>
+  rename1 `lookup_block pred fn.fn_blocks = SOME pb` >>
+  `?earlier rest. pre = earlier ++ (pred,before)::rest` by
+    metis_tac[listTheory.MEM_SPLIT] >>
+  `chronological_support fn (pred::MAP FST earlier) after /\
+   native_live_boundary fn pb (LENGTH pb.bb_instructions) after` by
+    (gvs[] >>
+     drule_at (Pat `plan_aux_trace _ _ _ _ _ _ _ _ _`)
+       initialized_trace_event_exit >>
+     simp[] >> disch_then (qspec_then `earlier` mp_tac) >>
+     simp[]) >>
+  `~MEM lbl (MAP FST pre)` by
+    (drule plan_aux_trace_distinct_keys >>
+     simp[listTheory.MAP_APPEND, listTheory.ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  qexistsl_tac [`MAP FST pre`, `pred`, `before`, `pb`, `ops`, `after`] >>
+  simp[] >> irule chronological_support_mono >> goal_assum (drule_at Any) >>
+  simp[pred_setTheory.SUBSET_DEF, listTheory.MAP_APPEND] >> metis_tac[]
+QED
+
+Theorem dfs_block_state_native_phi_selection:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (non_param_insts bb) ps k qs /\
+  k <= j /\ j < LENGTH (collect_phis bb.bb_instructions) ==>
+  ?d w. stack_get_phi_depth
+      (FILTER is_var_operand (EL j (collect_phis bb.bb_instructions)).inst_operands)
+      qs.ps_stack = SOME d /\
+    stack_peek d qs.ps_stack = Var w /\
+    MEM (Var w) (EL j (collect_phis bb.bb_instructions)).inst_operands
+Proof
+  strip_tac >> drule_all dfs_block_state_native_incoming >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `EVERY (\inst. inst.inst_opcode = PHI) (TAKE k (non_param_insts bb))` by
+    (qspec_then `bb` (qx_choose_then `tail` assume_tac) non_param_insts_phi_prefix >>
+     `k <= LENGTH (collect_phis bb.bb_instructions)` by decide_tac >>
+     gvs[listTheory.TAKE_APPEND1] >>
+     irule rich_listTheory.EVERY_TAKE >>
+     simp[listTheory.EVERY_MEM] >>
+     metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  `?result. native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (non_param_insts bb) after k result /\
+    result.ps_stack = qs.ps_stack /\ result.ps_spilled = qs.ps_spilled` by
+    (irule native_phi_prefix_physical_transport >> metis_tac[]) >>
+  `?d w. stack_get_phi_depth
+      (FILTER is_var_operand (EL j (collect_phis bb.bb_instructions)).inst_operands)
+      result.ps_stack = SOME d /\
+    stack_peek d result.ps_stack = Var w /\
+    MEM (Var w) (EL j (collect_phis bb.bb_instructions)).inst_operands` by
+    (irule incoming_join_native_phi_prefix_selection >>
+     simp[] >> gvs[chronological_support_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem dfs_block_state_unique:
   fn_entry_label fn = SOME entry /\
   generate_fn_plan_aux lv dfg cfg fn [entry] [] ps0 = SOME result /\
@@ -264,15 +399,6 @@ Proof
   `MEM (lbl,psD) events` by metis_tac[dfs_block_state_trace_event] >>
   `MEM (lbl,psE) events` by metis_tac[dfs_block_state_trace_event] >>
   metis_tac[plan_aux_trace_event_unique]
-QED
-
-Theorem lineage_state_has_entry[local]:
-  !lv dfg cfg fn ps0 lbl ps.
-    lineage_state lv dfg cfg fn ps0 lbl ps ==>
-    ?entry. fn_entry_label fn = SOME entry
-Proof
-  rpt gen_tac >> qid_spec_tac `ps` >> qid_spec_tac `lbl` >>
-  ho_match_mp_tac lineage_state_ind >> metis_tac[]
 QED
 
 Theorem lineage_state_actual_dfs_fields:
