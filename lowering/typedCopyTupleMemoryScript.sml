@@ -1,7 +1,7 @@
 (* Joint memory execution of heterogeneous typed field copies. *)
 Theory typedCopyTupleMemory
 Ancestors
-  typedCopyControlMemory typedMemoryCopy typedCopyDomain fragExecMem
+  typedCopySemanticIndex typedCopyControlMemory typedMemoryCopy typedCopyDomain fragExecMem
   context compileEnv emitHelper exprLoweringProps
   exprSimTuple exprSimAttributeFields vyperTypeABI
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
@@ -317,16 +317,7 @@ QED
 
 Resume typed_copy_tuple_entry_mem[children]:
   gen_tac >> strip_tac >>
-  `evaluate_type tenv (EL i dtys) = SOME (EL i tvs') /\
-   evaluate_type tenv (EL i stys) = SOME (EL i tvs)` by
-    metis_tac[opt_mmap_el] >>
-  `value_has_type (EL i tvs) (EL i l) /\
-   value_has_type (EL i tvs') (EL i l)` by
-    metis_tac[values_have_types_el] >>
-  `val_wf (EL i tvs) (EL i l) /\ val_wf (EL i tvs') (EL i l)` by
-    metis_tac[tuple_val_wf_el] >>
-  `type_widens_to tenv (EL i stys) (EL i dtys)` by
-    metis_tac[LIST_REL_EL_EQN] >>
+  drule_all typed_copy_semantic_index >> strip_tac >>
   conj_tac >- metis_tac[typed_copy_memory_size] >>
   conj_tac >- metis_tac[typed_copy_memory_size] >>
   `type_rank cenv.ce_struct_fields (EL i dtys) <
