@@ -94,7 +94,8 @@ Theorem abi_valid_allocated_array_backedge_advance:
   abi_valid_allocated_array_prefix tv vs (SUC j) d u /\
   EVERY (val_wf tv) vs /\ 32+SUC j*type_memory_size tv <= outsz /\
   fn_inst_ids_distinct func /\ fresh_vars_wrt ceiling u /\ ~u.vs_halted /\
-  abi_decoder_operand_live start.cs_next_var ip /\
+  eval_operand ip u = SOME (n2w slot) /\
+  ip <> Var (STRING #"%" (toString next)) /\
   start.cs_next_var <= next /\ next < ceiling.cs_next_var ==>
   abi_valid_allocated_array_inv ctx func cenv cx es start ceiling
     sites dstid live base_op hi src dst B L xs p d outsz
@@ -139,7 +140,8 @@ Proof
   fs[abi_valid_allocated_effect_def, abi_malformed_resource_post_def,
      abi_valid_allocated_array_inv_def] >>
   simp[Abbr `v`, abi_decode_mload_jump, mload_mstore_same,
-       jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]
+       jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def] >>
+  Cases_on `ip` >> fs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
 (* The successful pointer guard eliminates the malformed setup's abort arm. *)
@@ -197,4 +199,55 @@ Proof
   fs[abi_malformed_entry_def, EVERY_DEF] >>
   rpt conj_tac >> TRY (irule abi_decoder_operand_live_mono >>
     qexists_tac `st.cs_next_var` >> simp[] >> NO_TAC) >> decide_tac
+QED
+
+(* Keep the explicit read-only header witness for successful prefix transport. *)
+Theorem abi_valid_allocated_position_header_effect:
+  lookup_block hdr func.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_position_header_insts id ip src MLOAD base_op first body_lbl exit_lbl|> /\
+  abi_decode_position_loop_ready hdr ip src MLOAD base_op B p iw n j s /\
+  src <> Var (STRING #"%" (toString first)) /\
+  base_op <> Var (STRING #"%" (toString first)) /\ n < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  st.cs_next_var <= first /\
+  first + 4 + abi_decode_position_header_delta base_op <= ceiling.cs_next_var /\
+  fresh_vars_wrt ceiling s ==>
+  ?h. abi_decode_sim ctx func s h /\
+    abi_valid_allocated_effect ctx func cenv cx es first sites dstid d outsz s h /\
+    fresh_vars_wrt ceiling h /\ h.vs_memory = s.vs_memory /\
+    h.vs_current_bb = (if j < n then body_lbl else exit_lbl) /\
+    h.vs_inst_idx = 0 /\ ~h.vs_halted
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_malformed_position_header_sim >> strip_tac >>
+  drule_all abi_malformed_header_resource >>
+  disch_then (qspecl_then [`sites`, `p`, `n`,
+    `if j < n then body_lbl else exit_lbl`, `j`, `dstid`, `B`] strip_assume_tac) >>
+  qexists_tac `jump_to (if j < n then body_lbl else exit_lbl)
+    (abi_decode_position_header_state base_op first B p j n s)` >>
+  simp[abi_valid_allocated_effect_def] >>
+  Cases_on `base_op = Lit 0w` >>
+  fs[abi_valid_allocated_frame_def, abi_decode_position_header_state_def,
+     jump_to_def, update_var_def, abi_decode_position_loop_ready_def]
+QED
+
+(* A child's exact subrange frame preserves the prefix it extends. *)
+Theorem abi_valid_allocated_array_child_prefix:
+  abi_valid_allocated_array_prefix tv vs j d s /\ j < LENGTH vs /\
+  EVERY (val_wf tv) vs /\
+  abi_valid_allocated_frame sites (d+32+j*type_memory_size tv) childsz s t /\
+  alloca_inv s /\ FLOOKUP s.vs_allocas aid = SOME (B,cap) /\ aid NOTIN sites /\
+  B <= d /\ d+32+j*type_memory_size tv <= B+cap /\
+  val_in_memory tv (EL j vs) (d+32+j*type_memory_size tv) t.vs_memory ==>
+  abi_valid_allocated_array_prefix tv vs (SUC j) d t
+Proof
+  strip_tac >>
+  `abi_valid_allocated_array_prefix tv vs j d t` by
+    (irule abi_valid_allocated_array_prefix_frame >>
+     qhdtm_assum `abi_valid_allocated_frame` (irule_at Any) >>
+     qpat_assum `FLOOKUP s.vs_allocas aid = _` (irule_at Any) >> simp[]) >>
+  simp[abi_valid_allocated_array_prefix_def] >> rpt strip_tac >>
+  Cases_on `k = j` >> fs[abi_valid_allocated_array_prefix_def]
 QED
