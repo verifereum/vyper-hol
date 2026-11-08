@@ -50,7 +50,7 @@ Theorem abi_decode_store_sequence:
   run_inst_seq (emitted_insts st st') s = OK (mstore (w2n p) w s)
 Proof
   strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
-  simp[run_inst_seq_def, Once step_inst_base_def, exec_write2_def, mk_inst_def]
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def]
 QED
 
 Theorem abi_decoder_budget_word_bound:

@@ -53,7 +53,8 @@ Theorem eval_expr_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >>
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  TRY (rpt strip_tac >> REFL_TAC) >>
   rpt gen_tac >> strip_tac >>
   (fn g as (asms,w) =>
     let
@@ -90,7 +91,9 @@ Resume eval_expr_oracle_storage_mutual[Target]:
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_IntCall]:
-  rpt strip_tac >> gvs[int_calls_expr_def]
+  rpt strip_tac >>
+  qpat_x_assum `int_calls_expr _ = []`
+    (CONTR_TAC o SIMP_RULE (srw_ss()) [int_calls_expr_def])
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_RawCallTarget]:
