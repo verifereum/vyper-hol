@@ -10,9 +10,9 @@ Theorem transient_lock_checked_local_ptrs:
 Proof
   strip_tac >>
   `!n. st.cs_next_var <= n ==>
-    not_local_ptr cenv scopes (STRING #"%" (toString n))` by
+    not_scope_ptr cenv scopes (STRING #"%" (toString n))` by
     (rpt strip_tac >>
-     irule local_ptrs_rel_fresh_not_local_ptr >>
+     irule local_ptrs_rel_fresh_not_scope_ptr >>
      qexistsl_tac [`func`,`ss`,`st`] >> simp[]) >>
   simp[transient_lock_checked_state_def] >>
   irule local_ptrs_rel_update_var >> simp[] >>

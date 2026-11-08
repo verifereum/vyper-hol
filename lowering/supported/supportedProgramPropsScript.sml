@@ -240,15 +240,17 @@ Proof
   EVAL_TAC
 QED
 
+(* msg.gas is on the whitelist (the gas proofs cover it), so it may be a
+   default too. *)
 Theorem supported_default_expression_checks:
-  supported_program
+  EVERY (\e. supported_program
     [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
-       [expr_test_uint] NoneT []] /\
+       [e] NoneT []])
+    [expr_test_uint; Builtin (BaseT (UintT 256)) (Env MsgGas) []] /\
   EVERY (\e. ~supported_program
     [FunctionDecl External Pure F F "answer" [("x",BaseT (UintT 256))]
        [e] NoneT []])
-    [Builtin (BaseT (UintT 256)) (Env MsgGas) [];
-     Builtin (BaseT (UintT 256)) (Bop Add) [];
+    [Builtin (BaseT (UintT 256)) (Bop Add) [];
      Name (StructT (SOME 0,"S")) "x"]
 Proof
   EVAL_TAC
