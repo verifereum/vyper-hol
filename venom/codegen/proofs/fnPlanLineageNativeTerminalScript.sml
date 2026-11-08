@@ -5,35 +5,6 @@ Ancestors
   fnPlanLineageNativeTargets
   stackPlanGen venomWf venomInst codegenReadyCompute list rich_list finite_map
 
-Theorem native_terminal_jmp_target_set:
-  !fn bb targets.
-    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
-    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
-    join_target_ops (liveness_analyze fn) fn bb.bb_label
-      (LAST bb.bb_instructions) = SOME targets ==>
-    set (MAP Var (live_vars_at (liveness_analyze fn) bb.bb_label
-      (LENGTH bb.bb_instructions))) = set targets
-Proof
-  rpt gen_tac >> strip_tac >>
-  `wf_function fn` by gvs[codegen_ready_fn_def] >>
-  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
-    (irule venomExecProofsTheory.MEM_lookup_block >>
-     gvs[wf_function_def, venomInstTheory.fn_labels_def]) >>
-  `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
-    metis_tac[fn_reachable_cfg_analyze] >>
-  `inst_wf (LAST bb.bb_instructions)` by
-    (gvs[codegen_ready_fn_def, fn_inst_wf_def, EVERY_MEM] >> metis_tac[LAST_MEM]) >>
-  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ] /\
-    (LAST bb.bb_instructions).inst_outputs = []` by gvs[inst_wf_def] >>
-  qpat_x_assum `join_target_ops _ _ _ _ = _` mp_tac >>
-  simp[join_target_ops_def, AllCaseEqs()] >> strip_tac >>
-  `set (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)) =
-    set (input_vars_from bb.bb_label target_bb.bb_instructions
-      (live_vars_at (liveness_analyze fn) succ 0))` by
-    (irule analyzed_live_out_jmp >> simp[]) >>
-  simp[LIST_TO_SET_MAP]
-QED
-
 Theorem native_terminal_jmp_target_available:
   !fn bb ps targets.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
