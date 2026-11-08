@@ -111,6 +111,9 @@ Theorem pop_local_guard_store_path:
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts /\
     t.vs_memory = (mstore (w2n a) (w-1w) s).vs_memory /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient /\ t.vs_labels = s.vs_labels /\
+    (!v. new_len = Var v ==> not_fresh_at sf v) /\
     eval_operand new_len t = SOME (w-1w) /\
     op_taint tn' new_len = {} /\ op_prov G' new_len = NONE /\
     ptr_covers G' tn' root t bytes /\
@@ -134,6 +137,10 @@ Proof
       u.vs_memory t.vs_memory /\
     (!k. ptr_covers G' tn' root t k ==> ptr_covers G' tn' root u k)` by
     (irule pop_clean_header_store_path >> metis_tac[]) >>
+  `!v. new_len = Var v ==> not_fresh_at sf v` by
+    (gvs[emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
+         comp_ignore_bind_def, fresh_var_def, fresh_id_def, emit_def,
+         comp_return_def, not_fresh_at_def]) >>
   qexistsl_tac [`u`, `G'`, `tn'`] >>
   conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
   simp[] >> gvs[mstore_def, eval_operand_def, lookup_var_def, update_var_def]
