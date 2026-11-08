@@ -38,28 +38,22 @@ Ancestors
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
   loweringPtrBodyRun extEntryValueRevertPtr gasSummary
-  abiEncoderWindowLeavesPtr abiEncoderRobustWindowPtr externalReturnBytesPtr
-  abiEncoderBytesPtr externalReturnTupleWindowPtr
-  abiEncoderTupleWindowSource typedCopyTupleEffectsPtr
-  normalizationTupleResourcesPtr returnMetadataPtr normalizationOverflowPtr
-  normalizationTupleBytesPtr typedCopyOffsetBytesPtr
-  normalizationAllocExecPtr tupleChildCopyPtr tupleChildReadPtr
-  externalReturnBoundaryPtr calldataScratchArrayConstructorPtr
+  calldataScratchArrayConstructorPtr
   calldataScratchArrayEntryPtr calldataScratchArrayCompletePtr
   calldataScratchLoopPtr calldataScratchArrayPtr decoderScratchInitPtr
   calldataScratchTuplePtr calldataScratchBytesPtr calldataScratchWordPtr
   decoderArrayInitPtr decoderAllocationBoundsPtr decoderArraySetupPtr
   decoderScratchLoopPtr decoderLoopControlPtr decoderProtectedScratchPtr
-  decoderIndexInitPtr calldataValidWordInputPtr typedCopyArrayExecutionPtr
-  batchCopyRobustPtr normalizationAllocPtr typedCopyLoopBackedgePtr
+  decoderIndexInitPtr
+  normalizationAllocPtr
   fragExecPtr typedCopyFieldsPtr typedCopyBytesRobustPtr typedCopyOffsetPtr
   typedCopyBytesFieldsPtr typedCopyTuplePtr robustCopyTransportPtr
-  staticTypeFitsPtr liveArrayTransportPtr structChildPtr wordCopyRobustPtr
+  structChildPtr wordCopyRobustPtr
   rawEntryCode entryChecksPtr sourceValueRejection entryCheckIntervals
   sourceEntrySelection entryDispatchPtr sourceEntryCode entryValueRevertPtr
   loweringShapeProps loweringShapeSource supportedNames supportedDecls
   entryDispatchProps o1PipelineCorrect selectedBodyCode calldataDecodePtr
-  calldataTypedRobustPtr externalReturnRegisteredRun entryPtrSeamDead
+  calldataTypedRobustPtr entryPtrSeamDead
   entryPtrSeamPrefix entryPtrSeamRegister
 
 val _ = Parse.hide "body";
