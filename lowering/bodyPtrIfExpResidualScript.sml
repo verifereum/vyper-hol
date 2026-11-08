@@ -3,7 +3,7 @@ Ancestors
   bodyPtrIfExpRepresentationCases bodyPtrIfExpLayoutRefl
   bodyPtrIfExpCallAlignment bodyPtrIfExpCallShape bodyPtrIfExpUnwrapNoop
   bodyPtrIfExpUnwrapContract exprSimHypsDefs vyperTypeSystem
-  exprLowering compileEnv context vyperAST
+  exprLowering compileEnv context vyperAST vyperTypeCallGraph
 
 Theorem ifexp_allocating_lowered_differs:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
@@ -16,27 +16,13 @@ Proof
   metis_tac[same_memory_layout_reflexive]
 QED
 
-Theorem ifexp_allocating_call_zero_metadata:
-  compile_expr ce ret_ty (Call ann (IntCall fid) args dret) sa = (vv,sb) /\
-  vv_post ctx fn ce cx (Call ann (IntCall fid) args dret)
-    es sa sb s0 ee tv vv t /\
-  lowered_value_type ce (Call ann (IntCall fid) args dret) <>
-    expr_type (Call ann (IntCall fid) args dret) ==>
-  ?pvs. ce.ce_func_info (nsid_to_string fid) = (0,0,pvs)
-Proof
-  strip_tac >>
-  qmatch_goalsub_abbrev_tac `info = (0,0,_)` >>
-  PairCases_on `info` >>
-  `ce.ce_func_info (nsid_to_string fid) = (info0,info1,info2)` by
-    gvs[markerTheory.Abbrev_def] >>
-  `~(0 < info0 \/ 0 < info1)` by
-    (disch_tac >> drule_all ifexp_positive_call_normal_alignment >> simp[]) >>
-  gvs[]
-QED
 
 Theorem ifexp_allocating_arm_exceptions:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
   vv_post ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty ==>
@@ -51,8 +37,9 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `lowered_value_type ce arm <> expr_type arm` by
     metis_tac[ifexp_allocating_lowered_differs] >>
-  drule lowered_value_type_exceptions >> strip_tac >> gvs[] >>
-  drule_all ifexp_allocating_call_zero_metadata >> simp[]
+  `expr_type arm = ty` by gvs[expr_body_pre_def, well_typed_expr_def] >>
+  `int_calls_expr arm = []` by metis_tac[] >>
+  drule lowered_value_type_exceptions >> strip_tac >> gvs[int_calls_expr_def]
 QED
 
 Theorem ifexp_zero_call_result:
@@ -118,6 +105,9 @@ QED
 Theorem ifexp_allocating_noop_representation:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
   vv_post ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
   ~is_word_type ty /\
@@ -128,8 +118,8 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_type arm = ty` by gvs[expr_body_pre_def, well_typed_expr_def] >>
   `!tag p. vv = LocatedValue tag p ==> ~is_word_type tag` by
-    (rpt strip_tac >> gvs[] >> drule vv_post_located_type >>
-     disch_then SUBST_ALL_TAC >> gvs[]) >>
+    metis_tac[exprPtrUnwrapMarkedTheory.vv_post_located_type,
+              valueCopyBytesTheory.is_bytestring_word_type] >>
   drule_all ifexp_allocating_arm_exceptions >> strip_tac >> gvs[] >>
   FIRST [drule ifexp_string_literal_memory_result,
          drule ifexp_bytes_literal_memory_result,
@@ -141,6 +131,9 @@ QED
 Theorem ifexp_allocating_unwrap_noop:
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
   vv_post ctx fn ce cx arm es_arm sa sb s0 ee tv vv t /\
   ~is_word_type ty /\

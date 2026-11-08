@@ -59,7 +59,9 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_type arm = ty /\ well_typed_expr env arm` by
     gvs[expr_body_pre_def, well_typed_expr_def] >>
-  drule_all ifexp_allocating_arm_exceptions >> strip_tac >>
+  `lowered_value_type ce arm <> expr_type arm` by
+    metis_tac[ifexp_allocating_lowered_differs] >>
+  drule bodyPtrIfExpRepresentationCasesTheory.lowered_value_type_exceptions >> strip_tac >>
   gvs[expr_type_def, is_bytestring_type_def, well_typed_expr_def,
       type_builtin_result_ok_def, well_typed_builtin_app_def]
 QED

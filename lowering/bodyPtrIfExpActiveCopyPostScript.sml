@@ -6,6 +6,7 @@ Ancestors bodyPtrIfExpCopyPost bodyPtrIfExpAllocSource exprSimPrecompiles exprSi
 (* The allocation endpoint is the actual step result, not an independently
    chosen semantic run.  The copy supplies its ordinary frame at that endpoint. *)
 Theorem ifexp_allocated_copy_post:
+  post_value_type ce e = expr_type e /\
   vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
   read_result cx raw ee = (INL v,ee) /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\

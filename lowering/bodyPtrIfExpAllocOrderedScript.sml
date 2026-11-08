@@ -6,6 +6,7 @@ Ancestors
 
 Theorem compile_alloc_buffer_vv_ordered_frame:
   !D d ctx fn PG G0 tn0 G tn cenv cx e es sa sb s0 es' tv vv s n buf sc.
+    post_value_type cenv e = expr_type e /\
     vv_post ctx fn cenv cx e es sa sb s0 es' tv vv s /\
     ghost_inv d cenv cx es' G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
     local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\

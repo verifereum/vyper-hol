@@ -3,6 +3,7 @@ Ancestors bodyPtrIfExpActiveCopyPost bodyPtrIfExpStorageAllocationFrame
   loweringPosts compileEnv venomState finite_map words arithmetic
 
 Theorem ifexp_single_allocated_copy_post:
+  post_value_type ce e = expr_type e /\
   vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
   read_result cx raw ee = (INL v,ee) /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\

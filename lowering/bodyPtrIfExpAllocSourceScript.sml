@@ -29,6 +29,7 @@ Proof
 QED
 
 Theorem vv_post_alloc_map_frame:
+  post_value_type cenv e = expr_type e /\
   vv_post ctx fn cenv cx e es sa sb s0 es' raw vv s /\
   stmt_state_rel ctx fn cenv cx es' q /\
   q.vs_memory = s.vs_memory /\
@@ -49,7 +50,10 @@ Proof
   `vv_at cenv cx (expr_type e) sa sc es' raw vv q` by
     (irule vv_at_alloc_map_frame >> simp[] >>
      qexistsl_tac [`s`, `sb`] >> gvs[vv_post_def]) >>
-  gvs[vv_post_def, locals_kept_def] >> rpt strip_tac >> metis_tac[]
+  gvs[vv_post_def, locals_kept_def] >>
+  conj_tac
+  >- (Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]) >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Theorem alloca_step_contracts:
@@ -94,7 +98,8 @@ QED
 
 Theorem compile_alloc_buffer_vv_post:
   !ctx fn cenv cx e es sa sb s0 es' raw vv s n buf sc out u.
-    vv_post ctx fn cenv cx e es sa sb s0 es' raw vv s /\
+    post_value_type cenv e = expr_type e /\
+  vv_post ctx fn cenv cx e es sa sb s0 es' raw vv s /\
     fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sb.cs_next_var /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sb x) /\
@@ -251,6 +256,7 @@ Proof
   drule_all alloca_step_contracts >> strip_tac >>
   gvs[ptr_vv_ok_def] >> conj_tac
   >- metis_tac[alloca_step_operand_taint] >> conj_tac
+  >- (strip_tac >> gvs[] >> metis_tac[alloca_step_operand_prov]) >> conj_tac
   >- (strip_tac >> gvs[] >>
       irule alloca_step_source_memory >> simp[] >>
       rpt gen_tac >> disch_tac >>

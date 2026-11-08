@@ -15,6 +15,7 @@ Proof
 QED
 
 Theorem ifexp_runtime_arm_source:
+  post_value_type ce e = expr_type e /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\
   vv_post ctx fn ce cx e es sa sb s0 ee raw (LocatedValue tag pp) s /\
@@ -36,7 +37,7 @@ Proof
   drule_all ifexp_materialize_annotation_aligned >> strip_tac >>
   `tag = expr_type e /\ ?a. eval_operand pp.ptr_operand s = SOME a /\
     immutable_holds ce cx (expr_type e) raw a ee s` by
-    fs[vv_post_def, vv_holds_def] >>
+    gvs[vv_post_def, vv_holds_def] >>
   drule_all ifexp_immutable_holds_value >> strip_tac >>
   fs[ptr_vv_ok_def] >>
   simp[type_memory_size_slots, MULT_DIV] >> metis_tac[]

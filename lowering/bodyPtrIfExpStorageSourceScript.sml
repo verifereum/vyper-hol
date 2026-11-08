@@ -40,6 +40,7 @@ Proof
 QED
 
 Theorem ifexp_storage_arm_source:
+  post_value_type ce e = expr_type e /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\
   vv_post ctx fn ce cx e es sa sb s0 ee raw (LocatedValue tag pp) s /\
