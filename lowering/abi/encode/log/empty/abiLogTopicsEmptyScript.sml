@@ -46,8 +46,8 @@ Proof
   mp_tac (Q.SPECL [`topic_cut.cs_next_var`, `topic_ops`, `middle`, `topics`, `sig_hash`] log_topic_header) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> strip_tac >>
   `~middle.vs_call_ctx.cc_static` by
-    (mp_tac (Q.SPECL [`ss`, `middle`] abi_state_frame_observables) >>
-     impl_tac >- first_assum MATCH_ACCEPT_TAC >> simp[]) >>
+    (qpat_assum `fragment_path ctx func ss middle`
+       (mp_tac o MATCH_MP fragBlockPathTheory.fragment_path_call_ctx) >> fs[]) >>
   drule_all_then (qspec_then `ctx` (qx_choose_then `out` strip_assume_tac)) compile_log_empty_data_path >>
   `log_non_indexed_types flags arg_types = []` by (drule_all split_log_data_compatible >> simp[]) >>
   mp_tac (Q.SPECL [`tenv`, `w2w ss.vs_call_ctx.cc_address`, `sig_hash`, `flags`, `arg_types`, `vs`, `topics`]
