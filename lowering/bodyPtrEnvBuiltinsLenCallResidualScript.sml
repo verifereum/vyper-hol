@@ -7,6 +7,10 @@ Ancestors
   bodyPtrEnvBuiltinsBoundary exprSimLen vyperTypeSystem vyperTyping
   vyperValue valueEncoding vyperState vyperInterpreter exprPtrUnwrapStorageShape
   bodyPtrEnvBuiltinsLen exprLowering venomExecSemantics venomState builtinProps
+  bodyPtrEnvBuiltinsLenSource gasSummaryComposePtr fragGasPathPtr
+  exprLoweringProps gasSummary fragGasPath fragGasMode
+  exprSimProps exprSimSource exprSimUnwrap fragExec vyperTypeInvariants
+  vyperContext
 
 Theorem len_widened_memory_observation[local]:
   !tenv pt t pvt tvt v a mem cx es.
@@ -214,5 +218,87 @@ Theorem compile_len_singleton_call_sim_ptr:
     expr_vv_sim_ptr d ctx PG func cenv cx ty
       (Builtin (BaseT (UintT 256)) Len [e]) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `is_sized_type (expr_type e)` by (drule len_builtin_pre_shape >> simp[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (drule expr_body_pre_builtin_arg >>
+     disch_then (qspecl_then [`e`, `es`] mp_tac) >> fs[expr_body_pre_def]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  `type_widens_to (get_tenv cx) (post_value_type cenv e) (expr_type e)` by
+    (fs[expr_body_pre_def] >> metis_tac[post_value_type_widens]) >>
+  drule_all post_type_evaluates >> strip_tac >>
+  simp[expr_vv_sim_ptr_def] >> rpt gen_tac >> strip_tac >>
+  gvs[len_compile_split] >> pairarg_tac >> gvs[] >>
+  rename1 `compile_expr cenv ty e sa = (evv,sm)` >>
+  Cases_on `compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand evv)
+    (case vv_location evv of SOME l => l | NONE => LocMemory) sm` >>
+  gvs[as_stack_val_def] >>
+  drule_all len_builtin_load_extends >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    metis_tac[expr_body_pre_vv_gas_admissible] >>
+  qpat_x_assum `expr_vv_sim_ptr _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_ptr_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `evv`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`G0`, `tn0`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_ptr_def])
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj1_tac >>
+      qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_ptr_at_marked])
+      >- suspend "normal"
+      >> suspend "exception") >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  irule len_builtin_exempt_cert >> simp[]
 QED
+
+Resume compile_len_singleton_call_sim_ptr[normal]:
+  gvs[] >>
+  `gas_marked_exec F (ctx,func) (eval_expr cx e)
+    (es,s0) marks (INL tv') es_end (OK t)` by
+    metis_tac[gas_marked_exec_ptr_exec] >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL tv',es_end with gas_obs := [])` by
+    (fs[gas_marked_exec_ptr_def] >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    eval_result_typed (env,cx,es_end with gas_obs := []) tv' (Type (expr_type e)) /\
+    (!v. read_result cx tv' (es_end with gas_obs := []) =
+       (INL v,es_end with gas_obs := []) ==> value_has_type tvt v)` by
+    (irule expr_body_pre_runtime_typed >> goal_assum (drule_at Any) >>
+     simp[] >> qexists_tac `cenv` >> simp[]) >>
+  `compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand evv)
+    (case vv_location evv of SOME l => l | NONE => LocMemory) sm = (q,r)` by simp[] >>
+  drule_all len_widened_path_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  rewrite_tac[gas_summary_ptr_at_marked] >>
+  qexistsl_tac [`INL (Value (IntV (&n)))`, `es_end`, `G'`, `tn'`, `OK t'`] >>
+  simp[expr_type_def, is_word_type_def] >>
+  rewrite_tac[len_builtin_source] >>
+  irule (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal
+    |> REWRITE_RULE [listTheory.APPEND_NIL]) >>
+  qexistsl_tac [`G`, `es_end`, `t`, `tn`, `tv'`] >> simp[] >>
+  simp[gas_marked_exec_ptr_def, bind_def, return_def] >>
+  rpt strip_tac >>
+  qspecl_then [`cx`, `tv'`, `es_end with gas_obs := []`, `tail`]
+    mp_tac len_result_length_observation >> simp[]
+QED
+
+Resume compile_len_singleton_call_sim_ptr[exception]:
+  gvs[] >> Cases_on `res` >- fs[expr_exit_def] >>
+  rewrite_tac[gas_summary_ptr_at_marked] >>
+  qexistsl_tac [`INR y`, `es_end`, `G`, `tn`, `r'`] >> simp[] >>
+  rewrite_tac[len_builtin_source] >>
+  irule gas_marked_exec_ptr_bind_exception >> simp[]
+QED
+
+Finalise compile_len_singleton_call_sim_ptr
