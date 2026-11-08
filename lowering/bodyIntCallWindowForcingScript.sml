@@ -1,6 +1,8 @@
 (* Forcing a value keeps the bytes of every window inside an allocation
-   made before the forcing's own (an earlier site's), on top of what
-   protected_value_forcing gives. *)
+   made before the forcing's own (an earlier site's), every variable not
+   fresh at sa, and the locals' bytes, on top of what protected_value_forcing
+   gives; and it carries where the value sits (vv_at/vv_own from a value
+   lowered from sv) to the forced operand. *)
 Theory bodyIntCallWindowForcing
 Ancestors
   bodyIntCallForcing
@@ -34,6 +36,11 @@ Theorem protected_value_window_forcing:
     (!q. reserved q ==> eval_operand q u = eval_operand q s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
            lookup_var x u = SOME w) /\
+    locals_kept ce es s u /\
+    (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_at ce cx ty sv sa es r vv s ==>
+          expr_val_at ce cx ty sv sb es v op u) /\
+    (!sv. sv.cs_next_id <= sa.cs_next_id /\ vv_own ce cx ty sv sa es r vv s ==>
+          expr_val_own ce cx ty sv sb es v op u) /\
     (!name b sz. local_region ce scopes u name b sz <=> local_region ce scopes s name b sz) /\
     (ty <> NoneT /\ ~is_word_type ty /\ ~is_bytestring_type ty ==>
       ?w a k. eval_operand op u = SOME w /\ a <= w2n w /\

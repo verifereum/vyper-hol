@@ -12,6 +12,7 @@
 
 Theory bodyIntCallSeams
 Ancestors
+  bodyIntCallJointContract
   bodyIntCallSourceReturn bodyIntCallMetadata bodyIntCallReturnAdapters bodyIntCallCompilerBoundary bodyIntCallAssemblySource bodyIntCallAssemblyModes bodyIntCallAssembly bodyIntCallCompletedModes bodyIntCallCompletedFrame bodyIntCallCompletedFacts bodyIntCallCompletedSource bodyIntCallExemptReturn bodyIntCallStorePath bodyIntCallStoreRun bodyIntCallStorePost bodyIntCallEmitBoundary memoryLocalRhsProps supportedProgram supportedNames bodyIntCallReturnLayout bodyIntCallRestoreResults bodyIntCallRestoreFrame bodyIntCallCallerFrame bodyIntCallCountedPath bodyIntCallReturnBoundaryChecks bodyIntCallImmutableFrame bodyIntCallReturnSource bodySim exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts
   intCallCallee intCallFrame fragGasFocus gasOutcome gasContext
   bodyIntCallAllocatedForcing bodyIntCallAggregateStoreFrame bodyIntCallAggregateStoreLanding bodyIntCallSubslotGeometry bodyIntCallForcing bodyIntCallForcingCode bodyIntCallForcingCodeRun bodyIntCallForcingStorage bodyIntCallForcingReadOnly bodyIntCallStorageLanding bodyIntCallMaterializeLanding bodyIntCallSharpReturn bodyIntCallParameterGeometry bodyIntCallSourceSpans bodyIntCallStageOrigin bodyIntCallCopySharpRank bodyIntCallCopySharpDynamic bodyIntCallCopySharpFixed bodyIntCallCopySharpFast bodyIntCallCopySharpFields bodyIntCallCopySharpArray bodyIntCallCopySharpPrimitive bodyIntCallWidenCopy bodyIntCallDeclarationStore bodyIntCallDeclarationAlloc bodyIntCallDeclarationRegions bodyIntCallPrologueInit bodyIntCallLocalLanding bodyIntCallNameLanding bodyIntCallForceLanding bodyIntCallWordLanding bodyIntCallLiteralLanding bodyIntCallBodyTyping bodyIntCallSemanticEntry bodyIntCallHandler bodyIntCallResourceExit bodyIntCallPrologueResource bodyIntCallFrameProbe bodyIntCallReturnProbe bodyIntCallReturnCopy bodyIntCallProtectedLiteral bodyIntCallProtectedAlloc bodyIntCallProtectedBuffer bodyIntCallProtectedBytelike
@@ -242,33 +243,6 @@ Definition intcall_callee_exit_def:
               mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory) /\
       (!p. rb = SOME p ==> val_in_memory rtv v (w2n p) s'.vs_memory)
 End
-
-(* The caller's compile env agrees with every function's
-   build_compile_env for tops on the module-level fields the callee's
-   package env takes from tops: the module, module-variable types and
-   locations (immutables included), flag metadata and method ids.  body_inv pins the other module-level
-   fields this way. *)
-Definition cenv_module_pins_def:
-  cenv_module_pins tops cenv <=>
-    cenv.ce_module = NONE /\
-    cenv.ce_module_var_type = build_var_type_map tops /\
-    cenv.ce_module_vars =
-      add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
-        tops 0 (add_module_var_locations tops FEMPTY) /\
-    cenv.ce_flag_member_id = FST (build_flag_info tops (K (K 0)) (K 0)) /\
-    cenv.ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0)) /\
-    cenv.ce_method_id =
-      (\s tys. w2n (calldata_method_id
-                     (function_selector s (vyper_to_abi_types (type_env tops) tys))))
-End
-
-Theorem build_compile_env_module_pins:
-  cenv_module_pins tops
-    (build_compile_env tops vis mut fname args ret fbody use_trans)
-Proof
-  simp[cenv_module_pins_def, build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[])
-QED
 
 (* Held admission: the body_inv strengthening adds these pins to
    body_inv, which then proves this.  Only intcall_body_expr_ok uses it. *)
