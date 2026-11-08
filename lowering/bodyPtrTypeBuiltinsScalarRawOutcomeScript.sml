@@ -3,6 +3,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarSemantic bodyPtrTypeBuiltinsIntegerSemantic
   exprLowering exprLoweringProps compileEnv venomExecSemantics exprSimDefs
   valueEncoding loweringPosts exprSimConvert convertScalarBytes convertScalarOutputs
+  convertScalarDecimalRun
 
 Theorem scalar_identity_actual_outcome:
   valid_conversion src dst /\ ~is_bytestring_type src /\
@@ -417,4 +418,31 @@ Proof
   simp[expr_exit_def, convert_result_def,
     vyperValueOperationTheory.evaluate_convert_from_def,
     vyperValueOperationTheory.evaluate_convert_def]
+QED
+
+Theorem scalar_integer_decimal_actual_outcome:
+  0 < bits /\ bits <= 256 /\
+  within_int_bound (if sg then Signed bits else Unsigned bits) i /\
+  compile_type_convert x (ConvIntToDecimal sg bits 10000000000 (-&(2**167)) (&(2**167)-1)) sa = (out,sb) /\
+  fresh_vars_wrt sa s /\ eval_operand x s = SOME (i2w i) ==>
+  (?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    convert_result cx (BaseT (if sg then IntT bits else UintT bits)) (BaseT DecimalT) (IntV i) = INL vout /\
+    expr_val_rel cx (BaseT DecimalT) vout out t) \/
+  (?err t. run_inst_seq (emitted_insts sa sb) s = Abort err t /\
+    expr_exit (convert_result cx (BaseT (if sg then IntT bits else UintT bits)) (BaseT DecimalT) (IntV i)) (Abort err t))
+Proof
+  strip_tac >> Cases_on `within_int_bound decimal_bound (i * decimal_scale)`
+  >- (drule_all scalar_int_to_decimal_ok >> strip_tac >>
+      disj1_tac >> qexistsl_tac [`ss'`, `DecimalV (i * decimal_scale)`] >>
+      simp[convert_result_def, vyperValueOperationTheory.evaluate_convert_from_not_address_bytes,
+        vyperValueOperationTheory.evaluate_convert_def,
+        vyperValueOperationTheory.bounded_decimal_op_def, expr_val_rel_def,
+        vyperValueTheory.evaluate_type_def, is_word_type_def,
+        typed_val_to_w256_def, val_to_w256_def]) >>
+  drule_all scalar_int_to_decimal_abort >> strip_tac >>
+  disj2_tac >> qexistsl_tac [`Revert_abort`, `ss'`] >>
+  simp[expr_exit_def, convert_result_def,
+    vyperValueOperationTheory.evaluate_convert_from_not_address_bytes,
+    vyperValueOperationTheory.evaluate_convert_def,
+    vyperValueOperationTheory.bounded_decimal_op_def]
 QED
