@@ -502,6 +502,78 @@ Proof
   disch_then (qspec_then `v` mp_tac) >> simp[]
 QED
 
+Theorem distinct_flat_map_prefix_exclusion:
+  !f xs k x rest v.
+    ALL_DISTINCT (FLAT (MAP f xs)) /\ DROP k xs = x::rest /\ MEM v (f x) ==>
+    ~EXISTS (\y. MEM v (f y)) (TAKE k xs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `xs = TAKE k xs ++ DROP k xs` by simp[] >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  once_asm_rewrite_tac[] >>
+  simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP,
+       EVERY_MEM, combinTheory.o_DEF] >>
+  metis_tac[]
+QED
+
+Theorem native_inst_prefix_phase_resource_bound:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !bb v b.
+      b <= 1 /\ lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\ lbl = bb.bb_label /\
+      halt = bb_is_halting bb /\ n = LENGTH (get_params bb.bb_instructions) /\
+      len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+      ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) xs)) /\
+      (EXISTS (\i. MEM v i.inst_outputs) xs ==> b = 0) /\
+      LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+        (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= b /\
+      (!j before w. j < k /\ LENGTH (collect_phis bb.bb_instructions) <= j /\
+        fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before ==>
+        (MEM w (live_vars_at lv lbl (n+j)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+        (MEM (Var w) (compute_operands (EL j xs)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled)) ==>
+      LIST_ELEM_COUNT (Var v) qs.ps_stack +
+        (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
+      (if b = 1 \/ EXISTS (\i. MEM v i.inst_outputs) (TAKE k xs) then 1 else 0)
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_strongind >>
+  conj_tac >- (rpt strip_tac >> Cases_on `b = 1` >> gvs[] >>
+    `b = 0` by decide_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gvs[] >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ before = SOME (ops,after)` >>
+  `LIST_ELEM_COUNT (Var v) before.ps_stack +
+    (if Var v IN FDOM before.ps_spilled then 1 else 0) <=
+    (if b = 1 \/ EXISTS (\i. MEM v i.inst_outputs) (TAKE k (non_param_insts bb)) then 1 else 0)` by
+    (first_x_assum irule >> simp[] >>
+     rpt strip_tac >> `j < SUC k` by decide_tac >> metis_tac[]) >>
+  `k < LENGTH (non_param_insts bb) /\ inst = EL k (non_param_insts bb)` by
+    (drule_all native_indexed_step_layout >> simp[]) >>
+  `TAKE (SUC k) (non_param_insts bb) = TAKE k (non_param_insts bb) ++ [inst]` by
+    simp[TAKE_SUC_BY_TAKE] >>
+  Cases_on `MEM v inst.inst_outputs`
+  >- (`~EXISTS (\i. MEM v i.inst_outputs) (TAKE k (non_param_insts bb))` by
+        (irule distinct_flat_map_prefix_exclusion >> metis_tac[]) >>
+      `b = 0` by
+        (qpat_x_assum `(EXISTS _ _ ==> _)` irule >>
+         simp[EXISTS_MEM] >> qexists_tac `inst` >> simp[] >> metis_tac[EL_MEM]) >>
+      gvs[elem_count_zero_iff, indicator_zero_iff] >>
+      irule native_indexed_step_fresh_output_resource_bound >> simp[] >>
+      goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `DROP _ _ = _`)) >> simp[] >>
+      rpt strip_tac >> qpat_x_assum `!j before w. _` (qspecl_then [`k`,`before`,`w`] mp_tac) >>
+      simp[]) >>
+  gvs[] >>
+  irule native_indexed_step_nondefining_observer_bound >> simp[] >>
+  (conj_tac >- (IF_CASES_TAC >> simp[])) >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `DROP _ _ = _`)) >> simp[] >>
+  rpt strip_tac >> qpat_x_assum `!j before w. _` (qspecl_then [`k`,`before`,`w`] mp_tac) >>
+  simp[]
+QED
+
 Theorem native_inst_prefix_nondefining_observer_bound:
   !lv dfg cfg fn lbl halt n len xs incoming k qs.
     fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>

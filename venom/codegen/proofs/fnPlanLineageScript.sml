@@ -1393,6 +1393,85 @@ QED
 
 (* ===== Successor transfer ===== *)
 
+(* Successful native run boundary, independent of any resource observer. *)
+Theorem lineage_state_block_native_run:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) ==>
+    MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\ fn_reachable fn lbl /\
+    ?entry setup_ops start.
+      fn_entry_label fn = SOME entry /\
+      (if bb = HD fn.fn_blocks then
+         prepare_params_plan (liveness_analyze fn) fn
+           (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+       else if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+         clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+           (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+       else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+        (setup_ops,start) /\
+      native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) (non_param_insts bb) start
+        (LENGTH (non_param_insts bb)) after /\
+      (!j before w. j < LENGTH (non_param_insts bb) /\
+        LENGTH (collect_phis bb.bb_instructions) <= j /\
+        native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+          (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+          (LENGTH bb.bb_instructions) (non_param_insts bb) start j before ==>
+        (MEM w (live_vars_at (liveness_analyze fn) lbl
+          (LENGTH (get_params bb.bb_instructions)+j)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+        (MEM (Var w) (compute_operands (EL j (non_param_insts bb))) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?entry. fn_entry_label fn = SOME entry` by metis_tac[lineage_state_has_entry] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem,
+              venomExecPropsTheory.lookup_block_label] >>
+  `fn_reachable fn lbl` by
+    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  simp[] >>
+  qabbrev_tac `input = ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>` >>
+  Cases_on `if bb = HD fn.fn_blocks then prepare_params_plan (liveness_analyze fn) fn input
+    else if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+      clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb input
+    else ([],input)` >>
+  rename1 `_ = (setup_ops,start)` >>
+  `?worker_ops. generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    lbl (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) 0 (non_param_insts bb) start = SOME (worker_ops,after)` by
+    (`fn.fn_blocks <> []` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+     `cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []` by
+       metis_tac[fnPlanLineageCallersTheory.ready_entry_no_clean] >>
+     Cases_on `bb = HD fn.fn_blocks`
+     >- (gvs[] >> qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+         simp[generate_block_plan_def] >> gvs[AllCaseEqs()] >> metis_tac[]) >>
+     Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1` >> gvs[] >>
+     qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+     simp[generate_block_plan_def] >> gvs[AllCaseEqs()] >> metis_tac[]) >>
+  drule fnPlanLineageEntryProductionTheory.native_worker_prefix_endpoint >> strip_tac >>
+  qexistsl_tac [`setup_ops`,`start`] >> simp[] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (strip_tac >> irule lineage_state_ordinary_prefix_live_available >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      gvs[Abbr `input`, arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+  strip_tac >>
+  `EL j (non_param_insts bb) =
+     EL (LENGTH (get_params bb.bb_instructions)+j) bb.bb_instructions` by
+    metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
+  irule lineage_state_ordinary_prefix_available >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[Abbr `input`, arithmeticTheory.ADD_COMM] >> metis_tac[]
+QED
+
 Theorem lineage_state_block_nondefining_observer_bound:
   !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after v b.
     b <= 1 /\ codegen_ready_fn fn /\
@@ -1409,18 +1488,8 @@ Theorem lineage_state_block_nondefining_observer_bound:
       (if Var v IN FDOM after.ps_spilled then 1 else 0) <= b
 Proof
   rpt gen_tac >> strip_tac >>
-  `?entry. fn_entry_label fn = SOME entry` by metis_tac[lineage_state_has_entry] >>
-  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
-    metis_tac[livenessTransferProofsTheory.lookup_block_mem,
-              venomExecPropsTheory.lookup_block_label] >>
-  `fn_reachable fn lbl` by
-    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  drule_all lineage_state_block_native_run >> strip_tac >>
   qabbrev_tac `input = ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>` >>
-  Cases_on `if bb = HD fn.fn_blocks then prepare_params_plan (liveness_analyze fn) fn input
-    else if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
-      clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb input
-    else ([],input)` >>
-  rename1 `_ = (setup_ops,start)` >>
   `LIST_ELEM_COUNT (Var v) start.ps_stack +
      (if Var v IN FDOM start.ps_spilled then 1 else 0) <= b` by
     (Cases_on `bb = HD fn.fn_blocks`
@@ -1446,34 +1515,83 @@ Proof
          disch_then (qspec_then `v` mp_tac) >> simp[Abbr `input`] >>
          metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
      gvs[Abbr `input`]) >>
-  `?worker_ops. generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
-    lbl (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
-    (LENGTH bb.bb_instructions) 0 (non_param_insts bb) start = SOME (worker_ops,after)` by
-    (`fn.fn_blocks <> []` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
-     `cfg_preds_of (cfg_analyze fn) (HD fn.fn_blocks).bb_label = []` by
-       metis_tac[fnPlanLineageCallersTheory.ready_entry_no_clean] >>
-     Cases_on `bb = HD fn.fn_blocks`
-     >- (gvs[] >> qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
-         simp[generate_block_plan_def] >> gvs[AllCaseEqs()] >> metis_tac[]) >>
-     Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1` >> gvs[] >>
-     qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
-     simp[generate_block_plan_def] >> gvs[AllCaseEqs()] >> metis_tac[]) >>
-  drule fnPlanLineageEntryProductionTheory.native_worker_prefix_endpoint >> strip_tac >>
   drule fnPlanLineageObserverTransportTheory.native_inst_prefix_nondefining_observer_bound >>
   disch_then (qspecl_then [`bb`,`v`,`b`] mp_tac) >> simp[] >>
-  impl_tac >- (rpt gen_tac >> strip_tac >> conj_tac
-    >- (strip_tac >> irule lineage_state_ordinary_prefix_live_available >>
-        goal_assum (drule_at Any) >> simp[] >>
-        goal_assum (drule_at Any) >> simp[] >>
-        gvs[Abbr `input`, arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
-    strip_tac >>
-    `EL j (non_param_insts bb) =
-       EL (LENGTH (get_params bb.bb_instructions)+j) bb.bb_instructions` by
-      metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
-    irule lineage_state_ordinary_prefix_available >>
-    goal_assum (drule_at Any) >> simp[] >>
-    goal_assum (drule_at Any) >> simp[] >>
-    gvs[Abbr `input`, arithmeticTheory.ADD_COMM] >> metis_tac[]) >> simp[]
+  (impl_tac >- (rpt gen_tac >> strip_tac >>
+    qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >>
+    simp[arithmeticTheory.ADD_COMM])) >> simp[]
+QED
+
+Theorem lineage_state_block_fresh_output_resource_bound:
+  !fn dfg ch growth spill_base lbl_ctr lbl ps h promised bb ops after v.
+    codegen_ready_fn fn /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled ==>
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_block_native_run >> strip_tac >>
+  `LIST_ELEM_COUNT (Var v) ps.ps_stack = 0` by
+    simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff] >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  drule_all fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct >>
+  `bb.bb_instructions = get_params bb.bb_instructions ++ non_param_insts bb` by
+    metis_tac[fnPlanLineageCallersTheory.ready_block_parameter_suffix] >>
+  disch_then (fn th => mp_tac th) >>
+  qpat_x_assum `bb.bb_instructions = _` (fn th => once_rewrite_tac[th]) >>
+  simp[listTheory.MAP_APPEND, listTheory.FLAT_APPEND, listTheory.ALL_DISTINCT_APPEND] >> strip_tac >>
+  `?b. b <= 1 /\
+    (EXISTS (\i. MEM v i.inst_outputs) (non_param_insts bb) ==> b = 0) /\
+    LIST_ELEM_COUNT (Var v) start.ps_stack +
+      (if Var v IN FDOM start.ps_spilled then 1 else 0) <= b` by
+    (Cases_on `bb = HD fn.fn_blocks`
+     >- (gvs[] >>
+         Cases_on `EXISTS (\i. MEM v i.inst_outputs) (get_params (HD fn.fn_blocks).bb_instructions)`
+         >- (qexists_tac `1` >> simp[] >> conj_tac
+             >- (gvs[listTheory.EXISTS_MEM, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+                     listTheory.EVERY_MEM, combinTheory.o_DEF] >> metis_tac[]) >>
+             irule fnPlanLineageObserverTransportTheory.prepare_params_plan_fresh_output_resource_bound >>
+             goal_assum (drule_at Any) >> simp[] >>
+             irule fnPlanLineageSetupTheory.ready_parameter_names_distinct >>
+             simp[] >> Cases_on `fn.fn_blocks` >> gvs[]) >>
+         qexists_tac `0` >> simp[] >>
+         drule fnPlanLineageObserverTransportTheory.prepare_params_plan_nondefining_resource_nonincrease >>
+         disch_then (qspec_then `v` mp_tac) >>
+         impl_tac
+         >- (gvs[listTheory.EXISTS_MEM, listTheory.EVERY_MEM] >> rpt strip_tac >>
+             `MEM inst (HD fn.fn_blocks).bb_instructions /\ is_param_opcode inst.inst_opcode` by
+               metis_tac[fnPlanLineageObserverTransportTheory.get_params_mem] >>
+             `inst_wf inst` by
+               (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def,
+                    listTheory.EVERY_MEM] >> metis_tac[]) >>
+             `inst.inst_outputs <> []` by
+               (Cases_on `inst.inst_opcode` >>
+                gvs[venomInstTheory.is_param_opcode_def, venomWfTheory.inst_wf_def,
+                    listTheory.LENGTH_EQ_NUM_compute]) >>
+             qpat_x_assum `!e. MEM e (get_params _) ==> _`
+               (qspec_then `inst` mp_tac) >>
+             Cases_on `inst.inst_outputs` >> gvs[]) >>
+         simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff,
+              fnPlanLineageObserverTransportTheory.indicator_zero_iff]) >>
+     qexists_tac `0` >> simp[] >>
+     Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1` >> gvs[] >>
+     drule fnPlanLineageObserverTransportTheory.clean_stack_plan_resource_nonincrease >>
+     disch_then (qspec_then `v` mp_tac) >>
+     simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff,
+          fnPlanLineageObserverTransportTheory.indicator_zero_iff]) >>
+  drule fnPlanLineageObserverTransportTheory.native_inst_prefix_phase_resource_bound >>
+  disch_then (qspecl_then [`bb`,`v`,`b`] mp_tac) >> simp[] >>
+  (impl_tac >- (rpt gen_tac >> strip_tac >>
+    qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >>
+    simp[arithmeticTheory.ADD_COMM])) >>
+  Cases_on `b = 1 \/ EXISTS (\i. MEM v i.inst_outputs) (non_param_insts bb)` >>
+  simp[] >> strip_tac >> decide_tac
 QED
 
 Theorem lineage_state_block_nondefining_observer_upper:
@@ -1606,6 +1724,31 @@ Proof
   drule lineage_history_nondefining_absent >>
   disch_then (drule_at Any) >> simp[] >>
   disch_then (drule_at Any) >> simp[]
+QED
+
+Theorem lineage_history_first_arrival_output_resource_bound:
+  !fn dfg ch growth spill_base lbl_ctr entry vertices lbl ps bb inst v h promised ops after.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs /\
+    ~MEM lbl (MAP FST vertices) /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices
+      (entry,init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (ops,after) ==>
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_history_first_arrival_output_absent >> strip_tac >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps` by
+    (drule lineage_history_reconstruct >> simp[] >>
+     disch_then irule >> simp[lineage_state_entry]) >>
+  irule lineage_state_block_fresh_output_resource_bound >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem lineage_state_ordinary_last_use_extinction:

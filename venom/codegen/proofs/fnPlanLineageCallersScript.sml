@@ -183,6 +183,19 @@ Proof
   metis_tac[all_distinct_flat_map_member]
 QED
 
+(* Exact copy from assertCombinerProofs, avoiding pass-level imports. *)
+Theorem ssa_form_block_outputs_distinct:
+  !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
+Proof
+  simp[venomWfTheory.ssa_form_def, venomInstTheory.fn_insts_def] >>
+  rpt strip_tac >>
+  ntac 2 (pop_assum mp_tac) >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MAP_APPEND, FLAT_APPEND]
+QED
+
 (* Exact copy from unitShapeDefs, avoiding compiler-level imports. *)
 Theorem MEM_fn_insts_blocks_iff[local]:
   !bbs inst. MEM inst (fn_insts_blocks bbs) <=>
