@@ -112,7 +112,7 @@ Theorem step_ALLOCA[local]:
                eval_operand op ss' = SOME v) ∧
       eval_operand (Var out) ss' ≠ NONE
 Proof
-  rw[step_inst_base_def, exec_alloca_def, mk_inst_def, LET_THM] >>
+  rw[step_inst_base_opcode_eqs, exec_alloca_def, mk_inst_def, LET_THM] >>
   Cases_on `FLOOKUP ss.vs_allocas id` >>
   simp[eval_operand_alloca_fields, eval_operand_update_var] >>
   TRY (rename1 `SOME p` >> PairCases_on `p` >>
@@ -136,7 +136,7 @@ Theorem step_SHA3[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   PURE_REWRITE_TAC[mk_inst_def] >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[]
 QED
 
