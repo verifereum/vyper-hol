@@ -1403,10 +1403,11 @@ Theorem imm_array_index_range[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all imm_index_word_range >> disch_then SUBST1_TAC >>
+  qpat_x_assum `if sgn then _ else _` kall_tac >>
   Cases_on `av` >> gvs[vyperValueOperationTheory.array_index_def,
                        vyperValueOperationTheory.array_length_def] >>
   simp[listTheory.oEL_THM] >>
-  rpt CASE_TAC >> gvs[]
+  rw[] >> CASE_TAC >> simp[]
 QED
 
 Theorem imm_typed_array_length[local]:
