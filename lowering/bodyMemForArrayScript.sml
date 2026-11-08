@@ -47,7 +47,7 @@ Theorem array_for_source_ready_mem[local]:
     0 < n /\ n < dimword (:256) /\ entry.value = ArrayV (SArrayV al) /\
     vs = array_elements (ArrayTV tv (Fixed n)) (SArrayV al) /\ LENGTH vs = n /\
     (!gs. eval_iterator cx (Array (Name (ArrayT typ (Fixed n)) name))
-            (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+            (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
     body_stmts_mem_ok cx stmts /\
     FLOOKUP cenv.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
