@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the agg step: struct literals. *)
 Theory bodyIntCallFamAggStruct
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodyIntCallFamAggStructFields
 
 Theorem intcall_struct_literal_step:
   (!e'. expr_size e' < expr_size e ==>
