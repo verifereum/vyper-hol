@@ -147,3 +147,50 @@ Proof
   rpt strip_tac >>
   `30 < w2n n` by decide_tac >> simp[]
 QED
+
+Theorem ao_sign_extend_bit[local]:
+  !n (x:bytes32) i. n < 31 /\ i < 256 ==>
+    ((sign_extend (n2w n) x) ' i <=>
+     if i < 8 * (n + 1) then x ' i else x ' (8 * n + 7))
+Proof
+  rpt strip_tac >>
+  `fcp$dimindex (:256) = 256` by
+    simp[fcpLib.INDEX_CONV ``fcp$dimindex(:256)``] >>
+  `w2n (n2w n : bytes32) = n` by
+    simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+  `8 * n + 7 < fcp$dimindex (:256)` by simp[] >>
+  simp[sign_extend_def, lsr_and_1] >>
+  Cases_on `x ' (8 * n + 7)` >>
+  simp[wordsTheory.word_or_def, wordsTheory.word_and_def,
+       wordsTheory.word_1comp_def, fcpTheory.FCP_BETA,
+       wordsTheory.SHIFT_1_SUB_1] >>
+  Cases_on `i < 8 * (n + 1)` >> gvs[]
+QED
+
+Theorem ao_sign_extend_absorb:
+  !inner outer (x:bytes32). inner <=+ outer ==>
+    sign_extend outer (sign_extend inner x) = sign_extend inner x
+Proof
+  rpt strip_tac >>
+  Cases_on `31w <=+ outer`
+  >- metis_tac[ao_sign_extend_large] >>
+  `w2n outer < 31 /\ w2n inner <= w2n outer` by
+    gvs[wordsTheory.WORD_LS, wordsTheory.dimword_def,
+        fcpLib.INDEX_CONV ``fcp$dimindex(:256)``] >>
+  `w2n inner < 31` by decide_tac >>
+  `inner = n2w (w2n inner) /\ outer = n2w (w2n outer)` by simp[] >>
+  qpat_assum `inner = _` SUBST1_TAC >>
+  qpat_assum `outer = _` SUBST1_TAC >>
+  pure_rewrite_tac[fcpTheory.CART_EQ] >>
+  simp_tac std_ss [fcpLib.INDEX_CONV ``fcp$dimindex(:256)``] >>
+  rpt strip_tac >>
+  `8 * w2n outer + 7 < 256` by decide_tac >>
+  asm_simp_tac std_ss [ao_sign_extend_bit] >>
+  Cases_on `i < 8 * (w2n outer + 1)` >>
+  Cases_on `i < 8 * (w2n inner + 1)` >>
+  asm_simp_tac arith_ss [] >>
+  Cases_on `w2n inner = w2n outer`
+  >- asm_simp_tac arith_ss [] >>
+  `~(8 * w2n outer + 7 < 8 * (w2n inner + 1))` by decide_tac >>
+  simp[]
+QED
