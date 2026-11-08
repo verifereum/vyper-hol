@@ -64,9 +64,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
        step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds,
-                   combinTheory.K_THM, opcode_case_def] >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_read0_def, exec_read1_def, exec_pure1_def, exec_pure2_def,
        exec_gas_def, update_var_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
