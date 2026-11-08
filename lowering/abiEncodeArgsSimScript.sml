@@ -39,7 +39,7 @@ End
 Theorem abi_args_post_nil:
   abi_args_post ctx func ce cx es sa sb s0 es' [] ops vs s <=>
     ops = [] /\ vs = [] /\ stmt_state_rel ctx func ce cx es' s /\
-    wb_frame ce es sa s0 s
+    wb_frame ce es es' sa s0 s
 Proof
   cheat
 QED
@@ -115,7 +115,7 @@ Theorem abi_args_local_region_kept:
   expr_sim_inv ce cx env es /\
   stmt_state_rel ctx func ce cx es s0 /\
   stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
-  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   local_region ce es.scopes s0 name b sz ==>
   mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory
 Proof
@@ -126,7 +126,7 @@ Theorem abi_args_local_window_kept:
   expr_sim_inv ce cx env es /\
   stmt_state_rel ctx func ce cx es s0 /\
   stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
-  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   local_region ce es.scopes s0 name b sz /\
   b <= off /\ off + len <= b + sz ==>
   mem_bytes_at off len s1.vs_memory = mem_bytes_at off len s0.vs_memory
@@ -135,7 +135,7 @@ Proof
 QED
 
 Theorem abi_args_operand_kept:
-  wb_frame ce es st s0 s1 /\
+  wb_frame ce es es' st s0 s1 /\
   (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
   eval_operand op s0 = SOME w ==>
   eval_operand op s1 = SOME w
@@ -146,7 +146,7 @@ QED
 Theorem abi_args_location_kept_eq:
   stmt_state_rel ctx func ce cx es s0 /\
   MAP FDOM es'.scopes = MAP FDOM es.scopes /\ local_ptrs_reserved ce st /\
-  wb_frame ce es st s0 s1 /\
+  wb_frame ce es es' st s0 s1 /\
   eval_operand op s0 = eval_operand op s1 /\
   expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_at ce cx ty sa sb es' v op s1
@@ -157,7 +157,7 @@ QED
 Theorem abi_args_location_kept:
   stmt_state_rel ctx func ce cx es s0 /\
   MAP FDOM es'.scopes = MAP FDOM es.scopes /\ local_ptrs_reserved ce st /\
-  wb_frame ce es st s0 s1 /\
+  wb_frame ce es es' st s0 s1 /\
   (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
   expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_at ce cx ty sa sb es' v op s1
@@ -169,7 +169,7 @@ Theorem abi_args_value_kept_eq:
   expr_sim_inv ce cx env es /\
   stmt_state_rel ctx func ce cx es s0 /\
   stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
-  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   sb.cs_next_id <= st.cs_next_id /\
   eval_operand op s0 = eval_operand op s1 /\
   expr_val_rel cx ty v op s0 /\ expr_val_at ce cx ty sa sb es v op s0 ==>
@@ -182,7 +182,7 @@ Theorem abi_args_value_kept:
   expr_sim_inv ce cx env es /\
   stmt_state_rel ctx func ce cx es s0 /\
   stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
-  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   sb.cs_next_id <= st.cs_next_id /\
   (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
   expr_val_rel cx ty v op s0 /\ expr_val_at ce cx ty sa sb es v op s0 ==>
@@ -192,7 +192,7 @@ Proof
 QED
 
 Theorem abi_args_captured_value_kept:
-  wb_frame ce es st s0 s1 /\
+  wb_frame ce es es' st s0 s1 /\
   (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
   ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   expr_val_rel cx ty v op s0 /\ val_wf tv v /\
@@ -249,7 +249,7 @@ QED
 Theorem abi_args_post_start_mono:
   sa.cs_next_id <= sm.cs_next_id /\
   abi_args_post ctx func ce cx es sm sb s0 es' args ops vs s /\
-  wb_frame ce es sa s0 s ==>
+  wb_frame ce es es' sa s0 s ==>
   abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s
 Proof
   cheat

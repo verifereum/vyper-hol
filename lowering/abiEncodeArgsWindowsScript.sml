@@ -39,7 +39,7 @@ Theorem dynamic_local_window_kept:
     lookup_var p ss0 = SOME w /\ lookup_var p ss1 = SOME w /\
     entry.type = ArrayTV etv (Dynamic n) /\
     entry.value = ArrayV (DynArrayV vs) /\
-    locals_kept ce es ss0 ss1 ==>
+    locals_kept ce es es1 ss0 ss1 ==>
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss1.vs_memory =
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss0.vs_memory
 Proof
@@ -56,7 +56,7 @@ Theorem dynamic_local_window_scopes_kept:
     lookup_var p ss0 = SOME w /\ lookup_var p ss1 = SOME w /\
     entry.type = ArrayTV etv (Dynamic n) /\
     entry.value = ArrayV (DynArrayV vs) /\
-    locals_kept ce es ss0 ss1 ==>
+    locals_kept ce es es1 ss0 ss1 ==>
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss1.vs_memory =
     mem_bytes_at (w2n w) (val_footprint entry.type entry.value) ss0.vs_memory
 Proof

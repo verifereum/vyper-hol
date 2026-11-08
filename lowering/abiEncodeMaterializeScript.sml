@@ -86,7 +86,7 @@ Theorem materialize_store_state_run:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!off len. off + len <= w2n dw \/ w2n dw + type_memory_size tv <= off ==>
         mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
-      locals_kept ce es s t
+      locals_kept ce es es s t
 Proof
   cheat
 QED
@@ -95,7 +95,7 @@ QED
    frame.  The allocation map invariant supplies separation, not a presumed
    full-capacity representation of the input value. *)
 Theorem materialize_fresh_store_frame:
-  wb_frame ce es sa s0 s /\
+  wb_frame ce es es' sa s0 s /\
   allocas_non_overlapping s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -104,7 +104,7 @@ Theorem materialize_fresh_store_frame:
      mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
   (!name lb len. local_region ce es.scopes s0 name lb len ==>
      b + sz <= lb \/ lb + len <= b) ==>
-  wb_frame ce es sa s0 t
+  wb_frame ce es es' sa s0 t
 Proof
   cheat
 QED
