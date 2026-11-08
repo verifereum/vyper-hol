@@ -9,6 +9,7 @@
  *)
 Theory bodyPtrSubscriptSeamMap
 Ancestors
+  bodyPtrSubscriptSeamMapConsumer
   bodyPtrSubscriptScratchTransfer bodyPtrSubscriptMapDefs bodyPtrPreds
   bodyPtrDefs bodySim exprSimHypsDefs exprLowering vyperInterpreter
   vyperState vyperContext vyperAST
@@ -37,5 +38,7 @@ Theorem subscript_map_ptr:
     expr_map_sim_ptr d ctx PG func cenv cx ty e1 es ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Subscript ann e1 e2) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[expr_vv_sim_ptr_def] >> rpt gen_tac >> strip_tac >>
+  irule compile_mapping_subscript_outcome_ptr >> metis_tac[]
 QED
