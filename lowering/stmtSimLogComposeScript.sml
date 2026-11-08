@@ -7,7 +7,7 @@ Ancestors
   compileEnv stmtLowering fragExec loweringSlice exprLoweringProps emitHelperProps
   vyperInterpreter vyperState vyperTyping list stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
-  fragGasMode fragGasPath fragGasSeq rich_list
+  fragGasMode fragGasPath fragGasSeq rich_list eventLoweringStructure
 Libs
   monadsyntax
 
@@ -41,12 +41,16 @@ Proof
        mk_inst_def, is_terminator_def]
 QED
 
-Theorem log_compile_structure[local]:
+Theorem log_compile_structure:
   cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP expr_type args,flags) /\
   LENGTH flags = LENGTH args /\ EVERY supported_scalar_type (MAP expr_type args) /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
   compile_stmt cenv lctx ty (Log id args) sa = ((),sb) /\
   fn_has_code sa sb func ==>
-  ?xs sm ops st. compile_log_eval_all cenv args sa = (xs,sm) /\
+  ?ys xs sm ops st. compile_log_eval_all cenv args sa = (ys,sm) /\
+    xs = ZIP (MAP FST ys, MAP expr_type args) /\ log_eval_view cenv args sa xs sm /\
     compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
     MAP SND xs = MAP expr_type args /\ LENGTH flags = LENGTH xs /\
     inst_extends sm sb /\ same_blocks sm sb /\ sm.cs_next_var <= sb.cs_next_var /\
@@ -55,35 +59,48 @@ Theorem log_compile_structure[local]:
     fn_has_code sa sm func /\ fn_has_code sm sb func
 Proof
   strip_tac >> Cases_on `compile_log_eval_all cenv args sa` >>
-  rename1 `compile_log_eval_all cenv args sa = (xs,sm)` >>
+  rename1 `compile_log_eval_all cenv args sa = (ys,sm)` >>
+  `LENGTH ys = LENGTH args` by
+    (mp_tac (Q.SPECL [`cenv`, `args`, `sa`] compile_log_eval_all_length) >> simp[]) >>
+  `MAP SND ys = MAP (lowered_value_type cenv) args` by
+    (mp_tac (Q.SPECL [`cenv`, `args`, `sa`]
+       eventLoweringStructureTheory.compile_log_eval_all_types) >> simp[]) >>
+  qabbrev_tac `xs = ZIP (MAP FST ys, MAP expr_type args)` >>
+  `MAP SND xs = MAP expr_type args /\ LENGTH xs = LENGTH args` by
+    simp[Abbr `xs`, MAP_ZIP] >>
+  `log_eval_view cenv args sa xs sm` by
+    (simp[log_eval_view_def, LIST_REL_EL_EQN, Abbr `xs`, EL_ZIP, EL_MAP] >>
+     rpt strip_tac >>
+     qpat_x_assum `MAP SND ys = _` (mp_tac o Q.AP_TERM `EL n`) >>
+     gvs[EL_MAP, EVERY_EL]) >>
   Cases_on `compile_log_topic_ops (FST (split_log_ops xs flags)) sm` >>
   rename1 `compile_log_topic_ops _ sm = (ops,st)` >>
-  `MAP SND xs = MAP expr_type args` by
-    (drule compile_log_eval_all_types >> simp[]) >>
-  `LENGTH xs = LENGTH args` by metis_tac[listTheory.LENGTH_MAP] >>
   `EVERY (supported_scalar_type o SND) xs` by
     (`EVERY supported_scalar_type (MAP SND xs)` by metis_tac[] >>
      gvs[EVERY_MAP, combinTheory.o_DEF]) >>
   `LENGTH flags = LENGTH xs` by decide_tac >>
+  `cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags)` by simp[] >>
   drule_all log_success_suffix_code >> strip_tac >>
-  `cs_extends sa sm` by (drule compile_log_eval_all_grows >> simp[]) >>
+  `cs_extends sa sm` by (drule_all compile_log_eval_all_grows >> simp[]) >>
   `cs_extends sm sb` by
     (irule cs_extends_same_block >>
      gvs[same_blocks_def, inst_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
      metis_tac[]) >>
-  map_every qexists_tac [`xs`, `sm`, `ops`, `st`] >> simp[] >>
+  map_every qexists_tac [`ys`, `xs`, `sm`, `ops`, `st`] >>
+  simp[markerTheory.Abbrev_def] >> fs[markerTheory.Abbrev_def] >>
   metis_tac[fn_has_code_mid, cs_extends_refl]
 QED
 
 
-Theorem log_stmt_open[local]:
+Theorem log_stmt_open:
   cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all cenv args sa = (xs,sm) /\
+  MAP SND xs = tys /\ log_eval_view cenv args sa xs sm /\
+  EVERY (supported_scalar_type o SND) xs /\ LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt cenv lctx ty (Log id args) sa = ((),sb) ==>
   ~block_is_terminated sb
 Proof
-  strip_tac >>
+  strip_tac >> gvs[] >>
   Cases_on `SND (split_log_ops xs flags) = []`
   >- (drule_all compile_log_empty_trace >> strip_tac >>
       qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[] >>
@@ -134,6 +151,9 @@ Theorem compile_log_ready_stmt_frag:
   lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,tys,flags) /\
   MAP expr_type args = tys /\ LENGTH flags = LENGTH tys /\
   LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
   SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags tys)) < dimword (:256) /\
   abi_size_bound cenv.ce_struct_fields (TupleT (log_non_indexed_types flags tys)) < dimword (:256) ==>
   stmt_frag ctx func cx lctx RetQ cenv
@@ -151,7 +171,7 @@ Proof
   `gas_admissible (eval_exprs cx args) log_args_res_ok es` by
     metis_tac[log_args_admissible] >>
   qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `R`, `es`, `sa`, `xs`, `sm`,
-               `s0`, `env`, `env`, `es`] mp_tac compile_log_eval_all_gas >>
+               `s0`, `env`, `env`, `es`, `ys`] mp_tac compile_log_eval_all_gas >>
   impl_tac
   >- (RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> simp[] >>
       first_assum ACCEPT_TAC) >>
@@ -179,6 +199,7 @@ QED
 
 Resume compile_log_ready_stmt_frag[args_value]:
   gvs[Excl "enc_def"] >>
+  qabbrev_tac `xs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, Excl "enc_def"] >>
@@ -202,9 +223,10 @@ Resume compile_log_ready_stmt_frag[args_value]:
   `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `local_ptrs_reserved cenv sm` by
-    (drule compile_log_eval_all_grows >> strip_tac >>
+    (drule_all compile_log_eval_all_grows >> strip_tac >>
      metis_tac[local_ptrs_reserved_next_var]) >>
-  `LENGTH flags = LENGTH xs` by simp[] >>
+  `LENGTH flags = LENGTH xs` by
+    (qpat_assum `MAP SND xs = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
@@ -261,7 +283,7 @@ QED
 Resume compile_log_ready_stmt_frag[post]:
   drule log_args_post_frame >> simp[wb_frame_def, Excl "enc_def"] >> strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var` by
-    (drule compile_log_eval_all_grows >> simp[]) >>
+    (drule_all compile_log_eval_all_grows >> simp[]) >>
   `~u.vs_halted` by
     (drule gas_path_normal >> simp[Excl "enc_def"]) >>
   disj1_tac >>
@@ -269,7 +291,7 @@ Resume compile_log_ready_stmt_frag[post]:
   simp[cenv_top_ext_refl, Excl "enc_def"] >>
   rpt conj_tac
   >- fs[same_blocks_def]
-  >- metis_tac[log_stmt_open]
+  >- (drule_all log_stmt_open >> simp[])
   >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) u` mp_tac >>
       simp[Abbr `ev`, wordsTheory.w2w_id, Excl "enc_def"])
   >- (rpt strip_tac >>

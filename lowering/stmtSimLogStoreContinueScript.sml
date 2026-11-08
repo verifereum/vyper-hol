@@ -73,7 +73,7 @@ QED
 
 Theorem log_store_data_safe:
   !xs buf off st final. EVERY (supported_scalar_type o SND) xs /\
-    compile_log_store_data ce xs buf off st = ((),final) ==>
+    compile_log_store_data ce xs (MAP SND xs) buf off st = ((),final) ==>
   inst_extends st final /\ same_blocks st final /\
   EVERY (\i. log_encode_safe_opcode i.inst_opcode) (emitted_insts st final)
 Proof
@@ -81,7 +81,7 @@ Proof
   >- simp[compile_log_store_data_def, comp_return_def, same_blocks_def, inst_extends_def, emitted_insts_def] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
   fs[] >>
-  drule_all compile_log_store_data_split >> strip_tac >>
+  drule_all compile_log_store_data_scalar_split >> strip_tac >>
   drule_all log_store_scalar_safe >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   drule log_encode_emit_safe >>
@@ -93,7 +93,7 @@ Proof
 QED
 
 Theorem log_store_data_memory_mono:
-  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\
   EVERY (supported_scalar_type o SND) xs /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   LENGTH s.vs_memory <= LENGTH t.vs_memory
@@ -103,7 +103,7 @@ Proof
 QED
 
 Theorem log_store_data_stmt:
-  compile_log_store_data ce xs buf off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
   (!x. buf = Var x ==> not_fresh_at sa x) /\

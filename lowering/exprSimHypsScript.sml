@@ -853,16 +853,6 @@ Proof
   simp[return_def, raise_def, bind_def, ignore_bind_def]
 QED
 
-Theorem concat_payload_capacity_bound:
-  !ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
-       MAP bytelike_type_bound ts = MAP concat_payload_capacity ts
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  gvs[bytelike_type_bound_def, concat_payload_capacity_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[bound_length_def, concat_payload_capacity_def]
-QED
-
 Theorem concat_map_ctor_11:
   (!l1 l2. MAP BytesV l1 = MAP BytesV l2 <=> l1 = l2) /\
   (!l1 l2. MAP StringV l1 = MAP StringV l2 <=> l1 = l2)
@@ -1186,4 +1176,17 @@ Proof
   ho_match_mp_tac lowered_value_type_ind >>
   simp[lowered_value_type_def, is_bytestring_type_def,
        concat_buffer_type_bytestring]
+QED
+
+(* Outside calls, a well-typed expression is lowered at a bytestring type
+   exactly when its source type is one. *)
+Theorem lowered_value_type_bytestring_iff:
+  !cenv e.
+    well_typed_expr env e /\ (!a f args d. e <> Call a f args d) ==>
+    (is_bytestring_type (lowered_value_type cenv e) <=> is_bytestring_type (expr_type e))
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  rw[lowered_value_type_def, expr_type_def, is_bytestring_type_def, LET_THM] >>
+  gvs[well_typed_expr_def, well_typed_builtin_app_def, type_builtin_result_ok_def,
+      concat_buffer_type_def, is_bytestring_type_def]
 QED

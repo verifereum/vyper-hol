@@ -39,11 +39,12 @@ End
 
 (* Evaluate all log arg expressions in AST order.
    Returns (operand, source-layout type) pairs preserving AST order.
-   An aggregate operand points into memory: save its value before a later
-   argument can modify that memory, as eval_exprs materialises each value. *)
+   An aggregate operand points into memory: save its value when a later
+   argument can modify memory or storage, as Python's codegen does
+   (later_expressions_can_mutate_memory_or_storage). *)
 Definition compile_log_save_arg_def:
   compile_log_save_arg cenv src_ty op es =
-    if is_word_type src_ty \/ EVERY pure_expr es then return op
+    if is_word_type src_ty \/ ~exprs_can_mutate cenv es then return op
     else compile_materialize_vv cenv src_ty (StackValue src_ty op)
 End
 

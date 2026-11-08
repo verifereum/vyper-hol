@@ -66,6 +66,13 @@ Libs
 
 
 
+Theorem exprs_can_mutate_append:
+  !l1 l2. exprs_can_mutate cenv (l1 ++ l2) <=>
+          exprs_can_mutate cenv l1 \/ exprs_can_mutate cenv l2
+Proof
+  Induct >> simp[expr_can_mutate_def, DISJ_ASSOC]
+QED
+
 Theorem lower_value_nonword_memory:
   compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
   p.ptr_location = LocMemory /\ ~is_word_type t ==>
@@ -5000,7 +5007,7 @@ Proof
   metis_tac[step_inst_base_ok_jump_ctxs]
 QED
 
-Theorem step_inst_base_preserves_call_ctx[local]:
+Theorem step_inst_base_preserves_call_ctx:
   !inst s s'.
     step_inst_base inst s = OK s' ==>
     s'.vs_call_ctx = s.vs_call_ctx

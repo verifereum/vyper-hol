@@ -28,7 +28,7 @@ Theorem log_argument_prefix_advance:
     (!request. MEM request (compiler_alloca_requests cs load_cut) ==> MEM request requests) /\
     cs_extends cs load_cut /\ cs_extends save_cut final_cut /\
     fn_has_code cs load_cut func /\ fn_has_code load_cut save_cut func /\ fn_has_code save_cut final_cut func /\
-    (~is_word_type (lowered_value_type cenv e) /\ ~EVERY pure_expr suffix ==>
+    (~is_word_type (lowered_value_type cenv e) /\ exprs_can_mutate cenv suffix ==>
       MEM (load_cut.cs_next_id,type_memory_size tv) requests /\ MEM load_cut.cs_next_id ids) ==>
     ?out. fragment_path ctx func before out /\ out.vs_halted = before.vs_halted /\
       allocation_growth before out /\ cs.cs_next_var <= save_cut.cs_next_var /\
@@ -72,6 +72,11 @@ Proof
     (qspecl_then [`env`, `cx`, `es`, `es1`, `cenv`, `cs.cs_next_var`, `save_cut.cs_next_var`]
       mp_tac source_pointer_lifetimes_consistent_scopes >>
      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
+  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before save_cut.cs_next_var (Var x)` by
+    (rpt strip_tac >> MATCH_MP_TAC abi_operand_before_mono >> qexists_tac `cs.cs_next_var` >>
+     conj_tac >- (qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _` irule >>
+                  first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   qexists_tac `out` >> simp_tac bool_ss [log_prefix_ready_def] >>
   rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

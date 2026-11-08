@@ -29,7 +29,7 @@ Proof
   `abi_footprint_disjoint (w2n w) sz fp` by metis_tac[] >>
   `mem_bytes_at (w2n w) sz t.vs_memory = mem_bytes_at (w2n w) sz s.vs_memory` by
     (irule abi_decode_footprint_frame_slice >> goal_assum (drule_at Any) >> simp[]) >>
-  irule val_in_memory_mem_agree >> simp[] >>
+  irule memoryValueFrameTheory.memory_value_rel_mem_agree_region >> simp[] >>
   qexistsl_tac [`sz`,`s.vs_memory`] >> simp[]
 QED
 

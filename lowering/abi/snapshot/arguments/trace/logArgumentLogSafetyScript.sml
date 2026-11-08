@@ -6,7 +6,7 @@ Ancestors
   logArgumentListContract logArgumentOrigins logArgumentOriginSafety logArgumentSourceWindows logArgumentBacking
   logArgumentWriters sourceAllocationPrivacy sourceMemoryFrames nameLoweringProps
   abiRequestCredit abiRequestProfile abiAllocationBudgetBounds abiAllocatedWindows abiMemoryFrame abiFieldOperands typedLogArgs
-  memoryValueSnapshot compileAllocaProvenance compileEnv venomMemDefs venomState
+  memoryValueSnapshot compileAllocaProvenance compileEnv exprLowering venomMemDefs venomState
   list pair words arithmetic
 
 Theorem source_window_log_buffer_range[local]:
@@ -101,7 +101,7 @@ Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
   qpat_x_assum `log_prefix_ready _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
-  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[] >>
+  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[expr_can_mutate_def] >>
   `abi_request_reservation reserved requests ss` by (drule_all abi_request_credit_reservation >> simp[]) >>
   qspecl_then [`reserved`, `requests`, `allocation_cs.cs_next_id`, `capacity`, `ss`]
     mp_tac abi_request_reservation_room >>
@@ -116,6 +116,11 @@ Proof
     (qspecl_then [`cenv`, `es.scopes`, `cs.cs_next_var`, `allocation_cs.cs_next_var`]
       mp_tac source_pointer_lifetimes_mono >>
      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]) >>
+  `!x. cenv.ce_imm_alloca = SOME (Var x) ==> abi_operand_before allocation_cs.cs_next_var (Var x)` by
+    (rpt strip_tac >> MATCH_MP_TAC abi_operand_before_mono >> qexists_tac `cs.cs_next_var` >>
+     conj_tac >- (qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _` irule >>
+                  first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   `source_memory_separated cenv es.scopes ss (w2n (memory_snapshot_addr allocation_cs.cs_next_id ss)) byte_count` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `ss`, `capacity`, `allocation_cs`, `buf`, `cut`, `byte_count`, `ids`]
       mp_tac compile_buffer_payload_private >>
@@ -178,7 +183,7 @@ Theorem log_ready_arguments_empty_safe:
 Proof
   rpt gen_tac >>
   disch_then (strip_assume_tac o REWRITE_RULE [log_prefix_ready_def]) >>
-  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[] >>
+  `log_args_origins cenv es.scopes ss (compiler_alloca_ids cs final_cut) T args tvs` by fs[expr_can_mutate_def] >>
   `abi_request_reservation reserved requests ss` by (drule_all abi_request_credit_reservation >> simp[]) >>
   `ss.vs_alloca_next < dimword(:256)` by
     (qspecl_then [`reserved`, `MAP FST requests`, `ss`, `0`] mp_tac abi_alloca_budget_request_room >>

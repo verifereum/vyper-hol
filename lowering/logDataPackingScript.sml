@@ -250,7 +250,7 @@ Theorem log_data_allocate_emit_frag:
   eval_operand src packed = SOME sw /\ eval_operands ops packed = SOME ws /\
   EVERY (log_abi_old_operand packed_cut) (src::ops) /\
   LENGTH ops < dimword(:256) /\
-  val_in_memory tv v (w2n sw) packed.vs_memory /\
+  val_in_memory tv v (w2n sw) packed.vs_memory /\ ~packed.vs_call_ctx.cc_static /\
   log_packing_resources packed_cut encoder_start encoder_end capacity lo top tv (w2n sw)
     (LENGTH (enc (vyper_to_abi_type env ty) av)) packed ==>
   frag_exec ctx packed_cut final (\s. s = packed)
@@ -297,6 +297,9 @@ Proof
 QED
 
 Resume log_data_allocate_emit_frag[shared_fragment]:
+  `~allocated.vs_call_ctx.cc_static` by
+    simp[Abbr`allocated`, memory_snapshot_allocated_def, update_var_def,
+         memory_snapshot_alloc_frame_def, COND_RAND] >>
   drule_all compile_log_abi_emit_frag >>
   disch_then (qspec_then `ctx` assume_tac) >>
   `cs_extends packed_cut encoder_start` by
@@ -419,7 +422,8 @@ Theorem checked_log_packing_canonical:
     (LENGTH (enc (vyper_to_abi_type (type_env tops)
       (TupleT (log_non_indexed_types flags fts))) av)) ss /\
   ss.vs_current_bb = cs.cs_current_bb /\
-  ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted ==>
+  ss.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~ss.vs_halted /\
+  ~ss.vs_call_ctx.cc_static ==>
   ?packed.
     fragment_path ctx func ss packed /\ copy_state_frame ss packed /\
     (!op. abi_operand_before cs.cs_next_var op ==>
@@ -459,6 +463,10 @@ Proof
     (drule_all log_packing_resources_copy_frame >> simp[]) >>
   `type_memory_size (TupleTV (select_log_args F flags ftvs)) < dimword(:256)` by decide_tac >>
   drule_all log_selected_tuple_type >> strip_tac >>
+  `~packed.vs_call_ctx.cc_static` by
+    (qpat_assum `copy_state_frame ss packed`
+       (strip_assume_tac o REWRITE_RULE [copy_state_frame_def]) >>
+     drule abi_state_frame_observables >> simp[]) >>
   qexists_tac `packed` >> simp[] >>
   drule_all log_data_allocate_emit_frag >> simp[]
 QED
@@ -534,7 +542,7 @@ Theorem checked_log_data_frag:
   w2n root_addr + type_memory_size (TupleTV (select_log_args F flags ftvs)) < dimword(:256) /\
   EVERY (log_abi_old_operand cs) (src::ops) /\
   eval_operand src ss = SOME root_addr /\ eval_operands ops ss = SOME ws /\
-  LENGTH ops < dimword(:256) /\
+  LENGTH ops < dimword(:256) /\ ~ss.vs_call_ctx.cc_static /\
   log_packing_resources packed_cut encoder_start encoder_end capacity lo top
     (TupleTV (select_log_args F flags ftvs)) (w2n root_addr)
     (LENGTH (enc (vyper_to_abi_type (type_env tops)
@@ -602,6 +610,10 @@ Resume checked_log_data_frag[canonical_suffix]:
     (drule_all log_packing_resources_copy_frame >> simp[]) >>
   `type_memory_size (TupleTV (select_log_args F flags ftvs)) < dimword(:256)` by decide_tac >>
   drule_all log_selected_tuple_type >> strip_tac >>
+  `~packed.vs_call_ctx.cc_static` by
+    (qpat_assum `copy_state_frame ss packed`
+       (strip_assume_tac o REWRITE_RULE [copy_state_frame_def]) >>
+     drule abi_state_frame_observables >> simp[]) >>
   drule_all log_data_allocate_emit_frag >>
   disch_then (qspec_then `ctx` assume_tac) >>
   drule_all log_packing_path_frag >>

@@ -99,7 +99,8 @@ Theorem compile_log_abi_emit_frag:
   enc_pre st encode_end [dst;src] lo top tv v (w2n sw)
     [(w2n dw,LENGTH (enc (vyper_to_abi_type env ty) av))] s0 /\
   EVERY (log_abi_old_operand st) (dst::ops) /\
-  LENGTH ops < dimword(:256) /\ eval_operands ops s0 = SOME ws ==>
+  LENGTH ops < dimword(:256) /\ eval_operands ops s0 = SOME ws /\
+  ~s0.vs_call_ctx.cc_static ==>
   frag_exec ctx st final (\s. s = s0)
     (\s. mem_bytes_at (w2n dw)
             (LENGTH (enc (vyper_to_abi_type env ty) av)) s.vs_memory =
@@ -137,6 +138,7 @@ Proof
     (fs[] >> drule_all log_enc_frame_operand >> simp[]) >>
   `eval_operands ops encoded = SOME ws` by
     (fs[] >> drule_all log_enc_frame_topics >> simp[]) >>
+  `~encoded.vs_call_ctx.cc_static` by fs[] >>
   drule_all log_abi_emit_suffix >>
   disch_then (qspec_then `ctx` assume_tac) >>
   irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>

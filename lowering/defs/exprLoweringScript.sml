@@ -164,6 +164,16 @@ Definition concat_payload_capacity_def:
   concat_payload_capacity _ = 32
 End
 
+Theorem concat_payload_capacity_bound:
+  !ts. EVERY (\t. (?bd. t = BaseT (BytesT bd)) \/ ?m. t = BaseT (StringT m)) ts ==>
+       MAP bytelike_type_bound ts = MAP concat_payload_capacity ts
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  gvs[vyperTypeSystemTheory.bytelike_type_bound_def, concat_payload_capacity_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[bound_length_def, concat_payload_capacity_def]
+QED
+
 Definition concat_buffer_type_def:
   concat_buffer_type ret_ty n =
     (case ret_ty of

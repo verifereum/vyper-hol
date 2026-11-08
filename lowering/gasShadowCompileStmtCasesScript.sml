@@ -160,9 +160,7 @@ Theorem gas_shadow_stmt_return_none:
     (compile_stmt cenv lctx ty (gas_shadow_stmt (Return NONE)))
 Proof
   simp[gas_shadow_stmt_def, compile_stmt_def] >>
-  Cases_on `cenv.ce_return_pc` >>
-  simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_op,
-       gas_shadow_compiles_emit_inst]
+  Cases_on `cenv.ce_return_pc`
   >- (Cases_on `cenv.ce_ctor_exit_label` >> simp[gas_shadow_compiles_emit_inst] >>
       pairarg_tac >> simp[comp_ignore_bind_def] >>
       ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
@@ -170,8 +168,8 @@ Proof
                               gas_shadow_compiles_return]) >>
       simp[gas_shadow_compiles_emit_inst]) >>
   rename1 `SOME loc` >> Cases_on `loc` >>
-  simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_op,
-       gas_shadow_compiles_emit_inst] >>
+  simp[comp_ignore_bind_def, gas_shadow_compiles_bind, gas_shadow_compiles_return_unlock,
+       gas_shadow_compiles_emit_op, gas_shadow_compiles_emit_inst] >>
   Cases_on `cenv.ce_ctor_exit_label` >> simp[gas_shadow_compiles_emit_inst] >>
   pairarg_tac >> simp[comp_ignore_bind_def] >>
   (ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac

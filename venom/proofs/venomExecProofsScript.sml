@@ -248,7 +248,7 @@ Triviality step_inst_ok_terminator_jump_fields[local]:
     v.vs_inst_idx = 0 /\ v.vs_prev_bb = SOME s.vs_current_bb /\
     v.vs_halted = s.vs_halted /\
     (!x. lookup_var x v = lookup_var x s) /\
-    v.vs_labels = s.vs_labels
+    v.vs_labels = s.vs_labels /\ v.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
@@ -588,6 +588,34 @@ Proof
       step_inst_ok_terminator_jump_fields >>
     impl_tac >- gvs[] >> rw[])
   >- metis_tac[step_preserves_labels]
+QED
+
+Theorem step_inst_ok_preserves_call_ctx:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==> s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+        step_inst_ok_terminator_jump_fields >>
+      impl_tac >- gvs[] >> rw[])
+  >- (drule_all step_preserves_call_ctx >> simp[])
+QED
+
+Theorem exec_block_preserves_call_ctx:
+  !fuel ctx bb s s'.
+    exec_block fuel ctx bb s = OK s' ==> s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  ho_match_mp_tac (cj 2 run_defs_ind) >>
+  qexists_tac `\fuel ctx inst s. T` >>
+  qexists_tac `\fuel ctx fn s. T` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  simp[Once exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  imp_res_tac step_inst_ok_preserves_call_ctx >>
+  rw[] >> gvs[]
 QED
 
 (* MEM + ALL_DISTINCT labels ==> lookup_block finds the block *)
