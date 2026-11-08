@@ -38,7 +38,7 @@ Ancestors
   configuredE2ECorrectness
   finalizerContract asmSymBridge asmOptPruneJumps asmOptMergeIszero
   asmOptPeephole
-  asmOptPruneUnused
+  asmOptPruneUnused asmOptMergeJumpdests
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
