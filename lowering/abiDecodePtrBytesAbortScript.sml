@@ -186,6 +186,31 @@ Resume abi_decode_bytes_member_abort_ptr[count_success]:
 QED
 
 Resume abi_decode_bytes_member_abort_ptr[payload_entry]:
+  `s4.vs_inst_idx = LENGTH c4.cs_current_insts` by simp[Abbr `s4`] >>
+  qpat_assum `run_inst_seq (emitted_insts sa c3) s = _`
+    (mp_then (Pat `run_inst_seq xs s = _`) mp_tac emitted_insts_join_normalized_ptr) >>
+  disch_then drule_all >> strip_tac >>
+  suspend "payload_setup"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_setup]:
+  `inst_extends sa c4` by metis_tac[inst_extends_trans] >>
+  `emitted_insts sa sb = emitted_insts sa c4 ++ emitted_insts c4 sb` by
+    (irule emitted_insts_append >> asm_rewrite_tac[GSYM inst_extends_def]) >>
+  `run_inst_seq (emitted_insts c4 sb) s4 =
+    Abort a (u with vs_inst_idx := s4.vs_inst_idx)` by
+    (irule abi_decode_run_continue_abort_normalized >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`s`, `emitted_insts sa c4`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_assum `emitted_insts sa sb = emitted_insts sa c4 ++ _`
+       (fn th => pure_once_rewrite_tac[GSYM th]) >>
+     first_assum ACCEPT_TAC) >>
+  suspend "payload_guard"
+QED
+
+Resume abi_decode_bytes_member_abort_ptr[payload_guard]:
   cheat
 QED
 
