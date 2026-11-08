@@ -3,7 +3,7 @@ Ancestors
   passSharedFrame passSharedVarFrame dftCommutation execEquivProofs
   execEquivParamBase execEquivParamHelpers execEquivParamProps
   deadStoreElimProofs mem2varBlockSimHelpers allocaRemapProofs
-  prevBbIndep concretizeMemLocProofs ssaRenamedSim tailMergeStep
+  prevBbIndep concretizeMemLocProofs tailMergeStep
 
 (* This is a production-boundary audit, not whole-task validation.  Check the
    persisted theorem tags as well as rebuilding the strict consumers. *)
@@ -15,7 +15,7 @@ val audited_create_boundary_theories =
    "deadStoreElimProofs", "mem2varBlockSimHelpers", "allocaRemapProofs",
    "oracleExecProps", "venomInstProofs1", "venomInstProofs", "instIdxIndep",
    "execEquivParamDefs", "prevBbIndep", "concretizeMemLocProofs",
-   "ssaRenamedSim", "tailMergeStep"];
+   "tailMergeStep"];
 
 val _ = app (fn thy =>
   let val thms = DB.thms thy

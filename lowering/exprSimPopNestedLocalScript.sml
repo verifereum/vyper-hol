@@ -98,8 +98,8 @@ Resume pop_nested_local_live_case[normal]:
      (w2n b + k) t.vs_memory` by
     (drule_all exprSimPopNestedLocalMemoryTheory.val_in_memory_mutable_path >> simp[]) >>
   `mload (w2n (b + n2w k)) t = n2w (LENGTH vs)` by
-    (fs[valueEncodingTheory.val_in_memory_def] >>
-     gvs[venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def,
+    (fs[valueEncodingDefsTheory.val_in_memory_def] >>
+     gvs[venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def,
          arithmeticTheory.ADD_COMM]) >>
   `MAP FDOM es.scopes = MAP FDOM tend.scopes` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -153,7 +153,7 @@ Resume pop_nested_local_live_case[nonempty]:
   `well_formed_type_value (ArrayTV etv (Dynamic n'))` by
     metis_tac[vyperPlaceStatePreservationTheory.subscripts_type_well_formed] >>
   `LENGTH vs < dimword (:256)` by
-    (fs[valueEncodingTheory.val_wf_def, vyperTypingTheory.well_formed_type_value_def]) >>
+    (fs[valueEncodingDefsTheory.val_wf_def, vyperTypingTheory.well_formed_type_value_def]) >>
   `mload (w2n (b + n2w k)) t <> 0w` by
     (simp[] >> simp[wordsTheory.n2w_11] >> Cases_on `vs` >> gvs[]) >>
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by fs[listTheory.ALL_DISTINCT] >>
@@ -173,7 +173,7 @@ Resume pop_nested_local_live_case[nonempty]:
   disch_then (qspec_then `cx` mp_tac) >>
   simp[Abbr `fin`] >> strip_tac >>
   `k + 32 + (LENGTH vs - 1) * type_memory_size etv <= sz` by
-    (`LENGTH vs <= n'` by fs[valueEncodingTheory.val_wf_def] >>
+    (`LENGTH vs <= n'` by fs[valueEncodingDefsTheory.val_wf_def] >>
      ` (LENGTH vs - 1) * type_memory_size etv <= n' * type_memory_size etv` by
        (irule arithmeticTheory.LESS_MONO_MULT >> decide_tac) >>
      qpat_x_assum `(LENGTH vs - 1) * _ <= _` mp_tac >>

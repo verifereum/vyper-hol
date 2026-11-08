@@ -5,6 +5,7 @@ Ancestors
   deadStoreElimDefs deadStoreElimMemory basePtrDefs memLocDefs venomMemDefs
   venomInst venomState venomExecSemantics venomMemProps passSharedProps passSharedDefs
   passSimulationDefs
+  passTransform
 
 Definition dse_safety_agrees_def:
   dse_safety_agrees s t <=>

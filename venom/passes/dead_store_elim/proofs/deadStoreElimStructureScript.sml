@@ -6,6 +6,7 @@ Ancestors
   passSimulationDefs passSimulationProps passSharedDefs venomInst venomWf dfIterateDefs
   list rich_list indexedLists finite_map venomExecProofs cfgDefs venomEffects
   passSharedProps venomExecSemantics
+  passTransform
 
 Theorem bp_handle_inst_empty_outputs:
   inst.inst_outputs = [] ==> bp_handle_inst r inst = (F,r)

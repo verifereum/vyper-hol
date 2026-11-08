@@ -3,6 +3,7 @@ Ancestors
   deadStoreElimMemoryObserve deadStoreElimTerminalSteps deadStoreElimTerminalEquiv
   deadStoreElimLocal deadStoreElimPending deadStoreElimSafety deadStoreElimDefs
   basePtrDefs memLocDefs venomExecSemantics venomState venomMemDefs venomEffects venomInst list
+  deadStoreElimFrame
 
 Theorem dse_memory_terminal_retained:
   inst.inst_opcode IN {RETURN; REVERT} /\

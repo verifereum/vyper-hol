@@ -3,7 +3,7 @@ Theory stmtSimReasonStoragePath
 Ancestors
   exprSimStorageCopy storageCopyGasPath fragGasPath fragGasSeq gasCount
   fragExec exprLoweringProps emitHelperProps venomInstProps loweringHalt
-  context compileEnv
+  context compileEnv loweringStateRelDefs
   venomExecSemantics venomState venomInst words arithmetic list rich_list
 
 Theorem storage_reason_modular_test[local]:

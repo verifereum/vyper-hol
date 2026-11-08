@@ -9,6 +9,7 @@ Ancestors
   deadStoreElimDefs deadStoreElimEquiv passSimulationDefs basePtrDefs
   memLocDefs venomInst venomExecSemantics venomState cfgDefs vfmTypes
   byte While combin finite_map list rich_list pred_set words
+  deadStoreElimFrame
 
 Triviality w2n_32_256[local]:
   w2n (32w:256 word) = 32

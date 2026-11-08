@@ -2,6 +2,7 @@ Theory deadStoreElimExternalObservations
 Ancestors
   deadStoreElimLocal deadStoreElimPending deadStoreElimDefs
   deadStoreElimFrameReadSteps venomExecSemantics venomState vfmState
+  deadStoreElimFrame
 Libs
   deadStoreElimFrameLib
 

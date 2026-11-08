@@ -4,6 +4,7 @@ Ancestors
   deadStoreElimSafety deadStoreElimEquiv deadStoreElimDefs deadStoreElimDloadGuard
   finite_map deadStoreElimStructure venomWf
   basePtrDefs memLocDefs venomExecSemantics venomState venomEffects venomInst list
+  deadStoreElimFrame
 Libs
   deadStoreElimFrameLib
 

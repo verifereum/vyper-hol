@@ -6,6 +6,7 @@ Ancestors
   venomInst list passSharedDefs deadStoreElimStepSimulation deadStoreElimLocal
   deadStoreElimPending deadStoreElimContinuation deadStoreElimJumpSteps
   venomInstProps venomExecProofs venomExecProps stateEquiv deadStoreElimUnsupported deadStoreElimEquiv
+  deadStoreElimFrame passTransform
 Libs
   deadStoreElimFrameLib
 

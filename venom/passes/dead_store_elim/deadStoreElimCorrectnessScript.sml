@@ -19,6 +19,7 @@ Ancestors
   decoratedExecution deadStoreElimStructure deadStoreElimEquiv venomWf
   basePtrProps While deadStoreElimDefs passSharedDefs passSharedProps
   venomInst passSimulationProps allocaRemapDefs pointerConfinedDefs
+  deadStoreElimFrame
 
 (* ===== Obligations ===== *)
 

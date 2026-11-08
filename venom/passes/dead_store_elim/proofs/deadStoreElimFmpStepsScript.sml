@@ -3,6 +3,7 @@ Ancestors
   deadStoreElimLocal deadStoreElimPending deadStoreElimLiveness
   deadStoreElimMemory deadStoreElimSafety deadStoreElimDefs basePtrDefs memLocDefs
   venomExecSemantics venomState venomEffects venomInst list
+  deadStoreElimFrame
 
 Theorem dse_local_agrees_fmp:
   dse_local_agrees sp P s t ==>

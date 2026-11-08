@@ -15,6 +15,7 @@ Ancestors
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
   mmCopy mmScan passSharedField execEquivProps memzeroFrame
+  passTransform
 Libs
   memzeroFrameLib stepInstBaseLib
 

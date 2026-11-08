@@ -51,6 +51,7 @@ Ancestors
   dfIterateDefs finite_map basePtrDefs
   venomExecSemantics allocaRemapDefs pointerConfinedDefs
   venomEffects oracleExecProps
+  passTransform
 Libs
   BasicProvers deadStoreElimFrameLib
 

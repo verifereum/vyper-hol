@@ -3,6 +3,7 @@ Ancestors
   deadStoreElimPureSteps deadStoreElimLocal deadStoreElimPending
   deadStoreElimLiveness deadStoreElimSafety deadStoreElimDefs
   venomExecSemantics venomState venomEffects venomInst basePtrDefs memLocDefs
+  deadStoreElimFrame
 Libs
   deadStoreElimFrameLib
 

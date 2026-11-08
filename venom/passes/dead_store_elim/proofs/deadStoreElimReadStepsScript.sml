@@ -4,6 +4,7 @@ Ancestors
   deadStoreElimLiveness deadStoreElimDefs basePtrDefs memLocDefs
   venomExecSemantics venomState venomEffects venomInst venomMemDefs
   deadStoreElimEquiv list
+  deadStoreElimFrame
 
 Theorem dse_load_write_location:
   inst.inst_opcode IN {MLOAD; SLOAD; TLOAD} ==>
