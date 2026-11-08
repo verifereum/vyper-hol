@@ -86,6 +86,24 @@ Proof
   first_x_assum irule >> goal_assum drule >> simp[]
 QED
 
+(* IntCall's cleanup is skipped when the body halts. *)
+Theorem state_rel_frame_finally_unless_halt:
+  (!s t u. R s t /\ R t u ==> R s u) /\
+  state_rel_frame R f /\ state_rel_frame R g ==>
+  state_rel_frame R (finally_unless_halt f g)
+Proof
+  simp[state_rel_frame_def] >> rpt strip_tac >>
+  simp[finally_unless_halt_def] >>
+  Cases_on `f st` >> rename1 `f st = (q, r)` >>
+  `R st r` by
+    (qpat_x_assum `!st. R st (SND (f st))` (qspec_then `st` mp_tac) >>
+     simp[]) >>
+  `R r (SND (g r))` by simp[] >>
+  Cases_on `q` >> TRY (Cases_on `y`) >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `g r` >> Cases_on `q` >> gvs[] >> metis_tac[]
+QED
+
 Theorem machine_frame_primitives:
   state_rel_frame machine_frame (vyperState$return x) /\
   state_rel_frame machine_frame (vyperState$raise e) /\

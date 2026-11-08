@@ -24,7 +24,7 @@ val R_tm = mk_var ("R", type_of ``machine_frame``);
 val eval_frame_net =
   let
     val rules = [state_rel_frame_bind_guarded, state_rel_frame_try,
-      state_rel_frame_finally]
+      state_rel_frame_finally, state_rel_frame_finally_unless_halt]
     val leaves = [machine_frame_primitives, machine_frame_read_result,
       machine_frame_read_results, machine_frame_reads, machine_frame_select_result,
       machine_frame_extend_place, machine_frame_get_place, machine_frame_read_place,
@@ -129,7 +129,9 @@ Theorem eval_state_rel_frame:
   (!cx fl a d m g. state_rel_frame R (eval_raw_call cx fl a d m g)) /\
   (!cx k h r ts vs cs. state_rel_frame R (eval_create cx k h r ts vs cs)) /\
   (!a n v. state_rel_frame R (acquire_nonreentrant_lock a n v)) /\
-  (!a n. state_rel_frame R (release_nonreentrant_lock a n)) ==>
+  (!a n. state_rel_frame R (release_nonreentrant_lock a n)) /\
+  (!f. state_rel_frame R (update_accounts f)) /\
+  (!f. state_rel_frame R (update_pending_deletions f)) ==>
   (!cx s. state_rel_frame R (eval_stmt cx s)) /\
   (!cx ss. state_rel_frame R (eval_stmts cx ss)) /\
   (!cx it. state_rel_frame R (eval_iterator cx it)) /\

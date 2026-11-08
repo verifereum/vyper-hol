@@ -387,7 +387,9 @@ Theorem log_extends_eval_frame[local]:
   (!cx k h r ts vs cs.
      state_rel_frame log_extends (eval_create cx k h r ts vs cs)) /\
   (!a n v. state_rel_frame log_extends (acquire_nonreentrant_lock a n v)) /\
-  (!a n. state_rel_frame log_extends (release_nonreentrant_lock a n))
+  (!a n. state_rel_frame log_extends (release_nonreentrant_lock a n)) /\
+  (!f. state_rel_frame log_extends (update_accounts f)) /\
+  (!f. state_rel_frame log_extends (update_pending_deletions f))
 Proof
   rewrite_tac[state_rel_frame_result] >> rpt conj_tac >> rpt gen_tac
   >- metis_tac[log_extends_trans]
@@ -401,8 +403,12 @@ Proof
   >- metis_tac[eval_ext_call_log_extends]
   >- metis_tac[eval_raw_call_log_extends]
   >- metis_tac[eval_create_logs_extend, log_extends_def]
-  >- metis_tac[acquire_nonreentrant_lock_logs, log_extends_eq_logs] >>
-  metis_tac[release_nonreentrant_lock_logs, log_extends_eq_logs]
+  >- metis_tac[acquire_nonreentrant_lock_logs, log_extends_eq_logs]
+  >- metis_tac[release_nonreentrant_lock_logs, log_extends_eq_logs]
+  >- (strip_tac >> irule log_extends_eq_logs >>
+      gvs[vyperStateTheory.update_accounts_def, vyperStateTheory.return_def]) >>
+  strip_tac >> irule log_extends_eq_logs >>
+  gvs[vyperStateTheory.update_pending_deletions_def, vyperStateTheory.return_def]
 QED
 
 Theorem eval_mutual_log_extends =
