@@ -27,8 +27,8 @@ Proof
   gvs[exprLoweringTheory.lowered_value_type_def] >>
   Cases_on `LENGTH args = 1 /\ ~ensure` >> gvs[] >>
   `MAP (lowered_value_type c') args = MAP (lowered_value_type c) args` by
-    (irule MAP_CONG >> simp[] >> metis_tac[]) >>
-  metis_tac[]
+    (irule MAP_CONG >> rw[] >> metis_tac[]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> gvs[]
 QED
 
 Theorem ext_call_alloc_ok_struct_fields:

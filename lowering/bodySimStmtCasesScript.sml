@@ -1153,7 +1153,7 @@ Proof
       strip_tac >> gvs[expr_type_def] >>
       drule storage_not_bytestring >>
       gvs[well_typed_builtin_app_def, is_bytestring_type_def])
-  >- (rpt gen_tac >> strip_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
