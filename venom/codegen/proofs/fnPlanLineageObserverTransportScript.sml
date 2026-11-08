@@ -1745,3 +1745,51 @@ Proof
     (LENGTH (collect_phis bb.bb_instructions)) qs` by metis_tac[] >>
   drule_all native_inst_prefix_phi_schedule >> simp[]
 QED
+
+Theorem native_phi_schedule_endpoint:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  collect_phis bb.bb_instructions <> [] /\
+  fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt 0 len
+    bb.bb_instructions incoming (LENGTH (collect_phis bb.bb_instructions)) endpoint /\
+  phi_origin_schedule_ready
+    (MAPi (\j inst. (inst,live_vars_at lv lbl (j+1),halt))
+      (collect_phis bb.bb_instructions)) padding other cells cells_end /\
+  incoming.ps_stack = padding ++ MAP (phi_cell_value T) cells ==>
+  endpoint.ps_stack = padding ++ MAP (phi_cell_value T) cells_end /\
+  endpoint.ps_spilled = incoming.ps_spilled
+Proof
+  strip_tac >> drule_all ready_native_inst_prefix_phi_schedule >> strip_tac >>
+  drule fnPlanLineagePhiTemporalTheory.phi_origin_schedule_state_replay >>
+  disch_then (qspecl_then [`incoming`,
+    `incoming with ps_stack := other ++ MAP (phi_cell_value F) cells`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem native_phi_endpoint_observer_support:
+  codegen_ready_fn fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ collect_phis bb.bb_instructions <> [] /\
+  fnPlanLineageEntryProduction$native_inst_prefix (liveness_analyze fn) dfg cfg fn lbl halt 0 len
+    bb.bb_instructions incoming (LENGTH (collect_phis bb.bb_instructions)) endpoint /\
+  phi_origin_schedule_ready
+    (MAPi (\j inst. (inst,live_vars_at (liveness_analyze fn) lbl (j+1),halt))
+      (collect_phis bb.bb_instructions)) padding other cells cells_end /\
+  incoming.ps_stack = padding ++ MAP (phi_cell_value T) cells /\
+  MAP (phi_cell_value T) cells = MAP Var
+    (input_vars_from pred bb.bb_instructions (live_vars_at (liveness_analyze fn) lbl 0)) /\
+  phi_origin_tagged (native_phi_class pred (collect_phis bb.bb_instructions)) cells /\
+  EVERY (\c. ?op. c = PhiCommon op) cells_end /\
+  EVERY (\op. op = dead_stack_marker) padding /\
+  (!inst. MEM inst (collect_phis bb.bb_instructions) ==> ~MEM v inst.inst_outputs) ==>
+  MEM (Var v) endpoint.ps_stack ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  strip_tac >> drule_all native_phi_schedule_endpoint >> strip_tac >>
+  strip_tac >>
+  `~MEM (Var v) padding` by
+    (fs[EVERY_MEM] >>
+     qpat_x_assum `!op. MEM op padding ==> _` (qspec_then `Var v` mp_tac) >>
+     simp[dead_stack_marker_def]) >>
+  `MEM (Var v) (MAP (phi_cell_value T) cells_end)` by gvs[] >>
+  drule_all (REWRITE_RULE [arithmeticTheory.ADD1]
+    fnPlanLineagePhiScheduleTheory.analyzed_native_phi_schedule_observer_support) >> simp[]
+QED
