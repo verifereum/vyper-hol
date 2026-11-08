@@ -59,6 +59,7 @@ Proof
   irule (SRULE [expr_type_def]
     (Q.INST [`e` |-> `IfExp t c a b`] ifexp_word_vv_post_read)) >>
   goal_assum (drule_at Any) >> simp[] >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_word] >>
   irule expr_post_ifexp >> simp[] >> metis_tac[]
 QED
 

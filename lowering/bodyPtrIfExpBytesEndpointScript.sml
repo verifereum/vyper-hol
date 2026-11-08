@@ -6,6 +6,7 @@ Ancestors
   ghostPcTransportPtr bodyPtrIfExpAllocSource stmtFragPtr
 
 Theorem ifexp_bytes_destination_expr_post:
+  post_value_type ce result = expr_type result /\
   vv_post ctx fn ce cx arm es sa sc s0 ee raw vv t /\
   stmt_state_rel ctx fn ce cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sc /\
@@ -75,7 +76,7 @@ Theorem ifexp_expr_post_inst_idx[simp]:
   expr_post ctx fn ce cx e es sa sb s0 ee v op s
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
-       expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def]
 QED
 
 Theorem ifexp_pointer_post_inst_idx[simp]:

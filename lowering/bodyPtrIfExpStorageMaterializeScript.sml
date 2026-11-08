@@ -7,6 +7,7 @@ Ancestors bodyPtrIfExpStorageCaller bodyPtrIfExpStorageSource
   copyExecution exprLoweringProps exprSimCopy loweringHalt
 
 Theorem ifexp_ensure_memory_storage_loop:
+  post_value_type ce e = expr_type e /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\
   stmt_state_rel ctx fn ce cx es s0 /\
@@ -117,6 +118,7 @@ Finalise ifexp_ensure_memory_storage_loop
 
 (* Both compiler branches finish at the end of the current instruction list. *)
 Theorem ifexp_ensure_memory_storage:
+  post_value_type ce e = expr_type e /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\
   stmt_state_rel ctx fn ce cx es s0 /\

@@ -1,17 +1,9 @@
 Theory bodyPtrIfExpUnwrapContract
 Ancestors
   bodyPtrDefs loweringPosts exprLowering context compileEnv
-  exprSimUnwrap bodyPtrIfExpUnwrapNoop
+  exprSimUnwrap bodyPtrIfExpUnwrapNoop exprPtrUnwrapMarked valueCopyBytes
 
-(* LocatedValue carries its annotation exactly; StackValue deliberately
-   does not. This is a semantic boundary, independent of source layout. *)
-Theorem vv_post_located_type:
-  !ctx fn cenv cx e es sa sc s0 es' tv ty p s.
-    vv_post ctx fn cenv cx e es sa sc s0 es' tv (LocatedValue ty p) s ==>
-    ty = expr_type e
-Proof
-  simp[vv_post_def, vv_holds_def]
-QED
+(* The disjunctive located-tag boundary is exported by exprPtrUnwrapMarked. *)
 
 (* The allocating IfExp arm has a non-word result annotation. Therefore
    every word LocatedValue load is unreachable at this particular caller,
@@ -19,6 +11,7 @@ QED
 Theorem ifexp_allocated_unwrap_dispatch:
   !ctx fn cenv cx e es sa sc s0 es' tv ty p s.
     vv_post ctx fn cenv cx e es sa sc s0 es' tv (LocatedValue ty p) s /\
+    post_value_type cenv e = expr_type e /\
     ~is_word_type (expr_type e) ==>
     ~is_word_type ty /\ p.ptr_location <> LocCalldata /\
     unwrap_value cenv (LocatedValue ty p) =
@@ -30,7 +23,9 @@ Theorem ifexp_allocated_unwrap_dispatch:
                 cenv.ce_is_ctor cenv.ce_imm_alloca)
 Proof
   rpt gen_tac >> strip_tac >>
-  `ty = expr_type e` by metis_tac[vv_post_located_type] >>
+  `~is_word_type ty` by
+    metis_tac[exprPtrUnwrapMarkedTheory.vv_post_located_type,
+              is_bytestring_word_type] >>
   `p.ptr_location <> LocCalldata` by metis_tac[vv_post_calldata] >>
   simp[unwrap_value_def]
 QED

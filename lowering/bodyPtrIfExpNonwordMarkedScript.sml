@@ -9,6 +9,9 @@ Theorem ifexp_raw_marked_nonword_suffix:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   ~is_word_type ty /\ ~ce.ce_is_ctor /\
   compile_expr ce rty arm sa = (vv,sm) /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\
@@ -64,6 +67,9 @@ Theorem ifexp_selected_nonword_marked:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   ~is_word_type ty /\ ~ce.ce_is_ctor /\
   compile_expr ce rty arm sa = (vv,sm) /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\

@@ -7,6 +7,9 @@ Theorem ifexp_selected_nonword_outcome_ptr:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   ~is_word_type ty /\ ~ce.ce_is_ctor /\
   expr_vv_sim_ptr d ctx PG fn ce cx rty arm es /\
   compile_expr ce rty arm sa = (vv,sm) /\

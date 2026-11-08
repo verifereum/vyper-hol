@@ -1,5 +1,6 @@
 Theory bodyPtrIfExpNonwordBody
 Ancestors
+  bodyPtrIfExpWidened
   bodyPtrIfExpNonwordCallerPremises bodyPtrIfExpWordCallerPremises
   bodyPtrIfExpConditionSource bodyPtrIfExpNonwordOutcome bodyPtrIfExpLocatedFinish
   bodyPtrIfExpWordTyping
@@ -12,6 +13,10 @@ Ancestors
 Theorem ifexp_selected_body_nonword_outcome_ptr:
   (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx a) /\
   (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx b) /\
+  ((int_calls_expr a = [] \/ same_memory_layout cenv (lowered_value_type cenv a) (expr_type a)) /\
+   post_value_type cenv a = expr_type a) /\
+  ((int_calls_expr b = [] \/ same_memory_layout cenv (lowered_value_type cenv b) (expr_type b)) /\
+   post_value_type cenv b = expr_type b) /\
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env (IfExp t c a b) es /\
   ~is_word_type t /\
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
@@ -63,6 +68,10 @@ QED
 Theorem ifexp_nonword_normal_continuation_ptr:
   (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx a) /\
   (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx b) /\
+  ((int_calls_expr a = [] \/ same_memory_layout cenv (lowered_value_type cenv a) (expr_type a)) /\
+   post_value_type cenv a = expr_type a) /\
+  ((int_calls_expr b = [] \/ same_memory_layout cenv (lowered_value_type cenv b) (expr_type b)) /\
+   post_value_type cenv b = expr_type b) /\
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env (IfExp t c a b) es /\
   ~is_word_type t /\ expr_type c = BaseT BoolT /\
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
@@ -103,7 +112,7 @@ Theorem ifexp_nonword_normal_continuation_ptr:
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee gt r. expr_exit res r)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `bind (eval_expr cx c) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL (BoolV sel),mid with gas_obs := [])` by
@@ -118,10 +127,12 @@ Proof
   qexistsl_tac [`G1`,`tn1`,`jump_to (if sel then tl else el) u`] >>
   reverse conj_tac
   >- (irule ifexp_jnz_path_ptr >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  irule ifexp_located_arm_finish_ptr >> goal_assum (drule_at Any) >> simp[] >>
+  irule ifexp_located_arm_finish_ptr >>
+  goal_assum (drule_at Any) >> simp[] >>
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`cop`,`if sel then a else b`,`op`,`sc`,`se`,`sx`,`sy`,`sz`,`BoolV sel`] >>
   simp[] >> conj_tac >- (Cases_on `sel` >> simp[]) >>
+  conj_tac >- (Cases_on `sel` >> simp[]) >>
   irule ifexp_selected_body_nonword_outcome_ptr >> goal_assum (drule_at Any) >> simp[] >>
   simp[jump_to_def, ghost_inv_jump_to, stmt_state_rel_jump_to] >>
   `stmt_state_rel ctx fn cenv cx mid u` by fs[expr_post_def] >>
@@ -134,11 +145,17 @@ Theorem ifexp_nonword_framed_vv_ptr:
   ~is_word_type t /\
   (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx a) /\
   (!s raw ee. eval_expr cx c s = (INL raw,ee) ==> body_expr_ptr_ok cx b) /\
-  body_expr_ptr_ok cx c /\ body_inv tops ctx cenv cx /\
+  body_expr_ptr_ok cx c /\
+  ((int_calls_expr a = [] \/ same_memory_layout cenv (lowered_value_type cenv a) (expr_type a)) /\
+   post_value_type cenv a = expr_type a) /\
+  ((int_calls_expr b = [] \/ same_memory_layout cenv (lowered_value_type cenv b) (expr_type b)) /\
+   post_value_type cenv b = expr_type b) /\
+  body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (IfExp t c a b) es ==>
   expr_vv_sim_ptr d ctx PG fn cenv cx ty (IfExp t c a b) es
 Proof
-  strip_tac >> rewrite_tac[expr_vv_sim_ptr_def] >> rpt strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rewrite_tac[expr_vv_sim_ptr_def] >> rpt strip_tac >>
   `!e sa sb op. (e = a \/ e = b) /\ lower_value compile_expr cenv ty e sa = (op,sb) ==>
      cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id` by
     metis_tac[cj 2 compile_expr_grows] >>
@@ -160,20 +177,24 @@ Proof
   disch_then drule_all >>
   disch_then (strip_assume_tac o REWRITE_RULE
     [gas_outcome_ptr_def, gas_summary_ptr_at_marked])
-  >- (gvs[] >> suspend "normal")
+  >- (gnvs[] >> suspend "normal")
   >- (irule ifexp_condition_exit_ptr >> metis_tac[]) >>
   irule ifexp_condition_exempt_ptr >> metis_tac[]
 QED
 
 Resume ifexp_nonword_framed_vv_ptr[normal]:
+  markerLib.RESUME_TAC >>
+  qpat_x_assum `?v. _` strip_assume_tac >> gnvs[] >>
   `bind (eval_expr cx c) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL v,es_end with gas_obs := [])` by
-    (fs[gas_marked_exec_ptr_def] >> metis_tac[APPEND_NIL]) >>
+    (qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_ptr_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
   `?sel. v = BoolV sel` by
-    (irule ifexp_condition_bool >> goal_assum (drule_at Any) >> metis_tac[]) >> gvs[] >>
+    (irule ifexp_condition_bool >> goal_assum (drule_at Any) >> metis_tac[]) >> gnvs[] >>
   drule_all ifexp_nonword_code_layout >>
-  disch_then (qspec_then `sel` strip_assume_tac) >> gvs[] >>
+  disch_then (qspec_then `sel` strip_assume_tac) >> gnvs[] >>
   `~t'.vs_halted` by
     (fs[gas_marked_exec_ptr_def] >> metis_tac[gas_path_ptr_ok_not_halted]) >>
   irule gas_outcome_ptr_conseq >>
@@ -184,7 +205,11 @@ Resume ifexp_nonword_framed_vv_ptr[normal]:
   goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >> simp[] >>
-  qexistsl_tac [`tops`,`env`,`d`] >> simp[expr_type_def, mk_ptr_def] >> metis_tac[]
+  qexistsl_tac [`tops`,`env`,`d`] >> simp[expr_type_def, mk_ptr_def] >>
+  `post_value_type cenv c = expr_type c` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     simp[compileEnvTheory.is_word_type_def]) >>
+  fs[] >> metis_tac[]
 QED
 
 Finalise ifexp_nonword_framed_vv_ptr
@@ -197,7 +222,17 @@ Theorem ifexp_nonword_expr_ptr_ok:
     body_expr_ptr_ok cx c ==>
     body_expr_ptr_ok cx (IfExp t c a b)
 Proof
-  rpt gen_tac >> strip_tac >> simp[body_expr_ptr_ok_def] >> rpt strip_tac >>
+  rpt gen_tac >> strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> disch_then strip_assume_tac >>
+  Cases_on `?e. (e = a \/ e = b) /\
+    ~((int_calls_expr e = [] \/
+       same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+      post_value_type cenv e = expr_type e)`
+  >- metis_tac[body_ifexp_widened_call_arm_ptr] >>
+  `((int_calls_expr a = [] \/ same_memory_layout cenv (lowered_value_type cenv a) (expr_type a)) /\
+     post_value_type cenv a = expr_type a) /\
+   ((int_calls_expr b = [] \/ same_memory_layout cenv (lowered_value_type cenv b) (expr_type b)) /\
+     post_value_type cenv b = expr_type b)` by metis_tac[] >>
   `expr_vv_sim_ptr d ctx PG func cenv cx ty (IfExp t c a b) es` by
     (irule ifexp_nonword_framed_vv_ptr >> goal_assum (drule_at Any) >> metis_tac[]) >>
   simp[] >> irule expr_sim_ptr_of_vv >> goal_assum (drule_at Any) >> metis_tac[]

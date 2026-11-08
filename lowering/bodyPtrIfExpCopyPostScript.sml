@@ -7,6 +7,7 @@ Ancestors exprSimCopy loweringPosts exprLoweringProps freshWrites
    remains arbitrary: reading a place does not make it a Value constructor. *)
 Theorem ifexp_copy_buffer_post_transport:
   !ctx func cenv cx e es sa sm mid sb s0 es' raw v vv s u z tv op w sz inst.
+    post_value_type cenv e = expr_type e /\
     vv_post ctx func cenv cx e es sa sm s0 es' raw vv s /\
     read_result cx raw es' = (INL v,es') /\
     local_ptrs_reserved cenv sa /\

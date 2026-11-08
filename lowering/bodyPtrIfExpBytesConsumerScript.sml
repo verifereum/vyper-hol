@@ -6,6 +6,7 @@ Ancestors
   exprSimBufferStore vyperTyping valueCopyBytes exprLoweringProps valueEncodingTyping
 
 Theorem ifexp_allocated_bytes_writer:
+  post_value_type ce result = expr_type result /\
   vv_post ctx fn ce cx arm es sa sc s0 ee raw vv t /\
   stmt_state_rel ctx fn ce cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\

@@ -6,6 +6,7 @@ Ancestors bodyPtrIfExpUnwrapContract bodyPtrIfExpNoopPost
   exprLowering exprSimUnwrap valueEncodingTyping vyperState venomState finite_map words arithmetic
 
 Theorem ifexp_unwrap_nonword_path_capacity:
+  post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ ~ce.ce_is_ctor /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\ unwrap_value ce vv sm = (op,sb) /\
@@ -41,10 +42,14 @@ Proof
   strip_tac >> Cases_on `vv`
   >- suspend "stack" >>
   rename1 `LocatedValue tag pp` >>
-  `tag = expr_type e` by metis_tac[vv_post_located_type] >>
+  `~is_word_type tag` by
+    metis_tac[exprPtrUnwrapMarkedTheory.vv_post_located_type,
+              valueCopyBytesTheory.is_bytestring_word_type] >>
   `pp.ptr_location <> LocCalldata` by metis_tac[vv_post_calldata] >>
   Cases_on `pp.ptr_location = LocMemory`
   >- suspend "memory" >>
+  `tag = expr_type e` by
+    metis_tac[exprPtrUnwrapMarkedTheory.vv_post_located_type] >>
   Cases_on `pp.ptr_location = LocCode`
   >- suspend "runtime" >>
   suspend "storage"
@@ -140,6 +145,7 @@ QED
 Finalise ifexp_unwrap_nonword_path_capacity
 
 Theorem ifexp_unwrap_nonword_path:
+  post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ ~ce.ce_is_ctor /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\ unwrap_value ce vv sm = (op,sb) /\

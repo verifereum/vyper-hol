@@ -8,24 +8,27 @@ Theorem ifexp_allocating_arm_noncall:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es_arm /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
   vv_post ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty ==>
   ~(?ann fid args dret. arm = Call ann (IntCall fid) args dret)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `lowered_value_type ce arm <> expr_type arm` by
-    metis_tac[ifexp_allocating_lowered_differs] >>
   `expr_type arm = ty` by gvs[expr_body_pre_def, well_typed_expr_def] >>
-  strip_tac >> gvs[] >>
-  drule_all ifexp_allocating_call_zero_metadata >> strip_tac >>
-  drule_all ifexp_zero_call_layout >> gvs[expr_type_def]
+  `int_calls_expr arm = []` by metis_tac[] >>
+  strip_tac >> gvs[vyperTypeCallGraphTheory.int_calls_expr_def]
 QED
 
 Theorem ifexp_allocating_arm_bytes_inputs:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es_arm /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
   vv_post ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty /\
@@ -48,6 +51,9 @@ Theorem ifexp_allocating_arm_bytes_code:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty cond a b) es /\
   (arm = a \/ arm = b) /\ expr_body_pre ce cx env_arm arm es_arm /\
+  (int_calls_expr arm = [] \/
+   same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
+  post_value_type ce arm = expr_type arm /\
   compile_expr ce (expr_type arm) arm sa = (vv,sb) /\
   vv_post ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
   local_ptrs_reserved ce sa /\ eval_expr cx arm es_arm = (INL raw,ee) /\

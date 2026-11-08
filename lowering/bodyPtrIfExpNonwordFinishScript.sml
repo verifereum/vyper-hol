@@ -24,7 +24,7 @@ Theorem ifexp_stack_vv_post_read:
   read_result cx tv ee = (INL v,ee) ==>
   vv_post ctx fn ce cx e es sa sb s0 ee tv (StackValue tag op) s
 Proof
-  simp[expr_post_def, vv_post_def, vv_holds_def, vv_at_def] >>
+  simp[expr_post_def, vv_post_def, vv_holds_def, vv_at_def, vv_own_def] >>
   metis_tac[]
 QED
 
@@ -69,6 +69,7 @@ QED
 
 Theorem ifexp_nonword_arm_finish_ptr:
   expr_post ctx fn ce cx c es sa s1 s0 es1 v1 cop tt /\
+  post_value_type ce e = expr_type e /\
   expr_type e = t /\ ~is_word_type t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   local_ptrs_reserved ce sa /\ stmt_state_rel ctx fn ce cx es s0 /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
