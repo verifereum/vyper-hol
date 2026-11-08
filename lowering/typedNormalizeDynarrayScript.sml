@@ -33,7 +33,8 @@ Proof
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
        eval_operand_def, lookup_var_update_var, w2n_n2w, bool_to_word_def,
-       mstore_def, write_memory_with_expansion_def, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[mstore_def, write_memory_with_expansion_def, update_var_def,
        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE,
                        venom_state_component_equality]

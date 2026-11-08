@@ -419,7 +419,9 @@ Resume typed_store_rank_mem_cont[dynamic_equal_finish]:
   conj_tac >- metis_tac[dynarray_in_memory_capacity_irrelevant] >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>
-      fs[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
+      simp[Excl "LE_MULT_RCANCEL"] >>
+      qpat_x_assum `type_memory_size (ArrayTV tv (Dynamic cap)) + w2n dw <= _` mp_tac >>
+      simp[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
   conj_tac
   >- (qpat_x_assum `u with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
       qpat_x_assum `s.vs_current_bb = sa.cs_current_bb` mp_tac >>

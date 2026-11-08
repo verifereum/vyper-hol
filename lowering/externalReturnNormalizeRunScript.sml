@@ -22,7 +22,7 @@ Proof
   `step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)]
     [STRING #"%" (toString sb.cs_next_var)]) s = OK t` by
     (fs[mk_inst_def] >>
-     simp[step_inst_base_def, mk_inst_def, eval_operands_def, eval_operand_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def, eval_operand_def]) >>
   `frag_exec_mem ctx sb sc (\u. u = s)
     (\u. u = t with vs_inst_idx := LENGTH sc.cs_current_insts) (K F)` by
     metis_tac[actual_alloc_buffer_step_mem] >>
