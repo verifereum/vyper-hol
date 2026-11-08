@@ -1488,3 +1488,40 @@ Resume native_seeded_phi_body_dead_stack[crossing]:
 QED
 
 Finalise native_seeded_phi_body_dead_stack
+
+(* The demand bridge is used only after all PHIs have executed without a
+   definition of the observer; it says nothing about raw PHI alternatives. *)
+Theorem native_edge_phi_body_dead:
+  !fn bb pred v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    ~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0)) /\
+    EVERY (\inst. ~MEM v inst.inst_outputs) (collect_phis bb.bb_instructions) ==>
+    ~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `phi_block_ready (liveness_analyze fn) bb` by
+    metis_tac[fnPlanLineagePhiInputExclusionTheory.phi_codegen_block_ready] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >>
+     metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze]) >>
+  `EVERY (\inst. ~MEM v (inst_defs inst)) (collect_phis bb.bb_instructions)` by
+    gvs[venomInstTheory.inst_defs_def] >>
+  gvs[fnPlanLineageLivenessTheory.analyzed_ready_phi_live_through_edge]
+QED
+
+Theorem clean_stack_plan_stack_absent:
+  !lv cfg fn bb ps ops qs v.
+    clean_stack_plan lv cfg fn bb ps = (ops,qs) /\
+    ~MEM (Var v) ps.ps_stack ==> ~MEM (Var v) qs.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule clean_stack_plan_resource_nonincrease >>
+  disch_then (qspec_then `v` mp_tac) >>
+  drule fnPlanLineageInventoryTheory.clean_stack_plan_spilled_unchanged >>
+  strip_tac >> gvs[GSYM LIST_ELEM_COUNT_MEM]
+QED
