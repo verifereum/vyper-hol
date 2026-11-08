@@ -55,6 +55,7 @@ QED
 
 Theorem len_vv_path_ptr:
   !env ctx func PG d cenv cx e es sa sm sb s0 es' r vv op tv t G0 tn0 G tn.
+    post_value_type cenv e = expr_type e /\
     compile_builtin_len cenv.ce_is_ctor cenv.ce_imm_alloca (vv_operand vv)
       (case vv_location vv of SOME l => l | NONE => LocMemory) sm = (op,sb) /\
     local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sa /\
@@ -90,7 +91,11 @@ Theorem len_vv_path_ptr:
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es' t /\
-   vv_holds cenv cx (expr_type e) r vv es' t` by fs[vv_post_def] >>
+   vv_holds cenv cx (expr_type e) r vv es' t` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[vv_post_def] >>
+     qpat_assum `post_value_type cenv e = _` (fn th => rewrite_tac[th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   drule_all len_operand_header >> strip_tac >>
   qabbrev_tac `loc = case vv_location vv of SOME l => l | NONE => LocMemory` >>
   `?opc.

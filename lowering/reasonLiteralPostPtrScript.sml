@@ -107,7 +107,7 @@ Proof
     (Q.INST [`e` |-> `Literal (BaseT (StringT ml)) (StringL str)`]
       literal_ptr_memory_vv_frame_post) >>
   disch_then (irule o REWRITE_RULE [expr_type_def]) >>
-  simp[is_word_type_def, w2n_n2w] >>
+  simp[is_word_type_def, w2n_n2w, expr_type_def] >>
   qexistsl_tac [`32+32*word_size ml`, `p`, `sh`, `u`] >>
   asm_rewrite_tac[] >> reverse conj_tac
   >- (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = u` mp_tac >>

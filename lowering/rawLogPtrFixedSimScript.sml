@@ -386,6 +386,7 @@ QED
 Resume raw_log_fixed32_body_frag_ptr[fixed_post]:
   qmatch_goalsub_abbrev_tac `expr_post ctx func cenv cx call` >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
+  `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>
   `LENGTH sb.cs_current_insts = t''.vs_inst_idx + 2` by simp[] >>
   rename1 `run_inst_seq [_;_] t'' = OK out` >>
   `run_inst_seq (emitted_insts sn sb) t'' = OK out` by
@@ -430,6 +431,7 @@ Resume raw_log_fixed32_body_frag_ptr[fixed_post]:
        (OK (out with vs_inst_idx := LENGTH sb.cs_current_insts))` (irule_at Any) >>
      qpat_assum `ghost_inv _ _ _ (_ with logs := _) _ _
        (out with vs_inst_idx := LENGTH sb.cs_current_insts)` (irule_at Any) >>
+     qpat_assum `post_value_type cenv call = _` (irule_at Any) >>
      simp[mk_inst_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
   `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by decide_tac >>
   `ghost_kept cenv es sa G0 tn0 s0 G' tn''` by

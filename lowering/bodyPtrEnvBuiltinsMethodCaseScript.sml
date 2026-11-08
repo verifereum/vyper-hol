@@ -74,6 +74,16 @@ Resume method_id_runtime_sim_ptr[normal]:
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> fs[cs_extends_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    (`is_word_type (expr_type e) \/ is_bytestring_type (expr_type e)` by
+       (Cases_on `bty` >> gvs[is_word_type_def, is_bytestring_type_def] >>
+        rename1 `BytesT bd` >> Cases_on `bd` >>
+        gvs[vyperValueTheory.evaluate_type_def, is_word_type_def, is_bytestring_type_def]) >>
+     metis_tac[loweringPostsTheory.post_value_type_word,
+               loweringPostsTheory.post_value_type_bytestring]) >>
+  qpat_x_assum `post_value_type cenv e = _` (fn th =>
+    qpat_assum `expr_type e = _` (fn th2 =>
+      RULE_ASSUM_TAC (REWRITE_RULE [TRANS th th2]))) >>
   drule method_id_runtime_vv_suffix >>
   simp[] >> disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>

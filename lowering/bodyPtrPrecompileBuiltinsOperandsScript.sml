@@ -4,6 +4,7 @@ Ancestors bodyPtrPrecompileBuiltinsGhost exprSimAttributeFields exprSimProps
           vyperValue bodyPtrDefs representationCleanPtr vyperABI contractABI
 
 Theorem ec_point_interval_clean_kept:
+  post_value_type cenv e1 = expr_type e1 /\
   expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_sim_inv cenv cx env es /\ eval_operand x t = SOME w /\
@@ -16,6 +17,7 @@ Proof
     (Cases_on `v1` >> simp[val_footprint_def, type_memory_size_def]) >>
   `expr_val_at cenv cx (expr_type e1) sa s1 es1 v1 x t` by
     gvs[expr_post_def] >>
+  qpat_x_assum `post_value_type _ _ = _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_val_at_def, local_val_at_def, evaluate_type_def,
        is_word_type_def, type_slot_size_def, wordsTheory.dimword_def] >>
@@ -27,7 +29,9 @@ Proof
      drule local_path_at_dynarray_apart >> disch_then drule >>
      simp[dynarray_free_fixed, dynarray_free_base, type_memory_size_def] >>
      disch_then drule >> decide_tac) >>
-  metis_tac[ghost_kept_local_clean]
+  drule ghost_kept_local_clean >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then ACCEPT_TAC
 QED
 
 Theorem word_ptr_val_ok_kept:
@@ -42,6 +46,7 @@ Proof
 QED
 
 Theorem ec_point_clean_kept:
+  post_value_type cenv e1 = expr_type e1 /\
   expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_sim_inv cenv cx env es /\
@@ -64,6 +69,7 @@ Proof
   `!i. w2n w0 <= i /\ i < w2n w0 + 64 ==> i NOTIN tn.t_mem` by
     (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)
        ec_point_interval_clean_kept >> simp[] >>
+     disch_then drule >> simp[] >>
      disch_then drule >> simp[] >> disch_then drule >> simp[]) >>
   metis_tac[optionTheory.SOME_11]
 QED

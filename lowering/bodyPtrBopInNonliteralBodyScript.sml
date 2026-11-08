@@ -1,5 +1,6 @@
 Theory bodyPtrBopInNonliteralBody
 Ancestors bodyPtrBopInRuntimeContinuation bodyPtrBopInSourceTyping
+  bodyPtrBopInCallHaystackResidual
   exprSimBopRestWordFacts exprBopLowering exprLowering compileEnv
   exprSimOperators bodyPtrPreds exprPtrUnwrap exprSimWordArgs wordArgsPtr
   bodyPtrBopInRuntimeCompiler bodyPtrBopInHeaderCode exprSimBopRestWordBasics
@@ -85,6 +86,7 @@ QED
 
 
 Theorem nonliteral_expr_sim_ptr:
+  post_value_type cenv e2 = expr_type e2 /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
   expr_type e2 = ArrayT (expr_type e1) bd /\
@@ -105,7 +107,8 @@ Proof
   `local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
   rewrite_tac[membership_source_bind] >>
-  drule_at (Pat `lower_value _ _ _ _ _ = _`) membership_mixed_source_adapter >>
+  drule_at (Pat `lower_value _ _ _ _ _ = _`)
+    (UNDISCH (SPEC_ALL membership_mixed_source_adapter)) >>
   disch_then drule >> disch_then irule >> simp[] >>
   conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
   conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
@@ -147,8 +150,11 @@ QED
 Resume nonliteral_expr_sim_ptr[success]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `vv_holds cenv cx (expr_type e2) tv vv es2 s2` by
-    fs[bodyPtrBopInVvContractTheory.membership_vv_post_def,
-       loweringPostsTheory.vv_post_def] >>
+    (qpat_assum `membership_vv_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[bodyPtrBopInVvContractTheory.membership_vv_post_def,
+                 loweringPostsTheory.vv_post_def] >>
+     qpat_assum `post_value_type cenv e2 = _` (fn th => rewrite_tac[th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   drule_all membership_mixed_origin_success >> strip_tac >> gnvs[] >>
   drule expr_body_pre_bop >> strip_tac >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
@@ -165,6 +171,7 @@ Resume nonliteral_expr_sim_ptr[success]:
     metis_tac[not_fresh_at_mono] >>
   drule_all membership_mixed_post_frames >> strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var` by decide_tac >>
+  `post_value_type cenv e2 = expr_type e2` by fs[] >>
   drule_all membership_array_continuation_summary_ptr >>
   disch_then (qspecl_then [`Unsigned 0`,`e1`,`PG`,`cx_dead cx`] assume_tac) >>
   drule membership_typed_read_continuation >> disch_then (fn th => rewrite_tac[th]) >>
@@ -199,7 +206,9 @@ Proof
   simp[body_expr_ptr_ok_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_ptr d ctx PG func cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es` by
-    metis_tac[nonliteral_expr_sim_ptr] >>
+    (Cases_on `post_value_type cenv e2 = expr_type e2`
+     >- metis_tac[nonliteral_expr_sim_ptr]
+     >- metis_tac[bop_in_nonliteral_call_haystack_ptr]) >>
   conj_tac >- simp[] >>
   irule expr_vv_sim_ptr_stack >> simp[] >>
   reverse conj_tac >- metis_tac[eval_expr_builtin_value] >>

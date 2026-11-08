@@ -33,13 +33,16 @@ Proof
     (STRING #"%" (toString (sm.cs_next_var+k)))` by
     (rpt strip_tac >> irule local_ptrs_reserved_fresh >>
      goal_assum (drule_at Any) >> decide_tac) >>
-  fs[vv_post_def] >> gvs[] >> Cases_on `vv`
+  `post_value_type cenv r = expr_type r` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     fs[compileEnvTheory.is_bytestring_type_def]) >>
+  qpat_x_assum `post_value_type _ _ = _` (fn th => fs[vv_post_def, th]) >>
+  gvs[] >> Cases_on `vv`
   >- (irule (INST_TYPE [alpha |-> ``:type``] compile_revert_memory_string_endpoint_ptr) >> simp[] >>
       goal_assum (drule_at (Pat `vv_at _ _ _ _ _ _ _ _ _`)) >>
       simp[vv_operand_def, ADD_COMM] >>
       qexistsl [`BaseT (StringT max) : type`,`sb`] >> fs[vv_operand_def]) >>
   rename1 `LocatedValue vty p` >>
-  `vty = BaseT (StringT max)` by fs[vv_holds_def] >> gvs[] >>
   Cases_on `p.ptr_location`
   >- suspend "memory"
   >- suspend "storage"
@@ -49,6 +52,12 @@ Proof
 QED
 
 Resume compile_revert_string_endpoint_ptr[memory]:
+  `is_bytestring_type vty` by
+    (fs[vv_holds_def] >> metis_tac[is_bytestring_type_def]) >>
+  `~is_word_type vty` by
+    (Cases_on `vty` >> gvs[is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >> gvs[is_bytestring_type_def, is_word_type_def]) >>
   irule (INST_TYPE [alpha |-> ``:type``] compile_revert_memory_string_endpoint_ptr) >>
   simp[] >> goal_assum (drule_at (Pat `vv_at _ _ _ _ _ _ _ _ _`)) >>
   simp[is_word_type_def, ADD_COMM] >>
@@ -56,6 +65,7 @@ Resume compile_revert_string_endpoint_ptr[memory]:
 QED
 
 Resume compile_revert_string_endpoint_ptr[storage]:
+  `vty = BaseT (StringT max)` by fs[vv_holds_def] >> gvs[] >>
   irule (INST_TYPE [alpha |-> ``:type``] compile_revert_storage_string_endpoint_ptr) >>
   simp[] >> goal_assum (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >>
   qexists `BaseT (StringT max) : type` >> qexists `sm` >>
@@ -64,6 +74,7 @@ Resume compile_revert_string_endpoint_ptr[storage]:
 QED
 
 Resume compile_revert_string_endpoint_ptr[transient]:
+  `vty = BaseT (StringT max)` by fs[vv_holds_def] >> gvs[] >>
   irule (INST_TYPE [alpha |-> ``:type``] compile_revert_storage_string_endpoint_ptr) >>
   simp[] >> goal_assum (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >>
   qexists `BaseT (StringT max) : type` >> qexists `sm` >>
@@ -72,6 +83,7 @@ Resume compile_revert_string_endpoint_ptr[transient]:
 QED
 
 Resume compile_revert_string_endpoint_ptr[code]:
+  `vty = BaseT (StringT max)` by fs[vv_holds_def] >> gvs[] >>
   irule (INST_TYPE [alpha |-> ``:type``] compile_revert_code_string_endpoint_ptr) >>
   simp[] >> goal_assum (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >>
   qexists `BaseT (StringT max) : type` >> qexists `sm` >>
@@ -93,6 +105,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_body_pre cenv cx env r (es with gas_obs := gs)` by simp[] >>
   drule_all reason_string_source_typing >> strip_tac >>
+  `post_value_type cenv r = expr_type r` by
+    (irule loweringPostsTheory.post_value_type_bytestring >>
+     fs[compileEnvTheory.is_bytestring_type_def]) >>
+  qpat_x_assum `post_value_type cenv r = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule compile_revert_string_endpoint_ptr >> simp[] >>
   goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>

@@ -72,6 +72,10 @@ Resume membership_lower_typed_args[head_bind]:
         metis_tac[] >>
       `?tv. evaluate_type (get_tenv cx) (expr_type h) = SOME tv` by
         metis_tac[optionTheory.IS_SOME_EXISTS] >>
+      `post_value_type cenv h = expr_type h` by
+        metis_tac[loweringPostsTheory.post_value_type_word] >>
+      qpat_x_assum `post_value_type cenv h = _`
+        (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
       `local_ptrs_reserved cenv s1` by
         (irule local_ptrs_reserved_next_var >> metis_tac[]) >>
       irule (SRULE [SF ETA_ss] membership_typed_args_cons_tail) >> goal_assum (drule_at Any) >>

@@ -98,6 +98,7 @@ QED
 
 (* Consumers pass the concrete endpoint returned by the pointer tail. *)
 Theorem raw_log_dynamic_counted_post_ptr:
+  post_value_type cenv e = expr_type e /\
   emit_op MLOAD [data_op] sm = (len_op,s1) /\
   emit_op ADD [data_op; Lit 32w] s1 = (ptr_op,s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = (u,sb) /\
@@ -129,7 +130,10 @@ Theorem raw_log_dynamic_counted_post_ptr:
     (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   ghost_kept cenv es sm G tn s G' tn'
 Proof
-  strip_tac >> simp[] >>
+  strip_tac >>
+  qpat_x_assum `post_value_type cenv e = _` (fn th =>
+    qpat_assum `expr_type e = NoneT` (fn th2 => assume_tac (TRANS th th2))) >>
+  simp[] >>
   drule_all raw_log_dynamic_prepare_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm s2) s = OK mid` >>
   `s2.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm s2` by
@@ -158,6 +162,7 @@ Proof
 QED
 
 Theorem raw_log_fixed_counted_post_ptr:
+  post_value_type cenv e = expr_type e /\
   emit_void MSTORE [ptr_op; data_op] sm = (u,s1) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [Lit 32w;ptr_op]) [] s1 = (u',sb) /\
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
@@ -188,7 +193,10 @@ Theorem raw_log_fixed_counted_post_ptr:
     (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   ghost_kept cenv es sm G tn s G' tn'
 Proof
-  strip_tac >> simp[] >> drule_all raw_log_fixed_store_frame >> strip_tac >>
+  strip_tac >>
+  qpat_x_assum `post_value_type cenv e = _` (fn th =>
+    qpat_assum `expr_type e = NoneT` (fn th2 => assume_tac (TRANS th th2))) >>
+  simp[] >> drule_all raw_log_fixed_store_frame >> strip_tac >>
   `s1.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm s1` by
     (qpat_x_assum `emit_void MSTORE _ _ = _` mp_tac >>
      rpt (pop_assum kall_tac) >>

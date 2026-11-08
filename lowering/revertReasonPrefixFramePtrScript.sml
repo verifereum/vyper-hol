@@ -423,6 +423,10 @@ Proof
      `!k. k < 3 ==> s' <> STRING #"%" (toString (v+k))` by metis_tac[] >>
      conj_tac >- (first_x_assum drule >> simp[op_taint_def]) >>
      irule revert_reason_prefix_lookup_frame >> metis_tac[]) >>
+  `op_prov Gf p.ptr_operand = op_prov G p.ptr_operand` by
+    (Cases_on `p.ptr_operand` >> simp[op_prov_def] >>
+     `!k. k < 3 ==> s' <> STRING #"%" (toString (v+k))` by metis_tac[] >>
+     metis_tac[]) >>
   irule ptr_vv_ok_nonmemory_frame >> metis_tac[]
 QED
 

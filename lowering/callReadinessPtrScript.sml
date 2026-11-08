@@ -1,7 +1,7 @@
 (* Memory and pointer-check interfaces shared by CALL and STATICCALL. *)
 Theory callReadinessPtr
 Ancestors
-  oracleCallStepPtr valueEncoding venomInst venomState bodyPtrDefs stmtSimReturn
+  oracleCallStepPtr valueEncoding venomInst venomState bodyPtrDefs stmtSimReturn exprSimTypedAlloc
 
 Theorem mem_bytes_at_read_memory:
   mem_bytes_at off len s.vs_memory = bs ==>

@@ -9,6 +9,7 @@ Ancestors bodyPtrDefs loweringPosts exprLoweringProps compileEnv exprLowering
 Theorem assign_base_ptr_identity_post:
   !ctx func cenv cx e es sa sb s v op.
     stmt_state_rel ctx func cenv cx es s /\
+    post_value_type cenv e = expr_type e /\
     expr_val_rel cx (expr_type e) v op s /\
     expr_val_at cenv cx (expr_type e) sa sb es v op s ==>
     expr_post ctx func cenv cx e es sa sb s es v op s

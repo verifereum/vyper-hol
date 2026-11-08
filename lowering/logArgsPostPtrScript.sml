@@ -54,6 +54,7 @@ Theorem log_args_post_ptr_cons:
   sm.cs_next_id <= sb.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
   expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
   log_args_post ctx func cenv cx es1 sm sb t es' ys vs u /\
   ptr_val_ok cx (expr_type e) v x G1 tn1 t /\

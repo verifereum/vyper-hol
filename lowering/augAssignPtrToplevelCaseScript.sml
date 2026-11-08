@@ -356,7 +356,7 @@ Resume compile_augassign_toplevel_case_ptr[normal_compose]:
      `lookup_var x t = SOME w` by simp[] >>
      `lookup_var x t' = SOME w` by
        (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-          (mp_tac o cj 4 o REWRITE_RULE [expr_post_def]) >> simp[]) >>
+          (mp_tac o cj 5 o REWRITE_RULE [expr_post_def]) >> simp[]) >>
      `lookup_var x u = SOME w` by
        (qpat_x_assum `!z w. not_fresh_at s2 z /\ _ ==> _` irule >> simp[]) >>
      Cases_on `tr` >> fs[lookup_var_def]) >>

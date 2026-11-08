@@ -333,11 +333,14 @@ QED
 (* The semantic interface consumes exactly the expression endpoint's ordinary
    representation. Robust representation is needed separately by the taint post. *)
 Theorem assign_base_store_expr_source:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) ==>
   stmt_state_rel ctx func cenv cx es1 s /\
   ?b. eval_operand op s = SOME b /\ val_in_memory tv v (w2n b) s.vs_memory
 Proof
-  simp[expr_post_def, expr_val_rel_def] >> metis_tac[]
+  strip_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  asm_rewrite_tac[expr_post_def] >> simp[expr_val_rel_def] >> metis_tac[]
 QED

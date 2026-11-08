@@ -1,6 +1,6 @@
 (* Compiler decomposition for the supported storage assignment fragment. *)
 Theory assignBasePtrStorageFragment
-Ancestors assignBasePtrStorageTypes assignBasePtrStorageContinuation assignBasePtrStorageSemantic
+Ancestors bodyMemAssignTopCopyFacts assignBasePtrStorageTypes assignBasePtrStorageContinuation assignBasePtrStorageSemantic
   assignBasePtrStorageGhost stmtSimAssignStorage bodyPtrDefs stmtFragPtr
   stmtLowering exprLowering context compileEnv loweringPosts finite_map
   exprSimProps stmtSimProps stmtLoweringMono stmtSimForced gasSummaryComposePtr
@@ -82,7 +82,8 @@ Proof
   metis_tac[compile_word_copy_loop_open]
 QED
 
-Theorem compile_assign_storage_copy_stmt_frag_ptr:
+Theorem compile_assign_storage_copy_eq_frag_ptr:
+  post_value_type cenv e = expr_type e /\
   body_inv tops bctx cenv cx /\ expr_sim_inv cenv cx env es /\
   expr_body_pre cenv cx env e es /\ supported_expr tops e /\
   type_stmt env ret (Assign (BaseTarget (TopLevelNameTarget nid)) e) = SOME env' /\
@@ -137,7 +138,7 @@ Proof
   irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]
 QED
 
-Resume compile_assign_storage_copy_stmt_frag_ptr[summary]:
+Resume compile_assign_storage_copy_eq_frag_ptr[summary]:
   qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_ptr_at_marked] >> strip_tac
   >- suspend "operand" >>
@@ -147,7 +148,7 @@ Resume compile_assign_storage_copy_stmt_frag_ptr[summary]:
   disj2_tac >> simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
 QED
 
-Resume compile_assign_storage_copy_stmt_frag_ptr[operand]:
+Resume compile_assign_storage_copy_eq_frag_ptr[operand]:
   gvs[] >>
   drule_all assign_base_store_expr_source >> strip_tac >>
   drule gas_marked_exec_ptr_exec >> strip_tac >>
@@ -170,10 +171,14 @@ Resume compile_assign_storage_copy_stmt_frag_ptr[operand]:
   `not_fresh_at sB root` by metis_tac[compile_lower_value_var] >>
   `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `expr_val_at cenv cx (expr_type e) sa sB (es_end with gas_obs := [])
-     v (Var root) t` by fs[expr_post_def] >>
+     v (Var root) t` by
+    (qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type cenv e = _`
+       (fn th => rewrite_tac[expr_post_def, th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   suspend "counted"
 QED
-Resume compile_assign_storage_copy_stmt_frag_ptr[counted]:
+Resume compile_assign_storage_copy_eq_frag_ptr[counted]:
   `(case expr_type e of ArrayT elem (Dynamic _) =>
       SOME ((type_memory_bytes cenv elem + 31) DIV 32,
             type_memory_bytes cenv elem) | _ => NONE) = NONE` by
@@ -189,7 +194,7 @@ Resume compile_assign_storage_copy_stmt_frag_ptr[counted]:
   suspend "post"
 QED
 
-Resume compile_assign_storage_copy_stmt_frag_ptr[post]:
+Resume compile_assign_storage_copy_eq_frag_ptr[post]:
   `?writes. encode_value tv v = SOME writes` by
     metis_tac[value_has_type_equiv, optionTheory.IS_SOME_EXISTS] >>
   qmatch_asmsub_abbrev_tac `execution_frame u = execution_frame model` >>
@@ -224,7 +229,7 @@ Resume compile_assign_storage_copy_stmt_frag_ptr[post]:
      metis_tac[]) >>
   suspend "ghost"
 QED
-Resume compile_assign_storage_copy_stmt_frag_ptr[ghost]:
+Resume compile_assign_storage_copy_eq_frag_ptr[ghost]:
   `sa.cs_next_var <= sB.cs_next_var` by
     (drule (cj 2 compile_expr_grows) >> simp[]) >>
   `ret_pc_ok cenv sB t` by
@@ -240,7 +245,7 @@ Resume compile_assign_storage_copy_stmt_frag_ptr[ghost]:
   suspend "open"
 QED
 
-Resume compile_assign_storage_copy_stmt_frag_ptr[open]:
+Resume compile_assign_storage_copy_eq_frag_ptr[open]:
   `?gs rv es1. eval_expr cx e (es with gas_obs := gs) = (INL rv,es1)` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, bind_def, AllCaseEqs()] >> metis_tac[]) >>
@@ -259,7 +264,7 @@ Resume compile_assign_storage_copy_stmt_frag_ptr[open]:
   suspend "finish"
 QED
 
-Resume compile_assign_storage_copy_stmt_frag_ptr[finish]:
+Resume compile_assign_storage_copy_eq_frag_ptr[finish]:
   `!tail. write_storage_slot cx tr k tv v (es_end with gas_obs := tail) =
      (INL (),ee with gas_obs := tail)` by
     (gen_tac >>
@@ -279,4 +284,45 @@ Resume compile_assign_storage_copy_stmt_frag_ptr[finish]:
       fs[expr_post_def] >> metis_tac[]) >>
   fs[ghost_kept_def] >> metis_tac[not_fresh_at_mono]
 QED
-Finalise compile_assign_storage_copy_stmt_frag_ptr
+Finalise compile_assign_storage_copy_eq_frag_ptr
+
+
+Theorem compile_assign_storage_copy_stmt_frag_ptr:
+  body_inv tops bctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  expr_body_pre cenv cx env e es /\ supported_expr tops e /\
+  type_stmt env ret (Assign (BaseTarget (TopLevelNameTarget nid)) e) = SOME env' /\
+  supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
+  (!elem n. expr_type e <> ArrayT elem (Dynamic n)) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  well_formed_type_value tv /\
+  (storage_vars_rel cenv cx /\ transient_vars_rel cenv cx ==>
+   FLOOKUP cenv.ce_module_vars nid =
+    SOME (if tr then TransientLoc k else StorageLoc k)) /\
+  cenv.ce_hashmap_info nid = NONE /\ cenv.ce_module_var_type nid = SOME (expr_type e) /\
+  declared_storage_region cx mid id [] = SOME (tr,k,tv) /\
+  w2n k + type_slot_size tv <= dimword (:256) /\
+  (!mid' id' subs' k' tv'.
+     declared_storage_region cx mid' id' subs' = SOME (tr,k',tv') /\
+     (k',tv') <> (k,tv) ==>
+     ranges_disjoint (w2n k) (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
+  eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nid)) e) =
+    bind (bind (eval_expr cx e) (read_result cx)) (write_storage_slot cx tr k tv) /\
+  (!gs v es1. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+     (INL v,es1) ==> value_has_type tv v) /\
+  expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es ==>
+  stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
+    (stmt_env cenv lctx ret (Assign (BaseTarget (TopLevelNameTarget nid)) e))
+    (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nid)) e)) es
+Proof
+  strip_tac >>
+  `lowered_value_type cenv e = expr_type e` by
+    (mp_tac (Q.SPECL [`cenv`, `e`, `tops`, `bctx`, `cx`, `env`, `es`]
+               bodyMemAssignTopCopyFactsTheory.topcopy_rhs_lowered_type) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  mp_tac (SPEC_ALL compile_assign_storage_copy_eq_frag_ptr) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED

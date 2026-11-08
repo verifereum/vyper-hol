@@ -3,7 +3,7 @@ Theory rawCallPrefixReadyPtr
 Ancestors
   rawCallPrefixPtr rawCallAllocatedFinishPtr vyperTypeExtCallSoundness
   exprSimSource exprSimSend vyperInterpreter exprSimWordArgs exprSimHash
-  stmtSimReturn abiEncoderWindowSource rawCallResultLayoutPtr
+  stmtSimReturn exprSimTypedAlloc abiEncoderWindowSource rawCallResultLayoutPtr
 
 Theorem raw_call_keywords_post:
   !ks xs vs.

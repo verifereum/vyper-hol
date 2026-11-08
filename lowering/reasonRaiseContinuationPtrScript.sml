@@ -192,7 +192,7 @@ Theorem compile_raise_reason_path_frag_ptr:
    fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\
    ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\ fn_inst_ids_distinct func /\
    vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\
-   ghost_inv d cenv cx ee G tn t /\ ptr_vv_ok cx (expr_type r) tv vv ee G tn t /\
+   ghost_inv d cenv cx ee G tn t /\ ptr_vv_ok cx (post_value_type cenv r) tv vv ee G tn t /\
    read_result cx tv ee = (INL (StringV str),ee) /\
    (?gin gout. eval_expr cx r (es with gas_obs := gin) =
      (INL tv, ee with gas_obs := gout)) /\

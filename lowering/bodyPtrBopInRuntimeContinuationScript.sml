@@ -25,6 +25,7 @@ Proof
 QED
 
 Theorem membership_array_continuation_summary_ptr:
+  post_value_type cenv e2 = expr_type e2 /\
   membership_vv_post d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1 tvv ee s G tn /\
   compile_expr cenv ty e2 sc = (vv,sm) /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sm /\
