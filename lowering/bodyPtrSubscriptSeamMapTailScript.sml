@@ -55,3 +55,14 @@ Proof
       simp[]) >>
   gvs[emitted_insts_def, same_blocks_def]
 QED
+
+Theorem mapping_key_encoding_extends:
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) ==>
+  cs_extends sn sp
+Proof
+  strip_tac >> Cases_on `is_bytestring_type kt` >> gvs[]
+  >- (qspec_then `key` (qspec_then `F` (qspec_then `sn` mp_tac))
+        ci_mono_compile_keccak256_key >> simp[ci_mono_def]) >>
+  MATCH_ACCEPT_TAC compileEnvTheory.cs_extends_refl
+QED
