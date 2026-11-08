@@ -1094,7 +1094,7 @@ Proof
   gvs[expr_body_pre_def]
 QED
 
-Theorem aug_place_storage_read_ready[local]:
+Theorem aug_place_storage_read_ready:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   slots_in_range (get_storage cx st tr) (w2n slot) tv ==>
   ?cur. read_place cx (StoragePlace tr slot tv) st = (INL cur,st) /\
