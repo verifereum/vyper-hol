@@ -222,7 +222,7 @@ Proof
   `get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Lit 0w] [cv])` by
     metis_tac[instruction_prefix_cursor] >>
   `step_inst_base (mk_inst id ASSIGN [Lit 0w] [cv]) s = OK (update_var cv 0w s)` by
-    simp[step_inst_base_def, mk_inst_def, eval_operands_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def, eval_operand_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn (mk_inst id ASSIGN [Lit 0w] [cv]) s` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
           mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def] >>
@@ -517,7 +517,7 @@ Proof
   conj_tac >- (gen_tac >> Cases_on `op = Var cv` >>
     gvs[op_taint_def] >> Cases_on `op = Lit 32w` >> gvs[op_taint_def]) >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_opcode_eqs] >>
   pure_rewrite_tac[instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, AllCaseEqs(), update_var_def] >>
@@ -573,7 +573,7 @@ Proof
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_opcode_eqs] >>
   pure_rewrite_tac[instruction_accessors, instruction_accfupds,
                    combinTheory.K_THM, opcode_case_def] >>
   simp[exec_read1_def, AllCaseEqs(), update_var_def] >>
@@ -655,7 +655,7 @@ Proof
   qabbrev_tac `i = mk_inst id ADD [src;Var cv] [sv]` >>
   qabbrev_tac `u = update_var sv (a + n2w k) s` >>
   `step_inst_base i s = OK u` by
-    (simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
           exec_pure2_def, eval_operands_def, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
@@ -670,7 +670,7 @@ Proof
   qabbrev_tac `v = update_var vv (copy_runtime_word loc s (a+n2w k)) u1` >>
   `step_inst_base j u1 = OK v` by
     (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
-      step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def,
+      step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def,
       lookup_var_def, update_var_def, FLOOKUP_UPDATE, copy_runtime_word_def,
       sload_def, tload_def, contract_storage_def, contract_transient_def] >>
      Cases_on `loc = LocStorage` >> simp[]) >>
@@ -702,7 +702,7 @@ Proof
     (simp[Abbr `v1`, Abbr `v`, Abbr `u1`, Abbr `u`, eval_operand_def,
       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
   `step_inst_base l v1 = OK w` by
-    (simp[Abbr `l`, Abbr `w`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `l`, Abbr `w`, step_inst_base_opcode_eqs, mk_inst_def,
       exec_pure2_def, eval_operands_def] >>
      simp[NoAsms, eval_operand_def, word_mul_n2w]) >>
   `ptr_inst_ok D 0 0 ctx fn G2 tn2 l v1` by
@@ -728,7 +728,7 @@ Proof
     simp[Abbr `w1`, Abbr `w`, eval_operand_def, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base p w1 = OK x` by
-    simp[Abbr `p`, Abbr `x`, step_inst_base_def, mk_inst_def,
+    simp[Abbr `p`, Abbr `x`, step_inst_base_opcode_eqs, mk_inst_def,
       exec_pure2_def, eval_operands_def] >>
   `ptr_covers G3 tn3 dst w1 (32*n)` by
     gvs[Abbr `w1`, ptr_covers_def, lookup_var_def] >>
@@ -756,7 +756,7 @@ Proof
     simp[Abbr `x1`, Abbr `x`, Abbr `w1`, Abbr `w`, Abbr `v1`, Abbr `v`,
          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   `step_inst_base q x1 = OK y` by
-    (simp[Abbr `q`, Abbr `y`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `q`, Abbr `y`, step_inst_base_opcode_eqs, mk_inst_def,
          eval_operands_def, exec_write2_def] >> REFL_TAC) >>
   `ptr_covers G4 tn4 dv x1 32` by
     gvs[Abbr `x1`, ptr_covers_def, lookup_var_def] >>
@@ -776,7 +776,7 @@ Proof
       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      gvs[lookup_var_def]) >>
   `step_inst_base h y1 = OK z` by
-    (simp[Abbr `h`, Abbr `z`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `h`, Abbr `z`, step_inst_base_opcode_eqs, mk_inst_def,
           exec_pure2_def, eval_operands_def] >> simp[NoAsms, eval_operand_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G5 tn5 h y1` by
     (simp[Abbr `h`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
@@ -791,7 +791,7 @@ Proof
   qabbrev_tac `f = mk_inst (id+6) ASSIGN [Var nv] [cv]` >>
   qabbrev_tac `t = update_var cv (n2w k + 1w) z1` >>
   `step_inst_base f z1 = OK t` by
-    simp[Abbr `f`, Abbr `t`, Abbr `z1`, Abbr `z`, step_inst_base_def,
+    simp[Abbr `f`, Abbr `t`, Abbr `z1`, Abbr `z`, step_inst_base_opcode_eqs,
          mk_inst_def, exec_read1_def, eval_operand_def, lookup_var_def,
          update_var_def, FLOOKUP_UPDATE] >>
   `ptr_inst_ok D 0 0 ctx fn G6 tn6 f z1` by
@@ -961,10 +961,10 @@ Theorem toplevel_copy_backedge_path:
 Proof
   strip_tac >> irule toplevel_copy_jump_inv_path >>
   simp[] >>
-  simp[step_inst_base_def, mk_inst_def, ptr_inst_ok_def, access_ok_def,
+  simp[step_inst_base_opcode_eqs, mk_inst_def, ptr_inst_ok_def, access_ok_def,
        taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
        mk_inst_def, jump_to_def, op_taint_def]
 QED
 
@@ -1021,7 +1021,7 @@ Proof
      gvs[arithmeticTheory.LESS_MOD]) >>
   `step_inst_base (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) s =
      OK (update_var tv (bool_to_word (k=n)) s)` by
-    simp[step_inst_base_def, exec_pure2_def, mk_inst_def,
+    simp[step_inst_base_opcode_eqs, exec_pure2_def, mk_inst_def,
          eval_operands_def, eval_operand_def] >>
   `ptr_inst_ok D 0 0 ctx fn G tn
      (mk_inst id EQ [Var cv;Lit (n2w n)] [tv]) s` by
@@ -1048,7 +1048,7 @@ Proof
   `step_inst_base (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) t =
     OK (jump_to (if k=n then exit_lbl else body_lbl) t)` by
     (Cases_on `k=n` >>
-     simp[step_inst_base_def, mk_inst_def, eval_operand_def, bool_to_word_def]) >>
+     simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def, bool_to_word_def]) >>
   `ptr_inst_ok D 0 0 ctx fn G1 tn1
     (mk_inst (id+1) JNZ [Var tv;Label exit_lbl;Label body_lbl] []) t` by
     (simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
@@ -1200,11 +1200,11 @@ Proof
   qabbrev_tac `j = mk_inst (id+1) ASSIGN [Var nv] [cv]` >>
   qabbrev_tac `u = update_var nv (w+1w) s` >>
   `step_inst_base i s = OK u` by
-    simp[Abbr `i`, Abbr `u`, step_inst_base_def, exec_pure2_def,
+    simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, exec_pure2_def,
          mk_inst_def, eval_operands_def, eval_operand_def] >>
   qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   `step_inst_base j u1 = OK (update_var cv (w+1w) u1)` by
-    simp[Abbr `j`, Abbr `u1`, Abbr `u`, step_inst_base_def, exec_read1_def,
+    simp[Abbr `j`, Abbr `u1`, Abbr `u`, step_inst_base_opcode_eqs, exec_read1_def,
          mk_inst_def, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[inst_seq_ptr_def] >> strip_tac >>
@@ -1343,13 +1343,13 @@ Proof
     (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]` >>
   qabbrev_tac `u = update_var sv (a+c) s` >>
   `step_inst_base i s = OK u` by
-    simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+    simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
          exec_pure2_def, eval_operands_def, eval_operand_def] >>
   qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `v = update_var vv (copy_runtime_word loc s (a+c)) u1` >>
   `step_inst_base j u1 = OK v` by
     (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
-      step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def,
+      step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def, eval_operand_def,
       lookup_var_def, update_var_def, FLOOKUP_UPDATE, copy_runtime_word_def,
       sload_def, tload_def, contract_storage_def, contract_transient_def] >>
      Cases_on `loc = LocStorage` >> simp[]) >>
@@ -1381,13 +1381,13 @@ Proof
   qabbrev_tac `h = mk_inst (id+2) MSTORE [Var dv;Var vv] []` >>
   qabbrev_tac `u = update_var mv (n2w (32*k)) s` >>
   `step_inst_base i s = OK u` by
-    (simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
           exec_pure2_def, eval_operands_def, eval_operand_def] >>
      simp[NoAsms, word_mul_n2w]) >>
   qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `v = update_var dv (n2w (b+32*k)) u1` >>
   `step_inst_base j u1 = OK v` by
-    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`, step_inst_base_def,
+    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`, step_inst_base_opcode_eqs,
          mk_inst_def, exec_pure2_def, eval_operands_def, eval_operand_def,
          lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      gvs[lookup_var_def, GSYM word_add_n2w]) >>
@@ -1396,7 +1396,7 @@ Proof
   qabbrev_tac `w = mstore (b+32*k) z v1` >>
   `step_inst_base h v1 = OK w` by
     (simp[Abbr `h`, Abbr `w`, Abbr `v1`, Abbr `v`, Abbr `u1`, Abbr `u`,
-          step_inst_base_def, exec_write2_def, mk_inst_def, eval_operands_def,
+          step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def, eval_operands_def,
           eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
      gvs[lookup_var_def] >> REFL_TAC) >>
   qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -1406,7 +1406,7 @@ Proof
     simp[Abbr `u`, Abbr `v`, update_var_def] >>
   `w.vs_allocas = v1.vs_allocas /\ w.vs_fmp = v1.vs_fmp` by
     (qpat_x_assum `step_inst_base h v1 = OK w` mp_tac >>
-     simp[Abbr `h`, step_inst_base_def, mk_inst_def, exec_write2_def,
+     simp[Abbr `h`, step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
           eval_operands_def, AllCaseEqs(), mstore_def] >>
      rpt strip_tac >> gvs[]) >>
   `eval_operand (Var dv) v1 = SOME (n2w (b+32*k))` by
@@ -1453,10 +1453,10 @@ Proof
     (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]` >>
   qabbrev_tac `u = update_var sv (a+c) s` >>
   `step_inst_base i s = OK u` by
-    simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+    simp[Abbr `i`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
          exec_pure2_def, eval_operands_def, eval_operand_def] >>
   `step_inst_base j u = OK (update_var vv (copy_runtime_word loc s (a+c)) u)` by
-    (simp[Abbr `j`, Abbr `u`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `j`, Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
           exec_read1_def, eval_operand_def, lookup_var_def, update_var_def,
           FLOOKUP_UPDATE, copy_runtime_word_def, sload_def, tload_def,
           contract_storage_def, contract_transient_def] >>
@@ -1813,11 +1813,11 @@ Theorem toplevel_copy_jmp_path:
 Proof
   strip_tac >> irule toplevel_copy_raw_jump_path >>
   conj_tac >- simp[] >> qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`] >>
-  simp[mk_inst_def, step_inst_base_def, ptr_inst_ok_def, access_ok_def,
+  simp[mk_inst_def, step_inst_base_opcode_eqs, ptr_inst_ok_def, access_ok_def,
        taint_ok_def, allocas_from_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def] >>
   simp[GSYM mk_inst_def, step_inst_non_invoke, jump_to_def] >>
-  simp[step_inst_base_def, mk_inst_def, jump_to_def, op_taint_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, jump_to_def, op_taint_def]
 QED
 
 
