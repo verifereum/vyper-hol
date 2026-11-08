@@ -1434,3 +1434,96 @@ Proof
   Cases_on `eval_operands inst.inst_operands s` >>
   simp[inline_opaque_frame_istore]
 QED
+
+Theorem inline_opaque_frame_jump:
+  inline_opaque_frame_rel ren V opaque saved P s t ==>
+  inline_opaque_frame_rel ren V opaque saved P
+    (jump_to dst s) (jump_to (lab dst) t)
+Proof
+  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
+    inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+    jump_to_def, lookup_var_def]
+QED
+
+Theorem inline_jump_control:
+  t.vs_current_bb = lab s.vs_current_bb ==>
+  (jump_to (lab dst) t).vs_current_bb = lab (jump_to dst s).vs_current_bb /\
+  (jump_to (lab dst) t).vs_prev_bb =
+    OPTION_MAP lab (jump_to dst s).vs_prev_bb /\
+  (jump_to dst s).vs_inst_idx = 0 /\ (jump_to (lab dst) t).vs_inst_idx = 0
+Proof
+  simp[jump_to_def]
+QED
+
+Theorem inline_jmp_clone_step:
+  inst.inst_opcode = JMP /\ inst.inst_operands = [Label dst] ==>
+  step_inst fuel ctx inst s = OK (jump_to dst s) /\
+  step_inst fuel' ctx' (clone_instruction p labels inst) t =
+    OK (jump_to (if MEM dst labels then STRCAT p dst else dst) t)
+Proof
+  Cases_on `MEM dst labels` >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+    clone_instruction_def, clone_operand_def]
+QED
+
+Theorem inline_jnz_clone_step:
+  inst.inst_opcode = JNZ /\ inst.inst_operands = [test; Label yes; Label no] /\
+  eval_operand test s = SOME w /\
+  eval_operand (clone_operand p labels test) t = SOME w ==>
+  step_inst fuel ctx inst s = OK (jump_to (if w <> 0w then yes else no) s) /\
+  step_inst fuel' ctx' (clone_instruction p labels inst) t =
+    OK (jump_to (if MEM (if w <> 0w then yes else no) labels
+      then STRCAT p (if w <> 0w then yes else no)
+      else (if w <> 0w then yes else no)) t)
+Proof
+  strip_tac >> Cases_on `w = 0w` >>
+  Cases_on `MEM yes labels` >> Cases_on `MEM no labels` >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+    clone_instruction_def, clone_operand_def]
+QED
+
+Theorem inline_djmp_clone_step:
+  inst.inst_opcode = DJMP /\ inst.inst_operands = test::ops /\
+  eval_operand test s = SOME w /\
+  eval_operand (clone_operand p labels test) t = SOME w /\
+  extract_labels ops = SOME dests /\ w2n w < LENGTH dests ==>
+  step_inst fuel ctx inst s = OK (jump_to (EL (w2n w) dests) s) /\
+  step_inst fuel' ctx' (clone_instruction p labels inst) t =
+    OK (jump_to (if MEM (EL (w2n w) dests) labels
+      then STRCAT p (EL (w2n w) dests) else EL (w2n w) dests) t)
+Proof
+  strip_tac >>
+  `clone_operand p labels = inline_rename_operand (STRCAT p)
+    (\l. if MEM l labels then STRCAT p l else l)` by
+    simp[FUN_EQ_THM, clone_operand_inline_rename] >>
+  `extract_labels (MAP (clone_operand p labels) ops) =
+    SOME (MAP (\l. if MEM l labels then STRCAT p l else l) dests)` by
+    simp[inline_rename_extract_labels] >>
+  qpat_x_assum `clone_operand p labels = _` kall_tac >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+    clone_instruction_def, listTheory.EL_MAP]
+QED
+
+Theorem inline_ordinary_halt_observations:
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (Halt s) result /\ s.vs_halted ==>
+  ?t. result = Halt t /\ t.vs_halted /\
+    s.vs_returndata = t.vs_returndata /\ s.vs_memory = t.vs_memory /\
+    s.vs_accounts = t.vs_accounts /\
+    s.vs_outcomes = t.vs_outcomes /\ s.vs_requests = t.vs_requests
+Proof
+  simp[inline_ordinary_result_def] >> rpt strip_tac >>
+  drule inline_opaque_frame_observations >> simp[]
+QED
+
+Theorem inline_ordinary_abort_observations:
+  inline_ordinary_result (inline_opaque_frame_rel ren V opaque saved P)
+    (Abort reason s) result /\ s.vs_halted ==>
+  ?t. result = Abort reason t /\ t.vs_halted /\
+    s.vs_returndata = t.vs_returndata /\ s.vs_memory = t.vs_memory /\
+    s.vs_accounts = t.vs_accounts /\
+    s.vs_outcomes = t.vs_outcomes /\ s.vs_requests = t.vs_requests
+Proof
+  simp[inline_ordinary_result_def] >> rpt strip_tac >>
+  drule inline_opaque_frame_observations >> simp[]
+QED

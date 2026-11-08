@@ -536,3 +536,120 @@ Proof
   simp[] >> qexistsl [`fn`, `inst`] >>
   simp[] >> metis_tac[dftCommutationTheory.resolve_phi_MEM]
 QED
+
+Theorem inline_opaque_frame_eval_one_phi:
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  s.vs_prev_bb = SOME prev /\ t.vs_prev_bb = SOME (lab prev) /\
+  (!l. lab l = lab prev <=> l = prev) /\
+  EVERY (\op. (!v. op = Var v ==> v IN V /\ (v IN opaque ==> x IN opaque)) /\
+    (!l. op = Label l ==> FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (lab l)))
+    inst.inst_operands /\
+  eval_one_phi s inst = SOME (x,a) ==>
+  ?b. eval_one_phi t (inline_rename_inst ren lab inst) = SOME (ren x,b) /\
+    (x NOTIN opaque ==> b = a)
+Proof
+  rpt strip_tac >>
+  `resolve_phi (lab prev) (MAP (inline_rename_operand ren lab) inst.inst_operands) =
+    OPTION_MAP (inline_rename_operand ren lab) (resolve_phi prev inst.inst_operands)`
+    by (irule inline_rename_resolve_phi >> simp[]) >>
+  gvs[eval_one_phi_def, AllCaseEqs()] >>
+  `MEM val_op inst.inst_operands` by metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
+  gvs[listTheory.EVERY_MEM] >>
+  Cases_on `val_op` >> gvs[eval_operand_def, inline_rename_operand_def]
+  >- (qexists `a` >> simp[inline_rename_inst_def, eval_operand_def])
+  >- (`s' IN V` by metis_tac[] >>
+      drule_all inline_opaque_frame_read_defined >> strip_tac >>
+      qexists `b` >> simp[inline_rename_inst_def, eval_operand_def] >>
+      metis_tac[]) >>
+  qexists `a` >> simp[inline_rename_inst_def, eval_operand_def] >> metis_tac[]
+QED
+
+Definition inline_phi_outputs_def:
+  inline_phi_outputs [] = {} /\
+  inline_phi_outputs (inst::rest) =
+    if inst.inst_opcode = PHI then set inst.inst_outputs UNION inline_phi_outputs rest
+    else {}
+End
+
+Theorem inline_opaque_frame_phis_snapshot:
+  !insts ren lab V opaque saved P s t u.
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!inst x a. MEM inst insts /\ inst.inst_opcode = PHI /\
+    eval_one_phi s inst = SOME (x,a) ==>
+    ?b. eval_one_phi t (inline_rename_inst ren lab inst) = SOME (ren x,b) /\
+      (x NOTIN opaque ==> b = a)) /\
+  (!x. x IN inline_phi_outputs insts ==> ren x NOTIN P) /\
+  (!x v. x IN inline_phi_outputs insts /\
+    v IN V UNION inline_phi_outputs insts ==> (ren v = ren x <=> v = x)) /\
+  eval_phis s insts = OK u ==>
+  ?t'. eval_phis t (MAP (inline_rename_inst ren lab) insts) = OK t' /\
+    inline_opaque_frame_rel ren (V UNION inline_phi_outputs insts) opaque saved P u t'
+Proof
+  Induct >> simp[eval_phis_def, inline_phi_outputs_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (gvs[eval_phis_def, inline_phi_outputs_def, AllCaseEqs()] >>
+      rename1 `eval_phis s insts = OK tail_state` >>
+      `?b. eval_one_phi t (inline_rename_inst ren lab h) = SOME (ren out,b) /\
+        (out NOTIN opaque ==> b = v)` by metis_tac[] >>
+      `?t'. eval_phis t (MAP (inline_rename_inst ren lab) insts) = OK t' /\
+        inline_opaque_frame_rel ren (V UNION inline_phi_outputs insts) opaque saved P tail_state t'`
+        by (first_x_assum irule >> metis_tac[]) >>
+      `h.inst_outputs = [out]` by gvs[eval_one_phi_def, AllCaseEqs()] >>
+      qexists `update_var (ren out) b t'` >>
+      simp[inline_rename_inst_def] >>
+      `V UNION ({out} UNION inline_phi_outputs insts) =
+        out INSERT (V UNION inline_phi_outputs insts)` by SET_TAC[] >>
+      qpat_x_assum `V UNION _ = out INSERT _`
+        (fn th => pure_once_rewrite_tac[th]) >>
+      irule inline_opaque_frame_write_establish >>
+      simp[pred_setTheory.FORALL_IN_UNION]) >>
+  gvs[eval_phis_def, inline_phi_outputs_def, inline_rename_inst_def]
+QED
+
+Theorem inline_opaque_frame_eval_phis:
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  s.vs_prev_bb = SOME prev /\ t.vs_prev_bb = SOME (lab prev) /\
+  (!l. lab l = lab prev <=> l = prev) /\
+  EVERY (\inst. !x. MEM x inst.inst_outputs ==>
+    EVERY (\op. (!v. op = Var v ==> v IN V /\ (v IN opaque ==> x IN opaque)) /\
+      (!l. op = Label l ==> FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (lab l)))
+      inst.inst_operands) insts /\
+  (!x. x IN inline_phi_outputs insts ==> ren x NOTIN P) /\
+  (!x v. x IN inline_phi_outputs insts /\
+    v IN V UNION inline_phi_outputs insts ==> (ren v = ren x <=> v = x)) /\
+  eval_phis s insts = OK u ==>
+  ?t'. eval_phis t (MAP (inline_rename_inst ren lab) insts) = OK t' /\
+    inline_opaque_frame_rel ren (V UNION inline_phi_outputs insts) opaque saved P u t'
+Proof
+  strip_tac >> irule inline_opaque_frame_phis_snapshot >>
+  goal_assum (drule_at Any) >> simp[] >> qexists `s` >> simp[] >>
+  rpt strip_tac >> irule inline_opaque_frame_eval_one_phi >>
+  goal_assum (drule_at Any) >> simp[] >>
+  `inst.inst_outputs = [x]` by gvs[eval_one_phi_def, AllCaseEqs()] >>
+  goal_assum (drule_at (Pat `inline_opaque_frame_rel _ _ _ _ _ _ _`)) >>
+  gvs[listTheory.EVERY_MEM] >>
+  qpat_x_assum `!i. MEM i insts ==> _` (qspec_then `inst` mp_tac) >> simp[]
+QED
+
+Theorem inline_rename_extract_labels:
+  !ops ren lab.
+  extract_labels (MAP (inline_rename_operand ren lab) ops) =
+    OPTION_MAP (MAP lab) (extract_labels ops)
+Proof
+  Induct >> simp[extract_labels_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[inline_rename_operand_def, extract_labels_def] >>
+  Cases_on `extract_labels ops` >> simp[]
+QED
+
+Theorem inline_opaque_phis_control:
+  !insts s u.
+  eval_phis s insts = OK u ==>
+  u.vs_current_bb = s.vs_current_bb /\ u.vs_prev_bb = s.vs_prev_bb /\
+  u.vs_inst_idx = s.vs_inst_idx /\ u.vs_halted = s.vs_halted
+Proof
+  Induct >> simp[eval_phis_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[eval_phis_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[update_var_def] >> metis_tac[]
+QED
