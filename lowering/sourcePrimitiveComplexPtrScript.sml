@@ -134,13 +134,7 @@ Theorem canonical_primitive_complex_suffix_ptr:
     (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
       !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
-  Induct
-  >- (rpt gen_tac >> strip_tac >>
-      `k = LENGTH tys /\ DROP k elems = []` by simp[DROP_EQ_NIL] >>
-      gvs[Once compile_abi_decode_to_buf_def, comp_return_def] >>
-      qexistsl_tac [`s`, `G`, `tn`] >>
-      simp[abi_decode_frame_def] >> rpt strip_tac >>
-      first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  Induct >- suspend "empty" >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `!k sa s G tn. _` (mk_asm "ih") >>
   `k < LENGTH tys /\ SUC k <= LENGTH tys /\ LENGTH tys - SUC k = n` by decide_tac >>
@@ -163,6 +157,19 @@ Proof
   qpat_assum `EL k elems = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all complex_member_phase_code >> strip_tac >>
+  suspend "member"
+QED
+
+Resume canonical_primitive_complex_suffix_ptr[empty]:
+  rpt gen_tac >> strip_tac >>
+  `k = LENGTH tys /\ DROP k elems = []` by simp[DROP_EQ_NIL] >>
+  gvs[Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  qexistsl_tac [`s`, `G`, `tn`] >>
+  simp[abi_decode_frame_def] >> rpt strip_tac >>
+  first_x_assum irule >> simp[mem_agree_outside_def]
+QED
+
+Resume canonical_primitive_complex_suffix_ptr[member]:
   `SUM (MAP type_memory_size (TAKE k tvs)) + type_memory_size (EL k tvs) <= cap` by
     (qspec_then `type_memory_size` mp_tac abi_encoder_prefix_sum_bound >>
      disch_then (qspecl_then [`tvs`, `k`] mp_tac) >> simp[]) >>
@@ -175,7 +182,10 @@ Proof
   qpat_assum `dec_info_needs_offset _ = _` (fn th => pure_rewrite_tac[th]) >> strip_tac >>
   drule_all canonical_tuple_primitive_traversal_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
-  rename1 `fresh_vars_wrt en r` >>
+  rename1 `fresh_vars_wrt en r` >> suspend "tail"
+QED
+
+Resume canonical_primitive_complex_suffix_ptr[tail]:
   `k <= LENGTH tvs` by decide_tac >>
   `!i. i < k ==>
      val_in_memory (EL i tvs) (EL i vs)
@@ -223,7 +233,10 @@ Proof
   asm "ih" (qspec_then `SUC k` mp_tac) >>
   disch_then (qspecl_then [`en`, `r`, `H`, `u`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> gvs[])) >> strip_tac >>
-  qexistsl_tac [`t`, `H'`, `u'`] >> simp[] >>
+  qexistsl_tac [`t`, `H'`, `u'`] >> simp[] >> suspend "compose"
+QED
+
+Resume canonical_primitive_complex_suffix_ptr[compose]:
   conj_tac >- metis_tac[abi_decode_frame_trans] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -234,4 +247,60 @@ Proof
       `not_fresh_at en x` by metis_tac[freshWritesTheory.not_fresh_at_mono] >>
       metis_tac[]) >>
   metis_tac[SUBSET_TRANS]
+QED
+
+Finalise canonical_primitive_complex_suffix_ptr
+
+Theorem canonical_primitive_complex_ptr:
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  LIST_REL value_has_type tvs vs /\ vyper_to_abi_list env tys vs = SOME avs /\
+  ats = MAP (vyper_to_abi_type env) tys /\ LENGTH elems = LENGTH tys /\
+  (!i. i < LENGTH tys ==>
+    EL i elems = (type_to_abi_dec_info sf ce (EL i tys),
+      abi_member_head_size (EL i ats), type_memory_size (EL i tvs)) /\
+    ((?clamp. type_to_abi_dec_info sf ce (EL i tys) = DecPrimWord clamp /\
+       is_word_type (EL i tys) /\ type_memory_size (EL i tvs) = 32) \/
+     (?m. type_to_abi_dec_info sf ce (EL i tys) = DecBytestring m /\
+       type_memory_size (EL i tvs) = abi_decode_bytes_copy_size m /\
+       m < dimword (:256)))) /\
+  compile_abi_decode_complex_elems (Var root) src CALLDATALOAD (Lit 0w)
+    elems 0 0 sa = ((),sb) /\
+  mem_bytes_at cdsbase (LENGTH (enc (Tuple ats) (ListV avs))) s.vs_call_ctx.cc_calldata =
+    enc (Tuple ats) (ListV avs) /\
+  cdsbase + LENGTH (enc (Tuple ats) (ListV avs)) < dimword (:256) /\
+  (!i. i < LENGTH tys ==> cdsbase + abi_tuple_child_offset ats avs i < dimword (:256)) /\
+  lookup_var root s = SOME (n2w d) /\ not_fresh_at sa root /\
+  abi_decoder_operand_live sa.cs_next_var src /\
+  abi_decoder_operand_live sa.cs_next_var (Var root) /\
+  (!q. src = Var q ==> not_fresh_at sa q) /\
+  eval_operand src s = SOME (n2w cdsbase) /\ ptr_covers G tn root s cap /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  SUM (MAP type_memory_size tvs) <= cap /\ d + cap < dimword (:256) /\
+  fresh_vars_wrt sa s /\ fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t H u.
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ fresh_vars_wrt sb t /\
+    (!i. i < LENGTH tys ==>
+      val_in_memory (EL i tvs) (EL i vs)
+        (d + SUM (MAP type_memory_size (TAKE i tvs))) t.vs_memory /\
+      (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
+        val_in_memory (EL i tvs) (EL i vs)
+          (d + SUM (MAP type_memory_size (TAKE i tvs))) mem)) /\
+    abi_decode_frame d cap s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!op w. abi_decoder_operand_live sa.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op t = SOME w) /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    u.t_mem SUBSET tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG H u t) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  drule_all (SRULE [Excl "enc_def"]
+    (Q.SPECL [`LENGTH (tys : vyperAST$type list)`, `0`] canonical_primitive_complex_suffix_ptr)) >>
+  disch_then (qspec_then `PG` ACCEPT_TAC)
 QED
