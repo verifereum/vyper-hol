@@ -2,6 +2,7 @@
 Theory bodyIntCallFamCallInt
 Ancestors
   bodyIntCallJointContract bodyIntCallProducerOrder bodyIntCallJointCallCore
+  bodyIntCallFamCallIntCertificates
 
 (* The packaging theorem quantifies over every frame at the selected owner;
    the graph induction premise supplies all of them at once. *)
@@ -72,6 +73,35 @@ Proof
        vyperValueTheory.evaluate_type_def,
        wordsTheory.dimword_def, EVAL ``dimindex(:256)``] >> EVAL_TAC
 QED
+(* In the unequal aggregate-layout branch vv_own, rather than W, supplies
+   the allocation containing the entire source layout.  Site reuse is
+   harmless: the destination has a different compiler allocation id. *)
+Theorem intcall_owned_layout_separate:
+  vv_own ce cx ty a b es r (LocatedValue ann p) s /\
+  p.ptr_location = LocMemory /\
+  read_result cx r es = (INL v,es) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  ~is_bytestring_type ty /\ type_memory_size tv <> 0 /\
+  eval_operand p.ptr_operand s = SOME w /\
+  b.cs_next_id <= site /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry) /\
+  stmt_state_rel ctx func ce cx es u /\
+  FLOOKUP u.vs_allocas site = SOME (dst,sz) ==>
+  regions_disjoint (w2n w) (type_memory_size tv) dst sz
+Proof
+  strip_tac >>
+  `val_footprint tv v = type_memory_size tv` by
+    metis_tac[exprSimAggregateChildrenTheory.evaluated_nonbytes_footprint] >>
+  gvs[loweringPostsTheory.vv_own_def] >>
+  rename1 `FLOOKUP s.vs_allocas aid = SOME (src_base,src_cap)` >>
+  `FLOOKUP u.vs_allocas aid = SOME (src_base,src_cap)` by metis_tac[] >>
+  `aid <> site` by decide_tac >>
+  `regions_disjoint src_base src_cap dst sz` by
+    (irule exprSimPrecompilesTheory.state_allocations_disjoint >> metis_tac[]) >>
+  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
 
 Theorem intcall_intcall_step:
   (!e'. expr_size e' < expr_size e ==>
