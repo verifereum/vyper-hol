@@ -129,3 +129,51 @@ Proof
   REFL_TAC
 QED
 
+
+Theorem nested_external_preprocess[local]:
+  lower_vyper_runtime_unit nested_external_tops nested_premise_policy =
+  run_lowering [compute_selector FEMPTY "probe" []]
+    [set_external_package_target nested_premise_policy.rpol_target
+      ("fn_probe", nested_external_slice_cenv,
+        ([] : (string # bool # bool # num # abi_dec_info) list),4,F,F,0,F,F,
+       [AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+         (Literal (BaseT (UintT 256)) (IntL 1)); Return NONE],(NONE : type option))]
+    [set_internal_package_target nested_premise_policy.rpol_target
+      (package_internal_fn nested_external_tops F (assign_nkeys nested_external_tops 0) F 0
+        (Nonpayable,F,F,"f",[],([] : expr list),BaseT (UintT 256),nested_reach_body))]
+    (set_fallback_package_target nested_premise_policy.rpol_target
+      (package_fallback_fn nested_external_tops F (assign_nkeys nested_external_tops 0)
+        (NONE : (function_mutability # bool # bool # string # (string # type) list # expr list # type # stmt list) option)))
+    nested_premise_policy 0 0 ([] : dense_bucket list)
+    (build_dense_entry_info [compute_selector FEMPTY "probe" []]
+      [set_external_package_target nested_premise_policy.rpol_target
+       ("fn_probe", nested_external_slice_cenv,
+        ([] : (string # bool # bool # num # abi_dec_info) list),4,F,F,0,F,F,
+        [AugAssign (BaseT (UintT 256)) nested_reach_target Sub
+          (Literal (BaseT (UintT 256)) (IntL 1)); Return NONE],(NONE : type option))]) "__entry"
+Proof
+  mp_tac nested_external_return_guard >>
+  mp_tac nested_external_allocs >>
+  mp_tac nested_external_selectors >>
+  pure_rewrite_tac[nested_external_classify, pairTheory.FST, pairTheory.SND] >>
+  rpt disch_tac >>
+  pure_rewrite_tac[lower_vyper_runtime_unit_def, nested_external_classify, LET_THM] >>
+  pure_asm_rewrite_tac[nested_external_immutables,
+    listTheory.APPEND_NIL, optionTheory.option_case_def] >>
+  simp[Once listTheory.MAP, combinTheory.o_DEF, nested_external_package,
+    GSYM nested_external_slice_cenv_def]
+QED
+
+Theorem nested_external_internal_package[local]:
+  package_internal_fn nested_external_tops F (assign_nkeys nested_external_tops 0) F 0
+    (Nonpayable,F,F,"f",[],dflts,BaseT (UintT 256),nested_reach_body) =
+  ("internal 0 f()_runtime",
+    (build_compile_env nested_external_tops Internal Nonpayable "f" []
+      (BaseT (UintT 256)) nested_reach_body F) with
+      <|ce_is_ctor := F; ce_raw_return := F; ce_nonreentrant := (F,0,F,F)|>,
+    [],F,F,0,F,F,F,0,nested_reach_body,SOME (BaseT (UintT 256)))
+Proof
+  rewrite_tac[package_internal_fn_def] >>
+  CONV_TAC (RESTR_EVAL_CONV [``build_compile_env``]) >> REFL_TAC
+QED
+
