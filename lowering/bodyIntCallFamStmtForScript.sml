@@ -241,6 +241,194 @@ Proof
   fs[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> gvs[]
 QED
 
+(* The body's producer post is consumed verbatim; fp keeps its origin. *)
+Theorem intcall_for_range_round_at_body:
+  let v = IntV (n1 + &k);
+      entry = es with scopes :=
+        (FEMPTY |+ (id, <|assignable := F; type := tyv;
+                          value := v; popped := []|>)) :: es.scopes;
+      Q = (\res ee t. ?ce'' env''.
+        stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
+        (res = INL () ==> ~block_is_terminated sb1 /\ ce'' = ce_b /\ env'' = env_b) /\
+        cenv_top_ext bc ce'' ee.scopes /\
+        intcall_joint_res fp ce'' env'' ee sb1 t /\
+        (!x z. not_fresh_at sb0 x /\ lookup_var x s2 = SOME z ==>
+               lookup_var x t = SOME z) /\
+        (!aid b. FLOOKUP s2.vs_allocas aid = SOME b ==>
+                 FLOOKUP t.vs_allocas aid = SOME b) /\
+        s2.vs_alloca_next <= t.vs_alloca_next);
+      H = (\res ee u. ?broke. res = INL broke /\
+        u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+        intcall_joint_res fp ce env ee sa u /\
+        (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==>
+               lookup_var x u = SOME z) /\
+        (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==>
+                 FLOOKUP u.vs_allocas aid = SOME b) /\
+        cc.vs_alloca_next <= u.vs_alloca_next /\
+        (broke ==> u.vs_current_bb = exit_lbl) /\
+        (~broke ==> u.vs_current_bb = cond_lbl /\
+          lookup_var cv u = SOME (i2w (n1 + &(k+1))) /\
+          lookup_var ev u = SOME (i2w n2) /\ lookup_var p u = SOME w))
+  in
+  for_code fp.jc_func ce bc ty stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa cc /\
+  cenv_top_ext ce bc entry.scopes /\
+  local_ptrs_reserved ce sb1 /\ local_ptrs_reserved ce sa /\
+  (!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x) /\
+  (!scs. not_local_ptr ce scs cv /\ not_local_ptr ce scs nv) /\
+  (!op. fp.jc_reserved op ==> op <> Var cv /\ op <> Var nv) /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sb0 x /\ x <> cv /\ x <> nv) /\
+  not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
+  ev <> cv /\ ev <> nv /\ p <> cv /\ p <> nv /\
+  ~s2.vs_halted /\ lookup_var cv s2 = SOME (i2w (n1 + &k)) /\
+  lookup_var ev s2 = SOME (i2w n2) /\ lookup_var p s2 = SOME w /\
+  (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==>
+         lookup_var x s2 = SOME z) /\
+  (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==>
+           FLOOKUP s2.vs_allocas aid = SOME b) /\
+  cc.vs_alloca_next <= s2.vs_alloca_next /\
+  id NOTIN FDOM env.var_types /\ lookup_scopes id es.scopes = NONE /\
+  evaluate_type (get_tenv fp.jc_cx) fty = SOME tyv /\ value_has_type tyv v /\
+  type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
+  call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
+  supported_program fp.jc_tops /\ get_module_code fp.jc_cx NONE = SOME fp.jc_tops /\
+  supported_stmts fp.jc_tops bindings stmts /\
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (eval_stmts fp.jc_cx stmts) (entry,s2) Q (intcall_stmt_exit fp) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (ignore_bind (push_scope_with_var id tyv v)
+      (finally (try (ignore_bind (eval_stmts fp.jc_cx stmts) (return F))
+                     handle_loop_exception) pop_scope))
+    (es,s2) H (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qhdtm_assum `gas_outcome`
+    (mp_then Any mp_tac intcall_for_round_outcome) >>
+  disch_then irule >> simp[] >>
+  conj_tac >- suspend "exit" >> suspend "normal"
+QED
+Resume intcall_for_range_round_at_body[normal]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  conj_asm1_tac >- fs[stmt_lands_def] >>
+  `vyperEvalPreservesScopes$preserves_scopes_dom
+     (es with <|scopes := (FEMPTY |+ (id,
+       <|assignable := F; type := tyv; value := IntV (n1 + &k); popped := []|>)) ::
+       es.scopes; gas_obs := gs|>) ee` by
+    metis_tac[vyperEvalPreservesScopesTheory.eval_stmts_preserves_scopes_dom] >>
+  `ee.scopes <> []` by
+    fs[vyperEvalPreservesScopesTheory.preserves_scopes_dom_def] >>
+  `cenv_top_ext ce ce'' ee.scopes` by
+    (irule cenv_top_ext_trans >> qexists_tac `bc` >>
+     goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >>
+     fs[vyperEvalPreservesScopesTheory.preserves_scopes_dom_def]) >>
+  `intcall_joint_res fp ce env (es with gas_obs := gs) sa cc` by
+    (fs[intcall_joint_res_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+     metis_tac[]) >>
+  `intcall_joint_res fp ce env (ee with scopes := TL ee.scopes) sb1 t` by
+    (irule (cj 2 intcall_for_body_pop_resources) >>
+     simp[] >> reverse conj_tac
+     >- metis_tac[] >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `lookup_var cv t = SOME (i2w (n1 + &k))` by metis_tac[] >>
+  `not_local_ptr ce (ee with scopes := TL ee.scopes).scopes cv /\
+   not_local_ptr ce (ee with scopes := TL ee.scopes).scopes nv` by metis_tac[] >>
+  `(res = INL () ==> ~block_is_terminated sb1)` by metis_tac[] >>
+  drule_all intcall_for_body_finish_resources >> strip_tac >>
+  suspend "compose"
+QED
+Resume intcall_for_range_round_at_body[exit]:
+  rpt gen_tac >> strip_tac >>
+  `ee.scopes <> []` by
+    (drule vyperEvalPreservesScopesTheory.eval_stmts_preserves_scopes_len >>
+     simp[] >> strip_tac >> Cases_on `ee.scopes` >> gvs[]) >>
+  drule intcall_stmt_exit_no_loop_control >> strip_tac >> gvs[]
+QED
+Resume intcall_for_range_round_at_body[compose]:
+  `intcall_joint_res fp ce env (ee with scopes := TL ee.scopes) sa u` by
+    (irule intcall_joint_res_reentry >> metis_tac[]) >>
+  simp[] >> qexists_tac `u` >> simp[] >>
+  simp[stmtSimForPartsTheory.i2w_counter_suc]
+QED
+Finalise intcall_for_range_round_at_body
+
+(* The condition/body prefix has zero counted gas and keeps the same posts. *)
+Theorem intcall_for_range_round:
+  let v = IntV (n1 + &k);
+      entry = es with scopes :=
+        (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)) :: es.scopes;
+      Q = (\res ee t. ?ce'' env''.
+        stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
+        (res = INL () ==> ~block_is_terminated sb1 /\ ce'' = ce_b /\ env'' = env_b) /\
+        cenv_top_ext bc ce'' ee.scopes /\
+        intcall_joint_res fp ce'' env'' ee sb1 t /\
+        (!x z. not_fresh_at sb0 x /\ lookup_var x s2 = SOME z ==>
+               lookup_var x t = SOME z) /\
+        (!aid b. FLOOKUP s2.vs_allocas aid = SOME b ==>
+                 FLOOKUP t.vs_allocas aid = SOME b) /\
+        s2.vs_alloca_next <= t.vs_alloca_next);
+      H = (\res ee u. ?broke. res = INL broke /\
+        u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+        intcall_joint_res fp ce env ee sa u /\
+        (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==>
+               lookup_var x u = SOME z) /\
+        (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==>
+                 FLOOKUP u.vs_allocas aid = SOME b) /\
+        cc.vs_alloca_next <= u.vs_alloca_next /\
+        (broke ==> u.vs_current_bb = exit_lbl) /\
+        (~broke ==> u.vs_current_bb = cond_lbl /\
+          lookup_var cv u = SOME (i2w (n1 + &(k+1))) /\
+          lookup_var ev u = SOME (i2w n2) /\ lookup_var p u = SOME w))
+  in
+  for_code fp.jc_func ce bc ty stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa cc /\
+  cenv_top_ext ce bc entry.scopes /\
+  local_ptrs_reserved ce sb1 /\ local_ptrs_reserved ce sa /\
+  (!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x) /\
+  (!scs. not_local_ptr ce scs cv /\ not_local_ptr ce scs nv) /\
+  (!op. fp.jc_reserved op ==> op <> Var cv /\ op <> Var nv) /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sb0 x /\ x <> cv /\ x <> nv) /\
+  not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\ not_fresh_at sb0 p /\
+  ev <> cv /\ ev <> nv /\ p <> cv /\ p <> nv /\
+  ~s2.vs_halted /\ lookup_var cv s2 = SOME (i2w (n1 + &k)) /\
+  lookup_var ev s2 = SOME (i2w n2) /\ lookup_var p s2 = SOME w /\
+  (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==>
+         lookup_var x s2 = SOME z) /\
+  (!aid b. FLOOKUP cc.vs_allocas aid = SOME b ==>
+           FLOOKUP s2.vs_allocas aid = SOME b) /\
+  cc.vs_alloca_next <= s2.vs_alloca_next /\
+  id NOTIN FDOM env.var_types /\ lookup_scopes id es.scopes = NONE /\
+  evaluate_type (get_tenv fp.jc_cx) fty = SOME tyv /\ value_has_type tyv v /\
+  type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
+  call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
+  supported_program fp.jc_tops /\ get_module_code fp.jc_cx NONE = SOME fp.jc_tops /\
+  supported_stmts fp.jc_tops bindings stmts /\
+  gas_marked_path F fp.jc_ctx fp.jc_func cc 0 (OK s2) /\
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (eval_stmts fp.jc_cx stmts) (entry,s2) Q (intcall_stmt_exit fp) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (ignore_bind (push_scope_with_var id tyv v)
+      (finally (try (ignore_bind (eval_stmts fp.jc_cx stmts) (return F))
+                     handle_loop_exception) pop_scope))
+    (es,cc) H (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  irule stmtSimDeclComposeTheory.gas_outcome_zero_prefix >>
+  goal_assum (drule_at Any) >>
+  irule (SRULE [LET_THM] intcall_for_range_round_at_body) >>
+  simp[] >> reverse conj_tac
+  >- (qhdtm_assum `for_code` (irule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexists_tac `fty` >> simp[] >>
+      reverse conj_tac >- fs[] >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem intcall_for_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
        intcall_map_producer fp e) /\
