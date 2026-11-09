@@ -281,3 +281,119 @@ is configured. This does not prove wf_function, fn_inst_wf, or wf_ssa preservati
 new-name disjointness, nor any rebuilt-DFG semantic readiness clause. Those remain
 separate obligations; neither structural equality nor opcode exclusion supplies
 them. The frozen target and the accepted arbitrary-G execution proof are unchanged.
+
+## Rebuilt-DFG diagnostic (.48): checked obstruction and consumer contract
+
+`loadElimDFGReadinessProbesTheory` builds at the default timeout (2026-11-09,
+TO_load-elim-correct2-20261109T010004Z_m5575_t001). Its source is a single block
+`x = MLOAD 0; y = MLOAD 0; STOP`. `readiness_probe_wf` checks wf_function,
+fn_inst_wf and wf_ssa. The context is the **actual** memory context, with
+bp_analyze and memory_alias_analyze of that source, not arbitrary empty maps.
+`readiness_probe_round` checks that load_elim_one replaces the second MLOAD
+by `y = ASSIGN x`, and `readiness_probe_rebuilt_lookup` checks its DFG entry.
+
+At the shared initial state, x=0 and y=1. Original DFG soundness holds for
+**every** state (`readiness_probe_source_sound`): there are no ASSIGNs.
+`readiness_probe_rebuilt_unsound` refutes rebuilt soundness by specializing
+its universal definition to y and its actual ASSIGN, then evaluation. The
+combined `readiness_probe_no_initial_transport` includes the structural facts,
+original initial DFG soundness, and the **full frozen universal-step premise**,
+packaged as le_step_preserves with the original analyses. Thus that premise
+itself does NOT exclude this auxiliary example. MLOAD only updates variables;
+STOP has no OK result, and allocation-field predicates are unchanged. Empty
+BP queries are checked separately by readiness_probe_bp_empty.
+
+This is not frozen-theorem falsehood: no mismatch of original/transformed
+run_blocks is claimed; all frozen premises have not been certified together.
+The newly introduced equality becomes true after the second instruction has
+executed, but is not true at the initial state or necessarily just after the
+first MLOAD. Global rebuilt soundness, even at *every reached point*, is the
+wrong sufficient invariant to try to transport across rounds.
+
+### Direct normalization consumer map
+
+All entries below use d = ctx.lctx_dfg and N(op) = normalize_operand d [] op.
+These are precise semantic use sites, distinct from wrappers merely carrying
+DFG hypotheses. Line numbers refer to current source, not this document.
+
+| consumer | state/domain actually used |
+|---|---|
+| ConfiguredGeneration:69,75 (`le_configured_generation_read`) | generating StepOcc input u: N(addr) evaluates like addr, for the actual load/store address |
+| SingletonCurrentness:89 (`le_configured_retained_step_read`) | retaining store input u: N(op1) evaluates like the actual store address op1, to justify invalidation/non-aliasing |
+| SingletonCurrentness:144,158 (`le_configured_generation_address`) | generating input u: same load/store address normalization, to identify actual key address |
+| HomogeneousCurrentness:282 | selected generator post-state t: N(op)=r implies eval op t = eval r t; op is the generated operand (load output or store value), NOT an arbitrary alternative |
+| HomogeneousCurrentness:367 | final store input s: N(value) evaluates like the actual store value; combined with selected historical generation, not all alternatives evaluated at s |
+| ReachedStore:106 (`le_empty_store_key_read`) | current store input s: normalized actual address agrees with address |
+| ReachedLoad:46 (`le_empty_configured_load_address`) | current load input s: normalized actual address agrees with address, including the DLOAD case |
+| StoreEquivalence:14 | at its caller state s, two compared Var operands a,b each need normalization validity; this helper has no external caller in the current cone (grep), so do NOT make all-alternative currentness a new global premise on its account |
+
+Initial/PHI/step/snapshot separation: OccurrenceInvariants:139-182 derives
+whole-trace pre/post DFG soundness from initial soundness, universal step
+preservation and reachable PHI preservation. ReachedLoad/ReachedStore use that
+wrapper; it cannot re-create new equalities for a rebuilt DFG. CoupledExecution
+readiness:81,84-89 packages those three requirements, and :765 extracts the
+PHI-prefix soundness requirements for CaptureEntry. ReachedAvailability,
+ReachedCapture, DynamicCapture, ActualPhiFrame, CaptureEntry and
+ReachedSourceAgreement thread historical step DFG facts to generation/read
+consumers. Generated PHI selection itself reads the **incoming snapshot** u;
+no normalize_operand call occurs in capture. It needs the selected historical
+value, derived from generation plus retained suffix, then incoming lookup
+agreement. Normalizing every PHI alternative in u is neither required nor
+justified. Original PHI results p are subsequent body-input states and should
+receive only the reached-use obligations of their actual later consumers.
+
+### Candidate replacement contract (proposal only, no new assumptions)
+
+Reuse `loadElimNormalizeHelpers.le_chain_valid d [] op s` and its checked
+`le_chain_valid_eval`, rather than inventing another normalization predicate.
+This existing recursive predicate restricts ASSIGN equalities to the chain
+actually traversed from op; non-Var, missing definitions, non-ASSIGNs and
+visited-cycle stops impose no further equalities. The library restricted
+normalize_operand_eval theorem instead quantifies over ALL unvisited defs;
+visited=[] is not a reached-use solution. Search of shared/simulation/analysis
+and memory-copy-elision found only the global/restricted eval interfaces and
+local memory-copy operand_equiv facts, not a reached-domain discharge theorem.
+
+For each actual le_occ_prefix of intermediate source fi, a sufficient exact
+consumer contract would assert the following, with d = dfg_build_function fi:
+
+1. At every successful StepOcc bb n fuel u t, for actual configured load
+   operands [addr] or store operands [addr;value], require
+   `le_chain_valid d [] addr u`. This covers generation, retention/invalidation,
+   and active load/store address identification. At the current prefix end s,
+   the same applies to its active load/store when successful evaluation is used.
+2. For each **selected generating event** whose syntactic generation operand
+   op feeds the historical singleton/homogeneous certificate, require
+   `le_chain_valid d [] op t` at its post-state. This is the extra post-state
+   fact at HomogeneousCurrentness:282; input-only validity does not replace it.
+3. At a reached redundant-store test on actual value operand value, require
+   `le_chain_valid d [] value s`. Together with (2) and the checked retained
+   representative no-write argument, this yields store-test currentness.
+4. For a requested pre-PHI snapshot capture, use (1)-(2) on the historical
+   selected generator/retained suffix ending in that snapshot. Do NOT require
+   all alternatives' chains at the snapshot, nor normalize original PHIs'
+   incoming variables in their post-PHI state. Existing source-domain incoming
+   agreement remains a distinct requirement.
+
+These clauses deliberately quantify selected historical generators, not all
+members of a multivalue lattice at a current state. Literal-only initial
+instructions satisfy address validity without constraining not-yet-written y.
+A useful implementation may strengthen (1),(3) to validity for **all actual
+instruction operands at their reached use**, but must retain selected generator
+post-state validity (2). No need for validity at unused initial outputs.
+
+Discharge route still to be proved: SSA def-dominates-use plus successful
+execution must provide an occurrence of each relevant ASSIGN before the
+actual use, and absence of intervening redefinitions until that use. Follow
+the normalization chain with a visited set; when a chain source is itself
+assigned, order/dominance must justify its defining occurrence too. For the
+post-state load output in (2), its definition is the just-executed load (not
+ASSIGN); a store value is an actual input whose chain facts must survive that
+store. Across rounds, prior-round coupling constructs executions of fi from
+successful earlier executions, including introduced ASSIGN execution and PHI
+snapshot availability. It does NOT transport global DFG soundness at shared s.
+Loops require occurrence/epoch reasoning: static uniqueness is not absence of
+dynamic reexecution. Full structural wf_ssa, round-local name separation and
+source-error handling remain separate obligations. Proving these reached-use
+clauses and refactoring the cone needs a reviewed follow-up PLAN; none is
+asserted proved, inserted as a target hypothesis, or implemented here.
