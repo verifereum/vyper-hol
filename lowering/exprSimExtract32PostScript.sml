@@ -23,6 +23,8 @@ Proof
   `evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
    ~is_word_type (expr_type src)` by simp[evaluate_type_def, is_word_type_def] >>
   drule_all hash_dynamic_post_view >> strip_tac >>
+  `post_value_type cenv src = expr_type src` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type src) (BytesV bs) op s` by gvs[expr_post_def] >>
   drule_all expr_val_rel_memory >> strip_tac >>
   drule_all hash_post_footprint_bound >>
@@ -84,6 +86,8 @@ Theorem extract32_prepare_post:
     fresh_vars_wrt sb u
 Proof
   strip_tac >> drule_all extract32_source_post_view >> strip_tac >>
+  `post_value_type cenv src = expr_type src` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `p + 32 < dimword (:256)` by decide_tac >>
   drule_all extract32_prepare_run >> strip_tac >>
   `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
@@ -145,6 +149,10 @@ Theorem extract32_offset_post_view:
   eval_operand off_op s2 = SOME (n2w (Num i))
 Proof
   strip_tac >>
+  `post_value_type cenv src = expr_type src` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+  `post_value_type cenv off = expr_type off` by
+    (irule post_value_type_word >> simp[is_word_type_def]) >>
   `expr_val_rel cx (expr_type src) (BytesV bs) src_op s2` by
     (irule log_argument_value_kept >>
      conj_tac >- simp[] >>
@@ -333,5 +341,6 @@ Theorem extract32_expr_post_end_gas_obs:
   expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) v op s =
   expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
-  simp[expr_post_def, expr_val_at_def, stmt_state_rel_def, state_rel_gas_obs]
+  simp[expr_post_def, expr_val_at_def, expr_val_own_def, stmt_state_rel_def,
+       state_rel_gas_obs]
 QED

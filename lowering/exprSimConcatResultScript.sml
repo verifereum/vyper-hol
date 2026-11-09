@@ -833,7 +833,8 @@ Proof
     (Q.INST [`e` |-> `Builtin ann (Concat n) args`]
        vv_post_allocated_memory_intro)) >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[base_ptr_def] >> NO_TAC)
+  TRY (simp[base_ptr_def] >> NO_TAC) >>
+  TRY (simp[vyperASTTheory.expr_type_def] >> NO_TAC)
   >~ [`val_in_memory`]
   >- (qexistsl_tac [`sa.cs_next_id`, `B`, `bsz`, `tvr`, `n2w B`] >>
       qpat_assum `w2n _ = B` (fn th => rewrite_tac[th]) >>

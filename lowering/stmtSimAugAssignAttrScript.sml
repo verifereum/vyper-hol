@@ -734,6 +734,9 @@ Proof
     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >> strip_tac >>
   qpat_x_assum `!tv. INL v = INL tv ==> _` (qspec_then `v` mp_tac) >>
   simp[] >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     metis_tac[word_value_type_word]) >>
   irule expr_val_rel_word >> simp[] >>
   qexistsl_tac [`cx`, `expr_type e`] >>
   fs[expr_post_def, word_value_type_word]

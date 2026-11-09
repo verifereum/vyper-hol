@@ -19,8 +19,9 @@ Theorem memory_value_post_gas_obs[local]:
     (Value v) (LocatedValue ty p) t
 Proof
   strip_tac >>
-  gvs[vv_post_def, vv_holds_def, vv_at_def, read_result_def, return_def] >>
-  first_assum ACCEPT_TAC
+  gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
+      read_result_def, return_def] >>
+  metis_tac[]
 QED
 
 Theorem value_store_bound_gas_obs[local]:

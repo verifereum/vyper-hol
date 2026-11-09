@@ -879,6 +879,7 @@ QED
 
 Theorem literal_memory_vv_post:
   !func cenv cx e es sa sb s0 t v tvt buf w sz ctx.
+    post_value_type cenv e = expr_type e /\
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\

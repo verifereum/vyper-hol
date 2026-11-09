@@ -113,7 +113,7 @@ QED
 Theorem framed_array_element_summary:
   expr_body_pre cenv cx env obj es /\
   eval_expr cx obj es = (INL r,t) /\
-  expr_type obj = ArrayT et bd /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
   evaluate_type (get_tenv cx) et = SOME etv /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
@@ -248,11 +248,14 @@ Theorem vv_post_memory_footprint_bound:
   p.ptr_location = LocMemory /\
   read_result cx r ee = (INL v,ee) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  post_value_type cenv e = expr_type e /\
   eval_operand p.ptr_operand q = SOME w ==>
   w2n w + val_footprint tv v < dimword (:256)
 Proof
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_at_def] >>
   rpt strip_tac >>
+  qpat_x_assum `post_value_type _ _ = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   first_x_assum (drule_then strip_assume_tac) >> gvs[]
   >- (irule (SIMP_RULE (srw_ss()) [] exprSimHashTheory.hash_live_footprint_bound) >>
       goal_assum (drule_at Any) >> metis_tac[]) 
@@ -290,7 +293,7 @@ Theorem framed_array_represented_suffix_summary:
   ((?ty. vv_location (FST (compile_expr cenv ty obj sa)) = SOME LocCode) \/
    (?n. bd = Fixed n)) /\
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
-  expr_body_pre cenv cx env obj es /\ expr_type obj = ArrayT et bd /\
+  expr_body_pre cenv cx env obj es /\ expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   eval_expr cx obj es = (INL r,t) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
@@ -466,7 +469,7 @@ Theorem framed_array_suffix_summary:
   ((?ty. vv_location (FST (compile_expr cenv ty obj sa)) = SOME LocCode) \/
    (?n. bd = Fixed n)) /\
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
-  expr_type obj = ArrayT et bd /\
+  expr_type obj = ArrayT et bd /\ post_value_type cenv obj = expr_type obj /\
   eval_expr cx obj es = (INL r,t) /\
   eval_expr cx idx t = (INL ir,ee) /\ read_result cx ir ee = (INL iv,ee) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\

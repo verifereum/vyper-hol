@@ -41,6 +41,7 @@ Proof
   simp[loweringPostsTheory.vv_post_def,
        exprLoweringPropsTheory.stmt_state_rel_jump_to,
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def,
+       loweringPostsTheory.vv_own_def, loweringPostsTheory.expr_val_own_def,
        loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
        venomStateTheory.lookup_var_def, loweringStateRelDefsTheory.local_region_def,
        loweringPostsTheory.storage_holds_def, loweringPostsTheory.immutable_holds_def,

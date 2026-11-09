@@ -195,6 +195,9 @@ Proof
     (drule_at (Pos hd) expr_post_rebased_lookup >> simp[eval_operand_def]) >>
   `!z. op = Var z \/ Var x = Var z ==> not_fresh_at su z` by
     (rpt strip_tac >> gvs[] >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `post_value_type ce e = expr_type e` by
+    metis_tac[exprSimHypsTheory.post_value_type_no_calls,
+              loweringPostsTheory.post_value_type_lowered] >>
   drule_all aggregate_store_rebased_slice_run >> strip_tac >>
   `expr_val_rel cx (expr_type e) v op s` by gvs[expr_post_def] >>
   `gas_path_mem ctx func s 0
