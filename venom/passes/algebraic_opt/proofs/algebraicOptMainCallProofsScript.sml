@@ -79,7 +79,7 @@ Proof
   disch_then (SUBST1_TAC o SYM) >> simp[setup_callee_def]
 QED
 
-Theorem ao_main_eval_operands_map[local]:
+Theorem ao_main_eval_operands_map:
   !ops vals.
   eval_operands ops s = SOME vals /\
   (!a w. MEM a ops /\ eval_operand a s = SOME w ==>

@@ -2,7 +2,7 @@ Theory algebraicOptMainResidualProofs
 Ancestors
   algebraicOptMainCallProofs algebraicOptMainControlProofs
   algebraicOptRelationProofs algebraicOptDefs algebraicOptShapeProofs
-  venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps list
+  venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps stateFrame list
 
 Theorem ao_main_equal_write:
   ao_main_observations fn V s r /\
@@ -167,7 +167,7 @@ Proof
 QED
 
 Theorem ao_main_store_base:
-  MEM inst.inst_opcode [MSTORE; MSTORE8; SSTORE; TSTORE] /\
+  MEM inst.inst_opcode [MSTORE; MSTORE8; SSTORE; TSTORE; ISTORE] /\
   other.inst_opcode = inst.inst_opcode /\
   other.inst_operands = MAP resolve inst.inst_operands /\
   (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
@@ -182,16 +182,16 @@ Theorem ao_main_store_base:
 Proof
   strip_tac >> gvs[MEM] >> gvs[step_inst_base_opcode_eqs] >>
   gvs[exec_write2_def, AllCaseEqs()] >>
-  rename1 `eval_operand op1 s = SOME v1` >>
-  rename1 `eval_operand op2 s = SOME v2` >>
+  rename [`inst.inst_operands = [op1;op2]`,
+          `eval_operand op1 s = SOME v1`, `eval_operand op2 s = SOME v2`] >>
   `eval_operand (resolve op1) r = SOME v1 /\
    eval_operand (resolve op2) r = SOME v2` by metis_tac[] >>
   simp[] >>
   (conj_tac
    >- (irule ao_main_observations_vars >>
        qexistsl_tac [`r`, `s`] >>
-       simp[mstore_def, mstore8_def, sstore_def, tstore_def]) >>
-   gvs[mstore_def, mstore8_def, sstore_def, tstore_def,
+       simp[istore_def, mstore_def, mstore8_def, sstore_def, tstore_def]) >>
+   gvs[istore_def, mstore_def, mstore8_def, sstore_def, tstore_def,
        venom_state_component_equality])
 QED
 
@@ -319,4 +319,191 @@ Proof
   >- (irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >>
       simp[write_memory_with_expansion_def]) >>
   gvs[write_memory_with_expansion_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_ret_base:
+  MEM inst.inst_opcode [RET; RETFMP] /\
+  other.inst_opcode = inst.inst_opcode /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  (?e. step_inst_base inst s = Error e) \/
+  lift_result R (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base other r)
+Proof
+  strip_tac >> Cases_on `eval_operands inst.inst_operands s`
+  >- (gvs[MEM] >> simp[step_inst_base_opcode_eqs]) >>
+  `eval_operands other.inst_operands r = SOME x` by
+    (gvs[] >> irule ao_main_eval_operands_map >> qexists_tac `s` >> simp[]) >>
+  `s.vs_fmp = r.vs_fmp /\ execution_equiv UNIV s r` by
+    gvs[execution_equiv_def, execution_frame_def, venom_state_component_equality] >>
+  gvs[MEM] >> simp[step_inst_base_opcode_eqs] >>
+  Cases_on `x` >> simp[lift_result_def]
+QED
+
+Theorem ao_main_stop_base:
+  MEM inst.inst_opcode [STOP; SINK] /\ other.inst_opcode = inst.inst_opcode /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  lift_result R (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base other r)
+Proof
+  strip_tac >> gvs[MEM] >>
+  simp[step_inst_base_opcode_eqs, lift_result_def, execution_equiv_def,
+       execution_frame_def, halt_state_def, venom_state_component_equality] >>
+  gvs[venom_state_component_equality]
+QED
+
+Theorem ao_main_return_revert_base:
+  inst_wf inst /\ MEM inst.inst_opcode [RETURN; REVERT] /\
+  other.inst_opcode = inst.inst_opcode /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  (?e. step_inst_base inst s = Error e) \/
+  lift_result R (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base other r)
+Proof
+  strip_tac >> gvs[MEM] >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  rename1 `inst.inst_operands = [a;b]` >>
+  (Cases_on `eval_operand a s`
+   >- simp[step_inst_base_opcode_eqs] >>
+   Cases_on `eval_operand b s`
+   >- simp[step_inst_base_opcode_eqs] >>
+   `eval_operand (resolve a) r = SOME x /\
+    eval_operand (resolve b) r = SOME x'` by metis_tac[] >>
+   simp[step_inst_base_opcode_eqs, lift_result_def] >>
+   gvs[execution_equiv_def, execution_frame_def, halt_state_def,
+       revert_state_def, set_returndata_def, venom_state_component_equality])
+QED
+
+Theorem ao_main_setfmp_base:
+  inst.inst_opcode = SETFMP /\ other.inst_opcode = SETFMP /\
+  other.inst_outputs = inst.inst_outputs /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base other r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >> simp[] >>
+  conj_tac
+  >- (irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
+  gvs[venom_state_component_equality]
+QED
+
+Theorem ao_main_dalloca_base:
+  inst.inst_opcode = DALLOCA /\ other.inst_opcode = DALLOCA /\
+  other.inst_outputs = inst.inst_outputs /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base other r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  `s.vs_fmp = r.vs_fmp` by gvs[venom_state_component_equality] >>
+  simp[] >> conj_tac
+  >- (irule ao_main_observations_update >> simp[] >>
+      irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
+  gvs[update_var_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_bump_base:
+  inst.inst_opcode = BUMP /\ other.inst_opcode = BUMP /\
+  other.inst_outputs = inst.inst_outputs /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base other r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >> gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  rename [`inst.inst_operands = [a;b]`,
+          `eval_operand a s = SOME x`, `eval_operand b s = SOME y`] >>
+  `eval_operand (resolve a) r = SOME x /\
+   eval_operand (resolve b) r = SOME y` by metis_tac[] >>
+  simp[] >> conj_tac
+  >- (irule ao_main_observations_update >> simp[] >>
+      irule ao_main_observations_update >> simp[]) >>
+  gvs[update_var_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_alloca_base:
+  inst_wf inst /\ inst.inst_opcode = ALLOCA /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  ao_resolve_iszero_inst targets inst = inst /\
+  ?t u. step_inst_base inst s = OK t /\ step_inst_base inst r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  `ao_resolve_iszero_inst targets inst = inst` by
+    simp[ao_resolve_iszero_inst_def, ao_resolve_iszero_op_def,
+         instruction_component_equality] >>
+  `s.vs_allocas = r.vs_allocas /\ s.vs_alloca_next = r.vs_alloca_next` by
+    gvs[venom_state_component_equality] >>
+  simp[step_inst_base_opcode_eqs, exec_alloca_def] >>
+  Cases_on `FLOOKUP r.vs_allocas inst.inst_id` >> simp[]
+  >- (conj_tac
+      >- (irule ao_main_observations_update >> simp[] >>
+          irule ao_main_observations_vars >> qexistsl_tac [`r`, `s`] >> simp[]) >>
+      gvs[update_var_def, venom_state_component_equality]) >>
+  PairCases_on `x` >> simp[] >> irule ao_main_equal_write >> simp[]
+QED
+
+Theorem ao_main_nop_invalid_base:
+  MEM inst.inst_opcode [NOP; INVALID] /\
+  other.inst_opcode = inst.inst_opcode /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  lift_result
+    (\t u. ao_main_observations fn V t u /\
+      (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+      t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx)
+    (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base other r)
+Proof
+  strip_tac >> gvs[MEM] >> simp[step_inst_base_opcode_eqs, lift_result_def] >>
+  gvs[execution_equiv_def, execution_frame_def, halt_state_def,
+      set_returndata_def, venom_state_component_equality]
+QED
+
+Theorem ao_main_selfdestruct_base:
+  inst_wf inst /\ inst.inst_opcode = SELFDESTRUCT /\
+  other.inst_opcode = SELFDESTRUCT /\
+  other.inst_operands = MAP resolve inst.inst_operands /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (resolve a) r = SOME w) /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  (?e. step_inst_base inst s = Error e) \/
+  lift_result R (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base other r)
+Proof
+  strip_tac >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  rename1 `inst.inst_operands = [a]` >>
+  Cases_on `eval_operand a s`
+  >- simp[step_inst_base_opcode_eqs] >>
+  `eval_operand (resolve a) r = SOME x` by metis_tac[] >>
+  simp[step_inst_base_opcode_eqs, lift_result_def] >>
+  gvs[execution_equiv_def, execution_frame_def, halt_state_def,
+      set_returndata_def, venom_state_component_equality]
 QED
