@@ -2,6 +2,7 @@ Theory exprSimAbiEncodeArgsEntryCall
 Ancestors
   exprSimAbiEncodeArgsEntryValue exprSimAbiEncodeArgsEntryPrim
   exprLowering compileEnv context emitHelper exprSimAbiEncodeArgsEntry
+  exprSimAbiEncodeArgsEntryCallbacks
 
 Theorem abi_args_entry_multi_vvs:
   (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
@@ -251,4 +252,91 @@ Proof
       metis_tac[abi_args_entry_emit_void]) >>
   strip_tac >> gvs[] >> `INVOKE <> PHI` by simp[] >>
   metis_tac[abi_args_entry_emit_void]
+QED
+
+Theorem abi_args_entry_send:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce rt ty has_gas es d a vv b.
+    compile_call cfn ce rt ty (Send has_gas) es d a = (vv,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 4 gen_tac >> Cases
+  >- (simp[compile_call_def] >> rpt gen_tac >> pairarg_tac >> simp[] >>
+      strip_tac >> gvs[] >> `INVALID <> PHI` by simp[] >>
+      metis_tac[fragExecTheory.cs_extends_emit_inst, abi_args_entry_emit_inst]) >>
+  rename1 `addr_e::remaining` >> Cases_on `remaining`
+  >- (simp[compile_call_def] >> rpt gen_tac >> pairarg_tac >> simp[] >>
+      strip_tac >> gvs[] >> `INVALID <> PHI` by simp[] >>
+      metis_tac[fragExecTheory.cs_extends_emit_inst, abi_args_entry_emit_inst]) >>
+  rename1 `addr_e::val_e::gas_es` >> rpt gen_tac >> simp[compile_call_def] >>
+  IF_CASES_TAC
+  >- (pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+      `!ce ty e a x b. lower_value cfn ce ty e a = (x,b) ==>
+         cs_extends a b /\ abi_args_entry_safe a b` by
+        (rpt gen_tac >> metis_tac[abi_args_entry_lower_value]) >>
+      `cs_extends a st1 /\ abi_args_entry_safe a st1` by metis_tac[] >>
+      `cs_extends st1 st2 /\ abi_args_entry_safe st1 st2` by metis_tac[] >>
+      `cs_extends a st2 /\ abi_args_entry_safe a st2` by
+        metis_tac[cs_extends_trans, abi_args_entry_safe_trans] >>
+      pairarg_tac >> simp[] >>
+      `cs_extends st2 st2' /\ abi_args_entry_safe st2 st2'` by
+        (Cases_on `gas_es` >> gvs[]
+         >- simp[cs_extends_refl] >>
+         Cases_on `t`
+         >- (gvs[] >> metis_tac[]) >>
+         Cases_on `has_gas` >> gvs[]) >>
+      pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      `CALL <> PHI /\ ASSERT <> PHI` by simp[] >>
+      drule_all abi_args_entry_emit_op >> strip_tac >>
+      drule_all abi_args_entry_emit_void >> strip_tac >>
+      gvs[abi_args_entry_safe_def] >>
+      metis_tac[cs_extends_trans, abi_args_entry_emitted_mono,
+                abi_args_entry_emitted_code_eq]) >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `INVALID <> PHI` by simp[] >>
+  metis_tac[fragExecTheory.cs_extends_emit_inst, abi_args_entry_emit_inst]
+QED
+
+Theorem abi_args_entry_raw_revert_backend:
+  !data a x b. compile_raw_revert data a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  gen_tac >> rewrite_tac[builtinSystemTheory.compile_raw_revert_def] >>
+  ho_match_mp_tac abi_args_entry_emitted_bind >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule abi_args_entry_emit_op >>
+      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  gen_tac >> rpt gen_tac >> simp[comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  `ADD <> PHI` by simp[] >>
+  drule_all abi_args_entry_emit_op >> strip_tac >>
+  metis_tac[fragExecTheory.cs_extends_emit_inst, cs_extends_trans]
+QED
+
+Theorem abi_args_entry_raw_revert:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce rt ty es d a vv b.
+    compile_call cfn ce rt ty RawRevert es d a = (vv,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 3 gen_tac >> Cases
+  >- (simp[compile_call_def] >> rpt gen_tac >> pairarg_tac >> simp[] >>
+      strip_tac >> gvs[] >> `INVALID <> PHI` by simp[] >>
+      metis_tac[fragExecTheory.cs_extends_emit_inst, abi_args_entry_emit_inst]) >>
+  rename1 `data_e::rest` >> Cases_on `rest`
+  >- (rpt gen_tac >> simp[compile_call_def] >> pairarg_tac >> simp[] >>
+      `cs_extends a st1 /\ abi_args_entry_safe a st1` by
+        metis_tac[abi_args_entry_lower_value] >>
+      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      drule abi_args_entry_raw_revert_backend >> strip_tac >>
+      gvs[abi_args_entry_safe_def] >>
+      metis_tac[cs_extends_trans, abi_args_entry_emitted_mono,
+                abi_args_entry_emitted_code_eq]) >>
+  simp[compile_call_def] >> rpt gen_tac >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >> `INVALID <> PHI` by simp[] >>
+  metis_tac[fragExecTheory.cs_extends_emit_inst, abi_args_entry_emit_inst]
 QED
