@@ -24,7 +24,7 @@ Proof
        comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
        emit_def] >> strip_tac >>
   gvs[emitted_insts_def, DROP_LENGTH_APPEND, run_inst_seq_def,
-      step_inst_base_def, mk_inst_def, exec_alloca_def, eval_operand_def] >>
+      step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, eval_operand_def] >>
   gvs[AllCaseEqs(), update_var_def, FLOOKUP_UPDATE,
       abi_builtin_allocate_state_def]
 QED

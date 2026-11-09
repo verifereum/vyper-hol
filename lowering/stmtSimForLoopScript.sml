@@ -361,7 +361,7 @@ QED
    counter into the loop variable.  The relation then holds at the body's
    environment bc, for the source state with the loop variable's scope
    pushed. *)
-Theorem for_body_entry_alloca[local]:
+Theorem for_body_entry_alloca:
   !ctx func cenv bc cx esk cc id tyv p sz w ainst cv ev dv n1 n2 k
    cond_lbl exit_lbl body_lbl j1 j2 j3 bbb.
     lookup_block cond_lbl func.fn_blocks =
@@ -1029,7 +1029,7 @@ Proof
   rpt gen_tac >> strip_tac >> drule_all for_iteration_alloca >> simp[]
 QED
 
-Theorem gas_outcome_exec_conseq[local]:
+Theorem gas_outcome_exec_conseq:
   gas_outcome memory tops (ctx,func) source (es,s) Q R /\
   (!marks res mid t.
      gas_marked_exec memory (ctx,func) source (es,s) marks res mid (OK t) /\
