@@ -102,3 +102,55 @@ Proof
   qexists_tac `t` >> simp[] >>
   fs[typed_copy_effect_def] >> metis_tac[]
 QED
+
+(* A destination may be larger than a source member; frame the owned envelope. *)
+Theorem tuple_target_widened_source_memory:
+  stmt_state_rel ctx func cenv cx es s /\
+  tuple_target_layout es.scopes g dty dtv v /\
+  (is_word_type dty ==> type_memory_size dtv = 32) /\
+  (!id dst dsz. local_region cenv es.scopes s id dst dsz ==>
+     regions_disjoint b sz dst dsz) /\
+  b <= addr /\ addr + type_memory_size_list tvs <= b + sz /\
+  tuple_in_memory vs tvs addr s.vs_memory /\ tuple_val_wf vs tvs /\
+  (t.vs_memory = s.vs_memory \/ ?id p dsz entry dw.
+    g = BaseTarget (NameTarget id) /\ lookup_scopes id es.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) dsz) /\ lookup_var p s = SOME dw /\
+    (!a len. a + len <= w2n dw \/
+      w2n dw + (if is_word_type dty then 32 else type_memory_size dtv) <= a ==>
+      mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)) ==>
+  tuple_in_memory vs tvs addr t.vs_memory
+Proof
+  strip_tac >- simp[] >>
+  gvs[tuple_target_layout_local] >>
+  `type_memory_size entry.type <= dsz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> strip_tac >> gvs[] >> metis_tac[]) >>
+  `regions_disjoint b sz (w2n dw) dsz` by
+    (first_x_assum irule >> simp[local_region_def] >> metis_tac[]) >>
+  `mem_bytes_at addr (type_memory_size_list tvs) t.vs_memory =
+   mem_bytes_at addr (type_memory_size_list tvs) s.vs_memory` by
+    (first_x_assum irule >> fs[regions_disjoint_def] >>
+     Cases_on `is_word_type dty` >> gvs[] >> decide_tac) >>
+  irule (cj 5 val_in_memory_mem_agree_proof) >> metis_tac[]
+QED
+
+Theorem tuple_owned_source_region_frame:
+  local_ptrs_rel func cenv scopes s /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM scopes = MAP FDOM scopes' /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==>
+     FLOOKUP t.vs_allocas aid = SOME bs) /\
+  ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
+   (?name. local_region cenv scopes s name b sz)) /\
+  (!name lb len. local_region cenv scopes s name lb len ==>
+     regions_disjoint b sz lb len) ==>
+  ((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
+   (?name. local_region cenv scopes' t name b sz)) /\
+  (!name lb len. local_region cenv scopes' t name lb len ==>
+     regions_disjoint b sz lb len)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> conj_tac
+  >- (irule tuple_container_transport >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >>
+  irule local_region_frame >> metis_tac[]
+QED
