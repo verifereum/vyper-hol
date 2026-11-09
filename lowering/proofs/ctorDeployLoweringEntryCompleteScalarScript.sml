@@ -15,8 +15,8 @@ Theorem deploy_ctor_decoder_step_ambient:
  t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
  t.vs_block_ctx = s.vs_block_ctx
 Proof
- strip_tac >> Cases_on `inst.inst_opcode` >>
- gvs[abi_decoder_reentry_opcode_def] >>
+ strip_tac >>
+ fs[abi_decoder_reentry_opcode_def] >>
  qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
  pure_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[] >>
  pure_rewrite_tac[opcode_case_def] >>
