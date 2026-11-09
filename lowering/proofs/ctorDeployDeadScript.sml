@@ -67,7 +67,10 @@ Proof
       Cases_on `src`
       >- (rename1 `INL p` >> PairCases_on `p` >>
           rename1 `INL (am', rqs)` >>
-          drule load_contract_sources_layouts >> strip_tac >>
+          drule load_contract_sources_layouts >>
+          impl_tac >- (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
+                       simp[deploy_source_ok_def]) >>
+          strip_tac >>
           `(initial_evaluation_context am'.sources am'.layouts tx NONE).txn = tx`
             by simp[initial_evaluation_context_def] >>
           qabbrev_tac `cx = initial_evaluation_context am'.sources am'.layouts tx NONE` >>
