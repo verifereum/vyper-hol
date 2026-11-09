@@ -102,22 +102,11 @@ Theorem abi_args_local_type_coherent:
   ?ty. ce.ce_var_type name = SOME ty /\
        evaluate_type (get_tenv cx) ty = SOME entry.type
 Proof
-  simp[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+  simp[exprSimHypsDefsTheory.expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
        vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
   rpt strip_tac >>
   `IS_SOME (FLOOKUP env.var_types name)` by metis_tac[] >>
   Cases_on `FLOOKUP env.var_types name` >> gvs[] >> metis_tac[]
-QED
-
-Theorem abi_args_dynamic_local_type:
-  expr_sim_inv ce cx env es /\ lookup_scopes name es.scopes = SOME entry /\
-  dynarray_local ce name ==>
-  ?etv n. entry.type = ArrayTV etv (Dynamic n)
-Proof
-  strip_tac >> drule_all abi_args_local_type_coherent >> strip_tac >>
-  gvs[dynarray_local_def] >>
-  Cases_on `ty` >> gvs[dynarray_type_def, vyperValueTheory.evaluate_type_def,
-                         AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem abi_args_local_region_kept:
@@ -128,7 +117,7 @@ Theorem abi_args_local_region_kept:
   local_region ce es.scopes s0 name b sz ==>
   mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory
 Proof
-  cheat
+  simp[wb_frame_def, locals_kept_def] >> metis_tac[]
 QED
 
 Theorem abi_args_local_window_kept:
@@ -140,7 +129,10 @@ Theorem abi_args_local_window_kept:
   b <= off /\ off + len <= b + sz ==>
   mem_bytes_at off len s1.vs_memory = mem_bytes_at off len s0.vs_memory
 Proof
-  cheat
+  strip_tac >> drule_all abi_args_local_region_kept >> strip_tac >>
+  `off = b + (off - b)` by decide_tac >>
+  `off - b + len <= sz` by decide_tac >>
+  metis_tac[valueEncodingPropsTheory.mem_bytes_at_translated_window]
 QED
 
 Theorem abi_args_operand_kept:
@@ -149,7 +141,8 @@ Theorem abi_args_operand_kept:
   eval_operand op s0 = SOME w ==>
   eval_operand op s1 = SOME w
 Proof
-  cheat
+  strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
+  simp[] >> qexistsl [`st`, `s0`] >> gvs[wb_frame_def]
 QED
 
 Theorem abi_args_location_kept_eq:
@@ -160,7 +153,23 @@ Theorem abi_args_location_kept_eq:
   expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_at ce cx ty sa sb es' v op s1
 Proof
-  cheat
+  strip_tac >> rewrite_tac[expr_val_at_def] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by metis_tac[] >>
+  simp[]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >>
+      conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >> qexists `n` >>
+      irule exprSimPropsTheory.local_region_frame >>
+      conj_tac
+      >- (qexists `func` >>
+          gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
+      qexistsl [`st`, `es'.scopes`, `s1`] >> gvs[wb_frame_def])
+  >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
+      qexistsl [`s0`, `st`, `es.scopes`] >> gvs[wb_frame_def])
+  >> simp[]
 QED
 
 Theorem abi_args_location_kept:
@@ -171,7 +180,23 @@ Theorem abi_args_location_kept:
   expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_at ce cx ty sa sb es' v op s1
 Proof
-  cheat
+  strip_tac >> rewrite_tac[expr_val_at_def] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by metis_tac[abi_args_operand_kept] >>
+  simp[]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >>
+      conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >> qexists `n` >>
+      irule exprSimPropsTheory.local_region_frame >>
+      conj_tac
+      >- (qexists `func` >>
+          gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
+      qexistsl [`st`, `es'.scopes`, `s1`] >> gvs[wb_frame_def])
+  >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
+      qexistsl [`s0`, `st`, `es.scopes`] >> gvs[wb_frame_def])
+  >> simp[]
 QED
 
 Theorem abi_args_value_kept_eq:
@@ -184,7 +209,25 @@ Theorem abi_args_value_kept_eq:
   expr_val_rel cx ty v op s0 /\ expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_rel cx ty v op s1
 Proof
-  cheat
+  strip_tac >> Cases_on `is_word_type ty`
+  >- (qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+      simp[expr_val_rel_def] >> rpt strip_tac >>
+      qexists `w` >> simp[]) >>
+  qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+  simp[expr_val_rel_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by metis_tac[] >>
+  rewrite_tac[expr_val_rel_def] >> qexists `w` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> irule val_in_memory_footprint_agree >>
+  simp[] >> qexists `s0.vs_memory` >> simp[]
+  >- (`mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+        (gvs[wb_frame_def] >> first_x_assum irule >>
+         conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+         qexists `aid` >> simp[]) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      simp[])
+  >- (sym_tac >> irule abi_args_local_window_kept >> metis_tac[])
+  >> simp[valueEncodingTheory.mem_bytes_at_def]
 QED
 
 Theorem abi_args_value_kept:
@@ -197,7 +240,11 @@ Theorem abi_args_value_kept:
   expr_val_rel cx ty v op s0 /\ expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_rel cx ty v op s1
 Proof
-  cheat
+  strip_tac >> irule abi_args_value_kept_eq >>
+  `eval_operand op s0 = eval_operand op s1` by
+    (Cases_on `eval_operand op s0` >>
+     gvs[expr_val_rel_def] >> metis_tac[abi_args_operand_kept]) >>
+  metis_tac[]
 QED
 
 Theorem abi_args_captured_value_kept:
@@ -212,7 +259,14 @@ Theorem abi_args_captured_value_kept:
               b + sz <= lb \/ lb + lsz <= b) ==>
   expr_val_rel cx ty v op s1
 Proof
-  cheat
+  strip_tac >> irule expr_val_rel_footprint_agree >>
+  simp[] >> qexistsl [`s0`, `w`] >> simp[] >> reverse conj_tac
+  >- (irule abi_args_operand_kept >> metis_tac[]) >>
+  `mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+    (gvs[wb_frame_def] >> first_x_assum irule >>
+     conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+     qexists `aid` >> simp[]) >>
+  drule valueEncodingProofsTheory.mem_bytes_at_agree_window >> simp[]
 QED
 
 Theorem abi_args_nil_sim:
