@@ -81,7 +81,7 @@ Ancestors
   fragGasSeq fragGasSeqAbort exprSimProps
   loweringPosts
   list rich_list  exprSimHyps vyperAST exprSimWordBuiltins
-  exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
+  exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv loweringStateRelDefs
   valueEncoding fragExec freshWrites varsExt builtinProps arithmeticProps emitHelper
   vyperInterpreter vyperState vyperContext
   vyperValueOperation venomState exprSimAccounts exprSimUnop

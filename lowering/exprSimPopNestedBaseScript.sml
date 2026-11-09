@@ -13,7 +13,7 @@ Ancestors
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
-  exprLoweringProps compileEnv finite_map vyperPureExpr
+  exprLoweringProps compileEnv loweringStateRelDefs finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
   exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame stmtSimProps

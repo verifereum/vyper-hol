@@ -1,6 +1,6 @@
 Theory bodySimAugPlaceScopes
 Ancestors
-  supportedExprs vyperInterpreter vyperScopePreservation
+  supportedExprs vyperInterpreter vyperCallOutcomeFrame vyperScopePreservation
   vyperState vyperContext vyperMisc pair sum
   vyperStatePreservation vyperPlaceFrames vyperCallFrame
 

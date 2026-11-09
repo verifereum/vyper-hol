@@ -248,7 +248,7 @@ Resume compile_rest_word_membership_sim_mem[typed_tail]:
      metis_tac[fragGasModeTheory.gas_marked_path_exec,
        fragGasPathTheory.gas_path_normal]) >>
   `alloca_inv u` by fs[loweringPostsTheory.vv_post_def,
-    exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   suspend "safe_tail"
 QED
 

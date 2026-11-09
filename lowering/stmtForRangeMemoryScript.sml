@@ -2,7 +2,7 @@
    counted loop execution preserve allocation history and return-buffer frames. *)
 Theory stmtForRangeMemory
 Ancestors
-  stmtSimDefs exprSimMemDefs stmtLowering compileEnv vyperInterpreter
+  stmtSimDefs exprSimMemDefs stmtLowering compileEnv loweringStateRelDefs vyperInterpreter
   vyperState vyperTypeSystem stmtSimForRange stmtForRangeEndpointsMemory
   stmtForRangeChecksMemory stmtForRangeMemoryLoop stmtForRangeMemoryStart
   stmtLoweringMono exprLoweringProps stmtSimProps stmtSimForParts

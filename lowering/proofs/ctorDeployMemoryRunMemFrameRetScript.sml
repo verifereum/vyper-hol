@@ -12,7 +12,7 @@ Ancestors
   immutableDeployExecution allocaSiteResource venomExecSemantics venomState
   venomMemDefs words arithmetic finite_map exprLoweringProps moduleLowering venomInst
   fragExecMem memSafeRun fragGasPathMem fragExec gasCount instIdxIndep
-  list rich_list entrySinkExtraction compileEnv loweringHalt ctorReturnFrame bodySim unitTransformDefs stmtSimDefs stmtSimProps
+  list rich_list entrySinkExtraction compileEnv loweringStateRelDefs loweringHalt ctorReturnFrame bodySim unitTransformDefs stmtSimDefs stmtSimProps
   stmtLowering gasOutcome gasSummary fragGasMode loweringPosts vyperInterpreter
 
 Theorem constructor_mem_seq_split:

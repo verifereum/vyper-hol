@@ -3,7 +3,7 @@ Theory bodyMemBiLenSafety
 Ancestors
   exprSimLen exprSimSource exprSimProps exprSimHypsDefs exprSimDefs
   loweringPosts list fragExec exprSimHyps exprSimWordBuiltins exprBopLowering
-  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
+  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs
   accountsRelProps valueEncoding venomExecSemantics venomInst venomState
   vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
   vyperTypeBuiltins vyperValue vyperTyping vyperStorage builtinProps

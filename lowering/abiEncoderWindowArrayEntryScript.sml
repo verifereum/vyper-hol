@@ -8,7 +8,7 @@ Ancestors
   abiEncoderWindowContract abiEncoderRegisteredEffect abiEncoderPrimitiveEffect
   abiDecoderIndexInit abiEncoderArrayCode abiEncoderArrayPhases abiEncoderArrayTailInit
   emitHelperProps freshWrites exprLoweringProps compileEnv emitHelper
-  fragExec venomState venomMemDefs valueEncoding valueEncodingProps venomInst
+  fragExec venomState venomMemDefs valueEncoding valueEncodingDefs valueEncodingProps venomInst
   finite_map pred_set words list arithmetic
 
 Theorem window_array_cursor_init_phase_observed:

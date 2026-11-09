@@ -31,7 +31,7 @@ Ancestors
   list pair vyperMisc fragExec loweringSlice exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding valueEncodingProps
+  exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs valueEncodingProps
   vyperAST vyperInterpreter vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom

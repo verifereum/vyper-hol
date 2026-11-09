@@ -34,8 +34,8 @@ Ancestors
   allocLimits
   list fragExec loweringSlice builtinBytes  exprSimHyps exprBopLowering
   exprSimOperators vyperEvalExprPreservesScopesDom
-  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv
-  valueEncoding venomExecSemantics venomInst venomState vyperAST
+  exprLowering exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingDefs venomExecSemantics venomInst venomState vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeSystem
   vyperTypeInvariants vyperTyping vyperValueOperation vyperValue
   exprSimWordBuiltins exprSimWordArgs emitHelperProps freshWrites

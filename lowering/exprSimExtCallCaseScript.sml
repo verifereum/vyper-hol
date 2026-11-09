@@ -126,12 +126,12 @@ Definition extcall_request_ready_def:
              cap <= buf_size /\
              FLOOKUP t.vs_allocas live = SOME (w2n ro, buf_size)) /\
           (!name b sz. local_region cenv ee.scopes t name b sz ==>
-             compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+             loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
           (!name b sz. local_region cenv es.scopes s0 name b sz ==>
-             compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+             loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
           (!aid b sz. aid < sa.cs_next_id /\
              FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
-             compileEnv$regions_disjoint (w2n ro) cap b sz) /\
+             loweringStateRelDefs$regions_disjoint (w2n ro) cap b sz) /\
           (cenv.ce_is_ctor ==> !name tv v off.
              FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
                SOME (ImmutableLoc off) /\
@@ -139,12 +139,12 @@ Definition extcall_request_ready_def:
                         NONE => FEMPTY
                       | SOME imms => get_source_immutables cenv.ce_module imms)
                name = SOME (tv,v) ==>
-             compileEnv$regions_disjoint (w2n ro) cap off
+             loweringStateRelDefs$regions_disjoint (w2n ro) cap off
                (type_memory_size tv)) /\
           (!d w tv. default_opt = SOME d /\ ~is_word_type default_ty /\
              eval_operand default_op t = SOME w /\
              evaluate_type (get_tenv cx) default_ty = SOME tv ==>
-             compileEnv$regions_disjoint (w2n ro) cap (w2n w)
+             loweringStateRelDefs$regions_disjoint (w2n ro) cap (w2n w)
                (val_footprint tv d))) /\
     extcall_default_ready cx ret_type has_default default_op default_ty
       default_opt t

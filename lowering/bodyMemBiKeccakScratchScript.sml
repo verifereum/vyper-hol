@@ -2,7 +2,7 @@
 Theory bodyMemBiKeccakScratch
 Ancestors
   context list exprSimAlloc bodyMemBiKeccakSuffix allocaFootprint builtinHashing emitHelper
-  emitHelperProps exprLoweringProps fragExecMem instMemFrontier compileEnv
+  emitHelperProps exprLoweringProps fragExecMem instMemFrontier compileEnv loweringStateRelDefs
   venomInst abiBuiltinAllocation venomState venomExecSemantics venomMemDefs words finite_map
 
 Theorem keccak_fixed_site_mem_ok:

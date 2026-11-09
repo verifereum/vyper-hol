@@ -27,8 +27,8 @@ Theory valueCopy
 Ancestors
   exprSimProps
   list rich_list arithmetic
-  valueEncoding valueEncodingProps valueEncodingProofs  valueCopyBytes
-  compileEnv context exprLoweringProps emitHelper emitHelperProps
+  valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs  valueCopyBytes
+  compileEnv loweringStateRelDefs context exprLoweringProps emitHelper emitHelperProps
   vyperValue vyperTyping vfmConstants immutableMemoryFrame
   venomInst venomState venomExecSemantics venomMemProps
 Libs

@@ -76,10 +76,10 @@ Ancestors
   loweringPosts
   exprSimAlloc
   allocLimits
-  list  exprSimHyps exprSimConvert exprLowering compileEnv
+  list  exprSimHyps exprSimConvert exprLowering compileEnv loweringStateRelDefs
   exprSimValues gasNormalPrefix gasSummary gasOutcome gasContext
   fragGasMode fragGasPath fragGasSeq
-  valueEncoding vyperAST vyperInterpreter vyperState vyperContext
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperContext
   vyperValueOperation vyperTypeSystem fragExec venomState
   exprSimBuffer exprSimBufferEmptyExec exprSimAggregateLayout
   exprSimAggregateSource exprSimAggregateLoops exprSimAggregateChildren
@@ -796,7 +796,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ b len` drule >>
-      simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
       first_x_assum irule >> decide_tac) >>
   drule_all expr_sim_inv_memory_size >> strip_tac >>
   simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof] >>

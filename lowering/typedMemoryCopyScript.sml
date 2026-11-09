@@ -5,7 +5,7 @@
 Theory typedMemoryCopy
 Ancestors
   exprSimProps loweringPosts exprSimStorageCopy
-  context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
+  context typedCopyDomain compileEnv loweringStateRelDefs emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
   venomExecSemantics venomState venomInst words list pair finite_map arithmetic vfmConstants

@@ -5,8 +5,8 @@ Ancestors
   exprSimAlloc exprSimBufferStore abiBuiltinAllocation tupleStageProps
   fragGasPathMem fragGasMode fragGasSeqMem allocaHistoryFragment
   exprLoweringProps loweringSlice emitHelper emitHelperProps exprLowering
-  compileEnv context venomState venomExecSemantics venomInst freshWrites
-  valueEncoding valueEncodingProps valueTypingMemoryProps finite_map list rich_list
+  compileEnv loweringStateRelDefs context venomState venomExecSemantics venomInst freshWrites
+  valueEncoding valueEncodingDefs valueEncodingProps valueTypingMemoryProps finite_map list rich_list
   localPtrsProps stmtSimDefs stmtSimProps fragExec fragExecMem bodyMemoryDefs
   loweringPosts vyperTyping instMemFrontier stmtSimReturn tupleLoadProps stmtLowering tupleTypedLoad
 Libs

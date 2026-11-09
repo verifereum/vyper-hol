@@ -1,7 +1,7 @@
 Theory placeTypedCopyRecursivePath
 Ancestors
   placeTypedCopyPath placeCopyControlPath typedMemoryCopy fragExec fragGasMode
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv context valueEncoding valueEncodingProps
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs context valueEncoding valueEncodingDefs valueEncodingProps
   venomState venomInst venomExecSemantics words list arithmetic
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping pair
 

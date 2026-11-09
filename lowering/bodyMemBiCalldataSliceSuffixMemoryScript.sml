@@ -3,7 +3,7 @@ Theory bodyMemBiCalldataSliceSuffixMemory
 Ancestors
   bodyMemBiCalldataSliceFacts fragExecMem instMemFrontier
   venomState venomInst venomExecSemantics venomMemDefs
-  fragExec compileEnv emitHelper emitHelperProps context loweringSlice
+  fragExec compileEnv loweringStateRelDefs emitHelper emitHelperProps context loweringSlice
   words list builtinBytes exprLoweringProps freshWrites exprSimDefs arithmetic
   exprSimAlloc loweringPosts finite_map valueTypingMemoryProps builtinBytesMemory
   venomMemProps venomMemProofs venomInstProps exprSimCalldataSlice

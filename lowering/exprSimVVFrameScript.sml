@@ -4,7 +4,7 @@ Ancestors
   context
   exprLowering
   exprSimProps exprSimDefs loweringPosts freshWrites exprLoweringProps
-  compileEnv venomState venomExecSemantics valueEncoding
+  compileEnv loweringStateRelDefs venomState venomExecSemantics valueEncoding
   vyperState vyperValue words list finite_map
 
 

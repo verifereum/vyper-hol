@@ -3,7 +3,7 @@ Ancestors
   bodyPtrAttributeAdd bodyPtrAttributeFields exprSimAttribute exprSimVVFrame
   exprSimFieldLayout vyperStoragePlaceRegion
   exprOperandVar freshWrites ASCIInumbers emitHelperProps bodyPtrDefs
-  exprLoweringProps exprSimAttributeProps exprLowering context compileEnv venomState ptrDiscipline ptrSafeRun finite_map list arithmetic
+  exprLoweringProps exprSimAttributeProps exprLowering context compileEnv loweringStateRelDefs venomState ptrDiscipline ptrSafeRun finite_map list arithmetic
 
 (* Ordinary post transport is kept separate from the counted ghost edge. *)
 Theorem attribute_add_vv_post:

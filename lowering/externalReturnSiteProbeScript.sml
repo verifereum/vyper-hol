@@ -2,7 +2,7 @@ Theory externalReturnSiteProbe
 Ancestors
   exprSimHypsDefs vyperTypeEvalSoundness vyperTypeArgFits vyperTyping
   vyperTypeExprSoundness vyperTypeSystem vyperTypeInvariants
-  vyperInterpreter vyperState vyperAST loweringPosts valueEncoding exprLowering
+  vyperInterpreter vyperState vyperAST loweringPosts valueEncoding valueEncodingDefs exprLowering
 
 (* A successful typed return read is already a fixed point of its cast.
    This uses annotation typing, not any physical-layout assumption. *)

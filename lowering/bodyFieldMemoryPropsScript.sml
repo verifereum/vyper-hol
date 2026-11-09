@@ -4,7 +4,7 @@ Ancestors
   exprSimHypsDefs supportedExprTraverse supportedProgram valueEncodingProps vyperTypeCallGraph
   bodyNameMemoryFacts exprSimSource
   exprSimFieldLayout exprSimAttributeProps exprSimAttributeFields exprSimVVFrame
-  exprSimProps valueEncoding compileEnv venomState words list rich_list finite_map
+  exprSimProps valueEncoding valueEncodingDefs compileEnv loweringStateRelDefs venomState words list rich_list finite_map
   exprOperandVar exprSimDefs exprSimMemDefs loweringPosts context
   exprSimUnwrapProps exprSimMemoryPath
   exprLowering exprLoweringProps emitHelper emitHelperProps

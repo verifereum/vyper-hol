@@ -2,7 +2,7 @@
 Theory exprSimPtrTopLevelStorageSemantic
 Ancestors
   exprSimPtrTopLevelStorageEnsure exprSimCopy exprSimStorageCopy
-  exprLoweringProps compileEnv valueEncoding loweringPosts
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding loweringPosts
 
 Theorem toplevel_copy_prefix_state_rel:
   stmt_state_rel ctx fn cenv cx es u /\

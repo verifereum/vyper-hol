@@ -19,7 +19,7 @@ Proof
   Induct_on `vs` >- simp[] >>
   rpt gen_tac >> Cases_on `tvs` >- simp[] >>
   Cases_on `i` >>
-  simp[valueEncodingTheory.val_in_memory_def] >>
+  simp[valueEncodingDefsTheory.val_in_memory_def] >>
   rpt strip_tac >> first_x_assum drule_all >>
   simp_tac bool_ss [AC ADD_ASSOC ADD_COMM]
 QED

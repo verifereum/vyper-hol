@@ -2,8 +2,8 @@
 Theory exprSimMapKey
 Ancestors
   exprSimHash exprSimLeaves valueEncodingProofs exprLoweringProps
-  vyperTypeSystem vyperValue vyperTyping vyperStorage valueEncoding
-  vyperInterpreter vyperState list rich_list compileEnv loweringPosts context venomState
+  vyperTypeSystem vyperValue vyperTyping vyperStorage valueEncoding valueEncodingDefs
+  vyperInterpreter vyperState list rich_list compileEnv loweringStateRelDefs loweringPosts context venomState
   emitHelper emitHelperProps venomExecSemantics venomInst fragExec ASCIInumbers
   exprSimAlloc exprSimLiteralBuffer exprSimOps exprBopSimProps exprSimProps
   exprLowering exprCallbackContracts exprCallBounds exprSafeOperandBuiltins

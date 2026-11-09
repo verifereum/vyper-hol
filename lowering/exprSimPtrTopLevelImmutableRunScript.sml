@@ -1,7 +1,7 @@
 (* Arbitrary-length runtime immutable copies with actual checked ghosts. *)
 Theory exprSimPtrTopLevelImmutableRun
 Ancestors exprSimPtrTopLevelImmutableCopy immutableCopyExecution exprSimCopy
-  exprLoweringProps emitHelperProps emitHelper compileEnv context list
+  exprLoweringProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context list
   fragGasSeqPtr instSeqComposePtr fragExec venomInst venomState words
   bodyPtrDefs codegenRel
 

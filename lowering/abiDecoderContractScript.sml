@@ -3,7 +3,7 @@ Theory abiDecoderContract
 Ancestors
   abiDecoderRange fragExec abiBoundaryChecks abiTupleProps emitHelperProps valueEncodingProps
   exprLowering vyperABI venomExecSemantics venomInst venomState compileEnv abiEncoder
-  emitHelper valueEncoding words venomExecProofs exprLoweringProps
+  emitHelper valueEncoding valueEncodingDefs words venomExecProofs exprLoweringProps
 
 (* Contract-design handoff (C6.4): abi_decode_read, abi_decode_word_fragment
    and the two empty-fragment probes below validate only specialized interfaces.

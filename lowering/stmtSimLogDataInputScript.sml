@@ -4,7 +4,7 @@ Ancestors
   stmtSimLogDataRun stmtSimLogSource abiEncoderSourceCorrect
   abiBuiltinEncodeWord entryDecodeProps entryDecodeStaticProps
   supportedTypes vyperTyping vyperABI contractABI vyperValue words integer arithmetic typedCopyMetadata
-  abiEncoderInput valueEncoding compileEnv exprLowering stmtSimLogData
+  abiEncoderInput valueEncoding valueEncodingDefs compileEnv exprLowering stmtSimLogData
   valueEncodingProps list abiDecodeRanges exprSimAttributeFields vyperTypeDefaults abiDecoderMembers
 
 Theorem log_word_abi_type:

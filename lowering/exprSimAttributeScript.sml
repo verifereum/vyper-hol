@@ -44,9 +44,9 @@ Ancestors
   list rich_list finite_map pair
   fragExec  exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimBuffer exprSimAggregateChildren exprSimAttributeFields
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv context
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs context
   accountsRelProps
-  valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperTyping vyperTypeSystem vyperTypeExprSoundness vyperTypeInvariants
   vyperPlaceResultTyping
   venomState venomInst venomMemDefs

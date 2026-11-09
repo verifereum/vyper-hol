@@ -2,7 +2,7 @@
 Theory typedNormalizeStaticRigidity
 Ancestors
   typedNormalizeWidening typedNormalizeFastRepresentation
-  valueEncoding vyperValue compileEnv vyperTypeSystem list
+  valueEncoding valueEncodingDefs vyperValue compileEnv vyperTypeSystem list
 
 Theorem arg_type_fits_static_identity_joint[local]:
   (!s d. arg_type_fits s d ==>

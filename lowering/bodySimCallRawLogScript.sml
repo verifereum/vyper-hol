@@ -8,7 +8,7 @@ Ancestors
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
   exprSimSend vyperTypeSystem exprSimAggregateSource vyperValue
-  exprSimWordArgs exprLowering compileEnv emitHelper venomExecSemantics
+  exprSimWordArgs exprLowering compileEnv loweringStateRelDefs emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource vyperEvent
   fragExec venomInst exprSimHash exprSimBuffer exprSimPrecompiles emitHelperProps
   ASCIInumbers exprSimRawLog
