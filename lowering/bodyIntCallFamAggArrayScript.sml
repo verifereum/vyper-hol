@@ -634,5 +634,11 @@ Theorem intcall_array_literal_step:
   (?a t n args. e = Builtin a (MakeArray (SOME t) n) args) ==>
   intcall_expr_producer fp e /\ intcall_map_producer fp e
 Proof
-  cheat
+  strip_tac >> gvs[] >> conj_tac
+  >- (irule intcall_array_value_producer >> rpt strip_tac >>
+      `expr_size e < expr_size (Builtin a (MakeArray (SOME t) n) args)` by
+        (drule exprCallBoundsTheory.expr_list_member_bound >>
+         simp[vyperASTTheory.expr_size_def]) >>
+      gvs[]) >>
+  irule intcall_map_producer_other >> simp[]
 QED
