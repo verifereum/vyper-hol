@@ -571,7 +571,11 @@ Proof
      `?v. i.inst_outputs = [v]` by
        (qpat_x_assum `inst_wf i` mp_tac >>
         fs[MEM, context_read0_opcode_def, clean_value_shape_def, scalar_binary_opcode_def] >>
-        gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+        (* fs splits the opcode disjunction into ~28 goals; gvs over all their
+           assumptions was over the step limit, so rewrite with the opcode only *)
+        (qpat_x_assum `i.inst_opcode = _`
+           (fn th => simp[inst_wf_def, th, LENGTH_EQ_NUM_compute]) ORELSE
+         gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >> metis_tac[]) >>
      Cases_on `i.inst_opcode = ASSIGN`
      >- (gvs[] >>
          `g.lop_cursor < LENGTH (MAP FST path)` by simp[] >>
