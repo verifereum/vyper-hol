@@ -897,3 +897,239 @@ availability, dynamic capture, PHI frame), _m5943_t001 through _m5943_t005
 source agreement, singleton local exports), and _m5944_t001 through
 _m5944_t004 (readiness/coupled consumers, changed step, replacement semantics,
 capture invariant). These are source/interface evidence, not new proof claims.
+
+## Current five-round structural audit (.67, 2026-11-09)
+
+This section supersedes the proposed dynamic readiness inventory above. No
+new preservation theorem is asserted here. Checked public boundary:
+`loadElimRoundExecutionScript.sml:6-22`,
+`le_load_elim_one_run_structural`. Its entire premise list is structural:
+wf_function, fn_inst_wf, wf_ssa, configured context, rebuilt DFG, empty BP,
+wf aliases, initial entry, matching CFG, DISJOINT G source variables,
+collected outputs IN G, no MEMTOP in source and runtime context, and initial
+le_padded_control G. It internalizes convergence via
+le_load_analyze_fixpoint; no initial or historical DFG soundness remains.
+
+### Literal wrapper and per-round matrix
+
+Write F0=fn, g=cfg_analyze fn, b=bp_analyze g fn and
+A_m=memory_alias_analyze b fn, A_t=transient_alias_analyze b fn,
+A_s=storage_alias_analyze b fn. These are all ORIGINAL analyses.
+For r=1..5 let d_r=dfg_build_function F(r-1),
+c_r=mk_load_context b A_r d_r config_r, and
+F_r=load_elim_one c_r g F(r-1). This is exactly
+loadElimDefsScript.sml:554-581 (not a proposed reanalysis wrapper).
+
+| r | source | config | aliases | candidate G_r |
+|---|---|---|---|---|
+| 1 | F0 | memory_config | A_m | outputs of actions for c1,g,F0 |
+| 2 | F1 | transient_config | A_t | outputs of actions for c2,g,F1 |
+| 3 | F2 | storage_config | A_s | outputs of actions for c3,g,F2 |
+| 4 | F3 | dload_config | A_m | outputs of actions for c4,g,F3 |
+| 5 | F4 | calldataload_config | A_m | outputs of actions for c5,g,F4 |
+
+More precisely G_r = set (MAP (\pa. pa.pa_phi_out)
+(collect_phi_actions (fn_max_inst_id F(r-1)) c_r g
+(load_analyze c_r F(r-1)) F(r-1))). Output containment is then definitional.
+Each G_r is a subset of P={v | isPREFIX "$le_phi_" v}, by
+le_collected_action_output_prefix (ActionFreshness:12-18).
+
+| boundary premise | round 1 | rounds 2..5 |
+|---|---|---|
+| wf_function source | frozen premise | MISSING per-round preservation |
+| fn_inst_wf source | frozen premise | MISSING per-round preservation |
+| wf_ssa source | frozen premise | MISSING per-round preservation |
+| configured c_r / dfg field | mk_load_context/config equations | same equations, rebuilt DFG literally present |
+| empty BP queries | checked BPEmpty original-wrapper discharge | SAME b, no transport or reanalysis needed |
+| wf aliases | le_function_alias_maps_wf | SAME three maps, same checked theorem |
+| initial entry | frozen premise | le_round_entry iterated |
+| g=cfg_analyze source | reflexivity | le_round_cfg iterated, configured c_r |
+| DISJOINT G_r source vars | le_collected_action_source_disjoint + original freshness | MISSING previous-round generated-name separation |
+| collected outputs IN G_r | definition of G_r | definition of G_r |
+| source no MEMTOP | frozen premise, EVERY_MEM | le_round_no_memtop iterated |
+| runtime-context no MEMTOP | frozen premise, EVERY_MEM | unchanged C |
+| initial padded control | reflexivity at s=t | reflexivity at SAME s=t |
+| convergence | internal to public one-round theorem | internal to public one-round theorem |
+
+Checked signatures and locations:
+* RoundStructure:122 `le_configured_context c ==> cfg_analyze
+  (load_elim_one c g F) = cfg_analyze F`.
+* RoundStructure:129 `fn_entry_label (load_elim_one c g F) = fn_entry_label F`.
+* RoundStructure:168 configured c and EVERY no-MEMTOP (fn_insts F) imply
+  EVERY no-MEMTOP (fn_insts (load_elim_one c g F)).
+* CoupledExecution:100 `wf_alias_sets (memory_alias_analyze b F) /\
+  wf_alias_sets (storage_alias_analyze b F) /\
+  wf_alias_sets (transient_alias_analyze b F)` without source restrictions.
+* ActionFreshness:67 wf_function F implies ALL_DISTINCT of collected outputs.
+  Distinctness within one round does NOT imply disjointness from source vars.
+
+`loadElimWfScript.sml:15-31` contains only cheated WHOLE-FUNCTION wf and
+ssa_form preservation statements. Neither is a checked per-round export;
+ssa_form is not the wf_ssa premise. They cannot discharge this matrix.
+fn_max_inst_id freshens generated INSTRUCTION IDs, not output names.
+fresh_phi_var is "$le_phi_" ++ toString(load instruction id). Thus G=P is
+unsuitable after round 1: earlier PHIs already belong to P. Later disjointness
+must exploit disjoint configured load opcodes and unchanged original load IDs,
+not an increasing maximum instruction ID.
+
+### Result composition and clear_nops
+
+Compare every F_r from the SAME initial s and fuel, not from the preceding
+run's final state. Widen each round's result relation from G_r to P using
+G_r SUBSET P. `padded_exec_equiv_trans` (MemoryRel:19-25) is checked;
+control transitivity follows from le_padded_control_def and this theorem.
+Shared `passSimulationProps.lift_result_trans` (line 32) accepts transitive
+OK and terminal relations and composes three results. Generic lift_result
+case reasoning also handles the error disjunction: if R0 is not Error and
+R0 is lifted-related to R1, then R1 cannot be Error. Hence the next round's
+source-error alternative contradicts the preceding lift_result, and induction
+composes all five. No equality of intermediate final states is required.
+
+Shared `passSharedProps.clear_nops_function_correct:905-910` states
+wf_function F /\ s.vs_inst_idx=0 ==> result_equiv {}
+(run_blocks fuel C F s) (run_blocks fuel C (clear_nops_function F) s).
+It needs wf_function F5 (another use of missing per-round preservation).
+Its exact state/execution/revert relations need an adapter to padded result
+relations; there is no checked general exported adapter found in the designated
+search. `le_padded_full_weaken` (PaddedCalls:73) only weakens an ALREADY padded
+empty-set relation; it is not this adapter. The frozen le_exec_equiv is
+textually the padded_exec_equiv definition; frozen le_state_equiv is textually
+le_padded_control. A final definitional bridge is routine but not yet exported.
+
+### Finite missing boundary list for next planning
+
+1. Per-round structural preservation, under the actual configured context,
+   source wf/inst_wf/SSA, valid analyses and action-name disjointness:
+   `wf_function (load_elim_one c g F)`,
+   `fn_inst_wf (load_elim_one c g F)`, and
+   `wf_ssa (load_elim_one c g F)`. Determine minimal sufficient static
+   premises against definitions; do not assume cheated whole-wrapper results.
+2. For the literal five-round sequence above, original prefix freshness and
+   original wf/SSA imply `DISJOINT G_r (set (fn_all_vars F(r-1)))` for r=2..5.
+   Needed supporting invariant: surviving configured load IDs belong to their
+   distinct original opcode groups; introduced names refer only to earlier
+   groups. This is an obligation, not a verified invariant.
+3. Result adapters: if A SUBSET B then padded/control A imply padded/control B;
+   transitivity of le_padded_control; and for Q_B = lift_result
+   (le_padded_control B) (padded_exec_equiv B) (padded_exec_equiv B),
+   `(isError R0 \/ Q_B R0 R1) /\ (isError R1 \/ Q_B R1 R2)
+    ==> isError R0 \/ Q_B R0 R2`, where isError R abbreviates `?e. R=Error e`
+   only in this diagnostic prose (no new HOL definition required).
+4. `result_equiv {} R T ==> Q_P R T` for clear_nops, with revert/terminal
+   cases checked against actual lift_result definitions, plus definitional
+   conversion from Q_P to the frozen result relation.
+5. Assemble original empty BP discharge, five rounds, and clear_nops only
+   after 1-4 build. Do not resurrect global rebuilt DFG readiness.
+
+Verification: holbuild of RoundExecution, RoundStructure, BPEmpty and
+ActionFreshness passed unchanged in TO_load-elim-correct2-20261109T010004Z_m6151_t001.
+RoundExecution was explicitly staged and committed as 66bac035f. This audit
+adds no SML admission and does not start or modify the frozen theorem.
+
+## Static SSA availability audit (.69, 2026-11-09)
+
+Authoritative definitions are venomWfScript.sml:573-625. wf_ssa is ssa_form
+AND def_dominates_uses. def_available_at requires a defining instruction,
+block dominance (which includes target reachability), and strict same-block
+instruction order for SOME use. phi_edge_uses_wf additionally requires pair
+shape, distinct predecessor names, exact CFG predecessor coverage, and each
+incoming variable available at its named predecessor endpoint. These are
+static obligations over ALL instructions, not just successful executions.
+
+### Reusable checked interfaces, and limits
+
+* NormalizeAvailability:88-120 already proves: rebuilt DFG, wf_function,
+  fn_inst_wf, wf_ssa, MEM bb blocks, availability of op when it is a variable,
+  and normalize_operand dfg visited op = Var v imply
+  def_available_at fn bb point v. Its ordinary-use corollary is :132-143.
+  No duplicate normalization-availability lemma is needed.
+* StaticGeneration:60-76 proves that for EVERY nonempty entry-to-bb CFG path,
+  a point singleton SOME [op] has a generator on an earlier path block or in
+  TAKE n bb.instructions. Requires wf_function, fn_inst_wf, configured ctx,
+  solver fixpoint, n<=length; no runtime history or successful execution.
+* DefinitionCuts:126 gives, for Var v generation under wf_ssa/configured ctx,
+  `MEM v gi.inst_outputs \/ def_available_at fn gb (SOME gi) v`.
+  These two boundaries suggest path-to-dominance reasoning with SSA unique
+  output, but do not themselves export singleton def_available_at.
+* JoinPlacement:236-246 gives join membership on ANY finite entry-to-point
+  path, not merely operational paths, for a multivalue lookup. It requires
+  reachable DFS membership, source lookup and n<=length. This is the right
+  graph interface for static block dominance. ActionPlacement:32-105 is only
+  the operational occurrence corollary and cannot replace the graph theorem.
+* PhiCapture:106-113 gives successful action certificate: join is find_join;
+  ops=mk_phi_ops_from_pairs pairs; MAP FST pairs=cfg_preds_of join; every pair
+  has predecessor boundary SOME [Var v]. Does not prove endpoint availability.
+* StructuralAvailability:108-121 instead concludes eval_operand op s=SOME w
+  from an occurrence prefix and singleton lookup. This is dynamic totality,
+  NOT def_available_at or dominance, and cannot close static SSA preservation.
+* Existing simplify_cfg RepairDataflow:13 and :41 export endpoint/point
+  availability transport specifically for fix_all_phis. They are examples,
+  not instantiable round-transform preservation theorems. Shared pass search
+  found no generic def_available_at or def_dominates_uses transport export.
+
+### Finite desired static contracts (unproved)
+
+In the following prose S denotes wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn,
+configured ctx with rebuilt DFG, g=cfg_analyze fn, and the actual analyze
+fixpoint (internally derivable). R=load_analyze ctx fn,
+A=collect_phi_actions (fn_max_inst_id fn) ctx g R fn,
+F=load_elim_one ctx g fn. These are abbreviations in this audit only.
+
+1. Singleton point availability: S /\ MEM bb fn.fn_blocks /\
+   n<LENGTH bb.bb_instructions /\
+   FLOOKUP (unwrap_load_lattice (df_at NONE R bb.bb_label n)) k =
+     SOME [Var v]
+   ==> def_available_at fn bb (SOME (EL n bb.bb_instructions)) v.
+   The exact required use-site may restrict the current opcode to configured
+   load. Endpoint variant uses n=LENGTH and point NONE. Entry paths plus
+   StaticGeneration and unique definitions are promising; no exported proof
+   currently discharges either variant. Reachability of a nonempty actual
+   lookup must be proved for all source blocks or made explicit and then
+   discharged from solver support, not assumed from successful execution.
+2. Generated incoming PHI availability: S /\ MEM pa A /\
+   MEM (pred,v) (phi_pairs pa.pa_phi_ops)
+   ==> ?pb. MEM pb fn.fn_blocks /\ pb.bb_label=pred /\
+     fn_cfg_edge fn pred pa.pa_join_lbl /\ def_available_at fn pb NONE v.
+   Pair shape/distinctness/coverage are separate syntactic goals obtainable
+   from the action certificate and actual cfg_preds_of properties. Endpoint
+   singleton availability from (1) is the missing semantic-static link.
+3. Generated definition placement: S /\ MEM pa A and actual transformed
+   load-use membership should imply
+   fn_dominates fn pa.pa_join_lbl pa.pa_load_lbl, plus same-block PHI-before-
+   rewritten-load ordering. JoinPlacement supplies path membership but needs
+   action multivalue origin/DFS discharge and actual transformed-use matching.
+   Then conclude def_available_at F transformed_bb
+   (SOME transformed_load) pa.pa_phi_out, using the inserted PHI definition,
+   output freshness and concrete prepend index equations. Static dominance
+   alone is insufficient for same-block order.
+4. Availability transport for retained original variables: source
+   def_available_at fn bb point v implies the corresponding transformed
+   endpoint/ordinary point availability, provided every source definition of
+   v survives and original instruction order is preserved. Replacements keep
+   load outputs; stores changed to NOP have no outputs under inst_wf. Prove
+   this at the block-transform interface once, including original PHI
+   definitions and original PHI incoming endpoint uses. Use unchanged CFG and
+   entry from RoundStructure; do not reprove dominance via execution traces.
+5. Assemble def_dominates_uses F by source instruction/inserted PHI cases,
+   using 1-4, unchanged-original operand transport, and syntactic closure from
+   .68. Singleton replacements consume RAW stored op, not its normalization;
+   normalized address availability alone does not establish this goal.
+
+### Unreachable blocks and edge cases
+
+fn_dominates includes target reachability. Consequently source wf_ssa rules
+out any ordinary variable use or any incoming PHI variable at an unreachable
+target endpoint, but does not rule out an unreachable block containing only
+literal loads/STOP. Transform preservation must show solver-unvisited blocks
+cannot acquire variable replacements or inserted actions (or handle that case
+explicitly). Do not quantify only over cfg_dfs_pre in the final preservation
+conclusion. find_join stops on visited labels, not necessarily a multi-pred
+join; use the actual path-membership result. An empty predecessor list makes
+compute_phi_action's EVERY condition vacuous, so successful compute alone
+cannot prove nonempty PHI arity or reachability. Actual collection multivalue
+origin is essential. No concrete frozen-theorem counterexample was found or
+asserted in this audit; these are missing proof boundaries, not falsehood.
+
+Source evidence: TO_load-elim-correct2-20261109T010004Z_m6163_t001 through
+_m6163_t005, _m6164_t001 through _m6164_t005, _m6165_t001 through _m6165_t005.
+No new SML lemma or theorem admission was introduced by this diagnostic.
