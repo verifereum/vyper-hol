@@ -1798,6 +1798,45 @@ Proof
   qexists_tac `ops ++ ops'` >> simp[]
 QED
 
+Theorem phi_schedule_native_inst_prefix:
+  !phis lv dfg cfg fn lbl halting np len rest ps ops qs.
+    EVERY (\inst. inst.inst_opcode = PHI) phis /\ rest <> [] /\
+    phi_schedule_run
+      (MAPi (\j inst. (inst,live_vars_at lv lbl (j+np+1),halting)) phis) ps = (ops,qs) ==>
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting np len
+      (phis ++ rest) ps (LENGTH phis) qs
+Proof
+  Induct >- simp[fnPlanLineagePhiTemporalTheory.phi_schedule_run_def,
+    fnPlanLineageEntryProductionTheory.native_inst_prefix_zero] >>
+  rpt gen_tac >>
+  simp[fnPlanLineagePhiTemporalTheory.phi_schedule_run_def] >>
+  pairarg_tac >> pairarg_tac >> strip_tac >> gvs[] >>
+  `fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting np len
+    ((h::phis) ++ rest) ps 1 ps1` by
+    (simp[fnPlanLineageEntryProductionTheory.native_inst_prefix_one,
+      generate_inst_plan_def, is_pre_codegen_opcode_def,
+      is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
+      venomInstTheory.is_raw_fmp_opcode_def]) >>
+  `fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halting (np+1) len
+    (phis ++ rest) ps1 (LENGTH phis) qs` by
+    (qpat_x_assum `(\(rest,ps2). _) _ = _` mp_tac >>
+     pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+     first_x_assum irule >> simp[] >>
+     qexists_tac `rest'` >>
+     fs[combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES,
+       GSYM arithmeticTheory.ADD_ASSOC] >>
+     `(\j (inst:instruction). (inst,live_vars_at lv lbl (SUC (np + (j + 1))),halting)) =
+      (\j inst. (inst,live_vars_at lv lbl (j + (np + 2)),halting))` by
+       (simp_tac bool_ss [FUN_EQ_THM, pairTheory.PAIR_EQ] >> rpt gen_tac >>
+        AP_TERM_TAC >> decide_tac) >>
+     pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+     first_assum ACCEPT_TAC) >>
+  qpat_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ 1 _`
+    (mp_then (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+      fnPlanLineageEntryProductionTheory.native_inst_prefix_compose) >>
+  disch_then (qspecl_then [`LENGTH phis`,`qs`] mp_tac) >> simp[arithmeticTheory.ADD1]
+QED
+
 Theorem ready_native_inst_prefix_phi_schedule:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   collect_phis bb.bb_instructions <> [] /\
@@ -1815,6 +1854,28 @@ Proof
     (collect_phis bb.bb_instructions ++ rest) ps
     (LENGTH (collect_phis bb.bb_instructions)) qs` by metis_tac[] >>
   drule_all native_inst_prefix_phi_schedule >> simp[]
+QED
+
+Theorem ready_phi_schedule_native_inst_prefix:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  phi_schedule_run
+    (MAPi (\j inst. (inst,live_vars_at lv lbl (j+1),halt))
+      (collect_phis bb.bb_instructions)) start = (ops,endpoint) ==>
+  fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt 0
+    (LENGTH bb.bb_instructions) bb.bb_instructions start
+    (LENGTH (collect_phis bb.bb_instructions)) endpoint
+Proof
+  strip_tac >> Cases_on `collect_phis bb.bb_instructions = []`
+  >- gvs[fnPlanLineagePhiTemporalTheory.phi_schedule_run_def,
+       fnPlanLineageEntryProductionTheory.native_inst_prefix_zero] >>
+  drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> strip_tac >>
+  `EVERY (\inst. inst.inst_opcode = PHI) (collect_phis bb.bb_instructions)` by
+    (simp[EVERY_MEM] >> metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  `fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt 0
+     (LENGTH bb.bb_instructions) (collect_phis bb.bb_instructions ++ rest) start
+     (LENGTH (collect_phis bb.bb_instructions)) endpoint` by
+    (irule phi_schedule_native_inst_prefix >> simp[] >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem native_phi_schedule_endpoint:
@@ -1926,7 +1987,7 @@ Theorem native_incoming_phi_body_stack_support:
     clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb incoming
    else ([],incoming)) = (setup_ops,start) /\
   fnPlanLineageEntryProduction$native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn)
-    fn lbl (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions start
+    fn lbl halt 0 (LENGTH bb.bb_instructions) bb.bb_instructions start
       (LENGTH (collect_phis bb.bb_instructions)) endpoint /\
   EVERY (\inst. ~MEM v inst.inst_outputs) (collect_phis bb.bb_instructions) ==>
   MEM (Var v) endpoint.ps_stack ==>

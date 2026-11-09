@@ -1750,6 +1750,26 @@ Proof
   simp[rich_listTheory.DROP_DROP_T]
 QED
 
+Theorem native_inst_prefix_compose:
+  !k p lv dfg cfg fn lbl halt n total xs ps mid qs.
+    native_inst_prefix lv dfg cfg fn lbl halt n total xs ps p mid /\
+    native_inst_prefix lv dfg cfg fn lbl halt (n+p) total (DROP p xs) mid k qs ==>
+    native_inst_prefix lv dfg cfg fn lbl halt n total xs ps (p+k) qs
+Proof
+  Induct >- simp[native_inst_prefix_zero] >>
+  rpt gen_tac >> rename1 `native_inst_prefix lv dfg cfg fn lbl halt n len xs ps _ _` >>
+  strip_tac >>
+  qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ (SUC _) _` mp_tac >>
+  simp[Once native_inst_prefix_cases] >> strip_tac >>
+  `native_inst_prefix lv dfg cfg fn lbl halt n len xs ps (p+k) ps'` by
+    metis_tac[] >>
+  simp[arithmeticTheory.ADD_CLAUSES] >>
+  irule (cj 2 native_inst_prefix_rules) >>
+  qexistsl_tac [`inst`,`ops`,`ps'`,`rest`] >>
+  metis_tac[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_ASSOC,
+    arithmeticTheory.ADD_COMM]
+QED
+
 Theorem native_inst_prefix_deterministic:
   !k lv dfg cfg fn lbl halt n total xs ps qs rs.
     native_inst_prefix lv dfg cfg fn lbl halt n total xs ps k qs /\
