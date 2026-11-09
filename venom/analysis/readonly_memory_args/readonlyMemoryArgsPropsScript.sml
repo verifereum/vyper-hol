@@ -641,61 +641,6 @@ Proof
   metis_tac[icf_mcopy_noped_def, LIST_REL_icf_inst_compat_preserves_bb_wf]
 QED
 
-Theorem INDEX_FIND_EL_le[local]:
-  !l n P k.
-    k < LENGTH l /\ P (EL k l) ==>
-    ?j x. INDEX_FIND n P l = SOME (j, x) /\ j <= n + k
-Proof
-  Induct >> simp[INDEX_FIND_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `P h` >> simp[] >>
-  Cases_on `k` >> gvs[] >>
-  first_x_assum (qspecl_then [`SUC n`, `P`, `n'`] mp_tac) >>
-  simp[] >> strip_tac >> simp[]
-QED
-
-Theorem findi_EL_le:
-  !l P k.
-    k < LENGTH l /\ P (EL k l) ==>
-    ?j. findi P l = SOME j /\ j <= k
-Proof
-  rpt strip_tac >>
-  drule_all (Q.SPECL [`l`, `0`, `P`, `k`] INDEX_FIND_EL_le) >>
-  strip_tac >> simp[findi_def]
-QED
-
-Theorem ircf_try_forward_prefix_and_copy:
-  !ctx bb copy_idx new_insts.
-    ircf_try_forward ctx bb copy_idx = SOME new_insts ==>
-    copy_idx < LENGTH bb.bb_instructions /\
-    LENGTH new_insts = LENGTH bb.bb_instructions /\
-    (EL copy_idx bb.bb_instructions).inst_opcode = MCOPY /\
-    EL copy_idx new_insts = mk_nop_inst (EL copy_idx bb.bb_instructions) /\
-    (!i. i < copy_idx ==> EL i new_insts = EL i bb.bb_instructions)
-Proof
-  simp[ircf_try_forward_def] >> rpt gen_tac >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  rpt strip_tac >> simp[indexedListsTheory.EL_MAPi] >>
-  Cases_on `MEM (EL i bb.bb_instructions).inst_id
-              (MAP (\ri. ri.inst_id)
-                (MAP (\(v,inst,pos). inst)
-                  (FILTER (\(v,inst,pos).
-                    ~icf_is_assign_output_use inst pos /\
-                    (inst.inst_opcode = MCOPY ==> pos <> 0 \/
-                     inst.inst_id <> (EL copy_idx bb.bb_instructions).inst_id))
-                    (icf_alias_use_positions ctx.icf_dfg
-                      (icf_collect_aliases ctx.icf_dfg
-                        (icf_assign_root ctx.icf_dfg {} dst))))))` >>
-  simp[] >>
-  pop_assum mp_tac >> simp[MEM_MAP, PULL_EXISTS, pairTheory.EXISTS_PROD] >>
-  rpt strip_tac >>
-  `i < LENGTH bb.bb_instructions` by decide_tac >>
-  drule_then (qspec_then `\el. el.inst_id = ri.inst_id` mp_tac) findi_EL_le >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `EVERY ($~ o (\idx. idx <= copy_idx)) _`
-    (mp_tac o REWRITE_RULE [EVERY_MAP, EVERY_MEM]) >>
-  disch_then (qspec_then `(p_1, ri, p_2)` mp_tac) >>
-  simp[] >> decide_tac
-QED
 
 Theorem ricf_try_forward_sites[local]:
   !ctx bb copy_idx src_var_opt rewrite_sites.

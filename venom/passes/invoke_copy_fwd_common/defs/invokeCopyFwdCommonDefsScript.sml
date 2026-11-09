@@ -523,3 +523,83 @@ Proof
        MEM_SET_TO_LIST] >> rpt strip_tac >>
   simp[EXISTS_PROD] >> metis_tac[]
 QED
+
+Theorem INDEX_FIND_EL_le:
+  !l n P k.
+    k < LENGTH l /\ P (EL k l) ==>
+    ?j x. INDEX_FIND n P l = SOME (j, x) /\ j <= n + k
+Proof
+  Induct >> simp[INDEX_FIND_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `P h` >> simp[] >>
+  Cases_on `k` >> gvs[] >>
+  first_x_assum (qspecl_then [`SUC n`, `P`, `n'`] mp_tac) >>
+  simp[] >> strip_tac >> simp[]
+QED
+
+Theorem findi_EL_le:
+  !l P k.
+    k < LENGTH l /\ P (EL k l) ==>
+    ?j. findi P l = SOME j /\ j <= k
+Proof
+  rpt strip_tac >>
+  drule_all (Q.SPECL [`l`, `0`, `P`, `k`] INDEX_FIND_EL_le) >>
+  strip_tac >> simp[findi_def]
+QED
+
+Theorem INDEX_FIND_MAP_FST:
+  !l n P f.
+    OPTION_MAP FST (INDEX_FIND n P (MAP f l)) =
+    OPTION_MAP FST (INDEX_FIND n (P o f) l)
+Proof
+  Induct >> simp[INDEX_FIND_def] >> rpt gen_tac >>
+  Cases_on `P (f h)` >> simp[]
+QED
+
+Theorem findi_MAP:
+  !l P f. findi P (MAP f l) = findi (P o f) l
+Proof
+  simp[findi_def, INDEX_FIND_MAP_FST]
+QED
+
+Theorem findi_inst_ids:
+  !xs ys id.
+    MAP (\inst. inst.inst_id) xs = MAP (\inst. inst.inst_id) ys ==>
+    findi (\inst. inst.inst_id = id) xs =
+    findi (\inst. inst.inst_id = id) ys
+Proof
+  rpt strip_tac >>
+  `findi (\x. x = id) (MAP (\inst. inst.inst_id) xs) =
+   findi (\x. x = id) (MAP (\inst. inst.inst_id) ys)` by simp[] >>
+  gvs[findi_MAP, combinTheory.o_DEF]
+QED
+
+Theorem INDEX_FIND_some_index:
+  !l n P j x. INDEX_FIND n P l = SOME (j,x) ==>
+    n <= j /\ j < n + LENGTH l /\ EL (j - n) l = x /\ P x
+Proof
+  Induct >> simp[INDEX_FIND_def] >> rpt gen_tac >>
+  Cases_on `P h` >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  `j - n = SUC (j - SUC n)` by decide_tac >> simp[]
+QED
+
+Theorem findi_some_index:
+  !l P j. findi P l = SOME j ==> j < LENGTH l /\ P (EL j l)
+Proof
+  simp[findi_def, optionTheory.OPTION_MAP_EQ_SOME, pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >> drule INDEX_FIND_some_index >> simp[] >> metis_tac[]
+QED
+
+Theorem findi_inst_id_recover:
+  !xs inst j.
+    ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\ MEM inst xs /\
+    findi (\i. i.inst_id = inst.inst_id) xs = SOME j ==>
+    j < LENGTH xs /\ EL j xs = inst
+Proof
+  rpt strip_tac >> drule findi_some_index >> strip_tac >> simp[] >>
+  qpat_x_assum `MEM inst xs` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  `j = n` by
+    (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+     simp[EL_ALL_DISTINCT_EL_EQ] >>
+     disch_then (qspecl_then [`j`, `n`] mp_tac) >> simp[EL_MAP] >> gvs[]) >> gvs[]
+QED

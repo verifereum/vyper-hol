@@ -29,7 +29,7 @@
 
 Theory internalReturnCopyFwdDefs
 Ancestors
-  invokeCopyFwdCommonDefs
+  invokeCopyFwdCommonDefs list
 
 (* ===== Return Buffer Source Validation ===== *)
 
@@ -259,3 +259,52 @@ Definition ircf_transform_function_def:
     let fn' = fn with fn_blocks := new_blocks in
     if changed then clear_nops_function fn' else fn'
 End
+
+Theorem ircf_try_forward_prefix_and_copy:
+  !ctx bb copy_idx new_insts.
+    ircf_try_forward ctx bb copy_idx = SOME new_insts ==>
+    copy_idx < LENGTH bb.bb_instructions /\
+    LENGTH new_insts = LENGTH bb.bb_instructions /\
+    (EL copy_idx bb.bb_instructions).inst_opcode = MCOPY /\
+    EL copy_idx new_insts = mk_nop_inst (EL copy_idx bb.bb_instructions) /\
+    (!i. i < copy_idx ==> EL i new_insts = EL i bb.bb_instructions)
+Proof
+  simp[ircf_try_forward_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rpt strip_tac >> simp[indexedListsTheory.EL_MAPi] >>
+  Cases_on `MEM (EL i bb.bb_instructions).inst_id
+              (MAP (\ri. ri.inst_id)
+                (MAP (\(v,inst,pos). inst)
+                  (FILTER (\(v,inst,pos).
+                    ~icf_is_assign_output_use inst pos /\
+                    (inst.inst_opcode = MCOPY ==> pos <> 0 \/
+                     inst.inst_id <> (EL copy_idx bb.bb_instructions).inst_id))
+                    (icf_alias_use_positions ctx.icf_dfg
+                      (icf_collect_aliases ctx.icf_dfg
+                        (icf_assign_root ctx.icf_dfg {} dst))))))` >>
+  simp[] >>
+  pop_assum mp_tac >> simp[MEM_MAP, PULL_EXISTS, pairTheory.EXISTS_PROD] >>
+  rpt strip_tac >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  drule_then (qspec_then `\el. el.inst_id = ri.inst_id` mp_tac) findi_EL_le >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `EVERY ($~ o (\idx. idx <= copy_idx)) _`
+    (mp_tac o REWRITE_RULE [EVERY_MAP, EVERY_MEM]) >>
+  disch_then (qspec_then `(p_1, ri, p_2)` mp_tac) >>
+  simp[] >> decide_tac
+QED
+
+Theorem ircf_try_forward_inst_fields:
+  !ctx bb k new_insts.
+    ircf_try_forward ctx bb k = SOME new_insts ==>
+    (!i. i < LENGTH bb.bb_instructions ==>
+      (EL i new_insts).inst_id = (EL i bb.bb_instructions).inst_id /\
+      (i <> k ==>
+       (EL i new_insts).inst_opcode = (EL i bb.bb_instructions).inst_opcode /\
+       (EL i new_insts).inst_outputs = (EL i bb.bb_instructions).inst_outputs))
+Proof
+  simp[ircf_try_forward_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >>
+  simp[indexedListsTheory.EL_MAPi, passSharedDefsTheory.mk_nop_inst_def] >>
+  rpt IF_CASES_TAC >> simp[]
+QED
