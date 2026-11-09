@@ -80,3 +80,38 @@ Proof
   irule locals_kept_regions_tail >> goal_assum (drule_at Any) >>
   fs[wb_frame_def]
 QED
+
+Theorem return_allocated_immutable_frame:
+  immutable_alloca_sep func ce cx ee s /\ ce.ce_is_ctor /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+    NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+    name = SOME (tv,v) /\
+  abi_malformed_destination func ce ee.scopes dstid d n s /\
+  (!id b sz. id IN sites /\ FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
+    ?inst. MEM inst (fn_insts func) /\ inst.inst_id = id /\
+      inst.inst_opcode = ALLOCA) /\
+  abi_valid_allocated_frame sites d n s t ==>
+  mem_bytes_at off (type_memory_size tv) t.vs_memory =
+    mem_bytes_at off (type_memory_size tv) s.vs_memory
+Proof
+  strip_tac >>
+  `off + type_memory_size tv <= s.vs_alloca_next /\
+   (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+     regions_disjoint off (type_memory_size tv) b sz)` by
+    (fs[immutable_alloca_sep_def] >> first_x_assum drule_all >>
+     strip_tac >> metis_tac[]) >>
+  `regions_disjoint d n off (type_memory_size tv)` by
+    (gvs[abi_malformed_destination_def] >>
+     qpat_x_assum `!inst b sz. _` drule_all >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  irule abi_valid_allocated_frame_slice >> goal_assum (drule_at Any) >>
+  rpt gen_tac >> disch_tac >> conj_tac
+  >- (fs[regions_disjoint_def] >> decide_tac) >> strip_tac >>
+  fs[abi_malformed_site_range_def]
+  >- (qpat_x_assum `!id b sz. _` drule >> disch_then drule >> strip_tac >>
+      gvs[] >> qpat_x_assum `!inst b sz. _` drule_all >>
+      simp[regions_disjoint_def] >> decide_tac) >>
+  decide_tac
+QED
