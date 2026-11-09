@@ -169,14 +169,15 @@ Proof
   qexists_tac `p` >> simp_tac bool_ss [entry_array_init_resources_def] >>
   `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st)` by
-    (qpat_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _` mp_tac >>
      Cases_on `abi_decode_count_guard CALLDATALOAD src maxn st` >>
      simp[abi_decode_array_loop_init_def,
           abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_position_prefix_unbounded,
           abiDecoderDynarrayPrefixTheory.abi_decode_dynarray_prefix_def,
           abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
           abiEncoderTheory.compile_abi_dec_addr_def, comp_bind_def,
-          comp_ignore_bind_def, comp_return_def]) >>
+          comp_ignore_bind_def, comp_return_def] >>
+     rpt strip_tac >> gvs[]) >>
   `d+sz <= s.vs_alloca_next` by
     (fs[entry_owned_region_def, alloca_inv_def, alloca_next_valid_def] >>
      `root+extent <= s.vs_alloca_next` by metis_tac[] >> decide_tac) >>
