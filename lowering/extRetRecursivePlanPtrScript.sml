@@ -50,33 +50,19 @@ Theorem encodable_ret_shape_plan:
     abi_enc_plan tenv ty (type_to_abi_enc_info sf cenv ty)
 Proof
   ho_match_mp_tac encodable_ret_shape_strongind >> rpt conj_tac
-  >- suspend "base"
-  >- suspend "flag"
-  >- suspend "array"
-  >- suspend "tuple"
-  >> suspend "struct"
-QED
-
-Resume encodable_ret_shape_plan[base]:
-  ((rpt strip_tac >> Cases_on `bt` >>
-       simp[type_to_abi_enc_info_def, abi_enc_plan_bytes, abi_enc_plan_string])
-      >~ [`BytesT bd`]
-      >- (Cases_on `bd` >>
-          simp[type_to_abi_enc_info_def, abi_enc_plan_bytes] >>
-          irule abi_enc_plan_static_copy >> simp[is_abi_dynamic_def] >>
-          metis_tac[]) >>
+  >- (((rpt strip_tac >> Cases_on `bt` >>
+         simp[type_to_abi_enc_info_def, abi_enc_plan_bytes, abi_enc_plan_string])
+        >~ [`BytesT bd`]
+        >- (Cases_on `bd` >>
+            simp[type_to_abi_enc_info_def, abi_enc_plan_bytes] >>
+            irule abi_enc_plan_static_copy >> simp[is_abi_dynamic_def] >>
+            metis_tac[]) >>
+        irule abi_enc_plan_static_copy >> simp[is_abi_dynamic_def] >>
+        metis_tac[]))
+  >- (rpt strip_tac >> simp[type_to_abi_enc_info_def] >>
       irule abi_enc_plan_static_copy >> simp[is_abi_dynamic_def] >>
       metis_tac[])
-QED
-
-Resume encodable_ret_shape_plan[flag]:
-  rpt strip_tac >> simp[type_to_abi_enc_info_def] >>
-      irule abi_enc_plan_static_copy >> simp[is_abi_dynamic_def] >>
-      metis_tac[]
-QED
-
-Resume encodable_ret_shape_plan[array]:
-  rpt strip_tac >>
+  >- (rpt strip_tac >>
       drule encodable_ret_shape_evaluates >> strip_tac >>
       `abi_enc_plan tenv ty (type_to_abi_enc_info sf cenv ty)` by
         (first_x_assum irule >> metis_tac[]) >>
@@ -88,11 +74,8 @@ Resume encodable_ret_shape_plan[array]:
           drule_all abi_enc_plans_replicate >>
           disch_then (qspec_then `n` mp_tac) >> gvs[]) >>
       drule_all abi_elem_props >> strip_tac >> simp[] >>
-      irule abi_enc_plan_dynarray >> simp[]
-QED
-
-Resume encodable_ret_shape_plan[tuple]:
-  rpt strip_tac >> simp[Once type_to_abi_enc_info_def] >>
+      irule abi_enc_plan_dynarray >> simp[])
+  >- (rpt strip_tac >> simp[Once type_to_abi_enc_info_def] >>
       IF_CASES_TAC >- (drule_all abi_enc_plan_static_copy >> simp[]) >>
       drule_all abi_elem_props >> strip_tac >>
       irule abi_enc_plan_tuple >>
@@ -104,11 +87,8 @@ Resume encodable_ret_shape_plan[tuple]:
       qpat_x_assum `EVERY _ ts` mp_tac >> simp[EVERY_MEM] >>
       disch_then drule >> strip_tac >>
       drule encodable_ret_shape_evaluates >> strip_tac >>
-      simp[] >> first_x_assum irule >> metis_tac[]
-QED
-
-Resume encodable_ret_shape_plan[struct]:
-  rpt strip_tac >> simp[Once type_to_abi_enc_info_def] >>
+      simp[] >> first_x_assum irule >> metis_tac[])
+  >> rpt strip_tac >> simp[Once type_to_abi_enc_info_def] >>
   IF_CASES_TAC >- (drule_all abi_enc_plan_static_copy >> simp[]) >>
   `?fs. FLOOKUP sf (nsid_to_string id) = SOME fs /\
          MAP (FST o SND) fs = MAP SND fields` by
@@ -137,8 +117,6 @@ Resume encodable_ret_shape_plan[struct]:
   fs[SUBMAP_FLOOKUP_EQN, DOMSUB_FLOOKUP_THM] >>
   rpt strip_tac >> first_x_assum irule >> gvs[]
 QED
-
-Finalise encodable_ret_shape_plan
 
 Theorem encodable_ret_shape_empty_struct:
   FLOOKUP tenv id = SOME (StructArgs []) /\

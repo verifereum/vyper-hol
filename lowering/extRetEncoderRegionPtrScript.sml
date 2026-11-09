@@ -189,79 +189,48 @@ Theorem encoder_region_mutual:
 Proof
   ho_match_mp_tac compile_abi_encode_child_ind >>
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
-  >- suspend "child"
-  >- suspend "word"
-  >- suspend "bytes"
-  >- suspend "copy"
-  >- suspend "array"
-  >- suspend "empty"
-  >- suspend "complex"
-  >- suspend "nil"
-  >- suspend "cons"
-  >> suspend "loop"
-QED
-
-Resume encoder_region_mutual[child]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  region_db encoder_region_emit_op >> IF_CASES_TAC >> fs[] >>
-  ntac 2 (region_db encoder_region_emit_op) >>
-  ho_match_mp_tac encoder_region_bind >> conj_tac
-  >- (rpt gen_tac >> first_x_assum irule) >>
-  rpt gen_tac >> region_dib encoder_region_emit_void >>
-  region_db encoder_region_emit_op >>
-  region_dib encoder_region_emit_void >> simp[encoder_region_return]
-QED
-Resume encoder_region_mutual[word]:
-  rewrite_tac[Once compile_abi_encode_child_def] >> simp[encoder_static_region]
-QED
-Resume encoder_region_mutual[bytes]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  ntac 4 (region_db encoder_region_emit_op) >>
-  region_dib encoder_region_emit_void >> region_db encoder_region_emit_op >>
-  region_dib encoder_region_emit_void >>
-  ntac 2 (region_db encoder_region_emit_op) >> simp[encoder_region_emit_op]
-QED
-Resume encoder_region_mutual[copy]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  region_dib encoder_region_emit_void >> simp[encoder_region_return]
-QED
-Resume encoder_region_mutual[array]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  region_db encoder_region_alloc_buffer >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  region_dib encoder_region_emit_void >> region_db encoder_region_emit_op >>
-  region_dib encoder_region_emit_void >>
-  ho_match_mp_tac encoder_region_bind >> conj_tac
-  >- (rpt gen_tac >> IF_CASES_TAC
-      >- simp[encoder_static_loop_region] >> gvs[] >> first_x_assum irule >> simp[]) >>
-  rpt gen_tac >> ntac 2 (region_db encoder_region_emit_op) >>
-  region_dib encoder_region_emit_void >> simp[encoder_region_emit_op]
-QED
-Resume encoder_region_mutual[empty]:
-  rewrite_tac[Once compile_abi_encode_child_def] >> simp[encoder_region_return]
-QED
-Resume encoder_region_mutual[complex]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gnvs[]
-  >- (region_db encoder_region_alloc_buffer >>
-      simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      region_db encoder_region_emit_op >> IF_CASES_TAC >> fs[] >>
+      ntac 2 (region_db encoder_region_emit_op) >>
+      ho_match_mp_tac encoder_region_bind >> conj_tac
+      >- (rpt gen_tac >> first_x_assum irule) >>
+      rpt gen_tac >> region_dib encoder_region_emit_void >>
+      region_db encoder_region_emit_op >>
+      region_dib encoder_region_emit_void >> simp[encoder_region_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >> simp[encoder_static_region])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      ntac 4 (region_db encoder_region_emit_op) >>
+      region_dib encoder_region_emit_void >> region_db encoder_region_emit_op >>
       region_dib encoder_region_emit_void >>
+      ntac 2 (region_db encoder_region_emit_op) >> simp[encoder_region_emit_op])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      region_dib encoder_region_emit_void >> simp[encoder_region_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      region_db encoder_region_alloc_buffer >>
+      simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+      region_dib encoder_region_emit_void >> region_db encoder_region_emit_op >>
+      region_dib encoder_region_emit_void >>
+      ho_match_mp_tac encoder_region_bind >> conj_tac
+      >- (rpt gen_tac >> IF_CASES_TAC
+          >- simp[encoder_static_loop_region] >> gvs[] >> first_x_assum irule >> simp[]) >>
+      rpt gen_tac >> ntac 2 (region_db encoder_region_emit_op) >>
+      region_dib encoder_region_emit_void >> simp[encoder_region_emit_op])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >> simp[encoder_region_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gnvs[]
+      >- (region_db encoder_region_alloc_buffer >>
+          simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+          region_dib encoder_region_emit_void >>
+          ho_match_mp_tac encoder_region_ignore_bind >> conj_tac
+          >- (rpt gen_tac >> first_x_assum irule) >> simp[encoder_region_emit_op]) >>
+      rpt gen_tac >> ho_match_mp_tac encoder_region_ignore_bind >> conj_tac
+      >- (rpt gen_tac >> first_x_assum irule) >> simp[encoder_region_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >> simp[encoder_region_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      region_db encoder_region_emit_op >>
       ho_match_mp_tac encoder_region_ignore_bind >> conj_tac
-      >- (rpt gen_tac >> first_x_assum irule) >> simp[encoder_region_emit_op]) >>
-  rpt gen_tac >> ho_match_mp_tac encoder_region_ignore_bind >> conj_tac
-  >- (rpt gen_tac >> first_x_assum irule) >> simp[encoder_region_return]
-QED
-Resume encoder_region_mutual[nil]:
-  rewrite_tac[Once compile_abi_encode_child_def] >> simp[encoder_region_return]
-QED
-Resume encoder_region_mutual[cons]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  region_db encoder_region_emit_op >>
-  ho_match_mp_tac encoder_region_ignore_bind >> conj_tac
-  >- (rpt gen_tac >> first_x_assum irule) >> rpt gen_tac >> first_x_assum irule
-QED
-Resume encoder_region_mutual[loop]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
+      >- (rpt gen_tac >> first_x_assum irule) >> rpt gen_tac >> first_x_assum irule)
+  >> rewrite_tac[Once compile_abi_encode_child_def] >>
   region_db encoder_region_alloc_buffer >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> region_dib encoder_region_emit_void >>
   region_db encoder_region_alloc_buffer >>
@@ -281,7 +250,6 @@ Resume encoder_region_mutual[loop]:
   region_dib encoder_region_emit_op >> region_db encoder_region_emit_op >>
   simp[encoder_region_emit_op]
 QED
-Finalise encoder_region_mutual
 
 Theorem encoder_region_alloca_fresh:
   encoder_region st en /\ fn_has_code st en fn /\

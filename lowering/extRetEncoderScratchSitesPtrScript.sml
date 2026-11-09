@@ -83,92 +83,53 @@ Theorem encoder_alloc_code_mutual:
 Proof
   ho_match_mp_tac compile_abi_encode_child_ind >>
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
-  >- suspend "child"
-  >- suspend "word"
-  >- suspend "bytes"
-  >- suspend "copy"
-  >- suspend "array"
-  >- suspend "empty"
-  >- suspend "complex"
-  >- suspend "nil"
-  >- suspend "cons"
-  >> suspend "loop"
-QED
-
-Resume encoder_alloc_code_mutual[child]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  scratch_db abi_decoder_code_emit_op >> IF_CASES_TAC >> fs[] >>
-  ntac 2 (scratch_db abi_decoder_code_emit_op) >>
-  ho_match_mp_tac abi_decoder_code_bind >> conj_tac
-  >- (rpt gen_tac >> first_x_assum irule) >>
-  rpt gen_tac >> scratch_dib abi_decoder_code_emit_void >>
-  scratch_db abi_decoder_code_emit_op >>
-  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return]
-QED
-Resume encoder_alloc_code_mutual[word]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  simp[encoder_static_alloc_code]
-QED
-Resume encoder_alloc_code_mutual[bytes]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  ntac 4 (scratch_db abi_decoder_code_emit_op) >>
-  scratch_dib abi_decoder_code_emit_void >>
-  scratch_db abi_decoder_code_emit_op >>
-  scratch_dib abi_decoder_code_emit_void >>
-  ntac 2 (scratch_db abi_decoder_code_emit_op) >>
-  simp[abi_decoder_code_emit_op]
-QED
-Resume encoder_alloc_code_mutual[copy]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return]
-QED
-Resume encoder_alloc_code_mutual[array]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  scratch_db abi_decoder_code_alloc_buffer >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  scratch_dib abi_decoder_code_emit_void >>
-  scratch_db abi_decoder_code_emit_op >>
-  scratch_dib abi_decoder_code_emit_void >>
-  ho_match_mp_tac abi_decoder_code_bind >> conj_tac
-  >- (rpt gen_tac >> IF_CASES_TAC
-      >- simp[encoder_static_loop_alloc_code] >> gvs[] >> first_x_assum irule >> simp[]) >>
-  rpt gen_tac >> ntac 2 (scratch_db abi_decoder_code_emit_op) >>
-  scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_emit_op]
-QED
-Resume encoder_alloc_code_mutual[empty]:
-  rewrite_tac[Once compile_abi_encode_child_def] >> simp[abi_decoder_code_return]
-QED
-Resume encoder_alloc_code_mutual[complex]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gnvs[]
-  >- (scratch_db abi_decoder_code_alloc_buffer >>
-      simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-      scratch_dib abi_decoder_code_emit_void >>
-      ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      scratch_db abi_decoder_code_emit_op >> IF_CASES_TAC >> fs[] >>
+      ntac 2 (scratch_db abi_decoder_code_emit_op) >>
+      ho_match_mp_tac abi_decoder_code_bind >> conj_tac
       >- (rpt gen_tac >> first_x_assum irule) >>
-      simp[abi_decoder_code_emit_op]) >>
-  rpt gen_tac >> ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
-  >- (rpt gen_tac >> first_x_assum irule) >> simp[abi_decoder_code_return]
-QED
-Resume encoder_alloc_code_mutual[nil]:
-  rewrite_tac[Once compile_abi_encode_child_def] >> simp[abi_decoder_code_return]
-QED
-Resume encoder_alloc_code_mutual[cons]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
-  scratch_db abi_decoder_code_emit_op >>
-  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
-  >- (rpt gen_tac >> first_x_assum irule) >>
-  rpt gen_tac >> first_x_assum irule
-QED
-Resume encoder_alloc_code_mutual[loop]:
-  rewrite_tac[Once compile_abi_encode_child_def] >>
+      rpt gen_tac >> scratch_dib abi_decoder_code_emit_void >>
+      scratch_db abi_decoder_code_emit_op >>
+      scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >> simp[encoder_static_alloc_code])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      ntac 4 (scratch_db abi_decoder_code_emit_op) >>
+      scratch_dib abi_decoder_code_emit_void >> scratch_db abi_decoder_code_emit_op >>
+      scratch_dib abi_decoder_code_emit_void >>
+      ntac 2 (scratch_db abi_decoder_code_emit_op) >> simp[abi_decoder_code_emit_op])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      scratch_db abi_decoder_code_alloc_buffer >>
+      simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+      scratch_dib abi_decoder_code_emit_void >> scratch_db abi_decoder_code_emit_op >>
+      scratch_dib abi_decoder_code_emit_void >>
+      ho_match_mp_tac abi_decoder_code_bind >> conj_tac
+      >- (rpt gen_tac >> IF_CASES_TAC
+          >- simp[encoder_static_loop_alloc_code] >> gvs[] >> first_x_assum irule >> simp[]) >>
+      rpt gen_tac >> ntac 2 (scratch_db abi_decoder_code_emit_op) >>
+      scratch_dib abi_decoder_code_emit_void >> simp[abi_decoder_code_emit_op])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >> simp[abi_decoder_code_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gnvs[]
+      >- (scratch_db abi_decoder_code_alloc_buffer >>
+          simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+          scratch_dib abi_decoder_code_emit_void >>
+          ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+          >- (rpt gen_tac >> first_x_assum irule) >> simp[abi_decoder_code_emit_op]) >>
+      rpt gen_tac >> ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+      >- (rpt gen_tac >> first_x_assum irule) >> simp[abi_decoder_code_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >> simp[abi_decoder_code_return])
+  >- (rewrite_tac[Once compile_abi_encode_child_def] >>
+      scratch_db abi_decoder_code_emit_op >>
+      ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+      >- (rpt gen_tac >> first_x_assum irule) >> rpt gen_tac >> first_x_assum irule)
+  >> rewrite_tac[Once compile_abi_encode_child_def] >>
+  scratch_db abi_decoder_code_alloc_buffer >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> scratch_dib abi_decoder_code_emit_void >>
   scratch_db abi_decoder_code_alloc_buffer >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  scratch_dib abi_decoder_code_emit_void >>
-  scratch_db abi_decoder_code_alloc_buffer >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  scratch_db abi_decoder_code_emit_op >>
-  scratch_dib abi_decoder_code_emit_void >>
+  scratch_db abi_decoder_code_emit_op >> scratch_dib abi_decoder_code_emit_void >>
   ntac 3 (scratch_db abi_decoder_code_fresh_label) >>
   scratch_dib abi_decoder_code_emit_inst >> scratch_dib abi_decoder_code_new_block >>
   ntac 3 (scratch_db abi_decoder_code_emit_op) >>
@@ -183,7 +144,6 @@ Resume encoder_alloc_code_mutual[loop]:
   scratch_dib abi_decoder_code_emit_op >> scratch_db abi_decoder_code_emit_op >>
   simp[abi_decoder_code_emit_op]
 QED
-Finalise encoder_alloc_code_mutual
 
 Theorem encoder_new_alloca_shape:
   compile_abi_encode_to_buf dst src ei st = (result,en) /\
