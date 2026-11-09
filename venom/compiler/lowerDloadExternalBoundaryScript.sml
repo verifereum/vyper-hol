@@ -260,23 +260,6 @@ QED
 val _ = if null (hyp ld_create_request_equal) then ()
         else raise Fail "create request projection has hypotheses";
 
-Theorem ld_delegate_state_equal:
-  ld_nonghost tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
-  make_venom_delegatecall_state s target gas data code static =
-    make_venom_delegatecall_state t target gas data code static
-Proof
-  strip_tac >>
-  `s.vs_accounts = t.vs_accounts` by
-    metis_tac[ld_nonghost_accounts_empty] >>
-  `s.vs_transient = t.vs_transient` by
-    metis_tac[ld_nonghost_transient_empty] >>
-  gvs[ld_nonghost_def, make_venom_delegatecall_state_def,
-      venom_to_tx_params_def]
-QED
-
-val _ = if null (hyp ld_delegate_state_equal) then ()
-        else raise Fail "delegate state projection has hypotheses";
-
 Theorem ld_extract_venom_effect:
   ld_memory lo A tn s t /\ ld_nonghost tn s t /\
   tn.t_stor = {} /\ tn.t_trans = {} /\
