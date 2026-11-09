@@ -656,6 +656,60 @@ Proof
   simp[non_param_insts_def, MEM_FILTER] >> metis_tac[]
 QED
 
+Theorem traversal_reference_block:
+  (!lv dfg cfg fn wl visited ps ops final ps'.
+    generate_fn_plan_aux lv dfg cfg fn wl visited ps = SOME (ops, final, ps') ==>
+    !l. plan_ref l ops ==>
+    ?lbl bb start chunk stop pre post.
+      lookup_block lbl fn.fn_blocks = SOME bb /\ MEM lbl final /\
+      generate_block_plan lv dfg cfg fn bb start = SOME (chunk, stop) /\
+      plan_ref l chunk /\ ops = pre ++ chunk ++ post) /\
+  (!lv dfg cfg fn ss sp succs visited ps ops final ps'.
+    generate_succs_plan lv dfg cfg fn ss sp succs visited ps = SOME (ops, final, ps') ==>
+    !l. plan_ref l ops ==>
+    ?lbl bb start chunk stop pre post.
+      lookup_block lbl fn.fn_blocks = SOME bb /\ MEM lbl final /\
+      generate_block_plan lv dfg cfg fn bb start = SOME (chunk, stop) /\
+      plan_ref l chunk /\ ops = pre ++ chunk ++ post)
+Proof
+  ho_match_mp_tac generate_fn_plan_aux_ind >> rpt conj_tac
+  >- simp[Once generate_fn_plan_aux_def, plan_ref_nil]
+  >- suspend "aux"
+  >- simp[Once generate_fn_plan_aux_def, plan_ref_nil]
+  >> suspend "succ"
+QED
+
+Resume traversal_reference_block[aux]:
+  rpt gen_tac >> strip_tac >>
+  simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule generate_succs_plan_visited_mono >>
+  drule generate_fn_plan_aux_visited_mono >>
+  simp[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+  gvs[plan_ref_append]
+  >- (qexistsl [`lbl`, `bb`, `ps`, `block_ops`, `ps''`, `[]`, `succ_ops ++ rest_ops`] >>
+      simp[] >> metis_tac[]) >>
+  first_x_assum drule >> strip_tac
+  >- (qexistsl [`lbl'`, `bb'`, `start`, `chunk`, `stop`, `block_ops ++ pre`, `post ++ rest_ops`] >>
+      simp[APPEND_ASSOC]) >>
+  qexistsl [`lbl'`, `bb'`, `start`, `chunk`, `stop`, `block_ops ++ succ_ops ++ pre`, `post`] >>
+  simp[APPEND_ASSOC]
+QED
+
+Resume traversal_reference_block[succ]:
+  rpt gen_tac >> strip_tac >>
+  simp[Once (cj 4 generate_fn_plan_aux_def), AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule generate_succs_plan_visited_mono >>
+  simp[pred_setTheory.SUBSET_DEF] >> strip_tac >>
+  gvs[plan_ref_append] >> first_x_assum drule >> strip_tac
+  >- (qexistsl [`lbl`, `bb`, `start`, `chunk`, `stop`, `pre`, `post ++ rest_ops`] >>
+      simp[APPEND_ASSOC]) >>
+  qexistsl [`lbl`, `bb`, `start`, `chunk`, `stop`, `s_ops ++ pre`, `post`] >>
+  simp[APPEND_ASSOC]
+QED
+Finalise traversal_reference_block
+
 Theorem codegen_asm_static_wf:
   codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
   sym_unit_static_ok unit /\ codegen_ready unit.cu_context ==>
