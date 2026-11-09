@@ -1,6 +1,6 @@
 Theory fnPlanLineagePrefix
 Ancestors
-  stackPlanGen stackPlanTypes list arithmetic
+  fnPlanLineageReplay stackPlanGen stackPlanTypes list arithmetic
 
 (* Exact copies from fnPlanPrefix: importing that theory would pull genBlockSim
    and frame-level simulation into planner leaves. The prefix definition is the
@@ -79,4 +79,21 @@ Proof
   pop_assum SUBST1_TAC >>
   qpat_x_assum `!k i lv dfg cfg fn lbl halt np bl ps ops q. _` kall_tac >>
   metis_tac[]
+QED
+
+Theorem generate_block_insts_prefix_cleanup_update:
+  !k insts lr dfg cfg fn lbl halt np bl i ps h g b.
+    generate_block_insts_prefix lr dfg cfg fn lbl halt np bl i k insts (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    OPTION_MAP (\r. (FST r, SND r with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>))
+      (generate_block_insts_prefix lr dfg cfg fn lbl halt np bl i k insts ps)
+Proof
+  Induct >> simp[generate_block_insts_prefix_def] >>
+  Cases_on `insts` >> simp[generate_block_insts_prefix_def] >> rpt gen_tac >>
+  simp[generate_inst_plan_cleanup_update] >>
+  qmatch_goalsub_abbrev_tac `OPTION_MAP _ step` >>
+  Cases_on `step` >> simp[] >> PairCases_on `x` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `OPTION_MAP _ tail` >>
+  Cases_on `tail` >> simp[] >> PairCases_on `x` >> simp[]
 QED

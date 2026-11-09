@@ -361,3 +361,125 @@ Proof
   CASE_TAC >> simp[] >>
   CASE_TAC >> simp[]
 QED
+
+Theorem generate_phi_plan_cleanup_update:
+  !inst next halt ps h g b.
+    generate_phi_plan inst next halt (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    (FST (generate_phi_plan inst next halt ps),
+     SND (generate_phi_plan inst next halt ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >>
+  simp[generate_phi_plan_def, Excl "LET_THM"] >>
+  Cases_on `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack` >>
+  simp[Excl "LET_THM"] >>
+  irule (BETA_RULE (Q.ISPEC `(\s:plan_state. s with
+    <|ps_cleanup_height := h; ps_cleanup_growth := g;
+      ps_cleanup_promised := b|>)` pair_bind_transport)) >>
+  reverse conj_tac
+  >- (simp[Excl "LET_THM"] >> IF_CASES_TAC >> simp[Excl "LET_THM"] >>
+      Cases_on `do_dup x ps` >>
+      simp[do_dup_cleanup_update]) >>
+  rpt gen_tac >> simp[Excl "LET_THM"] >>
+  IF_CASES_TAC >> simp[popmany_plan_cleanup_update, pairTheory.UNCURRY_VAR]
+QED
+
+Theorem foldl_push_outputs_cleanup_update:
+  !outs ps h g b.
+    FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (ps with <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) outs =
+    FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack) ps outs with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  first_x_assum (qspec_then `ps with ps_stack := stack_push (Var h) ps.ps_stack` mp_tac) >>
+  simp[]
+QED
+
+Theorem generate_regular_inst_plan_cleanup_update:
+  !lr dfg cfg fn inst next halt term lbl ps h g b.
+    generate_regular_inst_plan lr dfg cfg fn inst next halt term lbl (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    (FST (generate_regular_inst_plan lr dfg cfg fn inst next halt term lbl ps),
+     SND (generate_regular_inst_plan lr dfg cfg fn inst next halt term lbl ps) with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>)
+Proof
+  rpt gen_tac >> simp[generate_regular_inst_plan_def, Excl "LET_THM"] >>
+  irule (BETA_RULE (Q.ISPEC `(\s:plan_state. s with
+    <|ps_cleanup_height := h; ps_cleanup_growth := g;
+      ps_cleanup_promised := b|>)` pair_bind_transport)) >>
+  reverse conj_tac >- simp[emit_input_plan_cleanup_update] >>
+  rpt gen_tac >> simp[Excl "LET_THM"] >>
+  irule (BETA_RULE (Q.ISPEC `(\s:plan_state. s with
+    <|ps_cleanup_height := h; ps_cleanup_growth := g;
+      ps_cleanup_promised := b|>)` pair_bind_transport)) >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[Excl "LET_THM"] >>
+      Cases_on `join_target_ops lr fn lbl inst` >> simp[Excl "LET_THM"] >>
+      simp[restore_spilled_plan_cleanup_update, reorder_plan_cleanup_update,
+        pairTheory.UNCURRY_VAR]) >>
+  rpt gen_tac >> simp[Excl "LET_THM"] >>
+  irule (BETA_RULE (Q.ISPEC `(\s:plan_state. s with
+    <|ps_cleanup_height := h; ps_cleanup_growth := g;
+      ps_cleanup_promised := b|>)` pair_bind_transport)) >>
+  reverse conj_tac
+  >- (IF_CASES_TAC >> simp[reorder_plan_cleanup_update, pairTheory.UNCURRY_VAR] >>
+      IF_CASES_TAC >> simp[]) >>
+  rpt gen_tac >> simp[foldl_push_outputs_cleanup_update, Excl "LET_THM"] >>
+  qspec_then `inst.inst_outputs` (qspec_then
+    `t with ps_stack := stack_pop (LENGTH (compute_operands inst)) t.ps_stack`
+    mp_tac) foldl_push_outputs_cleanup_update >>
+  simp[Excl "LET_THM"] >>
+  disch_then (qspecl_then [`h`,`g`,`b`] (fn th => rewrite_tac[th])) >>
+  irule (BETA_RULE (Q.ISPEC `(\s:plan_state. s with
+    <|ps_cleanup_height := h; ps_cleanup_growth := g;
+      ps_cleanup_promised := b|>)` pair_bind_transport)) >>
+  reverse conj_tac >- simp[generate_emit_ops_cleanup_update] >>
+  rpt gen_tac >> simp[Excl "LET_THM"] >>
+  IF_CASES_TAC >- simp[release_dead_spills_cleanup_update] >>
+  simp[Excl "LET_THM"] >>
+  irule (BETA_RULE (Q.ISPEC `(\s:plan_state. s with
+    <|ps_cleanup_height := h; ps_cleanup_growth := g;
+      ps_cleanup_promised := b|>)` pair_bind_transport)) >>
+  reverse conj_tac >- (IF_CASES_TAC >> simp[popmany_plan_cleanup_update]) >>
+  rpt gen_tac >> simp[Excl "LET_THM"] >>
+  IF_CASES_TAC >>
+  simp[optimistic_swap_plan_cleanup_update, release_dead_spills_cleanup_update,
+    pairTheory.UNCURRY_VAR]
+QED
+
+Theorem generate_inst_plan_cleanup_update:
+  !lr dfg cfg fn inst next halt term lbl ps h g b.
+    generate_inst_plan lr dfg cfg fn inst next halt term lbl (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    OPTION_MAP (\r. (FST r, SND r with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>))
+      (generate_inst_plan lr dfg cfg fn inst next halt term lbl ps)
+Proof
+  rpt gen_tac >>
+  simp[generate_inst_plan_def, generate_phi_plan_cleanup_update,
+    generate_offset_plan_cleanup_update, generate_regular_inst_plan_cleanup_update,
+    join_reached_def] >>
+  rpt (IF_CASES_TAC >> simp[])
+QED
+
+Theorem generate_block_insts_plan_cleanup_update:
+  !insts lr dfg cfg fn lbl halt np bl i ps h g b.
+    generate_block_insts_plan lr dfg cfg fn lbl halt np bl i insts (ps with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>) =
+    OPTION_MAP (\r. (FST r, SND r with
+      <|ps_cleanup_height := h; ps_cleanup_growth := g; ps_cleanup_promised := b|>))
+      (generate_block_insts_plan lr dfg cfg fn lbl halt np bl i insts ps)
+Proof
+  Induct >> simp[Once generate_block_insts_plan_def] >>
+  rpt gen_tac >>
+  simp[Once generate_block_insts_plan_def, generate_inst_plan_cleanup_update] >>
+  Cases_on `generate_inst_plan lr dfg cfg fn h
+    (if insts = [] then live_vars_at lr lbl bl else live_vars_at lr lbl (i + (np + 1)))
+    halt (case insts of [] => F | z::zs => is_terminator z.inst_opcode) lbl ps` >>
+  simp[] >> PairCases_on `x` >> simp[] >>
+  simp[AllCaseEqs()] >>
+  Cases_on `generate_block_insts_plan lr dfg cfg fn lbl halt np bl (i+1) insts x1` >>
+  simp[] >> PairCases_on `x` >> simp[]
+QED
