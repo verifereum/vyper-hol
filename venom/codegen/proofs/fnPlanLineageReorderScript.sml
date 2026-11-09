@@ -6,7 +6,7 @@
  *)
 
 Theory fnPlanLineageReorder
-Ancestors
+Ancestors reduceDepthSim
   inputMaterialised reorderStages
   reorderSim
   foldlSim doSwapSim spillSim instSimHelpers strongPrefixSim planSpillBounds dfgDefs

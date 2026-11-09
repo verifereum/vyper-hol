@@ -1663,7 +1663,7 @@ Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
   qpat_x_assum `!v. _ <= _` (qspec_then `v` assume_tac) >>
   qspecl_then [`opc`, `operand_vars rest ++ nl`, `h`, `ps`, `Var v`]
-    assume_tac emit_one_input_inventory_mono_aux >>
+    assume_tac emit_one_input_inventory_mono >>
   Cases_on `Var v = h`
   >- (gvs[elem_count_append, LIST_ELEM_COUNT_THM] >>
       Cases_on `MEM (Var v) rest \/ MEM v keep`

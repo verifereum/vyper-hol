@@ -2,7 +2,7 @@
  * Paired-prefix extension for the N14 opcode family (SHA3; LOG).
  *)
 Theory concretizePtrHashLogFamily
-Ancestors
+Ancestors venomInstProofs
   memoryReadRel
   concretizePtrStorageReadProducer concretizePtrMloadRecovery
   frameViewFacts opcodeClass codegenRel concretizePtrOrdinaryNext concretizePtrParamProducer
@@ -670,7 +670,7 @@ Resume ptr_paired_prefix_hash_log[attach]:
   `?i. active_inst a.po_fn i (post with vs_inst_idx := SUC a.po_state.vs_inst_idx)` by
     (irule ptr_ordinary_next_active >> metis_tac[]) >>
   `post.vs_prev_bb = a.po_state.vs_prev_bb` by
-    metis_tac[step_inst_preserves_prev_bb] >>
+    metis_tac[step_preserves_prev_bb] >>
   `s'.vs_current_bb = at.po_state.vs_current_bb /\
    s'.vs_inst_idx = at.po_state.vs_inst_idx /\
    s'.vs_prev_bb = at.po_state.vs_prev_bb` by

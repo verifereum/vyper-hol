@@ -1,5 +1,5 @@
 Theory fnPlanLineagePath
-Ancestors
+Ancestors venomExecProofs
   fnPlanLineagePhiActivation fnPlanLineageLiveness fnPlanLineageDemandSupport stackPlanGen livenessDefs
   livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
   removeUnusedSsaProofs codegenReadyCompute venomWfProps
@@ -77,7 +77,7 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   `fn_reachable fn d` by
-    metis_tac[fn_dominates_dom_reachable_compute] >>
+    metis_tac[fn_dominates_dom_reachable] >>
   rewrite_tac[listTheory.EVERY_MEM] >> qx_gen_tac `lbl` >> strip_tac >>
   `fn_reachable fn lbl` by
     (irule is_fn_path_all_reachable >>

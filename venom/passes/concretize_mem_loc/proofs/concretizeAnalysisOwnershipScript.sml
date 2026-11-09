@@ -87,7 +87,7 @@ Proof
   strip_tac >>
   `f = g` by metis_tac[source_instruction_owner_unique] >> gvs[] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts f))` by
-    (gvs[ctx_inst_ids_flat] >> drule_all ALL_DISTINCT_FLAT_MAP_MEM >> simp[]) >>
+    (gvs[ctx_inst_ids_flat] >> drule_all all_distinct_flat_map_member >> simp[]) >>
   gvs[MEM_EL] >> metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, EL_MAP]
 QED
 
@@ -130,7 +130,7 @@ Theorem source_member_ids_distinct:
 Proof
   strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
-    (gvs[ctx_inst_ids_flat] >> drule_all ALL_DISTINCT_FLAT_MAP_MEM >> simp[]) >>
+    (gvs[ctx_inst_ids_flat] >> drule_all all_distinct_flat_map_member >> simp[]) >>
   gvs[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_flat,
       MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]
 QED
