@@ -236,6 +236,89 @@ Proof
   simp[word_agree_except_def]
 QED
 
+Theorem taint_agree_allocation_fields:
+  taint_agree D X tn s t ==>
+  s.vs_allocas = t.vs_allocas /\ s.vs_alloca_next = t.vs_alloca_next
+Proof
+  disch_then (mp_tac o MATCH_MP taint_agree_frame) >>
+  simp[venom_state_component_equality]
+QED
+
+Theorem taint_agree_alloca_fresh:
+  taint_agree D X tn s t /\ s.vs_allocas = t.vs_allocas /\
+  s.vs_alloca_next = t.vs_alloca_next ==>
+  taint_agree D X
+    (tn with t_mem := tn.t_mem UNION
+      {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+sz})
+    (s with <|vs_allocas := s.vs_allocas |+ (id,(s.vs_alloca_next,sz));
+              vs_alloca_next := s.vs_alloca_next+sz|>)
+    (t with <|vs_allocas := t.vs_allocas |+ (id,(t.vs_alloca_next,sz));
+              vs_alloca_next := t.vs_alloca_next+sz|>)
+Proof
+  simp[taint_agree_def, ld_shared_agree_def, op_taint_def] >>
+  rpt strip_tac >> simp[]
+  >- (qpat_x_assum `_ = s`
+        (mp_tac o Q.AP_TERM `\u. u with
+          <|vs_allocas := s.vs_allocas |+ (id,(s.vs_alloca_next,sz));
+            vs_alloca_next := s.vs_alloca_next+sz|>`) >> simp[]) >>
+  first_x_assum irule >> simp[] >> decide_tac
+QED
+
+Theorem taint_agree_alloca_step:
+  taint_agree D X tn s t /\ inst.inst_opcode = ALLOCA /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `s.vs_allocas = t.vs_allocas /\ s.vs_alloca_next = t.vs_alloca_next` by
+    metis_tac[taint_agree_allocation_fields] >>
+  gvs[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs()] >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  qabbrev_tac `mask0 = tn with t_mem := mask.t_mem` >>
+  `mask = mask0 with t_var := set_var_taint mask0.t_var [out] {}` by
+    simp[Abbr `mask0`, Abbr `mask`, step_taint_def, out_taint_def, store_taint_def,
+         imm_taint_def, adopt_reset_def, eval_operand_def,
+         taint_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  irule taint_agree_update_var >> simp[word_agree_except_def] >>
+  simp[Abbr `mask0`, Abbr `mask`, step_taint_def, mem_taint_def, new_site_bytes_def,
+       update_var_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss] >>
+  `inst.inst_id NOTIN FDOM t.vs_allocas` by
+    metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
+  simp[] >> drule_all taint_agree_alloca_fresh >>
+  disch_then (qspecl_then [`w2n alloc_size`, `inst.inst_id`] mp_tac) >> simp[]
+QED
+
+Theorem taint_agree_allocation_step:
+  taint_agree D X tn s t /\ active_inst fn inst s /\
+  MEM fn C.ctx_functions /\ ~ctx_has_dalloca C /\
+  MEM inst.inst_opcode [ALLOCA; DALLOCA] ==>
+  (!s'. step_inst_base inst s = OK s' ==>
+    ?t'. step_inst_base inst t = OK t' /\
+         taint_agree D X (step_taint inst s s' tn) s' t') /\
+  (!v s'. step_inst_base inst s = IntRet v s' ==>
+    ?t'. step_inst_base inst t = IntRet v t' /\ taint_agree D X tn s' t') /\
+  (!s'. step_inst_base inst s = Halt s' ==>
+    ?t'. step_inst_base inst t = Halt t' /\ dead_result_rel D (Halt s') (Halt t')) /\
+  (!a s'. step_inst_base inst s = Abort a s' ==>
+    ?t'. step_inst_base inst t = Abort a t')
+Proof
+  strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, venomInstTheory.fn_insts_def,
+        o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `inst.inst_opcode <> DALLOCA` by
+    (fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+  gvs[MEM] >> conj_tac
+  >- metis_tac[taint_agree_alloca_step] >>
+  rpt conj_tac >> rpt strip_tac >>
+  gvs[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs()]
+QED
+
 Theorem taint_agree_memory_update:
   taint_agree D X tn s t /\
   (!i. i NOTIN X /\ i NOTIN M /\ i < s.vs_alloca_next ==>
@@ -247,6 +330,33 @@ Proof
   rpt strip_tac >> simp[] >>
   qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM `\u. u with vs_memory := ms`) >>
   simp[]
+QED
+
+Theorem taint_agree_write_memory:
+  taint_agree D X tn s t /\ LENGTH xs = len /\ LENGTH ys = len /\
+  (!k. k < len /\ k NOTIN m ==> EL k xs = EL k ys) ==>
+  taint_agree D X
+    (tn with t_mem := (tn.t_mem DIFF {i | a <= i /\ i < a+len}) UNION
+                         {a+k | k < len /\ k IN m})
+    (write_memory_with_expansion a xs s) (write_memory_with_expansion a ys t)
+Proof
+  strip_tac >>
+  `write_memory_with_expansion a xs s =
+     s with vs_memory := (write_memory_with_expansion a xs s).vs_memory` by
+    simp[write_memory_with_expansion_def] >>
+  `write_memory_with_expansion a ys t =
+     t with vs_memory := (write_memory_with_expansion a ys t).vs_memory` by
+    simp[write_memory_with_expansion_def] >>
+  pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
+  irule taint_agree_memory_update >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  gen_tac >> disch_tac >>
+  simp[regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+  Cases_on `a <= i /\ i < a+len` >> simp[]
+  >- (`i-a < len /\ a+(i-a) = i` by decide_tac >>
+      first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  irule taint_agree_memory >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> gvs[]
 QED
 
 Theorem taint_agree_mstore:
