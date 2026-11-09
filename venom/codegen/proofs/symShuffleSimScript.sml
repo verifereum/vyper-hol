@@ -847,5 +847,36 @@ Theorem sym_prefix_ops_sim:
           (!b. ~R b ==>
                FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  cheat
+  Induct_on `ops`
+  >- simp[execute_plan_def, apply_prefix_ops_def, codegenSymRelTheory.sym_steps_def] >>
+  suspend "cons"
 QED
+
+Resume sym_prefix_ops_sim[cons]:
+  simp[prefix_spill_wf_def, EVERY_DEF, planWfTheory.prefix_wf_cons,
+       pairTheory.pair_case_def, pairTheory.UNCURRY] >>
+  rpt strip_tac >> rename1 `is_prefix_op op` >>
+  rename1 `sym_kinds_ok ctx fn ret srest ps ss` >>
+  `asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp op) /\
+   asm_block_at p (ss.sym_base.as_pc + LENGTH (exec_stack_op initial_fmp op))
+     (execute_plan initial_fmp ops)` by
+    gvs[execute_plan_def, stackOpSimTheory.asm_block_at_append] >>
+  `!off b. op = SOSpill off /\ in_mem_range off 32 b ==>
+     R b /\ context_spill_byte ctx b` by metis_tac[MEM] >>
+  drule_all sym_prefix_op_sim >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  `prefix_wf lo (LENGTH (apply_prefix_op initial_fmp lo op ps).ps_stack) ops` by
+    simp[apply_prefix_op_length] >>
+  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte ctx b` by metis_tac[] >>
+  `asm_block_at p ss'.sym_base.as_pc (execute_plan initial_fmp ops)` by gvs[] >>
+  qpat_x_assum `!initial_fmp lo p env cp fn ret srest R ps ss. _`
+    (drule_all_then (qspec_then `env` strip_assume_tac)) >>
+  qexists_tac `ss''` >>
+  conj_tac >-
+    (drule_all sym_steps_compose >> simp[execute_plan_def]) >>
+  gvs[apply_prefix_ops_def, execute_plan_def] >>
+  metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]
+QED
+
+Finalise sym_prefix_ops_sim
