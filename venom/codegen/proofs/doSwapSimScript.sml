@@ -2502,7 +2502,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for spill ++ restore *)
-Theorem execute_plan_spill_restore_length[local]:
+Theorem execute_plan_spill_restore_length:
   !spill_offs restore_offs.
     LENGTH (execute_plan initial_fmp (MAP SOSpill spill_offs ++ MAP SORestore restore_offs)) =
       2 * LENGTH spill_offs + 2 * LENGTH restore_offs
