@@ -11,7 +11,7 @@ Ancestors
  actualAllocExec fragExec instIdxIndep loweringHalt vyperCompiler ctorAbiActualArrayRun
  compileVyper moduleLowering rich_list abiDecoderVarSequence
  venomExecSemantics venomState venomInst venomMemDefs
- vyperABI words list finite_map pred_set arithmetic
+ vyperABI words list finite_map pred_set arithmetic fragGasStraight
 
 Theorem deploy_ctor_decode_buffer_old_prefix_complete:
  !k dst src hi ce env ty tv av v st st' ctx func site initial sb d.
@@ -820,4 +820,69 @@ Proof
  irule deploy_ctor_register_suffix_actual_complete >> asm_rewrite_tac[] >>
  qexistsl [`atys`, `avs`, `ce0`, `data_size`, `encoded`, `env`, `fargs`, `0`, `fargs`,
    `ce0.ce_vars`] >> simp[]
+QED
+
+Theorem deploy_ctor_register_alloc_actual_complete_gas_path:
+ compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
+ n < dimword (:256) /\ local_ptrs_rel func ce scopes initial /\
+ fresh_vars_wrt st initial /\ alloca_inv initial /\
+ alloca_frontier_inv_from k ctx func site initial /\ fn_inst_ids_distinct func /\
+ k + unit_alloca_budget ctx < dimword (:256) /\
+ (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+ ?a. gas_path ctx func initial 0 (OK a) /\
+   buf.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+   local_ptrs_rel func ce scopes a /\
+   lookup_var (STRING #"%" (toString st.cs_next_var)) a =
+     SOME (n2w initial.vs_alloca_next) /\
+   local_backed func (STRING #"%" (toString st.cs_next_var)) a initial.vs_alloca_next n /\
+   FLOOKUP a.vs_allocas st.cs_next_id = SOME (initial.vs_alloca_next,n) /\
+   a.vs_alloca_next = initial.vs_alloca_next+n /\
+   a.vs_alloca_next < dimword (:256) /\
+   alloca_inv a /\ alloca_frontier_inv_from k ctx func site a /\
+   fresh_vars_wrt sa a /\ not_fresh_at sa (STRING #"%" (toString st.cs_next_var)) /\
+   (!aid. sa.cs_next_id <= aid ==> FLOOKUP a.vs_allocas aid = NONE) /\
+   (!name b sz. local_region ce scopes a name b sz ==>
+     compileEnv$regions_disjoint initial.vs_alloca_next n b sz) /\
+   a.vs_memory = initial.vs_memory /\
+   a.vs_data_section = initial.vs_data_section /\
+   a.vs_call_ctx = initial.vs_call_ctx /\ a.vs_labels = initial.vs_labels /\
+   a.vs_gas_readings = initial.vs_gas_readings /\ a.vs_code = initial.vs_code /\
+   a.vs_outcomes = initial.vs_outcomes /\ a.vs_tx_ctx = initial.vs_tx_ctx /\
+   a.vs_block_ctx = initial.vs_block_ctx /\
+   (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
+     lookup_var x a = SOME w) /\
+   abi_encoder_registered_effect (frag_ids st sa) [] initial a /\
+   ~a.vs_halted /\ a.vs_current_bb = sa.cs_current_bb /\
+   a.vs_inst_idx = LENGTH sa.cs_current_insts /\
+   abi_decode_sim ctx func initial a
+Proof
+ strip_tac >>
+ `FLOOKUP initial.vs_allocas st.cs_next_id = NONE` by simp[] >>
+ drule_all deploy_ctor_register_alloc_run_complete >> strip_tac >>
+ `initial.vs_alloca_next < dimword (:256)` by decide_tac >>
+ drule_all deploy_ctor_register_alloc_state_complete >> strip_tac >>
+ qabbrev_tac `raw = update_var (STRING #"%" (toString st.cs_next_var))
+   (n2w initial.vs_alloca_next)
+   (initial with <|vs_allocas := initial.vs_allocas |+
+     (st.cs_next_id,(initial.vs_alloca_next,n));
+     vs_alloca_next := initial.vs_alloca_next+n |>)` >>
+ `a = raw with vs_inst_idx := LENGTH sa.cs_current_insts` by simp[Abbr `raw`] >>
+ `sa.cs_current_bb = st.cs_current_bb /\
+  sa.cs_current_insts = st.cs_current_insts ++ emitted_insts st sa /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st sa) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts st sa) = [] /\
+  run_inst_seq (emitted_insts st sa) initial = OK raw` by
+   (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+    simp[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+      comp_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+      comp_ignore_bind_def, emit_def] >> strip_tac >> gvs[] >>
+    simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+      mk_inst_def, is_terminator_def, run_inst_seq_def, step_inst_base_def,
+      exec_alloca_def, w2n_n2w, Abbr `raw`]) >>
+ drule_all concat_straight_gas_path >> strip_tac >>
+ qexists `a` >> asm_rewrite_tac[] >>
+ gvs[Abbr `raw`, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
