@@ -16,6 +16,7 @@ Ancestors
   o1ContractSueStep o1PassContract venomRetProps o1ComposeSupport
   o1PassLift singleUseExpansionDefs singleUseExpansionSupplyProofs
   venomFnScheduleRunner venomWf venomInst irSupply singleUseExpansionSupplySim
+  gasEvents singleUseExpansionSupplyEvents
 
 Theorem sue_run_blocks_supply_entry:
   wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\
@@ -527,15 +528,6 @@ Proof
        codegenRelTheory.source_memory_write_ranges_def]
 QED
 
-Theorem sue_eval_operands_related[local]:
-  !xs ys. LIST_REL (\op newop. eval_operand newop t = eval_operand op s) xs ys ==>
-    eval_operands ys t = eval_operands xs s
-Proof
-  Induct >> Cases_on `ys` >>
-  simp[venomStateTheory.eval_operands_def] >>
-  rpt strip_tac >> res_tac >> simp[]
-QED
-
 Theorem sue_rewritten_call_observation:
   inst_wf inst /\ execution_frame s = execution_frame t /\
   LIST_REL (\op newop. eval_operand newop t = eval_operand op s)
@@ -892,6 +884,35 @@ Proof
   simp[ctx_pass_stage_def] >> strip_tac >> simp[] >>
   irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
   rpt strip_tac >> gvs[] >> drule sue_pass_step_replay >> simp[]
+QED
+
+(* The actual stage preserves complete GAS recorder lists across contexts. *)
+Theorem sue_stage_gas_events:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion)
+    view C C' /\
+  o1_ctx_shape C /\
+  EVERY (o1_fn_row 6) C.ctx_functions /\
+  lookup_function name C.ctx_functions = SOME fn ==>
+  ?fn'.
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_entry_label fn' = fn_entry_label fn /\
+    (!fuel st.
+      fn_entry_state fn st ==>
+      gas_events_blocks fuel C fn st =
+      gas_events_blocks fuel C' fn' st)
+Proof
+  strip_tac >> drule sue_stage_functions >> strip_tac >>
+  drule sue_supply_lookup_functions >>
+  disch_then (qspec_then `name` mp_tac) >>
+  Cases_on `lookup_function name C'.ctx_functions` >>
+  gvs[optionTheory.OPTREL_def] >> strip_tac >>
+  conj_tac
+  >- metis_tac[sue_expand_function_supply_identity] >>
+  rpt strip_tac >> irule sue_function_supply_entry_events >>
+  simp[] >>
+  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  gvs[o1_ctx_shape_def, o1_fn_shape_def, o1_fn_row_def,
+      listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
 (* Row 6 (o1_ssa_inv: wf_ssa, no ALLOCA) to row 7. *)
