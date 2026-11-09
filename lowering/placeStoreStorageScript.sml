@@ -3588,14 +3588,6 @@ Proof
   drule_all place_store_storage_replace >> Cases_on `tr` >> gvs[]
 QED
 
-Theorem place_store_operand_update[local]:
-  eval_operand op (update_var x v s) =
-    if op = Var x then SOME v else eval_operand op s
-Proof
-  Cases_on `op` >> simp[eval_operand_def,
-    emitHelperPropsTheory.lookup_var_update_var] >> metis_tac[]
-QED
-
 Theorem place_store_mload_update[local]:
   mload a (update_var x v s) = mload a s
 Proof
@@ -3629,7 +3621,8 @@ Proof
   strip_tac >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
     emitHelperPropsTheory.eval_operand_lit] >>
-  simp[run_inst_seq_def, step_inst_base_def, place_store_operand_update]
+  simp[run_inst_seq_def, step_inst_base_def,
+    slotCopyExecutionTheory.slot_copy_operand_update]
 QED
 
 Theorem place_store_forward_body_run:
@@ -3659,22 +3652,24 @@ Proof
   `eval_operand (Var cv) s = SOME k` by simp[eval_operand_def] >>
   simp_tac (srw_ss()) [LET_THM] >>
   simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
-    exec_pure2_def, place_store_operand_update,
+    exec_pure2_def, slotCopyExecutionTheory.slot_copy_operand_update,
     emitHelperPropsTheory.eval_operand_lit] >>
   `src <> Var mv /\ src <> Var sv /\ src <> Var vv /\
    dst <> Var mv /\ dst <> Var sv /\ dst <> Var vv /\ dst <> Var dv` by metis_tac[] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-    place_store_operand_update] >>
+    slotCopyExecutionTheory.slot_copy_operand_update] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_read1_def,
-    place_store_operand_update, place_store_mload_update] >>
+    slotCopyExecutionTheory.slot_copy_operand_update,
+    place_store_mload_update] >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-    place_store_operand_update] >>
+    slotCopyExecutionTheory.slot_copy_operand_update] >>
   Cases_on `tr` >>
   simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
-    eval_operands_def, place_store_operand_update, place_store_update_static] >>
+    eval_operands_def, slotCopyExecutionTheory.slot_copy_operand_update,
+    place_store_update_static] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq _ post` >>
   `eval_operand (Var cv) post = SOME k` by
-    (simp[Abbr `post`, place_store_operand_update,
+    (simp[Abbr `post`, slotCopyExecutionTheory.slot_copy_operand_update,
       SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `T`] place_store_slot_operand_frame),
       SIMP_RULE (srw_ss()) [] (Q.INST [`tr` |-> `F`] place_store_slot_operand_frame)]) >>
   irule place_store_forward_tail_run >> simp[]

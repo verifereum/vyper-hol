@@ -535,7 +535,8 @@ Proof
     (rw[cs_appends_def] >> metis_tac[compile_ptr_load_labels, pairTheory.SND]) >>
   `!op v. cs_appends (compile_ptr_store ctor NONE sl op v)` by
     (rw[cs_appends_def] >> metis_tac[compile_ptr_store_labels, pairTheory.SND]) >>
-  pure_rewrite_tac[contextTheory.compile_word_copy_loop_def, LET_THM] >> BETA_TAC >>
+  pure_rewrite_tac[contextTheory.compile_word_copy_loop_def,
+    contextTheory.compile_word_copy_loop_op_def, LET_THM] >> BETA_TAC >>
   map_every qid_spec_tac [`b`, `x`, `a`] >>
   ntac 3 (ho_match_mp_tac first_emission_bind >> conj_tac
     >- (rpt strip_tac >> drule (cj 1 first_emission_counters) >> metis_tac[]) >> gen_tac) >>
