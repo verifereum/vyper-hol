@@ -51,6 +51,8 @@ Theorem external_frame_equal_static_copy_stmt_frag_ptr_bounded:
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >>
+  `post_value_type next e = expr_type e` by
+    (irule post_value_type_lowered >> simp[]) >>
   drule_all external_frame_abicopy_capacity >> strip_tac >>
   drule_all external_frame_abicopy_layout >> strip_tac >>
   rw[stmt_frag_ptr_def] >>
@@ -71,7 +73,7 @@ Proof
   drule_all expr_post_ptr_return_inputs >> strip_tac >>
   `evaluate_type (get_tenv cx) (expr_type e) = SOME tv` by fs[] >>
   drule_all external_return_forced_value_typed >> strip_tac >>
-  `expr_val_at next cx (expr_type e) sa' sm ee v op t` by fs[expr_post_def] >>
+  `expr_val_at next cx (expr_type e) sa' sm ee v op t` by gvs[expr_post_def] >>
   drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)
     compile_external_return_static_copy_equal_gas_path_ptr >>
   simp[] >> disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>

@@ -1,6 +1,6 @@
 Theory extRetStaticFrameConsumerPtr
 Ancestors
-  extRetStaticFrameMetadataPtr extRetStaticReservedPtr
+  extRetStaticFrameMetadataPtr extRetStaticReservedPtr loweringPosts
 
 Theorem external_frame_equal_static_copy_stmt_frag_ptr:
   set_external_package_target target
@@ -24,6 +24,8 @@ Theorem external_frame_equal_static_copy_stmt_frag_ptr:
     (eval_stmt cx (Return (SOME e))) es
 Proof
   strip_tac >> drule_all external_frame_abicopy_layout >> strip_tac >>
+  `post_value_type next e = expr_type e` by
+    (irule post_value_type_lowered >> simp[]) >>
   irule external_return_static_copy_stmt_frag_ptr_reserved >>
   simp[] >> goal_assum (drule_at Any) >> simp[]
 QED

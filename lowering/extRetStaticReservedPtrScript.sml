@@ -16,6 +16,7 @@ Theorem external_return_static_copy_stmt_frag_ptr_reserved:
   cenv.ce_max_return_size < dimword (:256) /\
   expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
   call_evaluation_safe cx (int_calls_expr e) /\
+  post_value_type cenv e = expr_type e /\
   expr_sim_ptr d ctx PG func cenv cx ty e es ==>
   stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
@@ -37,7 +38,7 @@ Proof
   disch_then irule >> rpt gen_tac >> strip_tac >> gvs[] >>
   drule_all expr_post_ptr_return_inputs >> strip_tac >>
   drule_all external_return_forced_value_typed >> strip_tac >>
-  `expr_val_at cenv cx (expr_type e) sa sm ee v op t` by fs[expr_post_def] >>
+  `expr_val_at cenv cx (expr_type e) sa sm ee v op t` by gvs[expr_post_def] >>
   drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)
     compile_external_return_static_copy_gas_path_ptr >>
   simp[] >> disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>

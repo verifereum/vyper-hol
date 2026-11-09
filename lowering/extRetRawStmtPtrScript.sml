@@ -46,6 +46,7 @@ Theorem external_return_raw_stmt_frag_ptr:
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic k))) /\
   expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
   call_evaluation_safe cx (int_calls_expr e) /\
+  post_value_type cenv e = expr_type e /\
   expr_sim_ptr d ctx PG func cenv cx ty e es ==>
   stmt_frag_ptr d ctx PG func cx lctx (\v es gt r. T) cenv
     (stmt_env cenv lctx ty (Return (SOME e)))
@@ -70,7 +71,7 @@ Proof
   `?bs. v = BytesV bs` by
     (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
   gvs[] >>
-  `expr_val_at cenv cx (expr_type e) sa sm ee (BytesV bs) op t` by fs[expr_post_def] >>
+  `expr_val_at cenv cx (expr_type e) sa sm ee (BytesV bs) op t` by gvs[expr_post_def] >>
   drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)
     compile_external_return_raw_value_gas_path_ptr >>
   simp[] >> disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>

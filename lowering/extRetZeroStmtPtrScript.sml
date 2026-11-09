@@ -1,5 +1,6 @@
 Theory extRetZeroStmtPtr
 Ancestors
+  extRetPostInputsPtr
   extRetStaticStmtPtr exprOperandVar extRetCopyInputsPtr extRetNormalEvidencePtr
   extRetSomeComposePtr bodyPtrDefs typedCopyPtr loweringPosts stmtSimReturn
   exprLowering exprLoweringProps gasSummaryComposePtr extRetCopySuffixPtr
@@ -30,7 +31,7 @@ Proof
   drule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)
     external_return_some_outcome_ptr >>
   disch_then irule >> rpt gen_tac >> strip_tac >> gvs[] >>
-  drule_all expr_post_ptr_return_inputs >> strip_tac >>
+  drule_all expr_post_value_ptr_return_inputs >> strip_tac >>
   drule_at (Pat `compile_external_return _ _ _ _ _ _ _ _ _ _ = _`)
     compile_external_return_copy_zero_suffix_gas_path_ptr >>
   simp[] >> disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>

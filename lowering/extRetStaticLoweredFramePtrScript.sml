@@ -23,6 +23,11 @@ Proof
   >- (Cases_on `builtin` >>
       gvs[lowered_value_type_def, expr_type_def, well_typed_expr_def,
           type_builtin_result_ok_def, is_abi_dynamic_def]) >>
+  all_tac
+  >~ [`Builtin ty builtin args`]
+  >- (Cases_on `builtin` >>
+      gvs[lowered_value_type_def, expr_type_def, well_typed_expr_def,
+          well_typed_builtin_app_def, is_abi_dynamic_def]) >>
   rename1 `Call ty target args drv` >> Cases_on `target` >>
   gvs[lowered_value_type_def, expr_type_def] >>
   PairCases_on `p` >> gvs[well_typed_expr_def] >>
