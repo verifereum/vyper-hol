@@ -213,7 +213,7 @@ Resume pop_nested_local_live_case[nonempty]:
         (ValueSubscript (IntV &(LENGTH vs - 1))) =
       SOME (32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
        (simp[loweringPostsTheory.mem_step_offset_def] >>
-        fs[valueEncodingTheory.val_wf_def] >> Cases_on `vs` >> gvs[]) >>
+        fs[valueEncodingDefsTheory.val_wf_def] >> Cases_on `vs` >> gvs[]) >>
      `mem_path_offset entry.type
         (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))]) =
       SOME (k + 32 + (LENGTH vs - 1) * type_memory_size etv, etv)` by
