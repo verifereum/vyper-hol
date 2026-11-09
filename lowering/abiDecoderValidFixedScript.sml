@@ -3,7 +3,7 @@ Ancestors
   abiDecoderValidContract abiDecoderValidBytesInput abiValidBytesReentry abiDecoderValidBytes
   abiDecoderBytesTyped abiDecoderBytes abiDecoderCorrectLeaves abiDecoderEffect
   abiDecoderContract abiDecoderTypedContract abiDecoderReentry abiDecoderTypedCompose
-  abiDecoderLoop abiDecoderFrame abiEncoderSequence abiEncoder fragExec instIdxIndep compileEnv
+  abiDecoderLoop abiDecoderFrame abiDecoderSequenceReach abiEncoder fragExec instIdxIndep compileEnv loweringStateRelDefs
   emitHelperProps valueEncoding vyperABI vyperValue venomState venomExecSemantics words list
   abiDecoderValidPrefix contractABI abiDecoderMemberInfos abiDecoderMembers abiValidMembers
   abiDecodeRanges arithmetic abiDecoderComplexExecute abiDecoderComplexGuard
@@ -16,8 +16,9 @@ Ancestors
 
 (* Actual noncanonical Bytes/String execution closes the recursive child API. *)
 Theorem abi_decoder_valid_bytes_reach:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
-  abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d
     (abi_decoder_prune_vars st.cs_next_var initial) /\ fn_has_code st st' func /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
@@ -33,17 +34,18 @@ Theorem abi_decoder_valid_bytes_reach:
     actual.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~actual.vs_halted /\
     abi_decode_sim ctx func initial actual
 Proof
-  strip_tac >> drule_all abi_decoder_valid_bytes_reentry >> strip_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_decoder_valid_bytes_reentry >> strip_tac >>
   `abi_decode_source_opcode opc` by fs[abi_decoder_valid_bytes_pre_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
   drule abi_decoder_inst_extends_prefix >> strip_tac >>
-  drule_all abi_encoder_run_sequence_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  drule_all abi_decoder_run_sequence_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial reached` >> qexists_tac `reached` >>
   gvs[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx] >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_decoder_valid_pre_output_separated:
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc hi sb d b cap initial ==>
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc base_op hi B sb d b cap initial ==>
   d + type_memory_bytes ce ty <= b \/ b + cap <= d
 Proof
   simp_tac bool_ss [abi_decoder_valid_pre_def, abi_decoder_ranges_def] >>
@@ -57,7 +59,7 @@ Proof
   disch_then assume_tac >> simp_tac bool_ss [abi_decoder_valid_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_valid_bytes_input >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   drule_all abi_decoder_valid_bytes_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial actual` >>
@@ -105,7 +107,7 @@ QED
 Theorem abi_decoder_valid_complex_guard_inputs:
   abi_decoder_members ce env sf tys tvs avs vs /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial ==>
   abi_decode_source_opcode opc /\ eval_operand src initial = SOME (n2w sb) /\
@@ -119,7 +121,7 @@ Proof
   drule abi_valid_members_view >> strip_tac >>
   `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys) <= LENGTH bs`
     by (asm_simp_tac bool_ss [] >> decide_tac) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   asm_simp_tac bool_ss [] >> Cases_on `hi = Lit 0w` >- simp[] >>
   qpat_x_assum `hi = Lit 0w \/ _` mp_tac >> asm_simp_tac bool_ss [] >> strip_tac >>
@@ -134,7 +136,8 @@ QED
 
 Theorem abi_decoder_valid_complex_execute:
   LIST_REL (abi_decoder_valid_correct ce env sf) tys tvs /\
-  compile_abi_decode_to_buf dst src opc hi (DecComplex dyn (abi_decoder_member_infos sf ce tys))
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex dyn (abi_decoder_member_infos sf ce tys))
     st = ((),final) /\ fn_has_code st final func /\
   (st.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -142,14 +145,14 @@ Theorem abi_decoder_valid_complex_execute:
   abi_decoder_members ce env sf tys tvs
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH bs)
     d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial /\
-  mem_bytes_at sb (LENGTH bs)
+  mem_bytes_at (B + sb) (LENGTH bs)
     (abi_decode_source opc initial) = bs /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\ final.cs_next_id <= last /\
+  abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var hi /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\ final.cs_next_id <= last /\
   final.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -164,7 +167,8 @@ Proof
   drule abi_decoder_complex_trace >> strip_tac >>
   rename1 `abi_decode_complex_head_guard src hi _ st = ((),middle)` >>
   drule_all abi_decoder_complex_code >> strip_tac >>
-  `middle.cs_next_var <= limit_st.cs_next_var /\ first <= middle.cs_next_id` by decide_tac >>
+  `middle.cs_next_var <= limit_st.cs_next_var /\ first <= abi_decoder_entry_floor middle` by
+    (fs[abi_decoder_entry_floor_def, Excl "enc_def"] >> decide_tac) >>
   mp_tac (Q.INST [`st'` |-> `middle`, `head_sz` |->
     `FOLDR (\(_,asz,_) acc. asz + acc) 0 (abi_decoder_member_infos sf ce tys)`]
     abi_decode_complex_head_guard_reach) >>
@@ -178,6 +182,7 @@ Proof
      mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `prepared:venom_state`]
        abi_decoder_budget_transport) >> asm_simp_tac bool_ss []) >>
   `abi_decoder_operand_live middle.cs_next_var src /\ abi_decoder_operand_live middle.cs_next_var dst /\
+   abi_decoder_operand_live middle.cs_next_var base_op /\
    abi_decoder_operand_live middle.cs_next_var hi` by
     (rpt conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >> simp[]) >>
   drule abi_decoder_valid_members_correct_list >> strip_tac >>
@@ -206,7 +211,7 @@ QED
 Theorem abi_decoder_valid_struct_inputs:
   FLOOKUP env nsid = SOME (StructArgs args) /\ LENGTH tvs = LENGTH args /\
   abi_decoder_valid_pre ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
-    bs v st src dst opc hi sb d b cap initial ==>
+    bs v st src dst opc base_op hi B sb d b cap initial ==>
   ?cfields fields.
     FLOOKUP sf (nsid_to_string nsid) = SOME cfields /\
     MAP (FST o SND) cfields = MAP SND args /\
@@ -218,15 +223,15 @@ Theorem abi_decoder_valid_struct_inputs:
       (MAP SND fields) /\
     vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args)) bs bs /\
     type_memory_bytes ce (StructT nsid) = SUM (MAP (type_memory_bytes ce) (MAP SND args)) /\
-    abi_decoder_ranges opc hi src dst sb
+    abi_decoder_ranges opc base_op hi src dst B sb
       (LENGTH bs)
       d (SUM (MAP (type_memory_bytes ce) (MAP SND args))) b cap initial /\
-    mem_bytes_at sb
+    mem_bytes_at (B + sb)
       (LENGTH bs)
       (abi_decode_source opc initial) =
         bs /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-    abi_decoder_operand_live st.cs_next_var hi
+    abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var hi
 Proof
   simp_tac bool_ss [abi_decoder_valid_pre_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -266,18 +271,19 @@ Proof
   `LENGTH tvs = LENGTH args` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
   simp_tac bool_ss [abi_decoder_valid_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_decoder_valid_struct_inputs >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  drule_all abi_decoder_valid_struct_inputs >> strip_tac >> gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   (drule abi_decoder_struct_infos >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST [`st` |-> `start`, `final` |-> `end_st`,
+    `base_op` |-> `base_op`, `B` |-> `src_base`,
     `env` |-> `env \\ nsid`, `sf` |-> `sf \\ nsid_to_string nsid`,
     `tys` |-> `MAP SND (args:(string # vyperAST$type) list)`,
     `vs` |-> `MAP SND (fields:(string # value) list)`,
     `dyn` |-> `EXISTS (is_abi_dynamic ce.ce_struct_fields)
       (MAP SND (args:(string # vyperAST$type) list))`]
     abi_decoder_valid_complex_execute) >>
-  impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
+  impl_tac >- asm_simp_tac bool_ss [ADD_COMM] >> strip_tac >>
   rename1 `tuple_in_memory (MAP SND fields) tvs d actual.vs_memory` >>
   `fields_in_memory fields (ZIP (MAP FST args,tvs)) d actual.vs_memory` by
     (irule static_fields_memory_zip >> fs[Once value_has_type_def]) >>
@@ -290,17 +296,17 @@ QED
 
 Theorem abi_decoder_valid_tuple_inputs:
   abi_decoder_valid_pre ce env sf (TupleT tys) (TupleTV tvs) bs v
-    st src dst opc hi sb d b cap initial ==>
+    st src dst opc base_op hi B sb d b cap initial ==>
   ?vs. v = ArrayV (TupleV vs) /\
     abi_decoder_members ce env sf tys tvs
       (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
     vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
     type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys) /\
-    abi_decoder_ranges opc hi src dst sb (LENGTH bs)
+    abi_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
       d (SUM (MAP (type_memory_bytes ce) tys)) b cap initial /\
-    mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+    mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-    abi_decoder_operand_live st.cs_next_var hi
+    abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var hi
 Proof
   simp_tac bool_ss [abi_decoder_valid_pre_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -332,12 +338,13 @@ Proof
   simp_tac bool_ss [abi_decoder_valid_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_decoder_valid_tuple_inputs >> strip_tac >>
-  gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   mp_tac (Q.INST [`st` |-> `start`, `final` |-> `end_st`,
+    `base_op` |-> `base_op`, `B` |-> `src_base`,
     `dyn` |-> `EXISTS (is_abi_dynamic ce.ce_struct_fields) tys`] abi_decoder_valid_complex_execute) >>
-  impl_tac >- asm_simp_tac bool_ss [] >>
+  impl_tac >- asm_simp_tac bool_ss [ADD_COMM] >>
   asm_simp_tac bool_ss [val_in_memory_tuple]
 QED
 
@@ -382,17 +389,17 @@ QED
 
 Theorem abi_decoder_valid_fixed_array_inputs:
   abi_decoder_valid_pre ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
-    bs v st src dst opc hi sb d b cap initial ==>
+    bs v st src dst opc base_op hi B sb d b cap initial ==>
   ?vs. v = ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs)) /\ LENGTH vs = n /\
     abi_decoder_members ce env sf (REPLICATE n ty) (REPLICATE n tv)
       (abi_decode_members (MAP (vyper_to_abi_type env) (REPLICATE n ty)) bs bs) vs /\
     vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (REPLICATE n ty)) bs bs /\
     type_memory_bytes ce (ArrayT ty (Fixed n)) = SUM (MAP (type_memory_bytes ce) (REPLICATE n ty)) /\
-    abi_decoder_ranges opc hi src dst sb (LENGTH bs)
+    abi_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
       d (SUM (MAP (type_memory_bytes ce) (REPLICATE n ty))) b cap initial /\
-    mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+    mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-    abi_decoder_operand_live st.cs_next_var hi
+    abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var hi
 Proof
   simp_tac bool_ss [abi_decoder_valid_pre_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -419,16 +426,17 @@ Theorem abi_decoder_valid_correct_fixed_array:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> simp_tac bool_ss [abi_decoder_valid_correct_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_decoder_valid_fixed_array_inputs >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  drule abi_decoder_valid_fixed_array_inputs >> strip_tac >> gnvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   (`LIST_REL (abi_decoder_valid_correct ce env sf) (REPLICATE (LENGTH vs) ty) (REPLICATE (LENGTH vs) tv)`
     by simp[LIST_REL_REPLICATE_same] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   mp_tac (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]
     (Q.INST [`st` |-> `start`, `final` |-> `end_st`, `tys` |-> `REPLICATE (LENGTH vs) ty`,
-      `tvs` |-> `REPLICATE (LENGTH vs) tv`, `dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`]
+      `tvs` |-> `REPLICATE (LENGTH vs) tv`, `dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`,
+      `base_op` |-> `base_op`, `B` |-> `src_base`]
       abi_decoder_valid_complex_execute)) >>
-  impl_tac >- (asm_simp_tac (srw_ss()) [EVERY_MEM, MEM_REPLICATE,
+  impl_tac >- (asm_simp_tac (srw_ss()) [ADD_COMM, EVERY_MEM, MEM_REPLICATE,
     Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
     Cases_on `vs` >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]) >> strip_tac >>
   rename1 `tuple_in_memory vs (REPLICATE (LENGTH vs) tv) d actual.vs_memory` >>

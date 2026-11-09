@@ -33,7 +33,7 @@
 
 Theory cseDefs
 Ancestors
-  analysisSimDefs availExprDefs dfgDefs passSharedDefs venomEffects While
+  passTransform availExprDefs dfgDefs passSharedDefs venomEffects While
 
 (* ===== Opcodes excluded from CSE ===== *)
 

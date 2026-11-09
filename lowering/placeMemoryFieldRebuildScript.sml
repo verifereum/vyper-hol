@@ -1,6 +1,6 @@
 Theory placeMemoryFieldRebuild
 Ancestors
-  placeMemoryIndexRebuild placeMemoryTypedBase loweringPosts valueEncoding
+  placeMemoryIndexRebuild placeMemoryTypedBase loweringPosts valueEncoding valueEncodingDefs
   vyperTyping alist list rich_list arithmetic valueEncodingTyping
 
 (* Resolve the first named field once, simultaneously in its layout and update. *)

@@ -7,7 +7,7 @@ Theory e2eEntry
 Ancestors
   e2eDefs vyperLoweringCorrect codegenCorrectness
   venomState unitTransformDefs unitShapeDefs contextPlanLayoutProps
-  contextCodegenRel compileEnv symbolResolve finite_map words vyperArith
+  contextCodegenRel compileEnv loweringStateRelDefs symbolResolve finite_map words vyperArith
   immutableSectionRel
 
 Definition entry_venom_state_def:

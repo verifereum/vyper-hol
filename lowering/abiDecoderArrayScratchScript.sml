@@ -3,7 +3,7 @@ Theory abiDecoderArrayScratch
 Ancestors
   abiDecoderArrayInvariant abiDecoderArrayPrefix abiDecoderArraySlice
   abiDecoderFrame abiDecoderFrameCompose abiDecoderContract
-  valueEncodingProps valueEncodingProofs valueEncodingTyping valueEncoding
+  valueEncodingProps valueEncodingProofs valueEncodingTyping valueEncoding valueEncodingDefs
   vyperTyping venomState contractABI words list rich_list arithmetic
 Libs
   Omega

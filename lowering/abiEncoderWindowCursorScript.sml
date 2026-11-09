@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowSequence abiEncoderWindowLeaves valueEncodingProps
   abiEncoderWindowContract abiEncoderPrimitiveEffect
   abiEncoderRegisteredEffect emitHelperProps exprLoweringProps
-  emitHelper compileEnv fragExec freshWrites venomState venomExecSemantics
+  emitHelper compileEnv loweringStateRelDefs fragExec freshWrites venomState venomExecSemantics
   venomMemDefs venomInst words finite_map list arithmetic
 
 Theorem window_emit_alloca32_sequence:

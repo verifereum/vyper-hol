@@ -89,7 +89,7 @@ Proof
         (mp_tac o REWRITE_RULE [log_arg_clear_def]) >>
       disch_then (qspecl_then [`tv`, `n`, `w2n w - b`, `k`] mp_tac) >>
       simp[]) >>
-  gvs[valueEncodingTheory.mem_bytes_at_def]
+  gvs[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem log_argument_value_kept:
@@ -201,7 +201,7 @@ Proof
       conj_tac
       >- (qexists_tac `func` >>
           gvs[exprLoweringPropsTheory.stmt_state_rel_def,
-              compileEnvTheory.state_rel_def]) >>
+              loweringStateRelDefsTheory.state_rel_def]) >>
       qexistsl_tac [`sb`, `es'.scopes`, `t`] >> gvs[wb_frame_def]) >>
   strip_tac >> irule local_region_frame_fwd >>
   qexistsl_tac [`s`, `sb`, `es.scopes`] >> gvs[wb_frame_def]

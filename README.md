@@ -158,7 +158,7 @@ code hash when recording deployment traces; upstream test-facing calls are
 unchanged. HOL's exact runtime-byte comparison remains enabled.
 
 The compiler bytecode oracle has its own profile in
-`lowering/defs/bytecode/python_o1_bytecode_oracle.py`: Venom/NONE/Prague with
+`bytecode/python_o1_bytecode_oracle.py`: Venom/NONE/Prague with
 metadata disabled and decimals enabled by fixture pragmas. These profiles can
 evolve independently. At this pin NONE runs the O1 Venom passes but disables
 assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest

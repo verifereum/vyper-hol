@@ -3,9 +3,9 @@ Theory bodyMemPopLocalSim
 Ancestors
   bodyMemPopLocalPath bodyMemPopLocalFacts exprSimMemDefs exprSimPop
   exprSimDefs exprSimProps exprSimSource exprLowering exprLoweringProps
-  compileEnv context vyperAST vyperValue vyperState vyperInterpreter
+  compileEnv loweringStateRelDefs context vyperAST vyperValue vyperState vyperInterpreter
   vyperLookup venomState gasOutcome gasSummary fragGasMode fragGasPathMem
-  loweringPosts list words arithmetic valueEncoding exprSimVVFrame
+  loweringPosts list words arithmetic valueEncoding valueEncodingDefs exprSimVVFrame
   exprSimHypsDefs exprSimMemoryStack venomMemDefs fragExec
 
 Theorem pop_local_source_empty[local]:
