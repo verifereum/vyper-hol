@@ -24,7 +24,7 @@ Ancestors
   internalReturnCopyFwdPlan internalReturnCopyFwdDefs internalReturnCopyFwdAlias reachableFnSim
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
-  rangeAnalysisProofs
+  rangeAnalysisProofs stepWriteFootprintBase
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -295,6 +295,74 @@ Proof
    ircf_size_coherent (EL j stk).cf_fn (EL j stk).cf_state` by
     fs[ircf_alias_saved_def, ircf_alias_boundary_def] >>
   irule ircf_gam_saved_write_disjoint >> fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ircf_cross_base_frame:
+  ircf_cross tn gam s t /\
+  step_inst_base inst s = OK s' /\
+  step_inst_base ti t = OK t' /\
+  (!op j. MEM op inst.inst_operands /\ j IN op_taint tn op ==> j < 32) /\
+  (!db sb sz k. (db,sb,sz) IN gam /\ k < sz ==>
+     db+k NOTIN new_site_bytes s s' /\
+     sb+k NOTIN new_site_bytes s s' /\
+     db+k NOTIN range_bytes (source_memory_write_ranges inst s) /\
+     sb+k NOTIN range_bytes (source_memory_write_ranges inst s) /\
+     sb+k NOTIN range_bytes (source_memory_write_ranges ti t)) ==>
+  ircf_cross (step_taint inst s s' tn) gam s' t'
+Proof
+  strip_tac >> rw[ircf_cross_def] >>
+  `db+k NOTIN new_site_bytes s s' /\
+   sb+k NOTIN new_site_bytes s s' /\
+   db+k NOTIN range_bytes (source_memory_write_ranges inst s) /\
+   sb+k NOTIN range_bytes (source_memory_write_ranges inst s) /\
+   sb+k NOTIN range_bytes (source_memory_write_ranges ti t)` by metis_tac[] >>
+  `db+k IN mem_taint tn inst s s' <=> db+k IN tn.t_mem` by
+    (irule mem_taint_frame_source_range >> metis_tac[]) >>
+  `sb+k IN mem_taint tn inst s s' <=> sb+k IN tn.t_mem` by
+    (irule mem_taint_frame_source_range >> metis_tac[]) >>
+  qpat_x_assum `ircf_cross _ _ _ _`
+    (mp_tac o REWRITE_RULE [ircf_cross_def]) >>
+  disch_then (qspecl_then [`db`, `sb`, `sz`, `k`] mp_tac) >>
+  simp[] >> strip_tac >>
+  fs[step_taint_def] >>
+  `read_byte (db+k) s'.vs_memory = read_byte (db+k) s.vs_memory` by
+    (irule step_inst_base_OK_byte_frame >>
+     gvs[range_bytes_def] >> metis_tac[]) >>
+  `read_byte (sb+k) t'.vs_memory = read_byte (sb+k) t.vs_memory` by
+    (irule step_inst_base_OK_byte_frame >>
+     gvs[range_bytes_def] >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem ircf_cross_protected_base:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ lo <= vs.vs_alloca_next /\
+  EVERY wf_function C.ctx_functions /\ EVERY fn_inst_wf C.ctx_functions /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY fn_inst_ids_distinct C.ctx_functions /\
+  EVERY ircf_no_dst_write_alias C.ctx_functions /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  gam = ircf_gam_cur fn_meta rma C fn s UNION ircf_gam_stk fn_meta rma C stk /\
+  ircf_cross tn gam s t /\
+  step_inst_base inst s = OK s' /\ step_inst_base ti t = OK t' /\
+  (!db sb sz k. (db,sb,sz) IN gam /\ k < sz ==>
+    db+k NOTIN new_site_bytes s s' /\ sb+k NOTIN new_site_bytes s s' /\
+    sb+k NOTIN range_bytes (source_memory_write_ranges ti t)) ==>
+  ircf_cross (step_taint inst s s' tn) gam s' t'
+Proof
+  strip_tac >> irule ircf_cross_base_frame >>
+  conj_tac
+  >- (drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_projection >>
+      strip_tac >> metis_tac[frame_reachable_op_taint_bounded]) >>
+  simp[IgnAsm `gam = _`] >> qexistsl_tac [`t`, `ti`] >>
+  simp[IgnAsm `gam = _`] >> rpt gen_tac >> strip_tac >>
+  `db+k NOTIN new_site_bytes s s' /\ sb+k NOTIN new_site_bytes s s' /\
+   sb+k NOTIN range_bytes (source_memory_write_ranges ti t)` by metis_tac[] >>
+  simp[] >>
+  `!off len. MEM (off,len) (source_memory_write_ranges inst s) ==>
+    ~(off <= db+k /\ db+k < off+len) /\
+    ~(off <= sb+k /\ sb+k < off+len)` by
+    (rpt strip_tac >> metis_tac[ircf_gam_write_disjoint]) >>
+  gvs[range_bytes_def] >> metis_tac[]
 QED
 
 Theorem ircf_gam_phi_prefix:
