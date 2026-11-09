@@ -745,3 +745,127 @@ Proof
   Cases_on `vals` >- simp[] >>
   rpt strip_tac >> irule scratch_save_indexed_cons >> gvs[]
 QED
+
+Theorem sym_restore_scratch_repeated[local]:
+  scratch_kinds_ok fn ret [op;op] [off;at] ss.sym_mem_labels /\
+  off < dimword(:256) /\ at < dimword(:256) /\
+  ss.sym_stack = stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP (\k. SORestore (EL k [off;at])) [0;1;0])) ==>
+  ?last top. sym_steps p env
+    (LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k [off;at])) [0;1;0]))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\ LIST_REL (op_kind_ok fn ret) [op;op;op] top /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP (\k. SORestore (EL k [off;at])) [0;1;0]))
+Proof
+  mp_tac (Q.INST [`items` |-> `[op;op]`, `offsets` |-> `[off;at]`]
+    (Q.SPECL [`[0;1;0]`, `ss`, `stk`] sym_restore_scratch_list)) >> simp[]
+QED
+
+Theorem scratch_roundtrip_finish[local]:
+  sym_steps p env (LENGTH (execute_plan f saves)) ss = SymOK mid /\
+  sym_steps p env (LENGTH (execute_plan f loads)) mid = SymOK last /\
+  last.sym_stack = top ++ stk /\ LIST_REL (op_kind_ok fn ret) items top /\
+  scratch_kinds_ok fn ret saved offsets mid.sym_mem_labels /\
+  scratch_frame offsets ss.sym_mem_labels mid.sym_mem_labels /\
+  last.sym_mem_labels = mid.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan f saves) /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + LENGTH (execute_plan f loads) ==>
+  ?out top. sym_steps p env (LENGTH (execute_plan f (saves ++ loads))) ss = SymOK out /\
+    out.sym_stack = top ++ stk /\ LIST_REL (op_kind_ok fn ret) items top /\
+    scratch_kinds_ok fn ret saved offsets out.sym_mem_labels /\
+    scratch_frame offsets ss.sym_mem_labels out.sym_mem_labels /\
+    out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan f (saves ++ loads))
+Proof
+  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  metis_tac[stackOpSimTheory.execute_plan_append, LENGTH_APPEND, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem scratch_repeated_continue[local]:
+  sym_steps p env (LENGTH (execute_plan initial_fmp (MAP SOSpill [off;at]))) ss = SymOK mid /\
+  mid.sym_stack = stk /\
+  scratch_kinds_ok fn ret [op;op] [off;at] mid.sym_mem_labels /\
+  scratch_frame [off;at] ss.sym_mem_labels mid.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (MAP SOSpill [off;at])) /\
+  off < dimword(:256) /\ at < dimword(:256) /\
+  asm_block_at p mid.sym_base.as_pc
+    (execute_plan initial_fmp (MAP (\k. SORestore (EL k [off;at])) [0;1;0])) ==>
+  ?last top. sym_steps p env
+    (LENGTH (execute_plan initial_fmp
+      (MAP SOSpill [off;at] ++ MAP (\k. SORestore (EL k [off;at])) [0;1;0]))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\ LIST_REL (op_kind_ok fn ret) [op;op;op] top /\
+    scratch_kinds_ok fn ret [op;op] [off;at] last.sym_mem_labels /\
+    scratch_frame [off;at] ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+      (MAP SOSpill [off;at] ++ MAP (\k. SORestore (EL k [off;at])) [0;1;0]))
+Proof
+  strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_restore_scratch_repeated >>
+  drule_all_then MATCH_ACCEPT_TAC scratch_roundtrip_finish
+QED
+
+Theorem sym_spill_scratch_repeated[local]:
+  LIST_REL (op_kind_ok fn ret) [op;op] [a;b] /\
+  (!i j. i < LENGTH [off;at] /\ j < LENGTH [off;at] /\ i <> j ==>
+    EL i [off;at] + 32 <= EL j [off;at] \/ EL j [off;at] + 32 <= EL i [off;at]) /\
+  off < dimword(:256) /\ at < dimword(:256) /\ ss.sym_stack = [a;b] ++ stk /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (MAP SOSpill [off;at])) ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan initial_fmp (MAP SOSpill [off;at]))) ss = SymOK mid /\
+    mid.sym_stack = stk /\ scratch_kinds_ok fn ret [op;op] [off;at] mid.sym_mem_labels /\
+    scratch_frame [off;at] ss.sym_mem_labels mid.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (MAP SOSpill [off;at]))
+Proof
+  strip_tac >> irule sym_spill_scratch_list >> gvs[]
+QED
+
+Theorem sym_spill_scratch_repeated_prefix[local]:
+  LIST_REL (op_kind_ok fn ret) [op;op] [a;b] /\
+  (!i j. i < LENGTH [off;at] /\ j < LENGTH [off;at] /\ i <> j ==>
+    EL i [off;at] + 32 <= EL j [off;at] \/ EL j [off;at] + 32 <= EL i [off;at]) /\
+  off < dimword(:256) /\ at < dimword(:256) /\ ss.sym_stack = [a;b] ++ stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP SOSpill [off;at] ++ loads)) ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan initial_fmp (MAP SOSpill [off;at]))) ss = SymOK mid /\
+    mid.sym_stack = stk /\ scratch_kinds_ok fn ret [op;op] [off;at] mid.sym_mem_labels /\
+    scratch_frame [off;at] ss.sym_mem_labels mid.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (MAP SOSpill [off;at])) /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp loads)
+Proof
+  rw[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  drule_all_then (qspec_then `env` strip_assume_tac) (SRULE [] sym_spill_scratch_repeated) >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem sym_scratch_repeated_roundtrip:
+  LIST_REL (op_kind_ok fn ret) [op;op] [a;b] /\
+  (!i j. i < LENGTH [off;at] /\ j < LENGTH [off;at] /\ i <> j ==>
+    EL i [off;at] + 32 <= EL j [off;at] \/ EL j [off;at] + 32 <= EL i [off;at]) /\
+  off < dimword(:256) /\ at < dimword(:256) /\ ss.sym_stack = [a;b] ++ stk /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp
+    (MAP SOSpill [off;at] ++ MAP (\k. SORestore (EL k [off;at])) [0;1;0])) ==>
+  ?last top. sym_steps p env
+    (LENGTH (execute_plan initial_fmp
+      (MAP SOSpill [off;at] ++ MAP (\k. SORestore (EL k [off;at])) [0;1;0]))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\ LIST_REL (op_kind_ok fn ret) [op;op;op] top /\
+    scratch_kinds_ok fn ret [op;op] [off;at] last.sym_mem_labels /\
+    scratch_frame [off;at] ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+      (MAP SOSpill [off;at] ++ MAP (\k. SORestore (EL k [off;at])) [0;1;0]))
+Proof
+  strip_tac >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_spill_scratch_repeated_prefix >>
+  drule_all_then MATCH_ACCEPT_TAC scratch_repeated_continue
+QED
+
+Theorem scratch_repeated_allocation_separated[local]:
+  spill_alloc_layout_wf al sp /\
+  offsets = FST (spill_alloc_n [] al [op;op]) /\
+  al2 = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] al [op;op])) offsets ==>
+  LENGTH offsets = LENGTH [op;op] /\ ALL_DISTINCT offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac doSwapSimTheory.spill_alloc_n_temporary_layout >>
+  metis_tac[]
+QED
