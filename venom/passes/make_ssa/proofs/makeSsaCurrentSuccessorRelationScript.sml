@@ -74,7 +74,7 @@ Proof
   `LENGTH copies = LENGTH pre + LENGTH (collect_phis old_h.bb_instructions) -
     phi_prefix_length bb'.bb_instructions` by
     (simp[Abbr `copies`, LENGTH_TAKE_EQ, LENGTH_DROP] >>
-     mp_tac (Q.SPEC `old_h.bb_instructions` makeSsaCurrentDemandDominanceTheory.current_collect_phis_length) >>
+     mp_tac (Q.SPEC `old_h.bb_instructions` livenessTransferProofsTheory.current_collect_phis_length) >>
      decide_tac) >>
   `phi_prefix_length bb'.bb_instructions + LENGTH copies =
     LENGTH pre + LENGTH (collect_phis old_h.bb_instructions)` by decide_tac >>
@@ -88,7 +88,7 @@ Proof
   >- (qexistsl [`C`, `fuel`, `post'`] >> asm_rewrite_tac[]) >>
   rpt strip_tac >>
   `j + phi_prefix_length bb'.bb_instructions < LENGTH bb'.bb_instructions` by
-    (mp_tac (Q.SPEC `old_h.bb_instructions` makeSsaCurrentDemandDominanceTheory.current_collect_phis_length) >> decide_tac) >>
+    (mp_tac (Q.SPEC `old_h.bb_instructions` livenessTransferProofsTheory.current_collect_phis_length) >> decide_tac) >>
   `EL j copies = EL (phi_prefix_length bb'.bb_instructions + j) bb'.bb_instructions` by
     (simp[Abbr `copies`, EL_TAKE, EL_DROP] >> fs[Abbr `copies`]) >>
   simp[] >>

@@ -1041,7 +1041,10 @@ Proof
        (drule_all window_member_static_cursor_frame >> simp[]) >>
      `~is_dynamic (EL k ats)` by metis_tac[window_members_inv_source] >>
      `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by
-       fs[window_members_inv_def, window_member_prefix_def] >>
+       (qpat_x_assum `k < LENGTH infos` mp_tac >>
+        qpat_x_assum `window_member_prefix _ _ _ (SUC k) _ _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        rw[window_member_prefix_def]) >>
      drule_all window_member_tail_step >>
      fs[window_members_inv_def]) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>

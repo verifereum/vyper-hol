@@ -1,20 +1,11 @@
 Theory fnFrameBoundaryGenRet
 Ancestors
+  fnPlanPrefix
   genFrameSim frameRel contextCodegenRel codegenRel emitSim
   fnFrameTerminalPrep preparedPrefixSim asmFrame strongPrefixSim prefixSim stackOpSim
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map callLayoutDefs list rich_list reorderSim planWf stackModel
-
-Theorem release_dead_spills_stack:
-  (release_dead_spills nl ps).ps_stack = ps.ps_stack
-Proof
-  simp[release_dead_spills_def] >>
-  qspec_tac (`FILTER (\(op,off). case op of Lit v => T | Var v => ~MEM v nl | Label v => T)
-    (fmap_to_alist ps.ps_spilled)`, `xs`) >>
-  qid_spec_tac `ps` >> Induct_on `xs` >> simp[] >>
-  Cases_on `h` >> simp[]
-QED
 
 Theorem ret_plan_decompose:
   inst.inst_opcode = RET /\ inst_wf inst /\

@@ -59,7 +59,7 @@ Proof
   `run_from 0 ctx fn s =
      IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s` by
     simp[run_from_def, Once exec_block_def, step_inst_non_invoke,
-         mk_inst_def, step_inst_base_def, eval_operands_def] >>
+         mk_inst_def, step_inst_base_opcode_eqs, eval_operands_def] >>
   qexists_tac `0` >> simp[exit_result_def]
 QED
 
