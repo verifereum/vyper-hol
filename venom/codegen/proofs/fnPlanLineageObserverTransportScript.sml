@@ -2096,7 +2096,7 @@ Theorem native_indexed_step_fresh_output_demand_support:
   !fn bb dfg k before inst rest ops after v.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
     DROP k (non_param_insts bb) = inst::rest /\
-    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\ inst.inst_opcode <> OFFSET /\
+    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
     ~bb_is_halting bb /\ MEM v inst.inst_outputs /\
     ~MEM (Var v) before.ps_stack /\ Var v NOTIN FDOM before.ps_spilled /\
     (!w. MEM (Var w) (compute_operands inst) ==>
@@ -2116,6 +2116,28 @@ Theorem native_indexed_step_fresh_output_demand_support:
           (k + LENGTH (get_params bb.bb_instructions) + 1))
 Proof
   rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = OFFSET`
+  >- (`k < LENGTH (non_param_insts bb)` by
+        (qpat_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+         simp[] >> decide_tac) >>
+      `inst = EL k (non_param_insts bb)` by metis_tac[HD_DROP, HD] >>
+      `inst = EL (LENGTH (get_params bb.bb_instructions)+k) bb.bb_instructions` by
+        metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
+      `LENGTH bb.bb_instructions = LENGTH (get_params bb.bb_instructions)+k+SUC (LENGTH rest)` by
+        (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+         disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+         qpat_assum `DROP _ _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+         simp[] >> decide_tac) >>
+      `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+        metis_tac[removeUnusedProofsTheory.wf_lookup_block, codegen_ready_fn_def] >>
+      `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (SUC (LENGTH (get_params bb.bb_instructions)+k)))` by
+        (irule fnPlanLineagePathTheory.analyzed_offset_output_live_after >>
+         simp[] >> gvs[]) >>
+      Cases_on `rest = []` >> gvs[] >>
+      qpat_x_assum `MEM v (live_vars_at _ _ (SUC _))` mp_tac >>
+      pure_rewrite_tac[arithmeticTheory.ADD1, arithmeticTheory.ADD_ASSOC] >>
+      simp[]) >>
   drule_all native_indexed_step_layout >> strip_tac >>
   `~MEM (Var v) (compute_operands inst)` by metis_tac[] >>
   `inst.inst_opcode <> NOP` by
@@ -2137,7 +2159,7 @@ Theorem native_suffix_fresh_step[local]:
   !fn bb dfg p k before inst rest ops after v.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
     DROP (p+k) (non_param_insts bb) = inst::rest /\
-    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\ inst.inst_opcode <> OFFSET /\
+    inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
     ~bb_is_halting bb /\ MEM v inst.inst_outputs /\
     ~MEM (Var v) before.ps_stack /\ Var v NOTIN FDOM before.ps_spilled /\
     (!w. MEM (Var w) (compute_operands inst) ==>
@@ -2275,8 +2297,7 @@ Theorem native_ordinary_suffix_production[local]:
     ~bb_is_halting bb /\ ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) xs)) /\
     ~MEM (Var v) incoming.ps_stack /\ Var v NOTIN FDOM incoming.ps_spilled /\
     (!j. j < k ==> (EL j xs).inst_opcode <> PHI /\ (EL j xs).inst_opcode <> JMP /\
-      ~is_param_opcode (EL j xs).inst_opcode /\
-      (MEM v (EL j xs).inst_outputs ==> (EL j xs).inst_opcode <> OFFSET)) /\
+      ~is_param_opcode (EL j xs).inst_opcode) /\
     (!j before w. j < k /\
       fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before /\
       MEM (Var w) (compute_operands (EL j xs)) ==>
@@ -2309,7 +2330,7 @@ Proof
      >- (qpat_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
          simp[] >> decide_tac) >> metis_tac[HD_DROP, HD]) >>
   `inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
-    ~is_param_opcode inst.inst_opcode /\ (MEM v inst.inst_outputs ==> inst.inst_opcode <> OFFSET)` by
+    ~is_param_opcode inst.inst_opcode` by
     (qpat_x_assum `!j. j < SUC k ==> _` (qspec_then `k` mp_tac) >> simp[]) >>
   `!w. MEM (Var w) (compute_operands inst) ==>
     MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled` by
@@ -2401,9 +2422,7 @@ Theorem native_defined_ordinary_suffix_demand_support:
       (DROP p (non_param_insts bb)) incoming k qs /\
     (!j. j < k ==> (EL j (DROP p (non_param_insts bb))).inst_opcode <> PHI /\
       (EL j (DROP p (non_param_insts bb))).inst_opcode <> JMP /\
-      ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode /\
-      (MEM v (EL j (DROP p (non_param_insts bb))).inst_outputs ==>
-        (EL j (DROP p (non_param_insts bb))).inst_opcode <> OFFSET)) /\
+      ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode) /\
     (!j before w. j < k /\
       fnPlanLineageEntryProduction$native_inst_prefix
         (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)

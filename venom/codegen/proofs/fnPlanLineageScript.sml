@@ -2032,7 +2032,7 @@ Theorem lineage_history_first_ordinary_demand_support:
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     bb <> HD fn.fn_blocks /\ MEM inst (non_param_insts bb) /\
-    inst.inst_opcode <> PHI /\ inst.inst_opcode <> OFFSET /\ MEM v inst.inst_outputs /\
+    inst.inst_opcode <> PHI /\ MEM v inst.inst_outputs /\
     ~MEM lbl (MAP FST vertices) /\
     LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices
@@ -2091,9 +2091,7 @@ Proof
     suspend "phi_absent" >>
   `!j. j < k-p ==> (EL j (DROP p (non_param_insts bb))).inst_opcode <> PHI /\
     (EL j (DROP p (non_param_insts bb))).inst_opcode <> JMP /\
-    ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode /\
-    (MEM v (EL j (DROP p (non_param_insts bb))).inst_outputs ==>
-      (EL j (DROP p (non_param_insts bb))).inst_opcode <> OFFSET)` by
+    ~is_param_opcode (EL j (DROP p (non_param_insts bb))).inst_opcode` by
     suspend "suffix_layout" >>
   `!j before w. j < k-p /\
     native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
@@ -2197,7 +2195,7 @@ Theorem lineage_history_first_ordinary_resource_bound:
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     bb <> HD fn.fn_blocks /\ MEM inst (non_param_insts bb) /\
-    inst.inst_opcode <> PHI /\ inst.inst_opcode <> OFFSET /\ MEM v inst.inst_outputs /\
+    inst.inst_opcode <> PHI /\ MEM v inst.inst_outputs /\
     ~MEM lbl (MAP FST vertices) /\
     LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices
@@ -3098,7 +3096,7 @@ Theorem lineage_history_first_ordinary_exit_demand_support:
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     bb <> HD fn.fn_blocks /\ MEM inst (non_param_insts bb) /\
-    inst.inst_opcode <> PHI /\ inst.inst_opcode <> OFFSET /\ MEM v inst.inst_outputs /\
+    inst.inst_opcode <> PHI /\ MEM v inst.inst_outputs /\
     ~MEM lbl (MAP FST vertices) /\
     LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices
