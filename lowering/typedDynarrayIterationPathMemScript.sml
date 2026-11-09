@@ -6,7 +6,7 @@ Ancestors
   venomExecSemantics venomExecProofs venomState venomInst
   compileEnv emitHelper exprLowering words arithmetic list
 
-Theorem typed_dynarray_header_path_mem[local]:
+Theorem typed_dynarray_header_path_mem:
   s.vs_current_bb = hdr /\
   lookup_block hdr fn.fn_blocks = SOME
     <|bb_label := hdr; bb_instructions :=

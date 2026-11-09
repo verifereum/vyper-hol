@@ -6,7 +6,7 @@ Ancestors
   venomExecSemantics venomExecProofs venomState venomInst words arithmetic
   emitHelperProps exprLoweringProps context compileEnv list rich_list
 
-Theorem typed_sa_initial_path_mem[local]:
+Theorem typed_sa_initial_path_mem:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   bb.bb_instructions = prefix ++
     [mk_inst id ASSIGN [Lit 0w] [ctr]; mk_inst (id+1) JMP [Label hdr] []] /\
