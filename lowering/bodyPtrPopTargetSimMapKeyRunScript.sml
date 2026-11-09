@@ -2,7 +2,7 @@
 Theory bodyPtrPopTargetSimMapKeyRun
 Ancestors bodyPtrHashBuiltinsKeccakBytesRun exprSimMapKey exprLowering
   emitHelper emitHelperProps compileEnv ASCIInumbers rich_list codegenRel exprLoweringProps
-  typedCopyPtr typedCopyLoopHeaderPtr bodyPtrDefs fragGasSeqPtr
+  typedCopyPtr typedCopyLoopHeaderPtr bodyPtrDefs fragGasSeqPtr wordLoadStorePtr
   ghostPcTransportPtr instIdxIndep ptrDiscipline venomState venomInst
   venomExecSemantics words finite_map pred_set contextCodegenRel valueEncodingProps
   bodyPtrHashBuiltinsKeccak exprSimHash
