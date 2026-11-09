@@ -241,7 +241,10 @@ Theorem external_return_singleton_bytes_stmt_frag_ptr:
     (stmt_env cenv lctx (BaseT (BytesT (Dynamic n))) (Return (SOME e)))
     (eval_stmt cx (Return (SOME e))) es
 Proof
-  strip_tac >> rw[stmt_frag_ptr_def] >>
+  strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+  rw[stmt_frag_ptr_def] >>
   drule external_return_singleton_stmt_parts >>
   simp[is_word_type_def, is_bytestring_type_def] >>
   disch_then drule_all >> strip_tac >>
@@ -323,7 +326,10 @@ Theorem external_return_singleton_string_stmt_frag_ptr:
     (stmt_env cenv lctx (BaseT (StringT n)) (Return (SOME e)))
     (eval_stmt cx (Return (SOME e))) es
 Proof
-  strip_tac >> rw[stmt_frag_ptr_def] >>
+  strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
+  rw[stmt_frag_ptr_def] >>
   drule external_return_singleton_stmt_parts >>
   simp[is_word_type_def, is_bytestring_type_def] >>
   disch_then drule_all >> strip_tac >>
