@@ -180,15 +180,47 @@ QED
 Resume eval_no_mutation_scopes[Builtin]:
   rpt gen_tac >> strip_tac >>
   Cases_on `builtin_args_length_ok bt (LENGTH es)`
-  >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
-      Cases_on `bt = Env MsgGas` >>
-      gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-          assert_def, return_def, raise_def, AllCaseEqs()] >>
-      imp_res_tac result_array_length_state >> imp_res_tac next_gas_reading_state >>
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `bt = Len`
+      >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+              assert_def, return_def, raise_def, AllCaseEqs()] >>
+          imp_res_tac result_array_length_state >>
+          imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+          imp_res_tac precompile_call_success_state >> gvs[] >>
+          Cases_on `es` >> gvs[expr_can_mutate_def, builtin_args_length_ok_def] >>
+          first_x_assum drule_all >> simp[]) >>
+      Cases_on `bt = Env MsgGas`
+      >- (gvs[] >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+          simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+               assert_def, return_def, raise_def, AllCaseEqs()] >>
+          rpt strip_tac >>
+          imp_res_tac next_gas_reading_state >>
+          imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+          imp_res_tac precompile_call_success_state >> gvs[]) >>
+      Cases_on `code_slice_source bt es`
+      >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+          qpat_assum `code_slice_source _ _ = _` (fn th1 =>
+            qpat_assum `builtin_args_length_ok _ _` (fn th2 =>
+              simp[Once evaluate_def, th1, th2, bind_def, ignore_bind_def,
+                   type_check_def, assert_def, return_def, raise_def,
+                   AllCaseEqs()])) >>
+          rpt strip_tac >>
+          imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+          imp_res_tac precompile_call_success_state >>
+          gvs[expr_can_mutate_def, type_check_def, assert_def] >> metis_tac[]) >>
+      PairCases_on `x` >>
+      `?n start len. bt = Slice n /\
+                     es = [Builtin x0 (Acc Code) [x1]; start; len]` by
+        gvs[code_slice_source_SOME] >>
+      gvs[expr_can_mutate_def, type_check_def, assert_def] >>
+      qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+           assert_def, return_def, raise_def, builtin_args_length_ok_def,
+           AllCaseEqs()] >>
+      rpt strip_tac >>
       imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
       imp_res_tac precompile_call_success_state >> gvs[] >>
-      Cases_on `es` >> gvs[expr_can_mutate_def, builtin_args_length_ok_def] >>
-      first_x_assum drule_all >> simp[])
+      metis_tac[])
   >> simp[Once evaluate_def, type_check_def, assert_def, bind_def, ignore_bind_def, raise_def]
 QED
 
