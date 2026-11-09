@@ -4642,7 +4642,6 @@ Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
   disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
   rpt strip_tac >> gvs[] >>
   match_mp_tac raw_call_none_post >>
-  conj_tac >- gvs[] >>
   conj_tac >- gvs[raw_call_return_type_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac
