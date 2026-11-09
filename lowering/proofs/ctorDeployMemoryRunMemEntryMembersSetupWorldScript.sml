@@ -120,6 +120,11 @@ Proof
   drule ctor_actual_member_setup_opcodes >> strip_tac >>
   `dyn ==> abi_decode_load DLOAD (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)` by metis_tac[] >>
+  `dyn ==> eval_operand (Lit 0w) initial = SOME (n2w 0) /\
+    abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) initial = n2w payload_off /\
+    sb + payload_off < dimword (:256)` by (simp[eval_operand_def] >> gvs[]) >>
+  `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
   drule_all abi_decode_member_setup_reentry >> strip_tac >>
   drule_all ctor_decoder_sequence_context_world >> strip_tac >>
   drule_all ctor_actual_sequence_labels >> strip_tac >>
