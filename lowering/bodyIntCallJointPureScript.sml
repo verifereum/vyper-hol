@@ -1,7 +1,8 @@
 (* Seam 2 joint induction step: every other non-call expression form. *)
 Theory bodyIntCallJointPure
 Ancestors
-  bodyIntCallJointContract bodyIntCallFamPureAtom bodyIntCallFamPureBuiltin
+  bodyIntCallJointContract bodyIntCallFamPureAtom bodyIntCallFamPureIfExp
+  bodyIntCallFamPureBuiltin
 
 (* L-pure (C1.3.14.3), the same step for every other non-call form: names,
    literals, top-level names, flag members, ternaries, the other builtins
@@ -26,7 +27,9 @@ Proof
              ((?a b args. e = Builtin a b args /\ !t n. b <> MakeArray t n) \/
               (?a tb ty args. e = TypeBuiltin a tb ty args))`
   >- (disch_then (DISJ_CASES_THEN assume_tac)
-      >- (irule intcall_pure_atom_step >> metis_tac[])
+      >- (Cases_on `?ty c e1 e2. e = IfExp ty c e1 e2`
+          >- (irule intcall_ifexp_step >> metis_tac[])
+          >> irule intcall_pure_atom_step >> gvs[] >> metis_tac[])
       >> irule intcall_pure_builtin_step >> metis_tac[]) >>
   qpat_x_assum `!e'. _` kall_tac >>
   Cases_on `e` >> fs[]
