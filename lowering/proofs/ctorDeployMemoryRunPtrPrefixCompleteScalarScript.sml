@@ -148,10 +148,10 @@ Theorem prefix_scalar_complete_ghost:
 Proof
   strip_tac >> Cases_on `clamp`
   >- (irule prefix_scalar_noclamp_ghost >> goal_assum (drule_at Any) >> metis_tac[])
-  >- (irule prefix_scalar_checked_ghost >> simp[] >>
+  >- (irule prefix_scalar_checked_ghost >> asm_simp_tac bool_ss [] >>
       goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
       simp[] >> metis_tac[])
-  >- (irule prefix_scalar_checked_ghost >> simp[] >>
+  >- (irule prefix_scalar_checked_ghost >> asm_simp_tac bool_ss [] >>
       goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
       simp[] >> metis_tac[])
   >> irule prefix_scalar_bool_ghost >> goal_assum (drule_at Any) >> metis_tac[]
