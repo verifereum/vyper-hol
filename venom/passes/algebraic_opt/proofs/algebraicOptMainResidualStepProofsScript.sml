@@ -143,3 +143,102 @@ Resume ao_main_residual_ordinary_OK[delegatecall]:
   qexistsl_tac [`inst`, `ao_resolve_iszero_op targets DELEGATECALL`] >> simp[]
 QED
 Finalise ao_main_residual_ordinary_OK
+
+Theorem ao_main_residual_exact_base:
+  inst_wf inst /\
+  ~MEM inst.inst_opcode
+    [SHL; SHR; SAR; SIGNEXTEND; Exp; ADD; SUB; XOR; AND; MUL;
+     Div; SDIV; Mod; SMOD; OR; EQ; GT; LT; SGT; SLT; ISZERO; BALANCE; EXTCODESIZE] /\
+  ~MEM inst.inst_opcode [PHI; INVOKE; JNZ; ASSERT; ASSERT_UNREACHABLE] /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (ao_resolve_iszero_op targets inst.inst_opcode a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  (?e. step_inst_base inst s = Error e) \/
+  lift_result
+    (\t u. ao_main_observations fn V t u /\
+      (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+      (if MEM inst.inst_opcode [JMP; DJMP] then
+         t.vs_inst_idx = 0 /\ u.vs_inst_idx = 0
+       else t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx))
+    (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s) (step_inst_base (ao_resolve_iszero_inst targets inst) r)
+Proof
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; GETFMP; INITIAL_FMP]`
+  >- suspend "parameter" >>
+  Cases_on `inst.inst_opcode = ALLOCA`
+  >- suspend "alloca" >>
+  Cases_on `MEM inst.inst_opcode [NOP; INVALID]`
+  >- suspend "nop" >>
+  Cases_on `MEM inst.inst_opcode [RET; RETFMP]`
+  >- suspend "ret" >>
+  Cases_on `MEM inst.inst_opcode [STOP; SINK]`
+  >- suspend "stop" >>
+  Cases_on `MEM inst.inst_opcode [RETURN; REVERT]`
+  >- suspend "return" >>
+  Cases_on `inst.inst_opcode = SELFDESTRUCT`
+  >- suspend "selfdestruct" >>
+  Cases_on `inst.inst_opcode = DRET`
+  >- suspend "dret" >>
+  Cases_on `inst.inst_opcode = RETURNDATACOPY`
+  >- suspend "returndatacopy" >>
+  Cases_on `MEM inst.inst_opcode [CREATE; CREATE2]`
+  >- suspend "create" >>
+  Cases_on `step_inst_base inst s` >> simp[]
+  >- suspend "ordinary"
+  >- (drule step_inst_base_halt_opcodes >> fs[MEM])
+  >- (drule step_inst_base_abort_opcodes >> fs[MEM]) >>
+  drule step_inst_base_intret_opcodes >> fs[MEM]
+QED
+
+Resume ao_main_residual_exact_base[parameter]:
+  drule_all ao_main_parameter_base >>
+  disch_then (qspec_then `targets` strip_assume_tac) >>
+  fs[stateEquivTheory.lift_result_def, MEM]
+QED
+Resume ao_main_residual_exact_base[alloca]:
+  drule_all ao_main_alloca_base >>
+  disch_then (qspec_then `targets` strip_assume_tac) >>
+  fs[stateEquivTheory.lift_result_def, MEM]
+QED
+Resume ao_main_residual_exact_base[nop]:
+  `~MEM inst.inst_opcode [JMP; DJMP]` by fs[MEM] >> simp[] >>
+  disj2_tac >> irule ao_main_nop_invalid_base >> simp[ao_resolve_iszero_inst_def]
+QED
+Resume ao_main_residual_exact_base[ret]:
+  irule ao_main_ret_base >> simp[ao_resolve_iszero_inst_def] >>
+  qexists_tac `ao_resolve_iszero_op targets inst.inst_opcode` >> simp[]
+QED
+Resume ao_main_residual_exact_base[stop]:
+  disj2_tac >> irule ao_main_stop_base >> simp[ao_resolve_iszero_inst_def]
+QED
+Resume ao_main_residual_exact_base[return]:
+  irule ao_main_return_revert_base >> simp[ao_resolve_iszero_inst_def] >>
+  qexists_tac `ao_resolve_iszero_op targets inst.inst_opcode` >> simp[]
+QED
+Resume ao_main_residual_exact_base[selfdestruct]:
+  irule ao_main_selfdestruct_base >> fs[ao_resolve_iszero_inst_def] >>
+  qexists_tac `ao_resolve_iszero_op targets SELFDESTRUCT` >> simp[]
+QED
+Resume ao_main_residual_exact_base[dret]:
+  irule ao_main_dret_resolved >> fs[]
+QED
+Resume ao_main_residual_exact_base[returndatacopy]:
+  fs[] >> irule ao_main_returndatacopy_base >> simp[ao_resolve_iszero_inst_def] >>
+  qexists_tac `ao_resolve_iszero_op targets RETURNDATACOPY` >> simp[]
+QED
+Resume ao_main_residual_exact_base[create]:
+  `~MEM inst.inst_opcode [JMP; DJMP]` by fs[MEM] >> simp[] >>
+  irule ao_main_create_base >> simp[ao_resolve_iszero_inst_def] >>
+  qexists_tac `ao_resolve_iszero_op targets inst.inst_opcode` >> simp[]
+QED
+Resume ao_main_residual_exact_base[ordinary]:
+  `~MEM inst.inst_opcode
+    [PARAM; FMP_PARAM; RETPC_PARAM; GETFMP; INITIAL_FMP; ALLOCA;
+     NOP; INVALID; RET; RETFMP; STOP; SINK; RETURN; REVERT;
+     SELFDESTRUCT; DRET; RETURNDATACOPY; CREATE; CREATE2]` by fs[MEM] >>
+  drule_all ao_main_residual_ordinary_OK >> strip_tac >>
+  fs[stateEquivTheory.lift_result_def, MEM]
+QED
+Finalise ao_main_residual_exact_base
