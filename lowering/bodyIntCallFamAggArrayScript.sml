@@ -6,7 +6,9 @@ Ancestors
   vyperTypeInvariants stmtSimDeclPath placeMemoryCopyEffect
   compileEnv emitHelper emitHelperProps venomState venomExecSemantics venomMemProps
   valueEncodingProps intCallFrame exprSimProps exprSimAlloc venomInst
-  fragGasMode context
+  fragGasMode context exprSimAggregateLoops exprSimAggregateEncoding
+  exprSimWordArgs gasOutcome gasSummary gasSummaryCompose
+  exprLoweringProps fragExec valueEncodingProofs stmtReasonVvMemory
 
 (* Public child typing bridge: no equality between the produced layout and
    the annotation is assumed, including for widened internal-call results. *)
@@ -198,6 +200,215 @@ Proof
       fs[not_fresh_at_def] >> metis_tac[]) >>
   metis_tac[]
 QED
+
+(* Invert one element without identifying its produced layout with its
+   annotation.  compile_store_memory_post_type supplies that boundary. *)
+Theorem intcall_array_elems_cons_compile:
+  compile_make_array_elems cfn ce (e::es) et sz header buf idx sa = (out,sb) ==>
+  ?vv sm dst sn op su st.
+    cfn ce (expr_type e) e sa = (vv,sm) /\
+    emit_op ADD [buf; Lit (n2w (if header then 32 + idx * sz else idx * sz))]
+      sm = (dst,sn) /\
+    unwrap_value ce vv sn = (op,su) /\
+    compile_store_memory ce op dst et (lowered_value_type ce e) su = ((),st) /\
+    compile_make_array_elems cfn ce es et sz header buf (idx+1) st = (out,sb)
+Proof
+  simp[Once exprLoweringTheory.compile_make_array_elems_def,
+       comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[pairTheory.PAIR]
+QED
+
+(* The remaining slice of a literal, with the root owned since s0c. *)
+Theorem intcall_array_elems_outcome:
+  !args ce env idx header buf sa out sb es fp inst b k bw es0 s0c s0 t dtv et.
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  (!e. MEM e args ==> intcall_expr_producer fp e /\
+     supportedExprs$supported_expr fp.jc_tops e /\
+     calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
+     expr_type e = et) /\
+  (!e ee. MEM e args /\ expr_sim_inv ce fp.jc_cx env ee ==>
+     expr_body_pre ce fp.jc_cx env e ee /\
+     type_widens_to (get_tenv fp.jc_cx) (post_value_type ce e) et /\
+     ?stv. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME stv) /\
+  evaluate_type (get_tenv fp.jc_cx) et = SOME dtv /\
+  type_memory_bytes ce et = type_memory_size dtv /\
+  type_memory_size dtv + 64 < dimword (:256) /\
+  compile_make_array_elems compile_expr ce args et (type_memory_size dtv)
+    header buf idx sa = (out,sb) /\
+  fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  intcall_joint_res fp ce env es0 s0c s0 /\
+  intcall_expr_cont fp ce env es0 s0c s0 es sa t /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  s0c.cs_next_var <= sa.cs_next_var /\ s0c.cs_next_id <= sa.cs_next_id /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (b,k) /\
+  s0c.cs_next_id <= inst.inst_id /\ inst.inst_id < sa.cs_next_id /\
+  MEM inst (fn_insts fp.jc_func) /\ inst.inst_opcode = ALLOCA /\
+  eval_operand buf t = SOME bw /\ (!lbl. buf <> Label lbl) /\
+  (!x. buf = Var x ==> not_fresh_at sa x) /\
+  fp.jc_lo <= b /\ b <= w2n bw /\
+  w2n bw + (if header then 32 else 0) +
+    (idx + LENGTH args) * type_memory_size dtv <= b+k /\
+  b+k < dimword (:256) /\
+  (!name a n. local_region ce es.scopes t name a n ==> regions_disjoint b k a n) /\
+  (!name a n. local_region ce es0.scopes s0 name a n ==> regions_disjoint b k a n) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (eval_exprs fp.jc_cx args) (es,t)
+    (\res ee u. ?vs. res = INL vs /\ LENGTH vs = LENGTH args /\
+       elems_in_memory vs
+         (w2n bw + (if header then 32 else 0) + idx * type_memory_size dtv)
+         dtv u.vs_memory /\
+       intcall_expr_cont fp ce env es0 s0c s0 ee sb u /\
+       FLOOKUP u.vs_allocas inst.inst_id = SOME (b,k) /\
+       eval_operand buf u = SOME bw /\
+       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+       (!name a n. local_region ce ee.scopes u name a n ==> regions_disjoint b k a n) /\
+       (!a n. b <= a /\ a+n <= b+k /\
+          (a+n <= w2n bw + (if header then 32 else 0) + idx * type_memory_size dtv \/
+           w2n bw + (if header then 32 else 0) +
+             (idx + LENGTH args) * type_memory_size dtv <= a) ==>
+          mem_bytes_at a n u.vs_memory = mem_bytes_at a n t.vs_memory))
+    (\res ee r. expr_exit res r)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- suspend "nil"
+  >> suspend "cons"
+QED
+
+Resume intcall_array_elems_outcome[nil]:
+  gvs[exprLoweringTheory.compile_make_array_elems_def, comp_return_def] >>
+  irule intcall_gas_transparent_path_outcome >>
+  qexistsl_tac [`es`, `OK t`, `INL []`] >>
+  simp[eval_exprs_nil, gas_marked_path_def, fragGasPathTheory.gas_path_rules] >>
+  gvs[intcall_expr_cont_def, intcall_joint_res_def,
+      valueEncodingTheory.val_in_memory_def] >>
+  metis_tac[fragGasPathTheory.gas_path_rules]
+QED
+
+Resume intcall_array_elems_outcome[cons]:
+  rename1 `compile_make_array_elems compile_expr ce (e::args) _ _ _ _ _ _ = _` >>
+  drule intcall_array_elems_cons_compile >> strip_tac >>
+  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+  `expr_type e = et /\ intcall_expr_producer fp e /\
+   supportedExprs$supported_expr fp.jc_tops e /\
+   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)` by
+    (qpat_x_assum `!e'. MEM e' (e::args) ==> _` (qspec_then `e` mp_tac) >> simp[]) >>
+  `expr_body_pre ce fp.jc_cx env e es /\
+   type_widens_to (get_tenv fp.jc_cx) (post_value_type ce e) et /\
+   ?stv. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME stv` by
+    (qpat_x_assum `!e' ee. _ ==> _` (qspecl_then [`e`, `es`] mp_tac) >> simp[]) >>
+  `ci_mono sa sm /\ ci_mono sn su /\ ci_mono su st` by
+    (metis_tac[compile_expr_ci_mono, ci_mono_unwrap_value, ci_mono_compile_store_memory,
+               pairTheory.SND]) >>
+  `ci_mono sm sn` by
+    (metis_tac[ci_mono_emit_op, pairTheory.SND]) >>
+  `EVERY (\e. expr_type e = et) args` by
+    (simp[listTheory.EVERY_MEM] >> metis_tac[listTheory.MEM]) >>
+  `ci_mono st sb` by
+    (`compile_make_tuple compile_expr ce args buf
+        ((if header then 32 else 0) + (idx+1) * type_memory_bytes ce et) st = (out,sb)` by
+       metis_tac[compile_make_array_elems_as_tuple] >>
+     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
+  `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sn fp.jc_func /\
+   fn_has_code sn su fp.jc_func /\ fn_has_code su st fp.jc_func /\
+   fn_has_code st sb fp.jc_func` by
+    metis_tac[fn_has_code_split, ci_mono_def, cs_extends_trans] >>
+  `well_typed_expr env e` by fs[expr_body_pre_def] >>
+  `compile_store_memory ce op dst et (post_value_type ce e) su = ((),st)` by
+    metis_tac[compile_store_memory_post_type] >>
+  drule_at (Pat `compile_expr _ _ _ _ = _`) intcall_counted_child_store >>
+  disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+  disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ (post_value_type _ _) = _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ et = _`)) >>
+  disch_then (drule_at (Pat `eval_operand buf t = _`)) >>
+  (impl_tac >-
+    (qpat_x_assum `!ce env idx header buf sa out sb es fp inst b k bw es0 s0c s0 t dtv et. _` kall_tac >>
+     simp[] >> reverse (rpt conj_tac) >- metis_tac[] >- metis_tac[] >>
+     Cases_on `header` >> fs[listTheory.LENGTH, arithmeticTheory.ADD_CLAUSES,
+       arithmeticTheory.MULT_CLAUSES, arithmeticTheory.LEFT_ADD_DISTRIB] >> decide_tac)) >>
+  disch_tac >> suspend "bind_child"
+QED
+
+Resume intcall_array_elems_outcome[bind_child]:
+  rewrite_tac[eval_exprs_cons_action] >>
+  irule gas_outcome_bind_value >> goal_assum (drule_at Any) >>
+  reverse conj_tac
+  >- (rpt strip_tac >> Cases_on `res` >>
+      fs[exprSimDefsTheory.expr_exit_INL, stmtSimPropsTheory.expr_exit_INR_type]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  rename1 `gas_marked_exec _ _ _ _ marks (INL v) mid (OK u)` >>
+  irule aggregate_tuple_values_outcome >>
+  qpat_x_assum `!ce env idx header buf sa out sb es fp inst b k bw es0 s0c s0 t dtv et. _`
+    (drule_at (Pat `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ st _`)) >>
+  disch_then (drule_at (Pat `FLOOKUP u.vs_allocas _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand buf u = _`)) >>
+  (impl_tac >- (simp[] >>
+    qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+    qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` kall_tac >>
+    conj_tac >- metis_tac[] >>
+    `sa.cs_next_var <= st.cs_next_var /\ sa.cs_next_id <= st.cs_next_id` by
+      (fs[ci_mono_def] >> decide_tac) >>
+    fs[arithmeticTheory.ADD1] >>
+    metis_tac[freshWritesTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS,
+              arithmeticTheory.LESS_LESS_EQ_TRANS])) >>
+  disch_then assume_tac >> goal_assum (drule_at Any) >>
+  simp[] >> conj_tac
+  >- (Cases >> simp[exprSimDefsTheory.expr_exit_INL]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  suspend "cons_post"
+QED
+
+Resume intcall_array_elems_outcome[cons_post]:
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+  `expr_body_pre ce fp.jc_cx env e es` by metis_tac[] >>
+  `value_runtime_typed env (expr_type e) v` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` assume_tac) >>
+     irule memory_rhs_read_annotation_typed >>
+     qexistsl [`ce`, `fp.jc_cx`,
+       `es with gas_obs := gas_explicit marks t.vs_gas_readings ++ []`,
+       `mid with gas_obs := []`] >>
+     fs[vyperStateTheory.bind_def, expr_body_pre_gas_obs]) >>
+  `env.type_defs = get_tenv fp.jc_cx` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]) >>
+  `val_wf dtv v` by
+    (irule (cj 1 valueEncodingTypingTheory.value_has_type_val_wf) >>
+     gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def]) >>
+  suspend "cons_memory"
+QED
+
+Resume intcall_array_elems_outcome[cons_memory]:
+  qmatch_goalsub_abbrev_tac `elems_in_memory (v::vs) off dtv _` >>
+  `val_in_memory dtv v off r.vs_memory` by
+    (irule val_in_memory_mem_agree >> simp[] >>
+     qexistsl [`type_memory_size dtv`, `u.vs_memory`] >> simp[] >>
+     reverse conj_tac >- (Cases_on `header` >> fs[Abbr `off`]) >>
+     qpat_x_assum `!a n. _ ==> mem_bytes_at a n r.vs_memory = _` (qspecl_then [`off`, `type_memory_size dtv`] mp_tac) >>
+     (impl_tac >- (Cases_on `header` >> fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB, arithmeticTheory.MULT_CLAUSES] >> decide_tac)) >>
+     simp[]) >>
+  conj_tac
+  >- (simp[valueEncodingTheory.val_in_memory_def] >>
+      fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB,
+         AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  conj_tac >- metis_tac[] >> rpt strip_tac >>
+  `mem_bytes_at a n r.vs_memory = mem_bytes_at a n u.vs_memory` by
+    (qpat_x_assum `!a n. _ ==> mem_bytes_at a n r.vs_memory = _` irule >>
+     Cases_on `header` >> fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB,
+        arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  `mem_bytes_at a n u.vs_memory = mem_bytes_at a n t.vs_memory` by
+    (qpat_x_assum `!a n. _ ==> mem_bytes_at a n u.vs_memory = _` irule >>
+     Cases_on `header` >> fs[Abbr `off`, arithmeticTheory.LEFT_ADD_DISTRIB,
+        arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  simp[]
+QED
+
+Finalise intcall_array_elems_outcome
 
 Theorem intcall_array_literal_step:
   (!e'. expr_size e' < expr_size e ==>
