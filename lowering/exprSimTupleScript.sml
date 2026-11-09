@@ -463,7 +463,7 @@ QED
    precondition, and an in-range integer literal index whose element type
    is the annotation.  A place-typed base (the other branch of
    well_typed_expr) is an array or a mapping, never a tuple. *)
-Theorem tuple_pre_base[local]:
+Theorem tuple_pre_base:
   !cenv cx env ann obj idx es tys.
     expr_body_pre cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys ==>
@@ -906,7 +906,7 @@ Proof
 QED
 
 (* The element's value_vv after the ADD, from the base's. *)
-Theorem tuple_vv_post[local]:
+Theorem tuple_vv_post:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     post_value_type cenv obj = TupleT tys /\
@@ -1096,7 +1096,7 @@ Proof
 QED
 
 (* The source facts at the base's actual end state. *)
-Theorem tuple_base_facts[local]:
+Theorem tuple_base_facts:
   !cenv cx env obj ity k es0 tys btv es1.
     expr_body_pre cenv cx env
       (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) es0 /\
