@@ -190,18 +190,6 @@ Proof
   simp[type_rank_def, get_struct_fields_def]
 QED
 
-(* The exact invalid map from the unrestricted-equation counterexample. *)
-Definition audit_cycle_type_def:
-  audit_cycle_type = StructT (NONE,"AuditCycle")
-End
-Definition audit_cycle_fields_def:
-  audit_cycle_fields =
-    [("self",audit_cycle_type,0); ("word",BaseT (UintT 256),0)]
-End
-Definition audit_cycle_metadata_def:
-  audit_cycle_metadata = FEMPTY |+ ("AuditCycle",audit_cycle_fields)
-End
-
 (* Kernel-proved finite-map computation rules, never parity rewrites. *)
 Theorem restrict_complement_singleton:
   DRESTRICT sf (COMPL {name}) = sf \\ name
@@ -217,12 +205,6 @@ Proof
 QED
 
 val () = computeLib.add_persistent_funs ["finite_map.FEVERY_FEMPTY"];
-
-Theorem audit_cycle_metadata_not_acyclic:
-  ~acyclic_struct_metadata audit_cycle_metadata
-Proof
-  EVAL_TAC
-QED
 
 Theorem type_rank_tuple_bytes_probe:
   type_rank FEMPTY (TupleT [BaseT (BytesT (Dynamic 64));

@@ -13,7 +13,7 @@ Ancestors
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
-  exprLoweringProps compileEnv finite_map vyperPureExpr
+  exprLoweringProps compileEnv loweringStateRelDefs finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
   exprSimHash fragGasSeqAbort gasSummary exprSimVVFrame stmtSimProps
@@ -114,7 +114,8 @@ Theorem nested_pop_step_store:
         else sstore (THE (eval_operand hdr s)) (THE (lookup_var x s)) s)
 Proof
   Cases_on `tr` >> Cases_on `eval_operand hdr s` >> Cases_on `lookup_var x s` >>
-  simp[step_inst_base_def, exec_write2_def, mk_inst_def, eval_operand_def]
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def,
+       eval_operand_def]
 QED
 
 Theorem nested_pop_step_add:

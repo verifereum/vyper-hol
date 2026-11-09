@@ -23,9 +23,9 @@ Ancestors
   stmtSimDefs exprSimHypsDefs typedCopyDomain vyperStoragePlaceProvenance vyperStoragePlaceRegion vyperStorageFrame
   loweringPosts fragGasMode accountsRelProps copyExecution stmtSimStoreCopy
   placeStoreCopyChunk fragGasSeq typedMemoryCopy placeMemoryArrayControl
-  stmtLowering exprLowering compileEnv context
+  stmtLowering exprLowering compileEnv loweringStateRelDefs context
   vyperInterpreter vyperState vyperValue vyperTypeSystem vyperTyping
-  vyperStorage valueEncoding valueEncodingProps valueEncodingTyping
+  vyperStorage valueEncoding valueEncodingDefs valueEncodingProps valueEncodingTyping
   venomState fragGasPath arithmetic venomExecSemantics venomInst
   exprLoweringProps emitHelper list rich_list vyperTypeValues vyperTypeDefaults
 Libs
@@ -1998,7 +1998,7 @@ Proof
   qpat_x_assum `compile_store_slots _ _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_store_slots_def, is_bytestring_type_def,
        get_struct_fields_def] >> strip_tac >>
-  fs[valueEncodingTheory.val_in_memory_def,
+  fs[valueEncodingDefsTheory.val_in_memory_def,
      valueEncodingProofsTheory.fields_in_memory_tuple, listTheory.MAP_ZIP,
      valueEncodingTheory.type_memory_size_def,
      valueEncodingTypingTheory.type_memory_size_fields_zip,

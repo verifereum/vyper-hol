@@ -3,7 +3,7 @@ Theory targetSubscriptStorage
 Ancestors
   targetSubscriptMemory loweringPosts targetPlaceLive accountsRelProps exprSimArrayIndex
   vyperState vyperInterpreter vyperValue vyperStorageBackend
-  venomState compileEnv context exprLowering exprLoweringProps exprBopSimProps freshWrites exprSimUnopProps fragExec
+  venomState compileEnv loweringStateRelDefs context exprLowering exprLoweringProps exprBopSimProps freshWrites exprSimUnopProps fragExec
   vyperLookupStorage vyperStorage integer_word vyperPlaceStoragePreservation
   vyperStoragePlaceProvenance
   words arithmetic list rich_list finite_map emitHelper emitHelperProps fragGasMode venomInst venomExecSemantics

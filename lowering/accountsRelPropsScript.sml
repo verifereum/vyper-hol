@@ -56,7 +56,7 @@
 
 Theory accountsRelProps
 Ancestors
-  compileEnv vyperState vyperCallOutcome extCallOracle vyperStoragePlaceRegion
+  compileEnv loweringStateRelDefs vyperState vyperCallOutcome extCallOracle vyperStoragePlaceRegion
   vyperPlaceStoragePreservation
   venomState venomCallOracleDefs vfmExecution vfmState
 Libs

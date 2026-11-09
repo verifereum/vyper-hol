@@ -29,8 +29,8 @@ Ancestors
   list rich_list finite_map pair vyperMisc
   fragExec  exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim supportedExprTraverse
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
-  valueEncoding vyperAST vyperInterpreter vyperState vyperValue
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
+  valueEncoding vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc vyperPureExpr
   vyperScopePreservation vyperStatePreservation vyperCreateFrame
@@ -410,8 +410,9 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
                         option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def] >>
-  simp[bind_def, ignore_bind_def, type_check_def,
+  (* the case split on the one hypothesis, not gvs over every assumption
+     with AllCaseEqs(), which runs over the step budget *)
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, lift_option_type_def, option_CASE_rator,
        return_def, raise_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>

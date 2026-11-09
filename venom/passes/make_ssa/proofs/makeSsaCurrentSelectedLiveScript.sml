@@ -1,6 +1,6 @@
 Theory makeSsaCurrentSelectedLive
 Ancestors
-  makeSsaCurrentDemandDominance makeSsaCurrentDefs livenessDefs
+  makeSsaCurrentDemandDominance makeSsaDefs livenessDefs
   venomInst venomWf list alist
 
 Theorem current_live_in_after_phis_member:

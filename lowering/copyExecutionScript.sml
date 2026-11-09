@@ -2,7 +2,7 @@ Theory copyExecution
 Ancestors
   createMemoryInterface createFrameInterface createSourceCallback fragExec context contextProps
   emitHelperProps exprLoweringProps venomMemProps venomExecSemantics
-  compileEnv emitHelper venomInst venomState list rich_list
+  compileEnv loweringStateRelDefs emitHelper venomInst venomState list rich_list
 
 (* Dynamic copying is one MCOPY, not a compiler-generated loop.  Lift its
    checked execution to the compositional CFG interface. *)

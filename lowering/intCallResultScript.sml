@@ -27,8 +27,8 @@ Ancestors
   exprSimProps
   loweringPosts
   list rich_list arithmetic
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
-  freshWrites valueEncoding valueEncodingProps entryDecodeProps immutableMemoryFrame
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
+  freshWrites valueEncoding valueEncodingDefs valueEncodingProps entryDecodeProps immutableMemoryFrame
    fragExec localPtrsProps context valueCopy
   vyperTyping vyperValue vyperState venomExecSemantics venomState
 

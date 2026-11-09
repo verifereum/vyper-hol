@@ -4,7 +4,7 @@
 Theory bodyMemAssignTopCopySem
 Ancestors
   stmtSimAssignStorageCopy exprSimHash exprSimProps loweringPosts
-  compileEnv vyperValue vyperTyping valueEncodingProps
+  compileEnv loweringStateRelDefs vyperValue vyperTyping valueEncodingProps
   words arithmetic
 
 Theorem topcopy_post_words:

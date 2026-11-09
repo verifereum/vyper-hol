@@ -24,9 +24,9 @@ Ancestors
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
   valueEncodingTyping vyperStoragePlaceRegion
-  stmtLowering exprLowering compileEnv
+  stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
-  venomState valueEncoding vyperTyping valueEncodingProps valueEncodingProofs
+  venomState valueEncoding valueEncodingDefs vyperTyping valueEncodingProps valueEncodingProofs
   arithmetic list
 
 Theorem place_store_default_typed[local]:
@@ -1412,7 +1412,7 @@ Proof
   fs[stmt_state_rel_def, state_rel_def] >>
   fs[sstore_def, tstore_def, local_ptrs_rel_def, local_region_def,
      local_backed_def, lookup_var_def, immutables_rel_def, logs_rel_def,
-     immutable_alloca_sep_def, immutable_base_zero_def, eval_operand_def] >>
+     immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_def, eval_operand_def] >>
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule alloca_inv_fields >> qexists_tac `s` >> simp[],

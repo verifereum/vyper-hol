@@ -1,8 +1,8 @@
 (* Reentrant count guards and zero-filled calldata copies. *)
 Theory calldataBytesLive
 Ancestors
-  calldataWordLive calldataWordLeaf calldataBytesLeaf calldataDynOwned abiDecoderReentry
-  abiDecoderBytes abiDecoderCopy abiDecoderGuards abiEncoder
+  valueEncodingDefs calldataWordLive calldataWordLeaf calldataBytesLeaf calldataDynOwned abiDecoderReentry
+  abiDecoderBytes abiDecoderCopy abiDecoderGuards abiDecoderRange abiEncoder
   abiDecoderContract abiDecoderComposition valueEncoding safeSequence
   abiDecoderBytesTyped fragExecMem
   emitHelperProps exprLoweringProps compileEnv emitHelper
@@ -85,7 +85,7 @@ Proof
 QED
 
 Theorem calldata_bytes_accepted_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -103,8 +103,9 @@ Theorem calldata_bytes_accepted_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, comp_bind_def,
+    pairTheory.UNCURRY_DEF, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[abi_decode_copy_opcode_def] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
   drule_all calldata_count_guard_repeat_sequence >> strip_tac >>
@@ -123,7 +124,7 @@ Proof
 QED
 
 Theorem calldata_bytes_rejected_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ maxn < dimword (:256) /\
   maxn < w2n (abi_decode_load CALLDATALOAD p s) ==>
   ?t. run_inst_seq (emitted_insts st st') s = Abort Revert_abort t /\
@@ -135,8 +136,9 @@ Theorem calldata_bytes_rejected_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, comp_bind_def,
+    pairTheory.UNCURRY_DEF, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   drule_all calldata_count_guard_rejected_live >> strip_tac >>
   drule abi_decode_count_guard_shape >> strip_tac >>
@@ -146,7 +148,7 @@ Proof
 QED
 
 Theorem calldata_bytes_prefix_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -158,8 +160,9 @@ Theorem calldata_bytes_prefix_live:
 Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, comp_bind_def, LET_THM] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [abi_decode_bytes_sentinel, compile_abi_dec_addr_zero, comp_bind_def,
+    pairTheory.UNCURRY_DEF, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   rename1 `abi_decode_count_guard CALLDATALOAD src maxn st = (count_op,c1)` >>
   drule abi_decode_count_guard_shape >> strip_tac >>
@@ -184,7 +187,7 @@ Proof
 QED
 
 Theorem calldata_bytes_live_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\

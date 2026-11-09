@@ -9,7 +9,7 @@
 
 Theory targetPlaceLive
 Ancestors
-  compileEnv accountsRelProps exprSimPopStorage
+  compileEnv loweringStateRelDefs accountsRelProps exprSimPopStorage
   vyperAST vyperValue vyperState vyperInterpreter vyperLookupStorage
   vyperPlaceFrames vyperPureExpr vyperStatePreservation
   vyperStorageLayoutSafety vyperStoragePlaceRegion vyperStoragePlaceProvenance
@@ -149,7 +149,7 @@ Proof
       `rest < type_slot_size elem` by
         (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
       gvs[Once dead_bytes_def] >>
-      pure_once_rewrite_tac[compileEnvTheory.dead_bytes_def] >>
+      pure_once_rewrite_tac[loweringStateRelDefsTheory.dead_bytes_def] >>
       irule nested_pop_dead_fields >> simp[] >>
       qexistsl [`delta'`, `elem`, `s`] >> simp[] >>
       rpt strip_tac >> first_x_assum irule >>
@@ -171,7 +171,7 @@ Proof
   rename1 `ArrayTV child bd` >> Cases_on `bd` >> gvs[storage_subregion_def]
   >- (drule storage_subregion_bounds >> strip_tac >>
       gvs[Once dead_bytes_def] >>
-      rename1 `a < n'` >> pure_once_rewrite_tac[compileEnvTheory.dead_bytes_def] >>
+      rename1 `a < n'` >> pure_once_rewrite_tac[loweringStateRelDefsTheory.dead_bytes_def] >>
       qexists `a` >> simp[] >>
       Cases_on `a = Num i`
       >- (gvs[] >> first_x_assum irule >>
@@ -212,7 +212,7 @@ Proof
         lookup_storage (n2w off) st` by (first_x_assum irule >> decide_tac) >>
       qpat_x_assum `!q. _` kall_tac >>
       gvs[Once dead_bytes_def] >>
-      rename1 `a < n'` >> pure_once_rewrite_tac[compileEnvTheory.dead_bytes_def] >>
+      rename1 `a < n'` >> pure_once_rewrite_tac[loweringStateRelDefsTheory.dead_bytes_def] >>
       qexists `a` >> simp[] >>
       Cases_on `a = Num i`
       >- (gvs[] >> first_x_assum irule >>

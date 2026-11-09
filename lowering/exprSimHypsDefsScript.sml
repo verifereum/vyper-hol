@@ -1,7 +1,7 @@
 (* Expression preconditions and induction judgments, before their proofs. *)
 Theory exprSimHypsDefs
 Ancestors
-  exprSimStack exprSimDefs gasContext list finite_map pair exprCallBounds exprBopLowering
+  loweringStateRelDefs exprSimStack exprSimDefs gasContext list finite_map pair exprCallBounds exprBopLowering
   exprLowering compileEnv vyperAST vyperInterpreter vyperState vyperTypeSystem
   vyperTypeCallGraph vyperTypeInvariants vyperRuntimeAccounts vyperPlaceInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation supportedExprTraverse
@@ -26,7 +26,8 @@ Definition popped_keys_indexed_def:
                        (MAP FST entry.popped)) scs
 End
 
-(* An assignable immutable exists only in the constructor, lowered
+(* Every immutable location belongs to a bare global. An assignable
+   immutable exists only in the constructor, lowered
    with the constructor's compile env; every immutable has its
    declared type in ce_module_var_type, where compile_get_target_ptr
    reads a place type; and distinct immutables' regions are disjoint,
@@ -35,6 +36,8 @@ Definition bare_globals_layout_def:
   bare_globals_layout is_ctor module_var_type
       (module_vars:nsid |-> var_location) cx
       (globals:nsid |-> type) (assignable:nsid |-> type) <=>
+    (!src id off. FLOOKUP module_vars (src,id) = SOME (ImmutableLoc off) ==>
+       ?ty. FLOOKUP globals (src,id) = SOME ty) /\
     (!src id ty. FLOOKUP assignable (src,id) = SOME ty ==>
        (is_ctor <=> cx.in_deploy)) /\
     (!src id ty. FLOOKUP globals (src,id) = SOME ty ==>
@@ -47,7 +50,7 @@ Definition bare_globals_layout_def:
        FLOOKUP module_vars (src,id2) = SOME (ImmutableLoc off2) /\
        evaluate_type (get_tenv cx) ty1 = SOME tv1 /\
        evaluate_type (get_tenv cx) ty2 = SOME tv2 ==>
-       compileEnv$regions_disjoint off1 (type_memory_size tv1)
+       loweringStateRelDefs$regions_disjoint off1 (type_memory_size tv1)
          off2 (type_memory_size tv2))
 End
 

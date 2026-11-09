@@ -51,8 +51,42 @@ End
 
 (* ===== Offsets in a local's memory ===== *)
 
-(* mem_field_offset, mem_step_offset and mem_path_offset are in
-   compileEnv, where local_ptrs_rel uses them. *)
+(* The byte offset of a field in a struct's memory layout, and its type:
+   the preceding fields' sizes, as struct_field_slot sums slots. *)
+Definition mem_field_offset_def:
+  mem_field_offset [] id = NONE /\
+  mem_field_offset ((name,tv)::fields) id =
+    if name = id then SOME (0n,tv)
+    else OPTION_MAP (\(off,ftv). (type_memory_size tv + off,ftv))
+           (mem_field_offset fields id)
+End
+
+(* One step of a path: a field, or an element of an array (past the length
+   word of a DynArray) or a tuple, where subscript_type has it. *)
+Definition mem_step_offset_def:
+  mem_step_offset (StructTV fields) (AttrSubscript id) =
+    mem_field_offset fields id /\
+  mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then SOME (Num i * type_memory_size etv, etv)
+     else NONE) /\
+  mem_step_offset (ArrayTV etv (Dynamic n)) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < n then SOME (32 + Num i * type_memory_size etv, etv)
+     else NONE) /\
+  mem_step_offset (TupleTV tvs) (ValueSubscript (IntV i)) =
+    (if 0 <= i /\ Num i < LENGTH tvs then
+       SOME (type_memory_size_list (TAKE (Num i) tvs), EL (Num i) tvs)
+     else NONE) /\
+  mem_step_offset _ _ = NONE
+End
+
+Definition mem_path_offset_def:
+  mem_path_offset tv [] = SOME (0n,tv) /\
+  mem_path_offset tv (sb::path) =
+    case mem_step_offset tv sb of
+    | NONE => NONE
+    | SOME (k,etv) =>
+        OPTION_MAP (\(k',ptv). (k + k',ptv)) (mem_path_offset etv path)
+End
 
 (* The cenv twin of mem_step_offset and mem_path_offset, over declared
    types and read off the compile environment alone: a field sits at

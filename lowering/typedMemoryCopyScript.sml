@@ -5,7 +5,7 @@
 Theory typedMemoryCopy
 Ancestors
   exprSimProps loweringPosts exprSimStorageCopy
-  context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
+  context typedCopyDomain compileEnv loweringStateRelDefs emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingDefs valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
   venomExecSemantics venomState venomInst words list pair finite_map arithmetic vfmConstants
@@ -3240,7 +3240,7 @@ Proof
   metis_tac[typed_copy_memory_size]
 QED
 
-Theorem typed_copy_tuple_children_widen[local]:
+Theorem typed_copy_tuple_children_widen:
   !stys dtys dtvs.
     (stys = dtys \/ arg_types_fit stys dtys) /\
     OPT_MMAP (evaluate_type tenv) dtys = SOME dtvs ==>
@@ -3304,7 +3304,7 @@ Proof
                  decide_tac)) >> simp[]
 QED
 
-Theorem typed_copy_struct_values[local]:
+Theorem typed_copy_struct_values:
   !names tvs fields.
     LENGTH names = LENGTH tvs /\
     struct_has_type (ZIP (names,tvs)) fields /\
@@ -3319,7 +3319,7 @@ Proof
   qexists_tac `h'1::vs` >> simp[value_has_type_def, val_wf_def]
 QED
 
-Theorem typed_copy_struct_field_bytes[local]:
+Theorem typed_copy_struct_field_bytes:
   !fields tvs.
     OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
     EVERY (\(fname,fty,sz). !tv. evaluate_type tenv fty = SOME tv ==>

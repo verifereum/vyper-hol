@@ -2,7 +2,7 @@
    a fresh zeroed buffer with a counted memory-safe initialization path. *)
 Theory bodyMemTbEmptyMemory
 Ancestors
-  bodyMemoryPreds compileEnv bodyEmptyBufferMemory exprSimAggregates
+  bodyMemoryPreds compileEnv loweringStateRelDefs bodyEmptyBufferMemory exprSimAggregates
   exprSimMemDefs exprSimMemoryValues exprSimBuffer exprSimAggregateLayout
   exprSimBufferEmptyExec gasSummary loweringPosts exprLoweringProps
   exprLowering exprSimHypsDefs exprSimDefs exprSimProps valueEncoding
@@ -78,7 +78,7 @@ Proof
      conj_tac
      >- (rpt strip_tac >>
          qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ b len` drule >>
-         simp[compileEnvTheory.regions_disjoint_def] >> strip_tac >>
+         simp[loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >>
          first_x_assum irule >> decide_tac) >>
      reverse conj_tac
      >- (drule_all expr_sim_inv_memory_size >> strip_tac >>

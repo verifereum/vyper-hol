@@ -11,7 +11,7 @@ Ancestors
   stmtSimDeclMem
   gasOutcome stmtSimProps stmtSimForced exprSimProps stmtSimDefs exprSimDefs
   loweringPosts fragExec exprOperandVar stmtSimAssignStorage
-  exprLowering stmtLowering emitHelper exprLoweringProps context compileEnv
+  exprLowering stmtLowering emitHelper exprLoweringProps context compileEnv loweringStateRelDefs
   stmtLoweringMono vyperContext vyperAST vyperInterpreter vyperState
   vyperStorage vyperValue vyperTyping vyperStorageLayoutSafety
   vyperStoragePlaceRegion venomExecSemantics venomInst venomState

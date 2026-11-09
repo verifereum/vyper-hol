@@ -5,10 +5,11 @@
 Theory o1ContractMakeSsaPtrOk
 Ancestors
   ptrDiscipline pointerConfinedDefs pointerConfinedProps unitShapeDefs
-  venomInst venomWf cfgWf o1PassContract makeSsaCurrentDefs makeSsaCurrentProps
+  venomInst venomWf cfgWf o1PassContract makeSsaDefs makeSsaCurrentProps
   makeSsaCurrentCfg makeSsaCurrentOrigin makeSsaCurrentWfSsa
   makeSsaCurrentInputOk makeSsaCurrentNonDegenerate
-  removeUnusedProofs allocaRemapSSA mem2varBlockSimHelpers
+  allocaRemapSSA mem2varBlockSimHelpers
+  venomWfProps
 
 Definition mssa_inst_origin_def:
   mssa_inst_origin orig fn inst' <=>

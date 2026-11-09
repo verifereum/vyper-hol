@@ -3,7 +3,7 @@
    manufacture an ImmutableLoc. No name-freshness premise is needed. *)
 Theory immutableLocationProps
 Ancestors
-  immutableSectionRel immutableRelation compileVyper compileEnv context finite_map list arithmetic
+  loweringStateRelDefs immutableSectionRel immutableRelation compileVyper compileEnv context finite_map list arithmetic
 
 Theorem immutable_allocate_args_origin:
   !args off vars vars' off' key loc.

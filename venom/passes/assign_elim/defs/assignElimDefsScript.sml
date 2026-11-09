@@ -31,7 +31,7 @@
 
 Theory assignElimDefs
 Ancestors
-  analysisSimDefs dfAnalyzeDefs passSharedDefs venomExecSemantics
+  passTransform dfAnalyzeDefs passSharedDefs venomExecSemantics
 
 (* ===== Copy propagation lattice ===== *)
 

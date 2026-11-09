@@ -400,20 +400,14 @@ Proof
     drule compile_attribute_safe_operand >>
     simp[exprSafeOperandTheory.safe_operand_def, vv_operand_def])
   >>~- ([`well_typed_expr env (Builtin _ bi args)`],
-    gvs[] >>
-    `bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256` by
-      (rpt conj_tac >> strip_tac >>
-       gvs[Once well_typed_expr_def, well_typed_builtin_app_def,
-           is_uint256_type_def]) >>
-    `!bt xs. exprSimHypsDefs$names_builtin bt xs ==>
-       bt = AddMod \/ bt = MulMod \/ bt = PowMod256` by
-      (ho_match_mp_tac exprSimHypsDefsTheory.names_builtin_ind >>
-       simp[exprSimHypsDefsTheory.names_builtin_def]) >>
-    `~exprSimHypsDefs$names_builtin bi args` by metis_tac[] >>
-    gvs[exprSimHypsDefsTheory.compile_expr_builtin_dispatch] >>
-    qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
-    pure_once_rewrite_tac[cj 2 compile_expr_raw_def] >> strip_tac >>
-    drule_all builtin_array_not_label >> simp[vv_operand_def]) >>
+    qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+    simp[Once compile_expr_def, compile_expr_body_def] >> strip_tac >>
+    gvs[AllCaseEqs()]
+     >>~- ([`compile_builtin_dispatch _ _ _ _ _ _ = _`],
+       qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>
+       pure_once_rewrite_tac[cj 2 compile_expr_raw_def] >> strip_tac >>
+       drule_all builtin_array_not_label >> simp[vv_operand_def]) >>
+     gvs[Once well_typed_expr_def, well_typed_builtin_app_def]) >>
   all_tac
   >>~- ([`well_typed_expr env (Name _ _)`],
     gvs[Once well_typed_expr_def] >>

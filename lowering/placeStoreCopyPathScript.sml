@@ -2,7 +2,7 @@ Theory placeStoreCopyPath
 Ancestors
   stmtSimStoreCopy placeCopyControlPath
   fragExec loweringSlice emitHelper emitHelperProps exprLoweringProps
-  context compileEnv venomInst venomState venomExecSemantics words
+  context compileEnv loweringStateRelDefs venomInst venomState venomExecSemantics words
   fragGasSeq fragGasMode list rich_list arithmetic finite_map slotCopyExecution fragGasSeqAbort
 Libs
   stepInstBaseLib

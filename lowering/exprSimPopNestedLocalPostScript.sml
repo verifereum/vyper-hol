@@ -2,9 +2,9 @@ Theory exprSimPopNestedLocalPost
 Ancestors
   exprSimPopNestedLocalPtrs exprSimPopNestedLocalSource exprSimPopNestedLocalMemory
   exprSimAttributeFields exprBopSimProps exprSimProps loweringPosts
-  localPtrsProps compileEnv valueEncodingProps venomState
+  localPtrsProps compileEnv loweringStateRelDefs valueEncodingProps venomState
   finite_map arithmetic exprSimPop exprSimAggregateLayout
-  vyperPlaceStatePreservation vyperTyping valueEncoding
+  vyperPlaceStatePreservation vyperTyping valueEncoding valueEncodingDefs
   vyperState vyperTypeInvariants list rich_list stmtSimAssignStore
   loweringSlice exprLoweringProps
 

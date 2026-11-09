@@ -13,7 +13,7 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
@@ -125,7 +125,8 @@ Proof
   rpt gen_tac >> Cases_on `h`
   >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
       Cases_on `a` >>
-      simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
       simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]
       >~ [`array_set_index _ _ _ _ = INR _`]
       >- (gvs[vyperValueOperationTheory.array_set_index_def,
@@ -133,7 +134,8 @@ Proof
               listTheory.oEL_THM] >> metis_tac[]) >>
       first_x_assum drule_all >> simp[]) >>
   Cases_on `a` >>
-  simp[Once evaluate_subscripts_def, Once assign_subscripts_def] >>
+  PURE_ONCE_REWRITE_TAC[evaluate_subscripts_def] >>
+      PURE_ONCE_REWRITE_TAC[assign_subscripts_def] >>
   simp[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
   first_x_assum drule_all >> simp[]
 QED

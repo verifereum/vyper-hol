@@ -302,9 +302,13 @@ val range_ci_step =
   let val rws = ci_mono_return_helpers :: ci_mono_list_helpers ::
                 ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
                 ci_mono_stmt_rws
-      val close = FIRST (map MATCH_ACCEPT_TAC
-        (ci_mono_emit_op :: ci_mono_emit_void :: ci_mono_emit_inst ::
-         List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
+      (* index the closing facts by conclusion, so each goal tries only the
+         facts whose conclusion can match it *)
+      val net = List.foldl (fn (th, n) => Net.insert (concl (SPEC_ALL th), th) n)
+        Net.empty (ci_mono_emit_op :: ci_mono_emit_void :: ci_mono_emit_inst ::
+          List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws)))
+      fun close (asl, w) =
+        FIRST (map MATCH_ACCEPT_TAC (Net.match w net)) (asl, w)
   in
     FIRST [close, FIRST_ASSUM MATCH_ACCEPT_TAC,
            MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,

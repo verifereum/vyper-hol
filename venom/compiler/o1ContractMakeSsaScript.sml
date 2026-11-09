@@ -17,7 +17,7 @@ Ancestors
   o1PassContract o1PassLift o1ComposeSupport venomPassSchedule
   venomPassDispatcher venomCompilerTypes venomRetProps unitMemInv
   unitTransformDefs ptrDiscipline ctxLookupAgreeHelpers venomInst venomWf
-  makeSsaCurrentDefs makeSsaCurrentSim makeSsaCurrentFrameRf
+  makeSsaDefs makeSsaCurrentSim makeSsaCurrentFrameRf
   makeSsaCurrentWfSsa makeSsaCurrentNonDegenerate makeSsaCurrentInputOk
   o1ContractMakeSsaReplay o1ContractMakeSsaStep o1ContractMakeSsaPtr
   o1ContractMakeSsaTaint o1ContractMakeSsaSrc list

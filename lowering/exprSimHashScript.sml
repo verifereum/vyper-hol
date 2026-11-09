@@ -36,9 +36,9 @@ Ancestors
   allocLimits
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
-  builtinHashing exprLoweringProps compileEnv
+  builtinHashing exprLoweringProps compileEnv loweringStateRelDefs
    exprSimHyps exprSimLiteralBuffer exprSimWordArgs
-  vyperTypeSystem valueEncoding valueEncodingProofs extCallOracle
+  vyperTypeSystem valueEncoding valueEncodingDefs valueEncodingProofs extCallOracle
   vyperAST vyperValue exprLowering vyperInterpreter vyperContext
   vyperValueOperation vyperState exprSimWordBuiltins
   vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
@@ -131,7 +131,7 @@ Theorem mstore_region_frame:
 Proof
   strip_tac >>
   irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 (* The operand's counted outcome composes with a continuation: every
@@ -2655,7 +2655,7 @@ Proof
   Cases_on `call_outcome_success outcome` >> gvs[return_def]
 QED
 
-Theorem expr_exit_INR_cast[local]:
+Theorem expr_exit_INR_cast:
   expr_exit (INR exc : value + exception) r ==>
   expr_exit (INR exc : eval_result + exception) r
 Proof

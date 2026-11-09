@@ -26,8 +26,8 @@ Ancestors
   exprSimDefs
   loweringPosts
   list fragExec  exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
-  exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
-  valueEncoding
+  exprLoweringProps builtinSimple emitHelper compileEnv loweringStateRelDefs accountsRelProps
+  valueEncoding valueEncodingDefs
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeSystem vyperTypeBuiltins vyperValue vyperTyping vyperStorage
   builtinProps vyperTypeInvariants context freshWrites loweringSlice emitHelperProps
@@ -37,7 +37,7 @@ Ancestors
 open gasContextTheory gasOutcomeTheory gasSummaryTheory gasSummaryComposeTheory
      gasExemptCertTheory fragGasModeTheory fragGasPathTheory;
 
-Theorem len_pre_args[local]:
+Theorem len_pre_args:
   !cenv cx env ann args es.
     expr_body_pre cenv cx env (Builtin ann Len args) es ==>
     ?e. args = [e] /\ ann = BaseT (UintT 256) /\
@@ -51,7 +51,7 @@ Proof
   Cases_on `rest` >> gvs[]
 QED
 
-Theorem names_builtin_len[local]:
+Theorem names_builtin_len:
   !args. ~names_builtin Len args
 Proof
   `!bt args. names_builtin bt args ==> bt <> Len` suffices_by
@@ -59,7 +59,7 @@ Proof
   ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def]
 QED
 
-Theorem compile_expr_len[local]:
+Theorem compile_expr_len:
   !cenv ty ann e st.
     compile_expr cenv ty (Builtin ann Len [e]) st =
     (let (vv, st1) = compile_expr cenv ty e st in
@@ -73,7 +73,7 @@ Proof
        compile_builtin_dispatch_body_def]
 QED
 
-Theorem eval_expr_len[local]:
+Theorem eval_expr_len:
   !cx ann e es.
     eval_expr cx (Builtin ann Len [e]) es =
     (do tv <- eval_expr cx e;
@@ -90,7 +90,7 @@ Proof
   rename1 `(res, es2)` >> Cases_on `res` >> simp[bind_def, return_def]
 QED
 
-Theorem sized_type_cases[local]:
+Theorem sized_type_cases:
   !t. is_sized_type t ==>
     (?et k. t = ArrayT et (Dynamic k)) \/
     (?k. t = BaseT (StringT k)) \/
@@ -536,7 +536,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem len_vv_post_load[local]:
+Theorem len_vv_post_load:
   !func cenv cx e es sa sm sb s0 es' tv vv s1 op s n ctx.
     vv_post ctx func cenv cx e es sa sm s0 es' tv vv s1 /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -635,7 +635,7 @@ Proof
   simp[] >> qexistsl [`s1`, `sm`, `tv`, `vv`] >> simp[]
 QED
 
-Theorem len_load_extends[local]:
+Theorem len_load_extends:
   !ctor imm pop loc sa op sb.
     compile_builtin_len ctor imm pop loc sa = (op,sb) ==> cs_extends sa sb
 Proof
@@ -862,7 +862,7 @@ Proof
   Cases_on `decode_value x (w2n sl) tv` >> simp[raise_def, return_def]
 QED
 
-Theorem len_rp_obs[local]:
+Theorem len_rp_obs:
   !cx p st g.
     read_place cx p (st with gas_obs := g) =
     (FST (read_place cx p st), SND (read_place cx p st) with gas_obs := g)
@@ -882,7 +882,7 @@ Proof
       Cases_on `evaluate_subscripts (FST x') (SND x') l` >> simp[return_def, raise_def])
 QED
 
-Theorem len_bind_obs[local]:
+Theorem len_bind_obs:
   !m f.
     (!st g. m (st with gas_obs := g) = (FST (m st), SND (m st) with gas_obs := g)) /\
     (!v st g. f v (st with gas_obs := g) = (FST (f v st), SND (f v st) with gas_obs := g)) ==>
@@ -893,7 +893,7 @@ Proof
   Cases_on `m st` >> Cases_on `q` >> simp[]
 QED
 
-Theorem len_rr_obs[local]:
+Theorem len_rr_obs:
   !cx res st g.
     read_result cx res (st with gas_obs := g) =
     (FST (read_result cx res st), SND (read_result cx res st) with gas_obs := g)
@@ -901,7 +901,7 @@ Proof
   Cases_on `res` >> simp[read_result_def, len_rp_obs, return_def, raise_def]
 QED
 
-Theorem len_tail_obs[local]:
+Theorem len_tail_obs:
   !v st g.
     (case v of
        ArrayV (DynArrayV vs) => return (LENGTH vs)
@@ -929,7 +929,7 @@ Proof
   simp[return_def, raise_def]
 QED
 
-Theorem len_ral_gas_obs0[local]:
+Theorem len_ral_gas_obs0:
   !cx tv st g.
     result_array_length cx tv (st with gas_obs := g) =
     (FST (result_array_length cx tv st),
@@ -945,7 +945,7 @@ Proof
   Cases_on `get_storage_backend cx tr st` >> Cases_on `q` >> simp[return_def]
 QED
 
-Theorem len_ral_gas_obs[local]:
+Theorem len_ral_gas_obs:
   !cx tv st g r.
     result_array_length cx tv st = (r, st) ==>
     result_array_length cx tv (st with gas_obs := g) = (r, st with gas_obs := g)
@@ -992,7 +992,7 @@ Proof
   simp[] >> qexistsl [`t`, `sm`, `tv`, `vv`] >> simp[]
 QED
 
-Theorem len_source[local]:
+Theorem len_source:
   !cx ann e.
     eval_expr cx (Builtin ann Len [e]) =
     bind (eval_expr cx e)
@@ -1001,7 +1001,7 @@ Proof
   rpt gen_tac >> simp[FUN_EQ_THM, eval_expr_len]
 QED
 
-Theorem len_operand_admissible[local]:
+Theorem len_operand_admissible:
   !cenv cx env e es.
     expr_body_pre cenv cx env e es ==>
     gas_admissible (eval_expr cx e) expr_vv_res_ok es
@@ -1011,7 +1011,7 @@ Proof
   metis_tac[expr_body_pre_vv_res_ok]
 QED
 
-Theorem len_exempt_cert[local]:
+Theorem len_exempt_cert:
   !memory tops p cx ann e start marks out endpoint.
     gas_exempt_cert memory tops p (ignore_bind (eval_expr cx e) (return ()))
       start marks out endpoint ==>

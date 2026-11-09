@@ -1,10 +1,10 @@
 (* Owner and narrow-effect transport for concrete actual-window array rounds. *)
 Theory abiEncoderWindowArrayRound
 Ancestors
-  abiEncoderWindowArrayLoop abiEncoderWindowArrayBody
+  abiEncoderWindowArrayLoop abiEncoderWindowArrayBody abiEncoderWindowChild
   abiEncoderWindowArrayInvariant abiEncoderWindowArrayLayout abiEncoderRegisteredEffect
   abiEncoderArrayLoopCode abiEncoderArrayBodyCode abiEncoderWindowContract
-  compileEnv freshWrites venomState finite_map pred_set list arithmetic
+  compileEnv loweringStateRelDefs freshWrites venomState finite_map pred_set list arithmetic
 
 Theorem window_array_root_owner_mono:
   window_array_root ctx func owner ids ei asz msz active ty avs src dst sb cap d s /\
@@ -87,10 +87,11 @@ Proof
   fs[window_array_cursor_def]
 QED
 
-Theorem window_array_static_round:
+Theorem window_array_static_round_core:
   abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
   abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end) /\
   window_strong_contract ei /\
+  (obsv ==> window_observed_contract ei /\ body_end.cs_next_var < bound.cs_next_var) /\
   window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
   isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
   k < LENGTH avs /\
@@ -99,7 +100,8 @@ Theorem window_array_static_round:
   ?t. window_array_transition ctx func owner ids
       [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
     window_array_inv ctx func owner ids ei asz msz F ty avs src dst
-      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    (obsv ==> !x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `!x. not_fresh_at owner x ==> not_fresh_at body_st x` by
@@ -122,17 +124,21 @@ Proof
     abi_encoder_array_prefix ty avs (SUC k) d u.vs_memory /\
     eval_operand idx u = SOME (n2w k) /\
     u.vs_current_bb = body_end.cs_current_bb /\
-    u.vs_inst_idx = LENGTH body_end.cs_current_insts` by
+    u.vs_inst_idx = LENGTH body_end.cs_current_insts /\
+    (obsv ==> !x. ~not_fresh_at body_end x ==> lookup_var x u = lookup_var x s)` by
     (`eval_operand ip s = SOME (n2w islot) /\ islot < dimword (:256) /\
       mload islot s = n2w k /\ fn_has_code body_st body_end func` by
        fs[window_array_cursor_def, abi_encoder_array_loop_code_def,
-         venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def] >>
-     drule_all window_array_static_body_run >> strip_tac >>
+         venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
+     Cases_on `obsv`
+     >- (full_simp_tac bool_ss [] >> drule_all window_array_static_body_run_observed >>
+         strip_tac >> goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
+     full_simp_tac bool_ss [] >> drule_all window_array_static_body_run >> strip_tac >>
      goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
   suspend "finish"
 QED
 
-Resume window_array_static_round[finish]:
+Resume window_array_static_round_core[finish]:
   `window_array_transition ctx func owner
     (window_alloca_sites func (frag_ids body_st body_end))
     [(d+32+k*asz,LENGTH (enc ty (EL k avs)))] s u` by
@@ -149,7 +155,7 @@ Resume window_array_static_round[finish]:
   suspend "framing"
 QED
 
-Resume window_array_static_round[framing]:
+Resume window_array_static_round_core[framing]:
   `window_array_cursor T owner ip isite islot k sb cap d
       (LENGTH (enc (Array NONE ty) (ListV avs))) u` by
     (irule window_array_cursor_frame >>
@@ -180,7 +186,7 @@ Resume window_array_static_round[framing]:
   suspend "backedge"
 QED
 
-Resume window_array_static_round[backedge]:
+Resume window_array_static_round_core[backedge]:
   drule abiEncoderArrayRoundTheory.abi_encode_array_static_body_index >> disch_tac >>
   `!x. not_fresh_at owner x ==>
     x <> STRING #"%" (toString body_end.cs_next_var)` by
@@ -199,7 +205,7 @@ Resume window_array_static_round[backedge]:
   suspend "execute"
 QED
 
-Resume window_array_static_round[execute]:
+Resume window_array_static_round_core[execute]:
   qabbrev_tac `nv = STRING #"%" (toString body_end.cs_next_var)` >>
   qabbrev_tac `t = jump_to (FST labels)
     (mstore islot (n2w (SUC k)) (update_var nv (n2w (SUC k)) u))` >>
@@ -226,7 +232,7 @@ Resume window_array_static_round[execute]:
   suspend "compose"
 QED
 
-Resume window_array_static_round[compose]:
+Resume window_array_static_round_core[compose]:
   `window_array_inv ctx func owner ids ei asz msz F ty avs src dst
     ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t` by
     (qpat_assum `window_array_transition _ _ _ {isite} [] u t` mp_tac >>
@@ -237,17 +243,29 @@ Resume window_array_static_round[compose]:
     [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u t` by
     (irule window_array_transition_region >>
      qexistsl_tac [`{isite}`, `[]`] >> asm_rewrite_tac[] >> simp[]) >>
+  `obsv ==> !x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s` by
+    (strip_tac >> full_simp_tac bool_ss [] >>
+     `not_fresh_at bound nv` by simp[Abbr `nv`, not_fresh_at_def] >>
+     `!x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x u` by
+       (rpt strip_tac >> simp_tac bool_ss [Abbr `t`] >>
+        irule window_array_backedge_high_vars >> qexists_tac `bound` >>
+        asm_rewrite_tac[]) >>
+     rpt strip_tac >>
+     `~not_fresh_at body_end x` by
+       (fs[not_fresh_at_def] >> metis_tac[LESS_TRANS]) >>
+     metis_tac[]) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   irule window_array_transition_trans >> qexists_tac `u` >> asm_rewrite_tac[]
 QED
 
-Finalise window_array_static_round
+Finalise window_array_static_round_core
 
 
-Theorem window_array_dynamic_round:
+Theorem window_array_dynamic_round_core:
   abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
   abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end) /\
   window_strong_contract ei /\
+  (obsv ==> window_observed_contract ei /\ body_end.cs_next_var < bound.cs_next_var) /\
   window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
   isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
   dsite IN ids /\ dsite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
@@ -257,7 +275,8 @@ Theorem window_array_dynamic_round:
   ?t. window_array_transition ctx func owner ids
       [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
     window_array_inv ctx func owner ids ei asz msz T ty avs src dst
-      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    (obsv ==> !x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `!x. not_fresh_at owner x ==> not_fresh_at body_st x` by
@@ -289,19 +308,24 @@ Proof
     mem_word_at dslot u.vs_memory = n2w (off+LENGTH (enc ty (EL k avs))) /\
     eval_operand idx u = SOME (n2w k) /\
     u.vs_current_bb = body_end.cs_current_bb /\
-    u.vs_inst_idx = LENGTH body_end.cs_current_insts` by
+    u.vs_inst_idx = LENGTH body_end.cs_current_insts /\
+    (obsv ==> !x. ~not_fresh_at body_end x ==> lookup_var x u = lookup_var x s)` by
     (`eval_operand ip s = SOME (n2w islot) /\ islot < dimword (:256) /\
       mload islot s = n2w k /\ fn_has_code body_st body_end func` by
        fs[window_array_cursor_def, abi_encoder_array_loop_code_def,
-         venomStateTheory.mload_def, valueEncodingTheory.mem_word_at_def] >>
+         venomStateTheory.mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
      `off = LENGTH avs * abi_member_head_size ty +
        SUM (MAP (abi_member_tail_size ty) (TAKE k avs))` by simp[Abbr `off`] >>
+     Cases_on `obsv`
+     >- (`window_observed_contract ei` by metis_tac[] >>
+         drule_all window_array_dynamic_body_run_observed >>
+         strip_tac >> goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
      drule_all window_array_dynamic_body_run >> strip_tac >>
      goal_assum (drule_at Any) >> asm_rewrite_tac[]) >>
   suspend "dynamic_frame"
 QED
 
-Resume window_array_dynamic_round[dynamic_frame]:
+Resume window_array_dynamic_round_core[dynamic_frame]:
   `window_array_transition ctx func owner
     (window_alloca_sites func (frag_ids body_st body_end) UNION {dsite})
     [(d+32+k*abi_member_head_size ty,32);
@@ -335,7 +359,7 @@ Resume window_array_dynamic_round[dynamic_frame]:
   suspend "dynamic_cursor"
 QED
 
-Resume window_array_dynamic_round[dynamic_cursor]:
+Resume window_array_dynamic_round_core[dynamic_cursor]:
   `off + LENGTH (enc ty (EL k avs)) =
     LENGTH avs * abi_member_head_size ty +
       SUM (MAP (abi_member_tail_size ty) (TAKE (SUC k) avs))` by
@@ -367,7 +391,7 @@ Resume window_array_dynamic_round[dynamic_cursor]:
   suspend "dynamic_backedge"
 QED
 
-Resume window_array_dynamic_round[dynamic_backedge]:
+Resume window_array_dynamic_round_core[dynamic_backedge]:
   drule abiEncoderArrayRoundTheory.abi_encode_array_dynamic_body_index >> disch_tac >>
   `!x. not_fresh_at owner x ==>
     x <> STRING #"%" (toString body_end.cs_next_var)` by
@@ -386,7 +410,7 @@ Resume window_array_dynamic_round[dynamic_backedge]:
   suspend "dynamic_execute"
 QED
 
-Resume window_array_dynamic_round[dynamic_execute]:
+Resume window_array_dynamic_round_core[dynamic_execute]:
   qabbrev_tac `nv = STRING #"%" (toString body_end.cs_next_var)` >>
   qabbrev_tac `t = jump_to (FST labels)
     (mstore islot (n2w (SUC k)) (update_var nv (n2w (SUC k)) u))` >>
@@ -419,12 +443,158 @@ Resume window_array_dynamic_round[dynamic_execute]:
     [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u t` by
     (irule window_array_transition_region >>
      qexistsl_tac [`{isite}`, `[]`] >> asm_rewrite_tac[] >> simp[]) >>
+  `obsv ==> !x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s` by
+    (strip_tac >> full_simp_tac bool_ss [] >>
+     `not_fresh_at bound nv` by simp[Abbr `nv`, not_fresh_at_def] >>
+     `!x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x u` by
+       (rpt strip_tac >> simp_tac bool_ss [Abbr `t`] >>
+        irule window_array_backedge_high_vars >> qexists_tac `bound` >>
+        asm_rewrite_tac[]) >>
+     rpt strip_tac >>
+     `~not_fresh_at body_end x` by
+       (fs[not_fresh_at_def] >> metis_tac[LESS_TRANS]) >>
+     metis_tac[]) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   irule window_array_transition_trans >> qexists_tac `u` >> asm_rewrite_tac[]
 QED
 
-Finalise window_array_dynamic_round
+Finalise window_array_dynamic_round_core
 
+
+Theorem window_array_static_round:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end) /\
+  window_strong_contract ei /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  k < LENGTH avs /\
+  window_array_inv ctx func owner ids ei asz msz F ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k s ==>
+  ?t. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    window_array_inv ctx func owner ids ei asz msz F ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t
+Proof
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_array_static_round_core))) >> simp[]
+QED
+
+Theorem window_array_static_round_observed:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end) /\
+  window_observed_contract ei /\ body_end.cs_next_var < bound.cs_next_var /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  k < LENGTH avs /\
+  window_array_inv ctx func owner ids ei asz msz F ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k s ==>
+  ?t. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    window_array_inv ctx func owner ids ei asz msz F ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    (!x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_array_static_round_core))) >> simp[]
+QED
+
+Theorem window_array_dynamic_round:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end) /\
+  window_strong_contract ei /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  dsite IN ids /\ dsite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  dsite <> isite /\ k < LENGTH avs /\
+  window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k s ==>
+  ?t. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t
+Proof
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_array_dynamic_round_core))) >> simp[]
+QED
+
+Theorem window_array_dynamic_round_observed:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end) /\
+  window_observed_contract ei /\ body_end.cs_next_var < bound.cs_next_var /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  dsite IN ids /\ dsite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  dsite <> isite /\ k < LENGTH avs /\
+  window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k s ==>
+  ?t. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    window_array_inv ctx func owner ids ei asz msz T ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) t /\
+    (!x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_array_dynamic_round_core))) >> simp[]
+QED
+
+Theorem window_array_actual_control_loop_core[local]:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  (if active then
+     abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end)
+   else abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end)) /\
+  window_strong_contract ei /\
+  (obsv ==> window_observed_contract ei /\ body_end.cs_next_var < bound.cs_next_var) /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  (active ==> dsite IN ids /\
+    dsite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\ dsite <> isite) /\
+  window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST labels) sb cap d j s /\
+  j <= LENGTH avs ==>
+  ?t. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
+    window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+      ip isite islot dp dsite dslot count_op (SND (SND labels)) sb cap d (LENGTH avs) t /\
+    (obsv ==> !x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `!k u. k < LENGTH avs /\
+    window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+      ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k u ==>
+    ?v. window_array_transition ctx func owner ids
+        [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u v /\
+      window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+        ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) v /\
+      (obsv ==> !x. ~not_fresh_at bound x ==> lookup_var x v = lookup_var x u)` by
+    (rpt gen_tac >> strip_tac >> Cases_on `active` >> full_simp_tac bool_ss []
+     >- (irule window_array_dynamic_round_core >> goal_assum (drule_at Any) >> metis_tac[])
+     >> irule window_array_static_round_core >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  Cases_on `obsv`
+  >- (full_simp_tac bool_ss [] >>
+      irule window_array_control_loop_observed >>
+      full_simp_tac bool_ss [abi_encoder_array_loop_code_def] >>
+      conj_tac >- metis_tac[] >>
+      qmatch_asmsub_rename_tac `lookup_block body_st.cs_current_bb _ = SOME body_bb` >>
+      qexistsl_tac [`body_bb`, `FST (SND labels)`,
+        `STRING #"%" (toString (owner.cs_next_var+1))`,
+        `STRING #"%" (toString (owner.cs_next_var+2))`, `FST labels`,
+        `owner.cs_next_id+1`, `STRING #"%" (toString owner.cs_next_var)`, `j`] >>
+      asm_rewrite_tac[] >> rpt strip_tac >>
+      fs[not_fresh_at_def] >> metis_tac[]) >>
+  full_simp_tac bool_ss [] >> irule window_array_control_loop >>
+  full_simp_tac bool_ss [abi_encoder_array_loop_code_def] >>
+  conj_tac
+  >- metis_tac[] >>
+  qmatch_asmsub_rename_tac `lookup_block body_st.cs_current_bb _ = SOME body_bb` >>
+  qexistsl_tac [`body_bb`, `FST (SND labels)`,
+    `STRING #"%" (toString (owner.cs_next_var+1))`,
+    `STRING #"%" (toString (owner.cs_next_var+2))`, `FST labels`,
+    `owner.cs_next_id+1`, `STRING #"%" (toString owner.cs_next_var)`, `j`] >>
+  asm_rewrite_tac[] >> rpt strip_tac >>
+  fs[not_fresh_at_def] >> metis_tac[]
+QED
 
 Theorem window_array_actual_control_loop:
   abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
@@ -444,26 +614,32 @@ Theorem window_array_actual_control_loop:
     window_array_inv ctx func owner ids ei asz msz active ty avs src dst
       ip isite islot dp dsite dslot count_op (SND (SND labels)) sb cap d (LENGTH avs) t
 Proof
-  strip_tac >>
-  `!k u. k < LENGTH avs /\
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_array_actual_control_loop_core))) >> simp[]
+QED
+
+Theorem window_array_actual_control_loop_observed:
+  abi_encoder_array_loop_code func owner body_st body_end exit_st ip count_op labels /\
+  (if active then
+     abi_encode_array_dynamic_body ip dp src dst ei asz msz body_st = (idx,body_end)
+   else abi_encode_array_static_body ip src dst ei asz msz body_st = (idx,body_end)) /\
+  window_observed_contract ei /\ body_end.cs_next_var < bound.cs_next_var /\
+  window_alloca_sites func (frag_ids body_st body_end) SUBSET ids /\
+  isite IN ids /\ isite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\
+  (active ==> dsite IN ids /\
+    dsite NOTIN window_alloca_sites func (frag_ids body_st body_end) /\ dsite <> isite) /\
+  window_array_inv ctx func owner ids ei asz msz active ty avs src dst
+    ip isite islot dp dsite dslot count_op (FST labels) sb cap d j s /\
+  j <= LENGTH avs ==>
+  ?t. window_array_transition ctx func owner ids
+      [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] s t /\
     window_array_inv ctx func owner ids ei asz msz active ty avs src dst
-      ip isite islot dp dsite dslot count_op (FST (SND labels)) sb cap d k u ==>
-    ?v. window_array_transition ctx func owner ids
-        [(d,LENGTH (enc (Array NONE ty) (ListV avs)))] u v /\
-      window_array_inv ctx func owner ids ei asz msz active ty avs src dst
-        ip isite islot dp dsite dslot count_op (FST labels) sb cap d (SUC k) v` by
-    (rpt gen_tac >> strip_tac >> Cases_on `active` >> full_simp_tac bool_ss []
-     >- (irule window_array_dynamic_round >> goal_assum (drule_at Any) >> metis_tac[])
-     >> irule window_array_static_round >> goal_assum (drule_at Any) >> metis_tac[]) >>
-  irule window_array_control_loop >>
-  full_simp_tac bool_ss [abi_encoder_array_loop_code_def] >>
-  conj_tac
-  >- metis_tac[] >>
-  qmatch_asmsub_rename_tac `lookup_block body_st.cs_current_bb _ = SOME body_bb` >>
-  qexistsl_tac [`body_bb`, `FST (SND labels)`,
-    `STRING #"%" (toString (owner.cs_next_var+1))`,
-    `STRING #"%" (toString (owner.cs_next_var+2))`, `FST labels`,
-    `owner.cs_next_id+1`, `STRING #"%" (toString owner.cs_next_var)`, `j`] >>
-  asm_rewrite_tac[] >> rpt strip_tac >>
-  fs[not_fresh_at_def] >> metis_tac[]
+      ip isite islot dp dsite dslot count_op (SND (SND labels)) sb cap d (LENGTH avs) t /\
+    (!x. ~not_fresh_at bound x ==> lookup_var x t = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_array_actual_control_loop_core))) >> simp[]
 QED

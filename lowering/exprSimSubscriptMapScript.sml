@@ -16,7 +16,7 @@ Ancestors
   vyperTypeStoragePreservation exprSimMapKey
   vyperStorageLayoutSafety vyperStorageBackend accountsRelProps
   vyperTypeValues vyperLookupStorage
-  exprSimTopLevelProps compileEnv finite_map
+  exprSimTopLevelProps compileEnv loweringStateRelDefs finite_map
   fragGasPath fragGasMode vyperInterpreter
   vyperTypeEnv vyperStoragePlaceProvenance exprLoweringProps
   exprSimSubscriptArraySource

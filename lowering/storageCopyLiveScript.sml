@@ -17,7 +17,7 @@ Theory storageCopyLive
 Ancestors
   valueEncodingProps vyperStorageCoverage
   list rich_list arithmetic words byte vfmTypes vfmState valueEncodingProofs
-  compileEnv valueEncoding accountsRelProps exprSimAttributeFields
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs accountsRelProps exprSimAttributeFields
   vyperStorageLayoutSafety vyperStorageFrame
   vyperEncodeDecode vyperTyping vyperStorage vyperValue storageDecodeMemory
 
