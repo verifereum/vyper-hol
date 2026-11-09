@@ -3171,6 +3171,7 @@ Proof
       ho_match_mp_tac application_labels >> simp[lower_value_labels] >>
       rpt gen_tac >> ho_match_mp_tac application_labels >>
       simp[builtinSystemTheory.compile_selfdestruct_def, emit_void_labels,
+           SRULE [added_labels_def] emit_void_labels,
            cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
   once_rewrite_tac[compile_call_def] >> simp[LET_THM] >>
   ho_match_mp_tac application_labels >>
@@ -4120,7 +4121,24 @@ Proof
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
-      stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+      (* Return (SOME e): one goal per path, each in its own fragment. *)
+      Cases_on `cenv.ce_return_pc` >> Cases_on `cenv.ce_raw_return` >>
+      Cases_on `FST cenv.ce_nonreentrant`
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >- (stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
+          stmt_labels_chain stmt_labels_rws)
+      >> stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
       stmt_labels_chain stmt_labels_rws)
   >- (rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
       stmt_labels_chain stmt_labels_rws >> simp[pairTheory.ELIM_UNCURRY] >>
