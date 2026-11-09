@@ -1259,7 +1259,7 @@ QED
 (* ===== Case 1: No pointer operands ===== *)
 
 (* Bridge: mem_write_ops or mem_read_ops SOME implies iao_ofst is an operand *)
-Theorem mem_ops_ofst_is_operand[local]:
+Theorem mem_ops_ofst_is_operand:
   !inst ops.
     (mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops) ==>
     MEM ops.iao_ofst inst.inst_operands

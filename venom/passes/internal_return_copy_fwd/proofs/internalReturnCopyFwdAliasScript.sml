@@ -6,6 +6,7 @@ Ancestors
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
   singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs o1LowerDloadOccurrence occurrenceGeometry
+  allocaRemapProofs
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -1232,4 +1233,32 @@ Proof
   `b+z <= c \/ c+w <= b` by
     (irule ircf_saved_forward_sites_exclusion >> simp[] >> metis_tac[]) >>
   decide_tac
+QED
+
+Theorem ircf_fwd_later_writer_occurrence_exclusion:
+  fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  ircf_no_dst_write_alias fn /\ k < i /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ mem_write_ops inst = SOME ops /\
+  ops.iao_ofst = Var v /\ occurrence_syntax_origin fn a H /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\ (root = d \/ root = sr) ==>
+  FLOOKUP H v <> SOME (a,ai.inst_id)
+Proof
+  strip_tac >> strip_tac >>
+  `MEM (Var v) inst.inst_operands` by
+    (metis_tac[allocaRemapProofsTheory.mem_ops_ofst_is_operand]) >>
+  `v IN pointer_derived_vars fn {root}` by
+    (drule_all occurrence_syntax_origin_planned_root >> simp[]) >>
+  Cases_on `root = d`
+  >- (`ircf_alias fn d v` by
+        (drule_all ircf_fwd_dst_pointer_closure >>
+         fs[pred_setTheory.SUBSET_DEF]) >>
+      drule_all ircf_fwd_later_writer_not_dst_alias >> simp[]) >>
+  `root = sr` by metis_tac[] >>
+  `ircf_alias fn sr v` by
+    (drule_all ircf_fwd_src_pointer_closure >>
+     gvs[pred_setTheory.SUBSET_DEF]) >>
+  drule_all ircf_fwd_later_writer_not_src_alias >> simp[]
 QED

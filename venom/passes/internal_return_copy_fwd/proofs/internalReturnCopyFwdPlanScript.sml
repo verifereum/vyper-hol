@@ -1025,3 +1025,54 @@ Proof
      gvs[ircf_fwd_ok_def]) >>
   simp[]
 QED
+
+Theorem ircf_fwd_later_writer_not_dst_alias:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  ircf_no_dst_write_alias fn /\ k < i /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ mem_write_ops inst = SOME ops /\
+  MEM (Var v) inst.inst_operands ==> ~ircf_alias fn d v
+Proof
+  strip_tac >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (rewrite_tac[fn_insts_def] >>
+     irule unitShapeDefsTheory.MEM_fn_insts_blocks >>
+     qexists_tac `bb` >> simp[EL_MEM]) >>
+  `inst.inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >> drule_all ircf_fwd_copy_id >> strip_tac >>
+     `k < LENGTH bb.bb_instructions` by gvs[ircf_fwd_ok_def] >>
+     `i = k` by
+       (irule venomExecProofsTheory.inst_ids_el_eq >>
+        qexistsl_tac [`bb`, `fn`] >> gvs[]) >> decide_tac) >>
+  `MEM (EL k bb.bb_instructions) bb.bb_instructions /\
+   (EL k bb.bb_instructions).inst_opcode = MCOPY` by
+    (fs[ircf_fwd_ok_def] >> simp[EL_MEM]) >>
+  `MEM inst bb.bb_instructions` by simp[EL_MEM] >>
+  drule_all ircf_copy_roots_no_write_use >> simp[]
+QED
+
+Theorem ircf_fwd_later_writer_not_src_alias:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d sr sz /\
+  k < i /\ i < LENGTH bb.bb_instructions /\
+  inst = EL i bb.bb_instructions /\ mem_write_ops inst = SOME ops /\
+  MEM (Var v) inst.inst_operands ==> ~ircf_alias fn sr v
+Proof
+  strip_tac >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (rewrite_tac[fn_insts_def] >>
+     irule unitShapeDefsTheory.MEM_fn_insts_blocks >>
+     qexists_tac `bb` >> simp[EL_MEM]) >>
+  `inst.inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (strip_tac >> drule_all ircf_fwd_copy_id >> strip_tac >>
+     `k < LENGTH bb.bb_instructions` by gvs[ircf_fwd_ok_def] >>
+     `i = k` by
+       (irule venomExecProofsTheory.inst_ids_el_eq >>
+        qexistsl_tac [`bb`, `fn`] >> gvs[]) >> decide_tac) >>
+  `inst.inst_opcode <> ASSIGN /\ inst.inst_opcode <> INVOKE` by
+    (conj_tac >> strip_tac >> gvs[memLocDefsTheory.mem_write_ops_def]) >>
+  fs[ircf_fwd_ok_def] >>
+  qpat_x_assum `!j v. _ ==> j.inst_opcode = ASSIGN \/ _`
+    (qspecl_then [`inst`, `v`] mp_tac) >> simp[]
+QED
