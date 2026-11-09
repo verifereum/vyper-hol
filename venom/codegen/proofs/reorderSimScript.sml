@@ -3229,7 +3229,7 @@ Finalise reduce_depth_plan_align;
 
 
 (* Prefix interpretation depends only on the planner stack and spill map. *)
-Theorem apply_prefix_ops_ext_stack_spilled[local]:
+Theorem apply_prefix_ops_ext_stack_spilled:
   !ops lo ps1 ps2.
     ps1.ps_stack = ps2.ps_stack /\
     ps1.ps_spilled = ps2.ps_spilled ==>

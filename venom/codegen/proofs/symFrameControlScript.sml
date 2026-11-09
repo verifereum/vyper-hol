@@ -26,6 +26,28 @@ Ancestors
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
   dfgDefs symPlannerSim symShuffleSim
 
+(* Restore interpretation agrees on the fields observed by symbolic kinds. *)
+Theorem restore_spilled_plan_ss_align:
+  !targets ps ops ps'.
+    restore_spilled_plan targets ps = (ops, ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    !lo. (apply_prefix_ops initial_fmp lo ops ps).ps_stack = ps'.ps_stack /\
+         (apply_prefix_ops initial_fmp lo ops ps).ps_spilled = ps'.ps_spilled
+Proof
+  Induct >> simp[stackPlanOpsTheory.restore_spilled_plan_def,
+                 planAlignTheory.apply_prefix_ops_nil] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule doSwapSimTheory.spill_alloc_layout_wf_spilled_separated >> strip_tac >>
+  drule_all generatedPrefixSimTheory.do_restore_layout_wf >> strip_tac >>
+  drule_all planAlignTheory.do_restore_ss_align >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[] >> gen_tac >>
+  simp[planAlignTheory.apply_prefix_ops_append] >>
+  qspecl_then [`ops2`, `lo`] mp_tac
+    reorderSimTheory.apply_prefix_ops_ext_stack_spilled >>
+  metis_tac[]
+QED
+
 (* Projection and exact-stack extraction use sym_kinds_ok_def directly:
  * theorem search checks that simp[sym_kinds_ok_def] closes both interfaces.
  * Releasing spills additionally needs lookup inclusion and stack preservation.
