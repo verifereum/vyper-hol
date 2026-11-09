@@ -190,7 +190,7 @@ Proof
   metis_tac[LESS_EQ_TRANS, LESS_EQ_REFL]
 QED
 
-Theorem typed_sarray_body_successor_path_mem[local]:
+Theorem typed_sarray_body_successor_path_mem:
   sc.cs_current_insts =
     [mk_inst id MUL [Var ("%" ++ toString sa.cs_next_var); Lit (n2w ss)]
        ["%" ++ toString (sa.cs_next_var+3)];
