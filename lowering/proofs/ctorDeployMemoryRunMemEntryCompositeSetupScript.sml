@@ -18,7 +18,7 @@ Theorem ctor_complex_guard_mem_ok:
   run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
   Cases_on `hi = Lit 0w` >>
-  simp[abi_decode_complex_head_guard_def, abi_decode_le_guard_def,
+  simp[abi_decode_complex_head_guard_def, compile_abi_decode_range_check_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
        fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -235,6 +235,11 @@ Proof
   drule ctor_actual_member_setup_opcodes >> strip_tac >>
   `dyn ==> abi_decode_load DLOAD (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)` by metis_tac[] >>
+  `dyn ==> eval_operand (Lit 0w) initial = SOME (n2w 0) /\
+    abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) initial = n2w payload_off /\
+    sb + payload_off < dimword (:256)` by (simp[eval_operand_def] >> gvs[]) >>
+  `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
   drule_all abi_decode_member_setup_reentry >> strip_tac >>
   drule_all ctor_actual_sequence_labels >> strip_tac >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
