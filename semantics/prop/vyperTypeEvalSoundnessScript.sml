@@ -5824,7 +5824,6 @@ Proof
   qpat_x_assum `finally_unless_halt _ _ _ = _` kall_tac >>
   gvs[]
   >- (
-    strip_tac >>
     qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
                   `call_env`, `fn`, `fm`, `release`, `body'`, `env_after`,
                   `y`, `fin_st`] mp_tac
