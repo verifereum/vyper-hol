@@ -7,7 +7,7 @@
    body_assign_tuple_widened_call (bodySimStmtCases), still admitted there. *)
 Theory bodyMemAssignTupleWidened
 Ancestors
-  bodyMemoryPreds tupleWidenedLayout tupleUnstagedParts typedCopyPrimitivePathMem typedCopyArrayPathMem
+  bodyMemoryPreds tupleWidenedLayout tupleUnstagedParts typedCopyPrimitivePathMem typedCopyArrayPathMem typedCopyDynarrayPathMem
 
 Theorem body_assign_tuple_widened_call_mem:
   !cx gs e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.

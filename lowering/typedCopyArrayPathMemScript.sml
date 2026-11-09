@@ -5,7 +5,8 @@ Ancestors
   placeMemoryTypedBase placeMemoryChildForward context compileEnv emitHelperProps
   venomState venomExecSemantics freshWrites fragGasMode fragGasPathMem arithmetic
   placeMemoryArrayControl placeMemoryCodeLayout exprLoweringProps emitHelper
-  valueEncoding valueEncodingProps
+  valueEncoding valueEncodingProps typedCopyPrimitivePathMem
+  placeMemoryTypedPrimitive valueCopyBytes valueCopy
 
 Theorem typed_memory_array_element_forward_mem:
   (do so <- emit_op MUL [Var counter; Lit (n2w (type_memory_bytes cenv st))];
@@ -390,3 +391,58 @@ Resume typed_memory_sarray_slow_forward_mem[exit]:
 QED
 
 Finalise typed_memory_sarray_slow_forward_mem
+
+Theorem typed_memory_sarray_fast_forward_mem:
+  ~is_abi_dynamic cenv.ce_struct_fields det /\
+  type_widens_to tenv (ArrayT src_et (Fixed m)) (ArrayT det (Fixed n)) /\
+  compile_copy_sarray_typed cenv dst det src src_et n sa = ((),sb) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  evaluate_type tenv (ArrayT src_et (Fixed m)) = SOME stv /\
+  evaluate_type tenv (ArrayT det (Fixed n)) = SOME dtv /\
+  val_wf dtv v /\ val_in_memory stv v (w2n sw) s.vs_memory /\
+  type_memory_bytes cenv (ArrayT det (Fixed n)) = type_memory_size dtv /\
+  w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+  w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+  w2n dw + type_memory_size dtv <= s.vs_alloca_next /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+      typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_size dtv) /\
+      gas_path_mem ctx func s 0 (OK t)
+Proof
+  strip_tac >>
+  `ArrayT src_et (Fixed m) = ArrayT det (Fixed n)` by
+    (irule (INST_TYPE [``:'a`` |-> ``:string``, ``:'b`` |-> ``:num``]
+              typed_memory_static_widening) >> conj_tac
+     >- (qexists_tac `cenv.ce_struct_fields` >> simp[is_abi_dynamic_def]) >>
+     qexists_tac `tenv` >> simp[]) >> gvs[] >>
+  `compile_copy_memory dst src (type_memory_size dtv) sa = ((),sb)` by
+    (qpat_x_assum `compile_copy_sarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[Once compile_store_memory_typed_def] >> gvs[type_memory_bytes_def]) >>
+  `type_memory_size dtv < dimword (:256)` by decide_tac >>
+  `w2n sw + type_memory_size dtv <= s.vs_alloca_next /\
+   w2n dw + type_memory_size dtv <= s.vs_alloca_next` by decide_tac >>
+  drule_all compile_copy_memory_path_mem >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s 0 (OK t)` >>
+  `mem_bytes_at (w2n dw) (type_memory_size dtv) t.vs_memory =
+     mem_bytes_at (w2n sw) (type_memory_size dtv) s.vs_memory` by
+    (Cases_on `type_memory_size dtv = 0`
+     >- simp[Abbr `t`, mem_bytes_at_def] >>
+     simp[Abbr `t`, mcopy_mem_bytes_at_same]) >>
+  `val_in_memory dtv v (w2n dw) t.vs_memory` by
+    (irule valueEncodingPropsTheory.val_in_memory_relocate >> simp[] >>
+     qexistsl_tac [`s.vs_memory`, `type_memory_size dtv`, `w2n sw`] >> simp[]) >>
+  drule_all compile_copy_memory_sequence >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by gvs[same_blocks_def] >>
+  qexists_tac `t` >> simp[typed_copy_effect_def] >> conj_tac
+  >- metis_tac[gas_marked_path_from_mem] >>
+  Cases_on `type_memory_size dtv = 0`
+  >- simp[Abbr `t`, venom_state_component_equality, lookup_var_def] >>
+  simp[Abbr `t`, mcopy_memory_length] >> rpt conj_tac
+  >- simp[mcopy_def, write_memory_with_expansion_def, venom_state_component_equality]
+  >- simp[mcopy_def, write_memory_with_expansion_def, lookup_var_def]
+  >- (rpt strip_tac >> irule mcopy_mem_bytes_at_disjoint >> decide_tac) >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
