@@ -116,7 +116,7 @@ Proof
   fs[venom_state_component_equality, eval_operand_def, lookup_var_def]
 QED
 
-Theorem typed_sarray_child_decompose[local]:
+Theorem typed_sarray_child_decompose:
   ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
     ~is_abi_dynamic ce.ce_struct_fields dt) /\
   compile_copy_sarray_typed ce dst dt src st ncount sa = ((),sb) /\

@@ -501,7 +501,7 @@ Resume typed_dynarray_header_successor_path_mem[finish]:
 QED
 Finalise typed_dynarray_header_successor_path_mem
 
-Theorem typed_dynarray_header_iteration_path_mem[local]:
+Theorem typed_dynarray_header_iteration_path_mem:
   lookup_block hdr fn.fn_blocks = SOME
     <|bb_label := hdr; bb_instructions :=
       [mk_inst hid LT [Var ("%" ++ toString sm.cs_next_var); bound]
