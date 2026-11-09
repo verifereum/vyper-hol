@@ -2,7 +2,7 @@
 Theory functionInlinerSiteSimulation
 Ancestors
   functionInlinerSimulation functionInlinerContextTransport ctxLookupAgreeHelpers
-  venomExecSemantics venomInst functionInlinerDefs list
+  venomExecSemantics venomExecProofs venomInst functionInlinerDefs callLayoutDefs words list
 
 Definition inline_lower_instruction_def:
   inline_lower_instruction ctx0 C n rank bound i <=>
@@ -108,4 +108,72 @@ Theorem inline_exhausted_parameter_survives:
     ([clone_instruction p labs inst], k)
 Proof
   simp[rewrite_inline_inst_def, clone_instruction_def]
+QED
+
+(* This boundary is about original canonical code, not cloned residual code. *)
+Theorem inline_original_parameter_position:
+  canonical_entry_params_from k insts /\ j < LENGTH insts /\
+  is_param_opcode (EL j insts).inst_opcode ==>
+  param_inst_at (k + j) (EL j insts)
+Proof
+  strip_tac >> drule canonical_entry_params_from_sound >> strip_tac >>
+  rename1 `no_param_insts tail` >>
+  qabbrev_tac `params = users ++ fmp ++ retpc` >>
+  `insts = params ++ tail` by simp[Abbr `params`] >>
+  `j < LENGTH params` by
+    (spose_not_then assume_tac >>
+     gvs[EL_APPEND_EQN, no_param_insts_def, EVERY_EL] >>
+     first_x_assum (qspec_then `j - LENGTH params` mp_tac) >> simp[]) >>
+  drule_all param_insts_from_el >> simp[EL_APPEND_EQN]
+QED
+
+(* PARAM and FMP_PARAM read the current activation's argument vector.
+   RETPC_PARAM deliberately does not have this availability requirement. *)
+Theorem inline_original_argument_step:
+  MEM inst.inst_opcode [PARAM; FMP_PARAM] /\
+  inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [x] ==>
+  (step_inst fuel ctx inst s = OK u <=>
+   w2n idx < LENGTH s.vs_params /\
+   u = update_var x (EL (w2n idx) s.vs_params) s)
+Proof
+  strip_tac >> gvs[] >>
+  simp[step_inst_non_invoke, step_inst_base_def] >>
+  Cases_on `w2n idx < LENGTH s.vs_params` >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_original_reached_argument:
+  eval_operands ops caller = SOME vals /\
+  setup_callee fn vals caller = SOME cs /\
+  s.vs_params = cs.vs_params /\
+  MEM inst.inst_opcode [PARAM; FMP_PARAM] /\
+  inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [x] /\
+  step_inst fuel ctx inst s = r /\ (!e. r <> Error e) ==>
+  w2n idx < LENGTH ops /\
+  eval_operand (EL (w2n idx) ops) caller =
+    SOME (EL (w2n idx) s.vs_params) /\
+  r = OK (update_var x (EL (w2n idx) s.vs_params) s)
+Proof
+  strip_tac >>
+  `is_param_opcode inst.inst_opcode` by gvs[is_param_opcode_def] >>
+  drule step_inst_param_ok_or_error >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
+  strip_tac >> fs[] >>
+  drule setup_callee_frame >> strip_tac >>
+  `MEM inst.inst_opcode [PARAM; FMP_PARAM]` by simp[] >>
+  drule_all inline_original_argument_step >> simp[] >> strip_tac >>
+  drule eval_operands_length >> strip_tac >>
+  drule eval_operands_index >>
+  disch_then (qspec_then `w2n idx` mp_tac) >> gvs[]
+QED
+
+Theorem inline_original_reached_token:
+  setup_callee fn vals caller = SOME cs /\
+  s.vs_return_pc_token = cs.vs_return_pc_token /\
+  inst.inst_opcode = RETPC_PARAM /\
+  inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [x] ==>
+  step_inst fuel ctx inst s =
+    OK (update_var x (if NULL vals then 0w else LAST vals) s)
+Proof
+  strip_tac >> drule setup_callee_frame >> strip_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def]
 QED

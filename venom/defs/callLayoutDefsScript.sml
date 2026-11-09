@@ -753,3 +753,13 @@ Proof
   >> irule lowered_return_inst_layout_wf_length
   >> first_x_assum irule >> simp[]
 QED
+
+(* Physical-position lookup, shared by execution and code generation. *)
+Theorem param_insts_from_el:
+  !insts k j. param_insts_from k insts /\ j < LENGTH insts ==>
+    param_inst_at (k + j) (EL j insts)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `j` >>
+  simp[param_insts_from_def, arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
+  first_x_assum (qspecl_then [`SUC k`, `n`] mp_tac) >> simp[arithmeticTheory.ADD_CLAUSES]
+QED

@@ -1867,15 +1867,6 @@ Proof
   simp[frame_view_vars_lookup] >> Cases_on `inst.inst_opcode = RETPC_PARAM` >> simp[]
 QED
 
-Theorem param_insts_from_el:
-  !insts k j. param_insts_from k insts /\ j < LENGTH insts ==>
-    param_inst_at (k + j) (EL j insts)
-Proof
-  Induct >- simp[] >> rpt gen_tac >> Cases_on `j` >>
-  simp[param_insts_from_def, ADD_CLAUSES] >> strip_tac >>
-  first_x_assum (qspecl_then [`SUC k`, `n`] mp_tac) >> simp[ADD_CLAUSES]
-QED
-
 Theorem canonical_get_params_layout:
   !fn params.
     codegen_ready_fn fn /\
