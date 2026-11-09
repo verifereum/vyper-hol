@@ -1381,7 +1381,9 @@ Proof
   >- (irule sym_step_create_sim >> simp[]) >>
   Cases_on `MEM name ["CALL"; "STATICCALL"; "DELEGATECALL"; "SELFDESTRUCT";
     "GAS"; "MLOAD"; "SHA3"; "CALLDATACOPY"; "EXTCODECOPY"; "MCOPY"; "RETURNDATACOPY"]`
-  >- (gvs[MEM] >> simp[sym_step_call_sim, sym_step_staticcall_sim,
+  >- (qpat_x_assum `MEM name ("CALL" :: _)`
+        (strip_assume_tac o REWRITE_RULE [MEM]) >>
+      simp[sym_step_call_sim, sym_step_staticcall_sim,
         sym_step_delegatecall_sim, sym_step_selfdestruct_sim, sym_step_gas_sim,
         sym_step_mload_sim, sym_step_sha3_sim, sym_step_calldatacopy_sim,
         sym_step_extcodecopy_sim, sym_step_mcopy_sim, sym_step_returndatacopy_sim]) >>
@@ -1859,7 +1861,7 @@ Proof
 QED
 
 (* A code label's offset fits a PUSH2 and maps back to the label. *)
-Theorem asm_static_wf_code_label[local]:
+Theorem asm_static_wf_code_label:
   asm_static_wf p ∧ INDEX_OF (AsmLabel l) p = SOME i ⇒
   ∃off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off ∧
         off < 65536 ∧ FLOOKUP (build_offset_to_pc p) off = SOME i

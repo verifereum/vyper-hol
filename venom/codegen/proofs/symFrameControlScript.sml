@@ -24,7 +24,7 @@ Ancestors
   fnFrameDeepAbort fnFrameDeepGas fnFrameStepsRevertForwardDeep asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs symPlannerSim
+  dfgDefs symPlannerSim symShuffleSim
 
 (* Reassemble the frame boundary after a region-local symbolic segment. *)
 Theorem sym_frame_inv_region_transfer:
@@ -91,6 +91,140 @@ Proof
   >- (irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
       metis_tac[]) >>
   drule_all asm_sym_rel_pc >> simp[]
+QED
+
+(* Region-local shuffles expose the same frame boundary as input preparation. *)
+Theorem sym_prefix_ops_frame_sim:
+  !ops initial_fmp p env cp fn ret srest ps ss ctx labs0 cs r.
+  prefix_wf (SND (compute_label_offsets p)) (LENGTH ps.ps_stack) ops /\
+  prefix_spill_wf initial_fmp (SND (compute_label_offsets p)) ops ps /\
+  EVERY is_prefix_op ops /\
+  EVERY (\op. !l d. op <> SOPushOfst l d) ops /\
+  (!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    (r.sr_spill_base <= b /\ b < r.sr_spill_end) /\
+    context_spill_byte cp b) /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0
+      (apply_prefix_ops initial_fmp (SND (compute_label_offsets p)) ops ps)
+      cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `asm_sym_rel p env cs ss` by fs[sym_frame_inv_def] >>
+  rename1 `MEM r cplan.cp_regions` >>
+  `sym_kinds_ok cplan fn ret srest ps ss` by fs[sym_frame_inv_def] >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops)` by simp[] >>
+  drule_all (BETA_RULE (Q.INST
+    [`R` |-> `\b. r.sr_spill_base <= b /\ b < r.sr_spill_end`]
+    (SPEC_ALL sym_prefix_ops_sim))) >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
+  conj_tac
+  >- (irule sym_frame_inv_region_transfer >> goal_assum (drule_at Any) >>
+      metis_tac[]) >>
+  drule_all asm_sym_rel_pc >> simp[]
+QED
+
+(* A branch condition cannot carry either class of symbolic label. *)
+Theorem sym_jnz_condition_kind:
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  fn_shape_ok fn /\ label_flow_ok ctx /\
+  inst.inst_opcode = JNZ /\
+  inst.inst_operands = [cond_op; Label if_nz; Label if_z] /\
+  ~is_label_operand cond_op /\ cond_op <> dead_stack_marker /\
+  op_kind_ok fn ret cond_op sv ==>
+  ?w. sv = Val w
+Proof
+  strip_tac >> Cases_on `cond_op` >>
+  gvs[op_kind_ok_def, is_label_operand_def] >>
+  rename1 `Var x <> dead_stack_marker` >>
+  `~retpc_var fn x` by
+    (fs[fn_shape_ok_def, opaque_use_ok_def] >>
+     first_x_assum (qspec_then `inst` mp_tac) >>
+     simp[retpc_use_ok_def]) >>
+  `~code_end_var fn x` by
+    (fs[label_flow_ok_def] >>
+     first_x_assum (qspecl_then [`fn`, `inst`] mp_tac) >> simp[]) >>
+  gvs[]
+QED
+
+(* Static code-label resolution agrees with the concrete jump map. *)
+Theorem sym_code_label_dest:
+  asm_static_wf p /\ MEM (AsmLabel l) p /\
+  FLOOKUP (SND (compute_label_offsets p)) l = SOME off /\
+  FLOOKUP (build_offset_to_pc p) off = SOME pc ==>
+  sym_jump_dest p (Lab l 0) = SOME pc
+Proof
+  strip_tac >>
+  Cases_on `INDEX_OF (AsmLabel l) p`
+  >- gvs[listTheory.INDEX_OF_eq_NONE] >>
+  drule_all asm_static_wf_code_label >>
+  simp[sym_jump_dest_def]
+QED
+
+(* The symbolic jump consumes only its explicitly typed destination. *)
+Theorem sym_jump_steps:
+  asm_block_at p ss.sym_base.as_pc [AsmOp "JUMP"] /\
+  ss.sym_stack = Lab l 0 :: stk /\
+  sym_jump_dest p (Lab l 0) = SOME pc ==>
+  sym_steps p env 1 ss =
+    SymOK (ss with <|sym_base := ss.sym_base with as_pc := pc;
+                    sym_stack := stk|>)
+Proof
+  strip_tac >>
+  rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[asm_block_at_def, sym_step_def, sym_step_op_def, sym_jump_def]
+QED
+
+Theorem sym_jmp_suffix:
+  asm_block_at p ss.sym_base.as_pc [AsmPushLabel l; AsmOp "JUMP"] /\
+  sym_jump_dest p (Lab l 0) = SOME pc ==>
+  sym_steps p env 2 ss =
+    SymOK (ss with sym_base := ss.sym_base with as_pc := pc)
+Proof
+  strip_tac >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[stackOpSimTheory.asm_block_at_cons, sym_step_def, sym_step_op_def,
+      sym_set_stack_def, asm_next_def, sym_jump_def]
+QED
+
+Theorem sym_jnz_suffix_nonzero:
+  asm_block_at p ss.sym_base.as_pc [AsmPushLabel l; AsmOp "JUMPI"] /\
+  ss.sym_stack = Val w :: stk /\ w <> 0w /\
+  sym_jump_dest p (Lab l 0) = SOME pc ==>
+  sym_steps p env 2 ss =
+    SymOK (ss with <|sym_base := ss.sym_base with as_pc := pc;
+                    sym_stack := stk|>)
+Proof
+  strip_tac >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[stackOpSimTheory.asm_block_at_cons, sym_step_def, sym_step_op_def,
+      sym_set_stack_def, asm_next_def, sym_jumpi_def]
+QED
+
+Theorem sym_jnz_suffix_zero:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPushLabel ln; AsmOp "JUMPI"; AsmPushLabel lz; AsmOp "JUMP"] /\
+  ss.sym_stack = Val 0w :: stk /\
+  sym_jump_dest p (Lab lz 0) = SOME pc ==>
+  sym_steps p env 4 ss =
+    SymOK (ss with <|sym_base := ss.sym_base with as_pc := pc;
+                    sym_stack := stk|>)
+Proof
+  strip_tac >>
+  rewrite_tac[numLib.num_CONV ``4:num``, numLib.num_CONV ``3:num``,
+              arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[stackOpSimTheory.asm_block_at_cons, sym_step_def, sym_step_op_def,
+      sym_set_stack_def, asm_next_def, sym_jumpi_def, sym_jump_def]
 QED
 
 Theorem sym_jmp_frame_sim_deep:
