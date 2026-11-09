@@ -8,6 +8,7 @@ Ancestors
   exprSimDefs
   loweringPosts exprSimTypedAlloc
   gasContext gasExemptCert
+  fragGasOriginPtr bodyPtrDefs gasSummary
   list rich_list finite_map fragExec freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -466,5 +467,65 @@ Proof
      rename1 `read_result cx v est = (forced,forced_es)` >>
      Cases_on `forced` >> simp[raise_def]) >>
   pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Theorem compile_return_none_int_origin_ptr:
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) /\
+  compile_stmt cenv lctx ty (Return NONE) sa = ((), sb) /\
+  fn_has_code sa sb func /\ ret_pc_ok cenv sa s /\
+  ~ctx_has_dalloca ctx /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv_at D lo d cenv cx es G tn s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r.
+    r = IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s /\
+    gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+      (s, G, tn) [] (r, G, tn) /\
+    (!tail. eval_stmt cx (Return NONE)
+      (es with gas_obs := gas_explicit [] s.vs_gas_readings ++ tail) =
+      (INR (ReturnException NoneV), es with gas_obs := tail)) /\
+    intret_q func cenv cx ret_tv NoneV (es with scopes := []) r /\
+    op_taint tn (Var rpc) = {}
+Proof
+  strip_tac >>
+  `emit_inst RET [Var rpc] [] sa = ((), sb)` by
+    gvs[Once compile_stmt_def] >>
+  `op_taint tn (Var rpc) = {}` by
+    metis_tac[ghost_inv_at_def] >>
+  `?pc. lookup_var rpc s = SOME pc` by
+    metis_tac[ret_pc_ok_def] >>
+  qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+  simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  drule fn_has_code_same_block >> simp[] >> strip_tac >>
+  `!fuel. step_inst fuel ctx (mk_inst sa.cs_next_id RET [Var rpc] []) s =
+     IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s` by
+    (simp[step_inst_non_invoke, mk_inst_def] >>
+     mp_tac (Q.SPECL [`sa.cs_next_id`, `[]`, `rpc`, `s`, `[]`, `pc`]
+       step_ret_values) >> simp[eval_operands_def, mk_inst_def]) >>
+  conj_tac
+  >- (irule (cj 3 gas_origin_ptr_path_rules) >>
+      simp[exit_result_def, gas_origin_ptr_edge_def,
+           fragGasOriginTheory.gas_origin_edge_def,
+           fragGasPathPtrTheory.gas_path_ptr_edge_def] >>
+      conj_tac
+      >- (qexists_tac `0` >>
+          simp[gasEventsTheory.gas_events_step_def, mk_inst_def,
+               memSafeRunTheory.mem_safe_step_non_invoke,
+               unitTransformDefsTheory.inst_mem_below_frontier_def,
+               contextCodegenRelTheory.source_memory_read_ranges_def,
+               codegenRelTheory.source_memory_write_ranges_def]) >>
+      qexists_tac `0` >>
+      simp[gasCountTheory.gas_count_step_def,
+           ptrSafeRunTheory.ptr_safe_step_def,
+           ptrSafeRunTheory.ptr_inst_ok_def, mk_inst_def] >>
+      simp[ptrDisciplineTheory.access_ok_def,
+           ptrDisciplineTheory.taint_ok_def,
+           contextCodegenRelTheory.source_memory_read_ranges_def,
+           codegenRelTheory.source_memory_write_ranges_def] >>
+      metis_tac[ghost_inv_at_def]) >>
+  conj_tac >- simp[Once evaluate_def, raise_def] >>
+  simp[intret_q_def, result_rel_def, intret_vals_match_def] >>
+  irule state_rel_scopes_nil >> gvs[stmt_state_rel_def]
 QED
 
