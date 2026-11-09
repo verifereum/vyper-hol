@@ -124,7 +124,7 @@ Proof
   simp[MEM_COUNT_LIST]
 QED
 
-Theorem store_slots_bytes_footprint[local]:
+Theorem store_slots_bytes_footprint:
   (tv = BaseTV (BytesT (Dynamic cap)) \/ tv = BaseTV (StringT cap)) /\
   value_has_type tv v /\ val_in_memory tv v off mem /\
   off + type_memory_size tv < dimword (:256) /\
