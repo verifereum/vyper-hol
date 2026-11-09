@@ -901,3 +901,55 @@ Definition taint_within_def:
        R SUBSET D.d_ret s_h.vs_returndata)
 End
 
+
+(* Nonempty accesses through a known site expose its natural bounds. *)
+Theorem access_ok_read_site_bounds:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  FLOOKUP G v = SOME (b,sz) /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\ len <> 0 ==>
+  b <= off /\ off + len <= b + sz
+Proof
+  strip_tac >> gvs[access_ok_def] >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges _ _) /\ _ ==> _`
+    (qspecl_then [`off`,`len`] mp_tac) >>
+  simp[op_prov_def] >> metis_tac[]
+QED
+
+Theorem access_ok_write_site_bounds:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  FLOOKUP G v = SOME (b,sz) /\
+  MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 ==>
+  b <= off /\ off + len <= b + sz
+Proof
+  strip_tac >> gvs[access_ok_def] >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges _ _) /\ _ ==> _`
+    (qspecl_then [`off`,`len`] mp_tac) >>
+  simp[op_prov_def] >> metis_tac[]
+QED
+
+Theorem access_ok_mcopy_site_bases:
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  inst.inst_opcode = MCOPY /\
+  inst.inst_operands = [Var d; Var r; lenop] /\
+  eval_operand (Var d) s = SOME (n2w db) /\
+  eval_operand (Var r) s = SOME (n2w rb) /\
+  eval_operand lenop s = SOME len /\ w2n len <> 0 /\
+  FLOOKUP G d = SOME (db,dsz) /\ FLOOKUP G r = SOME (rb,rsz) ==>
+  w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb
+Proof
+  strip_tac >>
+  `db <= w2n (n2w db : bytes32)` by
+    (drule access_ok_write_site_bounds >>
+     simp[mem_write_ops_def, source_memory_write_ranges_def,
+          sized_source_write_range_def] >>
+     disch_then (qspecl_then [`w2n (n2w db : bytes32)`, `w2n len`] mp_tac) >>
+     simp[]) >>
+  `rb <= w2n (n2w rb : bytes32)` by
+    (drule access_ok_read_site_bounds >>
+     simp[mem_read_ops_def, source_memory_read_ranges_def] >>
+     disch_then (qspecl_then [`w2n (n2w rb : bytes32)`, `w2n len`] mp_tac) >>
+     simp[]) >>
+  metis_tac[wordsTheory.word_n2w_le2, arithmeticTheory.LESS_EQUAL_ANTISYM]
+QED
