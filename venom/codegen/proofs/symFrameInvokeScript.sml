@@ -380,6 +380,137 @@ Proof
   gvs[sym_kinds_ok_def, sym_steps_add]
 QED
 
+Theorem sym_invoke_return_output_kinds:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  LENGTH vals = LENGTH inst.inst_outputs ==>
+  LIST_REL (op_kind_ok fn ret) (REVERSE (MAP Var inst.inst_outputs))
+    (MAP Val (REVERSE vals))
+Proof
+  strip_tac >>
+  simp[GSYM MAP_REVERSE, LIST_REL_EL_EQN, EL_MAP] >>
+  rpt strip_tac >> irule sym_invoke_output_word_kind >>
+  simp[] >> qexists `inst` >> simp[GSYM MEM_REVERSE, EL_MEM]
+QED
+
+Theorem sym_invoke_return_spill_kinds:
+  !ctx cp fn callee r ps ss ssr ret srest.
+  ordered_spill_regions cp.cp_regions /\ MEM r cp.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\
+  fn_directly_calls ctx fn.fn_name callee /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  (!op off. FLOOKUP ps.ps_spilled op = SOME off ==>
+     r.sr_spill_base <= off /\ off + 32 <= r.sr_spill_end) /\
+  sym_kinds_ok cp fn ret srest ps ss /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp callee b ==>
+       FLOOKUP ssr.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) ==>
+  !op off. FLOOKUP ps.ps_spilled op = SOME off ==>
+    ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ssr.sym_mem_labels off sv
+Proof
+  rpt strip_tac >>
+  rename1 `sym_kinds_ok cplan fn ret srest ps ss` >>
+  `!b. in_mem_range off 32 b ==>
+       FLOOKUP ssr.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b` by
+    metis_tac[sym_invoke_caller_spill_labels_preserved] >>
+  drule mem_sval_at_range_cong >>
+  gvs[sym_kinds_ok_def] >> metis_tac[]
+QED
+
+Theorem sym_invoke_return_called_kinds:
+  !cp fn ret srest arranged ssr saved_ops saved_sym inst vals called ret_lbl.
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  LENGTH vals = LENGTH inst.inst_outputs /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE saved_ops) saved_sym /\
+  ssr.sym_stack = MAP Val (REVERSE vals) ++ saved_sym ++ srest /\
+  (!op off. FLOOKUP arranged.ps_spilled op = SOME off ==>
+    ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ssr.sym_mem_labels off sv) /\
+  (!b. b IN FDOM ssr.sym_mem_labels ==> context_spill_byte cp b) /\
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (arranged with ps_stack := saved_ops) inst.inst_outputs) = (ret_lbl, called) ==>
+  sym_kinds_ok cp fn ret srest called ssr
+Proof
+  rpt strip_tac >>
+  drule fnFrameBoundaryInvokeTheory.invoke_called_plan_fields >> strip_tac >>
+  drule_all sym_invoke_return_output_kinds >>
+  rw[sym_kinds_ok_def, REVERSE_APPEND] >> metis_tac[LIST_REL_APPEND]
+QED
+
+Theorem mem_sval_at_store_label:
+  mem_sval_at (labs |++ GENLIST (\i. (off + i, (l,d,i))) 32) off (Lab l d)
+Proof
+  simp[mem_sval_at_def, mem_label_at_def, mstore_labels_lookup,
+       EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+QED
+
+Theorem mem_labels_clear_lookup:
+  FLOOKUP (mem_labels_clear labs P) b = if P b then NONE else FLOOKUP labs b
+Proof
+  Cases_on `P b` >> simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT]
+QED
+
+Theorem mem_sval_at_store_word:
+  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
+Proof
+  simp[mem_sval_at_def, mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT]
+QED
+
+Theorem sym_mstore_slot:
+  ss.sym_stack = Val (n2w off) :: sv :: stk /\ off < dimword (:256) ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    mem_sval_at ss'.sym_mem_labels off sv /\
+    (!b. ~in_mem_range off 32 b ==>
+         FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `sv` >>
+  simp[sym_mstore_def, sym_step_concrete_def, asm_op_arity_def,
+       sval_val_def, sym_lift_def, asmOpSimTheory.asm_step_op_mstore, asm_mstore_def,
+       asm_op_arity_table_def, log_table_def,
+       asm_next_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
+       mem_labels_hit_def, Excl "GENLIST_NUMERALS", mem_sval_at_store_label,
+       mem_sval_at_store_word, mem_labels_clear_lookup, mstore_labels_lookup,
+       in_mem_range_def] >>
+  pure_once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  simp[mem_sval_at_store_label, mstore_labels_lookup, Excl "GENLIST_NUMERALS"]
+QED
+
+Theorem mem_sval_at_word_no_label:
+  mem_sval_at labs off (Val w) ==> mem_label_at labs off = NONE
+Proof
+  rw[mem_sval_at_def] >>
+  `off NOTIN FDOM labs` by gvs[in_mem_range_def] >>
+  simp[mem_label_at_def, finite_mapTheory.FLOOKUP_DEF]
+QED
+
+Theorem sym_mload_slot_label:
+  ss.sym_stack = Val (n2w off) :: stk /\ off < dimword (:256) /\
+  mem_sval_at ss.sym_mem_labels off (Lab l d) ==>
+  ?ss'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Lab l d :: stk /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[mem_sval_at_def, sym_mload_def, asm_next_def]
+QED
+
+Theorem sym_mload_slot_word:
+  ss.sym_stack = Val (n2w off) :: stk /\ off < dimword (:256) /\
+  mem_sval_at ss.sym_mem_labels off (Val w) ==>
+  ?ss' v. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Val v :: stk /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >> drule mem_sval_at_word_no_label >> strip_tac >>
+  simp[sym_mload_def, sym_step_concrete_def, asm_op_arity_def,
+       asm_op_arity_table_def, sval_val_def, sym_lift_def,
+       asmOpSimTheory.asm_step_op_mload, asm_mload_def, asm_next_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def, mem_labels_hit_def,
+       mem_labels_clear_def, finite_mapTheory.DRESTRICT_UNIV] >>
+  gvs[mem_sval_at_def] >>
+  `~?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range off 32 i` by metis_tac[] >>
+  simp[] >> simp[finite_mapTheory.fmap_eq_flookup,
+                  finite_mapTheory.FLOOKUP_DRESTRICT]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
