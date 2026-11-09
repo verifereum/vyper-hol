@@ -7,7 +7,7 @@ Ancestors
  abiEncoderRegisteredEffect ctorAbiActualSites ctorDeployMemoryFrontier
  compileEnv venomState venomExecSemantics venomMemDefs valueEncoding
  ASCIInumbers words list finite_map arithmetic fragGasPath
- abiDecoderRecursiveLoopContext abiDecoderRecursiveLoopLayout abiCanonicalHeadSize
+ abiDecoderRecursiveLoopContext abiDecoderRecursiveLoopLayout abiCanonicalHeadSize abiDecoderHeaderGasPath
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -329,4 +329,42 @@ Proof
   `abi_decode_sim ctx func s (jump_to hdr s)` by
     metis_tac[gas_path_normal, abi_decode_sim_def] >>
   qexists `jump_to hdr s` >> simp[jump_to_def]
+QED
+
+Theorem deploy_ctor_array_header_complete_gas_run:
+  (^Ok) k ctx func site ids D N d outsz next limit_st
+    tv vs slot_id slot initial j j s /\
+  abi_decode_loop_cfg func hdr body_lbl exit_lbl hid ip src DLOAD
+    (STRING #"%" (toString first)) (STRING #"%" (toString (first+1)))
+    (STRING #"%" (toString (first+2))) (STRING #"%" (toString (first+3))) /\
+  next <= first /\ first+4 <= limit_st.cs_next_var /\
+  abi_decoder_operand_live next src /\
+  s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+  eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME srcaddr /\
+  abi_decode_load DLOAD srcaddr s = n2w (LENGTH vs) /\
+  slot < dimword (:256) /\ LENGTH vs < dimword (:256) ==>
+  ?h. (^Ok) k ctx func site ids D N d outsz next limit_st
+      tv vs slot_id slot initial j j h /\
+    ~h.vs_halted /\ h.vs_current_bb = (if j < LENGTH vs then body_lbl else exit_lbl) /\
+    h.vs_inst_idx = 0 /\ abi_decode_sim ctx func s h /\
+    h.vs_outcomes = s.vs_outcomes /\ h.vs_tx_ctx = s.vs_tx_ctx /\
+    h.vs_block_ctx = s.vs_block_ctx /\ gas_path ctx func s 0 (OK h)
+Proof
+  strip_tac >>
+  `j <= LENGTH vs /\ mload slot s = n2w j` by fs[] >>
+  `abi_decode_loop_ready hdr ip src DLOAD (n2w slot) srcaddr (LENGTH vs) j s` by
+    simp[abi_decode_loop_ready_def, w2n_n2w] >>
+  `src <> Var (STRING #"%" (toString first))` by
+    metis_tac[abi_decoder_live_excludes_output] >>
+  `STRING #"%" (toString first) <> STRING #"%" (toString (first+1))` by simp[] >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_ready_header_sim >> disch_then (qspec_then `ctx` assume_tac) >>
+  drule_all abi_decode_ready_header_gas_path >> disch_then (qspec_then `ctx` assume_tac) >>
+  drule_all deploy_ctor_array_header_observation >> strip_tac >>
+  qexists `jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
+    (abi_decode_header_state (STRING #"%" (toString first))
+      (STRING #"%" (toString (first+1))) (STRING #"%" (toString (first+2)))
+      (STRING #"%" (toString (first+3))) j (LENGTH vs) s)` >>
+  asm_simp_tac bool_ss [] >>
+  simp[jump_to_def, abi_decode_header_state_def, update_var_def]
 QED
