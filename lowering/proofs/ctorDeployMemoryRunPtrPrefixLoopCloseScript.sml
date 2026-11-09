@@ -145,8 +145,9 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `eval_operand (Var slot_var) s = SOME (n2w slot) /\
    eval_operand src s = SOME (n2w sb)` by
-    (fs[abi_decoder_ranges_def, eval_operand_def,Excl "enc_def"] >>
-     metis_tac[ctor_actual_array_observation_operand]) >>
+    (fs[abi_decoder_ranges_def,Excl "enc_def"] >>
+     conj_tac >> irule ctor_actual_array_observation_operand >>
+     metis_tac[]) >>
   `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
     fs[ctor_actual_array_observation_def,abi_decode_source_def,Excl "enc_def"] >>
@@ -155,6 +156,13 @@ Proof
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb:bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid (Var slot_var) src DLOAD
+    (STRING #"%" (toString header_var)) (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2))) (STRING #"%" (toString (header_var+3)))` by
+    fs[abi_decode_position_loop_cfg_def, abi_decode_loop_cfg_def,
+       abi_decode_position_header_zero] >>
+  `header_var+4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
   drule_all prefix_loop_header_compiled_pair >>
   disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -479,7 +487,7 @@ QED
 Resume prefix_loop_body_index_pair[child_call]:
   `?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\
     phi_prefix_length hdr_bb.bb_instructions = 0` by
-    (fs[abi_decode_loop_cfg_def] >>
+    (fs[abi_decode_position_loop_cfg_def, abi_decode_position_header_zero] >>
      simp[abi_decode_header_insts_def,phi_prefix_length_def]) >>
   `eval_operand (Var slot_var) prepared = SOME (n2w slot)` by
     (`abi_decoder_operand_live st.cs_next_var (Var slot_var)` by
@@ -725,7 +733,7 @@ QED
 Resume prefix_loop_separated_body_pair[child_call]:
   `?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\
     phi_prefix_length hdr_bb.bb_instructions = 0` by
-    (fs[abi_decode_loop_cfg_def] >>
+    (fs[abi_decode_position_loop_cfg_def, abi_decode_position_header_zero] >>
      simp[abi_decode_header_insts_def,phi_prefix_length_def]) >>
   `eval_operand (Var slot_var) prepared = SOME (n2w slot)` by
     (`abi_decoder_operand_live st.cs_next_var (Var slot_var)` by
@@ -892,7 +900,7 @@ Theorem prefix_dynamic_array_setup_finite_pair_complete:
       (abi_embedded_static_size ce.ce_struct_fields ty) st = ((),guard_st) /\
     abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (Var iv,loop_st) /\
-    abi_decode_loop_prefix (Var iv) src DLOAD loop_st = (labels,body_st) /\
+    abi_decode_loop_prefix (Var iv) src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
     abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var iv) src (Var dst)
       DLOAD (Lit 0w) (Lit 0w) (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
       loop_st.cs_next_var st.cs_next_id st'.cs_next_id st.cs_next_id st'.cs_next_id
@@ -1060,7 +1068,7 @@ Theorem prefix_dynamic_array_setup_finite_pair:
       (abi_embedded_static_size ce.ce_struct_fields ty) st = ((),guard_st) /\
     abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (Var iv,loop_st) /\
-    abi_decode_loop_prefix (Var iv) src DLOAD loop_st = (labels,body_st) /\
+    abi_decode_loop_prefix (Var iv) src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
     abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var iv) src (Var dst)
       DLOAD (Lit 0w) (Lit 0w) (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
       loop_st.cs_next_var st.cs_next_id st'.cs_next_id st.cs_next_id st'.cs_next_id
