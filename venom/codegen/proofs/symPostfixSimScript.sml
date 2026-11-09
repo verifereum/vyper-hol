@@ -4,7 +4,7 @@ Ancestors
   symInstKinds symShuffleSim regularPostfixSim fnPlanPrefix
   doSwapSim deepDupCallerSim planWf codegenEncodingWf rich_list
   stackPlanOps stackPlanGen stackModel planExec prefixExec prefixSim
-  codegenSymRel asmSymSem finite_map list
+  codegenSymRel asmSymSem asmSem finite_map list
 
 Theorem sym_kinds_ok_inventory_mono:
   sym_kinds_ok cplan fn ret srest ps ss /\
@@ -441,4 +441,198 @@ Proof
     (simp[] >> EVAL_TAC) >>
   `17 < LENGTH ps.ps_stack` by simp[] >>
   metis_tac[do_dup17_duplicate_top_not_wf, pairTheory.PAIR, APPEND_NIL]
+QED
+
+(* Physical scratch inventory: keys identify cells, not operand names. *)
+Definition scratch_mem_ok_def:
+  scratch_mem_ok fn ret slots labs <=>
+    !off op. FLOOKUP slots off = SOME op ==>
+      ?sv. op_kind_ok fn ret op sv /\ mem_sval_at labs off sv
+End
+
+Definition scratch_store_labels_def:
+  scratch_store_labels labs off (Val w) =
+    mem_labels_clear labs (in_mem_range off 32) /\
+  scratch_store_labels labs off (Lab l d) =
+    labs |++ GENLIST (\i. (off + i, (l,d,i))) 32
+End
+
+Theorem scratch_store_labels_outside:
+  ~in_mem_range off 32 b ==>
+  FLOOKUP (scratch_store_labels labs off sv) b = FLOOKUP labs b
+Proof
+  Cases_on `sv` >> pure_rewrite_tac[scratch_store_labels_def,
+    asmSymBridgeTheory.mstore_labels_lookup] >>
+  simp[mem_labels_clear_def, FLOOKUP_DRESTRICT, in_mem_range_def]
+QED
+
+Theorem scratch_store_labels_at:
+  mem_sval_at (scratch_store_labels labs off sv) off sv
+Proof
+  Cases_on `sv` >> pure_rewrite_tac[scratch_store_labels_def,
+    mem_sval_at_def, mem_label_at_def,
+    asmSymBridgeTheory.mstore_labels_lookup] >>
+  simp[mem_labels_clear_def, FDOM_DRESTRICT, in_mem_range_def,
+       EVERY_MEM, MEM_COUNT_LIST]
+QED
+
+Theorem scratch_store_labels_retains:
+  (off + 32 <= old \/ old + 32 <= off) /\ mem_sval_at labs old sv ==>
+  mem_sval_at (scratch_store_labels labs off value) old sv
+Proof
+  strip_tac >> irule (iffRL mem_sval_at_range_cong) >>
+  qexists `labs` >> simp[] >> rpt strip_tac >>
+  irule scratch_store_labels_outside >> gvs[in_mem_range_def] >> decide_tac
+QED
+
+Theorem scratch_mem_ok_store:
+  scratch_mem_ok fn ret slots labs /\ op_kind_ok fn ret op sv /\
+  (!old at. FLOOKUP slots old = SOME at /\ old <> off ==>
+     off + 32 <= old \/ old + 32 <= off) ==>
+  scratch_mem_ok fn ret (slots |+ (off,op))
+    (scratch_store_labels labs off sv)
+Proof
+  simp[scratch_mem_ok_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  Cases_on `off = off'` >> gvs[]
+  >- metis_tac[scratch_store_labels_at] >>
+  metis_tac[scratch_store_labels_retains]
+QED
+
+Theorem scratch_mem_ok_restore:
+  scratch_mem_ok fn ret slots ss.sym_mem_labels /\
+  FLOOKUP slots off = SOME op ==>
+  ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ss.sym_mem_labels off sv
+Proof
+  simp[scratch_mem_ok_def] >> metis_tac[]
+QED
+
+Theorem scratch_duplicate_cells_probe:
+  a + 32 <= b /\ op_kind_ok fn ret op sva /\ op_kind_ok fn ret op svb ==>
+  scratch_mem_ok fn ret (FEMPTY |+ (a,op) |+ (b,op))
+    (scratch_store_labels (scratch_store_labels labs a sva) b svb)
+Proof
+  strip_tac >> irule scratch_mem_ok_store >> simp[FLOOKUP_UPDATE] >>
+  irule scratch_mem_ok_store >> simp[scratch_mem_ok_def]
+QED
+
+Theorem sym_mstore_scratch_step:
+  ss.sym_stack = Val off :: sv :: tail ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\
+        ss'.sym_stack = tail /\
+        ss'.sym_mem_labels = scratch_store_labels ss.sym_mem_labels (w2n off) sv /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  Cases_on `sv` >> strip_tac >>
+  simp[sym_mstore_def, scratch_store_labels_def, sym_step_concrete_def,
+       sym_lift_def, sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
+       mem_labels_hit_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_mstore_def, asm_next_def]
+QED
+
+Theorem sym_mload_scratch_word:
+  ss.sym_stack = Val off :: tail /\
+  mem_sval_at ss.sym_mem_labels (w2n off) (Val word) ==>
+  ?ss' w. sym_mload ss = SymOK ss' /\
+        ss'.sym_stack = Val w :: tail /\
+        ss'.sym_mem_labels = ss.sym_mem_labels /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  strip_tac >>
+  `FLOOKUP ss.sym_mem_labels (w2n off) = NONE` by
+    (gvs[mem_sval_at_def, flookup_thm] >>
+     first_x_assum irule >> simp[in_mem_range_def]) >>
+  simp[sym_mload_def, mem_label_at_def, sym_step_concrete_def,
+       sym_lift_def, sval_val_def, asm_op_arity_def, asm_op_arity_table_def,
+       asm_op_mem_reads_def, asm_op_mem_writes_def, log_table_def,
+       mem_labels_hit_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_mload_def, asm_next_def] >>
+  `~(?i. i IN FDOM ss.sym_mem_labels /\ in_mem_range (w2n off) 32 i)` by
+    metis_tac[mem_sval_at_def] >>
+  simp[mem_labels_clear_def, DRESTRICT_UNIV, GSYM pred_setTheory.UNIV_DEF]
+QED
+
+Theorem op_kind_ok_word_irrelevant:
+  op_kind_ok fn ret op (Val w) = op_kind_ok fn ret op (Val v)
+Proof
+  Cases_on `op` >> simp[op_kind_ok_def]
+QED
+
+Theorem sym_mload_scratch_kind:
+  ss.sym_stack = Val off :: tail /\
+  op_kind_ok fn ret op sv /\ mem_sval_at ss.sym_mem_labels (w2n off) sv ==>
+  ?ss' value. sym_mload ss = SymOK ss' /\
+        ss'.sym_stack = value :: tail /\ op_kind_ok fn ret op value /\
+        ss'.sym_mem_labels = ss.sym_mem_labels /\
+        ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  Cases_on `sv` >> strip_tac
+  >- (drule_all sym_mload_scratch_word >>
+      metis_tac[op_kind_ok_word_irrelevant]) >>
+  gvs[mem_sval_at_def] >>
+  simp[sym_mload_def, asm_next_def] >> metis_tac[]
+QED
+
+Theorem scratch_dead_marker_two_labels[local]:
+  a + 32 <= b ==>
+  scratch_mem_ok fn ret
+    (FEMPTY |+ (a,dead_stack_marker) |+ (b,dead_stack_marker))
+    (scratch_store_labels
+      (scratch_store_labels labs a (Lab l d)) b (Lab other delta))
+Proof
+  strip_tac >> irule scratch_duplicate_cells_probe >> simp[op_kind_ok_def]
+QED
+
+Theorem scratch_store_step_inventory:
+  ss.sym_stack = Val off :: sv :: tail /\
+  scratch_mem_ok fn ret slots ss.sym_mem_labels /\ op_kind_ok fn ret op sv /\
+  (!old at. FLOOKUP slots old = SOME at /\ old <> w2n off ==>
+    w2n off + 32 <= old \/ old + 32 <= w2n off) ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
+    scratch_mem_ok fn ret (slots |+ (w2n off,op)) ss'.sym_mem_labels /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    (!b. ~in_mem_range (w2n off) 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule sym_mstore_scratch_step >>
+  metis_tac[scratch_mem_ok_store, scratch_store_labels_outside]
+QED
+
+Theorem scratch_restore_step_inventory:
+  ss.sym_stack = Val off :: tail /\
+  scratch_mem_ok fn ret slots ss.sym_mem_labels /\
+  FLOOKUP slots (w2n off) = SOME op ==>
+  ?ss' value. sym_mload ss = SymOK ss' /\
+    ss'.sym_stack = value :: tail /\ op_kind_ok fn ret op value /\
+    scratch_mem_ok fn ret slots ss'.sym_mem_labels /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  strip_tac >> drule_all scratch_mem_ok_restore >>
+  metis_tac[sym_mload_scratch_kind]
+QED
+
+Theorem scratch_store_retains_inventory:
+  scratch_mem_ok fn ret inventory labs /\
+  (!old op. FLOOKUP inventory old = SOME op ==>
+    off + 32 <= old \/ old + 32 <= off) ==>
+  scratch_mem_ok fn ret inventory (scratch_store_labels labs off sv)
+Proof
+  simp[scratch_mem_ok_def] >> metis_tac[scratch_store_labels_retains]
+QED
+
+Theorem scratch_two_label_cells_readable[local]:
+  a + 32 <= b ==>
+  mem_label_at
+    (scratch_store_labels (scratch_store_labels labs a (Lab l d))
+      b (Lab other delta)) a = SOME (l,d) /\
+  mem_label_at
+    (scratch_store_labels (scratch_store_labels labs a (Lab l d))
+      b (Lab other delta)) b = SOME (other,delta)
+Proof
+  strip_tac >> rewrite_tac[GSYM mem_sval_at_def] >> conj_tac
+  >- (irule scratch_store_labels_retains >> simp[scratch_store_labels_at]) >>
+  simp[scratch_store_labels_at]
 QED
