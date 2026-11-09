@@ -137,7 +137,12 @@ Proof
   gvs[supported_declaration_header_def, check_toplevel_decl_def,
       lookup_function_def]
   >~ [`if s = name /\ f = External then _ else _`]
-  >- (Cases_on `s = name /\ f = External` >> gvs[] >>
+  >- (Cases_on `s = name /\ f = External` >> gvs[]
+      >- simp[well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
+      first_x_assum irule >> simp[] >> metis_tac[])
+  >~ [`if s = name /\ f = External then _ else _`]
+  >- (Cases_on `s = name /\ f = External` >> gvs[]
+      >- gvs[assignable_type_well_formed] >>
       first_x_assum irule >> simp[] >> metis_tac[])
   >~ [`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _)`]
   >- (Cases_on `vis` >> gvs[lookup_function_def] >>
