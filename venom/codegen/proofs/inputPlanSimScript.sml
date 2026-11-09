@@ -157,7 +157,7 @@ Theorem emit_input_plan_residual_budget_wf:
 Proof
   Induct >- simp[emit_input_plan_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `emit_one_input opc (dfgDefs$operand_vars operands ++ nl) h ps` >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
   rename1 `emit_one_input _ _ _ _ = (step_ops,mid)` >>
   Cases_on `emit_input_plan opc operands nl mid` >>
   rename1 `emit_input_plan opc operands nl mid = (rest_ops,last)` >>
@@ -166,7 +166,7 @@ Proof
      simp[Once emit_input_plan_def, LET_THM]) >> gvs[] >>
   `residual_budget_wf alloc_base (pending ++ [h]) mid` by
     (mp_tac (Q.SPECL [`alloc_base`,`pending`,`opc`,
-       `dfgDefs$operand_vars operands ++ nl`,`h`,`ps`,`step_ops`,`mid`]
+       `operand_vars operands ++ nl`,`h`,`ps`,`step_ops`,`mid`]
        emit_one_input_residual_budget_wf) >>
      (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> simp[]) >>
   first_x_assum (qspecl_then [`pending ++ [h]`,`alloc_base`,`opc`,`nl`,`mid`,

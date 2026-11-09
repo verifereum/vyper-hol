@@ -2321,15 +2321,6 @@ Proof
   fs[EVERY_MEM] >> res_tac >> gvs[sue_count_exempt_def, is_param_opcode_def]
 QED
 
-(* MEM (Var v) ops ==> MEM v (operand_vars ops) — one direction suffices *)
-Triviality mem_var_operand_vars[local]:
-  !ops v. MEM (Var v) ops ==> MEM v (operand_vars ops)
-Proof
-  Induct_on `ops` >> simp[] >> rpt strip_tac >> gvs[] >>
-  simp[Once dfgDefsTheory.operand_vars_def, dfgDefsTheory.operand_var_def] >>
-  Cases_on `h` >> simp[dfgDefsTheory.operand_var_def]
-QED
-
 (* var_use_count summed over blocks = LENGTH of global FILTER *)
 Triviality var_use_count_global[local]:
   !v bbs. SUM (MAP (var_use_count_block v) bbs) =

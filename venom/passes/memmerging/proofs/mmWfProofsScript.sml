@@ -532,8 +532,8 @@ Proof
   Cases_on `ops` >> simp[hard_barrier_has_id] >>
   rename1 `inst.inst_operands = dst_op::val_op::rest` >>
   Cases_on `rest` >> simp[hard_barrier_has_id] >>
-  Cases_on `operand_var_name val_op` >> simp[hard_barrier_has_id] >>
-  rename1 `operand_var_name val_op = SOME var` >>
+  Cases_on `operand_var val_op` >> simp[hard_barrier_has_id] >>
+  rename1 `operand_var val_op = SOME var` >>
   Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_has_id] >>
   Cases_on `FLOOKUP ss.ss_loads var` >> simp[hard_barrier_has_id] >>
   Cases_on `dfg_get_def dfg var` >>
@@ -652,8 +652,8 @@ Proof
   Cases_on `ops` >> simp[hard_barrier_def] >>
   rename1 `inst.inst_operands = dst_op::val_op::rest` >>
   Cases_on `rest` >> simp[hard_barrier_def] >>
-  Cases_on `operand_var_name val_op` >> simp[hard_barrier_def] >>
-  rename1 `operand_var_name val_op = SOME v` >>
+  Cases_on `operand_var val_op` >> simp[hard_barrier_def] >>
+  rename1 `operand_var val_op = SOME v` >>
   Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_def] >>
   Cases_on `FLOOKUP ss.ss_loads v` >> simp[hard_barrier_def] >>
   Cases_on `mode_allows_overlap mode` >>
@@ -1401,8 +1401,8 @@ Proof
   Cases_on `ops` >> simp[hard_barrier_has_id] >>
   rename1 `inst.inst_operands = dst_op::val_op::rest` >>
   Cases_on `rest` >> simp[hard_barrier_has_id] >>
-  Cases_on `operand_var_name val_op` >> simp[hard_barrier_has_id] >>
-  rename1 `operand_var_name val_op = SOME var` >>
+  Cases_on `operand_var val_op` >> simp[hard_barrier_has_id] >>
+  rename1 `operand_var val_op = SOME var` >>
   Cases_on `operand_lit_val dst_op` >> simp[hard_barrier_has_id] >>
   Cases_on `FLOOKUP ss.ss_loads var` >> simp[hard_barrier_has_id] >>
   Cases_on `dfg_get_def dfg var` >>

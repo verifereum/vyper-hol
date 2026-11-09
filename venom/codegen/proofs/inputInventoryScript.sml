@@ -25,13 +25,6 @@ Proof
   simp[operand_inventory_def, REWRITE_RULE [GREATER_DEF] LIST_ELEM_COUNT_MEM]
 QED
 
-Theorem mem_planner_operand_vars:
-  !ops v. MEM v (dfgDefs$operand_vars ops) <=> MEM (Var v) ops
-Proof
-  Induct >> simp[dfgDefsTheory.operand_vars_def] >>
-  rpt gen_tac >> Cases_on `h` >> simp[dfgDefsTheory.operand_var_def]
-QED
-
 Theorem emit_operand_inventory_mono:
   !opc nl op ps ops post x.
     emit_one_input opc nl op ps = (ops,post) ==>
@@ -68,25 +61,25 @@ QED
 Theorem emit_input_head_inventory_inc:
   !opc done rest nl op ps ops post.
     input_inventory_wf done (op::rest) ps /\
-    emit_one_input opc (dfgDefs$operand_vars rest ++ nl) op ps = (ops,post) /\
+    emit_one_input opc (operand_vars rest ++ nl) op ps = (ops,post) /\
     (~is_var_operand op \/ MEM op rest) ==>
     operand_inventory op ps + 1 <= operand_inventory op post
 Proof
   rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`opc`,`dfgDefs$operand_vars rest ++ nl`,`op`,`ps`,`ops`,`post`]
+  mp_tac (Q.SPECL [`opc`,`operand_vars rest ++ nl`,`op`,`ps`,`ops`,`post`]
     emit_operand_inventory_inc) >>
   (impl_tac >- (asm_rewrite_tac [] >> Cases_on `is_var_operand op` >> simp[] >>
     `MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
       (drule_all input_inventory_head_available >> simp[]) >>
     Cases_on `op` >> gvs[is_var_operand_def] >> rename1 `Var v` >>
-    asm_simp_tac (srw_ss()) [mem_planner_operand_vars])) >>
+    asm_simp_tac (srw_ss()) [MEM_operand_vars_eq_Var])) >>
   simp_tac bool_ss []
 QED
 
 Theorem emit_input_inventory_step:
   !opc done rest nl op ps ops post.
     input_inventory_wf done (op::rest) ps /\
-    emit_one_input opc (dfgDefs$operand_vars rest ++ nl) op ps = (ops,post) ==>
+    emit_one_input opc (operand_vars rest ++ nl) op ps = (ops,post) ==>
     input_inventory_wf (done ++ [op]) rest post
 Proof
   rpt gen_tac >> strip_tac >> simp[input_inventory_wf_def] >> gen_tac >>
@@ -116,7 +109,7 @@ Theorem emit_input_plan_inventory:
 Proof
   Induct >- simp[emit_input_plan_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `emit_one_input opc (dfgDefs$operand_vars pending ++ nl) h ps` >>
+  Cases_on `emit_one_input opc (operand_vars pending ++ nl) h ps` >>
   rename1 `emit_one_input _ _ _ _ = (step_ops,mid)` >>
   Cases_on `emit_input_plan opc pending nl mid` >>
   rename1 `emit_input_plan opc pending nl mid = (rest_ops,last)` >>
