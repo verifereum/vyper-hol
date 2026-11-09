@@ -718,3 +718,88 @@ Proof
   ho_match_mp_tac abi_args_entry_safe_stack_val >>
   metis_tac[abi_args_entry_acc_safe]
 QED
+
+Theorem abi_args_entry_acc_emitted:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)) ==>
+  !ce e item a x b. compile_acc cfn ce e item a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 3 gen_tac >>
+  Cases_on `item = Address`
+  >- (gvs[compile_acc_def] >> metis_tac[abi_args_entry_lower_value_emitted]) >>
+  Cases_on `item = Code`
+  >- (gvs[compile_acc_def, LET_THM] >> rpt gen_tac >>
+      Cases_on `emit_inst INVALID [] [] a` >> simp[] >>
+      strip_tac >> gvs[] >> conj_tac
+      >- metis_tac[fragExecTheory.cs_extends_emit_inst] >>
+      strip_tac >> irule abi_args_entry_emit_inst >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `item` >> gvs[compile_acc_def, LET_THM] >> (
+    ho_match_mp_tac abi_args_entry_emitted_pair_prefix >> conj_tac
+    >- metis_tac[abi_args_entry_lower_value_emitted] >>
+    rpt gen_tac >>
+    rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+    imp_res_tac abi_args_entry_acc_ops >>
+    gvs[] >> metis_tac[cs_extends_trans])
+QED
+
+Theorem abi_args_entry_builtin_acc_emitted:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)) ==>
+  !ce rt ty es item a vv b.
+    compile_builtin_dispatch_body cfn ce rt ty (Acc item) es a = (vv,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 5 gen_tac >>
+  simp[compile_builtin_dispatch_body_def] >>
+  ho_match_mp_tac abi_args_entry_stack_val >>
+  metis_tac[abi_args_entry_acc_emitted]
+QED
+
+Theorem abi_args_entry_concat_extends:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !es ce dp infos off a.
+    cs_extends a (SND (compile_concat cfn ce es dp infos off a))
+Proof
+  strip_tac >> Induct >> rpt gen_tac
+  >- simp[compile_concat_def, comp_return_def, cs_extends_refl] >>
+  Cases_on `infos`
+  >- simp[compile_concat_def, comp_return_def, cs_extends_refl] >>
+  rename1 `compile_concat cfn ce _ dp (info::rest) off` >> PairCases_on `info` >>
+  simp[compile_concat_def] >> Cases_on `info0` >> simp[] >>
+  rpt (FIRST [irule abi_args_entry_extends_bind,
+              irule abi_args_entry_extends_ignore_bind] >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[emit_op_labels, emit_void_labels] >>
+  qmatch_goalsub_abbrev_tac `SND res` >> Cases_on `res` >>
+  gvs[markerTheory.Abbrev_def] >> metis_tac[abi_args_entry_lower_value]
+QED
+
+Theorem abi_args_entry_builtin_concat:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce rt ty es n a vv b.
+    compile_builtin_dispatch_body cfn ce rt ty (Concat n) es a = (vv,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 5 gen_tac >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  ho_match_mp_tac abi_args_entry_emitted_pair_prefix >> conj_tac
+  >- metis_tac[abi_args_entry_alloc_buffer] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  imp_res_tac abi_args_entry_acc_ops >>
+  imp_res_tac abi_args_entry_emit_void >>
+  drule abi_args_entry_concat_extends >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `compile_concat cfn ce es data_ptr infos` >>
+  first_x_assum (qspecl_then [`es`, `ce`, `data_ptr`, `infos`,
+                            `off_alloc.buf_operand`, `st3b`] assume_tac) >>
+  drule abi_args_entry_alloc_buffer >> strip_tac >>
+  gvs[] >> metis_tac[cs_extends_trans]
+QED
