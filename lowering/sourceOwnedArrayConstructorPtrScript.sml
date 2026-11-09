@@ -2,7 +2,7 @@
 Theory sourceOwnedArrayConstructorPtr
 Ancestors
   sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence
-  actualAllocaReplayPtr actualDecoderAllocationPtr actualAllocExec
+  actualAllocaReplayPtr actualDecoderAllocationPtr actualAllocExec vyperCompiler allocaFrontierBound
   calldataDynInit calldataDynOwned abiDecoderRecursiveArray abiDecoderRecursiveLoopLayout
   abiDecoderArrayInit abiDecoderArrayInitExec abiDecoderArrayLoopInit abiDecoderIndexInit
   abiDecoderReentry abiDecoderFrame abiDecoderFrameCompose
@@ -216,3 +216,144 @@ Proof
      metis_tac[abi_decoder_operand_live_mono]) >>
   qexists_tac `actual` >> gvs[]
 QED
+
+(* Obtain the physical initializer state from actual-site resources, including
+   replay.  The owner is outside the whole decoder's scratch interval. *)
+Theorem source_array_init_owned_sequence:
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+    ((ip,cnt),loop_st) /\
+  abi_decode_index_init index_st = (ip,loop_st) /\
+  (!ins. MEM ins (emitted_insts index_st loop_st) ==> MEM ins (fn_insts fn)) /\
+  st.cs_next_id <= index_st.cs_next_id /\ index_st.cs_next_id < last.cs_next_id /\
+  loop_st.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  eval_operand src s = SOME (n2w cdsbase) /\ eval_operand dst s = SOME (n2w d) /\
+  abi_decode_load CALLDATALOAD (n2w cdsbase:bytes32) s = n2w n /\
+  n <= maxn /\ maxn < dimword (:256) /\
+  alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  unit_alloca_budget ctx < dimword (:256) /\
+  FLOOKUP s.vs_allocas oid = SOME (base_addr,owner_cap) /\
+  (oid < st.cs_next_id \/ last.cs_next_id <= oid) /\
+  base_addr <= d /\ d+32 <= base_addr+owner_cap /\
+  (!id p k. st.cs_next_id <= id /\ id < last.cs_next_id /\
+    FLOOKUP s.vs_allocas id = SOME (p,k) ==>
+    k = 32 /\ p < dimword (:256) /\ p+32 <= s.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) ==>
+  ?t p.
+    run_inst_seq (emitted_insts st loop_st) s = OK t /\
+    eval_operand ip t = SOME (n2w p) /\ eval_operand cnt t = SOME (n2w n) /\
+    mload p t = 0w /\ mem_word_at d t.vs_memory = n2w n /\
+    fresh_vars_wrt limit t /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op s) /\
+    abi_decode_footprint_frame [(d,32);(p,32)] s t /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+    s.vs_alloca_next <= t.vs_alloca_next /\
+    FLOOKUP t.vs_allocas oid = SOME (base_addr,owner_cap) /\
+    FLOOKUP t.vs_allocas index_st.cs_next_id = SOME (p,32) /\
+    p+32 < dimword (:256) /\
+    (p+32 <= base_addr \/ base_addr+owner_cap <= p) /\
+    (!id b k. FLOOKUP s.vs_allocas id = SOME (b,k) ==>
+      FLOOKUP t.vs_allocas id = SOME (b,k)) /\
+    (!id. id <> index_st.cs_next_id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    t.vs_halted = s.vs_halted /\ inst_extends st loop_st
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule actual_index_init_literal_site >> strip_tac >>
+  `MEM inst (fn_insts fn)` by metis_tac[] >>
+  `alloca_size inst = 32` by
+    (qpat_assum `inst.inst_operands = _` mp_tac >>
+     qpat_assum `inst.inst_opcode = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     simp[alloca_size_def, dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  `!entry. FLOOKUP s.vs_allocas inst.inst_id = SOME entry ==>
+    ?p. entry = (p,32) /\ p+32 <= s.vs_alloca_next` by
+    (rpt strip_tac >> PairCases_on `entry` >>
+     qpat_x_assum `!id p k. _` (qspecl_then [`inst.inst_id`,`entry0`,`entry1`] mp_tac) >>
+     impl_tac >- metis_tac[] >> simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  drule_all actual_word_alloca_physical_credit >> disch_tac >>
+  `index_st.cs_next_id = loop_st.cs_next_id-2` by
+    (drule abi_decode_index_init_shape >> strip_tac >> decide_tac) >>
+  `oid <> index_st.cs_next_id` by decide_tac >>
+  suspend "physical_run"
+QED
+
+Resume source_array_init_owned_sequence[physical_run]:
+  `s.vs_alloca_next < dimword (:256)` by
+    (drule alloca_frontier_inv_bound >> decide_tac) >>
+  `base_addr+owner_cap <= s.vs_alloca_next` by
+    (qpat_assum `alloca_inv s` mp_tac >>
+     qpat_assum `FLOOKUP s.vs_allocas oid = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp_tac bool_ss [alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `?p. ((FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) = NONE /\
+       p = s.vs_alloca_next /\ p+32 < dimword (:256)) \/
+      (FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) = SOME (p,32) /\
+       p+32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword (:256))) /\
+    p+32 < dimword (:256) /\
+    (p+32 <= base_addr \/ base_addr+owner_cap <= p)` by
+    (qpat_x_assum `(_ /\ _) \/ (?p. _)` strip_assume_tac
+     >- (qexists_tac `s.vs_alloca_next` >>
+         simp_tac (srw_ss()) [] >> metis_tac[]) >>
+     qexists_tac `p` >>
+     `p+32 <= base_addr \/ base_addr+owner_cap <= p` by
+       (qpat_assum `alloca_inv s` mp_tac >>
+        qpat_assum `FLOOKUP s.vs_allocas oid = _` mp_tac >>
+        qpat_assum `FLOOKUP s.vs_allocas inst.inst_id = _` mp_tac >>
+        qpat_assum `oid <> index_st.cs_next_id` mp_tac >>
+        qpat_assum `inst.inst_id = _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp_tac bool_ss [alloca_inv_def, allocas_non_overlapping_def] >> metis_tac[]) >>
+     simp_tac (srw_ss()) [] >> metis_tac[LESS_EQ_LESS_TRANS]) >>
+  pop_assum strip_assume_tac >>
+  `d < dimword (:256) /\ (d+32 <= p \/ p+32 <= d)` by decide_tac >>
+  mp_tac (Q.INST [`p` |-> `p`, `limit` |-> `limit`, `s` |-> `s`, `setup` |-> `(ip,cnt)`]
+    calldata_array_loop_init_repeat_physical_sequence) >>
+  (impl_tac >- (asm_simp_tac bool_ss [] >> metis_tac[])) >>
+  strip_tac >>
+  `((FLOOKUP s.vs_allocas index_st.cs_next_id = NONE /\ p = s.vs_alloca_next) \/
+    (FLOOKUP s.vs_allocas index_st.cs_next_id = SOME (p,32) /\
+     p < dimword (:256) /\ p+32 <= s.vs_alloca_next))` by
+    (asm_simp_tac bool_ss [] >> metis_tac[LESS_EQ_LESS_TRANS, DECIDE ``p <= p+32``]) >>
+  `FLOOKUP t.vs_allocas index_st.cs_next_id = SOME (p,32) /\
+    (!id. id <> index_st.cs_next_id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    (if FLOOKUP s.vs_allocas index_st.cs_next_id = NONE then
+      t.vs_alloca_next = s.vs_alloca_next+32 else
+      t.vs_alloca_next = s.vs_alloca_next)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`index_st.cs_next_id = _`,
+        `FLOOKUP t.vs_allocas (loop_st.cs_next_id-2) = _`,
+        `!id. id <> loop_st.cs_next_id-2 ==> _`, `t.vs_alloca_next = _`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     gvs[] >> Cases_on `FLOOKUP s.vs_allocas (loop_st.cs_next_id-2) = NONE` >> simp[]) >>
+  mp_tac (Q.INST [`st` |-> `index_st`, `st'` |-> `loop_st`, `p` |-> `p`, `t` |-> `t`]
+    calldata_index_init_owned_fields) >>
+  (impl_tac >- (asm_simp_tac bool_ss [] >> metis_tac[])) >> strip_tac >>
+  qexistsl_tac [`t`,`p`] >>
+  map_every (fn pat => qpat_assum pat mp_tac)
+    [`run_inst_seq (emitted_insts st loop_st) s = OK t`,
+     `eval_operand (FST (ip,cnt)) t = _`, `eval_operand (SND (ip,cnt)) t = _`,
+     `mload p t = _`, `mem_word_at d t.vs_memory = _`, `fresh_vars_wrt limit t`,
+     `!op. abi_decoder_operand_live st.cs_next_var op ==> _`,
+     `abi_decode_footprint_frame [(d,32);(p,32)] s t`,
+     `alloca_inv t`, `alloca_frontier_inv ctx fn site t`,
+     `s.vs_alloca_next <= t.vs_alloca_next`,
+     `FLOOKUP s.vs_allocas oid = _`, `oid <> index_st.cs_next_id`,
+     `!id b cap. FLOOKUP s.vs_allocas id = SOME (b,cap) ==> FLOOKUP t.vs_allocas id = _`,
+     `FLOOKUP t.vs_allocas index_st.cs_next_id = _`,
+     `p+32 < dimword (:256)`,
+     `!id. id <> index_st.cs_next_id ==> _`,
+     `t.vs_halted = s.vs_halted`, `inst_extends st loop_st`] >>
+  (Q.SUBGOAL_THEN `p+32 <= base_addr \/ base_addr+owner_cap <= p` mp_tac
+    >- metis_tac[]) >>
+  POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+  rule_assum_tac (PURE_REWRITE_RULE [pairTheory.FST, pairTheory.SND]) >>
+  asm_simp_tac bool_ss [] >> metis_tac[]
+QED
+
+Finalise source_array_init_owned_sequence
