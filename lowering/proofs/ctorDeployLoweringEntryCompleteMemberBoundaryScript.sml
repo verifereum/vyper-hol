@@ -19,7 +19,7 @@ Ancestors
  exprLoweringProps venomExecSemantics venomState venomInst words list arithmetic
 
 Theorem deploy_ctor_member_setup_complete_frame_fragment:
-  abi_decode_member_setup dst src DLOAD hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi dyn ao vo st = (ops,st') /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\
@@ -122,7 +122,7 @@ Theorem deploy_ctor_member_setup_complete_frame:
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))) (ListV (preavs ++ av::avs)) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs))) < dimword (:256) /\
-  abi_decode_member_setup dst src DLOAD hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = (ops,middle) /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -171,7 +171,7 @@ Theorem deploy_ctor_member_setup_complete_frame_narrow:
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))) (ListV (preavs ++ av::avs)) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs))) < dimword (:256) /\
-  abi_decode_member_setup dst src DLOAD hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = (ops,middle) /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\

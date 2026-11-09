@@ -948,7 +948,7 @@ Proof
 QED
 
 Theorem ctor_checked_array_source_setup_mem_ok:
-  abi_decode_array_source_setup ip src DLOAD hi asz st = (ops,st') /\
+  abi_decode_array_source_setup ip src DLOAD (Lit 0w) hi asz st = (ops,st') /\
   eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
   slot+32 <= s.vs_alloca_next /\ mload slot s = n2w idx /\
   eval_operand src s = SOME (n2w sb) /\

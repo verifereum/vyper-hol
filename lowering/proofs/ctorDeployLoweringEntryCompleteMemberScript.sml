@@ -296,7 +296,7 @@ Theorem deploy_ctor_members_cons_layout:
   (st.cs_blocks = final.cs_blocks \/ !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\ frag_ids st final SUBSET ids ==>
   ?ops middle end_st.
-  abi_decode_member_setup dst src DLOAD hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) DLOAD (Lit 0w) hi

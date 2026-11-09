@@ -190,7 +190,7 @@ Proof
 QED
 
 Theorem ctor_member_setup_mem_ok:
-  abi_decode_member_setup dst src DLOAD hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi dyn ao vo st = (ops,st') /\
   eval_operand src s = SOME (n2w sb) /\
   (dyn ==> sb + ao < dimword (:256) /\
            sb + ao + 32 <= LENGTH s.vs_data_section) ==>
@@ -210,7 +210,7 @@ Proof
 QED
 
 Theorem ctor_checked_member_setup_labels_fragment:
-  abi_decode_member_setup dst src DLOAD hi dyn ao vo st = (ops,st') /\
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi dyn ao vo st = (ops,st') /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb + ao) : bytes32) initial = n2w payload_off /\
     sb + payload_off < dimword (:256) /\ sb + ao < dimword (:256) /\
@@ -270,7 +270,7 @@ Theorem ctor_checked_member_setup_labels_narrow:
     (ListV (preavs ++ av::avs))) < dimword (:256) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs))) <= LENGTH initial.vs_data_section /\
-  abi_decode_member_setup dst src DLOAD hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
+  abi_decode_member_setup dst src DLOAD (Lit 0w) hi (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = (ops,middle) /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
