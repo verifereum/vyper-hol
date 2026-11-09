@@ -508,6 +508,76 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem sym_kinds_ok_swap:
+  !cp fn ret srest ps ss k base.
+    sym_kinds_ok cp fn ret srest ps ss /\ 0 < k /\ k < LENGTH ps.ps_stack ==>
+    sym_kinds_ok cp fn ret srest
+      (ps with ps_stack := stack_swap k ps.ps_stack)
+      (ss with <|sym_base := base;
+        sym_stack := LUPDATE (HD ss.sym_stack) k
+          (LUPDATE (EL k ss.sym_stack) 0 ss.sym_stack)|>)
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac >>
+  drule LIST_REL_LENGTH >> simp[] >> strip_tac >>
+  qexists_tac `LUPDATE (HD top) k (LUPDATE (EL k top) 0 top)` >>
+  `0 < LENGTH top /\ k < LENGTH top` by simp[] >>
+  `HD (top ++ srest) = HD top` by (Cases_on `top` >> gvs[]) >>
+  simp[lupdate_append, EL_APPEND_EQN, planWfTheory.reverse_stack_swap] >>
+  `LUPDATE (EL k (REVERSE ps.ps_stack)) 0
+     (LUPDATE (EL 0 (REVERSE ps.ps_stack)) k (REVERSE ps.ps_stack)) =
+   LUPDATE (HD (REVERSE ps.ps_stack)) k
+     (LUPDATE (EL k (REVERSE ps.ps_stack)) 0 (REVERSE ps.ps_stack))` by
+    simp[LUPDATE_commutes, EL] >>
+  gvs[asmSymBridgeTheory.LIST_REL_swap]
+QED
+
+Theorem sym_prefix_swap:
+  !cp fn ret srest ps ss initial_fmp lo p env k.
+    0 < k /\ k <= 16 /\ k < LENGTH ps.ps_stack /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOSwap k)) ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SOSwap k) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def] >>
+  rpt strip_tac >>
+  `k < LENGTH ss.sym_stack` by
+    (gvs[sym_kinds_ok_def] >> drule LIST_REL_LENGTH >> simp[]) >>
+  `ALOOKUP swap_table (swap_name k) = SOME k` by
+    (irule stackOpSimTheory.swap_table_lookup >> simp[]) >>
+  drule_all sym_steps_swap >> simp[asm_next_def] >> strip_tac >>
+  irule sym_kinds_ok_swap >> simp[]
+QED
+
+Theorem sym_prefix_push_var:
+  !cp fn ret srest ps ss initial_fmp lo p env x.
+    sym_kinds_ok cp fn ret srest ps ss ==>
+    ?ss'. sym_steps p env (LENGTH (exec_stack_op initial_fmp (SOPush (Var x)))) ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SOPush (Var x)) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (exec_stack_op initial_fmp (SOPush (Var x))) /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def,
+       codegenSymRelTheory.sym_steps_def]
+QED
+
+Theorem sym_prefix_poke:
+  !cp fn ret srest ps ss initial_fmp lo p env n op.
+    sym_kinds_ok cp fn ret srest ps ss ==>
+    ?ss'. sym_steps p env (LENGTH (exec_stack_op initial_fmp (SOPoke n op))) ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SOPoke n op) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (exec_stack_op initial_fmp (SOPoke n op)) /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def,
+       codegenSymRelTheory.sym_steps_def]
+QED
+
 (* A prefix of planner ops with no SOPushOfst (codegen emits one only for
    OFFSET, which unit_shape_ok excludes), whose spills write inside the
    byte set R and the context's spill regions, steps symbolically to the
