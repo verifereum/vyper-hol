@@ -40,7 +40,8 @@ Theorem tuple_place_compiler_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
-      FLOOKUP t.vs_allocas id = SOME entry)
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `stmt_state_rel ctx func cenv cx ee s /\

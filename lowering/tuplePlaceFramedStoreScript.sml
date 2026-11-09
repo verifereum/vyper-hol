@@ -35,7 +35,10 @@ Theorem tuple_place_word_run_frame:
                  FLOOKUP t.vs_allocas aid = SOME b) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory
+        mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory /\
+        (!off sz. (loc = LocMemory ==>
+           off+sz <= w2n w \/ w2n w+type_memory_size dtv <= off) ==>
+           mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `eval_operand op s = SOME (typed_val_to_w256 dtv v)` by
@@ -77,6 +80,14 @@ Proof
     (Cases_on `loc = LocMemory`
      >- (gvs[Abbr `u`] >> irule mstore_mem_bytes_at_disjoint >>
          drule_all abi_word_type_size >> simp[]) >>
+     gvs[Abbr `u`, sstore_def, tstore_def]) >>
+  `!off sz. (loc = LocMemory ==>
+     off+sz <= w2n w \/ w2n w+type_memory_size dtv <= off) ==>
+     mem_bytes_at off sz u.vs_memory = mem_bytes_at off sz s.vs_memory` by
+    (Cases_on `loc = LocMemory`
+     >- (gvs[Abbr `u`] >> rpt gen_tac >> disch_tac >>
+         irule mstore_mem_bytes_at_disjoint >>
+         drule_all abi_word_type_size >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
      gvs[Abbr `u`, sstore_def, tstore_def]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
   fs[stmt_state_rel_inst_idx, lookup_var_def]

@@ -18,6 +18,59 @@ Proof
   strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >> metis_tac[]
 QED
 
+(* Convert the store runners' protected-allocation byte frame into the
+   statement frame, without choosing another execution endpoint. *)
+Theorem tuple_place_store_alloca_frame:
+  stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+  MAP FDOM ee.scopes = MAP FDOM ff.scopes /\
+  place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  write_place cx p v ee = (INL (),ff) /\
+  (!id path entry t0. p = MemoryPlace id path /\
+    lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
+    evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  (!aid off sz. aid < sa.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
+    (loc = LocMemory ==> off+sz <= w2n w \/ w2n w+type_memory_size dtv <= off) ==>
+    mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory) ==>
+  alloca_frame cenv ee sa s cenv ff t
+Proof
+  strip_tac >>
+  `!n b sz. local_region cenv ff.scopes t n b sz <=>
+             local_region cenv ee.scopes s n b sz` by
+    (irule tuple_place_endpoint_local_regions_some >> metis_tac[]) >>
+  rewrite_tac[stmtSimDefsTheory.alloca_frame_def] >> rpt strip_tac
+  >- (qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ _ = _` irule >>
+      simp[] >> conj_tac >- (qexists `aid` >> simp[]) >> strip_tac >> gvs[] >>
+      drule_all placeMemoryLiveRegionTheory.memory_place_live_region >> strip_tac >>
+      `off + sz <= b \/ b + len <= off` by metis_tac[] >> decide_tac) >>
+  metis_tac[]
+QED
+
+Theorem tuple_place_pointer_store_alloca_frame:
+  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  supported_target_pure tops bt /\ eval_base_place cx bt es = (res,ee) /\
+  target_post ctx func cenv cx es sp sa s0 ee pv vt r s /\
+  compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
+  alloca_frame cenv ee sa s cenv ff t ==>
+  alloca_frame cenv es sp s0 cenv ff t
+Proof
+  strip_tac >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule_all tuplePlaceBorrowTheory.tuple_place_pure_target_scopes >> simp[]) >>
+  `alloca_frame cenv es sp s0 cenv ee s` by
+    (irule stmtSimDefsTheory.target_post_alloca_frame >>
+     fs[tuplePlaceHeadTheory.tuple_place_head_def] >> metis_tac[]) >>
+  `ci_mono sp sa` by
+    (qspec_then `bt` mp_tac stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     disch_then (qspecl_then [`cenv`, `sp`] mp_tac) >> simp[]) >>
+  irule stmtSimDefsTheory.alloca_frame_trans >>
+  qpat_assum `alloca_frame _ _ _ _ _ ff t` (irule_at Any) >>
+  qpat_assum `alloca_frame _ _ _ _ _ ee s` (irule_at Any) >>
+  fs[exprLoweringPropsTheory.ci_mono_def, loweringPostsTheory.target_post_def]
+QED
+
 Theorem tuple_place_head_advance_some:
   tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s /\
   i < LENGTH ltys /\ sp.cs_next_var <= sb.cs_next_var /\
@@ -130,11 +183,19 @@ Theorem tuple_place_equal_storage_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys tys tvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-      FLOOKUP t.vs_allocas aid = SOME entry)
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all tuplePlaceBranchReadyTheory.tuple_place_pointer_equal_storage_store >>
-  strip_tac >> qexists `t` >> simp[] >>
+  strip_tac >>
+  `alloca_frame cenv ee sa s cenv ff t` by
+    (irule stmtSimDefsTheory.alloca_frame_of_mem_frame >>
+     qpat_assum `stmt_state_rel _ _ _ _ ee s` (irule_at Any) >>
+     simp[] >> metis_tac[vyperScopePreservationTheory.write_place_scopes_dom]) >>
+  `alloca_frame cenv es sp s0 cenv ff t` by
+    (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
+  qexists `t` >> simp[] >>
   `ci_mono sa sb` by
     (metis_tac[cj 1 stmtLoweringMonoTheory.ci_mono_stmt_helpers, pairTheory.SND]) >>
   irule tuple_place_pointer_head_advance >>
@@ -262,10 +323,23 @@ Theorem tuple_place_word_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-      FLOOKUP t.vs_allocas aid = SOME entry)
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   strip_tac >>
   drule_all tuplePlaceBranchReadyTheory.tuple_place_pointer_word_store >> strip_tac >>
+  `alloca_frame cenv ee sa s cenv ff t` by
+    (irule tuple_place_store_alloca_frame >>
+     qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     `MAP FDOM ee.scopes = MAP FDOM ff.scopes` by
+       metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+     drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
+     drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
+     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `alloca_frame cenv es sp s0 cenv ff t` by
+    (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
   qexists `t` >> simp[] >>
   `ci_mono sa sb` by
     (metis_tac[exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND]) >>
@@ -357,12 +431,26 @@ Theorem tuple_place_equal_memory_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys tys tvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-      FLOOKUP t.vs_allocas aid = SOME entry)
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   strip_tac >>
   `0 < type_memory_size (EL i tvs)` by
     (drule_all tuplePlaceZeroTheory.tuple_place_element_source_positive >> simp[]) >>
   drule_all tuplePlaceBranchReadyTheory.tuple_place_pointer_equal_memory_store >> strip_tac >>
+  `alloca_frame cenv ee sa s cenv ff t` by
+    (irule tuple_place_store_alloca_frame >>
+     qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
+     drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
+     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     conj_tac >- metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+     rpt strip_tac >>
+     qpat_x_assum `!aid b len a n. _` irule >> simp[] >>
+     qexists `aid` >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `alloca_frame cenv es sp s0 cenv ff t` by
+    (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
   qexists `t` >> simp[] >>
   `w2n w + type_memory_size_list tvs <= w2n dw \/
    w2n dw + type_memory_size (EL i tvs) <= w2n w` by
@@ -425,10 +513,24 @@ Theorem tuple_place_owned_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
-      FLOOKUP t.vs_allocas id = SOME entry)
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all tuplePlaceBranchReadyTheory.tuple_place_pointer_owned_store >> strip_tac >>
+  `alloca_frame cenv ee sa s cenv ff t` by
+    (irule tuple_place_store_alloca_frame >>
+     qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
+     drule_all tuplePlacePointerReadyTheory.tuple_place_pointer_source_facts >> strip_tac >>
+     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     conj_tac >- metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+     rpt strip_tac >>
+     qpat_x_assum `!id lb len a n dtv. _` irule >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `alloca_frame cenv es sp s0 cenv ff t` by
+    (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
   qexists `t` >> simp[] >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
   `evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs)` by metis_tac[] >>
@@ -483,7 +585,8 @@ Theorem tuple_place_allword_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-      FLOOKUP t.vs_allocas aid = SOME entry)
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   strip_tac >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>
@@ -504,7 +607,26 @@ Proof
         listTheory.LIST_REL_EL_EQN] >>
      qpat_x_assum `!n. _ ==> value_has_type _ _` (qspec_then `i` mp_tac) >> simp[]) >>
   `expr_val_rel cx (EL i tys) (EL i vs) (EL i elems) s` by metis_tac[] >>
-  drule_all placeStoreTheory.place_store_word_run >> strip_tac >>
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\
+    stmt_state_rel ctx func cenv cx ff t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!off sz. (loc = LocMemory ==> off+sz <= w2n dw \/
+      w2n dw+type_memory_size (EL i tvs) <= off) ==>
+      mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory)` by
+    (drule_all (SRULE [] (Q.SPECL [`0`, `0`]
+       (Q.GENL [`a`, `n`] (SPEC_ALL tuplePlaceFramedStoreTheory.tuple_place_word_run_frame)))) >>
+     strip_tac >> qexists `t` >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `alloca_frame cenv ee sa s cenv ff t` by
+    (irule tuple_place_store_alloca_frame >>
+     qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     qexistsl [`func`, `EL i tvs`, `ctx`] >> simp[] >>
+     metis_tac[vyperScopePreservationTheory.write_place_scopes_dom]) >>
+  `alloca_frame cenv es sp s0 cenv ff t` by
+    (irule tuple_place_pointer_store_alloca_frame >> metis_tac[]) >>
   qexists `t` >> simp[] >>
   `ci_mono sa sb` by
     (metis_tac[exprLoweringPropsTheory.ci_mono_emit_void, pairTheory.SND]) >>
@@ -553,7 +675,8 @@ Theorem tuple_place_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
-      FLOOKUP t.vs_allocas id = SOME entry)
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all tuplePlacePointerReadyTheory.tuple_place_index_fit >> strip_tac >>

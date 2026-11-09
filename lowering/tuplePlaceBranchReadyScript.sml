@@ -33,7 +33,10 @@ Theorem tuple_place_pointer_word_store:
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     mem_bytes_at (w2n w) (type_memory_size_list ltvs) t.vs_memory =
-    mem_bytes_at (w2n w) (type_memory_size_list ltvs) s.vs_memory
+    mem_bytes_at (w2n w) (type_memory_size_list ltvs) s.vs_memory /\
+    (!off sz. (loc = LocMemory ==>
+      off+sz <= w2n dw \/ w2n dw+type_memory_size (EL i tvs) <= off) ==>
+      mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s.vs_memory)
 Proof
   strip_tac >>
   drule_all tuplePlaceSourceTheory.tuple_place_type_facts >> strip_tac >>

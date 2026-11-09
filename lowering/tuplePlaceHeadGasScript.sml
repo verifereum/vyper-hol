@@ -131,7 +131,8 @@ Theorem tuple_place_marked_head_step:
     tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
-      FLOOKUP t.vs_allocas id = SOME entry)
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    alloca_frame cenv es sp s0 cenv ff t
 Proof
   strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_marked_exec _ _ _ (es,s0) marks _ _ _` >>
@@ -168,12 +169,19 @@ Proof
     sp sa s0 (mid with gas_obs := []) (PlaceR p) (Type (EL i tys)) r s` by
     (fs[loweringPostsTheory.target_post_def, loweringPostsTheory.locals_kept_def,
         loweringPostsTheory.popped_kept_def] >> metis_tac[]) >>
-  simp[] >> irule tuple_place_compiler_head_step >>
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\
+    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
+      FLOOKUP t.vs_allocas id = SOME entry) /\
+    alloca_frame cenv (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
+      sp s0 cenv ff t` suffices_by
+    (strip_tac >> qexists `t` >> gvs[stmtSimDefsTheory.alloca_frame_gas_obs]) >>
+  irule tuple_place_compiler_head_step >>
   qpat_assum `eval_base_place _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_get_target_ptr _ _ _ _ = _` (irule_at Any) >>
   simp[] >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[]
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem tuple_place_write_gas_prefix:
