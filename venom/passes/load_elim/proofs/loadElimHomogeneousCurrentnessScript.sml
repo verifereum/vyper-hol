@@ -5,7 +5,7 @@ Ancestors
   loadElimTransferProvenance loadElimOccurrence loadElimDefs
   loadElimPopulation loadElimOccurrenceCoverage loadElimOperationalHistory analysisSimProofsBase
   loadElimLatestRead loadElimKeyRead loadElimKeyShapeInvariant loadElimConfiguredGeneration
-  loadElimGenerationSound loadElimOccurrenceRead dfgCorrectnessProof venomExecProps words pred_set
+  loadElimAbsoluteKey loadElimGenerationSound loadElimOccurrenceRead dfgCorrectnessProof venomExecProps words pred_set
   dfAnalyzeDefs cfgDefs cfgAnalysisProps venomWf venomExecProofs venomInstProps
   sccpCorrectnessProofs simplifyCfgPhiSemantics simplifyCfgPhiRepair
   simplifyCfgStruct finite_map list rich_list
@@ -247,3 +247,152 @@ Proof
   metis_tac[le_phi_read_occ_after]
 QED
 
+
+Theorem le_occ_prefix_homogeneous_current:
+  le_occ_prefix C fn s0 es i s /\
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  (!bb n fuel u t. MEM (StepOcc bb n fuel u t) es ==>
+    dfg_assigns_sound ctx.lctx_dfg u /\ dfg_assigns_sound ctx.lctx_dfg t) /\
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME vs /\
+  vs <> [] /\ EVERY (\op. normalize_operand ctx.lctx_dfg [] op = r) vs ==>
+  le_key_read ctx.lctx_addr_space key s = eval_operand r s
+Proof
+  strip_tac >> drule_all le_occ_prefix_homogeneous_suffix >> strip_tac >>
+  qpat_x_assum `es = _` SUBST_ALL_TAC >>
+  `MEM (StepOcc bb n fuel u t) (pre ++ StepOcc bb n fuel u t::suffix)` by simp[] >>
+  `le_occ_valid C fn (StepOcc bb n fuel u t)` by metis_tac[le_occ_prefix_member] >>
+  `MEM bb fn.fn_blocks /\ n < LENGTH bb.bb_instructions` by
+    (fs[le_occ_valid_def] >> metis_tac[lookup_block_MEM]) >>
+  `(!v. key = LK_Op (Var v) ==> ~MEM v (EL n bb.bb_instructions).inst_outputs)` by
+    (rpt strip_tac >> gvs[] >> drule_all le_generator_key_output_separate >> simp[]) >>
+  `le_absolute_key ctx.lctx_addr_space key` by metis_tac[le_generated_key_absolute] >>
+  `step_inst fuel C (EL n bb.bb_instructions) u = OK t` by fs[le_occ_valid_def] >>
+  `dfg_assigns_sound ctx.lctx_dfg u /\ dfg_assigns_sound ctx.lctx_dfg t` by metis_tac[] >>
+  `le_key_read ctx.lctx_addr_space key t = eval_operand op t` by
+    (irule le_configured_generation_read >> simp[] >> metis_tac[]) >>
+  `eval_operand op t = eval_operand r t` by metis_tac[normalize_operand_eval_proof] >>
+  drule_all le_configured_generation_address >> strip_tac >>
+  `!v. key = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
+    suspend "key" >>
+  `le_key_address ctx.lctx_addr_space key s = le_key_address ctx.lctx_addr_space key t` by
+    (drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]) >>
+  `le_read_address ctx.lctx_addr_space a s = le_read_address ctx.lctx_addr_space a t` by
+    suspend "read" >>
+  `eval_operand r s = eval_operand r t` by suspend "operand" >>
+  gvs[le_key_read_def]
+QED
+
+Resume le_occ_prefix_homogeneous_current[key]:
+  rpt gen_tac >> disch_tac >> simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+  irule le_present_occ_key_no_write >>
+  qexistsl [`C`, `ctx`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `s`, `s0`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[EVERY_MEM, le_homogeneous_step_presence]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[EVERY_MEM, le_homogeneous_phi_presence]
+QED
+
+Resume le_occ_prefix_homogeneous_current[read]:
+  `le_occ_chain (le_occ_after (StepOcc bb n fuel u t)) suffix s` by
+    (drule le_occ_prefix_chain >> simp[le_occ_chain_append, le_occ_chain_def] >> metis_tac[]) >>
+  `EVERY (le_occ_valid C fn) suffix` by
+    (drule le_occ_prefix_valid >> simp[]) >>
+  `EVERY (\q. !a. le_key_address ctx.lctx_addr_space key (le_occ_pre q) = SOME a /\
+    a < dimword (:256) ==>
+    le_read_address ctx.lctx_addr_space a (le_occ_after q) =
+    le_read_address ctx.lctx_addr_space a (le_occ_pre q)) suffix` by
+    (simp[EVERY_MEM] >> rpt strip_tac >> irule le_homogeneous_occ_read >>
+     simp[] >> qexistsl [`C`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `key`, `r`, `s`, `s0`] >>
+     simp[] >> reverse conj_tac
+     >- (qpat_x_assum `EVERY (le_homogeneous_retained_occ _ _ _ _) _` mp_tac >>
+         simp[EVERY_MEM]) >>
+     qpat_x_assum `!bb n fuel u t. _` mp_tac >> simp[] >> metis_tac[]) >>
+  `le_key_address ctx.lctx_addr_space key (le_occ_after (StepOcc bb n fuel u t)) = SOME a` by
+    simp[le_absolute_key_after_post, le_occ_post_def] >>
+  drule_all le_occ_chain_retained_read >> simp[le_read_address_occ_after, le_occ_post_def]
+QED
+
+Resume le_occ_prefix_homogeneous_current[operand]:
+  irule le_key_address_operand_injective >> qexists `ctx.lctx_addr_space` >>
+  `!v. LK_Op r = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
+    (rpt gen_tac >> disch_tac >> gvs[] >> simp[EVERY_MEM] >>
+     gen_tac >> disch_tac >> irule le_homogeneous_occ_value_no_write >>
+     qexistsl [`C`, `ctx`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `key`, `s`, `s0`] >>
+     simp[] >> metis_tac[EVERY_MEM]) >>
+  `le_absolute_key ctx.lctx_addr_space (LK_Op r)` by simp[le_absolute_key_def] >>
+  drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]
+QED
+Finalise le_occ_prefix_homogeneous_current
+
+Theorem le_occ_prefix_store_test_current:
+  le_occ_prefix C fn s0 es i s /\
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  (!bb n fuel u t. MEM (StepOcc bb n fuel u t) es ==>
+    dfg_assigns_sound ctx.lctx_dfg u /\ dfg_assigns_sound ctx.lctx_dfg t) /\
+  dfg_assigns_sound ctx.lctx_dfg s /\
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME vs /\
+  vs <> [] /\
+  EVERY (\a. case (a,value) of (Var _,Var _) =>
+    normalize_operand ctx.lctx_dfg [] a = normalize_operand ctx.lctx_dfg [] value
+    | _ => a = value) vs ==>
+  le_key_read ctx.lctx_addr_space key s = eval_operand value s
+Proof
+  strip_tac >>
+  `EVERY (\op. normalize_operand ctx.lctx_dfg [] op =
+     normalize_operand ctx.lctx_dfg [] value) vs` by
+    (gvs[EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> Cases_on `op` >> Cases_on `value` >> simp[]) >>
+  `le_key_read ctx.lctx_addr_space key s =
+     eval_operand (normalize_operand ctx.lctx_dfg [] value) s` by
+    (irule le_occ_prefix_homogeneous_current >> simp[] >>
+     qexistsl [`C`, `es`, `fn`, `i`, `s0`, `vs`] >> gvs[] >>
+     first_assum ACCEPT_TAC) >>
+  metis_tac[normalize_operand_eval_proof]
+QED
+
+(* Reachable-discharge audit for the explicit DFG premises above.
+   These theorems are semantic boundaries, not yet a wrapper discharging
+   those premises from the frozen theorem.
+
+   For each StepOcc bb n fuel u t, le_occ_prefix_member and
+   le_occ_valid_def supply the successful step; le_occ_step_wf supplies
+   inst_wf, and lookup_block_MEM supplies block membership.  The frozen
+   universal step premise supplies soundness at t with index reset IF
+   all five invariants hold at u with index reset.  dfg_assigns_sound
+   depends only on vs_vars (and hence ignores index reset).  This gives
+   precisely the extra generator-post-state soundness used at line 282,
+   not merely soundness of the generator input.
+
+   Propagating the five invariants to every reached input is still an
+   integration obligation.  The start and block clauses of le_occ_prefix
+   require whole-batch PHI preservation before the next step.  The frozen
+   PHI premise supplies its DFG component at reachable blocks; the empty
+   BP result makes bp_ptr_sound and bp_ptrs_bounded vacuous; and
+   venomExecProofs.eval_phis_preserves_alloca_fields supplies the unchanged
+   allocation fields for allocas_non_overlapping and allocas_in_word.
+   Index changes between occurrences affect none of these predicates.
+   Initial nonoverlap comes from alloca_inv.  DFS reachability is needed
+   to apply the frozen PHI premise (le_occ_phi_static gives it).
+
+   No reached-invariant induction is claimed here.  In particular the
+   step premise cannot be applied using DFG soundness alone.  A separate
+   checked occurrence-invariant wrapper must discharge that induction
+   before the exact store-test theorem is used under the frozen premises.
+*)
