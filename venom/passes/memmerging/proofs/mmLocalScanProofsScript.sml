@@ -3472,6 +3472,46 @@ Proof
   simp[arithmeticTheory.MAX_DEF] >> decide_tac
 QED
 
+Theorem mm_local_load_pending_disjoint[local]:
+  inst.inst_operands = [Lit w] /\ inst.inst_outputs = [out] /\
+  MEM cg (scan_load Mem2Mem ss inst).ss_copies /\ 0 < cg.cg_length ==>
+  w2n w + 32 <= cg.cg_dst \/ cg.cg_dst + cg.cg_length <= w2n w
+Proof
+  strip_tac >>
+  gvs[scan_load_def, operand_lit_val_def, mode_allows_overlap_def] >>
+  Cases_on `copies_that_overwrite ss.ss_copies (mk_interval (w2n w) 32) = []` >>
+  gvs[flush_copies_def, MEM_FILTER, copies_that_overwrite_def] >>
+  `~copy_overwrites cg (mk_interval (w2n w) 32)` by
+    (spose_not_then assume_tac >>
+     `MEM cg (FILTER (\c. copy_overwrites c (mk_interval (w2n w) 32)) ss.ss_copies)` by
+       simp[MEM_FILTER] >> gvs[]) >>
+  gvs[copy_overwrites_def, copy_dst_interval_def,
+      mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+      mmIntervalTheory.interval_end_def,
+      arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem mm_local_invalidate_binding[local]:
+  FLOOKUP (invalidate_loads ss iv).ss_loads v = SOME src ==>
+  FLOOKUP ss.ss_loads v = SOME src /\ ~load_conflicts iv src
+Proof
+  simp[invalidate_loads_def, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  Cases_on `FLOOKUP ss.ss_loads v` >> simp[] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem mm_local_invalidate_disjoint[local]:
+  0 < n /\
+  FLOOKUP (invalidate_loads ss (mk_interval dst n)).ss_loads v = SOME src ==>
+  src+32 <= dst \/ dst+n <= src
+Proof
+  strip_tac >> drule mm_local_invalidate_binding >>
+  simp[load_conflicts_def, mmIntervalTheory.interval_overlaps_def,
+       mmIntervalTheory.mk_interval_def, mmIntervalTheory.interval_end_def,
+       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
 Theorem mm_local_read_write_disjoint[local]:
   a+n <= d \/ d+LENGTH bs <= a ==>
   read_memory a n (write_memory_with_expansion d bs s) = read_memory a n s
