@@ -5,6 +5,35 @@ Ancestors
   livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
   removeUnusedSsaProofs codegenReadyCompute list pred_set
 
+Theorem analyzed_ready_live_at_through_edge:
+  !fn lbl bb pred pred_bb v a.
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ bb.bb_label = lbl /\
+  phi_block_ready (liveness_analyze fn) bb /\
+  EVERY (\inst. ~MEM v (inst_defs inst)) bb.bb_instructions /\
+  LENGTH (collect_phis bb.bb_instructions) <= a /\ a <= LENGTH bb.bb_instructions /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl a) /\
+  cfg_reachable_of (cfg_analyze fn) pred /\
+  lookup_block pred fn.fn_blocks = SOME pred_bb /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) pred) ==>
+  MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pred_bb.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qpat_assum `bb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions)))` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+     disch_then (qspecl_then [`lbl`, `bb`, `LENGTH (collect_phis bb.bb_instructions)`,
+       `a`, `v`] mp_tac) >>
+     gvs[listTheory.EVERY_EL] >> metis_tac[]) >>
+  `EVERY (\inst. ~MEM v (inst_defs inst)) (collect_phis bb.bb_instructions)` by
+    (gvs[listTheory.EVERY_MEM] >> metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
+  drule_all analyzed_ready_phi_live_through_edge >>
+  disch_then (qspec_then `pred` assume_tac) >>
+  drule_all analyzed_live_out_edge_subset >>
+  simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
 Theorem analyzed_ready_live_through_edge:
   !fn lbl bb pred pred_bb v.
   wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
@@ -18,21 +47,13 @@ Theorem analyzed_ready_live_through_edge:
   MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pred_bb.bb_instructions))
 Proof
   rpt gen_tac >> strip_tac >>
+  irule analyzed_ready_live_at_through_edge >> simp[] >>
+  qexistsl_tac [`LENGTH bb.bb_instructions`, `bb`] >> simp[] >>
   qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
-  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
-    (qpat_assum `bb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
-  `MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions)))` by
-    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
-     disch_then (qspecl_then [`lbl`, `bb`, `LENGTH (collect_phis bb.bb_instructions)`,
-       `LENGTH bb.bb_instructions`, `v`] mp_tac) >>
-     gvs[listTheory.EVERY_EL] >> metis_tac[]) >>
-  `EVERY (\inst. ~MEM v (inst_defs inst)) (collect_phis bb.bb_instructions)` by
-    (gvs[listTheory.EVERY_MEM] >> metis_tac[livenessTransferProofsTheory.collect_phis_mem]) >>
-  drule_all analyzed_ready_phi_live_through_edge >>
-  disch_then (qspec_then `pred` assume_tac) >>
-  drule_all analyzed_live_out_edge_subset >>
-  simp[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+  qpat_x_assum `bb.bb_instructions = _`
+    (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]
 QED
+
 
 (* Symbolic producer ledger (C3.2.2.21):
    - reachable_phi_incoming_live_out supplies the actual predecessor seed.
@@ -566,4 +587,39 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule analyzed_output_dominance_live_out_to_index >> simp[] >>
   conj_tac >- (qexists_tac `j` >> simp[]) >> metis_tac[]
+QED
+
+(* The final seed may be an ordinary-use point rather than a block exit.
+   Nonemptiness of the tail is essential: demand inside the head block does
+   not imply demand at its exit. *)
+Theorem analyzed_live_backward_no_kill_path_at:
+  !tail fn d head_bb end_bb v a.
+    wf_function fn /\ is_fn_path fn (d::tail) /\ tail <> [] /\
+    EVERY (\lbl. cfg_reachable_of (cfg_analyze fn) lbl /\
+      MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+      ?bb. lookup_block lbl fn.fn_blocks = SOME bb) (d::tail) /\
+    EVERY (\lbl. !bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+      phi_block_ready (liveness_analyze fn) bb /\
+      EVERY (\inst. ~MEM v (inst_defs inst)) bb.bb_instructions) tail /\
+    lookup_block d fn.fn_blocks = SOME head_bb /\
+    lookup_block (LAST (d::tail)) fn.fn_blocks = SOME end_bb /\
+    LENGTH (collect_phis end_bb.bb_instructions) <= a /\
+    a <= LENGTH end_bb.bb_instructions /\
+    MEM v (live_vars_at (liveness_analyze fn) (LAST (d::tail)) a) ==>
+    MEM v (live_vars_at (liveness_analyze fn) d (LENGTH head_bb.bb_instructions))
+Proof
+  Induct_on `tail` >- simp[] >>
+  rpt gen_tac >> strip_tac >> gvs[EVERY_DEF] >>
+  `fn_cfg_edge fn d h /\ is_fn_path fn (h::tail)` by
+    gvs[venomWfTheory.is_fn_path_def] >>
+  `bb.bb_label = h` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `MEM h (cfg_succs_of (cfg_analyze fn) d)` by
+    metis_tac[fn_cfg_edge_cfg_analyze] >>
+  Cases_on `tail = []`
+  >- (gvs[] >> irule analyzed_ready_live_at_through_edge >> simp[] >>
+      qexistsl_tac [`a`, `bb`] >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) h (LENGTH bb.bb_instructions))` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  irule analyzed_ready_live_through_edge >> simp[] >>
+  qexists_tac `bb` >> simp[]
 QED
