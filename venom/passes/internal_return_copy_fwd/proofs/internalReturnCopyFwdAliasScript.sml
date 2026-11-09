@@ -156,3 +156,147 @@ Theorem ircf_size_coherent_allocas_eq:
 Proof
   strip_tac >> gvs[ircf_size_coherent_def] >> metis_tac[]
 QED
+
+Theorem ircf_alias_site_alloca_preserves:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  ~MEM v inst.inst_outputs /\ ircf_alias_site_value fn s G v /\
+  exec_alloca inst s amount = OK t ==>
+  ircf_alias_site_value fn t (step_prov PG G inst t) v
+Proof
+  strip_tac >> simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  qpat_x_assum `ircf_alias_site_value _ _ _ _` mp_tac >>
+  simp[ircf_alias_site_value_def] >>
+  disch_then (qspecl_then [`ai`,`root`,`sz`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `root = out ==> ai = inst` by
+    (strip_tac >> irule ssa_outputs_same_inst >>
+     gvs[fn_insts_def] >> metis_tac[MEM]) >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (simp[update_var_def] >> strip_tac >> gvs[] >>
+      `inst.inst_id <> ai.inst_id` by (strip_tac >> gvs[]) >>
+      `root <> out` by metis_tac[] >>
+      qexists_tac `b` >>
+      gvs[lookup_var_def, step_prov_def,
+          o1FrameLockstepTheory.FLOOKUP_set_prov, FLOOKUP_UPDATE]) >>
+  PairCases_on `x` >> simp[update_var_def] >> strip_tac >> gvs[] >>
+  Cases_on `root = out` >> gvs[] >>
+  gvs[lookup_var_def, step_prov_def,
+      o1FrameLockstepTheory.FLOOKUP_set_prov, FLOOKUP_UPDATE]
+QED
+
+Theorem ircf_alias_site_nonalloca_step:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ALLOCA /\ ~MEM v inst.inst_outputs /\
+  ircf_alias_site_value fn s G v /\ step_inst fuel C inst s = OK t ==>
+  ircf_alias_site_value fn t (step_prov PG G inst t) v
+Proof
+  strip_tac >> irule ircf_alias_site_nonalloca >>
+  `t.vs_allocas = s.vs_allocas` by
+    (simp[FLOOKUP_EXT, FUN_EQ_THM] >>
+     metis_tac[basePtrProofsTheory.step_inst_alloca_flookup]) >>
+  metis_tac[]
+QED
+
+Theorem ircf_size_coherent_alloca:
+  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [Lit amount] /\ ircf_size_coherent fn s /\
+  exec_alloca inst s amount = OK t ==>
+  ircf_size_coherent fn t
+Proof
+  strip_tac >>
+  `!is. FLAT (MAP (\i:instruction. [i.inst_id]) is) =
+        MAP (\i. i.inst_id) is` by (Induct >> simp[]) >>
+  simp[ircf_size_coherent_def] >> rpt strip_tac >>
+  Cases_on `ai.inst_id = inst.inst_id`
+  >- (`ai = inst` by
+        (irule (INST_TYPE [``:'a`` |-> ``:num``] all_distinct_flat_map_inj) >>
+         qexistsl_tac [`\i. [i.inst_id]`, `fn_insts fn`, `ai.inst_id`] >>
+         gvs[venomWfTheory.fn_inst_ids_distinct_def, fn_insts_def,
+             fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
+      gvs[] >> rename1 `MEM inst (fn_insts fn)` >>
+      qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+      simp[exec_alloca_def] >>
+      Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+      >- (simp[update_var_def] >> strip_tac >>
+          gvs[FLOOKUP_UPDATE]) >>
+      PairCases_on `x` >> simp[update_var_def] >> strip_tac >> gvs[] >>
+      metis_tac[ircf_size_coherent_def]) >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (simp[update_var_def] >> strip_tac >> gvs[FLOOKUP_UPDATE] >>
+      metis_tac[ircf_size_coherent_def]) >>
+  PairCases_on `x` >> simp[update_var_def] >> strip_tac >> gvs[] >>
+  metis_tac[ircf_size_coherent_def]
+QED
+
+Theorem ircf_alias_site_output:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ venomWf$inst_wf inst /\
+  ircf_size_coherent fn s /\ MEM v inst.inst_outputs /\
+  (!u. MEM (Var u) inst.inst_operands ==> ircf_alias_site_value fn s G u) /\
+  step_inst fuel C inst s = OK t ==>
+  ircf_alias_site_value fn t (step_prov PG G inst t) v
+Proof
+  strip_tac >> simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  drule_all ircf_alias_output_inv >> strip_tac
+  >- (gvs[] >> rename1 `MEM inst (fn_insts fn)` >>
+      `exec_alloca inst s sz = OK t` by
+        gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, eval_operand_def] >>
+      `ircf_alias_site_value fn t (step_prov PG G inst t) root` by
+        (irule ircf_alias_site_alloca >> metis_tac[]) >>
+      metis_tac[ircf_alias_site_value_def]) >>
+  `inst.inst_operands = [Var u]` by
+    (gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_1] >> gvs[]) >>
+  `step_inst_base inst s = OK t` by
+    gvs[step_inst_non_invoke] >>
+  `ircf_alias_site_value fn t (step_prov PG G inst t) v` by
+    (irule ircf_alias_site_assign >> metis_tac[MEM]) >>
+  metis_tac[ircf_alias_site_value_def]
+QED
+
+Theorem ircf_alias_site_preserves:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\ venomWf$inst_wf inst /\
+  ~MEM v inst.inst_outputs /\ ircf_alias_site_value fn s G v /\
+  step_inst fuel C inst s = OK t ==>
+  ircf_alias_site_value fn t (step_prov PG G inst t) v
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
+  >- (`?out. inst.inst_outputs = [out]` by
+        gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_1] >>
+      `?amount:bytes32. exec_alloca inst s amount = OK t` by
+        (gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+         metis_tac[]) >>
+      drule_all ircf_alias_site_alloca_preserves >> simp[]) >>
+  irule ircf_alias_site_nonalloca_step >> metis_tac[]
+QED
+
+Theorem ircf_size_coherent_step:
+  fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
+  ircf_size_coherent fn s /\ step_inst fuel C inst s = OK t ==>
+  ircf_size_coherent fn t
+Proof
+  strip_tac >>
+  `!is. FLAT (MAP (\i:instruction. [i.inst_id]) is) =
+        MAP (\i. i.inst_id) is` by (Induct >> simp[]) >>
+  simp[ircf_size_coherent_def] >> rpt strip_tac >>
+  Cases_on `inst.inst_opcode = ALLOCA /\ ai.inst_id = inst.inst_id`
+  >- (gvs[] >>
+      `ai = inst` by
+        (irule (INST_TYPE [``:'a`` |-> ``:num``] all_distinct_flat_map_inj) >>
+         qexistsl_tac [`\i. [i.inst_id]`, `fn_insts fn`, `ai.inst_id`] >>
+         gvs[venomWfTheory.fn_inst_ids_distinct_def, fn_insts_def,
+             fn_insts_blocks_flat, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
+      gvs[] >> rename1 `MEM inst (fn_insts fn)` >>
+      `exec_alloca inst s sz = OK t` by
+        gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, eval_operand_def] >>
+      `ircf_size_coherent fn t` by
+        (drule_all ircf_size_coherent_alloca >> simp[]) >>
+      metis_tac[ircf_size_coherent_def]) >>
+  `FLOOKUP t.vs_allocas ai.inst_id = FLOOKUP s.vs_allocas ai.inst_id` by
+    (irule basePtrProofsTheory.step_inst_alloca_flookup >> metis_tac[]) >>
+  metis_tac[ircf_size_coherent_def]
+QED
