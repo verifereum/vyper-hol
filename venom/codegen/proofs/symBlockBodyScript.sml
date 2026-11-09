@@ -583,6 +583,89 @@ Proof
   simp[] >> strip_tac >> irule sym_body_result_intret >> metis_tac[]
 QED
 
+Theorem body_inv_rest_placed:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 ==>
+  asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp rest_ops)
+Proof
+  pure_rewrite_tac [body_inv_def] >> strip_tac >>
+  qpat_x_assum `as.as_pc = _` SUBST1_TAC >>
+  irule fnBlockBodyHelpersTheory.block_ops_at >> qexists_tac `[]` >>
+  pure_rewrite_tac [listTheory.APPEND_NIL] >>
+  qpat_x_assum `block_ops = _` (fn th => rewrite_tac [GSYM th]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem sym_body_revert_abort:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  revert_forward_pair bb k j /\ exec_block fuel ctx bb vs = Abort a vs1 /\
+  label_flow_ok ctx /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (Abort a vs1)
+Proof
+  strip_tac >> drule body_inv_facts >> strip_tac >>
+  `k < LENGTH bb.bb_instructions` by
+    (spose_not_then assume_tac >>
+     gvs[contextCodegenRelTheory.revert_forward_pair_def,
+         venomInstTheory.get_instruction_def]) >>
+  `EL k bb.bb_instructions = EL k bb.bb_instructions` by simp[] >>
+  drule_all body_inv_static >> strip_tac >>
+  qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `fn_shape_ok fn` by
+    (gvs[unit_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `!inst. MEM inst bb.bb_instructions ==> inst_shape_ok inst` by
+    (rpt strip_tac >> drule_all fnBlockBodyHelpersTheory.body_inst_ready >>
+     gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  drule_all rf_pair_no_labels >> strip_tac >>
+  `DROP (k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb) =
+   DROP k bb.bb_instructions` by
+    (simp[rich_listTheory.DROP_DROP_T]) >>
+  `generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+    (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+    (LENGTH bb.bb_instructions) (k - LENGTH (get_params bb.bb_instructions))
+    (DROP k bb.bb_instructions) ps = SOME (rest_ops, ps_after)` by metis_tac[] >>
+  `asm_block_at prog as.as_pc (execute_plan cpl.cp_initial_fmp rest_ops)` by
+    metis_tac[body_inv_rest_placed] >>
+  `!name. MEM (AsmOp name) (execute_plan cpl.cp_initial_fmp rest_ops) ==>
+    IS_SOME (evm_opcode_byte name)` by
+    metis_tac[body_placed_target_safe] >>
+  qpat_x_assum `!j. revert_forward_pair bb k j ==> !k' inst' op. _` drule >>
+  strip_tac >>
+  qpat_x_assum `!j. revert_forward_pair bb k j ==> !ops ps_end. _` drule >>
+  disch_then drule >> strip_tac >>
+  leaf_matches 5 mp_tac (anchored_leaf
+    ["fn_frame_inv", "generate_block_insts_plan", "sym_frame_inv",
+     "generated_plan_state_wf_marked", "exec_block"]
+    sym_revert_forward_frame_sim_deep) >>
+  simp[] >> strip_tac >> irule sym_body_result_abort >> metis_tac[]
+QED
+
+Theorem sym_body_revert_step:
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\ revert_forward_pair bb k j /\
+  label_flow_ok ctx /\ asm_static_wf prog /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  (!t. exec_block fuel ctx bb vs <> OK t) /\
+  sym_body_result lo o2pc prog env cpl ctx fn mem0 pc_ret rest srest labs0
+    as ss (exec_block fuel ctx bb vs)
+Proof
+  strip_tac >>
+  `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
+  `revert_forward_pair bb vs.vs_inst_idx j` by metis_tac[] >>
+  drule fnBlockBodyClassesTheory.rf_exec_block_cases >>
+  disch_then (qspecl_then [`fuel`, `ctx`] mp_tac) >> strip_tac
+  >- (simp[] >> drule_all sym_body_revert_abort >> simp[]) >>
+  simp[sym_body_result_error]
+QED
+
 (* body_inv bundles block_body_frame_sim's premises. *)
 Theorem sym_block_body_frame_sim:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
