@@ -398,6 +398,93 @@ Proof
   rewrite_tac[]
 QED
 
+Theorem selected_spill_marked_budget:
+  !base pending ps dist cand hops ps1.
+  residual_budget_wf_marked base pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  16 < dist /\ dist < LENGTH ps.ps_stack /\
+  select_spill_candidate ps.ps_stack pending dist (LENGTH pending) = SOME cand /\
+  do_spill_at cand ps = (hops,ps1) ==>
+  cand <= 16 /\ cand < LENGTH ps.ps_stack /\
+  residual_budget_wf_marked base pending ps1 /\
+  LENGTH pending <= LENGTH ps1.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all planWfTheory.select_spill_candidate_bound >> strip_tac >>
+  drule deepResidualBudgetTheory.select_spill_candidate_props >> strip_tac >>
+  `stack_peek cand ps.ps_stack <> dead_stack_marker` by
+    (Cases_on `stack_peek cand ps.ps_stack` >>
+     gvs[is_var_operand_def, dead_stack_marker_def]) >>
+  drule_all deepResidualBudgetTheory.residual_budget_wf_marked_do_spill_at >>
+  strip_tac >> simp[] >>
+  drule reorderSimTheory.do_spill_at_stack_length >> simp[] >> decide_tac
+QED
+
+Theorem sym_reduce_depth_plan_frame_sim:
+  !fuel pending op f ps ops ps' base initial_fmp p env cp fn ret srest
+    ss ctx labs0 cs r.
+  residual_budget_wf_marked base pending ps /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  reduce_depth_plan fuel pending op f (LENGTH pending) ps = (ops,ps') /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= base /\ ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[stackPlanOpsTheory.reduce_depth_plan_def, execute_plan_def,
+         asm_steps_def, sym_steps_def] >>
+  qpat_x_assum `reduce_depth_plan (SUC fuel) _ _ _ _ _ = _` mp_tac >>
+  simp[Once stackPlanOpsTheory.reduce_depth_plan_def] >>
+  Cases_on `f + 1 < LENGTH pending`
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  rename1 `_ = SOME dist` >> Cases_on `dist <= 16` >> simp[]
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  Cases_on `select_spill_candidate ps.ps_stack pending dist (LENGTH pending)` >> simp[]
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  pairarg_tac >> rename1 `do_spill_at cand ps = (hops,ps1)` >> gvs[] >>
+  pairarg_tac >> rename1 `reduce_depth_plan fuel pending op f (LENGTH pending) ps1 = (tops,ps2)` >>
+  strip_tac >> gvs[] >> suspend "selected_spill"
+QED
+
+Resume sym_reduce_depth_plan_frame_sim[selected_spill]:
+  `dist < LENGTH ps.ps_stack` by
+    metis_tac[stackModelTheory.stack_get_unfixed_depth_bound] >>
+  `16 < dist` by decide_tac >>
+  drule_all selected_spill_marked_budget >> strip_tac >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\ plan_slots_bounded base' ps` by
+    fs[deepResidualBudgetTheory.residual_budget_wf_marked_def] >>
+  `ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    metis_tac[allocMonoTheory.reduce_depth_plan_next_offset, arithmeticTheory.LESS_EQ_TRANS] >>
+  `(!off. MEM (SOSpill off) hops ==> off < dimword(:256)) /\
+   (!off. MEM (SOSpill off) tops ==> off < dimword(:256))` by metis_tac[] >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  `cand < LENGTH ps.ps_stack` by
+    metis_tac[planWfTheory.select_spill_candidate_bound] >>
+  `!off. MEM (SOSpill off) hops ==> off < dimword(:256)` by metis_tac[] >>
+  drule_all sym_do_spill_at_frame_sim >> strip_tac >>
+  `!off. MEM (SOSpill off) tops ==> off < dimword(:256)` by metis_tac[] >>
+  `asm_block_at p cs'.as_pc (execute_plan initial_fmp tops)` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qexistsl_tac [`cs''`, `ss''`] >>
+  simp[stackOpSimTheory.asm_steps_add, sym_steps_add] >> decide_tac
+QED
+
+Finalise sym_reduce_depth_plan_frame_sim
+
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
