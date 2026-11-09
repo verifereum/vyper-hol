@@ -443,3 +443,59 @@ Proof
     irule local_region_frame_fwd >> metis_tac[]) >>
   gvs[target_post_def]
 QED
+
+Theorem assign_pure_target_store_bound:
+  supported_target_pure tops bt /\ eval_target_place cx bt es = (res,ee) /\
+  vv_store_bound cx ty lt es r vv s /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  s.vs_alloca_next <= t.vs_alloca_next ==>
+  vv_store_bound cx ty lt ee r vv t
+Proof
+  strip_tac >>
+  `!v. read_result cx r ee = (INL v,ee) ==>
+       read_result cx r es = (INL v,es)` by
+    (rpt strip_tac >>
+     `FST (read_result cx r es) = INL v` by
+       metis_tac[assign_pure_target_read_frame, FST] >>
+     Cases_on `read_result cx r es` >> gvs[] >>
+     drule read_result_state >> simp[]) >>
+  irule vv_store_bound_frame_mem_src >>
+  goal_assum (drule_at Any) >> simp[] >>
+  Cases_on `vv` >> gvs[exprSimMemDefsTheory.vv_store_bound_def] >> metis_tac[]
+QED
+
+Theorem assign_pure_target_vv_post:
+  supported_target_pure tops bt /\ eval_target_place cx bt es = (res,ee) /\
+  vv_post ctx func cenv cx e old sa sm s0 es r vv s /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s /\
+  local_ptrs_reserved cenv sm /\ local_ptrs_rel func cenv es.scopes s /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_id <= sc.cs_next_id /\
+  target_post ctx func cenv cx es sm sc s ee pv vt op t /\
+  target_pure_frame cenv cx es s t ==>
+  vv_post ctx func cenv cx e es sa sc s ee r vv t
+Proof
+  strip_tac >>
+  `vv_holds cenv cx (post_value_type cenv e) r vv ee t` by
+    (irule assign_pure_target_vv_holds >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     gvs[vv_post_def] >> metis_tac[]) >>
+  `vv_at cenv cx (post_value_type cenv e) sa sc ee r vv t` by
+    (irule assign_pure_target_vv_at >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     gvs[vv_post_def] >> metis_tac[]) >>
+  `(post_value_type cenv e <> expr_type e ==>
+    vv_own cenv cx (post_value_type cenv e) sa sc ee r vv t)` by
+    (strip_tac >> irule assign_pure_target_vv_own >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     gvs[vv_post_def] >> metis_tac[]) >>
+  `~expr_has_effect e ==> vv_storage_live cx vv ee t` by
+    (strip_tac >> drule_all assign_pure_target_views >> strip_tac >>
+     Cases_on `vv` >> gvs[vv_post_def, contextTheory.vv_operand_def] >> metis_tac[]) >>
+  gvs[vv_post_def, target_post_def] >> rpt conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      gvs[not_fresh_at_def]) >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `aid` >> simp[]
+QED
