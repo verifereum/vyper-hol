@@ -12,7 +12,7 @@ Ancestors
   exprSimWordArgs exprSimSource exprSimHypsDefs exprSimProps exprSimDefs
   exprBopSimProps exprOperandVar loweringPosts gasOutcome gasSummary gasSummaryCompose
   gasExemptCert fragGasMode fragGasPath freshWrites fragExec exprLowering
-  exprLoweringProps compileEnv valueEncoding valueEncodingProps valueEncodingProofs venomState
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs venomState
   vyperValue vyperTyping vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperInterpreter vyperState venomMemProps venomExecSemantics words arithmetic list rich_list
 Libs

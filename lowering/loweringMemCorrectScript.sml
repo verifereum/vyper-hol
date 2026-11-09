@@ -78,7 +78,7 @@ Theorem lower_vyper_runtime_unit_run_mem_safe:
 Proof
   rpt gen_tac >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    metis_tac[gas_explicit_nil] >>
+    first_assum (ACCEPT_TAC o REWRITE_RULE [gasSummaryTheory.gas_explicit_nil] o Q.SPEC `[]`) >>
   `?mut args fbody.
      lookup_function NONE tx.function_name External tops =
        SOME (mut, F, args, [], ret, fbody) /\
@@ -93,8 +93,8 @@ Proof
       <| outcomes := SOME vs.vs_outcomes; requests := [] |>)` >>
   rename1 `_ = (sres, es0)` >> Cases_on `sres`
   >- (rename1 `INL u` >> Cases_on `u` >>
-      irule lower_vyper_runtime_unit_body_mem >> metis_tac[]) >>
-  irule external_entry_value_revert_mem >> metis_tac[]
+      drule_all lower_vyper_runtime_unit_body_mem >> simp[]) >>
+  drule_all external_entry_value_revert_mem >> simp[]
 QED
 
 (* S3's pointer discipline and taint bound: the rest of o1PassContract's
@@ -125,7 +125,7 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
 Proof
   rpt strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    metis_tac[gas_explicit_nil] >>
+    first_assum (ACCEPT_TAC o REWRITE_RULE [gasSummaryTheory.gas_explicit_nil] o Q.SPEC `[]`) >>
   drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
   drule lowering_context_ok_bridge >> strip_tac >>
   `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by

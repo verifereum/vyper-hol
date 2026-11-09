@@ -24,9 +24,9 @@ Ancestors
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
   valueEncodingTyping vyperStoragePlaceRegion
-  stmtLowering exprLowering compileEnv
+  stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
-  venomState valueEncoding vyperTyping valueEncodingProps valueEncodingProofs
+  venomState valueEncoding valueEncodingDefs vyperTyping valueEncodingProps valueEncodingProofs
   arithmetic list memoryValueEncoding
 
 Theorem place_store_default_typed[local]:

@@ -1,7 +1,7 @@
 Theory makeSsaCurrentEntryPrefix
 Ancestors
   makeSsaCurrentLockstep o1MakeSsaCfg o1MakeSsaFormats
-  sccpCorrectnessProofs analysisSimProofsBase
+  venomWfProps analysisSimProofsBase
   o1PassLift o1PassContract venomWf cfgWf venomInst venomExecProofs venomExecSemantics list relation
 
 Theorem current_target_entry_prefix_initial:

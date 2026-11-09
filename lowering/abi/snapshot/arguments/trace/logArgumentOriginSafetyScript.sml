@@ -46,7 +46,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `argument_origin _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [argument_origin_def]) >>
   simp_tac bool_ss [] >> strip_tac >|
-   [simp[compileEnvTheory.regions_disjoint_def] >> decide_tac,
+   [simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac,
     qpat_x_assum `private_value_window _ _ _ _ _ _`
       (mp_tac o REWRITE_RULE [private_value_window_def]) >>
     disch_then (qx_choose_then `owner` strip_assume_tac) >>
@@ -73,6 +73,6 @@ Proof
          disch_then (qspec_then `src_addr` mp_tac) >> simp[]) >>
       qspecl_then [`cenv`, `scopes`, `ss`, `writers`, `w2n src_addr`, `type_memory_size tv`, `id`, `byte_count`]
         mp_tac argument_origin_request_safe >>
-      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[compileEnvTheory.regions_disjoint_def]) >>
+      impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   first_x_assum drule_all >> simp[]
 QED

@@ -35,7 +35,7 @@ Ancestors
   fragExec localPtrsProps  loweringSlice freshWrites
   vyperEvalExprPreservesScopesDom
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
   gasOutcome gasContext gasExemptCert gasSummary gasSummaryCompose stmtSimForRounds vyperArith

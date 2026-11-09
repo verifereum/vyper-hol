@@ -22,6 +22,7 @@ Ancestors
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState list finite_map pred_set
+  passTransform
 Libs
   execEquivParamLib
 

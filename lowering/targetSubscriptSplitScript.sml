@@ -27,8 +27,8 @@ Ancestors
   list rich_list finite_map pair vyperMisc
   fragExec  exprSimHyps exprSimBuffer exprSimAttributeFields
   freshWrites stmtLoweringMono targetPlaceSim supportedExprTraverse
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
-  valueEncoding vyperAST vyperInterpreter vyperState vyperValue
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
+  valueEncoding vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc vyperPureExpr
   vyperScopePreservation vyperStatePreservation vyperCreateFrame

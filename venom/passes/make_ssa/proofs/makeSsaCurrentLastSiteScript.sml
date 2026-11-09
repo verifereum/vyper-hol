@@ -2,7 +2,7 @@ Theory makeSsaCurrentLastSite
 Ancestors
   makeSsaCurrentGraphCut makeSsaCurrentLiveTransport makeSsaCurrentFrontier
   makeSsaCurrentTokens dominatorProofs
-  makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaCurrentDefs
+  makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaDefs
   venomInst venomWf venomExecProps cfgAnalysisProps dominatorDefs
   list rich_list alist arithmetic makeSsaCurrentDemandDominance dominatorProofs cfgDefs relation cfgCorrectnessProof
 

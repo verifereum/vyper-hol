@@ -1,8 +1,9 @@
 Theory dftGasSimDominance
 Ancestors
   dftGasSimEndpoint dftGasSimSuccessor cfgNormSupplySim
-  sccpCorrectnessProofs venomExecProofs venomExecSemantics venomWf
+  venomExecProofs venomExecSemantics venomWf
   venomInst venomState list pred_set finite_map
+  venomWfProps
 
 Theorem ev_strict_dom_vars_defined_preserved_from_prefix:
   wf_function f /\ MEM bb f.fn_blocks /\

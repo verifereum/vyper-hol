@@ -6,7 +6,7 @@ Ancestors
   typedNormalizeFrame typedMemoryCopy stmtSimReturn
   venomState compileEnv memContinuation typedCopyAgreement emitHelper arithmetic valueCopyBytes
   exprSimBufferStore exprSimDefs exprSimProps loweringPosts exprSimAggregateChildren exprLoweringProps
-  context vyperTypeSystem vyperValue vyperTyping valueEncoding
+  context vyperTypeSystem vyperValue vyperTyping valueEncoding valueEncodingDefs
 
 Theorem typed_store_word_mem_cont:
   is_word_type dty /\ type_widens_to tenv sty dty /\

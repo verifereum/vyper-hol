@@ -1,7 +1,7 @@
 Theory makeSsaCurrentSourceEntryRuntime
 Ancestors
   makeSsaCurrentPhiBatchRuntime makeSsaCurrentPrefixRuntime
-  makeSsaCurrentWfSsa makeSsaCurrentDemand makeSsaHelper
+  makeSsaCurrentWfSsa makeSsaCurrentDemand
   makeSsaCurrentEdgeTransport makeSsaCurrentPrefixEffect
   makeSsaCurrentPrefixSuffixOwner
   venomExecSemantics venomExecProps venomExecProofs venomState venomWf venomInst

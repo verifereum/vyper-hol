@@ -4,7 +4,7 @@ Ancestors
   bodyUnopFragMemory exprSimUnopProps fragExec bodyMemEmitOpFrame bodyDeclMemoryCounted bodyDeclMemoryCore
   exprSimAccounts allocaFootprint instMemFrontier memSafeRun fragGasPathMem
   stmtSimProps emitHelperProps freshWrites exprOperandVar exprLoweringProps
-  fragGasMode compileEnv venomExecSemantics venomExecProofs venomInst venomState
+  fragGasMode compileEnv loweringStateRelDefs venomExecSemantics venomExecProofs venomInst venomState
   list finite_map exprSimUnop exprUnopSimDefs accountsRelProps
   valueEncodingProofs vyperInterpreter vyperTypeInvariants vyperTypeBytesCrypto
   vfmState integer_word words byte builtinSimple vyperTypeSystem
@@ -125,9 +125,8 @@ Proof
      strip_tac >>
      qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) r s0
                     with vs_inst_idx := LENGTH s1.cs_current_insts` >>
-     gvs[update_var_def, eval_operand_def, lookup_var_def] >>
-     Cases_on `out = STRING #"%" (toString sa.cs_next_var)` >>
-     gvs[finite_mapTheory.FLOOKUP_UPDATE]) >>
+     gvs[update_var_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     rw[] >> gvs[]) >>
   qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[unop_frag_mem_def] >>
   disch_then (qspecl_then [`s1`, `sb`, `c`, `op`, `u`] mp_tac) >>

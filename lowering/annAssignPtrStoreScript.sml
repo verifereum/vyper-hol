@@ -8,7 +8,7 @@ Ancestors
   representationCleanPtr valueEncodingProps valueEncoding list pred_set
   venomMemProofs valueEncodingProofs ptrSafeRun ptrDiscipline
   robustCopyTransportPtr localPtrsProps exprLoweringProps exprSimProps
-  loweringPosts compileEnv venomMemDefs emitHelper arithmetic
+  loweringPosts compileEnv loweringStateRelDefs venomMemDefs emitHelper arithmetic
 
 Theorem annassign_ghost_scope_update_ptr:
  !d cenv cx es G tn s sc rest id entry p sz.
@@ -153,7 +153,7 @@ Proof
    qexistsl [`w2n a`, `s`, `tn.t_mem`, `wd`] >> simp[] >>
    `val_footprint entry.type entry.value <= type_memory_size entry.type` by
      simp[val_footprint_le] >>
-   fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+   fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
  fs[return_buf_ptr_def, ptr_covers_def, stor_taint_ok_def,
     op_taint_def, mstore_def, lookup_var_def] >>
  Cases_on `d` >- simp[return_buf_ptr_def] >>

@@ -2,7 +2,7 @@
 Theory bodyMemBiSha256Suffix
 Ancestors
   bodyMemBiSha256Bounds emitHelper fragExecMem instMemFrontier memSafeRun
-  exprLoweringProps compileEnv emitHelperProps venomExecSemantics venomInst venomState venomMemProps
+  exprLoweringProps compileEnv loweringStateRelDefs emitHelperProps venomExecSemantics venomInst venomState venomMemProps
   venomMemDefs venomInstProps venomInstProofs words list bufferAllocationExecution exprSimHash
 
 Theorem sha256_call_preserves_operand:

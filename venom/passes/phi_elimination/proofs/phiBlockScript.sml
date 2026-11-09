@@ -9,7 +9,8 @@
 
 Theory phiBlock
 Ancestors
-  venomInstProofs phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSimDefs analysisSimProofsBase instIdxIndep runInstsProps finite_map list
+  venomInstProofs phiWellFormed execEquivProps venomExecProofs venomInstProps venomExecSemantics venomState venomInst venomWf phiDefs phiOrigins phiTransform stateEquiv stateEquivProps analysisSim
+  venomWfProps
 Libs
   pairLib
 
@@ -223,17 +224,6 @@ QED
    Guarded by vs_prev_bb <> NONE (satisfied for all reachable non-entry blocks).
    ========================================================================== *)
 
-Theorem ssa_form_block_outputs_distinct:
-  !fn bb. ssa_form fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
-Proof
-  simp[venomWfTheory.ssa_form_def, venomInstTheory.fn_insts_def] >>
-  rpt strip_tac >>
-  ntac 2 (pop_assum mp_tac) >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[ALL_DISTINCT_APPEND, MAP_APPEND, FLAT_APPEND]
-QED
 
 Triviality all_distinct_outputs_not_mem_other:
   !inst producer insts out.

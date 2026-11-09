@@ -24,7 +24,7 @@
 Theory exprOperandVar
 Ancestors
   list rich_list exprSafeOperand exprSafeOperandBuiltins exprLoweringProps
-  freshWrites compileEnv emitHelper emitHelperProps context exprLowering
+  freshWrites compileEnv loweringStateRelDefs emitHelper emitHelperProps context exprLowering
   exprCallBounds vyperAST
 
 (* Reservation constrains Var pointers, without excluding labels. *)
@@ -462,7 +462,7 @@ Proof
     (qspecl_then [`cenv`, `expr_type (IfExp ann cond te ee)`,
                   `lowered_value_type cenv ee`, `else_vv`, `st11a`] mp_tac
        ci_mono_compile_ifexp_arm >> simp[ci_mono_def]) >>
-  gvs[Abbr `sthen`, Abbr `selse`, compileEnvTheory.not_fresh_at_def,
+  gvs[Abbr `sthen`, Abbr `selse`, loweringStateRelDefsTheory.not_fresh_at_def,
       ASCIInumbersTheory.toString_11]
 QED
 
@@ -485,7 +485,7 @@ Proof
        simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
             fresh_id_def, fresh_var_def, emit_def]) >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_type_convert_var:
@@ -964,7 +964,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_method_id_runtime_var:
@@ -982,7 +982,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_slice_var:
@@ -1010,7 +1010,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_var_keep_bind[local]:
@@ -1066,7 +1066,7 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[compileEnvTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compiler_concat_var:

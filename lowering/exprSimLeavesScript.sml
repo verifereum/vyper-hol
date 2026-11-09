@@ -60,7 +60,7 @@ Ancestors
   list finite_map
   exprSimBufferForce exprLowering exprLoweringProps
   freshWrites builtinProps varsExt vyperContext exprSimUnop exprSimHyps exprSimUnwrap
-  compileEnv accountsRelProps loweringSlice
+  compileEnv loweringStateRelDefs accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness
   vyperValueOperation valueEncoding memoryValueEncoding

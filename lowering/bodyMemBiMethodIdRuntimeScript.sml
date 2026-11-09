@@ -5,7 +5,7 @@ Ancestors
   stmtReasonVvMemory exprSimHash exprSimMemDefs exprSimHyps exprSimSource
   exprSimProps exprLoweringProps gasOutcome gasSummary gasContext
   fragGasMode fragGasPathMem entrySinkExtraction venomExecSemantics venomState
-  bodyLiteralBufferMemory valueEncoding vyperTypeBytesCrypto vfmConstants list
+  bodyLiteralBufferMemory valueEncoding valueEncodingDefs vyperTypeBytesCrypto vfmConstants list
   exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperValue vyperTyping loweringPosts context exprSimDefs exprSimHypsDefs vyperTypeSystem builtinHashing vyperContext
 

@@ -8,16 +8,16 @@ val fixture_test_root = OS.FileSys.tmpName ();
 val () = OS.FileSys.remove fixture_test_root;
 val () = OS.FileSys.mkDir fixture_test_root;
 val fixture_test_dirs =
-  ["tests", "lowering", "lowering/defs", "lowering/defs/bytecode",
-   "lowering/defs/bytecode/eval",
-   "lowering/defs/bytecode/external-entries",
-   "lowering/defs/bytecode/external-entries/oracle"];
+  ["tests", "lowering", "lowering/defs", "bytecode",
+   "bytecode/eval",
+   "bytecode/external-entries",
+   "bytecode/external-entries/oracle"];
 val () = List.app
   (fn dir => OS.FileSys.mkDir (OS.Path.concat (fixture_test_root, dir)))
   fixture_test_dirs;
 val fixture_test_file = OS.Path.concat
   (fixture_test_root,
-   "lowering/defs/bytecode/external-entries/oracle/nr_ext_nonpayable.hex");
+   "bytecode/external-entries/oracle/nr_ext_nonpayable.hex");
 val () = let val output = TextIO.openOut fixture_test_file in
   TextIO.output (output, "deploy=0x0102\nruntime=0xff\n")
     before TextIO.closeOut output
@@ -38,7 +38,7 @@ in
 end;
 
 val fixture_test_contexts =
-  ["lowering/defs/bytecode/eval", "lowering/defs", ".", "tests"];
+  ["bytecode/eval", "lowering/defs", ".", "tests"];
 fun cleanup_fixture_test () = (
   OS.FileSys.remove fixture_test_file;
   List.app
@@ -54,14 +54,14 @@ val () = (
   (* The ordinary fixture directory still resolves in every context. *)
   OS.FileSys.rename
     {old = OS.Path.concat (fixture_test_root,
-             "lowering/defs/bytecode/external-entries"),
+             "bytecode/external-entries"),
      new = OS.Path.concat (fixture_test_root,
-             "lowering/defs/bytecode/python-o1-no-asm-opt")};
+             "bytecode/python-o1-no-asm-opt")};
   (List.app (fn dir => check_fixture_from dir "oracle/nr_ext_nonpayable.hex")
      fixture_test_contexts
    before OS.FileSys.rename
      {old = OS.Path.concat (fixture_test_root,
-              "lowering/defs/bytecode/python-o1-no-asm-opt"),
+              "bytecode/python-o1-no-asm-opt"),
       new = OS.Path.concat (fixture_test_root,
-              "lowering/defs/bytecode/external-entries")})
+              "bytecode/external-entries")})
   ) before cleanup_fixture_test ();

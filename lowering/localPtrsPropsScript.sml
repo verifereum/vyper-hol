@@ -44,7 +44,7 @@ Theory localPtrsProps
 Ancestors
   list finite_map words
   venomMemDefs
-  vyperState valueEncoding valueEncodingProps memoryValueDefs memoryValueFrame compileEnv
+  vyperState valueEncoding valueEncodingProps compileEnv loweringStateRelDefs memoryValueDefs memoryValueFrame
   venomState venomExecSemantics venomInst venomWf
 
 (* Updating a name outside the live scopes preserves pointer exclusion. *)

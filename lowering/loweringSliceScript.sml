@@ -40,7 +40,7 @@ Ancestors
   fragExec localPtrsProps venomMemDefs immutableMemoryFrame immutableRelation
   immutableEncoding
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps memoryValueDefs
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps memoryValueDefs
   vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperEvalExprPreservesScopesDom
   vyperEvalPreservesScopes vyperStatePreservation arithmeticProps
@@ -406,7 +406,7 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
   irule mstore_mem_bytes_at_disjoint >>
-  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem immutables_rel_mstore_outside_prefix:

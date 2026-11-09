@@ -23,7 +23,7 @@ Proof
       disch_then (qx_choose_then `owner` strip_assume_tac) >>
       `offset + read_len <= ss.vs_alloca_next` by
         (qspecl_then [`ss`, `owner`, `offset`, `read_len`] mp_tac abi_allocated_window_frontier >> simp[]) >>
-      simp[abi_window_separated_def, compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[abi_window_separated_def, loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `source_memory_separated cenv scopes ss dst byte_count` by fs[] >>
   drule_all source_value_window_separated >> simp[]
 QED

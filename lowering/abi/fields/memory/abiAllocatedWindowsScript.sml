@@ -78,7 +78,7 @@ Proof
     `FST (SND (right:num # (num # num)))`, `SND (SND (right:num # (num # num)))`]
     allocated_windows_disjoint) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Theorem abi_allocated_windows_pairwise:

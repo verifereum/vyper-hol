@@ -37,8 +37,7 @@ Ancestors
   fragGasSeq fragGasPath fragGasMode
   valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding valueTypingMemoryProps exprSimBufferStore
-  memoryValueEncoding
+  context compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueTypingMemoryProps exprSimBufferStore memoryValueEncoding
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs

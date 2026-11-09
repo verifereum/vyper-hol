@@ -1,7 +1,7 @@
 Theory placeStoreDynPrepare
 Ancestors
   placeStoreAllocPath placeTypedCopyRecursivePath exprSimBufferStore
-  exprLoweringProps compileEnv typedMemoryCopy venomState stmtLowering
+  exprLoweringProps compileEnv loweringStateRelDefs typedMemoryCopy venomState stmtLowering
   exprLowering finite_map loweringHalt freshWrites fragGasMode fragExec venomInst exprSimAlloc
 
 Theorem place_stmt_control_frame[local]:

@@ -1,7 +1,7 @@
 Theory exprSimPopNestedLocalPtrs
 Ancestors
   exprSimPopNestedLocalMemory exprSimPopNestedLocalProps
-  localPtrsProps compileEnv vyperLookup vyperPlaceStatePreservation
+  localPtrsProps compileEnv loweringStateRelDefs vyperLookup vyperPlaceStatePreservation
   vyperAssignPreservesType vyperTypeInvariants valueEncodingTyping
   exprSimProps vyperState vyperTyping valueEncoding valueEncodingProps
   venomState finite_map arithmetic memoryValueEncoding

@@ -26,7 +26,7 @@
  *)
 Theory makeSsaCurrentSim
 Ancestors
-  o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst irSupply
+  o1PassLift makeSsaDefs venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentLockstep o1FrameLockstep
   makeSsaCurrentForwardBlock makeSsaCurrentEdgePrefix
   makeSsaCurrentSuccessorRelation makeSsaCurrentPrefixTransport

@@ -14,6 +14,7 @@ Ancestors
   opcodeClass execEquivProps livenessProofs passSharedDefs passSharedProps venomInst
   stateEquiv stateEquivProofs venomExecProofs venomExecProps
   venomState venomExecSemantics indexedLists cfgTransform cfgAnalysisProps pointerConfinedDefs
+  venomWfProps
 Libs
   pairLib
 
@@ -274,56 +275,6 @@ QED
 
 (* ===== Function-level ===== *)
 
-(* ALL_DISTINCT outputs in fn_insts_blocks implies same for each block *)
-Theorem all_distinct_outputs_block[local]:
-  !bbs bb. MEM bb bbs ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs)
-                            (fn_insts_blocks bbs))) ==>
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs)
-                            bb.bb_instructions))
-Proof
-  Induct >> rw[fn_insts_blocks_def] >>
-  gvs[listTheory.MAP_APPEND, listTheory.FLAT_APPEND,
-      listTheory.ALL_DISTINCT_APPEND]
-QED
-
-(* Within a block with ALL_DISTINCT outputs, positions define same var ⟹ same *)
-Theorem all_distinct_outputs_unique_pos[local]:
-  !insts v i k.
-    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts)) /\
-    i < LENGTH insts /\ k < LENGTH insts /\
-    MEM v (EL i insts).inst_outputs /\
-    MEM v (EL k insts).inst_outputs ==>
-    i = k
-Proof
-  Induct >> rw[] >>
-  Cases_on `i` >> Cases_on `k` >> gvs[] >>
-  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT,
-      listTheory.MEM_MAP] >>
-  metis_tac[listTheory.MEM_EL]
-QED
-
-(* ssa_form implies: if v is output at position i in block bb,
-   then no other position in bb has v as output. *)
-Theorem ssa_form_no_dup_in_block:
-  !fn bb v i k.
-    ssa_form fn /\
-    MEM bb fn.fn_blocks /\
-    i < LENGTH bb.bb_instructions /\
-    k < LENGTH bb.bb_instructions /\
-    MEM v (EL i bb.bb_instructions).inst_outputs /\
-    MEM v (EL k bb.bb_instructions).inst_outputs ==>
-    i = k
-Proof
-  rpt strip_tac >>
-  `ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by (
-    irule all_distinct_outputs_block >>
-    qexists_tac `fn.fn_blocks` >> gvs[] >>
-    gvs[ssa_form_def, fn_insts_def]) >>
-  irule all_distinct_outputs_unique_pos >>
-  qexistsl_tac [`bb.bb_instructions`, `v`] >> gvs[]
-QED
-
 (* All NOP'd outputs across all blocks in one pass *)
 Definition single_pass_nop_outputs_def:
   single_pass_nop_outputs fn =
@@ -381,38 +332,6 @@ QED
 
 (* ===== cfg_exec_path infrastructure for operand condition ===== *)
 
-(* ALL_DISTINCT outputs → ALL_DISTINCT per-block flattened outputs *)
-Theorem ssa_form_per_block[local]:
-  !fn. ssa_form fn ==>
-    ALL_DISTINCT (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
-      bb.bb_instructions)) fn.fn_blocks))
-Proof
-  rpt strip_tac >>
-  fs[ssa_form_def, fn_insts_def] >>
-  pop_assum mp_tac >>
-  ONCE_REWRITE_TAC [venomFnInstsProofsTheory.fn_insts_blocks_flat] >>
-  simp[listTheory.MAP_FLAT, rich_listTheory.FLAT_FLAT,
-       listTheory.MAP_MAP_o, combinTheory.o_DEF]
-QED
-
-(* Under ssa_form, v in outputs of two instructions → same instruction *)
-Theorem ssa_outputs_same_inst:
-  !fn inst1 inst2 v.
-    ssa_form fn /\
-    MEM inst1 (fn_insts_blocks fn.fn_blocks) /\
-    MEM inst2 (fn_insts_blocks fn.fn_blocks) /\
-    MEM v inst1.inst_outputs /\ MEM v inst2.inst_outputs ==>
-    inst1 = inst2
-Proof
-  rpt strip_tac >>
-  fs[ssa_form_def, fn_insts_def] >>
-  mp_tac (Q.ISPECL [
-    `fn_insts_blocks fn.fn_blocks`,
-    `\(i:instruction). i.inst_outputs`,
-    `inst1:instruction`, `inst2:instruction`, `v:string`
-  ] venomFnInstsProofsTheory.all_distinct_flat_map_unique) >>
-  simp[]
-QED
 
 (* Under ssa_form, var_defined_at for v determines the block and index *)
 Theorem ssa_unique_var_defined_at[local]:
@@ -948,7 +867,7 @@ Proof
   rpt strip_tac >>
   fs[remove_unused_single_pass_def, LET_THM,
      clear_nops_function_def,
-     passSimulationDefsTheory.function_map_transform_def,
+     passTransformTheory.function_map_transform_def,
      listTheory.MEM_FLAT, listTheory.MEM_MAP, listTheory.MAP_MAP_o,
      combinTheory.o_DEF] >>
   rename1 `MEM bbo _.fn_blocks` >>
@@ -1015,7 +934,7 @@ Proof
   SPOSE_NOT_THEN ASSUME_TAC >>
   fs[fn_all_outputs_def, remove_unused_single_pass_def, LET_THM,
      clear_nops_function_def,
-     passSimulationDefsTheory.function_map_transform_def,
+     passTransformTheory.function_map_transform_def,
      listTheory.MAP_MAP_o, combinTheory.o_DEF,
      listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
   rename1 `MEM bb' _.fn_blocks` >>

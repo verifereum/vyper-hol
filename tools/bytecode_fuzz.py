@@ -4,14 +4,14 @@
 Generates small random Vyper programs, exports each one as the bytecode
 witness suites do (`vyper -f annotated_ast,layout`, merged by
 tests/sanitize_check_contract_json.py, and the oracle bytecode from the same
-flags as lowering/defs/bytecode/memory_store_witnesses.py), then compiles the
+flags as bytecode/memory_store_witnesses.py), then compiles the
 JSON with the native runner (tools/build_native_json_parity.py) and compares.
 
 Run it with the canonical oracle venv's `vyper` first on PATH (see
-lowering/defs/bytecode/README.md). Programs Python Vyper rejects are
+bytecode/README.md). Programs Python Vyper rejects are
 discarded; programs the HOL frontend, check_contract or the compiler rejects
 are coverage gaps, counted separately from divergences. check_contract runs
-through `holbuild run` on lowering/defs/bytecode/native/check_programs.sml,
+through `holbuild run` on bytecode/native/check_programs.sml,
 after the driver brings vyperCheckContractFrontendLib up to date with
 `holbuild build`. Every program that is not a PASS is kept in the output
 directory with its JSON, oracle, native bytes and verdict.
@@ -38,9 +38,9 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNNER = ROOT / "lowering/defs/bytecode/native/bytecode_parity_json.exe"
+RUNNER = ROOT / "bytecode/native/bytecode_parity_json.exe"
 SANITIZER = ROOT / "tests/sanitize_check_contract_json.py"
-CHECKER = ROOT / "lowering/defs/bytecode/native/check_programs.sml"
+CHECKER = ROOT / "bytecode/native/check_programs.sml"
 ORACLE_FLAGS = ["--experimental-codegen", "--evm-version", "prague", "-O", "none",
                 "--disable-bytecode-metadata", "-f", "bytecode,bytecode_runtime"]
 # The hash seeds tried before a mismatch counts as a divergence.

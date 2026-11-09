@@ -2,7 +2,7 @@
 Theory stmtSimLogStoreContinue
 Ancestors
   stmtSimLogDataRun stmtSimLogDataFrame stmtSimLogAllocate stmtSimLogEncodeFrame
-  stmtSimLogExecFields abiDecoderFrame compileEnv exprLoweringProps
+  stmtSimLogExecFields abiDecoderFrame compileEnv loweringStateRelDefs exprLoweringProps
   stmtSimLogEncodeFields exprSimBufferStore context emitHelper emitHelperProps
   stmtSimLogData stmtSimLogTopics stmtSimLogDataInput vyperABI supportedTypes stmtLowering venomInst venomState words list rich_list arithmetic
 

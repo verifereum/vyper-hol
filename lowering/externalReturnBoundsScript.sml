@@ -1,7 +1,7 @@
 Theory externalReturnBounds
 Ancestors
   stmtSimReturn exprSimDefs exprSimProps loweringPosts allocaFootprint exprLoweringProps venomMemDefs
-  compileEnv rawReturnValue valueCopyBytes vyperTyping vyperValue bodySim
+  compileEnv loweringStateRelDefs rawReturnValue valueCopyBytes vyperTyping vyperValue bodySim
   compileVyper entryStateRel
 
 (* Zero-footprint values need no readable region.  Every nonempty expression

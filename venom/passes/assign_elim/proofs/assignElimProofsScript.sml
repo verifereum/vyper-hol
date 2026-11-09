@@ -20,6 +20,7 @@ Ancestors
   cfgHelpers worklistDefs
   cfgAnalysisProps
   finite_map list pred_set arithmetic analysisSimProofsSound cfgCorrectnessProof
+  passTransform
 
 (* ===== Copy-prop specific: function-level simulation ===== *)
 

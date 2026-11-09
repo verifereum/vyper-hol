@@ -3,7 +3,7 @@ Theory bodyMemAggregateContinuation
 Ancestors
   bodyMemAggregateStore bodyMemAggregateUnwrap exprSimMemUnwrap
   exprSimAggregateChildren exprSimMemDefs exprSimUnwrap exprSimUnwrapProps
-  loweringPosts exprLowering compileEnv context fragGasPathMem gasSummary
+  loweringPosts exprLowering compileEnv loweringStateRelDefs context fragGasPathMem gasSummary
   gasOutcome fragGasMode list
 
 Theorem aggregate_rebased_marked_read_mem_capacity:

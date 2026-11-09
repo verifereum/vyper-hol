@@ -89,7 +89,7 @@ Proof
      disch_then (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >> simp[]) >>
   mp_tac (Q.SPECL [`ftv`, `entry.type`, `entry.value`, `copy_count`, `dst`, `offset`,
     `before.vs_memory`, `after.vs_memory`] array_copy_frame_source) >>
-  impl_tac >- fs[compileEnvTheory.regions_disjoint_def] >> simp[]
+  impl_tac >- fs[loweringStateRelDefsTheory.regions_disjoint_def] >> simp[]
 QED
 
 Theorem vars_rel_copy_frame:
@@ -120,7 +120,7 @@ Proof
      disch_then (qspecl_then [`name`, `entry`, `p`, `region_size`, `ptr_addr`] mp_tac) >> simp[]) >>
   mp_tac (Q.SPECL [`ftv`, `entry.type`, `entry.value`, `copy_count`, `dst`, `w2n (ptr_addr:bytes32)`,
     `before.vs_memory`, `after.vs_memory`] array_copy_frame_source) >>
-  impl_tac >- fs[compileEnvTheory.regions_disjoint_def] >> simp[]
+  impl_tac >- fs[loweringStateRelDefsTheory.regions_disjoint_def] >> simp[]
 QED
 
 Theorem local_ptrs_rel_copy_frame:

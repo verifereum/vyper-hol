@@ -1,7 +1,7 @@
 Theory makeSsaCurrentCutTokens
 Ancestors
   makeSsaCurrentLastSite makeSsaCurrentTokens makeSsaCurrentGraphCut
-  makeSsaCurrentAnalysis makeSsaCurrentDefs makeSsaCurrentSelectedLive
+  makeSsaCurrentAnalysis makeSsaDefs makeSsaCurrentSelectedLive
   venomInst venomWf venomExecProps list rich_list alist dominatorDefs
   cfgAnalysisProps dominatorProofs cfgCorrectnessProof
 

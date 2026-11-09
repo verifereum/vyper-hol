@@ -30,7 +30,7 @@ Ancestors
   list rich_list finite_map marker exprSimHyps
   fragExec  exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
-  exprLoweringProps compileEnv context vyperAST vyperInterpreter vyperState
+  exprLoweringProps compileEnv loweringStateRelDefs context vyperAST vyperInterpreter vyperState
   vyperValue valueEncoding venomExecSemantics venomExecProofs venomInst
   venomState exprSimLiteralBuffer words integer_word vfmConstants valueEncodingProps
   valueTypingMemoryProps copyFwdEquiv allocaRemapDefs valueEncodingProofs
@@ -212,7 +212,7 @@ Theorem ifexp_bytes_header[local]:
     val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) src s.vs_memory ==>
     mload src s = n2w (LENGTH bs)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem ifexp_string_header[local]:
@@ -220,7 +220,7 @@ Theorem ifexp_string_header[local]:
     val_in_memory (BaseTV (StringT cap)) (StringV str) src s.vs_memory ==>
     mload src s = n2w (LENGTH str)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem ifexp_typed_bytestring_header[local]:
@@ -1947,13 +1947,20 @@ Proof
       drule place_type_value_state >> strip_tac >> gvs[] >>
       `!tail. place_type_value cx p (ee with gas_obs := tail) =
          (pr,ee with gas_obs := tail)` by
-        (Cases_on `p` >>
-         fs[place_type_value_def, get_scopes_def, get_immutables_def,
-            get_address_immutables_def, bind_def, return_def,
-            lift_option_type_def, raise_def,
-            vfmTypesTheory.option_CASE_rator] >>
-         rpt (BasicProvers.FULL_CASE_TAC >> fs[return_def, raise_def]) >>
-         gvs[]) >>
+        (qpat_x_assum `place_type_value cx p ee = _` mp_tac >>
+         Cases_on `p` >>
+         simp[place_type_value_def, get_scopes_def, get_immutables_def,
+              get_address_immutables_def, bind_def, return_def]
+         >- (rename1 `lookup_scopes id ee.scopes` >>
+             Cases_on `lookup_scopes id ee.scopes` >> simp[] >>
+             rename1 `subscripts_type entry.type path` >>
+             Cases_on `subscripts_type entry.type path` >> simp[]) >>
+         rename1 `get_source_immutables src` >>
+         Cases_on `ALOOKUP ee.immutables cx.txn.target` >> simp[] >>
+         rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+         Cases_on `FLOOKUP (get_source_immutables src imms) id` >> simp[] >>
+         rename1 `subscripts_type (FST tva) path` >>
+         Cases_on `subscripts_type (FST tva) path` >> simp[]) >>
       simp[] >> Cases_on `pr` >> simp[] >>
       IF_CASES_TAC >> simp[return_def] >>
       Cases_on `read_place cx p ee` >>

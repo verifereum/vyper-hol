@@ -16,6 +16,7 @@ Ancestors
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState venomWf cfgAnalysisProps execEquivProofs
   list finite_map pred_set string
+  passTransform
 
 (* Forward-specialized dataflow theorems for sound proofs *)
 val fixpoint_fwd = SIMP_RULE (srw_ss()) []

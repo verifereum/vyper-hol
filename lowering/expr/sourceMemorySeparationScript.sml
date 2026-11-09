@@ -43,7 +43,7 @@ Proof
     (simp_tac bool_ss [local_region_def] >> qexistsl_tac [`entry`, `p`, `ptr_addr`] >> simp[]) >>
   drule_all local_ptrs_rel_alloca_disjoint >> DISCH_TAC >>
   drule_all local_ptrs_rel_value >> strip_tac >>
-  gvs[eval_operand_def, compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[eval_operand_def, loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem source_pointer_below_frontier:
@@ -68,10 +68,10 @@ Proof
   >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `offset`, `region_size`] >> strip_tac >>
       qpat_x_assum `!name entry offset region_size. _`
         (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >>
-      impl_tac >- simp[] >> simp_tac bool_ss [compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      impl_tac >- simp[] >> simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   MAP_EVERY qx_gen_tac [`name`, `entry`, `p`, `region_size`, `ptr_addr`] >> strip_tac >>
   drule_all source_pointer_below_frontier >> DISCH_TAC >>
-  simp_tac bool_ss [compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem source_memory_separated_fresh_snapshot:
@@ -110,7 +110,7 @@ Proof
   >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `offset`, `region_size`] >> strip_tac >>
       qpat_x_assum `!name entry offset region_size. _`
         (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >>
-      impl_tac >- simp[] >> simp[compileEnvTheory.regions_disjoint_def]) >>
+      impl_tac >- simp[] >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   MAP_EVERY qx_gen_tac [`name`, `entry`, `p`, `region_size`, `ptr_addr`] >> strip_tac >>
   drule_all source_pointer_cached_allocation_disjoint >> simp[]
 QED

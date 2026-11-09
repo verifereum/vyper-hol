@@ -21,7 +21,7 @@ Ancestors
   fragExec  exprSimAlloc exprSimCopy exprSimStorageCopy
   intCallReturnMem intCallResult typedMemoryCopy valueCopy valueCopyBytes
   loweringSlice localPtrsProps stmtSimReturn
-  stmtLowering exprLowering emitHelper exprLoweringProps context compileEnv
+  stmtLowering exprLowering emitHelper exprLoweringProps context compileEnv loweringStateRelDefs
   typedCopyDomain valueEncoding vyperTypeSystem vyperState vyperTyping
   venomExecSemantics venomInst venomState
 

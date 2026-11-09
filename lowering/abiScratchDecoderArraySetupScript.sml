@@ -6,7 +6,7 @@ Ancestors
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderDynamic abiDecoderOffset
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
   abiDecoderLoop abiDecodeRanges abiValidMember abiValidMembers abiEncoder fragExec instIdxIndep
-  compileEnv valueEncoding vyperABI vyperValue contractABI venomState venomExecSemantics words
+  compileEnv loweringStateRelDefs valueEncoding vyperABI vyperValue contractABI venomState venomExecSemantics words
   list arithmetic
 
 Definition abi_scratch_decoder_array_setup_post_def:

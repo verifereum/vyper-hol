@@ -4,7 +4,7 @@
    Complete execution contracts use fn_has_code and abi_decode_sim instead. *)
 Theory abiBuiltinFlatChecks
 Ancestors
-  builtinAbi abiEncoder exprLoweringProps compileEnv venomExecSemantics
+  builtinAbi abiEncoder exprLoweringProps compileEnv loweringStateRelDefs venomExecSemantics
   venomState venomInst words list finite_map
 
 Definition abi_builtin_flat_probe_start_def:

@@ -19,7 +19,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv context selectorDispatch immutableSectionRel
+  supportedProgram compileEnv loweringStateRelDefs selectorDispatch immutableSectionRel context
 
 (* ===== Source deployment, typing and storage ===== *)
 

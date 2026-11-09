@@ -18,6 +18,7 @@ Ancestors
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState venomWf cfgAnalysisProps cfgHelpers execEquivProofs
   list finite_map pred_set string cfgCorrectnessProof
+  passTransform
 
 (* Forward-specialized dataflow theorems for fwd proofs *)
 val inter_fwd = SIMP_RULE (srw_ss()) []
@@ -95,8 +96,8 @@ Proof
       impl_tac >- (
         rpt conj_tac >~
         [`MEM (analysis_block_transform _ _ _ bb) _`]
-        >- (simp[analysisSimDefsTheory.analysis_function_transform_def,
-                 passSimulationDefsTheory.function_map_transform_def, MEM_MAP] >>
+        >- (simp[passTransformTheory.analysis_function_transform_def,
+                 passTransformTheory.function_map_transform_def, MEM_MAP] >>
             qexists_tac `bb` >> simp[] >>
             metis_tac[venomExecProofsTheory.lookup_block_MEM]) >~
         [`MEM inst _`]

@@ -2,7 +2,7 @@
 Theory stmtSimForArrayLoop
 Ancestors
   loweringPosts stmtSimDefs stmtSimProps
-  stmtSimForArrayParts stmtSimForArray  stmtLowering compileEnv
+  stmtSimForArrayParts stmtSimForArray  stmtLowering compileEnv loweringStateRelDefs
   fragExec loweringSlice localPtrsProps exprLoweringProps emitHelper
   venomInst venomState venomExecSemantics vyperState valueEncoding
   list rich_list finite_map words integer_word venomExecProofs emitHelperProps

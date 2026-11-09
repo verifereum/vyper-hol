@@ -4,7 +4,7 @@ Ancestors
   exprSimHypsDefs exprSimProps exprSimDefs loweringPosts
   gasOutcome gasSummary gasSummaryCompose gasContext fragGasPath fragGasMode
   list finite_map fragExec localPtrsProps loweringSlice
-  exprLowering exprLoweringProps compileEnv context
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs context
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeEnv vyperTypeInvariants
   valueEncoding valueEncodingProofs venomInst venomState memoryValueEncoding
 

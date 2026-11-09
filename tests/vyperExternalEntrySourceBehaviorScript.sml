@@ -9,9 +9,9 @@ Libs
   cv_transLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../lowering/defs/bytecode/external-entries"]
+val () = holbuild_extra_deps ["../bytecode/external-entries"]
 fun entry_source_fixture name = let
-  val path = "../lowering/defs/bytecode/external-entries/ast/" ^ name ^ ".json"
+  val path = "../bytecode/external-entries/ast/" ^ name ^ ".json"
   val input = vyperCheckContractFrontendLib.prepare_check_input
     {in_deploy = false, address = ``43w : address``,
      annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,

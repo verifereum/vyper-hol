@@ -13,6 +13,7 @@ Ancestors
   passSimulationDefs passSimulationProofs execEquivParamProofs
   execEquivParamBase stateEquiv venomExecSemantics venomInst instIdxIndep
   venomState list finite_map pred_set
+  passTransform
 
 (* Shared simplification theorems for expanding Abbrev'd blocks
    WITHOUT triggering srw_ss() loops on FLAT/MAPi terms.

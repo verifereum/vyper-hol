@@ -148,14 +148,14 @@ Proof
   >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `offset`, `region_size`] >> strip_tac >>
       qpat_x_assum `!name entry offset region_size. _`
         (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >>
-      impl_tac >- simp[] >> simp[compileEnvTheory.regions_disjoint_def]) >>
+      impl_tac >- simp[] >> simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   MAP_EVERY qx_gen_tac [`name`, `entry`, `p`, `region_size`, `ptr_addr`] >> strip_tac >>
   `local_region cenv scopes before name (w2n ptr_addr) region_size` by
     (simp_tac bool_ss [local_region_def] >> qexistsl_tac [`entry`, `p`, `ptr_addr`] >> simp[]) >>
   qspecl_then [`func`, `cenv`, `scopes`, `before`, `after`, `inst`, `q`, `region_base`, `capacity`,
     `name`, `w2n ptr_addr`, `region_size`] mp_tac local_ptrs_rel_growing_alloca_disjoint >>
   impl_tac >- simp[] >> DISCH_TAC >> drule_all local_ptrs_rel_value >> strip_tac >>
-  gvs[eval_operand_def, compileEnvTheory.regions_disjoint_def] >> decide_tac
+  gvs[eval_operand_def, loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem source_owned_allocation_private:

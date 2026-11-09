@@ -1,6 +1,6 @@
 Theory rawReturnHalt
 Ancestors
-  loweringHalt fragExec stmtLowering compileEnv venomState emitHelper emitHelperProps venomExecSemantics venomInst
+  loweringHalt fragExec stmtLowering compileEnv loweringStateRelDefs venomState emitHelper emitHelperProps venomExecSemantics venomInst
 
 Theorem compile_external_return_raw_parts[local]:
   !op prim ei msz nkey ut iv st x st'.

@@ -1,63 +1,33 @@
 (* Concrete checks of the lowering and the compiler, as one build root:
-   bytecode parity with the pinned Python compiler on fixed fixtures,
-   membership in the supported subset, interface contracts on concrete
-   inputs, and oracle-admission audits. The pinned-Python witnesses have
-   their own root, evalCompilerWitnesses, so CI can shard them. *)
+   interface contracts on concrete inputs, compiled creation code, and
+   regressions of the compiler's allocation and evaluation order. Bytecode
+   parity with the pinned Python compiler is the native runner's job
+   (bytecode/native/). *)
 Theory loweringChecks
 Ancestors
-  (* bytecode parity with the pinned Python compiler, evaluated in the kernel *)
-  evalCompilerBytecodeExternalEntries evalCompilerBytecodePragmaPure
-  evalCompilerBytecodeDefaultEntries evalCompilerBytecodeDefaultMulti
-  evalCompilerBytecodeDefaultSender evalCompilerBytecodeDefaultOnly
-  evalCompilerBytecodeDefaultConstant evalCompilerBytecodeDefaultNamedConstant
-  evalCompilerBytecodeDefaultPayable evalCompilerBytecodeDefaultBalance
-  evalCompilerBytecodeDefaultInternalFull
-  evalCompilerBytecodeNonreentrantMulti evalCompilerBytecodeNonreentrantInternal
-  evalCompilerBytecodeNonreentrantPragma evalCompilerBytecodeNonreentrantPayable
-  evalCompilerBytecodeNonreentrantView evalCompilerBytecodeNonreentrantNoStorage
-  evalCompilerBytecodeNonreentrantTransient
-  evalCompilerBytecodeNonreentrantEarlyReturn
-  evalCompilerBytecodeNonreentrantFallback
-  evalCompilerBytecodeNonreentrantPragmaFallback
-  evalCompilerBytecodeNonreentrantPragmaInit
-  evalCompilerBytecodeNonreentrantInternalView
-  evalCompilerBytecodeNonreentrantPragmaReentrant
-  evalCompilerBytecodeNonreentrantInternalEarlyReturn
-  evalCompilerBytecodeNonreentrantInternalReturn
-  evalCompilerBytecodeNonreentrantFallbackEarlyReturn
-  evalCompilerAbiCodegen evalCompilerAbiTupleString
-  (* range lowering: literal and checked endpoints, computed bound failure *)
-  evalCompilerRange
-  (* the same parity with the final assembly optimizer on *)
-  evalCompilerBytecodeAsmOpt
-  (* each fixture lowers to a unit of the shape the O1 source stage promises *)
-  evalCompilerSourceShape
-  (* tests of the evaluation libraries those checks use *)
-  evalCompilerBytecodeLibTest evalCompilerBaseDftLibTest
-  evalCompilerPlanCacheLibTest
-  (* the supported subset: per-construct contracts, fixture membership *)
-  supportedTypeProps supportedNameProps supportedDeclProps
-  supportedExprFormProps supportedExprProps supportedStmtProps
-  supportedStmtTraverseProps supportedProgramProps
-  supportedFixturesCore supportedFixturesControl supportedFixturesControlDeploy
-  supportedFixturesState supportedFixturesMultiple supportedFixturesBuiltins
-  supportedFixturesAbiBuiltinsEvents supportedFixturesAbiCalls
-  supportedFixturesAbiExternal
-  supportedFixturesScalarArithmetic supportedFixturesScalarBounds
-  supportedFixturesScalarConversions supportedFixturesScalarOperators
-  supportedFixturesScalarWidthsLiterals
-  supportedEvalTest vyperMembershipMatrixTest
+  (* allocation limits, conversions, concat buffers, shared callee memory *)
+  compilerLoweringTest
+  (* fixed-program regressions: ranges, allocation budget, immutables,
+     assignment order, the O1 source-stage unit shape *)
+  evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
+  evalAssignmentOrder evalCompilerSourceShape
   (* contracts of the lowering's interfaces on concrete inputs *)
-  e2eBoundaryTest e2eEntryChecks e2eProducerChecks groupedDispatchProps
   targetPlaceTest
-  (* raw RETURN's copy, and the old opaque-callback expression package *)
-  rawReturnCopy exprRecursionRegression
-  (* compiled creation code and events *)
-  vyperCreateMemoryTest vyperCtorAliasTest createImmutableBytecodeTest
-  vyperEventForwardStruct vyperEventArgumentLifetime
-  (* admission audits: listed theorems use only the oracle tags each allows *)
-  createLoweringAudit createOracleClosureAudit conversionProofAudit
+  abiEncodeSnapshotTest
+  (* oracle-admission audit of the CREATE boundary theories *)
+  createOracleClosureAudit
+  (* compiled creation code *)
+  vyperCtorAliasTest createImmutableBytecodeTest createCompletionProbe
+  (* tests of the bytecode evaluation library the native runner shares *)
+  evalCompilerBytecodeLibTest
+  (* the supported subset: per-construct contracts, membership matrix *)
+  supportedExprFormProps supportedExprProps supportedProgramProps
+  vyperMembershipMatrixTest
+  (* more interface contracts on concrete inputs; raw RETURN's copy *)
+  e2eBoundaryTest groupedDispatchProps rawReturnCopy
+  (* compiled creation code and events, the event endpoints' admission audit *)
+  vyperCreateMemoryTest vyperEventForwardStruct vyperEventArgumentLifetime
   eventEndpointAudit
-  (* ABI encode/decode edge cases, creation completion and size boundaries *)
-  abiEncodeSnapshotTest abiDecodeBoundsTest abiDecodeAliasTest
-  abiDecoderBytesEdges createCompletionProbe createSizeBoundaryTest
+  (* ABI encode/decode edge cases and size boundaries *)
+  abiDecodeBoundsTest abiDecodeAliasTest abiDecoderBytesEdges
+  createSizeBoundaryTest

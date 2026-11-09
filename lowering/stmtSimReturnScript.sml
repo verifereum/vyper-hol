@@ -22,8 +22,7 @@ Ancestors
   vyperTypeABI
   transientLockProps nonreentrantEquiv accountsRelProps context localPtrsProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding venomMemDefs
-  vyperContext vfmExecution vfmState
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs venomMemDefs vyperContext vfmExecution vfmState
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   vyperStatePreservation
   venomExecSemantics venomInst venomState

@@ -4,7 +4,7 @@
    only in the output buffer. *)
 Theory abiMemoryFrame
 Ancestors
-  memoryReadProps compileEnv venomState venomExecSemantics list pair arithmetic
+  memoryReadProps compileEnv loweringStateRelDefs venomState venomExecSemantics list pair arithmetic
 
 Definition abi_window_separated_def:
   abi_window_separated offset read_len base write_len <=>

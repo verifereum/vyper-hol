@@ -1,6 +1,6 @@
 Theory immutableRelation
 Ancestors
-  immutableSection immutableEncodingProofs immutableEncoding immutableValue compileEnv
+  immutableSection immutableEncodingProofs immutableEncoding immutableValue compileEnv loweringStateRelDefs
 
 (* A lookup-to-declaration interface, discharged by location allocation and
    source-name uniqueness. It deliberately does not presume unshadowed keys. *)

@@ -5,7 +5,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
   vyperStorageBackend vyperStorage
-  exprLowering compileEnv vyperAST emitHelper
+  exprLowering compileEnv loweringStateRelDefs vyperAST emitHelper
   exprSimHyps exprSimHypsDefs exprSimAttributeFields exprSimFieldLayout vfmState
   exprLoweringProps venomState vyperLookupStorage list
   emitHelperProps venomExecSemantics venomInst exprSimVVFrame
@@ -740,7 +740,7 @@ QED
 Resume compile_pop_storage_normalized_sim[positive]:
   `(if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by simp[] >>
   `~s0.vs_call_ctx.cc_static` by
-    fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+    fs[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
   drule_all dynarray_pop_storage_run >>
   disch_then (qspecl_then [`sa.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
   `run_inst_seq (emitted_insts sa r) s0 = OK u` by

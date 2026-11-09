@@ -95,11 +95,11 @@ Proof
   >- (MAP_EVERY qx_gen_tac [`name`, `entry`, `offset`, `region_size`] >> strip_tac >>
       qpat_x_assum `!name entry offset region_size. _`
         (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >>
-      impl_tac >- simp[] >> simp_tac bool_ss [compileEnvTheory.regions_disjoint_def] >> strip_tac >> decide_tac) >>
+      impl_tac >- simp[] >> simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >> decide_tac) >>
   MAP_EVERY qx_gen_tac [`name`, `entry`, `p`, `region_size`, `ptr_addr`] >> strip_tac >>
   qpat_x_assum `!name entry p region_size ptr_addr. _`
     (qspecl_then [`name`, `entry`, `p`, `region_size`, `ptr_addr`] mp_tac) >>
-  impl_tac >- simp[] >> simp_tac bool_ss [compileEnvTheory.regions_disjoint_def] >> strip_tac >> decide_tac
+  impl_tac >- simp[] >> simp_tac bool_ss [loweringStateRelDefsTheory.regions_disjoint_def] >> strip_tac >> decide_tac
 QED
 
 Theorem source_writes_separated_prefix:

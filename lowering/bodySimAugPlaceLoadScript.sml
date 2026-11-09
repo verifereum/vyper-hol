@@ -1,12 +1,12 @@
 Theory bodySimAugPlaceLoad
 Ancestors
   bodySimAugPlaceLive bodySimAugPlaceScopes supportedTargets
-  targetPlaceSim valueEncoding valueEncodingProps
+  targetPlaceSim valueEncoding valueEncodingDefs valueEncodingProps
   vyperState vyperValue vyperMisc list pair finite_map words
   vyperTypeInvariants exprSimHyps vyperTyping vyperPlaceFrames
   vyperInterpreter vyperScopePreservation vyperValueOperation
   vyperPlaceStatePreservation vyperAssignPreservesType
-  exprSimBuffer exprLoweringProps compileEnv exprSimDefs exprSimHypsDefs
+  exprSimBuffer exprLoweringProps compileEnv loweringStateRelDefs exprSimDefs exprSimHypsDefs
   loweringPosts exprSimProps exprSimSource memoryValueEncoding
 
 Theorem aug_place_projection_needs_shape:

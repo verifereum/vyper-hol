@@ -2,7 +2,7 @@ Theory dftGasInvSSAProbe
 Ancestors
   dftGasOracleDefs dftGasInvOracleFrame dftGasInvCrossingProbe dftRunRel dftAvailability
   dftScheduleOrder dftWf dftIdempotent dftTopoSort venomWf
-  sccpCorrectnessProofs venomExecSemantics venomInst venomState
+  venomWfProps venomExecSemantics venomInst venomState
   list finite_map pred_set option dftSsaPreserve
 
 Theorem inv_remaining_head_vars:

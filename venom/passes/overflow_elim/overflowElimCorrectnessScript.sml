@@ -10,6 +10,7 @@ Ancestors
   passSimulationDefs venomInst dfgDefs
   rangeAnalysisDefs dfAnalyzeWidenDefs stateEquiv
   rangePassProofs analysisSimDefs analysisSimProps stateEquivProps venomExecSemantics venomState venomInstProps venomExecProps execEquivParamProps rangeEvalDefs valueRangeDefs rangeAnalysisProofs dfgAnalysisProps dfgSoundDefs dfgSoundProofs worklistDefs list finite_map indexedLists
+  passTransform
 
 Libs
   BasicProvers

@@ -2,7 +2,7 @@
 Theory allocationPtr
 Ancestors
   loweringHalt bodyPtrDefs loweringPosts exprSimDefs exprSimProps exprLoweringProps ptrDiscipline
-  venomMemDefs venomExecSemantics venomInst finite_map compileEnv venomState localPtrsProps
+  venomMemDefs venomExecSemantics venomInst finite_map compileEnv loweringStateRelDefs venomState localPtrsProps
 
 (* A zero-footprint value need not be allocated at all.  Every byte of a
    positive footprint, however, lies strictly below the allocation frontier. *)

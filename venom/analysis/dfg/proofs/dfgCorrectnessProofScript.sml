@@ -177,22 +177,6 @@ Proof
   simp[]
 QED
 
-(* --------------------------------------------------------------------------
-   Finiteness/termination helpers
-   -------------------------------------------------------------------------- *)
-
-Theorem dfg_def_ids_finite_proof:
-  !dfg. FINITE (dfg_def_ids dfg)
-Proof
-  rw[dfg_def_ids_def, IMAGE_FINITE, FINITE_FRANGE]
-QED
-
-Theorem dfg_get_def_implies_dfg_def_ids_proof:
-  !dfg v inst. dfg_get_def dfg v = SOME inst ==> inst.inst_id IN dfg_def_ids dfg
-Proof
-  metis_tac[dfg_def_ids_def, IN_IMAGE, IN_FRANGE_FLOOKUP, dfg_get_def_def]
-QED
-
 (* ==========================================================================
    Local helpers for uses/defs/ids correctness
    ========================================================================== *)

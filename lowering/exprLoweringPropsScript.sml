@@ -54,12 +54,12 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering exprCallBounds emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
+  exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple exprCallBounds
   builtinCreate context
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingProofs valueLoadProps localPtrsProps venomMemDefs
+  valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs valueLoadProps
   vyperAST vyperTyping fcgDefs
 Libs
   pairLib BasicProvers monadsyntax
@@ -323,7 +323,7 @@ Proof
   simp[local_region_def, lookup_scopes_def, lookup_var_def,
        immutable_alloca_sep_def, get_source_immutables_def,
        finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
-       type_memory_size_def, compileEnvTheory.regions_disjoint_def, wordsTheory.dimword_def,
+       type_memory_size_def, loweringStateRelDefsTheory.regions_disjoint_def, wordsTheory.dimword_def,
        venomMemPropsTheory.dimindex_256] >>
   conj_tac
   >- (rpt strip_tac >> gvs[AllCaseEqs()] >>
@@ -372,7 +372,7 @@ Proof
   qpat_x_assum `cenv.ce_is_ctor ==> _` drule_all >>
   strip_tac >> simp[] >>
   gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
-  metis_tac[compileEnvTheory.regions_disjoint_def]
+  metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 (* Expose the base operand and constructor runtime-label requirements. *)

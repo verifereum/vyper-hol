@@ -4,7 +4,7 @@
    The array region bound keeps each element read below the alloca frontier. *)
 Theory stmtForArrayMemory
 Ancestors
-  stmtSimDefs stmtLowering stmtLoweringMono compileEnv valueEncoding vyperInterpreter
+  stmtSimDefs stmtLowering stmtLoweringMono compileEnv loweringStateRelDefs valueEncoding vyperInterpreter
   vyperState stmtForArrayMemoryRounds stmtForArrayMemoryEntry
   stmtForArrayMemorySupport stmtSimForArrayFrag stmtSimForArrayLoop
   loweringPosts bodyMemoryDefs stmtSimProps exprLoweringProps fragGasMode finite_map list arithmetic

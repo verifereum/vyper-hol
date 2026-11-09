@@ -2,7 +2,7 @@
 Theory annAssignPtrDestinationFrame
 Ancestors
  annAssignPtrDestination annAssignPtrExterior annAssignPtrScratch
- exprSimProps exprLoweringProps localPtrsProps compileEnv venomState
+ exprSimProps exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs venomState
  valueEncodingProps robustCopyTransportPtr ptrDiscipline finite_map pred_set
  list venomMemProofs valueEncodingProofs loweringPosts venomMemDefs
 
@@ -20,7 +20,7 @@ Proof
    fs[stmt_state_rel_def, state_rel_def] >>
  rpt gen_tac >> strip_tac >>
  drule_all local_ptrs_rel_alloca_disjoint >>
- simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+ simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem annassign_local_ptrs_exterior_ptr:
@@ -119,7 +119,7 @@ Proof
  `aid <> inst.inst_id` by decide_tac >>
  fs[alloca_inv_def, allocas_non_overlapping_def] >>
  first_x_assum (qspecl_then [`aid`,`inst.inst_id`,`off`,`nsz`,`b`,`sz`] mp_tac) >>
- simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+ simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem annassign_allocated_destination_invariants_ptr:

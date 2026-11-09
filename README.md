@@ -214,13 +214,13 @@ code hash when recording deployment traces; upstream test-facing calls are
 unchanged. HOL's exact runtime-byte comparison remains enabled.
 
 The compiler bytecode oracle has its own profile in
-`lowering/defs/bytecode/python_o1_bytecode_oracle.py`: Venom/NONE/Prague with
+`bytecode/python_o1_bytecode_oracle.py`: Venom/NONE/Prague with
 metadata disabled and decimals enabled by fixture pragmas. These profiles can
 evolve independently. At this pin NONE runs the O1 Venom passes but disables
 assembly optimisation; it is not `-O O1`. Both compile for Prague (the newest
 target the pin supports), whereas the HOL EVM semantics executes Osaka.
 Metadata need not match for behavioral replay. Bytecode parity (checked by
-`lowering/defs/bytecode/native/`) is not implied by a passing semantics replay.
+`bytecode/native/`) is not implied by a passing semantics replay.
 
 Use Python 3.11.17 in an isolated environment, then run from this repository:
 

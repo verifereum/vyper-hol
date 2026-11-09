@@ -4,7 +4,7 @@ Theory annAssignPtrLength
 Ancestors
  annAssignPtrSetup typedCopyPtr fragGasSeqPtr fragGasPathPtr
  bodyPtrDefs ptrDiscipline venomInst venomInstProofs venomExecSemantics
- venomState finite_map emitHelper emitHelperProps context compileEnv
+ venomState finite_map emitHelper emitHelperProps context compileEnv loweringStateRelDefs
  exprLoweringProps fragExec
 
 Theorem annassign_mload_path_ptr:
@@ -23,8 +23,7 @@ Proof
  rpt gen_tac >> strip_tac >>
  `step_inst_base (mk_inst id MLOAD [Var src] [out]) s =
     OK (update_var out (mload (w2n a) s) s)` by
-   (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    simp[mk_inst_def, exec_read1_def, eval_operand_def]) >>
+   (irule step_MLOAD >> simp[eval_operand_def]) >>
  `gas_path_ptr_edge D 0 ctx func PG G tn s 0
    (step_prov PG G (mk_inst id MLOAD [Var src] [out])
      (update_var out (mload (w2n a) s) s))
@@ -55,8 +54,7 @@ Proof
  rpt gen_tac >> strip_tac >>
  `step_inst_base (mk_inst id opc [left;right] [out]) s =
     OK (update_var out (f a b) s)` by
-   (gvs[] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    simp[mk_inst_def, exec_pure2_def]) >>
+   (gvs[] >> FIRST [irule step_ADD, irule step_AND] >> simp[]) >>
  `gas_path_ptr_edge D 0 ctx func PG G tn s 0
    (step_prov PG G (mk_inst id opc [left;right] [out]) (update_var out (f a b) s))
    (step_taint (mk_inst id opc [left;right] [out]) s (update_var out (f a b) s) tn)

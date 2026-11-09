@@ -2,7 +2,7 @@
 Theory externalReturnCopyAdapter
 Ancestors
   externalReturnCopyFrame externalReturnCopyTransport externalReturnCopyBase
-  fragExec context compileEnv valueEncoding valueEncodingProps
+  fragExec context compileEnv valueEncoding valueEncodingDefs valueEncodingProps
   vyperTypeSystem vyperTyping vyperValue vfmConstants loweringPosts arithmetic words list
 
 Theorem return_copy_at_start:

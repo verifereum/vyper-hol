@@ -2,8 +2,9 @@ Theory fnFrameBoundaryEntryParams
 Ancestors
   asmFrame allocMono frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list pred_set
-  arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
+  arithmetic words unitShapeDefs venomWf cfgHelpers
   livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim livenessProofs
+  venomWfProps
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:

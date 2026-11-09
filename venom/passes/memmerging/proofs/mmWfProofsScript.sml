@@ -13,6 +13,7 @@ Ancestors
   mmCopyEquiv mmCopy mmScan passSharedField
   dfgAnalysisProps dfgDefs passSimulationDefs passSimulationProps
   venomExecProofs
+  passTransform
 
 (* ===== Structural helpers for wf preservation ===== *)
 

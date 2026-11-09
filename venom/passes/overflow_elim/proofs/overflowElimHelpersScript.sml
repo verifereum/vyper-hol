@@ -22,6 +22,7 @@ Ancestors
   dfgDefs dfgAnalysisProps dfgSoundDefs dfgSoundProofs
   worklistDefs
   list finite_map
+  passTransform
 Libs
   BasicProvers
 

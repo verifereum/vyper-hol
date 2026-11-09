@@ -1,6 +1,20 @@
 Theory makeSsaCurrentExternalExclusion
 Ancestors
-  makeSsaCurrentWfSsa venomExecProps list rich_list removeUnusedSsaProofs makeSsaSsaForm
+  makeSsaCurrentWfSsa venomExecProps list rich_list venomWfProps
+
+(* ALL_DISTINCT of FLAT (MAP f xs) means shared elements identify their source *)
+Triviality all_distinct_flat_map_unique:
+  !f xs x y v.
+    ALL_DISTINCT (FLAT (MAP f xs)) /\
+    MEM x xs /\ MEM y xs /\ MEM v (f x) /\ MEM v (f y) ==>
+    x = y
+Proof
+  gen_tac >> Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  Cases_on `x = h` >> Cases_on `y = h` >> gvs[] >>
+  metis_tac[MEM_FLAT, MEM_MAP]
+QED
 Theorem current_wf_external_output_disjoint:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\ lookup_block h renamed = SOME new /\

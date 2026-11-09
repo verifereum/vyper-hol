@@ -45,7 +45,7 @@ Ancestors
   loweringPosts
   list  exprSimHyps exprSimOps loweringSlice exprLowering
   exprLoweringProps vyperEvalExprPreservesScopesDom vyperInterpreter
-  vyperState vyperContext vyperTyping compileEnv freshWrites fragExec varsExt
+  vyperState vyperContext vyperTyping compileEnv loweringStateRelDefs freshWrites fragExec varsExt
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
 
 (* Keep the account parameter for account-dependent builtins.  Len and

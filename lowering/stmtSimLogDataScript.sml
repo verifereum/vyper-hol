@@ -1,7 +1,7 @@
 Theory stmtSimLogData
 Ancestors
   loweringPosts
-  stmtSimLogTopics exprSimBufferStore stmtLowering context compileEnv
+  stmtSimLogTopics exprSimBufferStore stmtLowering context compileEnv loweringStateRelDefs
   supportedTypes vyperValue valueEncoding words list abiEncoderInput
   emitHelper exprLoweringProps venomExecSemantics venomInst venomState emitHelperProps
 

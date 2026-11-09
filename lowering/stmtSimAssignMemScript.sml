@@ -38,7 +38,7 @@ Ancestors
   stmtSimDeclPath
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding memoryValueEncoding
+  compileEnv loweringStateRelDefs valueEncoding memoryValueEncoding
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs

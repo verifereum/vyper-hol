@@ -19,32 +19,31 @@ Ancestors
   venomAnalysisHol
   (* lowering, pipeline, codegen and e2e *)
   vyperLoweringHol
-  (* Venom execution: oracle-aware core simulations, alloca size caching *)
-  coreOracleSim coreOracleUpdates allocaCacheProps
-  (* passes: FMP lowering composition, memory merging, oracle projections of
-     the concretize and SSA simulations *)
-  fmpLowerSequenceExec mmTransform memzeroFrame concretizeOracleSim ssaOracleSim
-  (* lowering: ABI correctness, target/place steps, typed copies and hashing *)
-  abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
-  (* codegen and compiler units: frame simulation, stack planning, unit checks *)
-  genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
-  (* lowering: ABI encoder read windows, typed calldata decoding, entry
-     allocation frames and registration, nonreentrancy, byte-builtin and
-     concat memory, conversion from bytes *)
-  abiEncoderWindowSourceRun calldataFiniteTyped calldataAggregateTyped
-  actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
-  allocaHistoryFragment nonreentrantEntry nonreentrantSource nonreentrantExit
-  builtinBytesMemory concatMemory exprSimConvertFromBytes
+  (* Venom execution: alloca size caching, jump independence *)
+  allocaCacheProps jumpIndep
+  (* passes: FMP lowering composition, memory merging, the concretize
+     simulation's oracle projection *)
+  fmpLowerSequenceExec mmTransform memzeroFrame concretizeOracleSim
+  mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
-  (* lowering: gas-origin and raw gas shadows, calldata registration, constructor
-     arguments, widened returns, body memory closures, place typing *)
-  msgGasOriginPost generatedGasOrigin gasShadowRawRuntime gasShadowRawDeploy
-  calldataRegistrationLocals ctorRegisterArgs stmtSimReturnWiden
-  bodyMemory bodyDeclMemory bodyStmtClosureMemory bodyExprClosureMemory
+  (* codegen and compiler units: frame simulation, stack planning, unit checks *)
+  genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  (* lowering: ABI correctness, target/place steps, typed copies and hashing,
+     place typing *)
+  abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
   placeTypingE2EProps
-  (* passes: memory merging block/supply proofs, remaining-oracle and pass-oracle
-     simulations, jump independence *)
-  mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
-  remainingOracleSim remainingOracleTransport remainingOracleUpdates
-  passOracleSim jumpIndep
+  (* lowering: entry decoding, allocation frames and registration, constructor
+     arguments, nonreentrancy, byte-builtin and concat memory, conversion from
+     bytes, widened returns, body memory *)
+  actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
+  allocaHistoryFragment ctorRegisterArgs
+  nonreentrantEntry nonreentrantSource nonreentrantExit
+  builtinBytesMemory concatMemory exprSimConvertFromBytes
+  stmtSimReturnWiden bodyMemory
+  (* pointer safety of the lowering *)
+  batchCopyRobustPtr entryHaltPtr liveArrayTransportPtr normalizationAllocPtr
+  ptrSafetyTransport returnMetadataPtr staticTypeFitsPtr structChildPtr
+  typedCopyArrayExecutionPtr wordCopyRobustPtr
+  (* deployment: the constructor frame and deploy correctness *)
+  e2eDeployCorrectness

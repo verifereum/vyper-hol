@@ -4,7 +4,7 @@ Ancestors
   appendStorageComposeFactsPtr appendStorageSuccessPostPtr
   bodyPtrDefs stmtFragPtr stmtAbortPtr gasSummaryComposePtr stmtSimForced
   stmtSimAppendStorageCompose exprSimProps exprOperandVar exprLoweringProps
-  compileEnv loweringPosts stmtSimDefs stmtSimProps finite_map words
+  compileEnv loweringStateRelDefs loweringPosts stmtSimDefs stmtSimProps finite_map words
   vyperInterpreter vyperState vyperValue venomState fragGasPathPtr gasExemptCert
   gasSummary fragGasMode fragGasPath gasContext appendStorageGhostPtr ptrDiscipline
   vyperStorageBackend stmtAppendStoragePathPtr stmtSimAppendStorage

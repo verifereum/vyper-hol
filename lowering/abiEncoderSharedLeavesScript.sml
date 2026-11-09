@@ -2,7 +2,7 @@ Theory abiEncoderSharedLeaves
 Ancestors
   abiEncoderSharedContract abiEncoderSequence abiScratchLeafEffect abiScratchEncoderContract
   abiEncoderExtendSim abiDecoderContract abiEncoderRegisteredEffect abiDecoderFrame venomMemDefs
-  venomState venomExecSemantics instIdxIndep valueEncoding list arithmetic abiEncoderLeafGlobals
+  venomState venomExecSemantics instIdxIndep valueEncoding valueEncodingDefs list arithmetic abiEncoderLeafGlobals
   abiEncoderOpenInput abiEncoderInput abiEncoderReentryLeaves abiEncoderLeafCode
   abiEncoderAdmissible abiEncoderBytes abiEncoderBytesCode abiDecoderAllocation abiDecoderLoop
   abiDecoderReentry abiEncoder compileEnv emitHelper contractABI words rich_list

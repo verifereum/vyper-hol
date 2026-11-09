@@ -7,7 +7,7 @@
 Theory valueEncodingProofs
 Ancestors
   list rich_list venomMemProofs
-  valueEncoding vyperStorage vyperValue venomState venomExecSemantics
+  valueEncoding valueEncodingDefs vyperStorage vyperValue venomState venomExecSemantics
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeABI contractABI
 Libs
   blastLib intLib

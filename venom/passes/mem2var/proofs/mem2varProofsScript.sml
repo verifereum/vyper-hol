@@ -10,6 +10,7 @@ Ancestors
   dfgDefs
   finite_map list pred_set pair
   string ASCIInumbers
+  passTransform
 Libs
   HolKernel boolLib bossLib BasicProvers markerLib mem2varFrameLib
 

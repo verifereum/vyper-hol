@@ -16,7 +16,7 @@
 
 Theory concretizeMemLocDefs
 Ancestors
-  staticLayoutDefs passSimulationDefs passSharedDefs basePtrDefs cfgDefs enumeral toto
+  staticLayoutDefs passTransform passSharedDefs basePtrDefs cfgDefs enumeral toto
 
 (* ===== Allocation map ===== *)
 

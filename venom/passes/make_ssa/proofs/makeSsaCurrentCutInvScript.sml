@@ -374,7 +374,7 @@ Proof
   `MEM old fn.fn_blocks /\ MEM (EL k old.bb_instructions) old.bb_instructions /\
    old.bb_label = h` by
     metis_tac[venomExecPropsTheory.lookup_block_MEM,
-      makeSsaHelperTheory.lookup_block_label, listTheory.MEM_EL] >>
+      venomExecProofsTheory.lookup_block_label, listTheory.MEM_EL] >>
   `fn_cfg_edge fn p h` by
     (qpat_assum `current_wf_phi_context _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[current_wf_phi_context_def] >> strip_tac >> metis_tac[]) >>
@@ -413,9 +413,9 @@ Proof
   `MEM h (fn_labels fn)` by
     (simp[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
      metis_tac[venomExecPropsTheory.lookup_block_MEM,
-       makeSsaHelperTheory.lookup_block_label]) >>
+       venomExecProofsTheory.lookup_block_label]) >>
   `MAP FST pairs = cfg_preds_of (cfg_analyze fn) h` by
-    (drule makeSsaCurrentDefsTheory.ALOOKUP_current_pred_map >> disch_tac >>
+    (drule makeSsaDefsTheory.ALOOKUP_current_pred_map >> disch_tac >>
      qpat_x_assum `MAP FST pairs = _` mp_tac >> simp[]) >>
   `ALL_DISTINCT (MAP FST pairs)` by simp[cfg_analyze_preds_distinct] >>
   `MEM p (MAP FST pairs)` by
@@ -467,7 +467,7 @@ Theorem current_cut_pair_written_last_slot:
     EL k (EL (LENGTH pre + i) new.bb_instructions).inst_outputs = n
 Proof
   strip_tac >>
-  `old.bb_label = l` by metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+  `old.bb_label = l` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
   qpat_x_assum `current_cut_pair _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[current_cut_pair_def] >> strip_tac >>
   `old' = old` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
@@ -510,7 +510,7 @@ Proof
   `LENGTH pre + i <= LENGTH (current_event_input_block ev).bb_instructions` by
     (drule current_transport_source_cut_bound >> decide_tac) >>
   drule_all current_wf_event_source_cut_exists >> strip_tac >>
-  `old.bb_label = l` by metis_tac[makeSsaHelperTheory.lookup_block_label] >>
+  `old.bb_label = l` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
   `E' v = E v` by
     (irule current_transport_source_cut_unaffected >> metis_tac[]) >>
   `current_demand fn v l i` by
@@ -574,8 +574,8 @@ Theorem current_cut_rename_operands_rel[local]:
   !ops. (!v. MEM (Var v) ops ==> FLOOKUP sg (latest_current_name rs v) = SOME v) ==>
     LIST_REL (op_rename sg) ops (rename_current_operands rs ops)
 Proof
-  Induct >> simp[makeSsaCurrentDefsTheory.rename_current_operands_def] >>
-  Cases_on `h` >> simp[makeSsaCurrentDefsTheory.rename_current_operands_def,
+  Induct >> simp[makeSsaDefsTheory.rename_current_operands_def] >>
+  Cases_on `h` >> simp[makeSsaDefsTheory.rename_current_operands_def,
     op_rename_def] >> metis_tac[]
 QED
 
@@ -829,12 +829,12 @@ Resume current_cut_inv_ordinary_step[ordinary_transport]:
        fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def] >>
      `MEM l (MAP (\bb. bb.bb_label) renamed)` by
        metis_tac[venomExecPropsTheory.lookup_block_MEM,
-         makeSsaHelperTheory.lookup_block_label, listTheory.MEM_MAP] >>
+         venomExecProofsTheory.lookup_block_label, listTheory.MEM_MAP] >>
      fs[listTheory.MEM_MAP] >>
      metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
   `MEM new renamed /\ new.bb_label = l` by
     metis_tac[venomExecPropsTheory.lookup_block_MEM,
-      makeSsaHelperTheory.lookup_block_label] >>
+      venomExecProofsTheory.lookup_block_label] >>
   drule_all current_wf_precleanup_block_shape >> strip_tac >>
   drule current_wf_precleanup_structural >> strip_tac >>
   `lookup_block (current_event_label ev) fn.fn_blocks = SOME old` by simp[] >>
@@ -990,12 +990,12 @@ Resume current_cut_inv_block_entry_prefix[prefix_structure]:
        fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def] >>
      `MEM h (MAP (\bb. bb.bb_label) renamed)` by
        metis_tac[venomExecPropsTheory.lookup_block_MEM,
-         makeSsaHelperTheory.lookup_block_label, listTheory.MEM_MAP] >>
+         venomExecProofsTheory.lookup_block_label, listTheory.MEM_MAP] >>
      fs[listTheory.MEM_MAP] >>
      metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
   `MEM new renamed /\ new.bb_label = h` by
     metis_tac[venomExecPropsTheory.lookup_block_MEM,
-      makeSsaHelperTheory.lookup_block_label] >>
+      venomExecProofsTheory.lookup_block_label] >>
   drule_all current_wf_precleanup_block_shape >> strip_tac >>
   drule current_wf_precleanup_structural >> strip_tac >>
   `lookup_block (current_event_label ev) fn.fn_blocks = SOME old_h` by simp[] >>
@@ -1331,15 +1331,15 @@ Theorem current_cut_nonself_slot_values[local]:
     SOME (MAP SND (FILTER (\a. SND a <> out) pairs))
 Proof
   Induct >> simp[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
-    makeSsaCurrentDefsTheory.remove_current_phi_self_def,
-    makeSsaCurrentDefsTheory.current_phi_values_def] >>
+    makeSsaDefsTheory.remove_current_phi_self_def,
+    makeSsaDefsTheory.current_phi_values_def] >>
   gen_tac >> PairCases_on `h` >> gen_tac >>
   simp[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
-    makeSsaCurrentDefsTheory.remove_current_phi_self_def,
-    makeSsaCurrentDefsTheory.current_phi_values_def] >>
+    makeSsaDefsTheory.remove_current_phi_self_def,
+    makeSsaDefsTheory.current_phi_values_def] >>
   Cases_on `h1 = out` >>
   fs[makeSsaCurrentEdgeTraceTheory.current_phi_slots_def,
-    makeSsaCurrentDefsTheory.current_phi_values_def]
+    makeSsaDefsTheory.current_phi_values_def]
 QED
 
 Theorem current_cut_collapsed_slot_cases[local]:
@@ -1350,10 +1350,10 @@ Theorem current_cut_collapsed_slot_cases[local]:
   MEM (p,n) pairs ==> n = out \/ n = src
 Proof
   strip_tac >>
-  gvs[makeSsaCurrentDefsTheory.simplify_current_phi_def,
-    makeSsaCurrentDefsTheory.keep_current_phi_vars_def, AllCaseEqs()] >>
-  gvs[makeSsaCurrentDefsTheory.simplify_current_phi_raw_def,
-    makeSsaCurrentDefsTheory.current_phi_output_def,
+  gvs[makeSsaDefsTheory.simplify_current_phi_def,
+    makeSsaDefsTheory.keep_current_phi_vars_def, AllCaseEqs()] >>
+  gvs[makeSsaDefsTheory.simplify_current_phi_raw_def,
+    makeSsaDefsTheory.current_phi_output_def,
     current_cut_nonself_slot_values, AllCaseEqs()] >>
   gvs[venomInstTheory.instruction_component_equality] >>
   Cases_on `n = out` >> simp[] >>
@@ -1383,9 +1383,9 @@ Proof
   `MEM h (fn_labels fn)` by
     (simp[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
      metis_tac[venomExecPropsTheory.lookup_block_MEM,
-       makeSsaHelperTheory.lookup_block_label]) >>
+       venomExecProofsTheory.lookup_block_label]) >>
   `MAP FST pairs = cfg_preds_of (cfg_analyze fn) h` by
-    (drule makeSsaCurrentDefsTheory.ALOOKUP_current_pred_map >> disch_tac >>
+    (drule makeSsaDefsTheory.ALOOKUP_current_pred_map >> disch_tac >>
      qpat_x_assum `MAP FST pairs = _` mp_tac >> simp[]) >>
   `MEM p (MAP FST pairs)` by
     metis_tac[makeSsaCurrentAnalysisTheory.current_cfg_edge_preds] >>
@@ -1664,7 +1664,7 @@ Proof
      qpat_x_assum `current_block_annotations _ _ = _`
        (mp_tac o Q.AP_TERM `\xs. EL q xs`) >>
      simp[current_block_annotations_def, current_inserted_annotations_def,
-       EL_APPEND_EQN, EL_MAP, makeSsaCurrentDefsTheory.build_phi_inst_supply_def]) >>
+       EL_APPEND_EQN, EL_MAP, makeSsaDefsTheory.build_phi_inst_supply_def]) >>
   `w = x` by
     (qpat_x_assum `MAP _ _ = _` (mp_tac o Q.AP_TERM `MAP SND`) >>
      simp[MAP_MAP_o, combinTheory.o_DEF] >> strip_tac >> gvs[]) >>
@@ -1673,24 +1673,24 @@ Proof
   `(EL q new.bb_instructions).inst_opcode = PHI` by
     (qpat_x_assum `MAP instruction_inst_opcode _ = _`
       (mp_tac o Q.AP_TERM `\xs. EL q xs`) >>
-     simp[EL_MAP, EL_APPEND_EQN, makeSsaCurrentDefsTheory.build_phi_inst_supply_def]) >>
+     simp[EL_MAP, EL_APPEND_EQN, makeSsaDefsTheory.build_phi_inst_supply_def]) >>
   qexists_tac `q` >> simp[current_wf_inserted_phi_at_def] >>
   simp[current_block_annotations_def, current_inserted_annotations_def,
-    EL_APPEND_EQN, EL_MAP, makeSsaCurrentDefsTheory.build_phi_inst_supply_def] >>
+    EL_APPEND_EQN, EL_MAP, makeSsaDefsTheory.build_phi_inst_supply_def] >>
   metis_tac[lookup_block_label]
 QED
 
 Theorem current_cut_moved_phi_index[local]:
   !xs phis ord. MEM inst (collect_phis xs) /\
   (simplify_current_phi inst).inst_opcode <> PHI /\
-  makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs = (phis,ord) ==>
+  makeSsaDefs$simplify_current_phi_prefix_parts xs = (phis,ord) ==>
   ?k. k < phi_prefix_length xs - LENGTH phis /\
     k < LENGTH ord /\ EL k ord = simplify_current_phi inst
 Proof
   Induct >> simp[livenessDefsTheory.collect_phis_def,
-    makeSsaCurrentDefsTheory.simplify_current_phi_prefix_parts_def] >>
+    makeSsaDefsTheory.simplify_current_phi_prefix_parts_def] >>
   rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs` >>
+  Cases_on `makeSsaDefs$simplify_current_phi_prefix_parts xs` >>
   simp[] >> Cases_on `(simplify_current_phi h).inst_opcode = PHI` >>
   simp[] >> rpt strip_tac >> gvs[] >>
   fs[venomExecSemanticsTheory.phi_prefix_length_def]
@@ -1711,11 +1711,11 @@ Theorem current_cut_moved_phi_nonwrite[local]:
   ~MEM z (simplify_current_phi inst).inst_outputs
 Proof
   strip_tac >>
-  Cases_on `makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs` >>
-  rename1 `makeSsaCurrentDefs$simplify_current_phi_prefix_parts xs = (phis,ord)` >>
+  Cases_on `makeSsaDefs$simplify_current_phi_prefix_parts xs` >>
+  rename1 `makeSsaDefs$simplify_current_phi_prefix_parts xs = (phis,ord)` >>
   drule_all current_cut_moved_phi_index >> strip_tac >>
   `phi_prefix_length (simplify_current_phi_prefix xs) = LENGTH phis` by
-    (simp[makeSsaCurrentDefsTheory.simplify_current_phi_prefix_def,
+    (simp[makeSsaDefsTheory.simplify_current_phi_prefix_def,
       reassign_current_inst_ids_phi_prefix] >>
      metis_tac[simplify_current_phi_parts_prefix]) >>
   `LENGTH phis + k < LENGTH (phis ++ ord)` by simp[] >>
@@ -1724,7 +1724,7 @@ Proof
   qpat_x_assum `EVERY _ _` (mp_tac o REWRITE_RULE [EVERY_EL]) >>
   disch_then (qspec_then `k` mp_tac) >>
   simp[LENGTH_TAKE, LENGTH_DROP,
-    makeSsaCurrentDefsTheory.simplify_current_phi_prefix_def,
+    makeSsaDefsTheory.simplify_current_phi_prefix_def,
     makeSsaCurrentCleanupBoundaryTheory.current_reassign_length,
     EL_TAKE, EL_DROP, EL_APPEND_EQN] >>
   gvs[LENGTH_TAKE_EQ, LENGTH_DROP,
@@ -1769,7 +1769,7 @@ Proof
   rename1 `new.bb_instructions = hd::tl` >>
   Cases_on `hd.inst_opcode = PHI` >>
   fs[livenessDefsTheory.collect_phis_def,
-    makeSsaCurrentDefsTheory.simplify_current_phi_block_def]
+    makeSsaDefsTheory.simplify_current_phi_block_def]
 QED
 
 Theorem current_cut_local_carrier_endpoint[local]:

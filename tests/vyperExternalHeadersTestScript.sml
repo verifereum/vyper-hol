@@ -7,7 +7,7 @@ Libs
   jsonASTLib JSONDecode
 
 fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../lowering/defs/bytecode/external-entries"]
+val () = holbuild_extra_deps ["../bytecode/external-entries"]
 
 (* Mutate the real sanitized AST, preserving the frontend's expression types
    and layout, including its global transient lock slot. *)
@@ -16,7 +16,7 @@ val bytes10 = ``BaseT (BytesT (Dynamic 10))``;
 val zero = ``Literal ^uint256 (IntL 0)``;
 val one = ``Literal ^uint256 (IntL 1)``;
 val mutation_ast_path =
-  "../lowering/defs/bytecode/external-entries/ast/base_dom1.json";
+  "../bytecode/external-entries/ast/base_dom1.json";
 val mutation_input = vyperCheckContractFrontendLib.prepare_check_input
   {in_deploy = false, address = ``0w : address``,
    annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast mutation_ast_path,
@@ -199,7 +199,7 @@ val () = both "effectful_internal_call_default" true
 val () = List.app (fn name => List.app (fn in_deploy =>
   ignore (vyperCheckContractFrontendLib.check_contract_file
     {in_deploy = in_deploy, address = ``0w : address``,
-     path = "../lowering/defs/bytecode/external-entries/ast/" ^ name ^ ".json"}))
+     path = "../bytecode/external-entries/ast/" ^ name ^ ".json"}))
   [false,true])
   ["nr_ext_nonpayable", "nr_multi", "nr_internal", "nr_pragma",
    "dflt_one_lit", "dflt_multi", "dflt_bytes", "dflt_sender",

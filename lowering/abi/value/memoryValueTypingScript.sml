@@ -3,7 +3,7 @@
    byte-capacity rounding and the mutual tuple/array/field predicates. *)
 Theory memoryValueTyping
 Ancestors
-  valueEncoding vyperTyping vyperValue contractABI list pair arithmetic vfmConstants
+  valueEncoding valueEncodingDefs vyperTyping vyperValue contractABI list pair arithmetic vfmConstants
 
 Theorem memory_capacity_covers_bound:
   !bound. bound <= 32 * word_size bound

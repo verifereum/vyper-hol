@@ -9,7 +9,7 @@ Ancestors
   exprSimSource bodyExprPreFacts stmtSimProps exprSimHypsDefs
   vyperTypeStoragePreservation list finite_map bodySim bodySimStmtCases
   allocLimits exprSimHyps exprLoweringProps stmtLowering stmtLoweringMono
-  stmtSimForParts vyperTyping fragExec compileEnv valueEncoding
+  stmtSimForParts vyperTyping fragExec compileEnv loweringStateRelDefs valueEncoding
   supportedStmts supportedStmtTraverse supportedExprs vyperAST
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeCallGraph gasContext stmtSimReturn

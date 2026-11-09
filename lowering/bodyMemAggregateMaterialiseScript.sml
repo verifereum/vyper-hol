@@ -3,7 +3,7 @@ Theory bodyMemAggregateMaterialise
 Ancestors
   bodyMemAggregateBoundary exprSimMemUnwrap exprSimStorageCopy
   exprLoweringProps freshWrites valueEncodingProps loweringPosts fragGasPathMem
-  exprLowering context compileEnv exprSimCopy exprSimAlloc fragExec bodyImmutableUnwrapMemory
+  exprLowering context compileEnv loweringStateRelDefs exprSimCopy exprSimAlloc fragExec bodyImmutableUnwrapMemory
   venomExecSemantics venomInst venomState
 
 Theorem aggregate_storage_materialise_capacity:

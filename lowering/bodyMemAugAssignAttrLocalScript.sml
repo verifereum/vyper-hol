@@ -14,13 +14,13 @@ Ancestors
   exprBopSimDefs exprBopSimProps exprSimSource exprSimDefs stmtSimDefs
   exprSimFieldLayout exprSimAttributeFields exprSimHypsDefs
   vyperTypeInvariants vyperTypeSystem vyperTyping vyperTypeEnv
-  finite_map alist compileEnv
+  finite_map alist compileEnv loweringStateRelDefs
   bodyFieldMemoryProps bodyDeclMemoryCounted bodyDeclMemoryCore
   vyperTypeBuiltins stmtSimDeclStore exprSimWordArgs
   allocaFootprint fragGasSeqMem stmtSimProps localPtrsProps
   exprLoweringProps emitHelper emitHelperProps loweringSlice exprSimOps
   venomExecSemantics venomInst venomState
-  fragExec fragExecMem allocLimits valueEncoding freshWrites
+  fragExec fragExecMem allocLimits valueEncoding valueEncodingDefs freshWrites
   vyperLookup vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperAST
 Libs
@@ -702,7 +702,7 @@ Proof
   simp[] >> reverse conj_tac
   >- (irule attr_add_prefix_mem_ok >> metis_tac[]) >>
   qexistsl_tac [`[Var p; Lit (n2w off)]`, `ADD`] >>
-  simp[is_terminator_def, step_inst_base_def, mk_inst_def,
+  simp[is_terminator_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, eval_operand_def, wordsTheory.WORD_ADD_COMM]
 QED
 
@@ -730,7 +730,7 @@ Proof
   simp[] >> reverse conj_tac
   >- (irule emit_mload_mem_ok >> metis_tac[]) >>
   qexistsl_tac [`[dst]`, `MLOAD`] >>
-  simp[is_terminator_def, step_inst_base_def, mk_inst_def, exec_read1_def]
+  simp[is_terminator_def, step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]
 QED
 
 Theorem augassign_field_address_bound_mem[local]:
@@ -1785,7 +1785,7 @@ Theorem emit_op_exp_mem_src[local]:
 Proof
   rw[] >> irule emit_op_pure2_correct >> gvs[] >>
   goal_assum $ drule_at (Pat `emit_op`) >> gvs[] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operands_def, mk_inst_def]
+  simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operands_def, mk_inst_def]
 QED
 
 Theorem assert_exp_after_prefix_mem_src[local]:

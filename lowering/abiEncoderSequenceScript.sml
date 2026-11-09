@@ -1,7 +1,7 @@
 Theory abiEncoderSequence
 Ancestors
   abiEncoderCorrect abiDecoderCorrectLeaves abiDecoderEffect abiDecoderAllocation abiDecoderLoop
-  abiDecoderReentry abiDecoderContract fragExec emitHelperProps compileEnv valueEncoding
+  abiDecoderReentry abiDecoderContract fragExec emitHelperProps compileEnv loweringStateRelDefs valueEncoding
   venomState venomExecSemantics instIdxIndep list rich_list words abiBuiltinPrefix
   abiDecoderDynamicLoopSetup abiDecoderReentryAddress exprLoweringProps venomInst
 

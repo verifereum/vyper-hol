@@ -1,7 +1,7 @@
 Theory stmtSimLogStoreCompose
 Ancestors
   stmtSimLogStoreEncode stmtSimLogStoreContinue stmtSimLogStoreFresh
-  stmtSimLogEncodeLayout stmtSimLogDataInput vyperTypeABI vyperABI compileEnv supportedTypes contractABI list stmtSimLogAllocate abiDecoderReentry exprLoweringProps vyperTyping abiEncoderCounters stmtSimLogTrace emitHelperProps stmtSimLogDataRun arithmetic words
+  stmtSimLogEncodeLayout stmtSimLogDataInput vyperTypeABI vyperABI compileEnv loweringStateRelDefs supportedTypes contractABI list stmtSimLogAllocate abiDecoderReentry exprLoweringProps vyperTyping abiEncoderCounters stmtSimLogTrace emitHelperProps stmtSimLogDataRun arithmetic words
 
 val _ = if null (hyp stmtSimLogStoreContinueTheory.log_store_data_stmt)
   then print "STORE PREREQUISITE CLOSED\n"

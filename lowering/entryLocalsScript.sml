@@ -35,7 +35,7 @@
 Theory entryLocals
 Ancestors
   list finite_map
-  compileEnv compileVyper moduleLowering context abiEncoder emitHelper
+  compileEnv loweringStateRelDefs compileVyper moduleLowering context abiEncoder emitHelper
   exprLoweringProps loweringHalt intCallCallee
 Libs
   monadsyntax
