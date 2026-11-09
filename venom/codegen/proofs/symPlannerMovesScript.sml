@@ -796,6 +796,50 @@ Proof
   simp[sym_step_swap_name, sym_swap_one_stack]
 QED
 
+Theorem sym_steps_unchanged_mem_compose[local]:
+  sym_steps p env m ss = SymOK mid /\
+  sym_steps p env n mid = SymOK last /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  last.sym_mem_labels = mid.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + m /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + n ==>
+  sym_steps p env (m+n) ss = SymOK last /\
+  last.sym_mem_labels = ss.sym_mem_labels /\
+  last.sym_base.as_pc = ss.sym_base.as_pc + (m+n)
+Proof
+  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem sym_swap_one_stack_transport[local]:
+  mid.sym_stack = w::v::stk /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+  asm_block_at p (ss.sym_base.as_pc + 2)
+    (execute_plan initial_fmp [SOSwap 1]) ==>
+  ?last. sym_steps p env 1 mid = SymOK last /\
+    last.sym_stack = v::w::stk /\ last.sym_mem_labels = mid.sym_mem_labels /\
+    last.sym_base.as_pc = mid.sym_base.as_pc + 1
+Proof
+  strip_tac >> irule sym_exec_swap_one_stack >> simp[SF SFY_ss]
+QED
+
+Theorem sym_restore_swap_pair_post[local]:
+  sym_steps p env 2 ss = SymOK mid /\
+  sym_steps p env 1 mid = SymOK last /\
+  last.sym_stack = v::w::stk /\ op_kind_ok fn ret op w /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  last.sym_mem_labels = mid.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + 1 ==>
+  ?last w. sym_steps p env 3 ss = SymOK last /\
+    last.sym_stack = v::w::stk /\ op_kind_ok fn ret op w /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + 3
+Proof
+  strip_tac >> drule_all sym_steps_unchanged_mem_compose >>
+  simp[SF SFY_ss]
+QED
+
 Theorem sym_restore_swap_one_finish[local]:
   sym_steps p env 2 ss = SymOK mid /\
   mid.sym_stack = w::v::stk /\ op_kind_ok fn ret op w /\
@@ -809,11 +853,17 @@ Theorem sym_restore_swap_one_finish[local]:
     last.sym_base.as_pc = ss.sym_base.as_pc + 3
 Proof
   strip_tac >>
-  drule_at_then (Pos hd) (qspecl_then [`p`, `initial_fmp`, `env`] mp_tac)
-    sym_exec_swap_one_stack >>
-  simp[] >> strip_tac >>
-  qexistsl_tac [`last`, `w`] >> simp[] >>
-  drule_all sym_steps_compose_ok >> simp[]
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_swap_one_stack_transport >>
+  metis_tac[sym_restore_swap_pair_post]
+QED
+
+Theorem asm_block_at_restore_swap[local]:
+  asm_block_at p pc (execute_plan f [SORestore off; SOSwap 1]) ==>
+  asm_block_at p pc (execute_plan f [SORestore off]) /\
+  asm_block_at p (pc+2) (execute_plan f [SOSwap 1])
+Proof
+  gvs[execute_plan_def, exec_stack_op_def,
+    stackOpSimTheory.asm_block_at_cons]
 QED
 
 Theorem sym_restore_swap_one:
@@ -827,15 +877,8 @@ Theorem sym_restore_swap_one:
     last.sym_mem_labels = ss.sym_mem_labels /\
     last.sym_base.as_pc = ss.sym_base.as_pc + 3
 Proof
-  strip_tac >>
-  `asm_block_at p ss.sym_base.as_pc
-      (execute_plan initial_fmp [SORestore (EL j offsets)]) /\
-   asm_block_at p (ss.sym_base.as_pc + 2)
-      (execute_plan initial_fmp [SOSwap 1])` by
-    (gvs[execute_plan_def, exec_stack_op_def,
-      stackOpSimTheory.asm_block_at_cons]) >>
-  drule_all_then strip_assume_tac sym_restore_scratch_index >>
-  metis_tac[sym_restore_swap_one_finish]
+  strip_tac >> drule_then strip_assume_tac asm_block_at_restore_swap >>
+  metis_tac[sym_restore_scratch_index, sym_restore_swap_one_finish]
 QED
 
 Theorem execute_plan_restore_swap_cons[local]:
@@ -867,6 +910,41 @@ Proof
   simp[rich_listTheory.LIST_REL_APPEND_SING]
 QED
 
+Theorem carried_restore_pack[local]:
+  sym_steps p env n ss = SymOK last /\
+  last.sym_stack = v::(top ++ w::stk) /\
+  LIST_REL R (REVERSE (MAP g js)) top /\ R (g j) w /\
+  last.sym_mem_labels = ss.sym_mem_labels /\
+  last.sym_base.as_pc = ss.sym_base.as_pc + n ==>
+  ?top'. sym_steps p env n ss = SymOK last /\
+    last.sym_stack = v::(top' ++ stk) /\
+    LIST_REL R (REVERSE (MAP g (j::js))) top' /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + n
+Proof
+  strip_tac >> qexists_tac `top ++ [w]` >>
+  asm_simp_tac bool_ss [carried_restore_rel_snoc, GSYM APPEND_ASSOC, APPEND]
+QED
+
+Theorem carried_restore_compose[local]:
+  sym_steps p env 3 ss = SymOK mid /\
+  sym_steps p env n mid = SymOK last /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 3 /\
+  last.sym_stack = v::(top ++ w::stk) /\
+  LIST_REL R (REVERSE (MAP g js)) top /\ R (g j) w /\
+  last.sym_mem_labels = mid.sym_mem_labels /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + n ==>
+  ?top'. sym_steps p env (3+n) ss = SymOK last /\
+    last.sym_stack = v::(top' ++ stk) /\
+    LIST_REL R (REVERSE (MAP g (j::js))) top' /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + (3+n)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_steps_unchanged_mem_compose >>
+  metis_tac[carried_restore_pack]
+QED
+
 Theorem sym_restore_swap_fold_post[local]:
   sym_steps p env 3 ss = SymOK mid /\
   mid.sym_mem_labels = ss.sym_mem_labels /\
@@ -887,11 +965,75 @@ Theorem sym_restore_swap_fold_post[local]:
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan f
       (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) (j::js))))
 Proof
-  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
-  qexists_tac `top ++ [w]` >>
   pure_rewrite_tac[execute_plan_restore_swap_cons_length] >>
-  asm_simp_tac bool_ss [carried_restore_rel_snoc, GSYM APPEND_ASSOC,
-    APPEND, arithmeticTheory.ADD_ASSOC]
+  strip_tac >> simp[carried_restore_compose]
+QED
+
+Theorem sym_restore_carried_finish[local]:
+  sym_steps p env 3 ss = SymOK mid /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 3 /\
+  op_kind_ok fn ret (EL j items) w /\
+  (?last top. sym_steps p env (LENGTH (execute_plan f
+    (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) js)))) mid = SymOK last /\
+  last.sym_stack = v::(top ++ w::stk) /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) js)) top /\
+  last.sym_mem_labels = mid.sym_mem_labels /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + LENGTH (execute_plan f
+    (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) js)))) ==>
+  ?last top. sym_steps p env (LENGTH (execute_plan f
+    (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) (j::js))))) ss = SymOK last /\
+    last.sym_stack = v::(top ++ stk) /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) (j::js))) top /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan f
+      (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) (j::js))))
+Proof
+  strip_tac >> qexists_tac `last` >> simp[sym_restore_swap_fold_post]
+QED
+
+Theorem sym_restore_carried_continue[local]:
+  (!ss stk.
+    scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+    EVERY (\j. j < LENGTH items /\ EL j offsets < dimword(:256)) js /\
+    ss.sym_stack = v::stk /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp
+      (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) js))) ==>
+    ?last top. sym_steps p env (LENGTH (execute_plan initial_fmp
+        (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) js)))) ss = SymOK last /\
+      last.sym_stack = v::(top ++ stk) /\
+      LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) js)) top /\
+      last.sym_mem_labels = ss.sym_mem_labels /\
+      last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+        (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) js)))) /\
+  scratch_kinds_ok fn ret items offsets ss.sym_mem_labels /\
+  EVERY (\j. j < LENGTH items /\ EL j offsets < dimword(:256)) js /\
+  sym_steps p env 3 ss = SymOK mid /\ mid.sym_stack = v::w::stk /\
+  op_kind_ok fn ret (EL j items) w /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 3 /\
+  asm_block_at p (ss.sym_base.as_pc + 3) (execute_plan initial_fmp
+    (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) js))) ==>
+  ?last top. sym_steps p env (LENGTH (execute_plan initial_fmp
+      (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) (j::js))))) ss = SymOK last /\
+    last.sym_stack = v::(top ++ stk) /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\j. EL j items) (j::js))) top /\
+    last.sym_mem_labels = ss.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+      (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) (j::js))))
+Proof
+  strip_tac >> irule sym_restore_carried_finish >> metis_tac[]
+QED
+
+Theorem asm_block_at_restore_swap_cons[local]:
+  asm_block_at p pc (execute_plan f
+    (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) (j::js)))) <=>
+  asm_block_at p pc (execute_plan f [SORestore (EL j offsets); SOSwap 1]) /\
+  asm_block_at p (pc+3) (execute_plan f
+    (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) js)))
+Proof
+  rewrite_tac[execute_plan_restore_swap_cons, stackOpSimTheory.asm_block_at_append,
+    execute_plan_restore_swap_length]
 QED
 
 Theorem sym_restore_scratch_carried:
@@ -910,17 +1052,7 @@ Theorem sym_restore_scratch_carried:
       (FLAT (MAP (\j. [SORestore (EL j offsets); SOSwap 1]) indices)))
 Proof
   Induct >- simp[execute_plan_def, codegenSymRelTheory.sym_steps_compute] >>
-  rpt gen_tac >>
-  simp_tac bool_ss [EVERY_DEF] >>
-  strip_tac >>
-  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
-  pure_rewrite_tac[execute_plan_restore_swap_cons,
-    stackOpSimTheory.asm_block_at_append, execute_plan_restore_swap_length] >>
-  strip_tac >>
+  rw_tac bool_ss [EVERY_DEF, asm_block_at_restore_swap_cons] >>
   drule_all_then (qspec_then `env` strip_assume_tac) sym_restore_swap_one >>
-  first_x_assum (qspecl_then [`last`, `w::stk`] mp_tac) >>
-  asm_simp_tac bool_ss [] >> strip_tac >>
-  pure_rewrite_tac[GSYM execute_plan_restore_swap_cons] >>
-  qexists_tac `last'` >> irule sym_restore_swap_fold_post >>
-  asm_simp_tac bool_ss [] >> metis_tac[]
+  simp[sym_restore_carried_continue]
 QED
