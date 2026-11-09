@@ -1,7 +1,7 @@
 (* Allocation-history transport for counted memory paths, including raw jumps. *)
 Theory fragGasPathFrameMem
 Ancestors
-  fragGasPathMem allocaHistory venomExecProofs venomExecSemantics
+  execMemoryLengthBase fragGasPathMem allocaHistory venomExecProofs venomExecSemantics
   venomState fragExec arithmetic
 
 Theorem path_mem_edge_history[local]:
