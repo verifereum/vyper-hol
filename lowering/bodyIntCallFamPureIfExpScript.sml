@@ -5,7 +5,8 @@ Ancestors
   loweringPosts venomState venomExecSemantics finite_map context exprLowering vyperAST
   exprSimAggregateChildren exprBopSimProps arithmetic exprSimProps
   exprSimWordArgs exprSimSubscriptArrayCompose exprSimAggregateSource
-  stmtSimAugAssignPlaceMemory gasSummary gasContext vyperState
+  stmtSimAugAssignPlaceMemory gasSummary gasContext vyperState exprSimSubscriptMap
+  exprSimDefs gasOutcome
 
 (* Assemble the ordinary forced post at the chosen forcing endpoint. *)
 Theorem vv_post_forcing_frames:
@@ -255,6 +256,88 @@ Proof
   disch_then (qspecl_then [`b`, `a`] strip_assume_tac) >>
   qexists `q` >> simp[] >> metis_tac[]
 QED
+
+(* The selected arm's conditional-result suffix retains its authorized slot. *)
+Theorem ifexp_joint_arm_marked_suffix:
+  post_value_type ce e = expr_type e /\
+  gas_marked_exec F (fp.jc_ctx,fp.jc_func) (eval_expr fp.jc_cx e)
+    (es,s0) marks (INL raw) ee (OK s) /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sm s0
+    (ee with gas_obs := []) raw vv s /\
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_expr_cont fp ce env es sa s0 (ee with gas_obs := []) sm s /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
+  (~is_word_type (expr_type e) ==>
+    lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+      arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
+  (!tv. evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv /\
+      ~is_word_type (expr_type e) ==>
+      type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+      type_memory_size tv < 2 ** 64) /\
+  (!gs v es2. ~is_word_type (expr_type e) /\
+    bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx)
+      (es with gas_obs := gs) = (INL v,es2) ==>
+    ?tv. evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv /\ value_has_type tv v) /\
+  (?tv. evaluate_type (get_tenv fp.jc_cx) (expr_type e) = SOME tv) /\
+  gas_admissible (bind (eval_expr fp.jc_cx e) (conditional_result fp.jc_cx))
+    expr_vv_res_ok es /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+   ~is_bytestring_type (post_value_type ce e) /\
+   (case vv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   !tv. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME tv ==>
+     ?w a k. eval_operand (vv_operand vv) s = SOME w /\ a <= w2n w /\
+       w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+       (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) ==>
+  ?tr v q w. gas_marked_exec F (fp.jc_ctx,fp.jc_func)
+      (conditional_result fp.jc_cx raw) (ee with gas_obs := [],s) []
+      (INL tr) (ee with gas_obs := []) (OK q) /\
+    read_result fp.jc_cx tr (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
+    expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s0
+      (ee with gas_obs := []) v op q /\ eval_operand op q = SOME w /\
+    (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+     ~is_bytestring_type (post_value_type ce e) ==>
+     !tv. evaluate_type (get_tenv fp.jc_cx) (post_value_type ce e) = SOME tv ==>
+       ?a k. a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\
+         a+k < dimword (:256) /\
+         (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a+k <= b+z)) /\
+    q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0 /\
+   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\ allocas_above fp.jc_lo s /\
+   (!r x. fp.jc_reserved r /\ r = Var x ==> not_fresh_at sm x) /\
+   (!p k. fp.jc_prot p k ==> p+k <= fp.jc_lo) /\
+   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_frame_ok_def] >>
+  Cases_on `post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+            ~is_bytestring_type (post_value_type ce e)`
+  >- (`unwrap_value ce vv sm = (op,sb)` by
+        (`compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv =
+          unwrap_value ce vv` by
+           (irule ifexp_arm_unwrap_nonbytes >> gvs[]) >> metis_tac[]) >>
+      drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
+        (Q.INST [`lo` |-> `fp.jc_lo`, `P` |-> `fp.jc_prot`,
+                 `reserved` |-> `fp.jc_reserved`, `staged` |-> `fp.jc_staged`]
+          ifexp_protected_marked_unwrap) >>
+      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `allocas_above _ _`)) >>
+      disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
+      disch_then (qspec_then `tv` mp_tac) >>
+      (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+      qexistsl [`tr`,`v`,`q`] >> gvs[] >> metis_tac[]) >>
+  drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) ifexp_arm_marked_suffix >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
+  (impl_tac >- (simp[SF ETA_ss] >> metis_tac[optionTheory.SOME_11])) >> strip_tac >>
+  qexistsl [`tv'`,`v`,`q`] >> simp[] >>
+  fs[expr_post_def, expr_val_rel_def] >> metis_tac[]
+QED
+
 
 Theorem intcall_ifexp_step:
   (!e'. expr_size e' < expr_size e ==>
