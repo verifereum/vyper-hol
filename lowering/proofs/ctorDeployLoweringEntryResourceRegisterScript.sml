@@ -361,7 +361,7 @@ Theorem deploy_ctor_covered_getelemptr:
 Proof
   ntac 5 gen_tac >> rewrite_tac[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   covered_db deploy_ctor_coverage_emit_op >> Cases_on `dyn` >>
-  simp covered_simps >> ntac 2 (covered_db deploy_ctor_coverage_emit_op) >>
+  simp covered_simps >> ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
   ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp covered_simps >>
       ntac 2 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
@@ -379,12 +379,12 @@ Theorem deploy_ctor_covered_dyn_elem_ptr:
         MEM inst (fn_insts func)
 Proof
   ntac 5 gen_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 2 (covered_db deploy_ctor_coverage_emit_op) >>
+  ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
   ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp covered_simps >>
       ntac 2 (covered_db deploy_ctor_coverage_emit_op) >>
       covered_dib deploy_ctor_coverage_emit_void >>
-      ntac 3 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
+      ntac 6 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
   simp covered_simps
 QED
 
@@ -403,6 +403,137 @@ Theorem decode_bytes_copy_emit_void[local]:
 Proof
   Cases >> simp[]
 QED
+
+Theorem resource_register_covered_decoder_zero_base_mutual[local]:
+  (!dst src opc base_op hi info. base_op = Lit 0w /\ opc <> ALLOCA ==>
+    !st. cs_extends st (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) /\
+        MEM inst (fn_insts func)) /\
+  (!dst src opc base_op hi elems ao vo. base_op = Lit 0w /\ opc <> ALLOCA ==>
+    !st. cs_extends st (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) /\
+        MEM inst (fn_insts func)) /\
+  (!dst src opc base_op hi ei asz msz ip cnt. base_op = Lit 0w /\ opc <> ALLOCA ==>
+    !st. cs_extends st (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) /\
+        MEM inst (fn_insts func))
+Proof
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >> gvs[]
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume resource_register_covered_decoder_zero_base_mutual[word]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
+  simp[compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
+  irule deploy_ctor_covered_static >> simp[deploy_ctor_covered_clamp]
+QED
+Resume resource_register_covered_decoder_zero_base_mutual[bytes]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac (srw_ss()) [compile_abi_dec_addr_def, LET_THM,
+    decode_bytes_copy_emit_void] >>
+  ho_match_mp_tac deploy_ctor_covered_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp covered_simps >>
+      covered_db deploy_ctor_coverage_emit_op >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
+      >- (ntac 5 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
+      simp covered_simps) >>
+  gen_tac >> covered_db deploy_ctor_coverage_return >>
+  ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
+  covered_dib deploy_ctor_coverage_emit_void >>
+  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp covered_simps >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ntac 6 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
+  simp (decode_bytes_copy_emit_void :: covered_simps)
+QED
+Resume resource_register_covered_decoder_zero_base_mutual[array]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac (srw_ss()) [compile_abi_dec_addr_def, LET_THM,
+    decode_bytes_copy_emit_void] >>
+  ho_match_mp_tac deploy_ctor_covered_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp covered_simps >>
+      covered_db deploy_ctor_coverage_emit_op >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
+      >- (ntac 5 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
+      simp covered_simps) >>
+  gen_tac >> covered_db deploy_ctor_coverage_return >>
+  ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
+  covered_dib deploy_ctor_coverage_emit_void >>
+  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp covered_simps >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ntac 7 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
+  covered_db deploy_ctor_coverage_emit_op >>
+  covered_dib deploy_ctor_coverage_emit_void >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
+  >- (ntac 2 (covered_db deploy_ctor_coverage_emit_op) >>
+      covered_db deploy_ctor_coverage_return >>
+      covered_db deploy_ctor_coverage_emit_op >> simp covered_simps) >>
+  covered_db deploy_ctor_covered_alloc_buffer >> covered_dib deploy_ctor_coverage_emit_void >>
+  first_x_assum irule >> simp[]
+QED
+Resume resource_register_covered_decoder_zero_base_mutual[complex]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
+  >- simp[] >>
+  covered_db deploy_ctor_coverage_emit_op >>
+  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
+  >- (rewrite_tac[compile_abi_decode_range_check_def] >>
+      ntac 5 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
+  simp[]
+QED
+Resume resource_register_covered_decoder_zero_base_mutual[nil]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> simp covered_simps
+QED
+Resume resource_register_covered_decoder_zero_base_mutual[cons]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  covered_db deploy_ctor_covered_getelemptr >> covered_db deploy_ctor_coverage_emit_op >>
+  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
+  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
+  simp[]
+QED
+Resume resource_register_covered_decoder_zero_base_mutual[loop]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac pure_ss [compile_abi_dec_addr_def, LET_THM] >> BETA_TAC >>
+  ntac 3 (covered_db deploy_ctor_coverage_fresh_label) >>
+  covered_dib deploy_ctor_coverage_emit_inst >> covered_dib deploy_ctor_coverage_new_block >>
+  covered_db deploy_ctor_coverage_emit_op >>
+  covered_db deploy_ctor_coverage_return >>
+  ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
+  covered_dib deploy_ctor_coverage_emit_inst >> covered_dib deploy_ctor_coverage_new_block >>
+  ntac 4 (covered_db deploy_ctor_coverage_emit_op) >>
+  ho_match_mp_tac deploy_ctor_covered_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp (deploy_ctor_covered_dyn_elem_ptr::covered_simps)) >>
+  gen_tac >> ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
+  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
+  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
+  covered_db deploy_ctor_coverage_emit_op >>
+  covered_dib deploy_ctor_coverage_emit_void >> covered_dib deploy_ctor_coverage_emit_inst >>
+  covered_dib deploy_ctor_coverage_new_block >> simp covered_simps
+QED
+Finalise resource_register_covered_decoder_zero_base_mutual
 
 Theorem deploy_ctor_covered_decoder_mutual:
   (!dst src opc hi info. opc <> ALLOCA ==>
@@ -430,82 +561,15 @@ Theorem deploy_ctor_covered_decoder_mutual:
         abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)) /\
         MEM inst (fn_insts func))
 Proof
-  ho_match_mp_tac compile_abi_decode_to_buf_ind >>
-  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
-  >- suspend "word"
-  >- suspend "bytes"
-  >- suspend "array"
-  >- suspend "complex"
-  >- suspend "nil"
-  >- suspend "cons"
-  >> suspend "loop"
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule (cj 1 resource_register_covered_decoder_zero_base_mutual) >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule (cj 2 resource_register_covered_decoder_zero_base_mutual) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule (cj 3 resource_register_covered_decoder_zero_base_mutual) >> simp[]
 QED
-
-Resume deploy_ctor_covered_decoder_mutual[word]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  irule deploy_ctor_covered_static >> simp[deploy_ctor_covered_clamp]
-QED
-Resume deploy_ctor_covered_decoder_mutual[bytes]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
-  covered_dib deploy_ctor_coverage_emit_void >>
-  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp covered_simps >>
-      ntac 4 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
-  simp (decode_bytes_copy_emit_void :: covered_simps)
-QED
-Resume deploy_ctor_covered_decoder_mutual[array]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
-  covered_dib deploy_ctor_coverage_emit_void >>
-  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp covered_simps >>
-      ntac 5 (covered_db deploy_ctor_coverage_emit_op) >> simp covered_simps) >>
-  covered_db deploy_ctor_coverage_emit_op >>
-  covered_dib deploy_ctor_coverage_emit_void >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-  >- (ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
-      Cases_on `opc` >> simp covered_simps) >>
-  covered_db deploy_ctor_covered_alloc_buffer >> covered_dib deploy_ctor_coverage_emit_void >>
-  first_x_assum irule >> simp[]
-QED
-Resume deploy_ctor_covered_decoder_mutual[complex]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
-  >- (first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >>
-      simp[]) >>
-  ntac 3 (covered_db deploy_ctor_coverage_emit_op) >> covered_dib deploy_ctor_coverage_emit_void >>
-  first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >> simp[]
-QED
-Resume deploy_ctor_covered_decoder_mutual[nil]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> simp covered_simps
-QED
-Resume deploy_ctor_covered_decoder_mutual[cons]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  covered_db deploy_ctor_covered_getelemptr >> covered_db deploy_ctor_coverage_emit_op >>
-  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
-  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
-  first_x_assum (irule o SRULE[]) >> simp[]
-QED
-Resume deploy_ctor_covered_decoder_mutual[loop]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  ntac 3 (covered_db deploy_ctor_coverage_fresh_label) >>
-  covered_dib deploy_ctor_coverage_emit_inst >> covered_dib deploy_ctor_coverage_new_block >>
-  ntac 4 (covered_db deploy_ctor_coverage_emit_op) >>
-  covered_dib deploy_ctor_coverage_emit_inst >> covered_dib deploy_ctor_coverage_new_block >>
-  ntac 4 (covered_db deploy_ctor_coverage_emit_op) >>
-  ho_match_mp_tac deploy_ctor_covered_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp (deploy_ctor_covered_dyn_elem_ptr::covered_simps)) >>
-  gen_tac >> ntac 3 (covered_db deploy_ctor_coverage_emit_op) >>
-  ho_match_mp_tac deploy_ctor_covered_ignore_bind >> conj_tac
-  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
-  covered_db deploy_ctor_coverage_emit_op >>
-  covered_dib deploy_ctor_coverage_emit_void >> covered_dib deploy_ctor_coverage_emit_inst >>
-  covered_dib deploy_ctor_coverage_new_block >> simp covered_simps
-QED
-Finalise deploy_ctor_covered_decoder_mutual
 
 Theorem deploy_ctor_covered_decode_args:
   !args off. opc <> ALLOCA ==>
@@ -898,7 +962,7 @@ Theorem deploy_ctor_shape_covered_getelemptr:
 Proof
   ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   shape_db deploy_ctor_shape_coverage_emit_op >> Cases_on `dyn` >>
-  simp shape_simps >> ntac 2 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+  simp shape_simps >> ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
   ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp shape_simps >>
       ntac 2 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
@@ -916,14 +980,146 @@ Theorem deploy_ctor_shape_covered_dyn_elem_ptr:
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst
 Proof
   ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 2 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+  ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
   ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp shape_simps >>
       ntac 2 (shape_db deploy_ctor_shape_coverage_emit_op) >>
       shape_dib deploy_ctor_shape_coverage_emit_void >>
-      ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
+      ntac 6 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
   simp shape_simps
 QED
+
+Theorem resource_register_shape_covered_decoder_zero_base_mutual[local]:
+  (!dst src opc base_op hi info. base_op = Lit 0w /\ opc <> ALLOCA ==>
+    !st. cs_extends st (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) /\
+        MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst) /\
+  (!dst src opc base_op hi elems ao vo. base_op = Lit 0w /\ opc <> ALLOCA ==>
+    !st. cs_extends st (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) /\
+        MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst) /\
+  (!dst src opc base_op hi ei asz msz ip cnt. base_op = Lit 0w /\ opc <> ALLOCA ==>
+    !st. cs_extends st (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) /\
+        MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst)
+Proof
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >> gvs[]
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume resource_register_shape_covered_decoder_zero_base_mutual[word]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp[compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
+  irule deploy_ctor_shape_covered_static >> simp[deploy_ctor_shape_covered_clamp]
+QED
+Resume resource_register_shape_covered_decoder_zero_base_mutual[bytes]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac (srw_ss()) [compile_abi_dec_addr_def, LET_THM,
+    decode_bytes_copy_emit_void] >>
+  ho_match_mp_tac deploy_ctor_shape_covered_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      shape_db deploy_ctor_shape_coverage_emit_op >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+      >- (ntac 5 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
+      simp shape_simps) >>
+  gen_tac >> shape_db deploy_ctor_shape_coverage_return >>
+  ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+  shape_dib deploy_ctor_shape_coverage_emit_void >>
+  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ntac 6 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
+  Cases_on `opc` >> simp (decode_bytes_copy_emit_void :: shape_simps)
+QED
+Resume resource_register_shape_covered_decoder_zero_base_mutual[array]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac (srw_ss()) [compile_abi_dec_addr_def, LET_THM,
+    decode_bytes_copy_emit_void] >>
+  ho_match_mp_tac deploy_ctor_shape_covered_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      shape_db deploy_ctor_shape_coverage_emit_op >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+      >- (ntac 5 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
+      simp shape_simps) >>
+  gen_tac >> shape_db deploy_ctor_shape_coverage_return >>
+  ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+  shape_dib deploy_ctor_shape_coverage_emit_void >>
+  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      rewrite_tac[compile_abi_decode_range_check_def] >>
+      ntac 7 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
+  shape_db deploy_ctor_shape_coverage_emit_op >>
+  shape_dib deploy_ctor_shape_coverage_emit_void >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
+  >- (ntac 2 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+      shape_db deploy_ctor_shape_coverage_return >>
+      shape_db deploy_ctor_shape_coverage_emit_op >>
+      Cases_on `opc` >> simp shape_simps) >>
+  shape_db deploy_ctor_shape_covered_alloc_buffer >> shape_dib deploy_ctor_shape_coverage_emit_void >>
+  first_x_assum irule >> simp[]
+QED
+Resume resource_register_shape_covered_decoder_zero_base_mutual[complex]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
+  >- simp[] >>
+  shape_db deploy_ctor_shape_coverage_emit_op >>
+  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+  >- (rewrite_tac[compile_abi_decode_range_check_def] >>
+      ntac 5 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
+  simp[]
+QED
+Resume resource_register_shape_covered_decoder_zero_base_mutual[nil]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >> simp shape_simps
+QED
+Resume resource_register_shape_covered_decoder_zero_base_mutual[cons]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  shape_db deploy_ctor_shape_covered_getelemptr >> shape_db deploy_ctor_shape_coverage_emit_op >>
+  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
+  simp[]
+QED
+Resume resource_register_shape_covered_decoder_zero_base_mutual[loop]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac pure_ss [compile_abi_dec_addr_def, LET_THM] >> BETA_TAC >>
+  ntac 3 (shape_db deploy_ctor_shape_coverage_fresh_label) >>
+  shape_dib deploy_ctor_shape_coverage_emit_inst >> shape_dib deploy_ctor_shape_coverage_new_block >>
+  shape_db deploy_ctor_shape_coverage_emit_op >>
+  shape_db deploy_ctor_shape_coverage_return >>
+  ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+  shape_dib deploy_ctor_shape_coverage_emit_inst >> shape_dib deploy_ctor_shape_coverage_new_block >>
+  ntac 4 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+  ho_match_mp_tac deploy_ctor_shape_covered_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp (deploy_ctor_shape_covered_dyn_elem_ptr::shape_simps)) >>
+  gen_tac >> ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
+  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
+  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
+  shape_db deploy_ctor_shape_coverage_emit_op >>
+  shape_dib deploy_ctor_shape_coverage_emit_void >> shape_dib deploy_ctor_shape_coverage_emit_inst >>
+  shape_dib deploy_ctor_shape_coverage_new_block >> simp shape_simps
+QED
+Finalise resource_register_shape_covered_decoder_zero_base_mutual
 
 Theorem deploy_ctor_shape_covered_decoder_mutual:
   (!dst src opc hi info. opc <> ALLOCA ==>
@@ -951,82 +1147,15 @@ Theorem deploy_ctor_shape_covered_decoder_mutual:
         abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)) /\
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst)
 Proof
-  ho_match_mp_tac compile_abi_decode_to_buf_ind >>
-  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
-  >- suspend "word"
-  >- suspend "bytes"
-  >- suspend "array"
-  >- suspend "complex"
-  >- suspend "nil"
-  >- suspend "cons"
-  >> suspend "loop"
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule (cj 1 resource_register_shape_covered_decoder_zero_base_mutual) >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      irule (cj 2 resource_register_shape_covered_decoder_zero_base_mutual) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  irule (cj 3 resource_register_shape_covered_decoder_zero_base_mutual) >> simp[]
 QED
-
-Resume deploy_ctor_shape_covered_decoder_mutual[word]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  irule deploy_ctor_shape_covered_static >> simp[deploy_ctor_shape_covered_clamp]
-QED
-Resume deploy_ctor_shape_covered_decoder_mutual[bytes]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
-  shape_dib deploy_ctor_shape_coverage_emit_void >>
-  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp shape_simps >>
-      ntac 4 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
-  Cases_on `opc` >> simp shape_simps
-QED
-Resume deploy_ctor_shape_covered_decoder_mutual[array]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
-  shape_dib deploy_ctor_shape_coverage_emit_void >>
-  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp shape_simps >>
-      ntac 5 (shape_db deploy_ctor_shape_coverage_emit_op) >> simp shape_simps) >>
-  shape_db deploy_ctor_shape_coverage_emit_op >>
-  shape_dib deploy_ctor_shape_coverage_emit_void >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-  >- (ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
-      Cases_on `opc` >> simp shape_simps) >>
-  shape_db deploy_ctor_shape_covered_alloc_buffer >> shape_dib deploy_ctor_shape_coverage_emit_void >>
-  first_x_assum irule >> simp[]
-QED
-Resume deploy_ctor_shape_covered_decoder_mutual[complex]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
-  >- (first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >>
-      simp[]) >>
-  ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >> shape_dib deploy_ctor_shape_coverage_emit_void >>
-  first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >> simp[]
-QED
-Resume deploy_ctor_shape_covered_decoder_mutual[nil]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> simp shape_simps
-QED
-Resume deploy_ctor_shape_covered_decoder_mutual[cons]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  shape_db deploy_ctor_shape_covered_getelemptr >> shape_db deploy_ctor_shape_coverage_emit_op >>
-  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
-  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
-  first_x_assum (irule o SRULE[]) >> simp[]
-QED
-Resume deploy_ctor_shape_covered_decoder_mutual[loop]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  ntac 3 (shape_db deploy_ctor_shape_coverage_fresh_label) >>
-  shape_dib deploy_ctor_shape_coverage_emit_inst >> shape_dib deploy_ctor_shape_coverage_new_block >>
-  ntac 4 (shape_db deploy_ctor_shape_coverage_emit_op) >>
-  shape_dib deploy_ctor_shape_coverage_emit_inst >> shape_dib deploy_ctor_shape_coverage_new_block >>
-  ntac 4 (shape_db deploy_ctor_shape_coverage_emit_op) >>
-  ho_match_mp_tac deploy_ctor_shape_covered_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp (deploy_ctor_shape_covered_dyn_elem_ptr::shape_simps)) >>
-  gen_tac >> ntac 3 (shape_db deploy_ctor_shape_coverage_emit_op) >>
-  ho_match_mp_tac deploy_ctor_shape_covered_ignore_bind >> conj_tac
-  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
-  shape_db deploy_ctor_shape_coverage_emit_op >>
-  shape_dib deploy_ctor_shape_coverage_emit_void >> shape_dib deploy_ctor_shape_coverage_emit_inst >>
-  shape_dib deploy_ctor_shape_coverage_new_block >> simp shape_simps
-QED
-Finalise deploy_ctor_shape_covered_decoder_mutual
 
 Theorem deploy_ctor_shape_covered_decode_args:
   !args off. opc <> ALLOCA ==>
