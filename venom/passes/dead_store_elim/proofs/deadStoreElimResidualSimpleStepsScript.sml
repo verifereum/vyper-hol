@@ -99,6 +99,14 @@ Proof
   simp[dse_equiv_def, lookup_var_def]
 QED
 
+Theorem dse_equiv_pending_deletions[local]:
+  dse_equiv sp s t ==>
+  dse_equiv sp (s with vs_pending_deletions := d) (t with vs_pending_deletions := d)
+Proof
+  rw[dse_equiv_def, lookup_var_def] >>
+  fs[dse_frame_def, venom_state_component_equality]
+QED
+
 Theorem dse_selfdestruct_memory_step:
   inst.inst_opcode = SELFDESTRUCT /\
   dse_local_agrees AddrSp_Memory P s t /\ step_inst fuel ctx inst s = Halt s1 ==>
@@ -117,6 +125,10 @@ Proof
   strip_tac >> gvs[AllCaseEqs()] >>
   irule dse_equiv_halt_state >> irule dse_equiv_set_returndata >>
   irule dse_equiv_memory_accounts >>
+  `s.vs_pending_deletions = t.vs_pending_deletions` by
+    fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def,
+       dse_frame_def, venom_state_component_equality] >>
+  pop_assum SUBST1_TAC >> irule dse_equiv_pending_deletions >>
   irule dse_pending_space_equiv >> qexists_tac `P` >> fs[dse_local_agrees_def]
 QED
 
