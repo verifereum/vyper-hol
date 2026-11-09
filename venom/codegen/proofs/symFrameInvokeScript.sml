@@ -784,6 +784,30 @@ Proof
   simp[LIST_REL_EL_EQN, EVERY_EL, EL_MAP] >> rpt strip_tac >> metis_tac[]
 QED
 
+Theorem sym_scratch_post_spill:
+  sym_steps p env n ss = SymOK mid /\
+  mid.sym_stack = stk /\ mid.sym_base.as_pc = ss.sym_base.as_pc + n /\
+  (!b. (!off. MEM off saved ==> ~in_mem_range off 32 b) ==>
+    FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  LIST_REL (\op off. ?sv. op_kind_ok fn ret op sv /\
+    mem_sval_at mid.sym_mem_labels off sv) operands offs /\
+  EVERY (\off. off < dimword (:256)) offs /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan fmp (MAP SORestore offs)) ==>
+  ?ss' top.
+    sym_steps p env (n + LENGTH (execute_plan fmp (MAP SORestore offs))) ss = SymOK ss' /\
+    ss'.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE operands) top /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc +
+      (n + LENGTH (execute_plan fmp (MAP SORestore offs))) /\
+    (!b. (!off. MEM off saved ==> ~in_mem_range off 32 b) ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all sym_scratch_restores_kinds >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexistsl_tac [`ss'`, `top`] >> conj_tac
+  >- simp[Once sym_steps_add] >> metis_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
 Theorem sym_scratch_schedule_kinds:
   !offs operands vals indices ss stk p fmp env.
   LIST_REL (op_kind_ok fn ret) operands vals /\ LENGTH vals = LENGTH offs /\
@@ -817,11 +841,7 @@ Proof
   `asm_block_at p mid.sym_base.as_pc
      (execute_plan fmp (MAP SORestore (MAP (\i. EL i offs) indices)))` by
     metis_tac[arithmeticTheory.ADD_COMM] >>
-  drule_all sym_scratch_restores_kinds >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
-  rename1 `sym_steps p env _ mid = SymOK last` >>
-  qexistsl_tac [`last`, `top`] >> conj_tac
-  >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[sym_steps_add]) >> simp[]
+  drule_all sym_scratch_post_spill >> simp[]
 QED
 
 Theorem sym_scratch_preserves_spilled_kind:
@@ -861,6 +881,45 @@ Proof
   rw[sym_kinds_ok_def]
   >- metis_tac[sym_scratch_preserves_spilled_kind] >>
   drule_all sym_scratch_preserves_label_domain >> simp[]
+QED
+
+Theorem sym_scratch_schedule_framed:
+  !base.
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ss.sym_stack = vals ++ (tail ++ srest) /\
+  LIST_REL (op_kind_ok fn ret) operands vals /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE base) tail /\
+  LENGTH vals = LENGTH offs /\
+  ps'.ps_stack = base ++ MAP (\i. EL i operands) indices /\
+  ps'.ps_spilled = ps.ps_spilled /\
+  EVERY (\off. off < dimword (:256)) offs /\ ALL_DISTINCT offs /\
+  (!a b i. MEM a offs /\ MEM b offs /\ a <> b /\ in_mem_range a 32 i ==>
+    ~in_mem_range b 32 i) /\
+  EVERY (\i. i < LENGTH operands) indices /\
+  (!op old off b. FLOOKUP ps.ps_spilled op = SOME old /\ MEM off offs /\
+    in_mem_range old 32 b ==> ~in_mem_range off 32 b) /\
+  (!off b. MEM off offs /\ in_mem_range off 32 b ==>
+    R b /\ context_spill_byte cplan b) /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan fmp (MAP SOSpill offs ++
+      MAP SORestore (MAP (\i. EL i offs) indices))) ==>
+  ?ss'.
+    sym_steps p env (LENGTH (execute_plan fmp (MAP SOSpill offs ++
+      MAP SORestore (MAP (\i. EL i offs) indices)))) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest ps' ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan fmp (MAP SOSpill offs ++
+        MAP SORestore (MAP (\i. EL i offs) indices))) /\
+    (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  gen_tac >> strip_tac >> drule_all sym_scratch_schedule_kinds >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists_tac `ss'` >> simp[] >> reverse conj_tac
+  >- metis_tac[] >>
+  irule sym_kinds_ok_scratch_finish >> conj_tac
+  >- (qexists_tac `top ++ tail` >>
+      simp[REVERSE_APPEND, APPEND_ASSOC, LIST_REL_APPEND_suff]) >>
+  qexistsl_tac [`offs`, `ps`, `ss`] >> simp[] >> metis_tac[]
 QED
 
 Theorem sym_scratch_ranges_separated:
@@ -983,8 +1042,6 @@ Proof
     (simp[Abbr `desired`, EVERY_APPEND, EVERY_GENLIST] >> decide_tac) >>
   `LENGTH vals = LENGTH offs` by simp[] >>
   `ss.sym_stack = vals ++ (tail ++ srest)` by metis_tac[APPEND_ASSOC] >>
-  drule_all sym_scratch_schedule_kinds >>
-  disch_then (qspec_then `env` strip_assume_tac) >>
   `REVERSE (MAP (\i. EL i (REVERSE (top_n (dist + 1) ps.ps_stack)))
       (REVERSE desired)) =
    REVERSE (MAP (\i. EL i (top_n (dist + 1) ps.ps_stack)) desired)` by
@@ -992,15 +1049,14 @@ Proof
      qunabbrev_tac `desired` >>
      irule (GSYM (PURE_REWRITE_RULE [APPEND] doSwapSimTheory.reverse_desired_values)) >>
      simp[] >> decide_tac) >>
-  qexists_tac `ss'` >> simp[] >> reverse conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> rpt strip_tac >>
-      metis_tac[MEM_MAP]) >>
-  irule sym_kinds_ok_scratch_finish >>
-  conj_tac
-  >- (qexists_tac `top ++ tail` >>
-      simp[REVERSE_APPEND, LIST_REL_APPEND_suff, APPEND_ASSOC] >>
-      metis_tac[LIST_REL_APPEND_suff]) >>
-  qexistsl_tac [`offs`, `ps`, `ss`] >> simp[] >> metis_tac[MEM_MAP]
+  irule (PURE_ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM]
+    sym_scratch_schedule_framed) >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[MEM_MAP] >>
+  reverse conj_tac >- (qexists_tac `ps` >> metis_tac[]) >>
+  qexistsl_tac [`TAKE (LENGTH ps.ps_stack - (dist + 1)) ps.ps_stack`,
+    `REVERSE (top_n (dist + 1) ps.ps_stack)`, `tail`, `vals`] >>
+  simp[] >> gvs[REVERSE_11]
 QED
 
 Theorem sym_do_swap_numeric:
