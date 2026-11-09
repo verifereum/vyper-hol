@@ -11,7 +11,7 @@ Ancestors
   abiDecoderOffset
 
 Theorem prefix_member_setup_var_frame:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   run_inst_seq (emitted_insts st middle) s = OK t /\ not_fresh_at st v ==>
   lookup_var v t = lookup_var v s
 Proof
@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_complete_shift:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand (Var dst) s = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb+ao) : bytes32) s = n2w payload_off /\
            sb+payload_off < dimword (:256)) /\
@@ -72,6 +72,12 @@ Theorem prefix_member_setup_complete_shift:
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
+  `dyn ==> eval_operand (Lit 0w) s = SOME (n2w 0) /\
+    abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) s = n2w payload_off /\
+    sb + payload_off < dimword (:256)` by
+    (asm_rewrite_tac[eval_operand_def, ADD]) >>
   drule_all abi_decode_member_setup_reentry >> strip_tac >>
   drule_all prefix_member_setup_pair_shift >>
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
@@ -138,7 +144,7 @@ Theorem prefix_canonical_member_setup_complete_shift:
     enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys))) (ListV (preavs ++ av::avs)) /\
   sb + LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) (pretys ++ ty::tys)))
     (ListV (preavs ++ av::avs))) < dimword (:256) /\
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w)
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty))
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
     (SUM (MAP (type_memory_bytes ce) pretys)) st = (ops,middle) /\
