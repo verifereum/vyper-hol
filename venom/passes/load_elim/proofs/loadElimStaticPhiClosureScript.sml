@@ -133,3 +133,23 @@ Proof
   drule_all le_round_endpoint_available >> strip_tac >>
   metis_tac[]
 QED
+
+Theorem le_round_original_phi_edge_uses_wf:
+  wf_function fn /\ fn_inst_wf fn /\ le_configured_context ctx /\
+  phi_edge_uses_wf fn bb inst ==>
+  phi_edge_uses_wf (load_elim_one ctx (cfg_analyze fn) fn)
+    (analysis_block_transform_prepend NONE (load_analyze ctx fn)
+      (load_phi_prepend (collect_phi_actions (fn_max_inst_id fn) ctx
+        (cfg_analyze fn) (load_analyze ctx fn) fn))
+      (\ll i. [load_elim_inst ctx (collect_phi_actions (fn_max_inst_id fn) ctx
+        (cfg_analyze fn) (load_analyze ctx fn) fn) ll i]) bb) inst
+Proof
+  strip_tac >>
+  fs[phi_edge_uses_wf_def] >>
+  simp[phi_edge_uses_wf_def, analysis_block_transform_prepend_def,
+    le_round_cfg_edge] >>
+  rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all le_round_endpoint_available >> strip_tac >>
+  metis_tac[]
+QED
