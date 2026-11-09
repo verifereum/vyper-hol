@@ -4,6 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallFamStmtMutationResource
   bodyIntCallFamStmtMutationLocalStore bodyIntCallFamStmtMutationResourceLanding
   bodyIntCallFamStmtMutationAppendSuffix bodyIntCallFamStmtMutationAppendExec
+  bodyIntCallFamStmtMutationDeclEntry
 
 (* A pending declaration cannot use the current expression-producer entry.
    The new compile binding is present before the source local is introduced. *)
