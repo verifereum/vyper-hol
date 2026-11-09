@@ -3,7 +3,7 @@ Theory typedNormalizeRankPathMem
 Ancestors
   typedNormalizeRankMem typedFieldCopyAggregateMem typedArrayCopyPathsMem
   typedNormalizeFrame stmtSimReturn typedMemoryCopy valueCopyBytes exprSimBufferStore
-  allocaFootprint
+  allocaFootprint venomInst typedNormalizeFastRepresentation loweringPosts
   typedFieldCopyPathsMem context compileEnv venomState valueEncoding
   vyperTypeSystem vyperValue vyperTyping vyperTypeArgFits
   list rich_list arithmetic words valueCopy exprLoweringProps
@@ -209,6 +209,107 @@ Resume typed_store_rank_path_mem[fixed_slow]:
   cheat
 QED
 Resume typed_store_rank_path_mem[dynamic_array]:
+  qpat_x_assum `(?n m. _) \/ _` mp_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `sb' = _` SUBST_ALL_TAC >>
+  rename1 `ArrayT elem (Dynamic cap)` >>
+  qpat_x_assum `evaluate_type tenv (ArrayT se _) = SOME stv` mp_tac >>
+  simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `evaluate_type tenv (ArrayT elem _) = SOME dtv` mp_tac >>
+  simp[evaluate_type_def, AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `ArrayTV _ _ = stv` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `ArrayTV _ _ = dtv` (SUBST_ALL_TAC o SYM) >>
+  `type_widens_to tenv se elem` by
+    (qpat_x_assum `type_widens_to _ (ArrayT _ _) _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[type_widens_to_def, arg_type_fits_def, well_formed_type_def,
+       evaluate_type_def] >>
+     Cases_on `evaluate_type tenv elem` >> simp[] >> metis_tac[]) >>
+  `cap < dimword(:256)` by
+    (qpat_x_assum `type_slot_size (ArrayTV tv' _) < _` mp_tac >>
+     simp[type_slot_size_def] >>
+     `cap <= cap * type_slot_size tv'` by
+       (Cases_on `type_slot_size tv'` >> simp[MULT_CLAUSES]) >> decide_tac) >>
+  `type_memory_bytes ce se = type_memory_size tv /\
+   type_memory_bytes ce elem = type_memory_size tv'` by
+    (conj_tac >> irule typed_copy_memory_size >>
+     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _`
+    (mp_tac o SRULE [Once compile_store_memory_typed_def,
+      is_word_type_def, is_bytestring_type_def]) >> simp[] >> strip_tac >>
+  Cases_on `type_memory_bytes ce elem = type_memory_bytes ce se /\ elem = se`
+  >- suspend "dynamic_equal" >>
+  suspend "dynamic_slow"
+QED
+Resume typed_store_rank_path_mem[dynamic_equal]:
+  qpat_x_assum `!m. m < n ==> _` kall_tac >>
+  `elem = se` by metis_tac[] >> gnvs[] >>
+  qpat_x_assum `value_has_type (ArrayTV tv (Dynamic _)) v` mp_tac >>
+  Cases_on `v` >> simp[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> simp[value_has_type_def] >> strip_tac >>
+  `LENGTH l <= cap /\ LENGTH l <= n''` by
+    fs[value_has_type_def, typed_copy_dynarray_wf] >>
+  `LENGTH l * type_memory_size tv <= n'' * type_memory_size tv /\
+   LENGTH l * type_memory_size tv <= cap * type_memory_size tv` by
+    simp[LE_MULT_RCANCEL] >>
+  `mload (w2n sw) s = n2w (LENGTH l)` by
+    fs[val_in_memory_def, GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+  `w2n (sw+32w) = w2n sw+32 /\ w2n (dw+32w) = w2n dw+32 /\
+   LENGTH l * type_memory_bytes ce elem < dimword(:256) /\
+   w2n sw+32 <= s.vs_alloca_next /\ w2n dw+32 <= s.vs_alloca_next /\
+   w2n (sw+32w)+LENGTH l*type_memory_bytes ce elem <= s.vs_alloca_next /\
+   w2n (dw+32w)+LENGTH l*type_memory_bytes ce elem <= s.vs_alloca_next` by
+    (`w2n sw+32 < dimword(:256) /\ w2n dw+32 < dimword(:256) /\
+        LENGTH l * type_memory_bytes ce elem < dimword(:256) /\
+        w2n sw+32+LENGTH l*type_memory_bytes ce elem <= s.vs_alloca_next /\
+        w2n dw+32+LENGTH l*type_memory_bytes ce elem <= s.vs_alloca_next`
+       suffices_by (strip_tac >> simp[w2n_add_2] >> gvs[]) >>
+     gns[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
+  `!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all typedNormalizeDynarrayTheory.typed_dynarray_equal_compiler_run >> strip_tac >>
+  drule typedNormalizeDynarrayTheory.typed_dynarray_equal_shape >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts` by
+    simp[IS_PREFIX_APPEND] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)` by simp[mk_inst_def, is_terminator_def] >>
+  drule_all typed_copy_window_path_mem >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  suspend "dynamic_equal_finish"
+QED
+Resume typed_store_rank_path_mem[dynamic_equal_finish]:
+  `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `val_in_memory (ArrayTV tv (Dynamic (LENGTH l))) (ArrayV (DynArrayV l))
+    (w2n sw) s.vs_memory /\
+   val_wf (ArrayTV tv (Dynamic (LENGTH l))) (ArrayV (DynArrayV l))` by
+    (conj_tac >- metis_tac[dynarray_in_memory_capacity_irrelevant] >>
+     fs[typed_copy_dynarray_wf]) >>
+  `val_in_memory (ArrayTV tv (Dynamic (LENGTH l))) (ArrayV (DynArrayV l))
+    (w2n dw) u.vs_memory` by
+    (irule valueCopyTheory.val_in_memory_relocate >> conj_tac >- simp[] >>
+     qexistsl_tac [`w2n sw`, `32+LENGTH l*type_memory_size tv`, `s.vs_memory`] >>
+     simp[val_footprint_def, type_memory_size_def] >>
+     pure_rewrite_tac[Q.SPECL [`LENGTH l*type_memory_size tv`, `32`] ADD_COMM] >>
+     irule typedNormalizeDynarrayTheory.typed_dynarray_equal_window >> simp[] >>
+     qexists_tac `type_memory_size (ArrayTV tv (Dynamic n''))` >>
+     simp[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >>
+     gns[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
+  goal_assum (drule_at (Pat `gas_path_mem _ _ _ _ _`)) >> simp[] >>
+  conj_tac >- metis_tac[dynarray_in_memory_capacity_irrelevant] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `gas_path_mem _ _ _ _ _` kall_tac >>
+      qpat_x_assum `emitted_insts sa sb = _` kall_tac >>
+      asm_rewrite_tac[] >> irule typedNormalizeDynarrayTheory.typed_dynarray_equal_exterior >>
+      gns[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> decide_tac) >>
+  qpat_x_assum `gas_path_mem _ _ _ _ _` kall_tac >>
+  qpat_x_assum `emitted_insts sa sb = _` kall_tac >>
+  conj_tac
+  >- (qpat_x_assum `u with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+      simp[venom_state_component_equality]) >>
+  simp[lookup_var_def] >> metis_tac[lookup_var_def]
+QED
+Resume typed_store_rank_path_mem[dynamic_slow]:
   cheat
 QED
 Resume typed_store_rank_path_mem[tuple]:

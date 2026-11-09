@@ -316,7 +316,7 @@ Proof
 QED
 
 (* The header and data writes together affect only the live destination. *)
-Theorem typed_dynarray_equal_exterior[local]:
+Theorem typed_dynarray_equal_exterior:
   !s d p l stride a k.
     a+k <= d \/ d+32+l*stride <= a ==>
     mem_bytes_at a k
@@ -331,7 +331,7 @@ Proof
   simp[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
-Theorem typed_dynarray_equal_window[local]:
+Theorem typed_dynarray_equal_window:
   !s d p l stride src_size.
     mload p s = n2w l /\ 32+l*stride <= src_size /\
     (p+src_size <= d \/ d+32+l*stride <= p) ==>
