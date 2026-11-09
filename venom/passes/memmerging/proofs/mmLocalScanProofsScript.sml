@@ -6587,6 +6587,150 @@ Proof
   drule_all mm_local_indexed_store_pending_birth >> simp[]
 QED
 
+Definition mm_local_pending_indices_def:
+  mm_local_pending_indices is gs n = FILTER (\j.
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    ?g r. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      r < LENGTH is /\ n <= r /\
+      rep_of_group is g = SOME ((EL r is).inst_id,g)) (COUNT_LIST n)
+End
+
+Theorem mm_local_pending_indices_mem[local]:
+  MEM j (mm_local_pending_indices is gs n) <=>
+  j < n /\ (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  ?g r. MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+    r < LENGTH is /\ n <= r /\ rep_of_group is g = SOME ((EL r is).inst_id,g)
+Proof
+  simp[mm_local_pending_indices_def, MEM_FILTER, MEM_COUNT_LIST] >> metis_tac[]
+QED
+
+Theorem mm_local_pending_indices_order[local]:
+  SORTED $< (mm_local_pending_indices is gs n) /\
+  ALL_DISTINCT (mm_local_pending_indices is gs n)
+Proof
+  simp[mm_local_pending_indices_def] >> conj_tac
+  >- (irule sortingTheory.SORTED_FILTER >>
+      simp[sortingTheory.sorted_lt_count_list, relationTheory.transitive_def] >> decide_tac) >>
+  irule FILTER_ALL_DISTINCT >> simp[rich_listTheory.all_distinct_count_list]
+QED
+
+Theorem mm_local_store_birth_every[local]:
+  (!a b. P a /\ P b ==> P (copy_merge a b)) /\
+  mm_local_scan_every P ss /\
+  (!dst v src. inst.inst_operands = [Lit dst; Var v] /\
+    FLOOKUP ss.ss_loads v = SOME src ==>
+    P <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := inst.inst_id ::
+           (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id]) |>) ==>
+  mm_local_scan_every P (scan_store dfg mode ss inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >- simp[scan_store_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::ops` >>
+  Cases_on `ops` >- simp[scan_store_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::value::ops` >>
+  Cases_on `ops`
+  >- (Cases_on `dst` >> Cases_on `value` >>
+      simp[scan_store_def, operand_var_name_def, operand_lit_val_def,
+        mm_local_barrier_every] >>
+      rename1 `inst.inst_operands = [Lit addr; Var v]` >>
+      Cases_on `FLOOKUP ss.ss_loads v` >- simp[mm_local_barrier_every] >>
+      simp[] >>
+      qmatch_goalsub_abbrev_tac `flush_hazards mode ss0 cg` >>
+      `P cg` by (simp[Abbr `cg`] >> metis_tac[]) >>
+      `mm_local_scan_every P ss0` by
+        (simp[Abbr `ss0`] >> IF_CASES_TAC >> simp[mm_local_invalidate_every]) >>
+      drule mm_local_hazards_every >>
+      disch_then (qspecl_then [`mode`, `cg`] assume_tac) >>
+      gvs[mm_local_scan_every_def] >> irule mm_local_add_every >> simp[]) >>
+  simp[scan_store_def, mm_local_barrier_every]
+QED
+
+Theorem mm_local_bulk_birth_every[local]:
+  (!a b. P a /\ P b ==> P (copy_merge a b)) /\
+  mm_local_scan_every P ss /\
+  (!dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
+    P <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [inst.inst_id] |>) ==>
+  mm_local_scan_every P (scan_bulk_copy mode ss inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >- simp[scan_bulk_copy_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::ops` >>
+  Cases_on `ops` >- simp[scan_bulk_copy_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::src::ops` >>
+  Cases_on `ops` >- simp[scan_bulk_copy_def, mm_local_barrier_every] >>
+  rename1 `inst.inst_operands = dst::src::len::ops` >>
+  Cases_on `ops`
+  >- (Cases_on `dst` >>
+      simp[scan_bulk_copy_def, operand_lit_val_def, mm_local_barrier_every] >>
+      Cases_on `src` >> simp[operand_lit_val_def, mm_local_barrier_every] >>
+      Cases_on `len` >> simp[operand_lit_val_def, mm_local_barrier_every] >>
+      qmatch_goalsub_abbrev_tac `flush_hazards mode ss0 cg` >>
+      `P cg` by (simp[Abbr `cg`] >> metis_tac[]) >>
+      `mm_local_scan_every P ss0` by
+        (simp[Abbr `ss0`] >> IF_CASES_TAC >> simp[mm_local_invalidate_every]) >>
+      drule mm_local_hazards_every >>
+      disch_then (qspecl_then [`mode`, `cg`] assume_tac) >>
+      gvs[mm_local_scan_every_def] >> irule mm_local_add_every >> simp[]) >>
+  simp[scan_bulk_copy_def, mm_local_barrier_every]
+QED
+
+Theorem mm_local_inst_birth_every[local]:
+  (!a b. P a /\ P b ==> P (copy_merge a b)) /\
+  mm_local_scan_every P ss /\
+  (inst.inst_opcode = MSTORE ==>
+    !dst v src. inst.inst_operands = [Lit dst; Var v] /\ FLOOKUP ss.ss_loads v = SOME src ==>
+      P <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+        cg_inst_ids := inst.inst_id ::
+          (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id]) |>) /\
+  (inst.inst_opcode = MCOPY ==>
+    !dst src len. inst.inst_operands = [Lit dst; Lit src; Lit len] ==>
+      P <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+        cg_inst_ids := [inst.inst_id] |>) ==>
+  mm_local_scan_every P (scan_inst dfg Mem2Mem ss inst)
+Proof
+  strip_tac >> simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  IF_CASES_TAC >- (irule mm_local_load_every >> simp[]) >>
+  IF_CASES_TAC >- (irule mm_local_store_birth_every >> metis_tac[]) >>
+  IF_CASES_TAC >- (irule mm_local_bulk_birth_every >> metis_tac[]) >>
+  rpt IF_CASES_TAC >> simp[mm_local_barrier_every]
+QED
+
+Definition mm_local_id_birth_def:
+  mm_local_id_birth dfg is id <=> ?p. p < LENGTH is /\
+    ((?dst src len. (EL p is).inst_opcode = MCOPY /\
+       (EL p is).inst_operands = [Lit dst; Lit src; Lit len] /\ id = (EL p is).inst_id) \/
+     (?dst v src. (EL p is).inst_opcode = MSTORE /\
+       (EL p is).inst_operands = [Lit dst; Var v] /\
+       FLOOKUP (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE p is)).ss_loads v = SOME src /\
+       (id = (EL p is).inst_id \/ ?li. dfg_get_def dfg v = SOME li /\ id = li.inst_id)))
+End
+
+Theorem mm_local_birth_merge[local]:
+  (!id. MEM id a.cg_inst_ids ==> mm_local_id_birth dfg is id) /\
+  (!id. MEM id b.cg_inst_ids ==> mm_local_id_birth dfg is id) ==>
+  !id. MEM id (copy_merge a b).cg_inst_ids ==> mm_local_id_birth dfg is id
+Proof
+  simp[copy_merge_def, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem mm_local_scan_births[local]:
+  !t. t <= LENGTH is ==>
+    mm_local_scan_every (\g. !id. MEM id g.cg_inst_ids ==> mm_local_id_birth dfg is id)
+      (FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE t is))
+Proof
+  Induct >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
+  strip_tac >>
+  `t < LENGTH is /\ t <= LENGTH is` by decide_tac >>
+  simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
+  irule mm_local_inst_birth_every >>
+  conj_tac >- metis_tac[mm_local_birth_merge] >>
+  simp[] >> rpt conj_tac >> rpt strip_tac >>
+  simp[mm_local_id_birth_def] >> qexists `t` >>
+  simp[] >> Cases_on `dfg_get_def dfg v` >> gvs[]
+QED
+
 Theorem mm_local_two_copy_read[local]:
   mm_local_history is H (n+2) /\
   (EL n is).inst_opcode = MCOPY /\
