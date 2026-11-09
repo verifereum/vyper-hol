@@ -40,7 +40,7 @@ index 064af344..f0387207 100644
          """Get pointer to bytestring data (skipping length word).
  
 diff --git a/vyper/codegen_venom/stmt.py b/vyper/codegen_venom/stmt.py
-index 916871c1..a31e8d96 100644
+index c06e2280..19cd2991 100644
 --- a/vyper/codegen_venom/stmt.py
 +++ b/vyper/codegen_venom/stmt.py
 @@ -11,13 +11,20 @@ from __future__ import annotations
@@ -67,7 +67,7 @@ index 916871c1..a31e8d96 100644
  from vyper.semantics.types.user import ErrorT, EventT, StructT
  from vyper.utils import method_id_int
 @@ -29,6 +36,62 @@ from .context import Constancy, VenomCodegenContext
- from .expr import Expr
+ from .expr import Expr, check_target_overlap
  from .value import VyperValue
  
 +# Mutation test for delayed uses of a lowered value. Backport of

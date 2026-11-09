@@ -8,8 +8,6 @@ target's internal call changes the source.
 `conditional_memory_view` returns 2 for either flag because assignment copies
 the selected memory array before the target's pop shortens it. Reading it after
 the target's effects instead would return 1.
-`nested_retained_pop` returns 5 after an index expression pops the enclosing
-array: the previously captured inner location still contains the array to pop.
 `call_storage_read` returns 10 because internal calls capture every argument
 before reading the storage scalar changed by the later argument.
 `call_memory_pop` returns 1 because the later argument pops the memory array

@@ -8,9 +8,11 @@ Ancestors
   (* allocation limits, conversions, concat buffers, shared callee memory *)
   compilerLoweringTest
   (* fixed-program regressions: ranges, allocation budget, immutables,
-     assignment order, the O1 source-stage unit shape *)
+     assignment order, the O1 source-stage unit shape, the pop() subscript
+     rejection, a name declared at two types in sibling scopes *)
   evalCompilerRange evalCompilerAllocationBudget evalCompilerInternalImmutables
-  evalAssignmentOrder evalCompilerSourceShape
+  evalAssignmentOrder evalCompilerSourceShape evalCompilerPopSubscriptOverlap
+  evalCompilerSiblingScopeTypes
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
   abiEncodeSnapshotTest

@@ -50,14 +50,6 @@
     },
     {
       "arguments": [],
-      "expected": 5,
-      "fixture": "nested_retained_pop",
-      "returned": 5,
-      "runtime_sha256": "ee0c03003f41c13679716d02bd56944b7008b29a63085e66c06437fc08486b59",
-      "signature": "f()"
-    },
-    {
-      "arguments": [],
       "expected": 10,
       "fixture": "call_storage_read",
       "returned": 10,

@@ -43,13 +43,6 @@
       "source": "sources/conditional_snapshot.vy",
       "source_sha256": "20ba23272e7bb716a3c4f09421f9a23f238b1c57098e8f5b58c99e76ed17123f"
     },
-    "nested_retained_pop": {
-      "deploy_sha256": "259e09d06fe019d4a2b60814872b37656f799b21434b4a1346ce770bf06b30ec",
-      "frontend_sha256": "9d7a5f40a5e7a09011549fc12849b4b4557a74167484942d2d58191f627dc4fa",
-      "runtime_sha256": "ee0c03003f41c13679716d02bd56944b7008b29a63085e66c06437fc08486b59",
-      "source": "sources/nested_retained_pop.vy",
-      "source_sha256": "c78b0aa8b6c1772339b2accf709c4dc8faee7efd933863cd710b5909b91cf567"
-    },
     "pop_refill": {
       "deploy_sha256": "0a25d8bf1af12b7a0b921141f692445dabf69c6fd76aa31961d19edaaab8f3ea",
       "frontend_sha256": "73ec5deeb4227c97a542d7ba390b03fab1802190c52858ba95b59d897a43530d",

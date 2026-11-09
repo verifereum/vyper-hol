@@ -4,14 +4,14 @@
  *
  * TOP-LEVEL:
  *   alloc_limits_struct_fields  -- the check reads only the struct sizes
- *   alloc_limits_stmts_exists   -- alloc_limits_expr of every expression of
- *                                  a body, as supported_stmts_expr_exists
- *                                  traverses it, but a slice's .code source
- *                                  (is_extcode), which the check skips
- *   fn_allocs_ok_body           -- that, and the parameters' and declared
- *                                  locals' sizes, of a function the runtime
- *                                  unit lowers, in any compile env that
- *                                  agrees with its own (alloc_env_agree)
+ *   alloc_limits_stmt_exists    -- alloc_limits_expr of every expression of
+ *                                  a statement that holds no block,
+ *                                  but a slice's .code
+ *                                  source (is_extcode), which the check skips
+ *   fn_allocs_ok_body           -- alloc_limits_stmts of a function body the
+ *                                  runtime unit lowers, and the parameters'
+ *                                  sizes, in any compile env that agrees
+ *                                  with its own (alloc_env_agree)
  *)
 Theory allocLimitsProps
 Ancestors
@@ -39,26 +39,59 @@ Proof
   gvs[ext_call_alloc_ok_def]
 QED
 
+Theorem target_subscript_overlap_frame:
+  !c c' bt idx.
+    c'.ce_struct_fields = c.ce_struct_fields /\ c'.ce_modules = c.ce_modules /\
+    c'.ce_var_type = c.ce_var_type /\ c'.ce_hashmap_info = c.ce_hashmap_info /\
+    c'.ce_module_var_type = c.ce_module_var_type ==>
+    target_subscript_overlap c' bt idx = target_subscript_overlap c bt idx
+Proof
+  rw[] >>
+  `!bt. target_place_type c' bt = target_place_type c bt` by
+    (gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+     Cases_on `bt` >> gvs[target_place_type_def]) >>
+  `!bt. target_through_dynarray c' bt = target_through_dynarray c bt` by
+    (gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+     Cases_on `bt` >> gvs[target_through_dynarray_def]) >>
+  simp[target_subscript_overlap_def]
+QED
+
 Theorem alloc_limits_struct_fields:
   (!c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
             alloc_limits_expr c' e = alloc_limits_expr c e) /\
   (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
               alloc_limits_target c' tgt = alloc_limits_target c tgt) /\
   (!c es c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
              alloc_limits_exprs c' es = alloc_limits_exprs c es) /\
   (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
               alloc_limits_opt c' opt = alloc_limits_opt c opt) /\
   (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
               alloc_limits_named_exprs c' kes = alloc_limits_named_exprs c kes)
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
   drule ext_call_alloc_ok_struct_fields >> strip_tac >>
+  drule_all target_subscript_overlap_frame >> strip_tac >>
   simp[alloc_limits_expr_def, type_alloc_ok_def]
 QED
 
@@ -139,13 +172,16 @@ Proof
   imp_res_tac alloc_limits_expr_exists >> simp[]
 QED
 
-Theorem alloc_limits_stmts_exists:
-  (!cenv s. alloc_limits_stmt cenv s ==>
-            ~supported_stmt_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) s) /\
-  (!cenv ss. alloc_limits_stmts cenv ss ==>
-             ~supported_stmts_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) ss)
+(* A block checks its statements under the local types compile_stmts
+   threads to them (decl_var_type), so only a statement that holds no block
+   checks every expression under cenv itself. *)
+Theorem alloc_limits_stmt_exists:
+  !cenv s.
+    alloc_limits_stmt cenv s /\ (!c ss1 ss2. s <> If c ss1 ss2) /\
+    (!id ty it n body. s <> For id ty it n body) ==>
+    ~supported_stmt_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) s
 Proof
-  ho_match_mp_tac alloc_limits_stmt_ind >>
+  gen_tac >> Cases >>
   rw[alloc_limits_stmt_def, supported_stmt_expr_exists_def] >>
   imp_res_tac alloc_limits_expr_exists >>
   imp_res_tac alloc_limits_assignment_exists >>
@@ -157,10 +193,16 @@ QED
 (* The other checks read only the struct sizes too. *)
 Theorem alloc_limits_assignment_struct_fields:
   (!c g c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
             alloc_limits_assignment c' g = alloc_limits_assignment c g) /\
   (!c gs c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
              alloc_limits_assignments c' gs = alloc_limits_assignments c gs)
 Proof
   ho_match_mp_tac alloc_limits_assignment_ind >> rpt conj_tac >>
@@ -170,7 +212,10 @@ QED
 
 Theorem alloc_limits_frame:
   !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
-              c'.ce_func_return_type = c.ce_func_return_type ==>
+              c'.ce_func_return_type = c.ce_func_return_type /\
+              c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
+              c'.ce_hashmap_info = c.ce_hashmap_info /\
+              c'.ce_module_var_type = c.ce_module_var_type ==>
     type_memory_bytes c' = type_memory_bytes c /\
     alloc_limits_expr c' = alloc_limits_expr c /\
     alloc_limits_target c' = alloc_limits_target c /\
@@ -206,8 +251,26 @@ Definition alloc_env_agree_def:
     c'.ce_hashmap_info = c.ce_hashmap_info /\
     c'.ce_module_var_type = c.ce_module_var_type /\
     c'.ce_func_return_type = c.ce_func_return_type /\
+    c'.ce_modules = c.ce_modules /\
+    c'.ce_var_type = c.ce_var_type /\
     c'.ce_func_mutability = c.ce_func_mutability
 End
+
+Theorem alloc_env_agree_var_type:
+  !c c' f. alloc_env_agree c c' ==>
+    alloc_env_agree (c with ce_var_type updated_by f)
+                    (c' with ce_var_type updated_by f)
+Proof
+  rw[alloc_env_agree_def]
+QED
+
+Theorem alloc_env_agree_decl_var_type:
+  !c c' s. alloc_env_agree c c' ==>
+    alloc_env_agree (decl_var_type c s) (decl_var_type c' s)
+Proof
+  ntac 2 gen_tac >> Cases >> rpt strip_tac >>
+  gvs[decl_var_type_def, alloc_env_agree_var_type]
+QED
 
 Theorem call_can_mutate_frame:
   c'.ce_func_mutability = c.ce_func_mutability ==>
@@ -278,9 +341,24 @@ Theorem alloc_limits_stmt_struct_fields:
              alloc_limits_stmts c' ss = alloc_limits_stmts c ss)
 Proof
   ho_match_mp_tac alloc_limits_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
-  rpt strip_tac >> drule assign_alloc_ok_frame >>
-  gvs[alloc_env_agree_def] >> drule_all alloc_limits_frame >> strip_tac >>
-  gvs[alloc_limits_stmt_def, log_alloc_ok_def]
+  rpt strip_tac >> rename1 `alloc_env_agree c0 c1` >>
+  drule assign_alloc_ok_frame >> strip_tac >>
+  `!s. alloc_env_agree (decl_var_type c0 s) (decl_var_type c1 s)` by
+    metis_tac[alloc_env_agree_decl_var_type] >>
+  `!f. alloc_env_agree (c0 with ce_var_type updated_by f)
+                       (c1 with ce_var_type updated_by f)` by
+    metis_tac[alloc_env_agree_var_type] >>
+  `!f. alloc_limits_expr (c1 with ce_var_type updated_by f) =
+       alloc_limits_expr (c0 with ce_var_type updated_by f)` by
+    (gen_tac >> irule (cj 2 alloc_limits_frame) >> gvs[alloc_env_agree_def]) >>
+  `c1.ce_struct_fields = c0.ce_struct_fields /\
+   c1.ce_func_return_type = c0.ce_func_return_type /\
+   c1.ce_modules = c0.ce_modules /\ c1.ce_var_type = c0.ce_var_type /\
+   c1.ce_hashmap_info = c0.ce_hashmap_info /\
+   c1.ce_module_var_type = c0.ce_module_var_type /\
+   c1.ce_event_info = c0.ce_event_info` by gvs[alloc_env_agree_def] >>
+  drule_all alloc_limits_frame >> strip_tac >>
+  gvs[alloc_limits_stmt_def, log_alloc_ok_def] >> metis_tac[]
 QED
 
 (* A target compile_get_target_ptr places in storage or transient storage
@@ -322,8 +400,9 @@ Proof
 QED
 
 (* A function the runtime unit lowers (lower_vyper_runtime_unit_allocs_ok)
-   has its parameters' sizes, alloc_limits_expr of its body's expressions,
-   its locals' sizes and its return type's size below the limit in every compile env
+   has its parameters' sizes, alloc_limits_stmts of its body (its locals'
+   sizes and the expressions' buffers) and its return type's size below the
+   limit in every compile env
    that agrees with build_compile_env's on the fields the check reads: the
    struct sizes, the events, the module's variables and the internal
    functions' return types. *)
@@ -334,15 +413,17 @@ Theorem fn_allocs_ok_body:
       (build_compile_env tops Internal mut fname fargs ret ss F) cenv ==>
     EVERY (\(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs /\
     alloc_limits_exprs cenv dflts /\ alloc_limits_stmts cenv ss /\
-    ~supported_stmts_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) ss /\
     type_memory_bytes cenv ret < 2 ** 64
 Proof
   rpt gen_tac >> strip_tac >> gvs[fn_allocs_ok_def] >>
   qabbrev_tac `c = build_compile_env tops Internal mut fname fargs ret ss F` >>
   `cenv.ce_struct_fields = c.ce_struct_fields /\
-   cenv.ce_func_return_type = c.ce_func_return_type` by gvs[alloc_env_agree_def] >>
+   cenv.ce_func_return_type = c.ce_func_return_type /\
+   cenv.ce_modules = c.ce_modules /\ cenv.ce_var_type = c.ce_var_type /\
+   cenv.ce_hashmap_info = c.ce_hashmap_info /\
+   cenv.ce_module_var_type = c.ce_module_var_type` by gvs[alloc_env_agree_def] >>
   drule_all alloc_limits_frame >> strip_tac >>
   `alloc_limits_stmts cenv ss` by
     metis_tac[alloc_limits_stmt_struct_fields] >>
-  gvs[] >> irule (cj 2 alloc_limits_stmts_exists) >> simp[]
+  gvs[]
 QED
