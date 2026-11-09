@@ -2,7 +2,7 @@
 Theory functionInlinerSiteSimulation
 Ancestors
   functionInlinerSimulation functionInlinerContextTransport ctxLookupAgreeHelpers
-  venomExecSemantics venomInst list
+  venomExecSemantics venomInst functionInlinerDefs list
 
 Definition inline_lower_instruction_def:
   inline_lower_instruction ctx0 C n rank bound i <=>
@@ -65,4 +65,47 @@ Proof
   >- (metis_tac[inline_lower_instruction_closed]) >>
   simp[EVERY_MEM] >> rpt strip_tac >>
   simp[inline_lower_instruction_def] >> qexists `fn` >> simp[]
+QED
+
+Theorem inline_rewrite_counter:
+  !insts k. k <= LENGTH args ==>
+    SND (rewrite_inline_insts args outs ret insts k) =
+      MIN (LENGTH args)
+        (k + LENGTH (FILTER (\inst. is_param_opcode inst.inst_opcode) insts))
+Proof
+  Induct_on `insts`
+  >- simp[rewrite_inline_insts_def, arithmeticTheory.MIN_EQ_LE] >>
+  rpt strip_tac >>
+  Cases_on `is_param_opcode h.inst_opcode` >>
+  Cases_on `k < LENGTH args` >>
+  Cases_on `h.inst_opcode = RET \/ h.inst_opcode = RETFMP` >>
+  simp[rewrite_inline_inst_def, rewrite_inline_insts_def, pairTheory.UNCURRY] >>
+  first_x_assum (qspec_then `if is_param_opcode h.inst_opcode /\ k < LENGTH args
+    then k+1 else k` mp_tac) >> simp[] >>
+  rpt strip_tac >>
+  simp[pairTheory.UNCURRY, arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem inline_rewrite_prefix_counter:
+  SND (rewrite_inline_insts args outs ret
+    (MAP (clone_instruction p labs) (TAKE j insts)) 0) =
+  MIN (LENGTH args)
+    (LENGTH (FILTER (\inst. is_param_opcode inst.inst_opcode) (TAKE j insts)))
+Proof
+  `!xs. LENGTH (FILTER (\inst. is_param_opcode inst.inst_opcode)
+      (MAP (clone_instruction p labs) xs)) =
+    LENGTH (FILTER (\inst. is_param_opcode inst.inst_opcode) xs)` by
+    (Induct >> simp[clone_instruction_def] >>
+     Cases_on `is_param_opcode h.inst_opcode` >> simp[]) >>
+  simp[inline_rewrite_counter]
+QED
+
+(* Exhausted argument lists retain physical parameters; placement is not
+   preserved merely by the syntactic clone/rewrite operation. *)
+Theorem inline_exhausted_parameter_survives:
+  is_param_opcode inst.inst_opcode /\ LENGTH args <= k ==>
+  rewrite_inline_inst args outs ret (clone_instruction p labs inst) k =
+    ([clone_instruction p labs inst], k)
+Proof
+  simp[rewrite_inline_inst_def, clone_instruction_def]
 QED
