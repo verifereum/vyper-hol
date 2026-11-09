@@ -37,7 +37,7 @@
 Theory invokeCopyFwdCommonDefs
 Ancestors
   readonlyMemoryArgsDefs dfgDefs basePtrDefs memAliasDefs dominatorDefs
-  passSharedDefs venomEffects cfgDefs passResidualFrame stateEquiv
+  passSharedDefs venomEffects cfgDefs passResidualFrame stateEquiv pred_set While pair indexedLists list
 
 (* ===== Analysis Context ===== *)
 
@@ -440,3 +440,86 @@ Definition ricf_no_derived_mutable_sibling_def:
         v <> dst ==>
         ~MEM (Var v) use_inst.inst_operands
 End
+
+Theorem icf_aliases_step_mem:
+  !dfg als out.
+    out IN SND (icf_aliases_step dfg als) <=>
+    out IN als \/ ?v inst. v IN als /\
+      MEM inst (dfg_get_uses dfg v) /\ inst.inst_opcode = ASSIGN /\
+      inst.inst_outputs = [out]
+Proof
+  simp[icf_aliases_step_def, IN_BIGUNION, IN_IMAGE, PULL_EXISTS] >>
+  rpt gen_tac >> eq_tac
+  >- (rpt strip_tac >> gvs[] >>
+      Cases_on `inst.inst_opcode = ASSIGN` >> gvs[] >>
+      Cases_on `inst.inst_outputs` >> gvs[] >>
+      rename1 `inst.inst_outputs = h::tail` >>
+      Cases_on `tail` >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> gvs[] >> disj2_tac >>
+  qexists_tac `v` >> simp[] >> qexists_tac `inst` >> simp[]
+QED
+
+Theorem icf_aliases_step_changed:
+  !dfg als. FST (icf_aliases_step dfg als) <=>
+    SND (icf_aliases_step dfg als) <> als
+Proof
+  simp[icf_aliases_step_def] >> SET_TAC[]
+QED
+
+Theorem icf_aliases_step_inflationary:
+  !dfg als. als SUBSET SND (icf_aliases_step dfg als)
+Proof
+  simp[SUBSET_DEF, icf_aliases_step_mem]
+QED
+
+Theorem icf_aliases_owhile_fixpoint:
+  !n carrier dfg als.
+    CARD (carrier DIFF als) = n /\ FINITE carrier /\ als SUBSET carrier /\
+    (!a. a SUBSET carrier ==> SND (icf_aliases_step dfg a) SUBSET carrier) ==>
+    ?res. OWHILE (\(changed, _). changed)
+             (\(_, a). icf_aliases_step dfg a) (T, als) = SOME (F,res) /\
+          als SUBSET res /\ res SUBSET carrier /\
+          icf_aliases_step dfg res = (F,res)
+Proof
+  completeInduct_on `n` >> rpt strip_tac >>
+  Cases_on `icf_aliases_step dfg als` >> rename1 `icf_aliases_step dfg als = (changed,next)` >>
+  `als SUBSET next` by metis_tac[icf_aliases_step_inflationary, SND] >>
+  `next SUBSET carrier` by metis_tac[SND] >>
+  reverse (Cases_on `changed`)
+  >- (`next = als` by metis_tac[icf_aliases_step_changed, FST, SND] >> gvs[] >>
+      qexists_tac `als` >> simp[Once OWHILE_THM] >>
+      simp[Once OWHILE_THM]) >>
+  `next <> als` by metis_tac[icf_aliases_step_changed, FST, SND] >>
+  `CARD (carrier DIFF next) < CARD (carrier DIFF als)` by
+    (irule CARD_PSUBSET >> simp[] >>
+     simp[PSUBSET_DEF, SUBSET_DEF, EXTENSION] >>
+     gvs[SUBSET_DEF, EXTENSION] >> metis_tac[]) >>
+  first_x_assum (qspec_then `CARD (carrier DIFF next)` mp_tac) >>
+  simp[] >> disch_then (qspecl_then [`carrier`, `dfg`, `next`] mp_tac) >>
+  simp[] >> strip_tac >> qexists_tac `res` >>
+  simp[Once OWHILE_THM] >> metis_tac[SUBSET_TRANS]
+QED
+
+Theorem icf_use_positions_mem:
+  !dfg v inst pos.
+    MEM (inst,pos) (icf_use_positions dfg v) <=>
+    MEM inst (dfg_get_uses dfg v) /\
+    pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = Var v
+Proof
+  simp[icf_use_positions_def, MEM_FLAT, MEM_MAP, MEM_MAPi, PULL_EXISTS] >>
+  rpt gen_tac >> eq_tac
+  >- (rpt strip_tac >> gvs[] >>
+      qpat_x_assum `MEM (inst,pos) _` mp_tac >>
+      CASE_TAC >> simp[] >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]) >>
+  rpt strip_tac >> qexistsl_tac [`inst`, `pos`] >> simp[]
+QED
+
+Theorem icf_alias_use_positions_mem:
+  !dfg als v inst pos. FINITE als ==>
+    (MEM (v,inst,pos) (icf_alias_use_positions dfg als) <=>
+     v IN als /\ MEM (inst,pos) (icf_use_positions dfg v))
+Proof
+  simp[icf_alias_use_positions_def, MEM_FLAT, MEM_MAP, PULL_EXISTS,
+       MEM_SET_TO_LIST] >> rpt strip_tac >>
+  simp[EXISTS_PROD] >> metis_tac[]
+QED

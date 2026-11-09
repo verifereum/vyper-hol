@@ -19,7 +19,7 @@
 Theory internalReturnCopyFwdPlan
 Ancestors
   internalReturnCopyFwdDefs invokeCopyFwdCommonDefs dfgDefs passSharedDefs
-  venomWf venomInst list pred_set
+  venomWf venomInst list pred_set dfgAnalysisProps While
 
 (* v is x, or the output of an ASSIGN of an alias of x *)
 Inductive ircf_alias:
@@ -32,6 +32,91 @@ Inductive ircf_alias:
      inst.inst_outputs = [out] ==>
      ircf_alias fn x out)
 End
+
+Theorem ircf_alias_output_bound:
+  !fn x v. ircf_alias fn x v ==>
+    v = x \/ MEM v (FLAT (MAP (\inst. inst.inst_outputs) (fn_insts fn)))
+Proof
+  ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >> simp[] >>
+  disj2_tac >> simp[MEM_FLAT, MEM_MAP] >> metis_tac[MEM]
+QED
+
+Theorem ircf_alias_finite:
+  !fn x. FINITE {v | ircf_alias fn x v}
+Proof
+  rpt gen_tac >> irule SUBSET_FINITE_I >>
+  qexists_tac `x INSERT set (FLAT (MAP (\inst. inst.inst_outputs) (fn_insts fn)))` >>
+  simp[SUBSET_DEF] >> metis_tac[ircf_alias_output_bound]
+QED
+
+Theorem ircf_alias_step_closed:
+  !fn x a. a SUBSET {v | ircf_alias fn x v} ==>
+    SND (icf_aliases_step (dfg_build_function fn) a) SUBSET
+      {v | ircf_alias fn x v}
+Proof
+  simp[SUBSET_DEF, icf_aliases_step_mem] >> rpt strip_tac >>
+  gvs[] >> drule dfg_build_function_uses_sound >>
+  strip_tac >> irule ircf_alias_assign >>
+  qexistsl_tac [`inst`, `v`] >>
+  gvs[dfg_operand_vars_eq, MEM_operand_vars_eq_Var]
+QED
+
+Theorem ircf_collect_aliases_fixpoint:
+  !fn x. ?res.
+    OWHILE (\(changed, _). changed)
+      (\(_, a). icf_aliases_step (dfg_build_function fn) a) (T,{x}) = SOME (F,res) /\
+    x IN res /\ res SUBSET {v | ircf_alias fn x v} /\
+    icf_aliases_step (dfg_build_function fn) res = (F,res)
+Proof
+  rpt gen_tac >>
+  qspecl_then [`CARD ({v | ircf_alias fn x v} DIFF {x})`,
+              `{v | ircf_alias fn x v}`, `dfg_build_function fn`, `{x}`]
+    mp_tac icf_aliases_owhile_fixpoint >>
+  simp[ircf_alias_finite, ircf_alias_refl, ircf_alias_step_closed] >>
+  metis_tac[SUBSET_DEF, IN_SING]
+QED
+
+Theorem ircf_alias_least_closed:
+  !fn x v. ircf_alias fn x v ==>
+    !a. x IN a /\ SND (icf_aliases_step (dfg_build_function fn) a) = a ==>
+        v IN a
+Proof
+  ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >> gvs[] >>
+  `MEM inst (dfg_get_uses (dfg_build_function fn) v)` by
+    (irule dfg_build_function_uses_complete >>
+     simp[dfg_operand_vars_eq, MEM_operand_vars_eq_Var]) >>
+  metis_tac[icf_aliases_step_mem]
+QED
+
+Theorem icf_collect_aliases_ircf_alias:
+  !fn x. icf_collect_aliases (dfg_build_function fn) x =
+         {v | ircf_alias fn x v}
+Proof
+  rpt gen_tac >> qspecl_then [`fn`, `x`] strip_assume_tac
+    ircf_collect_aliases_fixpoint >>
+  simp[icf_collect_aliases_def] >>
+  simp[EXTENSION] >> gen_tac >> eq_tac
+  >- (gvs[SUBSET_DEF] >> metis_tac[]) >>
+  strip_tac >> drule ircf_alias_least_closed >>
+  disch_then (qspec_then `res` mp_tac) >> simp[]
+QED
+
+Theorem ircf_alias_use_positions_mem:
+  !fn x v inst pos.
+    MEM (v,inst,pos)
+      (icf_alias_use_positions (dfg_build_function fn)
+        (icf_collect_aliases (dfg_build_function fn) x)) <=>
+    ircf_alias fn x v /\ MEM inst (fn_insts fn) /\
+    pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = Var v
+Proof
+  simp[icf_collect_aliases_ircf_alias, icf_alias_use_positions_mem,
+       ircf_alias_finite, icf_use_positions_mem] >>
+  rpt gen_tac >> eq_tac
+  >- (rpt strip_tac >> drule dfg_build_function_uses_sound >> simp[]) >>
+  rpt strip_tac >> simp[] >> irule dfg_build_function_uses_complete >>
+  simp[dfg_operand_vars_eq, MEM_operand_vars_eq_Var] >>
+  metis_tac[EL_MEM]
+QED
 
 Definition ircf_alloca_of_def:
   ircf_alloca_of fn x sz <=>
