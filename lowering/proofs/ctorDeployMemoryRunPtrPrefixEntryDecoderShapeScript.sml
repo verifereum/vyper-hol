@@ -296,7 +296,8 @@ Theorem entry_shape_getelemptr[local]:
 Proof
   ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   shape_db entry_shape_emit_op >> Cases_on `dyn` >>
-  simp shape_simps >> ntac 2 (shape_db entry_shape_emit_op) >>
+  simp shape_simps >> shape_db entry_shape_return >>
+  ntac 2 (shape_db entry_shape_emit_op) >>
   ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp shape_simps >>
       ntac 2 (shape_db entry_shape_emit_op) >> simp shape_simps) >>
@@ -314,14 +315,141 @@ Theorem entry_shape_dyn_elem_ptr[local]:
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst
 Proof
   ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 2 (shape_db entry_shape_emit_op) >>
+  shape_db entry_shape_return >> ntac 2 (shape_db entry_shape_emit_op) >>
   ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp shape_simps >>
       ntac 2 (shape_db entry_shape_emit_op) >>
       shape_dib entry_shape_emit_void >>
-      ntac 3 (shape_db entry_shape_emit_op) >> simp shape_simps) >>
+      ntac 6 (shape_db entry_shape_emit_op) >> simp shape_simps) >>
   simp shape_simps
 QED
+
+Theorem entry_shape_range[local]:
+  !src e hi st.
+    cs_extends st (SND (compile_abi_decode_range_check src e hi st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_range_check src e hi st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_range_check src e hi st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_range_check src e hi st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_range_check src e hi st)) /\
+        MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst
+Proof
+  ntac 3 gen_tac >> rewrite_tac[compile_abi_decode_range_check_def] >>
+  ntac 5 (shape_db entry_shape_emit_op) >> simp shape_simps
+QED
+
+Theorem prefix_entry_shape_decoder_mutual_zero_base[local]:
+  (!dst src opc base_op hi info. opc = DLOAD /\ base_op = Lit 0w ==>
+    !st. cs_extends st (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_to_buf dst src opc base_op hi info st)) /\
+        MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst) /\
+  (!dst src opc base_op hi elems ao vo. opc = DLOAD /\ base_op = Lit 0w ==>
+    !st. cs_extends st (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo st)) /\
+        MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst) /\
+  (!dst src opc base_op hi ei asz msz ip cnt. opc = DLOAD /\ base_op = Lit 0w ==>
+    !st. cs_extends st (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)).cs_next_id ==>
+      ?inst. inst.inst_id = aid /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt st)) /\
+        MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst)
+Proof
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >> gvs[]
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume prefix_entry_shape_decoder_mutual_zero_base[word]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  rewrite_tac[compile_abi_dec_addr_def] >>
+  shape_db entry_shape_return >>
+  irule entry_shape_static >> simp[entry_shape_clamp]
+QED
+Resume prefix_entry_shape_decoder_mutual_zero_base[bytes]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  ho_match_mp_tac entry_shape_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      shape_db entry_shape_emit_op >> shape_dib entry_shape_range >>
+      simp shape_simps) >>
+  gen_tac >> rewrite_tac[compile_abi_dec_addr_def] >>
+  shape_db entry_shape_return >> ntac 3 (shape_db entry_shape_emit_op) >>
+  shape_dib entry_shape_emit_void >>
+  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      shape_db entry_shape_emit_op >> simp (entry_shape_range::shape_simps)) >>
+  simp shape_simps
+QED
+Resume prefix_entry_shape_decoder_mutual_zero_base[array]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  ho_match_mp_tac entry_shape_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      shape_db entry_shape_emit_op >> shape_dib entry_shape_range >>
+      simp shape_simps) >>
+  gen_tac >> rewrite_tac[compile_abi_dec_addr_def] >>
+  shape_db entry_shape_return >> ntac 3 (shape_db entry_shape_emit_op) >>
+  shape_dib entry_shape_emit_void >>
+  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp shape_simps >>
+      ntac 2 (shape_db entry_shape_emit_op) >> simp (entry_shape_range::shape_simps)) >>
+  shape_db entry_shape_emit_op >> shape_dib entry_shape_emit_void >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
+  >- (ntac 2 (shape_db entry_shape_emit_op) >>
+      shape_db entry_shape_return >> shape_db entry_shape_emit_op >> simp shape_simps) >>
+  shape_db entry_shape_alloc_buffer >> shape_dib entry_shape_emit_void >>
+  first_x_assum irule >> simp[]
+QED
+Resume prefix_entry_shape_decoder_mutual_zero_base[complex]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
+  >- simp[] >>
+  shape_db entry_shape_emit_op >> shape_dib entry_shape_range >> simp[]
+QED
+Resume prefix_entry_shape_decoder_mutual_zero_base[nil]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> simp shape_simps
+QED
+Resume prefix_entry_shape_decoder_mutual_zero_base[cons]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  shape_db entry_shape_getelemptr >> shape_db entry_shape_emit_op >>
+  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
+  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
+  simp[]
+QED
+Resume prefix_entry_shape_decoder_mutual_zero_base[loop]:
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
+  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
+  ntac 3 (shape_db entry_shape_fresh_label) >>
+  shape_dib entry_shape_emit_inst >> shape_dib entry_shape_new_block >>
+  shape_db entry_shape_emit_op >> rewrite_tac[compile_abi_dec_addr_def] >>
+  shape_db entry_shape_return >> ntac 3 (shape_db entry_shape_emit_op) >>
+  shape_dib entry_shape_emit_inst >> shape_dib entry_shape_new_block >>
+  ntac 4 (shape_db entry_shape_emit_op) >>
+  ho_match_mp_tac entry_shape_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp (entry_shape_dyn_elem_ptr::shape_simps)) >>
+  gen_tac >> ntac 3 (shape_db entry_shape_emit_op) >>
+  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
+  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
+  shape_db entry_shape_emit_op >>
+  shape_dib entry_shape_emit_void >> shape_dib entry_shape_emit_inst >>
+  shape_dib entry_shape_new_block >> simp shape_simps
+QED
+Finalise prefix_entry_shape_decoder_mutual_zero_base
 
 Theorem prefix_entry_shape_decoder_mutual:
   (!dst src opc hi info. opc = DLOAD ==>
@@ -349,80 +477,8 @@ Theorem prefix_entry_shape_decoder_mutual:
         abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)) /\
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst)
 Proof
-  ho_match_mp_tac compile_abi_decode_to_buf_ind >>
-  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >> gvs[]
-  >- suspend "word"
-  >- suspend "bytes"
-  >- suspend "array"
-  >- suspend "complex"
-  >- suspend "nil"
-  >- suspend "cons"
-  >> suspend "loop"
+  simp[prefix_entry_shape_decoder_mutual_zero_base]
 QED
-
-Resume prefix_entry_shape_decoder_mutual[word]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  irule entry_shape_static >> simp[entry_shape_clamp]
-QED
-Resume prefix_entry_shape_decoder_mutual[bytes]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 3 (shape_db entry_shape_emit_op) >>
-  shape_dib entry_shape_emit_void >>
-  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp shape_simps >>
-      ntac 4 (shape_db entry_shape_emit_op) >> simp shape_simps) >>
-  simp shape_simps
-QED
-Resume prefix_entry_shape_decoder_mutual[array]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  ntac 3 (shape_db entry_shape_emit_op) >>
-  shape_dib entry_shape_emit_void >>
-  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp shape_simps >>
-      ntac 5 (shape_db entry_shape_emit_op) >> simp shape_simps) >>
-  shape_db entry_shape_emit_op >>
-  shape_dib entry_shape_emit_void >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-  >- (ntac 3 (shape_db entry_shape_emit_op) >> simp shape_simps) >>
-  shape_db entry_shape_alloc_buffer >> shape_dib entry_shape_emit_void >>
-  first_x_assum irule >> simp[]
-QED
-Resume prefix_entry_shape_decoder_mutual[complex]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
-  >- simp[] >>
-  ntac 3 (shape_db entry_shape_emit_op) >> shape_dib entry_shape_emit_void >>
-  simp[]
-QED
-Resume prefix_entry_shape_decoder_mutual[nil]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> simp shape_simps
-QED
-Resume prefix_entry_shape_decoder_mutual[cons]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  shape_db entry_shape_getelemptr >> shape_db entry_shape_emit_op >>
-  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
-  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
-  simp[]
-QED
-Resume prefix_entry_shape_decoder_mutual[loop]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  ntac 3 (shape_db entry_shape_fresh_label) >>
-  shape_dib entry_shape_emit_inst >> shape_dib entry_shape_new_block >>
-  ntac 4 (shape_db entry_shape_emit_op) >>
-  shape_dib entry_shape_emit_inst >> shape_dib entry_shape_new_block >>
-  ntac 4 (shape_db entry_shape_emit_op) >>
-  ho_match_mp_tac entry_shape_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp (entry_shape_dyn_elem_ptr::shape_simps)) >>
-  gen_tac >> ntac 3 (shape_db entry_shape_emit_op) >>
-  ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
-  >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
-  shape_db entry_shape_emit_op >>
-  shape_dib entry_shape_emit_void >> shape_dib entry_shape_emit_inst >>
-  shape_dib entry_shape_new_block >> simp shape_simps
-QED
-Finalise prefix_entry_shape_decoder_mutual
 
 Theorem prefix_entry_decoder_alloca_shape:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi info st = ((),last) /\
