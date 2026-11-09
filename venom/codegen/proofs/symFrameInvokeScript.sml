@@ -824,6 +824,88 @@ Proof
   >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[sym_steps_add]) >> simp[]
 QED
 
+Theorem sym_scratch_preserves_spilled_kind:
+  (!b. (!off. MEM off offs ==> ~in_mem_range off 32 b) ==>
+    FLOOKUP labs' b = FLOOKUP labs b) /\
+  (!off b. MEM off offs /\ in_mem_range old 32 b ==> ~in_mem_range off 32 b) /\
+  op_kind_ok fn ret op sv /\ mem_sval_at labs old sv ==>
+  op_kind_ok fn ret op sv /\ mem_sval_at labs' old sv
+Proof
+  strip_tac >> irule_at Any (iffRL mem_sval_at_range_cong) >> metis_tac[]
+QED
+
+Theorem sym_scratch_preserves_label_domain:
+  !cplan labs labs' offs.
+  (!b. (!off. MEM off offs ==> ~in_mem_range off 32 b) ==>
+    FLOOKUP labs' b = FLOOKUP labs b) /\
+  (!off b. MEM off offs /\ in_mem_range off 32 b ==> context_spill_byte cplan b) /\
+  (!b. b IN FDOM labs ==> context_spill_byte cplan b) ==>
+  (!b. b IN FDOM labs' ==> context_spill_byte cplan b)
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >>
+  metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem sym_kinds_ok_scratch_finish:
+  !cplan fn ret srest ps ss ps' ss' offs top.
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  ps'.ps_spilled = ps.ps_spilled /\ ss'.sym_stack = top ++ srest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE ps'.ps_stack) top /\
+  (!b. (!off. MEM off offs ==> ~in_mem_range off 32 b) ==>
+    FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  (!op old off b. FLOOKUP ps.ps_spilled op = SOME old /\ MEM off offs /\
+    in_mem_range old 32 b ==> ~in_mem_range off 32 b) /\
+  (!off b. MEM off offs /\ in_mem_range off 32 b ==> context_spill_byte cplan b) ==>
+  sym_kinds_ok cplan fn ret srest ps' ss'
+Proof
+  rw[sym_kinds_ok_def]
+  >- metis_tac[sym_scratch_preserves_spilled_kind] >>
+  drule_all sym_scratch_preserves_label_domain >> simp[]
+QED
+
+Theorem sym_scratch_ranges_separated:
+  (a + 32 <= b \/ b + 32 <= a) /\ in_mem_range a 32 i ==>
+  ~in_mem_range b 32 i
+Proof
+  simp[in_mem_range_def] >> decide_tac
+QED
+
+Theorem sym_scratch_numeric_layout:
+  spill_alloc_layout_wf al sp /\ offs = FST (doSwapSim$spill_alloc_n [] al items) ==>
+  LENGTH offs = LENGTH items /\ ALL_DISTINCT offs /\
+  (!a b i. MEM a offs /\ MEM b offs /\ a <> b /\ in_mem_range a 32 i ==>
+    ~in_mem_range b 32 i) /\
+  (!op old off b. FLOOKUP sp op = SOME old /\ MEM off offs /\
+    in_mem_range old 32 b ==> ~in_mem_range off 32 b)
+Proof
+  strip_tac >> drule doSwapSimTheory.spill_alloc_n_temporary_layout >>
+  disch_then (qspecl_then [`offs`, `items`,
+    `FOLDL (\a off. free_spill_slot off a)
+      (SND (doSwapSim$spill_alloc_n [] al items)) offs`] mp_tac) >>
+  simp[] >> strip_tac >> simp[] >>
+  conj_tac >> rpt strip_tac >> gvs[MEM_EL] >>
+  metis_tac[sym_scratch_ranges_separated]
+QED
+
+Theorem sym_kinds_ok_stack_chunk:
+  !cplan fn ret srest ps ss n.
+  sym_kinds_ok cplan fn ret srest ps ss /\ n <= LENGTH ps.ps_stack ==>
+  ?vals tail.
+    ss.sym_stack = vals ++ (tail ++ srest) /\
+    LENGTH vals = n /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (stackPlanOps$top_n n ps.ps_stack)) vals /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (TAKE (LENGTH ps.ps_stack - n) ps.ps_stack)) tail
+Proof
+  rw[sym_kinds_ok_def] >> qexistsl_tac [`TAKE n top`, `DROP n top`] >>
+  conj_tac >- metis_tac[TAKE_DROP, APPEND_ASSOC] >>
+  `LENGTH top = LENGTH ps.ps_stack` by metis_tac[LIST_REL_LENGTH, LENGTH_REVERSE] >>
+  simp[stackPlanOpsTheory.top_n_def, LENGTH_TAKE] >> conj_tac
+  >- metis_tac[rich_listTheory.LIST_REL_TAKE] >>
+  metis_tac[rich_listTheory.LIST_REL_DROP, rich_listTheory.DROP_REVERSE,
+    rich_listTheory.BUTLASTN_TAKE_UNCOND]
+QED
+
 Theorem sym_do_swap_small_prefix:
   !dist ps ops ps' initial_fmp lo.
   do_swap dist ps = (ops, ps') /\ dist <= 16 /\ dist < LENGTH ps.ps_stack ==>
