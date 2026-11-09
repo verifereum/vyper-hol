@@ -218,6 +218,255 @@ QED
 
 Finalise sym_block_prefix_step
 
+Theorem sym_nonentry_run_rest:
+  !fuel ctx fn vs bb s_phi.
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis vs bb.bb_instructions = OK s_phi ==>
+    run_blocks (SUC fuel) ctx fn vs =
+    block_rest fuel ctx fn bb
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt strip_tac >> simp[run_blocks_unfold, run_block_def, block_rest_def] >>
+  Cases_on `exec_block fuel ctx bb
+    (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[]
+QED
+
+Theorem sym_phi_entry_inv:
+  !Inv ctx fn vs bb s_phi.
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    fn_entry_inv Inv ctx fn vs /\
+    eval_phis vs bb.bb_instructions = OK s_phi ==>
+    !inst. active_inst fn inst
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
+      Inv ctx fn inst
+        (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `fn_entry_inv _ _ _ _`
+    (irule o REWRITE_RULE [fn_entry_inv_def]) >>
+  simp[enters_block_def]
+QED
+
+Theorem sym_entry_body_inv:
+  !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   lbl_ctr ps_end ps0 param_ops ps1 body_ops ps_after pc_bb vs as
+   Inv ra pc_ret rest mem0.
+    ctx = unit.cu_context /\ lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\ EL i ctx.ctx_functions = fn /\
+    EL i cp.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+      MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+      MEM inst (fn_insts f) /\ inst.inst_opcode = INVOKE /\
+      inst.inst_operands = Label callee_name :: args /\
+      lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+      fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
+    (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+           (fcg_analyze ctx) fn.fn_name /\
+    growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+    ps0 = init_cleanup_plan_state ch growth r.sr_spill_base lbl_ctr /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      r.sr_spill_base lbl_ctr = SOME (r.sr_plan, ps_end) /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
+    vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\
+    lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+    dfs_block_state liveness dfg cfg fn ps0 (HD fn.fn_blocks).bb_label ps0 /\
+    generate_block_plan liveness dfg cfg fn (HD fn.fn_blocks) ps0 =
+      SOME (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops, ps_after) /\
+    block_plan_state liveness dfg cfg fn (HD fn.fn_blocks) ps0
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1 /\
+    generate_block_insts_plan liveness dfg cfg fn (HD fn.fn_blocks).bb_label
+      (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) 0
+      (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
+    vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+    ~vs.vs_call_ctx.cc_static /\
+    asm_block_at prog pc_bb (execute_plan cp.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
+    as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps1 vs as /\
+    (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+      operand_val (frame_view fn ra vs) lo at =
+      operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) ==>
+    body_inv rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth r.sr_spill_base lbl_ctr r.sr_plan ps_end (HD fn.fn_blocks)
+      ps0 ps0.ps_cleanup_height ps0.ps_cleanup_promised ps0
+      (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)
+      ps_after ps_after param_ops body_ops
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)) ps1
+      pc_bb vs as Inv ra pc_ret rest mem0
+Proof
+  rpt gen_tac >> strip_tac >> suspend "entry_shape"
+QED
+
+Resume sym_entry_body_inv[entry_shape]:
+  drule_all step_fn_shape >> strip_tac >> suspend "entry_body_fields"
+QED
+
+Resume sym_entry_body_inv[entry_body_fields]:
+  gvs[fnBlockBodyStepsTheory.body_inv_def, stackPlanGenTheory.init_cleanup_plan_state_def,
+      stackPlanTypesTheory.init_plan_state_def] >> suspend "entry_body_static"
+QED
+
+Resume sym_entry_body_inv[entry_body_static]:
+  rpt conj_tac >> metis_tac[entry_step_phi_bound,
+    revert_forward_pair_past_params, fnPlanLineageTheory.lineage_state_rules,
+    venomWfTheory.fn_reachable_def, relationTheory.RTC_REFL]
+QED
+
+Finalise sym_entry_body_inv
+
+Theorem sym_nonentry_body_inv:
+  !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
+   spill_base lbl_ctr fn_ops ps_end bb pred ps_l h promised ps_dfs
+   block_ops ps_dfs_after ps_after prefix_ops rest_ops ps pc0 vs s_phi as
+   Inv ra pc_ret rest mem0.
+    ctx = unit.cu_context /\ lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\ generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+    i < LENGTH ctx.ctx_functions /\ EL i ctx.ctx_functions = fn /\
+    EL i cp.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!f inst callee_name args callee.
+      MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+      MEM inst (fn_insts f) /\ inst.inst_opcode = INVOKE /\
+      inst.inst_operands = Label callee_name :: args /\
+      lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+      fn_has_retpc callee) /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    ~vs.vs_call_ctx.cc_static /\
+    codegen_context_obligations Inv ctx cp /\ reachability_closed Inv ctx /\
+    fn_entry_inv Inv ctx fn vs /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\
+    ch = cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+           (fcg_analyze ctx) fn.fn_name /\
+    growth = cleanup_growth_table ctx (fcg_analyze ctx) /\
+    spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\ fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    fn_reachable fn bb.bb_label /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      pred bb.bb_label ps_l /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      bb.bb_label ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
+    generate_block_plan liveness dfg cfg fn bb
+      (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      SOME (block_ops, ps_after) /\
+    ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+    ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+    block_plan_state liveness dfg cfg fn bb
+      (ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+      (phi_prefix_length bb.bb_instructions) ps /\
+    non_param_insts bb = bb.bb_instructions /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+      (phi_prefix_length bb.bb_instructions)
+      (DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb))
+      ps = SOME (rest_ops, ps_after) /\
+    block_ops = SOLabel bb.bb_label :: prefix_ops ++ rest_ops /\
+    eval_phis vs bb.bb_instructions = OK s_phi /\
+    asm_block_at prog pc0 (execute_plan cp.cp_initial_fmp block_ops) /\
+    as.as_pc = pc0 + LENGTH (execute_plan cp.cp_initial_fmp
+      (SOLabel bb.bb_label :: prefix_ops)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) as /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (frame_view fn ra s_phi) lo at =
+      operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) ==>
+    body_inv rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix_ops rest_ops
+      (phi_prefix_length bb.bb_instructions) ps pc0
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+      as Inv ra pc_ret rest mem0
+Proof
+  rpt gen_tac >> strip_tac >> suspend "phi_fields"
+QED
+
+Resume sym_nonentry_body_inv[phi_fields]:
+  `s_phi.vs_labels = vs.vs_labels /\
+   s_phi.vs_call_ctx = vs.vs_call_ctx /\
+   s_phi.vs_current_bb = vs.vs_current_bb` by
+    (drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+     disch_then (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
+  suspend "phi_body_inputs"
+QED
+
+Resume sym_nonentry_body_inv[phi_body_inputs]:
+  `!inst. active_inst fn inst
+      (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
+      Inv ctx fn inst
+        (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by
+    metis_tac[sym_phi_entry_inv] >>
+  suspend "phi_body_static"
+QED
+
+Resume sym_nonentry_body_inv[phi_body_static]:
+  `get_params bb.bb_instructions = []` by
+    (irule fnBlockBodyHelpersTheory.no_param_get_params >>
+     gvs[callLayoutDefsTheory.no_param_insts_def,
+         stackPlanGenTheory.non_param_insts_def, listTheory.FILTER_EQ_ID]) >>
+  suspend "phi_body_finish"
+QED
+
+Resume sym_nonentry_body_inv[phi_body_finish]:
+  gvs[fnBlockBodyStepsTheory.body_inv_def,
+      fnBlockStepHelpersTheory.operand_val_frame_view_inst_idx] >>
+  metis_tac[fnPlanLineageTheory.lineage_entry_lineage_state,
+            fnBlockStepHelpersTheory.revert_forward_pair_past_phis]
+QED
+
+Finalise sym_nonentry_body_inv
+
+Theorem sym_phi_error_body_result:
+  !fuel ctx fn vs bb e lo o2pc prog env cp mem0 pc_ret rest srest labs0 as ss.
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis vs bb.bb_instructions = Error e ==>
+    sym_body_result lo o2pc prog env cp ctx fn mem0 pc_ret rest srest labs0
+      as ss (run_blocks (SUC fuel) ctx fn vs)
+Proof
+  rpt strip_tac >>
+  simp[run_blocks_unfold, run_block_def, sym_body_result_def]
+QED
+
+Theorem sym_entry_return_result:
+  !lo o2pc prog env cp ctx fn pc_ret rest srest fuel vs as ss ra rv vs'.
+    fn_entry_state_rel cp fn vs as ra rest /\
+    sym_body_result lo o2pc prog env cp ctx fn as.as_memory pc_ret rest
+      srest ss.sym_mem_labels as ss (run_blocks fuel ctx fn vs) /\
+    run_blocks fuel ctx fn vs = IntRet rv vs' ==>
+    ?n as' ss'. asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = pc_ret /\ as'.as_stack = REVERSE rv.iret_values ++ rest /\
+      fn_return_state_rel ctx cp fn vs' as as' /\
+      sym_steps prog env n ss = SymOK ss' /\ asm_sym_rel prog env as' ss' /\
+      ss'.sym_stack = MAP Val (REVERSE rv.iret_values) ++ srest /\
+      (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+        FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+      (!b. b IN FDOM ss'.sym_mem_labels ==> context_spill_byte cp b)
+Proof
+  rpt gen_tac >> simp[sym_body_result_def] >> strip_tac >>
+  metis_tac[entry_step_return]
+QED
+
 Theorem sym_fn_entry_block_step:
   !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
