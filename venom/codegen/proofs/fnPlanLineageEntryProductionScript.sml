@@ -241,6 +241,36 @@ Proof
   metis_tac[native_inst_ops_prefix_rules]
 QED
 
+Theorem native_inst_ops_prefix_exec:
+  !k lv dfg cfg fn lbl halt np bl xs p0 ops q.
+    native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q <=>
+    fnPlanLineagePrefix$generate_block_insts_prefix
+      lv dfg cfg fn lbl halt np bl 0 k xs p0 = SOME (ops,q)
+Proof
+  Induct_on `k`
+  >- (simp[native_inst_ops_prefix_zero,
+           fnPlanLineagePrefixTheory.generate_block_insts_prefix_def] >>
+      metis_tac[]) >>
+  simp[native_inst_ops_prefix_suc,
+       fnPlanLineagePrefixTheory.generate_block_insts_prefix_suc]
+QED
+
+Theorem native_inst_ops_prefix_split:
+  !k xs lv dfg cfg fn lbl halt np bl p0 ops q.
+    k <= LENGTH xs ==>
+    (generate_block_insts_plan lv dfg cfg fn lbl halt np bl 0 xs p0 =
+       SOME (ops,q) <=>
+     ?pre mid post.
+       native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k pre mid /\
+       generate_block_insts_plan lv dfg cfg fn lbl halt np bl k
+         (DROP k xs) mid = SOME (post,q) /\ ops = pre ++ post)
+Proof
+  rpt strip_tac >> rewrite_tac[native_inst_ops_prefix_exec] >>
+  irule (SRULE [] (Q.INST [`i` |-> `0`]
+    (SPEC_ALL fnPlanLineagePrefixTheory.generate_block_insts_plan_split))) >>
+  simp[]
+QED
+
 Theorem native_inst_prefix_zero:
   native_inst_prefix lv dfg cfg fn label halting n len xs ps 0 qs <=> qs = ps
 Proof
@@ -2365,4 +2395,70 @@ Proof
     ["ops qs"] >>
   qexistsl_tac [`ops`,`qs`] >> simp[] >> conj_tac >>
   irule native_regular_bottom_frame >> simp[]
+QED
+
+Theorem native_ordinary_paired_interval_replay:
+  !k lv dfg cfg fn lbl halt np bl xs p0 prefixP prefixQ.
+    k <= LENGTH xs /\
+    (!j p inst rest.
+      j < k /\ native_inst_prefix lv dfg cfg fn lbl halt np bl xs p0 j p /\
+      DROP j xs = inst::rest ==>
+      codegen_ready_inst inst /\ inst_wf inst /\
+      inst.inst_opcode <> PHI /\ inst.inst_opcode <> JMP /\
+      (!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+        MEM x p.ps_stack \/ x IN FDOM p.ps_spilled) /\
+      EVERY (\v. ~MEM (Var v) prefixP)
+        ((if rest = [] then live_vars_at lv lbl bl
+          else live_vars_at lv lbl (j+np+1)) ++ inst.inst_outputs) /\
+      EVERY (\v. ~MEM (Var v) prefixQ)
+        ((if rest = [] then live_vars_at lv lbl bl
+          else live_vars_at lv lbl (j+np+1)) ++ inst.inst_outputs)) ==>
+    ?ops q.
+      native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q /\
+      native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+        (p0 with ps_stack := prefixP ++ p0.ps_stack) k ops
+        (q with ps_stack := prefixP ++ q.ps_stack) /\
+      native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs
+        (p0 with ps_stack := prefixQ ++ p0.ps_stack) k ops
+        (q with ps_stack := prefixQ ++ q.ps_stack)
+Proof
+  rpt gen_tac >> Induct_on `k`
+  >- (rpt strip_tac >> qexistsl_tac [`[]`,`p0`] >>
+      simp[native_inst_ops_prefix_zero]) >>
+  strip_tac >> qpat_x_assum `_ ==> ?ops q. _` mp_tac >>
+  (impl_tac >- (conj_tac >- simp[] >> rpt strip_tac >>
+    `j < SUC k` by decide_tac >> metis_tac[])) >>
+  strip_tac >>
+  `native_inst_prefix lv dfg cfg fn lbl halt np bl xs p0 k q` by
+    metis_tac[native_inst_ops_prefix_erase] >>
+  Cases_on `DROP k xs`
+  >- (fs[listTheory.DROP_EQ_NIL] >> decide_tac) >>
+  rename1 `DROP k xs = inst::rest` >>
+  qpat_x_assum `!j p inst rest. _` (qspecl_then [`k`,`q`,`inst`,`rest`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qabbrev_tac `nl = if rest = [] then live_vars_at lv lbl bl
+    else live_vars_at lv lbl (k+np+1)` >>
+  qabbrev_tac `term = case rest of [] => F | h::t => is_terminator h.inst_opcode` >>
+  `?step qs.
+     generate_inst_plan lv dfg cfg fn inst nl halt term lbl q = SOME (step,qs) /\
+     generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+       (q with ps_stack := prefixP ++ q.ps_stack) =
+       SOME (step,qs with ps_stack := prefixP ++ qs.ps_stack) /\
+     generate_inst_plan lv dfg cfg fn inst nl halt term lbl
+       (q with ps_stack := prefixQ ++ q.ps_stack) =
+       SOME (step,qs with ps_stack := prefixQ ++ qs.ps_stack)` by
+    (irule native_ordinary_shared_core_replay >> simp[Abbr `nl`]) >>
+  rename1 `generate_inst_plan lv dfg cfg fn inst nl halt term lbl q = SOME (step_ops,qs)` >>
+  qexistsl_tac [`ops ++ step_ops`,`qs`] >>
+  simp[native_inst_ops_prefix_suc] >>
+  rpt conj_tac >> rpt (first_assum $ irule_at Any) >>
+  gvs[Abbr `nl`,Abbr `term`]
+QED
+
+Theorem native_inst_ops_prefix_deterministic:
+  native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops q /\
+  native_inst_ops_prefix lv dfg cfg fn lbl halt np bl xs p0 k ops' q' ==>
+  ops = ops' /\ q = q'
+Proof
+  simp[native_inst_ops_prefix_exec] >> strip_tac >> gvs[]
 QED
