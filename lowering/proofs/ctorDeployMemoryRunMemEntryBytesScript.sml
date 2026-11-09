@@ -1,6 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryBytes
 Ancestors
-  loweringStateRelDefs abiEncoder
+  loweringStateRelDefs abiEncoder abiDecoderBytesPrefix
   ctorDeployMemoryRunMemEntryWord abiDecoderBytesBound abiDecoderGuard
   abiDecoderBytesTyped ctorAbiActualBytes abiCanonicalBytes
   fragGasSeqMem fragGasPathMem allocaHistory rich_list instIdxIndep fragExec
@@ -148,6 +148,50 @@ Proof
   rpt (pop_assum kall_tac) >>
   irule run_inst_seq_mem_ok_every >> simp[] >> rpt conj_tac >> gen_tac >>
   irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem ctor_bytes_position_prefix_mem_ok[local]:
+  abi_decode_bytes_position_prefix src DLOAD (Lit 0w) hi n st = ((addr,count_op),st') /\
+  eval_operand src s = SOME (n2w sb) /\
+  abi_decode_load DLOAD (n2w sb : bytes32) s = n2w cnt /\
+  cnt <= n /\ n < dimword (:256) /\ sb < dimword (:256) /\
+  (hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
+    sb + 32 + cnt <= h /\ h < dimword (:256)) /\
+  fresh_vars_wrt st s /\ sb <= LENGTH s.vs_data_section ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_bytes_position_prefix_unbounded,
+        compile_abi_dec_addr_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> strip_tac >> gvs[] >>
+      irule ctor_bytes_count_guard_mem_ok >> metis_tac[]) >>
+  strip_tac >>
+  qpat_x_assum `abi_decode_bytes_position_prefix _ _ _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_bytes_position_prefix_trace, compile_abi_dec_addr_def,
+       comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `abi_decode_bytes_head src hi st = (head,c1)` >>
+  rename1 `abi_decode_count_guard DLOAD src n c1 = (count_op,c2)` >>
+  `sb + 32 <= h` by decide_tac >>
+  drule_all abi_decode_bytes_head_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  drule abi_decode_bytes_payload_guard_shape >> strip_tac >>
+  `inst_extends c1 st'` by metis_tac[inst_extends_trans] >>
+  `emitted_insts st st' = emitted_insts st c1 ++ emitted_insts c1 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `emitted_insts c1 st' = emitted_insts c1 c2 ++ emitted_insts c2 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts st c1) s` by
+    (irule ctor_bytes_head_mem_ok >> metis_tac[]) >>
+  `eval_operand src s1 = SOME (n2w sb)` by metis_tac[] >>
+  `run_inst_seq_mem_ok (emitted_insts c1 c2) s1` by
+    (irule ctor_bytes_count_guard_mem_ok >>
+     qexistsl [`count_op`, `n`, `sb`, `src`] >> simp[] >> decide_tac) >>
+  `run_inst_seq_mem_ok (emitted_insts c1 st') s1` by
+    (once_asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >>
+     simp[] >> rpt strip_tac >>
+     irule ctor_bytes_payload_guard_mem_ok >> metis_tac[]) >>
+  once_asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> simp[] >> gvs[]
 QED
 
 Theorem ctor_bytes_fresh_mem_ok:
