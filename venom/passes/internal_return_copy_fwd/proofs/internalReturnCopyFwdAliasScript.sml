@@ -3,6 +3,7 @@ Theory internalReturnCopyFwdAlias
 Ancestors
   internalReturnCopyFwdPlan ptrDiscipline venomWfProps venomInst list finite_map words
   venomExecSemantics venomState o1LowerDloadPairedAllocation
+  venomMemProps basePtrProofs o1FrameLockstep
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -98,4 +99,60 @@ Proof
   simp[update_var_def] >> strip_tac >> gvs[] >>
   simp[lookup_var_def, step_prov_def,
        set_prov_def, out_prov_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ircf_alias_site_assign:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [Var src] /\
+  ircf_alias_site_value fn s G src /\
+  step_inst_base inst s = OK t ==>
+  ircf_alias_site_value fn t (step_prov PG G inst t) out
+Proof
+  strip_tac >> simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  `ircf_alias fn root src` by
+    (metis_tac[ircf_alias_assign_inv, ircf_alloca_of_def]) >>
+  `root <> out` by
+    (strip_tac >>
+     `ai = inst` by
+       (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[MEM]) >>
+     gvs[]) >>
+  qpat_x_assum `ircf_alias_site_value _ _ _ _` mp_tac >>
+  simp[ircf_alias_site_value_def] >>
+  disch_then (qspecl_then [`ai`,`root`,`sz`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_def, eval_operand_def] >>
+  strip_tac >> gvs[] >>
+  gvs[update_var_def, lookup_var_def, step_prov_def, set_prov_def,
+      out_prov_def, first_prov_def, op_prov_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ircf_alias_site_nonalloca:
+  ssa_form fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> ALLOCA /\ ~MEM v inst.inst_outputs /\
+  ircf_alias_site_value fn s G v /\ step_inst fuel C inst s = OK t /\
+  t.vs_allocas = s.vs_allocas ==>
+  ircf_alias_site_value fn t (step_prov PG G inst t) v
+Proof
+  strip_tac >> simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  `~MEM root inst.inst_outputs` by
+    (strip_tac >>
+     `ai = inst` by
+       (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[MEM]) >>
+     gvs[]) >>
+  `lookup_var v t = lookup_var v s` by
+    metis_tac[basePtrProofsTheory.step_inst_preserves_lookup] >>
+  `lookup_var root t = lookup_var root s` by
+    metis_tac[basePtrProofsTheory.step_inst_preserves_lookup] >>
+  `FLOOKUP (step_prov PG G inst t) v = FLOOKUP G v` by
+    simp[step_prov_def, o1FrameLockstepTheory.FLOOKUP_set_prov] >>
+  metis_tac[ircf_alias_site_value_def]
+QED
+
+Theorem ircf_size_coherent_allocas_eq:
+  ircf_size_coherent fn s /\ t.vs_allocas = s.vs_allocas ==>
+  ircf_size_coherent fn t
+Proof
+  strip_tac >> gvs[ircf_size_coherent_def] >> metis_tac[]
 QED
