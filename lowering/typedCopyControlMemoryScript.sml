@@ -290,7 +290,7 @@ Proof
   simp[word_mul_n2w]
 QED
 
-Theorem typed_copy_index_adds_frag_mem[local]:
+Theorem typed_copy_index_adds_frag_mem:
   !ctx src dst so doff sw dw sv dv a sp b dp c s off len.
     emit_op ADD [src;so] a = (sp,b) /\
     emit_op ADD [dst;doff] b = (dp,c) /\
