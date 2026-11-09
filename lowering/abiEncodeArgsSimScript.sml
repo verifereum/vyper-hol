@@ -41,23 +41,24 @@ Theorem abi_args_post_nil:
     ops = [] /\ vs = [] /\ stmt_state_rel ctx func ce cx es' s /\
     wb_frame ce es es' sa s0 s
 Proof
-  cheat
+  Cases_on `vs` >> simp[abi_args_post_def] >> metis_tac[]
 QED
 
 Theorem abi_args_post_cons:
   abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) s <=>
-    expr_val_rel cx (expr_type e) v op s /\
-    expr_val_at ce cx (expr_type e) sa sb es' v op s /\
+    expr_val_rel cx (lowered_value_type ce e) v op s /\
+    expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op s /\
     abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s
 Proof
-  cheat
+  simp[abi_args_post_def] >> metis_tac[]
 QED
 
 Theorem abi_args_post_lengths:
   abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s ==>
     LENGTH args = LENGTH vs /\ LENGTH ops = LENGTH args
 Proof
-  cheat
+  simp[abi_args_post_def] >> rpt strip_tac >>
+  drule listTheory.LIST_REL_LENGTH >> simp[]
 QED
 
 Theorem abi_args_ready_tail:
@@ -65,7 +66,8 @@ Theorem abi_args_ready_tail:
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) ==>
   abi_args_ready ctx func ce cx Inv args
 Proof
-  cheat
+  simp[abi_args_ready_def] >> rpt strip_tac >> first_x_assum irule >>
+  drule exprSimSourceTheory.eval_expr_read_INL >> metis_tac[]
 QED
 
 (* Readiness premise ledger (applicability remains a separate obligation).
@@ -86,13 +88,13 @@ QED
 Theorem abi_args_read_state:
   read_result cx result es = (res,es') ==> es' = es
 Proof
-  cheat
+  metis_tac[vyperStateTheory.read_result_state]
 QED
 
 Theorem abi_args_capture_size:
   n < 2 ** 64 ==> n + 64 < dimword (:256)
 Proof
-  cheat
+  simp[wordsTheory.dimword_def] >> decide_tac
 QED
 
 Theorem abi_args_local_type_coherent:
@@ -100,7 +102,11 @@ Theorem abi_args_local_type_coherent:
   ?ty. ce.ce_var_type name = SOME ty /\
        evaluate_type (get_tenv cx) ty = SOME entry.type
 Proof
-  cheat
+  simp[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
+  rpt strip_tac >>
+  `IS_SOME (FLOOKUP env.var_types name)` by metis_tac[] >>
+  Cases_on `FLOOKUP env.var_types name` >> gvs[] >> metis_tac[]
 QED
 
 Theorem abi_args_dynamic_local_type:
@@ -108,7 +114,10 @@ Theorem abi_args_dynamic_local_type:
   dynarray_local ce name ==>
   ?etv n. entry.type = ArrayTV etv (Dynamic n)
 Proof
-  cheat
+  strip_tac >> drule_all abi_args_local_type_coherent >> strip_tac >>
+  gvs[dynarray_local_def] >>
+  Cases_on `ty` >> gvs[dynarray_type_def, vyperValueTheory.evaluate_type_def,
+                         AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem abi_args_local_region_kept:
