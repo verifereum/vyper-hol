@@ -413,3 +413,52 @@ Proof
   `MEM inst.inst_opcode [PARAM; FMP_PARAM]` by simp[] >>
   drule_all inline_original_reached_argument >> simp[]
 QED
+
+(* The token belongs to the exact original child, not its storage owner. *)
+Theorem inline_original_child_token:
+  inline_original_child C call_fuel parent q call caller r child cr /\
+  inline_snapshot_data child route snap frame /\
+  inst.inst_opcode = RETPC_PARAM /\
+  inst.inst_operands = [Lit idx] /\ inst.inst_outputs = [x] ==>
+  ?edge. child.ia_parent = SOME edge /\
+    step_inst fuel C inst snap.ils_state =
+      OK (update_var x (if NULL edge.ipe_args then 0w else LAST edge.ipe_args)
+            snap.ils_state)
+Proof
+  strip_tac >> fs[inline_original_child_def] >>
+  drule inline_snapshot_original_entry >> strip_tac >>
+  drule_all inline_original_reached_token >> simp[]
+QED
+
+(* The single-edit point interfaces validate the concrete location actions.
+   Their instruction provenance remains available through the point getters. *)
+Theorem inline_active_location_keep:
+  inline_caller_point e.ise_caller e.ise_final e.ise_block e.ise_index
+    e.ise_return N opaque b j s t /\
+  ~(b = e.ise_block /\ j = e.ise_index) ==>
+  inline_active_location
+    <|ir_owner := owner; ir_rename := I; ir_path := [InlineKeep e]|>
+    (InlineAtInstruction j) s t 0
+Proof
+  simp[inline_caller_point_def, inline_active_location_def,
+       inline_path_location_def, inline_location_step_def,
+       inline_choice_location_def] >>
+  rpt strip_tac >> simp[]
+QED
+
+Theorem inline_active_location_enter:
+  inline_clone_point e.ise_caller e.ise_callee e.ise_final e.ise_block
+    e.ise_index e.ise_prefix e.ise_return N opaque_caller opaque
+    c d V b j counter s t /\
+  (?bb. lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+        e.ise_index < LENGTH bb.bb_instructions) ==>
+  inline_active_location
+    <|ir_owner := owner; ir_rename := STRCAT e.ise_prefix;
+      ir_path := [InlineEnter e]|>
+    (InlineAtInstruction j) s t counter
+Proof
+  simp[inline_clone_point_def, inline_active_location_def,
+       inline_path_location_def, inline_location_step_def,
+       inline_choice_location_def] >>
+  rpt strip_tac >> gvs[]
+QED
