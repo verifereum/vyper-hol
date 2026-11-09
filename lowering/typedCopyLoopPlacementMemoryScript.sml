@@ -32,6 +32,8 @@ Theorem typed_copy_sarray_loop_placement:
   fn_has_code sa sz func /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
   ?sc si se header body exit ctr lt done so doff sp dp test bb back.
+    header = fresh_label_output "typed_sa_cond" sa.cs_next_label /\
+    ctr = "%" ++ toString sa.cs_next_var /\
     compile_store_memory_typed ce (Var dp) dty (Var sp) sty si = ((),se) /\
     fn_has_code si se func /\
     ci_mono sa sc /\ ci_mono sc si /\
