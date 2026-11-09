@@ -1,6 +1,6 @@
 Theory bytestringCopyExecution
 Ancestors
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   fragExec fragGasSeq fragGasMode
   venomExecSemantics venomExecProofs venomState venomInst loweringSlice
   vyperValue vfmConstants words arithmetic list rich_list
