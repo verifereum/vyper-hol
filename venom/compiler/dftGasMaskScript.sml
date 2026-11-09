@@ -1199,6 +1199,61 @@ Proof
        stateEquivTheory.lift_result_def]
 QED
 
+Theorem prefix_terminates_mono[local]:
+  !pre s n m C.
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    terminates (FOLDR (dft_exec_cons n C) OK pre s) /\ n <= m ==>
+    FOLDR (dft_exec_cons m C) OK pre s =
+    FOLDR (dft_exec_cons n C) OK pre s
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  gvs[dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst n C h s` >>
+  gvs[passSimulationDefsTheory.terminates_def] >>
+  `step_inst m C h s = step_inst n C h s` by
+    (irule o1PassLiftTheory.step_inst_terminates_mono >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  simp[] >> first_x_assum irule >>
+  simp[passSimulationDefsTheory.terminates_def]
+QED
+
+Theorem prefix_terminates_coherent[local]:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  terminates (FOLDR (dft_exec_cons n C) OK pre s) /\
+  terminates (FOLDR (dft_exec_cons m C) OK pre s) ==>
+  FOLDR (dft_exec_cons n C) OK pre s =
+  FOLDR (dft_exec_cons m C) OK pre s
+Proof
+  strip_tac >>
+  `FOLDR (dft_exec_cons (MAX n m) C) OK pre s =
+   FOLDR (dft_exec_cons n C) OK pre s` by
+    (irule prefix_terminates_mono >> simp[]) >>
+  `FOLDR (dft_exec_cons (MAX n m) C) OK pre s =
+   FOLDR (dft_exec_cons m C) OK pre s` by
+    (irule prefix_terminates_mono >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem prefix_exact_cut_terminates[local]:
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons k C) OK pre s = OK u /\
+  terminates (FOLDR (dft_exec_cons j C) OK (pre ++ post) s) ==>
+  terminates (FOLDR (dft_exec_cons j C) OK post u)
+Proof
+  strip_tac >>
+  `terminates (FOLDR (dft_exec_cons j C) OK pre s)` by
+    (qpat_x_assum `terminates _` mp_tac >>
+     simp[FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue] >>
+     Cases_on `FOLDR (dft_exec_cons j C) OK pre s` >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  `FOLDR (dft_exec_cons j C) OK pre s =
+   FOLDR (dft_exec_cons k C) OK pre s` by
+    (irule prefix_terminates_coherent >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `terminates (FOLDR _ _ (_ ++ _) _)` mp_tac >>
+  simp[FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
