@@ -181,3 +181,141 @@ Theorem occurrence_syntax_origin_empty:
 Proof
   simp[occurrence_syntax_origin_def]
 QED
+
+Definition occurrence_origin_certificate_def:
+  occurrence_origin_certificate fn a H HP U stk <=>
+    occurrence_syntax_origin fn a H /\
+    (!aid. ~MEM (SOME (a,aid)) HP) /\
+    LENGTH U = LENGTH stk /\
+    (!j. j < LENGTH stk ==>
+      occurrence_syntax_origin (EL j stk).cf_fn (EL j U).of_owner
+        (EL j U).of_prov /\
+      (!aid. ~MEM (SOME ((EL j U).of_owner,aid)) (EL j U).of_params))
+End
+
+Theorem occurrence_origin_certificate_empty:
+  occurrence_origin_certificate fn a FEMPTY [] [] []
+Proof
+  simp[occurrence_origin_certificate_def, occurrence_syntax_origin_empty]
+QED
+
+Theorem occurrence_origin_certificate_next:
+  occurrence_origin_certificate fn a H HP U stk /\ MEM inst (fn_insts fn) ==>
+  occurrence_origin_certificate fn a (occurrence_step a HP H inst s) HP U stk
+Proof
+  simp[occurrence_origin_certificate_def] >> rpt strip_tac >>
+  irule occurrence_step_syntax_origin >> simp[]
+QED
+
+Theorem occurrence_origin_certificate_block:
+  occurrence_origin_certificate fn a H HP U stk ==>
+  occurrence_origin_certificate fn a (entry_prov fn s H) HP U stk
+Proof
+  simp[occurrence_origin_certificate_def] >>
+  metis_tac[entry_prov_syntax_origin]
+QED
+
+Theorem occurrence_origin_certificate_push:
+  occurrence_origin_certificate fn a H HP U stk /\
+  (!aid. ~MEM (SOME (c,aid)) params) ==>
+  occurrence_origin_certificate callee c FEMPTY params
+    (<|of_owner := a; of_prov := H; of_params := HP|> :: U)
+    (<|cf_fn := fn; cf_inst := call_inst; cf_state := s;
+       cf_params := PG; cf_prov := G; cf_tvar := tv|> :: stk)
+Proof
+  simp[occurrence_origin_certificate_def, occurrence_syntax_origin_empty] >>
+  strip_tac >> Cases >> simp[]
+QED
+
+Theorem occurrence_origin_certificate_pop:
+  occurrence_origin_certificate fn a H HP (u::U) (f::stk) ==>
+  occurrence_origin_certificate f.cf_fn u.of_owner
+    (DRESTRICT u.of_prov (COMPL (set outs))) u.of_params U stk
+Proof
+  rewrite_tac[occurrence_origin_certificate_def] >> strip_tac >>
+  fs[] >>
+  qpat_assum `!j. j < SUC (LENGTH stk) ==> _` (qspec_then `0` assume_tac) >>
+  fs[] >>
+  conj_tac >- (irule occurrence_return_syntax_origin >> simp[]) >>
+  simp[] >> gen_tac >> strip_tac >>
+  qpat_x_assum `!j. j < SUC (LENGTH stk) ==> _` (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+
+Theorem occurrence_annotation_fresh_arguments:
+  occurrence_annotation_ok n a U B HP H stk PG G s ==>
+  !aid. ~MEM (SOME (n,aid)) (MAP (op_prov H) ops)
+Proof
+  simp[occurrence_annotation_ok_def] >> strip_tac >> gen_tac >>
+  `!v. FLOOKUP H v <> SOME (n,aid)` by
+    (fs[occurrence_env_ok_def, EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[] >> metis_tac[arithmeticTheory.LESS_ANTISYM]) >>
+  irule occurrence_call_identity_absent >> simp[]
+QED
+
+Theorem occ_frame_reachable_origin_certificate:
+  !vs C stk PG G tn fn inst s n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
+    vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C ==>
+    occurrence_origin_certificate fn a H HP U stk
+Proof
+  ho_match_mp_tac occ_frame_reachable_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> simp[occurrence_origin_certificate_empty])
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume occ_frame_reachable_origin_certificate[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  irule occurrence_origin_certificate_next >> simp[] >>
+  irule allocaFrontierBoundTheory.active_inst_mem_fn_insts >>
+  qexists_tac `s` >> simp[]
+QED
+
+Resume occ_frame_reachable_origin_certificate[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  drule occurrence_origin_certificate_block >> simp[]
+QED
+
+Resume occ_frame_reachable_origin_certificate[call]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occurrence_annotation_fresh_arguments >> strip_tac >>
+  simp[occurrence_origin_certificate_push]
+QED
+
+Resume occ_frame_reachable_origin_certificate[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  drule occurrence_origin_certificate_pop >> simp[]
+QED
+
+Finalise occ_frame_reachable_origin_certificate
+
+Theorem occurrence_origin_certificate_current:
+  occurrence_origin_certificate fn a H HP U stk ==>
+  occurrence_syntax_origin fn a H
+Proof
+  simp[occurrence_origin_certificate_def]
+QED
+
+Theorem occurrence_origin_certificate_params:
+  occurrence_origin_certificate fn a H HP U stk ==>
+  !aid. ~MEM (SOME (a,aid)) HP
+Proof
+  simp[occurrence_origin_certificate_def]
+QED
+
+Theorem occurrence_origin_certificate_saved:
+  occurrence_origin_certificate fn a H HP U stk /\ j < LENGTH stk ==>
+  occurrence_syntax_origin (EL j stk).cf_fn (EL j U).of_owner (EL j U).of_prov /\
+  (!aid. ~MEM (SOME ((EL j U).of_owner,aid)) (EL j U).of_params)
+Proof
+  simp[occurrence_origin_certificate_def]
+QED
+
+Theorem occurrence_origin_certificate_length:
+  occurrence_origin_certificate fn a H HP U stk ==> LENGTH U = LENGTH stk
+Proof
+  simp[occurrence_origin_certificate_def]
+QED
