@@ -398,7 +398,15 @@ source-error handling remain separate obligations. Proving these reached-use
 clauses and refactoring the cone needs a reviewed follow-up PLAN; none is
 asserted proved, inserted as a target hypothesis, or implemented here.
 
-## Dynamic discharge audit (.51)
+## Dynamic discharge audit (.51; historical gap inventory)
+
+**Superseded status:** the A-C missing claims below record the state before
+E0227-E0229. A and recursive availability are now checked in
+`loadElimReachedNormalize`, B in `loadElimTemporalStability` (see .53 below), C in
+`loadElimGeneratorPostValidity` (E0228), and structural homogeneous/store-test
+consumers in `loadElimStructuralCurrentness` (E0229). The .57 inventory below
+is the current migration cursor. Historical proposed statements are retained
+for context, not as remaining proof obligations or permission to reopen them.
 
 This section is a signature/source audit, not a new HOL theorem or a change
 of readiness. The current `loadElimCoupledExecutionTheory` dependency cone
@@ -745,3 +753,147 @@ These are temporal interfaces only. They do not assert the ASSIGN value
 relation, recursive chain validity, rebuilt global DFG soundness, or discharge
 round readiness. The full-step semantic inversion and recursive reached-use
 integration remain separate obligations.
+
+## Current DFG consumer inventory (.57, 2026-11-09)
+
+Documentation only. No SML/readiness changes are authorized by this audit.
+`holbuild(targets=["loadElimStructuralCurrentnessTheory"], timeout=1800)`
+passes on the current source (nothing to rebuild), evidence
+TO_load-elim-correct2-20261109T010004Z_m5939_t001. E0227, E0228 and E0229
+certify reached input normalization, generator post-validity and structural
+homogeneous/store-test currentness respectively. The old A-C missing status
+and .52's final disposition are superseded; remaining work is interface
+migration, not another proof of dynamic chain validity. E0212 still excludes
+rebuilt global initial DFG soundness as the intended multi-round invariant.
+
+### Exact replacement resources
+
+Write S for the existing structural premises wf_function, fn_inst_wf, wf_ssa,
+entry equality and the actual le_occ_prefix. These abbreviations are prose,
+not new HOL predicates or target assumptions.
+
+* `le_frame_use_chain_valid` / `le_frame_use_normalize_eval` in
+  ReachedNormalize:95-121 take S via `frame_reach`, non-PHI current instruction,
+  and `MEM op i.inst_operands`. They support arbitrary visited lists. Recover
+  frame_reach with `le_occ_prefix_forget`.
+* `le_occ_available_chain_valid` / `le_occ_available_normalize_eval` in that
+  theory:44-93 additionally cover a non-immediate operand, GIVEN its
+  `def_available_at` at the actual fetched block/non-PHI observation point.
+  They do not assert availability of arbitrary lattice alternatives.
+* `le_occ_step_operands_valid` in StructuralCurrentness:10-20 takes S and
+  membership of StepOcc bb n k u t in es, and gives
+  `le_inst_operands_valid (dfg_build_function fn) (EL n bb.bb_instructions) u`.
+  Its checked proof obtains the earlier prefix and ordinary instruction point;
+  callers do not have to assume historical non-PHI membership separately.
+* `le_occ_generator_post_chain_valid` in GeneratorPostValidity takes S,
+  configured ctx, rebuilt-DFG equality, event membership and
+  `le_transfer_generates ... key op`, and gives selected op post-chain validity.
+* `le_occ_prefix_homogeneous_current_structural` and
+  `le_occ_prefix_store_test_current_structural` in StructuralCurrentness:22-79
+  already discharge historical input and generator-post contracts without any
+  semantic DFG hypothesis. The store-test theorem additionally requires
+  `i.inst_opcode <> PHI /\ MEM value i.inst_operands` at the actual current use.
+  These are checked exports, not replacement theorems still to be proved.
+
+### Dependency-ordered migration table
+
+All rows marked PROPOSED are unimplemented wrapper refactors. Preserve old
+exported interfaces as short compatibility corollaries, not duplicate proofs.
+The supplied ctx DFG equality remains necessary in every structural route.
+
+| Order / exported consumers | Current DFG premise and exact use | Checked replacement route / outstanding wrapper work |
+|---|---|---|
+| 1. SingletonCurrentness `le_occ_prefix_singleton_current`, `le_frame_singleton_current` | EVERY historical StepOcc input is dfg_assigns_sound; only generating/retaining address normalization uses it | PROPOSED structural wrappers: existing `_local` versions plus `le_occ_step_operands_valid`. No normalization of singleton witness at final s is needed; existing no-write transport supplies its value. |
+| 2. ExitCurrentness `le_occ_prefix_exit_singleton_current`, `_exit_var_current` | Same historical input DFG, solely passed to singleton currentness at lines 113-115 | PROPOSED use order 1. Boundary-to-active singleton and terminator read/operand preservation are already independent of DFG. Do not request current terminator operand validity or normalize the selected exit witness. |
+| 3. ReachedAvailability `le_occ_prefix_singleton_available`, `_exit_singleton_value`, `_phi_selected_value` | Same EVERY-input DFG at lines 36,74,119; singleton_available proof does not actually use it; exit value consumes exit-currentness and availability | PROPOSED remove unused premise from core availability proof, use order 2 for exit equality, propagate to selected value. Selected value uses `front` prefix extracted by predecessor inversion, not arbitrary snapshot normalization. |
+| 4. ReachedCapture and ReachedSourceAgreement selected-value/eval/capture, including domain/disjoint/prefix families | Thread EVERY-input DFG through selected-value; no direct normalization | PROPOSED propagate order 3. Source-domain membership and lookup agreement, pre <> [], actual predecessor and ALL_DISTINCT preds stay explicit. Existing `_source_value` adds MEM v fn_all_vars before snapshot transport. |
+| 5. ReachedBatchSuccess, DynamicCapture all-entries success / collected-action capture / history / success_capture | Thread EVERY-input DFG to order 4 | PROPOSED propagation only. Entry-empty-actions case, successful source PHIs and explicit successful rest remain unchanged. Target PHI success is still derived, never made a new premise. |
+| 6. ActualPhiFrame `le_occ_prefix_actual_phis_frame`, CaptureEntry `le_occ_prefix_actual_phis_captures` | EVERY-input DFG to orders 4-5; CaptureEntry lines 44-45, ActualPhiFrame lines 192-193 | PROPOSED propagation. No normalization in batch transport or latest-capture update. Keep disjoint source domain, output containment in G, incoming controls/labels, padded agreement and distinct preds. |
+| 7. LatestRead `le_multivalue_occ_read`, `le_capture_retention_source_read`, `le_occ_latest_join_source_read` | EVERY-input DFG at lines 58,98-99,155-156; multivalue StepOcc uses `le_configured_multivalue_step_read` | PROPOSED replace immediate call by checked `le_configured_multivalue_step_read_local` plus order-1 historical validity. Key-address no-write, PHI reads, bounds a < dimword and absolute-key proofs do not use DFG semantics. |
+| 8. ReachedLoad `le_empty_configured_load_address` | dfg_assigns_sound ctx.dfg s ONLY to prove eval N(addr) s = eval addr s at lines 45-46 | PROPOSED local core with chain validity (or input operand validity), old global corollary via OperandValidity. Reached caller gets address membership from `le_configured_load_shape`; configured load is non-PHI. Retain DLOAD-specific key branch. |
+| 9. ReachedStore `le_empty_store_key_read` | dfg_assigns_sound ctx.dfg s ONLY at lines 105-106, same address equation | PROPOSED local core as order 8. `[addr;value]` exposed by `le_configured_store_nop_test`; configured store opcode proves non-PHI and operand membership. |
+| 10. ReachedStore `le_occ_prefix_frozen_store_test_current`, `le_reached_store_replacement` | frozen_dfg supplies initial/current/historical soundness; test needs historical generation/retention plus current value normalization, address helper separately | PROPOSED reached replacement via checked structural store-test plus order 9. Old generic frozen-store-test statement has arbitrary value with NO operand-membership premise; KEEP it as compatibility API rather than trying to prove its arbitrary-value conclusion structurally. Actual replacement exposes MEM value i.operands, so needs no such arbitrary-value theorem. |
+| 11. ReachedLoad `le_reached_singleton_load_replacement`, `_captured_load_replacement` | initial DFG, BP/allocation, universal-step and PHI preservation used only to derive frozen_dfg at lines 94-109 / 176-188 | PROPOSED structural variants using orders 1,7,8. Singleton equality plus source-variable membership transfers actual replacement operand to target. Captured load consumes latest-join read persistence, not normalization of generated output. |
+| 12. CoupledExecution `le_coupled_changed_step`, `_captured_load`, `_phi_entry` and block/run/initial wrappers | unpack readiness for orders 6,10,11; explicit :764-770 derives historical DFG for PHI entry via frozen_invariants | PROPOSED invoke migrated structural consumers. Delete :764-770 ONLY after order 6 builds. Execution induction, action placement, latest_captures and target writes have no further direct DFG-semantic consumer in this cone. |
+
+CaptureInvariant defines latest_captures by selected action/read witnesses,
+without DFG semantics. CaptureSteps' three exports use only generated-output
+lookup framing, source membership, name disjointness and target step success;
+they require no migration. In CaptureEntry the arbitrary compute-action
+witness in latest_captures is handled by selected predecessor value at the
+actual preceding terminator. This witness's selected Var v is generally NOT
+an immediate operand of the current load/PHI. Nevertheless its **normalization
+is never used**: historical generation establishes availability, suffix
+no-write transports eval op, and terminator preservation transports it to the
+incoming snapshot. Thus there is no additional non-operand chain-validity
+obligation found on this path. Do not add one to readiness.
+
+### Readiness proposal and allocation separation (NOT implemented)
+
+The smallest normalization contract justified by the table needs NO new
+semantic readiness conjunct: S plus configured ctx, rebuilt-DFG equality,
+empty BP, wf aliases and analysis fixpoint discharge all actual input and
+selected-generator post normalization. No initial/current/post global DFG
+soundness, arbitrary-alternative validity, or transformed-success assumption
+is needed. Full wrapper migration/build remains unproved.
+
+For a bounded first coupling refactor, propose deleting only initial
+`dfg_assigns_sound` and successful-PHI DFG preservation from
+`le_round_ready_names`, after orders 1-12 build. Retain the mixed
+`le_step_preserves` and all BP/allocation clauses for this first milestone;
+retaining them is conservative, NOT a claim they can be discharged for later
+rounds. A subsequent separately authorized cleanup must split/remove this
+mixed universal-step contract before multi-round readiness is viable: it
+still mentions rebuilt DFG and E0212 forbids treating it as global readiness
+transport. No new DFG universal preservation theorem is proposed.
+
+The eventual candidate signature (conditional on checked migrated consumers)
+consists of wf_function/fn_inst_wf/wf_ssa; configured ctx and rebuilt DFG;
+empty BP queries; wf aliases; entry; fixpoint; DISJOINT G source vars;
+no MEMTOP in source/context, plus collected outputs IN G in the disjoint
+wrapper. This is the smallest candidate suggested by the audited semantic
+uses, not a theorem or authorization to weaken readiness now.
+
+Why allocation cannot simply be conflated with normalization: current
+ReachedLoad/ReachedStore BP soundness, alloca_inv, allocas_in_word,
+bp_ptrs_bounded and le_step_preserves feed `le_occ_prefix_frozen_dfg` and its
+invariant wrapper; there is no additional use in their replacement semantics.
+ReplacementSound load/store lemmas themselves have no allocation/BP premise.
+Historical read cores retain empty-BP, absolute-key and alias conditions;
+their runtime a < dimword side conditions are proved from key/word shape,
+not from global initial DFG. Separately, deriving original empty BP from the
+FROZEN hypotheses still genuinely uses the original universal-step premise,
+bp_assigns_stable and original DFG soundness (BPEmpty). That discharge is not
+a candidate for deletion. The initial memory bound and unrelated preservation
+obligations must not be dropped from the frozen theorem. Removing any mixed
+allocation/BP readiness bundle requires its own reviewed consumer build,
+not inference from the absence of normalization uses alone.
+
+### Concrete verification milestones proposed for review
+
+1. Structural singleton/exit/availability: build
+   `loadElimSingletonCurrentnessTheory`, `loadElimExitCurrentnessTheory`,
+   `loadElimReachedAvailabilityTheory`. Do not add StructuralCurrentness as an
+   ancestor of SingletonCurrentness (it already depends on singleton machinery);
+   use lower-level ReachedNormalize/OperandValidity interfaces or place the
+   structural bridge above singleton in a separate authorized helper.
+2. Propagate capture: build `loadElimReachedCaptureTheory`,
+   `loadElimReachedSourceAgreementTheory`, `loadElimReachedBatchSuccessTheory`,
+   `loadElimDynamicCaptureTheory`, `loadElimActualPhiFrameTheory`,
+   `loadElimCaptureEntryTheory`.
+3. Retention/address/replacements: build `loadElimLatestReadTheory`,
+   `loadElimReachedStoreTheory`, `loadElimReachedLoadTheory`, using existing
+   StructuralCurrentness rather than duplicating homogeneous proofs.
+4. Only after these checked interfaces: migrate/readjust readiness in
+   `loadElimCoupledExecutionTheory`, retain old exports as corollaries, review
+   exact residual mixed BP/allocation needs. No five-round or final-theorem
+   work follows automatically from that build.
+
+Source evidence for this inventory: TO_load-elim-correct2-20261109T010004Z_m5940_t001
+(CaptureEntry), _m5940_t002 (CaptureSteps), _m5940_t003 (ReachedLoad),
+_m5940_t004 (ReachedStore), _m5942_t001 through _m5942_t005 (exit, latest-read,
+availability, dynamic capture, PHI frame), _m5943_t001 through _m5943_t005
+(structural exports, reached normalization, coupling use locations,
+source agreement, singleton local exports), and _m5944_t001 through
+_m5944_t004 (readiness/coupled consumers, changed step, replacement semantics,
+capture invariant). These are source/interface evidence, not new proof claims.
