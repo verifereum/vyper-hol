@@ -284,3 +284,72 @@ Proof
      simp[update_var_def] >> goal_assum (drule_at Any)) >>
   gvs[adopt_return_fmp_def])
 QED
+
+(* A clone exits into its saved caller, rather than returning from run_blocks.
+   Keep the local callee state until the source INVOKE is assembled. *)
+Definition inline_clone_exit_def:
+  inline_clone_exit p V opaque P outs caller ret ir s' q <=>
+  ?u caller'. q = OK (jump_to ret u) /\
+    bind_outputs outs ir.iret_values caller = SOME caller' /\
+    inline_opaque_frame_rel (STRCAT p) V opaque caller'.vs_vars P s' u /\
+    (!x. x IN P ==> lookup_var x (jump_to ret u) =
+      lookup_var x (adopt_return_fmp ir (merge_callee_state caller' s'))) /\
+    merge_callee_state caller u = merge_callee_state caller s' /\
+    u.vs_fmp = s'.vs_fmp /\
+    (jump_to ret u).vs_current_bb = ret /\
+    (jump_to ret u).vs_inst_idx = 0 /\
+    (jump_to ret u).vs_prev_bb = SOME u.vs_current_bb
+End
+
+Theorem inline_return_exit_packet:
+  step_inst source_fuel ctx inst s = IntRet ir s' ==>
+  (inst.inst_opcode = RET \/ inst.inst_opcode = RETFMP) /\
+  inst.inst_operands = ops ++ [pc] /\
+  raw_return_user_arity inst = SOME (LENGTH outs) /\
+  EVERY (\op. (!v. op = Var v ==> v IN V /\ v NOTIN opaque) /\
+    ~is_label_op op) ops /\
+  (!x v. MEM x outs /\ v IN V ==> STRCAT p v <> x) /\
+  inline_opaque_frame_rel (STRCAT p) V opaque caller.vs_vars P s t /\
+  bb.bb_instructions = pre ++
+    FST (rewrite_inline_inst args outs ret (clone_instruction p [] inst) param_idx) /\
+  ~t.vs_halted ==>
+  inline_clone_exit p V opaque P outs caller ret ir s'
+    (exec_block fuel ctx bb (t with vs_inst_idx := LENGTH pre))
+Proof
+  strip_tac >> strip_tac >> drule inline_return_exit >>
+  disch_then (drule_at (Pat `inline_opaque_frame_rel _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `_ .bb_instructions = _`)) >>
+  simp[] >> disch_then (qspec_then `fuel` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  simp[inline_clone_exit_def] >> qexists `u` >>
+  gvs[jump_to_def]
+QED
+
+Theorem inline_clone_exit_caller_step:
+  inline_clone_exit p V opaque P call.inst_outputs caller ret ir s' q /\
+  call.inst_opcode = INVOKE /\ decode_invoke call = SOME (name,ops) /\
+  lookup_function name ctx.ctx_functions = SOME callee /\
+  eval_operands ops caller = SOME vals /\
+  setup_callee callee vals caller = SOME cs /\
+  run_blocks fuel ctx callee cs = IntRet ir s' ==>
+  ?u caller'. q = OK (jump_to ret u) /\
+    step_inst fuel ctx call caller =
+      OK (adopt_return_fmp ir (merge_callee_state caller' s')) /\
+    inline_opaque_frame_rel (STRCAT p) V opaque caller'.vs_vars P s' u /\
+    (!x. x IN P ==> lookup_var x (jump_to ret u) =
+      lookup_var x (adopt_return_fmp ir (merge_callee_state caller' s'))) /\
+    merge_callee_state caller u = merge_callee_state caller s' /\
+    u.vs_fmp = s'.vs_fmp
+Proof
+  strip_tac >> gvs[inline_clone_exit_def] >>
+  drule inline_return_bind_merge >>
+  disch_then (qspecl_then [`s'`, `ir`] assume_tac) >>
+  qexistsl [`u`, `caller'`] >> simp[Once step_inst_def]
+QED
+
+Theorem inline_clone_exit_control:
+  inline_clone_exit p V opaque P outs caller ret ir s' q ==>
+  ?t. q = OK t /\ t.vs_current_bb = ret /\ t.vs_inst_idx = 0
+Proof
+  rw[inline_clone_exit_def] >> simp[]
+QED
