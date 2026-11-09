@@ -4,7 +4,7 @@ Ancestors actualAllocCredit decoderBudgetAllocaCorePtr abiDecoderAllocation
   pred_set arithmetic finite_map words emitHelperProps venomExecSemantics
   venomState venomInst fragExec exprLoweringProps
 
-Theorem actual_slot_singleton_budget[local]:
+Theorem actual_slot_singleton_budget:
   (FLOOKUP s.vs_allocas id = NONE /\
      s.vs_alloca_next + 32 < dimword (:256)) \/
   (?p. FLOOKUP s.vs_allocas id = SOME (p,32) /\
