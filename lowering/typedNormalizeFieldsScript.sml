@@ -733,7 +733,7 @@ Proof
   asm_simp_tac (srw_ss()) [LET_THM]
 QED
 
-Theorem normalize_struct_prefix_sizes[local]:
+Theorem normalize_struct_prefix_sizes:
   !fields i.
     (!name ty sz. MEM (name,ty,sz) fields ==> sz = type_memory_bytes ce ty) ==>
     SUM (MAP (SND o SND) (TAKE i fields)) =
