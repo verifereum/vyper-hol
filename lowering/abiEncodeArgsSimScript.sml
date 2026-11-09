@@ -345,33 +345,146 @@ Proof
   simp[] >> rpt strip_tac >> irule expr_val_at_start_mono >> metis_tac[]
 QED
 
+Theorem abi_args_word_fits_eq[local]:
+  !src dst. arg_type_fits src dst /\ is_word_type dst ==> src = dst
+Proof
+  Cases >> Cases >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def] >>
+  rpt strip_tac >> Cases_on `b` >> Cases_on `b'` >>
+  gvs[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def] >>
+  Cases_on `b` >> Cases_on `b''` >>
+  gvs[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def]
+QED
+
+Theorem abi_args_local_base_transport[local]:
+  local_val_at ce cx n k (BaseTV bt1) v /\
+  val_wf (BaseTV bt1) v /\
+  val_footprint (BaseTV bt1) v = val_footprint (BaseTV bt2) v ==>
+  local_val_at ce cx n k (BaseTV bt2) v
+Proof
+  simp[local_val_at_def] >> rpt strip_tac >> disj2_tac
+  >- (qexists `bt1` >> simp[] >> metis_tac[val_footprint_le]) >>
+  qexists `bt0` >> simp[]
+QED
+
+Theorem abi_args_expr_post_lowered_rel:
+  expr_body_pre ce cx env e es /\
+  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  (~is_word_type (expr_type e) ==>
+    ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+         value_has_type tv v /\ val_wf tv v) ==>
+  expr_val_rel cx (lowered_value_type ce e) v op s
+Proof
+  strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  Cases_on `is_word_type (expr_type e)`
+  >- (`lowered_value_type ce e = expr_type e` by
+        metis_tac[abi_args_word_fits_eq] >>
+      gvs[expr_post_def]) >>
+  `~is_word_type (lowered_value_type ce e)` by
+    metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
+  first_x_assum drule >> strip_tac >>
+  drule_all materialize_expr_post_lowered_source >> strip_tac >>
+  simp[expr_val_rel_def] >> metis_tac[]
+QED
+
+Theorem abi_args_expr_post_lowered_at:
+  expr_body_pre ce cx env e es /\
+  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  (~is_word_type (expr_type e) ==>
+    ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+         value_has_type tv v /\ val_wf tv v) ==>
+  expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op s
+Proof
+  strip_tac >>
+  `arg_type_fits (lowered_value_type ce e) (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits] >>
+  Cases_on `is_word_type (expr_type e)`
+  >- (`lowered_value_type ce e = expr_type e` by
+        metis_tac[abi_args_word_fits_eq] >> simp[expr_val_at_def]) >>
+  first_x_assum drule >> strip_tac >>
+  drule_all materialize_post_lowered_classify >> strip_tac
+  >- gvs[expr_post_def] >>
+  `post_value_type ce e = expr_type e \/
+   post_value_type ce e = lowered_value_type ce e` by
+    (Cases_on `e` >> simp[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv` by
+    metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
+  `value_has_type ptv v` by
+    (Cases_on `post_value_type ce e = lowered_value_type ce e`
+     >- gvs[] >>
+     `post_value_type ce e = expr_type e` by metis_tac[] >>
+     drule (CONJUNCT1 vyperTypeArgFitsTheory.arg_type_fits_value_has_type) >>
+     disch_then irule >> metis_tac[]) >>
+  `val_footprint ptv v = val_footprint tv v` by
+    metis_tac[valueCopyBytesTheory.bytestring_val_footprint_eq] >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  `expr_val_at ce cx (post_value_type ce e) sa sb es' v op s` by
+    gvs[expr_post_def] >>
+  `val_wf ptv v` by (gvs[expr_val_at_def] >> metis_tac[]) >>
+  `!n k. local_val_at ce cx n k ptv v ==> local_val_at ce cx n k tv v` by
+    (`?bt1. ptv = BaseTV bt1` by
+       metis_tac[valueCopyBytesTheory.bytestring_type_value] >>
+     `?bt2. tv = BaseTV bt2` by
+       metis_tac[valueCopyBytesTheory.bytestring_type_value] >>
+     gvs[] >> metis_tac[abi_args_local_base_transport]) >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> rpt strip_tac >> metis_tac[]
+QED
+
 Theorem abi_args_post_cons_uncaptured:
   expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  expr_val_rel cx (lowered_value_type ce e) v op t /\
+  expr_val_at ce cx (lowered_value_type ce e) sa sm es1 v op t /\
   abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
   stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   local_ptrs_reserved ce sm /\ expr_sim_inv ce cx env es1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
-  (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
+  (~is_word_type (lowered_value_type ce e) ==> es'.scopes = es1.scopes) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
   (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) ==>
   abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
-  cheat
+  strip_tac >>
+  `wb_frame ce es1 es' sm t u` by metis_tac[abi_args_post_def] >>
+  `stmt_state_rel ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
+  `stmt_state_rel ctx func ce cx es' u` by metis_tac[abi_args_post_def] >>
+  `expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op u` by
+    (irule abi_args_location_end_mono >>
+     qexists `sm` >> simp[] >> irule abi_args_location_kept >>
+     metis_tac[]) >>
+  `expr_val_rel cx (lowered_value_type ce e) v op u` by
+    (Cases_on `is_word_type (lowered_value_type ce e)`
+     >- (qpat_x_assum `expr_val_rel _ _ _ _ t` mp_tac >>
+         simp[expr_val_rel_def] >> strip_tac >> qexists `w` >>
+         simp[] >> irule abi_args_operand_kept >> metis_tac[]) >>
+     `es'.scopes = es1.scopes` by simp[] >>
+     `sm.cs_next_id <= sm.cs_next_id` by simp[] >>
+     drule_all abi_args_value_kept >> simp[]) >>
+  irule abi_args_post_cons_frame >> metis_tac[]
 QED
 
 Theorem abi_args_post_cons_uncaptured_labels:
   expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  expr_val_rel cx (lowered_value_type ce e) v op t /\
+  expr_val_at ce cx (lowered_value_type ce e) sa sm es1 v op t /\
   abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
   stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   local_ptrs_reserved ce sm /\ expr_sim_inv ce cx env es1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
-  (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
+  (~is_word_type (lowered_value_type ce e) ==> es'.scopes = es1.scopes) /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
   (!x. op = Var x ==> not_fresh_at sm x) /\
+  gas_admissible (do r <- eval_expr cx e; read_result cx r od) expr_res_ok es /\
   expr_sim ctx func ce cx (expr_type e) e es /\
   lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
@@ -383,6 +496,8 @@ QED
 
 Theorem abi_args_post_cons_captured:
   expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  expr_val_rel cx (lowered_value_type ce e) v op t /\
+  expr_val_at ce cx (lowered_value_type ce e) sa sm es1 v op t /\
   abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
   stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   local_ptrs_reserved ce sm /\
@@ -391,8 +506,8 @@ Theorem abi_args_post_cons_captured:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
   (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ val_wf tv v /\
+  ~is_word_type (lowered_value_type ce e) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\ val_wf tv v /\
   eval_operand op t = SOME w /\
   FLOOKUP t.vs_allocas aid = SOME (b,sz) /\ aid < sm.cs_next_id /\
   b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
@@ -400,7 +515,16 @@ Theorem abi_args_post_cons_captured:
               b + sz <= lb \/ lb + lsz <= b) ==>
   abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
-  cheat
+  strip_tac >>
+  `wb_frame ce es1 es' sm t u` by metis_tac[abi_args_post_def] >>
+  `stmt_state_rel ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
+  `expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op u` by
+    (irule abi_args_location_end_mono >>
+     qexists `sm` >> simp[] >> irule abi_args_location_kept >>
+     metis_tac[]) >>
+  `expr_val_rel cx (lowered_value_type ce e) v op u` by
+    (irule abi_args_captured_value_kept >> metis_tac[]) >>
+  irule abi_args_post_cons_frame >> metis_tac[]
 QED
 
 Theorem abi_args_compile_cons:
@@ -462,7 +586,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   stmt_state_rel ctx func ce cx es s0 /\ expr_sim_inv ce cx env es1 /\
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
-  (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
+  (~is_word_type (lowered_value_type ce e) ==> es'.scopes = es1.scopes) /\
   ci_mono sa sm /\ ci_mono sm sb /\
   (!x. op = Var x ==> not_fresh_at sm x) /\
   (!t. frag_exec ctx sm sb (\s. s = t /\ stmt_state_rel ctx func ce cx es1 s)
@@ -486,7 +610,7 @@ Theorem abi_args_uncaptured_cons_sim:
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   stmt_state_rel ctx func ce cx es s0 /\ expr_sim_inv ce cx env es1 /\
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
-  (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
+  (~is_word_type (lowered_value_type ce e) ==> es'.scopes = es1.scopes) /\
   ci_mono sa sm /\ ci_mono sm sb /\
   (!x. op = Var x ==> not_fresh_at sm x) /\
   (!t. frag_exec ctx sm sb (\s. s = t /\ stmt_state_rel ctx func ce cx es1 s)
