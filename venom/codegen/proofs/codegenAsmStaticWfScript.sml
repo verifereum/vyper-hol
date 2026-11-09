@@ -7,7 +7,7 @@
 Theory codegenAsmStaticWf
 Ancestors
   codegenSymRel codegenAsmProgOk codegenEncodingWf codegen asmSymSem asmWf
-  asmOptimizer unitShapeDefs stackPlanGen venomWf fnPlanCover
+  asmOptimizer unitShapeDefs stackPlanGen venomWf fnPlanCover fnBlockBodyHelpers
   list rich_list planExec stackPlanTypes stackPlanOps finite_map
 
 Definition plan_ref_def:
@@ -462,6 +462,56 @@ Theorem clean_stack_plan_no_ref:
   !l. ~plan_ref l ops
 Proof
   metis_tac[clean_stack_plan_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem invoke_operands_wf_hd_mem:
+  invoke_operands_wf inst ==> MEM (HD inst.inst_operands) inst.inst_operands
+Proof
+  Cases_on `inst.inst_operands` >> simp[invoke_operands_wf_def]
+QED
+
+Theorem generate_emit_ops_refs:
+  generate_emit_ops inst topics ps = (ops, ps') /\
+  (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst) /\
+  plan_ref l ops ==>
+  MEM (SOLabel l) ops \/ l = "revert" \/
+  (MEM inst.inst_opcode [JMP; JNZ; INVOKE] /\ MEM (Label l) inst.inst_operands)
+Proof
+  rw[generate_emit_ops_def, bump_emit_ops_def,
+    pairTheory.ELIM_UNCURRY, AllCaseEqs()] >>
+  gvs[plan_ref_def] >>
+  metis_tac[invoke_operands_wf_hd_mem, MEM_FILTER, MEM]
+QED
+
+Theorem label_positions_ok_add_refs:
+  inst.inst_opcode = ADD /\ label_positions_ok inst /\
+  MEM (Label l) inst.inst_operands ==> l = "code_end"
+Proof
+  rw[label_positions_ok_def, CasePreds ["list", "operand"]] >>
+  gvs[EVERY_MEM, is_label_operand_def] >> metis_tac[is_label_operand_def]
+QED
+
+Theorem label_positions_ok_codecopy_refs:
+  inst.inst_opcode = CODECOPY /\ label_positions_ok inst /\
+  MEM (Label l) inst.inst_operands ==> l = "runtime_begin"
+Proof
+  rw[label_positions_ok_def, CasePreds ["list", "operand"]] >>
+  gvs[EVERY_MEM, is_label_operand_def] >> metis_tac[is_label_operand_def]
+QED
+
+Theorem label_positions_ok_refs:
+  label_positions_ok inst /\ inst.inst_opcode <> PHI /\
+  MEM (Label l) inst.inst_operands ==>
+  l = "code_end" \/ l = "runtime_begin" \/
+  MEM inst.inst_opcode [JMP; JNZ; INVOKE]
+Proof
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode [JMP; JNZ; PHI; INVOKE; ADD; CODECOPY]`
+  >- (gvs[] >> metis_tac[label_positions_ok_add_refs,
+        label_positions_ok_codecopy_refs]) >>
+  drule_all label_positions_ok_other >>
+  disch_then (qspec_then `Label l` mp_tac o REWRITE_RULE [EVERY_MEM]) >>
+  simp[is_label_operand_def]
 QED
 
 Theorem codegen_asm_static_wf:
