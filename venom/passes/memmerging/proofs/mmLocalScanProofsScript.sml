@@ -5738,6 +5738,92 @@ Proof
   drule_all mm_local_pending_discharge_prefix >> simp[]
 QED
 
+Definition mm_local_group_captures_def:
+  mm_local_group_captures is cap B g <=>
+    !j d bs. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      cap j = SOME (d,bs) ==>
+      g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
+      bs = mm_local_bytes B (g.cg_src + (d-g.cg_dst)) (LENGTH bs)
+End
+
+Theorem mm_local_group_captures_empty[local]:
+  mm_local_group_captures is (\j. NONE) B g
+Proof
+  simp[mm_local_group_captures_def]
+QED
+
+Theorem mm_local_group_captures_birth[local]:
+  j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  g.cg_inst_ids = [(EL j is).inst_id] /\
+  cap j = SOME (g.cg_dst, mm_local_bytes B g.cg_src g.cg_length) ==>
+  mm_local_group_captures is cap B g
+Proof
+  simp[mm_local_group_captures_def] >> rpt strip_tac >>
+  `j' = j` by
+    (metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]) >> gvs[]
+QED
+
+Theorem mm_local_group_captures_merge[local]:
+  c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 /\
+  mm_local_group_captures is cap B c1 /\ mm_local_group_captures is cap B c2 ==>
+  mm_local_group_captures is cap B (copy_merge c1 c2)
+Proof
+  simp[mm_local_group_captures_def, copy_merge_def, copy_can_merge_def] >>
+  rpt strip_tac >>
+  `MAX (c1.cg_dst + c1.cg_length) (c2.cg_dst + c2.cg_length) >=
+     c1.cg_dst + c1.cg_length /\
+   MAX (c1.cg_dst + c1.cg_length) (c2.cg_dst + c2.cg_length) >=
+     c2.cg_dst + c2.cg_length` by simp[arithmeticTheory.MAX_DEF] >>
+  `!d. c2.cg_dst <= d ==>
+    c1.cg_src + (d-c1.cg_dst) = c2.cg_src + (d-c2.cg_dst)` by decide_tac >>
+  res_tac >> fs[] >> gvs[] >> decide_tac
+QED
+
+Theorem mm_local_group_captures_rebase[local]:
+  mm_local_group_captures is cap B g /\
+  mm_local_bytes B g.cg_src g.cg_length = mm_local_bytes C g.cg_src g.cg_length ==>
+  mm_local_group_captures is cap C g
+Proof
+  simp[mm_local_group_captures_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
+   bs = mm_local_bytes B (g.cg_src + (d-g.cg_dst)) (LENGTH bs)` by metis_tac[] >>
+  simp[] >>
+  `d-g.cg_dst + LENGTH bs <= g.cg_length` by decide_tac >>
+  `mm_local_bytes B (g.cg_src + (d-g.cg_dst)) (LENGTH bs) =
+   TAKE (LENGTH bs) (DROP (d-g.cg_dst) (mm_local_bytes B g.cg_src g.cg_length))` by
+    (irule mm_local_bytes_restrict >> simp[]) >>
+  `mm_local_bytes C (g.cg_src + (d-g.cg_dst)) (LENGTH bs) =
+   TAKE (LENGTH bs) (DROP (d-g.cg_dst) (mm_local_bytes C g.cg_src g.cg_length))` by
+    (irule mm_local_bytes_restrict >> simp[]) >>
+  gvs[]
+QED
+
+Theorem mm_local_merge_adjacent_captures[local]:
+  !cs. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\
+    EVERY (mm_local_group_captures is cap B) cs ==>
+    EVERY (mm_local_group_captures is cap B) (merge_adjacent cs)
+Proof
+  recInduct merge_adjacent_ind >> simp[merge_adjacent_def] >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `copy_can_merge c1 c2`
+  >- (gvs[] >> first_x_assum irule >> conj_tac
+      >- (gvs[sortingTheory.SORTED_EQ, relationTheory.transitive_def,
+              copy_merge_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+      simp[] >> irule mm_local_group_captures_merge >>
+      gvs[sortingTheory.SORTED_DEF]) >>
+  gvs[] >> first_x_assum irule >> gvs[sortingTheory.SORTED_DEF]
+QED
+
+Theorem mm_local_add_copy_captures[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\
+  EVERY (mm_local_group_captures is cap B) cs /\ mm_local_group_captures is cap B c ==>
+  EVERY (mm_local_group_captures is cap B) (add_copy cs c)
+Proof
+  strip_tac >> simp[add_copy_def] >> irule mm_local_merge_adjacent_captures >>
+  metis_tac[mm_local_insert_sorted_order, mm_local_insert_every]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
