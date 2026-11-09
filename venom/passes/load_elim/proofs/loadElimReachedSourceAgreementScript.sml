@@ -192,6 +192,68 @@ Proof
   drule_all le_occ_prefix_phi_selected_source_eval_domain >> simp[]
 QED
 
+Theorem le_occ_prefix_phi_selected_source_capture_domain:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_occ_prefix C fn s0 (pre ++ PhiOcc bb u p :: suffix) i s /\
+  pre <> [] /\
+  compute_phi_action m (cfg_analyze fn) (load_analyze ctx fn) key lbl inst = SOME pa /\
+  bb.bb_label = pa.pa_join_lbl /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
+    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
+  r.vs_prev_bb = u.vs_prev_bb /\
+  (!v. MEM v (fn_all_vars fn) ==> lookup_var v u = lookup_var v r) /\
+  ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) pa.pa_join_lbl) /\
+  MEM pa actions /\ ALL_DISTINCT (MAP (\a. a.pa_phi_out) actions) /\
+  eval_phis r (phis_for_block actions pa.pa_join_lbl ++ rest) = OK q ==>
+  ?w. le_key_read ctx.lctx_addr_space key u = SOME w /\
+    lookup_var pa.pa_phi_out q = SOME w
+Proof
+  strip_tac >> drule_all le_occ_prefix_phi_selected_source_value >> strip_tac >>
+  `lookup_var v r = SOME w` by metis_tac[] >>
+  `lookup_var pa.pa_phi_out q = SOME w` by
+    (irule le_phi_action_capture >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem le_occ_prefix_phi_selected_source_capture_disjoint:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_occ_prefix C fn s0 (pre ++ PhiOcc bb u p :: suffix) i s /\
+  pre <> [] /\
+  compute_phi_action m (cfg_analyze fn) (load_analyze ctx fn) key lbl inst = SOME pa /\
+  bb.bb_label = pa.pa_join_lbl /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
+    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
+  r.vs_prev_bb = u.vs_prev_bb /\
+  DISJOINT G (set (fn_all_vars fn)) /\
+  (!v. v NOTIN G ==> lookup_var v u = lookup_var v r) /\
+  ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) pa.pa_join_lbl) /\
+  MEM pa actions /\ ALL_DISTINCT (MAP (\a. a.pa_phi_out) actions) /\
+  eval_phis r (phis_for_block actions pa.pa_join_lbl ++ rest) = OK q ==>
+  ?w. le_key_read ctx.lctx_addr_space key u = SOME w /\
+    lookup_var pa.pa_phi_out q = SOME w
+Proof
+  strip_tac >>
+  `!v. MEM v (fn_all_vars fn) ==> lookup_var v u = lookup_var v r` by
+    (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+  drule_all le_occ_prefix_phi_selected_source_capture_domain >> simp[]
+QED
+
 Theorem le_occ_prefix_phi_selected_source_capture:
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   le_occ_prefix C fn s0 (pre ++ PhiOcc bb u p :: suffix) i s /\
@@ -217,12 +279,9 @@ Theorem le_occ_prefix_phi_selected_source_capture:
   ?w. le_key_read ctx.lctx_addr_space key u = SOME w /\
     lookup_var pa.pa_phi_out q = SOME w
 Proof
-  strip_tac >> drule_all le_occ_prefix_phi_selected_source_value >> strip_tac >>
-  `~isPREFIX "$le_phi_" v` by
+  strip_tac >>
+  `!v. MEM v (fn_all_vars fn) ==> lookup_var v u = lookup_var v r` by
     (qpat_x_assum `EVERY _ _` mp_tac >>
      pure_rewrite_tac[EVERY_MEM] >> BETA_TAC >> metis_tac[]) >>
-  `lookup_var v r = SOME w` by metis_tac[] >>
-  `lookup_var pa.pa_phi_out q = SOME w` by
-    (irule le_phi_action_capture >> metis_tac[]) >>
-  metis_tac[]
+  drule_all le_occ_prefix_phi_selected_source_capture_domain >> simp[]
 QED
