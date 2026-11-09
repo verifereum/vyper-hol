@@ -13,8 +13,8 @@ Theorem internal_return_value_summary_mem:
     (\res ee t. ?v. res = INL v /\ P v ee t)
     (\res ee r. expr_exit res r) /\
   (!ee v t. P v ee t /\
-    (?gs ee'. bind (eval_expr cx e) (read_result cx)
-                (es with gas_obs := gs) = (INL v, ee')) /\ ~t.vs_halted ==>
+    (?gs. bind (eval_expr cx e) (read_result cx)
+                (es with gas_obs := gs) = (INL v, ee)) /\ ~t.vs_halted ==>
     ?n r. gas_path_mem ctx func t n r /\ exit_result r /\
       !tail. RetQ v ((ee with gas_obs := tail) with scopes := []) r) ==>
   !Q. ?marks'. gas_summary_at T (ctx,func) marks'
@@ -35,7 +35,9 @@ Proof
         (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
          simp[gas_marked_exec_def] >>
          metis_tac[gas_marked_path_exec, gas_path_normal]) >>
-      drule marked_exec_source_eq >> strip_tac >>
+      `?gs. bind (eval_expr cx e) (read_result cx)
+        (es with gas_obs := gs) = (INL v, es_end with gas_obs := [])` by
+        (fs[gas_marked_exec_def] >> metis_tac[]) >>
       first_x_assum drule >> simp[] >>
       (impl_tac >- metis_tac[]) >> strip_tac >>
       qexists_tac `marks ++ REPLICATE n F` >>
@@ -67,8 +69,8 @@ Theorem internal_return_value_counted_mem:
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
-    (?gs ee'. bind (eval_expr cx e) (read_result cx)
-       (es with gas_obs := gs) = (INL v,ee')) /\
+    (?gs. bind (eval_expr cx e) (read_result cx)
+       (es with gas_obs := gs) = (INL v,ee)) /\
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
