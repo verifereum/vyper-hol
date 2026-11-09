@@ -7,7 +7,7 @@
 Theory bodyMemIntCallReturnDirect
 Ancestors
   bodyMemoryDefs intCallReturnMem stmtSimReturn compileEnv valueEncoding
-  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem internalReturnBytestringMem internalReturnCompileMem internalReturnComposeMem internalReturnVoidMem internalReturnWordMem stmtSimReturnWiden bodySim
+  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem internalReturnBytestringMem internalReturnCompileMem internalReturnComposeMem internalReturnVoidMem internalReturnWordMem internalReturnAggregateMem stmtSimReturnWiden bodySim
 
 (* ADMITTED (leaf): the internal twin of loweringMemFrameRet's
    external_frame_ret_ok_mem's direct returns.  The compile env returns
@@ -78,5 +78,16 @@ Proof
          qexists_tac `env.type_defs` >> fs[vyperTypeSystemTheory.type_stmt_def]) >>
       gvs[] >> irule internal_return_word_mem >>
       fs[same_frame_def, compile_env_component_equality] >> metis_tac[]) >>
+  Cases_on `0 < cenv.ce_returns_count`
+  >- (`rb = NONE` by (Cases_on `rb` >> gvs[]) >>
+      `expr_type e = ret_ty` by
+        (irule stack_return_widens_eq >>
+         conj_tac
+         >- (qexists_tac `\name. MAP (FST o SND)
+               (get_struct_fields cenv.ce_struct_fields name)` >> fs[]) >>
+         qexists_tac `env.type_defs` >> fs[vyperTypeSystemTheory.type_stmt_def]) >>
+      gvs[] >> irule internal_return_aggregate_mem >>
+      fs[same_frame_def, compile_env_component_equality, body_inv_def] >>
+      metis_tac[]) >>
   cheat
 QED
