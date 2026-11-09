@@ -466,3 +466,144 @@ Proof
   qexistsl [`t with vs_inst_idx := LENGTH st'.cs_current_insts`, `p`] >>
   fs[eval_op_inst_idx, deploy_ctor_array_observation_inst_idx]
 QED
+
+Theorem deploy_ctor_array_header_index_complete_gas_path:
+  abi_decode_array_header dst src DLOAD st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) /\
+  eval_operand src initial = SOME p /\
+  eval_operand dst initial = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decode_load DLOAD p initial = n2w (LENGTH vs) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts func)) /\
+  header_st.cs_next_id IN ctor_actual_sites func ids /\
+  ctor_actual_scratch func ids D N initial /\ D+N <= initial.vs_alloca_next /\
+  alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func)) /\
+  k + unit_alloca_budget ctx < dimword (:256) /\
+  D <= d /\ d+32 <= D+N /\ 32 <= outsz /\
+  fn_has_code st header_st func /\ fn_has_code header_st loop_st func /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual slot. gas_path ctx func initial 0 (OK actual) /\
+    eval_operand ip actual = SOME (n2w slot) /\
+    (^Ok) k ctx func site ids D N d outsz
+      st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial 0 0 actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = loop_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
+    abi_decode_sim ctx func initial actual /\
+    actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+    actual.vs_block_ctx = initial.vs_block_ctx
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  `header_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all deploy_ctor_array_count_header_complete_gas_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func initial header` >>
+  `alloca_inv header /\ alloca_frontier_inv_from k ctx func site header /\
+    ctor_actual_scratch func ids D N header /\ D+N <= header.vs_alloca_next` by
+    metis_tac[deploy_ctor_array_allocation_state] >>
+  `mload d header = n2w (LENGTH vs)` by fs[mem_word_at_eq_mload] >>
+  `header_st.cs_next_var < limit_st.cs_next_var` by decide_tac >>
+  drule_all deploy_ctor_array_index_complete_gas_path >>
+  disch_then (qspecl_then [`tv`, `outsz`] strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func header actual` >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  `abi_encoder_registered_effect (ctor_actual_sites func ids) [(d,outsz)] initial header` by
+    (irule abi_encoder_registered_effect_enlarge >>
+     qexistsl [`{}`, `[(d,32)]`] >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `header.vs_call_ctx = initial.vs_call_ctx /\
+    header.vs_data_section = initial.vs_data_section` by fs[abi_decode_frame_def] >>
+  `(^Ok) k ctx func site ids D N d outsz
+      st.cs_next_var limit_st tv vs header_st.cs_next_id p' initial 0 0 actual` by
+    (irule deploy_ctor_array_observation_rebase >>
+     qexistsl [`header_st.cs_next_var`, `header`] >> simp[abi_decode_frame_def] >>
+     rpt strip_tac >>
+     qpat_x_assum `!op w. _` (qspec_then `Var x` mp_tac) >>
+     simp[abi_decoder_operand_live_def, eval_operand_def, IN_DEF]) >>
+  `gas_path ctx func initial 0 (OK actual)` by
+    (drule_all gas_path_then >> simp[]) >>
+  qexistsl [`actual`, `p'`] >> simp[] >>
+  irule abi_decode_sim_trans >> qexists `header` >> simp[]
+QED
+
+Theorem deploy_ctor_array_prefix_header_index_complete_gas_path:
+  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+  abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) /\
+  eval_operand src initial = SOME (n2w sb) /\
+  eval_operand dst initial = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w (LENGTH vs) /\
+  LENGTH vs <= maxn /\ maxn < dimword (:256) /\
+  (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\
+    sb+32+LENGTH vs*asz <= h /\ h < dimword (:256)) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var hi /\
+  loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts func)) /\
+  header_st.cs_next_id IN ctor_actual_sites func ids /\
+  ctor_actual_scratch func ids D N initial /\ D+N <= initial.vs_alloca_next /\
+  alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func)) /\
+  k + unit_alloca_budget ctx < dimword (:256) /\
+  D <= d /\ d+32 <= D+N /\ 32 <= outsz /\
+  fn_has_code st guard_st func /\ fn_has_code guard_st header_st func /\
+  fn_has_code header_st loop_st func /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?actual slot. gas_path ctx func initial 0 (OK actual) /\
+    eval_operand ip actual = SOME (n2w slot) /\
+    (^Ok) k ctx func site ids D N d outsz
+      st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial 0 0 actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = loop_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
+    abi_decode_sim ctx func initial actual /\
+    actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+    actual.vs_block_ctx = initial.vs_block_ctx
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_array_header_shape >> strip_tac >>
+  drule abi_decode_index_init_shape >> strip_tac >>
+  `guard_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all deploy_ctor_array_prefix_complete_gas_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func initial guard` >>
+  `guard.vs_allocas = initial.vs_allocas /\
+    guard.vs_alloca_next = initial.vs_alloca_next` by fs[abi_decoder_address_frame_def] >>
+  `alloca_inv guard /\ alloca_frontier_inv_from k ctx func site guard /\
+    ctor_actual_scratch func ids D N guard /\ D+N <= guard.vs_alloca_next` by
+    metis_tac[deploy_ctor_array_allocation_state] >>
+  `eval_operand src guard = SOME (n2w sb) /\
+    eval_operand dst guard = SOME (n2w d)` by
+    fs[abi_decoder_address_frame_def] >>
+  `guard.vs_data_section = initial.vs_data_section` by fs[abi_decoder_address_frame_def] >>
+  `abi_decode_load DLOAD (n2w sb : bytes32) guard = n2w (LENGTH vs)` by
+    (qpat_x_assum `abi_decode_load _ _ initial = _` mp_tac >>
+     simp_tac (srw_ss()) [abi_decode_load_def, abi_decode_source_def] >> asm_rewrite_tac[]) >>
+  `abi_decoder_operand_live guard_st.cs_next_var src /\
+    abi_decoder_operand_live guard_st.cs_next_var dst` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  drule_all deploy_ctor_array_header_index_complete_gas_path >>
+  disch_then (qspec_then `tv` strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func guard actual` >>
+  `abi_encoder_registered_effect (ctor_actual_sites func ids) [(d,outsz)] initial guard` by
+    (irule abi_encoder_registered_effect_enlarge >> qexistsl [`{}`, `[]`] >> simp[]) >>
+  `guard.vs_call_ctx = initial.vs_call_ctx /\
+    guard.vs_data_section = initial.vs_data_section` by fs[abi_decoder_address_frame_def] >>
+  `(^Ok) k ctx func site ids D N d outsz
+      st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial 0 0 actual` by
+    (irule deploy_ctor_array_observation_rebase >>
+     qexistsl [`guard_st.cs_next_var`, `guard`] >> simp[] >>
+     rpt strip_tac >> irule ctor_actual_address_old_vars >>
+     goal_assum (drule_at Any) >> qexists `st.cs_next_var` >> simp[]) >>
+  `gas_path ctx func initial 0 (OK actual)` by
+    (drule_all gas_path_then >> simp[]) >>
+  qexistsl [`actual`, `slot`] >> simp[] >>
+  irule abi_decode_sim_trans >> qexists `guard` >> simp[]
+QED
