@@ -27,3 +27,23 @@ Proof
   gvs[package_internal_fn_def, set_internal_package_target_def,
       update_cenv_nonreentrant_def, body_inv_def] >> metis_tac[]
 QED
+
+(* Presence alone suffices for this nonfailure fact; no namespace uniqueness
+   is needed, even when an earlier declaration shadows the given body. *)
+Theorem internal_decl_lookup_not_none:
+  !tops src name fm nr raw args dflts ret ss.
+    MEM (FunctionDecl Internal fm nr raw name args dflts ret ss) tops ==>
+    vyperInterpreter$lookup_function src name Internal tops <> NONE
+Proof
+  Induct_on `tops` >- simp[] >>
+  gen_tac >> gen_tac >> Cases_on `h` >>
+  simp[vyperInterpreterTheory.lookup_function_def] >>
+  rpt strip_tac >> gvs[]
+  >~ [`vyperInterpreter$lookup_function _ _ Internal (VariableDecl vis _ _ _ _ :: _)`] >-
+    (Cases_on `vis` >> gvs[vyperInterpreterTheory.lookup_function_def] >>
+     metis_tac[])
+  >~ [`vyperInterpreter$lookup_function _ _ Internal (HashMapDecl vis _ _ _ _ _ :: _)`] >-
+    (Cases_on `vis` >> gvs[vyperInterpreterTheory.lookup_function_def] >>
+     metis_tac[]) >>
+  metis_tac[]
+QED
