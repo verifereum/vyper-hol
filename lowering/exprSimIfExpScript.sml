@@ -381,7 +381,7 @@ Proof
   drule_all post_value_type_widens >> simp[]
 QED
 
-Theorem ifexp_aggregate_footprint[local]:
+Theorem ifexp_aggregate_footprint:
   !tenv t tv v.
     evaluate_type tenv t = SOME tv /\ ~is_bytestring_type t ==>
     val_footprint tv v = type_memory_size tv
@@ -392,7 +392,7 @@ Proof
   Cases_on `v` >> simp[val_footprint_def]
 QED
 
-Theorem ifexp_aggregate_source_region[local]:
+Theorem ifexp_aggregate_source_region:
   expr_val_at cenv cx ty origin sa es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   ~is_word_type ty /\ ~is_bytestring_type ty /\
