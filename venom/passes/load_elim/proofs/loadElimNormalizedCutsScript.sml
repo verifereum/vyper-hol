@@ -1,15 +1,14 @@
 Theory loadElimNormalizedCuts
 Ancestors
   loadElimSelectedGeneration loadElimDefinitionCuts loadElimNormalizeAvailability
-  loadElimTransferProvenance loadElimDefs loadElimConfiguredGeneration loadElimKeyShapeInvariant
+  loadElimNormalizeHelpers loadElimTransferProvenance loadElimDefs loadElimConfiguredGeneration loadElimKeyShapeInvariant
   dfgDefs dfgAnalysisProps venomWf venomInst venomExecProofs
   simplifyCfgLabelProps simplifyCfgPhiRepair simplifyCfgWfssa simplifyCfgStruct simplifyCfgPhiSemantics
   finite_map list rich_list dfAnalyzeDefs cfgDefs
 
-Theorem le_nonassign_output_normalize:
-  wf_ssa fn /\ MEM gi (fn_insts fn) /\ MEM out gi.inst_outputs /\
-  gi.inst_opcode <> ASSIGN ==>
-  normalize_operand (dfg_build_function fn) [] (Var out) = Var out
+Theorem le_ssa_output_def:
+  wf_ssa fn /\ MEM gi (fn_insts fn) /\ MEM out gi.inst_outputs ==>
+  dfg_get_def (dfg_build_function fn) out = SOME gi
 Proof
   strip_tac >>
   drule_all dfg_build_function_defs_complete >> strip_tac >>
@@ -17,7 +16,27 @@ Proof
   `inst' = gi` by
     (gvs[fn_insts_def, fn_insts_blocks_mem, wf_ssa_def] >>
      metis_tac[ssa_form_output_unique]) >>
-  gvs[dfg_get_def_def, Once normalize_operand_def]
+  gvs[]
+QED
+
+Theorem le_nonassign_output_normalize:
+  wf_ssa fn /\ MEM gi (fn_insts fn) /\ MEM out gi.inst_outputs /\
+  gi.inst_opcode <> ASSIGN ==>
+  normalize_operand (dfg_build_function fn) [] (Var out) = Var out
+Proof
+  strip_tac >> drule_all le_ssa_output_def >>
+  simp[dfg_get_def_def] >> strip_tac >>
+  simp[Once normalize_operand_def]
+QED
+
+Theorem le_nonassign_output_chain_valid:
+  wf_ssa fn /\ MEM gi (fn_insts fn) /\ MEM out gi.inst_outputs /\
+  gi.inst_opcode <> ASSIGN ==>
+  le_chain_valid (dfg_build_function fn) visited (Var out) s
+Proof
+  strip_tac >> drule_all le_ssa_output_def >>
+  simp[dfg_get_def_def] >> strip_tac >>
+  simp[Once le_chain_valid_def]
 QED
 
 Theorem le_normalized_generator_available:

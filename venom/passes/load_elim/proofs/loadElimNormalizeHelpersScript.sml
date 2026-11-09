@@ -26,6 +26,27 @@ Termination
   qexists_tac `v` >> fs[finite_mapTheory.FLOOKUP_DEF]
 End
 
+Theorem le_chain_valid_frame:
+  !dfg visited op s t.
+    (!v. lookup_var v t = lookup_var v s) /\
+    t.vs_labels = s.vs_labels ==>
+    (le_chain_valid dfg visited op t = le_chain_valid dfg visited op s)
+Proof
+  ho_match_mp_tac normalize_operand_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      simp[Ntimes le_chain_valid_def 2] >>
+      Cases_on `MEM dfg' visited` >> simp[] >>
+      Cases_on `FLOOKUP dfg.dfg_defs dfg'` >> simp[] >>
+      rename1 `FLOOKUP _ _ = SOME inst` >>
+      Cases_on `inst.inst_opcode = ASSIGN` >> simp[] >>
+      Cases_on `inst.inst_operands` >> simp[] >>
+      Cases_on `t'` >> simp[] >>
+      `eval_operand h t = eval_operand h s` by
+        (Cases_on `h` >> simp[eval_operand_def]) >>
+      metis_tac[]) >>
+  simp[le_chain_valid_def]
+QED
+
 Theorem le_chain_valid_eval:
   !dfg visited op s. le_chain_valid dfg visited op s ==>
     eval_operand (normalize_operand dfg visited op) s = eval_operand op s
