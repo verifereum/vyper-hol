@@ -53,9 +53,10 @@ Proof
  drule_all deploy_ctor_decoder_sequence_observations >> strip_tac >>
  drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
  qexists `actual` >>
- gvs[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
+ simp[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
    abi_encoder_registered_effect_def, alloca_inv_def, alloca_frontier_inv_def,
    remaining_alloca_budget_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+ fs[fresh_vars_wrt_def, abi_decode_frame_def, abi_encoder_registered_effect_def] >>
  metis_tac[]
 QED
 
@@ -93,9 +94,10 @@ Proof
  drule_all ctor_actual_scratch_free_effect >>
  disch_then (qspecl_then [`site`, `{}`, `func`, `ctx`] strip_assume_tac) >>
  qexists `actual` >>
- gvs[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
+ simp[fresh_vars_wrt_def, abi_decode_frame_def, eval_op_inst_idx,
    abi_encoder_registered_effect_def, alloca_inv_def, alloca_frontier_inv_def,
    remaining_alloca_budget_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+ fs[fresh_vars_wrt_def, abi_decode_frame_def, abi_encoder_registered_effect_def] >>
  metis_tac[]
 QED
 
