@@ -6,7 +6,7 @@ Ancestors
 
 Theorem abi_return_decode_reject:
   rt = (if needs_external_call_wrap ty then TupleT [ty] else ty) /\
-  cap = vyper_abi_size_bound env rt /\ lo = static_length (vyper_to_abi_type env rt) /\
+  cap = vyper_abi_size_bound env rt /\ lo = abi_static_length (vyper_to_abi_type env rt) /\
   (~is_dynamic (vyper_to_abi_type env rt) ==> cap = lo) /\ lo <= cap /\
   lo < dimword (:256) /\ cap < dimword (:256) /\
   evaluate_abi_decode_return env ty bs = INR err /\
