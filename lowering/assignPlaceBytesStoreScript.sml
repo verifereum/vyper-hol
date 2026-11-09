@@ -1,0 +1,106 @@
+Theory assignPlaceBytesStore
+Ancestors
+  placeStoreStorage stmtSimStoreCopy exprLoweringProps
+  words arithmetic list rich_list
+
+(* Capacity-sized copies may wrap on dead source words.  Keep the actual
+   word-address semantics here; only live reads are later unwrapped. *)
+Theorem assign_place_memory_to_slots_wrapped_path:
+  (if tr then compile_memory_to_transient else compile_memory_to_storage)
+    src dst n sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_call_ctx.cc_static /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  n < dimword (:256) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      store_copy_normalize s t =
+        FOLDL (\q j. (if tr then tstore else sstore) (dw + n2w j)
+          (mload (w2n (sw + n2w j * 32w)) s) q) s (COUNT_LIST n) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `compile_word_copy_loop src dst n LocMemory
+     (if tr then LocTransient else LocStorage) F sa = (result,sb)` by
+    (Cases_on `tr` >> gvs[contextTheory.compile_memory_to_transient_def,
+                          contextTheory.compile_memory_to_storage_def]) >>
+  drule place_store_copy_boundary >> strip_tac >> gvs[] >>
+  drule_all place_store_copy_framed_run >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[] >>
+  drule place_store_copy_frame_observations >> strip_tac >> simp[] >>
+  gvs[store_copy_frame_def, store_copy_prefix_def] >>
+  Cases_on `tr` >> simp[]
+QED
+
+(* A live byte forces the start of its word below the live footprint end;
+   it does not force the end of that rounded word below the footprint. *)
+Theorem assign_place_live_word_start:
+  !st base len i cap b off.
+  w2n (lookup_storage (n2w base) st) = len /\
+  i < 1 + word_size cap /\ b < 32 /\
+  ~dyn_bytes_dead st base cap (base+i) b /\
+  off + 32 + len < dimword (:256) ==>
+  off + 32*i < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `i = 0` >- simp[] >>
+  gvs[compileEnvTheory.dyn_bytes_dead_def] >>
+  `i <= word_size cap` by decide_tac >>
+  `base < base+i /\ base+i <= base + word_size cap` by decide_tac >>
+  gvs[] >>
+  `32*i = 32*(i-1) + 32` by decide_tac >>
+  gvs[] >> decide_tac
+QED
+
+Theorem assign_place_wrapped_memory_leaf_run:
+  (if tr then compile_memory_to_transient else compile_memory_to_storage)
+    src dst n sa = (result,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_call_ctx.cc_static /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME (n2w start) /\
+  n < dimword (:256) /\ local_ptrs_reserved cenv sa /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
+  storage_subregion root path delta tv /\ start = w2n rootk + delta /\
+  0 < type_slot_size tv /\ encode_value tv v = SOME writes /\ value_has_type tv v /\
+  start + type_slot_size tv <= dimword (:256) /\ n <= type_slot_size tv /\
+  (!i b. i < type_slot_size tv /\ b < 32 /\
+    ~dead_bytes (apply_writes (n2w start) writes (get_storage cx ee tr))
+       start tv (start+i) b ==>
+    i < n /\
+    EL b (word_to_bytes (lookup_storage (n2w (start+i))
+      (apply_writes (n2w start) writes (get_storage cx ee tr))) T) =
+    EL b (word_to_bytes (mload (w2n (sw + n2w i * 32w)) s) T)) ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx
+        (set_storage cx ee tr (apply_writes (n2w start) writes (get_storage cx ee tr))) t /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+      t.vs_labels = s.vs_labels /\ t.vs_call_ctx = s.vs_call_ctx /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  drule_all (BETA_RULE (Q.INST
+    [`rd` |-> `\i. mload (w2n (sw + n2w i * 32w)) s`]
+    (SPEC_ALL place_store_encoded_leaf_state))) >> strip_tac >>
+  drule_all assign_place_memory_to_slots_wrapped_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >> simp[] >>
+  irule place_store_normalized_stmt_state >>
+  goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >>
+  qexists_tac `s` >> simp[] >>
+  qpat_x_assum `store_copy_normalize _ _ = _` SUBST1_TAC >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
+  qpat_x_assum `start = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac bool_ss [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n,
+    AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM,
+    arithmeticTheory.ADD_COMM]
+QED
