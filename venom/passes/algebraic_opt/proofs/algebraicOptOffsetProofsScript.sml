@@ -223,3 +223,63 @@ Proof
   Cases_on `exec_block fuel ctx bb
     (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >> simp[]
 QED
+
+Theorem ao_offset_function_well_formed:
+  !fn fn0.
+  wf_function fn /\
+  fn0 = fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks ==>
+  wf_function fn0
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fn_labels fn0 = fn_labels fn` by
+    gvs[fn_labels_def, MAP_MAP_o, combinTheory.o_DEF] >>
+  `fn_has_entry fn0 = fn_has_entry fn` by
+    gvs[fn_has_entry_def] >>
+  `!bb. MEM bb fn0.fn_blocks ==> bb_well_formed bb` by
+    (gvs[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+     irule ao_offset_block_well_formed >> fs[wf_function_def]) >>
+  `fn_succs_closed fn0` by
+    (gvs[fn_succs_closed_def, MEM_MAP] >> rpt strip_tac >>
+     gvs[ao_offset_block_successors] >>
+     metis_tac[wf_function_def, fn_succs_closed_def]) >>
+  drule ao_offset_function_ids_outputs >> strip_tac >>
+  fs[wf_function_def, fn_inst_ids_distinct_def, fn_insts_def,
+     rtaSupplyProofsTheory.fn_insts_blocks_inst_ids, lambdify irSupplyTheory.block_ir_inst_ids_def]
+QED
+
+Theorem ao_offset_function_coverage:
+  !fn fn0 supply.
+  ir_supply_covers_fn supply fn /\ EVERY label_positions_ok (fn_insts fn) /\
+  fn0 = fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks ==>
+  ir_supply_covers_fn supply fn0
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_offset_function_label_contract >> strip_tac >>
+  drule_all ao_offset_function_vars >> strip_tac >>
+  drule ao_offset_function_ids_outputs >> strip_tac >>
+  gvs[venomFnScheduleRunnerTheory.ir_supply_covers_fn_def,
+      irSupplyTheory.fn_ir_inst_ids_def,
+      GSYM rtaSupplyProofsTheory.fn_insts_blocks_inst_ids, GSYM fn_insts_def] >>
+  simp[irSupplyTheory.fn_ir_vars_def, irSupplyTheory.block_ir_vars_def,
+       venomFnScheduleRunnerTheory.list_subset_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >>
+  gvs[EVERY_MEM, pred_setTheory.SUBSET_DEF, fn_insts_def,
+      unitShapeDefsTheory.MEM_fn_insts_blocks_iff, MEM_FLAT, MEM_MAP] >>
+  qpat_x_assum `!inst. _ ==> !x. _` (qspec_then `ao_handle_offset_inst y'` mp_tac) >>
+  (impl_tac >- (
+    qexists_tac `bb with bb_instructions := MAP ao_handle_offset_inst bb.bb_instructions` >>
+    simp[MEM_MAP] >> metis_tac[])) >>
+  disch_then drule >> simp[]
+QED
+
+Theorem ao_offset_function_initial_absence:
+  fn0 = fn with fn_blocks := MAP (\bb. bb with bb_instructions :=
+    MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+  (!i x. MEM i (fn_insts fn) /\ MEM x i.inst_outputs ==> lookup_var x s = NONE) ==>
+  !i x. MEM i (fn_insts fn0) /\ MEM x i.inst_outputs ==> lookup_var x s = NONE
+Proof
+  strip_tac >> drule ao_offset_function_insts >> strip_tac >>
+  simp[MEM_MAP] >> rpt strip_tac >> gvs[ao_handle_offset_inst_shape] >> metis_tac[]
+QED
