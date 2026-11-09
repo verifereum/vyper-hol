@@ -2078,7 +2078,7 @@ Resume aug_place_result_bind_outcome_exec[exempt]:
 QED
 Finalise aug_place_result_bind_outcome_exec
 
-Theorem aug_place_result_bind_outcome_path[local]:
+Theorem aug_place_result_bind_outcome_path:
   gas_outcome memory tops (ctx,func)
     (a : evaluation_state -> eval_result evaluation_result) (es,s0) P E /\
   (!v mid t marks. P (INL v) mid t /\
