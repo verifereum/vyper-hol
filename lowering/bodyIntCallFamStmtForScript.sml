@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: For. *)
 Theory bodyIntCallFamStmtFor
 Ancestors
-  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier bodyIntCallFamStmtForTransport bodyIntCallFamStmtForPop bodyIntCallFamStmtForArrayFrame bodyIntCallFamStmtForRound stmtForRangeMemoryLoop stmtSimForLoop stmtSimProps stmtSimDeclStore fragGasMode intCallFrame venomState finite_map
+  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier bodyIntCallFamStmtForTransport bodyIntCallFamStmtForPop bodyIntCallFamStmtForArrayFrame bodyIntCallFamStmtForRound bodyIntCallFamStmtForStart stmtForRangeMemoryLoop stmtSimForLoop stmtSimProps stmtSimDeclStore fragGasMode intCallFrame venomState finite_map
 
 (* Re-entry uses the original compile state, not the body's allocation
    frontier.  Only the static operand reservations need to be re-established. *)
@@ -551,6 +551,17 @@ Resume intcall_for_range_iterations[round]:
 QED
 
 Finalise intcall_for_range_iterations
+
+(* A loop-local name absent from the typing environment is absent at every
+   re-entry; this uses scope consistency, not freshness of compile operands. *)
+Theorem intcall_for_scope_absent:
+  env_scopes_consistent env cx es /\ id NOTIN FDOM env.var_types ==>
+  lookup_scopes id es.scopes = NONE
+Proof
+  strip_tac >> Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+  fs[vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
+  metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_IS_SOME_EQ_NONE]
+QED
 
 Theorem intcall_for_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
