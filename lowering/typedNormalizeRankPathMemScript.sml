@@ -2,7 +2,8 @@
 Theory typedNormalizeRankPathMem
 Ancestors
   typedNormalizeRankMem typedFieldCopyAggregateMem typedArrayCopyPathsMem
-  typedSarrayCopyPathsMem typedNormalizeSemanticPathsMem
+  typedSarrayCopyPathsMem typedNormalizeSemanticPathsMem typedNormalizeTupleSemanticPathsMem
+  typedNormalizeStructEntryPathsMem
   typedNormalizeFrame stmtSimReturn typedMemoryCopy valueCopyBytes exprSimBufferStore
   allocaFootprint venomInst typedNormalizeFastRepresentation loweringPosts
   typedFieldCopyPathsMem context compileEnv venomState valueEncoding
@@ -418,9 +419,200 @@ Resume typed_store_rank_path_mem[dynamic_slow_premises]:
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
 QED
 Resume typed_store_rank_path_mem[tuple]:
-  cheat
+  `?stys. sty = TupleT stys` by metis_tac[typed_copy_tuple_widening] >>
+  qpat_x_assum `sty = TupleT stys` SUBST_ALL_TAC >>
+  qpat_x_assum `evaluate_type tenv (TupleT stys) = SOME stv` mp_tac >>
+  simp[evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >> strip_tac >>
+  qpat_x_assum `evaluate_type tenv (TupleT tys) = SOME dtv` mp_tac >>
+  simp[evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >> strip_tac >>
+  qpat_x_assum `TupleTV _ = stv` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `TupleTV _ = dtv` (SUBST_ALL_TAC o SYM) >>
+  Cases_on `v` >> gnvs[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gnvs[value_has_type_def] >>
+  `LIST_REL (type_widens_to tenv) stys tys` by
+    (irule typed_copy_tuple_children_widen >>
+     conj_tac >- metis_tac[] >>
+     drule typed_copy_tuple_widening >> simp[] >> strip_tac >> simp[]) >>
+  suspend "tuple_metadata"
+QED
+Resume typed_store_rank_path_mem[tuple_metadata]:
+  `LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) stys tvs /\
+   LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs'` by
+    (conj_tac >> irule vyperTypeABITheory.OPT_MMAP_LIST_REL >> simp[]) >>
+  `LIST_REL (\ty tv. type_memory_bytes ce ty = type_memory_size tv) stys tvs /\
+   LIST_REL (\ty tv. type_memory_bytes ce ty = type_memory_size tv) tys tvs'` by
+    (qpat_x_assum `!m. m < n ==> _` kall_tac >>
+     conj_tac >> fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     irule typed_copy_memory_size >> qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  `LENGTH tys = LENGTH tvs' /\ LENGTH stys = LENGTH tvs /\
+   LENGTH tys = LENGTH stys /\ LENGTH l = LENGTH tys /\
+   EVERY2 val_wf tvs l /\ EVERY2 val_wf tvs' l` by
+    (qpat_x_assum `!m. m < n ==> _` kall_tac >>
+     fs[LIST_REL_EL_EQN, val_wf_def,
+       abiTupleValueEncodingTheory.abi_values_have_types] >>
+     metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]) >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, is_word_type_def,
+    is_bytestring_type_def] >> strip_tac >>
+  suspend "tuple_adapter"
+QED
+Resume typed_store_rank_path_mem[tuple_adapter]:
+  pure_rewrite_tac[val_in_memory_def, type_value_case_def, type_memory_size_def] >>
+  BETA_TAC >>
+  qpat_assum `val_in_memory (TupleTV _) _ _ _`
+    (assume_tac o SRULE [val_in_memory_def]) >>
+  mp_tac (Q.INST [`DT` |-> `tys`, `ST` |-> `stys`,
+    `dtvs` |-> `tvs'`, `stvs` |-> `tvs`, `vs` |-> `l`,
+    `a` |-> `w2n (sw : 256 word)`, `b` |-> `w2n (dw : 256 word)`,
+    `d` |-> `\i. w2n (dw : 256 word) + SUM (MAP (type_memory_bytes ce) (TAKE i tys))`,
+    `h` |-> `\i. w2n (sw : 256 word) + SUM (MAP (type_memory_bytes ce) (TAKE i stys))`]
+    normalize_tuple_semantic_path_mem) >>
+  (impl_tac >- suspend "tuple_premises") >>
+  strip_tac >> goal_assum (drule_at (Pat `gas_path_mem _ _ _ _ _`)) >>
+  qpat_x_assum `!m. m < n ==> _` kall_tac >>
+  fs[] >> metis_tac[]
+QED
+Resume typed_store_rank_path_mem[tuple_premises]:
+  `SUM (MAP (type_memory_bytes ce) tys) = type_memory_size_list tvs' /\
+   SUM (MAP (type_memory_bytes ce) stys) = type_memory_size_list tvs` by
+    (conj_tac
+     >- (qpat_assum `LIST_REL (\ty tv. type_memory_bytes ce ty = _) tys tvs'`
+           (mp_then Any (qspec_then `LENGTH tys` mp_tac) tupleTypedLoadTheory.tuple_prefix_sizes) >>
+         simp[valueEncodingProofsTheory.type_memory_size_list_sum, TAKE_LENGTH_TOO_LONG]) >>
+     qpat_assum `LIST_REL (\ty tv. type_memory_bytes ce ty = _) stys tvs`
+       (mp_then Any (qspec_then `LENGTH stys` mp_tac) tupleTypedLoadTheory.tuple_prefix_sizes) >>
+     simp[valueEncodingProofsTheory.type_memory_size_list_sum, TAKE_LENGTH_TOO_LONG]) >>
+  simp[TAKE_LENGTH_TOO_LONG] >>
+  ntac 5 (conj_tac >- (qpat_x_assum `!m. m < n ==> _` kall_tac >>
+    fs[type_memory_size_def] >> metis_tac[])) >>
+  conj_tac >- suspend "tuple_children" >> metis_tac[]
+QED
+Resume typed_store_rank_path_mem[tuple_children]:
+  qpat_x_assum `!m. m < n ==> _` mp_tac >>
+  qpat_x_assum `acyclic_struct_metadata _` mp_tac >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  qpat_x_assum `!name fields. FLOOKUP _ name = SOME fields ==> _` mp_tac >>
+  qpat_x_assum `LIST_REL (type_widens_to tenv) _ _` mp_tac >>
+  rpt (qpat_x_assum `LIST_REL _ _ _` mp_tac) >>
+  rpt (qpat_x_assum `values_have_types _ _` mp_tac) >>
+  qpat_x_assum `LENGTH tys = LENGTH stys` mp_tac >>
+  qpat_x_assum `LENGTH stys = LENGTH tvs` mp_tac >>
+  qpat_x_assum `LENGTH tys = LENGTH tvs'` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt disch_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `evaluate_type tenv (EL i stys) = SOME (EL i tvs) /\
+   evaluate_type tenv (EL i tys) = SOME (EL i tvs') /\
+   type_widens_to tenv (EL i stys) (EL i tys) /\
+   value_has_type (EL i tvs) (EL i l) /\ value_has_type (EL i tvs') (EL i l) /\
+   val_wf (EL i tvs) (EL i l) /\ val_wf (EL i tvs') (EL i l) /\
+   type_memory_bytes ce (EL i tys) = type_memory_size (EL i tvs') /\
+   type_memory_bytes ce (EL i stys) = type_memory_size (EL i tvs)` by
+    (qpat_x_assum `!m. m < n ==> _` kall_tac >>
+     fs[LIST_REL_EL_EQN, abiTupleValueEncodingTheory.abi_values_have_types]) >>
+  `type_rank ce.ce_struct_fields (EL i tys) < type_rank ce.ce_struct_fields (TupleT tys)` by
+    (irule typedCopyDomainTheory.member_rank_lt_tuple >> simp[EL_MEM] >> metis_tac[]) >>
+  suspend "tuple_child_apply"
+QED
+Resume typed_store_rank_path_mem[tuple_child_apply]:
+  `SUM (MAP (type_memory_bytes ce) (TAKE (SUC i) tys)) =
+     SUM (MAP (type_memory_bytes ce) (TAKE i tys)) + type_memory_size (EL i tvs') /\
+   SUM (MAP (type_memory_bytes ce) (TAKE (SUC i) stys)) =
+     SUM (MAP (type_memory_bytes ce) (TAKE i stys)) + type_memory_size (EL i tvs)` by
+    (qpat_x_assum `!m. m < n ==> _` kall_tac >>
+     `i < LENGTH tys /\ i < LENGTH stys` by metis_tac[] >>
+     conj_tac
+     >- (qpat_assum `i < LENGTH tys`
+          (mp_then Any (qspec_then `type_memory_bytes ce` mp_tac)
+            typedNormalizeFieldsTheory.normalize_prefix_step) >> simp[]) >>
+     qpat_assum `i < LENGTH stys`
+       (mp_then Any (qspec_then `type_memory_bytes ce` mp_tac)
+         typedNormalizeFieldsTheory.normalize_prefix_step) >> simp[]) >>
+  rpt (qhdtm_x_assum `LIST_REL` kall_tac) >>
+  rpt (qpat_x_assum `values_have_types _ _` kall_tac) >>
+  qabbrev_tac `a = SUM (MAP (type_memory_bytes ce) (TAKE i stys)) + w2n sw` >>
+  qabbrev_tac `b = SUM (MAP (type_memory_bytes ce) (TAKE i tys)) + w2n dw` >>
+  `a + type_memory_size (EL i tvs) <= u.vs_alloca_next /\
+   b + type_memory_size (EL i tvs') <= u.vs_alloca_next /\
+   a + type_memory_size (EL i tvs) < dimword(:256) /\
+   b + type_memory_size (EL i tvs') < dimword(:256)` by
+    (qpat_x_assum `!m. m < n ==> _` kall_tac >>
+     simp[Abbr `a`, Abbr `b`] >> decide_tac) >>
+  `a < dimword(:256) /\ b < dimword(:256)` by decide_tac >>
+  `w2n (n2w a : 256 word) = a /\ w2n (n2w b : 256 word) = b` by simp[] >>
+  suspend "tuple_rank_call"
+QED
+Resume typed_store_rank_path_mem[tuple_rank_call]:
+  qpat_x_assum `!m. m < n ==> _`
+    (drule_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`))) >>
+  disch_then (drule_at (Pat `evaluate_type _ (EL i stys) = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ (EL i tys) = _`)) >>
+  disch_then (drule_at (Pat `value_has_type (EL i tvs) _`)) >>
+  disch_then (drule_at (Pat `eval_operand sp _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand dp _ = _`)) >>
+  disch_then (qspecl_then [`ctx`, `fn`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[ADD_ASSOC, ADD_COMM])) >>
+  strip_tac >> goal_assum (drule_at (Pat `gas_path_mem _ _ _ _ _`)) >>
+  `SUM (MAP (type_memory_bytes ce) (TAKE i tys)) +
+     (type_memory_size (EL i tvs') + w2n dw) = b + type_memory_size (EL i tvs')` by
+    (simp[Abbr `b`] >> decide_tac) >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `val_in_memory _ _ (w2n (n2w b)) _` mp_tac >> simp[]) >>
+  qpat_x_assum `!p k. _ ==> mem_bytes_at _ _ t.vs_memory = _` mp_tac >>
+  simp[] >> metis_tac[ADD_COMM, ADD_ASSOC]
 QED
 Resume typed_store_rank_path_mem[struct]:
-  cheat
+  `!ty tv cv sd se dp sp u dw sw.
+    type_rank ce.ce_struct_fields ty < type_rank ce.ce_struct_fields (StructT name) /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv cv /\ val_wf tv cv /\
+    compile_store_memory_typed ce dp ty sp ty sd = ((),se) /\
+    eval_operand dp u = SOME dw /\ eval_operand sp u = SOME sw /\
+    (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
+    fn_has_code sd se fn /\
+    (emitted_blocks sd se <> [] ==>
+      ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
+        phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    w2n dw + type_memory_size tv <= u.vs_alloca_next /\
+    w2n sw + type_memory_size tv <= u.vs_alloca_next /\
+    w2n dw + type_memory_size tv < dimword(:256) /\
+    w2n sw + type_memory_size tv < dimword(:256) /\
+    (w2n sw + type_memory_size tv <= w2n dw \/
+      w2n dw + type_memory_size tv <= w2n sw) /\
+    val_in_memory tv cv (w2n sw) u.vs_memory ==>
+    ?count t. gas_path_mem ctx fn u count (OK t) /\ ~t.vs_halted /\
+      t.vs_current_bb = se.cs_current_bb /\
+      t.vs_inst_idx = LENGTH se.cs_current_insts /\
+      val_in_memory tv cv (w2n dw) t.vs_memory /\
+      (!p k. p+k <= w2n dw \/ w2n dw+type_memory_size tv <= p ==>
+        mem_bytes_at p k t.vs_memory = mem_bytes_at p k u.vs_memory) /\
+      (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+        vs_current_bb := sd.cs_current_bb; vs_inst_idx := LENGTH sd.cs_current_insts;
+        vs_prev_bb := u.vs_prev_bb|>) = u /\
+      (!x. not_fresh_at sd x ==> lookup_var x t = lookup_var x u)` by
+    suspend "struct_child" >>
+  qpat_x_assum `!m. m < n ==> _` kall_tac >>
+  drule_all typed_store_struct_path_mem >> strip_tac >>
+  qpat_x_assum `!ty tv cv sd se dp sp u dw sw. _` kall_tac >>
+  goal_assum (drule_at (Pat `gas_path_mem _ _ _ _ _`)) >>
+  fs[GSYM ADD_ASSOC] >> metis_tac[]
+QED
+Resume typed_store_rank_path_mem[struct_child]:
+  qpat_x_assum `!m. m < n ==> _` mp_tac >>
+  qpat_x_assum `type_rank _ (StructT _) = n` mp_tac >>
+  qpat_x_assum `acyclic_struct_metadata _` mp_tac >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  qpat_x_assum `!name fields. FLOOKUP _ name = SOME fields ==> _` mp_tac >>
+  rpt (pop_assum kall_tac) >> ntac 5 disch_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `type_rank ce.ce_struct_fields ty < n` by metis_tac[] >>
+  qpat_x_assum `!m. m < n ==> _`
+    (drule_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`))) >>
+  disch_then (drule_at (Pat `value_has_type _ _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
+  `type_widens_to tenv ty ty` by simp[] >>
+  disch_then (qspecl_then [`tv`, `ctx`, `fn`] mp_tac) >>
+  (impl_tac >- (simp[] >> conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 QED
 Finalise typed_store_rank_path_mem
