@@ -21,7 +21,7 @@ QED
    rather than inferred from the ordinary value relation. *)
 Theorem intcall_joint_res_frame:
   intcall_frame_ok fp /\
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee u /\
   expr_sim_inv ce fp.jc_cx env ee /\
   sa.cs_next_var <= sb.cs_next_var /\
@@ -35,11 +35,11 @@ Theorem intcall_joint_res_frame:
   (!n p k. local_region ce ee.scopes u n p k ==>
      local_region ce es.scopes s n p k) /\
   ee.immutables = es.immutables ==>
-  intcall_joint_res fp ce env ee sb u
+  intcall_expr_res fp ce env ee sb u
 Proof
   strip_tac >>
-  qpat_x_assum `intcall_joint_res _ _ _ _ _ _` mp_tac >>
-  simp[intcall_joint_res_def] >> strip_tac >>
+  qpat_x_assum `intcall_expr_res _ _ _ _ _ _` mp_tac >>
+  simp[intcall_joint_res_def, intcall_expr_res_def] >> strip_tac >>
   `local_ptrs_reserved ce sb` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      goal_assum (drule_at Any) >> simp[]) >>
@@ -64,7 +64,7 @@ QED
 (* Separate the resource certificate from the ordinary value post. *)
 Theorem intcall_expr_cont_vv_post:
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee tv vv u /\
-  intcall_joint_res fp ce env ee sb u /\
+  intcall_expr_res fp ce env ee sb u /\
   ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
   s.vs_alloca_next <= u.vs_alloca_next ==>
@@ -84,7 +84,7 @@ Theorem intcall_vv_post_intro:
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee tv vv u
 Proof
   simp[loweringPostsTheory.vv_post_def, intcall_expr_cont_def,
-       intcall_joint_res_def] >> metis_tac[]
+       intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]
 QED
 
 Theorem intcall_expr_cont_frame:
@@ -96,7 +96,7 @@ Proof
 QED
 
 Theorem intcall_expr_cont_trans:
-  intcall_joint_res fp ce env es a s /\
+  intcall_expr_res fp ce env es a s /\
   intcall_expr_cont fp ce env es a s em b t /\
   intcall_expr_cont fp ce env em b t ee d u /\
   a.cs_next_id <= b.cs_next_id /\ a.cs_next_var <= b.cs_next_var /\
@@ -108,12 +108,12 @@ Proof
   `wb_frame ce em b t u` by metis_tac[intcall_expr_cont_frame] >>
   `wb_frame ce es a s u` by
     (irule exprSimWordArgsTheory.wb_frame_trans >>
-     conj_tac >- fs[intcall_joint_res_def] >>
+     conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
      conj_tac >- (qexistsl [`em`, `b`, `t`] >> simp[]) >>
      qexistsl [`fp.jc_ctx`, `fp.jc_cx`, `fp.jc_func`] >>
-     fs[intcall_joint_res_def]) >>
+     fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   fs[intcall_expr_cont_def, loweringPostsTheory.wb_frame_def] >>
-  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  first_assum ACCEPT_TAC
 QED
 
 (* Calls and pops are values, never mapping places. *)
@@ -123,7 +123,7 @@ Theorem intcall_effect_map_producer:
   intcall_map_producer fp e
 Proof
   strip_tac >> gvs[intcall_map_producer_def,
-    supported_pure_expr_def]
+    supported_pure_expr_def, supported_effect_expr_def]
 QED
 
 Theorem intcall_supported_call_forms:
@@ -726,7 +726,7 @@ Theorem intcall_pure_child_value_certificate:
   supported_pure_expr fp.jc_tops child /\
   eval_expr fp.jc_cx child es = (INL child_r,ee) /\
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx child es c d s ee child_r child_vv u /\
-  intcall_joint_res fp ce env es c s /\
+  intcall_expr_res fp ce env es c s /\
   intcall_expr_cont fp ce env es c s ee d u /\
   gas_marked_path F fp.jc_ctx fp.jc_func s n (OK u) ==>
   vv_holds ce fp.jc_cx ty r vv ee u /\
@@ -758,7 +758,7 @@ Proof
   `!name off len. local_region ce ee.scopes u name off len <=>
                  local_region ce es.scopes s name off len` by
     (rpt gen_tac >> irule stmtSimLogArgsTheory.log_frame_local_region >>
-     fs[intcall_joint_res_def, intcall_expr_cont_def,
+     fs[intcall_joint_res_def, intcall_expr_res_def, intcall_expr_cont_def,
         loweringPostsTheory.wb_frame_def] >>
      conj_tac >-
        (qexists `c` >> simp[] >> rpt conj_tac >> rpt gen_tac >>

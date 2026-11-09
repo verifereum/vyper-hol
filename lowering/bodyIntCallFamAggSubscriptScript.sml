@@ -1,7 +1,10 @@
-(* Seam 2 joint induction, a family leaf of the agg step: subscripts (every place_type case). *)
+(* Seam 2 joint induction, a family leaf of the agg step: subscripts (every place_type case).
+   The residual array-place-base case is the held leaf
+   bodyIntCallFamAggSubscriptHeldTheory.intcall_subscript_array_place_base_held;
+   use it for that case. *)
 Theory bodyIntCallFamAggSubscript
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodyIntCallFamAggSubscriptHeld
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>

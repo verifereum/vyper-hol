@@ -1831,13 +1831,36 @@ Proof
        simp[comp_return_labels, emit_op_labels, emit_void_labels])
 QED
 
+Theorem compile_abi_dec_addr_labels[local]:
+  !bop pos s P.
+    cs_extends s (SND (compile_abi_dec_addr bop pos s)) /\
+    EVERY P (added_labels s (SND (compile_abi_dec_addr bop pos s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_dec_addr_def] >>
+  IF_CASES_TAC >> simp[comp_return_labels, emit_op_labels]
+QED
+
+Theorem compile_abi_decode_range_check_labels[local]:
+  !a b h s P.
+    cs_extends s (SND (compile_abi_decode_range_check a b h s)) /\
+    EVERY P (added_labels s (SND (compile_abi_decode_range_check a b h s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_decode_range_check_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[emit_op_labels, emit_void_labels])
+QED
+
 Theorem compile_getelemptr_abi_labels:
-  !src dyn off opc hi s P.
-    cs_extends s (SND (compile_getelemptr_abi src dyn off opc hi s)) /\
-    EVERY P (added_labels s (SND (compile_getelemptr_abi src dyn off opc hi s)))
+  !src dyn off opc bop hi s P.
+    cs_extends s (SND (compile_getelemptr_abi src dyn off opc bop hi s)) /\
+    EVERY P (added_labels s (SND (compile_getelemptr_abi src dyn off opc bop hi s)))
 Proof
   rpt gen_tac >> Cases_on `hi = Lit 0w` >> Cases_on `dyn` >>
-  simp[abiEncoderTheory.compile_getelemptr_abi_def] >> BETA_TAC >>
+  Cases_on `bop = Lit 0w` >>
+  simp[abiEncoderTheory.compile_getelemptr_abi_def,
+       abiEncoderTheory.compile_abi_dec_addr_def] >> BETA_TAC >>
   rpt IF_CASES_TAC >> gvs[] >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
@@ -1846,16 +1869,17 @@ Proof
 QED
 
 Theorem compile_abi_decode_dyn_elem_ptr_labels:
-  !opc elem src hi sz s P.
-    cs_extends s (SND (compile_abi_decode_dyn_elem_ptr opc elem src hi sz s)) /\
-    EVERY P (added_labels s (SND (compile_abi_decode_dyn_elem_ptr opc elem src hi sz s)))
+  !opc bop elem src hi sz s P.
+    cs_extends s (SND (compile_abi_decode_dyn_elem_ptr opc bop elem src hi sz s)) /\
+    EVERY P (added_labels s (SND (compile_abi_decode_dyn_elem_ptr opc bop elem src hi sz s)))
 Proof
   rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >>
   BETA_TAC >> Cases_on `hi = Lit 0w` >> simp[] >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >>
-       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+       simp[comp_return_labels, emit_op_labels, emit_void_labels,
+            compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels])
 QED
 
 Theorem compile_abi_encode_dyn_static_loop_labels:
@@ -1887,9 +1911,9 @@ Proof
 QED
 
 Theorem compile_return_value_decode_labels:
-  !buf minsz maxsz s P.
-    cs_extends s (SND (compile_return_value_decode buf minsz maxsz s)) /\
-    EVERY P (added_labels s (SND (compile_return_value_decode buf minsz maxsz s)))
+  !minsz maxsz s P.
+    cs_extends s (SND (compile_return_value_decode minsz maxsz s)) /\
+    EVERY P (added_labels s (SND (compile_return_value_decode minsz maxsz s)))
 Proof
   rpt gen_tac >> rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >>
   BETA_TAC >>
@@ -2115,15 +2139,15 @@ QED
 Finalise compile_abi_encode_labels
 
 Theorem compile_abi_decode_labels:
-  (!dst src lop hi info s.
-    cs_extends s (SND (compile_abi_decode_to_buf dst src lop hi info s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_to_buf dst src lop hi info s)))) /\
-  (!dst src lop hi elems ao vo s.
-    cs_extends s (SND (compile_abi_decode_complex_elems dst src lop hi elems ao vo s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_complex_elems dst src lop hi elems ao vo s)))) /\
-  (!dst src lop hi info asz msz ip cnt s.
-    cs_extends s (SND (compile_abi_decode_dyn_loop dst src lop hi info asz msz ip cnt s)) /\
-    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_dyn_loop dst src lop hi info asz msz ip cnt s))))
+  (!dst src lop bop hi info s.
+    cs_extends s (SND (compile_abi_decode_to_buf dst src lop bop hi info s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_to_buf dst src lop bop hi info s)))) /\
+  (!dst src lop bop hi elems ao vo s.
+    cs_extends s (SND (compile_abi_decode_complex_elems dst src lop bop hi elems ao vo s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_complex_elems dst src lop bop hi elems ao vo s)))) /\
+  (!dst src lop bop hi info asz msz ip cnt s.
+    cs_extends s (SND (compile_abi_decode_dyn_loop dst src lop bop hi info asz msz ip cnt s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_dyn_loop dst src lop bop hi info asz msz ip cnt s))))
 Proof
   ho_match_mp_tac abiEncoderTheory.compile_abi_decode_to_buf_ind >> rpt conj_tac
   >- suspend "word"
@@ -2136,7 +2160,10 @@ Proof
 QED
 Resume compile_abi_decode_labels[word]:
   rpt gen_tac >> once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
-  irule compile_abi_decode_static_labels >> simp[compile_abi_clamp_basetype_labels]
+  irule comp_bind_labels >> conj_tac
+  >- (rpt gen_tac >> BETA_TAC >>
+      irule compile_abi_decode_static_labels >> simp[compile_abi_clamp_basetype_labels]) >>
+  simp[compile_abi_dec_addr_labels]
 QED
 Resume compile_abi_decode_labels[nil]:
   rpt gen_tac >> once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
@@ -2149,7 +2176,8 @@ Resume compile_abi_decode_labels[cons]:
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >>
-       simp[compile_getelemptr_abi_labels, emit_op_labels]) >>
+       simp[compile_getelemptr_abi_labels, emit_op_labels,
+            compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels]) >>
   first_x_assum (qspec_then `dec_info_needs_offset info` mp_tac) >>
   simp[arithmeticTheory.ADD_COMM]
 QED
@@ -2158,11 +2186,19 @@ Resume compile_abi_decode_labels[bytes]:
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
        rpt gen_tac >> BETA_TAC >>
-       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels])
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels,
+            compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels])
   >- (IF_CASES_TAC >> simp[comp_return_labels] >>
       rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >>
-           simp[emit_op_labels, emit_void_labels])) >>
-  Cases_on `lop` >> simp[emit_void_labels]
+           simp[emit_op_labels, emit_void_labels,
+                compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels])) >>
+  rpt IF_CASES_TAC >> BasicProvers.EVERY_CASE_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[comp_return_labels, emit_op_labels, emit_void_labels,
+              compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels]) >>
+  simp[comp_return_labels, emit_op_labels, emit_void_labels,
+              compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels]
 QED
 Resume compile_abi_decode_labels[tuple]:
   rpt gen_tac >> strip_tac >>
@@ -2170,27 +2206,22 @@ Resume compile_abi_decode_labels[tuple]:
   simp[LET_THM] >> IF_CASES_TAC >> gvs[] >> rpt gen_tac >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac] >>
-       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, emit_void_labels]) >>
+       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, emit_void_labels,
+         compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels]) >>
   first_x_assum (irule o SRULE[]) >> simp[]
 QED
 Resume compile_abi_decode_labels[array]:
   rpt gen_tac >> strip_tac >>
   once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >> BETA_TAC >>
   rpt (FIRST [irule comp_bind_labels >> conj_tac,
-              irule comp_ignore_bind_labels >> conj_tac] >>
+              irule comp_ignore_bind_labels >> conj_tac,
+              IF_CASES_TAC] >>
        rpt gen_tac >> BETA_TAC >>
-       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels])
-  >- (IF_CASES_TAC >> simp[comp_return_labels] >>
-      rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >>
-           simp[emit_op_labels, emit_void_labels])) >>
-  IF_CASES_TAC >> gvs[]
-  >- (rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> simp[emit_op_labels]) >>
-      Cases_on `lop` >> simp[emit_void_labels]) >>
-  rpt (FIRST [irule comp_bind_labels >> conj_tac,
-              irule comp_ignore_bind_labels >> conj_tac] >>
-       rpt gen_tac >> BETA_TAC >>
-       simp[LET_THM, compile_alloc_buffer_labels, emit_void_labels]) >>
-  first_x_assum (irule o SRULE[]) >> simp[]
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels,
+            compile_alloc_buffer_labels, compile_abi_dec_addr_labels,
+            compile_abi_decode_range_check_labels])
+  >>~- ([`MCOPY`], Cases_on `lop` >> simp[emit_void_labels]) >>
+  first_x_assum (irule o SRULE[]) >> fs[]
 QED
 Resume compile_abi_decode_labels[loop]:
   rpt gen_tac >> strip_tac >>
@@ -2204,7 +2235,8 @@ Resume compile_abi_decode_labels[loop]:
               irule comp_bind_labels >> conj_tac,
               irule comp_ignore_bind_labels >> conj_tac, disch_tac] >>
        rpt gen_tac >> BETA_TAC >>
-       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels, emit_inst_labels]) >>
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels, emit_inst_labels,
+              compile_abi_dec_addr_labels, compile_abi_decode_range_check_labels]) >>
   IF_CASES_TAC >> simp[compile_abi_decode_dyn_elem_ptr_labels, comp_return_labels]
 QED
 Finalise compile_abi_decode_labels

@@ -43,7 +43,7 @@ Proof
 QED
 
 (* A field selection reads no gas observation. *)
-Theorem select_attr_gas_obs[local]:
+Theorem select_attr_gas_obs:
   !cx ty tv fld ee tail.
     select_result cx ty tv (AttrSubscript fld) (ee with gas_obs := tail) =
     (FST (select_result cx ty tv (AttrSubscript fld) ee),
@@ -62,19 +62,19 @@ Proof
       >- (simp[select_result_def, extend_place_def, place_type_value_def,
                read_place_def, get_scopes_def, bind_def, ignore_bind_def,
                lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-          rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+          rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def])) >>
       simp[select_result_def, extend_place_def, place_type_value_def,
            read_place_def, get_immutables_def, get_address_immutables_def,
            bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            return_def, raise_def] >>
       rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[bind_def, return_def, raise_def])) >>
+           simp[bind_def, return_def, raise_def])) >>
   simp[select_result_def, extend_place_def, raise_def]
 QED
 
 (* The source side of the field read: the selection from the base's
    result succeeds, under every gas tail, with the field's value. *)
-Theorem attr_select_field[local]:
+Theorem attr_select_field:
   expr_body_pre cenv cx env (Attribute ann obj fld) es /\
   expr_type obj = StructT sid /\
   attribute_type (get_tenv cx) (StructT sid) fld = SOME ann /\
