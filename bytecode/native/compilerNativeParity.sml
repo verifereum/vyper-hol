@@ -65,12 +65,10 @@ structure compilerNativeParity = struct
   val pending = ["builtin-forms/oracle/uint2str_local.hex"]
 
   (* Fixtures that must compile but differ from the pinned oracle, so that a
-     list entry that starts to match fails and gets removed.
-     decoder_divergent: bounded memory decoding checks relative positions and
-     head words before forming pointers, which the pinned Python does not (see
-     ../pending-bounded-decode-guards.md).
-     stale_oracle: the pinned oracle lacks upstream fixes the HOL compiler
-     already follows (same file). *)
+     list entry that starts to match fails and gets removed: bounded memory
+     decoding checks relative positions and head words before forming
+     pointers, which the pinned Python does not (see
+     ../pending-bounded-decode-guards.md). *)
   val decoder_divergent = [
       "python-o1-no-asm-opt/abi_dynamic.hex",
       "python-o1-no-asm-opt/abi_static.hex",
@@ -102,13 +100,6 @@ structure compilerNativeParity = struct
       "memory-stores/oracle/t03_tuple_assign_abi_decode.hex",
       "memory-stores/oracle/t04_tuple_assign_extcall.hex",
       "memory-stores/oracle/t11_tuple_onew_decode_mem.hex"]
-  val stale_oracle = [
-      "conversions/oracle/bys16_to_dec.hex",
-      "conversions/oracle/bys32_to_i8.hex",
-      "internal-frames/oracle/p41_int_local_and_call.hex",
-      "memory-stores/oracle/t01_tuple_assign_intcall.hex",
-      "memory-stores/oracle/t06_tuple_assign_mixed_targets.hex"]
-  val expected_diff = decoder_divergent @ stale_oracle
 
   fun hex_files root dir = let
     val d = OS.FileSys.openDir (OS.Path.concat (root, dir))
@@ -130,9 +121,9 @@ structure compilerNativeParity = struct
            val d_diff = compare "deploy" d (hex_bytes deploy)
            val r_diff = compare "runtime" r (hex_bytes runtime)
          in
-           if List.exists (fn k => k = name) expected_diff
+           if List.exists (fn k => k = name) decoder_divergent
            then (case (d_diff, r_diff) of
-                   (NONE, NONE) => SOME "matches the oracle: remove it from the expected-difference lists"
+                   (NONE, NONE) => SOME "matches the oracle: remove it from decoder_divergent"
                  | _ => NONE)
            else (case d_diff of NONE => r_diff | e => e)
          end)
