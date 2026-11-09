@@ -564,3 +564,133 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists `t` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+
+val CcompleteGas = ``\ty tv.
+ !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
+ compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ abi_decoder_coherent ce env sf ty tv /\
+ abi_decoder_metadata ce env ty tv root_di av v /\
+ eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
+ sb + LENGTH (enc (vyper_to_abi_type env ty) av) < dimword (:256) /\
+ mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av)) initial.vs_data_section = enc (vyper_to_abi_type env ty) av /\
+ (hi = Lit 0w \/ ?h. eval_operand hi initial = SOME (n2w h) /\ sb + LENGTH (enc (vyper_to_abi_type env ty) av) <= h /\ h < dimword (:256)) /\
+ (!x. src = Var x \/ dst = Var x \/ hi = Var x ==> not_fresh_at st x) /\
+ st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+ fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+ (st.cs_blocks = st'.cs_blocks \/ !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==> phi_prefix_length bb.bb_instructions = 0) /\
+ alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\ k + unit_alloca_budget ctx < dimword (:256) /\
+ D <= d /\ d + type_memory_bytes ce ty <= D+N /\ D+N <= initial.vs_alloca_next /\
+ frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
+ ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+ ?actual. gas_path ctx func initial 0 (OK actual) /\ val_in_memory tv v d actual.vs_memory /\
+ abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st st')) [(d,type_memory_bytes ce ty)] initial actual /\
+ alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
+ ctor_actual_scratch func ids D N actual /\ D+N <= actual.vs_alloca_next /\
+ actual.vs_data_section = initial.vs_data_section /\ actual.vs_call_ctx = initial.vs_call_ctx /\
+ (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==> lookup_var x actual = SOME w) /\
+ ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\ actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
+ abi_decode_sim ctx func initial actual /\ fresh_vars_wrt limit_st actual /\
+ actual.vs_labels = initial.vs_labels /\ actual.vs_gas_readings = initial.vs_gas_readings /\ actual.vs_code = initial.vs_code /\
+ actual.vs_outcomes = initial.vs_outcomes /\ actual.vs_tx_ctx = initial.vs_tx_ctx /\
+ actual.vs_block_ctx = initial.vs_block_ctx``;
+
+Theorem deploy_ctor_array_body_complete_gas_at_index:
+  (^CcompleteGas) ty tv /\
+  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+    (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD hi
+    (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
+  fn_has_code st end_st func /\ fn_inst_ids_distinct func /\
+  (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
+  (^Ok) k ctx func site ids D N d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+    tv vs slot_id slot initial j j s /\ j < LENGTH vs /\
+  abi_decoder_ranges DLOAD hi src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  eval_operand ip initial = SOME (n2w slot) /\
+  abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
+  abi_decoder_operand_live next hi /\ abi_decoder_operand_live next ip /\
+  next <= st.cs_next_var /\ end_st.cs_next_var <= limit_st.cs_next_var /\
+  k + unit_alloca_budget ctx < dimword (:256) /\
+  D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
+  frag_ids st end_st SUBSET ids /\ slot_id NOTIN frag_ids middle end_st /\
+  venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. gas_path ctx func s 0 (OK t) /\
+    (^Ok) k ctx func site ids D N d
+      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+      tv vs slot_id slot initial (SUC j) j t /\
+    val_in_memory tv (EL j vs) (d+32+j*type_memory_bytes ce ty) t.vs_memory /\
+    eval_operand (FST ops) t = SOME (n2w j) /\ eval_operand ip t = SOME (n2w slot) /\
+    ~t.vs_halted /\ t.vs_current_bb = end_st.cs_current_bb /\
+    t.vs_inst_idx = LENGTH end_st.cs_current_insts /\ abi_decode_sim ctx func s t /\
+    abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st end_st))
+      [(d+32+j*type_memory_bytes ce ty,type_memory_bytes ce ty)] s t /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx
+Proof
+  disch_then (CONJUNCTS_THEN2 (mk_asm "child") (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  `abi_decoder_ranges DLOAD hi src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s` by
+    (drule_all deploy_ctor_array_observation_ranges >> simp[]) >>
+  drule_all deploy_ctor_array_observation_setup_inputs >> strip_tac >>
+  `abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var dst /\
+   abi_decoder_operand_live st.cs_next_var hi /\
+   abi_decoder_operand_live st.cs_next_var ip` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `fresh_vars_wrt limit_st s` by (BETA_TAC >> fs[]) >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_array_body_code >> strip_tac >>
+  `middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all deploy_ctor_array_setup_complete_gas_at_index >>
+  disch_then (qspec_then `ctx` (qx_choose_then `prepared` (MAP_EVERY assume_tac o CONJUNCTS))) >>
+  `(^Ok) k ctx func site ids D N d
+    (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
+    tv vs slot_id slot initial j j prepared` by
+    (drule_all deploy_ctor_array_observation_address >> simp[]) >>
+  `!w. eval_operand hi initial = SOME w ==> eval_operand hi prepared = SOME w` by
+    (rpt strip_tac >>
+     qpat_assum `_ k ctx func site ids D N d _ next limit_st tv vs slot_id slot initial j j prepared`
+       (mp_then Any mp_tac deploy_ctor_array_observation_operand) >>
+     disch_then irule >> simp[]) >>
+  `abi_decoder_operand_live middle.cs_next_var hi /\
+   abi_decoder_operand_live middle.cs_next_var ip` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `st.cs_next_id <= middle.cs_next_id` by
+    (drule deploy_ctor_array_setup_ids_complete >> simp[]) >>
+  `frag_ids middle end_st SUBSET frag_ids st end_st` by
+    (simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
+  `frag_ids middle end_st SUBSET ids` by metis_tac[SUBSET_TRANS] >>
+  drule_all deploy_ctor_array_prepared_child_inputs >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  asm "child" (drule_all o BETA_RULE) >>
+  disch_then (qx_choose_then `t` (MAP_EVERY assume_tac o CONJUNCTS)) >>
+  asm_x "child" kall_tac >>
+  `next <= middle.cs_next_var` by metis_tac[LESS_EQ_TRANS] >>
+  `venomMemDefs$regions_disjoint (slot,32)
+    (d+32+j*type_memory_bytes ce ty,type_memory_bytes ce ty)` by
+    (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
+     qpat_x_assum `_ + type_memory_bytes ce ty <= d+type_memory_bytes ce (ArrayT ty (Dynamic maxn))` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `eval_operand ip prepared = SOME (n2w slot)` by
+    (qpat_assum `_ k ctx func site ids D N d _ next limit_st tv vs slot_id slot initial j j prepared`
+       (mp_then Any mp_tac deploy_ctor_array_observation_operand) >>
+     disch_then irule >> simp[]) >>
+  drule_all deploy_ctor_array_post_child >> strip_tac >>
+  qexists `t` >> conj_tac
+  >- (qpat_x_assum `gas_path _ _ s _ _` mp_tac >>
+      qpat_x_assum `gas_path _ _ prepared _ _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[gas_path_then, ADD_0]) >>
+  asm_simp_tac bool_ss []
+QED
