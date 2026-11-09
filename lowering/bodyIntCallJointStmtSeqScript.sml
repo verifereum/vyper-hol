@@ -60,7 +60,7 @@ Proof
   `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
     (drule stmt_env_reserved >>
      simp[cj 1 compile_stmt_cs_mono] >>
-     fs[intcall_joint_res_def] >> metis_tac[]) >>
+     fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   `cs_extends sm sb /\ sm.cs_next_var <= sb.cs_next_var` by
     (mp_tac (Q.SPECL [`c`, `lctx`,
        `if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty`, `ss`]

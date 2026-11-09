@@ -13,7 +13,7 @@ Theorem intcall_joint_res_gas_obs:
   intcall_joint_res fp ce env (es with gas_obs := gs) sa s <=>
   intcall_joint_res fp ce env es sa s
 Proof
-  simp[intcall_joint_res_def, stmt_state_rel_gas_obs]
+  simp[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_gas_obs]
 QED
 
 Theorem intcall_stmts_producer_loop_jump:

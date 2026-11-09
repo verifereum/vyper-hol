@@ -1,4 +1,4 @@
-(* The internal-call callee body's joint induction: the held case of a
+(* The internal-call callee body's joint induction: the (vacuous) case of a
    subscript of a widened internal-call result.
  *
  * TOP-LEVEL:
@@ -6,16 +6,12 @@
  *)
 Theory bodyIntCallJointWidened
 Ancestors
-  bodyIntCallJointContract
+  bodyIntCallJointContract bodySimExprCases
 
-(* Held, like bodySimSubscriptWidenedTheory.body_subscript_widened_call_base
-   (the same case for the global body induction): a subscript whose base is
-   an internal call that the call's type widens (post_value_type differs from
-   the source type only for such a call, post_value_type_not_int_call).
-   compile_subscript reads the base at offsets taken from the base's source
-   type, so for a tuple base it reads the wrong field until the subscript
-   readers use the lowered layout.  Retired together with
-   body_subscript_widened_call_base. *)
+(* Vacuous: a subscript's internal-call base is typed at its callee's exact
+   return type (well_typed_expr's subscript_base_type_exact), so
+   post_value_type agrees with the source type there
+   (expr_body_pre_subscript_base_type). *)
 Theorem intcall_subscript_widened_producer:
   !fp a e1 e2 t fid cargs drv.
     e1 = Call t (IntCall fid) cargs drv /\
@@ -31,7 +27,7 @@ Theorem intcall_subscript_widened_producer:
       compile_expr ce ty (Subscript a e1 e2) sa = (vv,sb) /\
       fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
       gas_admissible (eval_expr fp.jc_cx (Subscript a e1 e2)) expr_vv_res_ok es /\
-      intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+      intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
@@ -58,5 +54,5 @@ Theorem intcall_subscript_widened_producer:
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt strip_tac >> drule expr_body_pre_subscript_base_type >> simp[]
 QED
