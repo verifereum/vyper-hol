@@ -2075,13 +2075,13 @@ Theorem bound_labels_assign_value[local]:
     (SND (compile_assign_value ce dst loc v prim src dt st sz s))))
 Proof
   strip_tac >> Cases_on `loc`
-  >~ [`compile_assign_value _ _ LocMemory _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocMemory _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac
-  >~ [`compile_assign_value _ _ LocStorage _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocStorage _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac
-  >~ [`compile_assign_value _ _ LocTransient _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocTransient _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac
-  >~ [`compile_assign_value _ _ LocCode _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocCode _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac >>
   bound_labels_assign_case_tac
 QED
