@@ -384,7 +384,7 @@ Proof
   disch_then (qspecl_then [`ncount`,`j`] strip_assume_tac) >>
   gvs[abi_decode_loop_ready_def, abi_decoder_ranges_def] >>
   asm_simp_tac (srw_ss()) [] >>
-  fs[jump_to_def, abi_decode_header_state_def, update_var_def, mload_def]
+  fs[jump_to_def, abi_decode_header_state_def, update_var_def, mload_def, eval_operand_def]
 QED
 
 Theorem entry_bytes_element_after_header[local]:
@@ -692,7 +692,7 @@ Proof
   `t.vs_call_ctx = s.vs_call_ctx` by
     fs[entry_loop_fields_def] >>
   asm_rewrite_tac[] >>
-  fs[abi_decoder_ranges_def, abi_decode_source_def] >>
+  fs[abi_decoder_ranges_def, abi_decode_source_def, eval_operand_def] >>
   metis_tac[]
 QED
 
@@ -1076,7 +1076,7 @@ Proof
   qpat_x_assum `entry_array_init_resources _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
   qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def, arithmeticTheory.ADD]) >>
   `d < dimword (:256)` by decide_tac >>
   SUBGOAL_THEN ``d+sz <= p \/ p+32 <= d`` assume_tac >- decide_tac >>
   `abi_decode_load CALLDATALOAD (n2w sb : 256 word) initial = n2w (LENGTH avs)` by
@@ -1090,7 +1090,7 @@ Proof
     (assume_tac o PURE_REWRITE_RULE [abi_decode_source_def]) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   pure_rewrite_tac[entry_loop_fields_def, abi_decoder_ranges_def,
-     abi_decode_source_def] >>
+     abi_decode_source_def, eval_operand_def, arithmeticTheory.ADD] >>
   asm_rewrite_tac[] >> metis_tac[]
 QED
 
@@ -1235,6 +1235,10 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_loop_phase_cfg >> strip_tac >>
+  qpat_x_assum `abi_decode_position_loop_cfg _ _ _ _ _ _ _ _ _ _`
+    (assume_tac o SIMP_RULE bool_ss
+      [abiDecoderExecutionTheory.abi_decode_position_loop_cfg_def,
+       abiDecoderExecutionTheory.abi_decode_position_header_zero]) >>
   drule_all (SIMP_RULE bool_ss [abiDecoderExecutionTheory.abi_decode_position_header_zero,
       abiDecoderExecutionTheory.abi_decode_position_header_delta_def, arithmeticTheory.ADD_0]
       (Q.INST [`base_op` |-> `Lit 0w`] abi_decoder_loop_phase_lookups)) >> strip_tac >>
@@ -1247,7 +1251,7 @@ Proof
      (FST labels) (SND (SND labels)) last = ((),final)` by metis_tac[] >>
   drule abi_decoder_loop_suffix_facts >> strip_tac >>
   drule_all abi_decoder_array_body_code >> strip_tac >>
-  gvs[] >> simp[SF SFY_ss]
+  gvs[] >> simp[SF SFY_ss, abiDecoderExecutionTheory.abi_decode_loop_cfg_def]
 QED
 
 Theorem entry_bytes_array_concrete_config:
@@ -1437,12 +1441,12 @@ Proof
   `FLOOKUP t.vs_allocas oid = SOME (d,capacity)` by metis_tac[] >>
   `eval_operand src t = SOME (n2w sb)` by
     (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
-     pure_rewrite_tac[abi_decoder_ranges_def] >> metis_tac[]) >>
+     pure_rewrite_tac[abi_decoder_ranges_def, arithmeticTheory.ADD] >> metis_tac[]) >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) t = n2w (LENGTH xs)` by
     (asm_rewrite_tac[] >> irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
      qexists_tac `vyper_to_abi_type env ty` >> asm_rewrite_tac[] >>
      qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
-     pure_rewrite_tac[abi_decoder_ranges_def] >> metis_tac[]) >>
+     pure_rewrite_tac[abi_decoder_ranges_def, arithmeticTheory.ADD] >> metis_tac[]) >>
   `w2n (n2w p:bytes32) = p` by simp[] >>
   `entry_bytes_array_state cfg t 0 (jump_to (FST labels) t)` by
     (irule entry_bytes_array_initialized_state >>
