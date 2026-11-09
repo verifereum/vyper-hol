@@ -4,7 +4,7 @@ Ancestors
   exprSimHashBoundary
   bodyMemAssignTopCopyFacts stmtSimAssignStorageCopy stmtSimStoreCopy
   stmtSimDeclMem stmtSimAssignMem stmtSimAssignStorage stmtSimAssign exprLoweringProps
-  stmtLowering exprLowering emitHelper emitHelperProps context compileEnv
+  stmtLowering exprLowering emitHelper emitHelperProps context compileEnv loweringStateRelDefs
   vyperStorage vyperStorageBackend vyperValue vyperTyping
   accountsRelProps exprSimHash exprSimProps stmtSimProps loweringPosts storageCopyLive
   words arithmetic

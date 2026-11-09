@@ -42,7 +42,7 @@ Proof
        exprLoweringPropsTheory.stmt_state_rel_jump_to,
        loweringPostsTheory.vv_holds_def, loweringPostsTheory.vv_at_def,
        loweringPostsTheory.expr_val_rel_def, loweringPostsTheory.expr_val_at_def,
-       venomStateTheory.lookup_var_def, compileEnvTheory.local_region_def,
+       venomStateTheory.lookup_var_def, loweringStateRelDefsTheory.local_region_def,
        loweringPostsTheory.storage_holds_def, loweringPostsTheory.immutable_holds_def,
        venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
        venomStateTheory.jump_to_def, venomStateTheory.eval_operand_def,
@@ -186,7 +186,7 @@ Proof
   `!n. cl.cs_next_var <= n ==>
        needleop <> Var (STRING #"%" (toString n)) /\
        lenop <> Var (STRING #"%" (toString n))` by
-    (rpt strip_tac >> gvs[compileEnvTheory.not_fresh_at_def]) >>
+    (rpt strip_tac >> gvs[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp[exprLoweringPropsTheory.emitted_insts_def] >>
   once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
@@ -195,9 +195,9 @@ Proof
        exec_read1_def, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   irule rest_word_search_rep_update >>
-  simp[compileEnvTheory.not_fresh_at_def] >>
+  simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   irule rest_word_search_rep_update >>
-  simp[compileEnvTheory.not_fresh_at_def]
+  simp[loweringStateRelDefsTheory.not_fresh_at_def]
 QED
 
 (* Boundary check: freshness and the tested register come from the SAME
@@ -286,7 +286,7 @@ Proof
      Cases_on `bound_opt` >> simp[]) >>
   `!z. not_fresh_at cs z ==> not_fresh_at cl z` by metis_tac[not_fresh_at_mono] >>
   `~not_fresh_at cs h.rw_idx /\ ~not_fresh_at cs h.rw_result` by
-    simp[compileEnvTheory.not_fresh_at_def] >>
+    simp[loweringStateRelDefsTheory.not_fresh_at_def] >>
   qpat_x_assum `h.rw_idx = _` kall_tac >>
   qpat_x_assum `h.rw_result = _` kall_tac >>
   qpat_x_assum `h.rw_entry = _` kall_tac >>

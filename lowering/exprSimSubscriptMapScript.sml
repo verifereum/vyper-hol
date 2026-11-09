@@ -16,9 +16,10 @@ Ancestors
   vyperTypeStoragePreservation exprSimMapKey
   vyperStorageLayoutSafety vyperStorageBackend accountsRelProps
   vyperTypeValues vyperLookupStorage
-  exprSimTopLevelProps compileEnv finite_map
+  exprSimTopLevelProps compileEnv loweringStateRelDefs finite_map
   fragGasPath fragGasMode vyperInterpreter
   vyperTypeEnv vyperStoragePlaceProvenance exprLoweringProps
+  exprSimSubscriptArraySource
   gasOutcome loweringPosts context venomState
 
 Theorem mapping_leaf_storage_valid:
@@ -99,15 +100,6 @@ QED
 
 (* Counted source sequencing keeps the observation stream available to both
    operands; in particular the index is forced only after the base succeeds. *)
-Theorem eval_subscript_bind:
-  eval_expr cx (Subscript ann obj idx) =
-    bind (eval_expr cx obj) (\tv.
-      bind (bind (eval_expr cx idx) (read_result cx)) (\v.
-        select_result cx (expr_type obj) tv (ValueSubscript v)))
-Proof
-  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_assoc]
-QED
-
 Theorem subscript_result_base_admissible:
   (!ex. A (INR ex) ==> expr_map_res_ok (INR ex)) /\
   gas_admissible (eval_expr cx (Subscript ann obj idx)) A es ==>
@@ -118,7 +110,7 @@ Proof
   rename1 `INR ex` >>
   first_x_assum irule >>
   qpat_x_assum `!gs res ee. _ ==> _` (qspec_then `gs` mp_tac) >>
-  rewrite_tac[eval_subscript_bind] >>
+  rewrite_tac[eval_expr_subscript_bind] >>
   disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
   simp[bind_def]
 QED
@@ -139,7 +131,7 @@ Proof
   first_x_assum irule >>
   qpat_x_assum `!gs res ee. _ ==> _`
     (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
-  rewrite_tac[eval_subscript_bind] >>
+  rewrite_tac[eval_expr_subscript_bind] >>
   disch_then (qspecl_then [`INR ex`, `ee`] mp_tac) >>
   gvs[bind_def]
 QED
@@ -773,7 +765,7 @@ Proof
   rewrite_tac[expr_map_sim_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[eval_subscript_bind] >>
+  rewrite_tac[eval_expr_subscript_bind] >>
   disch_then (mp_then Any irule gas_outcome_bind_result_exec) >>
   reverse conj_tac
   >- (conj_tac

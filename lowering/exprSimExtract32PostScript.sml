@@ -7,7 +7,7 @@ Ancestors
   loweringPosts valueEncodingProofs valueEncoding exprLoweringProps builtinBytes
   stmtSimLogArgs freshWrites exprSafeOperand fragExec exprReasonOperand
   exprSimHypsDefs exprSimHyps vyperTypeSystem vyperTyping exprSimVVFrame
-  vyperValue vyperAST integer_word words compileEnv
+  vyperValue vyperAST integer_word words compileEnv loweringStateRelDefs
 Libs
   monadsyntax
 

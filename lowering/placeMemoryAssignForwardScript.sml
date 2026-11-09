@@ -3,7 +3,7 @@ Ancestors
   placeMemoryStaging placeMemoryLiveRegion placeMemoryTypedForward
   placeMemoryTypeInterfaces exprSimHyps valueEncodingTyping vyperTypeArgFits
   stmtLowering loweringPosts stmtSimDefs fragGasMode exprLoweringProps
-  context placeMemoryPrimitiveForward venomState compileEnv vyperTypeSystem
+  context placeMemoryPrimitiveForward venomState compileEnv loweringStateRelDefs vyperTypeSystem
   memoryLocalRhsProps placeMemoryTypedPrimitive placeMemoryChildForward
   placeMemoryCopyEffect exprSimHypsDefs exprSimAlloc
   loweringHalt abiTupleProps rich_list fragExec

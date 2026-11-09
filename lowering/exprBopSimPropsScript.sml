@@ -8,7 +8,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec varsExt  freshWrites exprBopLowering loweringSlice
   localPtrsProps vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
-  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
+  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding venomExecSemantics venomInst venomState
   vyperValue integer integer_word int_bitwise words intBits vyperTyping

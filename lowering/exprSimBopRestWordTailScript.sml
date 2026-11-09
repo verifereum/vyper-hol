@@ -100,7 +100,7 @@ Proof
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_array_immutable_load_mem_ok >> simp[]) >>
   `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
     eval_operand (THE cenv.ce_imm_alloca) p = SOME 0w)` by
-    (fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.immutable_base_zero_def] >>
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.immutable_base_zero_def] >>
      Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
   drule (Q.INST [`b` |-> `0w`] exprSimBopRestWordLoadPathTheory.rest_word_ptr_load_run) >> simp[] >>
   disch_then (qspecl_then [`p`,
@@ -357,7 +357,7 @@ Proof
     (drule_all exprSimBopRestWordLoadSafetyTheory.rest_word_array_immutable_header_mem_ok >> simp[]) >>
   `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
     eval_operand (THE cenv.ce_imm_alloca) p = SOME 0w)` by
-    (fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.immutable_base_zero_def] >>
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.immutable_base_zero_def] >>
      Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
   drule (Q.INST [`b` |-> `0w`] exprSimBopRestWordLoadPathTheory.rest_word_ptr_load_run) >> simp[] >>
   disch_then (qspecl_then [`p`, `w`] mp_tac) >>
@@ -489,7 +489,7 @@ Proof
     compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
   strip_tac >> gvs[] >>
   simp[exprLoweringPropsTheory.emitted_insts_def,
-    rich_listTheory.DROP_LENGTH_APPEND, compileEnvTheory.not_fresh_at_def]
+    rich_listTheory.DROP_LENGTH_APPEND, loweringStateRelDefsTheory.not_fresh_at_def]
 QED
 
 Theorem rest_word_loop_caller_prefix[local]:

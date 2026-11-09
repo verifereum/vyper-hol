@@ -1,7 +1,7 @@
 (* Compiler-side factoring and instruction layout for membership. *)
 Theory exprSimBopRestWordLayout
 Ancestors
-  exprLowering exprLoweringProps compileEnv emitHelper emitHelperProps venomInst
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst
   list rich_list pair fragExec freshWrites
 Libs
   monadsyntax

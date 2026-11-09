@@ -18,7 +18,7 @@ Ancestors
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
   arithmetic list ASCIInumbers numposrep logroot
-  exprSimHyps allocLimits vyperTypeSystem compileEnv
+  exprSimHyps allocLimits vyperTypeSystem compileEnv loweringStateRelDefs
   valueEncodingProps valueEncodingProofs venomExecSemantics byte words
   builtinStrings emitHelper fragExec exprSimLiteralBuffer immutableMemoryFrame
    exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc
@@ -96,7 +96,7 @@ Theorem mstore_string_header:
   val_in_memory ty (StringV str) p
     (mstore p (n2w (LENGTH str)) s).vs_memory
 Proof
-  strip_tac >> simp[valueEncodingTheory.val_in_memory_def,
+  strip_tac >> simp[valueEncodingDefsTheory.val_in_memory_def,
     mstore_mem_word_at_same, mstore_mem_bytes_at_disjoint]
 QED
 
@@ -524,7 +524,7 @@ Proof
     (irule literal_mstore_state_rel >>
      gvs[u2s_safe_def] >> metis_tac[]) >>
   gvs[u2s_safe_def, venomStateTheory.eval_operand_def, venomStateTheory.mstore_def,
-      venomStateTheory.lookup_var_def, compileEnvTheory.local_region_def] >>
+      venomStateTheory.lookup_var_def, loweringStateRelDefsTheory.local_region_def] >>
   metis_tac[]
 QED
 
@@ -554,7 +554,7 @@ Proof
     (irule u2s_frame_update >> gvs[u2s_safe_def]) >>
   gvs[u2s_safe_def, venomStateTheory.update_var_def,
       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-      compileEnvTheory.local_region_def, compileEnvTheory.not_local_ptr_def,
+      loweringStateRelDefsTheory.local_region_def, loweringStateRelDefsTheory.not_local_ptr_def,
       finite_mapTheory.FLOOKUP_UPDATE] >>
   metis_tac[u2s_var_fresh]
 QED
@@ -607,7 +607,7 @@ Theorem u2s_digits_initial:
   lookup_var (u2s_var a 1) s = SOME 0w ==>
   u2s_digits a b n X X [] s
 Proof
-  simp[u2s_digits_def, valueEncodingTheory.mem_bytes_at_def]
+  simp[u2s_digits_def, valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem u2s_step_assign:
@@ -680,7 +680,7 @@ Proof
   simp[u2s_safe_def, u2s_frame_jump,
        exprLoweringPropsTheory.stmt_state_rel_jump_to,
        venomStateTheory.jump_to_def, venomStateTheory.eval_operand_def,
-       venomStateTheory.lookup_var_def, compileEnvTheory.local_region_def] >>
+       venomStateTheory.lookup_var_def, loweringStateRelDefsTheory.local_region_def] >>
   metis_tac[]
 QED
 
@@ -1562,12 +1562,12 @@ Proof
   `!name off len. local_region cenv es.scopes t name off len ==>
      w2n w + sz <= off \/ off + len <= w2n w` by
     (rpt strip_tac >> first_x_assum drule >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   `u2s_safe ctx fn cenv cx es a buf.buf_operand (w2n w) sz inst t t` by
     (irule u2s_safe_initial >> gvs[venomInstTheory.mk_inst_def] >>
      metis_tac[ADD_COMM]) >>
   qexistsl_tac [`t`, `w`] >> simp[] >>
-  rpt strip_tac >> first_x_assum drule >> simp[compileEnvTheory.regions_disjoint_def] >>
+  rpt strip_tac >> first_x_assum drule >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   decide_tac
 QED
 
@@ -1650,7 +1650,7 @@ Proof
   strip_tac >> Cases_on `buf` >>
   gvs[u2s_safe_def, u2s_frame_index, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-       compileEnvTheory.local_region_def] >> metis_tac[]
+       loweringStateRelDefsTheory.local_region_def] >> metis_tac[]
 QED
 
 Theorem u2s_alloc_control:
@@ -2892,7 +2892,7 @@ Proof
   `LENGTH (num_to_dec_string X) <= 78` by
     (irule (cj 2 uint256_decimal_length) >> gvs[wordsTheory.dimword_def]) >>
   qspec_then `n` assume_tac le_word_size_mul >>
-  simp[valueEncodingTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
+  simp[valueEncodingDefsTheory.val_wf_def, valueEncodingTheory.type_memory_size_def,
        val_footprint_def] >> decide_tac
 QED
 

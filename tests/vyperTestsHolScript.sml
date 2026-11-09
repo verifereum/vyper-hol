@@ -2,10 +2,9 @@
 Theory vyperTestsHol
 Ancestors
   e2eSourceBoundaryCVTest
-  jsonConstEvalWitness
   livenessProofIntegrity
+  jsonConstEvalWitness
   vyperAccountCodehashTest
-  vyperAssignmentOrderAudit
   vyperBytesAddressConvertTest
   vyperBytesDecimalConvertTest
   vyperCallOutcomeTest
@@ -20,7 +19,6 @@ Ancestors
   vyperCustomErrorTest
   vyperDecimalConvertTest
   vyperEqualitySemanticsTest
-  vyperDecimalMulAudit
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest
@@ -53,3 +51,20 @@ Ancestors
   vyperUnreachableTest
   vyperUnsafeDivTest
   vyperASTSyntaxTest
+  abiDecodeTypingTest
+  createOracleResultTest
+  createSizeBoundaryTest
+  createSizeClassificationCounterexample
+  createSourceSizeBoundaryTest
+  ctorAbiDomainWitness
+  selfdestructReturnDataTest
+  vyperArgWriteTypingTest
+  vyperCreateTypingTest
+  vyperCtorStorageAliasTest
+  vyperExternalDefaultsTest
+  vyperExternalHeadersTest
+  vyperOracleInitialStateTest
+  vyperPlaceProbesTest
+  vyperPlaceSanityTest
+  vyperPopTypingTest
+  vyperRawSystemTypingTest

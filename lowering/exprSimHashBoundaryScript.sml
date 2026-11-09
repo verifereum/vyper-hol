@@ -5,8 +5,8 @@ Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert
   fragGasMode fragGasPath fragGasSeq fragExec
   exprSimDefs loweringPosts allocLimits
-  valueEncoding valueEncodingProofs venomMemDefs
-  exprLoweringProps compileEnv vyperState vyperValue
+  valueEncoding valueEncodingDefs valueEncodingProofs venomMemDefs
+  exprLoweringProps compileEnv loweringStateRelDefs vyperState vyperValue
   words list rich_list
 
 Theorem expr_val_rel_memory:

@@ -4,7 +4,7 @@ Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogAllocate stmtSimLogDataFrame stmtSimLogDataRun stmtSimLogArgs
   abiBuiltinAllocation abiDecoderReentry exprSimWordArgs 
-  exprLoweringProps compileEnv venomState venomMemDefs valueTypingMemoryProps
+  exprLoweringProps compileEnv loweringStateRelDefs venomState venomMemDefs valueTypingMemoryProps
   valueEncoding supportedTypes finite_map words list arithmetic emitHelperProps ASCIInumbers
 
 Theorem log_allocation_wb_frame[local]:

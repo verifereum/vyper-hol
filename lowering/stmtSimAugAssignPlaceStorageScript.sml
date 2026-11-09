@@ -16,7 +16,7 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtSimIf stmtLoweringMono stmtLowering compileEnv loweringStateRelDefs fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
@@ -1300,7 +1300,9 @@ Proof
   simp[venomStateTheory.update_var_def] >> strip_tac >>
   conj_tac >- (Cases_on `arg` >>
     fs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def] >>
-    metis_tac[]) >> simp[] >> metis_tac[]
+    qpat_x_assum `!x w'. _` (drule_then drule) >>
+    rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem aug_place_static_store_exit[local]:

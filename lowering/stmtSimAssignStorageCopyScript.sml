@@ -29,7 +29,7 @@ Ancestors
   stmtSimStoreCopy storageCopyLive accountsRelProps
   fragGasMode fragGasSeq fragGasPath venomExecProofs
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding stmtLoweringMono
+  context compileEnv loweringStateRelDefs valueEncoding stmtLoweringMono
   vyperContext vyperAST vyperInterpreter vyperState vyperStorage vyperStorageBackend vyperValue
   vyperTyping vyperStorageLayoutSafety vyperStorageFrame
   venomExecSemantics venomInst venomState

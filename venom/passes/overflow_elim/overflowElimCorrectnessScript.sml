@@ -9,6 +9,7 @@ Ancestors
   passSharedDefs passSimulationProps passSharedProps
   passSimulationDefs venomInst dfgDefs
   rangeAnalysisDefs dfAnalyzeWidenDefs stateEquiv
+  passTransform
 
 Libs
   BasicProvers

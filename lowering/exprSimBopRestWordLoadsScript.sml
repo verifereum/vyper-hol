@@ -2,8 +2,8 @@
 Theory exprSimBopRestWordLoads
 Ancestors
   exprSimBopRestWordLoadPath exprSimBopRestWordIndex exprSimAggregateEncoding valueEncodingProps vyperTyping
-  compileEnv loweringPosts exprSimUnwrap exprLoweringProps venomMemDefs
-  valueEncodingProofs valueEncoding vyperValueOperation vyperValue list alist
+  compileEnv loweringStateRelDefs loweringPosts exprSimUnwrap exprLoweringProps venomMemDefs
+  valueEncodingProofs valueEncoding valueEncodingDefs vyperValueOperation vyperValue list alist
 
 Theorem rest_word_array_memory_index:
   value_has_type (ArrayTV et bd) (ArrayV av) /\

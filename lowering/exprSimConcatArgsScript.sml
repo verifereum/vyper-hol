@@ -12,7 +12,7 @@ Ancestors
   exprSimWordArgs exprSimSource exprSimHypsDefs exprSimProps exprSimDefs
   exprBopSimProps exprOperandVar loweringPosts gasOutcome gasSummary gasSummaryCompose
   gasExemptCert fragGasMode fragGasPath freshWrites fragExec exprLowering
-  exprLoweringProps compileEnv valueEncoding valueEncodingProps valueEncodingProofs venomState
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs venomState
   vyperValue vyperTyping vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   vyperInterpreter vyperState venomMemProps venomExecSemantics words arithmetic list rich_list
 Libs
@@ -1027,8 +1027,11 @@ Resume concat_args_sim[head_exit]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
   >- (rewrite_tac[eval_exprs_cons_action] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> simp[] >>
-  pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+  (* Beta-reduce the exit assumption and rewrite only the goal: gvs[] over
+     this context was too slow for one step. *)
+  disj2_tac >>
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o BETA_RULE) >> simp[] >>
+  qpat_x_assum `expr_exit _ r` mp_tac >>
   Cases_on `y` >> Cases_on `r` >> simp[expr_exit_def] >>
   rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]
 QED

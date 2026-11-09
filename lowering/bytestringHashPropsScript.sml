@@ -1,7 +1,7 @@
 Theory bytestringHashProps
 Ancestors
-  exprLowering exprLoweringProps emitHelperProps compileEnv venomExecSemantics
-  venomState venomInst byte keccak valueEncoding venomMemProps
+  exprLowering exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs venomExecSemantics
+  venomState venomInst byte keccak valueEncoding valueEncodingDefs venomMemProps
   ASCIInumbers rich_list fragExec emitHelper words
 
 Theorem emit_op_SHA3_correct:

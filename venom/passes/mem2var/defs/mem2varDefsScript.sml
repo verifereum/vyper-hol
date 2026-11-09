@@ -19,15 +19,14 @@
  *   m2v_transform_function      — function-level transform
  *   m2v_stores_dominate_loads   — precondition: MSTOREs dominate MLOADs per alloca
  *   m2v_promotable_wf           — all promoted allocas satisfy domination
- *   m2v_equiv                   — equivalence relation (ignores memory)
  *
  * Upstream: vyperlang/vyper@8780b3134 (remove alloca_id)
  *)
 
 Theory mem2varDefs
 Ancestors
-  passSimulationDefs dfgDefs venomExecSemantics venomInst stateEquiv venomWf
-  pred_set finite_map mem2varFrame irSupply
+  passTransform dfgDefs venomExecSemantics venomInst venomWf
+  pred_set finite_map irSupply
 
 (* ===== Fresh Variable ===== *)
 
@@ -189,31 +188,6 @@ Definition m2v_transform_function_def:
       fn.fn_blocks
 End
 
-(* ===== Equivalence Relation ===== *)
-
-(*
- * m2v_equiv: State equivalence ignoring vs_memory.
- *
- * mem2var promotes MSTORE→ASSIGN, so memory genuinely differs after
- * transformation (alloca regions are not written in the transformed code).
- * This relation captures everything that IS preserved:
- *   - All variables (except fresh alloca promotion vars)
- *   - Residual m2v_frame (ignores memory, index and call-entry FMP)
- *   - Both block labels (usable as both R_ok and R_term in lift_result)
- *
- * The `vars` parameter excludes fresh variables introduced by promotion
- * (the alloca_N_M naming scheme). These variables exist only in the
- * transformed state.
- *
- * Allocation state and the other three FMP fields remain compared.
- * Clearing fields in the mask does not constrain their original values.
- *)
-Definition m2v_equiv_def:
-  m2v_equiv vars s1 s2 <=>
-    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    m2v_frame s1 = m2v_frame s2
-End
-
 (* Fresh variables introduced by the transform *)
 Definition m2v_fresh_vars_def:
   m2v_fresh_vars fn =
@@ -363,23 +337,6 @@ End
 Definition mem_byte_def:
   mem_byte (i : num) (s : venom_state) =
     if i < LENGTH s.vs_memory then EL i s.vs_memory else (0w : word8)
-End
-
-(* Inter-block invariant:
-   1. m2v_equiv: all non-fresh variables and non-memory fields agree
-   2. Memory agreement outside promoted alloca regions
-   3. Sync: each written promoted variable tracks the alloca memory cell *)
-Definition m2v_inv_def:
-  m2v_inv fn s1 s2 <=>
-    m2v_equiv (m2v_fresh_vars fn) s1 s2 /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    (!i. ~in_promoted_region fn s1 i ==>
-         mem_byte i s1 = mem_byte i s2) /\
-    (!ao pvar sz.
-       MEM (ao, pvar, sz) (m2v_promo_list fn) ==>
-       !addr. lookup_var ao s1 = SOME addr ==>
-         IS_SOME (lookup_var pvar s2) ==>
-         lookup_var pvar s2 = SOME (mload (w2n addr) s1))
 End
 
 (* Predicate: all promoted allocas have size exactly 32.

@@ -6,7 +6,7 @@ Ancestors
   fragGasMode
   builtinBytes builtinProps arithmeticProps emitHelperProps emitHelper
   exprLowering exprLoweringProps compileEnv fragExec venomExecSemantics venomInst venomState
-  vyperTypeSystem vyperValue vyperContext valueEncoding words integer_word list rich_list
+  vyperTypeSystem vyperValue vyperContext valueEncoding valueEncodingDefs words integer_word list rich_list
 
 Theorem extract32_clamp_address_run:
   !raw sa op sb s w.

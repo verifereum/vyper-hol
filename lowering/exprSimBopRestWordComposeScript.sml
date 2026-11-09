@@ -115,7 +115,7 @@ Proof
           qpat_x_assum `!n b sz'. local_region _ es.scopes s0 _ _ _ ==> _` irule >>
           qexists `n` >> irule local_region_frame >>
           conj_tac >- (qexists `func` >>
-            gvs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+            gvs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
           qexistsl [`sa`, `es1.scopes`, `t`] >> asm_rewrite_tac[])
       >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
           qexists `sa.cs_next_id` >> asm_rewrite_tac[]) >>

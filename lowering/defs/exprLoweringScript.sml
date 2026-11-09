@@ -928,10 +928,11 @@ End
 
 (* ===== Return Value Decode ===== *)
 (* Decode return value from external call buffer.
-   Check returndatasize >= min_return_size, then compute hi bound for ABI decode.
+   Check returndatasize >= min_return_size, then compute the payload bound
+   for ABI decode, measured from the buffer start.
    Mirrors Python: expr.py _lower_external_call decode path *)
 Definition compile_return_value_decode_def:
-  compile_return_value_decode buf_op min_return_size max_return_size =
+  compile_return_value_decode min_return_size max_return_size =
     do rds <- emit_op RETURNDATASIZE [];
        too_small <- emit_op LT [rds; Lit (n2w min_return_size)];
        ok <- emit_op ISZERO [too_small];
@@ -939,10 +940,7 @@ Definition compile_return_value_decode_def:
        (* Compute payload bound = min(returndatasize, max_return_size).
           select(cond, rds, max): cond=1 when rds<max → take rds *)
        is_smaller <- emit_op LT [rds; Lit (n2w max_return_size)];
-       payload_bound <- compile_select is_smaller rds
-                          (Lit (n2w max_return_size));
-       (* hi = buf + payload_bound (cap for ABI decode reads) *)
-       emit_op ADD [buf_op; payload_bound]
+       compile_select is_smaller rds (Lit (n2w max_return_size))
     od
 End
 
@@ -975,9 +973,9 @@ Definition compile_default_return_path_def:
        (* Decode block: full ABI decode from buf to result.
           Mirrors Python: abi_decode_to_buf(ctx, result_val.operand, src, hi=hi) *)
        new_block decode_lbl;
-       hi_op <- compile_return_value_decode buf_op min_return_size
-                                             max_return_size;
-       compile_abi_decode_to_buf result_op buf_op MLOAD
+       hi_op <- compile_return_value_decode min_return_size
+                                         max_return_size;
+       compile_abi_decode_to_buf result_op (Lit 0w) MLOAD buf_op
          hi_op ret_dec_info;
        emit_inst JMP [Label exit_lbl] [];
        (* Exit block *)
@@ -1118,9 +1116,9 @@ Definition compile_external_call_kwargs_def:
             do (* Simple decode path *)
                result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
                let result_op = result_op_alloc.buf_operand in
-               do hi_op <- compile_return_value_decode buf_op min_return_size
-                                                        return_abi_size;
-                  compile_abi_decode_to_buf result_op buf_op MLOAD
+               do hi_op <- compile_return_value_decode min_return_size
+                                                    return_abi_size;
+                  compile_abi_decode_to_buf result_op (Lit 0w) MLOAD buf_op
                     hi_op ret_dec_info;
                   return result_op
                od

@@ -3,8 +3,8 @@ Ancestors
   exprSimHashBoundary
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
-  stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv context
-  exprSimHash  exprSimWordArgs vyperEvent valueEncoding
+  stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv loweringStateRelDefs context
+  exprSimHash  exprSimWordArgs vyperEvent valueEncoding valueEncodingDefs
   emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState
   venomInst freshWrites words string finite_map list ASCIInumbers supportedTypes
   vyperTyping vyperValue exprSimLiteralBuffer byte exprSimOps
