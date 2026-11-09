@@ -1,5 +1,7 @@
 Theory concretizeLayoutDelegate
 Ancestors concretizeLayoutDelegateBoundary concretizeLayoutExtractResult
+  concretizeLayoutExternalCall concretizeLayoutExternalRequests
+  venomCallOracleDefs extCallOracle
   concretizeLayoutCleanRead concretizeLayoutSupplement concretizeLayoutReaderContext
   frameRelocationEnvironment frameRelocationAllocationSteps frameRelocationMemory
   venomExecSemantics venomState ptrDiscipline list venomMemProps
@@ -17,15 +19,14 @@ Ancestors concretizeLayoutDelegateBoundary concretizeLayoutExtractResult
 Theorem delegate_success_envelope:
   exec_delegatecall inst s (gas:bytes32) (addr:bytes32)
     (off:bytes32) (sz:bytes32) (ro:bytes32) (rs:bytes32) = OK post ==>
-  ?out w p. inst.inst_outputs = [out] /\ post = update_var out w p /\
-    extract_venom_result s 1w (w2n ro) (w2n rs)
-      (run (make_venom_delegatecall_state s (w2w addr) (w2n gas)
-        (read_memory (w2n off) (w2n sz) s)
-        (lookup_account (w2w addr) s.vs_accounts).code
-        s.vs_call_ctx.cc_static)) = SOME (w,p)
+  ?out w p. inst.inst_outputs = [out] /\
+    consume_call_outcome (venom_call_request s addr 0w off sz F with
+      cr_kind := DelegateMessageCall) (w2n ro) (w2n rs) s = (w,p) /\
+    post = update_var out w p
 Proof
-  simp[exec_delegatecall_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[] >> metis_tac[]
+  simp[exec_delegatecall_def, AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  strip_tac >> pairarg_tac >> gvs[AllCaseEqs(), Excl "consume_call_outcome_eq"] >>
+  metis_tac[]
 QED
 
 Theorem delegate_taint:
@@ -61,26 +62,44 @@ Theorem concretize_delegate_observation:
       post'.vs_vars = (update_var out w t).vs_vars)
 Proof
   strip_tac >> drule_all concretize_delegate_clean_snapshots >> strip_tac >>
-  `s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions` by
+  `s.vs_logs = t.vs_logs /\ s.vs_pending_deletions = t.vs_pending_deletions /\
+   LIST_REL (request_agree_except <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+     d_imm := K UNIV; d_ret := K {} |>) s.vs_requests t.vs_requests` by
     fs[concretize_local_obs_def, dead_result_rel_def] >>
-  `make_venom_delegatecall_state s (w2w addr) (w2n gas)
-     (read_memory (w2n off) (w2n sz) s)
-     (lookup_account (w2w addr) s.vs_accounts).code s.vs_call_ctx.cc_static =
-   make_venom_delegatecall_state t (w2w addr) (w2n gas)
-     (read_memory (w2n offT) (w2n sz) t)
-     (lookup_account (w2w addr) t.vs_accounts).code t.vs_call_ctx.cc_static` by
-    (gvs[relocation_env_def] >> irule concretize_delegate_input >> simp[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by fs[relocation_env_def] >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[concretize_supplement_def] >>
   drule delegate_success_envelope >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `extract_venom_result s _ _ _ result = _` >>
-  `?pT. extract_venom_result t 1w (w2n roT) (w2n rs) result = SOME (w,pT)` by
-    (irule concretize_extract_exists >> goal_assum (drule_at Any)) >>
-  drule_all concretize_extract_observables >> strip_tac >>
-  rev_drule concretize_extract_unchanged >> strip_tac >>
-  drule concretize_extract_unchanged >> strip_tac >>
-  qexists_tac `update_var out w pT` >> conj_tac
-  >- (simp[exec_delegatecall_def] >>
-      qpat_assum `make_venom_delegatecall_state _ _ _ _ _ _ = _`
-        (fn th => pure_once_rewrite_tac[GSYM th]) >> fs[Abbr `result`]) >>
+  qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+  `venom_call_request t addr 0w offT sz F with cr_kind := DelegateMessageCall = rq` by
+    simp[Abbr `rq`, venom_call_request_def] >>
+  `!M. request_agree_except M rq rq` by
+    simp[request_agree_except_def, accounts_agree_except_def,
+         transient_agree_except_def, storage_agree_except_def,
+         word_agree_except_def] >>
+  Cases_on `take_outcome rq s.vs_outcomes` >>
+  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
+  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >> rename1 `adopt_outcome rq oc _ = (ac,ats,alg)` >>
+  drule_all call_completion_fields >> strip_tac >>
+  `take_outcome rq t.vs_outcomes = (oc,rest) /\
+   adopt_outcome rq oc (t.vs_accounts,t.vs_transient,t.vs_logs) = (ac,ats,alg)` by
+    metis_tac[] >>
+  `LIST_REL (request_agree_except <| d_stor := K (K UNIV); d_trans := K (K UNIV);
+     d_imm := K UNIV; d_ret := K {} |>)
+     (record_request rq s.vs_requests) (record_request rq t.vs_requests) /\
+   LIST_REL (request_agree_except D)
+     (record_request rq s.vs_requests) (record_request rq t.vs_requests)` by
+    (conj_tac >> irule request_agree_record_request >>
+     fs[concretize_supplement_def]) >>
+  qexists_tac `update_var out w (t with <|
+    vs_outcomes := rest; vs_requests := record_request rq t.vs_requests;
+    vs_accounts := ac; vs_transient := ats; vs_logs := alg;
+    vs_pending_deletions := adopt_outcome_deletions rq oc t.vs_pending_deletions;
+    vs_returndata := oc.co_returnData;
+    vs_memory := (write_memory_with_expansion (w2n roT)
+      (TAKE (w2n rs) oc.co_returnData) t).vs_memory |>)` >>
+  conj_tac >- simp[exec_delegatecall_def] >>
+  qpat_x_assum `consume_call_outcome _ _ _ _ = _` kall_tac >>
   rpt conj_tac
   >- gvs[concretize_local_obs_def, dead_result_rel_def, update_var_def,
          accounts_agree_except_def, transient_agree_except_def,
@@ -91,7 +110,7 @@ Proof
          storage_agree_except_def, word_agree_except_def]
   >- gvs[relocation_env_def, update_var_def]
   >- gvs[relocation_reader_context_def, update_var_def] >>
-  qexistsl_tac [`out`,`w`] >> simp[update_var_def]
+  qexistsl_tac [`out`,`w`] >> gvs[update_var_def]
 QED
 
 Theorem delegate_execution_fields:
@@ -104,9 +123,13 @@ Theorem delegate_execution_fields:
     post.vs_allocas = s.vs_allocas /\ post.vs_fmp = s.vs_fmp
 Proof
   strip_tac >> drule delegate_success_envelope >> strip_tac >>
-  drule concretize_extract_unchanged >> strip_tac >>
-  drule extract_venom_result_memory >> strip_tac >>
-  qexistsl_tac [`out`,`w`] >> gvs[update_var_def]
+  qmatch_asmsub_abbrev_tac `consume_call_outcome rq _ _ s = _` >>
+  Cases_on `take_outcome rq s.vs_outcomes` >>
+  rename1 `take_outcome rq s.vs_outcomes = (oc,rest)` >>
+  Cases_on `adopt_outcome rq oc (s.vs_accounts,s.vs_transient,s.vs_logs)` >>
+  PairCases_on `r` >> drule_all call_completion_fields >> strip_tac >>
+  qexistsl_tac [`out`,`w`] >>
+  gvs[update_var_def, Excl "consume_call_outcome_eq"]
 QED
 
 Theorem concretize_delegate_local_execution:
