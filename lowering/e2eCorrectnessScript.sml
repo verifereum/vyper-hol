@@ -820,7 +820,7 @@ Proof
     metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok_full >> strip_tac >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras_full >> strip_tac >>
-  drule lower_vyper_runtime_unit_defs_reach_uses_full >> strip_tac >>
+  drule lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>

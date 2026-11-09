@@ -41,7 +41,9 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok_full:
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
     code_layout_valid vs /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx))
     ==> mem_inv dload_offset_ok unit.cu_context vs
 Proof
   cheat

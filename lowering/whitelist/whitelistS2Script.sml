@@ -4,9 +4,7 @@
    lower_vyper_runtime_unit_source_unit_ok_full holds only once the O1 unit
    shape admits what the lowering emits for raw_call, create and calldata
    raw_call (DELEGATECALL, CREATE/CREATE2, DALLOCA; vyper-hol #963): until
-   that widening it is false for those programs and stays admitted.
-   lower_vyper_runtime_unit_defs_reach_uses_full is
-   lower_vyper_runtime_unit_defs_reach_uses, which needs no whitelist. *)
+   that widening it is false for those programs and stays admitted. *)
 Theory whitelistS2
 Ancestors
   vyperLoweringCorrect whitelistS2Shape whitelistS2RawBaseShape whitelistS2CreateShape
@@ -27,12 +25,4 @@ Theorem lower_vyper_runtime_unit_o1_shape_extras_full:
     ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
 Proof
   cheat
-QED
-
-Theorem lower_vyper_runtime_unit_defs_reach_uses_full:
-  !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit
-    ==> unit_defs_reach_uses unit
-Proof
-  ACCEPT_TAC lower_vyper_runtime_unit_defs_reach_uses
 QED
