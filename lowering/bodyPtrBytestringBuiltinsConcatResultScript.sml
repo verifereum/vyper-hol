@@ -5,7 +5,9 @@ Ancestors
   exprSimConcatResult exprSimHyps exprSimProps exprLowering
   compileEnv loweringPosts bodyPtrDefs words list arithmetic vfmConstants
   vyperTypeConversions valueEncoding bodyPtrBytestringBuiltinsCalldataOutcome
-  exprSimHash
+  exprSimHash exprSimSource exprSimHypsDefs exprSimDefs vyperTyping
+  vyperTypeSystem allocLimits vyperTypeInvariants gasSummaryComposePtr gasExemptCert
+  vyperState
 
 Theorem concat_buffer_capacity:
   ann = BaseT (BytesT (Dynamic n)) \/ ann = BaseT (StringT n) ==>
@@ -90,4 +92,74 @@ Proof
     assume_tac (Q.SPEC `MAP expr_type args` concat_alloc_size_bounds) >>
     gvs[] >> decide_tac) >>
   gvs[])
+QED
+
+Theorem concat_body_pre_facts:
+  expr_body_pre ce cx env (Builtin ann (Concat n) args) es ==>
+  expr_sim_inv ce cx env es /\
+  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st) /\
+  2 <= LENGTH args /\
+  SUM (MAP bytelike_type_bound (MAP expr_type args)) <= n /\
+  ((ann = BaseT (BytesT (Dynamic n)) /\
+    EVERY (\t. ?bd. t = BaseT (BytesT bd)) (MAP expr_type args)) \/
+   (ann = BaseT (StringT n) /\
+    EVERY (\t. ?m. t = BaseT (StringT m)) (MAP expr_type args))) /\
+  (?tv. evaluate_type (get_tenv cx) ann = SOME tv) /\
+  EVERY (\e. is_bytestring_type (expr_type e) \/
+    ?m. expr_type e = BaseT (BytesT (Fixed m))) args /\
+  concat_alloc_size (MAP expr_type args) < dimword (:256)
+Proof
+  strip_tac >>
+  `!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
+    expr_body_pre ce cx env e st` by
+    (rpt strip_tac >> irule expr_body_pre_builtin_arg >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`ann`,`args`,`Concat n`,`es`] >> simp[]) >>
+  `expr_sim_inv ce cx env es /\ well_typed_expr env (Builtin ann (Concat n) args) /\
+    alloc_limits_expr ce (Builtin ann (Concat n) args)` by fs[expr_body_pre_def] >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `2 <= LENGTH args /\ SUM (MAP bytelike_type_bound (MAP expr_type args)) <= n /\
+    well_formed_type env.type_defs ann` by
+    (qpat_x_assum `well_typed_expr _ _` mp_tac >>
+     simp[Once well_typed_expr_def, well_typed_builtin_app_def] >>
+     rpt strip_tac >> fs[]) >>
+  Q.SUBGOAL_THEN
+    `((ann = BaseT (BytesT (Dynamic n)) /\
+       EVERY (\t. ?bd. t = BaseT (BytesT bd)) (MAP expr_type args)) \/
+      (ann = BaseT (StringT n) /\
+       EVERY (\t. ?m. t = BaseT (StringT m)) (MAP expr_type args)))` assume_tac
+  >- (qpat_x_assum `well_typed_expr _ _` mp_tac >>
+      simp[Once well_typed_expr_def, well_typed_builtin_app_def] >>
+      rpt strip_tac >> fs[]) >>
+  `?tv. evaluate_type (get_tenv cx) ann = SOME tv` by
+    (fs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >> gvs[]) >>
+  `concat_alloc_size (MAP expr_type args) < 2 ** 64` by
+    fs[alloc_limits_expr_def] >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `(_ /\ _) \/ (_ /\ _)` strip_assume_tac >>
+      fs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >> res_tac >>
+      fs[is_bytestring_type_def] >> rename1 `BytesT bd` >>
+      Cases_on `bd` >> fs[is_bytestring_type_def]) >>
+  irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** 64` >> simp[dimword_def]
+QED
+
+Theorem gas_outcome_ptr_values_bind:
+  gas_outcome_ptr D tops (ctx,fn) PG
+    (source : evaluation_state -> value list evaluation_result)
+    (es,s0,G0,tn0) P E /\
+  (!res ee G tn t. P res ee G tn t ==>
+    ?vs. res = INL vs /\
+      gas_outcome_ptr D tops (ctx,fn) PG (next vs) (ee,t,G,tn) Q R) /\
+  (!res ee gt r. E res ee gt r ==>
+    ?exc. res = INR exc /\ R (INR exc) ee gt r) ==>
+  gas_outcome_ptr D tops (ctx,fn) PG (vyperState$bind source next)
+    (es,s0,G0,tn0) Q R
+Proof
+  strip_tac >> irule gas_outcome_ptr_bind >> rpt conj_tac
+  >- (rpt strip_tac >> irule gas_exempt_cert_bind_values >>
+      goal_assum (drule_at Any) >> simp[]) 
+  >- (rpt strip_tac >> irule gas_exempt_cert_error_values >> simp[]) >>
+  irule gas_outcome_ptr_conseq >> qexistsl_tac [`P`,`E`] >> simp[]
 QED
