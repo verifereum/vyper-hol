@@ -655,6 +655,87 @@ Proof
   metis_tac[]
 QED
 
+(* The finite range loop, with its round callback supplied by the body producer. *)
+Theorem intcall_for_range_producer_iterations:
+  let N = Num (n2 - n1);
+      vs = GENLIST (\j. IntV (n1 + &j)) N;
+      K = (\s.
+        (!x z. not_fresh_at sa x /\ lookup_var x cc0 = SOME z ==>
+               lookup_var x s = SOME z) /\
+        (!aid b. FLOOKUP cc0.vs_allocas aid = SOME b ==>
+                 FLOOKUP s.vs_allocas aid = SOME b) /\
+        cc0.vs_alloca_next <= s.vs_alloca_next);
+      Inv = (\k es s. s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\
+        ~s.vs_halted /\ intcall_joint_res fp ce env es sa s /\
+        lookup_var cv s = SOME (i2w (n1 + &k)) /\
+        lookup_var ev s = SOME (i2w n2) /\ lookup_var p s = SOME w /\ K s);
+      Done = (\es s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
+        ~s.vs_halted /\ intcall_joint_res fp ce env es sa s /\ K s)
+  in
+  for_code fp.jc_func ce bc
+    (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty)
+    stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+  intcall_stmts_producer fp stmts /\ intcall_frame_ok fp /\
+  declare_local ce id fty sd = (bc,sd') /\ ce.ce_alloca_locals /\
+  FLOOKUP ce.ce_vars id = NONE /\ id NOTIN FDOM env.var_types /\
+  evaluate_type (get_tenv fp.jc_cx) fty = SOME tyv /\
+  (!k. k < N ==> value_has_type tyv (IntV (n1 + &k))) /\
+  type_memory_bytes ce fty < 2 ** 64 /\
+  sa.cs_next_var <= sb0.cs_next_var /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sb0 x /\ x <> dv /\ x <> cv /\ x <> nv) /\
+  (!scs. lookup_scopes id scs = NONE ==> not_local_ptr bc (FEMPTY :: scs) p) /\
+  local_ptrs_reserved ce sb1 /\ local_ptrs_reserved ce sa /\
+  (!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x) /\
+  (!op. fp.jc_reserved op ==> op <> Var cv /\ op <> Var nv /\ op <> Var dv) /\
+  FLOOKUP cc0.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\
+  n1 <= n2 /\ N < dimword (:256) /\
+  body_inv fp.jc_tops fp.jc_ctx bc fp.jc_cx /\
+  supported_program fp.jc_tops /\ get_module_code fp.jc_cx NONE = SOME fp.jc_tops /\
+  supported_stmts fp.jc_tops bindings stmts /\
+  (!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) stmts ==>
+     occurs_abi_decode_target target fp.jc_tops) /\
+  type_stmts (extend_local env id fty F) fp.jc_ret_ty stmts = SOME env_b /\
+  IS_SOME (type_stmts ((extend_local env id fty F) with bare_global_assignable := FEMPTY)
+    fp.jc_ret_ty stmts) /\
+  EVERY (stmt_exprs_ok bc) stmts /\
+  calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_stmts stmts) /\
+  call_evaluation_safe fp.jc_cx (int_calls_stmts stmts) /\
+  stmts_env bc (InLoop exit_lbl incr_lbl)
+    (if fp.jc_ret_ty = NoneT then BaseT BoolT else fp.jc_ret_ty) stmts sb0 = (ce_b,sb1) ==>
+  !k es s. k <= N /\ Inv k es s /\
+    gas_admissible (eval_for fp.jc_cx tyv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (eval_for fp.jc_cx tyv id stmts (DROP k vs)) (es,s)
+      (\res ee t. res = INL () /\ Done ee t)
+      (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)
+Proof
+  simp[LET_THM] >> rpt strip_tac >>
+  irule (SRULE [LET_THM] intcall_for_range_iterations) >>
+  simp[] >>
+  qexistsl_tac [`body_lbl`, `cv`, `dv`, `ev`, `j1`, `j2`, `stmt_res_ok lctx`, `p`, `w`] >>
+  simp[] >>
+  `(!scs. not_local_ptr ce scs dv) /\
+   lookup_block cond_lbl fp.jc_func.fn_blocks =
+     SOME <|bb_label := cond_lbl; bb_instructions :=
+       [mk_inst j1 EQ [Var cv; Var ev] [dv];
+        mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []]|>` by
+    fs[for_code_def] >>
+  simp[] >> reverse conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  rename1 `kk < Num (n2 - n1)` >>
+  qpat_x_assum `gas_admissible _ _ es'` mp_tac >>
+  simp[Once rich_listTheory.DROP_CONS_EL, listTheory.EL_GENLIST] >> disch_tac >>
+  irule intcall_for_range_producer_round >>
+  qhdtm_assum `for_code` (irule_at Any) >> simp[] >>
+  `lookup_scopes id es'.scopes = NONE` by
+    (irule intcall_for_scope_absent >> simp[] >>
+     fs[intcall_joint_res_def, exprSimHypsDefsTheory.expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def] >> metis_tac[]) >>
+  goal_assum (drule_at Any) >>
+  qhdtm_assum `declare_local` (irule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem intcall_for_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
        intcall_map_producer fp e) /\
