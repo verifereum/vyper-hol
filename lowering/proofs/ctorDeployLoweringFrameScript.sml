@@ -686,6 +686,7 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_func_return_type = cenv.ce_func_return_type /\
     cenv'.ce_method_id = cenv.ce_method_id /\
     cenv'.ce_module = cenv.ce_module /\
+    cenv'.ce_modules = cenv.ce_modules /\
     cenv'.ce_event_info = cenv.ce_event_info /\
     cenv'.ce_is_external = cenv.ce_is_external
 Proof
