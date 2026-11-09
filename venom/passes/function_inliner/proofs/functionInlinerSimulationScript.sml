@@ -4,8 +4,120 @@ Ancestors
   functionInlinerOperational functionInlinerCallBoundary
   functionInlinerReturnTransport functionInlinerFuel functionInlinerSiteLayout
   functionInlinerPhiTransport functionInlinerFmp
-  venomExecSemantics
+  venomExecSemantics venomInstProofs venomExecProofs
   functionInlinerFrame functionInlinerDefs venomState venomInst venomWf list pred_set
+
+(* Bookkeeping belongs to the saved caller, independently of clone frames. *)
+Definition inline_caller_bookkeeping_def:
+  inline_caller_bookkeeping d t <=>
+    t.vs_params = d.vs_params /\
+    t.vs_call_entry_fmp = d.vs_call_entry_fmp /\
+    t.vs_return_pc_token = d.vs_return_pc_token /\
+    t.vs_labels = d.vs_labels
+End
+
+Theorem inline_caller_bookkeeping_refl[simp]:
+  inline_caller_bookkeeping s s
+Proof
+  simp[inline_caller_bookkeeping_def]
+QED
+
+Theorem inline_caller_bookkeeping_updates[simp]:
+  inline_caller_bookkeeping d (s with vs_vars := vars) = inline_caller_bookkeeping d s /\
+  inline_caller_bookkeeping d (s with vs_inst_idx := i) = inline_caller_bookkeeping d s /\
+  inline_caller_bookkeeping d (jump_to l s) = inline_caller_bookkeeping d s /\
+  inline_caller_bookkeeping d (adopt_return_fmp ir s) = inline_caller_bookkeeping d s /\
+  inline_caller_bookkeeping d (merge_callee_state s u) = inline_caller_bookkeeping d s
+Proof
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[inline_caller_bookkeeping_def, jump_to_def, adopt_return_fmp_def,
+       merge_callee_state_def]
+QED
+
+Theorem inline_caller_bookkeeping_bind:
+  bind_outputs outs vals s = SOME t ==>
+  inline_caller_bookkeeping d t = inline_caller_bookkeeping d s
+Proof
+  simp[bind_outputs_def] >> strip_tac >> gvs[] >>
+  qspec_then `\s. inline_caller_bookkeeping d s` mp_tac
+    venomInstProofs1Theory.foldl_update_var_preserves >>
+  simp[update_var_def]
+QED
+
+Theorem inline_caller_bookkeeping_phis:
+  eval_phis s insts = OK t ==>
+  inline_caller_bookkeeping d t = inline_caller_bookkeeping d s
+Proof
+  strip_tac >> drule eval_phis_only_updates_vs_vars >>
+  disch_then SUBST1_TAC >> simp[]
+QED
+
+Theorem inline_caller_bookkeeping_step_nonterminator:
+  step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+  inline_caller_bookkeeping d t = inline_caller_bookkeeping d s
+Proof
+  rw[Once step_inst_def] >> gvs[AllCaseEqs()]
+  >- (drule inline_caller_bookkeeping_bind >> simp[]) >>
+  drule_all venomInstProofs1Theory.step_inst_base_preserves_all >>
+  simp[inline_caller_bookkeeping_def]
+QED
+
+Theorem inline_caller_bookkeeping_terminator[local]:
+  is_terminator inst.inst_opcode /\ step_inst_base inst s = OK t ==>
+  inline_caller_bookkeeping d t = inline_caller_bookkeeping d s
+Proof
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >> gvs[step_inst_base_opcode_eqs] >>
+  gvs[AllCaseEqs(), jump_to_def, inline_caller_bookkeeping_def] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem inline_caller_bookkeeping_step:
+  step_inst fuel ctx inst s = OK t ==>
+  inline_caller_bookkeeping d t = inline_caller_bookkeeping d s
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (Cases_on `inst.inst_opcode = INVOKE` >- gvs[is_terminator_def] >>
+      fs[Once step_inst_def] >>
+      metis_tac[inline_caller_bookkeeping_terminator]) >>
+  metis_tac[inline_caller_bookkeeping_step_nonterminator]
+QED
+
+Theorem inline_caller_bookkeeping_exec_block:
+  !fuel ctx bb s t. exec_block fuel ctx bb s = OK t ==>
+  inline_caller_bookkeeping d t = inline_caller_bookkeeping d s
+Proof
+  rpt gen_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block fuel ctx bb s = OK t` mp_tac >>
+  once_rewrite_tac[exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK u` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- (Cases_on `u.vs_halted` >> simp[] >> strip_tac >> gvs[] >>
+      metis_tac[inline_caller_bookkeeping_step]) >>
+  strip_tac >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `inline_caller_bookkeeping d t =
+    inline_caller_bookkeeping d (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (first_x_assum irule >> qexists `bb` >> simp[]) >>
+  metis_tac[inline_caller_bookkeeping_step, inline_caller_bookkeeping_updates]
+QED
+
+Theorem inline_caller_bookkeeping_run_block:
+  run_block fuel ctx bb s = OK t ==>
+  inline_caller_bookkeeping d t = inline_caller_bookkeeping d s
+Proof
+  strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  gvs[run_block_def] >>
+  imp_res_tac inline_caller_bookkeeping_exec_block >>
+  imp_res_tac inline_caller_bookkeeping_phis >> gvs[]
+QED
 
 (* The countdown is the number of ordinary instructions still to traverse.
    R owns the program points; Q owns all terminal and continuation results. *)
