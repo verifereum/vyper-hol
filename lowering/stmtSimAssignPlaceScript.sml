@@ -27,6 +27,7 @@ Ancestors
   immutableAssignMetadata immutableAssignRepresentation immutableAssignStore
   immutableDeployAssignRestore immutableAssignCode immutableAssignEmpty
   immutableAssignCompose immutableAssignOpen stmtSimForced
+  assignPlacePureFacts assignPlacePureCode
   bodySim supportedTargets supportedDecls
   placeStore targetPureVvFrame targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
   stmtSimDefs exprSimHypsDefs exprSimDefs typedCopyDomain loweringPosts
