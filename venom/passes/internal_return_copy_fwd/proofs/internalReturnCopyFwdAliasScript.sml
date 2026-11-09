@@ -60,3 +60,42 @@ Proof
   simp[exec_alloca_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   gen_tac >> qspec_then `w:bytes32` mp_tac w2n_lt >> decide_tac
 QED
+
+(* Sites use natural bases; variables contain their word representations. *)
+Definition ircf_alias_site_value_def:
+  ircf_alias_site_value fn s G v <=>
+    !ai root sz. MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+      ai.inst_outputs = [root] /\ ai.inst_operands = [Lit sz] /\
+      ircf_alias fn root v ==>
+      ?b. lookup_var v s = SOME (n2w b) /\
+        lookup_var root s = SOME (n2w b) /\
+        FLOOKUP s.vs_allocas ai.inst_id = SOME (b,w2n sz) /\
+        FLOOKUP G v = SOME (b,w2n sz)
+End
+
+Theorem ircf_alias_site_alloca:
+  ssa_form fn /\ ircf_size_coherent fn s /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
+  inst.inst_outputs = [out] /\ inst.inst_operands = [Lit amount] /\
+  exec_alloca inst s amount = OK t ==>
+  ircf_alias_site_value fn t (step_prov PG G inst t) out
+Proof
+  strip_tac >> simp[ircf_alias_site_value_def] >> rpt strip_tac >>
+  `root = out` by
+    (irule ircf_alloca_alias_root >>
+     metis_tac[ircf_alloca_of_def]) >>
+  `ai = inst` by
+    (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[MEM]) >>
+  gvs[] >> rename1 `MEM inst (fn_insts fn)` >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
+  >- (simp[update_var_def] >> strip_tac >> gvs[] >>
+      simp[lookup_var_def, step_prov_def, set_prov_def,
+           out_prov_def, FLOOKUP_UPDATE]) >>
+  PairCases_on `x` >>
+  `x1 = w2n amount` by metis_tac[ircf_size_coherent_def] >>
+  simp[update_var_def] >> strip_tac >> gvs[] >>
+  simp[lookup_var_def, step_prov_def,
+       set_prov_def, out_prov_def, FLOOKUP_UPDATE]
+QED
