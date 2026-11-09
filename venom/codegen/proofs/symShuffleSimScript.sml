@@ -362,6 +362,152 @@ Proof
   metis_tac[sym_mload_label_effect]
 QED
 
+Theorem sym_kinds_ok_push:
+  !cp fn ret srest ps ss op sv base.
+    sym_kinds_ok cp fn ret srest ps ss /\ op_kind_ok fn ret op sv ==>
+    sym_kinds_ok cp fn ret srest
+      (ps with ps_stack := SNOC op ps.ps_stack)
+      (ss with <|sym_base := base; sym_stack := sv :: ss.sym_stack|>)
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac >>
+  qexists_tac `sv :: top` >> simp[]
+QED
+
+Theorem sym_prefix_push_lit:
+  !cp fn ret srest ps ss initial_fmp lo p env v.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOPush (Lit v))) ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SOPush (Lit v)) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def] >>
+  rpt strip_tac >> drule sym_steps_push >>
+  simp[asm_next_def] >> strip_tac >> irule sym_kinds_ok_push >>
+  simp[op_kind_ok_def]
+QED
+
+Theorem sym_prefix_push_label:
+  !cp fn ret srest ps ss initial_fmp lo p env l.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc [AsmPushLabel l] ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (ps with ps_stack := SNOC (Label l) ps.ps_stack) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  rpt strip_tac >> drule sym_steps_push_label >>
+  simp[asm_next_def] >> strip_tac >> irule sym_kinds_ok_push >>
+  simp[op_kind_ok_def]
+QED
+
+Theorem sym_prefix_initial_fmp:
+  !cp fn ret srest ps ss initial_fmp lo p env.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp SOInitialFmp) ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo SOInitialFmp ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, stackModelTheory.stack_push_def] >>
+  rpt strip_tac >> drule sym_steps_push >>
+  simp[asm_next_def] >> strip_tac >> irule sym_kinds_ok_push >>
+  simp[op_kind_ok_def]
+QED
+
+Theorem sym_prefix_label:
+  !cp fn ret srest ps ss initial_fmp lo p env l.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOLabel l)) ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SOLabel l) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def] >>
+  rpt strip_tac >> drule sym_steps_label >>
+  gvs[asm_next_def, sym_kinds_ok_def]
+QED
+
+Theorem sym_kinds_ok_pop:
+  !cp fn ret srest ps ss k base.
+    sym_kinds_ok cp fn ret srest ps ss /\ k <= LENGTH ps.ps_stack ==>
+    sym_kinds_ok cp fn ret srest
+      (ps with ps_stack := TAKE (LENGTH ps.ps_stack - k) ps.ps_stack)
+      (ss with <|sym_base := base; sym_stack := DROP k ss.sym_stack|>)
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac >>
+  qexists_tac `DROP k top` >>
+  `REVERSE (TAKE (LENGTH ps.ps_stack - k) ps.ps_stack) =
+   DROP k (REVERSE ps.ps_stack)` by
+    metis_tac[rich_listTheory.BUTLASTN_TAKE_UNCOND, rich_listTheory.DROP_REVERSE] >>
+  drule LIST_REL_LENGTH >> simp[] >> strip_tac >>
+  simp[DROP_APPEND1, rich_listTheory.LIST_REL_DROP]
+QED
+
+Theorem sym_prefix_pop:
+  !cp fn ret srest ps ss initial_fmp lo p env k.
+    k <= LENGTH ps.ps_stack /\ sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SOPop k)) ==>
+    ?ss'. sym_steps p env k ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SOPop k) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + k /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def] >>
+  rpt strip_tac >>
+  `k <= LENGTH ss.sym_stack` by
+    (gvs[sym_kinds_ok_def] >> drule LIST_REL_LENGTH >> simp[]) >>
+  drule_all sym_steps_pops >> simp[] >> strip_tac >>
+  irule sym_kinds_ok_pop >> simp[]
+QED
+
+Theorem sym_kinds_ok_peek:
+  !cp fn ret srest ps ss k.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    0 < k /\ k <= LENGTH ps.ps_stack ==>
+    op_kind_ok fn ret (EL (LENGTH ps.ps_stack - k) ps.ps_stack)
+      (EL (k-1) ss.sym_stack)
+Proof
+  simp[sym_kinds_ok_def] >> rpt strip_tac >>
+  `k - 1 < LENGTH top` by gvs[LIST_REL_EL_EQN] >>
+  `EL (k-1) (REVERSE ps.ps_stack) =
+   EL (LENGTH ps.ps_stack - k) ps.ps_stack` by
+    (simp[EL_REVERSE] >> AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
+  gvs[EL_APPEND_EQN, LIST_REL_EL_EQN] >>
+  qpat_x_assum `!n. n < _ ==> op_kind_ok _ _ _ _`
+    (qspec_then `k-1` mp_tac) >> simp[]
+QED
+
+Theorem sym_prefix_dup:
+  !cp fn ret srest ps ss initial_fmp lo p env k.
+    0 < k /\ k <= 16 /\ k <= LENGTH ps.ps_stack /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SODup k)) ==>
+    ?ss'. sym_steps p env 1 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SODup k) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def] >>
+  rpt strip_tac >>
+  `k-1 < LENGTH ss.sym_stack` by
+    (gvs[sym_kinds_ok_def] >> drule LIST_REL_LENGTH >> simp[]) >>
+  `ALOOKUP dup_table (dup_name k) = SOME (k-1)` by
+    (qspec_then `k-1` mp_tac stackOpSimTheory.dup_table_lookup >> simp[]) >>
+  drule_all sym_steps_dup >> simp[asm_next_def] >> strip_tac >>
+  irule sym_kinds_ok_push >> simp[] >> irule sym_kinds_ok_peek >>
+  simp[] >> metis_tac[]
+QED
+
 (* A prefix of planner ops with no SOPushOfst (codegen emits one only for
    OFFSET, which unit_shape_ok excludes), whose spills write inside the
    byte set R and the context's spill regions, steps symbolically to the
