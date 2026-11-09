@@ -1389,6 +1389,64 @@ Proof
   metis_tac[LIST_ELEM_COUNT_MEM, arithmeticTheory.GREATER_DEF]
 QED
 
+(* Singleton edges have no PHIs, so predecessor live-out shields every
+   cleanup query and also every successor entry-live variable. *)
+Theorem analyzed_single_pred_excluded_prefix_cleanup:
+  !fn pred pred_bb lbl bb ps qs prefixD prefixL core.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pred_bb /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM lbl (cfg_succs_of (cfg_analyze fn) pred) /\
+    cfg_preds_of (cfg_analyze fn) lbl = [pred] /\
+    ps.ps_stack = prefixD ++ core /\ qs.ps_stack = prefixL ++ core /\
+    ps.ps_alloc = qs.ps_alloc /\ ps.ps_spilled = qs.ps_spilled /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) pred
+                    (LENGTH pred_bb.bb_instructions)) ==>
+      ~MEM (Var v) prefixD /\ ~MEM (Var v) prefixL) ==>
+    ?choice ops core' prefixD' prefixL' al prefD prefL.
+      clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb ps =
+        (ops, ps with <|ps_stack := prefixD' ++ core'; ps_alloc := al;
+                       ps_cleanup_promised := prefD|>) /\
+      clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+        (qs with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+        (ops, qs with <|ps_stack := prefixL' ++ core'; ps_alloc := al;
+                       ps_cleanup_height := NONE; ps_cleanup_promised := prefL|>) /\
+      (!v. MEM (Var v) prefixD' ==> MEM (Var v) prefixD) /\
+      (!v. MEM (Var v) prefixL' ==> MEM (Var v) prefixL) /\
+      (!P. P dead_stack_marker /\ EVERY P prefixD ==> EVERY P prefixD') /\
+      (!P. P dead_stack_marker /\ EVERY P prefixL ==> EVERY P prefixL') /\
+      (!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+        ~MEM (Var v) prefixD' /\ ~MEM (Var v) prefixL')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl /\ pred_bb.bb_label = pred` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `NULL (collect_phis bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, phis_at_joins_def, EVERY_MEM] >>
+     first_x_assum (qspec_then `bb` mp_tac) >> simp[]) >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  drule_all fnPlanLineageLivenessTheory.analyzed_live_out_edge_subset >>
+  simp[livenessDefsTheory.input_vars_from_def, pred_setTheory.SUBSET_DEF] >> disch_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+    ~MEM (Var v) prefixD /\ ~MEM (Var v) prefixL` by metis_tac[] >>
+  Cases_on `1 < LENGTH (cfg_succs_of (cfg_analyze fn) pred)`
+  >- (`cfg_preds_of (cfg_analyze fn) bb.bb_label = [pred]` by simp[] >>
+      `!v. MEM v (live_vars_at (liveness_analyze fn) pred
+                       (LENGTH pred_bb.bb_instructions)) \/
+           MEM v (input_vars_from pred bb.bb_instructions
+             (live_vars_at (liveness_analyze fn) bb.bb_label 0)) ==>
+         ~MEM (Var v) prefixD /\ ~MEM (Var v) prefixL` by
+        (simp[livenessDefsTheory.input_vars_from_def] >> metis_tac[]) >>
+      drule_all fnPlanLineageInventoryTheory.clean_stack_plan_active_excluded_prefix_replay >>
+      strip_tac >> rpt (goal_assum (drule_at Any)) >> metis_tac[]) >>
+  `!st. clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb st = ([], st)` by
+    (gen_tac >> irule fnPlanLineageInventoryTheory.clean_stack_plan_noop >> simp[] >>
+     metis_tac[listTheory.CONS_11]) >>
+  qexistsl_tac [`F`, `[]`, `core`, `prefixD`, `prefixL`, `ps.ps_alloc`,
+                `ps.ps_cleanup_promised`, `F`] >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
+
 Theorem native_inst_prefix_phi_member:
   !lv dfg cfg fn label halt n len xs ps k qs.
     native_inst_prefix lv dfg cfg fn label halt n len xs ps k qs ==>
