@@ -4615,7 +4615,6 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
   qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
   qpat_x_assum `initial.cs_next_var <= sc.cs_next_var` mp_tac >>
-  qpat_x_assum `post_value_type _ _ = _` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure`
   >- suspend "revert_zero" >>
