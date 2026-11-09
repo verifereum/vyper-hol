@@ -16,6 +16,10 @@ Ancestors
   fnBlockStep fnBlockStepHelpers fnBlockBody fnSimSpec asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel venomExecSemantics
   venomState planExec stackOpSim blockSimHelpers
+Libs
+  prefixContractLib
+
+val _ = Theory.add_ML_dependency "prefixContractLib";
 
 (* These names are representation variables in the boundary contracts. *)
 val _ = Parse.hide "base";
@@ -149,21 +153,37 @@ QED
 
 Resume sym_block_prefix_step[single]:
   qpat_assum `LENGTH (TAKE _ _) = _` (fn len =>
-  irule (GEN_ALL (REWRITE_RULE [len, listTheory.TAKE_DROP, stackPlanTypesTheory.plan_state_accfupds, combinTheory.K_THM,
-      fnPlanPrefixTheory.wf_marked_cleanup_fields, fn_frame_inv_cleanup_fields,
-      sym_frame_inv_cleanup_fields]
-    (Q.INST [`ps` |-> `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`,
-             `base:num` |-> `spill_base:num`,
-             `phis:instruction list` |-> `TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
-             `body:instruction list` |-> `DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`]
-      (SPEC_ALL sym_single_pred_prefix_frame_sim))))) >> simp[] >>
+  prefix_contract_tac REWRITE_RULE irule
+    [`ps` |-> `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`,
+     `base:num` |-> `spill_base:num`,
+     `phis:instruction list` |-> `TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
+     `body:instruction list` |-> `DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`]
+    [len, listTheory.TAKE_DROP, stackPlanTypesTheory.plan_state_accfupds,
+     combinTheory.K_THM, fnPlanPrefixTheory.wf_marked_cleanup_fields,
+     fn_frame_inv_cleanup_fields, sym_frame_inv_cleanup_fields]
+    sym_single_pred_prefix_frame_sim) >> simp[] >>
   conj_tac >- gvs[listTheory.MEM_APPEND] >>
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`ch`, `growth`, `h`, `lbl_ctr`, `pred`, `promised`, `ps_l`, `spill_base`, `vs`] >> gvs[] >> metis_tac[]
 QED
 
 Resume sym_block_prefix_step[join]:
-  cheat
+  gvs[] >>
+  qpat_assum `non_param_insts _ = _` (fn np =>
+  prefix_contract_tac (SRULE o cons listTheory.TAKE_DROP)
+    (drule_at (Pat `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = _`))
+    [`ps` |-> `ps_l with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>`,
+     `base:num` |-> `spill_base:num`,
+     `phis:instruction list` |-> `TAKE (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`,
+     `body:instruction list` |-> `DROP (phi_prefix_length bb.bb_instructions) (non_param_insts bb)`]
+    [np, stackPlanTypesTheory.plan_state_accfupds, combinTheory.K_THM,
+     fnPlanPrefixTheory.wf_marked_cleanup_fields,
+     fn_frame_inv_cleanup_fields, sym_frame_inv_cleanup_fields]
+    sym_phi_prefix_frame_sim) >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `lineage_entry _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `MEM _ _.cp_regions`)) >> simp[] >> (impl_tac >- metis_tac[]) >> simp[]
 QED
 
 Finalise sym_block_prefix_step
