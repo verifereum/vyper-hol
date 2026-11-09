@@ -2,7 +2,7 @@
 Theory symPostfixSim
 Ancestors
   symInstKinds symShuffleSim regularPostfixSim fnPlanPrefix
-  doSwapSim planWf codegenEncodingWf rich_list
+  doSwapSim deepDupCallerSim planWf codegenEncodingWf rich_list
   stackPlanOps stackPlanGen stackModel planExec prefixExec prefixSim
   codegenSymRel asmSymSem finite_map list
 
@@ -418,4 +418,27 @@ Proof
   `MEM tmp (FST (spill_alloc_n [] ps.ps_alloc
       (top_n (d + 1) ps.ps_stack)))` by gvs[MEM_MAP] >>
   metis_tac[temporary_spill_ranges_avoid_inventory]
+QED
+
+(* Contract audit: marked well-formedness permits the duplicate-key scratch
+   trace already excluded by do_dup17_duplicate_top_not_wf.  This concerns
+   operand-keyed replay, not the physical symbolic machine. *)
+Theorem marked_scratch_dup_audit[local]:
+  !ps f lo.
+    ps = (init_plan_state 0 with
+      ps_stack := REPLICATE 18 dead_stack_marker) ==>
+    generated_plan_state_wf_marked 0 ps /\
+    ~prefix_spill_wf f lo (FST (do_dup 17 ps)) ps
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (gvs[generated_plan_state_wf_marked_def,
+          planSpillBoundsTheory.plan_slots_bounded_def,
+          planSpillBoundsTheory.alloc_slots_bounded_def,
+          spill_alloc_layout_wf_def, stackPlanTypesTheory.init_plan_state_def,
+          stackPlanTypesTheory.init_spill_alloc_def] >> EVAL_TAC) >>
+  `ps.ps_stack = REPLICATE 16 dead_stack_marker ++
+       [dead_stack_marker; dead_stack_marker]` by
+    (simp[] >> EVAL_TAC) >>
+  `17 < LENGTH ps.ps_stack` by simp[] >>
+  metis_tac[do_dup17_duplicate_top_not_wf, pairTheory.PAIR, APPEND_NIL]
 QED
