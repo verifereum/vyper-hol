@@ -11,6 +11,7 @@ Ancestors
  contextCodegenRel fcgPostorder arithmetic abiDecoderLoop
  actualEntryAllocationFrame immutableWordExecution emitHelperProps rich_list
  emitHelper exprLoweringProps ctorRegisterArgs ctorDeployLoweringCodeShape
+ exprSimConcatResult instIdxIndep fragGasPath entryDispatchProps
 
 Theorem deploy_ctor_enter_context[local]:
  ctx.ctx_entry = SOME name /\
@@ -341,6 +342,36 @@ Proof
  simp[comp_return_def, cs_extends_refl]
 QED
 
+Theorem deploy_ctor_payable_raw_frame:
+ emit_op CALLVALUE [] st0 = (cv,st1) /\
+ emit_op ISZERO [cv] st1 = (nv,st2) /\
+ emit_void ASSERT [nv] st2 = ((),st3) /\
+ fresh_vars_wrt st0 e /\ e.vs_call_ctx.cc_callvalue = 0w ==>
+ ?raw. run_inst_seq (emitted_insts st0 st3) e = OK raw /\
+   vars_pc_only e raw /\ fresh_vars_wrt st3 raw
+Proof
+ strip_tac >>
+ drule_all compile_payable_check_ok_or_revert >> strip_tac >> gvs[] >>
+ drule_all fallback_check_run_frame >> strip_tac >>
+ goal_assum $ drule_at Any >> simp[]
+QED
+
+Theorem deploy_ctor_fixed_raw_frame:
+ compile_fixed_region_with_id cap st = ((id,buf),st') /\
+ fresh_vars_wrt st e ==>
+ ?raw. run_inst_seq (emitted_insts st st') e = OK raw /\
+   vars_pc_only e raw /\ fresh_vars_wrt st' raw /\
+   eval_operand buf.buf_operand raw = SOME 0w
+Proof
+ strip_tac >> drule compile_fixed_region_execution >>
+ disch_then (qspec_then `e` strip_assume_tac) >>
+ drule compile_fixed_region_with_id_result >> strip_tac >>
+ qexists `update_var ("%" ++ toString st.cs_next_var) 0w e` >>
+ simp[] >> conj_tac
+ >- simp[vars_pc_only_def, update_var_def, venom_state_component_equality] >>
+ irule fresh_vars_wrt_advance >> simp[] >> goal_assum $ drule_at Any >> simp[]
+QED
+
 Theorem deploy_ctor_pre_register_actual:
  !pay cap st st_pay st1 imm ctx func e.
  (if pay then comp_return ()
@@ -376,6 +407,79 @@ Proof
      irule abi_decode_sim_trans >> goal_assum $ drule_at Any >> simp[]) >>
  gvs[comp_return_def] >> goal_assum $ drule_at Any >>
  simp[eval_operand_def])
+QED
+
+Theorem deploy_ctor_pre_register_gas_path:
+ !pay cap st st_pay st1 imm ctx func e.
+ (if pay then comp_return ()
+  else comp_bind (emit_op CALLVALUE [])
+    (\cv. comp_bind (emit_op ISZERO [cv]) (\nv. emit_void ASSERT [nv]))) st = ((),st_pay) /\
+ (if cap > 0 then
+    comp_bind (compile_fixed_region_with_id cap) (\r. comp_return (SND r).buf_operand)
+  else comp_return (Lit 0w)) st_pay = (imm,st1) /\
+ fn_has_code st st1 func /\ fresh_vars_wrt st e /\ ~e.vs_halted /\
+ e.vs_current_bb = st.cs_current_bb /\
+ e.vs_inst_idx = LENGTH st.cs_current_insts /\
+ (pay \/ e.vs_call_ctx.cc_callvalue = 0w) ==>
+ ?t. vars_pc_only e t /\ fresh_vars_wrt st1 t /\ ~t.vs_halted /\
+     t.vs_current_bb = st1.cs_current_bb /\
+     t.vs_inst_idx = LENGTH st1.cs_current_insts /\
+     eval_operand imm t = SOME 0w /\ abi_decode_sim ctx func e t /\
+     gas_path ctx func e 0 (OK t)
+Proof
+ rpt gen_tac >> strip_tac >>
+ `st1.cs_current_bb = st.cs_current_bb /\
+  st1.cs_current_insts = st.cs_current_insts ++ emitted_insts st st1 /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st1) /\
+  FILTER (\i. i.inst_opcode = GAS) (emitted_insts st st1) = []` by
+   (Cases_on `pay` >> Cases_on `cap > 0` >>
+    gvs[compile_fixed_region_with_id_def, emit_op_def, emit_void_def,
+        emit_inst_def, fresh_var_def, fresh_id_def, emit_def,
+        comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        emitted_insts_def] >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+    simp[DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
+ `?raw. run_inst_seq (emitted_insts st st1) e = OK raw /\
+   vars_pc_only e raw /\ fresh_vars_wrt st1 raw /\
+   eval_operand imm raw = SOME 0w` by
+   (`?p. run_inst_seq (emitted_insts st st_pay) e = OK p /\
+       vars_pc_only e p /\ fresh_vars_wrt st_pay p` by
+      (Cases_on `pay`
+       >- (gvs[comp_return_def] >> qexists `e` >>
+           simp[emitted_insts_def, run_inst_seq_def, vars_pc_only_refl]) >>
+       fs[comp_bind_def] >> rpt (pairarg_tac >> gvs[]) >>
+       drule_all deploy_ctor_payable_raw_frame >> simp[]) >>
+    `st_pay.cs_current_insts = st.cs_current_insts ++ emitted_insts st st_pay /\
+     st1.cs_current_insts = st_pay.cs_current_insts ++ emitted_insts st_pay st1` by
+      (qpat_x_assum `_ st = ((),st_pay)` mp_tac >>
+       qpat_x_assum `_ st_pay = (imm,st1)` mp_tac >>
+       rpt (pop_assum kall_tac) >>
+       Cases_on `pay` >> Cases_on `cap > 0` >>
+       simp[compile_fixed_region_with_id_def, emit_op_def, emit_void_def,
+            emit_inst_def, fresh_var_def, fresh_id_def, emit_def,
+            comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+       rpt strip_tac >> gvs[LET_THM, emitted_insts_def] >>
+       pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[DROP_APPEND]) >>
+    drule_all emitted_insts_append >> disch_tac >>
+    drule run_inst_seq_append >> disch_then (qspec_then `emitted_insts st_pay st1` assume_tac) >>
+    Cases_on `cap > 0`
+    >- (fs[comp_bind_def, comp_return_def] >> pairarg_tac >> gvs[] >>
+        PairCases_on `r''` >> drule_all deploy_ctor_fixed_raw_frame >>
+        strip_tac >> goal_assum $ drule_at Any >> simp[] >>
+        metis_tac[vars_pc_only_trans]) >>
+    `imm = Lit 0w /\ st1 = st_pay` by
+      (qpat_x_assum `_ st_pay = (imm,st1)` mp_tac >> simp[comp_return_def]) >>
+    qexists `p` >>
+    fs[emitted_insts_def, run_inst_seq_def, eval_operand_def]) >>
+ drule_all concat_straight_gas_path >>
+ disch_then (qspec_then `ctx` strip_assume_tac) >>
+ qexists `raw with vs_inst_idx := LENGTH st1.cs_current_insts` >>
+ `abi_decode_sim ctx func e
+   (raw with vs_inst_idx := LENGTH st1.cs_current_insts)` by
+   metis_tac[abi_decode_sim_def, gas_path_normal] >>
+ gvs[vars_pc_only_def, fresh_vars_wrt_def, eval_op_inst_idx,
+     venom_state_component_equality]
 QED
 
 Theorem deploy_ctor_registration_code:

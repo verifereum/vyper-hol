@@ -283,7 +283,7 @@ Proof
        venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
 QED
 
-Theorem fallback_check_run_frame[local]:
+Theorem fallback_check_run_frame:
   emit_op CALLVALUE [] st0 = (cv, st1) /\
   emit_op ISZERO [cv] st1 = (nv, st2) /\
   emit_void ASSERT [nv] st2 = ((), st3) /\
