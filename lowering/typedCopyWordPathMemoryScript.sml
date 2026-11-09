@@ -1,7 +1,7 @@
 (* A reachable joint value/frame endpoint for a typed word copy. *)
 Theory typedCopyWordPathMemory
 Ancestors
-  typedCopyPrimitiveMemory fragGasSeqMem typedMemoryCopy context compileEnv
+  typedCopyPrimitiveMemory placedSequenceMemory typedMemoryCopy context compileEnv
   emitHelper exprLoweringProps fragExec venomInst venomState venomMemDefs
   valueEncoding valueEncodingProps valueCopy words list rich_list
 
@@ -40,16 +40,13 @@ Proof
     (irule typed_copy_word_mem_ok >> metis_tac[]) >>
   `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
     metis_tac[typed_copy_word_no_gas] >>
-  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-        isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
-    (gvs[fn_has_code_def, same_blocks_def, IS_PREFIX_APPEND] >>
-     simp[DROP_APPEND]) >>
-  drule_all run_inst_seq_gas_path_mem >> simp[] >> strip_tac >>
+  `isPREFIX sa.cs_current_insts sb.cs_current_insts` by
+    (simp[IS_PREFIX_APPEND] >> metis_tac[]) >>
+  drule_all placed_sequence_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
   qexists_tac `(mstore (w2n d) (mload (w2n a) s)
     (update_var (STRING #"%" (toString sa.cs_next_var)) (mload (w2n a) s) s))
       with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  `LENGTH sb.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts sa sb)` by
-    simp[] >>
   simp[typed_copy_word_state_frame] >>
   drule_all exprSimPropsTheory.val_in_memory_word >> strip_tac >>
   gvs[same_blocks_def, mstore_def, write_memory_with_expansion_def, update_var_def,
