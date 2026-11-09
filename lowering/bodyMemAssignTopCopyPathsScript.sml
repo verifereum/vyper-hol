@@ -650,7 +650,11 @@ Proof
     (qspecl_then [`SUC i`, `w`] mp_tac) >>
   impl_tac >- (gvs[] >> metis_tac[]) >>
   disch_then (qx_choose_then `t` strip_assume_tac) >> qexists_tac `t` >> simp[] >>
-  metis_tac[gas_marked_path_then, ADD_CLAUSES]
+  `gas_marked_path T ctx func v (0 + 0) (OK t)` by
+    (irule gas_marked_path_then >> qexists_tac `w` >> simp[]) >>
+  `gas_marked_path T ctx func s (0 + 0) (OK t)` by
+    (irule gas_marked_path_then >> qexists_tac `v` >> gvs[]) >>
+  gvs[]
 QED
 
 Theorem topcopy_init_path:

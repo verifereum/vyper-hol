@@ -1573,7 +1573,7 @@ Proof
   simp[compile_with_byte_offset_def] >> metis_tac[]
 QED
 
-Theorem store_slots_lit_offset_fresh[local]:
+Theorem store_slots_lit_offset_fresh:
   !ptr0 off sa op sb.
   compile_lit_byte_offset ptr0 off sa = (op,sb) /\
   (!x. ptr0 = Var x ==> not_fresh_at sa x) ==>
