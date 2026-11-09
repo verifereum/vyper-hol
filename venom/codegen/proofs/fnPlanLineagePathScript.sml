@@ -528,3 +528,46 @@ Proof
   first_x_assum (qspec_then `inst` mp_tac) >> simp[] >>
   Cases_on `inst.inst_outputs` >> gvs[]
 QED
+
+(* An exit demand dominated by an SSA definition propagates to the point
+   immediately after that definition, not across it. *)
+Theorem analyzed_output_dominance_live_out_to_post_definition:
+  !fn d bb j v p pb.
+    codegen_ready_fn fn /\ lookup_block d fn.fn_blocks = SOME bb /\
+    j < LENGTH bb.bb_instructions /\
+    MEM v (EL j bb.bb_instructions).inst_outputs /\
+    fn_dominates fn d p /\ lookup_block p fn.fn_blocks = SOME pb /\
+    MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) d (SUC j))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn /\ ssa_form fn /\ phi_operands_ready fn` by
+    gvs[codegen_ready_fn_def] >>
+  `EVERY (phi_block_ready (liveness_analyze fn)) fn.fn_blocks` by
+    (gvs[phi_operands_ready_def] >>
+     gvs[EVERY_MEM, combinTheory.o_DEF] >>
+     Cases_on `collect_phis bb.bb_instructions` >> gvs[] >>
+     qpat_x_assum `!b. MEM b fn.fn_blocks ==> NULL _`
+       (mp_tac) >> simp[phi_block_ready_def, NULL_EQ, phi_uses_disjoint_def]) >>
+  drule_all dominates_analyzed_path_no_revisit >> strip_tac >>
+  `MEM d (cfg_analyze fn).cfg_dfs_pre` by gvs[] >>
+  `MEM v (live_vars_at (liveness_analyze fn) d (LENGTH bb.bb_instructions))` by
+    (irule analyzed_live_backward_no_kill_path >> simp[] >>
+     qexistsl_tac [`pb`, `tail`] >> simp[] >>
+     reverse conj_tac >- (gvs[EVERY_MEM] >> metis_tac[]) >>
+     simp[EVERY_MEM] >> qx_gen_tac `lbl` >> strip_tac >>
+     qx_gen_tac `bb'` >> strip_tac >>
+     conj_tac >- metis_tac[venomExecPropsTheory.lookup_block_MEM, EVERY_MEM] >>
+     `lbl <> d` by metis_tac[] >>
+     `EVERY (\inst. ~MEM v inst.inst_outputs) bb'.bb_instructions` by
+       (irule ssa_output_other_block_no_outputs >> simp[] >>
+        goal_assum (drule_at Any) >>
+        qexistsl_tac [`bb`, `fn`, `EL j bb.bb_instructions`] >> simp[EL_MEM]) >>
+     gvs[venomInstTheory.inst_defs_def, EVERY_MEM]) >>
+  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  disch_then (qspecl_then [`d`, `bb`, `SUC j`, `LENGTH bb.bb_instructions`, `v`] mp_tac) >>
+  simp[] >> disch_then irule >> rpt strip_tac >>
+  gvs[venomInstTheory.inst_defs_def] >>
+  `j < LENGTH bb.bb_instructions` by decide_tac >>
+  `k = j` by metis_tac[ssa_output_position_unique] >> decide_tac
+QED
