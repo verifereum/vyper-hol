@@ -864,17 +864,8 @@ Theorem entry_traversal_jump_target:
   MEM l final /\ ?target. lookup_block l fn.fn_blocks = SOME target
 Proof
   strip_tac >>
-  drule simplifyCfgDefsTheory.lookup_block_member_label >> strip_tac >>
-  `bb_well_formed bb /\ fn_succs_closed fn` by
-    (gvs[codegen_ready_fn_def, wf_function_def] >> metis_tac[]) >>
-  drule_all block_jump_ref_successor >> strip_tac >>
-  `fn_cfg_edge fn lbl l` by (simp[fn_cfg_edge_def] >> metis_tac[]) >>
-  drule_all ready_fn_cfg_edge >> strip_tac >>
-  drule (cj 1 traversal_visited_closed) >> simp[] >> strip_tac >>
-  conj_tac >- metis_tac[] >>
-  `MEM l (fn_labels fn)` by metis_tac[fn_succs_closed_def] >>
-  gvs[venomInstTheory.fn_labels_def] >>
-  drule dfAnalyzeProofsTheory.lookup_block_exists >> metis_tac[]
+  `fn_cfg_edge fn lbl l` by metis_tac[ready_fn_jump_edge] >>
+  metis_tac[entry_traversal_edge_target]
 QED
 
 Theorem entry_traversal_jump_label_mem:
@@ -907,10 +898,12 @@ Proof
          MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
   drule_all generate_block_plan_refs >> strip_tac >>
   gvs[MEM_APPEND]
-  >- (disj1_tac >> rewrite_tac[GSYM MEM_APPEND] >>
-      irule entry_traversal_jump_label_mem >> simp[] >> metis_tac[])
-  >- (disj1_tac >> rewrite_tac[GSYM MEM_APPEND] >>
-      irule entry_traversal_jump_label_mem >> simp[] >> metis_tac[]) >>
+  >- (`MEM (SOLabel l) (pre ++ chunk ++ post)` by
+        (irule entry_traversal_jump_label_mem >> simp[] >> metis_tac[]) >>
+      gvs[MEM_APPEND])
+  >- (`MEM (SOLabel l) (pre ++ chunk ++ post)` by
+        (irule entry_traversal_jump_label_mem >> simp[] >> metis_tac[]) >>
+      gvs[MEM_APPEND]) >>
   simp[venomInstTheory.fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[]
 QED
 
@@ -941,6 +934,150 @@ Proof
   drule fnPlanPlaceFnRegionTheory.generate_fn_plan_with_cleanup_analyzed_leading_label >>
   strip_tac >> gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
                   AllCaseEqs()]
+QED
+
+Theorem context_plan_region_generated:
+  generate_context_plan_with gen ctx = SOME plan /\ MEM r plan.cp_regions ==>
+  ?fn sb lc ps. MEM fn ctx.ctx_functions /\ gen fn sb lc = SOME (r.sr_plan, ps)
+Proof
+  strip_tac >>
+  drule fnPlanPlaceFnRegionTheory.generate_context_plan_with_provenance >> strip_tac >>
+  gvs[MEM_EL] >> metis_tac[]
+QED
+
+Theorem context_plan_function_generated:
+  generate_context_plan_with gen ctx = SOME plan /\ MEM fn ctx.ctx_functions ==>
+  ?r sb lc ps. MEM r plan.cp_regions /\ gen fn sb lc = SOME (r.sr_plan, ps)
+Proof
+  strip_tac >>
+  drule fnPlanPlaceFnRegionTheory.generate_context_plan_with_provenance >> strip_tac >>
+  gvs[MEM_EL] >> metis_tac[]
+QED
+
+Theorem context_plan_function_label:
+  generate_context_plan ctx = SOME plan /\ MEM fn ctx.ctx_functions /\
+  fn_shape_ok fn ==> MEM (SOLabel fn.fn_name) (context_plan_ops plan)
+Proof
+  simp[generate_context_plan_def] >> strip_tac >>
+  drule_all context_plan_function_generated >> strip_tac >> gvs[] >>
+  drule_all generate_fn_plan_with_cleanup_entry_label >>
+  simp[context_plan_ops_def, MEM_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem context_plan_region_refs:
+  generate_context_plan ctx = SOME plan /\ MEM r plan.cp_regions /\
+  EVERY fn_shape_ok ctx.ctx_functions /\ codegen_ready ctx /\ plan_ref l r.sr_plan ==>
+  MEM (SOLabel l) r.sr_plan \/ l = "revert" \/ l = "code_end" \/
+  (l = "runtime_begin" /\ ?fn inst. MEM fn ctx.ctx_functions /\
+    MEM inst (fn_insts fn) /\ MEM (Label "runtime_begin") inst.inst_operands) \/
+  (?fn inst. MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+    inst.inst_opcode = INVOKE /\ MEM (Label l) inst.inst_operands)
+Proof
+  simp[generate_context_plan_def] >> strip_tac >>
+  drule_all context_plan_region_generated >> strip_tac >>
+  gvs[codegen_ready_def, EVERY_MEM] >>
+  `fn_shape_ok fn /\ codegen_ready_fn fn` by metis_tac[] >>
+  drule_all generate_fn_plan_with_cleanup_refs >> metis_tac[]
+QED
+
+Theorem shaped_invoke_target_context:
+  wf_invoke_targets ctx /\ MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  MEM (Label l) inst.inst_operands ==>
+  ?callee. MEM callee ctx.ctx_functions /\ callee.fn_name = l
+Proof
+  strip_tac >>
+  `label_positions_ok inst` by
+    (gvs[fn_shape_ok_def, inst_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  fs[wf_invoke_targets_def] >> first_x_assum drule_all >> strip_tac >>
+  gvs[label_positions_ok_def, EVERY_MEM, is_label_operand_def] >>
+  gvs[venomInstTheory.ctx_fn_names_def, MEM_MAP] >>
+  metis_tac[is_label_operand_def]
+QED
+
+Theorem context_plan_ops_label_mem:
+  MEM r plan.cp_regions /\ MEM (SOLabel l) r.sr_plan ==>
+  MEM (SOLabel l) (context_plan_ops plan)
+Proof
+  simp[context_plan_ops_def, MEM_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem context_plan_ops_ref_region:
+  plan_ref l (context_plan_ops plan) ==>
+  ?r. MEM r plan.cp_regions /\ plan_ref l r.sr_plan
+Proof
+  simp[context_plan_ops_def, plan_ref_append, revert_postamble_def,
+       plan_ref_def, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem context_plan_refs:
+  generate_context_plan ctx = SOME plan /\ EVERY fn_shape_ok ctx.ctx_functions /\
+  codegen_ready ctx /\ wf_invoke_targets ctx /\ plan_ref l (context_plan_ops plan) ==>
+  MEM (SOLabel l) (context_plan_ops plan) \/ l = "code_end" \/
+  (l = "runtime_begin" /\ ?fn inst. MEM fn ctx.ctx_functions /\
+    MEM inst (fn_insts fn) /\ MEM (Label "runtime_begin") inst.inst_operands)
+Proof
+  strip_tac >> drule context_plan_ops_ref_region >> strip_tac >>
+  drule_all context_plan_region_refs >> strip_tac
+  >- metis_tac[context_plan_ops_label_mem]
+  >- simp[context_plan_ops_def, revert_postamble_def] 
+  >- simp[]
+  >- metis_tac[] >>
+  `fn_shape_ok fn` by gvs[EVERY_MEM] >>
+  drule_all shaped_invoke_target_context >> strip_tac >>
+  metis_tac[context_plan_function_label, EVERY_MEM]
+QED
+
+Theorem data_section_bytes_no_refs:
+  EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F) ds.ds_items ==>
+  asm_label_refs (data_section_asm ds) = []
+Proof
+  simp[asmIRTheory.data_section_asm_def, asm_label_refs_def, MAP_MAP_o,
+       combinTheory.o_DEF, FLAT_EQ_NIL, EVERY_MAP, EVERY_MEM] >>
+  rpt strip_tac >> Cases_on `di` >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem data_segment_bytes_no_refs:
+  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                     ds.ds_items) segs ==>
+  asm_label_refs (data_segment_asm segs) = []
+Proof
+  pure_rewrite_tac[asmIRTheory.data_segment_asm_def] >>
+  Induct_on `segs` >- simp[asm_label_refs_def] >>
+  rw[asm_label_refs_append] >> simp[data_section_bytes_no_refs]
+QED
+
+Theorem data_segment_header_mem:
+  EXISTS (\ds. ds.ds_label = l) segs ==>
+  MEM (AsmDataHeader l) (data_segment_asm segs)
+Proof
+  simp[EXISTS_MEM, asmIRTheory.data_segment_asm_def, MEM_FLAT, MEM_MAP,
+       asmIRTheory.data_section_asm_def] >> metis_tac[MEM]
+QED
+
+Theorem asm_label_refs_data_header:
+  asm_label_refs [AsmDataHeader l] = []
+Proof
+  simp[asm_label_refs_def]
+QED
+
+Theorem codegen_assembly_label_refs_closed:
+  codegen_assembly rpolicy unit = SOME prog /\ unit_shape_ok unit /\
+  sym_unit_static_ok unit /\ codegen_ready unit.cu_context ==>
+  !l. MEM l (asm_label_refs prog) ==>
+      MEM (AsmLabel l) prog \/ MEM (AsmDataHeader l) prog
+Proof
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >>
+  gvs[sym_unit_static_ok_def, unit_shape_ok_def,
+      asm_label_refs_append, data_segment_bytes_no_refs, asm_label_refs_data_header,
+      execute_plan_label_refs] >>
+  rpt strip_tac >>
+  drule_all context_plan_refs >> strip_tac
+  >- simp[execute_plan_label, MEM_APPEND]
+  >- simp[MEM_APPEND] >>
+  `EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment` by metis_tac[] >>
+  drule data_segment_header_mem >> simp[MEM_APPEND]
 QED
 
 Theorem codegen_asm_static_wf:
