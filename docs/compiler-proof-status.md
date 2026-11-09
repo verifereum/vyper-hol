@@ -40,9 +40,10 @@ Notes:
 ## Gas observations
 
 The semantic result boundary factors source execution into `gas_readings_rel`,
-`call_success_rel`, and `exception_outcome_rel`. The gas relation fixes a
-single source result across all fillings of unrecorded reading slots and
-all appended suffixes. Recorded slots consume distinct EVM readings, allowing
+`call_success_rel`, and `exception_outcome_rel`. For every filling of
+unrecorded reading slots and every appended suffix, the source outcome
+must relate to the target outcome. Failed source runs may follow different
+paths; their request lists are not compared. Recorded slots consume distinct EVM readings, allowing
 permutation. Success compares concrete event lists directly, alongside return
 data, accounts, transient storage, and requests. Deployment reuses the gas and
 exception relations. These definitions alone do not establish the stronger

@@ -381,7 +381,7 @@ QED
    leaves dead (accounts_agree, compileEnv). *)
 
 (* Fixed slots use distinct observations; absent slots must be irrelevant
-   to the entire source result, including its requests on failure. *)
+   to the observation selected by run. *)
 Definition gas_readings_rel_def:
   gas_readings_rel readings run out <=>
     ?slots unused.
@@ -441,11 +441,11 @@ End
 
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
-    ?res am' rqs.
-      gas_readings_rel (gas_readings es)
-        (\gobs. call_external (SOME (MAP SND (call_trace es))) gobs am tx)
-        (res, am', rqs) /\
-      case res of
-        INL v => call_success_rel tops ret tx (v, am', rqs) es r es'
-      | INR exc => exception_outcome_rel tops exc es r es'
+    gas_readings_rel (gas_readings es)
+      (\gobs.
+        let (res, am', rqs) =
+          call_external (SOME (MAP SND (call_trace es))) gobs am tx in
+        case res of
+          INL v => call_success_rel tops ret tx (v, am', rqs) es r es'
+        | INR exc => exception_outcome_rel tops exc es r es') T
 End

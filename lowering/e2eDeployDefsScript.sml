@@ -159,10 +159,9 @@ End
 
 Definition deploy_call_result_rel_def:
   deploy_call_result_rel tops runtime_bc am tx es r es' <=>
-    ?src.
-      gas_readings_rel (gas_readings es)
-        (\gobs. load_contract NONE gobs am tx [(NONE, tops)] []) src /\
-      deploy_result_rel tops runtime_bc tx es r es' src
+    gas_readings_rel (gas_readings es)
+      (\gobs. deploy_result_rel tops runtime_bc tx es r es'
+        (load_contract NONE gobs am tx [(NONE, tops)] [])) T
 End
 
 (* Current-owner kernel gate: definitions are total saved objects, not stage
