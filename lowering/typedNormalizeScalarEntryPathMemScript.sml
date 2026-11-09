@@ -1,13 +1,13 @@
 (* Same-endpoint finite entries for nonrecursive typed normalization. *)
 Theory typedNormalizeScalarEntryPathMem
 Ancestors
-  typedNormalizePrimitivePath typedNormalizeDynarray
+  typedNormalizePrimitivePath typedNormalizeDynarray typedNormalizeFastRepresentation
   fragGasPathMem typedCopyAgreement typedNormalizeFrame venomState exprSimDefs exprLoweringProps
   exprSimProps valueEncoding typedMemoryCopy stmtSimReturn arithmetic
   valueCopyBytes exprSimBufferStore emitHelperProps exprSimAggregateChildren words
   vyperTypeSystem vyperTypeArgFits vyperTyping valueCopy compileEnv exprLowering emitHelper
   context vyperValue allocaFootprint fragGasSeqMem list rich_list venomExecSemantics venomInst
-  stmtReasonLitFragMemory
+  stmtReasonLitFragMemory loweringPosts
 
 Theorem typed_store_word_path_mem:
   is_word_type dty /\ type_widens_to tenv sty dty /\
@@ -250,4 +250,60 @@ Proof
       pure_rewrite_tac [Q.SPECL [`l*type_memory_bytes ce ty`, `32`] ADD_COMM] >>
       irule typed_dynarray_equal_window >> metis_tac[]) >>
   rpt strip_tac >> simp[typed_dynarray_equal_exterior])
+QED
+
+Theorem typed_store_dynarray_equal_path_mem:
+  compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  mload (w2n sw) s = n2w (LENGTH vs) /\ LENGTH vs <= cap /\
+  type_memory_bytes ce ty = type_memory_size tv /\
+  cap < dimword(:256) /\ LENGTH vs * type_memory_size tv < dimword(:256) /\
+  w2n sw + 32 < dimword(:256) /\ w2n dw + 32 < dimword(:256) /\
+  32 + LENGTH vs * type_memory_size tv <= type_memory_size (ArrayTV tv (Dynamic scap)) /\
+  w2n sw + type_memory_size (ArrayTV tv (Dynamic scap)) <= s.vs_alloca_next /\
+  w2n dw + type_memory_size (ArrayTV tv (Dynamic cap)) <= s.vs_alloca_next /\
+  (w2n sw + type_memory_size (ArrayTV tv (Dynamic scap)) <= w2n dw \/
+   w2n dw + type_memory_size (ArrayTV tv (Dynamic cap)) <= w2n sw) /\
+  val_in_memory (ArrayTV tv (Dynamic scap)) (ArrayV (DynArrayV vs)) (w2n sw) s.vs_memory /\
+  val_wf (ArrayTV tv (Dynamic (LENGTH vs))) (ArrayV (DynArrayV vs)) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n dw) t.vs_memory /\
+    (!p k. p+k <= w2n dw \/ w2n dw+type_memory_size (ArrayTV tv (Dynamic cap)) <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
+      vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `LENGTH vs * type_memory_size tv <= cap * type_memory_size tv` by simp[] >>
+  `val_in_memory (ArrayTV tv (Dynamic (LENGTH vs))) (ArrayV (DynArrayV vs))
+     (w2n sw) s.vs_memory` by metis_tac[dynarray_in_memory_capacity_irrelevant] >>
+  qpat_x_assum `val_in_memory (ArrayTV tv (Dynamic scap)) _ _ _` kall_tac >>
+  drule_at (Pat `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _`)
+    normalize_dynarray_equal_window_path_mem >>
+  disch_then (drule_at (Pat `eval_operand src _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand dst _ = _`)) >>
+  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
+  disch_then (qspecl_then [`type_memory_size (ArrayTV tv (Dynamic scap))`, `LENGTH vs`, `fn`, `ctx`] mp_tac) >>
+  (impl_tac >- (fs[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >>
+    simp[val_footprint_def, type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> gvs[])) >>
+  strip_tac >>
+  `u.vs_halted = s.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    (qpat_x_assum `u with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `sb.cs_current_bb = sa.cs_current_bb` by metis_tac[typed_dynarray_equal_shape] >>
+  `!p k. p+k <= w2n dw \/ w2n dw+type_memory_size (ArrayTV tv (Dynamic cap)) <= p ==>
+     mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _`
+       (qspecl_then [`p`, `k`] mp_tac) >>
+     fs[type_memory_size_def, Excl "LE_MULT_RCANCEL"] >> simp[] >> decide_tac) >>
+  qexistsl_tac [`u with vs_inst_idx := LENGTH sb.cs_current_insts`, `0`] >>
+  gvs[venom_state_component_equality,lookup_var_def] >>
+  metis_tac[dynarray_in_memory_capacity_irrelevant]
 QED
