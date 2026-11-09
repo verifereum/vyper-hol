@@ -6,6 +6,7 @@ Ancestors
   loadElimActionSelection loadElimLatestJoin loadElimOccurrence loadElimDefs
   loadElimSentinelHelpers loadElimKeyShapeInvariant cfgAnalysisProps
   instIdxIndep analysisSimProofsBase venomInstProps contextCodegenRel opcodeClass
+  cfgDefs finite_map dfAnalyzeProps
   venomState venomInst venomExecSemantics venomExecProps venomExecProofs stateFrame stateEquiv list
 
 (* Entry/edge coupling is le_padded_control.  Inside a block only the
@@ -712,3 +713,227 @@ Resume le_coupled_block_terminal[ok]:
   simp[Once exec_block_def, le_transformed_nonterm, Excl "isPREFIX"]
 QED
 Finalise le_coupled_block_terminal
+
+(* PHI entry consumes a source occurrence, never a successful target run. *)
+Theorem le_coupled_phi_entry:
+  le_round_ready C fn ctx s0 /\
+  le_occ_prefix C fn s0 (h ++ [PhiOcc bb u p]) i
+    (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) /\
+  le_padded_control {v | isPREFIX "$le_phi_" v} u r /\
+  ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) bb.bb_label) /\
+  le_latest_captures m ctx (cfg_analyze fn) (load_analyze ctx fn)
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) h r ==>
+  ?q. eval_phis r
+    (analysis_block_transform_prepend NONE (load_analyze ctx fn)
+      (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+      (\ll inst. [load_elim_inst ctx
+        (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) bb).bb_instructions = OK q /\
+    le_body_coupling m ctx (cfg_analyze fn) (load_analyze ctx fn)
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (h ++ [PhiOcc bb u p]) bb
+      (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+      (q with vs_inst_idx := phi_prefix_length bb.bb_instructions +
+        LENGTH (phis_for_block
+          (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) bb.bb_label))
+Proof
+  strip_tac >>
+  `!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
+     (h ++ [PhiOcc bb u p]) ==> dfg_assigns_sound ctx.lctx_dfg u'` by
+    (rpt strip_tac >>
+     irule (cj 1 le_occ_invariants_step_dfg) >>
+     fs[le_round_ready_def, Excl "isPREFIX"] >>
+     drule_all le_occ_prefix_frozen_invariants >> strip_tac >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `r.vs_prev_bb = u.vs_prev_bb /\ r.vs_labels = u.vs_labels` by
+    fs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def] >>
+  rule_assum_tac (PURE_REWRITE_RULE [le_round_ready_def, le_padded_control_def]) >>
+  RULE_L_ASSUM_TAC CONJUNCTS >>
+  drule_all le_occ_prefix_actual_phis_captures >>
+  strip_tac >> qexists_tac `q` >> conj_tac >- first_assum ACCEPT_TAC >>
+  irule le_body_coupling_enter >> conj_tac
+  >- (drule loadElimOccurrenceInversionTheory.le_occ_prefix_phi_semantics >> strip_tac >>
+      qpat_x_assum `eval_phis u _ = OK p` mp_tac >>
+      rewrite_tac[loadElimOperationalHistoryTheory.le_eval_phis_snapshot] >> strip_tac >>
+      drule loadElimActualPhiFrameTheory.le_snapshot_batch_controls >> strip_tac >>
+      fs[le_padded_control_def, Excl "isPREFIX"]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem le_pred_insert_distinct[local]:
+  !xs acc pred.
+    (!lbl. ALL_DISTINCT (fmap_lookup_list acc lbl)) ==>
+    !lbl. ALL_DISTINCT (fmap_lookup_list
+      (FOLDR (\succ m2. m2 |+ (succ,
+        ordered_set_insert pred (fmap_lookup_list m2 succ))) acc xs) lbl)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`acc`, `pred`] mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[cfgHelpersTheory.fmap_lookup_list_update] >>
+  IF_CASES_TAC >> simp[] >>
+  qmatch_goalsub_abbrev_tac `ordered_set_insert pred ys` >>
+  `ALL_DISTINCT ys` by metis_tac[] >>
+  simp[ordered_set_insert_def] >>
+  IF_CASES_TAC >> simp[ALL_DISTINCT_APPEND]
+QED
+
+Theorem le_build_preds_distinct[local]:
+  !bbs acc.
+    (!lbl. ALL_DISTINCT (fmap_lookup_list acc lbl)) ==>
+    !lbl. ALL_DISTINCT (fmap_lookup_list
+      (FOLDL (\m bb. FOLDR (\succ m2. m2 |+ (succ,
+        ordered_set_insert bb.bb_label (fmap_lookup_list m2 succ)))
+        m (fmap_lookup_list succs bb.bb_label)) acc bbs) lbl)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> irule le_pred_insert_distinct >> simp[]
+QED
+
+Theorem le_cfg_preds_distinct:
+  ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) lbl)
+Proof
+  simp[cfg_preds_of_def, cfg_analyze_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  simp[build_preds_def] >> irule le_build_preds_distinct >>
+  simp[init_preds_def, fmap_lookup_list_def] >> rpt strip_tac >>
+  CASE_TAC >> simp[] >>
+  qspecl_then [`MAP (\bb. bb.bb_label) fn.fn_blocks`, `[]`, `lbl`, `x`]
+    mp_tac dfAnalyzePropsTheory.foldl_fempty_val >>
+  simp[rich_listTheory.FOLDL_MAP]
+QED
+
+(* The source entry certificate is supplied by start or by the last completed
+   terminator; it mentions no target execution. *)
+Theorem le_coupled_run:
+  !fuel u h t.
+  le_round_ready C fn ctx s0 /\
+  (!bb p i. lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis u bb.bb_instructions = OK p /\
+    get_instruction bb (phi_prefix_length bb.bb_instructions) = SOME i ==>
+    le_occ_prefix C fn s0 (h ++ [PhiOcc bb u p]) i
+      (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+  le_padded_control {v | isPREFIX "$le_phi_" v} u t /\
+  le_latest_captures m ctx (cfg_analyze fn) (load_analyze ctx fn)
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) h t ==>
+  (?e. run_blocks fuel C fn u = Error e) \/
+  lift_result (le_padded_control {v | isPREFIX "$le_phi_" v})
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v})
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v})
+    (run_blocks fuel C fn u)
+    (run_blocks fuel C
+      (analysis_function_transform_prepend NONE (load_analyze ctx fn)
+        (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+        (\ll inst. [load_elim_inst ctx
+          (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) fn) t)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- simp[Once run_blocks_def] >>
+  Cases_on `lookup_block u.vs_current_bb fn.fn_blocks`
+  >- simp[Once run_blocks_def] >>
+  rename1 `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb` >>
+  reverse (qspec_then `u` (qspec_then `bb.bb_instructions` strip_assume_tac)
+    eval_phis_ok_or_error_defs)
+  >- simp[Once run_blocks_def] >>
+  rename1 `eval_phis u bb.bb_instructions = OK p` >>
+  Cases_on `get_instruction bb (phi_prefix_length bb.bb_instructions)`
+  >- (disj1_tac >> pure_once_rewrite_tac[run_blocks_def] >>
+      simp[] >> pure_once_rewrite_tac[exec_block_def] >> simp[]) >>
+  rename1 `get_instruction bb (phi_prefix_length bb.bb_instructions) = SOME i` >>
+  `le_occ_prefix C fn s0 (h ++ [PhiOcc bb u p]) i
+    (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)` by metis_tac[] >>
+  `?q. eval_phis t
+    (analysis_block_transform_prepend NONE (load_analyze ctx fn)
+      (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+      (\ll inst. [load_elim_inst ctx
+        (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) bb).bb_instructions = OK q /\
+    le_body_coupling m ctx (cfg_analyze fn) (load_analyze ctx fn)
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (h ++ [PhiOcc bb u p]) bb
+      (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+      (q with vs_inst_idx := phi_prefix_length bb.bb_instructions +
+        LENGTH (phis_for_block
+          (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) bb.bb_label))` by
+    (irule le_coupled_phi_entry >> simp[le_cfg_preds_distinct] >> metis_tac[]) >>
+  `p.vs_current_bb = u.vs_current_bb` by
+    (qpat_x_assum `eval_phis u _ = OK p` mp_tac >>
+     rewrite_tac[loadElimOperationalHistoryTheory.le_eval_phis_snapshot] >>
+     strip_tac >> drule loadElimActualPhiFrameTheory.le_snapshot_batch_controls >> simp[]) >>
+  `t.vs_current_bb = u.vs_current_bb` by fs[le_padded_control_def] >>
+  `le_configured_context ctx` by fs[le_round_ready_def] >>
+  qmatch_asmsub_abbrev_tac `eval_phis t bt.bb_instructions` >>
+  `lookup_block t.vs_current_bb
+    (analysis_function_transform_prepend NONE (load_analyze ctx fn)
+      (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+      (\ll inst. [load_elim_inst ctx
+        (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) fn).fn_blocks = SOME bt` by
+    simp[analysisSimDefsTheory.analysis_function_transform_prepend_def,
+      passSimulationDefsTheory.function_map_transform_def,
+      passSimulationPropsTheory.lookup_block_map,
+      analysisSimDefsTheory.analysis_block_transform_prepend_def, Abbr `bt`] >>
+  Cases_on `exec_block fuel C bb
+    (p with vs_inst_idx := phi_prefix_length bb.bb_instructions)`
+  >- suspend "exit"
+  >- suspend "halt"
+  >- suspend "abort"
+  >- suspend "intret"
+  >> (disj1_tac >> pure_once_rewrite_tac[run_blocks_def] >> simp[])
+QED
+
+Resume le_coupled_run[exit]:
+  drule_at (Pat `le_body_coupling _ _ _ _ _ _ _ _ _`) le_coupled_block_OK >>
+  simp[Excl "isPREFIX"] >>
+  disch_then (qspecl_then [`s0`, `fuel`, `C`] mp_tac) >>
+  simp[Excl "isPREFIX"] >> strip_tac >>
+  `!nb pp jj. lookup_block v.vs_current_bb fn.fn_blocks = SOME nb /\
+      eval_phis v nb.bb_instructions = OK pp /\
+      get_instruction nb (phi_prefix_length nb.bb_instructions) = SOME jj ==>
+      le_occ_prefix C fn s0
+        ((h' ++ [StepOcc bb x.vs_inst_idx fuel x v]) ++ [PhiOcc nb v pp]) jj
+        (pp with vs_inst_idx := phi_prefix_length nb.bb_instructions)` by
+    (rpt strip_tac >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     irule (cj 3 le_occ_prefix_rules) >>
+     simp[active_inst_def, get_instruction_def, Excl "isPREFIX"] >>
+     fs[get_instruction_def, Excl "isPREFIX"] >>
+     qpat_x_assum `eval_phis v _ = OK pp` mp_tac >>
+     rewrite_tac[loadElimOperationalHistoryTheory.le_eval_phis_snapshot] >>
+     strip_tac >> drule loadElimActualPhiFrameTheory.le_snapshot_batch_controls >>
+     simp[Excl "isPREFIX"] >> strip_tac >>
+     qexists_tac `nb` >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `~v'.vs_halted` by
+    fs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def] >>
+  first_x_assum (qspecl_then [`v`, `h' ++ [StepOcc bb x.vs_inst_idx fuel x v]`, `v'`] mp_tac) >>
+  simp[Excl "isPREFIX"] >> strip_tac >>
+  pure_once_rewrite_tac[run_blocks_def] >>
+  simp[le_actual_prepend_phi_length, Abbr `bt`, Excl "isPREFIX"]
+QED
+Resume le_coupled_run[halt]:
+  drule_at (Pat `le_body_coupling _ _ _ _ _ _ _ _ _`) le_coupled_block_terminal >>
+  simp[Excl "isPREFIX"] >>
+  disch_then (qspecl_then [`s0`, `fuel`, `C`] mp_tac) >>
+  simp[Excl "isPREFIX"] >> strip_tac >>
+  disj2_tac >> pure_once_rewrite_tac[run_blocks_def] >>
+  simp[le_actual_prepend_phi_length, Abbr `bt`, Excl "isPREFIX"] >>
+  qmatch_asmsub_abbrev_tac `lift_result _ _ _ _ br` >>
+  Cases_on `br` >> gvs[lift_result_def, Excl "isPREFIX"]
+QED
+Resume le_coupled_run[abort]:
+  drule_at (Pat `le_body_coupling _ _ _ _ _ _ _ _ _`) le_coupled_block_terminal >>
+  simp[Excl "isPREFIX"] >>
+  disch_then (qspecl_then [`s0`, `fuel`, `C`] mp_tac) >>
+  simp[Excl "isPREFIX"] >> strip_tac >>
+  disj2_tac >> pure_once_rewrite_tac[run_blocks_def] >>
+  simp[le_actual_prepend_phi_length, Abbr `bt`, Excl "isPREFIX"] >>
+  qmatch_asmsub_abbrev_tac `lift_result _ _ _ _ br` >>
+  Cases_on `br` >> gvs[lift_result_def, Excl "isPREFIX"]
+QED
+Resume le_coupled_run[intret]:
+  drule_at (Pat `le_body_coupling _ _ _ _ _ _ _ _ _`) le_coupled_block_terminal >>
+  simp[Excl "isPREFIX"] >>
+  disch_then (qspecl_then [`s0`, `fuel`, `C`] mp_tac) >>
+  simp[Excl "isPREFIX"] >> strip_tac >>
+  disj2_tac >> pure_once_rewrite_tac[run_blocks_def] >>
+  simp[le_actual_prepend_phi_length, Abbr `bt`, Excl "isPREFIX"] >>
+  qmatch_asmsub_abbrev_tac `lift_result _ _ _ _ br` >>
+  Cases_on `br` >> gvs[lift_result_def, Excl "isPREFIX"]
+QED
+Finalise le_coupled_run
