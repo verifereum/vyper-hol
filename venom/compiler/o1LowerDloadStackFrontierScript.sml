@@ -211,3 +211,64 @@ Theorem ld_frame_reachable_current_initial_frontier:
 Proof
   metis_tac[ld_frame_reachable_initial_frontier]
 QED
+
+Theorem ld_occurrence_saved_site_bound:
+  !U stk B owner aid b sz limit.
+  occurrence_saved_ok B U stk /\ MEM owner (MAP (\u. u.of_owner) U) /\
+  FLOOKUP B (owner,aid) = SOME (b,sz) /\
+  EVERY (\f. alloca_inv f.cf_state) stk /\
+  EVERY (\f. f.cf_state.vs_alloca_next <= limit) stk ==>
+  b + sz <= limit
+Proof
+  Induct >> simp[occurrence_saved_ok_def] >> rpt strip_tac >> gvs[]
+  >- (gvs[occurrence_allocas_ok_def] >>
+      `b + sz <= f.cf_state.vs_alloca_next` by
+        metis_tac[venomMemDefsTheory.alloca_inv_def,
+                  venomMemDefsTheory.alloca_next_valid_def] >> decide_tac)
+  >> first_x_assum irule >> metis_tac[]
+QED
+
+Theorem ld_frame_reachable_prov_site_bound:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  FLOOKUP G v = SOME (b,sz) ==>
+  b + sz <= s.vs_alloca_next
+Proof
+  strip_tac >>
+  `alloca_inv s /\ EVERY (\f. alloca_inv f.cf_state) stk` by
+    metis_tac[ld_frame_reachable_alloca_inv] >>
+  drule_all frame_reachable_occurrence_annotation >> strip_tac >>
+  drule ld_occ_saved_frontiers >> strip_tac >>
+  gvs[occurrence_annotation_ok_def, occurrence_env_ok_def] >>
+  `?id. FLOOKUP H v = SOME id` by
+    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_IS_SOME_EQ_NONE] >>
+  PairCases_on `id` >>
+  first_x_assum (drule_at Any) >> strip_tac >> gvs[]
+  >- (gvs[occurrence_allocas_ok_def] >>
+      metis_tac[venomMemDefsTheory.alloca_inv_def,
+                venomMemDefsTheory.alloca_next_valid_def])
+  >> irule ld_occurrence_saved_site_bound >> metis_tac[]
+QED
+
+Theorem ld_frame_reachable_read_byte_bound:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\
+  off <= i /\ i < off + len ==>
+  i < s.vs_alloca_next
+Proof
+  strip_tac >>
+  `vs.vs_alloca_next <= s.vs_alloca_next` by
+    metis_tac[ld_frame_reachable_current_initial_frontier] >>
+  `lo <= vs.vs_alloca_next /\ access_ok lo G fn inst s` by
+    metis_tac[ptr_discipline_def] >>
+  Cases_on `off + len <= lo` >- decide_tac >>
+  `len <> 0 /\ lo < off + len` by decide_tac >>
+  gvs[access_ok_def] >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges inst s) /\ _ ==> _`
+    (qspecl_then [`off`, `len`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `b + sz <= s.vs_alloca_next` by
+    (irule ld_frame_reachable_prov_site_bound >> metis_tac[]) >> decide_tac
+QED

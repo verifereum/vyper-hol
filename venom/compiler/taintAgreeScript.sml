@@ -18,7 +18,9 @@
 
 Theory taintAgree
 Ancestors
-  o1LowerDloadJointStorageWrite
+  o1LowerDloadJointStorageWrite o1LowerDloadStackFrontier
+  o1LowerDloadRangeTransport o1LowerDloadJointMemoryRead
+  o1LowerDloadMemoryConsumer
   o1LowerDloadRelocationKernel o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomState finite_map pred_set list
 
@@ -78,6 +80,44 @@ Theorem taint_agree_memory:
   read_byte i s.vs_memory = read_byte i t.vs_memory
 Proof
   simp[taint_agree_def]
+QED
+
+Theorem taint_agree_reachable_read_byte:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_agree D X tn s t /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\
+  off <= i /\ i < off + len /\ i NOTIN tn.t_mem ==>
+  read_byte i s.vs_memory = read_byte i t.vs_memory
+Proof
+  strip_tac >> irule taint_agree_memory >>
+  `i < s.vs_alloca_next` by
+    (irule ld_frame_reachable_read_byte_bound >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem taint_agree_reachable_clean_read:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_agree D X tn s t /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  MEM (off,len) (source_memory_read_ranges inst s) /\
+  (!i. off <= i /\ i < off + len ==> i NOTIN tn.t_mem) ==>
+  read_memory off len s = read_memory off len t
+Proof
+  strip_tac >> irule LIST_EQ >> simp[ld_read_memory_length] >>
+  rpt strip_tac >> simp[ld_read_memory_element] >>
+  irule taint_agree_reachable_read_byte >>
+  qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
+  qexistsl_tac [`off`, `len`] >> simp[] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem taint_agree_operand_defined:
@@ -194,6 +234,84 @@ Proof
     (irule taint_agree_operand_clean >> goal_assum (drule_at Any) >> simp[]) >>
   gvs[] >> irule taint_agree_update_var >>
   simp[word_agree_except_def]
+QED
+
+Theorem taint_agree_memory_update:
+  taint_agree D X tn s t /\
+  (!i. i NOTIN X /\ i NOTIN M /\ i < s.vs_alloca_next ==>
+       read_byte i ms = read_byte i mt) ==>
+  taint_agree D X (tn with t_mem := M)
+    (s with vs_memory := ms) (t with vs_memory := mt)
+Proof
+  simp[taint_agree_def, ld_shared_agree_def, op_taint_def] >>
+  rpt strip_tac >> simp[] >>
+  qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM `\u. u with vs_memory := ms`) >>
+  simp[]
+QED
+
+Theorem taint_agree_mstore:
+  taint_agree D X tn s t /\ word_agree_except m x y ==>
+  taint_agree D X
+    (tn with t_mem := (tn.t_mem DIFF {i | a <= i /\ i < a+32}) UNION
+                         {a+k | k IN m})
+    (mstore a x s) (mstore a y t)
+Proof
+  strip_tac >>
+  `mstore a x s = s with vs_memory := (mstore a x s).vs_memory` by
+    simp[mstore_def] >>
+  `mstore a y t = t with vs_memory := (mstore a y t).vs_memory` by
+    simp[mstore_def] >>
+  pop_assum SUBST1_TAC >> pop_assum SUBST1_TAC >>
+  irule taint_agree_memory_update >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  gen_tac >> disch_tac >> simp[ld_mstore_bytes] >>
+  Cases_on `a <= i /\ i < a+32` >> simp[]
+  >- (gvs[word_agree_except_def] >>
+      `i-a < 32 /\ a + (i-a) = i` by decide_tac >>
+      first_x_assum irule >> simp[] >> metis_tac[]) >>
+  irule taint_agree_memory >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> gvs[]
+QED
+
+Theorem taint_agree_load_word:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  MEM inst.inst_opcode [MLOAD; ILOAD] /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
+    (gvs[taint_ok_def, MEM] >> metis_tac[]) >>
+  fs[MEM] >> gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()] >>
+  rename1 `eval_operand op1 s = SOME v` >>
+  `eval_operand op1 t = SOME v` by
+    (qsuff_tac `eval_operand op1 s = eval_operand op1 t` >- simp[] >>
+     irule taint_agree_operand_clean >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> simp[]) >>
+  simp[] >>
+  `word_agree_except (mem_word_taint tn.t_mem (w2n v))
+     (mload (w2n v) s) (mload (w2n v) t)` by
+    (irule ld_mload_masked_bytes >> simp[mem_word_taint_def] >>
+     rpt strip_tac >> irule taint_agree_reachable_read_byte >>
+     qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
+     qexistsl_tac [`w2n v`, `32`] >>
+     simp[source_memory_read_ranges_def]) >>
+  `step_taint inst s (update_var out (mload (w2n v) s) s) tn =
+     tn with t_var := set_var_taint tn.t_var [out]
+       (mem_word_taint tn.t_mem (w2n v))` by
+    simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+         imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
+         step_writes_def, source_memory_write_ranges_def, written_taint_def,
+         range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, taint_component_equality] >>
+  simp[] >> irule taint_agree_update_var >> simp[]
 QED
 
 Theorem taint_agree_assign:
