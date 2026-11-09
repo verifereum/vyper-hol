@@ -2516,6 +2516,37 @@ Proof
   irule taint_agree_create_abort >> fs[MEM] >> metis_tac[]
 QED
 
+Theorem taint_agree_dload:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  inst.inst_opcode = DLOAD /\ step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
+    (gvs[taint_ok_def] >> metis_tac[]) >>
+  `s.vs_data_section = t.vs_data_section` by
+    (drule taint_agree_frame >> simp[venomStateTheory.venom_state_component_equality]) >>
+  `!u. out_taint tn inst u = {}` by
+    (gen_tac >> irule o1LowerDloadJointRead0Theory.ld_out_taint_default >> simp[]) >>
+  gvs[step_inst_base_opcode_eqs] >>
+  drule_at (Pat `exec_read1 _ _ _ = _`) taint_agree_exec_read1_clean >>
+  simp[] >> disch_then drule >> simp[] >>
+  disch_then (qx_choose_then `target` strip_assume_tac) >>
+  qexists_tac `target` >> simp[] >>
+  qpat_x_assum `exec_read1 _ inst s = _` mp_tac >>
+  simp[exec_read1_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  qpat_x_assum `taint_agree _ _ _ _ _` mp_tac >>
+  simp[step_taint_def, mem_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
+       step_writes_def, source_memory_write_ranges_def, written_taint_def,
+       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss] >>
+  strip_tac >> qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  `mask = tn with t_var := mask.t_var` by
+    simp[Abbr `mask`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[Abbr `mask`]
+QED
+
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
    no taint, so taint_agree evaluates it equally in t; access_ok puts
    each read ending above lo inside a site, below the bump pointer since
@@ -2557,5 +2588,351 @@ Theorem taint_agree_step_base:
     (!a s'. r = Abort a s' ==>
           ?t'. step_inst_base inst t = Abort a t')
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `wf_function fn /\ fn_inst_wf fn` by
+    (gvs[o1PassContractTheory.o1_ctx_shape_def, listTheory.EVERY_MEM] >>
+     metis_tac[o1PassContractTheory.o1_fn_shape_def]) >>
+  `inst_wf inst` by
+    (gvs[active_inst_def, venomWfTheory.fn_inst_wf_def] >>
+     metis_tac[listTheory.MEM_EL]) >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, venomInstTheory.fn_insts_def,
+        o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `inst.inst_opcode <> MEMTOP /\ inst.inst_opcode <> DRET /\
+   inst.inst_opcode <> GETFMP /\ inst.inst_opcode <> SETFMP /\
+   inst.inst_opcode <> RETFMP /\ inst.inst_opcode <> FMP_PARAM` by
+    (drule o1LowerDloadPtrDisciplineTheory.ptr_discipline_fn_ptr_ok >>
+     strip_tac >> fs[EVERY_MEM] >>
+     `fn_ptr_ok P fn` by metis_tac[] >> fs[fn_ptr_ok_def]) >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
+  >- (irule taint_agree_external_step >> metis_tac[]) >>
+  qpat_x_assum `step_inst_base inst s = r` (SUBST_ALL_TAC o SYM) >>
+  Cases_on `MEM inst.inst_opcode [ALLOCA; DALLOCA]`
+  >- (irule taint_agree_allocation_step >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [MLOAD; ILOAD; MSTORE; ISTORE; MSTORE8]`
+  >- (irule taint_agree_load_store_step >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode
+    [MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES; RETURNDATACOPY; EXTCODECOPY]`
+  >- (irule taint_agree_copy_step >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [SHA3; LOG]`
+  >- (irule taint_agree_memory_observation_step >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [SLOAD; TLOAD; SSTORE; TSTORE]`
+  >- (irule taint_agree_storage_step >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE; INVALID; REVERT]`
+  >- (irule taint_agree_assert_step >> metis_tac[]) >>
+  `~in_revert_forward fn s` by
+    (spose_not_then assume_tac >>
+     gvs[in_revert_forward_def, active_inst_def] >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+       (irule venomExecPropsTheory.MEM_lookup_block >>
+        gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+     gvs[] >>
+     `get_instruction bb s.vs_inst_idx = SOME (EL s.vs_inst_idx bb.bb_instructions)` by
+       simp[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> fs[MEM]) >>
+  Cases_on `MEM inst.inst_opcode [RET; STOP; SINK; RETURN; SELFDESTRUCT]`
+  >- (irule taint_agree_terminal_step >> fs[MEM] >> metis_tac[]) >>
+  suspend "ordinary"
 QED
+
+Resume taint_agree_step_base[ordinary]:
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `MEM inst.inst_opcode
+        [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; EQ; LT; GT; SLT; SGT;
+         AND; OR; XOR; SIGNEXTEND; BYTE; OFFSET]`
+      >- (irule taint_agree_pure2 >> metis_tac[]) >>
+      Cases_on `MEM inst.inst_opcode [ISZERO; NOT]`
+      >- (irule taint_agree_pure1 >> metis_tac[]) >>
+      Cases_on `MEM inst.inst_opcode [ADDMOD; MULMOD]`
+      >- (irule taint_agree_pure3 >> metis_tac[]) >>
+      Cases_on `MEM inst.inst_opcode [SHL; SHR; SAR]`
+      >- (irule taint_agree_shift >> metis_tac[]) >>
+      Cases_on `MEM inst.inst_opcode
+        [CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID;
+         COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
+         BLOBBASEFEE; CALLDATASIZE; CODESIZE; RETURNDATASIZE; SELFBALANCE]`
+      >- (irule taint_agree_read0 >> metis_tac[]) >>
+      Cases_on `MEM inst.inst_opcode
+        [BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH; CALLDATALOAD]`
+      >- (irule taint_agree_read1 >> metis_tac[]) >>
+      Cases_on `MEM inst.inst_opcode [PARAM; RETPC_PARAM; INITIAL_FMP]`
+      >- (irule taint_agree_frame_scalar >> metis_tac[]) >>
+      suspend "small_ok") >>
+  suspend "ordinary_terminal"
+QED
+
+Resume taint_agree_step_base[small_ok]:
+  Cases_on `inst.inst_opcode = DLOAD`
+  >- (irule taint_agree_dload >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = ASSIGN`
+  >- (irule taint_agree_assign >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- (irule taint_agree_gas >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = BUMP`
+  >- (irule taint_agree_bump >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = NOP`
+  >- (irule taint_agree_identity >> simp[] >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [JMP; JNZ; DJMP]`
+  >- (irule taint_agree_jump >>
+      `inst.inst_outputs = []` by
+        (fs[MEM] >> gvs[venomWfTheory.inst_wf_def]) >> metis_tac[]) >>
+  fs[MEM] >> Cases_on `inst.inst_opcode` >>
+  TRY (qpat_x_assum `~(c = c)` mp_tac >> simp[] >> NO_TAC) >>
+  gvs[step_inst_base_opcode_eqs]
+QED
+
+Resume taint_agree_step_base[ordinary_terminal]:
+  fs[MEM] >> Cases_on `inst.inst_opcode` >>
+  TRY (qpat_x_assum `~(c = c)` mp_tac >> simp[] >> NO_TAC) >>
+  qpat_x_assum `inst.inst_opcode = _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >> strip_tac
+  >~ [`inst.inst_opcode = ADD`] >- suspend "term_ADD"
+  >~ [`inst.inst_opcode = SUB`] >- suspend "term_SUB"
+  >~ [`inst.inst_opcode = MUL`] >- suspend "term_MUL"
+  >~ [`inst.inst_opcode = Div`] >- suspend "term_Div"
+  >~ [`inst.inst_opcode = Mod`] >- suspend "term_Mod"
+  >~ [`inst.inst_opcode = SDIV`] >- suspend "term_SDIV"
+  >~ [`inst.inst_opcode = SMOD`] >- suspend "term_SMOD"
+  >~ [`inst.inst_opcode = Exp`] >- suspend "term_Exp"
+  >~ [`inst.inst_opcode = EQ`] >- suspend "term_EQ"
+  >~ [`inst.inst_opcode = LT`] >- suspend "term_LT"
+  >~ [`inst.inst_opcode = GT`] >- suspend "term_GT"
+  >~ [`inst.inst_opcode = SLT`] >- suspend "term_SLT"
+  >~ [`inst.inst_opcode = SGT`] >- suspend "term_SGT"
+  >~ [`inst.inst_opcode = AND`] >- suspend "term_AND"
+  >~ [`inst.inst_opcode = OR`] >- suspend "term_OR"
+  >~ [`inst.inst_opcode = XOR`] >- suspend "term_XOR"
+  >~ [`inst.inst_opcode = SIGNEXTEND`] >- suspend "term_SIGNEXTEND"
+  >~ [`inst.inst_opcode = BYTE`] >- suspend "term_BYTE"
+  >~ [`inst.inst_opcode = OFFSET`] >- suspend "term_OFFSET"
+  >~ [`inst.inst_opcode = ISZERO`] >- suspend "term_ISZERO"
+  >~ [`inst.inst_opcode = NOT`] >- suspend "term_NOT"
+  >~ [`inst.inst_opcode = ADDMOD`] >- suspend "term_ADDMOD"
+  >~ [`inst.inst_opcode = MULMOD`] >- suspend "term_MULMOD"
+  >~ [`inst.inst_opcode = SHL`] >- suspend "term_SHL"
+  >~ [`inst.inst_opcode = SHR`] >- suspend "term_SHR"
+  >~ [`inst.inst_opcode = SAR`] >- suspend "term_SAR"
+  >~ [`inst.inst_opcode = CALLER`] >- suspend "term_CALLER"
+  >~ [`inst.inst_opcode = ADDRESS`] >- suspend "term_ADDRESS"
+  >~ [`inst.inst_opcode = CALLVALUE`] >- suspend "term_CALLVALUE"
+  >~ [`inst.inst_opcode = ORIGIN`] >- suspend "term_ORIGIN"
+  >~ [`inst.inst_opcode = GASPRICE`] >- suspend "term_GASPRICE"
+  >~ [`inst.inst_opcode = CHAINID`] >- suspend "term_CHAINID"
+  >~ [`inst.inst_opcode = COINBASE`] >- suspend "term_COINBASE"
+  >~ [`inst.inst_opcode = TIMESTAMP`] >- suspend "term_TIMESTAMP"
+  >~ [`inst.inst_opcode = NUMBER`] >- suspend "term_NUMBER"
+  >~ [`inst.inst_opcode = PREVRANDAO`] >- suspend "term_PREVRANDAO"
+  >~ [`inst.inst_opcode = GASLIMIT`] >- suspend "term_GASLIMIT"
+  >~ [`inst.inst_opcode = BASEFEE`] >- suspend "term_BASEFEE"
+  >~ [`inst.inst_opcode = BLOBBASEFEE`] >- suspend "term_BLOBBASEFEE"
+  >~ [`inst.inst_opcode = CALLDATASIZE`] >- suspend "term_CALLDATASIZE"
+  >~ [`inst.inst_opcode = CODESIZE`] >- suspend "term_CODESIZE"
+  >~ [`inst.inst_opcode = RETURNDATASIZE`] >- suspend "term_RETURNDATASIZE"
+  >~ [`inst.inst_opcode = SELFBALANCE`] >- suspend "term_SELFBALANCE"
+  >~ [`inst.inst_opcode = BLOCKHASH`] >- suspend "term_BLOCKHASH"
+  >~ [`inst.inst_opcode = BLOBHASH`] >- suspend "term_BLOBHASH"
+  >~ [`inst.inst_opcode = BALANCE`] >- suspend "term_BALANCE"
+  >~ [`inst.inst_opcode = EXTCODESIZE`] >- suspend "term_EXTCODESIZE"
+  >~ [`inst.inst_opcode = EXTCODEHASH`] >- suspend "term_EXTCODEHASH"
+  >~ [`inst.inst_opcode = CALLDATALOAD`] >- suspend "term_CALLDATALOAD"
+  >~ [`inst.inst_opcode = DLOAD`] >- suspend "term_DLOAD"
+  >~ [`inst.inst_opcode = PARAM`] >- suspend "term_PARAM"
+  >~ [`inst.inst_opcode = RETPC_PARAM`] >- suspend "term_RETPC_PARAM"
+  >~ [`inst.inst_opcode = INITIAL_FMP`] >- suspend "term_INITIAL_FMP"
+  >~ [`inst.inst_opcode = ASSIGN`] >- suspend "term_ASSIGN"
+  >~ [`inst.inst_opcode = GAS`] >- suspend "term_GAS"
+  >~ [`inst.inst_opcode = BUMP`] >- suspend "term_BUMP"
+  >~ [`inst.inst_opcode = NOP`] >- suspend "term_NOP"
+  >~ [`inst.inst_opcode = JMP`] >- suspend "term_JMP"
+  >~ [`inst.inst_opcode = JNZ`] >- suspend "term_JNZ"
+  >~ [`inst.inst_opcode = DJMP`] >- suspend "term_DJMP"
+  >~ [`inst.inst_opcode = PHI`] >- suspend "term_PHI"
+QED
+
+Resume taint_agree_step_base[term_ADD]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SUB]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_MUL]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_Div]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_Mod]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SDIV]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SMOD]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_Exp]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_EQ]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_LT]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_GT]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SLT]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SGT]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_AND]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_OR]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_XOR]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SIGNEXTEND]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_BYTE]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_OFFSET]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_ISZERO]: simp[step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_NOT]: simp[step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_ADDMOD]: simp[step_inst_base_opcode_eqs, exec_pure3_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_MULMOD]: simp[step_inst_base_opcode_eqs, exec_pure3_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SHL]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SHR]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SAR]: simp[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_CALLER]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_ADDRESS]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_CALLVALUE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_ORIGIN]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_GASPRICE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_CHAINID]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_COINBASE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_TIMESTAMP]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_NUMBER]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_PREVRANDAO]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_GASLIMIT]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_BASEFEE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_BLOBBASEFEE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_CALLDATASIZE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_CODESIZE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_RETURNDATASIZE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_SELFBALANCE]: simp[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_BLOCKHASH]: simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_BLOBHASH]: simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_BALANCE]: simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_EXTCODESIZE]: simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_EXTCODEHASH]: simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_CALLDATALOAD]: simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_DLOAD]: simp[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_PARAM]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_RETPC_PARAM]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_INITIAL_FMP]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_ASSIGN]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_GAS]: simp[step_inst_base_opcode_eqs, exec_gas_def, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_BUMP]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_NOP]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_JMP]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_JNZ]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_DJMP]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+Resume taint_agree_step_base[term_PHI]: simp[step_inst_base_opcode_eqs, AllCaseEqs()]
+QED
+
+
+Finalise taint_agree_step_base
