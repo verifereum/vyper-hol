@@ -4,7 +4,7 @@ Ancestors
   extcallReturnObserver extcallReturnObserverRun extcallReturnCountedTransport exprSimAbiGasBridge compileEnv fragExec exprLoweringProps abiDecoderLoop
   simplifyCfgFixupSemantics venomExecSemantics venomExecProofs
   venomInstProofs venomInstProofs1 venomInstProps venomInst list rich_list
-  arithmetic venomWf mem2varBlockSimHelpers
+  arithmetic venomWf mem2varBlockSimHelpers abiEncoderObserver venomState fragGasMode
 
 Theorem return_straight_shape:
   cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks ==>
@@ -380,4 +380,84 @@ Proof
   qexistsl_tac [`ids`] >> simp[] >>
   irule return_observer_complete_sim >> simp[] >>
   qexistsl_tac [`ctx'`, `func`, `keep`] >> fs[EVERY_MEM]
+QED
+
+Theorem return_observer_counted_success_straight:
+  (!ids fn'. LENGTH ids = LENGTH sa.cs_current_insts /\
+     fn_has_code (start_relabel sa.cs_current_bb ids sa)
+       (start_swap sa sa.cs_current_bb ids sb) fn' /\
+     fn_inst_ids_distinct fn' /\ fn'.fn_name = func.fn_name /\
+     (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==>
+          MEM i (fn_insts func)) /\
+     (!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE) /\
+     (!i. i.inst_opcode = ALLOCA ==>
+        (MEM i (fn_insts fn') <=> MEM i (fn_insts func))) ==>
+     ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+         abi_decode_sim (return_observer_context ctx fn') fn' s t) /\
+  cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks /\ frag_gas_free sa sb /\
+  (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all return_straight_completion >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qpat_x_assum `!ids fn'. _` drule_all >> strip_tac >>
+  `abi_decode_sim ctx (frag_observer sa sb func stop) s t` by metis_tac[] >>
+  `?fuel. run_from fuel ctx (frag_observer sa sb func stop) s = Halt (stop_view t)` by
+    (irule abi_decode_sim_stop_run >> simp[] >>
+     qexistsl_tac [`<|bb_label := sb.cs_current_bb;
+       bb_instructions := sb.cs_current_insts ++ [mk_inst stop STOP [] []]|>`, `stop`] >>
+     simp[frag_observer_cut_lookup, frag_observer_cut_instruction]) >>
+  `(s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb` by
+    metis_tac[frag_observer_start_region] >>
+  `(stop_view t).vs_current_bb = sb.cs_current_bb /\
+   (stop_view t).vs_inst_idx = LENGTH sb.cs_current_insts` by
+    simp[stop_view_def, halt_state_def] >>
+  `?u. local_prefix ctx (frag_observer sa sb func stop) (frag_observer_cut sb) s u /\
+       stop_view u = stop_view t` by
+    (irule frag_observer_halt_cut_prefix >> simp[frag_observer_cut_def] >>
+     metis_tac[]) >>
+  `gas_path ctx func s 0 (OK u)` by
+    (drule frag_observer_prefix_zero_path >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  drule local_prefix_endpoint >> strip_tac >>
+  qexists_tac `u` >> simp[gas_marked_path_def] >>
+  `Q u` by (irule stop_view_closed_post >> metis_tac[]) >>
+  gvs[frag_observer_cut_def]
+QED
+
+Theorem return_observer_counted_abort_straight:
+  (!ids fn'. LENGTH ids = LENGTH sa.cs_current_insts /\
+     fn_has_code (start_relabel sa.cs_current_bb ids sa)
+       (start_swap sa sa.cs_current_bb ids sb) fn' /\
+     fn_inst_ids_distinct fn' /\ fn'.fn_name = func.fn_name /\
+     (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP /\ i.inst_opcode <> NOP ==>
+          MEM i (fn_insts func)) /\
+     (!i. MEM i (fn_insts fn') ==> i.inst_opcode <> INVOKE) /\
+     (!i. i.inst_opcode = ALLOCA ==>
+        (MEM i (fn_insts fn') <=> MEM i (fn_insts func))) ==>
+     ?fuel r. run_from fuel (return_observer_context ctx fn') fn' s = r /\
+              exit_result r /\ R r) /\
+  cs_extends sa sb /\ sa.cs_blocks = sb.cs_blocks /\ frag_gas_free sa sb /\
+  (!h. ~R (Halt h)) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?r. gas_marked_path F ctx func s 0 r /\ exit_result r /\ R r
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all return_straight_completion >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qpat_x_assum `!ids fn'. _` drule_all >> strip_tac >>
+  `run_from fuel ctx (frag_observer sa sb func stop) s = r` by metis_tac[] >>
+  `(s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region sa sb` by
+    metis_tac[frag_observer_start_region] >>
+  qexists_tac `r` >> simp[gas_marked_path_def] >>
+  irule frag_observer_exit_path >> simp[] >> metis_tac[]
 QED
