@@ -362,26 +362,35 @@ Proof
   simp[sym_steps_compute]
 QED
 
-Theorem sym_push_offset_post:
-  !p env ss off inst P.
+Theorem sym_push_offset_then:
+  !p env ss off inst pushed out.
     off < dimword(:256) /\
     asm_block_at p ss.sym_base.as_pc [AsmPush (encode_num_bytes off); inst] /\
-    (!pushed. pushed = ss with <|
-       sym_base := asm_next (ss.sym_base with as_stack := []);
-       sym_stack := Val (n2w off) :: ss.sym_stack |> ==>
-       ?out. sym_step p env inst pushed = SymOK out /\ P out) ==>
-    ?out. sym_steps p env 2 ss = SymOK out /\ P out
+    pushed = ss with <|
+      sym_base := asm_next (ss.sym_base with as_stack := []);
+      sym_stack := Val (n2w off) :: ss.sym_stack |> /\
+    sym_step p env inst pushed = SymOK out ==>
+    sym_steps p env 2 ss = SymOK out
+Proof
+  rpt strip_tac >> irule sym_steps_two >>
+  qexistsl_tac [`AsmPush (encode_num_bytes off)`, `inst`, `pushed`] >>
+  gvs[sym_step_push_offset, asmSemTheory.asm_next_def]
+QED
+
+Theorem sym_pushed_mstore:
+  !p env ss off sv stk pushed.
+    off < dimword(:256) /\ ss.sym_stack = sv :: stk /\
+    pushed = ss with <|
+      sym_base := asm_next (ss.sym_base with as_stack := []);
+      sym_stack := Val (n2w off) :: ss.sym_stack |> ==>
+    ?out. sym_step p env (AsmOp "MSTORE") pushed = SymOK out /\
+      out.sym_stack = stk /\
+      out.sym_mem_labels = scratch_labels_write ss.sym_mem_labels off sv /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
   rpt strip_tac >>
-  first_x_assum (qspec_then `ss with <|
-    sym_base := asm_next (ss.sym_base with as_stack := []);
-    sym_stack := Val (n2w off) :: ss.sym_stack |>` mp_tac) >>
-  simp[] >> strip_tac >>
-  qexists_tac `out` >> simp[] >> irule sym_steps_two >>
-  qexistsl_tac [`AsmPush (encode_num_bytes off)`, `inst`,
-    `ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
-      sym_stack := Val (n2w off) :: ss.sym_stack |>`] >>
-  simp[sym_step_push_offset, asmSemTheory.asm_next_def]
+  qspec_then `pushed` mp_tac sym_mstore_scratch_write >>
+  gvs[sym_step_def, sym_step_op_def, asmSemTheory.asm_next_def]
 QED
 
 Theorem sym_spill_offset_steps:
@@ -394,14 +403,7 @@ Theorem sym_spill_offset_steps:
       ss'.sym_mem_labels = scratch_labels_write ss.sym_mem_labels off sv /\
       ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >> ho_match_mp_tac sym_push_offset_post >>
-  qexistsl_tac [`off`, `AsmOp "MSTORE"`] >> simp[] >>
-  rpt strip_tac >> gvs[sym_step_def, sym_step_op_def] >>
-  mp_tac sym_mstore_scratch_write >>
-  disch_then (qspec_then `ss with <|
-    sym_base := asm_next (ss.sym_base with as_stack := []);
-    sym_stack := Val (n2w off) :: ss.sym_stack |>` mp_tac) >>
-  simp[asmSemTheory.asm_next_def]
+  rpt strip_tac >> metis_tac[sym_pushed_mstore, sym_push_offset_then]
 QED
 
 Theorem sym_mload_saved_kinds:
@@ -420,6 +422,23 @@ Proof
   simp[asmSemTheory.asm_next_def]
 QED
 
+Theorem sym_pushed_mload:
+  !p env ss off sv pushed.
+    off < dimword(:256) /\ mem_sval_at ss.sym_mem_labels off sv /\
+    pushed = ss with <|
+      sym_base := asm_next (ss.sym_base with as_stack := []);
+      sym_stack := Val (n2w off) :: ss.sym_stack |> ==>
+    ?out sv'. sym_step p env (AsmOp "MLOAD") pushed = SymOK out /\
+      out.sym_stack = sv' :: ss.sym_stack /\
+      (!fn ret op. op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv') /\
+      out.sym_mem_labels = ss.sym_mem_labels /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  rpt strip_tac >>
+  qspec_then `pushed` mp_tac sym_mload_saved_kinds >>
+  gvs[sym_step_def, sym_step_op_def, asmSemTheory.asm_next_def]
+QED
+
 Theorem sym_restore_offset_steps:
   !p env ss off sv.
     off < dimword(:256) /\ mem_sval_at ss.sym_mem_labels off sv /\
@@ -431,25 +450,7 @@ Theorem sym_restore_offset_steps:
       out.sym_mem_labels = ss.sym_mem_labels /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >>
-  qabbrev_tac `pushed = ss with <|
-    sym_base := asm_next (ss.sym_base with as_stack := []);
-    sym_stack := Val (n2w off) :: ss.sym_stack |>` >>
-  `?out sv'. sym_mload pushed = SymOK out /\
-    out.sym_stack = sv' :: ss.sym_stack /\
-    (!fn ret op. op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv') /\
-    out.sym_mem_labels = ss.sym_mem_labels /\
-    out.sym_base.as_pc = ss.sym_base.as_pc + 2` by
-    (mp_tac sym_mload_saved_kinds >>
-     disch_then (qspec_then `pushed` mp_tac) >>
-     simp[Abbr `pushed`, asmSemTheory.asm_next_def]) >>
-  `sym_step p env (AsmPush (encode_num_bytes off)) ss = SymOK pushed` by
-    simp[Abbr `pushed`, sym_step_push_offset] >>
-  `sym_step p env (AsmOp "MLOAD") pushed = SymOK out` by
-    simp[sym_step_def, sym_step_op_def] >>
-  `pushed.sym_base.as_pc = ss.sym_base.as_pc + 1` by
-    simp[Abbr `pushed`, asmSemTheory.asm_next_def] >>
-  metis_tac[sym_steps_two]
+  rpt strip_tac >> metis_tac[sym_pushed_mload, sym_push_offset_then]
 QED
 
 Theorem sym_steps_ok_append:
@@ -458,6 +459,24 @@ Theorem sym_steps_ok_append:
   sym_steps p env (m + n) ss = SymOK out
 Proof
   simp[sym_steps_add]
+QED
+
+Theorem sym_spill_offsets_cons_result:
+  !p env ss mid out off sv xs stk.
+    sym_steps p env 2 ss = SymOK mid /\
+    mid.sym_mem_labels = scratch_labels_write ss.sym_mem_labels off sv /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    sym_steps p env (2 * LENGTH xs) mid = SymOK out /\
+    out.sym_stack = stk /\
+    out.sym_mem_labels = scratch_labels_store mid.sym_mem_labels xs /\
+    out.sym_base.as_pc = mid.sym_base.as_pc + 2 * LENGTH xs ==>
+    ?result. sym_steps p env (2 * LENGTH ((off,sv)::xs)) ss = SymOK result /\
+      result.sym_stack = stk /\
+      result.sym_mem_labels = scratch_labels_store ss.sym_mem_labels ((off,sv)::xs) /\
+      result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
+Proof
+  rpt strip_tac >> drule_all sym_steps_ok_append >>
+  gvs[scratch_labels_store_def, arithmeticTheory.MULT_CLAUSES]
 QED
 
 Theorem sym_spill_offsets_steps:
@@ -485,9 +504,34 @@ Proof
     (execute_plan initial_fmp (MAP SOSpill (MAP FST xs)))` by simp[] >>
   first_x_assum drule_all >>
   disch_then (qspec_then `env` strip_assume_tac) >>
-  `sym_steps p env (2 + 2 * LENGTH xs) ss = SymOK out` by
-    (irule sym_steps_ok_append >> goal_assum drule >> simp[]) >>
-  qexists_tac `out` >> gvs[scratch_labels_store_def, arithmeticTheory.MULT_CLAUSES]
+  drule_all sym_spill_offsets_cons_result >> simp[]
+QED
+
+Theorem sym_restore_offsets_cons_result:
+  !p env ss mid out off sv sv' xs vals.
+    sym_steps p env 2 ss = SymOK mid /\
+    mid.sym_stack = sv' :: ss.sym_stack /\
+    (!fn ret op. op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv') /\
+    mid.sym_mem_labels = ss.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    sym_steps p env (2 * LENGTH xs) mid = SymOK out /\
+    out.sym_stack = REVERSE vals ++ mid.sym_stack /\
+    LIST_REL (\sv sv'. !fn ret op.
+      op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv') (MAP SND xs) vals /\
+    out.sym_mem_labels = mid.sym_mem_labels /\
+    out.sym_base.as_pc = mid.sym_base.as_pc + 2 * LENGTH xs ==>
+    ?result values.
+      sym_steps p env (2 * LENGTH ((off,sv)::xs)) ss = SymOK result /\
+      result.sym_stack = REVERSE values ++ ss.sym_stack /\
+      LIST_REL (\sv sv'. !fn ret op.
+        op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
+        (MAP SND ((off,sv)::xs)) values /\
+      result.sym_mem_labels = ss.sym_mem_labels /\
+      result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
+Proof
+  rpt strip_tac >> drule_all sym_steps_ok_append >>
+  gvs[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
+  qexists_tac `sv' :: vals` >> simp[]
 QED
 
 Theorem sym_restore_offsets_steps:
@@ -520,10 +564,7 @@ Proof
      mem_sval_at mid.sym_mem_labels (FST p) (SND p)) xs` by simp[] >>
   first_x_assum drule_all >>
   disch_then (qspec_then `env` strip_assume_tac) >>
-  `sym_steps p env (2 + 2 * LENGTH xs) ss = SymOK out` by
-    (irule sym_steps_ok_append >> goal_assum drule >> simp[]) >>
-  qexistsl_tac [`out`, `sv' :: vals`] >>
-  gvs[arithmeticTheory.MULT_CLAUSES]
+  drule_all sym_restore_offsets_cons_result >> simp[]
 QED
 
 Theorem scratch_labels_store_restore_ready:
@@ -575,6 +616,25 @@ Proof
   drule_all sym_steps_ok_append >> simp[]
 QED
 
+Theorem scratch_ranges_outside:
+  !xs R b.
+    (!off sv b. MEM (off,sv) xs /\ in_mem_range off 32 b ==> R b) /\
+    ~R b ==>
+    EVERY (\p. ~in_mem_range (FST p) 32 b) xs
+Proof
+  simp[listTheory.EVERY_MEM] >> metis_tac[pairTheory.PAIR]
+QED
+
+Theorem scratch_labels_store_separated_saved:
+  !xs labs old saved.
+    (!off sv. MEM (off,sv) xs ==> old + 32 <= off \/ off + 32 <= old) ==>
+    (mem_sval_at (scratch_labels_store labs xs) old saved <=>
+     mem_sval_at labs old saved)
+Proof
+  rpt strip_tac >> irule scratch_labels_store_preserves_saved >>
+  gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> gvs[]
+QED
+
 Theorem scratch_labels_store_context:
   !labs cp xs.
   (!b. b IN FDOM labs ==> context_spill_byte cp b) /\
@@ -582,12 +642,8 @@ Theorem scratch_labels_store_context:
      context_spill_byte cp b) ==>
   !b. b IN FDOM (scratch_labels_store labs xs) ==> context_spill_byte cp b
 Proof
-  rpt strip_tac >> spose_not_then assume_tac >>
-  `EVERY (\p. ~in_mem_range (FST p) 32 b) xs` by
-    (simp[listTheory.EVERY_MEM] >> metis_tac[pairTheory.PAIR]) >>
-  drule scratch_labels_store_outside >>
-  disch_then (qspec_then `labs` mp_tac) >>
-  gvs[finite_mapTheory.FLOOKUP_DEF, AllCaseEqs()] >> metis_tac[]
+  simp[GSYM finite_mapTheory.FLOOKUP_DEF, finite_mapTheory.TO_FLOOKUP] >>
+  metis_tac[scratch_ranges_outside, scratch_labels_store_outside]
 QED
 
 Theorem sym_kinds_scratch_store:
@@ -603,10 +659,7 @@ Theorem sym_kinds_scratch_store:
   sym_kinds_ok cp fn ret srest (ps with ps_stack := stack) out
 Proof
   simp[sym_kinds_ok_def] >> rpt strip_tac
-  >- (rename1 `FLOOKUP ps.ps_spilled op = SOME old` >>
-      `EVERY (\p. old + 32 <= FST p \/ FST p + 32 <= old) xs` by
-        (simp[listTheory.EVERY_MEM] >> metis_tac[pairTheory.PAIR]) >>
-      metis_tac[scratch_labels_store_preserves_saved]) >>
+  >- metis_tac[scratch_labels_store_separated_saved] >>
   metis_tac[scratch_labels_store_context]
 QED
 
