@@ -58,7 +58,7 @@ Theorem slice_bytes_continue_seq_mem:
       vv_store_bound cx (expr_type result) (lowered_value_type cenv result) ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-      alloca_history func t)
+      alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >> ho_match_mp_tac slice_two_read_outcome_seq_mem >> simp[] >>
@@ -85,7 +85,7 @@ Proof
     vv_store_bound cx (expr_type result) (lowered_value_type cenv result) ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts /\
-    alloca_history func z)` >>
+    alloca_history func z /\ r.vs_alloca_next <= z.vs_alloca_next)` >>
   qexists_tac `(\res ee r. expr_exit res r)` >>
   conj_tac >- simp[] >>
   conj_tac >- (BETA_TAC >> rpt strip_tac >> qexists_tac `tv` >>
@@ -148,7 +148,7 @@ Theorem slice_string_continue_seq_mem:
       vv_store_bound cx (expr_type result) (lowered_value_type cenv result) ee tv
         (LocatedValue (expr_type result) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-      alloca_history func t)
+      alloca_history func t /\ u.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >> ho_match_mp_tac slice_two_read_outcome_seq_mem >> simp[] >>
@@ -175,7 +175,7 @@ Proof
     vv_store_bound cx (expr_type result) (lowered_value_type cenv result) ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts /\
-    alloca_history func z)` >>
+    alloca_history func z /\ r.vs_alloca_next <= z.vs_alloca_next)` >>
   qexists_tac `(\res ee r. expr_exit res r)` >>
   conj_tac >- simp[] >>
   conj_tac >- (BETA_TAC >> rpt strip_tac >> qexists_tac `tv` >>

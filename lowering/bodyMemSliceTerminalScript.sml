@@ -2,6 +2,7 @@
 Theory bodyMemSliceTerminal
 Ancestors
   bodyMemSliceData bodyMemSliceResult exprSimSliceTerminal bodyMemTbEmptyMemory exprSimVVFrame
+  bodyMemBiSha256Compose
   fragGasMode gasOutcome gasSummary exprSimWordArgs vyperState vyperContext
   exprLoweringProps loweringPosts context list words
 
@@ -50,7 +51,7 @@ Theorem slice_data_bytes_outcome_mem:
        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       alloca_history func t)
+       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >> Cases_on `i+k <= LENGTH bs`
@@ -66,6 +67,10 @@ Resume slice_data_bytes_outcome_mem[success]:
   `w2n (n2w src_base : bytes32) + w2n (n2w (LENGTH bs) : bytes32) <= s.vs_alloca_next /\
    32 + w2n (n2w k : bytes32) <= sz` by fs[] >>
   drule_all slice_data_success_path_mem >> strip_tac >>
+  `s.vs_alloca_next <= t.vs_alloca_next` by
+    (irule sha256_run_inst_seq_alloca_next_mono >>
+     qexists_tac `emitted_insts sa sb` >> simp[] >>
+     drule slice_data_zero_code >> simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
   irule slice_terminal_outcome_mem >>
   qexistsl_tac [`OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`,
     `INL (Value (BytesV (TAKE k (DROP i bs))))`] >>
@@ -129,7 +134,7 @@ Theorem slice_data_string_outcome_mem:
        vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       alloca_history func t)
+       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >> Cases_on `i+k <= LENGTH text`
@@ -145,6 +150,10 @@ Resume slice_data_string_outcome_mem[success]:
   `w2n (n2w src_base : bytes32) + w2n (n2w (LENGTH text) : bytes32) <= s.vs_alloca_next /\
    32 + w2n (n2w k : bytes32) <= sz` by fs[] >>
   drule_all slice_data_success_path_mem >> strip_tac >>
+  `s.vs_alloca_next <= t.vs_alloca_next` by
+    (irule sha256_run_inst_seq_alloca_next_mono >>
+     qexists_tac `emitted_insts sa sb` >> simp[] >>
+     drule slice_data_zero_code >> simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
   irule slice_terminal_outcome_mem >>
   qexistsl_tac [`OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`,
     `INL (Value (StringV (TAKE k (DROP i text))))`] >>
