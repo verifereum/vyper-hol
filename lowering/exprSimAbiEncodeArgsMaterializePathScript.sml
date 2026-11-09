@@ -454,6 +454,133 @@ Proof
 QED
 
 
+(* Lift the actual ALLOCA result, including allocation-map reentry. *)
+Theorem materialize_alloc_run_path:
+  compile_alloc_buffer sz sa = (buf,sb) /\ fn_has_code sa sb fn /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_marked_path F ctx fn s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+  ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\
+   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+     ["%" ++ toString sa.cs_next_var]) s = OK t /\
+   ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+     get_instruction bb (LENGTH sa.cs_current_insts) =
+       SOME (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+         ["%" ++ toString sa.cs_next_var])` by
+    (gvs[contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+         fresh_id_def, fresh_var_def, emit_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, exprLoweringPropsTheory.emitted_insts_def,
+         rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
+         exprLoweringPropsTheory.run_inst_seq_def, AllCaseEqs(), fragExecTheory.fn_has_code_def,
+         rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN] >>
+     metis_tac[]) >>
+  `~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb` by
+    (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+     simp[venomExecSemanticsTheory.step_inst_base_def,
+          venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_alloca_def,
+          venomStateTheory.eval_operand_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
+     >- (simp[venomStateTheory.update_var_def] >> strip_tac >> gvs[]) >>
+     rename1 `SOME entry` >> PairCases_on `entry` >>
+     simp[venomStateTheory.update_var_def] >> strip_tac >> gvs[]) >>
+  `fragGasPath$gas_path_edge ctx fn s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (simp[fragGasPathTheory.gas_path_edge_def] >> qexists_tac `0` >>
+     simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+          gasCountTheory.gas_count_step_def] >>
+     disj1_tac >> qexists_tac `t` >>
+     gvs[venomExecSemanticsTheory.step_inst_non_invoke,
+          GSYM venomInstTheory.mk_inst_def]) >>
+  fs[fragGasModeTheory.gas_marked_path_def] >>
+  qpat_x_assum `gas_path_edge _ _ _ _ _` mp_tac >>
+  simp[] >> strip_tac >>
+  drule (cj 2 fragGasPathTheory.gas_path_rules) >>
+  disch_then (qspecl_then [`0`, `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] mp_tac) >>
+  simp[fragGasPathTheory.gas_path_rules]
+QED
+
+Theorem materialize_alloc_semantic_path:
+  compile_alloc_buffer sz sa = (buf,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn ce cx es s /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved ce sa /\
+  sz < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t w. gas_marked_path F ctx fn s 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    stmt_state_rel ctx fn ce cx es t /\
+    eval_operand buf.buf_operand t = SOME w /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+    w2n w + sz < dimword (:256) /\
+    t.vs_memory = s.vs_memory /\ sa.cs_next_id < sb.cs_next_id /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (!name b len. local_region ce es.scopes t name b len ==>
+       regions_disjoint (w2n w) sz b len) /\
+    (?p. buf.buf_operand = Var p /\ not_fresh_at sb p)
+Proof
+  strip_tac >> drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  drule_all exprSimAllocTheory.literal_alloc_buffer_run >> strip_tac >>
+  drule_all materialize_alloc_run_path >> strip_tac >>
+  qexistsl_tac [`t with vs_inst_idx := LENGTH sb.cs_current_insts`, `w`] >>
+  simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       local_region_def] >>
+  gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+      local_region_def] >> metis_tac[]
+QED
+
+Theorem materialize_zero_slot_prefixes:
+  compile_materialize_vv ce ty (LocatedValue vty p) sa = (dst,sb) /\
+  ~is_word_type ty /\ type_memory_bytes ce ty = 0 /\
+  ~is_word_type vty /\ type_memory_bytes ce vty = 0 /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  fn_has_code sa sb fn /\ local_ptrs_reserved ce sa ==>
+  ?tmp src mid su u.
+    compile_alloc_buffer 0 sa = (tmp,mid) /\
+    compile_alloc_buffer 0 mid = (src,su) /\
+    compile_word_copy_loop p.ptr_operand src.buf_operand 0
+      p.ptr_location LocMemory F su = (u,sb) /\
+    dst = tmp.buf_operand /\
+    fn_has_code sa mid fn /\ fn_has_code mid su fn /\ fn_has_code su sb fn /\
+    local_ptrs_reserved ce mid /\ sa.cs_next_var <= mid.cs_next_var /\
+    mid.cs_next_var <= su.cs_next_var
+Proof
+  strip_tac >>
+  `?tmp mid src su u.
+    compile_alloc_buffer 0 sa = (tmp,mid) /\
+    compile_alloc_buffer 0 mid = (src,su) /\
+    compile_word_copy_loop p.ptr_operand src.buf_operand 0
+      p.ptr_location LocMemory F su = (u,sb) /\ dst = tmp.buf_operand` by
+    (gvs[materialize_zero_slot_shape, comp_bind_def, comp_return_def] >>
+     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+     pairarg_tac >> gvs[] >> metis_tac[]) >>
+  `cs_extends sa mid /\ cs_extends mid su /\ cs_extends su sb` by
+    (imp_res_tac loweringHaltTheory.compile_alloc_buffer_extends >>
+     mp_tac (Q.SPECL [`p.ptr_operand`, `src.buf_operand`, `0`,
+       `p.ptr_location`, `LocMemory`, `F`, `su`]
+       exprLoweringPropsTheory.ci_mono_compile_word_copy_loop) >>
+     gvs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `fn_has_code sa mid fn /\ fn_has_code mid su fn /\ fn_has_code su sb fn` by
+    (metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans]) >>
+  `sa.cs_next_var <= mid.cs_next_var /\ mid.cs_next_var <= su.cs_next_var` by
+    (imp_res_tac loweringHaltTheory.compile_alloc_buffer_emission >> simp[]) >>
+  `local_ptrs_reserved ce mid` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  metis_tac[]
+QED
+
 (* A zero-sized destination can leave the unwrap loop's exit empty. *)
 Theorem materialize_zero_destination_alias_probe:
   let sa = initial_compile_state "@wcopy_exit_2";
