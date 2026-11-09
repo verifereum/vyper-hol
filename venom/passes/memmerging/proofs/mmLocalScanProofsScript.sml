@@ -5884,6 +5884,131 @@ Proof
   gvs[] >> metis_tac[optionTheory.NOT_NONE_SOME]
 QED
 
+Theorem mm_local_group_captures_extend[local]:
+  j < LENGTH is /\ ~MEM (EL j is).inst_id g.cg_inst_ids /\
+  mm_local_group_captures is cap B g /\
+  cap' = (\q. if q = j then SOME (d,bs) else cap q) ==>
+  mm_local_group_captures is cap' B g
+Proof
+  pure_rewrite_tac[mm_local_group_captures_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `j' = j` >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_hazards_removed[local]:
+  ?tail. (flush_hazards Mem2Mem ss c).ss_flushed = ss.ss_flushed ++ tail /\
+    (!g. MEM g tail ==> MEM g ss.ss_copies /\
+      ~MEM g (flush_hazards Mem2Mem ss c).ss_copies)
+Proof
+  simp[flush_hazards_def, mode_allows_overlap_def] >>
+  rpt IF_CASES_TAC >>
+  gvs[flush_copies_def, waw_hazards_def, raw_hazards_def, war_hazards_def,
+      copies_that_overwrite_def, APPEND_ASSOC] >>
+  simp[MEM_APPEND, MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem mm_local_hazards_historical_captures[local]:
+  hs = flush_hazards Mem2Mem (invalidate_loads ss iv) c /\ j < LENGTH is /\
+  EVERY (mm_local_group_captures is cap B) ss.ss_copies /\
+  (!g. MEM g ss.ss_copies ==> ~MEM (EL j is).inst_id g.cg_inst_ids) /\
+  cap' = (\q. if q = j then SOME (d,bs) else cap q) ==>
+  ?tail. hs.ss_flushed = ss.ss_flushed ++ tail /\
+    EVERY (mm_local_group_captures is cap' B) tail /\
+    (!g. MEM g tail ==> MEM g ss.ss_copies /\ ~MEM g hs.ss_copies)
+Proof
+  strip_tac >>
+  qspecl_then [`invalidate_loads ss iv`, `c`] strip_assume_tac
+    (GEN_ALL mm_local_hazards_removed) >>
+  gvs[invalidate_loads_def] >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  irule mm_local_group_captures_extend >> metis_tac[]
+QED
+
+Theorem mm_local_bulk_capture_survivors[local]:
+  i.inst_opcode = MCOPY /\ i.inst_operands = [Lit dst; Lit src; Lit len] /\
+  step_inst_base i s = OK t /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [i.inst_id] |> /\
+  hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c ==>
+  (!g. MEM g hs.ss_copies ==>
+    read_memory g.cg_src g.cg_length t = read_memory g.cg_src g.cg_length s) /\
+  (?tail. hs.ss_flushed = ss.ss_flushed ++ tail)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      metis_tac[mm_local_snapshot_copy_base]) >>
+  gvs[] >>
+  `ss.ss_flushed = (invalidate_loads ss (mk_interval (w2n dst) (w2n len))).ss_flushed`
+    by simp[invalidate_loads_def] >>
+  metis_tac[mm_local_hazards_flushed_extension]
+QED
+
+Theorem mm_local_store_capture_survivors[local]:
+  i.inst_opcode = MSTORE /\ i.inst_operands = [Lit dst; Var v] /\
+  lookup_var v s = SOME (mload src s) /\ step_inst_base i s = OK t /\
+  c.cg_dst = w2n dst /\ c.cg_src = src /\ c.cg_length = 32 /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) 32)) c ==>
+  (!g. MEM g hs.ss_copies ==>
+    read_memory g.cg_src g.cg_length t = read_memory g.cg_src g.cg_length s) /\
+  (?tail. hs.ss_flushed = ss.ss_flushed ++ tail)
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[mm_local_snapshot_store_base]) >>
+  gvs[] >>
+  `ss.ss_flushed = (invalidate_loads ss (mk_interval (w2n dst) 32)).ss_flushed`
+    by simp[invalidate_loads_def] >>
+  metis_tac[mm_local_hazards_flushed_extension]
+QED
+
+Theorem mm_local_zero_store_capture_birth[local]:
+  j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  i = EL j is /\ i.inst_opcode = MSTORE /\
+  i.inst_operands = [Lit dst; Lit 0w] /\ step_inst_base i s = OK t /\
+  c = copy_memzero (w2n dst) 32 [i.inst_id] /\
+  cap' = (\q. if q = j then SOME (w2n dst, REPLICATE 32 0w) else cap q) ==>
+  scan_inst_memzero dfg mz i = mz with mz_copies := add_copy mz.mz_copies c /\
+  t.vs_memory = (write_memory_with_expansion (w2n dst) (REPLICATE 32 0w) s).vs_memory /\
+  cap' j = SOME (w2n dst, REPLICATE 32 0w) /\
+  mm_local_group_captures is cap' (\a. 0w) c
+Proof
+  strip_tac >> conj_tac
+  >- gvs[scan_inst_memzero_def, is_zero_store_def, operand_lit_val_def] >>
+  conj_tac
+  >- (gvs[venomExecSemanticsTheory.step_inst_base_def,
+          venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operand_def] >>
+      simp[mstore_0w_eq_write]) >>
+  conj_tac >- simp[] >> irule mm_local_group_captures_birth >>
+  simp[copy_memzero_def] >> qexists `j` >>
+  gvs[copy_memzero_def, mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF]
+QED
+
+Theorem mm_local_zero_calldata_capture_birth[local]:
+  j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  i = EL j is /\ is_calldatasize_copy dfg i /\
+  i.inst_operands = [Lit dst; Var v; Lit len] /\
+  lookup_var v s = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
+  LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
+  step_inst_base i s = OK t /\
+  c = copy_memzero (w2n dst) (w2n len) [i.inst_id] /\
+  cap' = (\q. if q = j then SOME (w2n dst, REPLICATE (w2n len) 0w) else cap q) ==>
+  scan_inst_memzero dfg mz i = mz with mz_copies := add_copy mz.mz_copies c /\
+  t.vs_memory = (write_memory_with_expansion (w2n dst) (REPLICATE (w2n len) 0w) s).vs_memory /\
+  cap' j = SOME (w2n dst, REPLICATE (w2n len) 0w) /\
+  mm_local_group_captures is cap' (\a. 0w) c
+Proof
+  strip_tac >>
+  `i.inst_opcode = CALLDATACOPY` by fs[is_calldatasize_copy_def] >>
+  conj_tac
+  >- gvs[scan_inst_memzero_def, is_zero_store_def, operand_lit_val_def] >>
+  conj_tac
+  >- (gvs[venomExecSemanticsTheory.step_inst_base_def, venomStateTheory.eval_operand_def] >>
+      simp[calldatacopy_past_end_bytes, TAKE_LENGTH_ID_rwt]) >>
+  conj_tac >- simp[] >> irule mm_local_group_captures_birth >>
+  simp[copy_memzero_def] >> qexists `j` >>
+  gvs[copy_memzero_def, mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
