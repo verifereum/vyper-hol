@@ -1068,6 +1068,260 @@ Proof
   irule sym_do_swap_deep_numeric >> gvs[] >> metis_tac[]
 QED
 
+Theorem sym_numeric_seq:
+  !p env cp fn ret srest initial_fmp R ops1 ops2 ps ps1 ps2 ss.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (ops1 ++ ops2)) /\
+    (!s. sym_kinds_ok cp fn ret srest ps s /\
+      asm_block_at p s.sym_base.as_pc (execute_plan initial_fmp ops1) ==>
+      ?t. sym_steps p env (LENGTH (execute_plan initial_fmp ops1)) s = SymOK t /\
+        sym_kinds_ok cp fn ret srest ps1 t /\
+        t.sym_base.as_pc = s.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops1) /\
+        (!b. ~R b ==> FLOOKUP t.sym_mem_labels b = FLOOKUP s.sym_mem_labels b)) /\
+    (!s. sym_kinds_ok cp fn ret srest ps1 s /\
+      asm_block_at p s.sym_base.as_pc (execute_plan initial_fmp ops2) ==>
+      ?t. sym_steps p env (LENGTH (execute_plan initial_fmp ops2)) s = SymOK t /\
+        sym_kinds_ok cp fn ret srest ps2 t /\
+        t.sym_base.as_pc = s.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops2) /\
+        (!b. ~R b ==> FLOOKUP t.sym_mem_labels b = FLOOKUP s.sym_mem_labels b)) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp (ops1 ++ ops2))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps2 out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (ops1 ++ ops2)) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  qpat_x_assum `!s. sym_kinds_ok _ _ _ _ ps s /\ _ ==> _`
+    (qspec_then `ss` mp_tac) >> simp[] >> strip_tac >>
+  first_x_assum (qspec_then `t` mp_tac) >> simp[] >> strip_tac >>
+  qexists `t'` >> simp[] >> metis_tac[sym_steps_ok_append, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem sym_swap_pop_numeric:
+  !d n ps p env cp fn ret srest initial_fmp R ss.
+    d < LENGTH ps.ps_stack /\ n <= LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) (FST (do_swap d ps)) \/
+      MEM (SORestore off) (FST (do_swap d ps)) ==> off < dimword(:256)) /\
+    (!b. (SND (do_swap d ps)).ps_alloc.sa_spill_base <= b /\
+      b < (SND (do_swap d ps)).ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (FST (do_swap d ps) ++ [SOPop n])) ==>
+    ?out. sym_steps p env
+        (LENGTH (execute_plan initial_fmp (FST (do_swap d ps) ++ [SOPop n]))) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest
+        ((SND (do_swap d ps)) with ps_stack := stack_pop n (SND (do_swap d ps)).ps_stack) out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp (FST (do_swap d ps) ++ [SOPop n])) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >> irule sym_numeric_seq >> (conj_tac >- asm_rewrite_tac[]) >>
+  qexistsl [`ps`, `SND (do_swap d ps)`] >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> irule sym_do_swap_numeric >> metis_tac[]) >>
+  rpt strip_tac >> irule sym_pop_numeric >> simp[planWfTheory.do_swap_length]
+QED
+
+Theorem pop_one_step_alloc_mono:
+  !item ps ops ps'.
+    cleanOpsSim$pop_one_step item ps = (ops,ps') ==>
+    ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+    ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
+Proof
+  rpt gen_tac >> Cases_on `stack_get_depth item ps.ps_stack`
+  >- simp[cleanOpsSimTheory.pop_one_step_def] >>
+  drule fnFrameBoundaryEntryParamsTheory.entry_pop_one_step_some >>
+  disch_then SUBST1_TAC >> strip_tac >> gvs[] >>
+  metis_tac[allocMonoTheory.do_swap_spill_base, allocMonoTheory.do_swap_next_offset,
+    pairTheory.PAIR]
+QED
+
+Theorem pop_steps_alloc_mono:
+  !items ps ops ps'.
+    foldlSim$plan_steps cleanOpsSim$pop_one_step items ps = (ops,ps') ==>
+    ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+    ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
+Proof
+  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
+  Cases_on `cleanOpsSim$pop_one_step h ps` >>
+  rename1 `cleanOpsSim$pop_one_step h ps = (ops1,ps1)` >>
+  Cases_on `foldlSim$plan_steps cleanOpsSim$pop_one_step items ps1` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule pop_one_step_alloc_mono >> first_x_assum drule >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem pop_one_some_layout:
+  !item d ps ops ps'.
+    stack_get_depth item ps.ps_stack = SOME d /\
+    cleanOpsSim$pop_one_step item ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
+Proof
+  rpt strip_tac >>
+  drule fnFrameBoundaryEntryParamsTheory.entry_pop_one_step_some >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
+  drule_all doSwapSimTheory.do_swap_layout_wf >> strip_tac >> gvs[]
+QED
+
+Theorem pop_one_step_layout:
+  !item ps ops ps'.
+    cleanOpsSim$pop_one_step item ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled ==>
+    spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
+Proof
+  rpt strip_tac >> Cases_on `stack_get_depth item ps.ps_stack`
+  >- gvs[cleanOpsSimTheory.pop_one_step_def] >>
+  metis_tac[pop_one_some_layout]
+QED
+
+Theorem sym_pop_one_some_numeric:
+  !item d ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    stack_get_depth item ps.ps_stack = SOME d /\
+    cleanOpsSim$pop_one_step item ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule fnFrameBoundaryEntryParamsTheory.entry_pop_one_step_some >> strip_tac >>
+  `d < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
+  gvs[] >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule sym_swap_pop_numeric >> gvs[] >> metis_tac[]
+QED
+
+Theorem sym_pop_one_numeric:
+  !item ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    cleanOpsSim$pop_one_step item ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `stack_get_depth item ps.ps_stack`
+  >- (gvs[cleanOpsSimTheory.pop_one_step_def] >> qexists `ss` >>
+      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+  drule_all sym_pop_one_some_numeric >> simp[]
+QED
+
+Theorem sym_pop_steps_numeric:
+  !items ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    foldlSim$plan_steps cleanOpsSim$pop_one_step items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Induct
+  >- (simp[foldlSimTheory.plan_steps_def] >> rpt strip_tac >>
+      qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `cleanOpsSim$pop_one_step h ps` >>
+  rename1 `cleanOpsSim$pop_one_step h ps = (ops1,ps1)` >>
+  Cases_on `foldlSim$plan_steps cleanOpsSim$pop_one_step items ps1` >>
+  rename1 `foldlSim$plan_steps cleanOpsSim$pop_one_step items ps1 = (ops2,ps2)` >>
+  gvs[foldlSimTheory.plan_steps_def] >>
+  drule_all pop_one_step_layout >> strip_tac >>
+  drule pop_steps_alloc_mono >> strip_tac >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >> irule sym_numeric_seq >>
+  (conj_tac >- asm_rewrite_tac[]) >>
+  qexistsl [`ps`, `ps1`] >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> irule sym_pop_one_numeric >>
+      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  rpt strip_tac >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  first_x_assum irule >> gvs[] >> metis_tac[]
+QED
+
+Theorem sym_popmany_individual_numeric:
+  !items ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    popmany_individual items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >>
+  pure_rewrite_tac[cleanOpsSimTheory.popmany_individual_eq_foldl,
+    cleanOpsSimTheory.pop_foldl_body_eq_foldl_body, GSYM foldlSimTheory.plan_steps_eq_foldl] >>
+  strip_tac >> drule_all sym_pop_steps_numeric >> simp[]
+QED
+
+Theorem sym_popmany_contiguous_numeric:
+  !items ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    items <> [] /\
+    EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
+    is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items)) /\
+    popmany_plan items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH items < LENGTH ps.ps_stack` by
+    (irule cleanOpsSimTheory.contiguous_top_stack_bound >> simp[]) >>
+  Cases_on `items` >- gvs[] >>
+  gvs[stackPlanOpsTheory.popmany_plan_def, pairTheory.UNCURRY] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule sym_swap_pop_numeric >> gvs[] >> metis_tac[]
+QED
+
+Theorem sym_popmany_numeric:
+  !items ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    popmany_plan items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `items = []`
+  >- (gvs[stackPlanOpsTheory.popmany_plan_def] >> qexists `ss` >>
+      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+  Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
+    is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items))`
+  >- (irule sym_popmany_contiguous_numeric >> metis_tac[]) >>
+  drule_all cleanOpsSimTheory.popmany_plan_noncontig_new >> strip_tac >>
+  drule_all sym_popmany_individual_numeric >> simp[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
