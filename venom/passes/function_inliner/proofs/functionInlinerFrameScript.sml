@@ -689,3 +689,129 @@ Proof
   gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
   imp_res_tac listTheory.MEM_ZIP >> gvs[] >> metis_tac[listTheory.EL_MEM]
 QED
+
+(* Coverage is deliberately one-sided: support may also contain undefined names.
+   Parallel PHIs read their original snapshot, not preceding PHI writes. *)
+Definition inline_defined_support_def:
+  inline_defined_support V s <=>
+    !v a. lookup_var v s = SOME a ==> v IN V
+End
+
+Definition inline_supported_frame_def:
+  inline_supported_frame ren V opaque saved P s t <=>
+    inline_opaque_frame_rel ren V opaque saved P s t /\
+    inline_defined_support V s
+End
+
+Theorem inline_defined_support_empty:
+  inline_defined_support {} (s with vs_vars := FEMPTY)
+Proof
+  simp[inline_defined_support_def, lookup_var_def]
+QED
+
+Theorem inline_defined_support_write:
+  inline_defined_support V s ==>
+  inline_defined_support (x INSERT V) (update_var x w s)
+Proof
+  simp[inline_defined_support_def, lookup_var_def, update_var_def,
+    FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem inline_defined_support_phis:
+  !insts s u V.
+    eval_phis s insts = OK u /\ inline_defined_support V s ==>
+    inline_defined_support (V UNION inline_phi_outputs insts) u
+Proof
+  Induct >> simp[eval_phis_def, inline_phi_outputs_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (gvs[eval_phis_def, inline_phi_outputs_def, AllCaseEqs()] >>
+      rpt strip_tac >>
+      `h.inst_outputs = [out]` by gvs[eval_one_phi_def, AllCaseEqs()] >>
+      `inline_defined_support (V UNION inline_phi_outputs insts) s''` by
+        (first_x_assum irule >> metis_tac[]) >>
+      gvs[inline_defined_support_def, update_var_def, lookup_var_def,
+        FLOOKUP_UPDATE] >> metis_tac[]) >>
+  simp[eval_phis_def, inline_phi_outputs_def] >> metis_tac[]
+QED
+
+Theorem inline_supported_frame_eval_one_phi:
+  inline_supported_frame ren V opaque saved P s t /\
+  s.vs_prev_bb = SOME prev /\ t.vs_prev_bb = SOME (lab prev) /\
+  (!l. lab l = lab prev <=> l = prev) /\
+  (!l. resolve_phi prev inst.inst_operands = SOME (Label l) ==>
+    FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (lab l)) /\
+  (!v. resolve_phi prev inst.inst_operands = SOME (Var v) /\ v IN opaque ==>
+    x IN opaque) /\
+  eval_one_phi s inst = SOME (x,a) ==>
+  ?b. eval_one_phi t (inline_rename_inst ren lab inst) = SOME (ren x,b) /\
+    (x NOTIN opaque ==> b = a)
+Proof
+  rpt strip_tac >>
+  `resolve_phi (lab prev) (MAP (inline_rename_operand ren lab) inst.inst_operands) =
+    OPTION_MAP (inline_rename_operand ren lab) (resolve_phi prev inst.inst_operands)`
+    by (irule inline_rename_resolve_phi >> simp[]) >>
+  gvs[inline_supported_frame_def, eval_one_phi_def, AllCaseEqs()] >>
+  Cases_on `val_op` >> gvs[eval_operand_def, inline_rename_operand_def]
+  >- (qexists `a` >> simp[inline_rename_inst_def, eval_operand_def])
+  >- (`s' IN V` by metis_tac[inline_defined_support_def] >>
+      drule_all inline_opaque_frame_read_defined >> strip_tac >>
+      qexists `b` >> simp[inline_rename_inst_def, eval_operand_def] >> metis_tac[]) >>
+  qexists `a` >> simp[inline_rename_inst_def, eval_operand_def] >> metis_tac[]
+QED
+
+Theorem inline_eval_phis_none_success:
+  s.vs_prev_bb = NONE /\ eval_phis s insts = OK u ==>
+  u = s /\ inline_phi_outputs insts = {} /\
+  !ren lab t. eval_phis t (MAP (inline_rename_inst ren lab) insts) = OK t
+Proof
+  Cases_on `insts` >> simp[eval_phis_def, inline_phi_outputs_def] >>
+  Cases_on `h.inst_opcode = PHI` >> rpt strip_tac >>
+  gvs[eval_phis_def, eval_one_phi_def, inline_phi_outputs_def,
+    inline_rename_inst_def, AllCaseEqs()]
+QED
+
+Theorem inline_supported_frame_eval_phis:
+  inline_supported_frame ren V opaque saved P s t /\
+  t.vs_prev_bb = OPTION_MAP lab s.vs_prev_bb /\
+  (!prev l. s.vs_prev_bb = SOME prev ==> (lab l = lab prev <=> l = prev)) /\
+  (!inst prev l. MEM inst insts /\ s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Label l) ==>
+    FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (lab l)) /\
+  (!inst prev v x a. MEM inst insts /\ s.vs_prev_bb = SOME prev /\
+    eval_one_phi s inst = SOME (x,a) /\
+    resolve_phi prev inst.inst_operands = SOME (Var v) /\ v IN opaque ==>
+    x IN opaque) /\
+  (!x. x IN inline_phi_outputs insts ==> ren x NOTIN P) /\
+  (!x v. x IN inline_phi_outputs insts /\
+    v IN V UNION inline_phi_outputs insts ==> (ren v = ren x <=> v = x)) /\
+  eval_phis s insts = OK u ==>
+  ?t'. eval_phis t (MAP (inline_rename_inst ren lab) insts) = OK t' /\
+    inline_supported_frame ren (V UNION inline_phi_outputs insts) opaque saved P u t'
+Proof
+  strip_tac >> Cases_on `s.vs_prev_bb`
+  >- (drule_all inline_eval_phis_none_success >> strip_tac >>
+      qexists `t` >> gvs[]) >>
+  `?t'. eval_phis t (MAP (inline_rename_inst ren lab) insts) = OK t' /\
+    inline_opaque_frame_rel ren (V UNION inline_phi_outputs insts) opaque saved P u t'`
+    by (irule inline_opaque_frame_phis_snapshot >>
+        goal_assum (drule_at Any) >>
+        gvs[inline_supported_frame_def] >> qexists `s` >> simp[] >>
+        rpt strip_tac >> irule inline_supported_frame_eval_one_phi >>
+        goal_assum (drule_at Any) >> simp[inline_supported_frame_def] >> metis_tac[]) >>
+  qexists `t'` >> simp[inline_supported_frame_def] >>
+  irule inline_defined_support_phis >>
+  gvs[inline_supported_frame_def] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem inline_supported_frame_setup:
+  setup_callee fn args caller = SOME cs /\ ~caller.vs_halted ==>
+  inline_supported_frame ren {} opaque caller.vs_vars P cs caller /\
+  cs.vs_prev_bb = NONE
+Proof
+  strip_tac >>
+  `inline_opaque_frame_rel ren {} opaque caller.vs_vars P cs caller` by
+    (irule inline_opaque_frame_setup_empty >> metis_tac[]) >>
+  simp[inline_supported_frame_def] >>
+  gvs[setup_callee_def, inline_defined_support_def, lookup_var_def,
+    AllCaseEqs()]
+QED
