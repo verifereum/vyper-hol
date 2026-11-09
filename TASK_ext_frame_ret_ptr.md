@@ -170,3 +170,20 @@ reads; elsewhere it is `expr_type e` (`post_value_type_lowered`,
 - A separate run proves the expression-level encoder case
   (`abi_encode_expr_ptr_ok`). If you need a lemma it would produce, state
   it in your own leaf under a distinct name; don't wait for it.
+
+## Build state at the resume (2026-11-09)
+
+- Every theory outside the extRet* leaves that they import builds on this
+  head (one local overlay: lowering/externalReturnSiteProbeScript.sml is
+  cheat-admitted and hidden from git; never commit it).
+- The leaves themselves still fail where they were written against the
+  pre-D18 interface; the first is extRetStaticStmtPtr
+  (`external_return_static_copy_stmt_frag_ptr`: `expr_post_ptr_return_inputs`
+  wants `ptr_val_ok` at `expr_type e`, the post now gives it at
+  `post_value_type cenv e`). Fix those first, then the admissions above.
+- Two constants are named `ceil32` (contractABI's, used by
+  `vyper_abi_size_bound`, and venomLayout's). Where a leaf's statement
+  means the ABI one and the parse picks the other, add
+  `Overload ceil32[local] = “contractABI$ceil32”` in that leaf.
+- An Ancestors entry opens only that theory's names: a lemma used
+  unqualified must come from a theory listed directly.
