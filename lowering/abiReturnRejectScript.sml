@@ -10,7 +10,7 @@ Theorem abi_return_reflected_success:
   cap = vyper_abi_size_bound env rt /\
   (~is_dynamic (vyper_to_abi_type env rt) ==>
     cap = static_length (vyper_to_abi_type env rt)) /\
-  static_length (vyper_to_abi_type env rt) <= LENGTH (TAKE cap bs) /\
+  abi_static_length (vyper_to_abi_type env rt) <= LENGTH (TAKE cap bs) /\
   vyper_decode_valid_enc (vyper_to_abi_type env rt)
     (if is_dynamic (vyper_to_abi_type env rt) then TAKE cap bs
      else TAKE (static_length (vyper_to_abi_type env rt)) (TAKE cap bs)) /\
@@ -33,7 +33,7 @@ Theorem abi_return_bounded_decode_reject:
   cap = vyper_abi_size_bound env rt /\
   (~is_dynamic (vyper_to_abi_type env rt) ==>
     cap = static_length (vyper_to_abi_type env rt)) /\
-  static_length (vyper_to_abi_type env rt) <= LENGTH (TAKE cap bs) /\
+  abi_static_length (vyper_to_abi_type env rt) <= LENGTH (TAKE cap bs) /\
   evaluate_abi_decode_return env ty bs = INR err /\
   abi_decoder_coherent ce env sf rt tv /\ abi_decode_bytes_widths env rt /\
   assignable_type env rt /\ type_memory_size tv < dimword (:256) /\

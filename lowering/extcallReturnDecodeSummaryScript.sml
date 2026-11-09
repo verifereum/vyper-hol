@@ -30,8 +30,9 @@ Proof
      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   `vyper_valid_enc env rt (TAKE cap bs)` by
     metis_tac[evaluate_abi_decode_vyper_valid_enc] >>
-  `static_length (vyper_to_abi_type env rt) <= LENGTH (TAKE cap bs)` by
-    metis_tac[vyper_valid_enc_length_lower] >>
+  `is_dynamic (vyper_to_abi_type env rt) \/
+   static_length (vyper_to_abi_type env rt) <= LENGTH (TAKE cap bs)` by
+    metis_tac[vyper_valid_enc_static_length_lower] >>
   qspecl_then [`s`, `en`] strip_assume_tac return_decoder_ceiling_exists >>
   qexists_tac `ceiling` >>
   irule (SRULE [abi_valid_allocated_type_contract_def] abi_valid_allocated_success) >>
