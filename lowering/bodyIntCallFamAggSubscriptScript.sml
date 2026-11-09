@@ -17,6 +17,8 @@ Ancestors
   bodyIntCallFamAggSubscriptKey bodyIntCallFamAggSubscriptOptionalKey
   bodyIntCallFamAggSubscriptHashTail bodyIntCallFamAggSubscriptKeyLanding
   bodyIntCallFamAggSubscriptPosts bodyIntCallFamAggSubscriptKeyOutcome
+  bodyIntCallFamAggSubscriptForcedOutcome bodyIntCallFamAggSubscriptCompile
+  bodyIntCallFamAggSubscriptKeyProducer bodyIntCallFamAggSubscriptBaseOutcome
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>
