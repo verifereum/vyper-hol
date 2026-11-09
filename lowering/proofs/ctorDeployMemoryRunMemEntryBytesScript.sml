@@ -212,45 +212,29 @@ Proof
   asm_simp_tac bool_ss [abi_decode_bytes_phases, comp_bind_def,
     comp_ignore_bind_def, LET_THM] >>
   simp_tac (srw_ss()) [abi_decode_copy_opcode_def, LET_THM] >>
-  pairarg_tac >> strip_tac >> gnvs[] >> pairarg_tac >> gnvs[] >>
-  rename1 `abi_decode_count_guard DLOAD src n st = (count_op,c1)` >>
-  rename1 `abi_decode_bytes_end_guard src count_op hi c1 = (u,c2)` >>
-  Cases_on `u` >>
-  drule_all abi_decode_count_guard_sequence >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
-  `eval_operand src s1 = SOME (n2w sb)` by metis_tac[] >>
-  drule abi_decode_bytes_end_guard_sequence >>
-  disch_then (qspecl_then [`sb`, `s1`, `cnt`] mp_tac) >>
-  (impl_tac >- (simp[] >> Cases_on `hi = Lit 0w` >>
-    gvs[] >> qexists `h` >> simp[ADD_ASSOC, ADD_COMM] >> metis_tac[])) >>
-  strip_tac >>
-  rename1 `run_inst_seq (emitted_insts c1 c2) s1 = OK s2` >>
-  `eval_operand src s2 = SOME (n2w sb) /\ eval_operand dst s2 = SOME (n2w d)` by
-    metis_tac[] >>
-  drule ctor_bytes_count_guard_no_alloca >> strip_tac >>
-  drule ctor_bytes_end_guard_no_alloca >> strip_tac >>
-  `s1.vs_allocas = s.vs_allocas /\ s1.vs_alloca_next = s.vs_alloca_next` by
-    (irule abi_decode_sequence_allocation_frame >> metis_tac[]) >>
-  `s2.vs_allocas = s1.vs_allocas /\ s2.vs_alloca_next = s1.vs_alloca_next` by
-    (irule abi_decode_sequence_allocation_frame >> metis_tac[]) >>
-  drule abi_decode_count_guard_shape >> strip_tac >>
-  imp_res_tac inst_extends_emit_void >>
-  `inst_extends st c2` by metis_tac[inst_extends_trans] >>
-  `emitted_insts st st' = emitted_insts st c2 ++ emitted_insts c2 st'` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  `emitted_insts st c2 = emitted_insts st c1 ++ emitted_insts c1 c2` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  pairarg_tac >> strip_tac >> gnvs[] >>
+  PairCases_on `ac` >>
+  rename1 `abi_decode_bytes_position_prefix src DLOAD (Lit 0w) hi n st = ((addr,count_op),c1)` >>
   `run_inst_seq_mem_ok (emitted_insts st c1) s` by
-    (irule ctor_bytes_count_guard_mem_ok >> metis_tac[]) >>
-  `run_inst_seq_mem_ok (emitted_insts st c2) s` by
-    (once_asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> simp[] >>
-     rpt strip_tac >> irule ctor_bytes_end_guard_mem_ok >> metis_tac[]) >>
-  `run_inst_seq (emitted_insts st c2) s = OK s2` by
-    (irule run_inst_seq_compose_ok >> qexistsl [`s1`, `c1`] >> simp[]) >>
+    (drule ctor_bytes_position_prefix_mem_ok >>
+     disch_then (qspecl_then [`sb`, `s`, `cnt`] mp_tac) >>
+     metis_tac[ADD_ASSOC, ADD_COMM]) >>
+  drule abi_decode_bytes_position_prefix_sequence >>
+  disch_then (qspecl_then [`s`, `sb`, `cnt`, `0`] mp_tac) >>
+  (impl_tac >- (simp[eval_operand_def] >> metis_tac[ADD_COMM])) >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
+  drule_all abi_decode_bytes_position_prefix_shape >> strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode)
+    (emitted_insts st c1)` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all abi_decode_nonallocating_sequence_frame >> strip_tac >>
+  `eval_operand src s1 = SOME (n2w sb) /\ eval_operand dst s1 = SOME (n2w d)` by
+    metis_tac[] >>
+  imp_res_tac inst_extends_emit_void >>
+  `emitted_insts st st' = emitted_insts st c1 ++ emitted_insts c1 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
   once_asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> simp[] >>
   rpt strip_tac >> gvs[] >> irule ctor_bytes_copy_mem_ok >>
-  qexistsl [`d`, `dst`, `abi_decode_bytes_copy_size n`, `sb`, `src`] >>
-  simp[] >> metis_tac[]
+  qexistsl [`d`, `dst`, `abi_decode_bytes_copy_size n`, `sb`, `src`] >> simp[]
 QED
 
 Theorem ctor_bytes_reentry_mem_ok:
@@ -286,7 +270,10 @@ Proof
   `run_inst_seq_mem_ok (emitted_insts st st') pruned` by
     (irule ctor_bytes_fresh_mem_ok >> metis_tac[]) >>
   drule_all abi_decoder_bytes_reentry_code >> strip_tac >>
-  drule_all abi_decode_bytes_sequence >> strip_tac >>
+  drule abi_decode_bytes_sequence >>
+  simp[eval_operand_def] >>
+  disch_then (qspecl_then [`pruned`, `sb`, `d`, `cnt`, `0`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[ADD_COMM])) >> strip_tac >>
   irule ctor_reentry_sequence_mem >> conj_tac >- simp[] >>
   qexistsl [`initial.vs_vars`, `pruned`, `t`] >>
   simp[Abbr `pruned`, abi_decoder_prune_extension]
