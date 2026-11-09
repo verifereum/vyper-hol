@@ -1,6 +1,7 @@
 Theory abiDecodePtrBytesFramed
 Ancestors
   abiDecodePtrBytesSuccess abiDecodePtrBytesRuntimeFrame abiDecodePtrBytesMember
+  abiDecodePtrBytesHeader abiDecoderBytes
   abiDecodePtrMemberFrame bodyPtrHashBuiltinsGhostFrame exprSimBufferStore
   abiDecodeStaticProps assignTuplePtrLocalBytesCopy exprPtrUnwrapPostFrames
   abiEncoder emitHelperProps exprLoweringProps compileEnv context bodyPtrDefs
@@ -39,6 +40,7 @@ Theorem abi_decode_bytes_success_framed:
     regions_disjoint off (type_memory_size tv) (w2n d) cap) ==>
   ?H tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
     ghost_inv ret cenv cx es H tf u /\ stmt_state_rel ctx func cenv cx es u /\
+    mload (w2n d) u = mload (w2n b+p) s /\
     fresh_vars_wrt sb u /\
     abi_decode_ptr_window H tf u src b h /\
     abi_decode_ptr_window H tf u dst d
@@ -79,6 +81,12 @@ Resume abi_decode_bytes_success_framed[capacity]:
        (w2n (mload (w2n b+p) s)))` by decide_tac >>
      qpat_x_assum `!i. ~(w2n d <= i /\ i < w2n d+32+_) ==> _`
        (qspec_then `i` mp_tac) >> disch_then irule >> decide_tac) >>
+  `mload (w2n d) u = mload (w2n b+p) s` by
+    (irule abi_decode_bytes_success_header >> (conj_tac >- simp[]) >>
+     goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+     simp[] >> qexists_tac `h` >>
+     simp[abi_decode_bytes_copy_size_def, GSYM contractABITheory.ceil32_def,
+          eval_operand_def] >> decide_tac) >>
   suspend "ghost"
 QED
 

@@ -1,6 +1,7 @@
 Theory abiDecodePtrMemberDecode
 Ancestors
   abiDecodePtrMemberInterface abiDecodePtrWord abiDecodePtrBytesFramed abiDecodePtrMemberFrame
+  abiDecodePtrFootprint
   abiDecodePtrBytesRuntimeFrame abiDecodePtrBytesMember abiDecoderBytesPhases
   abiDecodePtrWordRuntimeFrame abiDecoderClampedWord abiDecoderExecution abiDecoderContract
   abiEncoder compileEnv context bodyPtrDefs ptrDiscipline contractABI vyperTypeABI
@@ -21,7 +22,9 @@ Theorem abi_decode_member_decode_success:
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
     abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tf t /\
     abi_decode_member_frame sa G tn s H tf t (w2n d+q) k /\
-    32 <= m /\ m <= k /\ abi_decode_ptr_window H tf t out (d+n2w q) m
+    32 <= m /\ m <= k /\
+    m = abi_decode_runtime_footprint ei (w2n d+q) t /\
+    abi_decode_ptr_window H tf t out (d+n2w q) m
 Proof
   strip_tac >>
   drule abi_decode_member_live_resources >> strip_tac >>
@@ -86,7 +89,7 @@ Resume abi_decode_member_decode_success[word]:
     (fs[abi_decode_member_frame_def] >>
      qpat_x_assum `(u with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s` mp_tac >>
      simp[venom_state_component_equality]) >>
-  qexistsl_tac [`H`, `tf`, `32`] >> simp[] >>
+  qexistsl_tac [`H`, `tf`] >> simp[] >>
   conj_tac
   >- (irule abi_decode_member_live_transport >>
       simp[ghost_inv_inst_idx, stmt_state_rel_inst_idx, fresh_vars_wrt_def] >>
@@ -126,7 +129,24 @@ Resume abi_decode_member_decode_success[bytes_finish]:
   `u.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `(u with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
      simp[venom_state_component_equality]) >>
-  qexistsl_tac [`H`, `tf`, `32`] >> simp[] >>
+  `w2n (mload (w2n b+w2n w) s) <= n` by
+    (drule abi_decode_bytes_member_success_bounds >>
+     disch_then (drule_at (Pat `run_inst_seq _ _ = _`)) >>
+     disch_then (qspecl_then [`w2n w`, `h`, `b`] mp_tac) >>
+     `eval_operand (Var src) s = SOME b` by
+       fs[abi_decode_ptr_window_def, eval_operand_def] >>
+     `h < dimword(:256) /\ n < dimword(:256)` by decide_tac >>
+     simp[w2n_lt] >> strip_tac >>
+     `w2n (b+w) = w2n b+w2n w` by
+       (simp[word_add_def, w2n_n2w] >> decide_tac) >>
+     fs[]) >>
+  `mload (w2n d+q) (u with vs_inst_idx := LENGTH sb.cs_current_insts) =
+     mload (w2n b+w2n w) s` by
+    (qpat_x_assum `mload _ u = _` mp_tac >> simp[mload_def] >> gvs[]) >>
+  `contractABI$ceil32 (w2n (mload (w2n b+w2n w) s)) <= contractABI$ceil32 n` by
+    (irule ceil32_mono >> simp[]) >>
+  qexistsl_tac [`H`, `tf`] >>
+  simp[] >>
   conj_tac
   >- (irule abi_decode_member_live_transport >>
       simp[ghost_inv_inst_idx, stmt_state_rel_inst_idx, fresh_vars_wrt_def] >>

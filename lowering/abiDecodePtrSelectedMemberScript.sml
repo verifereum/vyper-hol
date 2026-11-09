@@ -230,6 +230,7 @@ Theorem abi_decode_selected_member_success:
       emit_op ADD [Var dst;Lit (n2w q)] sm = (Var out,sn) /\
       compile_abi_decode_to_buf (Var out) v MLOAD (Var src) hi ei sn = ((),sb) /\
       32 <= m /\ m <= k /\
+      m = abi_decode_runtime_footprint ei (w2n d+q) t /\
       abi_decode_ptr_window H tf t out (d+n2w q) m
 Proof
   strip_tac >>
@@ -319,7 +320,7 @@ Resume abi_decode_selected_member_success[decode]:
       `r with vs_inst_idx := LENGTH sn.cs_current_insts = r` by
         (simp[venom_state_component_equality]) >> simp[]) >>
    reverse conj_tac
-   >- (conj_tac >- metis_tac[ADD_COMM] >> qexists_tac `m` >> simp[]) >>
+   >- gvs[] >>
    asm_rewrite_tac[] >> irule inst_seq_ptr_append_run >> simp[] >>
    qexistsl_tac [`J`, `tj`] >> simp[] >>
    `t with vs_inst_idx := LENGTH sm.cs_current_insts = t` by
