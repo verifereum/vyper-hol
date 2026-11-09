@@ -720,7 +720,7 @@ Proof
      mk_inst (st.cs_next_id+2) ISZERO [Var y] [z];
      mk_inst (st.cs_next_id+3) ASSERT [Var z] [];
      mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []]` by
-    (gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> drule prefix_boolword_code >> simp[]) >>
+    (gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, comp_bind_def, compile_abi_decode_range_check_def] >> drule prefix_boolword_code >> simp[]) >>
   qpat_x_assum `x = _` kall_tac >>
   qpat_x_assum `y = _` kall_tac >>
   qpat_x_assum `z = _` kall_tac >>
