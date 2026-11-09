@@ -20,7 +20,7 @@ Theorem entry_zero_reserve_valid_pre:
   abi_decoder_operand_live first.cs_next_var src /\
   abi_decoder_operand_live first.cs_next_var dst ==>
   abi_decoder_valid_pre ce env sf ty tv bytes nv first src dst CALLDATALOAD
-    (Lit 0w) sb p (p + type_memory_bytes ce ty) 0 ready
+    (Lit 0w) (Lit 0w) 0 sb p (p + type_memory_bytes ce ty) 0 ready
 Proof
   simp[abi_decoder_valid_pre_def, abi_decoder_ranges_def,
     abi_decode_source_opcode_def, abi_decoder_operand_live_def]
@@ -29,7 +29,7 @@ QED
 Theorem entry_zero_reserve_child_endpoint:
   unit_alloca_budget ctx < dimword (:256) /\
   abi_decoder_coherent ce env sf ty tv /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) first = ((),last) /\
   fn_has_code first last fn /\
   (first.cs_blocks = last.cs_blocks \/
@@ -40,7 +40,7 @@ Theorem entry_zero_reserve_child_endpoint:
   base_addr <= p /\ p + type_memory_size tv <= base_addr + cap /\
   p + type_memory_size tv < dimword (:256) /\
   abi_decoder_valid_pre ce env sf ty tv bytes nv first src dst CALLDATALOAD
-    (Lit 0w) sb p (p + type_memory_bytes ce ty) 0 ready /\
+    (Lit 0w) (Lit 0w) 0 sb p (p + type_memory_bytes ce ty) 0 ready /\
   fresh_vars_wrt limit_st ready /\ alloca_inv ready /\
   alloca_frontier_inv ctx fn site ready /\
   calldata_member_own fn first.cs_next_id last.cs_next_id ready /\

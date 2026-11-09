@@ -14,7 +14,7 @@ Theorem calldata_executed_init_to_header:
   (!pre i post u. emitted_insts st loop_st = pre ++ i::post /\
     run_inst_seq pre initial = OK u ==> inst_mem_below_frontier i u) /\
   run_inst_seq (emitted_insts st loop_st) initial = OK t /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),end_st) /\
   fn_has_code st loop_st fn /\ fn_has_code loop_st end_st fn /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\

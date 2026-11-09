@@ -1,7 +1,7 @@
 (* Frontier checks for the straight-line RawLog continuations. *)
 Theory bodyMemRawLogSuffix
 Ancestors
-  bodySimRawLog instMemFrontier fragExecMem bodyMemBiKeccakBounds
+  bodySimRawLog instMemFrontier fragExecMem bodyMemBiKeccakBounds loweringStateRelDefs
   exprSimOperators exprOperandVar words finite_map ASCIInumbers
   emitHelper compileEnv exprLoweringProps emitHelperProps list rich_list
   venomInst venomState venomExecSemantics

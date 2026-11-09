@@ -195,7 +195,7 @@ Proof
   Cases_on `buf` >> gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
   rename1 `not_fresh_at a z` >>
   `z <> u2s_var a 11` by
-    (gvs[compileEnvTheory.not_fresh_at_def, u2s_var_def,
+    (gvs[loweringStateRelDefsTheory.not_fresh_at_def, u2s_var_def,
          compileEnvTheory.fresh_var_def]) >> simp[]
 QED
 

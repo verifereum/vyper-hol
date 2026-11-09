@@ -19,7 +19,7 @@ Proof
 QED
 
 Theorem calldata_array_init_compile_inputs[local]:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\ fn_has_code st loop_st fn /\
   loop_st.cs_next_id <= end_st.cs_next_id ==>
   ?guard_st header_st.
@@ -85,17 +85,17 @@ Theorem calldata_valid_header_producer_local_frontier:
         (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < end_st.cs_next_id /\
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
-        abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+        abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
           d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),prefix_st) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = ((hdr,body_lbl,exit_lbl),prefix_st) /\
   fn_has_code st loop_st fn /\ fn_has_code loop_st prefix_st fn /\
   loop_st.cs_next_id <= end_st.cs_next_id /\
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) sb d b reserve_cap initial /\
+    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b reserve_cap initial /\
   maxn < dimword (:256) /\
   alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
   unit_alloca_budget ctx < dimword (:256) /\ initial.vs_alloca_next < dimword (:256) /\
@@ -134,7 +134,7 @@ Proof
     (qx_choose_then `p` (MAP_EVERY assume_tac o CONJUNCTS)) >- suspend "slot") >>
   `eval_operand dst initial = SOME (n2w d) /\ d < dimword (:256)` by
     (fs[abi_decoder_valid_pre_def, abi_decoder_ranges_def]) >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   mp_tac (Q.INST [`srcword` |-> `n2w sb`]
     (INST_TYPE [alpha |-> ``:value``] calldata_valid_init_header_local_frontier)) >>

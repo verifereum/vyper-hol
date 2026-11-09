@@ -1,7 +1,7 @@
 (* Memory certificate for the allocating bytestring widening suffix. *)
 Theory bodyMemTbConvertWidenCounted
 Ancestors
-  bodyMemTbConvertCopyMemory bodyLiteralBufferMemory exprSimConvertBytes
+  bodyMemTbConvertCopyMemory bodyLiteralBufferMemory exprSimConvertBytes loweringStateRelDefs
   exprSimAlloc bodyAllocMemory bodyCopyMemory fragExecMem exprLoweringProps
   compileEnv context emitHelperProps emitHelper venomState venomInst
   venomExecSemantics rich_list list words venomMemDefs instMemFrontier

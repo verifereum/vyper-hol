@@ -28,7 +28,7 @@ Theorem entry_registration_singleton_prefix_frame:
     (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
       ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
       ins.inst_id = st.cs_next_id) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first =
       ((),final) /\ fn_has_code first final fn /\
     st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\

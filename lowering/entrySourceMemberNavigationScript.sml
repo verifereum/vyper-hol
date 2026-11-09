@@ -19,7 +19,7 @@ Theorem entry_member_observed_valid_pre[local]:
   vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b cap initial /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
   abi_decoder_address_frame st.cs_next_var initial endpoint /\
@@ -30,7 +30,7 @@ Theorem entry_member_observed_valid_pre[local]:
   abi_decoder_operand_live ready.cs_next_var ep /\
   abi_decoder_operand_live ready.cs_next_var dp ==>
   abi_decoder_valid_pre ce env sf ty tv childbs v ready ep dp CALLDATALOAD
-    (Lit 0w) (sb+off) (d+vo) b cap endpoint
+    (Lit 0w) (Lit 0w) 0 (sb+off) (d+vo) b cap endpoint
 Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   `sb + LENGTH bs < dimword (:256)` by fs[abi_decoder_ranges_def] >>
@@ -50,13 +50,13 @@ Theorem entry_source_member_navigation:
       ao = SUM (MAP abi_member_head_size pre);
       off = abi_decode_member_offset at bs ao;
       childbs = abi_decode_member_bytes at bs (DROP ao bs) in
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,ready) /\
   fn_has_code st ready fn /\ abi_decoder_coherent ce env sf ty tv /\
   vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz base_addr cap s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz base_addr cap s /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -67,7 +67,7 @@ Theorem entry_source_member_navigation:
   fn_inst_ids_distinct fn /\ alloca_history fn s ==>
   ?t.
     abi_decoder_valid_pre ce env sf ty tv childbs v ready (FST ops) (SND ops)
-      CALLDATALOAD (Lit 0w) (sb+off) (d+vo) base_addr cap t /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 (sb+off) (d+vo) base_addr cap t /\
     ~t.vs_halted /\ t.vs_current_bb = ready.cs_current_bb /\
     t.vs_inst_idx = LENGTH ready.cs_current_insts /\
     calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
@@ -89,7 +89,7 @@ Proof
    sb+LENGTH bs < dimword (:256)` by fs[abi_decoder_ranges_def] >>
   drule_all abi_valid_member_window >> simp_tac bool_ss [LET_THM] >> strip_tac >>
   PairCases_on `ops` >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_member_setup_def] >> disch_tac >>
   drule_all entry_member_navigation_endpoint >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
@@ -107,8 +107,8 @@ Resume entry_source_member_navigation[typed]:
   `abi_decoder_valid_pre ce env sf ty tv
     (abi_decode_member_bytes (vyper_to_abi_type env ty) bs
       (DROP (SUM (MAP abi_member_head_size pre)) bs)) v ready ops0 ops1
-    CALLDATALOAD (Lit 0w)
-    (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
+    CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
       (SUM (MAP abi_member_head_size pre))) (d+vo) base_addr cap t` by
     (irule (SIMP_RULE bool_ss [LET_THM] entry_member_observed_valid_pre) >>
      goal_assum (drule_at Any) >> simp[word_add_n2w] >> metis_tac[]) >>
@@ -120,9 +120,9 @@ QED
 Finalise entry_source_member_navigation
 
 Theorem entry_source_empty_member_resources:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
   fn_has_code st last fn /\ abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
@@ -148,12 +148,12 @@ Theorem entry_source_empty_member_resources:
 Proof
   strip_tac >>
   `last = middle` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_empty_complex_phases, abi_decode_complex_head_guard_def,
        comp_return_def]) >>
   drule_all abi_decoder_empty_descriptor_value >> strip_tac >>
   PairCases_on `ops` >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_member_setup_def, dec_info_needs_offset_def] >> disch_tac >>
   gvs[] >> drule_all entry_member_navigation_endpoint >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>

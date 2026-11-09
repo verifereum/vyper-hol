@@ -16,23 +16,23 @@ Theorem calldata_members_success_relation[local]:
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!xs ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!ei az mz rest ao vo a b s.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) /\
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) /\
     fn_has_code a b fn /\ ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
     s.vs_inst_idx = LENGTH a.cs_current_insts /\ I ((ei,az,mz)::rest) ao vo a s ==>
     ?t. ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
       t.vs_inst_idx = LENGTH b.cs_current_insts /\ I rest (ao+az) (vo+mz) b t /\ R s t) ==>
   !xs ao vo a b s.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs ao vo a = ((),b) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs ao vo a = ((),b) /\
     fn_has_code a b fn /\ ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
     s.vs_inst_idx = LENGTH a.cs_current_insts /\ I xs ao vo a s ==>
     ?t. ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
@@ -44,14 +44,14 @@ Proof
   >- (simp[compile_abi_decode_to_buf_def, comp_return_def] >>
       rpt strip_tac >> gvs[] >> qexists_tac `s` >> simp[]) >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
   strip_tac >> gvs[] >>
-  rename1 `compile_abi_decode_to_buf elem_dst elem_src CALLDATALOAD (Lit 0w) h0 cs'' = ((),middle)` >>
-  `(do ep <- compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w);
+  rename1 `compile_abi_decode_to_buf elem_dst elem_src CALLDATALOAD (Lit 0w) (Lit 0w) h0 cs'' = ((),middle)` >>
+  `(do ep <- compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w) (Lit 0w);
        dp <- emit_op ADD [dst; Lit (n2w vo)];
-       compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) h0 od) a = ((),middle)` by
+       compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) h0 od) a = ((),middle)` by
     simp[comp_bind_def, comp_ignore_bind_def] >>
   `cs_extends a middle /\ cs_extends middle b` by metis_tac[] >>
   drule_all fn_has_code_split >> strip_tac >>
@@ -98,24 +98,24 @@ Theorem calldata_members_success_transfers[local]:
         !fuel. mem_safe_run fuel ctx fn s)
   in
   (!xs ao vo a b.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs ao vo a = ((),b) ==>
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs ao vo a = ((),b) ==>
     cs_extends a b) /\
   (!ei ao vo a b.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) ==>
     cs_extends a b) /\
   (!ei az mz rest ao vo a b s.
-    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
         dp <- emit_op ADD [dst; Lit (n2w vo)];
-        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) /\
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),b) /\
     fn_has_code a b fn /\ ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
     s.vs_inst_idx = LENGTH a.cs_current_insts /\ I ((ei,az,mz)::rest) ao vo a s ==>
     ?t. ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
       t.vs_inst_idx = LENGTH b.cs_current_insts /\ I rest (ao+az) (vo+mz) b t /\
       Safe s t /\ Pull s t) ==>
   !xs ao vo a b s.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs ao vo a = ((),b) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs ao vo a = ((),b) /\
     fn_has_code a b fn /\ ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
     s.vs_inst_idx = LENGTH a.cs_current_insts /\ I xs ao vo a s ==>
     ?t. ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
@@ -184,11 +184,11 @@ Definition calldata_source_member_cursor_def:
     n <= LENGTH xs /\ rest = DROP n xs /\
     ao = ao0 + SUM (MAP (\(ei,az,mz). az) (TAKE n xs)) /\
     vo = vo0 + SUM (MAP (\(ei,az,mz). mz) (TAKE n xs)) /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) rest ao vo a = ((),final) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) rest ao vo a = ((),final) /\
     cs_extends first a /\ cs_extends a final /\ ci_mono first a /\ ci_mono a final /\
     abi_decoder_operand_live a.cs_next_var src /\
     abi_decoder_operand_live a.cs_next_var dst /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap s /\
     mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
     FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
     calldata_member_resource_frame ctx fn site limit_st first.cs_next_id
@@ -204,11 +204,11 @@ Definition calldata_source_member_cursor_def:
 End
 
 Theorem calldata_source_member_cursor_initial[local]:
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs ao0 vo0 first = ((),final) /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs ao0 vo0 first = ((),final) /\
   cs_extends first final /\ ci_mono first final /\
   abi_decoder_operand_live first.cs_next_var src /\
   abi_decoder_operand_live first.cs_next_var dst /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap initial /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
   fresh_vars_wrt limit_st initial /\ alloca_inv initial /\
@@ -252,13 +252,13 @@ Theorem calldata_source_member_navigation[local]:
       ao = SUM (MAP abi_member_head_size pre);
       off = abi_decode_member_offset at bs ao;
       childbs = abi_decode_member_bytes at bs (DROP ao bs) in
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,ready) /\
   fn_has_code st ready fn /\ abi_decoder_coherent ce env sf ty tv /\
   vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   (is_dynamic at ==> !elem. at <> Array (SOME 0) elem) /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz base_addr cap s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz base_addr cap s /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -268,7 +268,7 @@ Theorem calldata_source_member_navigation[local]:
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?t.
     abi_decoder_valid_pre ce env sf ty tv childbs v ready (FST ops) (SND ops)
-      CALLDATALOAD (Lit 0w) (sb+off) (d+vo) base_addr cap t /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 (sb+off) (d+vo) base_addr cap t /\
     ~t.vs_halted /\ t.vs_current_bb = ready.cs_current_bb /\
     t.vs_inst_idx = LENGTH ready.cs_current_insts /\
     calldata_member_resource_frame ctx fn site limit_st lo hi st.cs_next_var
@@ -353,9 +353,9 @@ QED
 (* The inline-empty branch is a complete successful member, not an offset
    navigation followed by an assumed recursive call. *)
 Theorem calldata_source_empty_member_resources[local]:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) middle = ((),last) /\
   fn_has_code st last fn /\ abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
@@ -390,10 +390,10 @@ QED
 Theorem calldata_source_member_inputs_preserved[local]:
   calldata_member_resource_frame ctx fn site limit_st lo hi live p len s t scratch /\
   abi_decoder_operand_live live src /\ abi_decoder_operand_live live dst /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap s /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
   FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) ==>
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap t /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap t /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD t) = bs /\
   FLOOKUP t.vs_allocas oid = SOME (base_addr,cap)
 Proof
@@ -411,7 +411,7 @@ Theorem calldata_source_member_cursor_advance[local]:
     xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
     ao0 vo0 first final initial ((ei,az,mz)::rest) ao vo a s /\
   LENGTH tys = LENGTH xs /\ LENGTH tvs = LENGTH xs /\ LENGTH vs = LENGTH xs /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     rest (ao+az) (vo+mz) next = ((),final) /\
   cs_extends a next /\ cs_extends next final /\ ci_mono a next /\ ci_mono next final /\
   calldata_member_resource_frame ctx fn site limit_st a.cs_next_id next.cs_next_id
@@ -489,18 +489,18 @@ Theorem calldata_source_member_child_endpoint[local]:
       Pull = \s t. ((!fuel. mem_safe_run fuel ctx fn t) ==>
         !fuel. mem_safe_run fuel ctx fn s)
   in
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,ready) /\
   vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\ val_wf tv v /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),last) /\
   fn_has_code st last fn /\
   (ready.cs_blocks = last.cs_blocks \/
     !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
   abi_decoder_coherent ce env sf ty tv /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap s /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -516,7 +516,7 @@ Theorem calldata_source_member_child_endpoint[local]:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (!u.
-    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) ready = ((),last) /\
     fn_has_code ready last fn /\
     (ready.cs_blocks = last.cs_blocks \/
@@ -527,7 +527,7 @@ Theorem calldata_source_member_child_endpoint[local]:
     base_addr <= d+vo /\ d+vo+type_memory_size tv <= base_addr+cap /\
     d+vo+type_memory_size tv < dimword (:256) /\
     abi_decoder_valid_pre ce env sf ty tv childbs v ready (FST ops) (SND ops)
-      CALLDATALOAD (Lit 0w) (sb+off) (d+vo) b reserve_cap u /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 (sb+off) (d+vo) b reserve_cap u /\
     fresh_vars_wrt limit_st u /\ alloca_inv u /\ alloca_frontier_inv ctx fn site u /\
     calldata_member_own fn ready.cs_next_id last.cs_next_id u /\
     FLOOKUP u.vs_allocas oid = SOME (base_addr,cap) /\
@@ -579,7 +579,7 @@ Resume calldata_source_member_child_endpoint[child]:
   drule calldata_member_resource_observations >> strip_tac >>
   `calldata_member_own fn ready.cs_next_id last.cs_next_id u` by
     (irule calldata_member_own_nested >> goal_assum (drule_at Any) >> simp[]) >>
-  qpat_x_assum `!u. compile_abi_decode_to_buf _ _ _ _ _ _ = _ /\ _ ==> _`
+  qpat_x_assum `!u. compile_abi_decode_to_buf _ _ _ _ _ _ _ = _ /\ _ ==> _`
     (qspec_then `u` mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   `calldata_member_resource_frame ctx fn site limit_st st.cs_next_id last.cs_next_id
@@ -680,7 +680,7 @@ End
 Definition calldata_member_child_contract_def:
   calldata_member_child_contract ce env sf ctx fn site limit_st ty tv <=>
   !bytes v src dst sb p b reserve_cap oid base_addr cap first last s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) first = ((),last) /\
     fn_has_code first last fn /\
     (first.cs_blocks = last.cs_blocks \/
@@ -691,7 +691,7 @@ Definition calldata_member_child_contract_def:
     base_addr <= p /\ p+type_memory_size tv <= base_addr+cap /\
     p+type_memory_size tv < dimword (:256) /\
     abi_decoder_valid_pre ce env sf ty tv bytes v first src dst
-      CALLDATALOAD (Lit 0w) sb p b reserve_cap s /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb p b reserve_cap s /\
     fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
     calldata_member_own fn first.cs_next_id last.cs_next_id s /\
     FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
@@ -703,7 +703,7 @@ End
 
 Theorem calldata_member_child_contract_apply:
   calldata_member_child_contract ce env sf ctx fn site limit_st ty tv /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) first = ((),last) /\
   fn_has_code first last fn /\
   (first.cs_blocks = last.cs_blocks \/
@@ -714,7 +714,7 @@ Theorem calldata_member_child_contract_apply:
   base_addr <= p /\ p+type_memory_size tv <= base_addr+cap /\
   p+type_memory_size tv < dimword (:256) /\
   abi_decoder_valid_pre ce env sf ty tv bytes v first src dst
-    CALLDATALOAD (Lit 0w) sb p b reserve_cap s /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb p b reserve_cap s /\
   fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
   calldata_member_own fn first.cs_next_id last.cs_next_id s /\
   FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
@@ -741,9 +741,9 @@ Theorem calldata_source_member_success[local]:
   let at = vyper_to_abi_type env ty;
       ao = SUM (MAP abi_member_head_size pre);
       childbs = abi_decode_member_bytes at bs (DROP ao bs) in
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,ready) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),last) /\
   fn_has_code st last fn /\
   (ready.cs_blocks = last.cs_blocks \/
@@ -752,7 +752,7 @@ Theorem calldata_source_member_success[local]:
   abi_decoder_coherent ce env sf ty tv /\
   vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\ val_wf tv v /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap s /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -773,9 +773,9 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   asm_simp_tac bool_ss [calldata_member_success_def, calldata_member_transfers_def] >>
   irule (SIMP_RULE bool_ss [LET_THM] calldata_source_member_child_endpoint) >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `vyper_decode_valid_enc_tuple _ _ _` (irule_at Any) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `FLOOKUP s.vs_allocas oid = _` (irule_at Any) >>
   asm_rewrite_tac[] >> rpt strip_tac >>
   drule_all calldata_member_child_contract_apply >>
@@ -827,18 +827,18 @@ Theorem calldata_source_cursor_compilation[local]:
     xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
     0 0 first final initial ((ei,az,mz)::rest) ao vo a s /\
   xs = abi_decoder_member_infos sf ce tys /\
-  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)];
-      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next) /\
+      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),next) /\
   fn_has_code a final fn /\
   (a.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) ==>
   ?ops ready.
-    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (dec_info_needs_offset ei) ao vo a = (ops,ready) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) ei ready = ((),next) /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w) ei ready = ((),next) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       rest (ao+az) (vo+mz) next = ((),final) /\
     cs_extends a next /\ cs_extends next final /\
     fn_has_code a next fn /\
@@ -852,12 +852,12 @@ Proof
   qpat_assum `(do ep <- _; _ od) a = ((),next)` mp_tac >>
   simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
-  rename1 `compile_getelemptr_abi src _ ao CALLDATALOAD (Lit 0w) a = (ep,middle)` >>
+  rename1 `compile_getelemptr_abi src _ ao CALLDATALOAD (Lit 0w) (Lit 0w) a = (ep,middle)` >>
   rename1 `emit_op ADD _ middle = (dp,ready)` >>
-  `abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  `abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset ei) ao vo a = ((ep,dp),ready)` by
     simp[abi_decode_member_setup_def, comp_bind_def, comp_return_def] >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     rest (ao+az) (vo+mz) next = ((),final)` by
     (qhdtm_assum `calldata_source_member_cursor`
       (mp_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >>
@@ -895,9 +895,9 @@ Theorem calldata_source_member_cursor_step[local]:
   MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
   LENGTH vs = LENGTH tys /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
-  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)];
-      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next) /\
+      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),next) /\
   fn_has_code a final fn /\
   (a.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -934,7 +934,7 @@ Resume calldata_source_member_cursor_step[child]:
      irule abi_encoder_prefix_sum_bound >> simp[]) >>
   `ci_mono first a /\ abi_decoder_operand_live a.cs_next_var src /\
    abi_decoder_operand_live a.cs_next_var dst /\
-   abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+   abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap s /\
    mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
    FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
    fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
@@ -957,7 +957,7 @@ Resume calldata_source_member_cursor_step[apply]:
     (strip_tac >> suspend "advance") >>
   qhdtm_x_assum `calldata_source_member_cursor` kall_tac >>
   qpat_x_assum `(do ep <- _; _ od) a = _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` kall_tac >>
   `MAP (vyper_to_abi_type env) tys =
     MAP (vyper_to_abi_type env) (TAKE n tys) ++
     vyper_to_abi_type env (EL n tys)::MAP (vyper_to_abi_type env) (DROP (SUC n) tys)` by
@@ -977,9 +977,9 @@ Resume calldata_source_member_cursor_step[apply]:
   qpat_x_assum `type_memory_size (EL n tvs) = _` kall_tac >>
   irule (SIMP_RULE bool_ss [LET_THM] calldata_source_member_success) >>
   asm_simp_tac bool_ss [] >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `FLOOKUP s.vs_allocas oid = _` (irule_at Any) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexistsl_tac [`env`,`MAP (vyper_to_abi_type env) (DROP (SUC n) tys)`] >>
   asm_simp_tac bool_ss [] >>
   qpat_x_assum `MAP (vyper_to_abi_type env) tys = _`
@@ -1022,7 +1022,7 @@ Finalise calldata_source_member_cursor_step
 
 Theorem calldata_source_members_owned_success:
   let xs = abi_decoder_member_infos sf ce tys in
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs 0 0 first = ((),final) /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs 0 0 first = ((),final) /\
   fn_has_code first final fn /\
   (first.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -1036,7 +1036,7 @@ Theorem calldata_source_members_owned_success:
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
   abi_decoder_operand_live first.cs_next_var src /\
   abi_decoder_operand_live first.cs_next_var dst /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap initial /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   fresh_vars_wrt limit_st initial /\ alloca_inv initial /\
   alloca_frontier_inv ctx fn site initial /\

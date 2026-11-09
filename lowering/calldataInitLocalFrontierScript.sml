@@ -97,7 +97,7 @@ QED
 Finalise calldata_index_init_local_frontier_fields
 
 Theorem calldata_array_loop_init_local_frontier_owned:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\

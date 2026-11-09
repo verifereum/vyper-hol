@@ -1,7 +1,7 @@
 (* One actual passing-checks endpoint and its memory-safe continuation. *)
 Theory entryCheckEndpointMem
 Ancestors
-  entryPrefixMem entrySelectedEndpointMem entryRegistrationCursorHistory
+  entryPrefixMem entrySelectedEndpointMem entryRegistrationCursorHistory loweringStateRelDefs
   moduleLowering emitHelper compileEnv exprLoweringProps fragExec fragExecMem
   instMemFrontier venomInst list rich_list finite_map words venomExecSemantics
   venomState moduleLoweringProps entryDispatchMem

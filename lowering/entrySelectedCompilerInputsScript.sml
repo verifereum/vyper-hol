@@ -1,7 +1,7 @@
 (* Source-selected joint compiler intervals and entry-control inputs. *)
 Theory entrySelectedCompilerInputs
 Ancestors
-  entrySelectedRegistrationIntervals entrySelectedOwnership entryRegistrationOpen
+  entrySelectedRegistrationIntervals entrySelectedOwnership entryRegistrationOpen loweringStateRelDefs
   entryAcceptedCheckFacts entrySourcePackages entryRejectCode entryValueRejectFacts entryRuntimeSlice
   entryDispatchMem entryDispatchProps moduleLoweringProps compileVyper compileEnv
   supportedProgram supportedDecls e2eDefs vyperLoweringCorrect venomWf

@@ -1,7 +1,7 @@
 (* The source continuation after concat's operand-list evaluation. *)
 Theory bodyMemBiConcatResult
 Ancestors
-  protectedAllocationFrame bodyMemBiConcatPost
+  protectedAllocationFrame bodyMemBiConcatPost loweringStateRelDefs
   bodyMemBiConcatArgs bodyMemBiConcatPrefix bodyMemBiConcatFragments
   bodyMemBiECRecoverCompose exprSimConcatResult gasSummary gasOutcome
   fragGasMode fragGasPathMem exprSimMemDefs vyperState vyperValueOperation
@@ -296,7 +296,7 @@ Resume concat_result_vv_sim_mem[suffix_sizes]:
 QED
 
 Resume concat_result_vv_sim_mem[suffix_store_size]:
-  reverse conj_tac >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  reverse conj_tac >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   `LIST_REL (\t v. ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
                           value_has_type tv v) (MAP expr_type args) vs` by
     simp[LIST_REL_MAP1, combinTheory.o_DEF] >>

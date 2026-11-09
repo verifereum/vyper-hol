@@ -16,15 +16,15 @@ Theorem entry_code_decoder_mutual[local]:
   (!dst src load_opc hi info.
     load_opc <> DALLOCA ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_abi_decode_to_buf dst src load_opc hi info)) /\
+      (compile_abi_decode_to_buf dst src load_opc (Lit 0w) hi info)) /\
   (!dst src load_opc hi elems ao vo.
     load_opc <> DALLOCA ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_abi_decode_complex_elems dst src load_opc hi elems ao vo)) /\
+      (compile_abi_decode_complex_elems dst src load_opc (Lit 0w) hi elems ao vo)) /\
   (!dst src load_opc hi ei asz msz ip cnt.
     load_opc <> DALLOCA ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-      (compile_abi_decode_dyn_loop dst src load_opc hi ei asz msz ip cnt))
+      (compile_abi_decode_dyn_loop dst src load_opc (Lit 0w) hi ei asz msz ip cnt))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
   conj_tac >- suspend "prim" >>
@@ -130,7 +130,7 @@ Finalise entry_code_decoder_mutual
 Theorem entry_code_decode_to_buf:
   load_opc <> DALLOCA ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_abi_decode_to_buf dst src load_opc hi info)
+    (compile_abi_decode_to_buf dst src load_opc (Lit 0w) hi info)
 Proof
   metis_tac[entry_code_decoder_mutual]
 QED
@@ -138,7 +138,7 @@ QED
 Theorem entry_code_decode_complex_elems:
   load_opc <> DALLOCA ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_abi_decode_complex_elems dst src load_opc hi elems ao vo)
+    (compile_abi_decode_complex_elems dst src load_opc (Lit 0w) hi elems ao vo)
 Proof
   metis_tac[entry_code_decoder_mutual]
 QED
@@ -146,7 +146,7 @@ QED
 Theorem entry_code_decode_dyn_loop:
   load_opc <> DALLOCA ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_abi_decode_dyn_loop dst src load_opc hi ei asz msz ip cnt)
+    (compile_abi_decode_dyn_loop dst src load_opc (Lit 0w) hi ei asz msz ip cnt)
 Proof
   metis_tac[entry_code_decoder_mutual]
 QED

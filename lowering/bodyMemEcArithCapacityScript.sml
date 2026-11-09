@@ -1,6 +1,6 @@
 Theory bodyMemEcArithCapacity
 Ancestors
-  bodyMemEcArithCallbacks bodyMemEcArithPrefix exprSimLiteralBuffer
+  bodyMemEcArithCallbacks bodyMemEcArithPrefix exprSimLiteralBuffer loweringStateRelDefs
   exprSimPrecompiles exprLoweringProps instMemFrontier venomState exprSimAlloc compileEnv
 
 Theorem ec_allocated_payload_capacity_run:

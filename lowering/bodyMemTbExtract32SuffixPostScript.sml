@@ -1,7 +1,7 @@
 (* Result-post composition across extract32's readonly snapshot and suffix. *)
 Theory bodyMemTbExtract32SuffixPost
 Ancestors
-  bodyMemTbExtract32TypedSuffix bodyMemTbExtract32SnapshotEntry
+  bodyMemTbExtract32TypedSuffix bodyMemTbExtract32SnapshotEntry loweringStateRelDefs
   exprSimWordArgs exprSimProps exprSimHash exprLoweringProps
   loweringPosts compileEnv venomState venomExecSemantics list finite_map
   vyperTypeConversions exprSimMemDefs fragExec rich_list allocaHistoryFragment

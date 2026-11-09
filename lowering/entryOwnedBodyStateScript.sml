@@ -1,7 +1,7 @@
 (* Body-state constructors that preserve the actual owned endpoint. *)
 Theory entryOwnedBodyState
 Ancestors
-  entryOwnedSourceLocals entryRuntimeStateBoundary entryRuntimePackageLayout
+  entryOwnedSourceLocals entryRuntimeStateBoundary entryRuntimePackageLayout loweringStateRelDefs
   entryOwnedBodyResources entryRuntimeContextCode entryOwnedEndpointObservations
   exprLoweringProps abiAllocationHistory compileEnv compileVyper moduleLowering
   entryStateRel e2eDefs vyperContext vyperState vyperInterpreter

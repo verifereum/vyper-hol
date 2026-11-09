@@ -37,11 +37,11 @@ Theorem calldata_valid_owned_header_iterate:
         (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < end_st.cs_next_id /\
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
-        abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+        abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
           d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     st0 = (ops,ready) /\ fn_has_code st0 ready fn /\
@@ -88,7 +88,7 @@ Theorem calldata_valid_owned_header_iterate:
         (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
         (STRING #"%" (toString (next+3))) k (LENGTH vs) h) /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\

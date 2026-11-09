@@ -13,9 +13,9 @@ Theorem entry_source_member_success:
   let at = vyper_to_abi_type env ty;
       ao = SUM (MAP abi_member_head_size pre);
       childbs = abi_decode_member_bytes at bs (DROP ao bs) in
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,ready) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),last) /\
   fn_has_code st last fn /\
   (ready.cs_blocks = last.cs_blocks \/
@@ -24,7 +24,7 @@ Theorem entry_source_member_success:
   abi_decoder_coherent ce env sf ty tv /\
   vyper_decode_valid_enc_tuple (pre ++ at::ats) bs bs /\
   abi_to_vyper env ty (dec at childbs) = SOME v /\ val_wf tv v /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap s /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs /\
   vo + type_memory_bytes ce ty <= outsz /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\

@@ -1,7 +1,7 @@
 (* Memory footprints of external entry prefixes. *)
 Theory entryPrefixMem
 Ancestors
-  moduleLowering emitHelper compileEnv exprLoweringProps fragExec fragExecMem instMemFrontier venomInst list rich_list
+  moduleLowering emitHelper compileEnv exprLoweringProps fragExec fragExecMem instMemFrontier venomInst list rich_list loweringStateRelDefs
   finite_map words venomExecSemantics venomState moduleLoweringProps
   entryDispatchMem
 Libs

@@ -1,7 +1,7 @@
 (* Counted memory execution of the raw_call output allocation and call. *)
 Theory rawCallOracleMemory
 Ancestors
-  rawCallArgumentMemory bodyMemRawCallBounds bodyMemBiMethodIdSuffix
+  rawCallArgumentMemory bodyMemRawCallBounds bodyMemBiMethodIdSuffix loweringStateRelDefs
   exprSimRawCall exprSafeOperand fragExec exprLoweringProps fragGasMode entrySinkExtraction builtinSystem context
   emitHelper emitHelperProps compileEnv venomExecSemantics venomState venomInst
   rich_list list

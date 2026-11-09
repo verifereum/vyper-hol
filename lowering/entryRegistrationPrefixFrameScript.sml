@@ -1,7 +1,7 @@
 (* Same-witness machine frames for positional registration prefixes. *)
 Theory entryRegistrationPrefixFrame
 Ancestors
-  actualAllocExec entryDecoderStateFrame entryDecoderHistoryFrame abiAllocationHistory
+  actualAllocExec entryDecoderStateFrame entryDecoderHistoryFrame abiAllocationHistory loweringStateRelDefs
   emitHelperProps abiDecoderVarSequence
   successfulSequenceEndpoint abiDecoderLoopRegisters fragExecMem loweringHalt
   abiDecoderReentry unitTransformDefs contextCodegenRel codegenRel

@@ -8,7 +8,7 @@ Ancestors
 
 Theorem calldata_valid_array_inputs:
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) sb d b cap initial ==>
+    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b cap initial ==>
   eval_operand src initial = SOME (n2w sb) /\
   abi_decode_load CALLDATALOAD (n2w sb : bytes32) initial = n2w (LENGTH vs) /\
   LENGTH vs <= maxn /\ LENGTH vs < dimword (:256) /\
@@ -29,7 +29,7 @@ QED
 
 Theorem calldata_valid_array_loaded_count:
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) sb d b cap initial /\
+    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b cap initial /\
   eval_operand src initial = SOME srcword ==>
   abi_decode_load CALLDATALOAD srcword initial = n2w (LENGTH vs)
 Proof

@@ -23,7 +23,7 @@ Theorem entry_canonical_valid_pre:
   abi_decoder_operand_live first.cs_next_var dst ==>
   ?nv. abi_to_vyper env ty av = SOME nv /\
     abi_decoder_valid_pre ce env sf ty tv bytes nv first src dst CALLDATALOAD
-      (Lit 0w) (4+k) p (p + type_memory_bytes ce ty) 0 ready
+      (Lit 0w) (Lit 0w) 0 (4+k) p (p + type_memory_bytes ce ty) 0 ready
 Proof
   strip_tac >>
   `evaluate_type env ty = SOME tv` by

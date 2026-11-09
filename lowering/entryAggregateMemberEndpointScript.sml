@@ -1,7 +1,7 @@
 (* Aggregate constructors retain the endpoint of the framed tuple fold. *)
 Theory entryAggregateMemberEndpoint
 Ancestors
-  entryAggregateValuePackaging abiStaticDynarrayLayout valueEncodingProps vyperTyping
+  entryAggregateValuePackaging abiStaticDynarrayLayout valueEncodingProps vyperTyping valueEncodingDefs
   valueEncodingTyping abiDecoderFixedMemory
   entryTupleMemberFold entryDecoderMemberEndpoint abiDecoderValidFixed
   abiDecoderCoherence abiDecoderMemberInfos abiDecoderComplexGuard abiDecoderComplexHead
@@ -25,9 +25,9 @@ Proof
      irule LIST_EQ >> asm_simp_tac list_ss [EL_MAP, LENGTH_MAP] >> rpt strip_tac >>
      `abi_decoder_coherent ce env sf (EL x tys) (EL x tvs)` by metis_tac[] >>
      drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys) 0 0 first = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decoder_tuple_infos, abi_decode_complex_phases,
        abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def]) >>
@@ -72,11 +72,11 @@ Proof
   drule_all abi_decoder_valid_struct_inputs >> strip_tac >>
   `MAP type_memory_size tvs = MAP (type_memory_bytes ce) (MAP SND args)` by
     suspend "layout" >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos (sf \\ nsid_to_string nsid) ce (MAP SND args))
     0 0 first = ((),last)` by
     (drule abi_decoder_struct_infos >> strip_tac >>
-     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      asm_simp_tac std_ss [LET_THM, abi_decode_complex_phases,
        abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def]) >>
@@ -135,9 +135,9 @@ Proof
   `MAP type_memory_size (REPLICATE n tv) =
     MAP (type_memory_bytes ce) (REPLICATE n ty)` by
     (drule abi_decoder_coherent_header >> simp[abi_decoder_header_def, map_replicate]) >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce (REPLICATE n ty)) 0 0 first = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decoder_fixed_array_infos, abi_decode_complex_phases,
        abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def]) >>

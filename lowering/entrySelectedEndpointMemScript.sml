@@ -1,7 +1,7 @@
 (* Joint endpoint boundaries for memory-free selected entry control. *)
 Theory entrySelectedEndpointMem
 Ancestors
-  entryDispatchMem memSafeRun venomExecSemantics venomExecProofs
+  entryDispatchMem memSafeRun venomExecSemantics venomExecProofs loweringStateRelDefs
   venomState venomInst instMemFrontier fragExecMem moduleLoweringProps
   emitHelperProps compileEnv moduleLowering stateEquiv fragExec
   exprLoweringProps emitHelper freshWrites rich_list

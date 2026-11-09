@@ -1,7 +1,7 @@
 (* Memory-enabled endpoints for the RawLog data continuation. *)
 Theory bodyMemRawLogCompose
 Ancestors
-  bodyMemRawLogExecution bodyMemRawLogStages bodyMemRawLogAllocation bodySimRawLogTails
+  bodyMemRawLogExecution bodyMemRawLogStages bodyMemRawLogAllocation bodySimRawLogTails valueEncodingDefs
   bodyMemBiKeccakBounds stmtSimLogSuffix exprSimHash exprSimRawLog
   exprSimProps exprSimHyps exprSimMemDefs gasSummary fragGasMode gasOutcome
   vyperTyping vyperValue vyperState valueEncoding venomState e2eDefs list

@@ -7,15 +7,15 @@ Ancestors
   venomInst venomExecSemantics abiDecoderContract list arithmetic
 
 Theorem calldata_array_compile_boundary:
-  compile_abi_decode_dyn_loop dst src CALLDATALOAD (Lit 0w) di asz msz ip cnt
+  compile_abi_decode_dyn_loop dst src CALLDATALOAD (Lit 0w) (Lit 0w) di asz msz ip cnt
     loop_st = ((),final_st) /\ fn_has_code loop_st final_st fn /\
   (!bb. lookup_block final_st.cs_current_bb fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) ==>
   ?hdr body_lbl exit_lbl st0 ops ready st1 exit_bb.
-    abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
-    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di asz msz st0 =
+    abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di asz msz st0 =
       (ops,ready) /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       di ready = ((),st1) /\
     abi_decode_loop_suffix ip (FST ops) hdr exit_lbl st1 = ((),final_st) /\
     fn_has_code loop_st st0 fn /\ fn_has_code st0 ready fn /\

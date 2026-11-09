@@ -1,7 +1,7 @@
 (* Checked stores followed by the allocated scalar tuple encoder. *)
 Theory stmtLogStoreEncodeMemory
 Ancestors
-  stmtLogAllocatedEncodeMemory stmtLogEncodingCapacity stmtLogDataMemory
+  stmtLogAllocatedEncodeMemory stmtLogEncodingCapacity stmtLogDataMemory loweringStateRelDefs
   stmtSimLogStoreCompose stmtSimLogStoreContinue stmtSimLogStoreFresh
   stmtSimLogEncodeLayout stmtSimLogDataInput stmtSimLogAllocate stmtSimLogStoreEncode
   abiDecoderReentry exprLoweringProps localPtrsProps abiEncoderCounters

@@ -1,7 +1,7 @@
 (* Memory checks for the inline tuple result of nonreverting raw_call. *)
 Theory rawCallTupleMemory
 Ancestors
-  rawCallFinishPathMemory exprSimRawCall fragExecMem instMemFrontier
+  rawCallFinishPathMemory exprSimRawCall fragExecMem instMemFrontier loweringStateRelDefs
   exprSafeOperand freshWrites emitHelper context compileEnv exprLoweringProps fragExec memSafeRun venomExecSemantics venomState
   venomInst words finite_map rich_list list
   exprSimRawCallCalldata allocaFootprint bodyMemEcArithPrefix valueCopy venomMemDefs

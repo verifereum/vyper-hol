@@ -1,7 +1,7 @@
 (* Successful source-valued primitive-word decoding over actual calldata. *)
 Theory calldataValidOwnedWord
 Ancestors
-  abiDecoderValidContract abiDecoderCoherence abiDecoderWordTyped
+  abiDecoderValidContract abiDecoderCoherence abiDecoderWordTyped loweringStateRelDefs
   abiDecoderTypedContract abiDecoderPrefixPre abiValidStatic vyperABIValid
   abiDecoderContract abiDecodeRanges compileEnv valueEncoding
   vyperABI contractABI venomState words list arithmetic
@@ -11,7 +11,7 @@ Ancestors
   safeSequence fragExecMem abiDecoderFrame abiCallerAllocation abiDecoderFootprint finite_map
 
 Theorem valid_word_source_window[local]:
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc hi sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst opc (Lit 0w) hi 0 sb d b cap initial /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==>
   type_memory_size tv = 32 /\ ~is_dynamic (vyper_to_abi_type env ty) /\
   32 <= LENGTH bs /\
@@ -19,7 +19,7 @@ Theorem valid_word_source_window[local]:
     enc (vyper_to_abi_type env ty) (dec (vyper_to_abi_type env ty) bs)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   drule abi_decoder_primitive_cases >> disch_then (qspec_then `clamp` mp_tac) >>
   asm_simp_tac bool_ss [] >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -40,7 +40,7 @@ Proof
 QED
 
 Theorem valid_word_clean_sequence[local]:
-  compile_abi_decode_to_buf dst src opc hi (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi (DecPrimWord clamp) st = ((),last) /\
   abi_decode_source_opcode opc /\ abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -63,10 +63,10 @@ QED
 
 Theorem valid_word_owned_sequence:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   d + type_memory_size tv < dimword (:256) ==>
   type_memory_size tv = 32 /\ val_wf tv v /\
@@ -80,12 +80,12 @@ Theorem valid_word_owned_sequence:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all valid_word_source_window >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
   `val_wf tv v` by (drule_all (cj 1 value_has_type_val_wf) >> simp[]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `abi_decode_source_opcode CALLDATALOAD /\ d < dimword (:256) /\ sb < dimword (:256)` by
     (simp[abi_decode_source_opcode_def] >> decide_tac) >>
@@ -96,7 +96,7 @@ Proof
        enc (vyper_to_abi_type env ty) (dec (vyper_to_abi_type env ty) bs) /\
    fresh_vars_wrt st (abi_decoder_prune_vars st.cs_next_var initial)` by
     simp[abi_decoder_prune_eval, abi_decoder_prune_source, abi_decoder_prune_fresh] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   drule_all valid_word_clean_sequence >> strip_tac >>
   drule_all abi_decoder_word_reentry_code >> strip_tac >>
@@ -117,10 +117,10 @@ QED
 
 Theorem valid_word_owned_fragment[local]:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   d + type_memory_size tv < dimword (:256) /\
   d + type_memory_size tv <= initial.vs_alloca_next ==>
@@ -134,12 +134,12 @@ Theorem valid_word_owned_fragment[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all valid_word_owned_sequence >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next` by decide_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
@@ -166,10 +166,10 @@ Theorem calldata_valid_word_owned_success:
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
   in
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\ fn_has_code st last fn /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
   Own st.cs_next_id last.cs_next_id initial /\

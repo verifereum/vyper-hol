@@ -1,7 +1,7 @@
 (* Common counted allocation and call endpoint, independent of result policy. *)
 Theory rawCallAllocatedOracleMemory
 Ancestors
-  rawCallOracleMemory exprSimRawCall exprSimRawCallCalldata exprSimWordArgs exprSimDefs loweringPosts
+  rawCallOracleMemory exprSimRawCall exprSimRawCallCalldata exprSimWordArgs exprSimDefs loweringPosts loweringStateRelDefs
   exprSafeOperand exprSimProps exprLoweringProps fragGasPathMem
   builtinSystem emitHelperProps compileEnv venomMemDefs venomState
   instIdxIndep entrySinkExtraction valueTypingMemoryProps vfmConstants words finite_map list
@@ -195,7 +195,7 @@ Resume raw_call_allocated_oracle_mem[endpoint]:
     (qpat_x_assum `u = update_var _ _ r` SUBST1_TAC >> simp[update_var_def]) >>
   `mem_bytes_at (if cap=0 then w2n w else w2n w+32)
     (LENGTH (TAKE cap outcome.co_returnData)) u.vs_memory = TAKE cap outcome.co_returnData` by
-    (Cases_on `cap=0` >- fs[valueEncodingTheory.mem_bytes_at_def] >>
+    (Cases_on `cap=0` >- fs[valueEncodingDefsTheory.mem_bytes_at_def] >>
      `0 < cap` by decide_tac >> gs[]) >>
   qpat_x_assum `r.vs_memory = _` kall_tac >>
   qpat_x_assum `u.vs_memory = r.vs_memory` kall_tac >>
@@ -203,7 +203,7 @@ Resume raw_call_allocated_oracle_mem[endpoint]:
   qexistsl_tac [`u with vs_inst_idx := LENGTH sc.cs_current_insts`,`w`] >>
   simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx, eval_op_inst_idx] >>
   fs[Abbr `a`] >>
-  simp[valueEncodingTheory.mem_bytes_at_def] >>
+  simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   (Cases_on `cap = 0` >- gs[] >>
    strip_tac >>
    conj_tac

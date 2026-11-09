@@ -130,7 +130,7 @@ val () =
   end;
 
 Theorem entry_array_initializer_reentry_code:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     (setup,loop_st) ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st loop_st)
 Proof
@@ -147,7 +147,7 @@ Proof
 QED
 
 Theorem entry_array_initializer_frame:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     (setup,loop_st) /\
   fn_inst_ids_distinct fn /\ alloca_history fn initial /\ alloca_inv initial /\
   fn_has_code st loop_st fn /\
@@ -177,7 +177,7 @@ val () =
 
 (* The source-valid initializer's original resource witness, now framed. *)
 Theorem entry_valid_initializer_header:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
@@ -200,14 +200,14 @@ Theorem entry_valid_initializer_header:
   EntryLoopOwn fn st.cs_next_id end_st.cs_next_id initial /\
   FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
   fresh_vars_wrt limit_st initial /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   loop_st.cs_blocks = st.cs_blocks /\ loop_st.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts loop_st.cs_current_insts /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) (emitted_insts st loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),prefix_st) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = ((hdr,body_lbl,exit_lbl),prefix_st) /\
   fn_has_code st loop_st fn /\ fn_has_code loop_st prefix_st fn /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -342,7 +342,7 @@ Theorem entry_joint_loop_endpoint:
   (!k head entry.
     k < LENGTH vs /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
-      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
@@ -429,7 +429,7 @@ Theorem entry_joint_initialized_loop_endpoint:
   (!k header entry.
     k < LENGTH vs /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
-      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st header entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st header entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
@@ -506,7 +506,7 @@ val () =
    the loop.  It returns resources and observations under the same existential. *)
 Theorem entry_valid_array_child_resources:
   (!bytes v child_src child_dst child_sb addr b reserve_cap oid base_addr cap first last s.
-    compile_abi_decode_to_buf child_dst child_src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf child_dst child_src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) first = ((),last) /\
     fn_has_code first last fn /\
     (first.cs_blocks = last.cs_blocks \/
@@ -517,7 +517,7 @@ Theorem entry_valid_array_child_resources:
     base_addr <= addr /\ addr+type_memory_size tv <= base_addr+cap /\
     addr+type_memory_size tv < dimword (:256) /\
     abi_decoder_valid_pre ce env sf ty tv bytes v first child_src child_dst
-      CALLDATALOAD (Lit 0w) child_sb addr b reserve_cap s /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 child_sb addr b reserve_cap s /\
     fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
     calldata_member_own fn first.cs_next_id last.cs_next_id s /\
     FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
@@ -526,7 +526,7 @@ Theorem entry_valid_array_child_resources:
     ?child scratch. calldata_member_success ctx fn site limit_st first last addr
       (type_memory_size tv) tv v s child scratch /\
       entry_decoder_obs s child /\ alloca_history fn child) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),st1) /\
   fn_has_code ready st1 fn /\
   (ready.cs_blocks = st1.cs_blocks \/
@@ -536,7 +536,7 @@ Theorem entry_valid_array_child_resources:
   (oid < ready.cs_next_id \/ st1.cs_next_id <= oid) /\
   type_memory_bytes ce ty = type_memory_size tv /\
   abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
-    (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st header entry /\
+    (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st header entry /\
   ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
   entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
   alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
@@ -561,7 +561,7 @@ Proof
   qpat_assum `type_memory_bytes ce ty = _` (fn th =>
     qhdtm_x_assum `abi_decoder_valid_pre`
       (assume_tac o PURE_REWRITE_RULE [th])) >>
-  first_x_assum (drule_at (Pat `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  first_x_assum (drule_at (Pat `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`oid`,`base_addr`,`cap`,`st1`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   drule entry_member_success_child_resources >> strip_tac >>

@@ -1,6 +1,6 @@
 Theory bodyMemEcArithPayload
 Ancestors
-  bodyMemEcArithCode bodyMemEcArithTransfers exprSimCalldataSlice
+  bodyMemEcArithCode bodyMemEcArithTransfers exprSimCalldataSlice loweringStateRelDefs
   emitHelper emitHelperProps compileEnv context venomState venomInst
   venomExecSemantics exprLoweringProps exprSimWordBuiltins
   exprSimPrecompiles immutableMemoryFrame valueEncodingProps

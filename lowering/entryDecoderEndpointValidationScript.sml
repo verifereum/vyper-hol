@@ -5,8 +5,8 @@ Ancestors
   abiDecoderExecution allocaHistory venomState venomExecSemantics list
 
 Theorem entry_valid_bytes_endpoint_frame:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
-  abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d s /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi (DecBytestring n) st = ((),st') /\
+  abi_decoder_valid_bytes_pre n at bs payload st src dst opc (Lit 0w) hi 0 sb d s /\
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
     ~is_terminator i.inst_opcode) (emitted_insts st st') /\
   fn_inst_ids_distinct fn /\ alloca_history fn s /\ alloca_inv s /\

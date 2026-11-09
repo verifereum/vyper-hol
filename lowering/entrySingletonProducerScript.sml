@@ -67,7 +67,7 @@ Theorem entry_registration_singleton_source_endpoint:
     (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
       ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
       ins.inst_id = st.cs_next_id) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),final) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),final) /\
     fn_has_code first final fn /\ st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\
     ~ready.vs_halted /\ ready.vs_current_bb = first.cs_current_bb /\
@@ -122,7 +122,7 @@ Resume entry_registration_singleton_source_endpoint[endpoint]:
     (DROP (SUM (MAP abi_member_head_size pre)) bs)` >>
   `?nv. abi_to_vyper env ty av = SOME nv /\
     abi_decoder_valid_pre ce env sf ty tv bytes nv first src dst CALLDATALOAD
-      (Lit 0w) (4+k) p (p + type_memory_bytes ce ty) 0 ready` by
+      (Lit 0w) (Lit 0w) 0 (4+k) p (p + type_memory_bytes ce ty) 0 ready` by
     (irule entry_canonical_valid_pre >>
       qpat_assum `n = type_memory_bytes ce ty`
         (fn th => asm_rewrite_tac[GSYM th]) >>

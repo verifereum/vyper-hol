@@ -8,7 +8,7 @@ Ancestors
   contractABI abiEncoder words list arithmetic finite_map
 
 Theorem calldata_valid_owned_array_child_entry:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     st = (ops,ready) /\
@@ -18,7 +18,7 @@ Theorem calldata_valid_owned_array_child_entry:
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   is_dynamic (vyper_to_abi_type env ty) /\
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   eval_operand ip initial = SOME (n2w slot) /\ mload slot initial = n2w j /\
@@ -29,7 +29,7 @@ Theorem calldata_valid_owned_array_child_entry:
   alloca_inv initial /\ slot < dimword (:256) ==>
   frag_exec_mem ctx st ready (\s. s = initial)
     (\t. abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st.cs_next_var limit_st initial t /\
+      (Lit 0w) (Lit 0w) 0 sb d b cap st.cs_next_var limit_st initial t /\
       (!op. abi_decoder_operand_live st.cs_next_var op ==>
         eval_operand op t = eval_operand op initial)) (K F)
 Proof

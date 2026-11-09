@@ -1,7 +1,7 @@
 (* Memory-mode address and bytes argument continuation for raw_call. *)
 Theory rawCallPrefixMemory
 Ancestors
-  bodyMemRawCallBounds rawCallGasMemory rawCallArgumentMemory exprSimRawCall exprSimHash bodyMemoryPreds exprSimMemDefs
+  bodyMemRawCallBounds rawCallGasMemory rawCallArgumentMemory exprSimRawCall exprSimHash bodyMemoryPreds exprSimMemDefs loweringStateRelDefs
   exprSimDefs exprSimProps exprLoweringProps loweringPosts bodySim
   compileEnv venomState vyperInterpreter vyperState fragExec exprSimSource exprSimHypsDefs
   bodyArgsMemory exprSimWordArgs exprWordOperand exprSimOperands exprSimHyps

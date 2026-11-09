@@ -22,11 +22,11 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   rewrite_tac[entry_member_child_contract_def] >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gnvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [Once type_to_abi_dec_info_def] >> strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   `first.cs_blocks <> last.cs_blocks` by
@@ -84,10 +84,10 @@ Resume entry_nonbulk_array_child_contract[loop]:
   drule_at (Pat `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ _ _ _`)
     (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
       entry_nonbulk_loop_endpoint)) >>
-  disch_then (drule_at (Pat `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `abi_decode_loop_prefix _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_decode_loop_prefix _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `abi_decode_index_init _ = _`)) >>
-  disch_then (drule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME (n2w _)`)) >>
   disch_then (qspecl_then [`oid`,`cap`,`base_addr`] mp_tac) >>
   (impl_tac >- asm_rewrite_tac[]) >>

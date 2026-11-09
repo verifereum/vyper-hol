@@ -1,7 +1,7 @@
 (* Source-selected calldata is preserved through the entry control prefix. *)
 Theory entrySelectedCalldataWindow
 Ancestors
-  entryDispatchProps moduleLoweringProps vyperLoweringCorrect
+  entryDispatchProps moduleLoweringProps vyperLoweringCorrect valueEncodingDefs
   abiDecoderContract valueEncoding list words
 
 Theorem selector_prefixed_calldata_window[local]:

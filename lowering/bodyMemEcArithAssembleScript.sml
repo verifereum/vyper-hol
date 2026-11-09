@@ -1,6 +1,6 @@
 Theory bodyMemEcArithAssemble
 Ancestors
-  bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc bodyMemEcArithCapacity bodyMemEcArithCallbacks
+  bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc bodyMemEcArithCapacity bodyMemEcArithCallbacks loweringStateRelDefs
   fragGasSeqMem allocaHistoryFragment exprSimProps exprSimPrecompiles
   exprLoweringProps emitHelperProps compileEnv context venomState venomInst
   loweringHalt fragExecMem loweringPosts vyperValue

@@ -10,7 +10,7 @@ Ancestors
 
 Theorem entry_source_members_owned_success:
   let xs = abi_decoder_member_infos sf ce tys in
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs 0 0 first = ((),final) /\
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) xs 0 0 first = ((),final) /\
   fn_has_code first final fn /\
   (first.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -24,7 +24,7 @@ Theorem entry_source_members_owned_success:
     (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
   abi_decoder_operand_live first.cs_next_var src /\
   abi_decoder_operand_live first.cs_next_var dst /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap initial /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d outsz b reserve_cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   fresh_vars_wrt limit_st initial /\ alloca_inv initial /\
   alloca_frontier_inv ctx fn site initial /\
@@ -111,7 +111,7 @@ Resume entry_source_members_owned_success[terminal]:
   `LENGTH tvs = LENGTH xs` by
     (fs[Abbr `xs`, abi_decoder_member_infos_def] >> metis_tac[LIST_REL_LENGTH]) >>
   `a = final` by
-    (qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ (DROP (LENGTH xs) xs) _ _ _ = _`
+    (qpat_x_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ (DROP (LENGTH xs) xs) _ _ _ = _`
        mp_tac >> rpt (pop_assum kall_tac) >>
      simp[compile_abi_decode_to_buf_def, comp_return_def]) >>
   qexistsl_tac [`t`,`scratch`] >> simp[] >>
@@ -129,13 +129,13 @@ Resume entry_source_members_owned_success[successor]:
   Cases_on `EL k xs` >> Cases_on `r` >>
   rename1 `EL k xs = (ei,az,mz)` >>
   `cs_extends first a /\ cs_extends a final /\
-   compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (DROP k xs)
+   compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DROP k xs)
      (SUM (MAP (\(ei,az,mz). az) (TAKE k xs)))
      (SUM (MAP (\(ei,az,mz). mz) (TAKE k xs))) a = ((),final)` by
     (qhdtm_assum `calldata_source_member_cursor`
        (strip_assume_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >>
      asm_rewrite_tac[]) >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ (DROP k xs) _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ (DROP k xs) _ _ _ = _` mp_tac >>
   qpat_assum `DROP k xs = _` (fn th => pure_once_rewrite_tac[th]) >>
   suspend "split"
 QED
@@ -144,12 +144,12 @@ Resume entry_source_members_owned_success[split]:
   pairarg_tac >> asm_simp_tac (srw_ss()) [] >>
   pairarg_tac >> asm_simp_tac (srw_ss()) [] >>
   pairarg_tac >> asm_simp_tac (srw_ss()) [] >> strip_tac >>
-  rename1 `compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei ready = (ignored,next)` >>
+  rename1 `compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei ready = (ignored,next)` >>
   Cases_on `ignored` >>
   `(do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
-       (SUM (MAP (\(ei,az,mz). az) (TAKE k xs))) CALLDATALOAD (Lit 0w);
+       (SUM (MAP (\(ei,az,mz). az) (TAKE k xs))) CALLDATALOAD (Lit 0w) (Lit 0w);
        dp <- emit_op ADD [dst; Lit (n2w (SUM (MAP (\(ei,az,mz). mz) (TAKE k xs))))];
-       compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next)` by
+       compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),next)` by
     asm_simp_tac (srw_ss()) [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   suspend "step"
 QED

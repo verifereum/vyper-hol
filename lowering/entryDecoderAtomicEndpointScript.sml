@@ -1,7 +1,7 @@
 (* Joint resource, observation and history endpoints for atomic decoders. *)
 Theory entryDecoderAtomicEndpoint
 Ancestors
-  calldataFiniteEndpoints entryDecoderEndpointValidation
+  calldataFiniteEndpoints entryDecoderEndpointValidation loweringStateRelDefs
   calldataValidOwnedWord calldataWordLive calldataWordLeaf
   abiDecoderClampedWord abiDecoderReentryPointer abiDecoderReentry
   abiDecoderValidContract abiDecoderTypedContract abiDecoderContract successfulSequenceEndpoint
@@ -26,10 +26,10 @@ Theorem entry_valid_word_owned_endpoint:
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
   in
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\ fn_has_code st last fn /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
   Own st.cs_next_id last.cs_next_id initial /\
@@ -61,11 +61,11 @@ Proof
   `d + type_memory_size tv <= initial.vs_alloca_next` by
     (irule abi_caller_allocation_end >> goal_assum (drule_at Any) >>
      asm_rewrite_tac[] >> metis_tac[]) >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
@@ -128,10 +128,10 @@ Theorem entry_valid_bytes_owned_endpoint:
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
   in
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\ fn_has_code st last fn /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
   Own st.cs_next_id last.cs_next_id initial /\
@@ -160,7 +160,7 @@ Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_valid_bytes_input >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
@@ -170,21 +170,21 @@ Proof
   `d + type_memory_size tv <= initial.vs_alloca_next` by
     (irule abi_caller_allocation_end >> goal_assum (drule_at Any) >>
      asm_rewrite_tac[] >> metis_tac[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   drule_all abi_decoder_valid_bytes_reentry >> strip_tac >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   suspend "sequence"
 QED
 
 Resume entry_valid_bytes_owned_endpoint[sequence]:
   `w2n (abi_decode_load CALLDATALOAD (n2w sb:bytes32) initial) <= n` by
-    (qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >> strip_tac >>
      drule abi_decoder_valid_bytes_facts >>
      simp[abi_decode_load_def, abi_decoder_prune_source] >> strip_tac >>
-     qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _`
+     qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_bytes_pre_def]) >>
      gvs[w2n_n2w]) >>
   drule_all calldata_bytes_accepted_live >> strip_tac >>
@@ -251,11 +251,11 @@ Theorem entry_valid_bulk_owned_endpoint:
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
   in
   abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
-    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn))) st = ((),last) /\
   fn_has_code st last fn /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
@@ -291,9 +291,9 @@ Proof
     (irule abi_caller_allocation_end >> goal_assum (drule_at Any) >>
      asm_rewrite_tac[] >> metis_tac[]) >>
   drule_all valid_bulk_owned_sequence >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `DecDynArray ei abi_sz mem_sz F maxn =
     type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn))` by asm_rewrite_tac[] >>
@@ -301,7 +301,7 @@ Proof
   qpat_x_assum `DecDynArray _ _ _ _ _ = type_to_abi_dec_info _ _ _` kall_tac >>
   `d+(32+maxn*mem_sz) < dimword (:256) /\
    d+(32+maxn*mem_sz) <= initial.vs_alloca_next` by metis_tac[LESS_EQ_LESS_TRANS] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `type_to_abi_dec_info sf ce (ArrayT _ _) = _`
     (fn th => pure_rewrite_tac[th]) >> disch_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>

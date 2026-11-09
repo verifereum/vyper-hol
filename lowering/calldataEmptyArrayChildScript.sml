@@ -1,7 +1,7 @@
 (* Empty complex children use the offset-free setup, even for dynamic ABI types. *)
 Theory calldataEmptyArrayChild
 Ancestors
-  calldataStaticSetupEndpoint calldataValidMemberEndpoint abiDecoderEmpty
+  calldataStaticSetupEndpoint calldataValidMemberEndpoint abiDecoderEmpty loweringStateRelDefs valueEncodingDefs
   abiDecoderStaticLoopSetup successfulSequenceEndpoint calldataDynOwned calldataDynStep
   abiDecoderArraySetupInputs abiDecoderReentry abiDecoderExecution instIdxIndep
   compileEnv exprLoweringProps abiDecoderContract safeSequence fragExecMem venomMemDefs
@@ -10,7 +10,7 @@ Ancestors
   calldataSourceMemberFold calldataMemberResourceFrame abiDecoderComplexHead abiDecoderGuard abiEncoder
 
 Theorem calldata_offset_free_array_setup_endpoint:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     di asz msz st = (ops,ready) /\ ~dec_info_needs_offset di /\
   eval_operand ip initial = SOME (n2w slot) /\ mload slot initial = n2w j /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -78,9 +78,9 @@ Proof
 QED
 
 Theorem calldata_empty_array_child_endpoint:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) asz (type_memory_size tv) st = (ops,ready) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) ready = ((),last) /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\ value_has_type tv v /\

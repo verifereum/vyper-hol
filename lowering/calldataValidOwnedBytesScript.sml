@@ -1,30 +1,30 @@
 (* Successful source-valued reentrant Bytes/String decoding with owned memory. *)
 Theory calldataValidOwnedBytes
 Ancestors
-  abiDecoderValidBytesInput abiDecoderValidBytes abiDecoderReentry abiValidBytesReentry calldataBytesLive
+  abiDecoderValidBytesInput abiDecoderValidBytes abiDecoderReentry abiValidBytesReentry calldataBytesLive loweringStateRelDefs
   calldataBytesLeaf calldataFiniteTransport abiDecoderBytesTyped abiDecoderValidContract
   abiDecoderTypedContract abiDecoderContract abiDecoderBytes
   abiDecoderCoherence valueEncodingProps valueEncodingTyping safeSequence fragExecMem
   abiDecoderFrame abiCallerAllocation abiDecoderFootprint compileEnv venomState words list finite_map
 
 Theorem valid_bytes_source_count[local]:
-  abi_decoder_valid_bytes_pre n at bs payload st src dst CALLDATALOAD (Lit 0w) sb d
+  abi_decoder_valid_bytes_pre n at bs payload st src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d
     (abi_decoder_prune_vars st.cs_next_var initial) ==>
   w2n (abi_decode_load CALLDATALOAD (n2w sb:bytes32) initial) <= n
 Proof
   strip_tac >> drule abi_decoder_valid_bytes_facts >>
   simp[abi_decode_load_def, abi_decoder_prune_source] >> strip_tac >>
-  qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_decoder_valid_bytes_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_bytes_pre_def]) >>
   gvs[w2n_n2w]
 QED
 
 Theorem valid_bytes_owned_sequence[local]:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   d + type_memory_size tv < dimword (:256) ==>
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
@@ -39,17 +39,17 @@ Theorem valid_bytes_owned_sequence[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decoder_valid_bytes_input >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
   `val_wf tv v` by (drule_all (cj 1 value_has_type_val_wf) >> simp[]) >>
   `d + abi_decode_bytes_copy_size n < dimword (:256)` by metis_tac[] >>
   `n < dimword (:256)` by metis_tac[abi_decode_bytes_extent_capacity_bound] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   drule_all abi_decoder_valid_bytes_reentry >> strip_tac >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   drule valid_bytes_source_count >> disch_tac >>
   drule_all calldata_bytes_accepted_live >> strip_tac >>
@@ -58,10 +58,10 @@ QED
 
 Theorem valid_bytes_owned_fragment[local]:
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   d + type_memory_size tv < dimword (:256) /\
   d + type_memory_size tv <= initial.vs_alloca_next ==>
@@ -75,14 +75,14 @@ Theorem valid_bytes_owned_fragment[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all valid_bytes_owned_sequence >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `d + abi_decode_bytes_copy_size n < dimword (:256) /\
    d + abi_decode_bytes_copy_size n <= initial.vs_alloca_next /\
    n < dimword (:256)` by metis_tac[abi_decode_bytes_extent_capacity_bound] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
@@ -107,10 +107,10 @@ Theorem calldata_valid_bytes_owned_success:
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
   in
   (ty = BaseT (BytesT (Dynamic n)) \/ ty = BaseT (StringT n)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\ fn_has_code st last fn /\
-  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
   Own st.cs_next_id last.cs_next_id initial /\

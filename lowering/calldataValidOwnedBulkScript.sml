@@ -1,7 +1,7 @@
 (* Successful source-valued bulk dynamic-array decoding over actual calldata. *)
 Theory calldataValidOwnedBulk
 Ancestors
-  abiDecoderValidContract abiDecoderBulk abiDecoderBulkReentry abiDecoderBulkExecute
+  abiDecoderValidContract abiDecoderBulk abiDecoderBulkReentry abiDecoderBulkExecute loweringStateRelDefs
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
   abiValidStatic vyperABIValid abiStaticLayoutProps abiDecodeRanges
   compileEnv valueEncoding vyperABI contractABI venomState words list arithmetic
@@ -12,7 +12,7 @@ Ancestors
 
 Theorem valid_bulk_canonical_prefix[local]:
   abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
-    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst opc hi sb d b cap initial /\
+    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst opc (Lit 0w) hi 0 sb d b cap initial /\
   type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei ==>
   LENGTH (enc (vyper_to_abi_type env (ArrayT elem_ty (Dynamic maxn)))
@@ -23,7 +23,7 @@ Theorem valid_bulk_canonical_prefix[local]:
       (dec (vyper_to_abi_type env (ArrayT elem_ty (Dynamic maxn))) bs)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   `DecDynArray ei abi_sz mem_sz F maxn =
      type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn))` by asm_rewrite_tac[] >>
@@ -43,8 +43,8 @@ QED
 
 Theorem valid_bulk_empty_window_pre[local]:
   abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
-    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
   d + type_memory_bytes ce (ArrayT elem_ty (Dynamic maxn)) <= initial.vs_alloca_next /\
@@ -52,15 +52,15 @@ Theorem valid_bulk_empty_window_pre[local]:
   abi_decoder_recursive_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
     (ArrayTV elem_tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
     (dec (vyper_to_abi_type env (ArrayT elem_ty (Dynamic maxn))) bs) v
-    st st.cs_next_id src dst CALLDATALOAD (Lit 0w) sb d initial.vs_alloca_next 0
+    st st.cs_next_id src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d initial.vs_alloca_next 0
     (abi_decoder_prune_vars st.cs_next_var initial)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all valid_bulk_canonical_prefix >> strip_tac >>
   `abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
-    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d initial.vs_alloca_next 0 initial` by
-    (qpat_x_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d initial.vs_alloca_next 0 initial` by
+    (qpat_x_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[abi_decoder_valid_pre_def, abi_decoder_ranges_def] >>
      disch_then (map_every assume_tac o CONJUNCTS) >> asm_simp_tac (srw_ss()) []) >>
   `abi_decoder_reservation st.cs_next_id st.cs_next_id initial.vs_alloca_next 0 initial` by
@@ -70,11 +70,11 @@ QED
 
 Theorem valid_bulk_owned_sequence:
   abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
-    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn))) st = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   d + type_memory_bytes ce (ArrayT elem_ty (Dynamic maxn)) <= initial.vs_alloca_next /\
@@ -90,14 +90,14 @@ Theorem valid_bulk_owned_sequence:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all valid_bulk_empty_window_pre >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   qpat_assum `abi_decoder_metadata _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
   `val_wf (ArrayTV elem_tv (Dynamic maxn)) v` by
     (drule_all (cj 1 value_has_type_val_wf) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> disch_tac >>
   qpat_assum `dec _ bs = ListV _`
     (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
@@ -121,11 +121,11 @@ QED
 
 Theorem valid_bulk_owned_fragment[local]:
   abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
-    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn))) st = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   d + type_memory_bytes ce (ArrayT elem_ty (Dynamic maxn)) <= initial.vs_alloca_next /\
@@ -141,9 +141,9 @@ Theorem valid_bulk_owned_fragment[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all valid_bulk_owned_sequence >> strip_tac >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `DecDynArray ei abi_sz mem_sz F maxn =
     type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn))` by asm_rewrite_tac[] >>
@@ -151,7 +151,7 @@ Proof
   qpat_x_assum `DecDynArray _ _ _ _ _ = type_to_abi_dec_info _ _ _` kall_tac >>
   `d+(32+maxn*mem_sz) < dimword (:256) /\
    d+(32+maxn*mem_sz) <= initial.vs_alloca_next` by metis_tac[LESS_EQ_LESS_TRANS] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `type_to_abi_dec_info sf ce (ArrayT _ _) = _`
     (fn th => pure_rewrite_tac[th]) >> disch_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
@@ -177,11 +177,11 @@ Theorem calldata_valid_bulk_owned_success:
           (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)
   in
   abi_decoder_valid_pre ce env sf (ArrayT elem_ty (Dynamic maxn))
-    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w)
-    sb d b cap initial /\
+    (ArrayTV elem_tv (Dynamic maxn)) bs v st src dst CALLDATALOAD (Lit 0w) (Lit 0w)
+    0 sb d b cap initial /\
   type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn)) =
     DecDynArray ei abi_sz mem_sz F maxn /\ ~dec_info_needs_clamp ei /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT elem_ty (Dynamic maxn))) st = ((),last) /\
   fn_has_code st last fn /\
   last.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\

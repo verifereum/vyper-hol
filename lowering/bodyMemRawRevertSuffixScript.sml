@@ -1,7 +1,7 @@
 (* Memory-counted execution of the raw_revert suffix. *)
 Theory bodyMemRawRevertSuffix
 Ancestors
-  bodyMemRawRevertBounds exprSimRawRevertCore fragGasSeqMem
+  bodyMemRawRevertBounds exprSimRawRevertCore fragGasSeqMem loweringStateRelDefs
   fragGasPathMem instMemFrontier memSafeRun fragExec gasCount
   exprLoweringProps emitHelperProps compileEnv venomExecSemantics
   venomInstProofs venomExecProps venomState venomInst finite_map list rich_list arithmetic

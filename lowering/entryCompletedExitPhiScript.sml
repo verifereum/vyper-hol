@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem entry_decoder_completed_containing_exit_phi:
-  compile_abi_decode_to_buf dst src opc hi info first = ((),exit) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi info first = ((),exit) /\
   abi_decode_source_opcode opc /\ fn_has_code first exit fn /\
   compile_register_positional_args ce args off exit = (cef,z) /\
   compile_guarded_body cef F nk ut iv stmts rt z = ((),b) /\

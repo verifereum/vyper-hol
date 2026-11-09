@@ -17,15 +17,15 @@ Theorem entry_nonbulk_loop_endpoint:
     mem_word_at d u.vs_memory = n2w (LENGTH vs) /\
     FLOOKUP u.vs_allocas index_st.cs_next_id = SOME (ix,32) /\
     FLOOKUP u.vs_allocas oid = SOME (base_addr,cap) /\ MEM (ix,32) old /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap u /\
     mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD u) = bs
   in
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) first = ((ip,cnt),loop_st) /\
   abi_decode_index_init index_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
-  compile_abi_decode_dyn_loop dst src CALLDATALOAD (Lit 0w)
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
+  compile_abi_decode_dyn_loop dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) ip cnt loop_st = ((),last) /\
   fn_has_code first loop_st fn /\ fn_has_code loop_st last fn /\
@@ -37,7 +37,7 @@ Theorem entry_nonbulk_loop_endpoint:
   base_addr <= d /\ d+(32+maxn*type_memory_size tv) <= base_addr+cap /\
   d+(32+maxn*type_memory_size tv) < dimword (:256) /\
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) first src dst CALLDATALOAD (Lit 0w) sb d b reserve_cap initial /\
+    bs (ArrayV (DynArrayV vs)) first src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b reserve_cap initial /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   (is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
@@ -78,7 +78,7 @@ Resume entry_nonbulk_loop_endpoint[initialize]:
 QED
 Resume entry_nonbulk_loop_endpoint[child]:
   `!bytes v child_src child_dst child_sb addr b reserve_cap oid base_addr cap first last s.
-    compile_abi_decode_to_buf child_dst child_src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf child_dst child_src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) first = ((),last) /\
     fn_has_code first last fn /\
     (first.cs_blocks = last.cs_blocks \/
@@ -89,7 +89,7 @@ Resume entry_nonbulk_loop_endpoint[child]:
     base_addr <= addr /\ addr+type_memory_size tv <= base_addr+cap /\
     addr+type_memory_size tv < dimword (:256) /\
     abi_decoder_valid_pre ce env sf ty tv bytes v first child_src child_dst
-      CALLDATALOAD (Lit 0w) child_sb addr b reserve_cap s /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 child_sb addr b reserve_cap s /\
     fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
     calldata_member_own fn first.cs_next_id last.cs_next_id s /\
     FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
@@ -114,7 +114,7 @@ Resume entry_nonbulk_loop_endpoint[callback]:
   `!k header entry.
     k < LENGTH vs /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
-      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st header entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st header entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\

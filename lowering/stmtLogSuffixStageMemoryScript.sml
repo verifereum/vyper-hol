@@ -1,7 +1,7 @@
 (* Selected arguments at the post-topic memory boundary. *)
 Theory stmtLogSuffixStageMemory
 Ancestors
-  stmtSimLogSuffix stmtSimLogTrace stmtSimLogTopicFresh stmtSimLogTopics
+  stmtSimLogSuffix stmtSimLogTrace stmtSimLogTopicFresh stmtSimLogTopics loweringStateRelDefs
   stmtLogDataMemory abiDecoderReentry compileEnv exprLoweringProps
   emitHelperProps abiEncoderCounters abiEncoderAppend list words
   loweringHalt stmtSimLogDataRun fragExec abiBuiltinAllocation

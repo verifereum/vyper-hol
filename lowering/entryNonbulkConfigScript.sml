@@ -20,15 +20,15 @@ Theorem entry_nonbulk_loop_config:
     mem_word_at d u.vs_memory = n2w (LENGTH vs) /\
     FLOOKUP u.vs_allocas index_st.cs_next_id = SOME (ix,32) /\
     FLOOKUP u.vs_allocas oid = SOME (base_addr,cap) /\ MEM (ix,32) old /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap u /\
     mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD u) = bs
   in
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn
     (abi_embedded_static_size ce.ce_struct_fields ty) first = ((ip,cnt),loop_st) /\
   abi_decode_index_init index_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
-  compile_abi_decode_dyn_loop dst src CALLDATALOAD (Lit 0w)
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = ((hdr,body_lbl,exit_lbl),st0) /\
+  compile_abi_decode_dyn_loop dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) ip cnt loop_st = ((),last) /\
   fn_has_code first loop_st fn /\ fn_has_code loop_st last fn /\
@@ -40,7 +40,7 @@ Theorem entry_nonbulk_loop_config:
   base_addr <= d /\ d+(32+maxn*type_memory_size tv) <= base_addr+cap /\
   d+(32+maxn*type_memory_size tv) < dimword (:256) /\
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) first src dst CALLDATALOAD (Lit 0w) sb d b reserve_cap initial /\
+    bs (ArrayV (DynArrayV vs)) first src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b reserve_cap initial /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   (is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
@@ -51,7 +51,7 @@ Theorem entry_nonbulk_loop_config:
     EntryLoopConfig fn first st0 ready st1 last limit_st ce env sf ty tv vs maxn
       hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs ix d
       index_st.cs_next_id oid base_addr cap /\
-    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) ready = ((),st1) /\
     fn_has_code ready st1 fn /\
     (!bb. lookup_block st1.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -82,7 +82,7 @@ Resume entry_nonbulk_loop_config[prepare]:
   qpat_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE
       [calldata_member_resource_frame_def, calldata_member_wit_def]) >>
-  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_valid_pre_def]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule calldata_valid_array_inputs >> strip_tac >>

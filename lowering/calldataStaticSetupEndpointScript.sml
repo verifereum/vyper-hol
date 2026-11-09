@@ -9,7 +9,7 @@ Ancestors
   venomState venomExecSemantics words list arithmetic
 
 Theorem calldata_static_valid_owned_array_child_endpoint:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     st = (ops,ready) /\
@@ -18,7 +18,7 @@ Theorem calldata_static_valid_owned_array_child_endpoint:
     (dec (Array NONE (vyper_to_abi_type env ty)) bs) (ArrayV (DynArrayV vs)) /\
   vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\ j < LENGTH vs /\
   ~is_dynamic (vyper_to_abi_type env ty) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   eval_operand ip initial = SOME (n2w slot) /\ mload slot initial = n2w j /\
@@ -33,7 +33,7 @@ Theorem calldata_static_valid_owned_array_child_endpoint:
   ?child. ~child.vs_halted /\ child.vs_current_bb = ready.cs_current_bb /\
     child.vs_inst_idx = LENGTH ready.cs_current_insts /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st.cs_next_var limit_st initial child /\
+      (Lit 0w) (Lit 0w) 0 sb d b cap st.cs_next_var limit_st initial child /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op child = eval_operand op initial) /\
     ((!fuel. mem_safe_run fuel ctx fn child) ==> !fuel. mem_safe_run fuel ctx fn initial) /\
@@ -64,7 +64,7 @@ Proof
     (drule calldata_element_setup_opcodes >> simp[EVERY_MEM]) >>
   mp_tac (Q.INST [`s` |-> `initial`, `t` |-> `prepared`, `P` |-> `\child.
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b cap st.cs_next_var limit_st initial child /\
+      (Lit 0w) (Lit 0w) 0 sb d b cap st.cs_next_var limit_st initial child /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==>
       eval_operand op child = eval_operand op initial)`] (SPEC_ALL successful_sequence_endpoint)) >>
   simp[eval_op_inst_idx] >> strip_tac >>

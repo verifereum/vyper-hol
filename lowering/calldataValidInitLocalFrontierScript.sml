@@ -1,6 +1,6 @@
 Theory calldataValidInitLocalFrontier
 Ancestors
-  calldataInitOwnedLocalFrontier calldataInitSequence calldataInitEntry calldataValidOwnedLoop
+  calldataInitOwnedLocalFrontier calldataInitSequence calldataInitEntry calldataValidOwnedLoop loweringStateRelDefs
   abiDecoderFrame abiDecoderTypedContract abiDecoderContract venomState
   exprLoweringProps allocaFrontierBound calldataDynOwned compileEnv fragExecMem list calldataInitializerSafety
 
@@ -34,11 +34,11 @@ Theorem calldata_valid_init_header_local_frontier:
         (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < end_st.cs_next_id /\
           FLOOKUP s.vs_allocas id = SOME (q,k)) /\
         fresh_vars_wrt limit_st s /\
-        abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+        abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
           d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
         mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
   in
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
@@ -59,14 +59,14 @@ Theorem calldata_valid_init_header_local_frontier:
   st.cs_next_id <= header_st.cs_next_id /\ header_st.cs_next_id < end_st.cs_next_id /\
   Own initial /\ FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
   fresh_vars_wrt limit_st initial /\ loop_st.cs_next_var <= limit_st.cs_next_var /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap initial /\
   mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
   loop_st.cs_blocks = st.cs_blocks /\ loop_st.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts loop_st.cs_current_insts /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) (emitted_insts st loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),prefix_st) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = ((hdr,body_lbl,exit_lbl),prefix_st) /\
   fn_has_code st loop_st fn /\ fn_has_code loop_st prefix_st fn /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -137,7 +137,7 @@ Resume calldata_valid_init_header_local_frontier[header]:
      asm_rewrite_tac[]) >>
   `eval_operand src t = SOME srcword /\ eval_operand dst t = SOME (n2w d)` by
     metis_tac[] >>
-  `abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d
+  `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap t` by
     (gvs[abi_decoder_ranges_def]) >>
   simp_tac bool_ss [Abbr `H`] >>
@@ -152,7 +152,7 @@ Resume calldata_valid_init_header_local_frontier[header]:
   conj_tac
   >- (qexists_tac `header_st.cs_next_id` >> simp[]) >>
   conj_tac
-  >- (qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  >- (qpat_x_assum `abi_decoder_ranges _ (Lit 0w) _ _ _ 0 _ _ _ _ _ _ t` mp_tac >>
       simp[abi_decoder_ranges_def]) >>
   qpat_x_assum `mem_bytes_at sb _ (abi_decode_source _ initial) = bs` mp_tac >>
   simp[abi_decode_source_def]

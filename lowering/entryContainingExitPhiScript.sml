@@ -16,7 +16,7 @@ Proof
 QED
 
 Theorem entry_decoder_nonempty_containing_exit_phi:
-  compile_abi_decode_to_buf dst src opc hi info first = ((),last) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi info first = ((),last) /\
   abi_decode_source_opcode opc /\ fn_has_code first last fn /\
   last.cs_current_insts <> [] ==>
   first.cs_blocks = last.cs_blocks \/

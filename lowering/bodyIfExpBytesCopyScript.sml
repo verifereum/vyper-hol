@@ -81,7 +81,7 @@ Proof
   `stmt_state_rel ctx func cenv cx ee (m with vs_vars := q.vs_vars)` by
     (irule exprSimPropsTheory.stmt_state_rel_vars_frame >>
      fs[loweringPostsTheory.expr_post_def] >> rpt strip_tac >>
-     fs[compileEnvTheory.local_ptrs_reserved_def,
+     fs[loweringStateRelDefsTheory.local_ptrs_reserved_def,
         venomStateTheory.lookup_var_def] >> metis_tac[]) >>
   suspend "post"
 QED
@@ -95,7 +95,7 @@ Resume ifexp_copy_post_transport[post]:
   `!n b sz. local_region cenv ee.scopes q n b sz <=>
              local_region cenv ee.scopes m n b sz` by
     (rpt gen_tac >>
-     fs[compileEnvTheory.local_region_def, compileEnvTheory.local_ptrs_reserved_def] >>
+     fs[loweringStateRelDefsTheory.local_region_def, loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
      metis_tac[]) >>
   `(q with vs_inst_idx := m.vs_inst_idx) = (m with vs_vars := q.vs_vars)` by
     (qpat_x_assum `q with <|vs_vars := _; vs_inst_idx := _|> = m`

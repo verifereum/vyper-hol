@@ -1,7 +1,7 @@
 (* Source and counted target outcomes for the raw-call suffix. *)
 Theory rawCallTailOutcomeMemory
 Ancestors
-  rawCallTailMemory exprSimRawCall exprSimRawCallCalldata rawCallPrefixMemory
+  rawCallTailMemory exprSimRawCall exprSimRawCallCalldata rawCallPrefixMemory valueEncodingDefs
   exprSimMemDefs gasOutcome gasSummary fragGasMode
   vyperInterpreter vyperState exprLowering compileEnv exprSimDefs exprSimProps
   loweringPosts valueEncoding words finite_map list exprLoweringProps exprSimSource

@@ -1,7 +1,7 @@
 (* Actual member navigation endpoint, including fixed-limit freshness. *)
 Theory calldataMemberEndpoint
 Ancestors
-  calldataMembers successfulSequenceEndpoint abiDecoderLoopRegisters
+  calldataMembers successfulSequenceEndpoint abiDecoderLoopRegisters loweringStateRelDefs
   abiDecoderContract abiDecoderReentry compileEnv emitHelper emitHelperProps
   abiEncoder exprLoweringProps venomState venomInst venomExecSemantics
   safeSequence fragExecMem instIdxIndep words list rich_list arithmetic finite_map
@@ -38,7 +38,7 @@ Proof
 QED
 
 Theorem member_address_limit_fresh[local]:
-  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)]; return (ep,dp) od) st = ((ep,dp),mid) /\
   run_inst_seq (emitted_insts st mid) s = OK t /\
   mid.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
@@ -60,7 +60,7 @@ Proof
 QED
 
 Theorem calldata_member_address_endpoint:
-  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)]; return (ep,dp) od) st = ((ep,dp),mid) /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME q /\
   abi_decoder_operand_live st.cs_next_var src /\

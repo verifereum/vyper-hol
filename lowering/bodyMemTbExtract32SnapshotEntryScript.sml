@@ -1,7 +1,7 @@
 (* Complete control and state boundary for the extract32 source snapshot. *)
 Theory bodyMemTbExtract32SnapshotEntry
 Ancestors
-  bodyMemTbExtract32Cuts allocaHistoryFragment exprSimProps
+  bodyMemTbExtract32Cuts allocaHistoryFragment exprSimProps loweringStateRelDefs
   exprLoweringProps exprOperandVar builtinBytes emitHelper emitHelperProps
   compileEnv venomInst rich_list loweringPosts fragExec
   bodyMemTbExtract32Source fragGasSeqMem list venomState venomExecSemantics

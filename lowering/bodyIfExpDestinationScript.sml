@@ -1,6 +1,6 @@
 Theory bodyIfExpDestination
 Ancestors
-  bodyMemAssignAttrStorage exprSimMemUnwrap loweringPosts freshWrites
+  bodyMemAssignAttrStorage exprSimMemUnwrap loweringPosts freshWrites loweringStateRelDefs
   venomState compileEnv exprLowering exprSimIfExp exprSimVVFrame exprSimAlloc
   bodyMemAggregateUnwrap exprSimProps exprLoweringProps exprSimUnwrapProps
   exprSimMemDefs vyperInterpreter vyperState

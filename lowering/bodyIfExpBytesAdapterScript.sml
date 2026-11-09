@@ -1,6 +1,6 @@
 Theory bodyIfExpBytesAdapter
 Ancestors
-  bodyIfExpDestination bodyIfExpBytesCopy exprSimIfExp exprSimWordArgs
+  bodyIfExpDestination bodyIfExpBytesCopy exprSimIfExp exprSimWordArgs loweringStateRelDefs
   exprSimHash exprSimAggregateSource exprLoweringProps fragExec compileEnv
   exprOperandVar freshWrites exprSimMemDefs loweringPosts venomState
   bodyMemAssignAttrStorage exprSimPrecompiles valueCopy exprSimProps
