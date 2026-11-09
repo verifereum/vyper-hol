@@ -112,7 +112,7 @@ Proof
     (Cases_on `src` >> gvs[eval_operand_def] >> metis_tac[]) >> simp[]
 QED
 
-Theorem typed_fields_address_effect[local]:
+Theorem typed_fields_address_effect:
   gas_path_mem ctx func s 0 (OK u) /\
   (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
