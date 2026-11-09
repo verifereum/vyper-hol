@@ -581,6 +581,67 @@ Proof
   metis_tac[]
 QED
 
+Theorem materialize_zero_slot_execution:
+  compile_materialize_vv ce ty (LocatedValue vty p) sa = (dst,sb) /\
+  ~is_word_type ty /\ type_memory_bytes ce ty = 0 /\
+  ~is_word_type vty /\ type_memory_bytes ce vty = 0 /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  fn_has_code sa sb fn /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t mid su z w.
+    gas_marked_path F ctx fn s 0 (OK t) /\
+    t = jump_to sb.cs_current_bb
+      (update_var ("%" ++ toString (su.cs_next_var+1)) 1w
+        (jump_to (fresh_label_output "wcopy_cond" su.cs_next_label)
+          (update_var ("%" ++ toString su.cs_next_var) 0w z))) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand dst z = SOME w /\
+    FLOOKUP z.vs_allocas sa.cs_next_id = SOME (w2n w,0) /\
+    z.vs_memory = s.vs_memory /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP z.vs_allocas aid = SOME entry) /\
+    (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
+    sa.cs_next_id < mid.cs_next_id /\
+    sa.cs_next_var < mid.cs_next_var /\ mid.cs_next_var < su.cs_next_var
+Proof
+  strip_tac >> (drule materialize_zero_slot_prefixes >>
+  disch_then (qspec_then `fn` mp_tac) >> simp[] >> strip_tac >>
+  `0 < dimword (:256)` by simp[] >>
+  drule_all materialize_alloc_semantic_path >>
+  disch_then (qx_choose_then `a` (qx_choose_then `w` strip_assume_tac)) >>
+  drule_all materialize_alloc_semantic_path >>
+  disch_then (qx_choose_then `z` (qx_choose_then `w2` strip_assume_tac)) >>
+  drule materialize_zero_loop_path >>
+  disch_then (qspecl_then [`z`, `fn`, `ctx`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `sb.cs_current_insts = []` by
+    (drule materialize_zero_loop_layout >>
+     disch_then (qspec_then `fn` mp_tac) >> simp[]) >>
+  `sa.cs_next_var < mid.cs_next_var /\ mid.cs_next_var < su.cs_next_var` by
+    (imp_res_tac loweringHaltTheory.compile_alloc_buffer_emission >> simp[]) >>
+  `gas_marked_path F ctx fn s 0 (OK z)` by
+    (irule (fragGasModeTheory.gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+     qexists_tac `a` >> simp[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at mid x` by
+       (irule freshWritesTheory.not_fresh_at_mono >>
+        qexists_tac `sa` >> simp[]) >> simp[]) >>
+  `eval_operand dst z = SOME w` by
+    (gvs[venomStateTheory.eval_operand_def] >> simp[]) >>
+  `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+     FLOOKUP z.vs_allocas aid = SOME entry` by metis_tac[] >>
+  qexistsl_tac [`mid`, `su`, `z`, `w`] >>
+  conj_tac
+  >- (irule (fragGasModeTheory.gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+      qexists_tac `z` >> simp[]) >>
+  gvs[venomStateTheory.jump_to_def, venomStateTheory.update_var_def,
+      venomStateTheory.eval_operand_def] >> metis_tac[])
+QED
+
 (* A zero-sized destination can leave the unwrap loop's exit empty. *)
 Theorem materialize_zero_destination_alias_probe:
   let sa = initial_compile_state "@wcopy_exit_2";
