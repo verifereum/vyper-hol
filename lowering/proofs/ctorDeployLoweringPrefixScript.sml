@@ -195,7 +195,8 @@ Proof
   dep_rewrite.DEP_REWRITE_TAC[deploy_prefix_send_value_ready] >>
   simp[e2eDeployDefsTheory.deploy_evaluation_context_def,
        initial_evaluation_context_def, initial_state_def,
-       vyperStateTheory.return_def] >> gvs[]
+       vyperStateTheory.return_def,
+       e2eDeployDefsTheory.value_transfer_created_in_tx] >> gvs[]
 QED
 
 Theorem deploy_prefix_no_start_nonpayable:

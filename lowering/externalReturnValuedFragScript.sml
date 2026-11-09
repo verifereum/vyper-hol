@@ -51,7 +51,15 @@ Proof
     (SND (return_consumer_suffix ce ret (lowered_value_type ce e) op sx))` by
     (gen_tac >> pure_rewrite_tac[return_consumer_suffix_def] >>
      irule ci_mono_bind >> conj_tac
-     >- simp[ci_mono_return_helpers] >>
+     >~ [`ce.ce_raw_return`]
+     >- (rpt gen_tac >> BETA_TAC >> IF_CASES_TAC
+         >- (irule ci_mono_ignore_bind >> conj_tac
+             >- (gen_tac >> IF_CASES_TAC >>
+                 simp[ci_mono_context_helpers, ci_mono_comp_return]) >>
+             gen_tac >> irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+             rpt gen_tac >> BETA_TAC >> irule ci_mono_ignore_bind >>
+             simp[ci_mono_typed_memory_family, ci_mono_return_helpers]) >>
+         simp[ci_mono_return_helpers]) >>
      rpt gen_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return] >>
      irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
      rpt gen_tac >> irule ci_mono_bind >> simp[ci_mono_comp_return] >>

@@ -10,6 +10,12 @@ Ancestors
   venomState venomExecSemantics venomInst words list rich_list arithmetic
   fragExec instIdxIndep abiDecoderLoop
 
+val prefix_code_case_tac =
+  strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
+  gvs[DROP_LENGTH_APPEND, abi_decoder_reentry_opcode_def, mk_inst_def,
+    is_terminator_def, is_alloca_op_def];
+
 Theorem ctor_actual_array_prefix_code:
   abi_decode_dynarray_checked_prefix src opc hi maxn asz st = ((),st') /\
   abi_decode_source_opcode opc ==>
@@ -25,11 +31,14 @@ Proof
     abi_decode_dynarray_payload_guard_def, compile_abi_decode_range_check_def,
     abi_decode_le_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[emitted_insts_def] >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
-  gvs[DROP_LENGTH_APPEND, abi_decoder_reentry_opcode_def, mk_inst_def,
-    is_terminator_def, is_alloca_op_def]
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def]
+  (* One fragment per opcode and hi case. *)
+  >- prefix_code_case_tac
+  >- prefix_code_case_tac
+  >- prefix_code_case_tac
+  >- prefix_code_case_tac
+  >- prefix_code_case_tac
+  >> prefix_code_case_tac
 QED
 
 Theorem ctor_actual_array_prefix_reentry:
