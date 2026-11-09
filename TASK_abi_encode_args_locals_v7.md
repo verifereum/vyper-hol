@@ -4,9 +4,27 @@
 Status: planned
 Priority: P1
 Created: 2026-11-07 (v7: 2026-11-09)
-Location: lowering/exprSimAbiEncodeArgsScript.sml
+Location: lowering/exprSimAbiEncodeArgsCapturedScript.sml
 
 ## Theorem Statement (FROZEN)
+
+Owner note 8 (scope split, branch manager ruling): from commit 0b5d69ca6 on, this run's frozen targets are the two captured-head cons lemmas in `lowering/exprSimAbiEncodeArgsCapturedScript.sml`, exactly as committed there:
+
+- `abi_args_captured_cons_sim_live`
+- `abi_args_captured_cons_sim` (the same without `EVERY (abi_decoder_operand_live sb.cs_next_var) ...` in the tail hypothesis's postcondition and in the conclusion)
+
+Commit 0b5d69ca6 restated the argument-list lemmas as counted paths (`gas_outcome`) and split them across theories; its message has every statement OLD -> NEW. The legacy `frag_exec` cons lemmas are gone from `abiEncodeArgsSim`, and `compile_abi_encode_args_case_sim` is deleted. Other runs now own the rest, in parallel:
+
+- the uncaptured-head pair `abi_args_uncaptured_cons_sim{,_live}` (`exprSimAbiEncodeArgsUncaptured`);
+- the counted list pair `compile_abi_encode_args_sim{,_live}` and `compile_abi_encode_args_case_gas_sim` (`exprSimAbiEncodeArgs`). The former target below is theirs now; it stays here only as background.
+
+The captured lemma says: the head `e` is non-word and compiled by `compile_expr` to `vv` at `mid`, then materialized by `compile_materialize_vv ce (lowered_value_type ce e) vv mid = (op,sm)`. With the counted tail hypothesis from every successful head run `(es1,t)` at `sm`, they give the counted outcome of `eval_exprs cx (e::args)` from `(es,s0)` at `sa`. Facts about the head's and the tail's end states are premises over every run on any gas tail (`es with gas_obs := gs`, `es1 with gas_obs := gs'`), because a counted run's result depends on the gas readings.
+
+The `exprSimAbiEncodeArgsMaterializePath` work in progress (the owned materialization path, C1.1.x) stays yours: finish what the captured lemmas need. Its lemmas are helpers, not frozen; nothing else uses them, so restate them freely to fit the captured statement (which types the head at `lowered_value_type ce e`). The proved boundary `abiEncodeMaterialize.compile_materialize_vv_owned_sim` and the head error exits `abiEncodeArgsSim.abi_args_vv_error_prefix` / `abi_args_vv_read_error_prefix` are there to use; the composition template is `exprSimWordArgs.lower_word_args_sim`.
+
+Do not modify the two captured statements, `abi_args_post_def`, `abi_args_ready_def` or `compile_abi_encode_args_def`. Prove them as they are, or produce a checked counterexample and stop. If a premise turns out missing, stop and report it with the goal; don't change the statement.
+
+Former target (background only, owned by another run now):
 
 ```sml
 Theorem compile_abi_encode_args_case_gas_sim:
@@ -30,7 +48,7 @@ Theorem compile_abi_encode_args_case_gas_sim:
       (\rr ee r. wb_args_exit rr r)
 ```
 
-Do not modify this statement. Prove it as-is, or produce a counterexample. `abi_args_post_def` (`lowering/abiEncodeArgsSimScript.sml`) is frozen with it.
+Don't prove or modify this one here; it's the other run's target. `abi_args_post_def` (`lowering/abiEncodeArgsSimScript.sml`) stays frozen.
 
 Owner note: `wb_frame` (and `locals_kept`) now take the final environment as well (`wb_frame cenv es es' sa s0 s`). `abi_args_post_def` has been updated to match: its last conjunct is now `wb_frame ce es es' sa s0 s`, where `es'` is its existing final-environment argument. It stays frozen in that form. The other `wb_frame`/`locals_kept` uses in the harvested `abi*` theories are yours to port. Several (for example in `abiEncodeArgsSim`) still use the old arity.
 
@@ -66,11 +84,10 @@ Owner note 7 (no-PHI course correction, branch manager ruling with argon): the f
 
 ## Completion Criteria
 
-- The theorem is proved with no `cheat` in `lowering/exprSimAbiEncodeArgsScript.sml`, or in helper theories named `exprSimAbiEncodeArgs<Part>`.
-- The same holds for the five harvested ancestors `abiArgsLabelBoundary`, `abiEncodeArgsWindows`, `abiEncodeMaterialize`, `abiEncodeArgsSim` and `abiEncodeArgsCase`. Their proofs no longer built after the `locals_kept`/`wb_frame` merge, so commit 1afcd65b0 admitted all of them (`cheat`) to let the ancestors build. Every one of those admissions is yours to prove. The original proofs are at commit 4cd0c6660 (`git show 4cd0c6660:lowering/<file>`); restore what still works and port the rest. Their statements may change where the new interfaces force it; `abi_args_post_def` and `compile_abi_encode_args` stay as they are now (after owner note 2).
-- The harvested theories this proof needs (below) may be ported in place: change their proofs and add lemmas freely, but do not change `abi_args_post_def` or `compile_abi_encode_args` beyond owner note 2.
+- `abi_args_captured_cons_sim_live` and `abi_args_captured_cons_sim` are proved with no `cheat` in `lowering/exprSimAbiEncodeArgsCapturedScript.sml`, in `lowering/exprSimAbiEncodeArgsMaterializePathScript.sml`, or in new helper theories named `exprSimAbiEncodeArgsCaptured<Part>`.
+- `holbuild -j4 build exprSimAbiEncodeArgsCapturedTheory` passes at the default step limit. Add `exprSimAbiEncodeArgsMaterializePath` (or your helpers) to its Ancestors as needed.
+- Edit only those files. Other runs are editing `exprSimAbiEncodeArgs`, `exprSimAbiEncodeArgsUncaptured*` and `exprSimAbiEncodeArgsList*`; don't touch them. The harvested `abi*` theories (`abiArgsLabelBoundary`, `abiEncodeArgsWindows`, `abiEncodeMaterialize`, `abiEncodeArgsSim`, `abiEncodeArgsCase`) are fully proved now; leave them as they are and add any lemma you need to your own helper theories.
 - No new axioms or admissions. Definitions only as proof-only helpers.
-- `holbuild -j4 build exprSimAbiEncodeArgsTheory` passes at the default step limit.
 - Commit checked work with the trailer `Bot: opus (Claude Opus 5.5)`; do not push.
 
 ## Build
@@ -78,12 +95,12 @@ Owner note 7 (no-PHI course correction, branch manager ruling with argon): the f
 From the project root:
 
 ```sh
-holbuild -j4 build exprSimAbiEncodeArgsTheory
+holbuild -j4 build exprSimAbiEncodeArgsCapturedTheory
 ```
 
 Default tactic timeout and memory limits.
 
-Some ancestor theories on this branch are admitted by a local overlay (their files are cheated in the work tree and marked skip-worktree). Inherited admissions from them are expected and fine; do not edit, commit or un-skip those files. Exception: `exprSimHyps` and `memoryLocalRhsProps` are no longer overlaid; their real proofs are back and are in scope for the proof repairs owner note 2 lists. `gasShadowCompilePure`, `gasShadowCompileBodies` and `abiEncodeEndpointMetadata` were never overlaid and are in that scope too. `exprSimAbiGasBridge` is proved on this branch (no admissions).
+Some ancestor theories on this branch are admitted by a local overlay (their files are cheated in the work tree and marked skip-worktree). Inherited admissions from them are expected and fine; do not edit, commit or un-skip those files.
 
 ## Background
 

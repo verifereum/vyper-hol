@@ -3,6 +3,8 @@ Libs exprSimAbiEncodeArgsProbeLib
 Ancestors
   abiEncodeMaterialize exprSimAbiGasBridge exprSimHash vyperCompiler context
   loweringPosts compileEnv finite_map exprSimAbiEncodeSeparation
+  entrySinkExtraction fragGasSeq stmtReasonLitFragMemory emitHelperProps
+  abiDecodeStaticProps fragGasMode list exprSimHyps
 
 Definition materialize_owned_post_def:
   materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv s <=>
@@ -28,6 +30,205 @@ Proof
        wb_frame_def, expr_val_rel_def, expr_val_at_def,
        locals_kept_def, popped_kept_def, local_region_def, venomStateTheory.eval_operand_def,
        venomStateTheory.lookup_var_def]
+QED
+
+Theorem materialize_expr_post_returndata[local]:
+  expr_post ctx func ce cx e es sa sb s0 es' v op
+    (s with vs_returndata := rd) <=>
+  expr_post ctx func ce cx e es sa sb s0 es' v op s
+Proof
+  Cases_on `op` >>
+  simp[expr_post_def, hash_returndata_state_rel,
+       expr_val_rel_def, expr_val_at_def, expr_val_own_def,
+       locals_kept_def, popped_kept_def, local_region_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.eval_operand_def]
+QED
+
+Theorem materialize_unwrap_owned_straight_path[local]:
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tvv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  not_fresh_at sm p /\ lookup_var p r = SOME w /\
+  FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) /\
+  cs_extends sm su /\ frag_gas_free sm su /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\
+      expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
+      lookup_var p u = SOME w /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
+      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+      u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >> drule_all materialize_unwrap_owned_sim >>
+  disch_then (qspec_then `\r. F` mp_tac) >> strip_tac >>
+  drule frag_exec_gas_path >>
+  disch_then (qspecl_then [`func`, `r`] mp_tac) >>
+  simp[materialize_expr_post_returndata, venomStateTheory.lookup_var_def] >>
+  metis_tac[]
+QED
+
+Theorem materialize_unwrap_identity_path[local]:
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tvv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  not_fresh_at sm p /\ lookup_var p r = SOME w /\
+  FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) /\
+  ((?ty src. vv = StackValue ty src) \/
+   (?ty ptr. vv = LocatedValue ty ptr /\ ~is_word_type ty /\
+             ptr.ptr_location = LocMemory)) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\
+      expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
+      lookup_var p u = SOME w /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
+      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+      u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >>
+  `cs_extends sm su /\ frag_gas_free sm su` by
+    (gvs[exprLoweringTheory.unwrap_value_def, comp_return_def] >>
+     simp[cs_extends_refl, frag_gas_free_def, frag_code_def,
+          fragExecTheory.emitted_blocks_def, exprLoweringPropsTheory.emitted_insts_def]) >>
+  drule_all materialize_unwrap_owned_straight_path >> simp[]
+QED
+
+Theorem materialize_unwrap_word_region[local]:
+  unwrap_value ce (LocatedValue ty psrc) sm = (op,su) /\
+  is_word_type ty /\ psrc.ptr_location <> LocCode /\
+  (!l. psrc.ptr_operand <> Label l) ==>
+  cs_extends sm su /\ frag_gas_free sm su
+Proof
+  Cases_on `psrc.ptr_location` >>
+  simp[exprLoweringTheory.unwrap_value_def, contextTheory.compile_ptr_load_def,
+       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_return_def] >> rpt strip_tac >>
+  gvs[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  simp[cs_extends_def, frag_gas_free_def, frag_code_def,
+       fragExecTheory.emitted_blocks_def, exprLoweringPropsTheory.emitted_insts_def,
+       rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
+       venomInstTheory.mk_inst_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem materialize_straight_zero_path[local]:
+  frag_exec ctx sm su P Q (\r. F) /\
+  dec_straight sm su /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sm su) /\
+  fn_has_code sm su func /\ P r /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\ Q u /\
+      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+      u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >> drule_all frag_exec_straight_run >> strip_tac >>
+  `su.cs_current_bb = sm.cs_current_bb /\
+   su.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm su /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sm su)` by
+    gvs[dec_straight_def, inst_extends_def] >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm su)) = 0` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[EVERY_MEM]) >>
+  drule_all hash_run_path >>
+  disch_then (qspec_then `ctx` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `u with vs_inst_idx := LENGTH su.cs_current_insts` >> simp[]
+QED
+
+Theorem materialize_unwrap_word_straight[local]:
+  unwrap_value ce (LocatedValue ty src) sm = (op,su) /\
+  is_word_type ty /\ src.ptr_location <> LocCode ==>
+  dec_straight sm su /\
+  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sm su)
+Proof
+  Cases_on `src.ptr_location` >>
+  simp[exprLoweringTheory.unwrap_value_def, contextTheory.compile_ptr_load_def,
+       emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+       comp_bind_def, comp_return_def] >> rpt strip_tac >>
+  gvs[emitHelperTheory.emit_op_def, fresh_var_def, fresh_id_def, emit_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  simp[dec_straight_def, inst_extends_def, exprLoweringPropsTheory.emitted_insts_def,
+       rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_EQ_0,
+       venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem materialize_captured_post_copy_ok:
+  expr_body_pre ce cx env e es /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv < 2 ** 64 ==>
+  !tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+        ~is_word_type (post_value_type ce e) ==>
+    type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64
+Proof
+  strip_tac >>
+  `post_value_type ce e = expr_type e \/
+   post_value_type ce e = lowered_value_type ce e` by
+    (Cases_on `e` >> simp[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  rpt strip_tac >> gvs[] >> drule_all expr_body_pre_copy_ok >> simp[]
+QED
+
+Theorem materialize_unwrap_owned_path:
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tvv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  not_fresh_at sm p /\ lookup_var p r = SOME w /\
+  FLOOKUP r.vs_allocas aid = SOME (w2n w,sz) /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func r 0 (OK u) /\
+      expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
+      lookup_var p u = SOME w /\
+      FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
+      ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
+      u.vs_inst_idx = LENGTH su.cs_current_insts
+Proof
+  strip_tac >> Cases_on `vv`
+  >- (irule materialize_unwrap_identity_path >> simp[] >> metis_tac[]) >>
+  rename1 `LocatedValue vty src` >>
+  Cases_on `is_word_type vty`
+  >- (Cases_on `src.ptr_location = LocCode`
+      >- cheat >>
+      drule_all materialize_unwrap_word_straight >> strip_tac >>
+      drule_all materialize_unwrap_owned_sim >>
+      disch_then (qspec_then `\r. F` mp_tac) >> strip_tac >>
+      drule materialize_straight_zero_path >>
+      disch_then (qspec_then `r` mp_tac) >> simp[] >> metis_tac[]) >>
+  Cases_on `src.ptr_location`
+  >- (irule materialize_unwrap_identity_path >> simp[] >> metis_tac[])
+  >- cheat
+  >- cheat
+  >- cheat >>
+  gvs[vv_post_def, vv_holds_def]
 QED
 
 Theorem compile_materialize_vv_owned_path:
