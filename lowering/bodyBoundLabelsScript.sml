@@ -2396,7 +2396,8 @@ Proof
       rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
         bound_labels_internal_return_from_env, bound_labels_external_return,
         bound_labels_alloc_buffer, bound_labels_memory_typed,
-        bound_labels_return_unlock, comp_return_def]),
+        bound_labels_return_unlock, bound_labels_nonreentrant_unlock,
+        comp_return_def]),
         gen_tac, strip_tac, irule bound_labels_bind,
         irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])) >>
   simp[] >> rpt strip_tac >> irule bound_labels_lower_value >>
