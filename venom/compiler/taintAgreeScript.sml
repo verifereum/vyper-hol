@@ -334,10 +334,9 @@ QED
 
 Theorem taint_agree_write_memory:
   taint_agree D X tn s t /\ LENGTH xs = len /\ LENGTH ys = len /\
-  (!k. k < len /\ k NOTIN m ==> EL k xs = EL k ys) ==>
-  taint_agree D X
-    (tn with t_mem := (tn.t_mem DIFF {i | a <= i /\ i < a+len}) UNION
-                         {a+k | k < len /\ k IN m})
+  (tn.t_mem DIFF {i | a <= i /\ i < a+len}) SUBSET M /\
+  (!k. k < len /\ a+k NOTIN M ==> EL k xs = EL k ys) ==>
+  taint_agree D X (tn with t_mem := M)
     (write_memory_with_expansion a xs s) (write_memory_with_expansion a ys t)
 Proof
   strip_tac >>
@@ -352,11 +351,10 @@ Proof
   qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
   gen_tac >> disch_tac >>
   simp[regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
-  Cases_on `a <= i /\ i < a+len` >> simp[]
-  >- (`i-a < len /\ a+(i-a) = i` by decide_tac >>
-      first_x_assum irule >> gvs[] >> metis_tac[]) >>
+  Cases_on `a <= i /\ i < a+len` >> simp[] >>
   irule taint_agree_memory >>
-  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> gvs[]
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  gvs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
 
 Theorem taint_agree_mstore:
@@ -442,6 +440,35 @@ Proof
        arithmeticTheory.ADD_COMM, SF CONJ_ss]
 QED
 
+Theorem taint_agree_byte_store_step:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  inst.inst_opcode = MSTORE8 /\ inst.inst_outputs = [] /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >>
+     gvs[taint_ok_def] >> metis_tac[]) >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def,
+       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss,
+       DRESTRICT_UNIV] >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  `mask = tn with t_mem := mask.t_mem` by
+    simp[Abbr `mask`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
+  irule taint_agree_write_memory >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  qexists_tac `1` >>
+  simp[fixed_source_write_range_def, arithmeticTheory.ADD_COMM] >>
+  pred_setLib.SET_TAC[]
+QED
+
 Theorem taint_agree_load_word:
   frame_reachable vs C stk PG G tn fn inst s /\
   vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
@@ -481,6 +508,54 @@ Proof
          step_writes_def, source_memory_write_ranges_def, written_taint_def,
          range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, taint_component_equality] >>
   simp[] >> irule taint_agree_update_var >> simp[]
+QED
+
+Theorem taint_agree_load_store_step:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  o1_ctx_shape C /\ MEM fn C.ctx_functions /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  taint_agree D X tn s t /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  MEM inst.inst_opcode [MLOAD; ILOAD; MSTORE; ISTORE; MSTORE8] ==>
+  (!s'. step_inst_base inst s = OK s' ==>
+    ?t'. step_inst_base inst t = OK t' /\
+         taint_agree D X (step_taint inst s s' tn) s' t') /\
+  (!v s'. step_inst_base inst s = IntRet v s' ==>
+    ?t'. step_inst_base inst t = IntRet v t' /\ taint_agree D X tn s' t') /\
+  (!s'. step_inst_base inst s = Halt s' ==>
+    ?t'. step_inst_base inst t = Halt t' /\ dead_result_rel D (Halt s') (Halt t')) /\
+  (!a s'. step_inst_base inst s = Abort a s' ==>
+    ?t'. step_inst_base inst t = Abort a t')
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `wf_function fn /\ fn_inst_wf fn` by
+    (gvs[o1PassContractTheory.o1_ctx_shape_def, listTheory.EVERY_MEM] >>
+     metis_tac[o1PassContractTheory.o1_fn_shape_def]) >>
+  `inst_wf inst` by
+    (gvs[active_inst_def, venomWfTheory.fn_inst_wf_def] >>
+     metis_tac[listTheory.MEM_EL]) >>
+  `~in_revert_forward fn s` by
+    (spose_not_then assume_tac >>
+     gvs[in_revert_forward_def, active_inst_def] >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+       (irule venomExecPropsTheory.MEM_lookup_block >>
+        gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+     gvs[] >>
+     `get_instruction bb s.vs_inst_idx = SOME (EL s.vs_inst_idx bb.bb_instructions)` by
+       simp[venomInstTheory.get_instruction_def] >>
+     drule_all memSafeRunTheory.revert_forward_at_opcode >> fs[MEM]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `MEM inst.inst_opcode [MLOAD; ILOAD]`
+      >- (irule taint_agree_load_word >> metis_tac[]) >>
+      Cases_on `inst.inst_opcode = MSTORE8`
+      >- (irule taint_agree_byte_store_step >>
+          gvs[venomWfTheory.inst_wf_def] >> metis_tac[]) >>
+      irule taint_agree_word_store_step >> fs[MEM] >>
+      gvs[venomWfTheory.inst_wf_def] >> metis_tac[]) >>
+  rpt conj_tac >> rpt strip_tac >> fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, exec_write2_def, AllCaseEqs()]
 QED
 
 Theorem taint_agree_assign:
