@@ -847,3 +847,61 @@ Theorem ircf_alias_site_value_elim:
 Proof
   metis_tac[ircf_alias_site_value_def]
 QED
+
+Theorem ircf_fwd_operand_sites:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = k /\ ircf_fwd_ok fn bb k d r sz ==>
+  ?dv rv dai rai db rb.
+    (EL k bb.bb_instructions).inst_operands = [Var dv; Var rv; Lit sz] /\
+    MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\
+    dai.inst_outputs = [d] /\ dai.inst_operands = [Lit sz] /\
+    MEM rai (fn_insts fn) /\ rai.inst_opcode = ALLOCA /\
+    rai.inst_outputs = [r] /\ rai.inst_operands = [Lit sz] /\
+    lookup_var dv s = SOME (n2w db) /\ lookup_var d s = SOME (n2w db) /\
+    lookup_var rv s = SOME (n2w rb) /\ lookup_var r s = SOME (n2w rb) /\
+    FLOOKUP s.vs_allocas dai.inst_id = SOME (db,w2n sz) /\
+    FLOOKUP s.vs_allocas rai.inst_id = SOME (rb,w2n sz) /\
+    FLOOKUP G dv = SOME (db,w2n sz) /\ FLOOKUP G rv = SOME (rb,w2n sz)
+Proof
+  strip_tac >>
+  `?dv rv. (EL k bb.bb_instructions).inst_operands = [Var dv; Var rv; Lit sz] /\
+    ircf_alias fn d dv /\ ircf_alias fn r rv` by metis_tac[ircf_fwd_ok_def] >>
+  `active_inst fn (EL k bb.bb_instructions) s` by
+    (simp[active_inst_def] >> qexists_tac `bb` >>
+     metis_tac[lookup_block_MEM, lookup_block_label, ircf_fwd_ok_def]) >>
+  `ircf_alias_site_value fn s G dv /\ ircf_alias_site_value fn s G rv` by
+    (conj_tac >> irule ircf_alias_boundary_operand >> simp[] >>
+     qexists_tac `EL k bb.bb_instructions` >> simp[] >>
+     gvs[ircf_fwd_ok_def]) >>
+  gvs[ircf_fwd_ok_def, ircf_alloca_of_def] >>
+  drule_all ircf_alias_site_value_elim >> strip_tac >>
+  drule_all ircf_alias_site_value_elim >> strip_tac >>
+  metis_tac[ircf_alias_site_value_elim]
+QED
+
+Theorem ircf_fwd_access_ranges:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = k /\ ircf_fwd_ok fn bb k d r sz /\
+  access_ok lo G fn (EL k bb.bb_instructions) s /\
+  ~in_revert_forward fn s /\ w2n sz <> 0 ==>
+  ?db rb.
+    lookup_var d s = SOME (n2w db) /\ lookup_var r s = SOME (n2w rb) /\
+    w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb /\
+    source_memory_read_ranges (EL k bb.bb_instructions) s = [(rb,w2n sz)] /\
+    source_memory_write_ranges (EL k bb.bb_instructions) s = [(db,w2n sz)]
+Proof
+  strip_tac >> drule_all ircf_fwd_operand_sites >> strip_tac >>
+  `eval_operand (Var dv) s = SOME (n2w db) /\
+   eval_operand (Var rv) s = SOME (n2w rb)` by simp[eval_operand_def] >>
+  `eval_operand (Lit sz) s = SOME sz` by simp[eval_operand_def] >>
+  `(EL k bb.bb_instructions).inst_opcode = MCOPY` by metis_tac[ircf_fwd_ok_def] >>
+  `w2n (n2w db : bytes32) = db /\ w2n (n2w rb : bytes32) = rb` by
+    (drule_all access_ok_mcopy_site_bases >> simp[]) >>
+  qexistsl_tac [`db`, `rb`] >>
+  simp[source_memory_read_ranges_def, codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.sized_source_write_range_def]
+QED
