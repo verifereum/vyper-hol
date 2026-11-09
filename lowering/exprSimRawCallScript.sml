@@ -2208,6 +2208,9 @@ Proof
     (`(n2w b : bytes32) = n2w b'` by metis_tac[optionTheory.SOME_11] >>
      fs[wordsTheory.n2w_11] >> metis_tac[arithmeticTheory.LESS_MOD]) >>
   gvs[] >>
+  `post_value_type cenv d = BaseT (BytesT (Dynamic cap))` by
+    (`is_bytestring_type (expr_type d)` by simp[is_bytestring_type_def] >>
+     drule post_value_type_bytestring >> simp[]) >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s1 s2 esD (BytesV bs) data tD` by
     fs[expr_post_def] >>
   `b < dimword (:256)` by (fs[] >> decide_tac) >>
