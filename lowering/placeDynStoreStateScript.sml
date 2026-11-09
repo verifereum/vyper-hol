@@ -72,7 +72,7 @@ Proof
     local_ptrs_rel_def, local_region_def, local_backed_def, storage_rel_def,
     transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def,
     venomMemDefsTheory.alloca_inv_def, alloca_room_def, fmp_room_def,
-    immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_def,
+    immutable_alloca_sep_def, immutable_base_zero_def,
     lookup_var_def, oneline eval_operand_def, contract_storage_def, contract_transient_def,
     venomMemDefsTheory.allocas_non_overlapping_def,
     venomMemDefsTheory.alloca_next_valid_def, pending_alloca_size_def] >>

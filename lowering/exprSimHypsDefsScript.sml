@@ -50,7 +50,7 @@ Definition bare_globals_layout_def:
        FLOOKUP module_vars (src,id2) = SOME (ImmutableLoc off2) /\
        evaluate_type (get_tenv cx) ty1 = SOME tv1 /\
        evaluate_type (get_tenv cx) ty2 = SOME tv2 ==>
-       loweringStateRelDefs$regions_disjoint off1 (type_memory_size tv1)
+       compileEnv$regions_disjoint off1 (type_memory_size tv1)
          off2 (type_memory_size tv2))
 End
 
