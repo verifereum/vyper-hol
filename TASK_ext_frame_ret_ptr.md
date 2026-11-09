@@ -51,8 +51,10 @@ lowering/fragGasPathPtrScript.sml; the per-step check `ptr_safe_step`,
 
 ## Completion Criteria
 
-1. `holbuild -j4 build extFrameRetOkPtrTheory` passes, with no `cheat` in
-   lowering/extFrameRetOkPtrScript.sml or in any theory you add.
+1. `holbuild -j4 build extFrameRetOkPtrTheory` passes, with no `cheat` or
+   `suspend` in lowering/extFrameRetOkPtrScript.sml, in
+   lowering/extRetWidenedPtrScript.sml (`external_frame_ret_widened_ptr`,
+   statement frozen like the target's), or in any extRet* theory you add.
 2. Helpers go in new leaf theories in lowering/ that extFrameRetOkPtr
    imports (add them to its `Ancestors`). Do not edit any other existing
    file: not bodyPtrDefs, bodyPtrPreds, fragGasPathPtr, fragGasSeqPtr,
@@ -141,3 +143,30 @@ AbiComplex, the return wrapped in a one-element tuple), and the
 `needs_normalize` widening copy (a dynamic non-bytestring value returned at
 a wider declared type). No counterexample was found: in each branch the
 bytes in the RETURN range are written with untainted data first.
+
+## Resumed run (2026-11-09): Decision 18 is in
+
+The branch now carries Decision 18: `expr_sim_ptr`/`expr_vv_sim_ptr` give
+`ptr_val_ok`/`ptr_vv_ok` at `post_value_type cenv e`
+(lowering/loweringPostsScript.sml), not at the `ty` argument. For an
+internal call returning a non-word, non-bytestring value that is
+`lowered_value_type cenv e`, exactly the type `Return`'s normalize branch
+reads; elsewhere it is `expr_type e` (`post_value_type_lowered`,
+`post_value_type_word`, `post_value_type_not_int_call`). So:
+
+- The widened case (`lowered_value_type cenv e <> expr_type e`) is no
+  longer blocked. Prove `external_frame_ret_widened_ptr` in
+  lowering/extRetWidenedPtrScript.sml (you may add Ancestors there and
+  helpers in new leaves); extRetWidenedCallEvidence shows why it failed
+  before D18 and is reference only.
+- The open work is the encoder admissions in the extRet* leaves (cheat or
+  suspend): EncoderScratchSites, EncoderRegion, BulkCopyCounted,
+  ScalarCopyCounted, AbiBytesCounted, AbiBytesAllocation, RecursivePlan,
+  AbiSingleton{Wrapper,Live,Counted}, AbiArrayStatic{Body,Loop,Counted},
+  AbiArrayHeader, AbiStaticCounted, AbiSourceArrayDispatch, then the
+  equal-type `cheat` in the target. Proofs written against the pre-D18
+  interface may need `post_value_type cenv e = expr_type e` in the
+  assumptions (from the lemmas above) to rewrite back to the old shape.
+- A separate run proves the expression-level encoder case
+  (`abi_encode_expr_ptr_ok`). If you need a lemma it would produce, state
+  it in your own leaf under a distinct name; don't wait for it.

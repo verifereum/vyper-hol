@@ -5,7 +5,7 @@ Ancestors abiEncoderChildContext extRetAbiChildBoundaryPtr extRetAbiBytesCounted
   context compileEnv emitHelper ptrDiscipline bodyPtrDefs venomState venomExecSemantics
   valueEncoding venomMemProps words finite_map pred_set arithmetic
   venomInst venomInstProofs ptrSafeRun fragExecPtr typedCopyPtr contextCodegenRel
-  extRetScratchResourcePtr
+  extRetScratchResourcePtr wordLoadStorePtr
 
 Theorem child_mstore_exact_counted_ptr[local]:
   emit_void MSTORE [Var dst;value] sa = ((),sb) /\ fn_has_code sa sb fn /\

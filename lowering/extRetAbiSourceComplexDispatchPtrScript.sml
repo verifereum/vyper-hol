@@ -5,7 +5,7 @@ Ancestors extRetAbiSourceComplexBytesPtr extRetAbiArrayInitPtr
   abiEncoderComplexCode abiEncoderComplexPrefix abiEncoderMembersBoundary
   abiEncoderAddressReach abiEncoder abiEncoderMemberCode exprLoweringProps
   emitHelperProps exprLowering fragExec fragGasPathPtr compileEnv emitHelper
-  ptrDiscipline venomState context words list arithmetic
+  ptrDiscipline venomState context words list arithmetic wordLoadStorePtr
 
 Theorem abi_complex_empty_dispatch_counted_ptr:
   compile_abi_encode_to_buf dst src (AbiComplex []) sa = (out,sb) /\ ~s.vs_halted ==>

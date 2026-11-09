@@ -5,8 +5,7 @@ Ancestors
   extRetAbiArrayBackedgePtr fragExec fragGasSeqPtr fragGasPathPtr bodyPtrDefs ptrSafeRun
   venomExecSemantics venomExecProofs venomInst venomState emitHelperProps
   codegenRel contextCodegenRel compileEnv loweringShapeRules stmtFragPtr gasCount
-  words finite_map pred_set arithmetic
-
+  words finite_map pred_set arithmetic wordLoadStorePtr
 Theorem abi_encode_header_count_provenance_obstruction:
   FLOOKUP G iv = NONE /\ FLOOKUP G cv = SOME site ==>
   ~access_ok 0 G fn (mk_inst id LT [Var iv; Var cv] [cmp]) s

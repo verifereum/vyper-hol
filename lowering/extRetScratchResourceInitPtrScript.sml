@@ -9,7 +9,7 @@ Ancestors
   ptrDiscipline bodyPtrDefs venomState venomInst venomExecSemantics
   venomMemProps venomMemDefs valueEncodingProps words finite_map pred_set
   arithmetic list rich_list emitHelperProps fragExec extRetBulkCopyCountedPtr
-  extRetBytesCopyCountedPtr typedCopyPtr
+  extRetBytesCopyCountedPtr typedCopyPtr wordLoadStorePtr
 
 Theorem scratch_resource_allocate_state[local]:
   scratch_resource ctx fn sites q len s /\ id IN sites /\

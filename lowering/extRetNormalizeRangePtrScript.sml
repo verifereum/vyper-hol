@@ -1,6 +1,6 @@
 Theory extRetNormalizeRangePtr
 Ancestors
-  bodyPtrDefs exprLoweringProps venomMemDefs compileEnv
+  bodyPtrDefs exprLoweringProps venomMemDefs compileEnv exprSimTypedAlloc
 
 (* Whole lowered-buffer provenance, not concrete allocation membership. *)
 Theorem ptr_buf_ok_range:

@@ -3,7 +3,7 @@ Ancestors
   extRetBytesCopyCountedPtr fragGasPathPtr context compileEnv emitHelper
   venomState venomInst venomExecSemantics ptrDiscipline bodyPtrDefs
   words arithmetic finite_map ptrSafeRun fragExecPtr typedCopyPtr emitHelper
-  venomInst venomInstProofs codegenRel contextCodegenRel
+  venomInst venomInstProofs codegenRel contextCodegenRel wordLoadStorePtr
 
 (* A static zero-sized copy emits no instruction, unlike a dynamic MCOPY
    whose evaluated size happens to be zero. *)
@@ -206,7 +206,7 @@ Proof
 QED
 
 Theorem bulk_binop_ghost_frame[local]:
-  (opc = MUL \/ opc = GT) ==>
+  (opc = MUL \/ opc = GT) /\ op_taint tn left = {} /\ op_taint tn right = {} ==>
   op_taint (step_taint (mk_inst id opc [left;right] [out]) s
     (update_var out w s) tn) (Var out) = {} /\
   (step_taint (mk_inst id opc [left;right] [out]) s
@@ -226,6 +226,8 @@ Proof
     simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
          pred_setTheory.EXTENSION, SF CONJ_ss] >>
   gvs[] >> Cases_on `eval_operand left s` >>
+  qpat_x_assum `op_taint tn left = _` (assume_tac o SRULE [op_taint_def]) >>
+  qpat_x_assum `op_taint tn right = _` (assume_tac o SRULE [op_taint_def]) >>
   simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
        mk_inst_def, set_var_taint_def, out_taint_def, op_taint_def,
        store_taint_def, adopt_reset_def, mem_taint_def, step_writes_def,

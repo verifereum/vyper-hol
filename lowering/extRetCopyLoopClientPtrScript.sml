@@ -2,7 +2,7 @@
  * block/cursor, not necessarily the loop's body-entry block. It does not
  * establish the concrete instruction segments. *)
 Theory extRetCopyLoopClientPtr
-Ancestors extRetCopyCountedPtr venomState venomExecSemantics compileEnv arithmetic
+Ancestors extRetCopyCountedPtr venomState venomExecSemantics compileEnv arithmetic exprSimTypedAlloc
 
 Theorem copy_path_ptr_loop_client:
   !count H B C I test ctr finish D lo ctx fn PG R.

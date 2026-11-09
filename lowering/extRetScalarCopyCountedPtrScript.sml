@@ -3,8 +3,7 @@ Ancestors
   extRetCopyCountedPtr typedCopyPtr fragGasSeqPtr fragExec
   fragExecPtr bodyPtrDefs fragGasPathPtr
   venomExecSemantics venomInstProofs venomInst venomState
-  ptrSafeRun ptrDiscipline finite_map compileEnv emitHelper arithmetic
-
+  ptrSafeRun ptrDiscipline finite_map compileEnv emitHelper arithmetic wordLoadStorePtr
 (* Concrete emitted word copy.  Source cleanliness is an actual read-window
    premise, not a consequence of ghost buffer coverage. *)
 Theorem compile_store_word_counted_ptr:

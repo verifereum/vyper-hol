@@ -11,7 +11,7 @@ Ancestors
   abiBuiltinAllocation extRetAbiSingletonWrapperPtr abiEncoderComplexPrefix
   abiEncoder fragGasPathPtr abiEncoderComplexCode extRetNormalEvidencePtr
   extRetSomeComposePtr typedCopyPtr extRetStaticStmtPtr vyperValue vyperArith vyperTypeABI venomLayout
-  extRetAbiSourceInputPtr vfmConstants abiBytesExecution representationCleanPtr valueEncoding valueEncodingTyping
+  extRetAbiSourceInputPtr vfmConstants extRetAbiBytesArithPtr representationCleanPtr valueEncoding valueEncodingTyping exprSimTypedAlloc
 
 Theorem external_return_singleton_stmt_parts[local]:
   stmt_env cenv lctx ty (Return (SOME e)) sa = (cenv',sb) /\

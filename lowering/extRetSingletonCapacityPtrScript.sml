@@ -15,12 +15,12 @@ Theorem external_frame_bytes_return_capacity:
   same_frame cenv next /\
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
   assignable_type (type_env tops) (BaseT (BytesT (Dynamic n))) ==>
-  next.ce_max_return_size = 64 + ceil32 n
+  next.ce_max_return_size = 64 + contractABI$ceil32 n
 Proof
-  strip_tac >> drule external_frame_return_size >>
+  strip_tac >> drule external_frame_return_size >> rpt (disch_then drule) >>
   simp[needs_external_call_wrap_def, vyper_to_abi_type_def,
        vyper_base_to_abi_type_def, is_dynamic_def, vyper_abi_size_bound_def,
-       vyper_is_dynamic_def] >> metis_tac[]
+       vyper_is_dynamic_def]
 QED
 
 Theorem external_frame_string_return_capacity:
@@ -32,12 +32,12 @@ Theorem external_frame_string_return_capacity:
   same_frame cenv next /\
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
   assignable_type (type_env tops) (BaseT (StringT n)) ==>
-  next.ce_max_return_size = 64 + ceil32 n
+  next.ce_max_return_size = 64 + contractABI$ceil32 n
 Proof
-  strip_tac >> drule external_frame_return_size >>
+  strip_tac >> drule external_frame_return_size >> rpt (disch_then drule) >>
   simp[needs_external_call_wrap_def, vyper_to_abi_type_def,
        vyper_base_to_abi_type_def, is_dynamic_def, vyper_abi_size_bound_def,
-       vyper_is_dynamic_def] >> metis_tac[]
+       vyper_is_dynamic_def]
 QED
 
 Theorem external_frame_bytes_live_capacity:
@@ -49,7 +49,7 @@ Theorem external_frame_bytes_live_capacity:
   same_frame cenv next /\
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
   assignable_type (type_env tops) (BaseT (BytesT (Dynamic n))) /\ k <= n ==>
-  0 < next.ce_max_return_size /\ 64 + ceil32 k <= next.ce_max_return_size
+  0 < next.ce_max_return_size /\ 64 + contractABI$ceil32 k <= next.ce_max_return_size
 Proof
   strip_tac >> drule_all external_frame_bytes_return_capacity >>
   drule ceil32_mono >> simp[]
@@ -64,7 +64,7 @@ Theorem external_frame_string_live_capacity:
   same_frame cenv next /\
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
   assignable_type (type_env tops) (BaseT (StringT n)) /\ k <= n ==>
-  0 < next.ce_max_return_size /\ 64 + ceil32 k <= next.ce_max_return_size
+  0 < next.ce_max_return_size /\ 64 + contractABI$ceil32 k <= next.ce_max_return_size
 Proof
   strip_tac >> drule_all external_frame_string_return_capacity >>
   drule ceil32_mono >> simp[]

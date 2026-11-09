@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps compileEnv emitHelper context codegenRel loweringPosts
   ptrDiscipline ptrSafeRun bodyPtrDefs typedCopyPtr venomState venomInst
   venomExecSemantics venomMemProps valueEncoding valueEncodingProps words
-  finite_map pred_set arithmetic
+  finite_map pred_set arithmetic wordLoadStorePtr
 
 (* The existing store interface omits concrete allocation metadata. Retain
    its exact state here, so no recursive consumer must unfold MSTORE. *)

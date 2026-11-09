@@ -4,7 +4,7 @@ Ancestors
   extRetStaticFrameMetadataPtr extRetStaticStmtPtr
   representationCleanPtr stmtSimReturn exprOperandVar extRetNormalEvidencePtr
   extRetSomeComposePtr bodyPtrDefs typedCopyPtr loweringPosts
-  exprLowering exprLoweringProps gasSummaryComposePtr
+  exprLowering exprLoweringProps gasSummaryComposePtr exprSimTypedAlloc
 
 Theorem compile_external_return_static_copy_equal_gas_path_ptr:
   !cx ctx fn PG G tn s op m n nkey ut iv st x st' cenv es ty sa sb v tv w.

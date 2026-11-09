@@ -5,6 +5,8 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+Overload ceil32[local] = “contractABI$ceil32”
+
 Theorem frame_valued_return_capacity_word_bound:
   stmt_exprs_ok cenv (Return (SOME e)) /\
   cenv.ce_is_external /\ ~cenv.ce_raw_return ==>

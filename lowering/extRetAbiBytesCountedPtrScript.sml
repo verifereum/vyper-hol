@@ -2,7 +2,7 @@
 Theory extRetAbiBytesCountedPtr
 Ancestors
   extRetAbiBytesHeaderPtr extRetBulkCopyCountedPtr abiEncoderBytesCode
-  abiBytesExecution venomLayout exprLoweringProps emitHelperProps
+  extRetAbiBytesArithPtr venomLayout exprLoweringProps emitHelperProps
   context compileEnv emitHelper venomState ptrDiscipline fragGasSeqPtr
   extRetBytesCopyCountedPtr bodyPtrDefs fragExec fragGasPathPtr words
   venomInst venomExecSemantics ptrSafeRun typedCopyPtr finite_map arithmetic

@@ -2,7 +2,7 @@
 Theory extRetSourceWindowPtr
 Ancestors
   extRetSourceAllocationPtr extRetAbiReadBoundsPtr stmtSimReturn
-  words finite_map arithmetic loweringPosts bodyPtrDefs
+  words finite_map arithmetic loweringPosts bodyPtrDefs exprSimTypedAlloc
 
 Theorem expr_val_at_aggregate_bound:
   stmt_state_rel ctx func ce cx es s /\

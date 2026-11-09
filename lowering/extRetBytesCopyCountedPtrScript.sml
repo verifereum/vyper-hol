@@ -4,8 +4,7 @@ Ancestors
   fragGasSeqPtr fragGasPathPtr fragExec fragExecPtr
   venomExecSemantics venomInstProofs venomInst venomState
   ptrSafeRun ptrDiscipline bodyPtrDefs finite_map context compileEnv emitHelper
-  arithmetic exprSimBufferStore
-
+  arithmetic exprSimBufferStore wordLoadStorePtr
 (* An emitted, nonterminating, non-GAS instruction is one zero-count edge.
    The semantic and pointer premises are discharged for each concrete opcode
    below; this is not a conversion from a fixed-run fragment. *)

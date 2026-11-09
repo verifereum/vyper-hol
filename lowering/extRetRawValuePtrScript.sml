@@ -2,7 +2,7 @@ Theory extRetRawValuePtr
 Ancestors
   extRetCountedPtr representationCleanPtr stmtSimReturn stmtLowering
   compileEnv emitHelper loweringHalt contextCodegenRelProps fragExec
-  bodyPtrDefs loweringPosts venomState venomInst words arithmetic valueEncodingProps
+  bodyPtrDefs loweringPosts venomState venomInst words arithmetic valueEncodingProps exprSimTypedAlloc
 
 Theorem compile_external_return_raw_indexed_gas_path_ptr[local]:
   !cx ctx fn PG G tn s src prim ei msz nkey ut iv st x st' a n cap.

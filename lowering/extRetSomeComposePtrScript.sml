@@ -1,6 +1,6 @@
 Theory extRetSomeComposePtr
 Ancestors
-  bodyPtrDefs gasSummaryComposePtr gasExemptCert stmtSimReturnWord
+  bodyPtrDefs gasSummaryComposePtr gasExemptCert
   stmtSimProps stmtSimReturn exprSimDefs fragExec fragGasPathPtr gasSummary vyperInterpreter vyperState
 
 Theorem external_return_some_outcome_ptr:

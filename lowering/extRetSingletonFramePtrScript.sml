@@ -3,7 +3,7 @@ Ancestors
   extRetSingletonStmtPtr extRetLoweredBytesFramePtr extRetSingletonCapacityPtr
   extRetSingletonWordCapacityPtr returnMetadataPtr abiEncoderProps vyperTypeABI
   vyperABI contractABI vyperTyping vyperTypeSystem vyperAST compileEnv
-  vyperValue valueEncoding valueTypingMemoryProps vyperTypeCallGraph abiBytesExecution
+  vyperValue valueEncoding valueTypingMemoryProps vyperTypeCallGraph extRetAbiBytesArithPtr
 
 Theorem typed_string_return_source:
   IS_SOME (type_stmt env (BaseT (StringT n)) (Return (SOME e))) ==>

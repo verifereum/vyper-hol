@@ -6,8 +6,7 @@ Ancestors
   fragExecPtr venomInst venomState fragGasSeqPtr bodyPtrDefs venomInstProofs
   emitHelperProps abiBuiltinAllocation finite_map allocaFootprint arithmetic
   allocationPtr memLocDefs contextCodegenRel codegenRel
-  typedCopyPtr typedCopyLoopHeaderPtr
-
+  typedCopyPtr typedCopyLoopHeaderPtr wordLoadStorePtr
 Theorem stop_gas_path_ptr:
   ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
