@@ -3,7 +3,7 @@ Theory tupleWidenedStoreFrame
 Ancestors
   typedCopyRankPathMem bodyMemAssignLocalMem tupleMemoryFrame
   bodyMemAssignTopCopySem placeMemoryCopyEffect valueEncodingProofs
-  compileEnv venomState
+  compileEnv venomState bodyMemBopRestWordPath bodyMemoryDefs
 
 Theorem typed_copy_owned_tuple_frame:
   typed_copy_effect ctx func sa sb s t dst written /\
@@ -51,4 +51,24 @@ Proof
     vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx|>` by
     simp[Abbr `u2`, venom_state_component_equality] >>
   gvs[]
+QED
+
+Theorem typed_copy_body_frames:
+  typed_copy_effect ctx func sa sb s t dst written /\
+  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
+  return_buf_frame d cenv sa s /\ sa.cs_next_var <= sb.cs_next_var ==>
+  alloca_history func t /\ return_buf_frame d cenv sb t /\
+  t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `t.vs_alloca_next = s.vs_alloca_next` by
+    (drule typed_copy_effect_record >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `alloca_history func t` by
+    (irule (cj 1 rest_word_marked_alloca) >>
+     goal_assum (drule_at Any) >>
+     metis_tac[typed_copy_effect_path]) >>
+  simp[] >> irule return_buf_frame_frame >>
+  qexistsl_tac [`cenv`, `s`, `sa`] >> simp[] >>
+  metis_tac[typed_copy_effect_lookup]
 QED
