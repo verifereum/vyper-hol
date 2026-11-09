@@ -1688,6 +1688,63 @@ Proof
   irule sym_invoke_cleanup_frame_rebuild >> metis_tac[]
 QED
 
+Theorem sym_invoke_return_frame_numeric:
+  ordered_spill_regions cplan.cp_regions /\ MEM r cplan.cp_regions /\
+  r.sr_fn_name = fn.fn_name /\
+  fn_directly_calls ctx fn.fn_name callee.fn_name /\
+  ~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 arranged vs mid /\
+  arranged.ps_stack = stack_pop (LENGTH operands) arranged.ps_stack ++ operands /\
+  mid.as_stack = REVERSE args ++ saved ++ rest /\ LENGTH args = LENGTH operands /\
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T) outs)
+    arranged.ps_stack /\
+  (!op. op IN FDOM arranged.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) outs) /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  fn_return_state_rel ctx cplan callee rvs mid asr /\
+  asr.as_stack = REVERSE vals ++ saved ++ rest /\
+  bind_outputs outs vals (adopt_return_fmp ret (merge_callee_state vs rvs)) = SOME vs' /\
+  ALL_DISTINCT outs /\ EVERY (\x. ~retpc_var fn x) outs /\
+  fresh_label "return_label"
+    (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+      (arranged with ps_stack := stack_pop (LENGTH operands) arranged.ps_stack)
+      outs) = (ret_lbl, called) /\
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  final = release_dead_spills nl swapped /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (pops ++ opts) /\
+  asm_block_at prog asr.as_pc
+    (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  lo = SND (compute_label_offsets prog) /\ o2pc = build_offset_to_pc prog /\
+  asm_static_wf prog /\
+  sym_frame_inv prog env ctx cplan fn sret srest labs0 called asr ssr ==>
+  ?fin sfin.
+    asm_steps lo o2pc prog
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) asr = AsmOK fin /\
+    fn_frame_inv ctx cplan lo fn ra rest mem0 final vs' fin /\
+    fin.as_pc = asr.as_pc +
+      LENGTH (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts))) /\
+    sym_steps prog env
+      (1 + LENGTH (execute_plan cplan.cp_initial_fmp (pops ++ opts))) ssr = SymOK sfin /\
+    sym_frame_inv prog env ctx cplan fn sret srest labs0 final fin sfin
+Proof
+  strip_tac >>
+  drule fnFrameBoundaryInvokeTheory.invoke_called_plan_fields >> strip_tac >>
+  `spill_alloc_layout_wf called.ps_alloc called.ps_spilled` by gvs[] >>
+  drule_all fnFrameDeepInvokeTheory.invoke_return_frame_numeric_exact >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  drule_all sym_invoke_return_suffix_frame >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
