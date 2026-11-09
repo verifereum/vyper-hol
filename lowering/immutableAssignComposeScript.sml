@@ -460,3 +460,76 @@ Proof
     (`acyclic_struct_metadata ce.ce_struct_fields` by fs[bodySimTheory.body_inv_def] >>
      simp[] >> fs[expr_sim_inv_def] >> metis_tac[])) >> simp[]
 QED
+
+(* The read/unwrap and immutable write form a zero-mark RHS continuation. *)
+Theorem immutable_assign_normal_continuation:
+  body_inv tops ctx ce cx /\ cx.in_deploy /\
+  supported_immutable_type tops (ce.ce_module,id) = SOME ity /\
+  expr_body_pre ce cx env e es /\
+  assignable_type env.type_defs (expr_type e) /\
+  type_widens_to env.type_defs (expr_type e) ity /\
+  compile_expr ce (expr_type e) e sa = (vv,sm) /\
+  unwrap_value ce vv sm = (op,su) /\
+  compile_assign_value ce (Lit (n2w off)) LocCode op (is_word_type ity)
+    (vv_location vv) ity (lowered_value_type ce e) da (type_memory_bytes ce ity) su = ((),sb) /\
+  fn_has_code sm su func /\ fn_has_code su sb func /\ fn_inst_ids_distinct func /\
+  ~block_is_terminated sb /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv r /\
+  ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
+  r.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\
+  ce.ce_imm_alloca = SOME region /\
+  (!x. region = Var x ==> not_fresh_at sa x) /\
+  FLOOKUP ce.ce_module_vars (ce.ce_module,id) = SOME (ImmutableLoc off) /\
+  ce.ce_module_var_type (ce.ce_module,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv /\
+  off + type_memory_size itv < dimword (:256) ==>
+  ?fin q.
+    (!tail. (do p <- eval_target_place cx (TopLevelNameTarget (ce.ce_module,id));
+                v <- read_result cx tv; write_place cx p v od)
+       (ee with gas_obs := tail) = (INL (),fin with gas_obs := tail)) /\
+    gas_marked_path F ctx func r 0 (OK q) /\
+    stmt_post ctx func cx lctx ce ce sa sb es s0 (INL ()) fin q
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ci_mono sa sm` by metis_tac[cj 1 compile_expr_ci_mono, pairTheory.SND] >>
+  `ci_mono sm su` by metis_tac[ci_mono_unwrap_value, pairTheory.SND] >>
+  `local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su` by
+    (fs[ci_mono_def, local_ptrs_reserved_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  `sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    metis_tac[cj 1 compiler_compile_var] >>
+  drule_all immutable_assign_rhs_read >> strip_tac >>
+  drule_all immutable_assign_read_source >> strip_tac >>
+  `expr_body_pre ce cx env e (es with gas_obs := gs)` by simp[] >>
+  `(do pv <- eval_expr cx e; read_result cx pv od) (es with gas_obs := gs) = (INL v,ee)` by
+    simp[bind_def] >>
+  `!x. op = Var x ==> not_fresh_at su x` by
+    (drule compiler_unwrap_value_var >> Cases_on `vv` >> gvs[vv_operand_def]) >>
+  `!x. region = Var x ==> not_fresh_at su x` by
+    (fs[ci_mono_def, not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  drule_all immutable_assign_value_stmt_post >>
+  disch_then (qspec_then `lctx` strip_assume_tac) >>
+  qexistsl_tac [`fin`,`q`] >> simp[] >> conj_tac
+  >- (irule (gas_marked_path_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+      qexists_tac `u` >> simp[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (drule exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom >> simp[]) >>
+  `stmt_state_rel ctx func ce cx ee r` by fs[vv_post_def] >>
+  `local_ptrs_reserved ce (sa with cs_next_var := sm.cs_next_var)` by
+    (fs[local_ptrs_reserved_def, ci_mono_def, not_fresh_at_def] >> metis_tac[]) >>
+  `alloca_frame ce es sa s0 ce ee r` by
+    (drule_all vv_post_alloca_frame >> simp[]) >>
+  `alloca_frame ce ee (sa with cs_next_var := sm.cs_next_var) r ce ee u` by
+    metis_tac[expr_post_alloca_frame] >>
+  `alloca_frame ce es sa s0 ce ee u` by
+    (irule alloca_frame_trans >>
+     qexistsl_tac [`ce`,`ee`,`r`,`sa with cs_next_var := sm.cs_next_var`] >>
+     simp[] >> fs[vv_post_def]) >>
+  irule stmt_post_entry_frame >>
+  qexistsl_tac [`ee`,`u`,`su`] >> simp[] >>
+  fs[vv_post_def, expr_post_def, ci_mono_def, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
