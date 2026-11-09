@@ -376,3 +376,15 @@ Proof
   gen_tac >> strip_tac >>
   first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
 QED
+
+Theorem occurrence_syntax_origin_planned_root:
+  occurrence_syntax_origin fn a H /\ fn_inst_ids_distinct fn /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\ FLOOKUP H v = SOME (a,ai.inst_id) ==>
+  v IN pointer_derived_vars fn {root}
+Proof
+  simp[occurrence_syntax_origin_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all venomWfPropsTheory.fn_inst_ids_distinct_inj >>
+  strip_tac >> gvs[]
+QED

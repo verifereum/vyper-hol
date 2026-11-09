@@ -20,6 +20,7 @@ Theory internalReturnCopyFwdPlan
 Ancestors
   internalReturnCopyFwdDefs invokeCopyFwdCommonDefs dfgDefs passSharedDefs
   venomWf venomInst list pred_set dfgAnalysisProps While venomWfProps
+  o1LowerDloadClosure
 
 (* v is x, or the output of an ASSIGN of an alias of x *)
 Inductive ircf_alias:
@@ -873,4 +874,94 @@ Proof
      qexistsl_tac [`icf_build_ctx fn_meta ctx_fns rma fn`, `h`] >>
      simp[icf_build_ctx_def]) >>
   first_x_assum irule >> simp[ircf_block_plan_refl]
+QED
+
+Theorem ircf_fwd_copy_id:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d s sz /\ MEM inst (fn_insts fn) /\
+  inst.inst_id = (EL k bb.bb_instructions).inst_id ==>
+  inst = EL k bb.bb_instructions
+Proof
+  strip_tac >> irule fn_inst_ids_distinct_inj >>
+  conj_tac >- simp[] >> qexists_tac `fn` >> simp[] >> rewrite_tac[fn_insts_def] >>
+  irule unitShapeDefsTheory.MEM_fn_insts_blocks >>
+  qexists_tac `bb` >> fs[ircf_fwd_ok_def] >> simp[EL_MEM]
+QED
+
+Theorem ircf_fwd_src_pointer_use:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d s sz /\ MEM inst (fn_insts fn) /\
+  ircf_alias fn s u /\ MEM (Var u) inst.inst_operands /\
+  is_pointer_preserving_op inst.inst_opcode ==>
+  inst.inst_opcode = ASSIGN
+Proof
+  strip_tac >>
+  `inst.inst_id = (EL k bb.bb_instructions).inst_id ==>
+   inst = EL k bb.bb_instructions` by metis_tac[ircf_fwd_copy_id] >>
+  fs[ircf_fwd_ok_def] >>
+  qpat_x_assum `!i v. _ ==> i.inst_opcode = ASSIGN \/ _`
+    (qspecl_then [`inst`, `u`] mp_tac) >> simp[] >>
+  strip_tac >> gvs[pointerConfinedDefsTheory.is_pointer_preserving_op_def]
+QED
+
+Theorem ircf_fwd_dst_pointer_use:
+  fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d s sz /\ MEM inst (fn_insts fn) /\
+  ircf_alias fn d u /\ MEM (Var u) inst.inst_operands /\
+  is_pointer_preserving_op inst.inst_opcode ==>
+  inst.inst_opcode = ASSIGN
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = ASSIGN` >- simp[] >>
+  Cases_on `inst.inst_id = (EL k bb.bb_instructions).inst_id`
+  >- (drule_all ircf_fwd_copy_id >> strip_tac >>
+      gvs[ircf_fwd_ok_def, pointerConfinedDefsTheory.is_pointer_preserving_op_def]) >>
+  fs[ircf_fwd_ok_def] >>
+  qpat_x_assum `!i v. _ ==> i.inst_opcode <> PHI /\ _`
+    (qspecl_then [`inst`, `u`] assume_tac) >> rfs[] >>
+  `?pos. pos < LENGTH inst.inst_operands /\
+    EL pos inst.inst_operands = Var u` by metis_tac[MEM_EL] >>
+  `is_mem_addr_position inst.inst_opcode pos` by metis_tac[] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[pointerConfinedDefsTheory.is_pointer_preserving_op_def,
+      is_mem_addr_position_def]
+QED
+
+Theorem ircf_assign_pointer_alias:
+  fn_inst_wf fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ ircf_alias fn root u /\
+  MEM (Var u) inst.inst_operands /\ MEM v inst.inst_outputs ==>
+  ircf_alias fn root v
+Proof
+  strip_tac >>
+  `inst_wf inst` by
+    (fs[fn_inst_wf_def, fn_insts_def,
+        unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  `LENGTH inst.inst_outputs = 1` by
+    (qpat_x_assum `inst_wf inst` mp_tac >> simp[inst_wf_def]) >>
+  `inst.inst_outputs = [v]` by
+    (Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  metis_tac[ircf_alias_assign]
+QED
+
+Theorem ircf_fwd_src_pointer_closure:
+  fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d s sz ==>
+  pointer_derived_vars fn {s} SUBSET {v | ircf_alias fn s v}
+Proof
+  strip_tac >> irule pointer_derived_vars_least >>
+  simp[ircf_alias_refl] >> rpt strip_tac >>
+  `inst.inst_opcode = ASSIGN` by metis_tac[ircf_fwd_src_pointer_use] >>
+  metis_tac[ircf_assign_pointer_alias]
+QED
+
+Theorem ircf_fwd_dst_pointer_closure:
+  fn_inst_wf fn /\ fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
+  ircf_fwd_ok fn bb k d s sz ==>
+  pointer_derived_vars fn {d} SUBSET {v | ircf_alias fn d v}
+Proof
+  strip_tac >> irule pointer_derived_vars_least >>
+  simp[ircf_alias_refl] >> rpt strip_tac >>
+  `inst.inst_opcode = ASSIGN` by metis_tac[ircf_fwd_dst_pointer_use] >>
+  metis_tac[ircf_assign_pointer_alias]
 QED
