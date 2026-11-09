@@ -204,7 +204,9 @@ Proof
     (mp_tac (Q.SPECL [`middle`, `end_st`, `final`, `func`] fn_has_code_split) >> simp[]) >>
   `frag_ids middle end_st SUBSET ids` by
     (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
-     gvs[frag_ids_def, SUBSET_DEF, IN_COUNT, IN_DIFF] >> decide_tac) >>
+     qpat_x_assum `frag_ids st final SUBSET ids` mp_tac >>
+     simp_tac bool_ss [frag_ids_def, SUBSET_DEF, IN_GSPEC_IFF] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `alloca_inv prepared /\ alloca_frontier_inv_from r ctx func site prepared /\
    ctor_actual_scratch func ids D N prepared /\ D+N <= prepared.vs_alloca_next` by
     (asm_x "child" kall_tac >> asm_x "tail" kall_tac >>
