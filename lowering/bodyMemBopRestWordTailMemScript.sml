@@ -32,7 +32,10 @@ Theorem rest_word_fixed_tail_mem:
          else ~evaluate_in_array (ArrayTV et (Fixed n)) needle av))
 Proof
   strip_tac >>
-  drule_all (Q.INST [`memory` |-> `T`] rest_word_fixed_tail) >>
+  `read_result cx (Value (ArrayV av)) es' = (INL (ArrayV av), es')` by
+    simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  drule_all (Q.INST [`memory` |-> `T`, `tv` |-> `Value (ArrayV av)`]
+               rest_word_fixed_tail) >>
   disch_then (qspec_then `execctx` strip_assume_tac) >>
   drule_all rest_word_marked_allocation_posts >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
@@ -67,7 +70,10 @@ Theorem rest_word_dynamic_tail_mem:
          else ~evaluate_in_array (ArrayTV et (Dynamic cap)) needle av))
 Proof
   strip_tac >>
-  drule_all (Q.INST [`memory` |-> `T`] rest_word_dynamic_tail) >>
+  `read_result cx (Value (ArrayV av)) es' = (INL (ArrayV av), es')` by
+    simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  drule_all (Q.INST [`memory` |-> `T`, `tv` |-> `Value (ArrayV av)`]
+               rest_word_dynamic_tail) >>
   disch_then (qspec_then `execctx` strip_assume_tac) >>
   drule_all rest_word_marked_allocation_posts >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
