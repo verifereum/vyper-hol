@@ -6,7 +6,7 @@ Ancestors
  abiDecoderContract abiDecoderReentry abiDecoderTypedContract
  abiEncoderRegisteredEffect ctorAbiActualSites ctorDeployMemoryFrontier
  compileEnv venomState venomExecSemantics venomMemDefs valueEncoding
- ASCIInumbers words list finite_map arithmetic
+ ASCIInumbers words list finite_map arithmetic fragGasPath
  abiDecoderRecursiveLoopContext abiDecoderRecursiveLoopLayout abiCanonicalHeadSize
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
@@ -305,4 +305,28 @@ Proof
  >- (irule deploy_ctor_array_observation_exit >> goal_assum (drule_at Any)) >>
  irule abi_decode_sim_trans >> qexists `prepared` >> asm_simp_tac bool_ss [] >>
  irule abi_decode_sim_trans >> qexists `h` >> simp[]
+QED
+
+Theorem deploy_ctor_array_entry_complete_gas_path:
+  (^Ok) k ctx func site ids D N d outsz next limit_st
+    tv vs slot_id slot initial i i s /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions = prefix ++ [mk_inst id JMP [Label hdr] []] /\
+  lookup_block hdr func.fn_blocks = SOME hdr_bb /\
+  phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  ~s.vs_halted /\ s.vs_inst_idx = LENGTH prefix ==>
+  ?h. gas_path ctx func s 0 (OK h) /\
+    (^Ok) k ctx func site ids D N d outsz next limit_st
+      tv vs slot_id slot initial i i h /\
+    ~h.vs_halted /\ h.vs_current_bb = hdr /\ h.vs_inst_idx = 0 /\
+    abi_decode_sim ctx func s h /\
+    h.vs_outcomes = s.vs_outcomes /\ h.vs_tx_ctx = s.vs_tx_ctx /\
+    h.vs_block_ctx = s.vs_block_ctx
+Proof
+  strip_tac >> drule_all deploy_ctor_array_observation_jump >>
+  disch_then (qspec_then `hdr` assume_tac) >>
+  drule_all gas_path_jump >> disch_then (qspec_then `ctx` assume_tac) >>
+  `abi_decode_sim ctx func s (jump_to hdr s)` by
+    metis_tac[gas_path_normal, abi_decode_sim_def] >>
+  qexists `jump_to hdr s` >> simp[jump_to_def]
 QED
