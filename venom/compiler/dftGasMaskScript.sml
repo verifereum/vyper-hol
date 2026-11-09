@@ -27,15 +27,15 @@ Theorem dft_blocks_gas_mask:
          ?ir. run_blocks fuel C' fn' s = IntRet ir t) ==>
         EVERY IS_SOME raw_slots /\ unused = t.vs_gas_readings) /\
       !gobs tail.
-        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
-        (?fuel_src. terminates
-          (run_blocks fuel_src C fn (s with vs_gas_readings := gobs ++ tail)))
-        ==>
-        terminates
-          (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail)) /\
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
         (?extra.
           sites = gas_events_blocks fuel C fn
             (s with vs_gas_readings := gobs ++ tail) ++ extra) /\
+        ((?fuel_src. terminates
+          (run_blocks fuel_src C fn (s with vs_gas_readings := gobs ++ tail)))
+         ==>
+        terminates
+          (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail)) /\
         dft_res_rel
           (restore_result []
             (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail)))
@@ -46,7 +46,7 @@ Theorem dft_blocks_gas_mask:
           gas_events_blocks fuel C fn
             (s with vs_gas_readings := gobs ++ tail) = sites /\
           residual_result tail (run_blocks fuel C' fn' s)
-            (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail)))
+            (run_blocks fuel C fn (s with vs_gas_readings := gobs ++ tail))))
 Proof
   cheat
 QED
