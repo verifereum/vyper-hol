@@ -2181,6 +2181,61 @@ Proof
   simp[]
 QED
 
+Theorem taint_agree_external_step:
+  !vs C stk PG G tn fn inst s t D X lo r.
+    frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    o1_ctx_shape C /\ MEM fn C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+    ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\
+    taint_within D C vs /\ dead_wf D /\
+    inst.inst_opcode <> INVOKE /\
+    MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
+    taint_agree D X tn s t /\
+    (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+                 off <= i /\ i < off + len ==> i NOTIN X) /\
+    step_inst_base inst s = r /\ terminates r ==>
+    (!s'. r = OK s' ==>
+          ?t'. step_inst_base inst t = OK t' /\
+               taint_agree D X (step_taint inst s s' tn) s' t') /\
+    (!v s'. r = IntRet v s' ==>
+          ?t'. step_inst_base inst t = IntRet v t' /\
+               taint_agree D X tn s' t') /\
+    (!s'. r = Halt s' ==>
+          ?t'. step_inst_base inst t = Halt t' /\
+               dead_result_rel D (Halt s') (Halt t')) /\
+    (!a s'. r = Abort a s' ==>
+          ?t'. step_inst_base inst t = Abort a t')
+Proof
+  rpt gen_tac >> strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `MEM inst.inst_opcode [CALL; STATICCALL]`
+      >- (irule taint_agree_call_ok >> metis_tac[]) >>
+      Cases_on `inst.inst_opcode = DELEGATECALL`
+      >- (irule taint_agree_delegatecall_ok >> metis_tac[]) >>
+      irule taint_agree_create_ok >> fs[MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `MEM inst.inst_opcode [CALL; STATICCALL]`
+      >- metis_tac[taint_agree_call_not_terminal] >>
+      Cases_on `inst.inst_opcode = DELEGATECALL`
+      >- metis_tac[taint_agree_delegatecall_not_terminal] >>
+      fs[MEM] >> gvs[step_inst_base_opcode_eqs, AllCaseEqs(), exec_create_not_IntRet]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `MEM inst.inst_opcode [CALL; STATICCALL]`
+      >- metis_tac[taint_agree_call_not_terminal] >>
+      Cases_on `inst.inst_opcode = DELEGATECALL`
+      >- metis_tac[taint_agree_delegatecall_not_terminal] >>
+      fs[MEM] >> gvs[step_inst_base_opcode_eqs, AllCaseEqs(), exec_create_not_Halt]) >>
+  rpt strip_tac >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL]`
+  >- (irule taint_agree_call_abort >> metis_tac[]) >>
+  Cases_on `inst.inst_opcode = DELEGATECALL`
+  >- (irule taint_agree_delegatecall_abort >> metis_tac[]) >>
+  irule taint_agree_create_abort >> fs[MEM] >> metis_tac[]
+QED
+
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
    no taint, so taint_agree evaluates it equally in t; access_ok puts
    each read ending above lo inside a site, below the bump pointer since
