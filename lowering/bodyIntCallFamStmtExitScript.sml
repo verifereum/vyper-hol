@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: Raise and Assert. *)
 Theory bodyIntCallFamStmtExit
 Ancestors
-  bodyIntCallJointContract bodyIntCallFamStmtExitReason
+  bodyIntCallJointContract bodyIntCallFamStmtExitReason bodyIntCallFamStmtExitLiteral bodyIntCallFamStmtExitBoundary
 
 Theorem intcall_exit_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
