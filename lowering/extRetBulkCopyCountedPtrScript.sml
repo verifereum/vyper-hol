@@ -205,6 +205,15 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem bulk_binop_prov_frame[local]:
+  (opc = MUL \/ opc = GT) /\ p <> out ==>
+  FLOOKUP (step_prov PG G (mk_inst id opc [left;right] [out])
+    (update_var out w s)) p = FLOOKUP G p
+Proof
+  strip_tac >> simp[step_prov_def, set_prov_def, mk_inst_def] >>
+  BasicProvers.EVERY_CASE_TAC >> simp[FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+QED
+
 Theorem bulk_binop_ghost_frame[local]:
   (opc = MUL \/ opc = GT) /\ op_taint tn left = {} /\ op_taint tn right = {} ==>
   op_taint (step_taint (mk_inst id opc [left;right] [out]) s
@@ -290,7 +299,8 @@ Proof
        bulk_binop_ghost_frame |> SPEC_ALL |> Q.INST [`opc` |-> `MUL`] |> SRULE [],
        bulk_binop_ghost_frame |> SPEC_ALL |> Q.INST [`opc` |-> `GT`] |> SRULE []] >>
   rpt strip_tac >> `p <> out` by metis_tac[] >>
-  simp[bulk_binop_ghost_frame, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+  simp[bulk_binop_prov_frame, bulk_binop_ghost_frame, lookup_var_def,
+       update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem emit_iszero_counted_ptr:
