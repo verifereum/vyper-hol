@@ -74,6 +74,8 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD /\
    abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
     simp[abi_decode_source_opcode_def, abi_decoder_operand_live_def] >>
+  `first <= abiDecoderTypedContract$abi_decoder_entry_floor st` by
+    simp[abiDecoderTypedContractTheory.abi_decoder_entry_floor_def] >>
   drule_all ((calldata_pos abi_scratch_decoder_init_reentry) |> Q.INST [`hi` |-> `Lit 0w`] |> SRULE []) >> strip_tac >>
   `abi_decoder_array_init_post setup st.cs_next_var limit_st (loop_st.cs_next_id - 2)
     first last b cap d n initial actual` by
