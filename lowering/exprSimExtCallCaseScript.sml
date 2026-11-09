@@ -42,6 +42,7 @@ Ancestors
   vyperInterpreter vyperState exprSimDefs
   extCallSeamPrecheck extCallSeamOracle extCallSeamFrame extCallSeamFinish
   extCallSeamSummary exprLowering emitHelper rawCallFragPath compileEnv
+  exprExtRequestOperandCps exprExtRequestPrefix exprExtRequestValue
   exprLoweringProps exprSafeOperand fragGasPath gasSummary gasSummaryCompose
 
 (* A storage or transient pointer an effect-free operand leaves reads live
@@ -328,8 +329,496 @@ Theorem extcall_request_setup:
          (Call ann (ExtCall is_static skip (fname,arg_types,ret_type) opts)
             args dflt)) (es,s0) Q (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `args`
+  >- (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+      simp[gasContextTheory.gas_admissible_def] >>
+      disch_then (qspecl_then [`[]`, `INR (Error (TypeError "ExtCall operands"))`, `es with gas_obs := []`] mp_tac) >>
+      simp[Once evaluate_def] >>
+      simp[evaluate_def, bind_return, read_results_def, eval_ext_call_def,
+           vyperStateTheory.raise_def, expr_vv_res_ok_def]) >>
+  rename1 `h::rest` >>
+  gvs[arithmeticTheory.ADD1] >>
+  qpat_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[NoAsms, Once compile_expr_def, LET_THM,
+       exprCallbackContractsTheory.compile_call_child_calls] >> strip_tac >>
+  drule exprExtRequestShapeTheory.extrequest_compile_call_split >> strip_tac >>
+  qpat_x_assum `let call_types = _ in _` mp_tac >>
+  simp[NoAsms, LET_THM] >> pairarg_tac >> simp[] >> strip_tac >>
+  drule_all exprExtRequestCodeTheory.extrequest_operand_code >> strip_tac >>
+  fs[exprExtRequestStagesSourceTheory.extrequest_source_stages] >>
+  irule (BETA_RULE (Q.INST [`kont` |->
+    `\target rs kwargs. vyperState$bind (read_results cx rs) (\vs.
+       eval_ext_call cx is_static' skip (fname,arg_types,ret_type) opts
+         (target::(vs ++ kwargs)))`]
+    exprExtRequestOperandCpsTheory.extrequest_operand_cps)) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `compile_ext_call_kwargs _ _ _ _ _ _ = _`)) >>
+  qexistsl [`is_static'`, `nocalls`, `env`, `dflt`, `ann`] >>
+  simp[vv_post_storage_live, vv_post_pure_memory_frame] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[vv_post_storage_live] >>
+  conj_tac >- metis_tac[vv_post_pure_memory_frame] >>
+  rpt gen_tac >> strip_tac >>
+  `?posvs. read_results cx rs ee = (INL posvs,ee)` by
+    (qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o SRULE [exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
+     drule_all exprExtRequestStrongCaptureTheory.extrequest_strong_captures_projection >> strip_tac >>
+     drule exprExtRequestCaptureTheory.extrequest_captures_read >> metis_tac[]) >>
+  drule_at (Pat `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    exprExtRequestTypedCellsTheory.extrequest_call_typed_cells >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `extrequest_results_success _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `read_results _ _ _ = _`)) >>
+  disch_then (qspec_then `target` mp_tac) >>
+  (impl_tac >- (qexists_tac `used` >> simp[])) >> strip_tac >>
+  drule_all exprExtRequestGasSelectionsTheory.extrequest_kwargs_gas_endpoint >> strip_tac >>
+  drule_at (Pat `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    exprExtRequestAbiFitsTheory.extrequest_call_positional_calldata >>
+  disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `extrequest_results_success _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `read_results _ _ _ = _`)) >>
+  disch_then (qspec_then `target` mp_tac) >>
+  (impl_tac >- (qexists_tac `used` >> simp[])) >> strip_tac >>
+  drule_all exprExtRequestShapeTheory.extrequest_compile_kwargs_code >> strip_tac >>
+  drule_all exprExtRequestPrefixTheory.extrequest_tuple_cells_history >> strip_tac >>
+  `expr_body_pre cenv cx env h es` by
+    (irule exprExtRequestShapeTheory.extrequest_body_pre_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+     gvs[expr_body_pre_def]) >>
+  `expr_sim_inv cenv cx env esA` by
+    (qpat_assum `!tail. vyperState$bind (eval_expr cx h) _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     `expr_body_pre cenv cx env h (es with gas_obs := used)` by simp[] >>
+     fs[vyperStateTheory.bind_def] >>
+     drule_at (Pat `(case _ of _ => _ | _ => _) = _`)
+       (SRULE [vyperStateTheory.bind_def] exprSimSourceTheory.expr_body_pre_eval) >>
+     simp[]) >>
+  drule exprExtRequestStagesSourceTheory.extrequest_operand_body_pre >> strip_tac >>
+  `expr_sim_inv cenv cx env esB` by
+    (qpat_assum `extrequest_results_success _ _ _ _ _`
+       (strip_assume_tac o SRULE [exprExtRequestUnreadCpsTheory.extrequest_results_success_def]) >>
+     `expr_sim_inv cenv cx env mid` by
+       (irule exprExtRequestStagesSourceTheory.extrequest_results_preserves_inv >>
+        goal_assum (drule_at Any) >> simp[] >> metis_tac[EVERY_TAKE, EVERY_DEF]) >> simp[]) >>
+  `expr_sim_inv cenv cx env ee` by
+    (qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o SRULE [exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
+     irule exprExtRequestStagesSourceTheory.extrequest_exprs_preserves_inv >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[EVERY_DROP, EVERY_DEF]) >>
+  `SUM (MAP (type_memory_bytes cenv)
+      (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))) < 2 ** 64 /\
+   MAX (abi_size_bound cenv.ce_struct_fields
+      (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))))
+     (abi_size_bound cenv.ce_struct_fields
+      (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) + 32 < 2 ** 64` by
+    (qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _`
+       (strip_assume_tac o SRULE [expr_body_pre_def,
+          allocLimitsTheory.alloc_limits_expr_def,
+          allocLimitsTheory.ext_call_alloc_ok_def, LET_THM]) >> simp[]) >>
+  drule exprExtRequestTypedCellsTheory.extrequest_cells_layout >> strip_tac >>
+  `LENGTH arg_vals = LENGTH (TAKE (LENGTH arg_types) rest)` by
+    (qpat_assum `extrequest_strong_captures _ _ _ _ _ _ _ _ s4 t'` mp_tac >>
+     simp[NoAsms, exprExtRequestStrongCaptureTheory.extrequest_strong_captures_def] >>
+     strip_tac >> imp_res_tac LIST_REL_LENGTH >> fs[]) >>
+  `MAP (\(e,r,vv,ty,tv,v). vv) cells = arg_vals` by
+    (qpat_assum `MAP _ cells = ZIP _` (mp_tac o Q.AP_TERM `MAP FST`) >>
+     simp[MAP_MAP_o, MAP_ZIP] >>
+     `MAP (FST o (\(e,r,vv,ty,tv,v). (vv,ty))) cells =
+      MAP (\(e,r,vv,ty,tv,v). vv) cells` by
+       (irule MAP_CONG >> simp[] >> rpt strip_tac >> PairCases_on `x` >> simp[]) >>
+     simp[]) >>
+  `local_ptrs_reserved cenv s4` by
+    fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >>
+  `SUM (MAP (\(e,r,vv,ty,tv,v). type_memory_size tv) cells) =
+     type_memory_size_list tvs` by
+    (qpat_x_assum `MAP (\(e,r,vv,ty,tv,v). tv) cells = tvs` (fn th => rewrite_tac[GSYM th]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     Induct_on `cells` >> simp[valueEncodingTheory.type_memory_size_def] >>
+     qx_gen_tac `cell` >> PairCases_on `cell` >> simp[valueEncodingTheory.type_memory_size_def]) >>
+  `ee.gas_obs = []` by
+    fs[exprExtRequestKwargsTheory.extrequest_kwargs_post_def] >>
+  `SUM (MAP (type_memory_bytes cenv)
+      (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))) =
+    type_memory_size_list tvs` by metis_tac[] >>
+  `?t'' (w:bytes32).
+    gas_marked_path F ctx func t' 0 (OK t'') /\
+    stmt_state_rel ctx func cenv cx ee t'' /\
+    extrequest_history_frame cenv cx ee s4 t' ee sp t'' /\
+    ~t''.vs_halted /\ t''.vs_current_bb = sp.cs_current_bb /\
+    t''.vs_inst_idx = LENGTH sp.cs_current_insts /\
+    eval_operand len t'' = SOME (n2w (4 + LENGTH (enc
+      (vyper_to_abi_type (get_tenv cx) (TupleT
+        (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest)))) av))) /\
+    eval_operand off t'' = SOME (n2w (w2n w + 28)) /\
+    read_memory (w2n w + 28) (4 + LENGTH (enc
+      (vyper_to_abi_type (get_tenv cx) (TupleT
+        (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest)))) av)) t'' =
+      function_selector fname (vyper_to_abi_types (get_tenv cx) arg_types) ++
+      enc (vyper_to_abi_type (get_tenv cx) (TupleT
+        (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest)))) av /\
+    FLOOKUP t''.vs_allocas s4.cs_next_id = SOME (w2n w, MAX
+      (abi_size_bound cenv.ce_struct_fields (TupleT
+        (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))))
+      (abi_size_bound cenv.ce_struct_fields
+        (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) + 32) /\
+    w2n w + abi_size_bound cenv.ce_struct_fields
+      (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type) < dimword (:256) /\
+    local_ptrs_reserved cenv sp /\ safe_operand sp len /\ safe_operand sp off /\
+    eval_operand buf t'' = SOME w /\ safe_operand sp buf` by
+   (Cases_on `arg_vals = []`
+  >- (`arg_types = []` by
+        (drule exprExtRequestShapeTheory.extrequest_body_typed >>
+         simp[Once vyperTypeSystemTheory.well_typed_expr_def] >> strip_tac >>
+         fs[LENGTH_TAKE_EQ, LENGTH_NIL]) >>
+      fs[valueEncodingTheory.type_memory_size_def] >>
+      drule_at (Pat `extrequest_compile_prefix _ _ _ _ _ _ _ _ _ = _`)
+        exprExtRequestPrefixTheory.extrequest_empty_prefix_endpoint >>
+      disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+      disch_then (qspec_then `env` mp_tac) >>
+      (impl_tac >- (simp[] >> fs[wordsTheory.dimword_def] >> decide_tac)) >>
+      strip_tac >>
+      qpat_x_assum `posvs = []` SUBST_ALL_TAC >>
+      gvs[vyperABITheory.vyper_to_abi_def] >>
+      qexistsl_tac [`t''`, `w`] >> simp[contractABITheory.enc_def, listTheory.REV_DEF, wordsTheory.dimword_def]) >>
+  `TAKE (LENGTH arg_types) rest <> []` by metis_tac[LENGTH_NIL] >>
+  drule_at (Pat `extrequest_compile_prefix _ _ _ _ _ _ _ _ _ = _`)
+    exprExtRequestPrefixTheory.extrequest_tuple_prefix_endpoint >>
+  disch_then (drule_at (Pat `EVERY _ cells`)) >>
+  disch_then (qspecl_then [`posvs`, `tvs`, `env`, `av`] mp_tac) >>
+  (impl_tac >- (simp[valueEncodingTheory.type_memory_size_def] >>
+    fs[wordsTheory.dimword_def] >> decide_tac)) >>
+  strip_tac >> qexistsl_tac [`t''`, `w`] >> simp[]) >>
+  `extrequest_history_frame cenv cx ee s3 t ee sp t''` by
+    (irule exprExtRequestHistoryComposeTheory.extrequest_history_frame_trans >>
+     conj_tac >- (qexistsl_tac [`ctx`, `func`] >>
+       fs[exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
+     qexistsl_tac [`ee`, `s4`, `t'`] >> simp[]) >>
+  `wb_frame cenv es sa s0 t''` by
+    (irule exprSimWordArgsTheory.wb_frame_trans >>
+     simp[] >> reverse conj_tac
+     >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
+     qexistsl_tac [`ee`, `s3`, `t`] >> simp[] >>
+     irule exprExtRequestPrefixTheory.extrequest_history_writeback >>
+     qexistsl_tac [`cx`, `ee`, `sp`] >> simp[]) >>
+  `extrequest_kwarg_selection cenv cx ret_type EKDefault
+     (ext_call_kwarg EKDefault opts vs) default_opt ee sp t''` by
+    (irule exprExtRequestKwargsTheory.extrequest_kwarg_selection_transport >>
+     qexistsl_tac [`ctx`, `ee`, `func`, `s4`, `t'`] >> simp[]) >>
+  `extrequest_kwarg_selection cenv cx ret_type EKValue
+     (ext_call_kwarg EKValue opts vs)
+     (OPTION_MAP (\op. (op,ret_type)) value_opt) ee sp t''` by
+    (irule exprExtRequestKwargsTheory.extrequest_kwarg_selection_transport >>
+     qexistsl_tac [`ctx`, `ee`, `func`, `s4`, `t'`] >> simp[]) >>
+  `eval_operand addr_op t'' = SOME (w2w target_addr)` by
+    (irule exprExtRequestReconstructTheory.extrequest_history_operand >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any)) >>
+  `eval_operand gas_op t'' = SOME gw` by
+    (irule exprExtRequestReconstructTheory.extrequest_history_operand >>
+     qexistsl_tac [`cenv`, `cx`, `ee`, `ee`, `s4`, `sp`, `t'`] >> simp[]) >>
+  `extcall_default_ready cx ret_type has_default default_op default_ty
+      (ext_call_kwarg EKDefault opts vs) t''` by
+    (`IS_SOME default_opt ==> ret_type <> NoneT` by
+       (Cases_on `default_opt` >> simp[] >> PairCases_on `x` >>
+        drule_all exprExtRequestShapeTheory.extrequest_body_default_type >> simp[]) >>
+     qpat_assum `IS_SOME default_opt ==> _` mp_tac >>
+     qpat_assum `extrequest_kwarg_selection _ _ _ EKDefault _ _ _ sp t''` mp_tac >>
+     qpat_assum `_ = (has_default,default_op,default_ty)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     Cases_on `default_opt` >>
+     fs[extcall_default_ready_def,
+        exprExtRequestKwargsTheory.extrequest_kwarg_selection_def] >>
+     PairCases_on `x` >> gvs[] >>
+     `ret_type <> NoneT` by fs[] >>
+     conj_tac >- (Cases_on `ext_call_kwarg EKDefault opts vs` >> simp[] >> fs[]) >>
+     rpt strip_tac >>
+     fs[exprExtRequestRetainedTheory.extrequest_retained_value_def] >>
+     `?w. eval_operand default_op t'' = SOME w` by
+       (qpat_assum `expr_val_rel _ _ _ default_op t''` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[expr_val_rel_def] >> metis_tac[]) >>
+     metis_tac[]) >>
+  `?inst p. MEM inst (fn_insts func) /\
+      inst.inst_id = s4.cs_next_id /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_outputs = [p] /\
+      not_local_ptr cenv ee.scopes p /\ s4.cs_next_id < sp.cs_next_id` by
+    (drule exprExtRequestPrefixTheory.extrequest_prefix_split >> strip_tac >>
+     (`fn_has_code s4 sm func /\ ci_mono s4 sm /\ ci_mono sm sp` by
+       (Cases_on `arg_vals = []`
+        >- (fs[] >>
+            `ci_mono s4 sm` by
+              metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
+            `ci_mono sm sn` by
+              metis_tac[ci_mono_emit_void, pairTheory.SND] >>
+            `ci_mono sn sp` by
+              metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+            fs[ci_mono_def] >>
+            metis_tac[fragExecTheory.fn_has_code_split, cs_extends_trans]) >>
+        fs[] >>
+        drule_all exprExtRequestPrefixTheory.extrequest_tuple_prefix_code >>
+        strip_tac >> fs[ci_mono_def] >>
+        metis_tac[cs_extends_trans]) >>
+     qpat_assum `compile_alloc_buffer _ s4 = _`
+       (mp_then Any mp_tac exprSimAllocTheory.buffer_alloc_code) >>
+     disch_then drule >> strip_tac >>
+     qpat_assum `compile_alloc_buffer _ s4 = _`
+       (strip_assume_tac o MATCH_MP loweringHaltTheory.compile_alloc_buffer_parts) >>
+     goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def] >>
+     conj_tac >- (irule exprSimOperandsTheory.fresh_not_local_ptr >>
+       qexists_tac `s4` >> simp[]) >>
+     fs[ci_mono_def] >> decide_tac)) >>
+  `!name b sz. local_region cenv ee.scopes t'' name b sz ==>
+      compileEnv$regions_disjoint (w2n w)
+        (abi_size_bound cenv.ce_struct_fields
+          (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
+    (rpt strip_tac >>
+     `alloca_inv t'' /\ local_ptrs_rel func cenv ee.scopes t''` by
+       (qpat_assum `stmt_state_rel ctx func cenv cx ee t''` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[stmt_state_rel_def, state_rel_def]) >>
+     qpat_assum `inst.inst_id = s4.cs_next_id`
+       (fn th => rule_assum_tac (ONCE_REWRITE_RULE [GSYM th])) >>
+     drule_all localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
+     simp[compileEnvTheory.regions_disjoint_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!name b sz. local_region cenv es.scopes s0 name b sz ==>
+      compileEnv$regions_disjoint (w2n w)
+        (abi_size_bound cenv.ce_struct_fields
+          (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
+    (drule_all wordArgsPtrTheory.wb_frame_local_regions >> strip_tac >>
+     metis_tac[]) >>
+  `!aid b sz. aid <> s4.cs_next_id /\
+      FLOOKUP t''.vs_allocas aid = SOME (b,sz) ==>
+      compileEnv$regions_disjoint (w2n w)
+        (abi_size_bound cenv.ce_struct_fields
+          (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
+    (`allocas_non_overlapping t''` by
+       (qpat_assum `stmt_state_rel ctx func cenv cx ee t''` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+     qpat_assum `FLOOKUP t''.vs_allocas s4.cs_next_id = SOME _` mp_tac >>
+     qpat_assum `allocas_non_overlapping t''` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[venomMemDefsTheory.allocas_non_overlapping_def] >> rpt strip_tac >>
+     first_x_assum drule >> disch_then drule >> simp[] >>
+     simp[compileEnvTheory.regions_disjoint_def, arithmeticTheory.MAX_DEF] >>
+     decide_tac) >>
+  `!aid b sz. aid < sa.cs_next_id /\
+      FLOOKUP t''.vs_allocas aid = SOME (b,sz) ==>
+      compileEnv$regions_disjoint (w2n w)
+        (abi_size_bound cenv.ce_struct_fields
+          (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) b sz` by
+    (rpt strip_tac >> first_x_assum irule >> qexists_tac `aid` >> simp[] >>
+     fs[ci_mono_def] >> decide_tac) >>
+  `cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of
+        NONE => FEMPTY | SOME imms => get_source_immutables cenv.ce_module imms)
+        name = SOME (tv,v) ==>
+      compileEnv$regions_disjoint (w2n w)
+        (abi_size_bound cenv.ce_struct_fields
+          (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+        off (type_memory_size tv)` by
+    (`immutable_alloca_sep func cenv cx ee t''` by
+       (qpat_assum `stmt_state_rel ctx func cenv cx ee t''` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[stmt_state_rel_def]) >>
+     rpt strip_tac >>
+     qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
+     simp[immutable_alloca_sep_def] >>
+     disch_then drule >> disch_then drule >> strip_tac >>
+     qpat_x_assum `!inst b sz. _` (qspec_then `inst` mp_tac) >>
+     simp[] >>
+     simp[compileEnvTheory.regions_disjoint_def] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!d dw tv. ext_call_kwarg EKDefault opts vs = SOME d /\
+      ~is_word_type default_ty /\ eval_operand default_op t'' = SOME dw /\
+      evaluate_type (get_tenv cx) default_ty = SOME tv ==>
+      compileEnv$regions_disjoint (w2n w)
+        (abi_size_bound cenv.ce_struct_fields
+          (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+        (w2n dw) (val_footprint tv d)` by
+    (qpat_assum `extrequest_kwarg_selection _ _ _ EKDefault _ _ _ s4 t'` mp_tac >>
+     qpat_assum `_ = (has_default,default_op,default_ty)` mp_tac >>
+     qpat_assum `extrequest_history_frame _ _ _ s4 t' _ sp t''` mp_tac >>
+     qpat_assum `!aid b sz. aid <> s4.cs_next_id /\ _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     Cases_on `default_opt` >>
+     fs[exprExtRequestKwargsTheory.extrequest_kwarg_selection_def] >>
+     PairCases_on `x` >> gvs[] >> rpt strip_tac >>
+     fs[exprExtRequestRetainedTheory.extrequest_retained_value_def] >>
+     `eval_operand default_op t'' = SOME w'` by
+       (drule_all exprExtRequestReconstructTheory.extrequest_history_operand >> simp[]) >>
+     `dw = w'` by gvs[] >> fs[] >>
+     fs[exprExtRequestHistoryTheory.extrequest_history_frame_def] >>
+     `FLOOKUP t''.vs_allocas aid = SOME (w2n w',size')` by metis_tac[] >>
+     `compileEnv$regions_disjoint (w2n w)
+        (abi_size_bound cenv.ce_struct_fields
+          (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+        (w2n w') size'` by (first_x_assum irule >> qexists_tac `aid` >> simp[]) >>
+     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  `outcomes_accounts_typed ee.outcomes /\ accounts_runtime_well_typed ee.accounts` by
+    (qpat_assum `expr_sim_inv cenv cx env ee` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed]) >>
+  `sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `safe_operand sp addr_op /\ safe_operand sp gas_op` by
+    (conj_tac
+     >- (irule safe_operand_mono >> qexists_tac `s3` >> simp[] >>
+         fs[ci_mono_def] >> decide_tac) >>
+     irule safe_operand_mono >> qexists_tac `s4` >> simp[] >> fs[ci_mono_def]) >>
+  `safe_operand sp default_op` by
+    (qpat_assum `extrequest_kwarg_selection _ _ _ EKDefault _ _ _ sp t''` mp_tac >>
+     qpat_assum `_ = (has_default,default_op,default_ty)` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     Cases_on `default_opt` >>
+     fs[exprExtRequestKwargsTheory.extrequest_kwarg_selection_def, safe_operand_def] >>
+     PairCases_on `x` >> gvs[] >>
+     Cases_on `ext_call_kwarg EKDefault opts vs` >> gvs[] >>
+     fs[exprExtRequestRetainedTheory.extrequest_retained_value_def, safe_operand_def]) >>
+  `w2n w + MAX
+      (abi_size_bound cenv.ce_struct_fields
+        (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))))
+      (abi_size_bound cenv.ce_struct_fields
+        (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) + 32
+      <= t''.vs_alloca_next` by
+    (qpat_assum `stmt_state_rel ctx func cenv cx ee t''` mp_tac >>
+     qpat_assum `FLOOKUP t''.vs_allocas s4.cs_next_id = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+     fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+  `t''.vs_alloca_next < dimword (:256)` by
+    (qpat_assum `stmt_state_rel ctx func cenv cx ee t''` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[stmt_state_rel_def, state_rel_def, alloca_room_def] >>
+     strip_tac >> decide_tac) >>
+  `safe_operand sp (case value_opt of NONE => Lit 0w | SOME v => v)` by
+    (qpat_assum `extrequest_kwarg_selection _ _ _ EKValue _ _ _ sp t''` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `value_opt` >>
+     simp[exprExtRequestKwargsTheory.extrequest_kwarg_selection_def, safe_operand_def] >>
+     strip_tac >> Cases_on `ext_call_kwarg EKValue opts vs` >> gvs[] >>
+     fs[exprExtRequestRetainedTheory.extrequest_retained_value_def, safe_operand_def]) >>
+  `ext_call_opts_ok is_static' opts` by
+    (qpat_assum `expr_body_pre cenv cx env (Call _ _ _ _) es` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[expr_body_pre_def] >>
+     metis_tac[exprExtRequestShapeTheory.extrequest_typed_nonempty]) >>
+  `extcall_request_ready ctx func cenv cx ret_type es sa s0 sp is_static'
+      addr_op (case value_opt of NONE => Lit 0w | SOME v => v) gas_op buf off len
+      (abi_size_bound cenv.ce_struct_fields
+        (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type))
+      target_addr
+      (if is_static' then NONE else case ext_call_kwarg EKValue opts vs of
+        NONE => SOME 0 | SOME v => dest_NumV v)
+      (function_selector fname (vyper_to_abi_types (get_tenv cx) arg_types) ++
+        enc (vyper_to_abi_type (get_tenv cx)
+          (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest)))) av)
+      has_default default_op default_ty (ext_call_kwarg EKDefault opts vs) ee t''` by
+    (simp[extcall_request_ready_def, wordsTheory.w2w_w2w] >>
+     conj_tac >- wordsLib.WORD_DECIDE_TAC >>
+     conj_tac >-
+       (irule exprExtRequestValueTheory.extrequest_value_static >>
+        goal_assum (drule_at Any)) >>
+     conj_tac >-
+       (qpat_assum `extrequest_kwarg_selection _ _ _ EKValue _ _ _ sp t''` mp_tac >>
+        qpat_assum `ext_call_opts_ok is_static' opts` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+        metis_tac[exprExtRequestValueTheory.extrequest_value_operand]) >>
+     `!n a b p q D:num.
+       n <= a /\ p + MAX a b + 32 <= q /\ q < D ==>
+       n + 4 < D /\ p + b < D` by
+       (POP_ASSUM_LIST (K ALL_TAC) >> rpt gen_tac >>
+        Cases_on `a <= b` >> simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+     `LENGTH (enc (vyper_to_abi_type (get_tenv cx)
+        (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest)))) av) + 4
+          < dimword (:256)` by
+       (qpat_assum `!n a b p q D:num. _` mp_tac >>
+        qpat_assum `LENGTH (enc _ av) <= _` mp_tac >>
+        qpat_assum `w2n w + MAX _ _ + 32 <= _` mp_tac >>
+        qpat_assum `t''.vs_alloca_next < dimword (:256)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> metis_tac[]) >>
+     `w2n w + 28 < dimword (:256)` by
+       (qpat_assum `w2n w + MAX _ _ + 32 <= _` mp_tac >>
+        qpat_assum `t''.vs_alloca_next < dimword (:256)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> decide_tac) >>
+     conj_tac >-
+       (qpat_assum `read_memory (w2n w + 28) _ t'' = _` mp_tac >>
+        qpat_assum `LENGTH (enc _ av) + 4 < dimword (:256)` mp_tac >>
+        qpat_assum `w2n w + 28 < dimword (:256)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        pure_rewrite_tac [cj 2 vyperABITheory.vyper_to_abi_type_def] >>
+        simp[wordsTheory.dimword_def] >>
+        CONV_TAC (DEPTH_CONV numLib.REDUCE_CONV) >>
+        rpt strip_tac >>
+        fs[arithmeticTheory.MOD_LESS, arithmeticTheory.ADD_COMM]) >>
+     conj_tac >-
+       (qpat_assum `w2n w + abi_size_bound _ _ < dimword (:256)` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >> simp[wordsTheory.dimword_def]) >>
+     conj_tac >-
+       (qexists_tac `s4.cs_next_id` >>
+        qexists_tac `MAX
+          (abi_size_bound cenv.ce_struct_fields
+            (TupleT (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))))
+          (abi_size_bound cenv.ce_struct_fields
+            (if needs_external_call_wrap ret_type then TupleT [ret_type] else ret_type)) + 32` >>
+        simp[] >> fs[ci_mono_def] >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        `!a b:num. b <= MAX a b + 32` by
+          (rpt gen_tac >> Cases_on `a <= b` >>
+           simp[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+        metis_tac[]) >>
+     rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  qpat_x_assum `!sp sr u result_op' addr_op' value_op gas_op' buf_op call_offset call_len has_default' default_op' default_ty' target_v rest' target calldata ee t. _`
+    (mp_tac o SRULE [GSYM exprExtRequestShapeTheory.extrequest_compile_step_def,
+                     GSYM exprExtRequestShapeTheory.extrequest_compile_return_def]) >>
+  disch_then (drule_at (Pat `extrequest_compile_step _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `extrequest_compile_return _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then assume_tac >>
+  `LENGTH posvs = LENGTH arg_types /\ LENGTH vs = LENGTH opts` by
+    (qpat_assum `extrequest_kwargs_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o SRULE [exprExtRequestKwargsTheory.extrequest_kwargs_post_def]) >>
+     drule exprExtRequestShapeTheory.extrequest_body_typed >>
+     simp[vyperTypeSystemTheory.well_typed_expr_def, LET_THM] >> strip_tac >>
+     imp_res_tac vyperTypeArgFitsTheory.arg_types_fit_LENGTH >>
+     qpat_assum `MAP (\(e,r,vv,ty,tv,v). v) cells = posvs` mp_tac >>
+     qpat_assum `MAP (\(e,r,vv,ty,tv,v). ty) cells = _` mp_tac >>
+     qpat_assum `LENGTH vs = LENGTH opts` mp_tac >>
+     qpat_assum `LENGTH (MAP expr_type _) = LENGTH arg_types` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[] >> metis_tac[LENGTH_MAP]) >>
+  qpat_x_assum `!target_v rest' target calldata ee t. _`
+    (qspecl_then [`target`, `posvs ++ vs`, `target_addr`] mp_tac) >>
+  qpat_assum `LENGTH posvs = LENGTH arg_types`
+    (fn th => pure_rewrite_tac[GSYM th]) >>
+  simp[expr_type_def, TAKE_APPEND, DROP_APPEND] >>
+  disch_then (qspecl_then [`ee`, `t''`] mp_tac) >>
+  (impl_tac >-
+    (qhdtm_assum `extcall_request_ready` mp_tac >>
+     pure_rewrite_tac[cj 2 vyperABITheory.vyper_to_abi_type_def] >> simp[])) >>
+  strip_tac >>
+  `!tail. read_results cx rs (ee with gas_obs := tail) =
+      (INL posvs, ee with gas_obs := tail)` by
+    (gen_tac >>
+     `extrequest_read_frame cx ee (ee with gas_obs := tail)` by
+       simp[exprExtRequestReadProbeTheory.extrequest_read_frame_def] >>
+     drule exprExtRequestSuffixTheory.extrequest_read_results_frame >>
+     disch_then (qspec_then `rs` mp_tac) >> simp[]) >>
+  `gas_marked_path F ctx func t (if IS_NONE gas_opt then 1 else 0) (OK t'')` by
+    (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
+  qhdtm_x_assum `gas_summary_at`
+    (strip_assume_tac o SRULE [gasSummaryTheory.gas_summary_at_def]) >>
+  (rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+  qexists_tac `REPLICATE (if IS_NONE gas_opt then 1 else 0) F ++ marks` >>
+  disj1_tac >> rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl_tac [`res`, `es_end`, `r`] >>
+  conj_tac >-
+    (irule gasSummaryComposeTheory.gas_marked_exec_bind_normal >>
+     qexistsl_tac [`ee`, `t''`, `posvs`] >>
+     fs[gasSummaryTheory.gas_marked_exec_def, optionTheory.IS_NONE_EQ_NONE]) >>
+  simp[])
 QED
+
 
 (* (2) The call step.  From a ready request at sp: the extcodesize check
    against the source's precheck, the CALL or STATICCALL as an oracle step
