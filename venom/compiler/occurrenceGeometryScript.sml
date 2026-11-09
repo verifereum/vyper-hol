@@ -347,3 +347,20 @@ Theorem occurrence_geometry_saved_site_bound:
 Proof
   simp[occurrence_natural_geometry_def] >> metis_tac[]
 QED
+
+Theorem occurrence_env_site_exclusion:
+  occurrence_natural_geometry lo a U B stk s /\
+  occurrence_env_ok B owners H G /\
+  (!v. FLOOKUP H v <> SOME id) /\
+  FLOOKUP B id = SOME (b,z) /\ FLOOKUP G v = SOME (c,w) /\
+  0 < z /\ 0 < w ==> b + z <= c \/ c + w <= b
+Proof
+  strip_tac >>
+  `v IN FDOM H` by
+    (fs[occurrence_env_ok_def] >> gvs[FLOOKUP_DEF]) >>
+  `?jd. FLOOKUP H v = SOME jd` by metis_tac[FLOOKUP_DEF] >>
+  `FLOOKUP B jd = SOME (c,w)` by
+    (fs[occurrence_env_ok_def] >> metis_tac[]) >>
+  irule occurrence_geometry_sites_disjoint >>
+  metis_tac[]
+QED

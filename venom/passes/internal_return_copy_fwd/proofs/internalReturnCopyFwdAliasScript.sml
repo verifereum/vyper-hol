@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics venomState o1LowerDloadPairedAllocation
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
   tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
-  singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs o1LowerDloadOccurrence
+  singleUseExpansionSupplySim occurrenceOrigin unitShapeDefs o1LowerDloadOccurrence occurrenceGeometry
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -1158,3 +1158,78 @@ Resume ircf_saved_forward_suffix_absent[ret]:
 QED
 
 Finalise ircf_saved_forward_suffix_absent
+
+Theorem ircf_saved_forward_sites_exclusion:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ j < LENGTH stk /\
+  lookup_block (EL j stk).cf_state.vs_current_bb
+    (EL j stk).cf_fn.fn_blocks = SOME bb /\
+  wf_function (EL j stk).cf_fn /\ fn_inst_wf (EL j stk).cf_fn /\
+  fn_inst_ids_distinct (EL j stk).cf_fn /\
+  ircf_no_dst_write_alias (EL j stk).cf_fn /\
+  ircf_fwd_ok (EL j stk).cf_fn bb k d sr sz /\
+  ircf_copy_roots (EL j stk).cf_fn (EL k bb.bb_instructions) =
+    SOME (d,sr,sz) /\
+  k < (EL j stk).cf_state.vs_inst_idx /\
+  MEM ai (fn_insts (EL j stk).cf_fn) /\
+  ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [root] /\
+  (root = d \/ root = sr) /\
+  FLOOKUP (EL j stk).cf_state.vs_allocas ai.inst_id = SOME (b,z) /\
+  FLOOKUP G v = SOME (c,w) /\ 0 < z /\ 0 < w ==>
+  b + z <= c \/ c + w <= b
+Proof
+  strip_tac >>
+  `occurrence_suffix_absent ((EL j U).of_owner,ai.inst_id) j H HP U` by
+    (drule ircf_saved_forward_suffix_absent >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  drule occurrence_suffix_absent_current >> strip_tac >>
+  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  drule occ_frame_reachable_geometry >> simp[] >>
+  disch_then (qspec_then `lo` mp_tac) >> simp[] >> strip_tac >>
+  `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
+    (fs[occurrence_annotation_ok_def] >>
+     metis_tac[occurrence_saved_ok_allocas]) >>
+  fs[occurrence_annotation_ok_def] >>
+  drule_all occurrence_env_site_exclusion >> simp[]
+QED
+
+Theorem ircf_saved_forward_write_disjoint:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\ j < LENGTH stk /\
+  lookup_block (EL j stk).cf_state.vs_current_bb
+    (EL j stk).cf_fn.fn_blocks = SOME bb /\
+  wf_function (EL j stk).cf_fn /\ fn_inst_wf (EL j stk).cf_fn /\
+  fn_inst_ids_distinct (EL j stk).cf_fn /\
+  ircf_no_dst_write_alias (EL j stk).cf_fn /\
+  ircf_fwd_ok (EL j stk).cf_fn bb k d sr sz /\
+  ircf_copy_roots (EL j stk).cf_fn (EL k bb.bb_instructions) =
+    SOME (d,sr,sz) /\
+  k < (EL j stk).cf_state.vs_inst_idx /\
+  MEM ai (fn_insts (EL j stk).cf_fn) /\
+  ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [root] /\
+  (root = d \/ root = sr) /\
+  FLOOKUP (EL j stk).cf_state.vs_allocas ai.inst_id = SOME (b,z) /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  MEM (off,len) (source_memory_write_ranges inst s) /\ b <= i /\ i < b+z ==>
+  ~(off <= i /\ i < off+len)
+Proof
+  strip_tac >> strip_tac >>
+  `0 < z /\ len <> 0` by decide_tac >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
+  qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
+  `FLOOKUP B ((EL j U).of_owner,ai.inst_id) = SOME (b,z)` by
+    (fs[occurrence_annotation_ok_def] >>
+     metis_tac[occurrence_saved_ok_allocas]) >>
+  `lo <= b` by metis_tac[occurrence_geometry_site_bounds] >>
+  `lo < off+len` by decide_tac >>
+  `?ops v c w. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+     FLOOKUP G v = SOME (c,w) /\ c <= off /\ off+len <= c+w` by
+    (fs[access_ok_def] >> metis_tac[]) >>
+  `0 < w` by decide_tac >>
+  `b+z <= c \/ c+w <= b` by
+    (irule ircf_saved_forward_sites_exclusion >> simp[] >> metis_tac[]) >>
+  decide_tac
+QED

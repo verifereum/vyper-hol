@@ -621,3 +621,12 @@ Proof
   drule occ_frame_reachable_annotation >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem occurrence_saved_ok_allocas:
+  !U stk j. occurrence_saved_ok B U stk /\ j < LENGTH stk ==>
+    FLOOKUP B ((EL j U).of_owner,aid) =
+      FLOOKUP (EL j stk).cf_state.vs_allocas aid
+Proof
+  Induct >> simp[occurrence_saved_ok_def] >> rpt strip_tac >>
+  Cases_on `j` >> gvs[occurrence_allocas_ok_def] >> metis_tac[]
+QED
