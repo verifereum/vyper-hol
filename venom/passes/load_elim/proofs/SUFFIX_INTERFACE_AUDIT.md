@@ -513,3 +513,143 @@ Recommendation: keep .13 blocked until these flat obligations and the
 reachable fixed-context consumer choice are planned. In particular the audit
 does NOT establish any final/one-round correctness claim or authorize proof
 of the frozen target before its machinery is validated.
+
+## 8. Redundant-store selected-witness audit (.30)
+
+### 8.1 Checked semantic interface (not currentness)
+
+`loadElimStoreEquivalenceTheory` exports `le_store_equiv_eval` and
+`le_store_equiv_list_read`. Both build without admissions. The first uses
+`dfgCorrectnessProofTheory.normalize_operand_eval_proof`:
+
+```sml
+!dfg visited op s. dfg_assigns_sound dfg s ==>
+  eval_operand (normalize_operand dfg visited op) s = eval_operand op s
+```
+
+The exact test is the case expression at load_elim_inst_def lines 484–487:
+normalize only Var/Var; otherwise require syntactic equality. Searches in
+shared and simulation found no equivalent boundary; analysis supplies the
+normalization theorem. The closest memory-copy helper,
+`operand_equiv_norm_eval`, is local and uses the broader operand_equiv test,
+so cannot serve as an exported exact-test interface here.
+
+The checked list consumer requires **current-state** `dfg_assigns_sound d s`,
+EVERY of that test against value, one member op, and key-read/evaluation
+equality for that member. It does not require successful evaluation. Current
+DFG soundness is separate from historical StepOcc soundness: the active store
+has not yet been appended to es. In the final theorem it must come from the
+initial/PHI/step invariant (normalized index zero as appropriate), not from
+MEM (StepOcc ... s ...) es.
+
+### 8.2 Exact proposed source-only obligation (UNPROVED)
+
+The intended generalization of le_occ_prefix_singleton_current is:
+
+```sml
+le_occ_prefix C fn s0 es i s /\
+wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+(!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+fn_entry_label fn = SOME s0.vs_current_bb /\
+is_fixpoint (df_process_block Forward NONE load_join load_transfer
+  load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+  (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+  (load_analyze ctx fn) /\
+(!bb n fuel u t. MEM (StepOcc bb n fuel u t) es ==>
+  dfg_assigns_sound ctx.lctx_dfg u) /\
+FLOOKUP (unwrap_load_lattice
+  (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME vs
+==> ?op. MEM op vs /\
+         le_key_read ctx.lctx_addr_space key s = eval_operand op s
+```
+
+No extra nonemptiness premise is necessary: le_analyze_point_lookup_nonempty
+supplies vs <> [] at the reached active point. No extra current-state DFG
+premise is asserted necessary for this witness conjecture itself; it IS
+necessary for applying the checked list consumer. There is no checked proof
+or counterexample for the displayed generalization. In particular no
+no-write certificate is silently being added as a pass premise.
+
+### 8.3 Backward selection: exact interfaces and changes in list
+
+`le_join_selected_lookup` has b = SOME m and
+FLOOKUP (unwrap_load_lattice (load_join a b)) k = SOME vs as premises;
+it yields `?ws. FLOOKUP m k = SOME ws /\ (!v. MEM v ws ==> MEM v vs)`.
+It does NOT itself yield ws <> [].
+
+`le_analyze_selected_predecessor` additionally requires wf_function, the
+explicit fixpoint, reachable lbl, its lookup_block, predecessor membership,
+and `df_boundary ... pred = SOME m`. From an index-zero SOME vs lookup it
+yields the same sublist inclusion on ws. Actual occurrence edges provide the
+predecessor and DFS membership; le_analyze_boundary_some provides SOME m;
+le_analyze_boundary_lookup_nonempty provides ws <> [].
+`le_analyze_selected_exit` similarly requires reachable lbl, its block and
+`df_at ... lbl (LENGTH bb.bb_instructions) = SOME exit`. From boundary SOME vs
+it yields an exit lookup SOME ws with set ws SUBSET set vs. Point nonemptiness
+is again separate. These interfaces already support arbitrary lists, unlike
+le_analyze_singleton_predecessor/exit, whose last step forces ws = [op] using
+nonemptiness AND inclusion in an actual singleton.
+
+Thus at a block transition there can be two successive sublist selections
+(join and accumulated old-boundary absorption). Neither is equality. A
+backward certificate must carry changing nonempty lists and inclusions, then
+choose a generator whose operand belongs to the final list. A witness chosen
+before a join cannot be replaced arbitrarily while preserving a previously
+proved semantic equality. le_occ_prefix_singleton_suffix instead fixes one
+op and EVERY (le_singleton_retained_occ ... op) over the whole suffix; its
+statement cannot simply replace [op] by vs.
+
+### 8.4 Unproved preservation cases, including singleton transitions
+
+Within a block a non-generating transfer retains the lookup; a generating
+transfer replaces it by [op]. le_analyze_multivalue_prefix is applicable only
+while 1 < LENGTH vs. Once a predecessor/exit sublist is singleton, use the
+singleton origin/retention case, NOT the multivalue lemma. At entry,
+`le_analyze_entry_no_lookup` (loadElimActualGenerationScript.sml:141),
+already used in SingletonSuffix[start], excludes ANY lookup from initialized
+SOME FEMPTY, even with incoming CFG edges. Original PHI-prefix transparency
+then contradicts SOME vs; do not assume the entry has no predecessors.
+
+Key-address no-write already follows from presence via
+le_ordinary_definition_key_cut and le_phi_definition_key_cut. Value no-write
+is the unresolved additional difficulty: le_ordinary_definition_value_cut
+and le_phi_definition_value_cut exclude only `SOME [Var v]`, not membership
+of Var v in a longer list. They cannot justify transporting an arbitrarily
+selected witness across original PHIs that redefine it. Generalizing those
+cuts to all-member exclusion may be too strong: an alternative originating
+on another predecessor need not dominate this occurrence. The proof needs
+only the actual selected witness to survive, or a justified reselection.
+This is a genuine proof gap, not evidence of falsehood of the frozen theorem.
+
+For stores, non-generating retention must establish disjoint-write read
+preservation for arbitrary nonempty retained lists, including singleton
+lists selected at joins. Existing multivalue-only read retention does not
+cover that transition; existing singleton retention covers it only with its
+fixed operand/non-generation certificate. A generating store/load instead
+restarts at its own checked generation-read boundary, with historical DFG
+soundness and address/output separation. No simultaneous currentness of all
+members is required or justified.
+
+### 8.5 Consumer derivation and bounded alternative
+
+At an actually eliminated store obtain vs <> [] and EVERY exact test from
+load_elim_inst_def. Discharge the source-only witness above, then apply
+le_store_equiv_list_read using current-state DFG soundness. Successful source
+store semantics provides eval_operand value s = SOME w and eval_operand addr
+s = SOME a. The normalized write-key/address boundary identifies key read
+with le_read_address space (w2n a) s. This supplies the read-equals-w premise
+of the already checked store-to-NOP boundary; target step success is its
+CONCLUSION, never an assumption.
+
+If arbitrary selected-witness preservation is too strong, the narrower
+candidate is the same source configuration plus current-state DFG soundness
+and EVERY exact test against this store value, concluding directly
+`le_key_read ctx.lctx_addr_space key s = eval_operand value s`.
+It would need an all-equivalent-specific treatment of PHI overwrites and
+normalization; the checked semantic test alone does not solve that case.
+Do not assume normalization equalities hold in every historical state.
+This alternative is a proposal for strategy review, not a new theorem or a
+weakening of the frozen statement. No witness induction or coupling was
+started in .30.
