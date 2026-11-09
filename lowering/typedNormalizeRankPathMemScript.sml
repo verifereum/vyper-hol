@@ -2,6 +2,7 @@
 Theory typedNormalizeRankPathMem
 Ancestors
   typedNormalizeRankMem typedFieldCopyAggregateMem typedArrayCopyPathsMem
+  typedSarrayCopyPathsMem
   typedNormalizeFrame stmtSimReturn typedMemoryCopy valueCopyBytes exprSimBufferStore
   allocaFootprint venomInst typedNormalizeFastRepresentation loweringPosts
   typedFieldCopyPathsMem context compileEnv venomState valueEncoding
