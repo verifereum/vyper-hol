@@ -6139,6 +6139,130 @@ Proof
   rpt strip_tac >> gvs[operand_lit_val_def]
 QED
 
+Theorem mm_local_zero_inst_certificate[local]:
+  SORTED (\a b. a.cg_dst <= b.cg_dst) mz.mz_copies /\
+  EVERY P (mz.mz_flushed ++ mz.mz_copies) /\
+  (!cs c. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\
+    EVERY P cs /\ P c ==> EVERY P (add_copy cs c)) /\
+  (!dst. is_zero_store i /\ i.inst_operands = [Lit dst; Lit 0w] ==>
+    P (copy_memzero (w2n dst) 32 [i.inst_id])) /\
+  (!dst v len. is_calldatasize_copy dfg i /\
+    i.inst_operands = [Lit dst; Var v; Lit len] ==>
+    P (copy_memzero (w2n dst) (w2n len) [i.inst_id])) ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst) (scan_inst_memzero dfg mz i).mz_copies /\
+  EVERY P ((scan_inst_memzero dfg mz i).mz_flushed ++
+    (scan_inst_memzero dfg mz i).mz_copies)
+Proof
+  strip_tac >> simp[scan_inst_memzero_def] >>
+  Cases_on `is_zero_store i`
+  >- (fs[is_zero_store_def] >>
+      rpt (CASE_TAC >> gvs[operand_lit_val_def, memzero_barrier_def, EVERY_APPEND]) >>
+      gvs[oneline operand_lit_val_def, AllCaseEqs()] >>
+      metis_tac[mm_local_add_copy_order]) >>
+  Cases_on `is_calldatasize_copy dfg i`
+  >- (fs[is_calldatasize_copy_def] >>
+      rpt (CASE_TAC >> gvs[operand_lit_val_def, memzero_barrier_def, EVERY_APPEND]) >>
+      gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()] >>
+      rename1 `i.inst_operands = [Lit dst; src; Lit len]` >>
+      Cases_on `src` >> gvs[] >> metis_tac[mm_local_add_copy_order]) >>
+  gvs[] >> IF_CASES_TAC >>
+  gvs[memzero_barrier_def, EVERY_APPEND]
+QED
+
+Theorem mm_local_zero_fold_certificate[local]:
+  !xs mz. SORTED (\a b. a.cg_dst <= b.cg_dst) mz.mz_copies /\
+  EVERY P (mz.mz_flushed ++ mz.mz_copies) /\
+  (!cs c. SORTED (\a b. a.cg_dst <= b.cg_dst) cs /\
+    EVERY P cs /\ P c ==> EVERY P (add_copy cs c)) /\
+  EVERY (\i.
+    (!dst. is_zero_store i /\ i.inst_operands = [Lit dst; Lit 0w] ==>
+      P (copy_memzero (w2n dst) 32 [i.inst_id])) /\
+    (!dst v len. is_calldatasize_copy dfg i /\
+      i.inst_operands = [Lit dst; Var v; Lit len] ==>
+      P (copy_memzero (w2n dst) (w2n len) [i.inst_id]))) xs ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst)
+    (FOLDL (scan_inst_memzero dfg) mz xs).mz_copies /\
+  EVERY P ((FOLDL (scan_inst_memzero dfg) mz xs).mz_flushed ++
+    (FOLDL (scan_inst_memzero dfg) mz xs).mz_copies)
+Proof
+  Induct_on `xs` >- simp[] >>
+  pure_rewrite_tac[FOLDL, EVERY_DEF] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  metis_tac[mm_local_zero_inst_certificate]
+QED
+
+Theorem mm_local_zero_prefix_certificate[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) is) ==>
+  SORTED (\a b. a.cg_dst <= b.cg_dst)
+    (FOLDL (scan_inst_memzero dfg) empty_memzero_state (TAKE n is)).mz_copies /\
+  EVERY (\g.
+    mm_local_group_captures is (mm_local_zero_capture dfg is n) (\a. 0w) g /\
+    mm_local_group_coverage is n (mm_local_zero_capture dfg is n) g)
+    ((FOLDL (scan_inst_memzero dfg) empty_memzero_state (TAKE n is)).mz_flushed ++
+     (FOLDL (scan_inst_memzero dfg) empty_memzero_state (TAKE n is)).mz_copies)
+Proof
+  strip_tac >> irule mm_local_zero_fold_certificate >>
+  simp[empty_memzero_state_def] >> conj_tac
+  >- (simp[EVERY_CONJ] >> metis_tac[mm_local_add_copy_captures,
+                                  mm_local_add_copy_coverage]) >>
+  simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+  `?j. j < n /\ j < LENGTH is /\ i = EL j is` by
+    (fs[MEM_EL, LENGTH_TAKE_EQ] >>
+     rename1 `j < if n <= LENGTH is then n else LENGTH is` >>
+     `j < n /\ j < LENGTH is` by (Cases_on `n <= LENGTH is` >> gvs[] >> decide_tac) >>
+     qexists `j` >> simp[EL_TAKE]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `mm_local_zero_capture dfg is n j = SOME (w2n dst, REPLICATE 32 0w)` by
+        (irule mm_local_zero_capture_store >> gvs[is_zero_store_def]) >>
+      conj_tac
+      >- (irule mm_local_group_captures_birth >> simp[] >> qexists `j` >>
+          gvs[copy_memzero_def, mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF]) >>
+      irule mm_local_group_coverage_birth >> simp[] >> qexistsl [`REPLICATE 32 0w`, `j`] >>
+      gvs[copy_memzero_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `mm_local_zero_capture dfg is n j = SOME (w2n dst, REPLICATE (w2n len) 0w)` by
+    (irule mm_local_zero_capture_calldata >> metis_tac[]) >>
+  conj_tac
+  >- (irule mm_local_group_captures_birth >> simp[] >> qexists `j` >>
+      gvs[copy_memzero_def, mm_local_bytes_def, REPLICATE_GENLIST, combinTheory.K_DEF]) >>
+  irule mm_local_group_coverage_birth >> simp[] >> qexistsl [`REPLICATE (w2n len) 0w`, `j`] >>
+  gvs[copy_memzero_def]
+QED
+
+Theorem mm_local_zero_block_certificate[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) ==>
+  (scan_block_memzero dfg bb).mz_copies = [] /\
+  EVERY (\g.
+    mm_local_group_captures bb.bb_instructions
+      (mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions))
+      (\a. 0w) g /\
+    mm_local_group_coverage bb.bb_instructions (LENGTH bb.bb_instructions)
+      (mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions)) g)
+    (scan_block_memzero dfg bb).mz_flushed
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`is` |-> `bb.bb_instructions`, `dfg` |-> `dfg`,
+    `n` |-> `LENGTH bb.bb_instructions`] mm_local_zero_prefix_certificate) >>
+  simp[scan_block_memzero_def, memzero_barrier_def]
+QED
+
+Theorem mm_local_zero_capture_sound[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) is) /\ mm_local_history is H n /\
+  (!j dst v len. j < n /\ is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  mm_local_zero_capture dfg is n j = SOME (d,bs) ==>
+  j < n /\ j < LENGTH is /\
+  (H (SUC j)).vs_memory = (write_memory_with_expansion d bs (H j)).vs_memory
+Proof
+  strip_tac >> drule mm_local_zero_capture_cases >> strip_tac >>
+  simp[] >> fs[mm_local_history_def]
+  >- (irule (cj 2 mm_local_zero_store_capture_birth) >> simp[] >> metis_tac[]) >>
+  irule (cj 2 mm_local_zero_calldata_capture_birth) >> simp[] >> metis_tac[]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
