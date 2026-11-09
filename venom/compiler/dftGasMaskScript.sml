@@ -598,6 +598,41 @@ Proof
      simp[gasOracleReplayTheory.gas_adopt_return_readings]) >>
   qexistsl_tac [`raw_slots`, `sites`, `unused`] >>
   gvs[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `LIST_REL _ (_ ++ _) gobs` mp_tac >>
+  simp[LIST_REL_SPLIT1] >> strip_tac >> gvs[] >>
+  rename1 `LIST_REL _ raw_slots pg` >>
+  first_x_assum (qspecl_then [`pg`, `w::tail`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `eval_operands ops (s with vs_gas_readings := pg ++ w::tail) = SOME args` by
+    (simp[gasOracleReplayTheory.gas_eval_operands]) >>
+  `setup_callee f args (s with vs_gas_readings := pg ++ w::tail) =
+     SOME (cs with vs_gas_readings := pg ++ w::tail)` by
+    (qpat_x_assum `setup_callee f args _ = SOME cs` mp_tac >>
+     simp[gasOracleReplayTheory.gas_setup_callee, optionTheory.OPTION_MAP_EQ_SOME] >>
+     strip_tac >> gvs[] >>
+     qpat_x_assum `cs = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  qabbrev_tac `gs = pg ++ w::tail` >>
+  conj_tac >- (
+    simp[Once gas_events_block_def, venomInstTheory.get_instruction_def, EL_APPEND_EQN,
+         Excl "APPEND_ASSOC"] >>
+    simp[gas_events_step_def, venomInstTheory.is_terminator_def, Excl "APPEND_ASSOC"] >>
+    Cases_on `run_blocks fuel C f (cs with vs_gas_readings := gs)` >>
+    simp[Once step_inst_def, Excl "APPEND_ASSOC"] >>
+    pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+    asm_rewrite_tac[] >>
+    simp[]
+    >~ [`run_blocks fuel C f _ = IntRet ret ct`]
+    >- (`?fuel_src. terminates (run_blocks fuel_src C f
+          (cs with vs_gas_readings := gs))` by
+          (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+        qpat_x_assum `(?fuel_src. _) ==> _` mp_tac >>
+        (impl_tac >- metis_tac[]) >> strip_tac >>
+        qpat_x_assum `residual_result _ _ _` mp_tac >>
+        simp[residual_result_def, stateEquivTheory.lift_result_def] >> strip_tac >>
+        cheat) >>
+    qexists_tac `extra ++ [(s.vs_current_bb,y.inst_id)]` >> simp[]) >>
   cheat
 QED
 
