@@ -180,13 +180,6 @@ Proof
   simp[Once run_blocks_def]
 QED
 
-Theorem lookup_function_fn_name:
-  !fns name fn. lookup_function name fns = SOME fn ==> fn.fn_name = name
-Proof
-  Induct >> simp[lookup_function_def, FIND_thm] >> rpt strip_tac >>
-  Cases_on `h.fn_name = name` >> gvs[lookup_function_def]
-QED
-
 (* Steps. *)
 Theorem gas_events_step_plain:
   i.inst_opcode <> INVOKE ==>

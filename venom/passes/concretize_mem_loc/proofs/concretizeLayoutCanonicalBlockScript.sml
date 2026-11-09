@@ -3,7 +3,7 @@ Ancestors concretizeLayoutCanonicalDeferred concretizeLayoutCanonicalBase
   concretizeLayoutCanonicalDriver concretizeLayoutAlignedControl concretizeLayoutPhaseCompose
   concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin frameRankedTerminalCorridor
   concretizeLayoutPairedEntry concretizeLayoutStagePairing concretizeStepStructure
-  frameSelectedSimulation frameGasEvents frameFiniteExecution venomExecSemantics venomInst
+  frameSelectedSimulation frameGasEvents fmpAnalysisProps frameFiniteExecution venomExecSemantics venomInst
   fragExec concretizeMemLocDefs passSharedDefs list arithmetic
 
 Theorem layout_canonical_corridor_instruction:
@@ -102,7 +102,7 @@ Theorem layout_canonical_run_fn_name:
   fn'.fn_name = fn.fn_name
 Proof
   simp[layout_canonical_run_def, layout_driver_row_def] >>
-  metis_tac[lookup_function_fn_name]
+  metis_tac[fmpAnalysisPropsTheory.lookup_function_name]
 QED
 
 Theorem layout_canonical_block_exit_certificate:
