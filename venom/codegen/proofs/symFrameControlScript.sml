@@ -24,7 +24,7 @@ Ancestors
   fnFrameDeepAbort fnFrameDeepGas fnFrameStepsRevertForwardDeep asmSymBridge
   asmSymSem frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs symPlannerSim symShuffleSim
+  dfgDefs symPlannerSim symShuffleSim asmSymPc
 
 (* Pointwise kind equivalence transports a typed symbolic stack. *)
 Theorem list_rel_op_kind_transport:
@@ -594,6 +594,214 @@ Proof
        GSYM pred_setTheory.IN_UNIV, finite_mapTheory.DRESTRICT_UNIV] >>
   simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT]
 QED
+
+Theorem sym_push_scratch_address:
+  off < dimword(:256) ==>
+  sym_step p env (AsmPush (encode_num_bytes off)) ss =
+    SymOK (ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
+                    sym_stack := Val (n2w off) :: ss.sym_stack|>)
+Proof
+  simp[sym_step_def, sym_lift_def, asm_step_def,
+       spillSimTheory.push_encode_num_roundtrip, asm_next_def] >>
+  simp[sym_state_component_equality]
+QED
+
+Theorem sym_scratch_store_step:
+  ss.sym_stack = Val off :: sv :: tail ==>
+  ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
+    mem_sval_at ss'.sym_mem_labels (w2n off) sv /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1 /\
+    (!b. ~in_mem_range (w2n off) 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==>
+      b IN FDOM ss.sym_mem_labels \/ in_mem_range (w2n off) 32 b)
+Proof
+  strip_tac >>
+  `?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = tail /\
+    mem_sval_at ss'.sym_mem_labels (w2n off) sv /\
+    (!b. ~in_mem_range (w2n off) 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
+    (Cases_on `sv` >- metis_tac[sym_mstore_word_cell] >>
+     metis_tac[sym_mstore_label_cell]) >>
+  qexists_tac `ss'` >> simp[] >> conj_tac
+  >- (irule sym_step_pc_next >>
+      qexistsl_tac [`env`, `AsmOp "MSTORE"`, `p`] >>
+      simp[sym_step_def, sym_step_op_def]) >>
+  metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem sym_scratch_spill_steps:
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill off]) /\
+  ss.sym_stack = sv :: tail ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp [SOSpill off])) ss = SymOK ss' /\
+    ss'.sym_stack = tail /\ mem_sval_at ss'.sym_mem_labels off sv /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    (!b. ~in_mem_range off 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==>
+      b IN FDOM ss.sym_mem_labels \/ in_mem_range off 32 b)
+Proof
+  strip_tac >>
+  qabbrev_tac `pushed = ss with
+    <|sym_base := asm_next (ss.sym_base with as_stack := []);
+      sym_stack := Val (n2w off) :: ss.sym_stack|>` >>
+  `pushed.sym_stack = Val (n2w off) :: sv :: tail` by simp[Abbr `pushed`] >>
+  drule sym_scratch_store_step >> strip_tac >> qexists_tac `ss'` >>
+  gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def,
+      wordsTheory.w2n_n2w] >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[stackOpSimTheory.asm_block_at_cons] >>
+  simp[sym_push_scratch_address, asm_next_def] >>
+  gvs[sym_step_def, sym_step_op_def]
+QED
+
+Theorem sym_scratch_load_word_step:
+  ss.sym_stack = Val off :: tail /\
+  mem_sval_at ss.sym_mem_labels (w2n off) (Val w) ==>
+  ?ss' v. sym_mload ss = SymOK ss' /\ ss'.sym_stack = Val v :: tail /\
+          ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >>
+  `?loaded v. asm_mload (ss.sym_base with as_stack := [off]) = AsmOK loaded /\
+              loaded.as_stack = [v]` by simp[asm_mload_def, asm_next_def] >>
+  `mem_sval_at ss.sym_mem_labels (w2n off) (Val v)` by gvs[mem_sval_at_def] >>
+  drule_all sym_mload_word_cell >> metis_tac[]
+QED
+
+Theorem sym_scratch_load_step:
+  ss.sym_stack = Val off :: tail /\ mem_sval_at ss.sym_mem_labels (w2n off) sv ==>
+  ?ss' sv'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = sv' :: tail /\
+    (case sv of Val w => ?v. sv' = Val v | Lab l d => sv' = sv) /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
+Proof
+  strip_tac >>
+  `?ss' sv'. sym_mload ss = SymOK ss' /\ ss'.sym_stack = sv' :: tail /\
+    (case sv of Val w => ?v. sv' = Val v | Lab l d => sv' = sv) /\
+    ss'.sym_mem_labels = ss.sym_mem_labels` by
+    (Cases_on `sv`
+     >- (simp[] >> metis_tac[sym_scratch_load_word_step]) >>
+     simp[] >> metis_tac[sym_mload_label_cell]) >>
+  qexistsl_tac [`ss'`, `sv'`] >> simp[] >>
+  irule sym_step_pc_next >> qexistsl_tac [`env`, `AsmOp "MLOAD"`, `p`] >>
+  simp[sym_step_def, sym_step_op_def]
+QED
+
+Theorem sym_scratch_restore_steps:
+  off < dimword(:256) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SORestore off]) /\
+  mem_sval_at ss.sym_mem_labels off sv ==>
+  ?ss' sv'. sym_steps p env (LENGTH (execute_plan fmp [SORestore off])) ss = SymOK ss' /\
+    ss'.sym_stack = sv' :: ss.sym_stack /\
+    (case sv of Val w => ?v. sv' = Val v | Lab l d => sv' = sv) /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
+Proof
+  strip_tac >>
+  qabbrev_tac `pushed = ss with
+    <|sym_base := asm_next (ss.sym_base with as_stack := []);
+      sym_stack := Val (n2w off) :: ss.sym_stack|>` >>
+  `pushed.sym_stack = Val (n2w off) :: ss.sym_stack /\
+   mem_sval_at pushed.sym_mem_labels (w2n (n2w off : bytes32)) sv` by
+    simp[Abbr `pushed`, wordsTheory.w2n_n2w] >>
+  drule_all sym_scratch_load_step >> strip_tac >>
+  qexistsl_tac [`ss'`, `sv'`] >>
+  gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def] >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  gvs[stackOpSimTheory.asm_block_at_cons] >>
+  simp[sym_push_scratch_address, asm_next_def] >>
+  gvs[sym_step_def, sym_step_op_def]
+QED
+Theorem sym_scratch_spill_sim:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  off < dimword(:256) /\
+  asm_block_at p cs.as_pc (execute_plan fmp [SOSpill off]) /\
+  ss.sym_stack = sv :: tail ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan fmp [SOSpill off])) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan fmp [SOSpill off])) ss = SymOK ss' /\
+    asm_sym_rel p env cs' ss' /\
+    cs'.as_memory = mem_write32 off (HD cs.as_stack) cs.as_memory /\
+    cs'.as_stack = TL cs.as_stack /\
+    ss'.sym_stack = tail /\ mem_sval_at ss'.sym_mem_labels off sv /\
+    cs'.as_pc = cs.as_pc + 2 /\
+    (!b. ~in_mem_range off 32 b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==>
+      b IN FDOM ss.sym_mem_labels \/ in_mem_range off 32 b)
+Proof
+  strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill off])` by simp[] >>
+  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  `1 <= LENGTH cs.as_stack` by gvs[asm_sym_rel_def] >>
+  `asm_block_at p cs.as_pc [AsmPush (encode_num_bytes off); AsmOp "MSTORE"]` by
+    gvs[execute_plan_def, exec_stack_op_def] >>
+  drule_at (Pos last) spillSimTheory.spill_asm_steps >>
+  simp[] >>
+  disch_then (qspecl_then [`SND (compute_label_offsets p)`, `build_offset_to_pc p`] strip_assume_tac) >>
+  gvs[execute_plan_def, exec_stack_op_def] >> metis_tac[asm_result_11]
+QED
+
+Theorem sym_scratch_restore_sim:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  off < dimword(:256) /\
+  asm_block_at p cs.as_pc (execute_plan fmp [SORestore off]) /\
+  mem_sval_at ss.sym_mem_labels off sv /\
+  (case sv of Val w =>
+     word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP off (asm_expand_memory (off + 32) cs.as_memory))) = w
+   | Lab l d => T) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan fmp [SORestore off])) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan fmp [SORestore off])) ss = SymOK ss' /\
+    asm_sym_rel p env cs' ss' /\ ss'.sym_stack = sv :: ss.sym_stack /\
+    ss'.sym_mem_labels = ss.sym_mem_labels /\ cs'.as_pc = cs.as_pc + 2 /\
+    cs'.as_memory = asm_expand_memory (off + 32) cs.as_memory
+Proof
+  strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SORestore off])` by simp[] >>
+  drule_all sym_scratch_restore_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  `asm_block_at p cs.as_pc [AsmPush (encode_num_bytes off); AsmOp "MLOAD"]` by
+    gvs[execute_plan_def, exec_stack_op_def] >>
+  drule_all spillSimTheory.restore_asm_steps >>
+  disch_then (qspecl_then [`SND (compute_label_offsets p)`, `build_offset_to_pc p`] strip_assume_tac) >>
+  gvs[execute_plan_def, exec_stack_op_def] >>
+  Cases_on `sv` >>
+  gvs[asm_sym_rel_def, sval_conc_def]
+QED
+
+Theorem sym_scratch_repeated_value_probe:
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill 0; SOSpill 32]) /\
+  ss.sym_stack = sv :: sv :: tail ==>
+  ?ss'. sym_steps p env 4 ss = SymOK ss' /\ ss'.sym_stack = tail /\
+    mem_sval_at ss'.sym_mem_labels 0 sv /\ mem_sval_at ss'.sym_mem_labels 32 sv /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 4
+Proof
+  strip_tac >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill 0]) /\
+   asm_block_at p (ss.sym_base.as_pc + 2) (execute_plan fmp [SOSpill 32])` by
+    gvs[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
+  `0 < dimword(:256) /\ 32 < dimword(:256)` by
+    simp[wordsTheory.dimword_def] >>
+  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
+  `asm_block_at p ss'.sym_base.as_pc (execute_plan fmp [SOSpill 32])` by simp[] >>
+  `ss'.sym_stack = sv :: tail` by simp[] >>
+  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
+  `mem_sval_at ss''.sym_mem_labels 0 sv` by
+    (irule scratch_store_preserves_disjoint_cell >>
+     qexistsl_tac [`ss'.sym_mem_labels`, `32`] >> simp[in_mem_range_def]) >>
+  qexists_tac `ss''` >>
+  gvs[execute_plan_def, exec_stack_op_def] >>
+  mp_tac (Q.SPECL [`2`, `2`, `ss`] sym_steps_add) >> simp[]
+QED
+
 
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
