@@ -1,7 +1,7 @@
 (* Physical-post aggregate relayout with the child's rebased frame. *)
 Theory bodyMemAggregateBodyContinuation
 Ancestors
-  bodyMemAggregatePhysicalRead bodyMemAggregateTypedStore
+  bodyMemAggregatePhysicalRead bodyMemAggregateTypedStore wideningZeroLayout
   exprSimAggregateChildren exprSimHyps exprSimHypsDefs typedMemoryCopy
   exprLoweringProps loweringPosts compileEnv context venomState externalNormalizePremises
   vyperInterpreter vyperState fragGasPathMem
