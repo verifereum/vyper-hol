@@ -518,6 +518,49 @@ Proof
       livenessDefsTheory.MEM_ordered_inst_uses]
 QED
 
+(* Terminal JMPs neither consume nor define variables.  Reuse the native
+   absence boundary rather than duplicating the target restoration proof. *)
+Theorem native_terminal_jmp_demand_support:
+  !fn bb dfg ps ops qs v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
+    (!w. MEM w (live_vars_at (liveness_analyze fn) bb.bb_label
+      (PRE (LENGTH bb.bb_instructions))) ==>
+      MEM (Var w) ps.ps_stack \/ Var w IN FDOM ps.ps_spilled) /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST bb.bb_instructions)
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))
+      (bb_is_halting bb) F bb.bb_label ps = SOME (ops,qs) /\
+    ((MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (PRE (LENGTH bb.bb_instructions)))) ==>
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+        (LENGTH bb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (LENGTH bb.bb_instructions))` >- simp[] >>
+  `inst_wf (LAST bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, EVERY_MEM] >>
+     metis_tac[LAST_MEM]) >>
+  `?succ. (LAST bb.bb_instructions).inst_operands = [Label succ]` by
+    gvs[venomWfTheory.inst_wf_def] >>
+  `SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions /\
+    PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    metis_tac[LAST_EL] >>
+  `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+    (PRE (LENGTH bb.bb_instructions)))` by
+    (strip_tac >> drule_at (Pat `MEM _ (live_vars_at _ _ _)`)
+       analyzed_live_loss_compute_operand >>
+     simp[compute_operands_def, asmIRTheory.get_non_label_operands_def,
+       stackPlanTypesTheory.is_label_operand_def]) >>
+  `~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled` by metis_tac[] >>
+  drule_all native_terminal_jmp_nondefining_absent >> simp[]
+QED
+
 Theorem native_indexed_ordinary_step_demand_support:
   !fn bb dfg k before inst rest ops after v.
     codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
@@ -2577,3 +2620,84 @@ Proof
        qpat_x_assum `!j before w. _` (qspecl_then [`j`,`before`,`w`] mp_tac) >> simp[])) >>
   metis_tac[]
 QED
+
+Theorem ready_jmp_block_terminal_factor:
+  !fn bb lv dfg cfg ps ops after.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP /\
+    (bb = HD fn.fn_blocks ==> LENGTH (cfg_preds_of cfg bb.bb_label) <> 1) /\
+    generate_block_plan lv dfg cfg fn bb ps = SOME (ops,after) ==>
+    ?setup_ops start before chunk.
+      (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps
+       else if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+         clean_stack_plan lv cfg fn bb ps else ([],ps)) = (setup_ops,start) /\
+      LENGTH (collect_phis bb.bb_instructions) <= PRE (LENGTH (non_param_insts bb)) /\
+      PRE (LENGTH (non_param_insts bb)) < LENGTH (non_param_insts bb) /\
+      LENGTH (get_params bb.bb_instructions) + PRE (LENGTH (non_param_insts bb)) =
+        PRE (LENGTH bb.bb_instructions) /\
+      native_inst_prefix lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+        (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+        (non_param_insts bb) start (PRE (LENGTH (non_param_insts bb))) before /\
+      generate_inst_plan lv dfg cfg fn (LAST bb.bb_instructions)
+        (live_vars_at lv bb.bb_label (LENGTH bb.bb_instructions))
+        (bb_is_halting bb) F bb.bb_label before = SOME (chunk,after)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (LAST bb.bb_instructions) (non_param_insts bb)` by
+    simp[non_param_insts_def, MEM_FILTER, LAST_MEM, venomInstTheory.is_param_opcode_def] >>
+  `non_param_insts bb <> []` by metis_tac[MEM] >>
+  `bb.bb_instructions = get_params bb.bb_instructions ++ non_param_insts bb` by
+    metis_tac[fnPlanLineageCallersTheory.ready_block_parameter_suffix] >>
+  `LAST bb.bb_instructions = LAST (non_param_insts bb)` by
+    (qpat_assum `bb.bb_instructions = _ ++ _`
+       (fn th => once_rewrite_tac[th]) >> simp[rich_listTheory.LAST_APPEND_NOT_NIL]) >>
+  `LENGTH bb.bb_instructions = LENGTH (get_params bb.bb_instructions) +
+     LENGTH (non_param_insts bb)` by metis_tac[LENGTH_APPEND] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= PRE (LENGTH (non_param_insts bb))` by
+    suspend "phi_bound" >>
+  `?setup_ops start worker_ops.
+     (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps
+      else if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+        clean_stack_plan lv cfg fn bb ps else ([],ps)) = (setup_ops,start) /\
+     generate_block_insts_plan lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+       (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+       0 (non_param_insts bb) start = SOME (worker_ops,after)` by
+    suspend "setup_worker" >>
+  `?before chunk.
+     native_inst_prefix lv dfg cfg fn bb.bb_label (bb_is_halting bb)
+       (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions)
+       (non_param_insts bb) start (PRE (LENGTH (non_param_insts bb))) before /\
+     generate_inst_plan lv dfg cfg fn (LAST (non_param_insts bb))
+       (live_vars_at lv bb.bb_label (LENGTH bb.bb_instructions))
+       (bb_is_halting bb) F bb.bb_label before = SOME (chunk,after)` by
+    (irule fnPlanLineageEntryProductionTheory.native_worker_terminal_prefix >>
+     goal_assum (drule_at Any) >>
+     simp[fnPlanLineageEntryProductionTheory.native_inst_prefix_zero]) >>
+  qexistsl_tac [`setup_ops`,`start`,`before`,`chunk`] >> gvs[] >>
+  Cases_on `non_param_insts bb` >> gvs[]
+QED
+
+Resume ready_jmp_block_terminal_factor[phi_bound]:
+  mp_tac (Q.SPEC `bb` fnPlanLineageEntryProductionTheory.non_param_insts_phi_prefix) >>
+  strip_tac >>
+  `tail <> []` by
+    (strip_tac >> gvs[] >>
+     `MEM (LAST bb.bb_instructions) (collect_phis bb.bb_instructions)` by metis_tac[] >>
+     drule livenessProofsTheory.collect_phis_mem >> simp[]) >>
+  qpat_x_assum `non_param_insts bb = _ ++ _`
+    (fn th => once_rewrite_tac[th]) >> simp[] >>
+  Cases_on `tail` >> gvs[]
+QED
+
+Resume ready_jmp_block_terminal_factor[setup_worker]:
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `bb = HD fn.fn_blocks`
+  >- (simp[generate_block_plan_def] >> pairarg_tac >> simp[AllCaseEqs()] >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >>
+  simp[generate_block_plan_def]
+  >- (pairarg_tac >> simp[AllCaseEqs()] >> strip_tac >>
+      gvs[] >> metis_tac[]) >>
+  simp[AllCaseEqs()] >> strip_tac >> metis_tac[]
+QED
+Finalise ready_jmp_block_terminal_factor
