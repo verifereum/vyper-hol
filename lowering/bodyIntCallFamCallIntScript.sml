@@ -14,6 +14,7 @@ Ancestors
   bodyIntCallFamCallIntPureStageInterface bodyIntCallFamCallIntStageEffect
   bodyIntCallFamCallIntCompletedEffect bodyIntCallFamCallIntStageAllocation
   bodyIntCallFamCallIntAllocationGeometry bodyIntCallFamCallIntAllocationCertificates
+  bodyIntCallFamCallIntGuardedEffect
 
 (* The packaging theorem quantifies over every frame at the selected owner;
    the graph induction premise supplies all of them at once. *)
