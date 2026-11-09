@@ -1498,7 +1498,7 @@ Proof
   irule gas_exempt_cert_error_value >> simp[]
 QED
 
-Theorem ifexp_root_vv_post_of_expr_post_read[local]:
+Theorem ifexp_root_vv_post_of_expr_post_read:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
   read_result cx tv es' = (INL v, es') ==>

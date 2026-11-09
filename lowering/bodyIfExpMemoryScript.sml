@@ -372,20 +372,6 @@ Proof
   rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
 QED
 
-Theorem ifexp_vv_post_of_expr_post_read[local]:
-  expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
-  post_value_type cenv e = expr_type e /\
-  read_result cx tv es' = (INL v, es') ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv
-    (if is_word_type (expr_type e) then StackValue (expr_type e) (Var rv)
-     else LocatedValue (expr_type e) (mk_ptr (Var rv) LocMemory)) s
-Proof
-  rw[expr_post_def, vv_post_def] >>
-  gvs[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def] >>
-  fs[expr_val_rel_def, expr_val_at_def] >>
-  rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
-QED
-
 Theorem ifexp_finish_post[local]:
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
@@ -404,7 +390,7 @@ Theorem ifexp_finish_post[local]:
 Proof
   strip_tac >>
   irule (SRULE [vyperASTTheory.expr_type_def]
-    (Q.INST [`e` |-> `IfExp t c a b`] ifexp_vv_post_of_expr_post_read)) >>
+    (Q.INST [`e` |-> `IfExp t c a b`] exprSimIfExpTheory.ifexp_root_vv_post_of_expr_post_read)) >>
   goal_assum (drule_at Any) >>
   irule expr_post_ifexp >>
   `~not_fresh_at sa rv` by metis_tac[] >>

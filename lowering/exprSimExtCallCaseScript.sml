@@ -104,7 +104,7 @@ Definition extcall_request_ready_def:
       addr_op value_op gas_op buf_op call_offset call_len cap
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
@@ -156,7 +156,7 @@ End
 Definition extcall_returned_def:
   extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t <=>
-    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\
