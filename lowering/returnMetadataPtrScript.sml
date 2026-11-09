@@ -138,6 +138,7 @@ Proof
       lookup_function_def]
   >~ [`if s = name /\ f = External then _ else _`]
   >- (Cases_on `s = name /\ f = External` >> gvs[] >>
+      TRY (simp[well_formed_type_def] >> NO_TAC) >>
       first_x_assum irule >> simp[] >> metis_tac[])
   >~ [`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _)`]
   >- (Cases_on `vis` >> gvs[lookup_function_def] >>
