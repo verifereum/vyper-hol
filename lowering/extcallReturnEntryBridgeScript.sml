@@ -5,6 +5,8 @@ Ancestors
   abiReturnPrefixTransport abiValidAllocatedContract abiMalformedRecursiveInterface
   abiDecoderReentry exprSafeOperand placeMemoryStaging exprSimAlloc loweringHalt
   exprLoweringProps emitHelperProps venomInst venomExecSemantics fragGasMode words
+  abiReturnSize varsExt freshWrites builtinSimple rich_list exprLowering emitHelper
+  appendStorageStageTransportPtr
 
 Theorem return_decoder_ceiling_exists:
   !s en. ?ceiling. en.cs_next_var <= ceiling.cs_next_var /\
@@ -82,4 +84,53 @@ Proof
   >- metis_tac[]
   >> gvs[]
   >> qpat_x_assum `w2n tw = _` (fn th => rewrite_tac[GSYM th, n2w_w2n]))
+QED
+
+Theorem return_size_vars_ext_ops[local]:
+  compile_return_value_decode lo cap a = (hi,b) ==>
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+    ~is_ext_call_op i.inst_opcode) (emitted_insts a b)
+Proof
+  simp[compile_return_value_decode_def, compile_select_def,
+       comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  gvs[emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pure_rewrite_tac[emitted_insts_def] >>
+  simp_tac (srw_ss()) [] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, APPEND] >>
+  simp[mk_inst_def, is_terminator_def, is_ext_call_op_def]
+QED
+
+Theorem return_size_actual_run:
+  compile_return_value_decode lo cap a = (hi,b) /\
+  lo < dimword (:256) /\ cap < dimword (:256) /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  (if LENGTH s.vs_returndata < lo then
+     ?u. run_inst_seq (emitted_insts a b) s = Abort Revert_abort u
+   else
+     ?u. run_inst_seq (emitted_insts a b) s = OK u /\
+       eval_operand hi u = SOME (n2w (MIN (LENGTH s.vs_returndata) cap)) /\
+       u = s with vs_vars := u.vs_vars /\
+       (!x. not_fresh_at a x ==> lookup_var x u = lookup_var x s))
+Proof
+  strip_tac >>
+  `fresh_vars_wrt a (drop_fresh a s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `LENGTH (drop_fresh a s).vs_returndata < dimword (:256)` by
+    simp[drop_fresh_def] >>
+  drule_all abi_return_size_run >>
+  simp[drop_fresh_def] >>
+  Cases_on `LENGTH s.vs_returndata < lo` >> simp[] >> strip_tac >>
+  `vars_ext (drop_fresh a s) s` by simp[vars_ext_drop_fresh] >>
+  drule return_size_vars_ext_ops >> strip_tac >>
+  drule_all run_inst_seq_vars_ext >>
+  simp[drop_fresh_def, vars_ext_result_def] >> strip_tac
+  >- metis_tac[] >>
+  qexists_tac `t'` >> simp[] >>
+  conj_tac >- (gvs[] >> drule_all vars_ext_eval_operand >> simp[]) >>
+  conj_tac >- (irule abi_return_size_frame >> goal_assum (drule_at Any) >>
+    goal_assum (drule_at Any)) >>
+  rpt strip_tac >> irule abi_return_size_reserved >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`cap`, `hi`, `lo`] >> simp[]
 QED
