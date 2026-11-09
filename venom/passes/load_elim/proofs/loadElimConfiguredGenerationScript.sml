@@ -1,7 +1,7 @@
 Theory loadElimConfiguredGeneration
 Ancestors
   loadElimGenerationSound loadElimKeyShapeInvariant loadElimTransferProvenance
-  dfgCorrectnessProof loadElimDefs venomExecSemantics venomState list
+  loadElimOperandValidity dfgCorrectnessProof loadElimDefs venomExecSemantics venomState list
 
 Theorem le_configured_load_opcode:
   le_configured_context ctx /\ inst.inst_opcode = ctx.lctx_config.lc_load ==>
@@ -54,9 +54,9 @@ Proof
   gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem le_configured_generation_read:
+Theorem le_configured_generation_read_local:
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  dfg_assigns_sound ctx.lctx_dfg s /\
+  le_inst_operands_valid ctx.lctx_dfg inst s /\
   le_transfer_generates ctx inst key op /\
   step_inst fuel C inst s = OK t /\
   (!a. key = LK_Op (Var a) ==> ~MEM a inst.inst_outputs) ==>
@@ -66,12 +66,24 @@ Proof
   >- (drule_all le_configured_load_opcode >> strip_tac >>
       drule_all le_generating_load_address_exists >> strip_tac >>
       `eval_operand (normalize_operand ctx.lctx_dfg [] addr) s = SOME w` by
-        metis_tac[normalize_operand_eval_proof] >>
+        metis_tac[le_inst_operands_valid_eval, MEM] >>
       simp[eval_operand_def] >> irule le_generating_load_key >> simp[] >>
       conj_tac >- (gvs[] >> metis_tac[]) >> metis_tac[]) >>
   drule_all le_configured_store_opcode >> strip_tac >>
   drule_all le_generating_store_address_exists >> strip_tac >>
   `eval_operand (normalize_operand ctx.lctx_dfg [] addr) s = SOME w` by
-    metis_tac[normalize_operand_eval_proof] >>
+    metis_tac[le_inst_operands_valid_eval, MEM] >>
   irule le_generating_store_key >> simp[] >> metis_tac[]
+QED
+
+Theorem le_configured_generation_read:
+  le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  dfg_assigns_sound ctx.lctx_dfg s /\
+  le_transfer_generates ctx inst key op /\
+  step_inst fuel C inst s = OK t /\
+  (!a. key = LK_Op (Var a) ==> ~MEM a inst.inst_outputs) ==>
+  le_key_read ctx.lctx_addr_space key t = eval_operand op t
+Proof
+  metis_tac[le_configured_generation_read_local,
+            le_dfg_sound_inst_operands_valid]
 QED

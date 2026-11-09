@@ -6,7 +6,7 @@ Ancestors
   loadElimKeyReadOperational loadElimAbsoluteKey
   loadElimSolverProvenance loadElimActualGeneration loadElimOccurrence
   dfAnalyzeDefs cfgDefs rich_list venomExecProofs venomExecProps
-  loadElimDefs loadElimTransferProvenance dfgCorrectnessProof
+  loadElimDefs loadElimTransferProvenance dfgCorrectnessProof loadElimOperandValidity
   venomExecSemantics venomState venomEffects venomInst
   finite_map list pred_set words passSharedProps venomWf
 
@@ -66,11 +66,11 @@ Proof
   drule_all le_transient_read_no_write_step >> simp[]
 QED
 
-Theorem le_configured_retained_step_read:
+Theorem le_configured_retained_step_read_local:
   le_configured_context ctx /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
   wf_alias_sets ctx.lctx_aliases /\
-  dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
+  le_inst_operands_valid ctx.lctx_dfg inst s /\ inst_wf inst /\
   le_absolute_key ctx.lctx_addr_space key /\
   FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
   (!op. ops = [op] ==> ~le_transfer_generates ctx inst key op) /\
@@ -86,7 +86,7 @@ Proof
           drule_all inst_wf_store_shape >> strip_tac >>
           drule_all le_generating_store_address_exists >> strip_tac >>
           `eval_operand (normalize_operand ctx.lctx_dfg [] op1) s = SOME w` by
-            metis_tac[normalize_operand_eval_proof] >>
+            metis_tac[le_inst_operands_valid_eval, MEM] >>
           `inst.inst_opcode <> ctx.lctx_config.lc_load` by
             (spose_not_then assume_tac >>
              drule_all le_configured_load_opcode >> gvs[]) >>
@@ -108,11 +108,11 @@ QED
 
 (* Alternatives need not all denote the current read. Their multiplicity
    alone excludes a singleton overwrite at this retained step. *)
-Theorem le_configured_multivalue_step_read:
+Theorem le_configured_multivalue_step_read_local:
   le_configured_context ctx /\
   (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
   wf_alias_sets ctx.lctx_aliases /\
-  dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
+  le_inst_operands_valid ctx.lctx_dfg inst s /\ inst_wf inst /\
   le_absolute_key ctx.lctx_addr_space key /\
   FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
   1 < LENGTH ops /\
@@ -123,12 +123,12 @@ Proof
   strip_tac >>
   `!op. ops = [op] ==> ~le_transfer_generates ctx inst key op` by
     (rpt strip_tac >> gvs[]) >>
-  drule_all le_configured_retained_step_read >> simp[]
+  drule_all le_configured_retained_step_read_local >> simp[]
 QED
 
-Theorem le_configured_generation_address:
+Theorem le_configured_generation_address_local:
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
-  dfg_assigns_sound ctx.lctx_dfg s /\
+  le_inst_operands_valid ctx.lctx_dfg inst s /\
   le_transfer_generates ctx inst key op /\
   step_inst fuel C inst s = OK t /\
   (!a. key = LK_Op (Var a) ==> ~MEM a inst.inst_outputs) ==>
@@ -141,7 +141,7 @@ Proof
   >- (drule_all le_configured_load_opcode >> strip_tac >>
       drule_all le_generating_load_address_exists >> strip_tac >>
       `eval_operand (normalize_operand ctx.lctx_dfg [] addr) s = SOME w` by
-        metis_tac[normalize_operand_eval_proof] >>
+        metis_tac[le_inst_operands_valid_eval, MEM] >>
       `le_key_address ctx.lctx_addr_space
         (load_get_read_key ctx.lctx_bp ctx.lctx_addr_space
           (normalize_operand ctx.lctx_dfg []) inst) s = SOME (w2n w)` by
@@ -155,7 +155,7 @@ Proof
   drule_all le_configured_store_opcode >> strip_tac >>
   drule_all le_generating_store_address_exists >> strip_tac >>
   `eval_operand (normalize_operand ctx.lctx_dfg [] addr) s = SOME w` by
-    metis_tac[normalize_operand_eval_proof] >>
+    metis_tac[le_inst_operands_valid_eval, MEM] >>
   `le_key_address ctx.lctx_addr_space
     (load_get_write_key ctx.lctx_bp ctx.lctx_addr_space
       (normalize_operand ctx.lctx_dfg []) inst) s = SOME (w2n w)` by
@@ -163,6 +163,50 @@ Proof
   drule_all le_generating_store_state >> strip_tac >>
   qexists `w2n w` >> simp[w2n_lt] >>
   metis_tac[le_absolute_key_same_bindings]
+QED
+
+Theorem le_configured_retained_step_read:
+  le_configured_context ctx /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
+  le_absolute_key ctx.lctx_addr_space key /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
+  (!op. ops = [op] ==> ~le_transfer_generates ctx inst key op) /\
+  le_key_address ctx.lctx_addr_space key s = SOME a /\ a < dimword (:256) /\
+  step_inst fuel C inst s = OK t ==>
+  le_read_address ctx.lctx_addr_space a t = le_read_address ctx.lctx_addr_space a s
+Proof
+  metis_tac[le_configured_retained_step_read_local,
+            le_dfg_sound_inst_operands_valid]
+QED
+
+Theorem le_configured_multivalue_step_read:
+  le_configured_context ctx /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  dfg_assigns_sound ctx.lctx_dfg s /\ inst_wf inst /\
+  le_absolute_key ctx.lctx_addr_space key /\
+  FLOOKUP (unwrap_load_lattice (load_transfer ctx inst initial)) key = SOME ops /\
+  1 < LENGTH ops /\
+  le_key_address ctx.lctx_addr_space key s = SOME a /\ a < dimword (:256) /\
+  step_inst fuel C inst s = OK t ==>
+  le_read_address ctx.lctx_addr_space a t = le_read_address ctx.lctx_addr_space a s
+Proof
+  metis_tac[le_configured_multivalue_step_read_local,
+            le_dfg_sound_inst_operands_valid]
+QED
+
+Theorem le_configured_generation_address:
+  le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  dfg_assigns_sound ctx.lctx_dfg s /\
+  le_transfer_generates ctx inst key op /\
+  step_inst fuel C inst s = OK t /\
+  (!a. key = LK_Op (Var a) ==> ~MEM a inst.inst_outputs) ==>
+  ?a. le_key_address ctx.lctx_addr_space key t = SOME a /\ a < dimword (:256)
+Proof
+  metis_tac[le_configured_generation_address_local,
+            le_dfg_sound_inst_operands_valid]
 QED
 
 Theorem le_analyze_step_transfer:
