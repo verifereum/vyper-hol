@@ -804,6 +804,172 @@ Proof
   irule taint_agree_storage_abort >> fs[MEM] >> metis_tac[]
 QED
 
+Theorem taint_agree_final_taint:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode <> INVOKE /\ step_inst_base inst s = Halt sh ==>
+  final_taint vs C sh (step_taint inst s sh tn) (ret_taint tn inst s)
+Proof
+  strip_tac >> simp[final_taint_def] >>
+  qexistsl_tac [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`, `0`] >>
+  simp[step_inst_non_invoke]
+QED
+
+Theorem taint_agree_ret:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  inst.inst_opcode = RET /\ step_inst_base inst s = IntRet v s' ==>
+  ?t'. step_inst_base inst t = IntRet v t' /\ taint_agree D X tn s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >>
+     gvs[taint_ok_def] >> metis_tac[]) >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  `inst.inst_operands <> []` by
+    (Cases_on `inst.inst_operands` >> gvs[eval_operands_def]) >>
+  drule o1LowerDloadOpaqueTheory.eval_operands_front_agree >>
+  disch_then (qspecl_then [`s`, `t`, `v3::v4`] mp_tac) >>
+  (impl_tac >- metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL]) >> strip_tac >>
+  qexists_tac `t` >> simp[] >> Cases_on `ys` >> gvs[]
+QED
+
+Theorem taint_agree_halt_result:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode <> INVOKE /\ step_inst_base inst s = Halt sh /\
+  taint_within D C vs /\
+  ld_shared_agree D sh.vs_call_ctx.cc_address (step_taint inst s sh tn) sh th /\
+  LENGTH sh.vs_returndata = LENGTH th.vs_returndata /\
+  (!i. i < LENGTH sh.vs_returndata /\ i NOTIN ret_taint tn inst s ==>
+       EL i sh.vs_returndata = EL i th.vs_returndata) /\
+  sh.vs_halted = th.vs_halted ==>
+  dead_result_rel D (Halt sh) (Halt th)
+Proof
+  strip_tac >> drule_all taint_agree_final_taint >> strip_tac >>
+  qpat_x_assum `taint_within _ _ _` mp_tac >>
+  simp[taint_within_def] >> strip_tac >>
+  irule ld_shared_halt_result >> metis_tac[]
+QED
+
+Theorem taint_agree_simple_halt:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  taint_within D C vs /\ taint_agree D X tn s t /\
+  MEM inst.inst_opcode [STOP; SINK] /\ step_inst_base inst s = Halt sh ==>
+  ?th. step_inst_base inst t = Halt th /\ dead_result_rel D (Halt sh) (Halt th)
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by fs[MEM] >>
+  drule_all taint_agree_final_taint >> strip_tac >>
+  qpat_x_assum `taint_within _ _ _` mp_tac >>
+  simp[taint_within_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  fs[MEM] >> (gvs[step_inst_base_opcode_eqs] >>
+  irule ld_shared_halt_result >>
+  gvs[taint_agree_def, ld_shared_agree_def, halt_state_def,
+      step_inst_base_opcode_eqs, ret_taint_def, step_taint_def,
+      mem_taint_def, out_taint_def, store_taint_def, imm_taint_def,
+      adopt_reset_def, new_site_bytes_def, step_writes_def,
+      source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+      FLOOKUP_DEF, taint_component_equality] >>
+  qpat_x_assum `_ = s` (assume_tac o Q.AP_TERM `\u. u.vs_returndata`) >>
+  gvs[] >> conj_tac
+  >- (qexists_tac `{}` >> simp[]) >>
+  qexistsl_tac [`s.vs_call_ctx.cc_address`, `tn`] >> simp[])
+QED
+
+Theorem taint_agree_assert_step:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\ inst_wf inst /\
+  MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE; INVALID; REVERT] ==>
+  (!s'. step_inst_base inst s = OK s' ==>
+    ?t'. step_inst_base inst t = OK t' /\
+         taint_agree D X (step_taint inst s s' tn) s' t') /\
+  (!v s'. step_inst_base inst s = IntRet v s' ==>
+    ?t'. step_inst_base inst t = IntRet v t' /\ taint_agree D X tn s' t') /\
+  (!s'. step_inst_base inst s = Halt s' ==>
+    ?t'. step_inst_base inst t = Halt t' /\ dead_result_rel D (Halt s') (Halt t')) /\
+  (!a s'. step_inst_base inst s = Abort a s' ==>
+    ?t'. step_inst_base inst t = Abort a t')
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >>
+     gvs[taint_ok_def] >> fs[MEM] >> metis_tac[]) >>
+  fs[MEM] >> (gvs[venomWfTheory.inst_wf_def, step_inst_base_opcode_eqs,
+                    AllCaseEqs()] >>
+    rpt conj_tac >> rpt strip_tac >>
+    gvs[step_inst_base_opcode_eqs, AllCaseEqs(), MEM] >>
+    qpat_x_assum `taint_agree _ _ _ _ _` mp_tac >>
+    Cases_on `tn` >>
+    simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+         imm_taint_def, adopt_reset_def, new_site_bytes_def,
+         step_writes_def, source_memory_write_ranges_def, written_taint_def,
+         range_bytes_def, FLOOKUP_DEF, SF CONJ_ss, set_var_taint_def,
+         DRESTRICT_UNIV, taint_agree_def, ld_shared_agree_def, op_taint_def])
+QED
+
+Theorem taint_agree_return_slice:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_agree D X tn s t /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  inst.inst_opcode = RETURN /\ inst.inst_operands = [addr;sz] /\
+  eval_operand addr s = SOME p /\ eval_operand sz s = SOME len ==>
+  !k. k < w2n len /\ k NOTIN ret_taint tn inst s ==>
+    EL k (read_memory (w2n p) (w2n len) s) =
+    EL k (read_memory (w2n p) (w2n len) t)
+Proof
+  rpt strip_tac >> simp[ld_read_memory_element] >>
+  irule taint_agree_reachable_read_byte >>
+  qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
+  qexistsl_tac [`w2n p`, `w2n len`] >>
+  gvs[ret_taint_def, source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  metis_tac[arithmeticTheory.ADD_COMM, arithmeticTheory.LESS_EQ_ADD]
+QED
+
+Theorem taint_agree_return_halt:
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs /\ ~in_revert_forward fn s /\
+  taint_within D C vs /\ taint_agree D X tn s t /\
+  (!off len i. MEM (off,len) (source_memory_read_ranges inst s) /\
+               off <= i /\ i < off + len ==> i NOTIN X) /\
+  inst.inst_opcode = RETURN /\ step_inst_base inst s = Halt sh ==>
+  ?th. step_inst_base inst t = Halt th /\ dead_result_rel D (Halt sh) (Halt th)
+Proof
+  strip_tac >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule taint_agree_operand_clean >>
+     gvs[taint_ok_def] >> metis_tac[]) >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  drule_all taint_agree_final_taint >> strip_tac >>
+  qpat_x_assum `taint_within _ _ _` mp_tac >>
+  simp[taint_within_def] >> strip_tac >> first_x_assum drule >> strip_tac >>
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  rename1 `inst.inst_operands = [addr_op0;size_op0]` >>
+  rename1 `eval_operand addr_op0 t = SOME p` >>
+  rename1 `eval_operand size_op0 t = SOME len` >>
+  `!k. k < w2n len /\ k NOTIN ret_taint tn inst s ==>
+      EL k (read_memory (w2n p) (w2n len) s) =
+      EL k (read_memory (w2n p) (w2n len) t)` by
+    (rpt strip_tac >> irule taint_agree_return_slice >>
+     simp[] >>
+     qpat_assum `frame_reachable _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `ptr_discipline _ _ _` (irule_at Any) >>
+     qpat_assum `inst.inst_operands = _` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  irule ld_shared_halt_result >>
+  gvs[halt_state_def, set_returndata_def, step_taint_def, store_taint_def,
+      adopt_reset_def, imm_taint_def, ld_read_memory_length,
+      GSYM read_memory_def] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`s.vs_call_ctx.cc_address`, `tn`] >>
+  gvs[taint_agree_def, ld_shared_agree_def]
+QED
+
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
    no taint, so taint_agree evaluates it equally in t; access_ok puts
    each read ending above lo inside a site, below the bump pointer since
