@@ -551,11 +551,12 @@ Proof
   metis_tac[]
 QED
 
-Theorem alloca_remap_rel_accounts_update[local]:
-  !fn roots remap s1 s2 f.
+Theorem alloca_remap_rel_accounts_deletions_update[local]:
+  !fn roots remap s1 s2 f pending.
     alloca_remap_rel fn roots remap s1 s2 ==>
     alloca_remap_rel fn roots remap
-      (s1 with vs_accounts := f) (s2 with vs_accounts := f)
+      (s1 with <| vs_accounts := f; vs_pending_deletions := pending |>)
+      (s2 with <| vs_accounts := f; vs_pending_deletions := pending |>)
 Proof
   rpt strip_tac >>
   qpat_x_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
@@ -5074,6 +5075,8 @@ Proof
                       irule alloca_remap_rel_halted >> simp[])
   (* SELFDESTRUCT *)
   >- (term_op_agree >>
+      `s1.vs_pending_deletions = s2.vs_pending_deletions` by
+        fs[alloca_remap_rel_def] >>
       (* the static-frame guard reads the same operands on both sides *)
       `eval_operands inst.inst_operands s1 =
        eval_operands inst.inst_operands s2` by
@@ -5082,7 +5085,12 @@ Proof
       gvs[lift_result_def] >>
       irule alloca_remap_rel_halt_returndata >>
       (* the static-frame abort leaves the accounts alone *)
-      TRY (irule alloca_remap_rel_accounts_update) >> simp[])
+      simp[] >>
+      qmatch_goalsub_abbrev_tac
+        `s1 with <| vs_accounts := accts; vs_pending_deletions := pending |>` >>
+      drule alloca_remap_rel_accounts_deletions_update >>
+      disch_then (qspecl_then [`accts`, `pending`] mp_tac) >>
+      simp[Abbr `accts`, Abbr `pending`])
   (* INVALID *)
   >> (irule alloca_remap_rel_halt_returndata >> simp[])
 QED

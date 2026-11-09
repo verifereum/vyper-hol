@@ -58,7 +58,7 @@ Theorem append_storage_step_frame[local]:
 Proof
   pure_rewrite_tac[listTheory.MEM] >> strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  asm_rewrite_tac[Once step_inst_base_def, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, opcode_case_def, venomInstTheory.instruction_accessors, venomInstTheory.instruction_accfupds, combinTheory.K_THM] >>
   simp[exec_read1_def, exec_pure2_def, AllCaseEqs()] >>
   strip_tac >> gvs[update_var_def]
 QED
@@ -105,7 +105,7 @@ Proof
      >- (drule_all emit_op_SLOAD_correct >> metis_tac[]) >>
      qspecl_then [`TLOAD`, `tload`] mp_tac emit_op_read1_correct >>
      disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
-     simp[step_inst_base_def, exec_read1_def] >> strip_tac >>
+     simp[step_inst_base_opcode_eqs, exec_read1_def] >> strip_tac >>
      first_x_assum (qspecl_then [`slot`, `ss`] mp_tac) >>
      simp[] >> metis_tac[]) >>
   `eval_operand (Lit (n2w cap)) ss1 = SOME (n2w cap)` by
@@ -196,7 +196,7 @@ Proof
   drule emitted_insts_emit_void >> strip_tac >>
   `step_inst_base (mk_inst st.cs_next_id TSTORE [aop; vop] []) ss =
     OK (tstore addr w ss)` by
-    simp[step_inst_base_def, mk_inst_def, exec_write2_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def] >>
   gvs[run_inst_seq_def] >>
   drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >>
   conj_tac >-

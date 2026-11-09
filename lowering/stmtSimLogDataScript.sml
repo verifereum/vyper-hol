@@ -54,7 +54,7 @@ Proof
   simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   strip_tac >> gvs[] >> simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+  simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, eval_operand_def, bind_outputs_def] >>
   simp[run_inst_seq_def, word_add_n2w, lookup_var_update_var] >>
   conj_tac >- simp[update_var_def] >>

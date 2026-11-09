@@ -493,7 +493,7 @@ Resume compile_for_range_checked_frag_active_mem[finish_loop]:
      `not_fresh_at s2 x` by (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[] >> decide_tac) >>
      first_x_assum irule >> simp[]) >>
   Cases_on `d`
-  >- (qpat_x_assum `return_buf_frame NONE cenv sa t` mp_tac >>
+  >- (qpat_x_assum `return_buf_frame NONE cenv sa _` mp_tac >>
       simp[return_buf_frame_def]) >>
   rename1 `SOME desc` >> PairCases_on `desc` >>
   `sa.cs_next_var <= r.cs_next_var` by

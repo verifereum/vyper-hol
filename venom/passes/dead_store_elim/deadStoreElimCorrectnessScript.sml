@@ -1,8 +1,10 @@
 (*
  * Dead Store Elimination — Correctness Statement
  *
- * Preconditions: alloca_inv s + alloca_safe_access fn (alloca_roots fn) s +
- *   step_preserves_safety fn (alloca_roots fn)
+ * Preconditions: wf_function + ssa_form, and a state invariant safe_inv that
+ *   holds at the start, survives every step of fn, and implies alloca safety,
+ *   soundness of fn's base-pointer analysis, and accesses staying in their
+ *   own alloca (see deadStoreElimProofsScript)
  * Conclusion includes Error disjunct: original execution may error while
  *   DSE-transformed succeeds (e.g. undefined operand in dead store).
  * See deadStoreElimProofsScript.sml for counterexamples and explanation.
@@ -13,107 +15,13 @@
 
 Theory deadStoreElimCorrectness
 Ancestors
-  deadStoreElimProofs venomWf basePtrProps While
-  deadStoreElimDefs passSharedDefs passSharedProps venomInst
-  passSimulationProps allocaRemapDefs pointerConfinedDefs
+  deadStoreElimProofs deadStoreElimComposition deadStoreElimCertificate
+  decoratedExecution deadStoreElimStructure deadStoreElimEquiv venomWf
+  basePtrProps While deadStoreElimDefs passSharedDefs passSharedProps
+  venomInst passSimulationProps allocaRemapDefs pointerConfinedDefs
   deadStoreElimFrame
 
 (* ===== Obligations ===== *)
-
-(* dse_inst properties *)
-
-
-(* Bridge lemmas: certain opcode classes are disjoint from is_memory_def_opcode.
-   This avoids expanding write_effects_def (91 clauses) in every di_* proof. *)
-
-Triviality terminator_not_memory_def:
-  !space op. is_terminator op ==> ~is_memory_def_opcode space op
-Proof
-  Cases_on `op` >> simp[is_terminator_def, is_memory_def_opcode_def] >>
-  Cases_on `space` >> EVAL_TAC
-QED
-
-Triviality phi_not_memory_def:
-  !space. ~is_memory_def_opcode space PHI
-Proof
-  Cases_on `space` >> EVAL_TAC
-QED
-
-(* dse_inst either returns inst unchanged (guard false) or mk_nop_inst inst (guard true).
-   All 6 di_* properties follow from this + the bridge lemmas above. *)
-
-Triviality di_preserves_id:
-  !dead_ids space inst. (dse_inst dead_ids space inst).inst_id = inst.inst_id
-Proof
-  rw[dse_inst_def] >> rpt CASE_TAC >> simp[mk_nop_inst_def]
-QED
-
-Triviality di_terminator_identity:
-  !dead_ids space inst. is_terminator inst.inst_opcode ==>
-    dse_inst dead_ids space inst = inst
-Proof
-  rpt strip_tac >> simp[dse_inst_def] >>
-  imp_res_tac terminator_not_memory_def >> simp[]
-QED
-
-Triviality di_non_term:
-  !dead_ids space inst. ~is_terminator inst.inst_opcode ==>
-    ~is_terminator (dse_inst dead_ids space inst).inst_opcode
-Proof
-  rw[dse_inst_def] >>
-  rpt CASE_TAC >> gvs[mk_nop_inst_def, is_terminator_def]
-QED
-
-Triviality di_phi:
-  !dead_ids space inst. inst.inst_opcode = PHI ==>
-    (dse_inst dead_ids space inst).inst_opcode = PHI
-Proof
-  rpt strip_tac >> simp[dse_inst_def, phi_not_memory_def]
-QED
-
-Triviality di_non_phi:
-  !dead_ids space inst. inst.inst_opcode <> PHI ==>
-    (dse_inst dead_ids space inst).inst_opcode <> PHI
-Proof
-  rw[dse_inst_def] >>
-  rpt CASE_TAC >> gvs[mk_nop_inst_def]
-QED
-
-Triviality di_outputs:
-  !dead_ids space inst.
-    inst.inst_outputs = (dse_inst dead_ids space inst).inst_outputs \/
-    (dse_inst dead_ids space inst).inst_outputs = []
-Proof
-  rw[dse_inst_def] >>
-  rpt CASE_TAC >> simp[mk_nop_inst_def]
-QED
-
-(* dse_single_pass preserves wf/ssa *)
-
-Triviality dse_single_pass_preserves_wf:
-  !dead_ids space fn. wf_function fn ==>
-    wf_function (dse_single_pass dead_ids space fn)
-Proof
-  rw[dse_single_pass_def] >>
-  irule map_transform_preserves_wf >>
-  simp[di_preserves_id, di_terminator_identity, di_non_term, di_phi, di_non_phi]
-QED
-
-Triviality dse_single_pass_preserves_ssa:
-  !dead_ids space fn. wf_function fn /\ ssa_form fn ==>
-    wf_function (dse_single_pass dead_ids space fn) /\
-    ssa_form (dse_single_pass dead_ids space fn)
-Proof
-  rpt strip_tac >> simp[dse_single_pass_def]
-  >- (irule map_transform_preserves_wf >>
-      simp[di_preserves_id, di_terminator_identity,
-           di_non_term, di_phi, di_non_phi])
-  >- (irule map_transform_preserves_ssa >>
-      simp[di_preserves_id, di_outputs] >>
-      irule map_transform_preserves_wf >>
-      simp[di_preserves_id, di_terminator_identity,
-           di_non_term, di_phi, di_non_phi])
-QED
 
 (* OWHILE preserves wf/ssa via WhileTheory.OWHILE_INV_IND *)
 
@@ -211,10 +119,30 @@ Proof
 QED
 
 Theorem dse_function_space_correct:
-  !analysis_fn space fuel ctx fn s.
-    alloca_inv s /\
-    alloca_safe_access fn (alloca_roots fn) s /\
-    step_preserves_safety fn (alloca_roots fn) /\
+  !analysis_fn space fuel ctx fn s safe_inv.
+    wf_function fn /\ ssa_form fn /\
+    s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ safe_inv s /\
+    (!bb s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       s0.vs_inst_idx = 0 /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==>
+       safe_inv (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+    (!bb inst fuel' s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s0.vs_inst_idx = SOME inst /\ safe_inv s0 /\
+       step_inst fuel' ctx inst s0 = OK s1 ==>
+       safe_inv (if is_terminator inst.inst_opcode then s1
+                 else s1 with vs_inst_idx := SUC s0.vs_inst_idx)) /\
+    (!s0. safe_inv s0 ==>
+       alloca_inv s0 /\
+       (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
+                      base + sz < dimword (:256)) /\
+       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
+       (!bb inst.
+          lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s0.vs_inst_idx = SOME inst ==>
+          bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) inst s0)) /\
     (!fn'. all_dead_stores (analysis_fn space fn')
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
@@ -223,14 +151,43 @@ Theorem dse_function_space_correct:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dse_function_space analysis_fn space fn) s)
 Proof
-  ACCEPT_TAC dse_function_space_correct
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?e. run_blocks fuel ctx fn s = Error e`
+  >- simp[] >> disj2_tac >>
+  `dse_run_certificate fn fuel ctx s (run_blocks fuel ctx fn s)` by
+    (irule dse_certificate_initial >> simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     qexists_tac `safe_inv` >> simp[] >> metis_tac[]) >>
+  drule_all dse_function_space_certificate >> strip_tac >>
+  fs[dse_run_certificate_def] >>
+  drule_all decorated_run_erase >> strip_tac >> simp[]
 QED
 
 Theorem dse_function_correct:
-  !analysis_fn fuel ctx fn s.
-    alloca_inv s /\
-    alloca_safe_access fn (alloca_roots fn) s /\
-    step_preserves_safety fn (alloca_roots fn) /\
+  !analysis_fn fuel ctx fn s safe_inv.
+    wf_function fn /\ ssa_form fn /\
+    s.vs_inst_idx = 0 /\ ~s.vs_call_ctx.cc_static /\ safe_inv s /\
+    (!bb s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       s0.vs_inst_idx = 0 /\ safe_inv s0 /\
+       eval_phis s0 bb.bb_instructions = OK s1 ==>
+       safe_inv (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)) /\
+    (!bb inst fuel' s0 s1.
+       lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s0.vs_inst_idx = SOME inst /\ safe_inv s0 /\
+       step_inst fuel' ctx inst s0 = OK s1 ==>
+       safe_inv (if is_terminator inst.inst_opcode then s1
+                 else s1 with vs_inst_idx := SUC s0.vs_inst_idx)) /\
+    (!s0. safe_inv s0 ==>
+       alloca_inv s0 /\
+       (!aid base sz. FLOOKUP s0.vs_allocas aid = SOME (base, sz) ==>
+                      base + sz < dimword (:256)) /\
+       bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
+       (!bb inst.
+          lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
+          get_instruction bb s0.vs_inst_idx = SOME inst ==>
+          bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) inst s0)) /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
@@ -240,5 +197,14 @@ Theorem dse_function_correct:
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (dse_function analysis_fn fn) s)
 Proof
-  ACCEPT_TAC dse_function_correct
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?e. run_blocks fuel ctx fn s = Error e`
+  >- simp[] >> disj2_tac >>
+  `dse_run_certificate fn fuel ctx s (run_blocks fuel ctx fn s)` by
+    (irule dse_certificate_initial >> simp[] >>
+     reverse conj_tac >- metis_tac[] >>
+     qexists_tac `safe_inv` >> simp[] >> metis_tac[]) >>
+  drule_all dse_function_certificate >> strip_tac >>
+  fs[dse_run_certificate_def] >>
+  drule_all decorated_run_erase >> strip_tac >> simp[]
 QED

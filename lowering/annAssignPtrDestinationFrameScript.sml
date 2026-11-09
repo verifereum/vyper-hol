@@ -69,7 +69,7 @@ Proof
  qpat_x_assum `!i. i NOTIN writes ==> _` kall_tac >>
  fs[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def,
     alloca_next_valid_def, alloca_room_def, pending_alloca_size_def,
-    fmp_room_def, immutable_alloca_sep_def, immutable_base_zero_alt,
+    fmp_room_def, immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_alt,
     lookup_var_def] >> asm_rewrite_tac[]
 QED
 

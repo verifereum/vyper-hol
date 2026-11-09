@@ -102,7 +102,7 @@ Theorem step_ALLOCA[local]:
                eval_operand op ss' = SOME v) ∧
       eval_operand (Var out) ss' ≠ NONE
 Proof
-  rw[step_inst_base_def, exec_alloca_def, mk_inst_def, LET_THM] >>
+  rw[step_inst_base_opcode_eqs, exec_alloca_def, mk_inst_def, LET_THM] >>
   Cases_on `FLOOKUP ss.vs_allocas id` >>
   simp[eval_operand_alloca_fields, eval_operand_update_var] >>
   TRY (rename1 `SOME p` >> PairCases_on `p` >>
@@ -126,51 +126,8 @@ Theorem step_SHA3[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   PURE_REWRITE_TAC[mk_inst_def] >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[]
+  simp[step_inst_base_opcode_eqs]
 QED
-
-(* Tactic for weak-spec proofs of pure instruction chains (≤10 instructions).
-   Unfolds everything and case-splits on eval_operand results. *)
-val pure_chain_tac =
-  simp[run_inst_seq_def, step_inst_base_def,
-       exec_pure2_def, exec_pure1_def, exec_read1_def, mk_inst_def,
-       eval_operand_lit, eval_operand_update_var_if] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       TRY (metis_tac[eval_operand_update_not_none,
-                       optionTheory.NOT_NONE_SOME])) >>
-  gvs[eval_operand_update_var_if];
-
-(* Extended tactic: handles MLOAD, MSTORE, SHA3, and ASSERT in addition
-   to pure ops. Useful for weak-spec proofs (∃ss'. OK ∨ Abort).
-   WARNING: Do NOT include exec_alloca_def — causes FLOOKUP case splits
-   that lead to exponential blowup. Peel ALLOCA separately. *)
-val weak_spec_chain_tac =
-  simp[run_inst_seq_def, step_inst_base_def,
-       exec_pure2_def, exec_pure1_def, exec_read1_def,
-       exec_write2_def, mk_inst_def,
-       eval_operand_lit, eval_operand_update_var_if] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       TRY (metis_tac[eval_operand_update_not_none,
-                       eval_operand_mstore_not_none,
-                       optionTheory.NOT_NONE_SOME])) >>
-  gvs[eval_operand_update_var_if];
-
-(* Peel an ALLOCA instruction from the front of a chain.
-   ALLOCA causes weak_spec_chain_tac to timeout (FLOOKUP case split),
-   so we handle it separately via step_ALLOCA, then prove the operand
-   is preserved through the fresh variable update.
-   After: assumptions include eval_operand <input_op> ss1 = SOME <w>
-   and eval_operand (Var <fresh>) ss1 ≠ NONE.
-   Expects: fresh_vars_wrt st ss, eval_operand <op> ss = SOME <w>.
-   Usage: emitted_insts_tac >> peel_alloca_tac >> weak_spec_chain_tac *)
-val peel_alloca_impl_tac =
-  simp[] >> rpt strip_tac >> CCONTR_TAC >> gvs[] >>
-  qpat_x_assum `eval_operand _ ss = SOME _` mp_tac >>
-  simp[eval_operand_def, lookup_var_def] >>
-  gvs[fresh_vars_wrt_def] >>
-  first_x_assum (qspec_then `st.cs_next_var` mp_tac) >>
-  simp[finite_mapTheory.FLOOKUP_DEF];
 
 (* ===== Hashing ===== *)
 
@@ -1761,7 +1718,7 @@ Theorem step_TLOAD_result[local]:
      | Error e => Error e) =
       OK (update_var out (tload v1 ss) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]
 QED
 
 Theorem step_CALLDATALOAD_result[local]:
@@ -1791,7 +1748,7 @@ Theorem step_ILOAD_result[local]:
      | Error e => Error e) =
       OK (update_var out (mload (w2n v1) ss) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]
 QED
 
 Theorem step_DLOAD_result[local]:
@@ -1807,7 +1764,7 @@ Theorem step_DLOAD_result[local]:
         (word_of_bytes T (0w:bytes32)
            (TAKE 32 (DROP (w2n v1) ss.vs_data_section ++ REPLICATE 32 0w))) ss)
 Proof
-  rw[step_inst_base_def, exec_read1_def, mk_inst_def]
+  rw[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]
 QED
 
 (* len for dynarray: reads stored length *)
@@ -2206,8 +2163,7 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   gvs[] >>
   simp[run_inst_seq_def] >>
-  once_rewrite_tac[step_inst_base_def] >>
-  simp[mk_inst_def, exec_read0_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read0_def] >>
   conj_tac
   >- simp[eval_operand_update_var] >>
   conj_tac
@@ -2396,8 +2352,7 @@ Theorem emit_op_BLOCKHASH_correct:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
   simp[run_inst_seq_def] >>
-  once_rewrite_tac[step_inst_base_def] >>
-  simp[mk_inst_def, exec_read1_def] >>
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def] >>
   conj_tac >- simp[eval_operand_update_var] >>
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>

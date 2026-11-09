@@ -48,7 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  valueEncodingProps
+  loweringStateRelDefs valueEncodingProps
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
@@ -2386,7 +2386,8 @@ Proof
   `!ty. expr_sim ctx func cenv cx ty e es /\
         expr_vv_sim ctx func cenv cx ty e es` by
     (gen_tac >>
-     qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
+     qpat_x_assum `body_expr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
      disch_then irule >> conj_tac
      >- (qexists_tac `tops` >> simp[]) >>
      qexists_tac `env` >> simp[]) >>
@@ -2429,7 +2430,8 @@ Proof
      irule stmt_expr_body_pre >> simp[] >> qexists_tac `[]` >> simp[]) >>
   `expr_sim ctx func cenv cx (expr_type e) e es /\
    expr_vv_sim ctx func cenv cx (expr_type e) e es` by
-    (qpat_x_assum `body_expr_ok _ _` (mp_tac o REWRITE_RULE [body_expr_ok_def]) >>
+    (qpat_x_assum `body_expr_ok _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_ok_def]) >>
      disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`,
                               `expr_type e`, `es`] mp_tac) >>
      simp[]) >>

@@ -13,8 +13,8 @@ Ancestors
   calleeMemoryWitness cleanupPromiseWitness joinSpillWitness
   (* the compiler's unit-shape and unit-transform hypotheses *)
   unitShapeChecks unitTransformChecks
-  (* passes: call-frame allocation, effect and abort order in DFT, FMP aliasing *)
-  concretizeCallFrameRegression dftEffectOrderTest dftAbortOrderTest fmpAliasProbe
+  (* passes: call-frame allocation, effect and abort order in DFT, FMP aliasing, DSE checks *)
+  concretizeCallFrameRegression dftEffectOrderTest dftAbortOrderTest fmpAliasProbe dsePassChecks
   functionInlinerReturnPcWitness
   (* execution of INVOKE with no arguments and of STOP after a call *)
   invokeEmptyArgs stopReturndata

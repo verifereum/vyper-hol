@@ -659,7 +659,7 @@ Proof
   `(mk_inst id STOP [] []).inst_opcode = STOP` by simp[mk_inst_def] >>
   `step_inst_base (mk_inst id STOP [] []) s =
    Halt (halt_state (s with vs_returndata := []))` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
   `run_from 0 ctx fn s = Halt (halt_state (s with vs_returndata := []))` by
     (irule run_from_halt >>
      qexistsl_tac [`bb`, `mk_inst id STOP [] []`] >> simp[]) >>
@@ -766,7 +766,7 @@ Theorem step_inst_base_phi[local]:
     inst.inst_opcode = PHI ==>
     step_inst_base inst s = Error "phi outside prefix"
 Proof
-  rw[step_inst_base_def]
+  rw[step_inst_base_opcode_eqs]
 QED
 
 Theorem run_from_jump_target:

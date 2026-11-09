@@ -63,8 +63,7 @@ Proof
      qexistsl [`[dst; op]`, `if tr then TSTORE else SSTORE`, `[]`, `st`, `st'`] >>
      Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
        emit_inst_def, is_terminator_def] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     fs[mk_inst_def, exec_write2_def]) >>
+     simp[mk_inst_def] >> simp[Once step_inst_base_def, exec_write2_def]) >>
   `st'.cs_current_bb = st.cs_current_bb /\
    LENGTH st'.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
