@@ -1,0 +1,238 @@
+(*
+ * The symbolic twin of the codegen frame invariant: what codegen's assembly
+ * holds, read in asmSymSem's symbolic semantics, where code and data
+ * addresses are labels (Lab l d) rather than words.
+ *
+ * Every stack slot and spill slot of a frame holds a concrete word, except
+ * the return-PC slots (Lab ret 0, ret the return label the caller pushed)
+ * and the code_end-derived pointers (Lab "code_end" d).  Which operands are
+ * which is fixed by the function: retpc_var for the first kind, and
+ * code_end_var, the ADD [op; Label "code_end"] outputs and their ASSIGN
+ * copies, for the second.
+ *
+ * TOP-LEVEL:
+ *   code_end_var           - the code_end-derived variables of a function
+ *   label_flow_ok          - no CODESIZE; code_end variables only copied or
+ *                            CODECOPY's source, and CODECOPY reads only
+ *                            runtime_begin or a code_end variable
+ *   code_end_offset_ok     - a code_end ADD's offset is below 2^255
+ *   sym_unit_static_ok     - the data segment holds bytes only, has
+ *                            runtime_begin when the code uses it, and every
+ *                            INVOKE names a function of the context
+ *   op_kind_ok             - the kind of symbolic value an operand's slot
+ *                            holds in a frame
+ *   sym_frame_inv          - fn_frame_inv's symbolic twin
+ *   sym_steps              - n symbolic steps, as asm_steps
+ *   sym_run_terminal_never_bad - a symbolic run that ends never misuses a
+ *                            label, at any fuel
+ *)
+
+Theory codegenSymRel
+Ancestors
+  asmDataEnv asmSymBridge asmSymSem frameRel contextCodegenRel codegenRel
+  unitShapeDefs stackPlanTypes venomWf venomExecSemantics venomState
+  venomInst list finite_map arithmetic
+
+(* ===== Label-flow facts of the Venom unit ===== *)
+
+(* The variables holding a code_end-derived pointer: an ADD's output whose
+   second operand is Label "code_end", and the ASSIGN copies of one.  Unlike
+   retpc_var, there is no PHI case: label_flow_ok lets no PHI read one. *)
+Inductive code_end_var:
+[~seed:]
+  (!fn inst op x.
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = ADD /\
+    inst.inst_operands = [op; Label "code_end"] /\
+    MEM x inst.inst_outputs ==> code_end_var fn x)
+[~assign:]
+  (!fn inst x y.
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = ASSIGN /\
+    inst.inst_operands = [Var y] /\ MEM x inst.inst_outputs /\
+    code_end_var fn y ==> code_end_var fn x)
+End
+
+(* P1 and P2 of the step-5 plan.  CODESIZE is a label misuse (the symbolic
+   semantics has no code size); a code_end pointer is only copied or read
+   by CODECOPY as its source; and CODECOPY's source is runtime_begin or such
+   a pointer. *)
+Definition label_flow_ok_def:
+  label_flow_ok ctx <=>
+    !fn inst.
+      MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) ==>
+      inst.inst_opcode <> CODESIZE /\
+      (!x. MEM (Var x) inst.inst_operands /\ code_end_var fn x ==>
+           (inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var x]) \/
+           (inst.inst_opcode = CODECOPY /\
+            ?dst sz. inst.inst_operands = [dst; Var x; sz] /\
+                     dst <> Var x /\ sz <> Var x)) /\
+      (inst.inst_opcode = CODECOPY ==>
+       ?dst src sz.
+         inst.inst_operands = [dst; src; sz] /\
+         (src = Label "runtime_begin" \/
+          ?x. src = Var x /\ code_end_var fn x))
+End
+
+(* P3: at every invariant point of a code_end ADD, its offset is below
+   2^255, so the pointer's delta is one the symbolic semantics keeps
+   (sym_delta_ok). *)
+Definition code_end_offset_ok_def:
+  code_end_offset_ok Inv ctx <=>
+    !fn inst vs op w.
+      Inv ctx fn inst vs /\ inst.inst_opcode = ADD /\
+      inst.inst_operands = [op; Label "code_end"] /\
+      eval_operand op vs = SOME w ==>
+      w2n w < dimword (:256) DIV 2
+End
+
+(* The static clauses: the data segment holds bytes only (a DataLabel would
+   be a code address in the data, AsmDataLabel, which asm_static_wf rules
+   out); runtime_begin is a data header when the code reads it; and INVOKE
+   jumps to a function's label. *)
+Definition sym_unit_static_ok_def:
+  sym_unit_static_ok unit <=>
+    EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
+                      ds.ds_items) unit.cu_data_segment /\
+    ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
+                MEM inst (fn_insts fn) /\
+                MEM (Label "runtime_begin") inst.inst_operands) ==>
+     EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) /\
+    wf_invoke_targets unit.cu_context
+End
+
+(* ===== Symbolic kinds of operands ===== *)
+
+(* The symbolic value sv may sit in the slot of operand op in fn's frame,
+   ret being the return label the caller pushed: a word for a literal or an
+   ordinary variable, Lab ret 0 for a return-PC variable, a code_end
+   pointer for a code_end variable, and the label for a label.  Only the
+   kind is fixed: which word, and which code_end delta, is the concrete
+   state's business (asm_sym_rel).  Dead slots hold anything. *)
+Definition op_kind_ok_def:
+  op_kind_ok fn ret op sv <=>
+    op = dead_stack_marker \/
+    case op of
+      Lit _ => (?w. sv = Val w)
+    | Label l => sv = Lab l 0
+    | Var x =>
+        if retpc_var fn x then sv = Lab ret 0
+        else if code_end_var fn x then (?d. sv = Lab "code_end" d)
+        else (?w. sv = Val w)
+End
+
+(* The 32 memory bytes from off hold the symbolic value sv: a label's
+   intact bytes, or no label bytes at all. *)
+Definition mem_sval_at_def:
+  mem_sval_at labs off (Lab l d) = (mem_label_at labs off = SOME (l, d)) /\
+  mem_sval_at labs off (Val _) =
+    (!i. in_mem_range off 32 i ==> i NOTIN FDOM labs)
+End
+
+(* ===== The frame invariant ===== *)
+
+(* The symbolic state ss of program p against the concrete state cs, in
+   fn's frame with planner state ps:
+     ret:   the return label the caller's INVOKE pushed;
+     srest: the caller's symbolic stack below the frame, never touched;
+     labs0: the memory labels when the frame was entered.
+   ss is related to cs (asm_sym_rel); its frame stack holds values of its
+   operands' kinds; each live spill slot holds a value of its operand's
+   kind; label bytes lie in spill regions only, and outside the frame's
+   closure are the entry ones. *)
+Definition sym_frame_inv_def:
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss <=>
+    asm_sym_rel p env cs ss /\
+    (?top. ss.sym_stack = top ++ srest /\
+           LIST_REL (op_kind_ok fn ret) (REVERSE ps.ps_stack) top) /\
+    (!op off. FLOOKUP ps.ps_spilled op = SOME off ==>
+       ?sv. op_kind_ok fn ret op sv /\ mem_sval_at ss.sym_mem_labels off sv) /\
+    (!b. b IN FDOM ss.sym_mem_labels ==> context_spill_byte cp b) /\
+    (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+         FLOOKUP ss.sym_mem_labels b = FLOOKUP labs0 b) /\
+    (fn_has_retpc fn ==> MEM (AsmLabel ret) p)
+End
+
+(* ===== Runs ===== *)
+
+(* n symbolic steps, as asm_steps: the state they reach, or the result
+   that stopped them. *)
+Definition sym_steps_def:
+  sym_steps p env 0 ss = SymOK ss /\
+  sym_steps p env (SUC n) ss =
+    if ss.sym_base.as_pc >= LENGTH p then SymError "pc out of bounds"
+    else
+      case sym_step p env (EL ss.sym_base.as_pc p) ss of
+        SymOK ss' => sym_steps p env n ss'
+      | r => r
+End
+
+
+Theorem sym_run_zero[local]:
+  sym_run p env 0 ss = SymError "out of fuel"
+Proof
+  simp[Once sym_run_def]
+QED
+
+Theorem sym_run_SUC_step[local]:
+  sym_run p env (SUC fuel) ss =
+  if ss.sym_base.as_pc >= LENGTH p then SymError "pc out of bounds"
+  else
+    case sym_step p env (EL ss.sym_base.as_pc p) ss of
+      SymOK ss' => sym_run p env fuel ss'
+    | r => r
+Proof
+  simp[Once sym_run_def]
+QED
+
+(* The symbolic run is deterministic, and fuel only cuts it short with an
+   error: so one that ends never misuses a label, at any fuel. *)
+Theorem sym_run_terminal_never_bad:
+  !fuel0 ss. sym_terminal (sym_run p env fuel0 ss) ==>
+             !fuel msg. sym_run p env fuel ss <> SymBad msg
+Proof
+  Induct
+  >- simp[sym_run_zero, sym_terminal_def] >>
+  rpt gen_tac >> strip_tac >> Cases
+  >- simp[sym_run_zero] >>
+  gvs[sym_run_SUC_step] >>
+  Cases_on `ss.sym_base.as_pc >= LENGTH p` >> gvs[sym_terminal_def] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
+  gvs[sym_terminal_def] >> first_x_assum drule >> simp[]
+QED
+
+Theorem sym_steps_add:
+  !m n ss. sym_steps p env (m + n) ss =
+           case sym_steps p env m ss of
+             SymOK ss' => sym_steps p env n ss'
+           | r => r
+Proof
+  Induct >> simp[sym_steps_def, ADD_CLAUSES] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[]
+QED
+
+(* A run of n steps to ss' continues as the run from ss'. *)
+Theorem sym_steps_run:
+  !n ss ss' fuel.
+    sym_steps p env n ss = SymOK ss' ==>
+    sym_run p env (n + fuel) ss = sym_run p env fuel ss'
+Proof
+  Induct >> simp[sym_steps_def, ADD_CLAUSES] >> rpt gen_tac >>
+  simp[sym_run_SUC_step] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[] >>
+  ONCE_REWRITE_TAC [ADD_COMM] >> simp[]
+QED
+
+(* A run of n steps that ends ends the run with more fuel. *)
+Theorem sym_steps_terminal_run:
+  !n ss fuel.
+    sym_terminal (sym_steps p env n ss) ==>
+    sym_run p env (n + fuel) ss = sym_steps p env n ss
+Proof
+  Induct >> simp[sym_steps_def, sym_terminal_def, ADD_CLAUSES] >>
+  rpt gen_tac >> simp[sym_run_SUC_step] >>
+  IF_CASES_TAC >> simp[sym_terminal_def] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
+  simp[sym_terminal_def] >>
+  ONCE_REWRITE_TAC [ADD_COMM] >> simp[]
+QED
