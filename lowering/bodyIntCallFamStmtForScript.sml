@@ -429,6 +429,129 @@ Proof
   metis_tac[]
 QED
 
+(* The last comparison writes only its non-local temporary, then exits. *)
+Theorem intcall_for_range_final:
+  lookup_block cond_lbl fp.jc_func.fn_blocks =
+    SOME <| bb_label := cond_lbl; bb_instructions :=
+      [mk_inst j1 EQ [Var cv; Var ev] [dv];
+       mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []] |> /\
+  cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+  lookup_var cv cc = SOME v /\ lookup_var ev cc = SOME v /\
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa cc /\
+  not_local_ptr ce es.scopes dv /\
+  (!op. fp.jc_reserved op ==> op <> Var dv) /\
+  (!x. not_fresh_at sa x ==> x <> dv) ==>
+  ?t. gas_marked_path F fp.jc_ctx fp.jc_func cc 0 (OK t) /\
+    t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+    intcall_joint_res fp ce env es sa t /\
+    (!x z. not_fresh_at sa x /\ lookup_var x cc = SOME z ==>
+           lookup_var x t = SOME z) /\
+    t.vs_allocas = cc.vs_allocas /\ t.vs_alloca_next = cc.vs_alloca_next
+Proof
+  strip_tac >>
+  drule_all stmtForRangeMemoryPartsTheory.for_cond_zero_path_mem >>
+  simp[] >> strip_tac >>
+  `intcall_joint_res fp ce env es sa (update_var dv (bool_to_word T) cc)` by
+    (irule intcall_joint_res_update_var >> gvs[]) >>
+  qexists_tac `jump_to exit_lbl (update_var dv (bool_to_word T) cc)` >>
+  conj_tac
+  >- (irule gas_marked_path_from_mem >> simp[]) >>
+  simp[bodyIntCallJointStmtJumpTheory.intcall_joint_res_jump_to,
+       jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem intcall_for_range_iterations:
+  let N = Num (n2 - n1);
+      vs = GENLIST (\j. IntV (n1 + &j)) N;
+      K = (\s.
+        (!x z. not_fresh_at sa x /\ lookup_var x cc0 = SOME z ==>
+               lookup_var x s = SOME z) /\
+        (!aid b. FLOOKUP cc0.vs_allocas aid = SOME b ==>
+                 FLOOKUP s.vs_allocas aid = SOME b) /\
+        cc0.vs_alloca_next <= s.vs_alloca_next);
+      Inv = (\k es s. s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\
+        ~s.vs_halted /\ intcall_joint_res fp ce env es sa s /\
+        lookup_var cv s = SOME (i2w (n1 + &k)) /\
+        lookup_var ev s = SOME (i2w n2) /\ lookup_var p s = SOME w /\ K s);
+      Done = (\es s. s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\
+        ~s.vs_halted /\ intcall_joint_res fp ce env es sa s /\ K s);
+      H = (\k s res ee u. ?broke. res = INL broke /\
+        u.vs_inst_idx = 0 /\ ~u.vs_halted /\
+        intcall_joint_res fp ce env ee sa u /\
+        (!x z. not_fresh_at sa x /\ lookup_var x s = SOME z ==>
+               lookup_var x u = SOME z) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                 FLOOKUP u.vs_allocas aid = SOME b) /\
+        s.vs_alloca_next <= u.vs_alloca_next /\
+        (broke ==> u.vs_current_bb = exit_lbl) /\
+        (~broke ==> u.vs_current_bb = cond_lbl /\
+          lookup_var cv u = SOME (i2w (n1 + &(k+1))) /\
+          lookup_var ev u = SOME (i2w n2) /\ lookup_var p u = SOME w))
+  in
+  n1 <= n2 /\ intcall_frame_ok fp /\
+  lookup_block cond_lbl fp.jc_func.fn_blocks =
+    SOME <| bb_label := cond_lbl; bb_instructions :=
+      [mk_inst j1 EQ [Var cv; Var ev] [dv];
+       mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl] []] |> /\
+  (!es s. Inv N es s ==> not_local_ptr ce es.scopes dv) /\
+  (!op. fp.jc_reserved op ==> op <> Var dv) /\
+  (!x. not_fresh_at sa x ==> x <> dv) /\
+  (!k es s. k < N /\ Inv k es s /\
+    gas_admissible (eval_for fp.jc_cx tyv id stmts (DROP k vs)) ok es ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (ignore_bind (push_scope_with_var id tyv (IntV (n1 + &k)))
+        (finally (try (ignore_bind (eval_stmts fp.jc_cx stmts) (return F))
+                       handle_loop_exception) pop_scope))
+      (es,s) (H k s)
+      (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)) ==>
+  !k es s. k <= N /\ Inv k es s /\
+    gas_admissible (eval_for fp.jc_cx tyv id stmts (DROP k vs)) ok es ==>
+    gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+      (eval_for fp.jc_cx tyv id stmts (DROP k vs)) (es,s)
+      (\res ee t. res = INL () /\ Done ee t)
+      (\res ee r. ?ex. res = INR ex /\ intcall_stmt_exit fp (INR ex) ee r)
+Proof
+  BasicProvers.LET_ELIM_TAC >>
+  irule (stmtSimForRoundsTheory.eval_for_rounds |> SPEC_ALL |>
+    Q.INST [`R` |-> `\ex ee r. intcall_stmt_exit fp (INR ex) ee r`] |>
+    SRULE []) >>
+  conj_tac >- simp[Abbr `vs`] >>
+  qexistsl_tac [`Inv`, `ok`] >> simp[Abbr `vs`] >>
+  conj_tac >- suspend "final" >> suspend "round"
+QED
+
+Resume intcall_for_range_iterations[final]:
+  rpt strip_tac >> rename1 `Inv N ee cc` >>
+  `not_local_ptr ce ee.scopes dv` by metis_tac[] >>
+  `n1 + &N = n2` by
+    (simp[Abbr `N`] >>
+     `&(Num (n2 - n1)) = n2 - n1` by
+       (irule (iffRL integerTheory.INT_OF_NUM) >> intLib.COOPER_TAC) >>
+     intLib.COOPER_TAC) >>
+  fs[Abbr `Inv`] >>
+  mp_tac (intcall_for_range_final |>
+    Q.INST [`es` |-> `ee`, `v` |-> `i2w n2`]) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qexists_tac `t` >> simp[Abbr `Done`] >>
+  conj_tac
+  >- (fs[intcall_joint_res_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+      metis_tac[]) >>
+  fs[Abbr `K'`] >> metis_tac[]
+QED
+
+Resume intcall_for_range_iterations[round]:
+  rpt strip_tac >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  qexists_tac `H k' s''` >>
+  reverse conj_tac >- (first_x_assum irule >> simp[]) >>
+  fs[Abbr `H`, Abbr `Inv`, Abbr `Done`, Abbr `K'`] >>
+  rpt strip_tac >> qexists_tac `broke` >>
+  simp[arithmeticTheory.ADD1] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Finalise intcall_for_range_iterations
+
 Theorem intcall_for_stmt_step:
   (!e. intcall_expr_producer fp e /\ intcall_forced_producer fp e /\
        intcall_map_producer fp e) /\
