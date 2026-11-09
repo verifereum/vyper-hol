@@ -436,6 +436,15 @@ Proof
     simp[venom_state_component_equality] >> gvs[]
 QED
 
+(* The crossed spine in a head extraction need not be call-free. *)
+Theorem gas_head_crosses_invoke[local]:
+  dft_gas_swap_pair
+    (mk_inst 1 INVOKE [Label "callee"] [])
+    (mk_inst 2 GAS [] ["g"])
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
