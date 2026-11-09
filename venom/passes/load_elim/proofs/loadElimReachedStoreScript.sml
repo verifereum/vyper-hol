@@ -1,6 +1,7 @@
 Theory loadElimReachedStore
 Ancestors
   loadElimOccurrenceInvariants loadElimReplacementSound
+  loadElimStructuralCurrentness loadElimReachedNormalize
   loadElimHomogeneousCurrentness loadElimDefs loadElimOccurrence
   loadElimKeyShapeInvariant loadElimKeyRead finite_map
   dfgCorrectnessProof basePtrDefs memoryCopyElisionSound
@@ -122,15 +123,6 @@ Theorem le_reached_store_replacement:
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
-  dfg_assigns_sound (dfg_build_function fn) s0 /\
-  bp_ptr_sound ctx.lctx_bp s0 /\ alloca_inv s0 /\ allocas_in_word s0 /\
-  bp_ptrs_bounded ctx.lctx_bp fn s0 /\
-  le_step_preserves ctx.lctx_bp (dfg_build_function fn) fn /\
-  (!bb u t. MEM bb fn.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    eval_phis u bb.bb_instructions = OK t /\
-    dfg_assigns_sound (dfg_build_function fn) u ==>
-    dfg_assigns_sound (dfg_build_function fn) t) /\
   ctx.lctx_config.lc_store = SOME i.inst_opcode /\ inst_wf i /\
   padded_exec_equiv V s t /\ step_inst k C i s = OK s' /\
   load_elim_inst ctx actions
@@ -150,15 +142,22 @@ Proof
     (irule le_generating_store_address_exists >> metis_tac[]) >>
   `?w. eval_operand value s = SOME w` by
     metis_tac[le_generating_store_state] >>
-  `dfg_assigns_sound ctx.lctx_dfg s` by
-    (drule_all le_occ_prefix_frozen_dfg >> metis_tac[]) >>
+  `i.inst_opcode <> PHI /\ MEM value i.inst_operands /\
+   MEM addr i.inst_operands` by gvs[] >>
   `le_key_read ctx.lctx_addr_space
     (load_get_write_key ctx.lctx_bp ctx.lctx_addr_space
       (normalize_operand ctx.lctx_dfg []) i) s = eval_operand value s` by
-    (irule le_occ_prefix_frozen_store_test_current >> simp[] >>
+    (irule le_occ_prefix_store_test_current_structural >> simp[] >>
      qexistsl [`C`, `es`, `fn`, `i`, `s0`, `vs`] >> gvs[] >>
      first_assum ACCEPT_TAC) >>
+  `eval_operand (normalize_operand (dfg_build_function fn) [] addr) s =
+     eval_operand addr s` by
+    (irule le_frame_use_normalize_eval >> metis_tac[le_occ_prefix_forget]) >>
+  `le_key_address ctx.lctx_addr_space
+    (load_get_write_key ctx.lctx_bp ctx.lctx_addr_space
+      (normalize_operand ctx.lctx_dfg []) i) s = SOME (w2n a)` by
+    (irule le_empty_write_key_address >> metis_tac[]) >>
   `le_read_address ctx.lctx_addr_space (w2n a) s = SOME w` by
-    metis_tac[le_empty_store_key_read] >>
+    gvs[le_key_read_def] >>
   simp[] >> irule le_configured_store_replacement >> metis_tac[]
 QED
