@@ -129,7 +129,7 @@ Proof
 QED
 
 Theorem prefix_member_int_attach_shift:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   SND ops = Var child_dst /\
   compile_abi_decode_to_buf (Var child_dst) (FST ops) DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord (IntClamp bits signed)) middle = ((),end_st) /\
