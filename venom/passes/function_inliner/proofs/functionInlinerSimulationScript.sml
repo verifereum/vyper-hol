@@ -3,6 +3,7 @@ Theory functionInlinerSimulation
 Ancestors
   functionInlinerOperational functionInlinerCallBoundary
   functionInlinerReturnTransport functionInlinerFuel functionInlinerSiteLayout
+  functionInlinerPhiTransport
   venomExecSemantics
   functionInlinerFrame functionInlinerDefs venomState venomInst venomWf list pred_set
 
@@ -192,5 +193,29 @@ Proof
   drule inline_clone_exit_control >> strip_tac >> gvs[] >>
   first_x_assum drule >> strip_tac >>
   irule inline_clone_exit_raw_continuation >> simp[] >>
+  metis_tac[]
+QED
+
+(* A genuine INVOKE resumes after the PHI prefix, so block entry of the
+   generated continuation has no parallel assignments left to execute. *)
+Theorem inline_clone_exit_invoke_continuation:
+  inline_clone_exit p V opaque P outs caller ret ir s' (OK v) /\
+  lookup_block lbl caller_fn.fn_blocks = SOME source_bb /\
+  ~MEM ret (fn_labels caller_fn) /\
+  bb_well_formed source_bb /\ i < LENGTH source_bb.bb_instructions /\
+  (EL i source_bb.bb_instructions).inst_opcode = INVOKE /\
+  rb = <|bb_label := ret;
+         bb_instructions := DROP (i+1) source_bb.bb_instructions|> /\
+  exec_block f ctx rb (v with vs_inst_idx := 0) = OK w /\
+  ~w.vs_halted /\
+  run_blocks g ctx (inline_call_site p ret caller_fn callee lbl i) w = res /\
+  terminates res ==>
+  ?h. run_blocks h ctx (inline_call_site p ret caller_fn callee lbl i) v = res
+Proof
+  strip_tac >> irule inline_clone_exit_raw_continuation >>
+  simp[] >> conj_tac
+  >- (qexistsl [`f`, `g`, `v`, `w`] >>
+      simp[] >>
+      metis_tac[inline_invoke_suffix_eval_phis, inline_invoke_suffix_phi_prefix]) >>
   metis_tac[]
 QED

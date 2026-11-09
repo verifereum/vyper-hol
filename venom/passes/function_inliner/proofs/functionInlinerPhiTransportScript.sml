@@ -319,3 +319,22 @@ Proof
   fs[bb_well_formed_def] >>
   first_x_assum (qspecl_then [`i`, `n + (i+1)`] mp_tac) >> simp[] >> gvs[]
 QED
+
+Theorem inline_invoke_suffix_phi_prefix:
+  bb_well_formed bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  phi_prefix_length (DROP (i+1) bb.bb_instructions) = 0
+Proof
+  strip_tac >> drule_all inline_invoke_suffix_nonphi >>
+  Cases_on `DROP (i+1) bb.bb_instructions` >>
+  simp[phi_prefix_length_def]
+QED
+
+Theorem inline_invoke_suffix_eval_phis:
+  bb_well_formed bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  eval_phis s (DROP (i+1) bb.bb_instructions) = OK s
+Proof
+  strip_tac >> irule venomExecProofsTheory.eval_phis_no_phis >>
+  irule inline_invoke_suffix_nonphi >> simp[]
+QED
