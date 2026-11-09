@@ -237,7 +237,7 @@ Proof
   simp[TAKE_SUC, FOLDL_APPEND]
 QED
 
-Theorem le_retained_occ_read:
+Theorem le_retained_occ_read_local:
   wf_function fn /\
   is_fixpoint (df_process_block Forward NONE load_join load_transfer
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
@@ -248,7 +248,8 @@ Theorem le_retained_occ_read:
   le_occ_valid C fn e /\ le_singleton_retained_occ ctx fn key op e /\
   (!bb n fuel u t. e = StepOcc bb n fuel u t ==>
     MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-    inst_wf (EL n bb.bb_instructions) /\ dfg_assigns_sound ctx.lctx_dfg u) /\
+    inst_wf (EL n bb.bb_instructions) /\
+    le_inst_operands_valid ctx.lctx_dfg (EL n bb.bb_instructions) u) /\
   le_absolute_key ctx.lctx_addr_space key /\
   le_key_address ctx.lctx_addr_space key (le_occ_pre e) = SOME a /\
   a < dimword (:256) ==>
@@ -271,7 +272,7 @@ Proof
       `!v. [op] = [v] ==>
         ~le_transfer_generates ctx (EL u.vs_inst_idx bb.bb_instructions) key v` by
         simp[] >>
-      drule_all le_configured_retained_step_read >> simp[]) >>
+      drule_all le_configured_retained_step_read_local >> simp[]) >>
   metis_tac[le_phi_read_occ_after]
 QED
 
@@ -375,7 +376,7 @@ Proof
   fs[fn_inst_wf_def] >> metis_tac[EL_MEM]
 QED
 
-Theorem le_prefix_retained_suffix_read:
+Theorem le_prefix_retained_suffix_read_local:
   wf_function fn /\ fn_inst_wf fn /\
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
   wf_alias_sets ctx.lctx_aliases /\
@@ -386,7 +387,7 @@ Theorem le_prefix_retained_suffix_read:
     (load_analyze ctx fn) /\
   le_occ_prefix C fn s0 (pre ++ e::suffix) i s /\
   (!bb n fuel u t. MEM (StepOcc bb n fuel u t) (pre ++ e::suffix) ==>
-    dfg_assigns_sound ctx.lctx_dfg u) /\
+    le_inst_operands_valid ctx.lctx_dfg (EL n bb.bb_instructions) u) /\
   EVERY (le_singleton_retained_occ ctx fn key op) suffix /\
   le_absolute_key ctx.lctx_addr_space key /\
   (!v. key = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix) /\
@@ -409,7 +410,7 @@ Proof
      `MEM q (pre ++ e::suffix)` by simp[] >>
      `le_occ_valid C fn q /\ le_singleton_retained_occ ctx fn key op q` by
        metis_tac[EVERY_MEM] >>
-     irule le_retained_occ_read >> simp[] >>
+     irule le_retained_occ_read_local >> simp[] >>
      qexistsl [`C`, `fn`, `key`, `op`] >> simp[] >>
      rpt gen_tac >> strip_tac >> gvs[] >>
      conj_tac
@@ -445,7 +446,7 @@ Proof
   simp[le_absolute_key_after_post]
 QED
 
-Theorem le_occ_prefix_singleton_current:
+Theorem le_occ_prefix_singleton_current_local:
   le_occ_prefix C fn s0 es i s /\
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
@@ -457,7 +458,7 @@ Theorem le_occ_prefix_singleton_current:
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
   (!bb n fuel u t. MEM (StepOcc bb n fuel u t) es ==>
-    dfg_assigns_sound ctx.lctx_dfg u) /\
+    le_inst_operands_valid ctx.lctx_dfg (EL n bb.bb_instructions) u) /\
   FLOOKUP (unwrap_load_lattice
     (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME [op] ==>
   le_key_read ctx.lctx_addr_space key s = eval_operand op s
@@ -476,10 +477,10 @@ Proof
     metis_tac[le_generated_key_absolute] >>
   `step_inst fuel C (EL n bb.bb_instructions) u = OK t` by
     fs[le_occ_valid_def] >>
-  `dfg_assigns_sound ctx.lctx_dfg u` by metis_tac[] >>
+  `le_inst_operands_valid ctx.lctx_dfg (EL n bb.bb_instructions) u` by metis_tac[] >>
   `le_key_read ctx.lctx_addr_space key t = eval_operand op t` by
-    (irule le_configured_generation_read >> simp[] >> metis_tac[]) >>
-  drule_all le_configured_generation_address >> strip_tac >>
+    (irule le_configured_generation_read_local >> simp[] >> metis_tac[]) >>
+  drule_all le_configured_generation_address_local >> strip_tac >>
   `!v. key = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
     (rpt strip_tac >> qpat_x_assum `key = _` SUBST_ALL_TAC >>
      drule_all le_singleton_suffix_key_no_writes >> simp[]) >>
@@ -487,7 +488,7 @@ Proof
     (drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]) >>
   `le_read_address ctx.lctx_addr_space a s = le_read_address ctx.lctx_addr_space a t` by
     (drule_at_then (Pat `le_occ_prefix _ _ _ _ _ _`)
-       (mp_tac o SRULE [le_occ_post_def]) le_prefix_retained_suffix_read >>
+       (mp_tac o SRULE [le_occ_post_def]) le_prefix_retained_suffix_read_local >>
      disch_then irule >> simp[] >>
      conj_tac >- (gvs[] >> metis_tac[]) >>
      qexistsl [`key`, `op`] >> simp[]) >>
@@ -495,7 +496,7 @@ Proof
   gvs[le_key_read_def]
 QED
 
-Resume le_occ_prefix_singleton_current[operand]:
+Resume le_occ_prefix_singleton_current_local[operand]:
   irule le_key_address_operand_injective >>
   qexists `ctx.lctx_addr_space` >>
   `!v. op = Var v ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
@@ -506,7 +507,101 @@ Resume le_occ_prefix_singleton_current[operand]:
     simp[] >>
   drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]
 QED
-Finalise le_occ_prefix_singleton_current
+Finalise le_occ_prefix_singleton_current_local
+
+Theorem le_frame_singleton_current_local:
+  frame_reach C fn s0 i s /\
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  (!es bb n fuel u t. le_occ_prefix C fn s0 es i s /\
+    MEM (StepOcc bb n fuel u t) es ==>
+    le_inst_operands_valid ctx.lctx_dfg (EL n bb.bb_instructions) u) /\
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME [op] ==>
+  le_key_read ctx.lctx_addr_space key s = eval_operand op s
+Proof
+  strip_tac >> drule_all le_occ_prefix_annotate >> strip_tac >>
+  irule le_occ_prefix_singleton_current_local >> simp[] >>
+  qexistsl [`C`, `es`, `fn`, `i`, `s0`] >> simp[] >> metis_tac[]
+QED
+
+(* Compatibility boundaries for callers carrying global DFG soundness. *)
+Theorem le_retained_occ_read:
+  wf_function fn /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  le_occ_valid C fn e /\ le_singleton_retained_occ ctx fn key op e /\
+  (!bb n fuel u t. e = StepOcc bb n fuel u t ==>
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    inst_wf (EL n bb.bb_instructions) /\ dfg_assigns_sound ctx.lctx_dfg u) /\
+  le_absolute_key ctx.lctx_addr_space key /\
+  le_key_address ctx.lctx_addr_space key (le_occ_pre e) = SOME a /\
+  a < dimword (:256) ==>
+  le_read_address ctx.lctx_addr_space a (le_occ_after e) =
+  le_read_address ctx.lctx_addr_space a (le_occ_pre e)
+Proof
+  strip_tac >> irule le_retained_occ_read_local >> simp[] >>
+  qexistsl [`C`, `fn`, `key`, `op`] >> simp[] >>
+  metis_tac[le_dfg_sound_inst_operands_valid]
+QED
+
+Theorem le_prefix_retained_suffix_read:
+  wf_function fn /\ fn_inst_wf fn /\
+  le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  le_occ_prefix C fn s0 (pre ++ e::suffix) i s /\
+  (!bb n fuel u t. MEM (StepOcc bb n fuel u t) (pre ++ e::suffix) ==>
+    dfg_assigns_sound ctx.lctx_dfg u) /\
+  EVERY (le_singleton_retained_occ ctx fn key op) suffix /\
+  le_absolute_key ctx.lctx_addr_space key /\
+  (!v. key = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix) /\
+  le_key_address ctx.lctx_addr_space key (le_occ_post e) = SOME a /\
+  a < dimword (:256) ==>
+  le_read_address ctx.lctx_addr_space a s =
+  le_read_address ctx.lctx_addr_space a (le_occ_post e)
+Proof
+  strip_tac >> irule le_prefix_retained_suffix_read_local >> simp[] >>
+  qexistsl [`C`, `fn`, `i`, `key`, `op`, `pre`, `s0`, `suffix`] >> simp[] >>
+  gvs[MEM_APPEND, MEM] >> metis_tac[le_dfg_sound_inst_operands_valid]
+QED
+
+Theorem le_occ_prefix_singleton_current:
+  le_occ_prefix C fn s0 es i s /\
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  (!bb n fuel u t. MEM (StepOcc bb n fuel u t) es ==>
+    dfg_assigns_sound ctx.lctx_dfg u) /\
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME [op] ==>
+  le_key_read ctx.lctx_addr_space key s = eval_operand op s
+Proof
+  strip_tac >> irule le_occ_prefix_singleton_current_local >> simp[] >>
+  qexistsl [`C`, `es`, `fn`, `i`, `s0`] >> simp[] >>
+  metis_tac[le_dfg_sound_inst_operands_valid]
+QED
 
 Theorem le_frame_singleton_current:
   frame_reach C fn s0 i s /\
@@ -525,7 +620,7 @@ Theorem le_frame_singleton_current:
     (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME [op] ==>
   le_key_read ctx.lctx_addr_space key s = eval_operand op s
 Proof
-  strip_tac >> drule_all le_occ_prefix_annotate >> strip_tac >>
-  irule le_occ_prefix_singleton_current >> simp[] >>
-  qexistsl [`C`, `es`, `fn`, `i`, `s0`] >> simp[] >> metis_tac[]
+  strip_tac >> irule le_frame_singleton_current_local >> simp[] >>
+  qexistsl [`C`, `fn`, `i`, `s0`] >> simp[] >>
+  metis_tac[le_dfg_sound_inst_operands_valid]
 QED

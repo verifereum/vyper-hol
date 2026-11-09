@@ -6,6 +6,7 @@ Ancestors
   loadElimPopulation loadElimOccurrenceCoverage loadElimOperationalHistory analysisSimProofsBase
   loadElimLatestRead loadElimKeyRead loadElimKeyShapeInvariant loadElimConfiguredGeneration
   loadElimAbsoluteKey loadElimGenerationSound loadElimOccurrenceRead dfgCorrectnessProof venomExecProps words pred_set
+  loadElimOperandValidity loadElimNormalizeHelpers
   dfAnalyzeDefs cfgDefs cfgAnalysisProps venomWf venomExecProofs venomInstProps
   sccpCorrectnessProofs simplifyCfgPhiSemantics simplifyCfgPhiRepair
   simplifyCfgStruct finite_map list rich_list
@@ -211,7 +212,7 @@ Proof
   metis_tac[le_phi_definition_normalized_cut]
 QED
 
-Theorem le_homogeneous_occ_read:
+Theorem le_homogeneous_occ_read_local:
   wf_function fn /\ fn_inst_wf fn /\
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
   wf_alias_sets ctx.lctx_aliases /\
@@ -221,7 +222,8 @@ Theorem le_homogeneous_occ_read:
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
   le_occ_prefix C fn s0 es i s /\ MEM e es /\
-  (!b n fuel x y. MEM (StepOcc b n fuel x y) es ==> dfg_assigns_sound ctx.lctx_dfg x) /\
+  (!b n fuel x y. MEM (StepOcc b n fuel x y) es ==>
+    le_inst_operands_valid ctx.lctx_dfg (EL n b.bb_instructions) x) /\
   le_homogeneous_retained_occ ctx fn key r e /\
   le_absolute_key ctx.lctx_addr_space key /\
   le_key_address ctx.lctx_addr_space key (le_occ_pre e) = SOME a /\
@@ -242,11 +244,122 @@ Proof
          metis_tac[lookup_block_label]) >>
       fs[le_read_address_occ_after, le_occ_pre_def, le_occ_post_def,
          le_occ_valid_def, le_homogeneous_retained_occ_def] >>
-      irule le_configured_retained_step_read >> metis_tac[]) >>
+      irule le_configured_retained_step_read_local >> metis_tac[]) >>
   `le_occ_valid C fn (PhiOcc b v v0)` by metis_tac[le_occ_prefix_member] >>
   metis_tac[le_phi_read_occ_after]
 QED
 
+
+Theorem le_occ_prefix_homogeneous_current_local:
+  le_occ_prefix C fn s0 es i s /\
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  (!bb n fuel u t. MEM (StepOcc bb n fuel u t) es ==>
+    le_inst_operands_valid ctx.lctx_dfg (EL n bb.bb_instructions) u) /\
+  (!bb n fuel u t op. MEM (StepOcc bb n fuel u t) es /\
+    le_transfer_generates ctx (EL n bb.bb_instructions) key op ==>
+    le_chain_valid ctx.lctx_dfg [] op t) /\
+  FLOOKUP (unwrap_load_lattice
+    (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx)) key = SOME vs /\
+  vs <> [] /\ EVERY (\op. normalize_operand ctx.lctx_dfg [] op = r) vs ==>
+  le_key_read ctx.lctx_addr_space key s = eval_operand r s
+Proof
+  strip_tac >> drule_all le_occ_prefix_homogeneous_suffix >> strip_tac >>
+  qpat_x_assum `es = _` SUBST_ALL_TAC >>
+  `MEM (StepOcc bb n fuel u t) (pre ++ StepOcc bb n fuel u t::suffix)` by simp[] >>
+  `le_occ_valid C fn (StepOcc bb n fuel u t)` by metis_tac[le_occ_prefix_member] >>
+  `MEM bb fn.fn_blocks /\ n < LENGTH bb.bb_instructions` by
+    (fs[le_occ_valid_def] >> metis_tac[lookup_block_MEM]) >>
+  `(!v. key = LK_Op (Var v) ==> ~MEM v (EL n bb.bb_instructions).inst_outputs)` by
+    (rpt strip_tac >> gvs[] >> drule_all le_generator_key_output_separate >> simp[]) >>
+  `le_absolute_key ctx.lctx_addr_space key` by metis_tac[le_generated_key_absolute] >>
+  `step_inst fuel C (EL n bb.bb_instructions) u = OK t` by fs[le_occ_valid_def] >>
+  `le_inst_operands_valid ctx.lctx_dfg (EL n bb.bb_instructions) u` by metis_tac[] >>
+  `le_chain_valid ctx.lctx_dfg [] op t` by metis_tac[] >>
+  `le_key_read ctx.lctx_addr_space key t = eval_operand op t` by
+    (irule le_configured_generation_read_local >> simp[] >> metis_tac[]) >>
+  `eval_operand op t = eval_operand r t` by metis_tac[le_chain_valid_eval] >>
+  drule_all le_configured_generation_address_local >> strip_tac >>
+  `!v. key = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
+    suspend "key" >>
+  `le_key_address ctx.lctx_addr_space key s = le_key_address ctx.lctx_addr_space key t` by
+    (drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]) >>
+  `le_read_address ctx.lctx_addr_space a s = le_read_address ctx.lctx_addr_space a t` by
+    suspend "read" >>
+  `eval_operand r s = eval_operand r t` by suspend "operand" >>
+  gvs[le_key_read_def]
+QED
+
+Resume le_occ_prefix_homogeneous_current_local[key]:
+  rpt gen_tac >> disch_tac >> simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+  irule le_present_occ_key_no_write >>
+  qexistsl [`C`, `ctx`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `s`, `s0`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[EVERY_MEM, le_homogeneous_step_presence]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[EVERY_MEM, le_homogeneous_phi_presence]
+QED
+
+Resume le_occ_prefix_homogeneous_current_local[read]:
+  `le_occ_chain (le_occ_after (StepOcc bb n fuel u t)) suffix s` by
+    (drule le_occ_prefix_chain >> simp[le_occ_chain_append, le_occ_chain_def] >> metis_tac[]) >>
+  `EVERY (le_occ_valid C fn) suffix` by
+    (drule le_occ_prefix_valid >> simp[]) >>
+  `EVERY (\q. !a. le_key_address ctx.lctx_addr_space key (le_occ_pre q) = SOME a /\
+    a < dimword (:256) ==>
+    le_read_address ctx.lctx_addr_space a (le_occ_after q) =
+    le_read_address ctx.lctx_addr_space a (le_occ_pre q)) suffix` by
+    (simp[EVERY_MEM] >> rpt strip_tac >> irule le_homogeneous_occ_read_local >>
+     simp[] >> qexistsl [`C`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `key`, `r`, `s`, `s0`] >>
+     simp[] >> reverse conj_tac
+     >- (qpat_x_assum `EVERY (le_homogeneous_retained_occ _ _ _ _) _` mp_tac >>
+         simp[EVERY_MEM]) >>
+     gvs[MEM_APPEND, MEM] >> metis_tac[]) >>
+  `le_key_address ctx.lctx_addr_space key (le_occ_after (StepOcc bb n fuel u t)) = SOME a` by
+    simp[le_absolute_key_after_post, le_occ_post_def] >>
+  drule_all le_occ_chain_retained_read >> simp[le_read_address_occ_after, le_occ_post_def]
+QED
+
+Resume le_occ_prefix_homogeneous_current_local[operand]:
+  irule le_key_address_operand_injective >> qexists `ctx.lctx_addr_space` >>
+  `!v. LK_Op r = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
+    (rpt gen_tac >> disch_tac >> gvs[] >> simp[EVERY_MEM] >>
+     gen_tac >> disch_tac >> irule le_homogeneous_occ_value_no_write >>
+     qexistsl [`C`, `ctx`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `key`, `s`, `s0`] >>
+     simp[] >> metis_tac[EVERY_MEM]) >>
+  `le_absolute_key ctx.lctx_addr_space (LK_Op r)` by simp[le_absolute_key_def] >>
+  drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]
+QED
+Finalise le_occ_prefix_homogeneous_current_local
+
+Theorem le_homogeneous_occ_read:
+  wf_function fn /\ fn_inst_wf fn /\
+  le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  wf_alias_sets ctx.lctx_aliases /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  le_occ_prefix C fn s0 es i s /\ MEM e es /\
+  (!b n fuel x y. MEM (StepOcc b n fuel x y) es ==> dfg_assigns_sound ctx.lctx_dfg x) /\
+  le_homogeneous_retained_occ ctx fn key r e /\
+  le_absolute_key ctx.lctx_addr_space key /\
+  le_key_address ctx.lctx_addr_space key (le_occ_pre e) = SOME a /\
+  a < dimword (:256) ==>
+  le_read_address ctx.lctx_addr_space a (le_occ_after e) =
+  le_read_address ctx.lctx_addr_space a (le_occ_pre e)
+Proof
+  strip_tac >> irule le_homogeneous_occ_read_local >> simp[] >>
+  qexistsl [`C`, `es`, `fn`, `i`, `key`, `r`, `s`, `s0`] >> simp[] >>
+  metis_tac[le_dfg_sound_inst_operands_valid]
+QED
 
 Theorem le_occ_prefix_homogeneous_current:
   le_occ_prefix C fn s0 es i s /\
@@ -266,71 +379,10 @@ Theorem le_occ_prefix_homogeneous_current:
   vs <> [] /\ EVERY (\op. normalize_operand ctx.lctx_dfg [] op = r) vs ==>
   le_key_read ctx.lctx_addr_space key s = eval_operand r s
 Proof
-  strip_tac >> drule_all le_occ_prefix_homogeneous_suffix >> strip_tac >>
-  qpat_x_assum `es = _` SUBST_ALL_TAC >>
-  `MEM (StepOcc bb n fuel u t) (pre ++ StepOcc bb n fuel u t::suffix)` by simp[] >>
-  `le_occ_valid C fn (StepOcc bb n fuel u t)` by metis_tac[le_occ_prefix_member] >>
-  `MEM bb fn.fn_blocks /\ n < LENGTH bb.bb_instructions` by
-    (fs[le_occ_valid_def] >> metis_tac[lookup_block_MEM]) >>
-  `(!v. key = LK_Op (Var v) ==> ~MEM v (EL n bb.bb_instructions).inst_outputs)` by
-    (rpt strip_tac >> gvs[] >> drule_all le_generator_key_output_separate >> simp[]) >>
-  `le_absolute_key ctx.lctx_addr_space key` by metis_tac[le_generated_key_absolute] >>
-  `step_inst fuel C (EL n bb.bb_instructions) u = OK t` by fs[le_occ_valid_def] >>
-  `dfg_assigns_sound ctx.lctx_dfg u /\ dfg_assigns_sound ctx.lctx_dfg t` by metis_tac[] >>
-  `le_key_read ctx.lctx_addr_space key t = eval_operand op t` by
-    (irule le_configured_generation_read >> simp[] >> metis_tac[]) >>
-  `eval_operand op t = eval_operand r t` by metis_tac[normalize_operand_eval_proof] >>
-  drule_all le_configured_generation_address >> strip_tac >>
-  `!v. key = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
-    suspend "key" >>
-  `le_key_address ctx.lctx_addr_space key s = le_key_address ctx.lctx_addr_space key t` by
-    (drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]) >>
-  `le_read_address ctx.lctx_addr_space a s = le_read_address ctx.lctx_addr_space a t` by
-    suspend "read" >>
-  `eval_operand r s = eval_operand r t` by suspend "operand" >>
-  gvs[le_key_read_def]
+  strip_tac >> irule le_occ_prefix_homogeneous_current_local >> simp[] >>
+  qexistsl [`C`, `es`, `fn`, `i`, `s0`, `vs`] >> simp[] >>
+  metis_tac[le_dfg_sound_inst_operands_valid, le_dfg_sound_chain_valid]
 QED
-
-Resume le_occ_prefix_homogeneous_current[key]:
-  rpt gen_tac >> disch_tac >> simp[EVERY_MEM] >> gen_tac >> disch_tac >>
-  irule le_present_occ_key_no_write >>
-  qexistsl [`C`, `ctx`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `s`, `s0`] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> gvs[] >> metis_tac[EVERY_MEM, le_homogeneous_step_presence]) >>
-  rpt strip_tac >> gvs[] >> metis_tac[EVERY_MEM, le_homogeneous_phi_presence]
-QED
-
-Resume le_occ_prefix_homogeneous_current[read]:
-  `le_occ_chain (le_occ_after (StepOcc bb n fuel u t)) suffix s` by
-    (drule le_occ_prefix_chain >> simp[le_occ_chain_append, le_occ_chain_def] >> metis_tac[]) >>
-  `EVERY (le_occ_valid C fn) suffix` by
-    (drule le_occ_prefix_valid >> simp[]) >>
-  `EVERY (\q. !a. le_key_address ctx.lctx_addr_space key (le_occ_pre q) = SOME a /\
-    a < dimword (:256) ==>
-    le_read_address ctx.lctx_addr_space a (le_occ_after q) =
-    le_read_address ctx.lctx_addr_space a (le_occ_pre q)) suffix` by
-    (simp[EVERY_MEM] >> rpt strip_tac >> irule le_homogeneous_occ_read >>
-     simp[] >> qexistsl [`C`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `key`, `r`, `s`, `s0`] >>
-     simp[] >> reverse conj_tac
-     >- (qpat_x_assum `EVERY (le_homogeneous_retained_occ _ _ _ _) _` mp_tac >>
-         simp[EVERY_MEM]) >>
-     qpat_x_assum `!bb n fuel u t. _` mp_tac >> simp[] >> metis_tac[]) >>
-  `le_key_address ctx.lctx_addr_space key (le_occ_after (StepOcc bb n fuel u t)) = SOME a` by
-    simp[le_absolute_key_after_post, le_occ_post_def] >>
-  drule_all le_occ_chain_retained_read >> simp[le_read_address_occ_after, le_occ_post_def]
-QED
-
-Resume le_occ_prefix_homogeneous_current[operand]:
-  irule le_key_address_operand_injective >> qexists `ctx.lctx_addr_space` >>
-  `!v. LK_Op r = LK_Op (Var v) ==> EVERY (\q. v NOTIN le_occ_writes q) suffix` by
-    (rpt gen_tac >> disch_tac >> gvs[] >> simp[EVERY_MEM] >>
-     gen_tac >> disch_tac >> irule le_homogeneous_occ_value_no_write >>
-     qexistsl [`C`, `ctx`, `pre ++ StepOcc bb n fuel u t::suffix`, `fn`, `i`, `key`, `s`, `s0`] >>
-     simp[] >> metis_tac[EVERY_MEM]) >>
-  `le_absolute_key ctx.lctx_addr_space (LK_Op r)` by simp[le_absolute_key_def] >>
-  drule_all le_prefix_suffix_key_address >> simp[le_occ_post_def]
-QED
-Finalise le_occ_prefix_homogeneous_current
 
 Theorem le_occ_prefix_store_test_current:
   le_occ_prefix C fn s0 es i s /\
