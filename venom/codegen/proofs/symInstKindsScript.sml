@@ -43,6 +43,15 @@ Proof
   metis_tac[closure_spill_byte_own]
 QED
 
+Theorem spill_disjoint_range_not_context:
+  (len = 0 \/ !r. MEM r cplan.cp_regions ==>
+      off + len <= r.sr_spill_base \/ r.sr_spill_end <= off) /\
+  in_mem_range off len b ==> ~context_spill_byte cplan b
+Proof
+  rw[in_mem_range_def, context_spill_byte_def] >> gvs[] >>
+  spose_not_then strip_assume_tac >> first_x_assum drule >> decide_tac
+QED
+
 Theorem spill_disjoint_ranges_no_labels:
   EVERY (\(off,len). len = 0 \/
     !r. MEM r cplan.cp_regions ==>
@@ -51,12 +60,9 @@ Theorem spill_disjoint_ranges_no_labels:
   MEM (off,len) ranges /\ in_mem_range off len b ==>
   b NOTIN FDOM labs
 Proof
-  simp[EVERY_MEM, context_spill_byte_def, in_mem_range_def] >>
-  rpt strip_tac >>
-  first_x_assum (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
   qpat_x_assum `!e. MEM e ranges ==> _` drule >> simp[] >>
-  disch_then (qspec_then `r` mp_tac) >> simp[] >>
-  strip_tac >> spose_not_then strip_assume_tac >> gvs[]
+  metis_tac[spill_disjoint_range_not_context, arithmeticTheory.ADD_COMM]
 QED
 
 Theorem source_read_ranges_no_labels:
@@ -114,38 +120,6 @@ Proof
   simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
 QED
 
-Theorem phi_output_retpc:
-  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
-  inst.inst_opcode = PHI /\ MEM (Var y) inst.inst_operands ==>
-  (retpc_var fn x <=> retpc_var fn y)
-Proof
-  strip_tac >> eq_tac
-  >- (strip_tac >>
-      qpat_x_assum `retpc_shape_ok fn`
-        (mp_tac o cj 3 o REWRITE_RULE [retpc_shape_ok_def]) >>
-      disch_then drule_all >> simp[]) >>
-  simp[retpc_var_def] >> strip_tac >>
-  irule copy_phi_var_phi >> metis_tac[]
-QED
-
-Theorem phi_var_output_kind:
-  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
-  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
-  MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
-  MEM (Var y) inst.inst_operands ==>
-  (op_kind_ok fn ret (Var x) sv <=> op_kind_ok fn ret (Var y) sv)
-Proof
-  strip_tac >>
-  `~code_end_var fn x /\ ~code_end_var fn y` by
-    (conj_tac >> strip_tac
-     >- (drule_all code_end_var_def_inst >> simp[]) >>
-     qpat_x_assum `label_flow_ok ctx`
-       (mp_tac o REWRITE_RULE [label_flow_ok_def]) >>
-     disch_then drule_all >> simp[] >> metis_tac[]) >>
-  drule_all phi_output_retpc >>
-  simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
-QED
-
 Theorem ordinary_input_not_code_end:
   label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\
   MEM inst (fn_insts fn) /\ MEM (Var x) inst.inst_operands /\
@@ -156,6 +130,24 @@ Proof
   qpat_x_assum `label_flow_ok ctx`
     (mp_tac o REWRITE_RULE [label_flow_ok_def]) >>
   disch_then drule_all >> simp[] >> metis_tac[]
+QED
+
+Theorem phi_var_output_kind:
+  ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM x inst.inst_outputs /\ inst.inst_opcode = PHI /\
+  MEM (Var y) inst.inst_operands ==>
+  (op_kind_ok fn ret (Var x) sv <=> op_kind_ok fn ret (Var y) sv)
+Proof
+  strip_tac >>
+  `~code_end_var fn x` by
+    (drule_at (Pat `MEM inst (fn_insts fn)`) ordinary_output_not_code_end >>
+     simp[] >> metis_tac[]) >>
+  `~code_end_var fn y` by
+    (drule_at (Pat `MEM inst (fn_insts fn)`) ordinary_input_not_code_end >>
+     simp[] >> metis_tac[]) >>
+  drule_all frameViewFactsTheory.phi_output_retpc >>
+  simp[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
 QED
 
 Theorem op_kind_ok_numeric:
