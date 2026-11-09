@@ -200,3 +200,122 @@ Proof
   gvs[inline_one_site_def] >>
   irule inline_final_lookup_fields >> simp[]
 QED
+
+Theorem inline_pure1_id[local]:
+  exec_pure1 f (inst with inst_id := k) s = exec_pure1 f inst s
+Proof simp[exec_pure1_def]
+QED
+
+Theorem inline_pure2_id[local]:
+  exec_pure2 f (inst with inst_id := k) s = exec_pure2 f inst s
+Proof simp[exec_pure2_def]
+QED
+
+Theorem inline_pure3_id[local]:
+  exec_pure3 f (inst with inst_id := k) s = exec_pure3 f inst s
+Proof simp[exec_pure3_def]
+QED
+
+Theorem inline_read0_id[local]:
+  exec_read0 f (inst with inst_id := k) s = exec_read0 f inst s
+Proof simp[exec_read0_def]
+QED
+
+Theorem inline_read1_id[local]:
+  exec_read1 f (inst with inst_id := k) s = exec_read1 f inst s
+Proof simp[exec_read1_def]
+QED
+
+Theorem inline_write2_id[local]:
+  exec_write2 f (inst with inst_id := k) s = exec_write2 f inst s
+Proof simp[exec_write2_def]
+QED
+
+Theorem inline_gas_id[local]:
+  exec_gas (inst with inst_id := k) s = exec_gas inst s
+Proof simp[exec_gas_def]
+QED
+
+Theorem inline_ext_call_id[local]:
+  exec_ext_call (inst with inst_id := k) s g a v off sz ro rs st =
+  exec_ext_call inst s g a v off sz ro rs st
+Proof simp[exec_ext_call_def]
+QED
+
+Theorem inline_delegatecall_id[local]:
+  exec_delegatecall (inst with inst_id := k) s g a off sz ro rs =
+  exec_delegatecall inst s g a off sz ro rs
+Proof simp[exec_delegatecall_def]
+QED
+
+Theorem inline_create_id[local]:
+  exec_create (inst with inst_id := k) s v off sz salt =
+  exec_create inst s v off sz salt
+Proof simp[exec_create_def]
+QED
+
+Theorem inline_step_base_id:
+  inst.inst_opcode <> ALLOCA ==>
+  step_inst_base (inst with inst_id := k) s = step_inst_base inst s
+Proof
+  Cases_on `inst.inst_opcode` >>
+  first_assum (fn eq =>
+    let val opc = rhs (concl eq)
+        val branch = valOf (List.find
+          (fn th => aconv opc (rhs (#1 (dest_imp (#2 (strip_forall (concl th)))))))
+          (CONJUNCTS step_inst_base_opcode_eqs))
+    in simp[branch, inline_pure1_id, inline_pure2_id, inline_pure3_id,
+            inline_read0_id, inline_read1_id, inline_write2_id, inline_gas_id,
+            inline_ext_call_id, inline_delegatecall_id, inline_create_id]
+    end) >>
+  simp[dretShapeDefsTheory.parse_dret_shape_def]
+QED
+
+Theorem inline_step_id:
+  inst.inst_opcode <> ALLOCA ==>
+  step_inst fuel ctx (inst with inst_id := k) s = step_inst fuel ctx inst s
+Proof
+  strip_tac >> rewrite_tac[step_inst_def] >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- simp[decode_invoke_def] >>
+  simp[inline_step_base_id]
+QED
+
+Theorem inline_fields_step:
+  inline_inst_fields inst' = inline_inst_fields inst /\ inst.inst_opcode <> ALLOCA ==>
+  step_inst fuel ctx inst' s = step_inst fuel ctx inst s
+Proof
+  strip_tac >>
+  `inst' = inst with inst_id := inst'.inst_id` by
+    (Cases_on `inst` >> Cases_on `inst'` >> gvs[inline_inst_fields_def, venomInstTheory.instruction_component_equality]) >>
+  qpat_x_assum `inst' = _` SUBST1_TAC >>
+  irule inline_step_id >> simp[]
+QED
+
+Theorem inline_fields_length:
+  MAP inline_inst_fields xs = MAP inline_inst_fields ys ==> LENGTH xs = LENGTH ys
+Proof
+  metis_tac[LENGTH_MAP]
+QED
+
+Theorem inline_fields_phi_prefix:
+  !xs ys. MAP inline_inst_fields xs = MAP inline_inst_fields ys ==>
+    phi_prefix_length xs = phi_prefix_length ys
+Proof
+  Induct >> Cases_on `ys` >> simp[] >>
+  rpt strip_tac >> gvs[inline_inst_fields_def, phi_prefix_length_def] >> metis_tac[]
+QED
+
+Theorem inline_invoke_suffix_nonphi:
+  bb_well_formed bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  EVERY (\inst. inst.inst_opcode <> PHI) (DROP (i+1) bb.bb_instructions)
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  fs[MEM_EL] >>
+  `n + (i+1) < LENGTH bb.bb_instructions` by decide_tac >>
+  `(EL n (DROP (i+1) bb.bb_instructions)) =
+    EL (n + (i+1)) bb.bb_instructions` by (irule EL_DROP >> decide_tac) >>
+  fs[bb_well_formed_def] >>
+  first_x_assum (qspecl_then [`i`, `n + (i+1)`] mp_tac) >> simp[] >> gvs[]
+QED
