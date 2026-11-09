@@ -12,7 +12,7 @@ Ancestors
   codegenRel pred_set ptrSafeRun fragExec
 
 Theorem prefix_member_setup_code:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) ==>
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) ==>
   let x = "%" ++ toString st.cs_next_var;
       y = "%" ++ toString (st.cs_next_var+1);
       z = "%" ++ toString (st.cs_next_var+2);
@@ -302,7 +302,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_static_pair:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) F ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) F ao vo st = (ops,middle) /\
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME d /\
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
@@ -356,7 +356,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_dynamic_pair:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) T ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) T ao vo st = (ops,middle) /\
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME d /\
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -444,7 +444,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_ghost:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME d /\
   abi_decoder_operand_live st.cs_next_var (Var dst) /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -473,7 +473,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_pair:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand (Var dst) s = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb+ao) : bytes32) s = n2w payload_off /\
            sb+payload_off < dimword (:256)) /\
@@ -505,6 +505,12 @@ Theorem prefix_member_setup_pair:
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decoder_operand_live_def] >>
+  `dyn ==> eval_operand (Lit 0w) s = SOME (n2w 0) /\
+    abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) s = n2w payload_off /\
+    sb + payload_off < dimword (:256)` by
+    (Cases_on `dyn` >> gvs[eval_operand_def, ADD_COMM]) >>
   drule_all abi_decode_member_setup_reentry >> strip_tac >>
   gvs[] >>
   drule_all prefix_member_setup_ghost >>
@@ -513,7 +519,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_layout:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) ==>
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) ==>
   middle.cs_current_bb = st.cs_current_bb /\
   middle.cs_current_insts = st.cs_current_insts ++ emitted_insts st middle /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -521,7 +527,7 @@ Theorem prefix_member_setup_layout:
 Proof
   strip_tac >> drule prefix_member_setup_code >>
   Cases_on `dyn` >> simp[mk_inst_def, is_terminator_def] >> strip_tac >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[abi_decode_member_setup_def, compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
        emit_void_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
@@ -529,7 +535,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_current_bb:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   run_inst_seq (emitted_insts st middle) s = OK t ==>
   t.vs_current_bb = s.vs_current_bb
 Proof
@@ -543,7 +549,7 @@ Proof
 QED
 
 Theorem prefix_member_setup_run_continuation:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   run_inst_seq (emitted_insts st middle) s = OK t /\
   fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
