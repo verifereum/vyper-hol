@@ -2486,7 +2486,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for MAP SOSpill *)
-Theorem execute_plan_map_spill_length[local]:
+Theorem execute_plan_map_spill_length:
   !offs. LENGTH (execute_plan initial_fmp (MAP SOSpill offs)) = 2 * LENGTH offs
 Proof
   Induct >> simp[execute_plan_def, exec_stack_op_def] >>
@@ -2494,7 +2494,7 @@ Proof
 QED
 
 (* execute_plan initial_fmp length for MAP SORestore *)
-Theorem execute_plan_map_restore_length[local]:
+Theorem execute_plan_map_restore_length:
   !offs. LENGTH (execute_plan initial_fmp (MAP SORestore offs)) = 2 * LENGTH offs
 Proof
   Induct >> simp[execute_plan_def, exec_stack_op_def] >>

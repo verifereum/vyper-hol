@@ -802,6 +802,202 @@ Proof
   mp_tac (Q.SPECL [`2`, `2`, `ss`] sym_steps_add) >> simp[]
 QED
 
+Theorem sym_scratch_spill_bulk_steps:
+  !offsets ss.
+    LENGTH offsets <= LENGTH ss.sym_stack /\
+    EVERY (\off. off < dimword(:256)) offsets /\
+    (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+      EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan fmp (MAP SOSpill offsets)) ==>
+    ?ss'. sym_steps p env (2 * LENGTH offsets) ss = SymOK ss' /\
+      ss'.sym_stack = DROP (LENGTH offsets) ss.sym_stack /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH offsets /\
+      (!k. k < LENGTH offsets ==>
+        mem_sval_at ss'.sym_mem_labels (EL k offsets) (EL k ss.sym_stack)) /\
+      (!b. EVERY (\off. ~in_mem_range off 32 b) offsets ==>
+        FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+      (!b. b IN FDOM ss'.sym_mem_labels ==>
+        b IN FDOM ss.sym_mem_labels \/
+        EXISTS (\off. in_mem_range off 32 b) offsets)
+Proof
+  Induct >> simp[execute_plan_def, sym_steps_def] >>
+  rpt strip_tac >>
+  `(!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+      EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+   EVERY (\off. h + 32 <= off \/ off + 32 <= h) offsets` by
+    (conj_tac
+     >- (rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+     simp[listTheory.EVERY_EL] >> rpt strip_tac >>
+     first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  Cases_on `ss.sym_stack` >> gvs[] >>
+  rename1 `ss.sym_stack = sv :: tail` >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan fmp [SOSpill h]) /\
+   asm_block_at p (ss.sym_base.as_pc + 2) (execute_plan fmp (MAP SOSpill offsets))` by
+    gvs[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
+  drule_all sym_scratch_spill_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
+  first_x_assum (qspec_then `ss'` mp_tac) >> simp[] >>
+  strip_tac >> qexists_tac `ss''` >> simp[] >>
+  conj_tac
+  >- (gvs[execute_plan_def, exec_stack_op_def] >>
+      `2 * SUC (LENGTH offsets) = 2 + 2 * LENGTH offsets` by decide_tac >>
+      mp_tac (Q.SPECL [`2`, `2 * LENGTH (offsets:num list)`, `ss`] sym_steps_add) >> simp[]) >>
+  conj_tac
+  >- (Cases >> simp[] >>
+      `!b. in_mem_range h 32 b ==>
+         FLOOKUP ss''.sym_mem_labels b = FLOOKUP ss'.sym_mem_labels b` by
+        (rpt strip_tac >> first_x_assum irule >>
+         fs[listTheory.EVERY_MEM, in_mem_range_def] >> rpt strip_tac >>
+         first_x_assum drule >> decide_tac) >>
+      metis_tac[mem_sval_at_local_cong]) >>
+  metis_tac[]
+QED
+
+Theorem sym_scratch_restore_bulk_sim:
+  !offsets vals cs ss.
+    asm_static_wf p /\ asm_sym_rel p env cs ss /\
+    EVERY (\off. off < dimword(:256)) offsets /\
+    LIST_REL (\off sv. mem_sval_at ss.sym_mem_labels off sv /\
+      case sv of Val w => word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP off cs.as_memory)) = w | Lab l d => T) offsets vals /\
+    asm_block_at p cs.as_pc (execute_plan fmp (MAP SORestore offsets)) ==>
+    ?cs' ss'.
+      asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+        (2 * LENGTH offsets) cs = AsmOK cs' /\
+      sym_steps p env (2 * LENGTH offsets) ss = SymOK ss' /\
+      asm_sym_rel p env cs' ss' /\
+      ss'.sym_stack = REVERSE vals ++ ss.sym_stack /\
+      ss'.sym_mem_labels = ss.sym_mem_labels /\
+      cs'.as_pc = cs.as_pc + 2 * LENGTH offsets
+Proof
+  Induct >> simp[execute_plan_def, sym_steps_def, asm_steps_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `vals` >> gvs[] >>
+  rename1 `mem_sval_at ss.sym_mem_labels h sv` >>
+  `asm_block_at p cs.as_pc (execute_plan fmp [SORestore h]) /\
+   asm_block_at p (cs.as_pc + 2) (execute_plan fmp (MAP SORestore offsets))` by
+    gvs[execute_plan_def, exec_stack_op_def, stackOpSimTheory.asm_block_at_cons] >>
+  `case sv of Val w => word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP h (asm_expand_memory (h + 32) cs.as_memory))) = w
+    | Lab l d => T` by simp[spillSimTheory.word_of_bytes_take_drop_expand] >>
+  drule_all sym_scratch_restore_sim >> strip_tac >>
+  first_x_assum (qspecl_then [`t`, `cs'`, `ss'`] mp_tac) >>
+  simp[spillSimTheory.word_of_bytes_take_drop_expand] >>
+  strip_tac >> qexistsl_tac [`cs''`, `ss''`] >> simp[] >>
+  `2 * SUC (LENGTH offsets) = 2 + 2 * LENGTH offsets` by decide_tac >>
+  gvs[execute_plan_def, exec_stack_op_def] >>
+  conj_tac
+  >- (once_rewrite_tac[arithmeticTheory.MULT_SUC] >>
+      irule blockSimHelpersTheory.asm_steps_compose_ok >> qexists_tac `cs'` >> simp[]) >>
+  mp_tac (Q.SPECL [`2`, `2 * LENGTH (offsets:num list)`, `ss`] sym_steps_add) >>
+  simp[arithmeticTheory.MULT_SUC]
+QED
+
+Theorem sym_scratch_spill_bulk_sim:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  LENGTH offsets <= LENGTH ss.sym_stack /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp (MAP SOSpill offsets)) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (2 * LENGTH offsets) cs = AsmOK cs' /\
+    sym_steps p env (2 * LENGTH offsets) ss = SymOK ss' /\
+    asm_sym_rel p env cs' ss' /\
+    ss'.sym_stack = DROP (LENGTH offsets) ss.sym_stack /\
+    cs'.as_pc = cs.as_pc + 2 * LENGTH offsets /\
+    LIST_REL (\off sv. mem_sval_at ss'.sym_mem_labels off sv /\
+      case sv of Val w => word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP off cs'.as_memory)) = w | Lab l d => T)
+      offsets (TAKE (LENGTH offsets) ss.sym_stack) /\
+    (!b. EVERY (\off. ~in_mem_range off 32 b) offsets ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==>
+      b IN FDOM ss.sym_mem_labels \/ EXISTS (\off. in_mem_range off 32 b) offsets)
+Proof
+  strip_tac >>
+  `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
+  `asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp (MAP SOSpill offsets))` by simp[] >>
+  drule_all sym_scratch_spill_bulk_steps >> disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  `LENGTH offsets <= LENGTH cs.as_stack` by
+    gvs[asm_sym_rel_def, listTheory.LIST_REL_EL_EQN] >>
+  drule_all doSwapSimTheory.raw_spill_bulk_steps >>
+  disch_then (qspecl_then [`SND (compute_label_offsets p)`, `build_offset_to_pc p`] mp_tac) >>
+  strip_tac >> gvs[] >>
+  simp[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
+  simp[listTheory.EL_TAKE] >>
+  `word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP (EL n offsets)
+      (FOLDL (\mem p. mem_write32 (FST p) (SND p) mem) cs.as_memory
+        (ZIP (offsets, TAKE (LENGTH offsets) cs.as_stack))))) = EL n cs.as_stack` by
+    (mp_tac (Q.SPECL [`offsets:num list`, `TAKE (LENGTH (offsets:num list)) cs.as_stack`,
+       `cs.as_memory`, `n`] doSwapSimTheory.raw_spill_fold_read_occurrence) >>
+     simp[listTheory.EL_TAKE]) >>
+  Cases_on `EL n ss.sym_stack` >> simp[] >>
+  fs[asm_sym_rel_def, listTheory.LIST_REL_EL_EQN] >>
+  qpat_x_assum `!n. n < LENGTH ss.sym_stack ==> _`
+    (qspec_then `n` mp_tac) >> simp[sval_conc_def]
+QED
+
+Theorem sym_raw_spill_restore_schedule_steps:
+  asm_static_wf p /\ asm_sym_rel p env cs ss /\
+  LENGTH offsets <= LENGTH ss.sym_stack /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+  EVERY (\i. i < LENGTH offsets) desired /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp
+    (MAP SOSpill offsets ++ MAP SORestore
+      (MAP (\i. EL i offsets) (REVERSE desired)))) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp (MAP SOSpill offsets ++
+        MAP SORestore (MAP (\i. EL i offsets) (REVERSE desired))))) cs = AsmOK cs' /\
+    sym_steps p env
+      (LENGTH (execute_plan initial_fmp (MAP SOSpill offsets ++
+        MAP SORestore (MAP (\i. EL i offsets) (REVERSE desired))))) ss = SymOK ss' /\
+    asm_sym_rel p env cs' ss' /\
+    ss'.sym_stack = MAP (\i. EL i (TAKE (LENGTH offsets) ss.sym_stack)) desired ++
+      DROP (LENGTH offsets) ss.sym_stack /\
+    cs'.as_pc = cs.as_pc + 2 * LENGTH offsets + 2 * LENGTH desired /\
+    (!b. EVERY (\off. ~in_mem_range off 32 b) offsets ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+    (!b. b IN FDOM ss'.sym_mem_labels ==>
+      b IN FDOM ss.sym_mem_labels \/ EXISTS (\off. in_mem_range off 32 b) offsets)
+Proof
+  strip_tac >>
+  `asm_block_at p cs.as_pc (execute_plan initial_fmp (MAP SOSpill offsets)) /\
+   asm_block_at p (cs.as_pc + 2 * LENGTH offsets) (execute_plan initial_fmp
+     (MAP SORestore (MAP (\i. EL i offsets) (REVERSE desired))))` by
+    gvs[stackOpSimTheory.asm_block_at_append, stackOpSimTheory.execute_plan_append,
+        doSwapSimTheory.execute_plan_map_spill_length] >>
+  drule_all sym_scratch_spill_bulk_sim >> strip_tac >>
+  `EVERY (\off. off < dimword(:256)) (MAP (\i. EL i offsets) (REVERSE desired)) /\
+   LIST_REL (\off sv. mem_sval_at ss'.sym_mem_labels off sv /\
+      case sv of Val w => word_of_bytes T (0w:bytes32)
+        (TAKE 32 (DROP off cs'.as_memory)) = w | Lab l d => T)
+     (MAP (\i. EL i offsets) (REVERSE desired))
+     (MAP (\i. EL i (TAKE (LENGTH offsets) ss.sym_stack)) (REVERSE desired))` by
+    (fs[listTheory.EVERY_EL, listTheory.LIST_REL_EL_EQN] >>
+     simp[listTheory.EVERY_MAP, rich_listTheory.EVERY_REVERSE,
+          listTheory.EVERY_EL, listTheory.LIST_REL_EL_EQN, listTheory.EL_MAP] >>
+     simp[listTheory.EL_REVERSE, listTheory.LENGTH_REVERSE]) >>
+  `asm_block_at p cs'.as_pc (execute_plan initial_fmp
+     (MAP SORestore (MAP (\i. EL i offsets) (REVERSE desired))))` by gvs[] >>
+  drule_all sym_scratch_restore_bulk_sim >> strip_tac >>
+  qexistsl [`cs''`, `ss''`] >>
+  simp[stackOpSimTheory.execute_plan_append,
+       doSwapSimTheory.execute_plan_map_spill_length,
+       doSwapSimTheory.execute_plan_map_restore_length] >>
+  conj_tac >- (mp_tac (Q.SPECL
+    [`SND (compute_label_offsets p)`, `build_offset_to_pc p`, `p`,
+     `2 * LENGTH (offsets:num list)`, `2 * LENGTH (desired:num list)`,
+     `cs`, `cs'`, `cs''`] blockSimHelpersTheory.asm_steps_compose_ok) >> gvs[]) >>
+  mp_tac (Q.SPECL [`2 * LENGTH (offsets:num list)`,
+    `2 * LENGTH (desired:num list)`, `ss`] sym_steps_add) >>
+  gvs[listTheory.MAP_REVERSE]
+QED
+
 
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
