@@ -5,6 +5,7 @@ Ancestors
   loadElimKeyRead loadElimKeyShapeInvariant loadElimActualGeneration
   loadElimOccurrence loadElimOccurrenceCoverage analysisSimProofsBase
   loadElimOperationalHistory simplifyCfgPhiSemantics
+  loadElimReachedNormalize loadElimOperandValidity loadElimSingletonAvailability
   simplifyCfgPhiRepair venomExecProofs
   loadElimDefs venomExecProps venomWf list rich_list finite_map pred_set words
 
@@ -46,7 +47,8 @@ Proof
 QED
 
 Theorem le_multivalue_occ_read:
-  wf_function fn /\ fn_inst_wf fn /\
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  ctx.lctx_dfg = dfg_build_function fn /\
   le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
   wf_alias_sets ctx.lctx_aliases /\
   fn_entry_label fn = SOME s0.vs_current_bb /\
@@ -55,7 +57,6 @@ Theorem le_multivalue_occ_read:
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
   le_occ_prefix C fn s0 es i s /\ MEM e es /\
-  (!b n fuel x y. MEM (StepOcc b n fuel x y) es ==> dfg_assigns_sound ctx.lctx_dfg x) /\
   (!b n fuel x y. e = StepOcc b n fuel x y ==>
     ?vs. 1 < LENGTH vs /\ FLOOKUP (unwrap_load_lattice
       (df_at NONE (load_analyze ctx fn) b.bb_label (SUC n))) key = SOME vs) /\
@@ -77,9 +78,14 @@ Proof
           (df_at NONE (load_analyze ctx fn) b.bb_label n)` by
         (irule le_analyze_step_transfer >> fs[le_occ_valid_def] >>
          metis_tac[lookup_block_label]) >>
+      `le_inst_operands_valid ctx.lctx_dfg (EL n b.bb_instructions) v` by
+        (drule_all le_occ_prefix_step_before >> strip_tac >>
+         drule_all le_occ_step_static >> strip_tac >>
+         simp[le_inst_operands_valid_def, EVERY_MEM] >> rpt strip_tac >>
+         irule le_frame_use_chain_valid >> metis_tac[le_occ_prefix_forget]) >>
       fs[le_read_address_occ_after, le_occ_pre_def, le_occ_post_def,
          le_occ_valid_def] >>
-      irule le_configured_multivalue_step_read >> metis_tac[]) >>
+      irule le_configured_multivalue_step_read_local >> metis_tac[]) >>
   `le_occ_valid C fn (PhiOcc b v v0)` by metis_tac[le_occ_prefix_member] >>
   metis_tac[le_phi_read_occ_after]
 QED
@@ -95,8 +101,6 @@ Theorem le_capture_retention_source_read:
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
   le_occ_prefix C fn s0 (pre ++ PhiOcc bb u p :: suffix) i s /\
-  (!b n fuel x y. MEM (StepOcc b n fuel x y)
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg x) /\
   (!b n fuel x y. MEM (StepOcc b n fuel x y) (PhiOcc bb u p :: suffix) ==>
     ?vs. 1 < LENGTH vs /\
       FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) b.bb_label n)) key = SOME vs /\
@@ -133,9 +137,7 @@ Proof
     (pure_rewrite_tac[EVERY_MEM] >> BETA_TAC >> rpt strip_tac >>
      drule_at_then (Pat `le_occ_prefix _ _ _ _ _ _`) mp_tac le_multivalue_occ_read >>
      disch_then irule >> simp[] >>
-     conj_tac >- metis_tac[MEM_APPEND, MEM, le_occurrence_distinct] >>
-     qexists `key` >> simp[] >>
-     metis_tac[MEM_APPEND]) >>
+     qexists `key` >> simp[] >> metis_tac[]) >>
   `le_read_address ctx.lctx_addr_space a s = le_read_address ctx.lctx_addr_space a u` by
     (irule le_occ_chain_retained_read >> metis_tac[]) >>
   gvs[le_key_read_def]
@@ -152,8 +154,6 @@ Theorem le_occ_latest_join_source_read:
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
   le_occ_prefix C fn s0 (pre ++ PhiOcc bb u p :: suffix) i s /\
-  (!b n fuel x y. MEM (StepOcc b n fuel x y)
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg x) /\
   compute_phi_action m (cfg_analyze fn) (load_analyze ctx fn) key
     s.vs_current_bb i = SOME pa /\
   bb.bb_label = pa.pa_join_lbl /\
