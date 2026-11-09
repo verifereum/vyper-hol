@@ -15,7 +15,7 @@ Theorem source_window_log_buffer_range[local]:
     source_value_window cenv scopes ss offset read_len /\
     source_memory_separated cenv scopes ss dst byte_count ==>
     offset + read_len <= ss.vs_alloca_next /\
-    compileEnv$regions_disjoint offset read_len dst byte_count
+    loweringStateRelDefs$regions_disjoint offset read_len dst byte_count
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `source_value_window _ _ _ _ _`
@@ -45,7 +45,7 @@ Theorem argument_origin_log_buffer[local]:
     ss.vs_alloca_next + capacity < dimword(:256) /\ byte_count <= capacity /\
     source_memory_separated cenv scopes ss (w2n (memory_snapshot_addr id ss)) byte_count ==>
     offset + read_len < dimword(:256) /\
-    compileEnv$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
+    loweringStateRelDefs$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `offset = 0 /\ read_len = 0`
   >- (gvs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>

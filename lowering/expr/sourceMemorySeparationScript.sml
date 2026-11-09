@@ -36,7 +36,7 @@ Theorem source_pointer_cached_allocation_disjoint:
     FLOOKUP ss.vs_allocas inst.inst_id = SOME (region_base,recorded_size) /\ byte_count <= recorded_size /\
     lookup_scopes name scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) region_size) /\ lookup_var p ss = SOME ptr_addr ==>
-    compileEnv$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) region_base byte_count
+    loweringStateRelDefs$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) region_base byte_count
 Proof
   rpt gen_tac >> strip_tac >>
   `local_region cenv scopes ss name (w2n ptr_addr) region_size` by
