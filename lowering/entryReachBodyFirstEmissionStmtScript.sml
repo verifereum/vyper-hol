@@ -679,8 +679,8 @@ QED
 Finalise first_emission_store_slots_family
 
 Theorem first_emission_assign_value[local]:
-  !ce dst loc src pw sl dt st di sz a x b.
-  compile_assign_value ce dst loc src pw sl dt st di sz a = (x,b) ==>
+  !ce dst loc src pw sl dt st sz a x b.
+  compile_assign_value ce dst loc src pw sl dt st sz a = (x,b) ==>
   cs_extends a b /\
   ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
     a.cs_current_insts = b.cs_current_insts) \/
@@ -710,19 +710,9 @@ Proof
   >>~- ([`compile_imm_store_word _ _ _ _ = _`], metis_tac[first_emission_imm_store_word])
   >>~- ([`compile_imm_store_words _ _ _ _ _ _ = _`], metis_tac[first_emission_imm_store_words])
   >>~- ([`emit_op _ _ _ = _`],
-    rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
-  Cases_on `di` >> pure_rewrite_tac[optionTheory.option_case_def, pairTheory.pair_case_def] >> BETA_TAC >>
-  map_every qid_spec_tac [`b'`, `x'`, `b`] >>
-  rpt (FIRST [ho_match_mp_tac first_emission_bind >> conj_tac,
-              ho_match_mp_tac first_emission_ignore_bind >> conj_tac, gen_tac] >> BETA_TAC)
-  >>~- ([`emit_op _ _ _ = _`],
     rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[] >> metis_tac[])
-  >>~- ([`emit_void _ _ _ = _`],
-    rpt strip_tac >> drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[])
-  >>~- ([`comp_return _ _ = _`], metis_tac[first_emission_return])
-  >>~- ([`compile_word_copy_loop _ _ _ _ _ _ _ = _`], metis_tac[first_emission_word_copy_loop]) >>
-  PairCases_on `x` >> pure_rewrite_tac[pairTheory.pair_case_def] >> BETA_TAC >>
-  metis_tac[first_emission_store_slots_family]
+  >>~- ([`compile_store_slots _ _ _ _ _ _ = _`],
+    metis_tac[first_emission_store_slots_family])
 QED
 
 Theorem first_emission_tuple_load_all[local]:
