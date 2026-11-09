@@ -30,7 +30,7 @@ Proof
 QED
 
 
-Theorem tuple_load_no_gas[local]:
+Theorem tuple_load_no_gas:
   !tys cenv bop off sa elems sb.
     compile_load_tuple_elements cenv bop tys off sa = (elems,sb) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
