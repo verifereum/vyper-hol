@@ -578,6 +578,151 @@ Proof
        codegenSymRelTheory.sym_steps_def]
 QED
 
+Theorem sym_steps_push_offset:
+  !p env ss off.
+    off < dimword(:256) /\
+    asm_block_at p ss.sym_base.as_pc [AsmPush (encode_num_bytes off)] ==>
+    sym_steps p env 1 ss = SymOK (ss with <|
+      sym_base := asm_next (ss.sym_base with as_stack := []);
+      sym_stack := Val (n2w off) :: ss.sym_stack |>)
+Proof
+  rpt strip_tac >> drule sym_steps_push >>
+  `w2n (n2w off : bytes32) = off` by simp[wordsTheory.w2n_n2w] >>
+  qspec_then `n2w off : bytes32` mp_tac
+    asmToBytecodeProofsTheory.word_of_bytes_encode_roundtrip >>
+  simp[dividesTheory.divides_def]
+QED
+
+Theorem sym_steps_restore_kind:
+  !p env ss off sv fn ret op.
+    off < dimword(:256) /\
+    asm_block_at p ss.sym_base.as_pc
+      [AsmPush (encode_num_bytes off); AsmOp "MLOAD"] /\
+    mem_sval_at ss.sym_mem_labels off sv /\ op_kind_ok fn ret op sv ==>
+    ?ss' sv'. sym_steps p env 2 ss = SymOK ss' /\
+      ss'.sym_stack = sv' :: ss.sym_stack /\ op_kind_ok fn ret op sv' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `mid = ss with <|
+    sym_base := asm_next (ss.sym_base with as_stack := []);
+    sym_stack := Val (n2w off) :: ss.sym_stack |>` >>
+  `sym_steps p env 1 ss = SymOK mid` by
+    (simp[Abbr `mid`, NoAsms] >> irule sym_steps_push_offset >>
+     gvs[stackOpSimTheory.asm_block_at_cons]) >>
+  `asm_block_at p mid.sym_base.as_pc [AsmOp "MLOAD"] /\
+   mid.sym_stack = Val (n2w off) :: ss.sym_stack /\
+   mem_sval_at mid.sym_mem_labels (w2n (n2w off : bytes32)) sv` by
+    gvs[Abbr `mid`, asm_next_def, stackOpSimTheory.asm_block_at_cons,
+        wordsTheory.w2n_n2w] >>
+  drule_all sym_steps_mload_kind >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexistsl_tac [`ss'`, `sv'`] >>
+  conj_tac >- (drule_all sym_steps_compose >> simp[]) >>
+  gvs[Abbr `mid`, asm_next_def]
+QED
+
+Theorem sym_kinds_ok_restore:
+  !cp fn ret srest ps ss ss' sv initial_fmp lo off.
+    sym_kinds_ok cp fn ret srest ps ss /\
+    op_kind_ok fn ret (spill_lookup off ps.ps_spilled) sv /\
+    ss'.sym_stack = sv :: ss.sym_stack /\
+    ss'.sym_mem_labels = ss.sym_mem_labels ==>
+    sym_kinds_ok cp fn ret srest
+      (apply_prefix_op initial_fmp lo (SORestore off) ps) ss'
+Proof
+  simp[sym_kinds_ok_def, apply_prefix_op_def, stackModelTheory.stack_push_def,
+       finite_mapTheory.DOMSUB_FLOOKUP_THM] >> rpt strip_tac
+  >- (qexists_tac `sv :: top` >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem sym_prefix_restore:
+  !cp fn ret srest ps ss initial_fmp lo p env off.
+    spill_op_wf ps (SORestore off) /\ sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (exec_stack_op initial_fmp (SORestore off)) ==>
+    ?ss'. sym_steps p env 2 ss = SymOK ss' /\
+      sym_kinds_ok cp fn ret srest
+        (apply_prefix_op initial_fmp lo (SORestore off) ps) ss' /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+      ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  simp[spill_op_wf_def, exec_stack_op_def] >> rpt strip_tac >>
+  `FLOOKUP ps.ps_spilled (spill_lookup off ps.ps_spilled) = SOME off` by
+    (irule spill_lookup_flookup >> metis_tac[]) >>
+  `?sv. op_kind_ok fn ret (spill_lookup off ps.ps_spilled) sv /\
+        mem_sval_at ss.sym_mem_labels off sv` by
+    metis_tac[sym_kinds_ok_def] >>
+  drule_all sym_steps_restore_kind >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists_tac `ss'` >> simp[] >>
+  irule sym_kinds_ok_restore >> simp[] >> metis_tac[]
+QED
+
+Theorem sym_steps_spill:
+  !p env ss off sv stk.
+    off < dimword(:256) /\ ss.sym_stack = sv :: stk /\
+    asm_block_at p ss.sym_base.as_pc
+      [AsmPush (encode_num_bytes off); AsmOp "MSTORE"] ==>
+    ?ss'. sym_steps p env 2 ss = SymOK ss' /\ ss'.sym_stack = stk /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+      mem_sval_at ss'.sym_mem_labels off sv /\
+      (!b. ~in_mem_range off 32 b ==>
+        FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `mid = ss with <|
+    sym_base := asm_next (ss.sym_base with as_stack := []);
+    sym_stack := Val (n2w off) :: ss.sym_stack |>` >>
+  `sym_steps p env 1 ss = SymOK mid` by
+    (simp[Abbr `mid`, NoAsms] >> irule sym_steps_push_offset >>
+     gvs[stackOpSimTheory.asm_block_at_cons]) >>
+  `asm_block_at p mid.sym_base.as_pc [AsmOp "MSTORE"] /\
+   mid.sym_stack = Val (n2w off) :: sv :: stk` by
+    gvs[Abbr `mid`, asm_next_def, stackOpSimTheory.asm_block_at_cons] >>
+  drule_all sym_steps_mstore >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  qexists_tac `ss'` >>
+  conj_tac >- (drule_all sym_steps_compose >> simp[]) >>
+  gvs[Abbr `mid`, asm_next_def, wordsTheory.w2n_n2w]
+QED
+
+Theorem mem_sval_at_disjoint_store:
+  !labs labs' off off' sv.
+    (off' + 32 <= off \/ off + 32 <= off') /\
+    (!b. ~in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) /\
+    mem_sval_at labs off' sv ==>
+    mem_sval_at labs' off' sv
+Proof
+  rpt strip_tac >>
+  `!b. in_mem_range off' 32 b ==> FLOOKUP labs' b = FLOOKUP labs b` by
+    (rpt strip_tac >> first_x_assum irule >> gvs[in_mem_range_def]) >>
+  drule mem_sval_at_locality >> simp[]
+QED
+
+Theorem sym_spilled_store_kinds:
+  !cp fn ret srest ps ss labs' off op sv.
+    sym_kinds_ok cp fn ret srest ps ss /\ spill_op_wf ps (SOSpill off) /\
+    op_kind_ok fn ret op sv /\ mem_sval_at labs' off sv /\
+    (!b. ~in_mem_range off 32 b ==>
+      FLOOKUP labs' b = FLOOKUP ss.sym_mem_labels b) ==>
+    !op' off'. FLOOKUP (ps.ps_spilled |+ (op, off)) op' = SOME off' ==>
+      ?sv'. op_kind_ok fn ret op' sv' /\ mem_sval_at labs' off' sv'
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `op = op'` >- (gvs[] >> metis_tac[]) >>
+  simp[] >> strip_tac >>
+  `?sv'. op_kind_ok fn ret op' sv' /\
+         mem_sval_at ss.sym_mem_labels off' sv'` by
+    metis_tac[sym_kinds_ok_def] >>
+  qexists_tac `sv'` >> simp[] >>
+  irule mem_sval_at_disjoint_store >>
+  qexistsl_tac [`ss.sym_mem_labels`, `off`] >>
+  gvs[spill_op_wf_def] >> metis_tac[]
+QED
+
 (* A prefix of planner ops with no SOPushOfst (codegen emits one only for
    OFFSET, which unit_shape_ok excludes), whose spills write inside the
    byte set R and the context's spill regions, steps symbolically to the
