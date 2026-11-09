@@ -742,3 +742,130 @@ Proof
   metis_tac[inline_caller_residual_exec_block,
             inline_caller_bookkeeping_exec_block, inline_caller_bookkeeping_refl]
 QED
+
+(* The target caller anchor is independent of the callee's local frame. *)
+Definition inline_target_anchor_def:
+  inline_target_anchor d t <=>
+    inline_caller_bookkeeping d t /\
+    inline_caller_residual t = inline_caller_residual d
+End
+
+Theorem inline_target_anchor_refl[simp]:
+  inline_target_anchor d d
+Proof
+  simp[inline_target_anchor_def]
+QED
+
+Theorem inline_target_anchor_index[simp]:
+  inline_target_anchor d (t with vs_inst_idx := j) = inline_target_anchor d t
+Proof
+  simp[inline_target_anchor_def]
+QED
+
+Theorem inline_target_anchor_exec_block:
+  exec_block fuel ctx bb d = OK v /\ ~d.vs_halted /\ ~v.vs_halted ==>
+  inline_target_anchor d v
+Proof
+  metis_tac[inline_target_anchor_def, inline_caller_bookkeeping_exec_block,
+    inline_caller_bookkeeping_refl, inline_caller_residual_exec_block]
+QED
+
+Theorem inline_opaque_frame_saved_restrict:
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!x. x IN P ==> FLOOKUP saved x = FLOOKUP saved' x) ==>
+  inline_opaque_frame_rel ren V opaque saved' P s t
+Proof
+  simp[inline_opaque_frame_rel_def, inline_frame_rel_def] >> metis_tac[]
+QED
+
+Theorem inline_caller_data_setup_source_saved:
+  inline_caller_data N opaque_caller c d /\ setup_callee fn args c = SOME cs /\
+  ~c.vs_halted ==>
+  inline_opaque_frame_rel ren {} opaque c.vs_vars (N DIFF opaque_caller) cs d
+Proof
+  strip_tac >> irule inline_opaque_frame_saved_restrict >>
+  qexists `d.vs_vars` >> reverse conj_tac
+  >- metis_tac[inline_caller_data_setup] >>
+  gvs[inline_caller_data_def, lookup_var_def] >> metis_tac[]
+QED
+
+Definition inline_site_exit_def:
+  inline_site_exit N opaque_caller p V opaque outs c d ret ir u v <=>
+    inline_clone_exit p V opaque (N DIFF opaque_caller) outs c ret ir u (OK v) /\
+    inline_target_anchor d v /\ inline_fmp_result c.vs_fmp (IntRet ir u)
+End
+
+Theorem inline_site_exit_caller_data:
+  inline_caller_data N opaque_caller c d /\
+  inline_site_exit N opaque_caller p V opaque outs c d ret ir u v /\
+  bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state c u)) = SOME w ==>
+  inline_caller_data N opaque_caller w v
+Proof
+  simp[inline_site_exit_def, inline_target_anchor_def] >>
+  metis_tac[inline_caller_data_return, SUBSET_REFL]
+QED
+
+(* Instruction points are after entry PHIs; predecessor repair is not an
+   instruction-point operation. *)
+Definition inline_caller_point_def:
+  inline_caller_point caller final lbl i ret N opaque_caller b j s t <=>
+    inline_caller_data N opaque_caller s t /\
+    s.vs_current_bb = b /\ s.vs_inst_idx = j /\
+    t.vs_current_bb = (if b = lbl /\ i < j then ret else b) /\
+    t.vs_inst_idx = (if b = lbl /\ i < j then j - (i+1) else j) /\
+    (?bb tb. lookup_block b caller.fn_blocks = SOME bb /\
+      lookup_block t.vs_current_bb final.fn_blocks = SOME tb /\
+      j <= LENGTH bb.bb_instructions /\ t.vs_inst_idx <= LENGTH tb.bb_instructions)
+End
+
+Definition inline_clone_point_def:
+  inline_clone_point caller callee final lbl i p ret N opaque_caller opaque
+    c d V b j counter s t <=>
+    inline_caller_data N opaque_caller c d /\
+    inline_opaque_frame_rel (STRCAT p) V opaque c.vs_vars
+      (N DIFF opaque_caller) s t /\ inline_target_anchor d t /\
+    s.vs_current_bb = b /\ s.vs_inst_idx = j /\
+    t.vs_current_bb = STRCAT p b /\
+    (?call_bb cb tb.
+      lookup_block lbl caller.fn_blocks = SOME call_bb /\
+      lookup_block b callee.fn_blocks = SOME cb /\
+      lookup_block (STRCAT p b) final.fn_blocks = SOME tb /\
+      j <= LENGTH cb.bb_instructions /\
+      let pre = rewrite_inline_insts
+        (rotate_invoke_ops (EL i call_bb.bb_instructions).inst_operands)
+        (EL i call_bb.bb_instructions).inst_outputs ret
+        (MAP (clone_instruction p (fn_labels callee)) (TAKE j cb.bb_instructions)) 0
+      in t.vs_inst_idx = LENGTH (FST pre) /\ counter = SND pre /\
+         t.vs_inst_idx <= LENGTH tb.bb_instructions)
+End
+
+Theorem inline_caller_data_indices[simp]:
+  inline_caller_data N opaque_caller (s with vs_inst_idx := j)
+    (t with vs_inst_idx := k) = inline_caller_data N opaque_caller s t
+Proof
+  simp[inline_caller_data_def, inline_caller_bookkeeping_def,
+       inline_shared_frame_def, stateFrameTheory.execution_frame_def, lookup_var_def]
+QED
+
+Theorem inline_site_exit_control:
+  inline_site_exit N opaque_caller p V opaque outs c d ret ir u v ==>
+  v.vs_current_bb = ret /\ v.vs_inst_idx = 0
+Proof
+  simp[inline_site_exit_def] >> strip_tac >>
+  drule inline_clone_exit_control >> simp[]
+QED
+
+Theorem inline_site_exit_anchor:
+  inline_site_exit N opaque_caller p V opaque outs c d ret ir u v ==>
+  inline_target_anchor d v
+Proof
+  simp[inline_site_exit_def]
+QED
+
+Theorem inline_site_exit_packet:
+  inline_site_exit N opaque_caller p V opaque outs c d ret ir u v ==>
+  inline_clone_exit p V opaque (N DIFF opaque_caller) outs c ret ir u (OK v)
+Proof
+  simp[inline_site_exit_def]
+QED
