@@ -1,7 +1,7 @@
 (* Actual-site resources at the nonbulk source-array constructor boundary. *)
 Theory sourceOwnedArrayConstructorPtr
 Ancestors
-  sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence
+  sourceOwnedArrayLoopPtr decoderArrayInitPtr physicalArrayInitSequence abiEncoderSequence
   calldataRecursiveProducers sourceEncodingWindows sourceEncodingLayout abiDecoderCoherence
   ctorAbiActualArrayRun entrySinkExtraction fragExec
   abiDecoderRecursiveArray abiDecoderLoop abiDecoderArraySetupCode abiDecoderLoopRegisters
@@ -1043,4 +1043,51 @@ Resume source_owned_nonbulk_array_ptr[loop_ghost_tail]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   first_assum ACCEPT_TAC)
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_composition]:
+  markerLib.RESUME_TAC >>
+  `abi_decode_sim ctx fn s init` by
+    (qpat_assum `run_inst_seq (emitted_insts st loop_st) s = OK t` mp_tac >>
+     qpat_assum `fn_has_code st loop_st fn` mp_tac >>
+     qpat_assum `inst_extends st loop_st` mp_tac >>
+     qpat_assum `loop_st.cs_blocks = st.cs_blocks` mp_tac >>
+     qpat_assum `loop_st.cs_current_bb = st.cs_current_bb` mp_tac >>
+     qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st loop_st)` mp_tac >>
+     qpat_assum `~s.vs_halted` mp_tac >>
+     qpat_assum `s.vs_current_bb = st.cs_current_bb` mp_tac >>
+     qpat_assum `s.vs_inst_idx = LENGTH st.cs_current_insts` mp_tac >>
+     qpat_assum `init = t with vs_inst_idx := _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     drule_all abi_encoder_run_sequence_reach >>
+     disch_then (qspec_then `ctx` strip_assume_tac) >> gvs[]) >>
+  `abi_decode_sim ctx fn s t'` by
+    (irule abi_decode_sim_trans >> qexists `init` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     irule abi_decode_sim_trans >> qexists `h` >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "constructor_frames"
+QED
+
+Resume source_owned_nonbulk_array_ptr[constructor_frames]:
+  markerLib.RESUME_TAC >>
+  `abi_decode_footprint_frame ((d,outsz)::(p,32)::fp) s t'` by
+    (irule abi_decode_footprint_frame_trans >> qexists `h` >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     `abi_decode_footprint_frame [(d,32);(p,32)] s h` by
+       (qpat_assum `abi_decode_footprint_frame [(d,32);(p,32)] s t` mp_tac >>
+        qpat_assum `h.vs_memory = t.vs_memory` mp_tac >>
+        qpat_assum `h.vs_call_ctx = t.vs_call_ctx` mp_tac >>
+        qpat_assum `Abbrev (h = _)` mp_tac >>
+        qpat_assum `init = t with vs_inst_idx := _` mp_tac >>
+        POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[markerTheory.Abbrev_def, jump_to_def, abi_decode_footprint_frame_def]) >>
+     irule abi_decode_footprint_frame_weaken >>
+     goal_assum (drule_at Any) >>
+     qpat_assum `32 <= outsz` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+     rpt gen_tac >> strip_tac >> rpt gen_tac >>
+     simp_tac (srw_ss()) [] >> strip_tac
+     >- (qexistsl [`d`,`outsz`] >> simp[]) >>
+     qexistsl [`p`,`32`] >> simp[]) >>
+  suspend "constructor_allocation_frames"
 QED
