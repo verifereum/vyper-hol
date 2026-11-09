@@ -6,7 +6,7 @@ Ancestors
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation
   exprSimProps exprLoweringProps stmtSimProps bodyMemoryDefs
   compileEnv loweringPosts intCallFrame venomState list rich_list
-  fragGasSeq entrySinkExtraction emitHelperProps loweringSlice
+  fragGasSeq entrySinkExtraction emitHelperProps loweringSlice fragExec
 
 Theorem log_expr_sim_inv:
   expr_sim_inv ce cx env es ==>
@@ -143,4 +143,37 @@ Proof
   Cases_on `fp.jc_rb` >> simp[return_buf_frame_def] >>
   rename1 `fp.jc_rb = SOME rb` >> PairCases_on `rb` >>
   simp[return_buf_frame_def, lookup_var_def]
+QED
+
+(* Position a straight-line resource endpoint in its containing function. *)
+Theorem intcall_resource_run_gas_path:
+  fn_has_code sa sb fp.jc_func /\ same_blocks sa sb /\
+  inst_extends sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb) /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  intcall_joint_res fp ce env es sb t ==>
+  ?u. gas_path fp.jc_ctx fp.jc_func s
+        (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) (OK u) /\
+    intcall_joint_res fp ce env es sb u /\ ~u.vs_halted /\
+    u.vs_current_bb = sb.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    u.vs_vars = t.vs_vars /\ u.vs_allocas = t.vs_allocas /\
+    u.vs_alloca_next = t.vs_alloca_next
+Proof
+  strip_tac >>
+  `(?bb rest. lookup_block s.vs_current_bb fp.jc_func.fn_blocks = SOME bb /\
+      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
+    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND, same_blocks_def, inst_extends_def] >>
+     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
+  drule_all tuple_run_inst_seq_gas_path >>
+  disch_then (qspecl_then [`fp.jc_ctx`] mp_tac) >>
+  strip_tac >> qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  fs[intcall_joint_res_inst_idx, same_blocks_def] >> metis_tac[]
 QED
