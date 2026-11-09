@@ -46,3 +46,36 @@ Proof
   rw[occurrence_natural_geometry_def] >> metis_tac[LESS_EQ_TRANS]
 QED
 
+Theorem occurrence_natural_geometry_extend:
+  occurrence_natural_geometry lo a U B stk s /\
+  ~MEM a (MAP (\u. u.of_owner) U) /\
+  (a,aid) NOTIN FDOM B /\ lo <= s.vs_alloca_next /\
+  t.vs_alloca_next = s.vs_alloca_next + z ==>
+  occurrence_natural_geometry lo a U
+    (B |+ ((a,aid),(s.vs_alloca_next,z))) stk t
+Proof
+  strip_tac >> fs[occurrence_natural_geometry_def] >>
+  simp[occurrence_natural_geometry_def] >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `id = (a,aid)` >> gvs[FLOOKUP_UPDATE] >>
+      qpat_x_assum `!id b z. FLOOKUP B id = SOME (b,z) ==> _` drule >>
+      strip_tac >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `id = (a,aid)`
+      >- (gvs[FLOOKUP_UPDATE] >>
+          qpat_x_assum `!id b z. FLOOKUP B id = SOME (b,z) ==> _` drule >> simp[]) >>
+      Cases_on `jd = (a,aid)`
+      >- (gvs[FLOOKUP_UPDATE] >>
+          qpat_x_assum `!id b z. FLOOKUP B id = SOME (b,z) ==> _` drule >> simp[]) >>
+      gvs[FLOOKUP_UPDATE] >> metis_tac[]) >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!j. j < LENGTH stk ==> _` drule >> strip_tac >>
+  conj_tac >- simp[] >>
+  `~MEM a (MAP (\u. u.of_owner) (DROP j U))` by
+    (simp[MAP_DROP] >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `id = (a,aid)` >> gvs[FLOOKUP_UPDATE] >>
+      metis_tac[]) >>
+  rpt strip_tac >> Cases_on `id = (a,aid)` >> gvs[FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
