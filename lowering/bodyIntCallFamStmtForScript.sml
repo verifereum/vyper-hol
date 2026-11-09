@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: For. *)
 Theory bodyIntCallFamStmtFor
 Ancestors
-  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier bodyIntCallFamStmtForTransport bodyIntCallFamStmtForPop bodyIntCallFamStmtForArrayFrame bodyIntCallFamStmtForRound bodyIntCallFamStmtForStart stmtForRangeMemoryLoop stmtSimForLoop stmtSimProps stmtSimDeclStore fragGasMode intCallFrame venomState finite_map
+  bodyIntCallJointContract bodySim loweringPosts compileEnv bodyIntCallFamStmtForEntry bodyIntCallFamStmtForScope bodyIntCallFamStmtForResources bodyIntCallFamStmtForFrontier bodyIntCallFamStmtForTransport bodyIntCallFamStmtForPop bodyIntCallFamStmtForArrayFrame bodyIntCallFamStmtForRound bodyIntCallFamStmtForStart bodyIntCallFamStmtForSetup stmtForRangeMemoryLoop stmtSimForLoop stmtSimProps stmtSimDeclStore fragGasMode intCallFrame venomState finite_map
 
 (* Re-entry uses the original compile state, not the body's allocation
    frontier.  Only the static operand reservations need to be re-established. *)
