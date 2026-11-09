@@ -3416,15 +3416,14 @@ QED
 
 Finalise lineage_history_incoming_stack_support
 
-Theorem lineage_history_first_return_phi_output_absent:
-  !fn dfg ch growth spill_base lbl_ctr entry prefix lbl ps bb v segment qs.
+Theorem lineage_state_fresh_phi_return_absent:
+  !fn dfg ch growth spill_base lbl_ctr entry lbl ps bb v segment qs.
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis bb.bb_instructions))) /\
-    ~MEM lbl (MAP FST prefix) /\
-    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
-      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) prefix
-      (entry,init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
     segment <> [] /\ ~MEM lbl (MAP FST (TL segment)) /\
     LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)) segment (lbl,ps) (lbl,qs) ==>
@@ -3433,15 +3432,11 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `segment` >> gvs[listTheory.LRC_def] >>
   PairCases_on `z` >> gvs[] >>
-  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps` by
-    (qpat_assum `LRC _ prefix _ _` (mp_then Any mp_tac lineage_history_reconstruct) >> simp[] >>
-     disch_then irule >> simp[lineage_state_entry]) >>
   drule lineage_edge_physical >> strip_tac >>
   gvs[] >> suspend "transport"
 QED
 
-Resume lineage_history_first_return_phi_output_absent[transport]:
+Resume lineage_state_fresh_phi_return_absent[transport]:
   `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
     metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
   `collect_phis bb.bb_instructions <> []` by (strip_tac >> gvs[]) >>
@@ -3454,7 +3449,7 @@ Resume lineage_history_first_return_phi_output_absent[transport]:
       (live_vars_at (liveness_analyze fn) lbl (LENGTH bb.bb_instructions))) /\
     LIST_ELEM_COUNT (Var v) after.ps_stack +
       (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1` by
-    (irule lineage_history_first_phi_exit_demand_support >>
+    (irule lineage_state_fresh_phi_exit_demand_support >>
      metis_tac[]) >>
   `ssa_form fn` by gvs[codegen_ready_fn_def] >>
   `?inst. MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs` by
@@ -3479,7 +3474,7 @@ Resume lineage_history_first_return_phi_output_absent[transport]:
   strip_tac >> suspend "reset"
 QED
 
-Resume lineage_history_first_return_phi_output_absent[reset]:
+Resume lineage_state_fresh_phi_return_absent[reset]:
   `LIST_ELEM_COUNT (Var v) after'.ps_stack <= 1` by
     (Cases_on `Var v IN FDOM after'.ps_spilled` >> gvs[]) >>
   qpat_assum `generate_block_plan _ _ _ _ pb input = _`
@@ -3488,4 +3483,103 @@ Resume lineage_history_first_return_phi_output_absent[reset]:
   metis_tac[]
 QED
 
-Finalise lineage_history_first_return_phi_output_absent
+Finalise lineage_state_fresh_phi_return_absent
+
+Theorem lineage_history_first_return_phi_output_absent:
+  !fn dfg ch growth spill_base lbl_ctr entry prefix lbl ps bb v segment qs.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis bb.bb_instructions))) /\
+    ~MEM lbl (MAP FST prefix) /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) prefix
+      (entry,init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) /\
+    segment <> [] /\ ~MEM lbl (MAP FST (TL segment)) /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) segment (lbl,ps) (lbl,qs) ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?phi. MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs` by
+    (gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `MEM phi bb.bb_instructions` by
+    metis_tac[livenessTransferProofsTheory.collect_phis_mem] >>
+  drule_all lineage_history_first_arrival_output_absent >> strip_tac >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps` by
+    (qpat_assum `LRC _ prefix _ _` (mp_then Any mp_tac lineage_history_reconstruct) >> simp[] >>
+     disch_then irule >> simp[lineage_state_entry]) >>
+  irule lineage_state_fresh_phi_return_absent >> metis_tac[]
+QED
+
+Theorem lineage_history_phi_output_absent[local]:
+  !vertices fn dfg ch growth spill_base lbl_ctr entry lbl ps bb v.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis bb.bb_instructions))) /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices
+      (entry,init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) ==>
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled
+Proof
+  measureInduct_on `LENGTH vertices` >> rpt gen_tac >> strip_tac >>
+  Cases_on `MEM lbl (MAP FST vertices)`
+  >- suspend "return" >>
+  `?phi. MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs` by
+    (gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `MEM phi bb.bb_instructions` by
+    metis_tac[livenessTransferProofsTheory.collect_phis_mem] >>
+  drule_all lineage_history_first_arrival_output_absent >> simp[]
+QED
+
+Resume lineage_history_phi_output_absent[return]:
+  `?pre old tail. vertices = pre ++ (lbl,old)::tail /\ ~MEM lbl (MAP FST tail)` by
+    suspend "last_split" >>
+  gvs[fnPlanLineageCallTraceTheory.LRC_APPEND] >>
+  suspend "apply_return"
+QED
+
+Resume lineage_history_phi_output_absent[last_split]:
+  qpat_x_assum `MEM lbl (MAP FST vertices)` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  Induct_on `vertices`
+  >- simp[] >>
+  gen_tac >> rename1 `MEM lbl (MAP FST (vertex::rest))` >>
+  Cases_on `MEM lbl (MAP FST rest)`
+  >- (strip_tac >> first_x_assum drule >> strip_tac >>
+      qexistsl_tac [`vertex::pre`,`old`,`tail`] >> simp[]) >>
+  Cases_on `vertex` >> simp[] >> strip_tac >>
+  qexistsl_tac [`[]`,`r`,`rest`] >> gvs[]
+QED
+
+Resume lineage_history_phi_output_absent[apply_return]:
+  `y = (lbl,old)` by
+    (qpat_assum `LRC _ ((lbl,old)::tail) _ _` mp_tac >>
+     pure_rewrite_tac[Once listTheory.LRC_def] >> metis_tac[]) >> gvs[] >>
+  `~MEM (Var v) old.ps_stack /\ Var v NOTIN FDOM old.ps_spilled` by
+    (first_x_assum (qspec_then `pre` mp_tac) >> simp[] >>
+     disch_then (fn th => qpat_assum `LRC _ pre _ _`
+       (mp_then (Pat `LRC _ _ _ _`) mp_tac th)) >> simp[] >> metis_tac[]) >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl old` by
+    (qpat_assum `LRC _ pre _ _` (mp_then Any mp_tac lineage_history_reconstruct) >>
+     simp[] >> disch_then irule >> simp[lineage_state_entry]) >>
+  irule lineage_state_fresh_phi_return_absent >>
+  goal_assum (drule_at (Pat `LRC _ _ _ _`)) >> simp[] >> metis_tac[]
+QED
+
+Finalise lineage_history_phi_output_absent
+
+Theorem lineage_state_phi_output_absent:
+  !fn dfg ch growth spill_base lbl_ctr entry lbl ps bb v.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis bb.bb_instructions))) /\
+    lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps ==>
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule lineage_state_history >> strip_tac >> gvs[] >>
+  irule lineage_history_phi_output_absent >> metis_tac[]
+QED
