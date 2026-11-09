@@ -607,3 +607,118 @@ Audit disposition: checked local interfaces and last-writer machinery exist;
 source-epoch transport and recursive reached-chain discharge remain MISSING,
 not disproved. Review B and the stronger recursive availability interface
 before authorizing wrapper migration or the final theorem.
+
+## Temporal separator and occurrence interval audit (.52)
+
+CHECKED: `loadElimTemporalDominance.le_dominating_separator` proves
+
+```
+fn_dominates fn a d /\ fn_dominates fn d b /\ a <> d /\
+is_fn_path fn (a::tail) /\ LAST (a::tail) = b
+==> MEM d (a::tail)
+```
+
+No wf, SSA, entry-rooted suffix or acyclicity hypothesis is hidden in this
+statement. Dominance supplies reachability of a. A first-arrival entry path
+to a avoids d (otherwise a would dominate that earlier d, contradicting first
+arrival). Splicing it to the given suffix and using dominance of d over b
+forces d into the suffix. The local splice lemma is not exported. The
+separator is a graph result only: membership does not certify execution of
+any particular instruction. Tail=[] and a=b are covered by the proof; in
+particular a cycle cannot evade a genuinely intermediate dominator. No claim
+of temporal source stability follows merely from this check.
+
+### What the occurrence exports actually provide
+
+* `le_occ_prefix_route` (OccurrenceCoverage:46) gives a nonempty entry-rooted
+  path `le_occ_route es` ending at s.current_bb. The route records **PhiOccs**,
+  not StepOccs. `le_occ_route_append` splits this list at event boundaries.
+  A route suffix starting with a selected PhiOcc therefore gives a candidate
+  source-block-to-consumer route. A source StepOcc does not itself contribute
+  its label: its block label must be prepended to the later PhiOcc route.
+  Extracting that path, including its first transition, needs a suffix-path
+  lemma; `le_occ_prefix_route` alone is not such a lemma.
+* `le_occ_suffix_positions` (OccurrencePositions:6) supplies the LAST label
+  and an upper positional bound for events after a selected PhiOcc. It does
+  not state a CFG path for that suffix, nor that every intermediate
+  instruction is present in that suffix.
+* `le_occ_prefix_current_coverage` and `_completed_coverage`
+  (OccurrenceCoverage:110,162) do prove writes from instructions before the
+  current index and from completed route blocks respectively. Their
+  conclusion is `le_occ_wrote es v` for the **whole prefix es**. They do not
+  locate that writer after an arbitrary selected event. Using them unchanged
+  could choose the earlier selected ASSIGN and hence cannot contradict its
+  being the last writer. `le_occ_prefix_close_coverage` has the same whole
+  prefix limitation (and its appended step need not itself be certified OK).
+* The inductive prefix rules supply full actual traversal: ordinary next
+  increments the index, while block transition inserts a PhiOcc and resets
+  the next body index to phi_prefix_length. `le_occ_prefix_valid` supplies
+  actual fetched blocks for recorded events; `le_active_inst_lookup` plus
+  `_prefix_active` supplies the fetched **consumer** block. These are the
+  raw ingredients for interval coverage, not an exported interval theorem.
+  The abstract `le_occ_chain` alone does not encode complete traversal.
+
+### Exact missing interval interface (proposal, NOT a checked theorem)
+
+A useful single consumer-shaped crossing interface, avoiding another history
+relation, is the following. Quantify C, fn, s0, pre, e, suffix, i, s, db, di,
+v, w, cb. Assume:
+
+```
+wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+fn_entry_label fn = SOME s0.vs_current_bb /\
+le_occ_prefix C fn s0 (pre ++ e::suffix) i s /\
+lookup_block s.vs_current_bb fn.fn_blocks = SOME cb /\
+def_available_at fn cb (SOME i) v /\
+MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+di.inst_opcode = ASSIGN /\ di.inst_operands = [Var w] /\
+di.inst_outputs = [v] /\ w IN le_occ_writes e
+==> ?q. MEM q suffix /\ v IN le_occ_writes q
+```
+
+The conclusion locates a destination write strictly **after** a source write,
+not just somewhere in pre++e::suffix. Static uniqueness identifies the source
+writer but does not discharge this conclusion. Source availability at di is
+derived from wf_ssa's ordinary-use clause; the consumer availability must be
+explicit for recursively followed normalization variables (immediate operand
+membership at i is insufficient). No assumption that v was written earlier
+is needed for this crossing proposal. If established, applying it to each
+source-write event in the suffix after a last v writer yields audit B by
+contradicting v's suffix nonmembership. This is a proposed interface for
+review, not permission to assume it in readiness or the frozen theorem.
+
+Case obligations for this interface:
+
+1. **Distinct source/destination/consumer blocks:** derive source dominance
+   over destination from the ordinary ASSIGN use; derive destination dominance
+   over consumer from def_available_at and unique definitions. The checked
+   separator forces destination block membership in the source-to-use route.
+   If the visit is completed, interval (not whole-prefix) coverage must locate
+   di's write after e.
+2. **Destination equals consumer block:** block membership alone is vacuous.
+   Availability and unique instruction IDs give di's index strictly before
+   the fetched consumer index. Coverage of the final visit must locate that
+   write in suffix, not a previous visit to the same label.
+3. **Source and ASSIGN in the same block:** source availability gives strict
+   source-before-ASSIGN order for an ordinary source definition. Starting at
+   the source StepOcc, either traversal stays in the visit and crosses di, or
+   completes the visit before leaving. Numeric indices cannot be compared
+   across a re-entry without this split. A source write after an older ASSIGN
+   occurrence may belong to a later visit; the crossing must still be in
+   suffix.
+4. **Re-entry:** every successor visit begins with PhiOcc and resets traversal;
+   intermediate completed visits need interval coverage. Neither label
+   equality nor static dominance antisymmetry supplies event ordering.
+5. **Source PhiOcc:** its write footprint is the union of the leading PHIs'
+   outputs. Unique definition identifies the member defining w. If destination
+   is in the same block, di is a non-PHI after the leading prefix, so the
+   body traversal crosses it after that batch. For a distinct destination,
+   start the suffix path at this PhiOcc's label and use the separator. No
+   incoming operand is evaluated in the post-PHI state by this argument.
+
+Disposition: graph separator is checked; existing exports provide whole-prefix
+coverage and actual fetch, but no audited export provides interval crossing
+with the above conclusion. The required next repair is suffix path plus
+interval instruction traversal (or a direct proof of this crossing interface)
+before source-epoch stability, recursive chain validity, or wrapper migration.
+No source-validity theorem, readiness change, or frozen-theorem edit is made.
