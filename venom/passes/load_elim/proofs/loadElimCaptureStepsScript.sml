@@ -25,7 +25,8 @@ Proof
 QED
 
 Theorem le_collected_step_capture_frame:
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  DISJOINT G (set (fn_all_vars fn)) /\
+  (!pa. MEM pa (collect_phi_actions m ctx cfg result fn) ==> pa.pa_phi_out IN G) /\
   MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
   step_inst fuel run_ctx (load_elim_inst ctx actions ll inst) t = OK t' ==>
   !pa. MEM pa (collect_phi_actions m ctx cfg result fn) ==>
@@ -33,13 +34,15 @@ Theorem le_collected_step_capture_frame:
 Proof
   rpt strip_tac >> irule step_inst_preserves_lookup >>
   goal_assum (drule_at Any) >>
-  irule le_collected_transformed_output_fresh >> metis_tac[]
+  irule le_collected_transformed_output_fresh >>
+  fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
 QED
 
 Theorem le_latest_captures_transformed_step:
   le_latest_captures m ctx cfg result
     (collect_phi_actions m ctx cfg result fn) h t /\
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  DISJOINT G (set (fn_all_vars fn)) /\
+  (!pa. MEM pa (collect_phi_actions m ctx cfg result fn) ==> pa.pa_phi_out IN G) /\
   MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
   step_inst fuel run_ctx
     (load_elim_inst ctx (collect_phi_actions m ctx cfg result fn) ll inst) t = OK t' ==>

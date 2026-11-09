@@ -118,10 +118,11 @@ Proof
   gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem le_collected_generated_reads_reserved:
-  eval_phis r (phis_for_block (collect_phi_actions m ctx cfg result fn) lbl) = OK z ==>
+Theorem le_collected_generated_reads_in_set:
+  eval_phis r (phis_for_block (collect_phi_actions m ctx cfg result fn) lbl) = OK z /\
+  (!pa. MEM pa (collect_phi_actions m ctx cfg result fn) ==> pa.pa_phi_out IN G) ==>
   !j. MEM j (phis_for_block (collect_phi_actions m ctx cfg result fn) lbl) ==>
-    ?v w. eval_one_phi r j = SOME (v,w) /\ isPREFIX "$le_phi_" v
+    ?v w. eval_one_phi r j = SOME (v,w) /\ v IN G
 Proof
   strip_tac >>
   `le_phi_prefix (phis_for_block (collect_phi_actions m ctx cfg result fn) lbl) =
@@ -137,7 +138,7 @@ Proof
   drule venomExecProofsTheory.eval_one_phi_output_mem >>
   qpat_x_assum `MEM j _` mp_tac >>
   simp[phis_for_block_def, MEM_MAP, MEM_FILTER] >> rpt strip_tac >> gvs[] >>
-  drule loadElimActionFreshnessTheory.le_collected_action_output_prefix >> simp[]
+  metis_tac[]
 QED
 
 Theorem le_actual_prepend_generated_lookup:
@@ -191,15 +192,17 @@ Theorem le_occ_prefix_actual_phis_frame:
   (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
     (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\ r.vs_labels = u.vs_labels /\
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
-  padded_exec_equiv {v | isPREFIX "$le_phi_" v} u r /\
+  DISJOINT G (set (fn_all_vars fn)) /\
+  (!pa. MEM pa (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ==>
+    pa.pa_phi_out IN G) /\
+  padded_exec_equiv G u r /\
   ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) bb.bb_label) ==>
   ?q. eval_phis r
     (analysis_block_transform_prepend NONE (load_analyze ctx fn)
       (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
       (\ll inst. [load_elim_inst ctx
         (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) bb).bb_instructions = OK q /\
-    padded_exec_equiv {v | isPREFIX "$le_phi_" v} p q /\
+    padded_exec_equiv G p q /\
     q.vs_current_bb = r.vs_current_bb /\ q.vs_inst_idx = r.vs_inst_idx /\
     q.vs_prev_bb = r.vs_prev_bb /\ q.vs_labels = r.vs_labels /\
     (!pa. MEM pa (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) /\
@@ -210,7 +213,7 @@ Theorem le_occ_prefix_actual_phis_frame:
         lookup_var pa.pa_phi_out q = SOME w)
 Proof
   strip_tac >>
-  `!v. ~isPREFIX "$le_phi_" v ==> lookup_var v u = lookup_var v r` by
+  `!v. v NOTIN G ==> lookup_var v u = lookup_var v r` by
     fs[padded_exec_equiv_def] >>
   `eval_phis r [] = OK r` by simp[eval_phis_def] >>
   drule_all le_occ_prefix_all_entries_phis_success >>
@@ -227,12 +230,11 @@ Proof
      `MEM bb fn.fn_blocks` by metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
      `MEM v (fn_all_vars fn)` by
        metis_tac[cfgNormBaseTheory.inst_operand_var_in_fn_all_vars] >>
-     fs[EVERY_MEM] >> metis_tac[]) >>
-  drule le_collected_generated_reads_reserved >> strip_tac >>
+     fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
   `!j. MEM j (phis_for_block
       (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) bb.bb_label) ==>
-      ?v w. eval_one_phi r j = SOME (v,w) /\ v IN {v | isPREFIX "$le_phi_" v}` by
-     (fs[] >> metis_tac[]) >>
+      ?v w. eval_one_phi r j = SOME (v,w) /\ v IN G` by
+     (metis_tac[le_collected_generated_reads_in_set]) >>
   `u.vs_prev_bb = r.vs_prev_bb /\ u.vs_labels = r.vs_labels` by simp[] >>
   drule_all le_actual_prepend_phis_transport >>
   disch_then (qspec_then `load_analyze ctx fn` (qx_choose_then `q` strip_assume_tac)) >>
@@ -253,8 +255,9 @@ Proof
       pa.pa_join_lbl ++ []) = OK z` by metis_tac[APPEND_NIL] >>
   drule_all le_occ_prefix_collected_action_capture >> strip_tac >>
   `!j. MEM j bb.bb_instructions ==> ~MEM pa.pa_phi_out j.inst_outputs` by
-    (drule_all loadElimActionFreshnessTheory.le_collected_action_source_disjoint >>
-     strip_tac >> rpt strip_tac >>
+    (`pa.pa_phi_out NOTIN set (fn_all_vars fn)` by
+       (fs[DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
+     rpt strip_tac >>
      `MEM bb fn.fn_blocks` by metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
      fs[cfgTransformTheory.fn_all_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
      metis_tac[]) >>

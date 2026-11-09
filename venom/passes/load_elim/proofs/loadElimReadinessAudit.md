@@ -219,3 +219,47 @@ checks this specialization. This discharges the alias row only: generated-name
 disjointness/source-domain coupling, CFG and structural preservation, rebuilt
 DFG validity and later-source step/PHI invariants remain unresolved. No frozen
 statement, relation, or final proof has been changed.
+
+## Checked round-local name integration (.46)
+
+The prefix-only consumer displayed in the original audit is now a compatibility
+specialization of `le_coupled_run_initial_disjoint`. The latter uses arbitrary
+`G` in the incoming `le_padded_control` and all three lifted result relations.
+Its readiness is `le_round_ready_disjoint G m C fn ctx s0`, defined by:
+
+* `le_round_ready_names G C fn ctx s0`: every original non-name readiness
+  conjunct, with source prefix freshness replaced by
+  `DISJOINT G (set (fn_all_vars fn))`;
+* every action collected for this round has its `pa_phi_out IN G`.
+
+`le_round_ready C fn ctx s0` remains the prefix specialization of the first
+predicate. For it, output containment follows from
+`le_collected_action_output_prefix`, so the original exported
+`le_coupled_run_initial` needs no additional premise. The execution induction
+is shared, not duplicated. Build evidence: 2026-11-09,
+TO_load-elim-correct2-20261109T010004Z_m5472_t001.
+
+The migrated cone includes batch totality, DynamicCapture, ActualPhiFrame,
+CaptureEntry, TargetWrites, CaptureSteps and ReachedLoad. Selected snapshot
+transport uses the already checked source-domain/disjoint capture interfaces.
+Source writes are excluded by source-domain nonmembership; generated writes
+are invisible by collected-output containment. No instruction-level target
+preservation assumption, successful target suffix or final-theorem premise
+was added. ReachedStore was already generic in its memory relation.
+
+This discharges only the **conditional semantic use** of round-local names.
+For actual later rounds the following remain unproved and must not be hidden
+by specialization to the whole reserved prefix:
+
+1. Choose each round's `G`, prove it disjoint from that round's current source
+   variables, and prove containment of that round's collected outputs. Names
+   generated in earlier rounds are now source variables and must agree.
+2. Prove per-round CFG/entry preservation so the wrapper's reused original CFG
+   matches the analysis CFG of each intermediate source.
+3. Prove per-round wf_function, fn_inst_wf, wf_ssa and no-MEMTOP preservation.
+4. Establish soundness of rebuilt DFG at the common initial state and the
+   PHI/step preservation hypotheses for reached intermediate executions (or
+   replace this readiness interface through a separately validated design).
+   Result transitivity and wf_ssa alone establish none of these DFG facts.
+5. Package result composition and the clear_nops bridge with their structural
+   hypotheses discharged. The frozen final theorem remains untouched.

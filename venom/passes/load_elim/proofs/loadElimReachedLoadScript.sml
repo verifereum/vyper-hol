@@ -73,9 +73,9 @@ Theorem le_reached_singleton_load_replacement:
     eval_phis u bb.bb_instructions = OK t /\
     dfg_assigns_sound (dfg_build_function fn) u ==>
     dfg_assigns_sound (dfg_build_function fn) t) /\
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  DISJOINT G (set (fn_all_vars fn)) /\
   i.inst_opcode = ctx.lctx_config.lc_load /\ inst_wf i /\
-  padded_exec_equiv {v | isPREFIX "$le_phi_" v} s t /\
+  padded_exec_equiv G s t /\
   step_inst k C i s = OK s' /\
   FLOOKUP (unwrap_load_lattice
     (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx))
@@ -83,7 +83,7 @@ Theorem le_reached_singleton_load_replacement:
       (normalize_operand ctx.lctx_dfg []) i) = SOME [op] ==>
   ?t'. step_inst k C (load_elim_inst ctx actions
          (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx) i) t = OK t' /\
-       padded_exec_equiv {v | isPREFIX "$le_phi_" v} s' t' /\
+       padded_exec_equiv G s' t' /\
        s'.vs_current_bb = s.vs_current_bb /\
        s'.vs_prev_bb = s.vs_prev_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
        t'.vs_current_bb = t.vs_current_bb /\
@@ -112,7 +112,8 @@ Proof
      >~ [`lookup_var v t = SOME w`]
      >- (`MEM v (fn_all_vars fn)` by
             (irule le_occ_prefix_singleton_source_var >> metis_tac[]) >>
-         fs[EVERY_MEM, loadElimMemoryRelTheory.padded_exec_equiv_def,
+         fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
+            loadElimMemoryRelTheory.padded_exec_equiv_def,
             Excl "isPREFIX"] >> metis_tac[]) >>
      gvs[loadElimMemoryRelTheory.padded_exec_equiv_def, execution_frame_def]) >>
   `i.inst_opcode <> INVOKE` by
@@ -146,9 +147,9 @@ Theorem le_reached_captured_load_replacement:
     eval_phis u bb.bb_instructions = OK t /\
     dfg_assigns_sound (dfg_build_function fn) u ==>
     dfg_assigns_sound (dfg_build_function fn) t) /\
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  DISJOINT G (set (fn_all_vars fn)) /\
   i.inst_opcode = ctx.lctx_config.lc_load /\ inst_wf i /\
-  padded_exec_equiv {v | isPREFIX "$le_phi_" v} s t /\
+  padded_exec_equiv G s t /\
   step_inst k C i s = OK s' /\
   key = load_get_read_key ctx.lctx_bp ctx.lctx_addr_space
     (normalize_operand ctx.lctx_dfg []) i /\
@@ -164,7 +165,7 @@ Theorem le_reached_captured_load_replacement:
   lookup_var pa.pa_phi_out t = SOME captured ==>
   ?t'. step_inst k C (load_elim_inst ctx actions
          (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx) i) t = OK t' /\
-       padded_exec_equiv {v | isPREFIX "$le_phi_" v} s' t' /\
+       padded_exec_equiv G s' t' /\
        s'.vs_current_bb = s.vs_current_bb /\
        s'.vs_prev_bb = s.vs_prev_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
        t'.vs_current_bb = t.vs_current_bb /\

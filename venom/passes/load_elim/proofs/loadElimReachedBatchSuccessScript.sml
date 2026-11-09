@@ -3,7 +3,7 @@ Ancestors
   loadElimReachedSourceAgreement loadElimPhiSuccess loadElimOriginHelpers
   loadElimDefs venomExecSemantics list finite_map
 
-Theorem le_occ_prefix_collected_phis_success:
+Theorem le_occ_prefix_collected_phis_success_disjoint:
   wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
   le_occ_prefix C fn s0 (pre ++ PhiOcc bb u p :: suffix) i s /\
   pre <> [] /\
@@ -18,8 +18,8 @@ Theorem le_occ_prefix_collected_phis_success:
   (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
     (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
-  (!v. ~isPREFIX "$le_phi_" v ==> lookup_var v u = lookup_var v r) /\
+  DISJOINT G (set (fn_all_vars fn)) /\
+  (!v. v NOTIN G ==> lookup_var v u = lookup_var v r) /\
   ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) bb.bb_label) /\
   eval_phis r rest = OK z ==>
   ?q. eval_phis r
@@ -37,6 +37,6 @@ Proof
     simp[Abbr `g`] >>
   `bb.bb_label = e.pa_join_lbl` by metis_tac[] >>
   `ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) e.pa_join_lbl)` by metis_tac[] >>
-  drule_all le_occ_prefix_phi_selected_source_eval >> strip_tac >>
+  drule_all le_occ_prefix_phi_selected_source_eval_disjoint >> strip_tac >>
   metis_tac[]
 QED

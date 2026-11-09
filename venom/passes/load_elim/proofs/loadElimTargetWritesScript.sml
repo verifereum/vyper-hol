@@ -85,12 +85,12 @@ Proof
 QED
 
 Theorem le_collected_transformed_output_fresh:
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  ~MEM pa.pa_phi_out (fn_all_vars fn) /\
   MEM pa (collect_phi_actions m ctx cfg result fn) /\
   MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
   ~MEM pa.pa_phi_out (load_elim_inst ctx actions ll inst).inst_outputs
 Proof
-  strip_tac >> drule_all le_collected_action_source_disjoint >> strip_tac >>
+  strip_tac >>
   mp_tac le_transformed_outputs_subset >> simp[SUBSET_DEF] >>
   strip_tac >> strip_tac >>
   `MEM pa.pa_phi_out inst.inst_outputs` by metis_tac[] >>
@@ -101,7 +101,7 @@ QED
 
 Theorem le_collected_other_join_phi_fresh:
   wf_function fn /\ le_configured_context ctx /\
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  ~MEM pa.pa_phi_out (fn_all_vars fn) /\
   MEM pa (collect_phi_actions m ctx cfg result fn) /\
   MEM bb fn.fn_blocks /\ bb.bb_label <> pa.pa_join_lbl ==>
   pa.pa_phi_out NOTIN le_phi_outputs
@@ -112,7 +112,7 @@ Proof
   strip_tac >> irule le_selected_output_other_join >>
   simp[le_collected_action_outputs_distinct] >>
   simp[le_phi_outputs_def, le_configured_transformed_phi_prefix] >>
-  drule_all le_collected_action_source_disjoint >> strip_tac >>
+
   simp[le_phi_prefix_take, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
   gen_tac >> spose_not_then strip_assume_tac >>
   drule MEM_TAKE >> strip_tac >>

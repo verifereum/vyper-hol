@@ -44,8 +44,10 @@ Theorem le_occ_prefix_actual_phis_captures:
   (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
     (h ++ [PhiOcc bb u p]) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\ r.vs_labels = u.vs_labels /\
-  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
-  padded_exec_equiv {v | isPREFIX "$le_phi_" v} u r /\
+  DISJOINT G (set (fn_all_vars fn)) /\
+  (!pa. MEM pa (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ==>
+    pa.pa_phi_out IN G) /\
+  padded_exec_equiv G u r /\
   ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) bb.bb_label) /\
   le_latest_captures m ctx (cfg_analyze fn) (load_analyze ctx fn)
     (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) h r ==>
@@ -54,7 +56,7 @@ Theorem le_occ_prefix_actual_phis_captures:
       (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
       (\ll inst. [load_elim_inst ctx
         (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) bb).bb_instructions = OK q /\
-    padded_exec_equiv {v | isPREFIX "$le_phi_" v} p q /\
+    padded_exec_equiv G p q /\
     q.vs_current_bb = r.vs_current_bb /\ q.vs_inst_idx = r.vs_inst_idx /\
     q.vs_prev_bb = r.vs_prev_bb /\ q.vs_labels = r.vs_labels /\
     le_latest_captures m ctx (cfg_analyze fn) (load_analyze ctx fn)
@@ -64,8 +66,8 @@ Proof
   strip_tac >>
   `le_occ_prefix C fn s0 (h ++ PhiOcc bb u p :: []) i s` by simp[] >>
   drule_all le_occ_prefix_actual_phis_frame >>
-  disch_then (qspec_then `m` (qx_choose_then `q` strip_assume_tac)) >>
-  `!v. ~isPREFIX "$le_phi_" v ==> lookup_var v u = lookup_var v r` by
+  disch_then (qx_choose_then `q` strip_assume_tac) >>
+  `!v. v NOTIN G ==> lookup_var v u = lookup_var v r` by
     fs[loadElimMemoryRelTheory.padded_exec_equiv_def] >>
   `eval_phis r [] = OK r` by simp[eval_phis_def] >>
   drule_all loadElimDynamicCaptureTheory.le_occ_prefix_all_entries_phis_success >>
@@ -82,7 +84,8 @@ Proof
      qexistsl [`collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn`,
        `bb`, `ctx`, `r`, `load_analyze ctx fn`] >>
      simp[] >>
-     drule_all le_collected_action_source_disjoint >> strip_tac >>
+     `~MEM pa.pa_phi_out (fn_all_vars fn)` by
+       (fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> metis_tac[]) >>
      rpt strip_tac >>
      qpat_x_assum `~MEM _ (fn_all_vars fn)` mp_tac >>
      simp[cfgTransformTheory.fn_all_vars_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
@@ -102,7 +105,7 @@ Proof
       `ALL_DISTINCT (MAP (\a. a.pa_phi_out)
         (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))` by
         simp[le_collected_action_outputs_distinct] >>
-      drule_all le_occ_prefix_phi_selected_source_capture >>
+      drule_all le_occ_prefix_phi_selected_source_capture_disjoint >>
       strip_tac >> metis_tac[]) >>
   qexists_tac `r` >> simp[] >> rpt strip_tac >>
   `pa.pa_phi_out NOTIN le_phi_outputs (phis_for_block
