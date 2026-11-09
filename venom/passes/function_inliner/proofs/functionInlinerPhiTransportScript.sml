@@ -1,0 +1,101 @@
+(* Parallel PHI evaluation across the caller continuation predecessor repair. *)
+Theory functionInlinerPhiTransport
+Ancestors
+  functionInlinerDefs functionInlinerSiteLayout simplifyCfgBypassPhi venomExecSemantics venomWf
+  cfgTransform venomState passSimulationProps list
+
+Theorem inline_resolve_phi_repair:
+  phi_well_formed ops /\ ~MEM (Label fresh) ops /\ prev <> fresh ==>
+  resolve_phi (if prev = old then fresh else prev)
+    (MAP (subst_label_op old fresh) ops) = resolve_phi prev ops
+Proof
+  strip_tac >> Cases_on `old = fresh`
+  >- (gvs[] >> AP_TERM_TAC >>
+      irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+      Cases_on `EL x ops` >> simp[subst_label_op_def] >> metis_tac[]) >>
+  metis_tac[scfg_resolve_phi_replace]
+QED
+
+Theorem inline_eval_one_phi_repair:
+  phi_well_formed inst.inst_operands /\
+  ~MEM (Label fresh) inst.inst_operands /\ prev <> fresh ==>
+  eval_one_phi (s with vs_prev_bb := SOME (if prev = old then fresh else prev))
+    (subst_label_inst old fresh inst) =
+  eval_one_phi (s with vs_prev_bb := SOME prev) inst
+Proof
+  strip_tac >> drule_all inline_resolve_phi_repair >>
+  disch_then (qspec_then `old` assume_tac) >>
+  simp[eval_one_phi_def, subst_label_inst_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `resolve_phi prev inst.inst_operands` >> simp[] >>
+  Cases_on `x` >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem inline_phi_prefix_repair:
+  !insts. phi_prefix_length
+    (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                else subst_label_inst old fresh inst) insts) =
+    phi_prefix_length insts
+Proof
+  Induct >> simp[] >> Cases_on `h.inst_opcode = PHI` >>
+  gvs[phi_prefix_length_def, subst_label_inst_def]
+QED
+
+Theorem inline_eval_phis_repair:
+  !insts s prev old fresh.
+  EVERY (\inst. inst.inst_opcode = PHI ==>
+    phi_well_formed inst.inst_operands /\ ~MEM (Label fresh) inst.inst_operands) insts /\
+  prev <> fresh ==>
+  eval_phis (s with vs_prev_bb := SOME (if prev = old then fresh else prev))
+    (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                else subst_label_inst old fresh inst) insts) =
+  case eval_phis (s with vs_prev_bb := SOME prev) insts of
+    OK u => OK (u with vs_prev_bb := SOME (if prev = old then fresh else prev))
+  | err => err
+Proof
+  Induct >> simp[eval_phis_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (gvs[] >>
+      `eval_one_phi (s with vs_prev_bb := SOME (if prev = old then fresh else prev))
+         (subst_label_inst old fresh h) =
+       eval_one_phi (s with vs_prev_bb := SOME prev) h` by
+        (irule inline_eval_one_phi_repair >> simp[]) >>
+      first_x_assum (qspecl_then [`s`, `prev`, `old`, `fresh`] mp_tac) >>
+      simp[] >> strip_tac >>
+      simp[eval_phis_def, subst_label_inst_def] >>
+      Cases_on `eval_one_phi (s with vs_prev_bb := SOME prev) h` >> simp[] >>
+      PairCases_on `x` >> simp[] >>
+      Cases_on `eval_phis (s with vs_prev_bb := SOME prev) insts` >>
+      gvs[update_var_def]) >>
+  simp[eval_phis_def]
+QED
+
+Theorem inline_fix_phis_lookup:
+  lookup_block l (fix_inline_phis old fresh ret fn).fn_blocks =
+  OPTION_MAP (\bb. if MEM bb.bb_label (bb_succs ret) then
+    bb with bb_instructions := MAP (\inst.
+      if inst.inst_opcode <> PHI then inst else subst_label_inst old fresh inst)
+      bb.bb_instructions else bb) (lookup_block l fn.fn_blocks)
+Proof
+  simp[fix_inline_phis_def] >> irule lookup_block_map >>
+  gen_tac >> BETA_TAC >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem inline_fix_phis_lookup_some:
+  lookup_block l fn.fn_blocks = SOME bb ==>
+  lookup_block l (fix_inline_phis old fresh ret fn).fn_blocks =
+  SOME (if MEM bb.bb_label (bb_succs ret) then
+    bb with bb_instructions := MAP (\inst.
+      if inst.inst_opcode <> PHI then inst else subst_label_inst old fresh inst)
+      bb.bb_instructions else bb)
+Proof
+  simp[inline_fix_phis_lookup]
+QED
+
+Theorem inline_fix_phis_nonphi:
+  inst.inst_opcode <> PHI ==>
+  (if inst.inst_opcode <> PHI then inst else subst_label_inst old fresh inst) = inst
+Proof
+  simp[]
+QED
