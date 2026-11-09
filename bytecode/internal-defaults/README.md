@@ -14,9 +14,8 @@ The HOL lowering does the same (`omitted_defaults` in `compile_call`).
 | `d04_int_default_string` | a memory-passed `String` default |
 | `d05_int_default_nested` | an omitted-default call inside another one's arguments |
 
-`parity-fixtures.txt` selects all five; each has an exact deployment and
-runtime bytecode comparison in `eval/evalCompilerInternalDefaultsScript.sml`,
-included in `evalCompilerWitnesses`.
+`parity-fixtures.txt` selects all five; the native parity runner
+(`../native/`) compares each one's deployment and runtime bytecode exactly.
 
 `oracle/` holds the annotated AST/layout JSON and the deployment/runtime
 bytecode from the pinned Python Vyper (`VYPER_PIN`) and its provenance. With
@@ -24,9 +23,8 @@ the canonical oracle environment described in the parent README first on
 `PATH`, from the repository root:
 
 ```sh
-python lowering/defs/bytecode/memory_store_witnesses.py prepare \
+python bytecode/memory_store_witnesses.py prepare \
   --corpus internal-defaults --fixtures /tmp/internal-defaults-oracle --check
-holbuild -j4 build evalCompilerInternalDefaultsTheory
 ```
 
 `d05_int_default_nested` declares its functions in the order pinned Python

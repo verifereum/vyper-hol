@@ -29,6 +29,7 @@ val () = holbuild_extra_deps
    "../external-calls/oracle",
    "../for-iterables/oracle",
    "../immutables/oracle",
+   "../internal-defaults/oracle",
    "../internal-frames/oracle",
    "../internal-labels/oracle",
    "../memory-stores/oracle",
@@ -195,6 +196,9 @@ val suite_fixtures = [
     "i01_immut_uint", "i06_multiple_immutables", "i08_immut_read_in_ctor",
     "p23_imm_uint256", "p24_imm_uint8", "p25_imm_address",
     "p29b_imm_multi_nostr", "p59_imm_with_runtime_internal"]),
+  ("internal-defaults", [
+    "d01_int_default_word", "d02_int_default_partial", "d03_int_default_env",
+    "d04_int_default_string", "d05_int_default_nested"]),
   ("internal-frames", [
     "p01_int_local_word", "p02_int_local_string", "p03_int_local_array",
     "p04_int_local_struct", "p06_int_for_range", "p09_int_chain",

@@ -6,7 +6,8 @@ The runner checks that `compile_vyper` produces exactly the deployment and
 runtime bytes of the pinned Python compiler. It covers the 101 fixtures in
 `../python-o1-no-asm-opt/` and the witnessed fixtures of each feature suite
 (`abi-codegen`, `builtin-forms`, `conversions`, `ctor-locals`,
-`external-calls`, `for-iterables`, `immutables`, `internal-frames`,
+`external-calls`, `for-iterables`, `immutables`, `internal-defaults`,
+`internal-frames`,
 `internal-labels`, `memory-stores`, `name-collisions`, `phi-pointers`,
 `raw-calls`, `slice-buffers`). A suite's program is read from its
 `oracle/<name>.json` (the annotated AST and storage layout Python compiled) and
