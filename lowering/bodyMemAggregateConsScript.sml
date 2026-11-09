@@ -5,7 +5,7 @@ Ancestors
   exprOperandVar exprLoweringProps emitHelperProps ASCIInumbers words
   compileEnv venomState context fragExec exprSimAggregateChildren
   exprSimHypsDefs loweringPosts bodyMemAggregatePath gasSummary
-  bodyMemAggregateContinuation fragGasMode
+  bodyMemAggregateContinuation fragGasMode bodyMemAggregateConsContinuation
 
 Theorem aggregate_tuple_cons_continuation_mem_cursor:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
@@ -55,104 +55,25 @@ Theorem aggregate_tuple_cons_continuation_mem_cursor:
     alloca_history func q /\ r.vs_alloca_next <= q.vs_alloca_next /\
     lookup_var x q = SOME (n2w b) /\ FLOOKUP q.vs_allocas aid = SOME (b,asz)
 Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn su /\ ci_mono su sb` by
-    metis_tac[cj 1 compile_expr_ci_mono, ci_mono_emit_op,
-              ci_mono_unwrap_value, ci_mono_compile_store_memory, pairTheory.SND] >>
-  `fn_has_code sm sn func /\ fn_has_code sn su func /\ fn_has_code su sb func` by
-    (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
-  `local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sn /\ local_ptrs_reserved ce su` by
-    metis_tac[compiler_ci_mono_reserved] >>
-  `sa.cs_next_var <= sm.cs_next_var` by fs[ci_mono_def] >>
-  `eval_operand (Var x) r = SOME (n2w b)` by simp[eval_operand_def] >>
-  drule_at (Pat `emit_op _ _ _ = _`) aggregate_tuple_add_marked_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (qspec_then `n2w b` mp_tac) >>
-  impl_tac >- simp[] >>
-  strip_tac >>
-  suspend "store"
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  mp_tac (Q.INST [`P` |-> `\u. T`] (SPEC_ALL aggregate_cons_from_slice_mem_cursor)) >>
+  (impl_tac >- (simp[] >> conj_tac
+    >- (rpt strip_tac >> gvs[] >> first_x_assum irule >> metis_tac[]) >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    rpt gen_tac >> strip_tac >>
+    drule_at (Pat `compile_store_memory _ _ (Var _) _ _ _ = _`)
+      aggregate_unwrap_store_slice_mem_cursor >>
+    disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    disch_then (qspecl_then [`n2w (b+off)`, `tv`, `env`] mp_tac) >>
+    `w2n (n2w (b+off):bytes32) = b+off` by
+      (`b+off < dimword(:256)` by decide_tac >> simp[w2n_n2w]) >>
+    (impl_tac >- (simp[] >> conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `!n lo k. local_region ce es'.scopes u n lo k ==> _`
+            (drule_then mp_tac) >> decide_tac) >>
+      first_assum ACCEPT_TAC)) >>
+    simp[])) >> simp[]
 QED
-
-Resume aggregate_tuple_cons_continuation_mem_cursor[store]:
-  rename1 `gas_marked_path T ctx func r 0 (OK tadd)` >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
-  qmatch_asmsub_abbrev_tac `eval_operand (Var d) tadd` >>
-  `lookup_var d tadd = SOME (n2w (b+off))` by
-    fs[eval_operand_def, word_add_n2w] >>
-  `not_fresh_at sn d` by
-    simp[Abbr `d`, not_fresh_at_def, toString_11] >>
-  `!z. op = Var z ==> not_fresh_at su z` by
-    metis_tac[aggregate_child_unwrap_var, ci_mono_def] >>
-  `!z. vv_operand vv = Var z ==> not_fresh_at sn z` by
-    (rpt strip_tac >> irule not_fresh_at_mono >>
-     qexists_tac `sm` >> fs[ci_mono_def] >>
-     drule (cj 1 compiler_compile_var) >> simp[]) >>
-  `sa.cs_next_id <= sn.cs_next_id /\ sn.cs_next_var <= su.cs_next_var` by
-    (fs[ci_mono_def, cs_extends_def] >> decide_tac) >>
-  `type_memory_size tv < 2 ** 64` by
-    (drule_all aggregate_child_memory_size_bound >> simp[]) >>
-  `!v. read_result cx tvv (es' with gas_obs := []) =
-       (INL v,es' with gas_obs := []) ==> value_has_type tv v /\ val_wf tv v` by
-    (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) aggregate_child_read_typed_mem >>
-     disch_then (qspecl_then [`tv`, `env`, `ce`] mp_tac) >> simp[]) >>
-  `well_typed_expr env e` by fs[expr_body_pre_def] >>
-  `stmt_state_rel ctx func ce cx es' tadd` by fs[vv_post_def] >>
-  `alloca_inv tadd` by
-    (irule aggregate_mem_path_alloca_inv >>
-     qexistsl_tac [`ctx`, `func`, `0`, `r`] >> fs[gas_marked_path_def]) >>
-  `w2n (n2w (b+off) : bytes32) = b+off` by
-    (`b+off < dimword (:256)` by decide_tac >> simp[w2n_n2w]) >>
-  `w2n (n2w (b+off) : bytes32) + type_memory_size tv <= tadd.vs_alloca_next` by
-    (irule aggregate_allocated_slice_capacity >> simp[] >>
-     qexistsl_tac [`aid`, `asz`] >> simp[]) >>
-  suspend "apply"
-QED
-
-Resume aggregate_tuple_cons_continuation_mem_cursor[apply]:
-  `!n lo k. local_region ce es'.scopes tadd n lo k ==>
-     local_region ce es'.scopes r n lo k` by
-    (rpt strip_tac >> irule local_region_frame >>
-     conj_tac >- (qexists_tac `func` >> fs[vv_post_def, stmt_state_rel_def, state_rel_def]) >>
-     qexistsl_tac [`sm`, `es'.scopes`, `tadd`] >> simp[]) >>
-  drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_unwrap_store_slice_mem_cursor >>
-  disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (qspecl_then [`n2w (b+off)`, `tv`, `env`] mp_tac) >>
-  impl_tac >- (simp[] >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
-                rpt conj_tac >> metis_tac[aggregate_mem_path_alloca_inv]) >>
-  strip_tac >> suspend "join"
-QED
-
-Resume aggregate_tuple_cons_continuation_mem_cursor[join]:
-  `!z. not_fresh_at sm z ==> not_fresh_at sn z` by
-    (rpt strip_tac >> irule not_fresh_at_mono >>
-     qexists_tac `sm` >> fs[ci_mono_def]) >>
-  `tadd.vs_gas_readings = r.vs_gas_readings` by
-    (drule gas_marked_path_ok_suffix >> simp[]) >>
-  qexistsl_tac [`v`, `q`] >> simp[] >>
-  conj_tac
-  >- (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
-      simp[gas_marked_exec_def] >>
-      metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]) >>
-  conj_tac >- metis_tac[] >>
-  conj_tac
-  >- (pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
-      qpat_x_assum `!i lo sz aa kk. _ ==> mem_bytes_at aa kk q.vs_memory = _` mp_tac >>
-      simp[] >> disch_tac >> rpt gen_tac >> disch_tac >>
-      qpat_x_assum `!i lo sz aa kk. _ ==> mem_bytes_at aa kk q.vs_memory = _` irule >>
-      asm_rewrite_tac[] >> qexistsl_tac [`i`, `lo`, `sz`] >>
-      qpat_x_assum `FLOOKUP r.vs_allocas i = _ /\ _` strip_assume_tac >>
-      asm_rewrite_tac[] >> metis_tac[]) >>
-  `!n lo k. local_region ce es'.scopes r n lo k ==>
-     local_region ce es'.scopes tadd n lo k` by
-    (rpt strip_tac >> irule local_region_frame_fwd >>
-     qexistsl_tac [`r`, `sm`, `es'.scopes`] >> simp[]) >>
-  qpat_x_assum `locals_kept ce es' tadd q` mp_tac >>
-  simp[locals_kept_def] >> metis_tac[]
-QED
-
-Finalise aggregate_tuple_cons_continuation_mem_cursor
 
 Theorem aggregate_tuple_cons_continuation_mem:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
