@@ -7,9 +7,9 @@
 Theory bodyMemIntCallReturnDirect
 Ancestors
   bodyMemoryDefs intCallReturnMem stmtSimReturn compileEnv valueEncoding
-  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem internalReturnBytestringMem internalReturnCompileMem internalReturnComposeMem internalReturnVoidMem internalReturnWordMem internalReturnAggregateMem stmtSimReturnWiden bodySim
+  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem internalReturnBytestringMem internalReturnCompileMem internalReturnComposeMem internalReturnVoidMem internalReturnWordMem internalReturnAggregateMem internalReturnMemoryMem stmtSimReturnWiden bodySim
 
-(* ADMITTED (leaf): the internal twin of loweringMemFrameRet's
+(* The internal twin of loweringMemFrameRet's
    external_frame_ret_ok_mem's direct returns.  The compile env returns
    internally (RET to the return PC), with the stack-return count of the
    declared return type, and has a return buffer exactly when that count
@@ -89,5 +89,11 @@ Proof
       gvs[] >> irule internal_return_aggregate_mem >>
       fs[same_frame_def, compile_env_component_equality, body_inv_def] >>
       metis_tac[]) >>
-  cheat
+  `cenv.ce_returns_count = 0` by decide_tac >>
+  `ret_ty <> NoneT` by
+    (strip_tac >> gvs[vyperTypeSystemTheory.type_stmt_def]) >>
+  Cases_on `rb` >> gvs[] >> PairCases_on `x` >> gvs[] >>
+  `body_inv tops ctx cenv' cx` by metis_tac[bodyExprPreFactsTheory.body_inv_same_frame] >>
+  irule internal_return_memory_mem >>
+  fs[same_frame_def, compile_env_component_equality] >> metis_tac[]
 QED
