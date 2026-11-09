@@ -2,6 +2,7 @@
 Theory typedCopyLoopPathMemory
 Ancestors
   stmtForRangeMemoryParts fragGasSeqMem fragGasPathMem fragExecMem
+  finiteIterationMemory
   exprLoweringProps venomExecSemantics venomInst venomState instMemFrontier
   words list rich_list finite_map arithmetic memSafeRun
 
