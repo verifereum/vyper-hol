@@ -189,8 +189,6 @@ Theorem le_occ_prefix_actual_phis_frame:
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
-  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
-    (pre ++ PhiOcc bb u p :: suffix) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\ r.vs_labels = u.vs_labels /\
   DISJOINT G (set (fn_all_vars fn)) /\
   (!pa. MEM pa (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ==>

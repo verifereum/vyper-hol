@@ -1,7 +1,7 @@
 Theory loadElimCaptureEntry
 Ancestors
   loadElimCaptureInvariant loadElimDefs loadElimOccurrence loadElimKeyRead
-  loadElimActualPhiFrame loadElimReachedSourceAgreement loadElimInitialEntryActions
+  loadElimActualPhiFrame loadElimStructuralCapture loadElimInitialEntryActions
   loadElimTargetWrites loadElimOccurrenceInversion loadElimActionFreshness
   loadElimOperationalHistory loadElimHistoryHelpers venomExecSemantics
   list rich_list finite_map
@@ -41,8 +41,6 @@ Theorem le_occ_prefix_actual_phis_captures:
     load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
     (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
     (load_analyze ctx fn) /\
-  (!bb' n fuel u' t'. MEM (StepOcc bb' n fuel u' t')
-    (h ++ [PhiOcc bb u p]) ==> dfg_assigns_sound ctx.lctx_dfg u') /\
   r.vs_prev_bb = u.vs_prev_bb /\ r.vs_labels = u.vs_labels /\
   DISJOINT G (set (fn_all_vars fn)) /\
   (!pa. MEM pa (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ==>
@@ -105,7 +103,7 @@ Proof
       `ALL_DISTINCT (MAP (\a. a.pa_phi_out)
         (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))` by
         simp[le_collected_action_outputs_distinct] >>
-      drule_all le_occ_prefix_phi_selected_source_capture_disjoint >>
+      drule_all le_occ_prefix_phi_selected_source_capture_disjoint_structural >>
       strip_tac >> metis_tac[]) >>
   qexists_tac `r` >> simp[] >> rpt strip_tac >>
   `pa.pa_phi_out NOTIN le_phi_outputs (phis_for_block
