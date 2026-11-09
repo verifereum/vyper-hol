@@ -428,7 +428,7 @@ Proof
   simp[mload_def]
 QED
 
-Theorem store_slots_compose_fold[local]:
+Theorem store_slots_compose_fold:
   a.vs_memory = s.vs_memory /\
   w2n sw + i * type_memory_size tv < dimword (:256) /\
   store_copy_normalize s a =
@@ -458,7 +458,7 @@ Proof
   irule store_slots_shift_fold >> simp[]
 QED
 
-Theorem store_slots_element_bounds[local]:
+Theorem store_slots_element_bounds:
   i < N /\
   w2n (sw:bytes32) + N * type_memory_size tv < dimword (:256) /\
   w2n (dw:bytes32) + N * type_slot_size tv <= dimword (:256) ==>
@@ -767,7 +767,7 @@ Proof
   simp[store_slots_prefix_def, store_copy_normalize_def]
 QED
 
-Theorem store_slots_prefix_transfer[local]:
+Theorem store_slots_prefix_transfer:
   store_slots_prefix sa etv el tr sw dw s i ks u /\
   store_copy_normalize s v = store_copy_normalize s u /\
   (!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x u) /\
@@ -807,7 +807,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem store_slots_prefix_members_step[local]:
+Theorem store_slots_prefix_members_step:
   (!k. MEM k ks <=> ?r writes j. r < i /\
     encode_value etv (el r) = SOME writes /\
     MEM j (MAP FST writes) /\ k = r * type_slot_size etv + j) /\
