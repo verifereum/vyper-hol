@@ -13,7 +13,7 @@
 
 Theory bodyIntCallJointPackage
 Ancestors
-  bodyIntCallSeamDefs bodyIntCallJointContract bodyIntCallActualEntryResource
+  bodyIntCallSeamDefs bodyIntCallJointContract bodyIntCallActualEntryFields
 Libs
   monadsyntax
 
