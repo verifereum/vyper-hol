@@ -121,3 +121,34 @@ Proof
        unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
   metis_tac[inliner_phi_labels_fresh]
 QED
+
+Theorem inline_eval_phis_none_repair:
+  eval_phis (s with vs_prev_bb := NONE)
+    (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                else subst_label_inst old fresh inst) insts) =
+  eval_phis (s with vs_prev_bb := NONE) insts
+Proof
+  Cases_on `insts` >> simp[eval_phis_def] >>
+  Cases_on `h.inst_opcode = PHI` >>
+  simp[eval_phis_def, subst_label_inst_def, eval_one_phi_def] >>
+  Cases_on `h.inst_outputs` >> simp[] >> Cases_on `t` >> simp[]
+QED
+
+Theorem inline_eval_phis_optional_repair:
+  inliner_phi_labels_closed fn /\ fn_inst_wf fn /\
+  MEM bb fn.fn_blocks /\ ~MEM fresh (fn_labels fn) /\
+  (!prev. p = SOME prev ==> MEM prev (fn_labels fn)) ==>
+  eval_phis (s with vs_prev_bb := OPTION_MAP (\l. if l = old then fresh else l) p)
+    (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                else subst_label_inst old fresh inst) bb.bb_instructions) =
+  case eval_phis (s with vs_prev_bb := p) bb.bb_instructions of
+    OK u => OK (u with vs_prev_bb := OPTION_MAP (\l. if l = old then fresh else l) p)
+  | err => err
+Proof
+  strip_tac >> Cases_on `p`
+  >- (simp[inline_eval_phis_none_repair] >> Cases_on `bb.bb_instructions` >>
+      simp[eval_phis_def] >> Cases_on `h.inst_opcode = PHI` >>
+      simp[eval_phis_def, eval_one_phi_def] >>
+      Cases_on `h.inst_outputs` >> simp[] >> Cases_on `t` >> simp[]) >>
+  simp[] >> irule inline_eval_phis_closed_repair >> simp[] >> metis_tac[]
+QED
