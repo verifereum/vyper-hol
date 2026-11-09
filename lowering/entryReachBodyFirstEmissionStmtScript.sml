@@ -551,22 +551,6 @@ Proof
        simp[cs_appends_emit_helpers, cs_appends_prims, cs_appends_return])
 QED
 
-Theorem first_emission_lit_byte_offset[local]:
-  !op off a x b. compile_lit_byte_offset op off a = (x,b) ==>
-    cs_extends a b /\
-    ((a.cs_blocks = b.cs_blocks /\ a.cs_current_bb = b.cs_current_bb /\
-      a.cs_current_insts = b.cs_current_insts) \/
-     (!fn. fn_has_code a b fn ==> ?bb i.
-       lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
-       isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
-Proof
-  rpt gen_tac >> pure_rewrite_tac[contextTheory.compile_lit_byte_offset_def] >>
-  IF_CASES_TAC >- metis_tac[first_emission_return] >>
-  Cases_on `op` >> pure_rewrite_tac[venomStateTheory.operand_case_def]
-  >~ [`comp_return (Lit _) _`] >- metis_tac[first_emission_return] >>
-  rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[] >> metis_tac[]
-QED
-
 Theorem first_emission_store_slots_family[local]:
   (!cenv src slot ty tr a x b. compile_store_slots cenv src slot ty tr a = (x,b) ==>
     cs_extends a b /\
