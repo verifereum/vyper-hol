@@ -1254,6 +1254,106 @@ Proof
   simp[FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue]
 QED
 
+Theorem mask_segments_compose[local]:
+  let R = (\n D xs st. FOLDR (dft_exec_cons n D) OK xs st);
+      E = (\xs st. gas_events_block fuel C owner
+        <|bb_label := owner; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st);
+      Seg = (\xs st m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) st.vs_gas_readings /\
+        (!v. (R fuel C' xs st = OK v \/
+              (?ir. R fuel C' xs st = IntRet ir v)) ==>
+          EVERY IS_SOME m /\ unused = v.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = E xs (st with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (R j C xs (st with vs_gas_readings := gs ++ tail))) ==>
+            terminates (R fuel C xs (st with vs_gas_readings := gs ++ tail)) /\
+            dft_res_rel
+              (restore_result [] (R fuel C xs (st with vs_gas_readings := gs ++ tail)))
+              (restore_result [] (R fuel C' xs st)) /\
+            (((?v. R fuel C' xs st = OK v) \/
+              (?ir v. R fuel C' xs st = IntRet ir v)) ==>
+              E xs (st with vs_gas_readings := gs ++ tail) = es /\
+              residual_result tail (R fuel C' xs st)
+                (R fuel C xs (st with vs_gas_readings := gs ++ tail)))))
+  in
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    R fuel C' pre s = OK u /\
+    Seg pre s m1 e1 unused1 /\ Seg post u m2 e2 unused2 ==>
+    Seg (pre ++ post) s (m1 ++ m2) (e1 ++ e2) unused2
+Proof
+  rpt BasicProvers.LET_ELIM_TAC >>
+  `!n D st. R n D (pre ++ post) st =
+    case R n D pre st of OK v => R n D post v | other => other` by
+    simp[Abbr `R`, FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue] >>
+  fs[Abbr `Seg`] >>
+  `EVERY IS_SOME m1 /\ unused1 = u.vs_gas_readings` by metis_tac[] >>
+  conj_tac
+  >- (simp[FILTER_APPEND, MAP_APPEND, APPEND_ASSOC] >>
+      irule PERM_TRANS >> qexists_tac `MAP THE (FILTER IS_SOME m1) ++ unused1` >>
+      metis_tac[GSYM APPEND_ASSOC, PERM_APPEND_IFF]) >>
+  conj_tac >- gvs[] >>
+  `!pg rest. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m1 pg ==>
+    (?extra. e1 = E pre (s with vs_gas_readings := pg ++ rest) ++ extra) /\
+    (!v. R fuel C pre (s with vs_gas_readings := pg ++ rest) = OK v ==>
+      E pre (s with vs_gas_readings := pg ++ rest) = e1 /\
+      v = u with vs_gas_readings := rest)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!gs tail. LIST_REL _ m1 gs ==> _`
+       (qspecl_then [`pg`, `rest`] mp_tac) >> simp[] >> strip_tac >>
+     rpt strip_tac >>
+     `?j. terminates (R j C pre (s with vs_gas_readings := pg ++ rest))` by
+       (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+     gvs[residual_result_cases] >> metis_tac[]) >>
+  `!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (m1 ++ m2) gs ==>
+    ?extra. e1 ++ e2 = E (pre ++ post) (s with vs_gas_readings := gs ++ tail) ++ extra` by
+    (rpt gen_tac >> strip_tac >> simp[Abbr `E`] >>
+     irule (SRULE [] mask_exact_cut_prefix) >>
+     conj_tac >- simp[] >> qexistsl_tac [`m1`, `m2`, `u`] >>
+     fs[Abbr `R`] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `LIST_REL _ (m1 ++ m2) gs` mp_tac >>
+  simp[LIST_REL_SPLIT1] >> strip_tac >> gvs[] >>
+  disch_then (qx_choose_then `j` assume_tac) >>
+  `terminates (R j C pre (s with vs_gas_readings := (ys1 ++ ys2) ++ tail))` by
+    (Cases_on `R j C pre (s with vs_gas_readings := (ys1 ++ ys2) ++ tail)` >>
+     gvs[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `!gs tail. LIST_REL _ m1 gs ==> _`
+    (qspecl_then [`ys1`, `ys2 ++ tail`] mp_tac) >>
+  simp[APPEND_ASSOC] >> strip_tac >>
+  `?j. terminates (R j C pre (s with vs_gas_readings := ys1 ++ ys2 ++ tail))` by
+    metis_tac[APPEND_ASSOC] >>
+  gvs[residual_result_cases] >>
+  `R fuel C pre (s with vs_gas_readings := ys1 ++ ys2 ++ tail) =
+     OK (u with vs_gas_readings := ys2 ++ tail)` by
+    (qpat_x_assum `!gs' tail'. LIST_REL _ m1 gs' ==> _`
+       (qspecl_then [`ys1`, `ys2 ++ tail`] mp_tac) >>
+     simp[APPEND_ASSOC] >> impl_tac >- metis_tac[] >> simp[]) >>
+  `terminates (R j C post (u with vs_gas_readings := ys2 ++ tail))` by
+    metis_tac[prefix_exact_cut_terminates] >>
+  `E (pre ++ post) (s with vs_gas_readings := ys1 ++ ys2 ++ tail) =
+   E pre (s with vs_gas_readings := ys1 ++ ys2 ++ tail) ++
+   E post (u with vs_gas_readings := ys2 ++ tail)` by
+   (simp[Abbr `E`] >>
+  qmatch_goalsub_abbrev_tac `gas_events_block fuel C owner bb st` >>
+  `DROP st.vs_inst_idx bb.bb_instructions = pre ++ post` by
+    (simp[Abbr `st`, Abbr `bb`] >>
+     metis_tac[LENGTH_REPLICATE, DROP_LENGTH_APPEND, APPEND_ASSOC]) >>
+  `FOLDR (dft_exec_cons fuel C) OK pre st =
+     OK (u with vs_gas_readings := ys2 ++ tail)` by
+    fs[Abbr `R`, Abbr `st`] >>
+  drule_all prefix_events_splice >> disch_then (qspec_then `owner` SUBST1_TAC) >>
+  simp[Abbr `st`] >>
+  drule_all prefix_ok_cursor >> simp[] >> strip_tac >>
+  irule gas_events_block_suffix_cong >> qexists_tac `post` >>
+  simp[Abbr `bb`, DROP_APPEND, DROP_DROP_T]) >>
+  qpat_x_assum `!gs tail. LIST_REL _ m2 gs ==> _`
+    (qspecl_then [`ys2`, `tail`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `(?j. terminates (R j C post _)) ==> _` mp_tac >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
