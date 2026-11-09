@@ -4755,6 +4755,277 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_scan_selected_rep[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM cg (scan_block dfg mode bb).ss_flushed /\
+  rep_of_group bb.bb_instructions cg = SOME (id,cg) /\
+  (!v li. dfg_get_def dfg v = SOME li ==> li.inst_id <> id) ==>
+  ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block dfg mode bb).ss_flushed) id = SOME cg /\
+  ~MEM id (nop_ids_of_groups dfg mode bb.bb_instructions
+    (scan_block dfg mode bb).ss_flushed)
+Proof
+  strip_tac >>
+  conj_tac
+  >- (irule mm_local_scan_rep_lookup >>
+      conj_tac >- (qexists `\x. x = id` >> simp[] >> metis_tac[]) >>
+      simp[]) >>
+  irule mm_local_rep_not_nop >> simp[] >>
+  qexists `cg` >> simp[] >> rpt strip_tac >>
+  irule mm_local_scan_group_owner >>
+  qexistsl [`bb`,`dfg`,`id`,`mode`,`\x. x = id`] >>
+  drule mm_local_rep_member >> simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_prefix_selected_rep[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM i bb.bb_instructions /\
+  MEM cg (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  rep_of_group bb.bb_instructions cg = SOME (i.inst_id,cg) ==>
+  ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed) i.inst_id = SOME cg /\
+  ~MEM i.inst_id (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+Proof
+  strip_tac >>
+  `?g. ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed) i.inst_id = SOME g` by
+    (Cases_on `ALOOKUP (rep_map_of_groups bb.bb_instructions
+       (scan_block (dfg_build_function fn0) mode bb).ss_flushed) i.inst_id`
+     >- (gvs[alistTheory.ALOOKUP_FAILS] >>
+         `MEM (i.inst_id,cg) (rep_map_of_groups bb.bb_instructions
+           (scan_block (dfg_build_function fn0) mode bb).ss_flushed)` by
+           (simp[NoAsms, rep_map_of_groups_def, MEM_MAP, MEM_FILTER] >>
+            qexists `SOME (i.inst_id,cg)` >> simp[] >>
+            qexists `cg` >> simp[]) >>
+         metis_tac[]) >> simp[]) >>
+  `i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (irule mm_local_prefix_rep_write >> metis_tac[]) >>
+  irule mm_local_scan_selected_rep >> simp[] >>
+  metis_tac[mm_local_prefix_write_not_def]
+QED
+
+Theorem mm_local_selected_chunk[local]:
+  ~MEM i.inst_id ns /\ ALOOKUP rm i.inst_id = SOME cg /\
+  apply_groups_inst_supply mode ns rm u i = (chunk,v) ==>
+  ((cg.cg_length <> 32 \/ mode = DloadMerge) /\
+    chunk = [mk_bulk_copy_inst mode i cg] /\ v = u) \/
+  (cg.cg_length = 32 /\ mode <> DloadMerge /\ i.inst_opcode = MSTORE /\
+    chunk = [i] /\ v = u) \/
+  (cg.cg_length = 32 /\ mode <> DloadMerge /\ i.inst_opcode <> MSTORE /\
+    ?load_id s1 load_var. fresh_inst_id u = (load_id,s1) /\
+      fresh_ir_var s1 = (load_var,v) /\
+      chunk = [mk_load_inst mode (i with inst_id := load_id) cg.cg_src load_var;
+               mk_mstore_from_load i cg.cg_dst load_var])
+Proof
+  simp[apply_groups_inst_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_event_emission[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  j < LENGTH bb.bb_instructions /\
+  MEM (EL j bb.bb_instructions).inst_id cg.cg_inst_ids /\
+  MEM cg (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  transform_block_mode_supply (dfg_build_function fn0) mode sk bb = (cc,t) ==>
+  ?r pre chunk post u v.
+    j <= r /\ r < LENGTH bb.bb_instructions /\
+    rep_of_group bb.bb_instructions cg = SOME ((EL r bb.bb_instructions).inst_id,cg) /\
+    cc.bb_instructions = pre ++ chunk ++ post /\
+    mm_flat_map_supply
+      (apply_groups_inst_supply mode
+        (nop_ids_of_groups (dfg_build_function fn0) mode bb.bb_instructions
+          (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
+        (rep_map_of_groups bb.bb_instructions
+          (scan_block (dfg_build_function fn0) mode bb).ss_flushed))
+      sk (TAKE r bb.bb_instructions) = (pre,u) /\
+    (((cg.cg_length <> 32 \/ mode = DloadMerge) /\
+       chunk = [mk_bulk_copy_inst mode (EL r bb.bb_instructions) cg] /\ v = u) \/
+     (cg.cg_length = 32 /\ mode <> DloadMerge /\
+       (EL r bb.bb_instructions).inst_opcode = MSTORE /\
+       chunk = [EL r bb.bb_instructions] /\ v = u) \/
+     (cg.cg_length = 32 /\ mode <> DloadMerge /\
+       (EL r bb.bb_instructions).inst_opcode <> MSTORE /\
+       ?load_id s1 load_var. fresh_inst_id u = (load_id,s1) /\
+         fresh_ir_var s1 = (load_var,v) /\
+         chunk = [mk_load_inst mode ((EL r bb.bb_instructions) with inst_id := load_id)
+                    cg.cg_src load_var;
+                  mk_mstore_from_load (EL r bb.bb_instructions) cg.cg_dst load_var]))
+Proof
+  strip_tac >> drule_all mm_local_event_rep_position >> strip_tac >>
+  `MEM (EL r bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  drule_all mm_local_prefix_selected_rep >> strip_tac >>
+  drule mm_local_mode_emission_cut >> disch_then (qspec_then `r` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all mm_local_selected_chunk >> strip_tac >>
+  qexistsl [`r`,`pre`,`chunk`,`post`,`u`,`v`] >> simp[]
+QED
+
+Theorem mm_local_zero_add_unique[local]:
+  ALL_DISTINCT (mm_local_group_ids mz.mz_flushed ++
+    mm_local_group_ids mz.mz_copies ++ id::todo) /\ cg.cg_inst_ids = [id] ==>
+  ALL_DISTINCT (mm_local_group_ids mz.mz_flushed ++
+    mm_local_group_ids (add_copy mz.mz_copies cg) ++ todo)
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`proj` |-> `\x:num. T`, `ss` |->
+    `<| ss_flushed := mz.mz_flushed; ss_copies := mz.mz_copies; ss_loads := FEMPTY |>`]
+    mm_local_add_current_unique) >>
+  simp[mm_local_scan_unique_def]
+QED
+
+Theorem mm_local_zero_inst_unique[local]:
+  ALL_DISTINCT (mm_local_group_ids mz.mz_flushed ++
+    mm_local_group_ids mz.mz_copies ++ inst.inst_id::todo) ==>
+  ALL_DISTINCT (mm_local_group_ids (scan_inst_memzero dfg mz inst).mz_flushed ++
+    mm_local_group_ids (scan_inst_memzero dfg mz inst).mz_copies ++ todo)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (mm_local_group_ids mz.mz_flushed ++
+    mm_local_group_ids mz.mz_copies ++ todo)` by
+    (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  `ALL_DISTINCT (mm_local_group_ids (memzero_barrier mz).mz_flushed ++
+      mm_local_group_ids (memzero_barrier mz).mz_copies ++ todo)` by
+    gvs[memzero_barrier_def, mm_local_group_ids_append,
+        mm_local_group_ids_def, APPEND_ASSOC] >>
+  Cases_on `inst.inst_operands`
+  >- (simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+      IF_CASES_TAC >> simp[]) >>
+  rename1 `inst.inst_operands = dst::ops` >> Cases_on `ops`
+  >- (simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+      IF_CASES_TAC >> simp[]) >>
+  rename1 `inst.inst_operands = dst::src::ops` >> Cases_on `ops`
+  >- (simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+      rpt IF_CASES_TAC >> simp[] >>
+      Cases_on `operand_lit_val dst` >> simp[] >>
+      irule mm_local_zero_add_unique >> qexists `inst.inst_id` >> simp[copy_memzero_def]) >>
+  rename1 `inst.inst_operands = dst::src::len::ops` >> Cases_on `ops` >>
+  simp[scan_inst_memzero_def, is_zero_store_def, is_calldatasize_copy_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `operand_lit_val dst` >> simp[] >>
+  Cases_on `operand_lit_val len` >> simp[] >>
+  irule mm_local_zero_add_unique >> qexists `inst.inst_id` >> simp[copy_memzero_def]
+QED
+
+Theorem mm_local_zero_fold_unique[local]:
+  !xs mz. ALL_DISTINCT (mm_local_group_ids mz.mz_flushed ++
+    mm_local_group_ids mz.mz_copies ++ MAP (\i. i.inst_id) xs ++ todo) ==>
+  ALL_DISTINCT (mm_local_group_ids (FOLDL (scan_inst_memzero dfg) mz xs).mz_flushed ++
+    mm_local_group_ids (FOLDL (scan_inst_memzero dfg) mz xs).mz_copies ++ todo)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  mp_tac (Q.INST [`todo` |-> `MAP (\i. i.inst_id) xs ++ todo`,
+    `inst` |-> `h`, `mz` |-> `mz`] mm_local_zero_inst_unique) >>
+  qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, listTheory.APPEND] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_zero_scan_unique[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) ==>
+  ALL_DISTINCT (mm_local_group_ids (scan_block_memzero dfg bb).mz_flushed)
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`bb.bb_instructions`,`empty_memzero_state`]
+    (Q.INST [`todo` |-> `[]`] mm_local_zero_fold_unique)) >>
+  simp[empty_memzero_state_def, mm_local_group_ids_def] >>
+  simp[GSYM mm_local_group_ids_def, scan_block_memzero_def,
+       memzero_barrier_def, mm_local_group_ids_append, empty_memzero_state_def]
+QED
+
+Theorem mm_local_zero_selected_rep[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM cg (scan_block_memzero dfg bb).mz_flushed /\
+  rep_of_group bb.bb_instructions cg = SOME (id,cg) ==>
+  ALOOKUP (rep_map_of_groups bb.bb_instructions
+    (scan_block_memzero dfg bb).mz_flushed) id = SOME cg /\
+  ~MEM id (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+    (scan_block_memzero dfg bb).mz_flushed)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FILTER (\x:num. T)
+      (mm_local_group_ids (scan_block_memzero dfg bb).mz_flushed))` by
+    simp[mm_local_zero_scan_unique] >>
+  `MEM id cg.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  conj_tac
+  >- (irule mm_local_rep_lookup >> simp[] >> qexists `\x:num. T` >> simp[]) >>
+  irule mm_local_rep_not_nop >> simp[] >> qexists `cg` >> simp[] >>
+  rpt strip_tac >> irule mm_local_projected_owner >>
+  qexistsl [`(scan_block_memzero dfg bb).mz_flushed`,`id`,`\x:num. T`] >> simp[]
+QED
+
+Theorem mm_local_zero_emission_cut[local]:
+  transform_block_memzero_supply dfg supply bb = (cc,sk) /\
+  j < LENGTH bb.bb_instructions ==>
+  ?pre chunk post u v.
+    mm_flat_map_supply
+      (apply_memzero_inst_supply
+        (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
+        (rep_map_of_groups bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed))
+      supply (TAKE j bb.bb_instructions) = (pre,u) /\
+    apply_memzero_inst_supply
+      (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
+      (rep_map_of_groups bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
+      u (EL j bb.bb_instructions) = (chunk,v) /\
+    cc.bb_instructions = pre ++ chunk ++ post
+Proof
+  simp[transform_block_memzero_supply_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >> drule_all mm_local_supply_cut >> metis_tac[]
+QED
+
+Theorem mm_local_zero_selected_chunk[local]:
+  ~MEM i.inst_id ns /\ ALOOKUP rm i.inst_id = SOME cg /\
+  apply_memzero_inst_supply ns rm u i = (chunk,v) ==>
+  (cg.cg_length = 32 /\ chunk = [mk_zero_store_inst i cg.cg_dst] /\ v = u) \/
+  (cg.cg_length <> 32 /\
+    ?cds_id s1 cds_var. fresh_inst_id u = (cds_id,s1) /\
+      fresh_ir_var s1 = (cds_var,v) /\
+      chunk = [<| inst_id := cds_id; inst_opcode := CALLDATASIZE;
+                  inst_operands := []; inst_outputs := [cds_var] |>;
+               mk_memzero_calldatacopy i cg cds_var])
+Proof
+  simp[apply_memzero_inst_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem mm_local_zero_event_emission[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  j < LENGTH bb.bb_instructions /\
+  MEM (EL j bb.bb_instructions).inst_id cg.cg_inst_ids /\
+  MEM cg (scan_block_memzero dfg bb).mz_flushed /\
+  transform_block_memzero_supply dfg supply bb = (cc,t) ==>
+  ?r pre chunk post u v.
+    j <= r /\ r < LENGTH bb.bb_instructions /\
+    rep_of_group bb.bb_instructions cg = SOME ((EL r bb.bb_instructions).inst_id,cg) /\
+    cc.bb_instructions = pre ++ chunk ++ post /\
+    mm_flat_map_supply
+      (apply_memzero_inst_supply
+        (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed)
+        (rep_map_of_groups bb.bb_instructions (scan_block_memzero dfg bb).mz_flushed))
+      supply (TAKE r bb.bb_instructions) = (pre,u) /\
+    ((cg.cg_length = 32 /\
+      chunk = [mk_zero_store_inst (EL r bb.bb_instructions) cg.cg_dst] /\ v = u) \/
+     (cg.cg_length <> 32 /\
+      ?cds_id s1 cds_var. fresh_inst_id u = (cds_id,s1) /\
+        fresh_ir_var s1 = (cds_var,v) /\
+        chunk = [<| inst_id := cds_id; inst_opcode := CALLDATASIZE;
+                    inst_operands := []; inst_outputs := [cds_var] |>;
+                 mk_memzero_calldatacopy (EL r bb.bb_instructions) cg cds_var]))
+Proof
+  strip_tac >> drule_all mm_local_event_rep_position >> strip_tac >>
+  drule_all mm_local_zero_selected_rep >> strip_tac >>
+  drule mm_local_zero_emission_cut >> disch_then (qspec_then `r` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_all mm_local_zero_selected_chunk >> strip_tac >>
+  qexistsl [`r`,`pre`,`chunk`,`post`,`u`,`v`] >> simp[]
+QED
+
 Theorem mm_local_known_value_frame[local]:
   lookup_var x s = SOME value /\ step_inst_base inst s = OK t /\
   ~MEM (Var x) inst.inst_operands /\ ~MEM x inst.inst_outputs ==>
