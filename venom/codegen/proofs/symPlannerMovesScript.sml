@@ -597,3 +597,57 @@ Proof
   strip_tac >> drule_all (SRULE [arithmeticTheory.GREATER_DEF] do_swap_big_decompose) >>
   gvs[top_n_def, MAP_MAP_o, combinTheory.o_DEF]
 QED
+
+Theorem sym_do_swap_big:
+  do_swap dist ps = (ops,out) /\ 16 < dist /\ dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qabbrev_tac `items = top_n (dist+1) ps.ps_stack` >>
+  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc items)` >>
+  qabbrev_tac `al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets` >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  drule_all_then strip_assume_tac sym_do_swap_big_shape >>
+  `al.sa_next_offset <= r.sr_spill_end` by metis_tac[] >>
+  drule_all_then strip_assume_tac scratch_swap_allocation_facts >>
+  `EVERY (\off. off < dimword(:256)) offsets` by
+    (qpat_x_assum `EVERY _ ops` mp_tac >> simp[EVERY_APPEND, EVERY_MAP]) >>
+  `dist+1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all_then strip_assume_tac sym_kinds_ok_scratch_split >>
+  qpat_assum `items = _` (fn th =>
+    qpat_x_assum `LIST_REL _ (REVERSE (top_n _ _)) _`
+      (assume_tac o PURE_REWRITE_RULE [GSYM th])) >>
+  drule_all_then MATCH_ACCEPT_TAC sym_scratch_swap_sim
+QED
+
+Theorem sym_do_swap:
+  do_swap dist ps = (ops,out) /\ dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> Cases_on `dist <= 16`
+  >- (drule_all_then MATCH_ACCEPT_TAC sym_do_swap_small) >>
+  `16 < dist` by decide_tac >> drule_all_then MATCH_ACCEPT_TAC sym_do_swap_big
+QED
