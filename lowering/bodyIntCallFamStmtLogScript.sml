@@ -45,7 +45,7 @@ Proof
     fs[type_stmt_def, AllCaseEqs()] >>
   `EVERY (\e. expr_body_pre ce fp.jc_cx env e es') es` by
     (irule intcall_log_args_body_pre >>
-     fs[intcall_joint_res_def, supported_stmts_expr_exists_list] >>
+     fs[intcall_joint_res_def, intcall_expr_res_def, supported_stmts_expr_exists_list] >>
      conj_tac
      >- (fs[int_calls_stmt_def, intcall_frame_ok_def] >>
          metis_tac[call_evaluation_safe_def]) >>
@@ -55,7 +55,7 @@ QED
 
 Resume intcall_log_stmt_step[compose]:
   `~fp.jc_cx.txn.is_static` by
-    fs[intcall_joint_res_def, exprLoweringPropsTheory.stmt_state_rel_def,
+    fs[intcall_joint_res_def, intcall_expr_res_def, exprLoweringPropsTheory.stmt_state_rel_def,
        state_rel_def] >>
   `gas_admissible (eval_exprs fp.jc_cx es) log_args_res_ok es'` by
     metis_tac[log_args_admissible] >>
@@ -71,6 +71,8 @@ Resume intcall_log_stmt_step[compose]:
     (fs[int_calls_stmt_def, calls_follow_call_graph_def, EVERY_MEM] >>
      metis_tac[exprSimSourceTheory.int_calls_exprs_every_mem, EVERY_MEM]) >>
   `!e. intcall_forced_producer fp e` by metis_tac[] >>
+  qpat_assum `intcall_joint_res _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [intcall_joint_res_def]) >>
   drule_all intcall_compile_log_eval_all >> strip_tac >>
   `sa.cs_next_var <= sm.cs_next_var` by
     metis_tac[stmtSimLogArgsGrowthTheory.compile_log_eval_all_grows] >>

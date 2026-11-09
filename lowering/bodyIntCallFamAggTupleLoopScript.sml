@@ -80,7 +80,7 @@ Theorem intcall_tuple_head_store:
   intcall_expr_producer fp e /\ expr_body_pre ce fp.jc_cx env e es /\
   supportedExprs$supported_expr fp.jc_tops e /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
-  intcall_joint_res fp ce env es0 s0c s0 /\
+  intcall_expr_res fp ce env es0 s0c s0 /\
   intcall_expr_cont fp ce env es0 s0c s0 es si t /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   s0c.cs_next_var <= si.cs_next_var /\ s0c.cs_next_id <= si.cs_next_id /\
@@ -181,7 +181,7 @@ Theorem intcall_tuple_tail:
     type_memory_size tv + 64 < dimword (:256)) args tvs /\
   compile_make_tuple compile_expr ce args buf off si = (out,sb) /\
   fn_has_code si sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
-  intcall_joint_res fp ce env es0 s0c s0 /\
+  intcall_expr_res fp ce env es0 s0c s0 /\
   intcall_expr_cont fp ce env es0 s0c s0 es si t /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   s0c.cs_next_var <= si.cs_next_var /\ s0c.cs_next_id <= si.cs_next_id /\
@@ -220,7 +220,7 @@ Proof
       simp[exprSimWordArgsTheory.eval_exprs_nil,
            fragGasModeTheory.gas_marked_path_def,
            fragGasPathTheory.gas_path_rules, intcall_expr_cont_def] >>
-      gvs[intcall_expr_cont_def, intcall_joint_res_def,
+      gvs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
           valueEncodingTheory.val_in_memory_def,
           exprSimWordArgsTheory.stmt_state_rel_gas_obs,
           exprSimHypsDefsTheory.expr_sim_inv_gas_obs] >>
@@ -231,7 +231,7 @@ Proof
   Cases_on `tvs` >> gvs[] >>
   rename1 `LIST_REL _ args tail_types` >>
   `expr_sim_inv ce fp.jc_cx env es` by
-    fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+    fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
   `expr_body_pre ce fp.jc_cx env head es` by metis_tac[] >>
   `calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr head)` by metis_tac[] >>
   `s0c.cs_next_id <= si.cs_next_id` by decide_tac >>

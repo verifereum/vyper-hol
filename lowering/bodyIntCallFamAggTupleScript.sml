@@ -29,7 +29,7 @@ QED
 
 (* The allocated root is authorized and clear of both endpoint local sets. *)
 Theorem intcall_tuple_alloc_root:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer sz sa = (buf,sm) /\
   fn_has_code sa sm fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   sz < dimword (:256) /\ ~s.vs_halted /\
@@ -54,13 +54,13 @@ Proof
     `mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
        [STRING #"%" (toString sa.cs_next_var)]`] >>
   simp[venomInstTheory.mk_inst_def] >> conj_tac
-  >- (fs[intcall_expr_cont_def, intcall_joint_res_def,
+  >- (fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
          intCallFrameTheory.allocas_above_def] >> metis_tac[]) >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >>
   `local_region ce es.scopes u name b len` by
     (irule local_region_frame_fwd >> goal_assum (drule_at Any) >>
-     qexists_tac `sa` >> fs[intcall_expr_cont_def, intcall_joint_res_def]) >>
+     qexists_tac `sa` >> fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def]) >>
   metis_tac[]
 QED
 
@@ -79,7 +79,7 @@ Theorem intcall_tuple_entry:
   compile_make_tuple compile_expr ce args buf.buf_operand 0 sm = (out,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   type_memory_size_list tvs < dimword (:256) /\
-  intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+  intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = buf.buf_operand /\
@@ -294,7 +294,7 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
   `EVERY (\e. expr_body_pre ce fp.jc_cx env e es) args` by
     (simp[EVERY_MEM] >> rpt strip_tac >> first_x_assum irule >>
-     fs[intcall_joint_res_def]) >>
+     fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   drule_all intcall_children_layout >> strip_tac >>
   `~is_word_type a` by simp[is_word_type_def] >>
   `type_memory_size_list tvs < dimword (:256)` by

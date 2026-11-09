@@ -11,6 +11,6 @@ Theorem intcall_forced_expr_post:
    expr_val_own ce fp.jc_cx (post_value_type ce e) sa sb ee v op u) ==>
   expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee v op u
 Proof
-  simp[expr_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+  simp[expr_post_def, intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
   metis_tac[]
 QED

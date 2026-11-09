@@ -26,10 +26,10 @@ QED
 
 (* Only the source gas-observation queue is normalized at a counted endpoint. *)
 Theorem intcall_joint_res_gas_obs[simp]:
-  intcall_joint_res fp ce env (es with gas_obs := gs) sa s <=>
-  intcall_joint_res fp ce env es sa s
+  intcall_expr_res fp ce env (es with gas_obs := gs) sa s <=>
+  intcall_expr_res fp ce env es sa s
 Proof
-  simp[bodyIntCallJointContractTheory.intcall_joint_res_def]
+  simp[bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def]
 QED
 
 Theorem intcall_expr_cont_end_gas_obs[simp]:

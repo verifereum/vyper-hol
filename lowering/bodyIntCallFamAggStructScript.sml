@@ -97,7 +97,7 @@ Resume intcall_struct_literal_step[traversal]:
     metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
       exprLoweringPropsTheory.ci_mono_def, pairTheory.SND] >>
   `fp.jc_lo <= w2n w` by
-    (fs[intcall_expr_cont_def, intcall_joint_res_def,
+    (fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
         intCallFrameTheory.allocas_above_def] >> metis_tac[]) >>
   `!name a n. local_region ce es.scopes s name a n ==>
      regions_disjoint (w2n w) (type_memory_size_list tvs) a n` by
@@ -105,7 +105,7 @@ Resume intcall_struct_literal_step[traversal]:
      `local_region ce es.scopes landed name a n` by
        (irule exprSimPropsTheory.local_region_frame_fwd >>
         qexistsl_tac [`s`,`sa`,`es.scopes`] >>
-        fs[intcall_expr_cont_def, intcall_joint_res_def]) >>
+        fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def]) >>
      metis_tac[]) >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)

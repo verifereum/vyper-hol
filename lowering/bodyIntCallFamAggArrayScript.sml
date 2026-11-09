@@ -84,7 +84,7 @@ Proof
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    ~s.vs_halted /\ s.vs_current_bb = si.cs_current_bb /\
    s.vs_inst_idx = LENGTH si.cs_current_insts` by
-    fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+    fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
   drule_all intcall_mstore_effect >>
   disch_then (qspec_then `fp.jc_ctx` assume_tac) >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es
@@ -107,7 +107,7 @@ Proof
 QED
 
 Theorem intcall_array_root_alloc:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer sz sa = (buf,sm) /\
   fn_has_code sa sm fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   sz < dimword (:256) /\ ~s.vs_halted /\
@@ -130,7 +130,7 @@ Proof
   strip_tac >> drule_all intcall_alloc_landing >> strip_tac >>
   drule_all buffer_alloc_code >> disch_tac >>
   `fp.jc_lo <= w2n w` by
-    (fs[intcall_expr_cont_def, intcall_joint_res_def, allocas_above_def] >>
+    (fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def, allocas_above_def] >>
      metis_tac[]) >>
   `sa.cs_next_var <= sm.cs_next_var` by
     gvs[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_return_def,
@@ -140,14 +140,14 @@ Proof
        [STRING #"%" (toString sa.cs_next_var)]`] >>
   simp[mk_inst_def] >> rpt strip_tac >>
   qpat_x_assum `!name a z. local_region ce es.scopes u name a z ==> _` irule >>
-  fs[intcall_joint_res_def, intcall_expr_cont_def] >>
+  fs[intcall_joint_res_def, intcall_expr_res_def, intcall_expr_cont_def] >>
   metis_tac[local_region_frame_fwd]
 QED
 
 (* The actual array prefix: allocation, then the dynamic length header
    when present.  Its root remains fresh relative to the literal entry. *)
 Theorem intcall_array_entry:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer sz sa = (buf,sm) /\
   (if header then emit_void MSTORE [buf.buf_operand; Lit len] sm = ((),sb)
    else sb = sm) /\
@@ -237,7 +237,7 @@ Theorem intcall_array_elems_outcome:
   compile_make_array_elems compile_expr ce args et (type_memory_size dtv)
     header buf idx sa = (out,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
-  intcall_joint_res fp ce env es0 s0c s0 /\
+  intcall_expr_res fp ce env es0 s0c s0 /\
   intcall_expr_cont fp ce env es0 s0c s0 es sa t /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   s0c.cs_next_var <= sa.cs_next_var /\ s0c.cs_next_id <= sa.cs_next_id /\
@@ -280,7 +280,7 @@ Resume intcall_array_elems_outcome[nil]:
   irule intcall_gas_transparent_path_outcome >>
   qexistsl_tac [`es`, `OK t`, `INL []`] >>
   simp[eval_exprs_nil, gas_marked_path_def, fragGasPathTheory.gas_path_rules] >>
-  gvs[intcall_expr_cont_def, intcall_joint_res_def,
+  gvs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def,
       valueEncodingTheory.val_in_memory_def] >>
   metis_tac[fragGasPathTheory.gas_path_rules]
 QED
@@ -288,7 +288,7 @@ QED
 Resume intcall_array_elems_outcome[cons]:
   rename1 `compile_make_array_elems compile_expr ce (e::args) _ _ _ _ _ _ = _` >>
   drule intcall_array_elems_cons_compile >> strip_tac >>
-  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_expr_cont_def, intcall_joint_res_def] >>
+  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
   `expr_type e = et /\ intcall_expr_producer fp e /\
    supportedExprs$supported_expr fp.jc_tops e /\
    calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)` by
@@ -450,7 +450,7 @@ Resume intcall_array_value_producer[entry]:
      metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
   `fn_has_code sm sh fp.jc_func /\ fn_has_code sh sb fp.jc_func` by
     metis_tac[fn_has_code_split, ci_mono_def] >>
-  drule_at (Pat `intcall_joint_res _ _ _ _ _ _`) intcall_array_entry >>
+  drule_at (Pat `intcall_expr_res _ _ _ _ _ _`) intcall_array_entry >>
   disch_then (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
   disch_then (qspecl_then [`sh`, `n2w (LENGTH args)`,
     `(case bnd of vyperAST$Fixed cap => F | Dynamic cap => T)`] mp_tac) >>
@@ -491,7 +491,7 @@ Resume intcall_array_value_producer[loop_bounds]:
 QED
 
 Resume intcall_array_value_producer[stride_bound]:
-  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
+  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `type_memory_bytes ce (ArrayT et bnd) = type_memory_size (ArrayTV tv bnd)` by
     metis_tac[expr_sim_inv_memory_size] >>
   `0 < bound_length bnd` by
@@ -587,7 +587,7 @@ QED
 Resume intcall_array_value_producer[array_endpoint]:
   `type_memory_bytes ce (ArrayT et bnd) = type_memory_size (ArrayTV tv bnd)` by
     (irule expr_sim_inv_memory_size >>
-     fs[intcall_joint_res_def] >> metis_tac[]) >>
+     fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   conj_tac
   >- (simp[loweringPostsTheory.vv_holds_def,
            vyperStateTheory.read_result_def, vyperStateTheory.return_def, is_word_type_def] >>

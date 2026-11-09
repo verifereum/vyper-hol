@@ -18,7 +18,7 @@ Theorem intcall_log_counted_compose:
   compile_log_eval_all ce args sa = (xs,sm) /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  intcall_frame_ok fp /\ sm.cs_next_var <= sb.cs_next_var /\
+  intcall_frame_ok fp /\ ce_locals_declared ce env /\ sm.cs_next_var <= sb.cs_next_var /\
   sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   same_blocks sm sb /\
@@ -71,7 +71,7 @@ Proof
   `intcall_joint_res fp ce env (mid with gas_obs := []) sm t /\
    ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    fs[intcall_expr_cont_def] >>
+    fs[intcall_expr_cont_def, intcall_joint_res_def] >>
   irule gas_outcome_conseq >>
   qexistsl_tac [`\res ee u. res = INL () /\
     intcall_joint_res fp ce env ee sb u /\ ~u.vs_halted /\

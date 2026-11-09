@@ -17,7 +17,7 @@ Theorem intcall_joint_res_push_scope:
   intcall_joint_res fp ce env es sa s ==>
   intcall_joint_res fp ce env (es with scopes := FEMPTY :: es.scopes) sa s
 Proof
-  simp[intcall_joint_res_def, stmt_state_rel_push_scope,
+  simp[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_push_scope,
        local_region_def, lookup_scopes_def] >>
   strip_tac >> drule expr_sim_inv_push_scope >> metis_tac[]
 QED
@@ -84,7 +84,7 @@ Proof
      (ee with scopes := rest) u` by
     (irule stmt_state_rel_pop_top_ext >>
      conj_tac >- (qexists `sc` >> simp[]) >>
-     qexists `ce'` >> fs[intcall_joint_res_def]) >>
+     qexists `ce'` >> fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   `ce'.ce_return_pc = ce.ce_return_pc /\
    ce'.ce_return_buf = ce.ce_return_buf /\
    ce'.ce_is_ctor = ce.ce_is_ctor /\
@@ -97,7 +97,7 @@ Proof
      irule local_region_pop_scope >> simp[] >>
      fs[local_region_def, cenv_top_ext_def] >>
      metis_tac[optionTheory.NOT_SOME_NONE]) >>
-  fs[intcall_joint_res_def, ret_pc_ok_def] >>
+  fs[intcall_joint_res_def, intcall_expr_res_def, ret_pc_ok_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac >-
     (Cases_on `fp.jc_rb` >> fs[return_buf_frame_def] >>
@@ -203,7 +203,7 @@ Proof
   strip_tac >>
   `intcall_joint_res fp ce env es sc s` by
     (irule intcall_joint_res_next_var >> metis_tac[]) >>
-  fs[intcall_joint_res_def, ret_pc_ok_def] >>
+  fs[intcall_joint_res_def, intcall_expr_res_def, ret_pc_ok_def] >>
   conj_tac >- metis_tac[] >>
   Cases_on `fp.jc_rb` >> fs[return_buf_frame_def] >>
   rename1 `fp.jc_rb = SOME rb` >> PairCases_on `rb` >>
@@ -250,7 +250,7 @@ Proof
     simp[supportedExprsTheory.supported_expr_def] >>
   `expr_body_pre ce fp.jc_cx env e es` by
     (irule stmt_expr_body_pre >>
-     fs[intcall_joint_res_def, stmt_exprs_ok_def,
+     fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def] >>
      drule supported_expr_body_calls >> strip_tac >>
      fs[body_inv_def, cx_tops_def, AllCaseEqs()] >>
@@ -267,6 +267,8 @@ Proof
   `gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx))
      expr_res_ok es` by
     (irule if_condition_admissible >> metis_tac[]) >>
+  imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT1 (UNDISCH
+    (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
   qpat_x_assum `intcall_forced_producer _ _`
     (mp_tac o REWRITE_RULE [intcall_forced_producer_def]) >>
   disch_then drule_all >> strip_tac >>
@@ -331,8 +333,11 @@ Resume intcall_if_producer[branch_start]:
       ((es_end with gas_obs := []) with scopes := FEMPTY :: es_end.scopes)
       entry (jump_to (if b then tl else el) t)` by
     (`intcall_joint_res fp ce env (es_end with gas_obs := []) entry t` by
-       (irule intcall_joint_res_rebase >>
-        fs[intcall_expr_cont_def] >> metis_tac[]) >>
+       (fs[intcall_expr_cont_def] >>
+        imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT2 (UNDISCH
+          (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
+        imp_res_tac (GEN_ALL (iffRL (SPEC_ALL intcall_joint_res_def))) >>
+        irule intcall_joint_res_rebase >> metis_tac[]) >>
      drule intcall_joint_res_push_scope >>
      simp[intcall_joint_res_jump_to]) >>
   qmatch_asmsub_abbrev_tac `compile_stmts ce lctx cty branch entry` >>
@@ -410,7 +415,7 @@ Resume intcall_if_producer[branch_pop]:
   `ce_locals_declared ce env /\ locals_alloc_ok ce env /\
    local_ptrs_reserved ce sa /\ same_frame fp.jc_root_ce ce` by
     (qpat_x_assum `intcall_joint_res fp ce env es sa s`
-      (strip_assume_tac o REWRITE_RULE [intcall_joint_res_def]) >> simp[]) >>
+      (strip_assume_tac o REWRITE_RULE [intcall_joint_res_def, intcall_expr_res_def]) >> simp[]) >>
   `local_ptrs_reserved ce last` by
     (irule local_ptrs_reserved_next_var >> qexists `sa` >>
      qpat_x_assum `stmts_env ce lctx cty branch entry = _` mp_tac >>
@@ -440,7 +445,7 @@ Resume intcall_if_producer[branch_pop]:
   conj_tac >- (qexists `fp.jc_ret_ty` >> simp[type_stmt_def]) >>
   `expr_sim_inv ce fp.jc_cx env es` by
     (qpat_x_assum `intcall_joint_res fp ce env es sa s`
-       (mp_tac o cj 2 o REWRITE_RULE [intcall_joint_res_def]) >> simp[]) >>
+       (mp_tac o cj 2 o REWRITE_RULE [intcall_joint_res_def, intcall_expr_res_def]) >> simp[]) >>
   simp[] >> reverse conj_tac >-
     (qexistsl [`bindings`, `fp.jc_tops`] >>
      qpat_x_assum `body_inv _ _ _ _`

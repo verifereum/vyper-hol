@@ -14,7 +14,7 @@ Proof
   `fp.jc_ret_ty = NoneT` by
     gvs[vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()] >>
   `ce.ce_return_pc = SOME (PtrVar fp.jc_rpc 0)` by
-    fs[intcall_joint_res_def, intcall_frame_ok_def, same_frame_def,
+    fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def, same_frame_def,
        compile_env_component_equality] >>
   `emitHelper$emit_inst RET [fp.jc_rpc] [] sa = ((),sb)` by
     (qpat_x_assum `stmts_env _ _ _ _ _ = _` mp_tac >>
@@ -28,7 +28,7 @@ Proof
      (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> s)` by
     (irule emitted_memory_ret_path >> conj_tac >- simp[] >>
      qexistsl_tac [`fp.jc_rpc`, `sa`, `sb`] >>
-     fs[intcall_joint_res_def]) >>
+     fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INR (ReturnException NoneV)`, `es`,
@@ -41,7 +41,7 @@ Proof
            vyperStateTheory.raise_def]) >>
   simp[fragExecTheory.exit_result_def, intcall_stmt_exit_def] >>
   disj2_tac >>
-  fs[intcall_joint_res_def, intcall_frame_ok_def,
+  fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
      returns_stack_count_def, vyperValueTheory.evaluate_type_def] >>
   simp[intret_q_def, result_rel_def] >>
   simp[intret_vals_match_def, state_rel_gas_obs] >>

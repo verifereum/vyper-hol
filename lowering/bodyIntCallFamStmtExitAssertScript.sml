@@ -28,7 +28,7 @@ Proof
   `supported_expr fp.jc_tops e` by simp[supported_expr_def] >>
   `expr_body_pre ce fp.jc_cx env e es` by
     (irule stmt_expr_body_pre >>
-     fs[intcall_joint_res_def, stmt_exprs_ok_def,
+     fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def] >>
      drule supported_expr_body_calls >> strip_tac >>
      fs[body_inv_def, cx_tops_def, AllCaseEqs()] >>
@@ -39,6 +39,8 @@ Proof
   drule_all assert_reason_compiler_code >> strip_tac >>
   `gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx))
      expr_res_ok es` by metis_tac[assert_reason_expr_admissible] >>
+  imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT1 (UNDISCH
+    (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
   qpat_x_assum `intcall_forced_producer _ _`
     (mp_tac o REWRITE_RULE [intcall_forced_producer_def]) >>
   disch_then drule_all >> strip_tac >>
@@ -91,7 +93,7 @@ Resume intcall_stmts_producer_assert_reason[true]:
   `s1.cs_next_var <= sb.cs_next_var` by
     (`local_ptrs_reserved ce entry` by
        (irule local_ptrs_reserved_next_var >> qexists_tac `s1` >>
-        fs[intcall_expr_cont_def, intcall_joint_res_def]) >>
+        fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def]) >>
      qpat_assum `stmt_env _ _ _ (Raise _) _ = _`
        (mp_then Any mp_tac stmt_env_reserved) >>
      simp[stmtLoweringMonoTheory.compile_stmt_cs_mono] >>
@@ -106,7 +108,11 @@ Resume intcall_stmts_producer_assert_reason[true]:
       metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]) >>
   disj1_tac >> simp[] >>
   `intcall_joint_res fp ce env (es_end with gas_obs := []) sb u` by
-    (irule intcall_joint_res_next_var >> fs[intcall_expr_cont_def] >>
+    (fs[intcall_expr_cont_def] >>
+     imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT2 (UNDISCH
+       (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
+     imp_res_tac (GEN_ALL (iffRL (SPEC_ALL intcall_joint_res_def))) >>
+     irule intcall_joint_res_next_var >>
      goal_assum (drule_at Any) >> simp[]) >>
   fs[intcall_expr_cont_def] >>
   simp[intcall_joint_res_jump_to, stmt_lands_def, jump_to_def,
@@ -119,8 +125,12 @@ Resume intcall_stmts_producer_assert_reason[false]:
   imp_res_tac new_block_next_var >>
   `intcall_joint_res fp ce env (es_end with gas_obs := []) entry
       (jump_to entry.cs_current_bb u)` by
-    (simp[intcall_joint_res_jump_to] >> irule intcall_joint_res_next_var >>
-     fs[intcall_expr_cont_def] >> goal_assum (drule_at Any) >> simp[]) >>
+    (simp[intcall_joint_res_jump_to] >>
+     fs[intcall_expr_cont_def] >>
+     imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT2 (UNDISCH
+       (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
+     imp_res_tac (GEN_ALL (iffRL (SPEC_ALL intcall_joint_res_def))) >>
+     irule intcall_joint_res_next_var >> goal_assum (drule_at Any) >> simp[]) >>
   `gas_admissible (eval_stmt fp.jc_cx (Raise (RaiseReason r)))
       (stmt_res_ok lctx) (es_end with gas_obs := [])` by
     (irule stmtReasonVvMemoryTheory.assert_reason_raise_admissible >>

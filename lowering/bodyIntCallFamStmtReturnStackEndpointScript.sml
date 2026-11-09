@@ -88,14 +88,14 @@ Proof
   `ce.ce_returns_count = fp.jc_root_ce.ce_returns_count /\
    ce.ce_return_pc = SOME (PtrVar fp.jc_rpc 0) /\
    ce.ce_struct_fields = fp.jc_root_ce.ce_struct_fields` by
-    fs[intcall_joint_res_def, intcall_frame_ok_def,
+    fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
        bodySimTheory.same_frame_def, compile_env_component_equality] >>
   `fp.jc_rb = NONE` by
     (fs[intcall_frame_ok_def] >> Cases_on `fp.jc_rb` >> gvs[]) >>
-  `ce.ce_return_buf = NONE` by fs[intcall_joint_res_def, return_buf_frame_def] >>
+  `ce.ce_return_buf = NONE` by fs[intcall_joint_res_def, intcall_expr_res_def, return_buf_frame_def] >>
   `(!x. fp.jc_rpc = Var x ==> not_fresh_at sa x) /\
    eval_operand fp.jc_rpc s = SOME fp.jc_pc` by
-    (fs[intcall_joint_res_def, intcall_frame_ok_def] >> metis_tac[]) >>
+    (fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def] >> metis_tac[]) >>
   `?w. eval_operand op s = SOME w` by fs[expr_val_rel_def] >>
   qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_internal_return_from_env_def, comp_bind_def, comp_return_def] >>
@@ -105,7 +105,7 @@ Proof
    0 < returns_stack_count
      (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name))
      fp.jc_ret_ty /\ stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s` by
-    fs[intcall_frame_ok_def, intcall_joint_res_def] >>
+    fs[intcall_frame_ok_def, intcall_joint_res_def, intcall_expr_res_def] >>
   drule_all stack_return_operand_layout >>
   simp[] >> strip_tac >>
   qexists_tac `k` >> goal_assum (drule_at Any) >>

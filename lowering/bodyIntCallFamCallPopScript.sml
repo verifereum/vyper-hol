@@ -17,7 +17,7 @@ Ancestors
    have been established. *)
 Theorem intcall_expr_cont_memory_frame:
   intcall_frame_ok fp /\
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee u /\
   expr_sim_inv ce fp.jc_cx env ee /\
   ee.scopes = es.scopes /\ ee.immutables = es.immutables /\
@@ -30,17 +30,17 @@ Theorem intcall_expr_cont_memory_frame:
   intcall_expr_cont fp ce env es sa s ee sb u
 Proof
   strip_tac >>
-  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `(!op. fp.jc_reserved op ==> eval_operand op u = eval_operand op s)` by
     (rpt strip_tac >>
      `?x w. op = Var x /\ lookup_var x fp.jc_oorig = SOME w` by
        metis_tac[intcall_frame_ok_def] >>
      gvs[eval_operand_def] >>
-     `not_fresh_at sa x` by metis_tac[intcall_joint_res_def] >> simp[]) >>
-  `intcall_joint_res fp ce env ee sb u` by
+     `not_fresh_at sa x` by metis_tac[intcall_joint_res_def, intcall_expr_res_def] >> simp[]) >>
+  `intcall_expr_res fp ce env ee sb u` by
     (irule intcall_joint_res_frame >>
      simp[] >>
-     conj_tac >- (gvs[intcall_joint_res_def, allocas_above_def] >> metis_tac[]) >>
+     conj_tac >- (gvs[intcall_joint_res_def, intcall_expr_res_def, allocas_above_def] >> metis_tac[]) >>
      qexistsl [`es`, `s`, `sa`] >> simp[] >>
      rpt strip_tac >>
      drule_all copy_buffer_local_region_frame >> simp[] >> metis_tac[]) >>
@@ -109,7 +109,7 @@ Proof
   PairCases_on `id` >> gvs[] >>
   `expr_sim_inv ce fp.jc_cx env es /\
    stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
-   local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+   local_ptrs_reserved ce sa` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   drule intcall_supported_pop_form >> strip_tac >> gvs[] >>
   `?ts d. get_module_code fp.jc_cx id0 = SOME ts /\
      find_var_decl_by_name id1 ts = SOME d` by

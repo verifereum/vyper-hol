@@ -20,7 +20,7 @@ Theorem intcall_struct_fields_counted:
     expr_body_pre ce fp.jc_cx env e ee) /\
   compile_struct_lit compile_expr ce ty fields buf off sa = (out,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
-  intcall_joint_res fp ce env es0 sa0 s0 /\
+  intcall_expr_res fp ce env es0 sa0 s0 /\
   intcall_expr_cont fp ce env es0 sa0 s0 es sa s /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   sa0.cs_next_var <= sa.cs_next_var /\ sa0.cs_next_id <= sa.cs_next_id /\
@@ -66,7 +66,7 @@ Proof
   `expr_body_pre ce fp.jc_cx env e es` by
     (first_assum irule >> simp[] >>
      fs[bodyIntCallJointContractTheory.intcall_expr_cont_def,
-        bodyIntCallJointContractTheory.intcall_joint_res_def]) >>
+        bodyIntCallJointContractTheory.intcall_joint_res_def, bodyIntCallJointContractTheory.intcall_expr_res_def]) >>
   drule struct_child_store_types >> strip_tac >>
   pop_assum (qspecl_then [`op`,`dst`] strip_assume_tac) >>
   conj_tac >- metis_tac[exprOperandVarTheory.compiler_struct_lit_result] >>

@@ -14,7 +14,7 @@ Theorem intcall_expr_endpoint_vv_post:
   (~expr_has_effect e ==> vv_storage_live fp.jc_cx vv ee u) ==>
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s ee tv vv u
 Proof
-  simp[intcall_expr_cont_def, intcall_joint_res_def, vv_post_def] >>
+  simp[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def, vv_post_def] >>
   metis_tac[]
 QED
 
@@ -35,7 +35,7 @@ Proof
      fs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
   irule reason_encoder_abort_path >>
   goal_assum (drule_at Any) >> simp[] >>
-  fs[intcall_joint_res_def, stmt_state_rel_def] >>
+  fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def] >>
   fs[intcall_frame_ok_def, same_frame_def, compile_env_component_equality] >>
   metis_tac[]
 QED

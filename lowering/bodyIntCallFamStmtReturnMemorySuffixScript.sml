@@ -34,7 +34,7 @@ Theorem intcall_compound_store_return_exit:
       (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t)
 Proof
   strip_tac >>
-  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
+  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   drule_all intcall_copy_metadata >> strip_tac >>
   `evaluate_type (get_tenv fp.jc_cx) fp.jc_ret_ty = SOME fp.jc_ret_tv /\
    cap = type_memory_size fp.jc_ret_tv` by

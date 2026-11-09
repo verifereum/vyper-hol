@@ -148,7 +148,7 @@ Proof
   drule attr_extends >> strip_tac >>
   `fn_has_code sa sm fp.jc_func /\ fn_has_code sm sb fp.jc_func` by
     metis_tac[fn_has_code_split] >>
-  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `gas_admissible (eval_expr fp.jc_cx obj) expr_vv_res_ok es` by
     metis_tac[expr_body_pre_vv_gas_admissible] >>
   `intcall_expr_producer fp obj` by
@@ -168,7 +168,7 @@ Proof
   reverse conj_tac >- fs[Abbr `Q`] >>
   rpt gen_tac >> simp[Abbr `Q`] >> strip_tac >>
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sm s ee tv bvv t` by
-    (gvs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+    (gvs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
      first_assum ACCEPT_TAC) >>
   `post_value_type ce obj = expr_type obj` by
     (irule attr_post_value_type >> metis_tac[]) >>

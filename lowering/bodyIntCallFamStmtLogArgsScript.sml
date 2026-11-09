@@ -21,7 +21,7 @@ Theorem intcall_compile_log_eval_all:
   compile_log_eval_all ce args sa = (xs,sb) /\
   gas_admissible (eval_exprs fp.jc_cx args) log_args_res_ok es /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
-  intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+  intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (eval_exprs fp.jc_cx args) (es,s)
@@ -41,8 +41,8 @@ Proof
       qexistsl_tac [`INL []`, `es with gas_obs := []`, `OK s`] >>
       simp[gas_marked_exec_def, return_def, gas_marked_path_def,
            log_args_post_def, wb_frame_def,
-           intcall_expr_cont_def, intcall_joint_res_def] >>
-      fs[intcall_joint_res_def] >>
+           intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
+      fs[intcall_joint_res_def, intcall_expr_res_def] >>
       conj_tac >- (irule (cj 1 gas_path_rules) >> simp[]) >>
       metis_tac[]) >>
   suspend "cons"
@@ -80,12 +80,12 @@ QED
 
 Resume intcall_compile_log_eval_all[normal]:
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
-  `intcall_joint_res fp ce env (mid with gas_obs := []) sm t /\ ~t.vs_halted /\
+  `intcall_expr_res fp ce env (mid with gas_obs := []) sm t /\ ~t.vs_halted /\
    t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts` by
     fs[intcall_expr_cont_def] >>
   `EVERY (\e. expr_body_pre ce fp.jc_cx env e (mid with gas_obs := [])) args` by
     (fs[EVERY_MEM] >> rpt strip_tac >> irule expr_body_pre_state_transport >>
-     conj_tac >- fs[intcall_joint_res_def] >>
+     conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
      qexists_tac `es` >> simp[]) >>
   `gas_admissible (bind (eval_exprs fp.jc_cx args) (\vs. return (v::vs)))
      log_args_res_ok (mid with gas_obs := [])` by
@@ -135,7 +135,7 @@ Resume intcall_compile_log_eval_all[posts]:
   conj_tac
   >- (irule log_args_post_cons >>
       goal_assum (drule_at Any) >>
-      fs[intcall_joint_res_def] >>
+      fs[intcall_joint_res_def, intcall_expr_res_def] >>
       conj_tac >- (qexistsl_tac [`env`, `es`] >> simp[]) >>
       qexistsl_tac [`mid with gas_obs := []`, `sm`, `t`] >> simp[]) >>
   conj_tac

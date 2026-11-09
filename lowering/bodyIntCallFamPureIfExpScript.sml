@@ -265,7 +265,7 @@ Theorem ifexp_joint_arm_marked_suffix:
     (es,s0) marks (INL raw) ee (OK s) /\
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sm s0
     (ee with gas_obs := []) raw vv s /\
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s0 /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s0 /\
   intcall_expr_cont fp ce env es sa s0 (ee with gas_obs := []) sm s /\
   compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
   (~is_word_type (expr_type e) ==>
@@ -314,7 +314,7 @@ Proof
    (!r x. fp.jc_reserved r /\ r = Var x ==> not_fresh_at sm x) /\
    (!p k. fp.jc_prot p k ==> p+k <= fp.jc_lo) /\
    s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_frame_ok_def] >>
+    fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def] >>
   Cases_on `post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
             ~is_bytestring_type (post_value_type ce e)`
   >- (`unwrap_value ce vv sm = (op,sb)` by
@@ -352,7 +352,7 @@ Theorem ifexp_joint_arm_outcome:
   gas_admissible (eval_expr fp.jc_cx e) expr_vv_res_ok es /\
   gas_admissible (bind (eval_expr fp.jc_cx e) (conditional_result fp.jc_cx))
     expr_vv_res_ok es /\
-  intcall_joint_res fp ce env es sa s0 /\ ~s0.vs_halted /\
+  intcall_expr_res fp ce env es sa s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (~is_word_type (expr_type e) ==>
@@ -387,7 +387,7 @@ Proof
   qpat_x_assum `intcall_expr_producer _ _` mp_tac >>
   simp[Once intcall_expr_producer_def] >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_res _ _ _ _ _ _`)) >>
   (impl_tac >- simp[]) >> strip_tac >>
   irule gas_outcome_bind_result_exec >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -397,12 +397,12 @@ Proof
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sm s0
      (mid with gas_obs := []) v vv t` by
-    (fs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+    (fs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
      first_assum MATCH_ACCEPT_TAC) >>
   drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) ifexp_joint_arm_marked_suffix >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_res _ _ _ _ _ _`)) >>
   (impl_tac >- (simp[] >> metis_tac[optionTheory.SOME_11])) >>
   strip_tac >> rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
@@ -418,7 +418,7 @@ Theorem ifexp_joint_expr_producer:
 Proof
   strip_tac >> simp[Once intcall_expr_producer_def] >> rpt gen_tac >> strip_tac >>
   drule expr_body_pre_ifexp >> strip_tac >>
-  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `?cop sc. lower_value compile_expr ce (BaseT BoolT) c sa = (cop,sc) /\
     fn_has_code sa sc fp.jc_func` by
     (drule_at (Pat `compile_expr _ _ _ _ = _`) ifexp_root_code_layout >>
@@ -434,7 +434,7 @@ Proof
   qpat_x_assum `intcall_forced_producer _ _` mp_tac >>
   simp[Once intcall_forced_producer_def] >>
   disch_then (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_res _ _ _ _ _ _`)) >>
   (impl_tac >- (simp[] >> metis_tac[ifexp_root_condition_admissible])) >>
   disch_then (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
@@ -454,7 +454,7 @@ Resume ifexp_joint_expr_producer[normal]:
   gvs[] >>
   `expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx c es sa sc s
      (es_end with gas_obs := []) (BoolV sel) cop t'` by
-    (fs[expr_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+    (fs[expr_post_def, intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
      first_assum MATCH_ACCEPT_TAC) >>
   drule_at (Pat `compile_expr _ _ (IfExp _ _ _ _) _ = _`) ifexp_root_code_layout >>
   disch_then (drule_at (Pat `fn_has_code sa sb _`)) >>
@@ -463,13 +463,25 @@ Resume ifexp_joint_expr_producer[normal]:
   `~t'.vs_halted /\ t'.vs_current_bb = sc.cs_current_bb /\
    t'.vs_inst_idx = LENGTH sc.cs_current_insts` by fs[intcall_expr_cont_def] >>
   drule_all ifexp_root_jnz_path >> strip_tac >>
-  `intcall_joint_res fp ce env (es_end with gas_obs := []) se
+  `intcall_expr_res fp ce env (es_end with gas_obs := []) se
      (jump_to (if sel then tl else el) t')` by
-    (simp[intcall_joint_res_jump_to] >> irule bodyIntCallJointStmtBoundaryTheory.intcall_joint_res_next_var >>
-     qexists `sc` >> fs[intcall_expr_cont_def]) >>
+    (`intcall_expr_res fp ce env (es_end with gas_obs := []) sc t'` by
+       fs[intcall_expr_cont_def] >>
+     pop_assum mp_tac >>
+     simp[intcall_expr_res_def, stmt_state_rel_jump_to, stmtSimPropsTheory.ret_pc_ok_jump_to,
+          bodyMemoryDefsTheory.return_buf_frame_jump_to, intCallFrameTheory.allocas_above_def, compileEnvTheory.local_region_def,
+          jump_to_def, eval_operand_def, lookup_var_def] >>
+     strip_tac >>
+     `local_ptrs_reserved ce se` by
+       (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
+     `ret_pc_ok ce se t'` by
+       (drule stmtSimPropsTheory.ret_pc_ok_frame >> disch_then irule >> simp[]) >>
+     `return_buf_frame fp.jc_rb ce se t'` by
+       (drule bodyMemoryDefsTheory.return_buf_frame_frame >> disch_then irule >> simp[]) >>
+     simp[] >> rpt strip_tac >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `expr_body_pre ce fp.jc_cx env (if sel then a else b)
      (es_end with gas_obs := [])` by
-    (Cases_on `sel` >> fs[intcall_joint_res_def]) >>
+    (Cases_on `sel` >> fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   `supportedExprs$supported_pure_expr fp.jc_tops (if sel then a else b)` by
     (Cases_on `sel` >>
      fs[supportedExprsTheory.supported_expr_def,
@@ -487,7 +499,7 @@ Resume ifexp_joint_expr_producer[normal]:
   `intcall_expr_producer fp (if sel then a else b)` by (Cases_on `sel` >> simp[]) >>
   `expr_type (if sel then a else b) = expr_type a` by (Cases_on `sel` >> simp[]) >>
   drule_at (Pat `compile_expr _ _ _ _ = _`) ifexp_joint_arm_outcome >>
-  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_res _ _ _ _ _ _`)) >>
   disch_then (fn th => qpat_assum `expr_type (if _ then _ else _) = _`
     (fn eq => drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`) (REWRITE_RULE [eq] th))) >>
   impl_tac >- suspend "arm_hyps" >> strip_tac >>
@@ -541,7 +553,7 @@ Resume ifexp_joint_expr_producer[arm_finish]:
   disch_then (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
   disch_then (qspecl_then [`expr_type a`, `sb`] mp_tac) >>
   impl_tac >- (simp[] >> conj_tac
-    >- fs[intcall_joint_res_def] >>
+    >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
     drule (REWRITE_RULE [ETA_THM] bop_marked_scopes_dom) >> simp[]) >>
   strip_tac >>
   drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)
@@ -575,7 +587,7 @@ Resume ifexp_joint_expr_producer[lift_root]:
      simp[] >>
      conj_tac >- metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
      conj_tac >- metis_tac[] >>
-     conj_tac >- (fs[intcall_joint_res_def] >> metis_tac[]) >>
+     conj_tac >- (fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
      qexistsl [`IfExp (expr_type a) c a b`, `INL tv`, `tv`,
        `if is_word_type (expr_type a) then StackValue (expr_type a) (Var rv)
         else LocatedValue (expr_type a) (mk_ptr (Var rv) LocMemory)`] >>

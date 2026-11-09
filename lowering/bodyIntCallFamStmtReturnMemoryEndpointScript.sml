@@ -134,7 +134,7 @@ Proof
    returns_stack_count
      (\name. MAP (FST o SND) (get_struct_fields fp.jc_root_ce.ce_struct_fields name))
      fp.jc_ret_ty = 0` by
-    fs[intcall_joint_res_def, intcall_frame_ok_def,
+    fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
        bodySimTheory.same_frame_def, compile_env_component_equality] >>
   `~is_word_type fp.jc_ret_ty` by
     (Cases_on `fp.jc_ret_ty` >>
@@ -143,7 +143,7 @@ Proof
      Cases_on `is_word_type (BaseT bt)` >> gvs[]) >>
   `?x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) /\
     eval_operand (Var x) s = SOME bw /\ not_fresh_at sa x` by
-    fs[intcall_joint_res_def, return_buf_frame_def, venomStateTheory.eval_operand_def] >>
+    fs[intcall_joint_res_def, intcall_expr_res_def, return_buf_frame_def, venomStateTheory.eval_operand_def] >>
   qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_internal_return_from_env_def, compile_internal_return_def,
        comp_bind_def, comp_return_def, comp_ignore_bind_def] >>

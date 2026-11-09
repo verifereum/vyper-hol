@@ -22,7 +22,7 @@ Proof
    (!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at sa x) /\
    (?pc. eval_operand fp.jc_rpc s = SOME pc) /\
    (!b sz. fp.jc_prot b sz ==> regions_disjoint b sz (w2n bw) cap)` by
-    (fs[intcall_joint_res_def, intcall_frame_ok_def] >> metis_tac[]) >>
+    (fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def] >> metis_tac[]) >>
   drule (Q.INST [`P` |-> `fp.jc_prot`, `reserved` |-> `fp.jc_reserved`]
     (SPEC_ALL typed_copy_effect_ret_path)) >>
   disch_then (qspecl_then [`sb`, `fp.jc_rpc`, `fp`] mp_tac) >>

@@ -41,7 +41,7 @@ Resume intcall_stmts_producer_raise_reason[setup]:
   rename1 `compile_revert_with_reason ce msg_op _ _ reason_cs = ((),abort_cs)` >>
   `expr_body_pre ce fp.jc_cx env e es` by
     (irule stmt_expr_body_pre >>
-     fs[intcall_joint_res_def, stmt_exprs_ok_def,
+     fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, supported_raise_exists_def,
         alloc_limits_stmt_def] >>
      drule supported_expr_body_calls >> strip_tac >>
@@ -54,6 +54,8 @@ Resume intcall_stmts_producer_raise_reason[setup]:
   `cs_extends reason_cs abort_cs` by metis_tac[revert_reason_grows] >>
   `fn_has_code sa reason_cs fp.jc_func /\ fn_has_code reason_cs abort_cs fp.jc_func` by
     metis_tac[fn_has_code_split] >>
+  imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT1 (UNDISCH
+    (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
   qpat_x_assum `intcall_expr_producer _ _`
     (mp_tac o REWRITE_RULE [intcall_expr_producer_def]) >>
   disch_then drule_all >> strip_tac >>
@@ -85,10 +87,13 @@ Resume intcall_stmts_producer_raise_reason[normal]:
      qexists_tac `env` >> simp[]) >>
   drule vv_post_read_ok >> strip_tac >>
   `reason_vv_ok msg_op \/ reason_storage_vv msg_op \/ reason_code_vv msg_op` by
-    (fs[intcall_joint_res_def] >>
+    (fs[intcall_joint_res_def, intcall_expr_res_def] >>
      metis_tac[supported_reason_encoder_shape]) >>
   (`?t. gas_path fp.jc_ctx fp.jc_func u 0 (Abort Revert_abort t)` by
     (fs[intcall_expr_cont_def] >>
+     imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT2 (UNDISCH
+       (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
+     imp_res_tac (GEN_ALL (iffRL (SPEC_ALL intcall_joint_res_def))) >>
      metis_tac[intcall_reason_abort_path]) >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>

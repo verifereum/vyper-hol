@@ -17,7 +17,7 @@ Ancestors
    and old-allocation interface are shared with other expression proofs. *)
 Theorem intcall_expr_cont_frame:
   intcall_expr_cont fp ce env es sa s ee sb u <=>
-  intcall_joint_res fp ce env ee sb u /\ ~u.vs_halted /\
+  intcall_expr_res fp ce env ee sb u /\ ~u.vs_halted /\
   u.vs_current_bb = sb.cs_current_bb /\
   u.vs_inst_idx = LENGTH sb.cs_current_insts /\
   s.vs_alloca_next <= u.vs_alloca_next /\
@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem intcall_expr_cont_trans:
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   intcall_expr_cont fp ce env es sa s em sm t /\
   intcall_expr_cont fp ce env em sm t ee sb u /\
   MAP FDOM es.scopes = MAP FDOM em.scopes /\
@@ -38,7 +38,7 @@ Proof
   simp[intcall_expr_cont_frame] >> rpt strip_tac >>
   `wb_frame ce es sa s u` by
     (irule wb_frame_trans >>
-     gvs[intcall_joint_res_def] >> metis_tac[]) >>
+     gvs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
@@ -46,7 +46,7 @@ QED
    state relation is supplied at that suffix's actual counted endpoint. *)
 Theorem intcall_joint_res_frame:
   intcall_frame_ok fp /\
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u /\
   sa.cs_next_var <= sb.cs_next_var /\
   s.vs_alloca_next <= u.vs_alloca_next /\
@@ -58,21 +58,21 @@ Theorem intcall_joint_res_frame:
   (!op. fp.jc_reserved op ==> eval_operand op u = eval_operand op s) /\
   (!n b k. local_region ce es.scopes u n b k ==>
            local_region ce es.scopes s n b k) ==>
-  intcall_joint_res fp ce env es sb u
+  intcall_expr_res fp ce env es sb u
 Proof
   rpt strip_tac >>
   `local_ptrs_reserved ce sb` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
-     gvs[intcall_joint_res_def] >> metis_tac[]) >>
+     gvs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   `ret_pc_ok ce sb u` by
     (irule ret_pc_ok_frame >>
-     gvs[intcall_joint_res_def] >> metis_tac[]) >>
+     gvs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   `return_buf_frame fp.jc_rb ce sb u` by
     (irule return_buf_frame_frame >>
-     gvs[intcall_joint_res_def] >> metis_tac[]) >>
+     gvs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   `fp.jc_reserved fp.jc_rpc` by
     fs[intcall_frame_ok_def] >>
-  gvs[intcall_joint_res_def] >>
+  gvs[intcall_joint_res_def, intcall_expr_res_def] >>
   conj_tac
   >- (rpt strip_tac >> irule not_fresh_at_mono >>
       qexists_tac `sa` >> simp[]) >>
@@ -84,15 +84,15 @@ QED
 (* A store effect carries resources at its own operational endpoint. *)
 Theorem intcall_joint_res_copy:
   intcall_frame_ok fp /\
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   typed_copy_effect fp.jc_ctx fp.jc_func sa sb s u dst len /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es u /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!a k. fp.jc_prot a k ==> regions_disjoint a k dst len) ==>
-  intcall_joint_res fp ce env es sb u
+  intcall_expr_res fp ce env es sb u
 Proof
   rpt strip_tac >>
-  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+  `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `!n b k. local_region ce es.scopes u n b k <=>
            local_region ce es.scopes s n b k` by
     (irule copy_buffer_local_region_frame >>
@@ -101,7 +101,7 @@ Proof
     (drule typed_copy_effect_record >>
      simp[venom_state_component_equality]) >>
   `allocas_above fp.jc_lo u` by
-    (fs[intcall_joint_res_def, allocas_above_def, typed_copy_effect_def] >>
+    (fs[intcall_joint_res_def, intcall_expr_res_def, allocas_above_def, typed_copy_effect_def] >>
      metis_tac[]) >>
   irule intcall_joint_res_frame >> simp[] >>
   qexistsl_tac [`s`, `sa`] >> simp[] >>
@@ -111,7 +111,7 @@ Proof
   >- (rpt strip_tac >> irule typed_copy_effect_bytes >>
       goal_assum (drule_at Any) >> fs[regions_disjoint_def]) >>
   rpt strip_tac >> irule typed_copy_effect_operand_preserved >>
-  goal_assum (drule_at Any) >> fs[intcall_joint_res_def] >> metis_tac[]
+  goal_assum (drule_at Any) >> fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]
 QED
 
 (* Compatible copies share the same counted effect interface as widened copies. *)
@@ -195,7 +195,7 @@ QED
 Theorem intcall_expr_cont_copy:
   intcall_expr_cont fp ce env es0 sa s0 es si s /\
   typed_copy_effect fp.jc_ctx fp.jc_func si sb s u dst len /\
-  intcall_joint_res fp ce env es sb u /\
+  intcall_expr_res fp ce env es sb u /\
   alloca_inv s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ sa.cs_next_id <= aid /\
   sa.cs_next_var <= si.cs_next_var /\
@@ -232,29 +232,29 @@ Theorem intcall_owned_store_cont:
   intcall_expr_cont fp ce env es0 sa s0 es sb u
 Proof
   rpt strip_tac >>
-  `intcall_joint_res fp ce env es si s` by fs[intcall_expr_cont_def] >>
+  `intcall_expr_res fp ce env es si s` by fs[intcall_expr_cont_def] >>
   `!a k. fp.jc_prot a k ==> regions_disjoint a k dst len` by
     (fs[intcall_frame_ok_def, regions_disjoint_def] >> rpt strip_tac >>
      disj1_tac >> qpat_x_assum `!a k. fp.jc_prot a k ==> _ <= fp.jc_lo` drule >>
      decide_tac) >>
-  `intcall_joint_res fp ce env es sb u` by
+  `intcall_expr_res fp ce env es sb u` by
     (drule_all intcall_joint_res_copy >> simp[]) >>
   drule_all intcall_expr_cont_copy >> simp[]
 QED
 
 (* Project the resource invariant onto the supplied allocation run. *)
 Theorem intcall_joint_res_alloc:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer sz sa = (buf,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   sz < dimword (:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK u ==>
-  intcall_joint_res fp ce env es sb u
+  intcall_expr_res fp ce env es sb u
 Proof
   rpt strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo s` by
-    fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, intcall_expr_res_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   gvs[] >> rename1 `run_inst_seq _ s = OK u` >>
@@ -272,15 +272,15 @@ Proof
   irule intcall_joint_res_frame >> simp[] >>
   qexistsl_tac [`s`, `sa`] >> simp[] >>
   rpt strip_tac >> Cases_on `op` >>
-  gvs[eval_operand_def, lookup_var_def, intcall_joint_res_def] >> metis_tac[]
+  gvs[eval_operand_def, lookup_var_def, intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]
 QED
 
 Theorem intcall_joint_res_inst_idx[simp]:
-  intcall_joint_res fp ce env es sa (s with vs_inst_idx := n) <=>
-  intcall_joint_res fp ce env es sa s
+  intcall_expr_res fp ce env es sa (s with vs_inst_idx := n) <=>
+  intcall_expr_res fp ce env es sa s
 Proof
   Cases_on `fp.jc_rb` >>
-  simp[intcall_joint_res_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
+  simp[intcall_joint_res_def, intcall_expr_res_def, exprLoweringPropsTheory.stmt_state_rel_inst_idx,
        allocas_above_def, eval_operand_def, lookup_var_def,
        local_region_def, ret_pc_ok_def, return_buf_frame_def] >>
   rename1 `fp.jc_rb = SOME rb` >> Cases_on `rb` >>
@@ -289,7 +289,7 @@ QED
 
 (* Allocate at the actual counted endpoint, keeping the joint resources. *)
 Theorem intcall_alloc_landing:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   compile_alloc_buffer sz sa = (buf,sb) /\
   fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
   sz < dimword (:256) /\ ~s.vs_halted /\
@@ -307,7 +307,7 @@ Theorem intcall_alloc_landing:
 Proof
   rpt strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
-   local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >>
+   local_ptrs_reserved ce sa` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `run_inst_seq _ s = OK t` >>
@@ -347,9 +347,9 @@ Theorem intcall_expr_cont_readonly:
   intcall_expr_cont fp ce env es0 sa s0 es sb u
 Proof
   rpt strip_tac >>
-  `intcall_joint_res fp ce env es si s /\ wb_frame ce es0 sa s0 s` by
+  `intcall_expr_res fp ce env es si s /\ wb_frame ce es0 sa s0 s` by
     fs[intcall_expr_cont_frame] >>
-  `local_ptrs_reserved ce si` by fs[intcall_joint_res_def] >>
+  `local_ptrs_reserved ce si` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `!n b k. local_region ce es.scopes u n b k <=>
            local_region ce es.scopes s n b k` by
     (irule copy_buffer_local_region_frame >> qexists_tac `si` >> simp[]) >>
@@ -357,12 +357,12 @@ Proof
    u.vs_alloca_next = s.vs_alloca_next /\ u.vs_labels = s.vs_labels` by
     fs[venom_state_component_equality] >>
   `allocas_above fp.jc_lo u` by
-    (fs[intcall_joint_res_def, allocas_above_def] >> metis_tac[]) >>
-  `intcall_joint_res fp ce env es sb u` by
+    (fs[intcall_joint_res_def, intcall_expr_res_def, allocas_above_def] >> metis_tac[]) >>
+  `intcall_expr_res fp ce env es sb u` by
     (irule intcall_joint_res_frame >> simp[] >>
      qexistsl_tac [`s`, `si`] >> simp[] >>
      rpt strip_tac >> Cases_on `op` >>
-     gvs[intcall_joint_res_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+     gvs[intcall_joint_res_def, intcall_expr_res_def, eval_operand_def, lookup_var_def] >> metis_tac[]) >>
   `wb_frame ce es0 sa s0 u` by
     (irule wb_frame_readonly_tail >>
      qexistsl_tac [`si`, `s`] >> simp[]) >>
@@ -431,7 +431,7 @@ QED
 (* Materialization uses the child's allocation frontier, even after ADD has
    advanced the variable frontier.  Win includes every old allocation. *)
 Theorem intcall_unwrap_landing:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   unwrap_value ce vv sa = (op,sb) /\
   vv_holds ce fp.jc_cx ty r vv es s /\
   read_result fp.jc_cx r es = (INL v,es) /\
@@ -461,7 +461,7 @@ Proof
   rpt strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa /\ allocas_above fp.jc_lo s` by
-    fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, intcall_expr_res_def] >>
   drule (Q.INST
     [`reserved` |-> `fp.jc_reserved`, `P` |-> `fp.jc_prot`,
      `Win` |-> `\p k. ?aid. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k)`,
@@ -474,14 +474,14 @@ Proof
   disch_then (qspecl_then [`tv`, `fp`] mp_tac) >>
   (impl_tac >-
     (simp[] >> conj_tac
-     >- fs[intcall_frame_ok_def, intcall_joint_res_def] >>
+     >- fs[intcall_frame_ok_def, intcall_joint_res_def, intcall_expr_res_def] >>
      conj_tac >- (fs[intcall_frame_ok_def] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
      rpt strip_tac >> qexistsl_tac [`aid`, `p`, `k`] >> simp[arithmeticTheory.ADD_COMM])) >>
   strip_tac >>
   `sa.cs_next_var <= sb.cs_next_var` by
     (qspec_then `ce` (qspec_then `vv` (qspec_then `sa` mp_tac)) ci_mono_unwrap_value >>
      simp[ci_mono_def]) >>
-  `intcall_joint_res fp ce env es sb u` by
+  `intcall_expr_res fp ce env es sb u` by
     (irule intcall_joint_res_frame >> simp[] >> qexistsl_tac [`s`, `sa`] >> simp[]) >>
   qexists_tac `u` >> simp[intcall_expr_cont_def] >> metis_tac[]
 QED
@@ -489,7 +489,7 @@ QED
 (* Counted ADD followed by materialization, at the literal child's original
    allocation frontier.  This is uniform in word, memory and other locations. *)
 Theorem intcall_add_unwrap_landing:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env ee sm s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env ee sm s /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   local_ptrs_reserved ce si /\
   si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id /\
@@ -537,13 +537,13 @@ Proof
        eval_operand (vv_operand vv) t = SOME w` by
     (Cases_on `vv_operand vv` >> fs[intcall_expr_cont_def, eval_operand_def] >>
      metis_tac[]) >>
-  `intcall_joint_res fp ce env ee sn t /\ ~t.vs_halted /\
+  `intcall_expr_res fp ce env ee sn t /\ ~t.vs_halted /\
    t.vs_current_bb = sn.cs_current_bb /\
    t.vs_inst_idx = LENGTH sn.cs_current_insts /\
    vv_holds ce fp.jc_cx (post_value_type ce e) raw vv ee t` by
     fs[intcall_expr_cont_def, vv_post_def] >>
   drule_at (Pat `vv_holds _ _ _ _ _ _ _`) intcall_unwrap_landing >>
-  disch_then (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `intcall_expr_res _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
   disch_then (qspecl_then [`v`, `tv`] mp_tac) >>
   (impl_tac >-
@@ -592,7 +592,7 @@ Proof
 QED
 
 Theorem intcall_add_unwrap_landing_conditional:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env ee sm s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env ee sm s /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   local_ptrs_reserved ce si /\
   si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id /\
@@ -671,7 +671,7 @@ QED
 
 (* An old root survives a child and remains clear of its live locals. *)
 Theorem intcall_expr_cont_root:
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   intcall_expr_cont fp ce env es sa s ee sb u /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   FLOOKUP s.vs_allocas rid = SOME (b,k) /\ rid < sa.cs_next_id /\
@@ -692,9 +692,9 @@ Proof
   `local_region ce es.scopes s n a z` by
     (irule exprSimPropsTheory.local_region_frame >> conj_tac
      >- (qexists_tac `fp.jc_func` >>
-         fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def]) >>
+         fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def, state_rel_def]) >>
      qexistsl_tac [`sa`, `ee.scopes`, `u`] >>
-     fs[intcall_joint_res_def, intcall_expr_cont_def]) >>
+     fs[intcall_joint_res_def, intcall_expr_res_def, intcall_expr_cont_def]) >>
   metis_tac[]
 QED
 
@@ -703,7 +703,7 @@ QED
    neither is inferred from write-region authorization. *)
 Theorem intcall_child_store_effect:
   body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   compile_store_memory ce src dst dty sty sa = ((),sb) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   (!x. dst = Var x ==> not_fresh_at sa x) /\
@@ -733,7 +733,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sa /\ expr_sim_inv ce fp.jc_cx env es` by
-    fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `!ty tv. evaluate_type (get_tenv fp.jc_cx) ty = SOME tv ==>
     type_memory_bytes ce ty = type_memory_size tv` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
@@ -827,11 +827,11 @@ Theorem intcall_child_store_landing:
       mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory)
 Proof
   rpt strip_tac >>
-  `intcall_joint_res fp ce env es su s /\ ~s.vs_halted /\
+  `intcall_expr_res fp ce env es su s /\ ~s.vs_halted /\
    s.vs_current_bb = su.cs_current_bb /\
    s.vs_inst_idx = LENGTH su.cs_current_insts` by fs[intcall_expr_cont_def] >>
   drule_all intcall_child_store_effect >> strip_tac >>
-  `alloca_inv s` by fs[intcall_joint_res_def, stmt_state_rel_def] >>
+  `alloca_inv s` by fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def] >>
   `intcall_expr_cont fp ce env es0 sa s0 es sb u` by
     (irule intcall_owned_store_cont >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -901,8 +901,8 @@ QED
    continuation, without depending on the subsequent destination store. *)
 Theorem intcall_child_materialize_root:
   intcall_frame_ok fp /\ expr_body_pre ce fp.jc_cx env e es /\
-  intcall_joint_res fp ce env es0 s0c s0 /\
-  intcall_joint_res fp ce env es si t /\
+  intcall_expr_res fp ce env es0 s0c s0 /\
+  intcall_expr_res fp ce env es si t /\
   intcall_expr_cont fp ce env es0 s0c s0 es si t /\
   intcall_expr_cont fp ce env es si t ee sm q /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
@@ -943,13 +943,13 @@ Proof
     intcall_expr_cont_root >> disch_then drule_all >> strip_tac >>
   `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_id <= sm.cs_next_id` by
     metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
-  `local_ptrs_reserved ce si /\ intcall_joint_res fp ce env ee sm q /\
+  `local_ptrs_reserved ce si /\ intcall_expr_res fp ce env ee sm q /\
    ~q.vs_halted /\ q.vs_current_bb = sm.cs_current_bb /\
    q.vs_inst_idx = LENGTH sm.cs_current_insts` by
-    (conj_tac >- fs[intcall_joint_res_def] >> fs[intcall_expr_cont_def]) >>
+    (conj_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >> fs[intcall_expr_cont_def]) >>
   drule_all intcall_child_unwrap_condition >> disch_tac >>
   `type_memory_bytes ce (post_value_type ce e) = type_memory_size stv` by
-    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size, intcall_joint_res_def] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size, intcall_joint_res_def, intcall_expr_res_def] >>
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
     intcall_add_unwrap_landing_conditional >>
   disch_then (drule_at (Pat `emit_op ADD _ _ = _`)) >>
@@ -1001,7 +1001,7 @@ QED
 Theorem intcall_root_store_landing:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
-  intcall_joint_res fp ce env es0 sa s0 /\
+  intcall_expr_res fp ce env es0 sa s0 /\
   intcall_expr_cont fp ce env es0 sa s0 es su s /\
   compile_store_memory ce src dst dty sty su = ((),sb) /\
   (!x. src = Var x ==> not_fresh_at su x) /\
@@ -1050,9 +1050,9 @@ Proof
      `local_region ce es0.scopes s0 name a n` by
        (irule local_region_frame >> conj_tac
         >- (qexists_tac `fp.jc_func` >>
-            fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def]) >>
+            fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def, state_rel_def]) >>
         qexistsl_tac [`sa`, `es.scopes`, `u`] >>
-        fs[intcall_expr_cont_def, intcall_joint_res_def]) >> metis_tac[]) >>
+        fs[intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def]) >> metis_tac[]) >>
   qexists_tac `u` >> simp[] >> conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
   `mem_bytes_at a n u.vs_memory = mem_bytes_at a n s.vs_memory` by simp[] >>
@@ -1083,7 +1083,7 @@ Theorem intcall_counted_child_store:
   expr_body_pre ce fp.jc_cx env e es /\
   supportedExprs$supported_expr fp.jc_tops e /\
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) /\
-  intcall_joint_res fp ce env es0 s0c s0 /\
+  intcall_expr_res fp ce env es0 s0c s0 /\
   intcall_expr_cont fp ce env es0 s0c s0 es si t /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   s0c.cs_next_var <= si.cs_next_var /\ s0c.cs_next_id <= si.cs_next_id /\
@@ -1126,7 +1126,7 @@ Theorem intcall_counted_child_store:
     (\res ee r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >>
-  `intcall_joint_res fp ce env es si t /\ ~t.vs_halted /\
+  `intcall_expr_res fp ce env es si t /\ ~t.vs_halted /\
    t.vs_current_bb = si.cs_current_bb /\
    t.vs_inst_idx = LENGTH si.cs_current_insts` by fs[intcall_expr_cont_def] >>
   `gas_admissible (eval_expr fp.jc_cx e) expr_vv_res_ok es` by
@@ -1147,9 +1147,9 @@ Resume intcall_counted_child_store[read_store]:
   rename1 `gas_marked_exec _ _ _ _ marks (INL raw) mid (OK q)` >>
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es si sm t
      (mid with gas_obs := []) raw vv q` by
-    (fs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def] >>
+    (fs[vv_post_def, intcall_expr_cont_def, intcall_joint_res_def, intcall_expr_res_def] >>
      metis_tac[]) >>
-  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def] >>
+  `expr_sim_inv ce fp.jc_cx env es` by fs[intcall_joint_res_def, intcall_expr_res_def] >>
   drule_all intcall_child_read_layout >> strip_tac >>
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
     intcall_child_materialize_root >>

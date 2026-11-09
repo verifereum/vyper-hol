@@ -57,18 +57,18 @@ Theorem intcall_joint_res_log_frame:
 Proof
   strip_tac >>
   `expr_sim_inv ce fp.jc_cx env (es with logs := es.logs ++ ls)` by
-    (irule log_expr_sim_inv >> fs[intcall_joint_res_def]) >>
+    (irule log_expr_sim_inv >> fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   `local_ptrs_reserved ce sb` by
-    (fs[intcall_joint_res_def] >> drule_all local_ptrs_reserved_next_var >> simp[]) >>
+    (fs[intcall_joint_res_def, intcall_expr_res_def] >> drule_all local_ptrs_reserved_next_var >> simp[]) >>
   `ret_pc_ok ce sb t` by
-    (irule ret_pc_ok_frame >> fs[intcall_joint_res_def] >> metis_tac[]) >>
+    (irule ret_pc_ok_frame >> fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   `return_buf_frame fp.jc_rb ce sb t` by
-    (irule return_buf_frame_frame >> fs[intcall_joint_res_def] >> metis_tac[]) >>
+    (irule return_buf_frame_frame >> fs[intcall_joint_res_def, intcall_expr_res_def] >> metis_tac[]) >>
   `!n b sz. local_region ce es.scopes t n b sz ==>
             local_region ce es.scopes s n b sz` by
     (rpt strip_tac >> irule local_region_frame >>
-     fs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
-  fs[intcall_joint_res_def] >> rpt conj_tac
+     fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  fs[intcall_joint_res_def, intcall_expr_res_def] >> rpt conj_tac
   >- (rpt strip_tac >>
       `?x w. op = Var x /\ lookup_var x fp.jc_oorig = SOME w` by
         metis_tac[intcall_frame_ok_def] >>
@@ -117,7 +117,7 @@ Proof
   strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s /\
    local_ptrs_reserved ce sm /\ allocas_above fp.jc_lo s` by
-    fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, intcall_expr_res_def] >>
   drule_all intcall_log_suffix_run >> strip_tac >>
   `!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
          lookup_var x t = SOME w` by
@@ -137,7 +137,7 @@ Theorem intcall_joint_res_inst_idx:
   intcall_joint_res fp ce env es sa (s with vs_inst_idx := k) <=>
   intcall_joint_res fp ce env es sa s
 Proof
-  simp[intcall_joint_res_def, stmt_state_rel_inst_idx, allocas_above_def,
+  simp[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_inst_idx, allocas_above_def,
        eval_operand_def, lookup_var_def, local_region_def,
        ret_pc_ok_def, return_buf_frame_def] >>
   Cases_on `fp.jc_rb` >> simp[return_buf_frame_def] >>

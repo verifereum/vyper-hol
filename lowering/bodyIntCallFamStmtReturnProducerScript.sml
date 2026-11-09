@@ -23,7 +23,7 @@ Proof
   gvs[supported_stmt_def, type_stmt_def, int_calls_stmt_def,
       supported_stmt_expr_exists_def, AllCaseEqs()] >>
   `ce.ce_return_pc = SOME (PtrVar fp.jc_rpc 0)` by
-    fs[intcall_frame_ok_def, intcall_joint_res_def, same_frame_def,
+    fs[intcall_frame_ok_def, intcall_joint_res_def, intcall_expr_res_def, same_frame_def,
        compile_env_component_equality] >>
   qpat_x_assum `stmts_env _ _ _ _ _ = _` mp_tac >>
   simp[stmts_env_singleton, stmt_env_def, declare_stmt_local_def,
@@ -32,7 +32,7 @@ Proof
   rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
   `expr_body_pre ce fp.jc_cx env e es` by
     (irule stmt_expr_body_pre >>
-     fs[intcall_joint_res_def, stmt_exprs_ok_def,
+     fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def,
         supported_expr_exists_def] >>
      drule supported_expr_body_calls >> strip_tac >>
@@ -51,6 +51,8 @@ Proof
      fs[ci_mono_def] >> goal_assum (drule_at Any)) >>
   `gas_admissible (bind (eval_expr fp.jc_cx e) (read_result fp.jc_cx))
      expr_res_ok es` by metis_tac[return_forced_admissible] >>
+  imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT1 (UNDISCH
+    (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
   qpat_x_assum `intcall_forced_producer _ _`
     (mp_tac o REWRITE_RULE [intcall_forced_producer_def]) >>
   disch_then drule_all >> strip_tac >>
@@ -108,6 +110,9 @@ Resume intcall_valued_return_producer[terminal]:
     fs[intcall_frame_ok_def] >>
   drule_all marked_forced_destination_typed >> strip_tac >>
   fs[intcall_expr_cont_def] >>
+  imp_res_tac (GEN_ALL (DISCH_ALL (CONJUNCT2 (UNDISCH
+    (iffLR (SPEC_ALL intcall_joint_res_def)))))) >>
+  imp_res_tac (GEN_ALL (iffRL (SPEC_ALL intcall_joint_res_def))) >>
   irule intcall_return_endpoint >> simp[] >>
   goal_assum (drule_at (Pat `compile_internal_return_from_env _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>

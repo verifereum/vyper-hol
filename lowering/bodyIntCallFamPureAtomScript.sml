@@ -10,15 +10,15 @@ Ancestors
   vyperStoragePlaceProvenance exprSimMapDefs vyperState context
 
 Theorem joint_res_gas_obs[simp]:
-  intcall_joint_res fp ce env (es with gas_obs := gs) sa s <=>
-  intcall_joint_res fp ce env es sa s
+  intcall_expr_res fp ce env (es with gas_obs := gs) sa s <=>
+  intcall_expr_res fp ce env es sa s
 Proof
-  simp[intcall_joint_res_def, local_region_def]
+  simp[intcall_joint_res_def, intcall_expr_res_def, local_region_def]
 QED
 
 
 Theorem pure_vv_observed_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   ~expr_has_effect e /\
   eval_expr fp.jc_cx e (es with gas_obs := gs) = (res,ee) /\
   sa.cs_next_var <= sb.cs_next_var /\
@@ -32,7 +32,7 @@ Proof
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e
      (es with gas_obs := gs) sa sb s ee tv vv u` by
     (fs[vv_post_def, locals_kept_def] >> metis_tac[]) >>
-  `intcall_joint_res fp ce env (es with gas_obs := gs) sa s` by simp[] >>
+  `intcall_expr_res fp ce env (es with gas_obs := gs) sa s` by simp[] >>
   drule_all pure_vv_post_cont >>
   simp[intcall_expr_cont_def, locals_kept_def] >> metis_tac[]
 QED
@@ -55,7 +55,7 @@ Proof
     metis_tac[expr_vv_ok_def] >>
   `local_ptrs_reserved ce sa /\
    stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s` by
-    fs[intcall_joint_res_def] >>
+    fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `supportedExprs$supported_pure_expr fp.jc_tops e` by metis_tac[] >>
   `~expr_has_effect e` by metis_tac[supported_pure_expr_effect_free] >>
   `sa.cs_next_var <= sb.cs_next_var` by metis_tac[compile_expr_grows] >>
@@ -118,7 +118,7 @@ Proof
   `storage_mapping_region fp.jc_cx tr (n2w slot) (HashMapT kt vt)` by
     (irule lookup_global_mapping_region >> qexistsl [`src`, `es`, `es`, `id`] >> simp[]) >>
   `storage_vars_rel ce fp.jc_cx /\ transient_vars_rel ce fp.jc_cx` by
-    gvs[intcall_joint_res_def, stmt_state_rel_def, state_rel_def] >>
+    gvs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def, state_rel_def] >>
   drule_at (Pat `find_var_decl_by_name _ _ = _`) toplevel_storage_ce_vars_decl >>
   simp[var_decl_transient_def] >> disch_then drule_all >> strip_tac >>
   `compile_expr ce ty (TopLevelName ann (src,id)) sa =

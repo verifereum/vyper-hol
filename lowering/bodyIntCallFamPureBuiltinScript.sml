@@ -9,7 +9,7 @@ Ancestors
   exprOperandVar exprSimMapDefs vyperTypeSystem
 
 Theorem pure_marked_vv_post_cont:
-  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s /\
   ~expr_has_effect e /\ sa.cs_next_var <= sb.cs_next_var /\
   vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx e es sa sb s
     (ee with gas_obs := []) tv vv u /\
@@ -22,9 +22,9 @@ Proof
   strip_tac >>
   fs[gas_marked_exec_def, gas_marked_path_def] >>
   qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >> fs[] >>
-  `intcall_joint_res fp ce env
+  `intcall_expr_res fp ce env
      (es with gas_obs := gas_explicit marks s.vs_gas_readings) sa s` by
-    (fs[intcall_joint_res_def, stmt_state_rel_def] >> metis_tac[]) >>
+    (fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def] >> metis_tac[]) >>
   `intcall_expr_cont fp ce env
      (es with gas_obs := gas_explicit marks s.vs_gas_readings)
      sa s (ee with gas_obs := []) sb u` by
@@ -50,7 +50,7 @@ Proof
   disch_then (qspecl_then [`fp.jc_ctx`, `fp.jc_func`, `ty`] mp_tac) >>
   simp[expr_vv_sim_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `vv`, `s`] mp_tac) >>
-  impl_tac >- fs[intcall_joint_res_def] >>
+  impl_tac >- fs[intcall_joint_res_def, intcall_expr_res_def] >>
   disch_then (fn th => irule gas_outcome_exec_conseq >> irule_at Any th) >>
   reverse conj_tac >- (rpt strip_tac >> simp[]) >>
   rpt gen_tac >> strip_tac >>
@@ -60,7 +60,7 @@ Proof
     (drule_all pure_marked_vv_post_cont >> simp[]) >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sb x` by
     (drule (cj 1 compiler_compile_var) >>
-     `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def] >> simp[]) >>
+     `local_ptrs_reserved ce sa` by fs[intcall_joint_res_def, intcall_expr_res_def] >> simp[]) >>
   BETA_TAC >> qexists `tv` >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>

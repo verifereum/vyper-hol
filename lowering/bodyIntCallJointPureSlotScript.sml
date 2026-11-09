@@ -7,7 +7,7 @@ Ancestors
   structFieldsProps retAbiPlanProps
 
 Theorem joint_local_result_slot:
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
   ?w. eval_operand (Var p) s = SOME w /\
@@ -16,7 +16,7 @@ Theorem joint_local_result_slot:
       (fp.jc_lo <= w2n w \/
        ?b z. fp.jc_staged b z /\ b <= w2n w /\ w2n w + sz <= b + z)
 Proof
-  strip_tac >> fs[intcall_joint_res_def] >>
+  strip_tac >> fs[intcall_joint_res_def, intcall_expr_res_def] >>
   `?w. lookup_var p s = SOME w /\ w2n w + sz <= s.vs_alloca_next /\
         type_memory_size entry.type <= sz` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem joint_name_result_slot:
-  intcall_joint_res fp ce env es sc s /\
+  intcall_expr_res fp ce env es sc s /\
   well_typed_expr env (Name ann name) /\
   compile_expr ce ty (Name ann name) sa = (vv,sb) /\
   evaluate_type (get_tenv fp.jc_cx) ann = SOME tv ==>
@@ -42,12 +42,12 @@ Theorem joint_name_result_slot:
 Proof
   strip_tac >>
   `?entry. lookup_scopes name es.scopes = SOME entry /\ entry.type = tv` by
-    (fs[intcall_joint_res_def, expr_sim_inv_def] >>
+    (fs[intcall_joint_res_def, intcall_expr_res_def, expr_sim_inv_def] >>
      drule_all vyperTypeEnvTheory.well_typed_Name_lookup >> strip_tac >>
      gvs[vyperTypeInvariantsTheory.env_consistent_def,
          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
   `?p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz)` by
-    gvs[intcall_joint_res_def, expr_sim_inv_def,
+    gvs[intcall_joint_res_def, intcall_expr_res_def, expr_sim_inv_def,
         vyperTypeSystemTheory.well_typed_expr_def] >>
   drule_all joint_local_result_slot >> strip_tac >>
   drule exprSimNameValueTheory.compile_name_value_ptr >>
@@ -57,11 +57,11 @@ Proof
 QED
 
 Theorem joint_allocated_result_slot:
-  intcall_joint_res fp ce env es sa s /\
+  intcall_expr_res fp ce env es sa s /\
   FLOOKUP s.vs_allocas aid = SOME (a,k) ==>
   a + k < dimword (:256) /\ fp.jc_lo <= a
 Proof
-  strip_tac >> fs[intcall_joint_res_def, stmt_state_rel_def,
+  strip_tac >> fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def,
     venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
     intCallFrameTheory.allocas_above_def] >>
@@ -70,7 +70,7 @@ Proof
 QED
 
 Theorem joint_local_region_slot:
-  intcall_joint_res fp ce env es sa s /\ local_region ce es.scopes s name a k ==>
+  intcall_expr_res fp ce env es sa s /\ local_region ce es.scopes s name a k ==>
   a + k < dimword (:256) /\
   (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)
 Proof
@@ -80,7 +80,7 @@ Proof
 QED
 
 Theorem joint_positive_result_slot:
-  intcall_joint_res fp ce env es sc s /\
+  intcall_expr_res fp ce env es sc s /\
   vv_at ce fp.jc_cx ty sa sb es r vv s /\
   read_result fp.jc_cx r es = (INL v,es) /\
   evaluate_type (get_tenv fp.jc_cx) ty = SOME tv /\
@@ -214,7 +214,7 @@ QED
 
 Theorem joint_supported_result_slot:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  intcall_joint_res fp ce env es sc s /\
+  intcall_expr_res fp ce env es sc s /\
   supportedTypes$supported_value_type fp.jc_tops ty /\
   vv_at ce fp.jc_cx ty sa sb es r vv s /\
   read_result fp.jc_cx r es = (INL v,es) /\
@@ -277,7 +277,7 @@ QED
 
 Theorem joint_type_builtin_result_slot:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  intcall_joint_res fp ce env es sc s /\
+  intcall_expr_res fp ce env es sc s /\
   supportedExprForms$supported_type_builtin_form fp.jc_tops ty tb target args /\
   well_typed_expr env (TypeBuiltin ty tb target args) /\
   vv_at ce fp.jc_cx ty sa sb es r vv s /\
@@ -331,7 +331,7 @@ QED
 
 Theorem joint_builtin_result_slot:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  intcall_joint_res fp ce env es sc s /\
+  intcall_expr_res fp ce env es sc s /\
   supportedExprForms$supported_builtin_form fp.jc_tops ty blt args /\
   well_typed_expr env (Builtin ty blt args) /\
   (!elem bd. blt <> MakeArray elem bd) /\
@@ -397,8 +397,8 @@ QED
    Name deliberately uses local provenance even when its type has size zero. *)
 Theorem joint_nonconditional_result_slot:
   intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
-  intcall_joint_res fp ce env es sa s /\
-  intcall_joint_res fp ce env ee sb u /\
+  intcall_expr_res fp ce env es sa s /\
+  intcall_expr_res fp ce env ee sb u /\
   well_typed_expr env e /\ supportedExprs$supported_pure_expr fp.jc_tops e /\
   (!ann elem bd args. e <> Builtin ann (MakeArray elem bd) args) /\
   (!ann c a b. e <> IfExp ann c a b) /\
@@ -431,7 +431,7 @@ Proof
   >>~- ([`well_typed_expr env (TopLevelName ann nsid)`],
     `expr_sim_inv ce fp.jc_cx env es /\
       stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s` by
-       fs[intcall_joint_res_def] >>
+       fs[intcall_joint_res_def, intcall_expr_res_def] >>
      `supportedExprs$supported_pure_expr fp.jc_tops (TopLevelName ann nsid)` by
        simp[supportedExprsTheory.supported_pure_expr_def] >>
      drule_all supported_toplevel_result_nonmemory >> strip_tac >> gvs[])
