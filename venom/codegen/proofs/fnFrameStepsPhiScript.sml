@@ -1326,7 +1326,7 @@ Proof
   `?idx. idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = inst` by
     metis_tac[listTheory.MEM_EL] >>
   `MEM u (inst_uses inst)` by
-    metis_tac[removeUnusedSsaProofsTheory.operand_var_in_inst_uses] >>
+    metis_tac[venomInstTheory.operand_var_in_inst_uses] >>
   `MEM u (live_vars_at (liveness_analyze fn) bb.bb_label idx)` by
     (irule (SRULE [LET_THM] livenessProofsTheory.live_vars_at_uses) >>
      goal_assum drule >> simp[]) >>
@@ -1743,7 +1743,7 @@ Proof
     (LENGTH (collect_phis bb.bb_instructions)))` by
     (irule phi_output_exit_live_prefix >> goal_assum drule >> metis_tac[]) >>
   `MEM v (inst_uses phi)` by
-    metis_tac[removeUnusedSsaProofsTheory.operand_var_in_inst_uses] >>
+    metis_tac[venomInstTheory.operand_var_in_inst_uses] >>
   metis_tac[phi_codegen_input_dead_after_prefix]
 QED
 
@@ -1840,7 +1840,7 @@ Proof
   `MEM (EL i (collect_phis bb.bb_instructions))
     (collect_phis bb.bb_instructions)` by simp[listTheory.EL_MEM] >>
   `MEM v (inst_uses (EL i (collect_phis bb.bb_instructions)))` by
-    metis_tac[removeUnusedSsaProofsTheory.operand_var_in_inst_uses] >>
+    metis_tac[venomInstTheory.operand_var_in_inst_uses] >>
   `~MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
     (LENGTH (collect_phis bb.bb_instructions)))` by
     metis_tac[phi_codegen_input_dead_after_prefix] >>

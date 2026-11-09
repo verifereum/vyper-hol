@@ -76,14 +76,6 @@ QED
 
 (* ===== Main theorem: NOP'd variables not used as operands ===== *)
 
-Theorem operand_var_in_inst_uses[local]:
-
-  !inst v. MEM (Var v) inst.inst_operands ==>
-           MEM v (inst_uses inst)
-Proof
-  simp[inst_uses_def] >> metis_tac[mem_var_operand_vars]
-QED
-
 (* fn_insts_blocks = FLAT (MAP bb_instructions ...) *)
 Theorem fn_insts_blocks_flat:
   !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
@@ -135,7 +127,7 @@ QED
 
 (* ===== Boilerplate: reachability / lookup helpers ===== *)
 
-Theorem fn_reachable_in_cfg_dfs_pre[local]:
+Theorem fn_reachable_in_cfg_dfs_pre:
 
   !fn lbl. wf_function fn /\ fn_reachable fn lbl ==>
     MEM lbl (cfg_analyze fn).cfg_dfs_pre
