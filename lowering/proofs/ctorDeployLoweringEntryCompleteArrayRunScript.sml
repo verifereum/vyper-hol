@@ -120,6 +120,16 @@ Proof
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb : bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid ip src DLOAD
+    (STRING #"%" (toString header_var))
+    (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2)))
+    (STRING #"%" (toString (header_var+3)))` by
+    fs[abi_decode_position_loop_cfg_def, abi_decode_position_header_insts_def,
+       abi_decode_position_header_delta_def, abi_decode_loop_cfg_def,
+       abi_decode_header_insts_def] >>
+  `header_var + 4 <= limit_st.cs_next_var` by
+    fs[abi_decode_position_header_delta_def] >>
   drule_all deploy_ctor_array_header_complete_run >> simp[]
 QED
 
