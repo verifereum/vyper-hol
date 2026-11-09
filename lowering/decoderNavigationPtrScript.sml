@@ -63,8 +63,10 @@ Proof
       qexists_tac `0` >> simp[] >> irule ptr_inst_ok_copy_len_binop >>
       gvs[ptr_covers_def, op_taint_def]) >>
     `eval_operand (Var root) s = SOME a` by simp[eval_operand_def] >>
-    simp[Abbr `t`, mk_inst_def, is_terminator_def, step_inst_base_def,
-      exec_pure2_def, update_var_def]) >>
+    `step_inst_base (mk_inst id ADD [Var root;offset] [out]) s =
+       OK (update_var out (a+n2w off) s)` by
+      (irule step_ADD >> simp[]) >>
+    simp[Abbr `t`, is_terminator_def, update_var_def]) >>
   qexistsl_tac [`gf`, `tf`, `t with vs_inst_idx := SUC s.vs_inst_idx`] >>
   simp[] >> conj_tac >-
     simp[Abbr `t`, lookup_var_def, update_var_def, FLOOKUP_UPDATE,

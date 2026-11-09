@@ -17,7 +17,7 @@
  *)
 Theory entryPtrSeamRegister
 Ancestors
-  entryPtrSeamDecoder entryDecoderBudgetBoundary actualDecoderAllocationPtr actualAllocaReplayPtr
+  decoderArrayInitPtr entryPtrSeamDecoder entryDecoderBudgetBoundary actualDecoderAllocationPtr actualAllocaReplayPtr
   actualAllocSitesCredit acceptedContextPhi sourceWordDecoderPtr sourceBytesRepresentation
   sourceEncodingWindows sourceEncodingLayout sourcePrimitiveMemberPtr sourcePrimitiveReentryPtr canonicalMemberTraversalPtr sourcePrimitiveComplexPtr sourceRecursiveComplexPtr
   entryStateRel entryArgPtrs entryLocals
