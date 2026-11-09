@@ -5204,6 +5204,235 @@ Proof
   simp[]
 QED
 
+Theorem mm_local_payload_replace_merge_reverse[local]:
+  d1 <= d2 /\ d2 <= d1 + LENGTH bs1 /\
+  d1 + LENGTH merged = MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) merged /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-d1) merged) /\
+  d1 + LENGTH merged <= LENGTH mem ==>
+  replace_bytes d1 bs1 (replace_bytes d2 bs2 mem) =
+  replace_bytes d1 merged mem
+Proof
+  strip_tac >>
+  `LENGTH bs1 <= LENGTH merged /\ d2-d1 + LENGTH bs2 <= LENGTH merged` by
+    (gvs[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!i. i < LENGTH bs1 ==> EL i bs1 = EL i merged` by
+    metis_tac[EL_TAKE] >>
+  `!i. i < LENGTH bs2 ==> EL i bs2 = EL (i + (d2-d1)) merged` by
+    (rpt strip_tac >> qpat_x_assum `bs2 = _` (fn th => once_rewrite_tac[th]) >>
+     simp[EL_TAKE, EL_DROP]) >>
+  rw[LIST_EQ_REWRITE, replace_bytes_def, LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP] >>
+  rw[EL_APPEND_EQN, EL_TAKE, EL_DROP, LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP] >>
+  gvs[EL_DROP, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mm_local_payload_write_merge_reverse[local]:
+  d1 <= d2 /\ d2 <= d1 + LENGTH bs1 /\
+  d1 + LENGTH merged = MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) merged /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-d1) merged) ==>
+  write_memory_with_expansion d1 bs1 (write_memory_with_expansion d2 bs2 s) =
+  write_memory_with_expansion d1 merged s
+Proof
+  strip_tac >> simp[write_as_replace] >>
+  `d2 + LENGTH bs2 <= LENGTH (expand_mem s.vs_memory (d2 + LENGTH bs2))` by
+    simp[expand_mem_ge] >>
+  simp[expand_replace, venomStateTheory.venom_state_component_equality,
+       mm_local_expand_mem_max, arithmeticTheory.MAX_COMM] >>
+  irule mm_local_payload_replace_merge_reverse >> simp[expand_mem_ge]
+QED
+
+Theorem mm_local_payload_write_merge_unordered[local]:
+  dst = MIN d1 d2 /\
+  MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) = dst + LENGTH merged /\
+  (d1 <= d2 /\ d2 <= d1 + LENGTH bs1 \/
+   d2 <= d1 /\ d1 <= d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) (DROP (d1-dst) merged) /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-dst) merged) ==>
+  write_memory_with_expansion d2 bs2 (write_memory_with_expansion d1 bs1 s) =
+  write_memory_with_expansion dst merged s
+Proof
+  strip_tac >> Cases_on `d1 <= d2`
+  >- (`dst = d1` by simp[arithmeticTheory.MIN_DEF] >> gvs[] >>
+      irule mm_local_payload_write_merge >>
+      simp[] >> gvs[arithmeticTheory.MAX_DEF]) >>
+  `dst = d2` by simp[arithmeticTheory.MIN_DEF] >> gvs[] >>
+  irule mm_local_payload_write_merge_reverse >>
+  simp[arithmeticTheory.MAX_COMM]
+QED
+
+Theorem mm_local_payload_late_discharge_unordered[local]:
+  dst = MIN d1 d2 /\
+  MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) = dst + LENGTH merged /\
+  (d1 <= d2 /\ d2 <= d1 + LENGTH bs1 \/
+   d2 <= d1 /\ d1 <= d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) (DROP (d1-dst) merged) /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-dst) merged) /\
+  EVERY (\(d,bs). d + LENGTH bs <= d1 \/ d1 + LENGTH bs1 <= d) ws ==>
+  write_memory_with_expansion d2 bs2
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+      (write_memory_with_expansion d1 bs1 s) ws) =
+  write_memory_with_expansion dst merged
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws)
+Proof
+  strip_tac >>
+  `!v. write_memory_with_expansion d2 bs2 (write_memory_with_expansion d1 bs1 v) =
+       write_memory_with_expansion dst merged v` by
+    (gen_tac >> irule mm_local_payload_write_merge_unordered >> simp[]) >>
+  drule mm_local_write_log_commute >>
+  disch_then (qspec_then `s` (fn th => once_rewrite_tac[GSYM th])) >>
+  simp[]
+QED
+
+(* Historical cuts keep captures and static emission schedules separate. *)
+Definition mm_local_history_def:
+  mm_local_history is H n <=>
+    n <= LENGTH is /\
+    !j. j < n ==> step_inst_base (EL j is) (H j) = OK (H (SUC j))
+End
+
+Definition mm_local_owned_def:
+  mm_local_owned (cap:num -> (num # word8 list) option) rep n js <=>
+    ALL_DISTINCT js /\ SORTED ($<) js /\
+    EVERY (\j. j < n /\ n <= rep j /\ ?d bs. cap j = SOME (d,bs)) js
+End
+
+Definition mm_local_pending_def:
+  mm_local_pending cap js s t <=>
+    ?ws. LIST_REL (\j w. cap j = SOME w) js ws /\
+      s.vs_memory =
+        (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) t ws).vs_memory
+End
+
+Theorem mm_local_pending_empty[local]:
+  mm_local_pending cap [] s t <=> s.vs_memory = t.vs_memory
+Proof
+  simp[mm_local_pending_def]
+QED
+
+Theorem mm_local_history_last[local]:
+  mm_local_history is H (SUC n) ==>
+  mm_local_history is H n /\ step_inst_base (EL n is) (H n) = OK (H (SUC n))
+Proof
+  simp[mm_local_history_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem mm_local_pending_log[local]:
+  !js ws s t. mm_local_pending cap js s t /\
+    LIST_REL (\j w. cap j = SOME w) js ws ==>
+    s.vs_memory =
+      (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) t ws).vs_memory
+Proof
+  simp[mm_local_pending_def] >> rpt strip_tac >>
+  `MAP cap js = MAP SOME ws` by metis_tac[MAP_EQ_EVERY2, LIST_REL_LENGTH] >>
+  `MAP cap js = MAP SOME ws'` by metis_tac[MAP_EQ_EVERY2, LIST_REL_LENGTH] >>
+  `ws = ws'` by
+    (qpat_x_assum `MAP cap js = MAP SOME ws` mp_tac >> simp[] >>
+     disch_then (mp_tac o AP_TERM
+       ``MAP (THE : (num # word8 list) option -> num # word8 list)``) >>
+     simp[MAP_MAP_o, combinTheory.o_DEF, MAP_ID]) >>
+  gvs[]
+QED
+
+Theorem mm_local_write_log_memory_cong[local]:
+  !ws s t. s.vs_memory = t.vs_memory ==>
+  (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws).vs_memory =
+  (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) t ws).vs_memory
+Proof
+  Induct_on `ws` >- simp[] >>
+  Cases_on `h` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[write_as_replace]
+QED
+
+Theorem mm_local_pending_create[local]:
+  mm_local_pending cap js s t /\ cap n = SOME (d,bs) /\
+  s'.vs_memory = (write_memory_with_expansion d bs s).vs_memory ==>
+  mm_local_pending cap (js ++ [n]) s' t
+Proof
+  simp[mm_local_pending_def] >> rpt strip_tac >>
+  qexists `ws ++ [(d,bs)]` >>
+  simp[LIST_REL_APPEND, FOLDL_APPEND, write_as_replace]
+QED
+
+Theorem mm_local_owned_create[local]:
+  mm_local_owned cap rep n js /\ cap n = SOME (d,bs) /\
+  SUC n <= rep n /\ EVERY (\j. SUC n <= rep j) js ==>
+  mm_local_owned cap rep (SUC n) (js ++ [n])
+Proof
+  simp[mm_local_owned_def, EVERY_MEM] >> strip_tac >>
+  `!j. MEM j js ==> j < n` by metis_tac[] >>
+  `~MEM n js` by metis_tac[prim_recTheory.LESS_REFL] >>
+  simp[ALL_DISTINCT_APPEND, sortingTheory.SORTED_APPEND,
+       relationTheory.transitive_def] >>
+  rpt strip_tac >> gvs[] >> irule prim_recTheory.SUC_LESS >> simp[]
+QED
+
+Theorem mm_local_capture_create[local]:
+  EVERY (\j. ?d bs. cap j = SOME (d,bs) /\ C (EL j is) (H j) d bs) js /\
+  cap n = SOME (d,bs) /\ C (EL n is) (H n) d bs ==>
+  EVERY (\j. ?d bs. cap j = SOME (d,bs) /\ C (EL j is) (H j) d bs) (js ++ [n])
+Proof
+  simp[] >> metis_tac[]
+QED
+
+Theorem mm_local_pending_survivor[local]:
+  mm_local_pending cap js s t /\ LIST_REL (\j w. cap j = SOME w) js ws /\
+  EVERY (\(a,bs). a + LENGTH bs <= d \/ d + LENGTH payload <= a) ws /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion d payload t).vs_memory ==>
+  mm_local_pending cap js s' t'
+Proof
+  strip_tac >> drule_all mm_local_pending_log >> strip_tac >>
+  simp[mm_local_pending_def] >> qexists `ws` >> simp[] >>
+  drule mm_local_write_log_commute >>
+  disch_then (qspec_then `t` mp_tac) >> strip_tac >>
+  `s'.vs_memory =
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st)
+      (write_memory_with_expansion d payload t) ws).vs_memory` by
+    (qpat_x_assum `write_memory_with_expansion _ _ _ = _`
+       (fn th => once_rewrite_tac[GSYM th]) >> simp[write_as_replace]) >>
+  metis_tac[mm_local_write_log_memory_cong]
+QED
+
+Theorem mm_local_owned_discharge[local]:
+  mm_local_owned cap rep n (done ++ keep) /\
+  EVERY (\j. rep j = n) done /\ EVERY (\j. SUC n <= rep j) keep ==>
+  mm_local_owned cap rep (SUC n) keep
+Proof
+  simp[mm_local_owned_def, EVERY_MEM, ALL_DISTINCT_APPEND,
+       sortingTheory.SORTED_APPEND_GEN] >> rpt strip_tac >> gvs[] >>
+  simp[prim_recTheory.SUC_LESS]
+QED
+
+Theorem mm_local_pending_discharge_prefix[local]:
+  mm_local_pending cap (done ++ keep) s t /\
+  LIST_REL (\j w. cap j = SOME w) done old /\
+  LIST_REL (\j w. cap j = SOME w) keep rest /\
+  (!v. write_memory_with_expansion d payload
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) v old) =
+    write_memory_with_expansion dst merged v) /\
+  EVERY (\(a,bs). a + LENGTH bs <= d \/ d + LENGTH payload <= a) rest /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
+  mm_local_pending cap keep s' t'
+Proof
+  strip_tac >>
+  `LIST_REL (\j w. cap j = SOME w) (done ++ keep) (old ++ rest)` by
+    (irule rich_listTheory.EVERY2_APPEND_suff >> simp[]) >>
+  drule_all mm_local_pending_log >> simp[FOLDL_APPEND] >> strip_tac >>
+  drule mm_local_write_log_commute >>
+  disch_then (qspec_then
+    `FOLDL (\st (a,bs). write_memory_with_expansion a bs st) t old` mp_tac) >>
+  simp[] >> strip_tac >>
+  `s'.vs_memory =
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st)
+      (write_memory_with_expansion dst merged t) rest).vs_memory` by
+    (qpat_x_assum `write_memory_with_expansion _ _ _ = _`
+       (fn th => once_rewrite_tac[GSYM th]) >> simp[write_as_replace]) >>
+  simp[mm_local_pending_def] >> qexists `rest` >> simp[] >>
+  metis_tac[mm_local_write_log_memory_cong]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
