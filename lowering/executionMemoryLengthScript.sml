@@ -183,7 +183,7 @@ Proof
   drule pack_dret_dynamic_memory_length >> simp[]
 QED
 
-Theorem eval_phis_memory_length[local]:
+Theorem eval_phis_memory_length:
   !insts s. case eval_phis s insts of
      OK t => LENGTH s.vs_memory <= LENGTH t.vs_memory
    | Halt t => LENGTH s.vs_memory <= LENGTH t.vs_memory
