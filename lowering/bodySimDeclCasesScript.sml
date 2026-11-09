@@ -1254,11 +1254,13 @@ Proof
 QED
 
 Theorem array_body_result_ok:
-  !cx stmts cenv env ei id typ tv v ret_ty env_b r ef.
+  !cx stmts cenv env ei id typ tv v ret_ty env_b r ef tops bindings.
     expr_sim_inv cenv cx env ei /\ id NOTIN FDOM env.var_types /\
     evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
     type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
     call_evaluation_safe cx (int_calls_stmts stmts) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    supported_stmts tops bindings stmts /\
     eval_stmts cx stmts
       (ei with scopes :=
         (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
@@ -1266,6 +1268,11 @@ Theorem array_body_result_ok:
     !ex inc. stmt_res_ok (InLoop ex inc) r
 Proof
   rpt gen_tac >> strip_tac >>
+  `r <> INR HaltException` by
+    (imp_res_tac (cj 2 supported_stmts_storage_syntax) >>
+     `!st st'. eval_stmts cx stmts st <> (INR HaltException, st')` by
+       (rpt gen_tac >> irule (cj 4 eval_no_halt) >> metis_tac[]) >>
+     strip_tac >> gvs[] >> metis_tac[]) >>
   rule_assum_tac (REWRITE_RULE [scopes_CONS_updated]) >>
   `env_consistent (extend_local env id typ F) cx
      (ei with scopes updated_by
