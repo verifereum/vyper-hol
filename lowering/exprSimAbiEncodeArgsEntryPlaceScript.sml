@@ -174,3 +174,62 @@ Proof
       simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   simp[comp_return_def, cs_extends_refl]
 QED
+
+Theorem abi_args_entry_attribute_target:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce bt field a x b.
+    compile_get_target_ptr cfn ce (AttributeTarget bt field) a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 3 gen_tac >> simp[compile_get_target_ptr_def] >>
+  ho_match_mp_tac abi_args_entry_emitted_suffix_bind >> conj_tac
+  >- metis_tac[abi_args_entry_get_target_ptr] >>
+  gen_tac >> ho_match_mp_tac abi_args_entry_emitted_prefix >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> irule abi_args_entry_emit_op >>
+      simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[comp_return_def, cs_extends_refl]
+QED
+
+Theorem abi_args_entry_subscript_target:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce bt idx a x b.
+    compile_get_target_ptr cfn ce (SubscriptTarget bt idx) a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 3 gen_tac >> simp[compile_get_target_ptr_def] >>
+  ho_match_mp_tac abi_args_entry_emitted_suffix_bind >> conj_tac
+  >- metis_tac[abi_args_entry_get_target_ptr] >> gen_tac >>
+  Cases_on `SND (SND result)` >> simp[]
+  >- suspend "array" >>
+  Cases_on `x` >> simp[]
+  >- suspend "mapping" >>
+  suspend "array"
+QED
+
+Resume abi_args_entry_subscript_target[array]:
+  markerLib.RESUME_TAC >> (
+    ho_match_mp_tac abi_args_entry_emitted_suffix_bind >> conj_tac
+    >- metis_tac[abi_args_entry_lower_value] >>
+    gen_tac >> ho_match_mp_tac abi_args_entry_emitted_prefix >> conj_tac
+    >- (ho_match_mp_tac abi_args_entry_array_subscript >>
+        metis_tac[abi_args_entry_ptr_load, abi_args_entry_safe_def]) >>
+    simp[comp_return_def, cs_extends_refl])
+QED
+
+Resume abi_args_entry_subscript_target[mapping]:
+  ho_match_mp_tac abi_args_entry_emitted_suffix_bind >> conj_tac
+  >- metis_tac[abi_args_entry_lower_value] >>
+  gen_tac >> ho_match_mp_tac abi_args_entry_emitted_suffix_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[] >>
+      metis_tac[abi_args_entry_keccak_key, abi_args_entry_safe_def,
+                abi_args_entry_safe_return]) >>
+  gen_tac >> ho_match_mp_tac abi_args_entry_emitted_prefix >> conj_tac
+  >- metis_tac[abi_args_entry_mapping_subscript] >>
+  simp[comp_return_def, cs_extends_refl]
+QED
+
+Finalise abi_args_entry_subscript_target
