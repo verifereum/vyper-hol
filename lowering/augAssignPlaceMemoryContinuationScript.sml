@@ -1,7 +1,8 @@
 (* Counted target traversal with a caller-supplied continuation. *)
 Theory augAssignPlaceMemoryContinuation
 Ancestors
-  augAssignPlaceMemoryTarget augAssignPlaceRhsMemory bodyAugAssignOther gasSummary
+  augAssignPlaceMemoryTarget augAssignPlaceRhsMemory
+  augAssignPlaceWordStoreMemory bodyAugAssignOther gasSummary
   targetPlaceSimMem stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage
   vyperInterpreter gasOutcome targetPlaceSimDefs
   gasContext targetPlaceSimCases vyperState
