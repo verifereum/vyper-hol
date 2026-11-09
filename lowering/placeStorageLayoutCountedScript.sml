@@ -3,6 +3,7 @@ Theory placeStorageLayoutCounted
 Ancestors
   context compileEnv emitHelper emitHelperProps exprLoweringProps
   typedArrayControlCounted bodyMemAssignTopCopyPaths fragExecMem fragGasPathMem
+  bodyLiteralBufferMemory
   instMemFrontier venomExecSemantics venomExecProofs venomInst venomState
   fragGasMode valueEncodingProps fragExec words arithmetic list rich_list
 
@@ -259,3 +260,269 @@ Proof
     finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+
+Theorem dyn_storage_source_stage[local]:
+  ALL_DISTINCT [ctr; mv; so; sp] /\
+  (!x. src = Var x ==> ~MEM x [mv; so; sp]) /\
+  eval_operand src s = SOME p /\ lookup_var ctr s = SOME i ==>
+  ?q. run_inst_seq
+      [mk_inst id MUL [Var ctr; Lit 32w] [mv];
+       mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+       mk_inst (id+2) ADD [src; Var so] [sp]] s = OK q /\
+    run_inst_seq_mem_ok
+      [mk_inst id MUL [Var ctr; Lit 32w] [mv];
+       mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+       mk_inst (id+2) ADD [src; Var so] [sp]] s /\
+    lookup_var sp q = SOME (p + (32w + i * 32w)) /\
+    (q with vs_vars := s.vs_vars) = s /\
+    (!op. (!x. op = Var x ==> ~MEM x [mv; so; sp]) ==>
+       eval_operand op q = eval_operand op s)
+Proof
+  strip_tac >>
+  qexists_tac `update_var sp (p + (32w + i * 32w))
+    (update_var so (32w + i * 32w) (update_var mv (i * 32w) s))` >>
+  conj_tac
+  >- (Cases_on `src` >> gvs[ALL_DISTINCT, MEM, eval_operand_def] >>
+      simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+        exec_pure2_def, eval_operands_def, eval_operand_def, lookup_var_update_var]) >>
+  conj_tac
+  >- (irule run_inst_seq_mem_ok_every >>
+      simp[mk_inst_def, below_frontier_no_ranges]) >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases >> simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem dyn_storage_destination_stage[local]:
+  ALL_DISTINCT [ctr; off; dp] /\
+  (!x. dst = Var x ==> ~MEM x [off; dp]) /\
+  eval_operand dst s = SOME d /\ lookup_var ctr s = SOME i ==>
+  ?q. run_inst_seq
+      [mk_inst id ADD [Var ctr; Lit 1w] [off];
+       mk_inst (id+1) ADD [dst; Var off] [dp]] s = OK q /\
+    run_inst_seq_mem_ok
+      [mk_inst id ADD [Var ctr; Lit 1w] [off];
+       mk_inst (id+1) ADD [dst; Var off] [dp]] s /\
+    lookup_var dp q = SOME (d + (i + 1w)) /\
+    (q with vs_vars := s.vs_vars) = s /\
+    (!op. (!x. op = Var x ==> ~MEM x [off; dp]) ==>
+       eval_operand op q = eval_operand op s)
+Proof
+  strip_tac >>
+  qexists_tac `update_var dp (d + (i + 1w)) (update_var off (i + 1w) s)` >>
+  conj_tac
+  >- (Cases_on `dst` >> gvs[ALL_DISTINCT, MEM, eval_operand_def] >>
+      simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+        exec_pure2_def, eval_operands_def, eval_operand_def, lookup_var_update_var]) >>
+  conj_tac
+  >- (irule run_inst_seq_mem_ok_every >>
+      simp[mk_inst_def, below_frontier_no_ranges]) >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases >> simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem dyn_storage_load_stage[local]:
+  eval_operand op s = SOME p /\ w2n p + 32 <= s.vs_alloca_next ==>
+  run_inst_seq [mk_inst id MLOAD [op] [v]] s =
+    OK (update_var v (mload (w2n p) s) s) /\
+  run_inst_seq_mem_ok [mk_inst id MLOAD [op] [v]] s
+Proof
+  strip_tac >> conj_tac
+  >- (`step_inst_base (mk_inst id MLOAD [op] [v]) s =
+         OK (update_var v (mload (w2n p) s) s)` by
+        (irule step_MLOAD >> simp[]) >> simp[run_inst_seq_def]) >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_MLOAD,
+    memSafeRunTheory.inst_dload_in_section_def, mk_inst_def]
+QED
+
+Theorem dyn_storage_store_stage[local]:
+  eval_operand dst s = SOME d /\ lookup_var ctr s = SOME i /\
+  lookup_var v s = SOME w /\ ~s.vs_call_ctx.cc_static /\
+  ALL_DISTINCT [ctr; v; off; dp] /\
+  (!x. dst = Var x ==> ~MEM x [off; dp]) ==>
+  ?q. run_inst_seq
+      ([mk_inst id ADD [Var ctr; Lit 1w] [off];
+        mk_inst (id+1) ADD [dst; Var off] [dp]] ++
+       [mk_inst (id+2) (if tr then TSTORE else SSTORE) [Var dp; Var v] []]) s = OK q /\
+    run_inst_seq_mem_ok
+      ([mk_inst id ADD [Var ctr; Lit 1w] [off];
+        mk_inst (id+1) ADD [dst; Var off] [dp]] ++
+       [mk_inst (id+2) (if tr then TSTORE else SSTORE) [Var dp; Var v] []]) s /\
+    (q with vs_vars := s.vs_vars) =
+      (if tr then tstore (d + (i + 1w)) w s else sstore (d + (i + 1w)) w s) /\
+    (!op. (!x. op = Var x ==> ~MEM x [off; dp]) ==>
+       eval_operand op q = eval_operand op s)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT [ctr; off; dp]` by fs[ALL_DISTINCT, MEM] >>
+  drule_all dyn_storage_destination_stage >>
+  disch_then (qspec_then `id` (qx_choose_then `a` strip_assume_tac)) >>
+  `lookup_var v a = SOME w` by
+    (first_x_assum (qspec_then `Var v` mp_tac) >>
+     simp[eval_operand_def] >> fs[ALL_DISTINCT, MEM]) >>
+  `~a.vs_call_ctx.cc_static` by fs[venom_state_component_equality] >>
+  `run_inst_seq [mk_inst (id+2) (if tr then TSTORE else SSTORE)
+      [Var dp; Var v] []] a =
+    OK (if tr then tstore (d + (i + 1w)) w a else sstore (d + (i + 1w)) w a)` by
+    (Cases_on `tr` >> simp[run_inst_seq_def, step_inst_base_opcode_eqs,
+       mk_inst_def, exec_write2_def, eval_operands_def, eval_operand_def]) >>
+  `run_inst_seq_mem_ok [mk_inst (id+2) (if tr then TSTORE else SSTORE)
+      [Var dp; Var v] []] a` by
+    (irule run_inst_seq_mem_ok_every >> Cases_on `tr` >>
+     simp[mk_inst_def, below_frontier_no_ranges]) >>
+  drule_all run_inst_seq_mem_ok_append_run >> disch_tac >>
+  qpat_assum `run_inst_seq [_; _] s = OK a`
+    (mp_then Any mp_tac run_inst_seq_append) >>
+  disch_then (qspec_then `[mk_inst (id+2) (if tr then TSTORE else SSTORE)
+    [Var dp; Var v] []]` assume_tac) >>
+  qexists_tac `if tr then tstore (d + (i + 1w)) w a else sstore (d + (i + 1w)) w a` >>
+  simp[] >> conj_tac
+  >- (Cases_on `tr` >> fs[venom_state_component_equality, tstore_def, sstore_def]) >>
+  gen_tac >> strip_tac >>
+  `eval_operand op a = eval_operand op s` by
+    (first_x_assum irule >> fs[MEM]) >>
+  Cases_on `tr` >> Cases_on `op` >>
+  gvs[eval_operand_def, tstore_def, sstore_def, lookup_var_def]
+QED
+
+Theorem dyn_storage_read_stage[local]:
+  ALL_DISTINCT [ctr; mv; so; sp; v] /\
+  (!x. src = Var x ==> ~MEM x [mv; so; sp]) /\
+  eval_operand src s = SOME p /\ lookup_var ctr s = SOME i /\
+  w2n (p + (32w + i * 32w)) + 32 <= s.vs_alloca_next ==>
+  ?q. run_inst_seq
+      ([mk_inst id MUL [Var ctr; Lit 32w] [mv];
+        mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+        mk_inst (id+2) ADD [src; Var so] [sp]] ++
+       [mk_inst (id+3) MLOAD [Var sp] [v]]) s = OK q /\
+    run_inst_seq_mem_ok
+      ([mk_inst id MUL [Var ctr; Lit 32w] [mv];
+        mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+        mk_inst (id+2) ADD [src; Var so] [sp]] ++
+       [mk_inst (id+3) MLOAD [Var sp] [v]]) s /\
+    lookup_var v q = SOME (mload (w2n (p + (32w + i * 32w))) s) /\
+    (q with vs_vars := s.vs_vars) = s /\
+    (!op. (!x. op = Var x ==> ~MEM x [mv; so; sp; v]) ==>
+       eval_operand op q = eval_operand op s)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT [ctr; mv; so; sp]` by fs[ALL_DISTINCT, MEM] >>
+  drule_all dyn_storage_source_stage >>
+  disch_then (qspec_then `id` (qx_choose_then `a` strip_assume_tac)) >>
+  `eval_operand (Var sp) a = SOME (p + (32w + i * 32w))` by
+    simp[eval_operand_def] >>
+  `w2n (p + (32w + i * 32w)) + 32 <= a.vs_alloca_next` by
+    fs[venom_state_component_equality] >>
+  drule_all dyn_storage_load_stage >>
+  disch_then (qspecl_then [`v`, `id+3`] strip_assume_tac) >>
+  drule_all run_inst_seq_mem_ok_append_run >> disch_tac >>
+  qpat_assum `run_inst_seq [_; _; _] s = OK a`
+    (mp_then Any mp_tac run_inst_seq_append) >>
+  disch_then (qspec_then `[mk_inst (id+3) MLOAD [Var sp] [v]]` assume_tac) >>
+  qexists_tac `update_var v (mload (w2n (p + (32w + i * 32w))) a) a` >>
+  simp[] >> conj_tac
+  >- fs[mload_def, update_var_def, lookup_var_update_var,
+        venom_state_component_equality] >>
+  conj_tac
+  >- fs[update_var_def, venom_state_component_equality] >>
+  gen_tac >> strip_tac >>
+  `eval_operand op a = eval_operand op s` by
+    (first_x_assum irule >> fs[MEM]) >>
+  Cases_on `op` >>
+  gvs[eval_operand_def, lookup_var_update_var, MEM]
+QED
+
+Theorem dyn_storage_word_body_run[local]:
+  code =
+    [mk_inst id MUL [Var ctr; Lit 32w] [mv];
+     mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+     mk_inst (id+2) ADD [src; Var so] [sp];
+     mk_inst (id+3) MLOAD [Var sp] [v];
+     mk_inst (id+4) ADD [Var ctr; Lit 1w] [off];
+     mk_inst (id+5) ADD [dst; Var off] [dp];
+     mk_inst (id+6) (if tr then TSTORE else SSTORE) [Var dp; Var v] []] /\
+  ALL_DISTINCT [ctr; mv; so; sp; v; off; dp] /\
+  (!x. src = Var x \/ dst = Var x ==> ~MEM x [mv; so; sp; v; off; dp]) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  lookup_var ctr s = SOME i /\ ~s.vs_call_ctx.cc_static /\
+  w2n (p + (32w + i * 32w)) + 32 <= s.vs_alloca_next ==>
+  ?q. run_inst_seq code s = OK q /\ run_inst_seq_mem_ok code s /\
+    (q with vs_vars := s.vs_vars) =
+      (if tr then tstore (d + (i + 1w))
+         (mload (w2n (p + (32w + i * 32w))) s) s
+       else sstore (d + (i + 1w))
+         (mload (w2n (p + (32w + i * 32w))) s) s) /\
+    (!op. (!x. op = Var x ==> ~MEM x [mv; so; sp; v; off; dp]) ==>
+       eval_operand op q = eval_operand op s)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT [ctr; mv; so; sp; v]` by fs[ALL_DISTINCT, MEM] >>
+  `!x. src = Var x ==> ~MEM x [mv; so; sp]` by fs[MEM] >>
+  drule_all dyn_storage_read_stage >>
+  disch_then (qspec_then `id` (qx_choose_then `a` strip_assume_tac)) >>
+  `eval_operand dst a = SOME d` by
+    (first_x_assum (qspec_then `dst` mp_tac) >> simp[] >> fs[MEM]) >>
+  `lookup_var ctr a = SOME i` by
+    (first_x_assum (qspec_then `Var ctr` mp_tac) >>
+     simp[eval_operand_def] >> fs[ALL_DISTINCT, MEM]) >>
+  `~a.vs_call_ctx.cc_static` by fs[venom_state_component_equality] >>
+  `ALL_DISTINCT [ctr; v; off; dp]` by fs[ALL_DISTINCT, MEM] >>
+  `!x. dst = Var x ==> ~MEM x [off; dp]` by fs[MEM] >>
+  drule_all dyn_storage_store_stage >>
+  disch_then (qspecl_then [`tr`, `id+4`] (qx_choose_then `q` strip_assume_tac)) >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq tail a = OK q` >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq front s = OK a` >>
+  drule_all run_inst_seq_mem_ok_append_run >> disch_tac >>
+  qpat_assum `run_inst_seq front s = OK a`
+    (mp_then Any mp_tac run_inst_seq_append) >>
+  disch_then (qspec_then `tail` assume_tac) >>
+  `code = front ++ tail` by simp[Abbr `front`, Abbr `tail`] >>
+  qexists_tac `q` >> simp[] >> Cases_on `tr` >>
+  fs[venom_state_component_equality, tstore_def, sstore_def]
+QED
+
+Theorem dyn_storage_word_body_path:
+  code =
+    [mk_inst id MUL [Var ctr; Lit 32w] [mv];
+     mk_inst (id+1) ADD [Lit 32w; Var mv] [so];
+     mk_inst (id+2) ADD [src; Var so] [sp];
+     mk_inst (id+3) MLOAD [Var sp] [v];
+     mk_inst (id+4) ADD [Var ctr; Lit 1w] [off];
+     mk_inst (id+5) ADD [dst; Var off] [dp];
+     mk_inst (id+6) (if tr then TSTORE else SSTORE) [Var dp; Var v] []] /\
+  ALL_DISTINCT [ctr; mv; so; sp; v; off; dp] /\
+  (!x. src = Var x \/ dst = Var x ==> ~MEM x [mv; so; sp; v; off; dp]) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  lookup_var ctr s = SOME i /\ ~s.vs_call_ctx.cc_static /\ ~s.vs_halted /\
+  w2n (p + (32w + i * 32w)) + 32 <= s.vs_alloca_next /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?q. gas_path_mem ctx fn s 0 (OK q) /\
+    (q with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) =
+      (if tr then tstore (d + (i + 1w))
+         (mload (w2n (p + (32w + i * 32w))) s) s
+       else sstore (d + (i + 1w))
+         (mload (w2n (p + (32w + i * 32w))) s) s) /\
+    (!x. ~MEM x [mv; so; sp; v; off; dp] ==>
+       lookup_var x q = lookup_var x s) /\
+    q.vs_memory = s.vs_memory /\ q.vs_alloca_next = s.vs_alloca_next /\
+    q.vs_inst_idx = s.vs_inst_idx + 7
+Proof
+  strip_tac >> drule_all dyn_storage_word_body_run >>
+  disch_then (qx_choose_then `q` strip_assume_tac) >>
+  `LENGTH code = 7` by simp[] >>
+  `gas_marked_path T ctx fn s 0
+    (OK (q with vs_inst_idx := s.vs_inst_idx + LENGTH code))` by
+    (irule topcopy_seq_path >> Cases_on `tr` >>
+     gvs[mk_inst_def, is_terminator_def]) >>
+  qexists_tac `q with vs_inst_idx := s.vs_inst_idx + LENGTH code` >>
+  gvs[gas_marked_path_def] >>
+  conj_tac
+  >- (Cases_on `tr` >>
+      fs[venom_state_component_equality, tstore_def, sstore_def]) >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      first_x_assum (qspec_then `Var x` mp_tac) >>
+      simp[eval_operand_def, lookup_var_def]) >>
+  Cases_on `tr` >>
+  fs[venom_state_component_equality, tstore_def, sstore_def]
+QED
