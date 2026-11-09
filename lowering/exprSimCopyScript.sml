@@ -178,7 +178,8 @@ Theorem copy_buffer_expr_post:
        (!name b k. local_region cenv es.scopes s0 name b k ==>
           off + len <= b \/ b + k <= off) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
-    locals_kept cenv es s0 s ==>
+    locals_kept cenv es s0 s /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
     expr_post ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   rpt gen_tac >> strip_tac >>
@@ -188,7 +189,7 @@ Proof
       simp[] >> rpt strip_tac >>
       qpat_x_assum `!name b len. local_region _ es'.scopes _ _ _ _ ==> _` drule >>
       decide_tac) >>
-  metis_tac[]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Common semantic boundary for an allocation followed by either copy. *)
@@ -248,6 +249,17 @@ Proof
      qexistsl_tac [`w2n w`, `u`, `sz`] >>
      gvs[vv_post_def, locals_kept_def, regions_disjoint_def] >>
      metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 z` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 u` by
+       (irule pure_frame_mem_tail >> qexists_tac `s` >> gvs[vv_post_def]) >>
+     drule copy_static_fields >> strip_tac >>
+     match_mp_tac pure_frame_buffer_tail >>
+     qexistsl_tac [`u`, `inst`, `w2n w`, `sz`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (gvs[] >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` irule >>
+     fs[compileEnvTheory.regions_disjoint_def]) >>
   drule copy_static_fields >> strip_tac >>
   irule copy_buffer_expr_post >>
   simp[] >> conj_tac

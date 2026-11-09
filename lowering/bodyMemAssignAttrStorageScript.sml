@@ -135,6 +135,10 @@ Proof
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
+    (strip_tac >> match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`ee`, `sa with cs_next_var := sm.cs_next_var`, `s`] >>
+     gvs[vv_post_def, expr_post_def]) >>
   gvs[vv_post_def, expr_post_def] >> rpt conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at (sa with cs_next_var := sm.cs_next_var) x` by

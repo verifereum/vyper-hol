@@ -19,6 +19,9 @@ Proof
   `wb_frame cenv es sa s0 t` by
     (irule wb_frame_readonly_tail >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `s` >> simp[] >>
+     drule_all expr_post_pure_frame >> simp[]) >>
   `!w. eval_operand op s = SOME w ==> eval_operand op t = SOME w` by
     (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >> simp[] >>
      qexistsl_tac [`sb`,`s`] >> simp[]) >>
@@ -48,7 +51,8 @@ Theorem framed_array_base_endpoint:
   (!x w. not_fresh_at sc x /\ lookup_var x v = SOME w ==> lookup_var x q = SOME w) /\
   (!aid a. FLOOKUP v.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
   q.vs_memory = v.vs_memory /\ stmt_state_rel ctx func cenv cx t' q ==>
-  vv_post ctx func cenv cx obj es sa sd s0 t' r (LocatedValue (ArrayT et bd) p) q
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 t' r
+    (LocatedValue (ArrayT et bd) p) q
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_post ctx func cenv cx idx t sb sd u t' iv iop q` by
@@ -63,5 +67,15 @@ Proof
   `wb_frame cenv t sb u q` by metis_tac[expr_post_frame] >>
   `wb_frame cenv es sa s0 q` by
     (drule_all wb_frame_trans >> simp[]) >>
-  irule vv_post_frame_intro >> simp[]
+  `~expr_has_effect obj /\ ~expr_has_effect idx ==> pure_frame cenv func es sa s0 q` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 u` by
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+        simp[vv_post_def]) >>
+     `pure_frame cenv func t sb u q` by
+       (match_mp_tac expr_post_pure_frame >>
+        qexistsl_tac [`cx`, `idx`, `sd`, `t'`, `iv`, `iop`, `ctx`] >> simp[]) >>
+     match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+     qexistsl_tac [`t`, `sb`, `u`] >> fs[wb_frame_def]) >>
+  irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def, expr_has_effect_thm]
 QED

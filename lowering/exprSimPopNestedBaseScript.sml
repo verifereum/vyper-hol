@@ -817,7 +817,7 @@ Proof
   Cases_on `tr` >>
   (fs[target_post_def, vv_post_def, vv_holds_def, vv_at_def,
       contextTheory.mk_ptr_def, eval_operand_def, expr_type_def,
-      locals_kept_def] >> rpt strip_tac >> gvs[]
+      locals_kept_def, expr_has_effect_thm] >> rpt strip_tac >> gvs[]
    >- (qpat_assum `!aid off sz. FLOOKUP _ _ = _ /\ _ ==> _` irule >>
        simp[] >> metis_tac[]) >>
    metis_tac[])

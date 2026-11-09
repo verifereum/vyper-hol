@@ -178,9 +178,20 @@ Proof
           qexists_tac `sa.cs_next_id` >> asm_rewrite_tac[]) >>
       qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
       first_assum ACCEPT_TAC) >>
-  (* the locals' memory: kept by e1, then by e2 *)
-  irule locals_kept_mem_tail >> qexists_tac `u` >> simp[] >>
-  irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
+  conj_tac
+  >- ((* the locals' memory: kept by e1, then by e2 *)
+      irule locals_kept_mem_tail >> qexists_tac `u` >> simp[] >>
+      irule locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  (* the pure frame: kept by e1, then by e2 *)
+  simp[expr_has_effect_thm] >> strip_tac >>
+  `pure_frame cenv func es sa s0 t` by
+    (qpat_x_assum `_ ==> pure_frame _ _ _ _ s0 t` irule >> first_assum ACCEPT_TAC) >>
+  `pure_frame cenv func es1 s1 t u` by
+    (qpat_x_assum `_ ==> pure_frame _ _ _ _ t u` irule >> first_assum ACCEPT_TAC) >>
+  `pure_frame cenv func es sa s0 u` by
+    (drule_all pure_frame_trans >> disch_then ACCEPT_TAC) >>
+  irule pure_frame_mem_tail >> qexists_tac `u` >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 

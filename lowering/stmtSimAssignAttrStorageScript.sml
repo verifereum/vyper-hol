@@ -388,8 +388,8 @@ Proof
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
     lookup_var x s = SOME w` by gvs[vv_post_def] >>
   drule_all assign_attr_ghost_regions >> strip_tac >>
-  gvs[vv_post_def, vv_at_def, lookup_var_def, locals_kept_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  gvs[vv_post_def, vv_at_def, lookup_var_def, locals_kept_def, pure_frame_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem assign_attr_ghost_expr_post[local]:
@@ -406,8 +406,17 @@ Proof
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
     lookup_var x s = SOME w` by gvs[vv_post_def] >>
   drule_all assign_attr_ghost_regions >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ u`
+       (mp_tac o last o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
+     qpat_x_assum `!n b sz. local_region _ _ (s0 with vs_vars := _) _ _ _ <=> _`
+       mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[pure_frame_def]) >>
   gvs[expr_post_def, expr_val_at_def, lookup_var_def, locals_kept_def,
-      not_fresh_at_def] >> rpt strip_tac >> metis_tac[]
+      not_fresh_at_def] >>
+  TRY (qpat_x_assum `~expr_has_effect e ==> pure_frame _ _ _ (sa with cs_next_var := _) _ _`
+         kall_tac) >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Theorem assign_attr_path_nonhalting[local]:

@@ -644,7 +644,8 @@ Proof
 QED
 
 Theorem vv_post_array_element:
-  vv_post ctx func cenv cx obj es sa sb s0 es' r (LocatedValue ann p) s /\
+  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sb s0 es' r
+    (LocatedValue ann p) s /\
   expr_type obj = ArrayT et bd /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
   (p.ptr_location = LocMemory ==> ?n. bd = Fixed n) /\
@@ -664,13 +665,13 @@ Theorem vv_post_array_element:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `vv_holds cenv cx (ArrayT et bd) r (LocatedValue ann p) es' s` by
-    gvs[vv_post_def] >>
+    gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
   drule_all vv_holds_array_element >> strip_tac >>
   `vv_at cenv cx et sa sb es' child (LocatedValue et (mk_ptr dst p.ptr_location)) s` by
     (Cases_on `p.ptr_location = LocMemory`
      >- (fs[] >> gnvs[] >> rename1 `expr_type obj = ArrayT et (Fixed n)` >>
          `vv_at cenv cx (ArrayT et (Fixed n)) sa sb es' r (LocatedValue ann p) s`
-           by gvs[vv_post_def] >>
+           by gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
          `mem_step_offset (ArrayTV etv (Fixed n)) (ValueSubscript (IntV i)) =
             SOME (Num i * type_memory_size etv,etv)` by
            (Cases_on `av` >>
@@ -679,6 +680,6 @@ Proof
                 AllCaseEqs()]) >>
          drule_all vv_at_fixed_array_element >> simp[]) >>
      simp[vv_at_def, contextTheory.mk_ptr_def]) >>
-  gvs[vv_post_def, vyperASTTheory.expr_type_def] >>
+  gvs[vv_post_def, vyperASTTheory.expr_type_def, expr_has_effect_thm] >>
   first_assum ACCEPT_TAC
 QED

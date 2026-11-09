@@ -56,7 +56,16 @@ Theorem aggregate_make_tuple_sim_mem:
           p+n <= lo \/ lo+sz <= p) ==>
         mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory) /\
       locals_kept ce es s0 r /\
-      alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next)
+      alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next /\
+      (~EXISTS expr_has_effect args ==>
+        (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+          mem_bytes_at lb lsz r.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+        !p n. (p + n <= b \/ b + asz <= p) /\
+          (!i c sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
+             sa.cs_next_id <= i.inst_id /\
+             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
+             regions_disjoint p n c sz) ==>
+          mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
@@ -206,7 +215,8 @@ Resume aggregate_make_tuple_sim_mem[post]:
   conj_tac >- suspend "allocas_join" >>
   conj_tac >- suspend "slice_join" >>
   conj_tac >- suspend "exterior_join" >>
-  suspend "locals_join"
+  conj_tac >- suspend "locals_join" >>
+  suspend "pure_join"
 QED
 
 Resume aggregate_make_tuple_sim_mem[head_encoding]:
@@ -321,5 +331,38 @@ Resume aggregate_make_tuple_sim_mem[locals_join]:
     (irule exprBopSimPropsTheory.locals_kept_trans >> qexistsl_tac [`es1`, `sm`, `q`] >> simp[]) >>
   irule exprBopSimPropsTheory.locals_kept_trans >> qexistsl_tac [`es1`, `sa`, `t1`] >>
   fs[vv_post_def]
+QED
+Resume aggregate_make_tuple_sim_mem[pure_join]:
+  rpt (disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  `!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+      b + asz <= lb \/ lb + lsz <= b` by
+    (`not_local_ptr ce es.scopes x` by simp[] >>
+     `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
+       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+        simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
+        strip_tac >> asm_rewrite_tac[]) >>
+     rpt strip_tac >> drule_all localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
+     simp[regions_disjoint_def] >> decide_tac) >>
+  qpat_x_assum `~expr_has_effect h /\ _ ==> _` mp_tac >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                rpt strip_tac >>
+                qpat_assum `!n lb lsz. local_region _ _ _ _ _ _ ==> b + asz <= lb \/ _`
+                  drule >> decide_tac)) >> strip_tac >>
+  qpat_x_assum `EVERY _ args ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  `!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
+     lookup_var z q = SOME w` by
+    (rpt strip_tac >>
+     `not_fresh_at sm z` by
+       (irule not_fresh_at_mono >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+     qpat_x_assum `!z a. not_fresh_at sm z /\ _ ==> _` irule >> simp[] >>
+     fs[vv_post_def] >> metis_tac[]) >>
+  `sa.cs_next_id <= ss.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
+  qspecl_then [`ce`, `func`, `es`, `es1`, `sa`, `ss`, `s0`, `q`, `r`, `b`, `asz`]
+    mp_tac aggregate_pure_frame_trans >>
+  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+                once_rewrite_tac[arithmeticTheory.ADD_COMM] >> first_assum ACCEPT_TAC)) >>
+  strip_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >> first_assum ACCEPT_TAC
 QED
 Finalise aggregate_make_tuple_sim_mem

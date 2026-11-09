@@ -64,6 +64,27 @@ Proof
   cheat
 QED
 
+(* An effect-free expression's fragment keeps every live local whole and
+   every window clear of its own allocations. *)
+Theorem vv_post_pure_memory_frame:
+  !ctx func cenv cx e es sa sb s0 es' tv vv s.
+    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
+    ~expr_has_effect e ==>
+    (!n b sz. local_region cenv es.scopes s0 n b sz ==>
+       mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
+    (!off len.
+       (!inst b sz.
+          MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          sa.cs_next_id <= inst.inst_id /\
+          FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+          compileEnv$regions_disjoint off len b sz) ==>
+       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `pure_frame cenv func es sa s0 s` by gvs[vv_post_def] >>
+  pop_assum mp_tac >> rewrite_tac[pure_frame_def]
+QED
+
 (* Source boundary: positional locations are read only after kwargs. *)
 Theorem eval_extcall_stages:
   eval_expr cx (Call ann (ExtCall static skip sig opts) args dflt) =

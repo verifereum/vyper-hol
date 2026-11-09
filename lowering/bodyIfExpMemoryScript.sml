@@ -394,6 +394,7 @@ Theorem ifexp_finish_post[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id ==>
   vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
     (if is_word_type t then StackValue t (Var rv)
@@ -416,6 +417,7 @@ Theorem ifexp_word_arm_finish_mem[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id /\ sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
@@ -458,6 +460,7 @@ Theorem ifexp_forced_arm_finish_mem[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id /\ sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
@@ -980,6 +983,10 @@ Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
   conj_tac
   >- (`sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
         (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
+      `~expr_has_effect (IfExp (expr_type a) c a b) ==> ~expr_has_effect (if sel then a else b)` by
+        (Cases_on `sel` >>
+     rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >> asm_rewrite_tac[]) >>
       qpat_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _`
         (mp_then Any mp_tac ifexp_finish_post) >>
       disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -1217,6 +1224,10 @@ Resume compile_ifexp_word_sim_mem[selected_arm]:
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
   simp[expr_store_bound_word] >> strip_tac >>
   simp[Abbr `root_post`, expr_store_bound_word, vyperASTTheory.expr_type_def] >>
+  `~expr_has_effect (IfExp (expr_type a) c a b) ==> ~expr_has_effect (if sel then a else b)` by
+    (Cases_on `sel` >>
+     rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >> asm_rewrite_tac[]) >>
   qpat_assum `sb.cs_current_insts = []`
     (fn th => irule (SRULE [th] ifexp_forced_arm_finish_mem)) >>
   goal_assum (drule_at Any) >>

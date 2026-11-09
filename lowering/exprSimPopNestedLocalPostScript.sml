@@ -47,6 +47,7 @@ QED
 (* A memory value in a live local's region, including a recorded popped
    element, supplies both value and location parts of the post. *)
 Theorem local_memory_vv_post:
+  expr_has_effect e /\
   stmt_state_rel ctx func cenv cx es' u /\
   wb_frame cenv es sa s0 u /\
   read_result cx result es' = (INL v,es') /\
@@ -164,6 +165,7 @@ QED
 (* Post assembly uses only the live root encoding before the store.  The
    source transition supplies read_result, including its history fallback. *)
 Theorem pop_path_vv_post:
+  expr_has_effect e /\
   stmt_state_rel ctx func cenv cx es' u /\ wb_frame cenv es sa s0 u /\
   read_result cx result es' = (INL (LAST vs),es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\

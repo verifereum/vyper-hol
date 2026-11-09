@@ -337,7 +337,8 @@ Proof
       qpat_assum `vv_loc bvv = LocMemory`
         (fn th => pure_once_rewrite_tac[GSYM th]) >>
       irule body_attr_memory_at_field >> simp[] >> metis_tac[]) >>
-  first_assum ACCEPT_TAC
+  TRY (first_assum ACCEPT_TAC) >>
+  simp[loweringPostsTheory.expr_has_effect_thm]
 QED
 
 Theorem body_attribute_name_compile:

@@ -777,6 +777,123 @@ Proof
   Cases_on `lookup_scopes n scopes` >> gvs[]
 QED
 
+(* The frame of two fragments run one after the other, the second lowered
+   from s1 at or after sa, related at es1 whose scopes have es's names. *)
+Theorem pure_frame_trans:
+  !cenv func es es1 sa s1 s0 t u.
+    pure_frame cenv func es sa s0 t /\ pure_frame cenv func es1 s1 t u /\
+    sa.cs_next_id <= s1.cs_next_id /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+             FLOOKUP u.vs_allocas aid = SOME b) /\
+    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) ==>
+    pure_frame cenv func es sa s0 u
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      `local_region cenv es1.scopes t n b sz` by
+        (irule local_region_frame_fwd >> metis_tac[]) >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  `mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory` by
+    (qpat_x_assum `!off len. _ ==> mem_bytes_at off len u.vs_memory = _`
+       irule >> rpt strip_tac >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> gvs[]) >>
+  `mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!off len. _ ==> mem_bytes_at off len t.vs_memory = _`
+       irule >> rpt strip_tac >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> gvs[]) >>
+  simp[]
+QED
+
+Theorem pure_frame_mem_tail:
+  !cenv func es sa s0 u ss.
+    pure_frame cenv func es sa s0 u /\ ss.vs_memory = u.vs_memory /\
+    (!aid b. FLOOKUP u.vs_allocas aid = SOME b ==>
+             FLOOKUP ss.vs_allocas aid = SOME b) ==>
+    pure_frame cenv func es sa s0 ss
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >>
+  qpat_x_assum `ss.vs_memory = _` (fn th => rewrite_tac[th]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt strip_tac >>
+  qpat_x_assum `!off len. _ ==> mem_bytes_at off len u.vs_memory = _` irule >>
+  rpt strip_tac >>
+  qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+  qexists_tac `inst` >> gvs[]
+QED
+
+(* A leaf that writes only inside one of its own allocations, and keeps the
+   live locals' regions, has the pure frame. *)
+Theorem pure_frame_fresh_alloca:
+  !cenv func es sa s0 t id ops outs b sz.
+    MEM (mk_inst id ALLOCA ops outs) (fn_insts func) /\
+    sa.cs_next_id <= id /\ FLOOKUP t.vs_allocas id = SOME (b,sz) /\
+    (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+       mem_bytes_at lb lsz t.vs_memory = mem_bytes_at lb lsz s0.vs_memory) /\
+    (!off len. regions_disjoint off len b sz ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory) ==>
+    pure_frame cenv func es sa s0 t
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!n lb lsz. local_region _ _ _ _ _ _ ==> _` irule >>
+      goal_assum (drule_at Any)) >>
+  rpt strip_tac >>
+  qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==> _` irule >>
+  qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+  qexists_tac `mk_inst id ALLOCA ops outs` >>
+  simp[venomInstTheory.mk_inst_def]
+QED
+
+(* A suffix that writes only inside one fresh allocation, clear of the live
+   locals, keeps the pure frame. *)
+Theorem pure_frame_buffer_tail:
+  !cenv func es sa s0 s z inst bb bsz.
+    pure_frame cenv func es sa s0 s /\
+    (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==>
+             FLOOKUP z.vs_allocas aid = SOME e) /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    sa.cs_next_id <= inst.inst_id /\
+    FLOOKUP z.vs_allocas inst.inst_id = SOME (bb,bsz) /\
+    (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+       regions_disjoint bb bsz lb lsz) /\
+    (!off len. regions_disjoint off len bb bsz ==>
+       mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) ==>
+    pure_frame cenv func es sa s0 z
+Proof
+  rpt gen_tac >> simp[pure_frame_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      `regions_disjoint b sz bb bsz` by
+        (qpat_x_assum `!n lb lsz. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _`
+           drule >>
+         simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      `mem_bytes_at b sz z.vs_memory = mem_bytes_at b sz s.vs_memory` by
+        (qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==> _` irule >>
+         first_assum ACCEPT_TAC) >>
+      `mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+        (qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> mem_bytes_at _ _ _ = _`
+           irule >>
+         goal_assum (drule_at Any)) >>
+      simp[]) >>
+  rpt strip_tac >>
+  `mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory` by
+    (qpat_x_assum `!off len. regions_disjoint _ _ _ _ ==> _` irule >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `inst` >> simp[]) >>
+  `mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory` by
+    (qpat_x_assum `!off len. (!inst b sz. _) ==> mem_bytes_at _ _ s.vs_memory = _`
+       irule >>
+     rpt strip_tac >>
+     rename1 `FLOOKUP s.vs_allocas i.inst_id = SOME _` >>
+     qpat_x_assum `!inst b sz. _ ==> regions_disjoint off len b sz` irule >>
+     qexists_tac `i` >> simp[]) >>
+  simp[]
+QED
+
 Theorem vv_post_initial_gas:
   vv_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee tv vv t <=>
   vv_post ctx func cenv cx e es sa sb s0 ee tv vv t

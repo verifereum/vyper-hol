@@ -36,7 +36,9 @@ Proof
       simp[lookup_var_drop_fresh] >> metis_tac[]) >>
   simp[drop_fresh_def] >> conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-  irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+  conj_tac >- (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
+  strip_tac >> match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >>
+  qexists_tac `s` >> simp[drop_fresh_def]
 QED
 
 Theorem extract32_post_vars_ext:
@@ -83,7 +85,9 @@ Proof
       disj2_tac >> disj1_tac >>
       qexistsl_tac [`n`,`b`,`sz`] >> simp[]) >>
   conj_tac >- metis_tac[] >>
-  irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+  conj_tac >- (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
+  strip_tac >> match_mp_tac pure_frame_mem_tail >> qexists_tac `s` >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >- res_tac >> simp[]
 QED
 
 Theorem extract32_prepare_post_arbitrary:

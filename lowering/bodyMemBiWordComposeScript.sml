@@ -7,24 +7,42 @@ Ancestors
   vyperState venomState exprSimMemDefs exprSimHypsDefs
   freshWrites compileEnv fragExec exprLoweringProps fragGasPath gasContext
 
+Theorem typed_args_operands_word[local]:
+  !cx t args vs xs.
+    EVERY (\e. word_value_type (expr_type e)) args /\
+    LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                         value_has_type tv v) args vs /\
+    LENGTH args = LENGTH vs /\
+    LIST_REL (\x ev. eval_operand x t = SOME
+      (typed_val_to_w256
+        (THE (evaluate_type (get_tenv cx) (expr_type (FST ev))))
+        (SND ev))) xs (ZIP (args,vs)) ==>
+    LIST_REL (\x v. eval_operand x t = SOME (val_to_w256 v)) xs vs
+Proof
+  ntac 2 gen_tac >>
+  Induct >> Cases_on `vs` >> Cases_on `xs` >> simp[] >> rpt strip_tac >>
+  gvs[]
+  >- metis_tac[word_value_type_typed, typed_val_to_w256_word_value] >>
+  first_x_assum (drule_at Any) >> simp[]
+QED
+
 Theorem typed_args_post_word:
   !args vs xs.
     EVERY (\e. word_value_type (expr_type e)) args /\
     LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                          value_has_type tv v) args vs /\
     typed_args_post ctx func cenv cx es sa s0 ee args xs vs t ==>
-    wb_args_post ctx func cenv cx es sa s0 ee xs vs t
+    wb_args_post ctx func cenv cx es sa s0 ee xs vs t /\
+    (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t)
 Proof
-  Induct >> Cases_on `vs` >> Cases_on `xs` >>
-  simp[typed_args_post_def, wb_args_post_def] >> rpt strip_tac >>
-  gvs[]
-  >- metis_tac[word_value_type_typed, typed_val_to_w256_word_value] >>
-  first_x_assum (drule_at Any) >>
-  simp[typed_args_post_def, wb_args_post_def]
+  rpt gen_tac >> simp[typed_args_post_def, wb_args_post_def] >> strip_tac >>
+  simp[] >> match_mp_tac typed_args_operands_word >>
+  qexistsl_tac [`cx`, `args`] >> simp[]
 QED
 
 Theorem word_builtin_continuation_summary_mem:
   wb_args_post ctx func cenv cx es sa s0 (ee with gas_obs := []) xs vs t0 /\
+  (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   t0.vs_current_bb = sm.cs_current_bb /\
   t0.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t0.vs_halted /\
   alloca_history func t0 /\ s0.vs_alloca_next <= t0.vs_alloca_next /\

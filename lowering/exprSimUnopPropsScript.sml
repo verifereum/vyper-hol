@@ -96,6 +96,12 @@ Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
   `locals_kept cenv es s0 ss` by
     (irule locals_kept_mem_tail >> qexists_tac `t0` >> asm_rewrite_tac[]) >>
+  `~expr_has_effect (Builtin ann bi [e1]) ==> pure_frame cenv func es sa s0 ss` by
+    (simp[expr_has_effect_thm] >> strip_tac >>
+     `pure_frame cenv func es sa s0 t0` by
+       (qpat_x_assum `_ ==> pure_frame _ _ _ _ _ t0` irule >>
+        first_assum ACCEPT_TAC) >>
+     drule_all pure_frame_mem_tail >> disch_then ACCEPT_TAC) >>
   simp[expr_val_at_def, vyperASTTheory.expr_type_def] >>
   conj_tac
   >- (rpt strip_tac >> rename1 `lookup_var z s0 = SOME w` >>

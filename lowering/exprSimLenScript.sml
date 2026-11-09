@@ -392,7 +392,10 @@ Proof
   >- (fs[vv_post_def] >> metis_tac[not_fresh_at_mono])
   >~ [`FLOOKUP s.vs_allocas`] >- (fs[vv_post_def] >> metis_tac[])
   >~ [`locals_kept`]
-  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail]) >>
+  >- (fs[vv_post_def] >> metis_tac[locals_kept_mem_tail])
+  >~ [`pure_frame`]
+  >- (match_mp_tac pure_frame_mem_tail >> qexists_tac `s1` >>
+      fs[vv_post_def, expr_has_effect_thm]) >>
   fs[vv_post_def] >> metis_tac[]
 QED
 

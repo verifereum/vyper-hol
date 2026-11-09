@@ -421,7 +421,8 @@ Theorem hash_alloc_mstore_frame:
     local_ptrs_reserved cenv sh /\
     (!x. buf.buf_operand = Var x ==> not_fresh_at sh x) /\
     (!n b sz. local_region cenv es.scopes s n b sz ==>
-      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    pure_frame cenv func es sa s t
 Proof
   strip_tac >>
   `32 < dimword (:256)` by simp[dimword_def] >>
@@ -490,9 +491,21 @@ Resume hash_alloc_mstore_frame[compose]:
      irule mstore_region_frame >>
      qexistsl [`w2n addr`, `32`] >> simp[] >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _` drule >> simp[]) >>
+  `pure_frame cenv func es sa s (mstore (w2n addr) w allocated)` by
+    (match_mp_tac pure_frame_fresh_alloca >>
+     qexistsl_tac [`sa.cs_next_id`, `[Lit 32w]`,
+                   `[STRING #"%" (toString sa.cs_next_var)]`, `w2n addr`, `32`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (simp[mstore_def] >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `allocated.vs_memory = s.vs_memory`
+       (fn th => pure_rewrite_tac[GSYM th]) >>
+     irule mstore_region_frame >>
+     qexistsl [`w2n addr`, `32`] >> simp[] >>
+     gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   qexistsl_tac [`mstore (w2n addr) w allocated`, `addr`] >>
   simp[] >> gvs[mstore_def, lookup_var_def] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise hash_alloc_mstore_frame
@@ -517,7 +530,8 @@ Theorem compile_keccak256_bytesm_frame:
        FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
     (!n b sz. local_region cenv es.scopes s n b sz ==>
-      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    pure_frame cenv func es sa s t
 Proof
   strip_tac >>
   qpat_x_assum `compile_keccak256_bytesm _ _ _ = _` mp_tac >>
@@ -558,6 +572,10 @@ Proof
      `not_fresh_at sh x` by gvs[not_fresh_at_def] >>
      qpat_x_assum `!x. not_fresh_at sh x ==> _` drule >>
      qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]) >>
+  `pure_frame cenv func es sa s final` by
+    (`pure_frame cenv func es sa s final <=> pure_frame cenv func es sa s staged` by
+       (irule pure_frame_state_cong >> simp[]) >>
+     simp[]) >>
   qexists_tac `final` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid b len. aid < sa.cs_next_id /\ _ ==> _` drule >> simp[]) >>
@@ -1174,7 +1192,8 @@ Theorem hash_alloc_sha256_tail_frame:
        mem_bytes_at base len t.vs_memory = mem_bytes_at base len s.vs_memory) /\
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
     (!n b sz. local_region cenv es.scopes s n b sz ==>
-      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
+      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
+    pure_frame cenv func es sa s t
 Proof
   strip_tac >>
   `32 < dimword (:256)` by simp[dimword_def] >>
@@ -1242,6 +1261,15 @@ Resume hash_alloc_sha256_tail_frame[compose]:
      qpat_x_assum `!b len. _ \/ _ ==> mem_bytes_at b len final.vs_memory = _`
        (qspecl_then [`b`, `sz`] mp_tac) >>
      impl_tac >- metis_tac[regions_disjoint_def] >> simp[]) >>
+  `pure_frame cenv func es sa s final` by
+    (match_mp_tac pure_frame_fresh_alloca >>
+     qexistsl_tac [`sa.cs_next_id`, `[Lit 32w]`,
+                   `[STRING #"%" (toString sa.cs_next_var)]`, `w2n w`, `32`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!b len. _ \/ _ ==> mem_bytes_at b len final.vs_memory = _`
+       (qspecl_then [`off`, `len`] mp_tac) >>
+     gvs[compileEnvTheory.regions_disjoint_def]) >>
   qexists_tac `final` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sn x` by gvs[not_fresh_at_def] >>
@@ -1375,7 +1403,8 @@ Theorem compile_sha256_bytes_frame:
        FLOOKUP s.vs_allocas aid = SOME (base,len) ==>
        mem_bytes_at base len t.vs_memory = mem_bytes_at base len s.vs_memory) /\
     (!nm base sz. local_region cenv es.scopes s nm base sz ==>
-      mem_bytes_at base sz t.vs_memory = mem_bytes_at base sz s.vs_memory)
+      mem_bytes_at base sz t.vs_memory = mem_bytes_at base sz s.vs_memory) /\
+    pure_frame cenv func es sa s t
 Proof
   strip_tac >>
   qpat_x_assum `compile_sha256_bytes _ _ = _` mp_tac >>
@@ -1419,6 +1448,11 @@ Proof
     mem_bytes_at lb sz final.vs_memory = mem_bytes_at lb sz s.vs_memory` by
     (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `prefix`] >> gvs[] >> metis_tac[]) >>
+  `pure_frame cenv func es sa s final` by
+    (match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es`, `sm`, `prefix`] >> simp[] >>
+     rpt strip_tac >> qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >>
+     simp[]) >>
   qexists_tac `final` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by gvs[not_fresh_at_def] >>
@@ -1506,7 +1540,8 @@ Theorem compile_sha256_bytesm_frame:
        FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) /\
     (!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
-      mem_bytes_at lb sz t.vs_memory = mem_bytes_at lb sz s.vs_memory)
+      mem_bytes_at lb sz t.vs_memory = mem_bytes_at lb sz s.vs_memory) /\
+    pure_frame cenv func es sa s t
 Proof
   strip_tac >>
   qpat_x_assum `compile_sha256_bytesm _ _ _ = _` mp_tac >>
@@ -1553,6 +1588,12 @@ Resume compile_sha256_bytesm_frame[compose]:
     mem_bytes_at lb sz final.vs_memory = mem_bytes_at lb sz s.vs_memory` by
     (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `staged`] >> simp[] >> metis_tac[]) >>
+  `pure_frame cenv func es sa s final` by
+    (match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es`, `sd`, `staged`] >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x staged = _` drule >>
+     simp[]) >>
   qexists_tac `final` >> simp[] >> reverse conj_tac
   >- metis_tac[] >> rpt strip_tac >>
   `FLOOKUP staged.vs_allocas aid = SOME (b,len)` by metis_tac[] >>
@@ -1774,7 +1815,8 @@ Theorem hash_alloc_single_word_buffer_frame:
     (!n b sz. local_region cenv es.scopes s n b sz ==>
       mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory) /\
     (!n b sz. local_region cenv es.scopes t n b sz ==>
-      regions_disjoint (w2n p) 64 b sz)
+      regions_disjoint (w2n p) 64 b sz) /\
+    pure_frame cenv func es sa s t
 Proof
   strip_tac >>
   `64 < dimword (:256)` by simp[dimword_def] >>
@@ -1855,6 +1897,15 @@ Resume hash_alloc_single_word_buffer_frame[compose]:
         qexistsl [`sm`, `es.scopes`, `t`] >> simp[] >> metis_tac[]) >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _`
        drule >> simp[]) >>
+  `pure_frame cenv func es sa s t` by
+    (match_mp_tac pure_frame_fresh_alloca >>
+     qexistsl_tac [`sa.cs_next_id`, `[Lit 64w]`,
+                   `[STRING #"%" (toString sa.cs_next_var)]`, `w2n addr`, `64`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp[] >> NO_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `allocated.vs_memory = _` (fn th => once_rewrite_tac[GSYM th]) >>
+     qpat_x_assum `!off len. regions_disjoint _ _ off len ==> _` irule >>
+     fs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
   qexistsl_tac [`t`, `addr`] >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x` by gvs[not_fresh_at_def] >>
@@ -1908,7 +1959,8 @@ Theorem method_id_dynamic_suffix_frame:
     (!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
       mem_bytes_at lb sz t.vs_memory = mem_bytes_at lb sz s.vs_memory) /\
     (!n b sz. local_region cenv es.scopes t n b sz ==>
-      regions_disjoint (w2n p) 64 b sz)
+      regions_disjoint (w2n p) 64 b sz) /\
+    pure_frame cenv func es sa s t
 Proof
   strip_tac >> drule_all method_id_mask_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sn) s = OK masked` >>
@@ -1960,6 +2012,12 @@ Resume method_id_dynamic_suffix_frame[buffer]:
     mem_bytes_at lb sz t.vs_memory = mem_bytes_at lb sz s.vs_memory` by
     (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `masked`] >> gvs[] >> metis_tac[]) >>
+  `pure_frame cenv func es sa s t` by
+    (match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es`, `sn`, `masked`] >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x masked = _` drule >>
+     simp[]) >>
   qexistsl_tac [`t`, `p`] >> simp[] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sn x` by gvs[not_fresh_at_def] >>
@@ -2056,7 +2114,7 @@ Proof
   `vv_post ctx func cenv cx
      (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) =
    vv_post ctx func cenv cx lit` by
-    simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def] >>
+    simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def, expr_has_effect_thm] >>
   simp[expr_vv_sim_def]
 QED
 
@@ -2436,7 +2494,8 @@ Theorem vv_post_frame_intro:
   stmt_state_rel ctx func cenv cx es' t /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
-  wb_frame cenv es sa s0 t ==>
+  wb_frame cenv es sa s0 t /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv t
 Proof
   simp[vv_post_def, wb_frame_def] >> metis_tac[]
@@ -2447,7 +2506,8 @@ Theorem vv_post_word_intro:
   (?w. eval_operand op s = SOME w /\
     !tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
          w = typed_val_to_w256 tv v) /\
-  wb_frame cenv es sa s0 s ==>
+  wb_frame cenv es sa s0 s /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue ty op) s
 Proof
   strip_tac >> irule vv_post_frame_intro >>
@@ -2495,7 +2555,8 @@ Theorem vv_post_allocated_memory_intro:
   b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
   (!n lb lsz. local_region cenv es'.scopes s n lb lsz ==>
      b + sz <= lb \/ lb + lsz <= b) /\
-  wb_frame cenv es sa s0 s ==>
+  wb_frame cenv es sa s0 s /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) s
 Proof
@@ -2849,7 +2910,8 @@ QED
 Theorem keccak_word_vv_post:
   stmt_state_rel ctx func cenv cx es' s /\
   eval_operand op s = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-  wb_frame cenv es sa s0 s ==>
+  wb_frame cenv es sa s0 s /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])
     es sa sb s0 es' (Value (BytesV (Keccak_256_w64 bs)))
     (StackValue (BaseT (BytesT (Fixed 32))) op) s
@@ -2858,7 +2920,8 @@ Proof
   simp[vyperASTTheory.expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
        PAD_RIGHT, vyperTypeBytesCryptoTheory.LENGTH_Keccak_256_w64,
-       word_of_bytes_be_def]
+       word_of_bytes_be_def, expr_has_effect_thm] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem keccak_fixed_post_run:
@@ -2887,6 +2950,12 @@ Proof
   drule_at (Pos hd) compile_keccak256_bytesm_frame >> simp[] >>
   disch_then (drule_at (Pos hd)) >> simp[] >>
   disch_then drule_all >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> drule_all expr_post_pure_frame >> strip_tac >>
+     drule (cj 2 compile_expr_grows) >> strip_tac >>
+     match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es'`, `sm`, `s`] >> simp[] >>
+     drule expr_post_frame >> simp[wb_frame_def]) >>
   qexists `t` >> simp[] >> irule keccak_word_vv_post >> simp[] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   irule wb_frame_allocating_tail >> simp[] >>
@@ -2916,13 +2985,16 @@ Proof
   disch_then (drule_at (Pos hd)) >> simp[] >>
   disch_then (drule_at (Pat `mem_bytes_at _ _ _ = _`)) >> simp[] >>
   disch_then drule_all >> strip_tac >>
-  qexists `t` >> simp[] >> irule keccak_word_vv_post >> simp[] >>
   `t.vs_memory = s.vs_memory` by
     (qpat_x_assum `_ with vs_vars := _ = _`
       (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >> simp[]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `_ with vs_vars := _ = _`
       (mp_tac o Q.AP_TERM `\z. z.vs_allocas`) >> simp[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[] >>
+     drule_all expr_post_pure_frame >> simp[]) >>
+  qexists `t` >> simp[] >> irule keccak_word_vv_post >> simp[] >>
   irule wb_frame_readonly_tail >> qexistsl [`sm`, `s`] >> simp[] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   metis_tac[expr_post_frame]
@@ -3093,7 +3165,8 @@ QED
 Theorem hash_digest_word_vv_post:
   stmt_state_rel ctx func cenv cx es' s /\
   eval_operand op s = SOME w /\
-  wb_frame cenv es sa s0 s ==>
+  wb_frame cenv es sa s0 s /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])
     es sa sb s0 es' (Value (BytesV (word_to_bytes w T)))
     (StackValue (BaseT (BytesT (Fixed 32))) op) s
@@ -3101,7 +3174,9 @@ Proof
   strip_tac >> irule vv_post_word_intro >>
   simp[vyperASTTheory.expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
-       PAD_RIGHT, word_of_bytes_be_def, word_of_bytes_word_to_bytes]
+       PAD_RIGHT, word_of_bytes_be_def, word_of_bytes_word_to_bytes,
+       expr_has_effect_thm] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem sha256_fixed_fail_frag:
@@ -3172,6 +3247,12 @@ Proof
   drule_at (Pos hd) compile_sha256_bytesm_frame >> simp[] >>
   disch_then (drule_at (Pos hd)) >> simp[] >>
   disch_then drule_all >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> drule_all expr_post_pure_frame >> strip_tac >>
+     drule (cj 2 compile_expr_grows) >> strip_tac >>
+     match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es'`, `sm`, `s`] >> simp[] >>
+     drule expr_post_frame >> simp[wb_frame_def]) >>
   qexists `t` >> simp[] >> irule hash_digest_word_vv_post >> simp[] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   irule wb_frame_allocating_tail >> simp[] >>
@@ -3206,6 +3287,12 @@ Proof
   disch_then (drule_at (Pos hd)) >> simp[] >>
   disch_then (drule_at (Pat `mem_bytes_at _ _ _ = _`)) >> simp[] >>
   disch_then drule_all >> strip_tac >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> drule_all expr_post_pure_frame >> strip_tac >>
+     drule (cj 2 compile_expr_grows) >> strip_tac >>
+     match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es'`, `sm`, `s`] >> simp[] >>
+     drule expr_post_frame >> simp[wb_frame_def]) >>
   qexists `t` >> simp[] >> irule hash_digest_word_vv_post >> simp[] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   irule wb_frame_allocating_tail >> simp[] >>
@@ -3543,21 +3630,23 @@ Theorem method_id_fixed_post_run:
   emit_op SHL [Lit 224w; sel] sn = (op,sb) /\
   eval_operand hash s = SOME w /\
   stmt_state_rel ctx func cenv cx es' s /\ local_ptrs_reserved cenv sm /\
-  sa.cs_next_var <= sm.cs_next_var /\ wb_frame cenv es sa s0 s ==>
+  sa.cs_next_var <= sm.cs_next_var /\ wb_frame cenv es sa s0 s /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 4))) MethodId [e])
       es sa sb s0 es' (Value (BytesV (TAKE 4 (word_to_bytes w T))))
       (StackValue (BaseT (BytesT (Fixed 4))) op) t
 Proof
   strip_tac >> drule_all method_id_mask_frame >> strip_tac >>
-  qexists `t` >> simp[] >> irule vv_post_word_intro >>
-  simp[vyperASTTheory.expr_type_def, is_word_type_def,
-       vyperValueTheory.evaluate_type_def] >>
-  irule wb_frame_readonly_tail >> qexistsl [`sm`, `s`] >> simp[] >>
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `_ with vs_vars := _ = _`
        (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
-  simp[]
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
+  qexists `t` >> simp[] >> irule vv_post_word_intro >>
+  simp[vyperASTTheory.expr_type_def, is_word_type_def,
+       vyperValueTheory.evaluate_type_def, expr_has_effect_thm] >>
+  irule wb_frame_readonly_tail >> qexistsl [`sm`, `s`] >> simp[]
 QED
 
 Theorem method_id_dynamic_post_run:
@@ -3572,7 +3661,8 @@ Theorem method_id_dynamic_post_run:
   local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es sa s0 s /\ local_ptrs_reserved cenv sa /\
-  MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value (BytesV (TAKE 4 (word_to_bytes w T))))
@@ -3592,12 +3682,15 @@ Proof
      simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >> gvs[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 t` by
+    (strip_tac >> match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`es'`, `sm`, `s`] >> fs[wb_frame_def]) >>
   qexists `t` >> simp[] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e]`]
       vv_post_allocated_memory_intro)) >>
   simp[vyperASTTheory.expr_type_def, is_word_type_def,
-       vyperValueTheory.evaluate_type_def] >>
+       vyperValueTheory.evaluate_type_def, expr_has_effect_thm] >>
   conj_tac
   >- (qexistsl [`sp.cs_next_id`, `w2n p`, `64`] >>
       simp[val_wf_def, val_footprint_def, type_slot_size_def,
@@ -3665,6 +3758,7 @@ Theorem method_id_hash_typed_post_run:
     eval_operand hash t = SOME
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs)) /\
     stmt_state_rel ctx func cenv cx es' t /\ wb_frame cenv es sa s0 t /\
+    (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
     !ann. builtin_result cx es'.accounts ann MethodId [expr_type e] [v] =
       INL (BytesV (TAKE 4 bs))
 Proof
@@ -3680,7 +3774,8 @@ Proof
   qexists `bs` >> simp[] >>
   gvs[vv_post_def, vv_holds_def, expr_val_rel_def,
       vyperASTTheory.expr_type_def, vyperValueTheory.evaluate_type_def,
-      wb_frame_def, is_word_type_def, read_result_def, return_def] >>
+      wb_frame_def, is_word_type_def, read_result_def, return_def,
+      expr_has_effect_thm] >>
   rpt strip_tac >> first_x_assum irule >> simp[] >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   qexists `aid` >> simp[]
@@ -3754,8 +3849,7 @@ Proof
 QED
 
 Resume method_id_runtime_typed_post_run[fixed]:
-  drule_all method_id_fixed_post_run >>
-  disch_then (qspec_then `e` strip_assume_tac) >>
+  drule_all method_id_fixed_post_run >> strip_tac >>
   `run_inst_seq (emitted_insts sm sb) s =
      run_inst_seq (emitted_insts sm' sb) hashed` by
     (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
@@ -3763,8 +3857,7 @@ Resume method_id_runtime_typed_post_run[fixed]:
 QED
 
 Resume method_id_runtime_typed_post_run[dynamic]:
-  drule_all method_id_dynamic_post_run >>
-  disch_then (qspec_then `e` strip_assume_tac) >>
+  drule_all method_id_dynamic_post_run >> strip_tac >>
   `run_inst_seq (emitted_insts sm sb) s =
      run_inst_seq (emitted_insts sm' sb) hashed` by
     (irule (cj 1 run_inst_seq_chain) >> simp[]) >>

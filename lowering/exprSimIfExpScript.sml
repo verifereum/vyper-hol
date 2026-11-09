@@ -484,8 +484,10 @@ Proof
   fs[vv_post_def] >> rpt conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sa x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
-  >- metis_tac[] >>
-  irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+  >- metis_tac[]
+  >- (irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]) >>
+  strip_tac >> irule exprSimPropsTheory.pure_frame_mem_tail >>
+  qexists_tac `s` >> simp[]
 QED
 
 (* Rebase variables without changing allocation ownership. *)
@@ -547,7 +549,7 @@ Theorem ifexp_rebased_store_run[local]:
       FLOOKUP q.vs_allocas aid = SOME b) /\
     (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
-    locals_kept ce es' r q
+    locals_kept ce es' r q /\ q.vs_allocas = s.vs_allocas
 Proof
   strip_tac >>
   `eval_operand (Var x) s = SOME d` by
@@ -694,11 +696,46 @@ Proof
   `locals_kept ce es s0 q` by
     (irule locals_kept_trans >> qexistsl_tac [`es'`, `origin`, `r`] >>
      fs[vv_post_def]) >>
+  (* the store writes only inside the fresh destination buffer *)
+  `~expr_has_effect e ==> pure_frame ce func es origin s0 q` by
+    (strip_tac >>
+     `pure_frame ce func es origin s0 r` by fs[vv_post_def] >>
+     `pure_frame ce func es' (origin with cs_next_var := sm.cs_next_var) r s` by
+       fs[expr_post_def] >>
+     `!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
+              FLOOKUP s.vs_allocas aid = SOME b` by fs[expr_post_def] >>
+     `!x w. not_fresh_at origin x /\ lookup_var x s0 = SOME w ==>
+            lookup_var x r = SOME w` by fs[vv_post_def] >>
+     `pure_frame ce func es origin s0 s` by
+       (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+        qexistsl_tac [`es'`, `origin with cs_next_var := sm.cs_next_var`, `r`] >>
+        simp[]) >>
+     `!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+        regions_disjoint (w2n d) (type_memory_size tv) lb lsz` by
+       (rpt strip_tac >>
+        `local_region ce es'.scopes r n lb lsz` by
+          (irule exprSimPropsTheory.local_region_frame_fwd >>
+           qexistsl_tac [`s0`, `origin`, `es.scopes`] >> simp[]) >>
+        qpat_x_assum `!n b k. local_region ce es'.scopes r n b k ==> _` drule >>
+        simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     match_mp_tac exprSimPropsTheory.pure_frame_buffer_tail >>
+     qexistsl_tac [`s`, `inst`, `w2n d`, `type_memory_size tv`] >>
+     rpt conj_tac
+     >- first_assum ACCEPT_TAC
+     >- simp[]
+     >- first_assum ACCEPT_TAC
+     >- first_assum ACCEPT_TAC
+     >- first_assum ACCEPT_TAC
+     >- simp[]
+     >- first_assum ACCEPT_TAC >>
+     rpt strip_tac >>
+     qpat_x_assum `!a k. _ ==> mem_bytes_at a k q.vs_memory = _` irule >>
+     fs[compileEnvTheory.regions_disjoint_def]) >>
   qexists_tac `q` >> simp[expr_post_def] >>
   fs[vv_post_def] >> conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sm x'` by metis_tac[not_fresh_at_mono] >> metis_tac[]) >>
-  metis_tac[]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ifexp_expr_post_inst_idx[local,simp]:
@@ -846,7 +883,7 @@ Proof
 QED
 
 Theorem expr_post_ifexp:
-  !func cenv cx t c a b e es es1 es' sa s1 sc sd sb s0 tt u cop aop
+  !func cenv cx t c ea eb e es es1 es' sa s1 sc sd sb s0 tt u cop aop
              rv v1 v lbl w k xl ctx.
     expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
     expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) es' v aop u /\
@@ -856,8 +893,9 @@ Theorem expr_post_ifexp:
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
-    sd.cs_next_id <= sb.cs_next_id ==>
-    expr_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' v (Var rv)
+    sd.cs_next_id <= sb.cs_next_id /\
+    (~expr_has_effect (IfExp t c ea eb) ==> ~expr_has_effect e) ==>
+    expr_post ctx func cenv cx (IfExp t c ea eb) es sa sb s0 es' v (Var rv)
       (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -921,6 +959,38 @@ Proof
      >~ [`lookup_var _ (jump_to _ _)`] >- metis_tac[] >>
      irule locals_kept_mem_tail >> qexists_tac `tt` >>
      simp[jump_to_def] >> first_assum ACCEPT_TAC) >>
+  (* the pure frame: kept by c, then by the arm *)
+  `~expr_has_effect (IfExp t c ea eb) ==> pure_frame cenv func es sa s0 ss` by
+    (strip_tac >>
+     qpat_assum `~expr_has_effect (IfExp _ _ _ _)`
+       (strip_assume_tac o
+        REWRITE_RULE [loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM]) >>
+     `~expr_has_effect e` by
+       (qpat_x_assum `_ ==> ~expr_has_effect e` irule >> first_assum ACCEPT_TAC) >>
+     `pure_frame cenv func es sa s0 tt` by
+       (qpat_x_assum `~expr_has_effect c ==> _` irule >> first_assum ACCEPT_TAC) >>
+     `pure_frame cenv func es1 sc (jump_to lbl tt) u` by
+       (qpat_x_assum `~expr_has_effect e ==> _` irule >> first_assum ACCEPT_TAC) >>
+     `pure_frame cenv func es sa s0 (jump_to lbl tt)` by
+       (match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `tt` >>
+        simp[jump_to_def]) >>
+     `pure_frame cenv func es sa s0 u` by
+       (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+        qexistsl_tac [`es1`, `sc`, `jump_to lbl tt`] >>
+        rpt conj_tac
+        >- first_assum ACCEPT_TAC
+        >- first_assum ACCEPT_TAC
+        >- decide_tac
+        >- first_assum ACCEPT_TAC
+        >- first_assum ACCEPT_TAC
+        >- first_assum ACCEPT_TAC >>
+        rpt strip_tac >> asm_rewrite_tac[] >>
+        qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                        lookup_var x tt = SOME w` irule >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
+     match_mp_tac exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `u` >>
+     rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >> simp[]) >>
+  qpat_x_assum `_ ==> pure_frame _ _ _ _ _ ss` (fn th => rewrite_tac[th]) >>
   qpat_x_assum `locals_kept cenv es s0 ss` (fn th => rewrite_tac[th]) >>
   rpt strip_tac >>
   qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
@@ -2235,6 +2305,7 @@ Theorem ifexp_root_finish_post[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id ==>
   vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 ee tv
     (if is_word_type t then StackValue t (Var rv)
@@ -2257,6 +2328,7 @@ Theorem ifexp_root_arm_finish[local]:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
+  (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id /\ sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
   emit_inst ASSIGN [op] [rv] sd = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
@@ -2475,6 +2547,10 @@ Resume compile_ifexp_vv_sim[routed]:
   qpat_x_assum `fn_has_code sj sn func` kall_tac >>
   qpat_x_assum `fn_has_code sa sb func` kall_tac >>
   qpat_x_assum `fn_has_code sa sc func` kall_tac >>
+  `~expr_has_effect (IfExp (expr_type a) c a b) ==> ~expr_has_effect (if sel then a else b)` by
+    (Cases_on `sel` >>
+     rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+     strip_tac >> asm_rewrite_tac[]) >>
   irule ifexp_root_selected_outcome_prefix >>
   qexistsl_tac [`marks`,`es_end`,`sel`,`t'`,`jump_to (if sel then tl else el) t'`] >>
   simp[] >>

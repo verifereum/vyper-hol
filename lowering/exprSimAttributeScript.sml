@@ -433,7 +433,9 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
-      metis_tac[]) >>
+      metis_tac[])
+  >~ [`~expr_has_effect (Attribute _ _ _) ==> _`]
+  >- (rewrite_tac[loweringPostsTheory.expr_has_effect_thm] >> first_assum ACCEPT_TAC) >>
   first_assum ACCEPT_TAC
 QED
 

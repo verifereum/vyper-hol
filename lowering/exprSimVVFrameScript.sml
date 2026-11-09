@@ -110,8 +110,14 @@ Proof
      qexistsl_tac [`sa`, `es'.scopes`, `t`] >> asm_rewrite_tac[]) >>
   `locals_kept cenv es s0 t` by
     (irule locals_kept_mem_tail >> qexists_tac `s` >> asm_rewrite_tac[]) >>
+  `pure_frame cenv func es sa s0 t <=> pure_frame cenv func es sa s0 s` by
+    (irule pure_frame_state_cong >> conj_tac >> first_assum ACCEPT_TAC) >>
   pure_rewrite_tac[vv_post_def] >> asm_rewrite_tac[] >>
-  rpt strip_tac >> metis_tac[]
+  rpt strip_tac >>
+  qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==> _` irule >>
+  qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
+    (irule_at Any) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem vv_post_update_var:

@@ -739,7 +739,8 @@ Theorem ec_result_pointer_post[local]:
   FLOOKUP t.vs_allocas aid = SOME (w2n w,64) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name b sz. local_region cenv es'.scopes t name b sz ==>
-     regions_disjoint (w2n w) 64 b sz) ==>
+     regions_disjoint (w2n w) 64 b sz) /\
+  pure_frame cenv func es sa s0 t ==>
   vv_post ctx func cenv cx e es sa sb s0 es' (Value (mk_ec_result (x,y)))
     (FST (as_ptr_val (expr_type e) LocMemory (pop,sb))) t
 Proof
@@ -1160,7 +1161,9 @@ Theorem ec_scratch_stores_frame[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
     regions_disjoint a len off (type_memory_size tv)) ==>
-  stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t
+  stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t /\
+  (!b sz. regions_disjoint a len b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)
 Proof
   strip_tac >>
   `!b sz. regions_disjoint a len b sz ==>
@@ -1169,7 +1172,8 @@ Proof
      qexists_tac `len` >> metis_tac[]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[] >> irule ec_scratch_stores_capacity) >>
-  drule_all scratch_memory_frame >> simp[]
+  drule_all scratch_memory_frame >> strip_tac >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ec_input_stores_sim[local]:
@@ -1207,7 +1211,9 @@ Theorem ec_input_stores_sim[local]:
     mem_bytes_at (w2n bw) 96 t.vs_memory =
       word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
       word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
-      word_to_bytes wscalar T) /\
+      word_to_bytes wscalar T /\
+    (!b sz. regions_disjoint (w2n bw) 96 b sz ==>
+      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory)) /\
   (!p q ib sa sb s point point2 bw func cenv cx es sc.
   (do xp <- emit_op ADD [p; Lit 0w];
       x <- emit_op MLOAD [xp];
@@ -1251,7 +1257,9 @@ Theorem ec_input_stores_sim[local]:
       word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
       word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
       word_to_bytes (mem_word_at (w2n point2) s.vs_memory) T ++
-      word_to_bytes (mem_word_at (w2n point2+32) s.vs_memory) T)
+      word_to_bytes (mem_word_at (w2n point2+32) s.vs_memory) T /\
+    (!b sz. regions_disjoint (w2n bw) 128 b sz ==>
+      mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory))
 Proof
   conj_tac >> rpt gen_tac >> strip_tac
   >- (
@@ -1281,7 +1289,12 @@ Proof
 QED
 
 Resume ec_input_stores_sim[frame]:
-  markerLib.RESUME_TAC >> drule_all ec_scratch_stores_frame >> simp[]
+  markerLib.RESUME_TAC >> drule_all ec_scratch_stores_frame >> strip_tac >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> rpt strip_tac >>
+  qpat_x_assum `t.vs_memory = (mstore _ _ _).vs_memory` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `!b sz. regions_disjoint _ _ b sz ==>
+                  mem_bytes_at b sz t.vs_memory = _` irule >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise ec_input_stores_sim
@@ -1589,7 +1602,9 @@ Theorem ec_suffix_pointer_post[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
     regions_disjoint (w2n wo) 64 off (type_memory_size tv)) /\
-  expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
+  expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
+  pure_frame cenv func es sf s0 st /\
+  (?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts func)) ==>
   ?t. run_inst_seq (emitted_insts sm sb) st = OK t /\
       vv_post ctx func cenv cx e es sf sb s0 (es with outcomes := SOME rest)
         (Value (mk_ec_result (x,y)))
@@ -1632,6 +1647,29 @@ Proof
      simp[] >> conj_tac
      >- (qexists `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl [`sm`,`es.scopes`,`t`] >> simp[]) >>
+  (* the call writes only the fresh output buffer: the pure frame *)
+  `pure_frame cenv func es sf s0 t` by
+    (match_mp_tac (Q.SPECL [`cenv`,`func`,`es`,`sf`,`s0`,`st`,`t`,
+       `mk_inst aid ALLOCA ops outs`,`w2n (wo:256 word)`,`64`] pure_frame_buffer_tail) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- simp[mk_inst_def] >>
+     conj_tac >- simp[mk_inst_def] >>
+     conj_tac >- simp[mk_inst_def] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_assum `!name b sz. local_region cenv es.scopes st name b sz ==> _`
+           irule >>
+         qexists `n` >> irule exprSimPropsTheory.local_region_frame_fwd >>
+         qexistsl [`s0`, `sf`, `es.scopes`] >>
+         qpat_x_assum `wb_frame cenv es sf s0 st`
+           (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.wb_frame_def]) >>
+         simp[]) >>
+     rpt strip_tac >>
+     qpat_x_assum `t.vs_memory = _` (fn th => rewrite_tac[th]) >>
+     irule exprSimPrecompilesTheory.write_memory_take_exterior >>
+     simp[wordsTheory.dimword_def]) >>
   qpat_assum `expr_type e = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
   irule ec_result_pointer_post >> simp[] >>
   conj_tac >- (qexists `aid` >> gvs[] >> metis_tac[]) >> gvs[]
@@ -1838,6 +1876,8 @@ Resume ec_points_run[suffix]:
       drule run_inst_seq_append >>
       disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> simp[]) >>
   simp[] >> pop_assum strip_assume_tac >>
+  `?ops outs. MEM (mk_inst aid ALLOCA ops outs) (fn_insts func)` by
+    metis_tac[markerTheory.Abbrev_def] >>
   `?t. run_inst_seq (emitted_insts sm sb) st = OK t /\
        vv_post ctx func cenv cx e es sf sb s
          (es with outcomes := SOME (DROP 1 s.vs_outcomes))
@@ -2352,6 +2392,14 @@ Proof
                             `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      metis_tac[exprSimWordArgsTheory.expr_post_frame]) >>
+  `~expr_has_effect (Builtin ann bt [a;b]) ==> pure_frame cenv func es sa s0 u` by
+    (simp[expr_has_effect_thm] >> strip_tac >>
+     `pure_frame cenv func es sa s0 t /\ pure_frame cenv func es1 s1 t u` by
+       metis_tac[exprSimWordArgsTheory.expr_post_pure_frame] >>
+     `wb_frame cenv es sa s0 t /\ wb_frame cenv es1 s1 t u` by
+       metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
+     match_mp_tac pure_frame_trans >> qexistsl_tac [`es1`, `s1`, `t`] >>
+     fs[loweringPostsTheory.wb_frame_def]) >>
   `gas_marked_exec F (ctx,func)
      (ec_source_tail cx ann bt [expr_type a; expr_type b] [v1; v2])
      (es2,u) (REPLICATE n F) res es' r` by

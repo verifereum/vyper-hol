@@ -120,7 +120,14 @@ Proof
       >- (irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
           qexists `sa.cs_next_id` >> asm_rewrite_tac[]) >>
       metis_tac[]) >>
-  irule locals_kept_trans >> qexistsl [`es1`, `sa`, `t`] >>
+  conj_tac
+  >- (irule locals_kept_trans >> qexistsl [`es1`, `sa`, `t`] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rewrite_tac[loweringPostsTheory.expr_has_effect_thm, listTheory.EXISTS_DEF,
+              boolTheory.OR_CLAUSES, DE_MORGAN_THM] >>
+  strip_tac >> res_tac >>
+  match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+  qexistsl_tac [`es1`, `s1`, `t`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 

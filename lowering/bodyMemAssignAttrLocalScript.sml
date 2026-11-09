@@ -308,6 +308,10 @@ Proof
     (irule wb_frame_trans >> goal_assum drule >>
      conj_tac >- (goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
                   simp[]) >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
+    (strip_tac >> match_mp_tac exprSimPropsTheory.pure_frame_trans >>
+     qexistsl_tac [`ee`, `sa with cs_next_var := sm.cs_next_var`, `s`] >>
+     gvs[vv_post_def, expr_post_def]) >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   gvs[expr_post_def, wb_frame_def, expr_val_at_def] >> metis_tac[]
 QED

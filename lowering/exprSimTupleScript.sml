@@ -897,7 +897,10 @@ Proof
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-  >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[]) >>
+  >- (irule tuple_vv_holds_elem >> simp[] >> metis_tac[])
+  >~ [`~expr_has_effect (Subscript _ _ _) ==> _`]
+  >- (rewrite_tac[loweringPostsTheory.expr_has_effect_thm, DE_MORGAN_THM] >>
+      strip_tac >> res_tac) >>
   qspecl_then [`func`, `cenv`, `cx`, `env`, `es`, `sa`, `sn`, `es1`, `tv`,
                `bvv`, `q`, `w`, `dst`, `tys`, `tvs`, `vs`, `k`, `tv'`,
                `EL k tys`, `ctx`] mp_tac tuple_vv_at_elem >>
