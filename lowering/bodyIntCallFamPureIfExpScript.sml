@@ -3,6 +3,106 @@ Theory bodyIntCallFamPureIfExp
 Ancestors
   bodyIntCallJointContract exprSimIfExp bodyIntCallJointPureSuffix
   loweringPosts venomState venomExecSemantics finite_map context exprLowering vyperAST
+  exprSimAggregateChildren exprBopSimProps arithmetic
+
+(* Assemble the ordinary forced post at the chosen forcing endpoint. *)
+Theorem vv_post_forcing_frames:
+  post_value_type ce e = expr_type e /\
+  eval_expr cx e es = (INL raw,ee) /\
+  read_result cx raw ee = (INL v,ee) /\
+  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  stmt_state_rel ctx func ce cx ee q /\
+  expr_val_rel cx (post_value_type ce e) v op q /\
+  expr_val_at ce cx (post_value_type ce e) sa sb ee v op q /\
+  (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
+         lookup_var x q = SOME w) /\
+  (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+           FLOOKUP q.vs_allocas aid = SOME b) /\
+  locals_kept ce ee s q /\
+  (!aid off sz.
+     FLOOKUP s.vs_allocas aid = SOME (off,sz) /\ aid < sm.cs_next_id /\
+     (!n b sz'. local_region ce ee.scopes s n b sz' ==>
+                off + sz <= b \/ b + sz' <= off) ==>
+     mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory) ==>
+  expr_post ctx func ce cx e es sa sb s0 ee v op q
+Proof
+  strip_tac >>
+  `!n b sz. local_region ce ee.scopes s n b sz ==>
+            local_region ce es.scopes s0 n b sz` by
+    (rpt strip_tac >> irule vv_post_local_region_backward >> metis_tac[]) >>
+  fs[vv_post_def] >>
+  simp[expr_post_def] >>
+  rpt conj_tac
+  >- metis_tac[freshWritesTheory.not_fresh_at_mono]
+  >- (rpt strip_tac >>
+      `mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s.vs_memory` by
+        (first_x_assum irule >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+      metis_tac[]) >>
+  irule locals_kept_trans >> metis_tac[]
+QED
+
+(* Protected forcing and its ordinary post share a single endpoint. *)
+Theorem vv_post_protected_unwrap:
+  post_value_type ce e = expr_type e /\
+  eval_expr cx e es = (INL raw,ee) /\
+  read_result cx raw ee = (INL v,ee) /\
+  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  unwrap_value ce vv sm = (op,sb) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  type_memory_bytes ce (post_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv < 2**64 /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sm /\ allocas_above lo s /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!q x. reserved q /\ q = Var x ==> not_fresh_at sm x) /\
+  (!p k. P p k ==> p+k <= lo) /\
+  (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+   ~is_bytestring_type (post_value_type ce e) /\
+   (case vv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   ?w a k. eval_operand (vv_operand vv) s = SOME w /\
+     a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+     (lo <= a \/ ?b z. staged b z /\ b <= a /\ a+k <= b+z)) /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?q. gas_marked_path F ctx func s 0 (OK q) /\
+    expr_post ctx func ce cx e es sa sb s0 ee v op q /\
+    allocas_above lo q /\ s.vs_alloca_next <= q.vs_alloca_next /\
+    (!p k. P p k ==> mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!r. reserved r ==> eval_operand r q = eval_operand r s) /\
+    (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+     ~is_bytestring_type (post_value_type ce e) ==>
+     ?w a k. eval_operand op q = SOME w /\ a <= w2n w /\
+       w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+       (lo <= a \/ ?b z. staged b z /\ b <= a /\ a+k <= b+z)) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `vv_holds ce cx (post_value_type ce e) raw vv ee s /\
+   stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+  mp_tac (Q.INST [
+    `sa` |-> `sm`, `ty` |-> `post_value_type ce e`,
+    `r` |-> `raw`, `es` |-> `ee`,
+    `Win` |-> `\p k. ?aid. FLOOKUP s.vs_allocas aid = SOME (p,k) /\
+      aid < sm.cs_next_id /\
+      (!n b z. local_region ce ee.scopes s n b z ==> p+k <= b \/ b+z <= p)`,
+    `scopes` |-> `ee.scopes`]
+    bodyIntCallWindowForcingTheory.protected_value_window_forcing) >>
+  impl_tac >- (simp[] >> rpt strip_tac >> qexistsl [`aid`,`p`,`k`] >> simp[]) >>
+  strip_tac >> qexists `u` >> simp[] >>
+  irule vv_post_forcing_frames >>
+  simp[] >> reverse conj_tac
+  >- (qexistsl [`s`,`sm`,`vv`] >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+  qpat_assum `post_value_type ce e = _` (fn th => rewrite_tac[GSYM th]) >>
+  first_x_assum irule >> fs[vv_post_def]
+QED
 
 (* The layout-copy alternative only arises for bytestrings. *)
 Theorem ifexp_arm_unwrap_nonbytes:
