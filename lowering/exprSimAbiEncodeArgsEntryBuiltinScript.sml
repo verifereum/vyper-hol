@@ -670,3 +670,51 @@ Proof
   strip_tac >> gvs[markerTheory.Abbrev_def] >>
   metis_tac[abi_args_entry_as_wei_decimal, abi_args_entry_as_wei_int_safe]
 QED
+
+Theorem abi_args_entry_acc_ops:
+  !op args a x b. op <> PHI /\ emit_op op args a = (x,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b
+Proof
+  metis_tac[abi_args_entry_emit_op, abi_args_entry_safe_def]
+QED
+
+Theorem abi_args_entry_acc_safe:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce e item a x b. compile_acc cfn ce e item a = (x,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b
+Proof
+  strip_tac >> ntac 3 gen_tac >>
+  Cases_on `item = Address`
+  >- (gvs[compile_acc_def] >> metis_tac[abi_args_entry_lower_value]) >>
+  Cases_on `item = Code`
+  >- (gvs[compile_acc_def, LET_THM] >> rpt gen_tac >>
+      Cases_on `emit_inst INVALID [] [] a` >> simp[] >>
+      strip_tac >> gvs[] >>
+      conj_tac
+      >- metis_tac[fragExecTheory.cs_extends_emit_inst] >>
+      simp[abi_args_entry_safe_def] >> strip_tac >> disj1_tac >>
+      irule abi_args_entry_emit_inst >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `item` >> gvs[compile_acc_def, LET_THM] >> (
+    ho_match_mp_tac abi_args_entry_safe_pair >> conj_tac
+    >- metis_tac[abi_args_entry_lower_value] >>
+    gen_tac >>
+    rpt (ho_match_mp_tac abi_args_entry_safe_pair >> conj_tac >>
+         gen_tac) >>
+    rpt gen_tac >> strip_tac >> irule abi_args_entry_acc_ops >> simp[] >>
+    goal_assum (drule_at Any) >> simp[])
+QED
+
+Theorem abi_args_entry_builtin_acc_safe:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce rt ty es item a vv b.
+    compile_builtin_dispatch_body cfn ce rt ty (Acc item) es a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b
+Proof
+  strip_tac >> ntac 5 gen_tac >>
+  simp[compile_builtin_dispatch_body_def] >>
+  ho_match_mp_tac abi_args_entry_safe_stack_val >>
+  metis_tac[abi_args_entry_acc_safe]
+QED
