@@ -12,7 +12,8 @@ Ancestors
   bodyIntCallFamAggSubscriptScratchTail bodyIntCallFamAggSubscriptMapping
   bodyIntCallFamAggSubscriptAllocRun bodyIntCallFamAggSubscriptStoreRun
   bodyIntCallFamAggSubscriptRunCuts bodyIntCallFamAggSubscriptReadRun
-  bodyIntCallFamAggSubscriptWordRun
+  bodyIntCallFamAggSubscriptWordRun bodyIntCallFamAggSubscriptTailRun
+  bodyIntCallFamAggSubscriptMappingRun
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>
