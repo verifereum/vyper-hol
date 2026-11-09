@@ -5,7 +5,7 @@ Ancestors
   typedCopyAgreement exprLoweringProps emitHelperProps list rich_list
   exprSimBufferStore exprSimAggregateChildren exprSimProps exprSimDefs
   exprLowering compileEnv externalReturnNormalizeMem valueEncodingProps
-  venomState venomInst valueCopyBytes context emitHelper valueEncoding
+  venomState venomInst venomExecSemantics venomMemDefs venomMemProps valueCopyBytes context emitHelper valueEncoding
 
 Theorem normalize_bytestring_window_path_mem:
   is_bytestring_type dst_ty /\ is_bytestring_type src_ty /\
@@ -27,12 +27,16 @@ Theorem normalize_bytestring_window_path_mem:
           w2n d + (32 + 32 * word_size len) <= a ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
       (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH q.vs_memory
 Proof
   strip_tac >>
   `compile_store_bytestring src dst sa = ((),sb)` by
     gvs[compile_store_memory_typed_bytes] >>
   drule_all normalize_bytestring_window_run >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH q.vs_memory` by
+    (drule_all buffer_store_bytestring_run >> strip_tac >> gvs[] >>
+     simp[mcopy_def, write_memory_with_expansion_nondecreasing]) >>
   drule buffer_store_bytestring_shape >> strip_tac >>
   `compile_store_memory ce src dst dst_ty dst_ty sa = ((),sb)` by
     simp[compile_store_memory_def, is_bytestring_word_type] >>
@@ -64,11 +68,13 @@ Theorem normalize_word_window_path_mem:
       (!a k. a + k <= w2n d \/ w2n d + 32 <= a ==>
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
       (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH q.vs_memory
 Proof
   strip_tac >>
   `!x. dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
   drule_all normalize_word_copy_run >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH q.vs_memory` by simp[mstore_memory_nondecreasing] >>
   `run_inst_seq_mem_ok (emitted_insts sa sb) s` by
     (drule_all typed_copy_word_mem_ok >> simp[]) >>
   drule_all normalize_word_straight >> strip_tac >>

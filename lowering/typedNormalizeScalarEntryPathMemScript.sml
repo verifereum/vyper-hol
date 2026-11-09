@@ -7,7 +7,7 @@ Ancestors
   valueCopyBytes exprSimBufferStore emitHelperProps exprSimAggregateChildren words
   vyperTypeSystem vyperTypeArgFits vyperTyping valueCopy compileEnv exprLowering emitHelper
   context vyperValue allocaFootprint fragGasSeqMem list rich_list venomExecSemantics venomInst
-  stmtReasonLitFragMemory loweringPosts
+  stmtReasonLitFragMemory loweringPosts venomMemProps
 
 Theorem typed_store_word_path_mem:
   is_word_type dty /\ type_widens_to tenv sty dty /\
@@ -30,7 +30,8 @@ Theorem typed_store_word_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >>
   `sty = dty` by metis_tac[typed_copy_word_widening] >> gvs[] >>
@@ -67,7 +68,8 @@ Theorem typed_store_bytestring_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >>
   `is_bytestring_type sty` by metis_tac[typed_copy_bytestring_source] >>
@@ -110,7 +112,8 @@ Theorem typed_store_empty_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >>
   `sty = NoneT` by
@@ -170,7 +173,8 @@ Theorem typed_store_bulk_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >> Cases_on `type_memory_size tv` >- fs[] >>
   gvs[compile_copy_memory_def] >> fs[ADD_COMM] >>
@@ -222,7 +226,8 @@ Theorem normalize_dynarray_equal_window_path_mem:
     (!a k. a+k <= w2n d \/ w2n d+32+l*type_memory_bytes ce ty <= a ==>
       mem_bytes_at a k u.vs_memory = mem_bytes_at a k s.vs_memory) /\
     (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory
 Proof
   strip_tac >> (
   `w2n (p+32w) = w2n p+32 /\ w2n (d+32w) = w2n d+32` by simp[w2n_add_2] >>
@@ -231,6 +236,11 @@ Proof
    w2n (p+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
    w2n (d+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next` by decide_tac >>
   drule_all typed_dynarray_equal_compiler_run >> strip_tac >>
+  `LENGTH s.vs_memory <= LENGTH u.vs_memory` by
+    (irule LESS_EQ_TRANS >>
+     qexists `LENGTH (mstore (w2n d) (n2w l) s).vs_memory` >>
+     simp[mstore_memory_nondecreasing, mcopy_def,
+       write_memory_with_expansion_nondecreasing]) >>
   drule typed_dynarray_equal_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts sa sb) /\
@@ -277,7 +287,8 @@ Theorem typed_store_dynarray_equal_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH vs * type_memory_size tv <= cap * type_memory_size tv` by simp[] >>
