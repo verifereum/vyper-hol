@@ -1354,6 +1354,57 @@ Proof
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem noninvoke_segment_mask[local]:
+  i.inst_opcode <> INVOKE /\ inst_wf i /\
+  terminates (step_inst fuel C' i s) /\
+  LENGTH (gas_events_step fuel C' s.vs_current_bb i s) <= LENGTH s.vs_gas_readings ==>
+  ?m es unused.
+    LENGTH m = LENGTH es /\
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
+    (!u. (step_inst fuel C' i s = OK u \/
+          (?ir. step_inst fuel C' i s = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C s.vs_current_bb i
+         (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?j. terminates (step_inst j C i (s with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C i (s with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C i (s with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' i s)) /\
+        (((?u. step_inst fuel C' i s = OK u) \/
+          (?ir u. step_inst fuel C' i s = IntRet ir u)) ==>
+          gas_events_step fuel C s.vs_current_bb i
+            (s with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' i s)
+            (step_inst fuel C i (s with vs_gas_readings := gs ++ tail))))
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = GAS`
+  >- (drule_all dftRunRelTheory.dft_gas_ok_shape >> strip_tac >>
+      Cases_on `s.vs_gas_readings` >- gvs[gas_events_step_def] >>
+      qexistsl_tac [`[SOME h]`, `[(s.vs_current_bb,i.inst_id)]`, `t`] >>
+      simp[gas_events_step_def] >>
+      simp[residual_result_cases, restore_result_def,
+           dftRunRelTheory.dft_res_rel_def,
+           passSimulationDefsTheory.terminates_def,
+           venomStateTheory.update_var_def]) >>
+  qexistsl_tac [`[]`, `[]`, `s.vs_gas_readings`] >>
+  simp[gas_events_step_def] >>
+  `!rs. residual_result rs (step_inst fuel C' i s)
+    (step_inst fuel C i (s with vs_gas_readings := rs))` by
+    simp[venomExecSemanticsTheory.step_inst_non_invoke,
+         dftGasToListReplayTheory.replay_base_non_gas] >>
+  `gas_count_suffix 0 s (step_inst fuel C' i s)` by
+    metis_tac[gas_count_step_def, cj 1 gas_count_suffix] >>
+  Cases_on `step_inst fuel C' i s` >>
+  gvs[gas_count_suffix_def, passSimulationDefsTheory.terminates_def,
+      residual_result_def, stateEquivTheory.lift_result_def] >>
+  gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
+  Cases_on `step_inst fuel C i (s with vs_gas_readings := tail)` >>
+  simp[stateEquivTheory.lift_result_def] >> strip_tac >> gvs[] >>
+  simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]
+QED
+
 Theorem dft_blocks_gas_mask:
   !fuel C C' fn fn' s.
     LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
