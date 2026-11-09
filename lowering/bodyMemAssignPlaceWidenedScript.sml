@@ -6,7 +6,7 @@
 Theory bodyMemAssignPlaceWidened
 Ancestors
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
-  placeMemoryStagingMem typedCopyLoopCounted
+  placeMemoryStagingMem typedCopyAggregateCounted
 
 Theorem body_assign_place_widened_aggregate_call_mem:
   !cx t e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
