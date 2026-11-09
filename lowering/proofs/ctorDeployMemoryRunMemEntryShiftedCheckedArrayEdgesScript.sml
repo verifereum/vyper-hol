@@ -201,5 +201,13 @@ Proof
     (fs[Excl "enc_def"] >> decide_tac) >>
   `slot+32 <= s.vs_alloca_next` by
     (fs[alloca_inv_def, alloca_next_valid_def, Excl "enc_def"] >> metis_tac[]) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid ip src DLOAD
+    (STRING #"%" (toString header_var)) (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2))) (STRING #"%" (toString (header_var+3)))` by
+    gvs[abi_decode_position_loop_cfg_def, abi_decode_loop_cfg_def,
+        abi_decode_position_header_insts_def, abi_decode_position_header_delta_def,
+        abi_decode_header_insts_def] >>
+  qpat_x_assum `header_var + 4 + _ <= _`
+    (assume_tac o SIMP_RULE bool_ss [abi_decode_position_header_delta_def, ADD_CLAUSES]) >>
   drule_all ctor_checked_array_header_run_from >> simp[]
 QED
