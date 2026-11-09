@@ -49,6 +49,7 @@ Proof
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op DLOAD [src] st = (val_op,c1)` >>
+  pairarg_tac >> gvs[] >>
   rename1 `compile_abi_clamp_basetype val_op clamp c1 = ((),c2)` >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_read >> strip_tac >>
@@ -110,7 +111,8 @@ Proof
     (irule ctor_word_fresh_mem_ok >> metis_tac[]) >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_word_reentry_code >> strip_tac >>
-  drule_all abi_decoder_clamped_word_sequence >> strip_tac >>
+  `eval_operand (Lit 0w) pruned = SOME (n2w 0)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`B` |-> `0`] abi_decoder_clamped_word_sequence)) >> strip_tac >>
   irule ctor_reentry_sequence_mem >> conj_tac >- simp[] >>
   qexistsl [`initial.vs_vars`, `pruned`, `t`] >>
   simp[Abbr `pruned`, abi_decoder_prune_extension]
