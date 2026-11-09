@@ -265,7 +265,7 @@ Proof
             aug_place_supported_root_not_immutable]
 QED
 
-Theorem augassign_target_pre[local]:
+Theorem augassign_target_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) /\
