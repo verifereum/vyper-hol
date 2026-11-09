@@ -154,7 +154,7 @@ Proof
          >- metis_tac[body_expr_ok_case]
          >- metis_tac[body_expr_ok_map_case] >>
          rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
-      drule expr_sim_case_of_vv >>
+      drule_at (Pos last) expr_sim_case_of_vv >> simp[] >> strip_tac >>
       fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `expr_map_case F ctx func cenv cx (Subscript v8 e1 e2)` by
