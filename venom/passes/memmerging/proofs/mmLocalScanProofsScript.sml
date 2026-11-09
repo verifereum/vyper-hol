@@ -4,7 +4,7 @@ Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
-  simplifyCfgPhiSemantics basePtrProofs
+  simplifyCfgPhiSemantics basePtrProofs mmTraceProofs
 Libs
   wordsLib finite_mapLib
 
@@ -299,6 +299,69 @@ Theorem mm_local_zero_fold_every[local]:
   mm_local_zero_every P (FOLDL (scan_inst_memzero dfg) mz is)
 Proof
   Induct_on `is` >> simp[] >> metis_tac[mm_local_zero_inst_every]
+QED
+
+Theorem mm_local_zero_inst_flushed_prefix[local]:
+  scan_inst_memzero dfg (mz with mz_flushed := old ++ mz.mz_flushed) i =
+  (scan_inst_memzero dfg mz i) with
+    mz_flushed := old ++ (scan_inst_memzero dfg mz i).mz_flushed
+Proof
+  Cases_on `mz` >>
+  simp[scan_inst_memzero_def, memzero_scan_state_fn_updates] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  rpt (CASE_TAC >> simp[memzero_barrier_def, APPEND_ASSOC,
+                       memzero_scan_state_fn_updates]) >>
+  simp[memzero_scan_state_component_equality, memzero_barrier_def, APPEND_ASSOC]
+QED
+
+Theorem mm_local_zero_fold_flushed_prefix[local]:
+  !is mz. FOLDL (scan_inst_memzero dfg)
+    (mz with mz_flushed := old ++ mz.mz_flushed) is =
+  (FOLDL (scan_inst_memzero dfg) mz is) with
+    mz_flushed := old ++ (FOLDL (scan_inst_memzero dfg) mz is).mz_flushed
+Proof
+  Induct_on `is` >> simp[mm_local_zero_inst_flushed_prefix]
+QED
+
+Theorem mm_local_zero_fold_barrier[local]:
+  (memzero_barrier (FOLDL (scan_inst_memzero dfg)
+     (memzero_barrier mz) post)).mz_flushed =
+  mz.mz_flushed ++ mz.mz_copies ++
+    (memzero_barrier (FOLDL (scan_inst_memzero dfg)
+       empty_memzero_state post)).mz_flushed
+Proof
+  `memzero_barrier mz = empty_memzero_state with mz_flushed :=
+     (mz.mz_flushed ++ mz.mz_copies) ++ empty_memzero_state.mz_flushed` by
+    simp[memzero_barrier_def, empty_memzero_state_def] >>
+  pop_assum SUBST1_TAC >>
+  rewrite_tac[mm_local_zero_fold_flushed_prefix] >>
+  simp[memzero_barrier_def, APPEND_ASSOC]
+QED
+
+Theorem mm_local_memzero_barrier_localization[local]:
+  bb.bb_instructions = pre ++ [i] ++ post /\
+  is_volatile_memory i /\ ~is_zero_store i /\
+  ~is_calldatasize_copy dfg i /\
+  MEM cg (scan_block_memzero dfg bb).mz_flushed ==>
+  EVERY (\id. MEM id (MAP (\x. x.inst_id) pre)) cg.cg_inst_ids \/
+  EVERY (\id. MEM id (MAP (\x. x.inst_id) post)) cg.cg_inst_ids
+Proof
+  strip_tac >>
+  `mm_local_zero_every (\id. MEM id (MAP (\x. x.inst_id) pre))
+    (FOLDL (scan_inst_memzero dfg) empty_memzero_state pre)` by
+    (irule mm_local_zero_fold_every >>
+     simp[mm_local_zero_every_def, empty_memzero_state_def, EVERY_MEM,
+          MEM_MAP] >> metis_tac[]) >>
+  `mm_local_zero_every (\id. MEM id (MAP (\x. x.inst_id) post))
+    (memzero_barrier (FOLDL (scan_inst_memzero dfg) empty_memzero_state post))` by
+    (irule mm_local_zero_barrier_every >>
+     irule mm_local_zero_fold_every >>
+     simp[mm_local_zero_every_def, empty_memzero_state_def, EVERY_MEM,
+          MEM_MAP] >> metis_tac[]) >>
+  qpat_x_assum `MEM cg _` mp_tac >>
+  simp[scan_block_memzero_def, FOLDL_APPEND, scan_inst_memzero_def,
+       mm_local_zero_fold_barrier, MEM_APPEND] >>
+  gvs[mm_local_zero_every_def, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem mm_local_memzero_group_roles[local]:
@@ -617,6 +680,98 @@ Proof
   `MEM rep (REVERSE (sort_ids_by_block xs cg.cg_inst_ids))` by metis_tac[MEM] >>
   gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER]
 QED
+
+Theorem mm_local_memzero_rep_before_barrier[local]:
+  bb.bb_instructions = pre ++ [i] ++ post /\
+  ALL_DISTINCT (MAP (\x. x.inst_id) bb.bb_instructions) /\
+  is_volatile_memory i /\ ~is_zero_store i /\
+  ~is_calldatasize_copy dfg i /\
+  MEM cg (scan_block_memzero dfg bb).mz_flushed /\
+  MEM id cg.cg_inst_ids /\ MEM id (MAP (\x. x.inst_id) pre) ==>
+  ?r. rep_of_group bb.bb_instructions cg = SOME (r,cg) /\
+      MEM r (MAP (\x. x.inst_id) pre)
+Proof
+  strip_tac >>
+  drule_all mm_local_memzero_barrier_localization >> strip_tac
+  >- (
+    `FILTER (\id. MEM id cg.cg_inst_ids)
+       (MAP (\x. x.inst_id) (i::post)) = []` by
+      (simp[FILTER_EQ_NIL, EVERY_MEM] >>
+       gvs[EVERY_MEM, ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+    `FILTER (\id. MEM id cg.cg_inst_ids)
+       (MAP (\x. x.inst_id) pre) <> []` by
+      (simp[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
+    gvs[AllCaseEqs()] >>
+    simp[rep_of_group_def, sort_ids_by_block_def, MAP_APPEND,
+         FILTER_APPEND_DISTRIB] >>
+    Cases_on `REVERSE (FILTER (\id. MEM id cg.cg_inst_ids)
+      (MAP (\x. x.inst_id) pre))` >> gvs[] >>
+    `MEM h (REVERSE (FILTER (\id. MEM id cg.cg_inst_ids)
+      (MAP (\x. x.inst_id) pre)))` by metis_tac[MEM] >>
+    gvs[MEM_REVERSE, MEM_FILTER]) >>
+  gvs[EVERY_MEM, ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+Theorem mm_local_rep_position_max[local]:
+  !xs j k. ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  j < LENGTH xs /\ k < LENGTH xs /\
+  MEM (EL j xs).inst_id cg.cg_inst_ids /\
+  rep_of_group xs cg = SOME ((EL k xs).inst_id,cg) ==> j <= k
+Proof
+  Induct_on `xs` >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `k` >- (
+    Cases_on `j` >- simp[] >>
+    gvs[] >>
+    `FILTER (\id. MEM id cg.cg_inst_ids) (MAP (\i. i.inst_id) xs) <> []` by
+      (simp[FILTER_EQ_NIL, EVERY_MEM] >> qexists `(EL n xs).inst_id` >>
+       simp[MEM_MAP] >> qexists `EL n xs` >> simp[EL_MEM]) >>
+    gvs[rep_of_group_def, sort_ids_by_block_def] >>
+    Cases_on `REVERSE (FILTER (\id. MEM id cg.cg_inst_ids)
+      (MAP (\i. i.inst_id) xs))` >>
+    gvs[REVERSE_APPEND] >>
+    Cases_on `MEM h.inst_id cg.cg_inst_ids` >> gvs[REVERSE_APPEND] >>
+    `MEM h.inst_id (REVERSE (FILTER (\id. MEM id cg.cg_inst_ids)
+      (MAP (\i. i.inst_id) xs)))` by metis_tac[MEM] >>
+    gvs[MEM_REVERSE, MEM_FILTER]) >>
+  Cases_on `j` >- simp[] >> gvs[] >>
+  `rep_of_group xs cg = SOME ((EL n xs).inst_id,cg)` by
+    (gvs[rep_of_group_def, sort_ids_by_block_def] >>
+     Cases_on `MEM h.inst_id cg.cg_inst_ids` >> gvs[REVERSE_APPEND] >>
+     Cases_on `REVERSE (FILTER (\id. MEM id cg.cg_inst_ids)
+       (MAP (\i. i.inst_id) xs))` >> gvs[] >>
+     qpat_x_assum `~MEM _ (MAP _ xs)` mp_tac >>
+     simp[MEM_MAP] >> qexists `EL n xs` >> simp[EL_MEM]) >>
+  metis_tac[]
+QED
+Theorem mm_local_memzero_barrier_position[local]:
+  bb.bb_instructions = pre ++ [i] ++ post /\
+  ALL_DISTINCT (MAP (\x. x.inst_id) bb.bb_instructions) /\
+  is_volatile_memory i /\ ~is_zero_store i /\
+  ~is_calldatasize_copy dfg i /\
+  MEM cg (scan_block_memzero dfg bb).mz_flushed /\
+  MEM id cg.cg_inst_ids /\ MEM id (MAP (\x. x.inst_id) pre) ==>
+  ?k. k < LENGTH pre /\
+      rep_of_group bb.bb_instructions cg =
+        SOME ((EL k bb.bb_instructions).inst_id,cg) /\
+      (!j. j < LENGTH bb.bb_instructions /\
+           MEM (EL j bb.bb_instructions).inst_id cg.cg_inst_ids ==> j <= k)
+Proof
+  strip_tac >> drule_all mm_local_memzero_rep_before_barrier >>
+  strip_tac >>
+  qpat_x_assum `MEM r (MAP _ pre)` mp_tac >>
+  simp[MEM_EL] >> strip_tac >>
+  qexists `n` >>
+  `n < LENGTH bb.bb_instructions /\
+   (EL n bb.bb_instructions).inst_id = r` by
+    (gvs[] >> simp[EL_APPEND_EQN, EL_MAP]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >> irule mm_local_rep_position_max >>
+  qexistsl [`cg`, `bb.bb_instructions`] >>
+  gvs[] >> simp[MEM_EL] >> metis_tac[]
+QED
+
+
 
 Theorem mm_local_rep_lookup[local]:
   !groups cg. ALL_DISTINCT (FILTER proj (mm_local_group_ids groups)) /\
@@ -3282,6 +3437,32 @@ Proof
   simp[arithmeticTheory.MAX_DEF]
 QED
 
+Theorem mm_local_write_log_commute[local]:
+  !ws s. EVERY (\(d,bs). d + LENGTH bs <= a \/ a + LENGTH bytes <= d) ws ==>
+  write_memory_with_expansion a bytes
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws) =
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+    (write_memory_with_expansion a bytes s) ws
+Proof
+  Induct_on `ws` >- simp[] >>
+  Cases_on `h` >> simp[] >> rpt strip_tac >>
+  first_x_assum (drule_then (fn th => rewrite_tac[th])) >>
+  simp[mm_local_write_disjoint_commute]
+QED
+
+Theorem mm_local_zero_log_merge[local]:
+  d1 <= d2 /\ d2 <= d1+n1 /\
+  EVERY (\(d,bs). d + LENGTH bs <= d2 \/ d2+n2 <= d) ws ==>
+  write_memory_with_expansion d2 (REPLICATE n2 0w)
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+      (write_memory_with_expansion d1 (REPLICATE n1 0w) s) ws) =
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+    (write_memory_with_expansion d1
+      (REPLICATE (MAX (d1+n1) (d2+n2)-d1) 0w) s) ws
+Proof
+  strip_tac >> simp[mm_local_write_log_commute, mm_local_zero_write_merge]
+QED
+
 Theorem mm_local_write_pair_length[local]:
   LENGTH (write_memory_with_expansion d2 bs2
     (write_memory_with_expansion d1 bs1 s)).vs_memory =
@@ -3402,6 +3583,16 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem mm_local_trace_step_every[local]:
+  reachability_closed Inv ctx ==>
+  EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+    (trace_step [] d fuel ctx fn inst s)
+Proof
+  strip_tac >> drule (cj 1 mm_trace_root_inv) >>
+  disch_then (qspecl_then [`[]`, `d`, `fuel`, `fn`, `inst`, `s`] mp_tac) >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+
 (* Arbitrary predicates: retain the exact execution guards on trace tails. *)
 Theorem mm_local_trace_visit_every[local]:
   get_instruction bb s.vs_inst_idx = SOME inst ==>
@@ -3421,6 +3612,27 @@ Proof
   simp[EVERY_APPEND] >>
   Cases_on `step_inst fuel ctx inst s` >> simp[] >>
   Cases_on `is_terminator inst.inst_opcode` >> simp[]
+QED
+
+Theorem mm_local_trace_visit_root_every[local]:
+  reachability_closed Inv ctx /\
+  get_instruction bb s.vs_inst_idx = SOME inst ==>
+  (EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+     (trace_block [] d fuel ctx fn bb s) <=>
+   P fn inst s /\
+   (case step_inst fuel ctx inst s of
+      OK u => is_terminator inst.inst_opcode \/
+        EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+          (trace_block [] d fuel ctx fn bb
+            (u with vs_inst_idx := SUC s.vs_inst_idx))
+    | _ => T))
+Proof
+  strip_tac >>
+  `EVERY (\((p,d,id),f,i,t). p = [] ==> P f i t)
+     (trace_step [] d fuel ctx fn inst s)` by
+    (irule mm_local_trace_step_every >> metis_tac[]) >>
+  drule mm_local_trace_visit_every >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem mm_local_trace_enter_every[local]:
