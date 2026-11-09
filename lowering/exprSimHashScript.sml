@@ -25,6 +25,7 @@
  *)
 Theory exprSimHash
 Ancestors
+  exprSimAlloc
   allocLimits
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
@@ -276,19 +277,6 @@ Proof
   simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
-QED
-
-Theorem hash_alloc_buffer_labels[local]:
-  compile_alloc_buffer sz sa = (buf,sm) /\
-  run_inst_seq (emitted_insts sa sm) s = OK t ==>
-  t.vs_labels = s.vs_labels
-Proof
-  simp[contextTheory.compile_alloc_buffer_def, emit_op_def, comp_bind_def,
-       comp_return_def, comp_ignore_bind_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >> gvs[emitted_insts_def,
-       rich_listTheory.DROP_LENGTH_APPEND, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_alloca_def, AllCaseEqs()] >>
-  gvs[update_var_def]
 QED
 
 (* Allocate and stage one word, protecting every earlier allocation. *)
@@ -554,7 +542,9 @@ Theorem step_STATICCALL_sha256:
          (word_to_bytes (SHA_256_bytes bs) T) s) with
          vs_returndata := word_to_bytes (SHA_256_bytes bs) T))
 Proof
-  strip_tac >> simp[Once step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  strip_tac >>
+  pure_rewrite_tac [Once step_inst_base_def] >>
+  simp[mk_inst_def, eval_operand_def] >>
   irule (SRULE [mk_inst_def] sha256_exec_ext_call) >> simp[]
 QED
 
@@ -1421,9 +1411,10 @@ Proof
      simp[contextTheory.compile_alloc_buffer_def, emit_op_def, emit_void_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_id_def, fresh_var_def, emit_def] >> rpt strip_tac >>
-     gvs[emitted_insts_def, not_fresh_at_def, toString_inj,
-         rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
-         rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
+     gvs[] >>
+     simp[emitted_insts_def, not_fresh_at_def, toString_inj,
+          rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND1,
+          rich_listTheory.DROP_APPEND2, APPEND_ASSOC]) >>
   `local_ptrs_reserved cenv sn` by
     (gvs[local_ptrs_reserved_def, not_fresh_at_def] >>
      metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
@@ -1518,6 +1509,7 @@ Proof
     (gvs[expr_sim_pre_def] >>
      simp[well_typed_expr_def, well_typed_literal_def,
        well_formed_type_def, byte_widths_expr_def, alloc_limits_expr_def,
+       type_alloc_ok_def, type_memory_bytes_def,
        literal_alloc_ok_def, vyperTypeCallGraphTheory.int_calls_expr_def,
        supportedExprTraverseTheory.expr_has_evm_run_thm, type_bits_def,
        vfmConstantsTheory.word_size_def, vyperValueTheory.evaluate_type_def,
@@ -1610,8 +1602,6 @@ Proof
   disch_then (strip_assume_tac o SRULE [val_in_memory_def, LET_THM]) >>
   drule_all hash_post_footprint_bound >>
   simp[val_footprint_def] >> strip_tac >>
-  `w2n p + 32 + LENGTH bs < dimword (:256)` by
-    (irule (cj 1 literal_buffer_range) >> simp[] >> decide_tac) >>
   qexists_tac `w2n p` >> simp[] >> decide_tac
 QED
 
@@ -1633,8 +1623,6 @@ Proof
   disch_then (strip_assume_tac o SRULE [val_in_memory_def, LET_THM]) >>
   drule_all hash_post_footprint_bound >>
   simp[val_footprint_def] >> strip_tac >>
-  `w2n p + 32 + LENGTH str < dimword (:256)` by
-    (irule (cj 1 literal_buffer_range) >> simp[] >> decide_tac) >>
   qexists_tac `w2n p` >> simp[] >> decide_tac
 QED
 

@@ -90,10 +90,13 @@ Theorem compile_decode_args_next_var[local]:
 Proof
   Induct >- simp[compile_decode_args_def, comp_return_def] >>
   PairCases >> rpt gen_tac >>
+  Cases_on `h1` >> Cases_on `h2` >>
+  Cases_on `FLOOKUP cenv.ce_vars h0` >>
   simp[compile_decode_args_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, LET_THM] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[comp_bind_def, comp_ignore_bind_def,
-                            comp_return_def]) >>
+  TRY (rename1 `FLOOKUP cenv.ce_vars h0 = SOME loc` >>
+       Cases_on `var_location_decode_operand loc` >>
+       simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   imp_res_tac emit_op_next_var >> imp_res_tac emit_void_next_var >>
   imp_res_tac compile_abi_decode_to_buf_next_var >>

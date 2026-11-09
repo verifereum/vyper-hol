@@ -100,6 +100,18 @@ Proof
   rw[build_selectors_def] >> metis_tac[]
 QED
 
+(* Inverse provenance does not require selector uniqueness. *)
+Theorem build_selectors_mem_inv:
+  !tenv exts sel lbl htz.
+    MEM (sel, lbl, htz) (build_selectors tenv exts) ==>
+    ?mut nr rr name args dflts ret body.
+      MEM (mut, nr, rr, name, args, dflts, ret, body) exts /\
+      compute_selector tenv name (MAP SND args) = (sel, lbl, htz)
+Proof
+  gen_tac >> Induct >- simp[build_selectors_def] >>
+  PairCases >> rw[build_selectors_def] >> metis_tac[]
+QED
+
 Theorem linear_selectors_lt:
   !tenv exts.
     EVERY (\(sel, lbl). sel < 2 ** 32)

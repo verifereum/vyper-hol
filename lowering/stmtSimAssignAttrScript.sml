@@ -427,6 +427,7 @@ Theorem expr_add_unwrap_frag:
     emit_op ADD [bop; Lit (n2w off)] sm = (dst, sn) /\
     unwrap_value cenv vv sn = (op, su) /\
     fn_has_code sa su func /\ fn_inst_ids_distinct func /\
+    is_word_type (expr_type e) /\
     local_ptrs_reserved cenv sa /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es1) /\
@@ -448,9 +449,13 @@ Proof
   `ci_mono sm sn` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
   `ci_mono sn su` by metis_tac[ci_mono_unwrap_value, pairTheory.SND] >>
   `ci_mono sa sn` by (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
-  `fn_has_code sa sm func` by
+  `fn_has_code sa sm func /\ fn_has_code sn su func` by
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
   `local_ptrs_reserved cenv sn` by metis_tac[compiler_ci_mono_reserved] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sn z` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sm` >> fs[ci_mono_def] >>
+     drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
   qpat_x_assum `(do _ <- _; _ od) _ = _` mp_tac >> simp[bind_def] >>
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (raw, est)` >>
   Cases_on `raw` >> simp[]

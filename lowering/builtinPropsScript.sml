@@ -1,7 +1,7 @@
 (*
  * Builtin Function Properties (consolidated)
  *
- * Covers: hashing, math, simple, bytes, system, misc, create, convert, abi
+ * Covers: hashing, math, simple, bytes, misc, abi
  *
  * TOP-LEVEL:
  *   compile_keccak256_word_correct — compiled keccak256 outputs hash of word_to_bytes(w)
@@ -13,7 +13,6 @@
  *                                    reverts exactly on MIN_INT
  *   compile_builtin_abs_correct    — the same, as "outputs |v| or reverts"
  *   compile_builtin_len_correct    — compiled len outputs stored length via ptr_load
- *   compile_raw_create_correct     — compiled raw_create: OK or revert [CHEATED]
  *
  * Source: builtins/*.py
  * Lowering: builtin*Script.sml
@@ -2020,31 +2019,6 @@ Proof
   >> asm_rewrite_tac[]
 QED
 
-(* ===== System Builtins ===== *)
-
-(* TODO: compile_send_correct and compile_raw_create_correct need proofs
-   that reason about exec_ext_call / exec_ext_create, which invoke
-   verifereum's `run`.
-   Note: `run` always terminates (run_eq_tr from vfmDecreasesGasTheory),
-   so the NONE branch in extract_venom_result is dead for the run result.
-   The remaining difficulty is showing extract_venom_result returns SOME,
-   which requires the callee's context stack to be a singleton on return. *)
-
-(* send: CALL with zero-length data, asserts success *)
-Theorem compile_send_correct:
-  ∀ to_op value_op gas_op ss st st' tv vv gv.
-    compile_send to_op value_op gas_op st = ((), st') ∧
-    eval_operand to_op ss = SOME tv ∧
-    eval_operand value_op ss = SOME vv ∧
-    eval_operand gas_op ss = SOME gv ∧
-    fresh_vars_wrt st ss ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  cheat
-QED
-
 (* ===== Create Builtins ===== *)
 
 (* Historical admitted contract, refuted by rawCreateContractProbeTheory.
@@ -2249,6 +2223,3 @@ QED
 
 Finalise compile_extract32_correct;
 
-(* ===== Type Conversion ===== *)
-(* compile_type_convert_correct moved to builtinTypeConvertPropsScript.sml
-   for build time reasons (49 case arms × step_inst_base_def = slow). *)

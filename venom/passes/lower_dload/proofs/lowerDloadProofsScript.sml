@@ -385,10 +385,11 @@ QED
 Theorem ld_equiv_accounts_update[local]:
   !vars f s1 s2.
     ld_ok vars s1 s2 ==>
-    ld_equiv vars (halt_state (s1 with vs_accounts := f))
-                  (halt_state (s2 with vs_accounts := f))
+    ld_equiv vars (halt_state (set_returndata [] (s1 with vs_accounts := f)))
+                  (halt_state (set_returndata [] (s2 with vs_accounts := f)))
 Proof
-  rw[ld_ok_def, ld_equiv_def, halt_state_def, lookup_var_def]
+  rw[ld_ok_def, ld_equiv_def, halt_state_def, set_returndata_def,
+     lookup_var_def]
 QED
 
 (* pack_dret_dynamic changes only memory, which ld_ok deliberately omits. *)

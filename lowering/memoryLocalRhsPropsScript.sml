@@ -224,15 +224,6 @@ Proof
   simp[] >> decide_tac
 QED
 
-(* Result annotations are static: the interpreter uses the target type. *)
-Theorem eval_type_builtin_annotation:
-  !cx ty ty' tb target args.
-    eval_expr cx (TypeBuiltin ty tb target args) =
-    eval_expr cx (TypeBuiltin ty' tb target args)
-Proof
-  simp[Once evaluate_def, SimpLHS] >> simp[Once evaluate_def, SimpRHS]
-QED
-
 Theorem abi_encode_lowered_well_typed:
   !env a mid ty target sf.
     supported_tuple_type (expr_type a) /\ LENGTH mid = 4 /\
@@ -254,24 +245,6 @@ Proof
   `((vyper_abi_size_bound env.type_defs (expr_type a) + 4) + 31) DIV 32 <=
     (n + 31) DIV 32` by
     (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >> gvs[] >> decide_tac
-QED
-
-Theorem type_builtin_read_annotation_typed:
-  !cenv cx env es es' ty ty' tb target args v.
-    expr_sim_inv cenv cx env es /\
-    well_typed_expr env (TypeBuiltin ty' tb target args) /\
-    call_evaluation_safe cx (int_calls_expr (TypeBuiltin ty tb target args)) /\
-    (do r <- eval_expr cx (TypeBuiltin ty tb target args);
-        read_result cx r od) es = (INL v, es') ==>
-    value_runtime_typed env ty' v
-Proof
-  rpt strip_tac >>
-  `(do r <- eval_expr cx (TypeBuiltin ty' tb target args);
-       read_result cx r od) es = (INL v, es')` by
-    metis_tac[eval_type_builtin_annotation] >>
-  drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
-  disch_then (qspec_then `env` mp_tac) >>
-  gvs[expr_sim_inv_def, int_calls_expr_def, expr_type_def]
 QED
 
 Theorem word_size_monotone:
@@ -365,7 +338,7 @@ Proof
     gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
   gvs[value_runtime_typed_def] >>
-  metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size]
+  metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size]
 QED
 
 Theorem eval_empty_type_read:
@@ -540,7 +513,7 @@ Proof
      >- metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
      metis_tac[bytestring_memory_bound_evaluates]) >>
   qexists_tac `ltv` >> simp[] >>
-  metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size]
+  metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size]
 QED
 
 Theorem type_widens_to_has_length_word_source:

@@ -19,6 +19,7 @@
  *)
 Theory exprSimBufferEmptyExec
 Ancestors
+  exprSimAlloc
   exprSimBuffer exprSimBufferEmpty builtinSimple exprSimBufferStore
   exprSimLiteralBuffer exprSimOps freshWrites valueEncodingProps
   exprSimWordArgs emitHelperProps exprLoweringProps compileEnv context

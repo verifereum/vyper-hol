@@ -458,7 +458,7 @@ Definition asm_selfdestruct_def:
                               ben_acct.balance + bal
                           else s.as_accounts a) in
         AsmHalt (s with <|
-          as_stack := stk; as_accounts := accts' |>)
+          as_stack := stk; as_accounts := accts'; as_returndata := [] |>)
     | _ => AsmError "selfdestruct: stack underflow"
 End
 
@@ -558,6 +558,8 @@ Definition extract_asm_result_def:
              else s.as_transient in
            let ret_bytes = TAKE retSize returndata in
            let mem = asm_expand_memory (retOff + retSize) s.as_memory in
+           (* Overwrite only the returned prefix, as EVM does: short
+              returndata must not shift the memory after the buffer. *)
            let new_memory =
              TAKE retOff mem ++ ret_bytes ++
              DROP (retOff + LENGTH ret_bytes) mem in

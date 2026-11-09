@@ -15,4 +15,5 @@ Ancestors
   evalCompilerInternalFrames
   evalCompilerAllocationLimit
   evalCompilerConversions
+  evalCompilerConvertWiden
   evalCompilerRawCalls

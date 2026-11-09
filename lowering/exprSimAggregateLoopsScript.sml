@@ -246,7 +246,19 @@ Resume aggregate_make_tuple_sim[after_add]:
   `expr_sim_inv ce cx env es1` by
     (drule_all expr_body_pre_eval_result >> simp[]) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
-    metis_tac[exprSimAggregateLayoutTheory.expr_sim_inv_memory_size] >>
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `cs_extends sa sn /\ cs_extends sn su /\ cs_extends su sb` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `cs_extends sn sb` by (irule cs_extends_trans >> qexists_tac `su` >> simp[]) >>
+  `fn_has_code sn sb func` by
+    (qspecl_then [`sa`, `sn`, `sb`, `func`] mp_tac fn_has_code_split >>
+     simp[]) >>
+  `fn_has_code sn su func` by
+    (qspecl_then [`sn`, `su`, `sb`, `func`] mp_tac fn_has_code_split >>
+     simp[]) >>
+  `~is_word_type (expr_type h) ==> type_memory_size h' < 2 ** 64` by
+    (strip_tac >> drule_all exprSimHypsTheory.expr_body_pre_copy_ok >>
+     simp[]) >>
   drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
   qpat_x_assum `dst = Var _` SUBST_ALL_TAC >>
   qmatch_asmsub_abbrev_tac `eval_operand (Var d) r` >>
@@ -259,6 +271,10 @@ Resume aggregate_make_tuple_sim[after_add]:
               ci_mono_def, cs_extends_trans] >>
   `!z. op = Var z ==> not_fresh_at su z` by
     metis_tac[aggregate_child_unwrap_var, ci_mono_def] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sn z` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sm` >> fs[ci_mono_def] >>
+     drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
   `stmt_state_rel ctx func ce cx es1 r /\
    FLOOKUP r.vs_allocas inst.inst_id = SOME (b,asz)` by
     (fs[vv_post_def] >> metis_tac[]) >>
@@ -388,7 +404,9 @@ Resume aggregate_make_tuple_sim[slice_join]:
       b + asz <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es.scopes x` by simp[] >>
      `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       gvs[stmt_state_rel_def, state_rel_def] >>
+       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+        simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
+        strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
      simp[regions_disjoint_def]) >>
   `mem_bytes_at b asz r.vs_memory = mem_bytes_at b asz s0.vs_memory` by
@@ -399,7 +417,9 @@ Resume aggregate_make_tuple_sim[slice_join]:
       asz + b <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es1.scopes x` by simp[] >>
      `alloca_inv r /\ local_ptrs_rel func ce es1.scopes r` by
-       gvs[stmt_state_rel_def, state_rel_def] >>
+       (qpat_assum `stmt_state_rel ctx func ce cx es1 r` mp_tac >>
+        simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
+        strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
      simp[regions_disjoint_def, arithmeticTheory.ADD_COMM]) >>
   `mem_bytes_at p n s.vs_memory = mem_bytes_at p n t'.vs_memory` by

@@ -103,7 +103,8 @@ Theorem log_instruction_checked_conditions:
   !rpolicy unit prog Inv ctx cp func inst vs r (post:plan_state).
     codegen_assembly rpolicy unit = SOME prog /\
     codegen_memory_obligations Inv ctx cp /\ Inv ctx func inst vs /\
-    MEM func ctx.ctx_functions /\ MEM inst (fn_insts func) /\ MEM r cp.cp_regions /\
+    MEM func ctx.ctx_functions /\ MEM inst (fn_insts func) /\
+    ~in_revert_forward func vs /\ MEM r cp.cp_regions /\
     r.sr_spill_base <= post.ps_alloc.sa_spill_base /\
     post.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
     (!bytes. MEM (AsmPush bytes) prog ==> LENGTH bytes <= 32) /\
@@ -117,7 +118,8 @@ Proof
   rename1 `codegen_memory_obligations Inv ctx memory_plan` >>
   qsuff_tac `codegen_memory_obligations Inv ctx memory_plan /\
     Inv ctx func inst vs /\ MEM func ctx.ctx_functions /\
-    MEM inst (fn_insts func) /\ MEM r memory_plan.cp_regions /\
+    MEM inst (fn_insts func) /\ ~in_revert_forward func vs /\
+    MEM r memory_plan.cp_regions /\
     r.sr_spill_base <= post.ps_alloc.sa_spill_base /\
     post.ps_alloc.sa_next_offset <= r.sr_spill_end`
   >- (disch_then (mp_tac o MATCH_MP (GEN_ALL codegen_memory_obligations_local_reads)) >>

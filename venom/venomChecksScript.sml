@@ -13,5 +13,6 @@ Ancestors
   unitShapeChecks unitTransformChecks
   (* passes: call-frame allocation, effect order in the dead-function walk *)
   concretizeCallFrameRegression dftEffectOrderTest
-  (* execution of INVOKE with no arguments and of STOP after a call *)
-  invokeEmptyArgs stopReturndata
+  (* execution of INVOKE with no arguments, and return data after STOP and
+     SELFDESTRUCT *)
+  invokeEmptyArgs stopReturndata selfdestructReturnDataTest

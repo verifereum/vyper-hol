@@ -247,6 +247,20 @@ val stmt_ci_tac =
 
 val loop_ci_tac = RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> stmt_ci_tac;
 
+(* One compositional layer, so loop traversal is budgeted at script steps. *)
+val range_ci_step =
+  let val rws = ci_mono_return_helpers :: ci_mono_list_helpers ::
+                ci_mono_stmt_helpers :: ci_mono_compile_get_target_ptr ::
+                ci_mono_stmt_rws
+      val close = FIRST (map MATCH_ACCEPT_TAC
+        (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
+  in
+    FIRST [MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,
+           close, FIRST_ASSUM MATCH_ACCEPT_TAC,
+           IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >>
+    rpt conj_tac >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC
+  end;
+
 val cons_ci_tac =
   qpat_x_assum `!cs cenv. _ ==> !sa. ci_mono _ (SND (compile_stmt _ _ _ _ _))`
     (qspec_then `ARB with cs_current_insts := []`
@@ -282,7 +296,7 @@ Proof
    stmt_ci_tac,
    stmt_ci_tac,
    stmt_ci_tac,
-   loop_ci_tac,
+   suspend "range",
    loop_ci_tac,
    stmt_ci_tac,
    stmt_ci_tac,
@@ -293,6 +307,27 @@ Proof
    stmt_ci_tac,
    cons_ci_tac]
 QED
+
+Resume compile_stmt_ci_mono[range]:
+  first_x_assum (qspec_then `is_signed_type fty` assume_tac) >>
+  gvs[] >> gen_tac >> simp[Once compile_stmt_def] >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step >>
+  range_ci_step >> range_ci_step >> range_ci_step >> range_ci_step
+QED
+
+Finalise compile_stmt_ci_mono
 
 Theorem ci_mono_cs_mono:
   !m. (!sa. ci_mono sa (SND (m sa))) ==> cs_mono m

@@ -871,15 +871,20 @@ Proof
   Induct_on `es` >> rpt gen_tac >> strip_tac
   >- gvs[Once evaluate_def, return_def, constant_value_def] >>
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >> strip_tac >>
-  gvs[sum_CASE_rator, AllCaseEqs()] >>
+  simp[Once evaluate_def, bind_def] >>
+  simp[NoAsms, sum_CASE_rator, CaseEq "prod", CaseEq "sum", return_def] >>
+  strip_tac >>
   drule read_result_state >>
   disch_then SUBST_ALL_TAC >>
-  `constant_value mods imms h = SOME v''` by metis_tac[] >>
+  `s'' = st` by metis_tac[listTheory.MEM] >>
+  qpat_x_assum `s'' = st` SUBST_ALL_TAC >>
+  `constant_value mods imms h = SOME v''` by metis_tac[listTheory.MEM] >>
+  gvs[IgnAsm `!e pv next. _`, IgnAsm `!vs st'. _`] >>
   rename1 `eval_exprs cx es st = (INL tailvals,tailstate)` >>
   `tailstate = st /\ constant_values mods imms es = SOME tailvals` by metis_tac[] >>
+  `constant_value mods imms h = SOME v''` by metis_tac[] >>
   qpat_x_assum `!e pv next. _` kall_tac >>
-  gvs[return_def, constant_value_def]
+  simp[constant_value_def]
 QED
 
 Theorem constant_eval_expr_fold_agreement[local]:

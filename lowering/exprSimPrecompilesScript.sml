@@ -48,6 +48,7 @@
 
 Theory exprSimPrecompiles
 Ancestors
+  exprSimAlloc
   list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins
   exprSimLiteralBuffer abiDecodeStaticProps dftCommutation loweringHalt
   exprSimWordArgs exprSimOperators exprSimHash exprBopLowering exprLowering
@@ -1544,6 +1545,17 @@ Proof
   strip_tac >> gvs[] >> simp[emitted_insts_def, rich_listTheory.DROP_APPEND1]
 QED
 
+Theorem computed_suffix_staticcall_dispatch[local]:
+  eval_operand gp s = SOME gas /\ eval_operand ap s = SOME addr /\
+  eval_operand ip s = SOME ai /\ eval_operand np s = SOME an /\
+  eval_operand op s = SOME ro /\ eval_operand zp s = SOME rs ==>
+  step_inst_base (mk_inst id STATICCALL [gp; ap; ip; np; op; zp] outs) s =
+  exec_ext_call (mk_inst id STATICCALL [gp; ap; ip; np; op; zp] outs)
+    s gas addr 0w ai an ro rs T
+Proof
+  strip_tac >> simp[step_inst_base_def, mk_inst_def]
+QED
+
 Theorem computed_suffix_success:
   (do gas <- emit_op GAS [];
       success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit outsz];
@@ -1582,13 +1594,16 @@ Proof
     SOME (n2w s.vs_call_ctx.cc_gas:bytes32)` by
     simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
-  `step_inst_base ci sg = OK sc` by
-    (gvs[Abbr `ci`, mk_inst_def] >>
-     simp[step_inst_base_def, eval_operand_def] >> first_assum ACCEPT_TAC) >>
+  `step_inst_base ci sg =
+   exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T` by
+    (qunabbrev_tac `ci` >>
+     irule computed_suffix_staticcall_dispatch >> simp[eval_operand_def]) >>
+  `step_inst_base ci sg = OK sc` by simp[] >>
   `step_inst_base (mk_inst (sm.cs_next_id+2) ASSERT
      [Var (STRING #"%" (toString (sm.cs_next_var+1)))] []) sc = OK sc` by
-    simp[Abbr `sc`, step_inst_base_def, mk_inst_def, eval_operand_def,
-         lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+    (irule emitHelperPropsTheory.step_ASSERT_ok >> qexists_tac `1w` >>
+     simp[Abbr `sc`, eval_operand_def, lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
   simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
   simp[Once run_inst_seq_def] >>
   gvs[mk_inst_def] >>

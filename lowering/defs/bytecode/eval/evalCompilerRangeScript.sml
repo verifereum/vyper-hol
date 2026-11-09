@@ -1,9 +1,11 @@
 (* Range regression checks: the lowered operands, not the AST bound, select
-   folding/checks. Also execute the five corrected fixture ASTs in the source. *)
+   folding/checks, and a computed bound that is too small fails in both the
+   source and the target. Also execute the five corrected fixture ASTs in the
+   source. *)
 Theory evalCompilerRange
 Ancestors
   evalCompilerSubsetState compileVyper stmtLowering vyperCompiler
-  vyperInterpreter vyperContext alist integer_word
+  vyperInterpreter vyperContext alist integer_word venomExecSemantics
 Libs finite_mapLib computeLib wordsLib intReduce
 
 val () = computeLib.upd_compset add_finite_map_compset
@@ -23,7 +25,7 @@ Definition range_test_opcodes_def:
       (FLAT (MAP (\b. b.bb_instructions) cs.cs_blocks) ++ cs.cs_current_insts)
 End
 
-(* Positive bounds do not force runtime checks for literal operands. *)
+(* Source literals select static lowering. *)
 Theorem range_literal_operands_skip_checks:
   range_test_opcodes (BaseT (UintT 256))
     (Literal (BaseT (UintT 256)) (IntL 0))
@@ -39,7 +41,7 @@ Proof
   EVAL_TAC
 QED
 
-(* Either nonliteral operand forces SUB plus two checks, even at bound zero. *)
+(* Source names force SUB plus two checks, even at bound zero. *)
 Theorem range_nonliteral_operands_checked:
   FILTER (\opc. opc = SUB \/ opc = ASSERT)
     (range_test_opcodes (BaseT (UintT 256))
@@ -96,6 +98,42 @@ QED
 Theorem storage_scalar_loop_source_result:
   range_fixture_source_result storage_scalar_loop_program "set_add_in_loop"
     [IntV 4] = INL (IntV 7)
+Proof
+  EVAL_TAC
+QED
+
+Theorem range_empty_endpoint_checked:
+  FILTER (\opc. opc = SUB \/ opc = ASSERT)
+    (range_test_opcodes (BaseT (UintT 256))
+      (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+      (Literal (BaseT (UintT 256)) (IntL 2)) 1) = [SUB; ASSERT; ASSERT]
+Proof
+  EVAL_TAC
+QED
+
+Definition range_bound_failure_stmt_def:
+  range_bound_failure_stmt = For "i" (BaseT (UintT 256))
+    (Range (TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) [])
+           (Literal (BaseT (UintT 256)) (IntL 2))) 1 [Pass]
+End
+
+Theorem range_bound_failure_source:
+  FST (eval_stmt empty_evaluation_context range_bound_failure_stmt empty_state) =
+    INR (Error (RuntimeError "For too long"))
+Proof
+  EVAL_TAC
+QED
+
+Theorem range_bound_failure_target:
+  (case run_context 20
+    (FST (extract_context "entry"
+      (SND (emit_void STOP []
+        (SND (compile_stmt
+          (build_compile_env [] External Nonpayable "foo" [] NoneT
+            [range_bound_failure_stmt] F)
+          NoLoop NoneT range_bound_failure_stmt
+          (initial_compile_state "entry")))))))
+    (init_venom_state "entry") of Abort Revert_abort _ => T | _ => F)
 Proof
   EVAL_TAC
 QED

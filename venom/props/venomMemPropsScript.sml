@@ -33,6 +33,7 @@
  *   mstore_memory_nondecreasing       — MSTORE does not shrink memory
  *   mstore8_memory_nondecreasing      — MSTORE8 does not shrink memory
  *   lookup_var_write_memory_with_expansion — memory writes preserve variables
+ *   eval_operand_with_memory          — operand evaluation ignores memory
  *   eval_operand_write_memory_with_expansion — memory writes preserve operand evaluation
  *   write_memory_with_expansion_vs_allocas — memory writes preserve alloca map
  *   write_memory_with_expansion_vs_alloca_next — memory writes preserve next alloca offset
@@ -42,6 +43,8 @@
  *   write_memory_with_expansion_disjoint_read — disjoint write/read independence
  *   write_memory_with_expansion_regions_disjoint_read — regions_disjoint variant
  *   mstore_eq_write_mem               — MSTORE as write_memory_with_expansion
+ *   mstore8_eq_write_mem              — MSTORE8 as write_memory_with_expansion
+ *   extract_venom_result_memory       — a call result's memory is the returndata write
  *   mstore_disjoint_read              — disjoint MSTORE/read independence
  *   mload_mstore_disjoint             — disjoint 32-byte write/read independence
  *   mload_mstore8_disjoint            — disjoint 1-byte write / 32-byte read
@@ -364,6 +367,12 @@ Proof
   simp[lookup_var_def, write_memory_with_expansion_def, LET_THM]
 QED
 
+Theorem eval_operand_with_memory:
+  !op s m. eval_operand op (s with vs_memory := m) = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
 Theorem eval_operand_write_memory_with_expansion[simp]:
   ∀op off bytes s.
     eval_operand op (write_memory_with_expansion off bytes s) = eval_operand op s
@@ -472,6 +481,21 @@ Theorem mstore_eq_write_mem:
     mstore d v s = write_memory_with_expansion d (word_to_bytes v T) s
 Proof
   rw[mstore_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem mstore8_eq_write_mem:
+  mstore8 off v s = write_memory_with_expansion off [w2w v] s
+Proof
+  simp[mstore8_def, write_memory_with_expansion_def]
+QED
+
+Theorem extract_venom_result_memory:
+  extract_venom_result s output ro rz result = SOME (value,t) ==>
+  t.vs_memory = (write_memory_with_expansion ro
+    (TAKE rz t.vs_returndata) s).vs_memory
+Proof
+  simp[extract_venom_result_def, AllCaseEqs()] >> rpt strip_tac >>
+  pairarg_tac >> gvs[]
 QED
 
 Theorem mstore_disjoint_read:

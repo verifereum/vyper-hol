@@ -38,9 +38,8 @@ Proof
   simp[] >> qexists_tac `n` >> simp[]
 QED
 
-(* For over a range whose ends evaluate to integers without changing the
-   state and lower to their words without emitting code (literals,
-   max_value and the like): the loop variable's ALLOCA, the
+(* For over a range whose ends are source integer literals: the loop
+   variable's ALLOCA, the
    entry block, then the loop from the first counter value; on a normal
    finish the code ends at the start of the exit block.  The body's
    judgment is assumed for the environment declare_local gives, at the
@@ -60,6 +59,7 @@ Theorem compile_for_range_frag:
     eval_expr cx e2 es = (INL (Value (IntV n2)), es) /\
     (!s. lower_value compile_expr cenv fty e1 s = (Lit (i2w n1), s)) /\
     (!s. lower_value compile_expr cenv fty e2 s = (Lit (i2w n2), s)) /\
+    (?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) /\
     evaluate_type (get_tenv cx) fty = SOME tyv /\ type_memory_size tyv = 32 /\
     word_memory_type tyv /\
     32 <= type_memory_bytes cenv fty /\
@@ -105,9 +105,8 @@ Proof
   rename1 `compile_stmt _ _ _ _ sa = (uu, sb)` >>
   `uu = ()` by simp[oneTheory.one] >> gvs[] >>
   (* the code and the source loop *)
-  qspecl_then [`cenv`, `lctx`, `ty`, `id`, `fty`, `e1`, `i2w n1`, `e2`,
-               `i2w n2`, `bound`, `stmts`, `sa`, `sb`, `func`]
-    mp_tac compile_for_range_parts >>
+  drule compile_for_range_parts >>
+  disch_then (qspecl_then [`i2w n1`, `i2w n2`, `func`] mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   drule_all eval_stmt_for_range >> strip_tac >>
   drule_all declare_local_ptr >> strip_tac >>

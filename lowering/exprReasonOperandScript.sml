@@ -312,10 +312,22 @@ Theorem reason_builtin_bop[local]:
 Proof
   strip_tac >>
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
-  Cases_on `bop` >>
-  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  pop_assum mp_tac >> pop_assum mp_tac >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >> Cases_on `HD (TL args)` >> gvs[] >>
+      TRY (rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]) >>
+      rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+      metis_tac[reason_stack_result]) >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >>
+      Cases_on `bytestring_literal_hash (HD args)` >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `bop = Eq` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      metis_tac[reason_stack_result]) >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   metis_tac[reason_stack_result]
 QED
 
@@ -384,6 +396,15 @@ Proof
   metis_tac[reason_alloc_operand]
 QED
 
+Theorem reason_widen_copy_operand[local]:
+  compile_bytestring_widen_copy d v sz sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[reason_alloc_operand]
+QED
+
 Theorem reason_type_builtin_convert[local]:
   (!sa op sb. lower_value f cenv (expr_type (HD args)) (HD args) sa = (op,sb)
                ==> !l. op <> Label l) /\
@@ -392,7 +413,16 @@ Theorem reason_type_builtin_convert[local]:
 Proof
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  Cases_on `rt` >> gvs[] >>
+  qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
+  >- (strip_tac >> gvs[reason_result_shape_def]) >>
+  pop_assum kall_tac >> IF_CASES_TAC
+  >- (pop_assum kall_tac >> strip_tac >>
+      qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+      Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+      strip_tac >> gvs[reason_result_shape_def] >>
+      metis_tac[reason_widen_copy_operand]) >>
+  pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
@@ -477,6 +507,9 @@ Theorem reason_uint2str[local]:
 Proof
   simp[builtinStringsTheory.compile_uint2str_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
+  ntac 10 (pairarg_tac >> gvs[]) >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
 QED
 

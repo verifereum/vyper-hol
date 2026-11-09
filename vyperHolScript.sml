@@ -28,3 +28,12 @@ Ancestors
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
   (* codegen and compiler units: frame simulation, stack planning, unit checks *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  (* lowering: ABI encoder read windows, typed calldata decoding, entry
+     allocation frames and registration, nonreentrancy, byte-builtin and
+     concat memory, conversion from bytes, constructor bytestring decoding *)
+  abiEncoderWindowSourceRun ctorAbiActualBytesRun calldataFiniteTyped calldataAggregateTyped
+  actualDecoderPackaging actualRegistrationCode actualEntryAllocationFrame
+  allocaHistoryFragment nonreentrantEntry nonreentrantSource nonreentrantExit
+  builtinBytesMemory concatMemory exprSimConvertFromBytes
+  (* O1: lifting per-function pass facts to the stage contract *)
+  o1PassLift

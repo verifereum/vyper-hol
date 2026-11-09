@@ -26,6 +26,8 @@ Ancestors
   evalCompilerBytecodeNonreentrantInternalReturn
   evalCompilerBytecodeNonreentrantFallbackEarlyReturn
   evalCompilerAbiCodegen evalCompilerAbiTupleString
+  (* range lowering: literal and checked endpoints, computed bound failure *)
+  evalCompilerRange
   (* the same parity with the final assembly optimizer on *)
   evalCompilerBytecodeAsmOpt
   (* each fixture lowers to a unit of the shape the O1 source stage promises *)

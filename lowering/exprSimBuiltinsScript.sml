@@ -7,8 +7,8 @@
  * exprs_case of the operands, expr_vv_case of the builtin.  Row 3's word
  * builtins (exprSimWordBuiltins' word_builtin_case and compile_ceil_case),
  * rows 2 and 7 on exprSimHash's machinery, row 5 (here), row 6's account reads but
- * .code (in exprSimAccounts) and ecrecover are proved; the rest are
- * cheated, for the later #636 PRs.  Each #636 Builtins row is:
+ * .code (in exprSimAccounts), row 4's uint2str (by exprSimUint2Str) and
+ * ecrecover are proved; the rest are cheated, for the later #636 PRs.  Each #636 Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_case (by
  *     exprSimLen's compile_len_vv_case, and compile_len_ctor_code_case for
  *     an immutable in the constructor, unprovable for now, below),
@@ -40,8 +40,8 @@
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
  *   - compile_len_ctor_code_case, len of an immutable in the constructor:
- *     immutables_rel relates the immutable's first word to its whole
- *     value, not to its length.
+ *     nothing says the immutables buffer's base variable is 0, as
+ *     unwrap_ctor_immutable_word_sim (exprSimUnwrap).
  *   - compile_blockhash_case: the source raises a RuntimeError where
  *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
  *     hashes.
@@ -75,15 +75,18 @@ Ancestors
   vyperValueOperation venomState exprSimAccounts exprSimUnop
   exprSimOperators exprBopLowering builtinMisc venomExecSemantics venomInst
   exprSimCalldata exprSimCalldataSlice exprSimLen exprSimPrecompiles exprSimECArith
-  vyperValue exprLoweringProps vyperTyping
+  vyperValue exprLoweringProps vyperTyping exprSimUint2Str
 
 (* ===== Lengths and calldata ===== *)
 
 (* len of an operand in code, an immutable, in the constructor: the
-   lowering loads the immutable's first word with ILOAD, but immutables_rel
-   relates that word to typed_val_to_w256 of the whole value, not to its
-   length, so this does not hold as the definitions stand.  (At runtime it
-   is exprSimLen's compile_len_vv_case.) *)
+   lowering loads the immutable's length word with an MLOAD at the
+   immutables buffer's base variable plus the offset.  The constructor's
+   prologue sets that variable to 0, but stmt_state_rel says nothing of it
+   (immutable_base_zero is not one of its conjuncts), so this does not hold
+   as the definitions stand; unwrap_ctor_immutable_word_sim (exprSimUnwrap)
+   is cheated for the same reason.  (At runtime it is exprSimLen's
+   compile_len_vv_case.) *)
 Theorem compile_len_ctor_code_case:
   !nocalls ctx func cenv cx ann args.
     exprs_case nocalls ctx func cenv cx args /\ cenv.ce_is_ctor /\
@@ -260,12 +263,26 @@ Proof
   cheat
 QED
 
+(* uint2str(x): with buf the buffer (32 + 32 * word_size n bytes, n >= 78
+   by typing) and i digits stored so far, the k-th digit from the right
+   (k < i) sits at buf + n + 31 - k, written by MSTORE at buf + n - k,
+   whose zero bytes all lie below the digits stored before it.  The length
+   word goes at buf + n - i, just below the leading digit, so the value
+   occupies [buf + n - i, buf + n + 32) inside the buffer, which is what
+   vv_at's exact footprint 32 + i asks.  The zero path stores "0" at
+   buf + n + 31 and the length at buf + n - 1. *)
 Theorem compile_uint2str_case:
   !nocalls ctx func cenv cx ann n args.
     exprs_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Uint2Str n) args)
 Proof
-  cheat
+  rw[expr_vv_case_def] >>
+  `well_typed_expr env (Builtin ann (Uint2Str n) args)` by
+    gvs[expr_body_pre_def] >>
+  drule uint2str_expr_types >> strip_tac >> gvs[] >>
+  irule compile_uint2str_typed_vv_sim >>
+  conj_tac >- metis_tac[] >>
+  metis_tac[unop_operand_sim]
 QED
 
 (* ===== Chain and account reads ===== *)

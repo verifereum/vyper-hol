@@ -703,6 +703,12 @@ Definition subscript_type_def:
   subscript_type _ _ = NONE
 End
 
+Theorem subscript_type_value_int_shape:
+  subscript_type tv (ValueSubscript idx) = SOME ptv ==> ?i. idx = IntV i
+Proof
+  Cases_on `idx` >> Cases_on `tv` >> simp[subscript_type_def]
+QED
+
 val subscript_type_pre_def = cv_auto_trans_pre "subscript_type_pre" subscript_type_def;
 
 Theorem subscript_type_pre[cv_pre]:

@@ -32,7 +32,7 @@ Definition supported_declaration_header_def:
   supported_declaration_header tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
-        ~rr /\ (vis <> External ==> NULL defaults) /\
+        (vis <> External ==> NULL defaults) /\
         EVERY (supported_function_argument tops vis o SND) args /\
         supported_function_return tops vis ret
     | VariableDecl Private Storage name ty (SOME slot) =>
@@ -45,7 +45,10 @@ Definition supported_declaration_header_def:
         supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | StructDecl name fields =>
         EVERY (supported_place_type tops o SND) fields
-    | EventDecl name fields => T
+    | EventDecl name fields =>
+        (* Python rejects more than three indexed fields (EventT) *)
+        EVERY (supported_scalar_type o SND o FST) fields /\
+        LENGTH (FILTER I (MAP SND fields)) <= 3
     | InterfaceDecl name methods =>
         EVERY (supported_interface_signature tops) methods
     | _ => F
@@ -117,7 +120,7 @@ End
 Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
-  ~rr /\ (vis <> External ==> NULL defaults) /\
+  (vis <> External ==> NULL defaults) /\
   EVERY (supported_function_argument tops vis o SND) args /\
   supported_function_return tops vis ret
 Proof

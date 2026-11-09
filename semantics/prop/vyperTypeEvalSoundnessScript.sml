@@ -2611,8 +2611,9 @@ Proof
   simp[eval_result_typed_def, evaluate_type_def,
        expr_result_typed_def, expr_runtime_typed_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `expr_type e` >> gvs[is_int_type_def, evaluate_type_def,
-       AllCaseEqs(), value_result_typed_def] >>
+  (* drop the non-integer index types before unfolding the rest *)
+  Cases_on `expr_type e` >> gvs[is_int_type_def] >>
+  gvs[evaluate_type_def, AllCaseEqs(), value_result_typed_def] >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   drule_all extend_live_array_place_sound >> strip_tac >> simp[] >>
   Cases_on `res` >> gvs[] >> simp[eval_result_typed_def] >> metis_tac[]
@@ -3511,7 +3512,7 @@ Resume eval_scc_type_sound_results_mutual[If]:
   qpat_x_assum `st1 with scopes := FEMPTY::st1.scopes = st2` kall_tac >>
   conj_tac >- (
     rpt strip_tac >> qunabbrev_tac`P` >> BETA_TAC >>
-    simp[Abbr`st2`] >>
+    simp_tac (srw_ss()) [Abbr`st2`] >> ASM_REWRITE_TAC[] >>
     conj_tac >- (
       irule push_scope_preserves_state_well_typed >>
       qexistsl_tac [`st1`,`()`] >>
@@ -7834,7 +7835,10 @@ Resume eval_scc_type_sound_results_mutual[Exprs_cons]:
           qexists_tac `tv::tvs` >> simp[]) >>
       strip_tac >> gvs[]) >>
     strip_tac >> gvs[no_type_error_result_def]) >>
-  strip_tac >> gvs[no_type_error_result_def]
+  (* the expression raised: the induction hypotheses are not needed, and
+     gvs over them runs past the step budget *)
+  strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+  gvs[no_type_error_result_def]
 QED
 
 (* Each transition root has exactly one semantic key and one suspended goal. *)
@@ -7879,7 +7883,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Results_cons]:
   qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  simp[NoAsms, Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (drule_at (Pat `eval_expr _ _ _ = _`)) >>
@@ -9287,7 +9291,7 @@ Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
   strip_tac >>
   qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
   strip_tac >>
-  Cases_on `prefix_res` >> gvs[]
+  Cases_on `prefix_res` >> simp[] >> rpt BasicProvers.VAR_EQ_TAC
   >- (rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
         (INL prefix,prefix_st)` >>
       Cases_on `check_create_blueprint has_salt prefix prefix_st` >>

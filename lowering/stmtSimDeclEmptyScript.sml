@@ -288,7 +288,8 @@ Resume compile_annassign_empty_stmt_frag[success]:
      SOME (w2n w,type_memory_bytes cenv vtyp)` by
     simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
   `type_memory_size tyv <= type_memory_bytes cenv vtyp` by simp[] >>
-  drule_all annassign_empty_success_run >> strip_tac >>
+  drule_at (Pat `compile_expr _ _ _ _ = _`) annassign_empty_success_run >>
+  disch_then drule_all >> strip_tac >>
   `!tv es1. eval_expr cx e es = (INL tv,es1) ==> ?v. tv = Value v` by metis_tac[] >>
   drule_all annassign_word_top_ext >> strip_tac >>
   `!x. not_fresh_at sa x ==> x <> p /\ not_fresh_at sA x` by

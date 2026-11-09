@@ -259,6 +259,7 @@ Theorem compile_return_none_external_frag:
   !ctx cenv lctx ty st x st' nr nkey ut iv P Q R.
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) /\
     (!s. P s ==> R (Halt (halt_state (s with vs_returndata := [])))) ==>
     frag_exec ctx st st' P Q R
@@ -1265,6 +1266,7 @@ Proof
       exprLoweringPropsTheory.run_inst_seq_def, DROP_LENGTH_APPEND] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac [instruction_accessors, opcode_case_def] >>
   simp[exec_write2_def, eval_operand_def]
 QED
 
@@ -1603,6 +1605,7 @@ Theorem compile_return_none_external_unlock_frag:
   !ctx cenv lctx ty st x st' nr nkey ut iv P Q R.
     compile_stmt cenv lctx ty (Return NONE) st = (x, st') /\
     cenv.ce_return_pc = NONE /\
+    cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr /\ ~iv ==> ut) /\
     (!s ss. P s /\ ss.vs_returndata = [] /\
             ss.vs_accounts = s.vs_accounts /\

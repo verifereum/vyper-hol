@@ -1631,7 +1631,6 @@ Datatype:
   | ConvBytestringToDecimal num int int num (* divisor, out_lo, out_hi, in_maxlen *)
   | ConvBytestringToBytesM num       (* out_m *)
   | ConvBytestringCast num num       (* out_maxlen, in_maxlen *)
-  | ConvFixedToBytestring num       (* m: bytesM → Bytes[N] allocation *)
   | ConvIdentity
 End
 
@@ -1882,20 +1881,19 @@ Definition compile_type_convert_def:
           return v
        od
      else return v) ∧
-  (* Fixed bytes to bytestring: allocate length-prefixed buffer.
-     bytesM (word value) → Bytes[N] (memory pointer to [length][data]).
-     Mirrors Python: convert.py _to_Bytes for BytesM source *)
-  compile_type_convert v (ConvFixedToBytestring m) =
-    do buf_alloc <- compile_alloc_buffer 64;
-       let buf = buf_alloc.buf_operand in
-       do emit_void MSTORE [buf; Lit (n2w m)];
-          data_ptr <- emit_op ADD [buf; Lit 32w];
-          emit_void MSTORE [data_ptr; v];
-          return buf
-       od
-    od ∧
   (* Identity: no-op *)
   compile_type_convert v ConvIdentity = return v
+End
+
+(* Copy a bytestring of src_size buffer bytes into a new buffer of
+   dst_size bytes and return the new buffer.
+   Mirrors Python: convert.py _bytestring_convert_value (vyperlang/vyper#5338) *)
+Definition compile_bytestring_widen_copy_def:
+  compile_bytestring_widen_copy dst_size v src_size =
+    do buf <- compile_alloc_buffer dst_size;
+       compile_copy_memory buf.buf_operand v src_size;
+       return buf.buf_operand
+    od
 End
 
 (* ===== Unary Negation ===== *)
@@ -2002,16 +2000,10 @@ Definition mk_convert_op_def:
          | BaseT (BytesT (Fixed in_m)) => ConvBytesMToBytesM in_m m
          | FlagT _ => ConvIntToBytesM F 256 m
          | _ => ConvIdentity)
-    (* Bytestring/BytesM → Bytes[N]/String[N]:
-       - Bytestring source (is_bs=T): downcast length check only.
-       - BytesM source (is_bs=F): allocate length-prefixed buffer.
-       Mirrors Python: convert.py _to_Bytes, _to_String *)
-    | BaseT (BytesT (Dynamic out_n)) =>
-        (if is_bs then ConvBytestringCast out_n in_n
-         else ConvFixedToBytestring (fixed_bytes_size src_ty))
-    | BaseT (StringT out_n) =>
-        (if is_bs then ConvBytestringCast out_n in_n
-         else ConvFixedToBytestring (fixed_bytes_size src_ty))
+    (* Bytes[N]/String[N] targets take only bytestring sources.
+       Mirrors Python: convert.py to_bytes, to_string *)
+    | BaseT (BytesT (Dynamic out_n)) => ConvBytestringCast out_n in_n
+    | BaseT (StringT out_n) => ConvBytestringCast out_n in_n
     | _ => ConvIdentity
 End
 
@@ -3355,6 +3347,25 @@ Definition compile_type_builtin_dispatch_body_def:
          (let e1 = HD args in
           let src_ty = expr_type e1 in
           let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
+          (* A zero-capacity bytestring's buffer is its length word alone, so
+             loading its data word would read past it; its value is empty
+             and converts to 0. *)
+          if is_bytestring_type src_ty ∧ is_word_type ret_ty ∧
+             (lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) ∨
+              lowered_value_type cenv e1 = BaseT (StringT 0))
+          then (StackValue vv_ty (Lit 0w), st1)
+          (* Consumers read a bounded bytestring up to its type's size, past
+             a smaller source's buffer: copy the value into a buffer of the
+             target type (vyperlang/vyper#5338).  Python also copies an
+             unbounded source; the frontend has no unbounded bytestring
+             type, so that case can't arise. *)
+          else if is_bytestring_type src_ty ∧ is_bytestring_type ret_ty ∧
+             type_memory_bytes cenv (lowered_value_type cenv e1) <
+             type_memory_bytes cenv ret_ty
+          then as_stack_val vv_ty (compile_bytestring_widen_copy
+                 (type_memory_bytes cenv ret_ty) v
+                 (type_memory_bytes cenv (lowered_value_type cenv e1)) st1)
+          else
           case ret_ty of
             FlagT flag_nsid =>
               as_stack_val vv_ty (compile_type_convert v

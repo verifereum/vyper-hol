@@ -901,12 +901,6 @@ Termination
   simp[value_type_size_def]
 End
 
-Definition event_indexable_type_def:
-  event_indexable_type (BaseT _) = T /\
-  event_indexable_type (FlagT _) = T /\
-  event_indexable_type _ = F
-End
-
 (* Header checks apply in both checking modes, including constructors whose
    bodies are checked only in deployment mode. *)
 Definition function_header_ok_def:
@@ -922,6 +916,12 @@ Definition function_header_ok_def:
     (mut = Pure ==> ~nr) /\
     (* The fallback has no ABI argument-decoding entry block. *)
     (vis = External /\ name = "__default__" ==> NULL args)
+End
+
+Definition event_indexable_type_def:
+  event_indexable_type (BaseT _) = T /\
+  event_indexable_type (FlagT _) = T /\
+  event_indexable_type _ = F
 End
 
 (* ===== Loop iterables written by internal callees ===== *)

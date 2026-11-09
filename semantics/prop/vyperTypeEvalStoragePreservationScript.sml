@@ -2928,9 +2928,9 @@ Resume eval_scc_storage_preservation_results_mutual[For]:
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
   `env.type_defs = get_tenv cx` by
-    (qpat_x_assum `runtime_storage_consistent env cx st` mp_tac >>
-     simp[runtime_storage_consistent_def, runtime_consistent_def,
-          env_consistent_def, env_context_consistent_def]) >>
+    (drule runtime_storage_consistent_runtime >> strip_tac >>
+     drule vyperTypeExtCallCoreTheory.runtime_consistent_get_tenv >>
+     disch_then (ACCEPT_TAC o SYM)) >>
   `?env_after. type_stmts (extend_local env id typ F)
        ret_ty body' = SOME env_after` by
     (qpat_x_assum `IS_SOME (type_stmts _ _ _)` mp_tac >>
@@ -3839,6 +3839,9 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       qpat_x_assum `env_consistent env cx args_st` mp_tac >>
       simp[env_consistent_def, env_context_consistent_def]) >>
     `sig.param_types = MAP SND x''2 /\ sig.num_defaults = LENGTH x''3` by (
+      asm_x "actual_ih" kall_tac >>
+      asm_x "default_ih" kall_tac >>
+      asm_x "body_ih" kall_tac >>
       `fn_sigs_consistent env.fn_sigs cx` by
         gvs[env_consistent_def, env_context_consistent_def] >>
       drule_all fn_sigs_consistent_FLOOKUP_storage >> strip_tac >> gvs[]) >>
@@ -3951,8 +3954,11 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
     gvs[] >>
     Cases_on
       `bind_arguments (get_tenv cx) x''2 (actual_vs ++ dflt_vs)` >>
-    gvs[Excl "evaluate_type_def", lift_option_type_def, bind_apply,
-        return_def, raise_def] >>
+    simp_tac (srw_ss()) [] >>
+    qpat_x_assum `_ = (res,st')`
+      (mp_tac o SIMP_RULE (srw_ss())
+        [lift_option_type_def, bind_apply, return_def, raise_def]) >>
+    asm_rewrite_tac [] >> strip_tac >> gvs[] >>
     `LENGTH x''2 - LENGTH es <= LENGTH x''3 /\ LENGTH es <= LENGTH x''2` by (
       qpat_x_assum `type_check _ "IntCall args length" r = _` mp_tac >>
       simp[type_check_def, assert_def] >>
@@ -4063,8 +4069,13 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       `push_function (env_body.current_src,fn) call_env cx lock_st` >>
     rename1 `_ lock_st = (push_res,push_st)` >>
     Cases_on `push_res` >>
-    gvs[ignore_bind_apply, bind_apply, push_function_def,
-        return_def, raise_def] >>
+    qpat_x_assum `push_function _ _ _ _ = _`
+      (mp_tac o SIMP_RULE (srw_ss()) [push_function_def, return_def]) >>
+    simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
+    qpat_x_assum `_ = (res,st')`
+      (mp_tac o SIMP_RULE (srw_ss())
+        [ignore_bind_apply, bind_apply, return_def, raise_def]) >>
+    asm_rewrite_tac [] >> strip_tac >> gvs[] >>
     `runtime_storage_consistent env_body
        (cx with stk updated_by CONS (env_body.current_src,fn))
        (lock_st with scopes := [call_env])` by
@@ -4085,11 +4096,27 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       asm_x "body_ih" irule >>
       asm_x "actual_ih" kall_tac >> asm_x "default_ih" kall_tac >>
       asm "bind_call_env" assume_tac >>
-      gvs[type_check_def, assert_def, get_scopes_def, set_scopes_def,
-          lift_option_type_def, push_function_def, return_def,
-          protected_storage_creates_preserve_stk, AllCaseEqs()] >>
-      rpt (goal_assum (drule_at Any)) >>
-      simp[return_def] >> metis_tac[]) >>
+      simp_tac (srw_ss()) [protected_storage_creates_preserve_stk] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- (goal_assum (drule_at Any)) >>
+      simp_tac (srw_ss()) [lift_option_type_def, L "module_ok", return_def,
+                           CaseEq "option"] >>
+      goal_assum (drule_at Any) >>
+      simp_tac (srw_ss()) [L "lookup_ok", return_def] >>
+      goal_assum (drule_at Any) >>
+      simp_tac (srw_ss()) [] >>
+      rpt (CHANGED_TAC (goal_assum (drule_at Any))) >>
+      simp_tac (srw_ss()) [get_scopes_def, set_scopes_def, return_def,
+                           push_function_def] >>
+      qmatch_goalsub_rename_tac `DROP (LENGTH defaults - (LENGTH params - LENGTH es)) defaults` >>
+      `LENGTH defaults - (LENGTH params - LENGTH es) =
+       LENGTH es + LENGTH defaults - LENGTH params` by decide_tac >>
+      asm_rewrite_tac [] >>
+      rpt (CHANGED_TAC (goal_assum (drule_at Any))) >>
+      simp_tac (srw_ss()) [L "bind_call_env", return_def] >>
+      rpt (CHANGED_TAC (goal_assum (drule_at Any)))) >>
     (qpat_assum `_ = (res,st')` (mk_asm "suffix_eq") >>
      qmatch_asmsub_abbrev_tac `safe_cast actual_rtv _` >>
      qspecl_then
