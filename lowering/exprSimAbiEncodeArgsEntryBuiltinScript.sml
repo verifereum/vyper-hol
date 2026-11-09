@@ -3,7 +3,7 @@ Ancestors
   exprSimAbiEncodeArgsEntryCall exprSimAbiEncodeArgsEntryPlace
   builtinSimple builtinMisc builtinSystem externalEntryShape
   compileEnv exprSimAbiEncodeArgsEntryValue exprSimAbiEncodeArgsEntryPrim
-  exprSimAbiEncodeArgsEntry emitHelper exprLowering builtinMath builtinHashing
+  exprSimAbiEncodeArgsEntry emitHelper exprLowering builtinMath builtinHashing builtinStrings builtinBytes
 
 (* Let-bound compiler results use the same entry contract as monadic binds. *)
 Theorem abi_args_entry_safe_pair:
@@ -802,4 +802,41 @@ Proof
                             `off_alloc.buf_operand`, `st3b`] assume_tac) >>
   drule abi_args_entry_alloc_buffer >> strip_tac >>
   gvs[] >> metis_tac[cs_extends_trans]
+QED
+
+Theorem abi_args_entry_uint2str:
+  !v n sz a x b. compile_uint2str v n sz a = (x,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  ntac 3 gen_tac >> rewrite_tac[compile_uint2str_def] >>
+  ho_match_mp_tac abi_args_entry_emitted_prefix >> conj_tac
+  >- metis_tac[abi_args_entry_alloc_buffer] >>
+  rpt gen_tac >>
+  rpt (FIRST [irule abi_args_entry_extends_bind,
+              irule abi_args_entry_extends_ignore_bind] >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[emit_op_labels, emit_void_labels, emit_inst_labels,
+       fresh_var_labels, fresh_label_labels,
+       comp_return_def, cs_extends_refl] >>
+  irule abi_args_entry_extends_result >>
+  rpt gen_tac >> strip_tac >>
+  FIRST [drule cs_extends_new_block, drule cs_extends_fresh_label,
+         drule cs_extends_fresh_var, drule fragExecTheory.cs_extends_emit_inst] >> simp[]
+QED
+
+Theorem abi_args_entry_builtin_uint2str:
+  (!ce ty e a vv b. cfn ce ty e a = (vv,b) ==>
+    cs_extends a b /\ abi_args_entry_safe a b) ==>
+  !ce rt ty es n a vv b.
+    compile_builtin_dispatch_body cfn ce rt ty (Uint2Str n) es a = (vv,b) ==>
+    cs_extends a b /\
+    (a.cs_current_insts = [] ==> abi_args_entry_emitted a b)
+Proof
+  strip_tac >> ntac 5 gen_tac >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  ho_match_mp_tac abi_args_entry_emitted_pair >> conj_tac
+  >- metis_tac[abi_args_entry_lower_value] >>
+  gen_tac >> ho_match_mp_tac abi_args_entry_ptr_val >>
+  metis_tac[abi_args_entry_uint2str]
 QED
