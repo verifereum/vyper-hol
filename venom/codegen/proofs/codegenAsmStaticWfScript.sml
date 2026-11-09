@@ -123,22 +123,31 @@ Proof
   metis_tac[do_spill_at_fst_no_ref, pairTheory.FST]
 QED
 
+Theorem do_restore_fst_no_ref:
+  ~plan_ref l (FST (do_restore operand ps))
+Proof
+  simp[do_restore_def, plan_ref_fst_option, plan_ref_cons, plan_ref_nil] >>
+  simp[optionTheory.option_case_compute]
+QED
+
 Theorem do_restore_no_ref:
   do_restore operand ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  simp[do_restore_def] >>
-  Cases_on `FLOOKUP ps.ps_spilled operand` >>
-  simp[] >> rpt strip_tac >> gvs[plan_ref_def]
+  metis_tac[do_restore_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem restore_spilled_plan_fst_no_ref:
+  !operands ps. ~plan_ref l (FST (restore_spilled_plan operands ps))
+Proof
+  Induct >> simp[restore_spilled_plan_def, pairTheory.ELIM_UNCURRY,
+    plan_ref_append, plan_ref_nil, do_restore_fst_no_ref]
 QED
 
 Theorem restore_spilled_plan_no_ref:
   !operands ps ops ps'.
   restore_spilled_plan operands ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  Induct >- simp[restore_spilled_plan_def, plan_ref_def]
-  >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[plan_ref_append] >>
-  metis_tac[do_restore_no_ref]
+  metis_tac[restore_spilled_plan_fst_no_ref, pairTheory.FST]
 QED
 
 (* A fold only needs a one-step accumulator invariant. *)
@@ -171,24 +180,47 @@ Proof
   simp[pairTheory.FORALL_PROD, spill_accumulate_no_ref, SF SFY_ss]
 QED
 
+Theorem spill_fold_fst_no_ref:
+  ~plan_ref l acc_ops ==>
+  ~plan_ref l (FST (FOLDL (\(ops, offs, al) item.
+    (\(off, al'). (ops ++ [SOSpill off], SNOC off offs, al'))
+      (alloc_spill_slot al)) (acc_ops, offsets, al) items))
+Proof
+  Cases_on `FOLDL (\(ops, offs, al) item.
+    (\(off, al'). (ops ++ [SOSpill off], SNOC off offs, al'))
+      (alloc_spill_slot al)) (acc_ops, offsets, al) items` >>
+  metis_tac[spill_fold_no_ref, pairTheory.FST, pairTheory.PAIR]
+QED
+
+Theorem do_swap_fst_no_ref:
+  ~plan_ref l (FST (do_swap dist ps))
+Proof
+  simp[do_swap_def, pairTheory.ELIM_UNCURRY, plan_ref_fst_cond,
+    plan_ref_append, plan_ref_cons, plan_ref_nil,
+    SRULE [pairTheory.ELIM_UNCURRY] spill_fold_fst_no_ref] >>
+  simp[plan_ref_def, MEM_MAP]
+QED
+
 Theorem do_swap_no_ref:
   do_swap dist ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  simp[do_swap_def] >>
-  Cases_on `dist = 0` >- simp[plan_ref_def] >>
-  Cases_on `dist <= 16` >- (rw[] >> simp[plan_ref_def]) >>
-  simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  drule spill_fold_no_ref >> simp[plan_ref_def, MEM_MAP]
+  metis_tac[do_swap_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem do_dup_fst_no_ref:
+  ~plan_ref l (FST (do_dup dist ps))
+Proof
+  simp[do_dup_def, pairTheory.ELIM_UNCURRY, plan_ref_fst_cond,
+    plan_ref_append, plan_ref_cons, plan_ref_nil,
+    SRULE [pairTheory.ELIM_UNCURRY] spill_fold_fst_no_ref] >>
+  simp[plan_ref_def, MEM_FLAT, MEM_MAP, PULL_EXISTS,
+    COND_RAND, COND_RATOR]
 QED
 
 Theorem do_dup_no_ref:
   do_dup dist ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  simp[do_dup_def] >> IF_CASES_TAC >- (rw[] >> simp[plan_ref_def]) >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  drule spill_fold_no_ref >>
-  simp[plan_ref_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
-  rpt IF_CASES_TAC >> simp[]
+  metis_tac[do_dup_fst_no_ref, pairTheory.FST]
 QED
 
 (* Sequential generators concatenate their output chunks. *)
@@ -213,18 +245,6 @@ Proof
   rw[Once reduce_depth_plan_def, AllCaseEqs()] >>
   gvs[plan_ref_def] >>
   metis_tac[plan_pair_bind_no_ref, do_spill_at_no_ref, plan_ref_def]
-QED
-
-Theorem do_restore_fst_no_ref:
-  ~plan_ref l (FST (do_restore operand ps))
-Proof
-  Cases_on `do_restore operand ps` >> metis_tac[do_restore_no_ref, pairTheory.FST]
-QED
-
-Theorem do_swap_fst_no_ref:
-  ~plan_ref l (FST (do_swap dist ps))
-Proof
-  Cases_on `do_swap dist ps` >> metis_tac[do_swap_no_ref, pairTheory.FST]
 QED
 
 Theorem reduce_depth_plan_fst_no_ref:
@@ -273,8 +293,8 @@ QED
 Theorem reorder_plan_no_ref:
   reorder_plan dfg target_ops ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  simp[reorder_plan_def] >> strip_tac >> gen_tac >>
-  drule reorder_fold_no_ref >> simp[plan_ref_def]
+  rw[reorder_plan_def] >>
+  drule reorder_fold_no_ref >> simp[plan_ref_nil]
 QED
 
 Theorem popmany_swap_accumulate_no_ref:
@@ -284,9 +304,8 @@ Theorem popmany_swap_accumulate_no_ref:
      next_ps with ps_stack := stack_pop 1 next_ps.ps_stack))
     (if dist = 0 then ([], ps) else do_swap dist ps)))
 Proof
-  IF_CASES_TAC >- simp[plan_ref_append, plan_ref_def] >>
-  pairarg_tac >> simp[plan_ref_append, plan_ref_def] >>
-  metis_tac[do_swap_no_ref, plan_ref_def]
+  simp[pairTheory.ELIM_UNCURRY, plan_ref_fst_cond,
+    plan_ref_append, plan_ref_cons, plan_ref_nil, do_swap_fst_no_ref]
 QED
 
 Theorem popmany_accumulate_no_ref:
@@ -322,18 +341,127 @@ QED
 Theorem popmany_individual_no_ref:
   popmany_individual to_pop ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  simp[popmany_individual_def] >> strip_tac >> gen_tac >>
-  drule popmany_fold_no_ref >> simp[plan_ref_def]
+  rw[popmany_individual_def] >>
+  drule popmany_fold_no_ref >> simp[plan_ref_nil]
+QED
+
+Theorem popmany_individual_fst_no_ref:
+  ~plan_ref l (FST (popmany_individual to_pop ps))
+Proof
+  Cases_on `popmany_individual to_pop ps` >>
+  metis_tac[popmany_individual_no_ref, pairTheory.FST]
+QED
+
+Theorem popmany_plan_fst_no_ref:
+  ~plan_ref l (FST (popmany_plan to_pop ps))
+Proof
+  Cases_on `to_pop` >>
+  simp[popmany_plan_def, pairTheory.ELIM_UNCURRY, plan_ref_fst_cond,
+    plan_ref_append, plan_ref_cons, plan_ref_nil,
+    popmany_individual_fst_no_ref, do_swap_fst_no_ref]
 QED
 
 Theorem popmany_plan_no_ref:
   popmany_plan to_pop ps = (ops, ps') ==> !l. ~plan_ref l ops
 Proof
-  Cases_on `to_pop` >> simp[popmany_plan_def, plan_ref_def] >>
-  rpt IF_CASES_TAC >> simp[]
-  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-      drule do_swap_no_ref >> simp[plan_ref_def]) >>
-  metis_tac[popmany_individual_no_ref, plan_ref_def]
+  metis_tac[popmany_plan_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem emit_one_input_fst_refs:
+  plan_ref l (FST (emit_one_input opc live operand ps)) ==>
+  operand = Label l /\ opc <> INVOKE
+Proof
+  Cases_on `operand` >>
+  simp[emit_one_input_def, pairTheory.ELIM_UNCURRY,
+    plan_ref_fst_cond, plan_ref_fst_option, plan_ref_append,
+    plan_ref_cons, plan_ref_nil, do_restore_fst_no_ref, do_dup_fst_no_ref] >>
+  simp[optionTheory.option_case_compute]
+QED
+
+Theorem emit_one_input_refs:
+  emit_one_input opc live operand ps = (ops, ps') /\ plan_ref l ops ==>
+  operand = Label l /\ opc <> INVOKE
+Proof
+  metis_tac[emit_one_input_fst_refs, pairTheory.FST]
+QED
+
+Theorem emit_input_plan_fst_refs:
+  !operands ps.
+  plan_ref l (FST (emit_input_plan opc operands live ps)) ==>
+  MEM (Label l) operands /\ opc <> INVOKE
+Proof
+  Induct >> simp[emit_input_plan_def, pairTheory.ELIM_UNCURRY,
+    plan_ref_append, plan_ref_nil] >>
+  metis_tac[emit_one_input_fst_refs]
+QED
+
+Theorem emit_input_plan_refs:
+  emit_input_plan opc operands live ps = (ops, ps') /\ plan_ref l ops ==>
+  MEM (Label l) operands /\ opc <> INVOKE
+Proof
+  metis_tac[emit_input_plan_fst_refs, pairTheory.FST]
+QED
+
+Theorem optimistic_swap_plan_fst_no_ref:
+  ~plan_ref l (FST (optimistic_swap_plan dfg inst live term ps))
+Proof
+  simp[optimistic_swap_plan_def, plan_ref_fst_cond, plan_ref_fst_option,
+    plan_ref_nil, do_swap_fst_no_ref] >>
+  simp[optionTheory.option_case_compute]
+QED
+
+Theorem optimistic_swap_plan_no_ref:
+  optimistic_swap_plan dfg inst live term ps = (ops, ps') ==>
+  !l. ~plan_ref l ops
+Proof
+  metis_tac[optimistic_swap_plan_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem generate_phi_plan_fst_no_ref:
+  ~plan_ref l (FST (generate_phi_plan inst live halting ps))
+Proof
+  simp[generate_phi_plan_def, pairTheory.ELIM_UNCURRY,
+    plan_ref_fst_option, plan_ref_fst_cond, plan_ref_append,
+    plan_ref_cons, plan_ref_nil, do_dup_fst_no_ref, popmany_plan_fst_no_ref] >>
+  simp[optionTheory.option_case_compute]
+QED
+
+Theorem generate_phi_plan_no_ref:
+  generate_phi_plan inst live halting ps = (ops, ps') ==>
+  !l. ~plan_ref l ops
+Proof
+  metis_tac[generate_phi_plan_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem prepare_params_plan_fst_no_ref:
+  ~plan_ref l (FST (prepare_params_plan liveness fn ps))
+Proof
+  simp[prepare_params_plan_def, pairTheory.ELIM_UNCURRY,
+    plan_ref_fst_cond, plan_ref_append, plan_ref_nil,
+    popmany_plan_fst_no_ref, optimistic_swap_plan_fst_no_ref]
+QED
+
+Theorem prepare_params_plan_no_ref:
+  prepare_params_plan liveness fn ps = (ops, ps') ==>
+  !l. ~plan_ref l ops
+Proof
+  metis_tac[prepare_params_plan_fst_no_ref, pairTheory.FST]
+QED
+
+Theorem clean_stack_plan_fst_no_ref:
+  ~plan_ref l (FST (clean_stack_plan liveness cfg fn bb ps))
+Proof
+  simp[clean_stack_plan_def, list_case_compute, pairTheory.ELIM_UNCURRY,
+    plan_ref_fst_cond, plan_ref_fst_option, plan_ref_append,
+    plan_ref_nil, popmany_plan_fst_no_ref] >>
+  simp[optionTheory.option_case_compute]
+QED
+
+Theorem clean_stack_plan_no_ref:
+  clean_stack_plan liveness cfg fn bb ps = (ops, ps') ==>
+  !l. ~plan_ref l ops
+Proof
+  metis_tac[clean_stack_plan_fst_no_ref, pairTheory.FST]
 QED
 
 Theorem codegen_asm_static_wf:
