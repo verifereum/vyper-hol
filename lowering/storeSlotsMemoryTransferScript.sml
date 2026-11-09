@@ -1,7 +1,7 @@
 (* Execution agreement and memory-safe transport for sparse stores. *)
 Theory storeSlotsMemoryTransfer
 Ancestors
-  storeSlotsMemoryFootprint storeSlotsMemoryPaths exprSimAbiGasBridge abiEncoderPrefixSafety
+  storeSlotsObserverMemory storeSlotsMemoryFootprint storeSlotsMemoryPaths exprSimAbiGasBridge abiEncoderPrefixSafety
   fragGasPath fragGasPathMem gasCount abiEncoderObserver fragExec venomState list
   simplifyCfgMergeRuns memSafeRun exprSimHash placeStoreSlots placeStoreStorage
 
