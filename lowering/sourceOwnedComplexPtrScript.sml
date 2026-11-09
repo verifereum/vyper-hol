@@ -1,10 +1,11 @@
 (* Repeat-compatible navigation for the owned complex decoder fold. *)
 Theory sourceOwnedComplexPtr
 Ancestors sourceRecursiveComplexPtr sourceOwnedArrayConstructorPtr
-  canonicalMemberTraversalPtr calldataScratchTuplePtr
+  canonicalMemberTraversalPtr
   venomExecSemantics venomState abiDecoderMemberSetup abiDecoderContract
   decoderMemberPrefixPtr abiDecoderDynamicLoopSetup fragExec abiDecoderFrame
-  exprLoweringProps bodyPtrDefs list abiDecoderMemberCode abiDecoderLoop compileEnv arithmetic finite_map
+  exprLoweringProps bodyPtrDefs list abiDecoderMemberCode abiDecoderLoop compileEnv arithmetic finite_map abiDecoderMemberCons
+  abiDecoderCode abiEncoder emitHelperProps
 
 Theorem owned_member_navigation_ptr:
   abi_decode_member_setup (Var root) src CALLDATALOAD (Lit 0w)
@@ -96,4 +97,30 @@ Proof
       qexists_tac `id` >> metis_tac[LESS_LESS_EQ_TRANS]) >>
   qpat_x_assum `!p k. MEM (p,k) gp ==> _` drule >> strip_tac >>
   qexists_tac `id` >> metis_tac[LESS_EQ_TRANS]
+QED
+
+(* The owned fold carries semantic member sizes, not member_infos.  Its
+   successor-code argument therefore works for arbitrary compiled triples. *)
+Theorem complex_elems_child_exit_phi:
+  compile_abi_decode_to_buf childdst childsrc opc hi di middle = ((),end_st) /\
+  compile_abi_decode_complex_elems dst src opc hi elems ao vo end_st = ((),final) /\
+  middle.cs_blocks = st.cs_blocks /\ abi_decode_source_opcode opc /\
+  fn_has_code end_st final func /\
+  (st.cs_blocks = final.cs_blocks \/
+    !bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) ==>
+  middle.cs_blocks = end_st.cs_blocks \/
+  !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0
+Proof
+  Cases_on `elems`
+  >- (simp[Once compile_abi_decode_to_buf_def, comp_return_def] >> metis_tac[]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  PairCases_on `h` >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[abi_decode_complex_member_phases] >>
+  simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  drule_all abi_decoder_member_cons_code >> strip_tac >>
+  drule_all abi_decoder_member_exit_phi >> simp[]
 QED
