@@ -99,7 +99,7 @@ Proof
     (simp[Abbr `raw`,jump_to_def,mstore_def,update_var_def,
        write_memory_with_expansion_def,allocas_from_def] >>
      gvs[allocas_from_def] >> metis_tac[]) >>
-  simp[] >> suspend "remaining"
+  asm_simp_tac bool_ss [] >> suspend "remaining"
 QED
 
 Resume prefix_complete_backedge_support_pair[remaining]:
@@ -382,7 +382,9 @@ Resume prefix_complete_child_iteration[finish]:
  conj_tac
  >- (rpt strip_tac >>
      `not_fresh_at middle x` by
-       (gvs[abi_decoder_older_vars_def,not_fresh_at_def,IN_DEF] >> decide_tac) >>
+       (qpat_x_assum `abi_decoder_older_vars next x` mp_tac >>
+         simp_tac (srw_ss()) [abi_decoder_older_vars_def,not_fresh_at_def] >>
+         metis_tac[LESS_EQ_TRANS]) >>
      metis_tac[]) >>
  conj_tac >- simp[] >>
  conj_tac >- metis_tac[IN_UNION] >>
@@ -392,7 +394,9 @@ Resume prefix_complete_child_iteration[finish]:
  conj_tac
  >- (rpt strip_tac >>
      `not_fresh_at middle x` by
-       (gvs[abi_decoder_older_vars_def,not_fresh_at_def,IN_DEF] >> decide_tac) >>
+       (qpat_x_assum `abi_decoder_older_vars next x` mp_tac >>
+         simp_tac (srw_ss()) [abi_decoder_older_vars_def,not_fresh_at_def] >>
+         metis_tac[LESS_EQ_TRANS]) >>
      metis_tac[]) >>
  conj_tac >- metis_tac[] >>
  metis_tac[]
