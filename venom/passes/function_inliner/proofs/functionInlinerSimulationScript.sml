@@ -3,7 +3,7 @@ Theory functionInlinerSimulation
 Ancestors
   functionInlinerOperational functionInlinerCallBoundary
   functionInlinerReturnTransport functionInlinerFuel functionInlinerSiteLayout
-  functionInlinerPhiTransport
+  functionInlinerPhiTransport functionInlinerFmp
   venomExecSemantics
   functionInlinerFrame functionInlinerDefs venomState venomInst venomWf list pred_set
 
