@@ -39,9 +39,10 @@ Proof
           comp_ignore_bind_def, comp_return_def, pairTheory.UNCURRY]) >>
   pop_assum SUBST1_TAC >> simp[Once compile_stmt_def] >>
   irule ci_mono_bind_after >> simp[] >>
-  ci_mono_chain_tac
+  Cases_on `cenv.ce_return_pc` >> simp[] >>
+  FIRST [ci_mono_chain_tac
     [ci_mono_return_helpers, ci_mono_emit_op, ci_mono_compile_alloc_buffer,
-     cj 1 ci_mono_typed_memory_family] >>
+     cj 1 ci_mono_typed_memory_family]] >>
   FIRST [simp [ci_mono_comp_return, ci_mono_return_helpers, ci_mono_emit_op,
                ci_mono_compile_alloc_buffer, cj 1 ci_mono_typed_memory_family]]
 QED
