@@ -52,6 +52,9 @@ Theorem staged_region_typed_copy_path_mem:
     (!a k. (a+k <= w2n dw \/ w2n dw + type_memory_size dtv <= a) /\
       (a+k <= w2n tw \/ w2n tw+n <= a) ==>
       mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+    (!op w. eval_operand op s = SOME w /\
+      (!x. op = Var x ==> not_fresh_at sa x) ==> eval_operand op u = SOME w) /\
     stmt_state_rel ctx fn ce cx es u /\ alloca_history fn u /\
     alloca_history fn t /\ LENGTH u.vs_memory <= LENGTH t.vs_memory /\
     (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;

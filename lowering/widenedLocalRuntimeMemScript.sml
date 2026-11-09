@@ -3,7 +3,7 @@ Theory widenedLocalRuntimeMem
 Ancestors
   exprSimMemDefs exprSimHyps exprSimHypsDefs memoryLocalRhsProps bodySim
   loweringPosts valueEncoding vyperValue valueTypingMemoryProps
-  localCopyDestinationMem
+  localCopyDestinationMem widenedLocalEndpointMem
 Libs monadsyntax
 
 Theorem widened_local_source_memory[local]:
