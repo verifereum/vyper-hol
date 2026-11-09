@@ -298,6 +298,106 @@ Proof
   gvs[sym_frame_inv_def, sym_kinds_ok_def]
 QED
 
+Theorem do_swap_shallow_symbolic_prefix_facts:
+  !d ps ops ps' initial_fmp lo.
+  do_swap d ps = (ops,ps') /\ d <= 16 /\ d < LENGTH ps.ps_stack ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  prefix_spill_wf initial_fmp lo ops ps /\
+  EVERY is_prefix_op ops /\
+  EVERY (\op. !l n. op <> SOPushOfst l n) ops /\
+  (!off. ~MEM (SOSpill off) ops)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `d = 0` >>
+  gvs[stackPlanOpsTheory.do_swap_def, prefixExecTheory.prefix_wf_def,
+      prefixExecTheory.stack_op_wf_def, prefixSimTheory.is_prefix_op_def,
+      mixedPrefixSimTheory.prefix_spill_wf_def, mixedPrefixSimTheory.spill_op_wf_def]
+QED
+
+Theorem sym_do_swap_shallow_frame_sim:
+  !cp d ps ops ps' initial_fmp p env fn ret srest ss ctx labs0 cs r.
+  do_swap d ps = (ops,ps') /\ d <= 16 /\ d < LENGTH ps.ps_stack /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all do_swap_shallow_symbolic_prefix_facts >>
+  disch_then (qspecl_then [`initial_fmp`, `SND (compute_label_offsets p)`]
+    strip_assume_tac) >>
+  rename1 `MEM r cplan.cp_regions` >>
+  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    (r.sr_spill_base <= b /\ b < r.sr_spill_end) /\
+    context_spill_byte cplan b` by simp[] >>
+  drule_all planAlignTheory.do_swap_align >> strip_tac >>
+  drule_all sym_prefix_ops_frame_sim >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >> gvs[]
+QED
+
+Theorem do_spill_at_symbolic_prefix_shape:
+  !d ps ops ps' lo.
+  do_spill_at d ps = (ops,ps') /\ d <= 16 /\ d < LENGTH ps.ps_stack ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  EVERY is_prefix_op ops /\ EVERY (\op. !l n. op <> SOPushOfst l n) ops
+Proof
+  rpt gen_tac >> strip_tac >>
+  `1 <= LENGTH ps.ps_stack` by decide_tac >>
+  drule_all planWfTheory.do_spill_at_wf_len >> simp[] >> strip_tac >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >> Cases_on `d = 0` >>
+  gvs[stackPlanOpsTheory.do_spill_at_def, stackPlanOpsTheory.do_spill_tos_def,
+      prefixSimTheory.is_prefix_op_def, AllCaseEqs()]
+QED
+
+Theorem sym_do_spill_at_frame_sim:
+  !cp d ps ops ps' initial_fmp p env fn ret srest ss ctx labs0 cs r base.
+  do_spill_at d ps = (ops,ps') /\ d <= 16 /\ d < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  plan_slots_bounded base ps /\
+  (!off. MEM (SOSpill off) ops ==> off < dimword(:256)) /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= base /\ ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  sym_frame_inv p env ctx cp fn ret srest labs0 ps cs ss /\
+  asm_static_wf p /\
+  asm_block_at p cs.as_pc (execute_plan initial_fmp ops) ==>
+  ?cs' ss'.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p
+      (LENGTH (execute_plan initial_fmp ops)) cs = AsmOK cs' /\
+    sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_frame_inv p env ctx cp fn ret srest labs0 ps' cs' ss' /\
+    cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all (Q.ISPEC `SND (compute_label_offsets p)`
+    (Q.GEN `lo` (SPEC_ALL do_spill_at_symbolic_prefix_shape))) >>
+  disch_then (qspec_then `p` strip_assume_tac) >>
+  drule_all reorderSimTheory.do_spill_at_prefix_spill_wf >>
+  disch_then (qspecl_then [`initial_fmp`, `SND (compute_label_offsets p)`]
+    strip_assume_tac) >>
+  drule_all planSpillBoundsTheory.do_spill_at_slots_bounded >> strip_tac >>
+  rename1 `MEM r cplan.cp_regions` >>
+  `!off b. MEM (SOSpill off) ops /\ in_mem_range off 32 b ==>
+    (r.sr_spill_base <= b /\ b < r.sr_spill_end) /\
+    context_spill_byte cplan b` by
+    (fs[planSpillBoundsTheory.ops_spill_bounded_def, in_mem_range_def,
+        contextCodegenRelTheory.context_spill_byte_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  drule_all sym_prefix_ops_frame_sim >> strip_tac >>
+  qexistsl_tac [`cs'`, `ss'`] >> simp[] >>
+  drule reorderSimTheory.do_spill_at_relevant_align_layout >>
+  disch_then (qspecl_then [`initial_fmp`, `d`, `SND (compute_label_offsets p)`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `sym_frame_inv _ _ _ _ _ _ _ _ (apply_prefix_ops _ _ _ _) _ _`
+    mp_tac >> pure_rewrite_tac[sym_frame_inv_def, sym_kinds_ok_def] >>
+  qpat_x_assum `(apply_prefix_ops _ _ _ _).ps_stack = _` SUBST1_TAC >>
+  qpat_x_assum `(apply_prefix_ops _ _ _ _).ps_spilled = _` SUBST1_TAC >>
+  rewrite_tac[]
+QED
+
 (* A branch condition cannot carry either class of symbolic label. *)
 Theorem sym_jnz_condition_kind:
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
