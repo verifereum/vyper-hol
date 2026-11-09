@@ -5127,6 +5127,83 @@ Proof
   simp[venomExecSemanticsTheory.mcopy_def, write_as_replace]
 QED
 
+(* Byte compatibility, not disjointness, is needed for an overlapping discharge. *)
+Theorem mm_local_payload_replace_merge[local]:
+  d1 <= d2 /\ d2 <= d1 + LENGTH bs1 /\
+  d1 + LENGTH merged = MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) merged /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-d1) merged) /\
+  d1 + LENGTH merged <= LENGTH mem ==>
+  replace_bytes d2 bs2 (replace_bytes d1 bs1 mem) =
+  replace_bytes d1 merged mem
+Proof
+  strip_tac >>
+  `LENGTH bs1 <= LENGTH merged /\ d2-d1 + LENGTH bs2 <= LENGTH merged` by
+    (gvs[arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `!i. i < LENGTH bs1 ==> EL i bs1 = EL i merged` by
+    metis_tac[EL_TAKE] >>
+  `!i. i < LENGTH bs2 ==> EL i bs2 = EL (i + (d2-d1)) merged` by
+    (rpt strip_tac >> qpat_x_assum `bs2 = _` (fn th => once_rewrite_tac[th]) >>
+     simp[EL_TAKE, EL_DROP]) >>
+  rw[LIST_EQ_REWRITE, replace_bytes_def, LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP] >>
+  rw[EL_APPEND_EQN, EL_TAKE, EL_DROP, LENGTH_APPEND, LENGTH_TAKE, LENGTH_DROP] >>
+  gvs[EL_DROP, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mm_local_payload_write_merge[local]:
+  d1 <= d2 /\ d2 <= d1 + LENGTH bs1 /\
+  d1 + LENGTH merged = MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) merged /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-d1) merged) ==>
+  write_memory_with_expansion d2 bs2 (write_memory_with_expansion d1 bs1 s) =
+  write_memory_with_expansion d1 merged s
+Proof
+  strip_tac >> simp[write_as_replace] >>
+  `d1 + LENGTH bs1 <= LENGTH (expand_mem s.vs_memory (d1 + LENGTH bs1))` by
+    simp[expand_mem_ge] >>
+  simp[expand_replace, venomStateTheory.venom_state_component_equality,
+       mm_local_expand_mem_max] >>
+  irule mm_local_payload_replace_merge >> simp[expand_mem_ge]
+QED
+
+Theorem mm_local_payload_log_merge[local]:
+  d1 <= d2 /\ d2 <= d1 + LENGTH bs1 /\
+  d1 + LENGTH merged = MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) merged /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-d1) merged) /\
+  EVERY (\(d,bs). d + LENGTH bs <= d2 \/ d2 + LENGTH bs2 <= d) ws ==>
+  write_memory_with_expansion d2 bs2
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+      (write_memory_with_expansion d1 bs1 s) ws) =
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+    (write_memory_with_expansion d1 merged s) ws
+Proof
+  strip_tac >>
+  drule_all mm_local_payload_write_merge >>
+  disch_then (qspec_then `s` assume_tac) >>
+  simp[mm_local_write_log_commute]
+QED
+
+(* Runtime discharge is at the later representative, not scanner flush time. *)
+Theorem mm_local_payload_late_discharge[local]:
+  d1 <= d2 /\ d2 <= d1 + LENGTH bs1 /\
+  d1 + LENGTH merged = MAX (d1 + LENGTH bs1) (d2 + LENGTH bs2) /\
+  bs1 = TAKE (LENGTH bs1) merged /\
+  bs2 = TAKE (LENGTH bs2) (DROP (d2-d1) merged) /\
+  EVERY (\(d,bs). d + LENGTH bs <= d1 \/ d1 + LENGTH bs1 <= d) ws ==>
+  write_memory_with_expansion d2 bs2
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st)
+      (write_memory_with_expansion d1 bs1 s) ws) =
+  write_memory_with_expansion d1 merged
+    (FOLDL (\st (d,bs). write_memory_with_expansion d bs st) s ws)
+Proof
+  strip_tac >>
+  drule_all mm_local_payload_write_merge >> strip_tac >>
+  drule mm_local_write_log_commute >>
+  disch_then (qspec_then `s` (fn th => once_rewrite_tac[GSYM th])) >>
+  simp[]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
