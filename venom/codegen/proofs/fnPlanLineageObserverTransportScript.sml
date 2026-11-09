@@ -2,6 +2,21 @@ Theory fnPlanLineageObserverTransport
 Ancestors fnPlanLineageWide fnPlanLineagePhiResources fnPlanLineageNativeTerminal
 Libs stackPlanGenTheory stackModelTheory stackPlanOpsTheory listTheory rich_listTheory
 
+Theorem nonentry_setup_resource_absent:
+  !lv cfg fn bb ps ops qs v.
+    bb <> HD fn.fn_blocks /\
+    ~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled /\
+    (if bb = HD fn.fn_blocks then prepare_params_plan lv fn ps
+     else if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+       clean_stack_plan lv cfg fn bb ps else ([],ps)) = (ops,qs) ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `LENGTH (cfg_preds_of cfg bb.bb_label) = 1` >> gvs[] >>
+  drule fnPlanLineageChronologicalPrefixTheory.clean_stack_plan_inventory >>
+  disch_then (qspec_then `Var v` mp_tac) >> gvs[dead_stack_marker_def]
+QED
+
 Theorem get_params_mem:
   !insts inst. MEM inst (get_params insts) ==>
     MEM inst insts /\ is_param_opcode inst.inst_opcode
@@ -2334,6 +2349,42 @@ Resume native_ordinary_suffix_production[nondefining]:
 QED
 
 Finalise native_ordinary_suffix_production
+
+Theorem native_ordinary_suffix_computed_available:
+  !fn bb dfg p incoming j before w.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    p+j < LENGTH (non_param_insts bb) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label (bb_is_halting bb)
+      (LENGTH (get_params bb.bb_instructions)+p) (LENGTH bb.bb_instructions)
+      (DROP p (non_param_insts bb)) incoming j before /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label
+       (LENGTH (get_params bb.bb_instructions)+p)) ==>
+       MEM (Var v) incoming.ps_stack \/ Var v IN FDOM incoming.ps_spilled) /\
+    (!i. i < j ==> (EL i (DROP p (non_param_insts bb))).inst_opcode <> JMP /\
+      (EL i (DROP p (non_param_insts bb))).inst_opcode <> PHI) /\
+    MEM (Var w) (compute_operands (EL j (DROP p (non_param_insts bb)))) ==>
+    MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EL j (DROP p (non_param_insts bb)) =
+    EL (LENGTH (get_params bb.bb_instructions)+p+j) bb.bb_instructions` by
+    (drule_all fnPlanLineageCallersTheory.ready_block_suffix_index >>
+     gvs[listTheory.EL_DROP, AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  `!u. MEM u (live_vars_at (liveness_analyze fn) bb.bb_label
+      (LENGTH (get_params bb.bb_instructions)+p+j)) ==>
+    MEM (Var u) before.ps_stack \/ Var u IN FDOM before.ps_spilled` by
+    (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ j before`)
+       fnPlanLineageEntryProductionTheory.native_ordinary_interval_available >>
+     disch_then (qspecl_then [`bb`,`p`] mp_tac) >> simp[] >>
+     gvs[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  drule fnPlanLineageEntryProductionTheory.analyzed_live_coverage_computed_operands >>
+  disch_then (qspecl_then [`bb`,`LENGTH (get_params bb.bb_instructions)+p+j`,`before`] mp_tac) >>
+  disch_then (qspec_then `w` mp_tac) >>
+  (impl_tac >- (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+    disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+    gvs[] >> decide_tac)) >> gvs[]
+QED
 
 Theorem native_defined_ordinary_suffix_demand_support:
   !fn bb dfg p incoming k qs v.
