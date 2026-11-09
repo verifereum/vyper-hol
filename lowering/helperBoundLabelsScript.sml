@@ -1154,14 +1154,6 @@ Proof
   irule bound_labels_bind >> simp[bound_labels_emit_op, bound_labels_emit_void]
 QED
 
-Theorem bound_labels_raw_log:
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_raw_log n ptr_op len topics s))))
-Proof
-  simp[compile_raw_log_def, bound_labels_emit_void]
-QED
-
 Theorem bound_labels_raw_revert:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
