@@ -6951,6 +6951,139 @@ Proof
   `n <= mm_local_rep_index is gs x` by metis_tac[] >> BETA_TAC >> decide_tac
 QED
 
+Theorem mm_local_canonical_pending_append[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  n < LENGTH is /\
+  EVERY (\j. SUC n <= mm_local_rep_index is gs j) (mm_local_pending_indices is gs n) /\
+  (EL n is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n < r /\ r < LENGTH is ==>
+  mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]
+Proof
+  strip_tac >>
+  `n <= LENGTH is` by decide_tac >>
+  drule_all mm_local_canonical_pending_keep >>
+  `FILTER (\j. SUC n <= mm_local_rep_index is gs j) (mm_local_pending_indices is gs n) =
+   mm_local_pending_indices is gs n` by metis_tac[FILTER_EQ_ID] >>
+  strip_tac >>
+  `MEM n (mm_local_pending_indices is gs (SUC n))` by
+    (rewrite_tac[mm_local_pending_indices_mem] >>
+     `SUC n <= r` by decide_tac >>
+     conj_tac >- decide_tac >> conj_tac >- asm_rewrite_tac[] >>
+     qexistsl [`g`, `r`] >> asm_rewrite_tac[]) >>
+  qpat_x_assum `MEM n _` mp_tac >>
+  qpat_x_assum `_ = FILTER (\j. j < n) _` mp_tac >>
+  pure_rewrite_tac[mm_local_pending_indices_def, rich_listTheory.COUNT_LIST_SNOC,
+    rich_listTheory.SNOC_APPEND, FILTER_APPEND] >>
+  qmatch_goalsub_abbrev_tac `FILTER P (COUNT_LIST n)` >>
+  qmatch_goalsub_abbrev_tac `FILTER (\j. j < n) (FILTER Q (COUNT_LIST n))` >>
+  `FILTER (\j. j < n) (FILTER Q (COUNT_LIST n)) = FILTER Q (COUNT_LIST n)` by
+    (rewrite_tac[FILTER_EQ_ID, EVERY_MEM, MEM_FILTER, MEM_COUNT_LIST] >> simp[]) >>
+  simp[NoAsms, FILTER_APPEND, COND_RAND, MEM_FILTER, MEM_COUNT_LIST] >>
+  simp[] >>
+  qpat_x_assum `FILTER _ (mm_local_pending_indices is gs n) = _` mp_tac >>
+  pure_rewrite_tac[mm_local_pending_indices_def] >>
+  qunabbrev_tac `P` >>
+  qpat_x_assum `is = _` SUBST_ALL_TAC >>
+  qpat_x_assum `gs = _` SUBST_ALL_TAC >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+
+Theorem mm_local_canonical_bulk_defer[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ mm_local_history is H (SUC n) /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  EVERY (\j. SUC n <= mm_local_rep_index is gs j) (mm_local_pending_indices is gs n) /\
+  MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n < r /\ r < LENGTH is /\
+  (EL n is).inst_opcode = MCOPY /\
+  (EL n is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [(EL n is).inst_id] |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c /\
+  mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs n) (H n) t ==>
+  read_memory (w2n src) (w2n len) (H n) = read_memory (w2n src) (w2n len) t /\
+  mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs (SUC n)) (H (SUC n)) t
+Proof
+  strip_tac >>
+  `n <= LENGTH is /\ n <= SUC n` by decide_tac >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]` by
+    (irule mm_local_canonical_pending_append >> simp[] >> metis_tac[]) >>
+  `!j. MEM j (mm_local_pending_indices is gs n) ==> j < n /\ ?h g r d bs.
+    mm_local_write_capture is H (SUC n) j = SOME (d,bs) /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n <= r /\ r < LENGTH is /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length` by
+    (rpt strip_tac >> drule_all mm_local_canonical_pending_owner >> strip_tac >>
+     qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+       (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+     qexistsl [`h`, `g'`, `r'`, `d`, `bs`] >> gvs[]) >>
+  drule_all mm_local_indexed_bulk_pending_birth >> simp[]
+QED
+
+Theorem mm_local_canonical_store_defer_post_phis[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\ mm_local_history is H (SUC n) /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  EVERY (\j. SUC n <= mm_local_rep_index is gs j) (mm_local_pending_indices is gs n) /\
+  MEM g gs /\ MEM (EL n is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n < r /\ r < LENGTH is /\
+  (EL n is).inst_opcode = MSTORE /\ (EL n is).inst_operands = [Lit dst; Var v] /\
+  h = phi_prefix_length bb.bb_instructions /\ h <= n /\
+  LENGTH states = SUC (n-h) /\
+  eval_phis s bb.bb_instructions = OK s_phi /\
+  EL 0 states = s_phi with vs_inst_idx := h /\
+  (!r. r < n-h ==>
+    ~is_terminator (EL (h+r) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+r) bb.bb_instructions) (EL r states) = OK t /\
+        EL (SUC r) states = t with vs_inst_idx := SUC (EL r states).vs_inst_idx) /\
+  H n = EL (n-h) states /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  FLOOKUP ss.ss_loads v = SOME src /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL n is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]) |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) 32)) c /\
+  mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs n) (H n) t ==>
+  read_memory src 32 (H n) = read_memory src 32 t /\
+  mm_local_pending (mm_local_write_capture is H (SUC n))
+    (mm_local_pending_indices is gs (SUC n)) (H (SUC n)) t
+Proof
+  strip_tac >>
+  `n <= LENGTH is /\ n <= SUC n` by decide_tac >>
+  `mm_local_pending_indices is gs (SUC n) = mm_local_pending_indices is gs n ++ [n]` by
+    (irule mm_local_canonical_pending_append >> simp[] >> metis_tac[]) >>
+  `!j. MEM j (mm_local_pending_indices is gs n) ==> j < n /\ ?h g r d bs.
+    mm_local_write_capture is H (SUC n) j = SOME (d,bs) /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n <= r /\ r < LENGTH is /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length` by
+    (rpt strip_tac >> drule_all mm_local_canonical_pending_owner >> strip_tac >>
+     qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+       (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+     metis_tac[]) >>
+  drule_all mm_local_indexed_store_pending_post_phis >> simp[]
+QED
+
 Theorem mm_local_two_copy_read[local]:
   mm_local_history is H (n+2) /\
   (EL n is).inst_opcode = MCOPY /\
