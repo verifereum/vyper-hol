@@ -509,7 +509,8 @@ Proof
 QED
 
 Theorem compile_materialize_vv_owned_sim:
-  compile_materialize_vv ce (expr_type e) vv sm = (dst,sb) /\
+  compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
+  expr_body_pre ce cx env e es_pre /\
   vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
   stmt_state_rel ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -519,13 +520,20 @@ Theorem compile_materialize_vv_owned_sim:
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   read_result cx tvv es' = (INL v,es') /\
   ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
-  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
   type_memory_size tv < 2 ** 64 /\
   type_memory_size tv + 64 < dimword (:256) ==>
   frag_exec ctx sm sb (\s. s = r)
-    (\s. expr_post ctx func ce cx e es sa sb s0 es' v dst s /\
+    (\s. stmt_state_rel ctx func ce cx es' s /\
+      wb_frame ce es es' sa s0 s /\
+      expr_val_rel cx (lowered_value_type ce e) v dst s /\
+      expr_val_at ce cx (lowered_value_type ce e) sa sb es' v dst s /\
       sm.cs_next_id < sb.cs_next_id /\
       ?w. eval_operand dst s = SOME w /\
         FLOOKUP s.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_size tv) /\
@@ -533,12 +541,92 @@ Theorem compile_materialize_vv_owned_sim:
         (!name b len. local_region ce es'.scopes s name b len ==>
            w2n w + type_memory_size tv <= b \/ b + len <= w2n w)) R
 Proof
-  cheat
+  strip_tac >> drule materialize_compile_trace >> strip_tac >>
+  `ci_mono sm mid /\ ci_mono mid su /\ ci_mono su sb` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+      exprLoweringPropsTheory.ci_mono_unwrap_value,
+      exprLoweringPropsTheory.ci_mono_compile_store_memory, pairTheory.SND] >>
+  `cs_extends sm mid /\ cs_extends mid su /\ cs_extends su sb` by
+    gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `cs_extends mid sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sm mid func /\ fn_has_code mid sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `fn_has_code mid su func /\ fn_has_code su sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `sm.cs_next_id <= mid.cs_next_id` by gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `type_memory_bytes ce (lowered_value_type ce e) < dimword (:256)` by decide_tac >>
+  drule_all materialize_alloc_vv_sim >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  `local_ptrs_reserved ce mid` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sm` >> gvs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `sa.cs_next_id <= mid.cs_next_id /\
+   (!x. vv_operand vv = Var x ==> not_fresh_at mid x)` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
+  `lookup_var p u = SOME w` by gvs[venomStateTheory.eval_operand_def] >>
+  drule_all materialize_unwrap_owned_sim >>
+  disch_then (qspec_then `R` assume_tac) >>
+  qpat_x_assum `frag_exec ctx sm mid _ _ R`
+    (mp_then Any irule frag_exec_then) >> simp[] >>
+  qpat_x_assum `frag_exec ctx mid su _ _ R`
+    (mp_then Any irule frag_exec_then) >> simp[] >>
+  qx_gen_tac `z` >> strip_tac >>
+  suspend "store_continuation"
 QED
 
+Resume compile_materialize_vv_owned_sim[store_continuation]:
+  `sa.cs_next_var <= mid.cs_next_var` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  drule_all materialize_rebase_post >> strip_tac >>
+  `local_ptrs_reserved ce su /\ not_fresh_at su p /\
+   sa.cs_next_var <= su.cs_next_var /\ sm.cs_next_id < sb.cs_next_id` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+               not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS,
+               arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `!x. src = Var x ==> not_fresh_at su x` by
+    (rpt strip_tac >> irule exprOperandVarTheory.compiler_unwrap_value_var >>
+     qexistsl [`ce`, `src`, `mid`, `vv`] >> simp[] >>
+     Cases_on `vv` >> gvs[vv_operand_def]) >>
+  `!name b len. local_region ce es'.scopes z name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` mp_tac >>
+     disch_then (qspecl_then [`name`, `b`, `len`] mp_tac) >>
+     `local_region ce es'.scopes u name b len` by
+       (qpat_assum `expr_post _ _ _ _ _ es' _ _ u _ _ _ _`
+          (mp_then Any strip_assume_tac expr_post_frame) >>
+        irule exprSimPropsTheory.local_region_frame >>
+        conj_tac
+        >- (qexists_tac `func` >>
+            gvs[vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+                state_rel_def]) >>
+        qexistsl [`mid`, `es'.scopes`, `z`] >>
+        gvs[wb_frame_def, not_fresh_at_def]) >>
+     simp[regions_disjoint_def]) >>
+  `!name b len. local_region ce es.scopes s0 name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ z _ _ _ ==> _` irule >>
+     qexists_tac `name` >> irule exprSimPropsTheory.local_region_frame_fwd >>
+     qexistsl [`s0`, `sa`, `es.scopes`] >>
+     drule expr_post_frame >> simp[wb_frame_def]) >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          inst.inst_id = sm.cs_next_id` by
+    (goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def]) >>
+  `compile_store_memory ce src (Var p) (lowered_value_type ce e)
+     (lowered_value_type ce e) su = ((),sb)` by metis_tac[] >>
+  drule_all materialize_store_owned_post_sim >>
+  disch_then (qspec_then `R` mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_conseq) >>
+  simp[] >> metis_tac[]
+QED
+Finalise compile_materialize_vv_owned_sim
 
 Theorem compile_materialize_vv_sim:
-  compile_materialize_vv ce (expr_type e) vv sm = (dst,sb) /\
+  compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
+  expr_body_pre ce cx env e es_pre /\
   vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
   stmt_state_rel ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -548,16 +636,25 @@ Theorem compile_materialize_vv_sim:
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   read_result cx tvv es' = (INL v,es') /\
   ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
-  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+  (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
+         ~is_word_type (post_value_type ce e) ==>
+         type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
   type_memory_size tv < 2 ** 64 /\
   type_memory_size tv + 64 < dimword (:256) ==>
   frag_exec ctx sm sb (\s. s = r)
-    (\s. expr_post ctx func ce cx e es sa sb s0 es' v dst s /\
+    (\s. stmt_state_rel ctx func ce cx es' s /\
+      wb_frame ce es es' sa s0 s /\
+      expr_val_rel cx (lowered_value_type ce e) v dst s /\
+      expr_val_at ce cx (lowered_value_type ce e) sa sb es' v dst s /\
       ?w. eval_operand dst s = SOME w /\
         FLOOKUP s.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_size tv) /\
         val_in_memory tv v (w2n w) s.vs_memory) R
 Proof
-  cheat
+  strip_tac >> drule_all compile_materialize_vv_owned_sim >>
+  disch_then (qspec_then `R` mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >> metis_tac[]
 QED
