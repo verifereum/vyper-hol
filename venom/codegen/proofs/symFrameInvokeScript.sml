@@ -511,6 +511,269 @@ Proof
                   finite_mapTheory.FLOOKUP_DRESTRICT]
 QED
 
+Theorem sym_scratch_push:
+  off < dimword (:256) ==>
+  sym_step p env (AsmPush (encode_num_bytes off)) ss =
+  SymOK (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
+                   sym_stack := Val (n2w off) :: ss.sym_stack |>)
+Proof
+  strip_tac >>
+  `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes off)) = n2w off` by
+    (mp_tac (Q.SPEC `n2w off` (GEN_ALL strongPrefixSimTheory.push_encode_roundtrip)) >> simp[]) >>
+  simp[sym_step_def, stackOpAsmSimTheory.asm_step_push_ok, sym_lift_def,
+       asm_next_def, sym_state_component_equality]
+QED
+
+Theorem sym_scratch_spill:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPush (encode_num_bytes off); AsmOp "MSTORE"] /\
+  ss.sym_stack = sv :: stk /\ off < dimword (:256) ==>
+  ?ss'. sym_steps p env 2 ss = SymOK ss' /\ ss'.sym_stack = stk /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    mem_sval_at ss'.sym_mem_labels off sv /\
+    (!b. ~in_mem_range off 32 b ==>
+         FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
+  simp[sym_steps_compute, sym_scratch_push, asm_next_def] >>
+  simp[sym_step_def, sym_step_op_def] >>
+  qmatch_goalsub_abbrev_tac `sym_mstore mid` >>
+  `?ss'. sym_mstore mid = SymOK ss' /\ ss'.sym_stack = stk /\
+     ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+     mem_sval_at ss'.sym_mem_labels off sv /\
+     (!b. ~in_mem_range off 32 b ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
+    (mp_tac (Q.INST [`ss` |-> `mid`] sym_mstore_slot) >>
+     simp[Abbr `mid`]) >>
+  gvs[]
+QED
+
+Theorem sym_scratch_restore_label:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPush (encode_num_bytes off); AsmOp "MLOAD"] /\
+  off < dimword (:256) /\ mem_sval_at ss.sym_mem_labels off (Lab l d) ==>
+  ?ss'. sym_steps p env 2 ss = SymOK ss' /\
+    ss'.sym_stack = Lab l d :: ss.sym_stack /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
+  simp[sym_steps_compute, sym_scratch_push, asm_next_def] >>
+  simp[sym_step_def, sym_step_op_def] >>
+  qmatch_goalsub_abbrev_tac `sym_mload mid` >>
+  mp_tac (Q.INST [`ss` |-> `mid`, `stk` |-> `ss.sym_stack`]
+                 sym_mload_slot_label) >>
+  simp[Abbr `mid`] >> strip_tac >> gvs[]
+QED
+
+Theorem sym_scratch_restore_word:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPush (encode_num_bytes off); AsmOp "MLOAD"] /\
+  off < dimword (:256) /\ mem_sval_at ss.sym_mem_labels off (Val w) ==>
+  ?ss' v. sym_steps p env 2 ss = SymOK ss' /\
+    ss'.sym_stack = Val v :: ss.sym_stack /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
+  simp[sym_steps_compute, sym_scratch_push, asm_next_def] >>
+  simp[sym_step_def, sym_step_op_def] >>
+  qmatch_goalsub_abbrev_tac `sym_mload mid` >>
+  mp_tac (Q.INST [`ss` |-> `mid`, `stk` |-> `ss.sym_stack`]
+                 sym_mload_slot_word) >>
+  simp[Abbr `mid`] >> strip_tac >> gvs[]
+QED
+
+Theorem sym_scratch_spill_cons_compose:
+  sym_steps p env 2 ss = SymOK mid /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+  mem_sval_at mid.sym_mem_labels off sv /\
+  (!b. ~in_mem_range off 32 b ==>
+    FLOOKUP mid.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b) /\
+  sym_steps p env n mid = SymOK last /\ last.sym_stack = stk /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + n /\
+  LIST_REL (mem_sval_at last.sym_mem_labels) offs vals /\
+  (!b. (!a. MEM a offs ==> ~in_mem_range a 32 b) ==>
+    FLOOKUP last.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b) /\
+  (!a b. MEM a offs /\ in_mem_range off 32 b ==> ~in_mem_range a 32 b) ==>
+  sym_steps p env (n + 2) ss = SymOK last /\ last.sym_stack = stk /\
+  last.sym_base.as_pc = ss.sym_base.as_pc + (n + 2) /\
+  LIST_REL (mem_sval_at last.sym_mem_labels) (off :: offs) (sv :: vals) /\
+  (!b. (!a. MEM a (off :: offs) ==> ~in_mem_range a 32 b) ==>
+    FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  `!b. in_mem_range off 32 b ==>
+    FLOOKUP last.sym_mem_labels b = FLOOKUP mid.sym_mem_labels b` by metis_tac[] >>
+  `mem_sval_at last.sym_mem_labels off sv` by metis_tac[mem_sval_at_range_cong] >>
+  reverse conj_tac >- (simp[] >> metis_tac[]) >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[sym_steps_add]
+QED
+
+Theorem sym_scratch_spills_cons:
+  (!vals ss stk.
+    LENGTH vals = LENGTH offs /\ ss.sym_stack = vals ++ stk /\
+    EVERY (\off. off < dimword (:256)) offs /\ ALL_DISTINCT offs /\
+    (!a b i. MEM a offs /\ MEM b offs /\ a <> b /\ in_mem_range a 32 i ==>
+      ~in_mem_range b 32 i) /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan fmp (MAP SOSpill offs)) ==>
+    ?ss'. sym_steps p env (LENGTH (execute_plan fmp (MAP SOSpill offs))) ss = SymOK ss' /\
+      ss'.sym_stack = stk /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp (MAP SOSpill offs)) /\
+      LIST_REL (mem_sval_at ss'.sym_mem_labels) offs vals /\
+      (!b. (!off. MEM off offs ==> ~in_mem_range off 32 b) ==>
+        FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)) ==>
+  !vals ss stk.
+  LENGTH vals = LENGTH (h :: offs) /\ ss.sym_stack = vals ++ stk /\
+  EVERY (\off. off < dimword (:256)) (h :: offs) /\ ALL_DISTINCT (h :: offs) /\
+  (!a b i. MEM a (h :: offs) /\ MEM b (h :: offs) /\ a <> b /\ in_mem_range a 32 i ==>
+    ~in_mem_range b 32 i) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (MAP SOSpill (h :: offs))) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp (MAP SOSpill (h :: offs)))) ss = SymOK ss' /\
+    ss'.sym_stack = stk /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp (MAP SOSpill (h :: offs))) /\
+    LIST_REL (mem_sval_at ss'.sym_mem_labels) (h :: offs) vals /\
+    (!b. (!off. MEM off (h :: offs) ==> ~in_mem_range off 32 b) ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  disch_tac >> rpt gen_tac >> Cases_on `vals` >> simp[] >> strip_tac >>
+  rename1 `ss.sym_stack = v :: (vs ++ stk)` >>
+  `execute_plan fmp (SOSpill h :: MAP SOSpill offs) =
+     [AsmPush (encode_num_bytes h); AsmOp "MSTORE"] ++
+     execute_plan fmp (MAP SOSpill offs)` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  qpat_x_assum `execute_plan _ (SOSpill _ :: _) = _` (fn th =>
+    (rewrite_tac[th] >> rule_assum_tac (REWRITE_RULE [th]))) >>
+  qpat_x_assum `asm_block_at _ _ (_ ++ _)` mp_tac >>
+  simp[stackOpSimTheory.asm_block_at_append] >> strip_tac >>
+  drule_all sym_scratch_spill >> disch_then (qspec_then `env` strip_assume_tac) >>
+  first_x_assum (qspecl_then [`vs`, `ss'`, `stk`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >> qexists_tac `ss''` >>
+  `!a b. MEM a offs /\ in_mem_range h 32 b ==> ~in_mem_range a 32 b` by metis_tac[] >>
+  drule_all sym_scratch_spill_cons_compose >> simp[]
+QED
+
+Theorem sym_scratch_spills:
+  !offs vals ss stk.
+  LENGTH vals = LENGTH offs /\ ss.sym_stack = vals ++ stk /\
+  EVERY (\off. off < dimword (:256)) offs /\ ALL_DISTINCT offs /\
+  (!a b i. MEM a offs /\ MEM b offs /\ a <> b /\ in_mem_range a 32 i ==>
+           ~in_mem_range b 32 i) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (MAP SOSpill offs)) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan fmp (MAP SOSpill offs))) ss = SymOK ss' /\
+    ss'.sym_stack = stk /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp (MAP SOSpill offs)) /\
+    LIST_REL (mem_sval_at ss'.sym_mem_labels) offs vals /\
+    (!b. (!off. MEM off offs ==> ~in_mem_range off 32 b) ==>
+       FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  Induct >- simp[execute_plan_def, sym_steps_def] >>
+  drule sym_scratch_spills_cons >> simp[]
+QED
+
+Theorem op_kind_ok_word_replace:
+  op_kind_ok fn ret op (Val w) ==> op_kind_ok fn ret op (Val v)
+Proof
+  Cases_on `op` >> simp[op_kind_ok_def] >> rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem sym_scratch_restore_kind:
+  asm_block_at p ss.sym_base.as_pc
+    [AsmPush (encode_num_bytes off); AsmOp "MLOAD"] /\
+  off < dimword (:256) /\ op_kind_ok fn ret op sv /\
+  mem_sval_at ss.sym_mem_labels off sv ==>
+  ?ss' v. sym_steps p env 2 ss = SymOK ss' /\
+    ss'.sym_stack = v :: ss.sym_stack /\ op_kind_ok fn ret op v /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  Cases_on `sv` >> strip_tac
+  >- (drule_all sym_scratch_restore_word >>
+      disch_then (qspec_then `env` strip_assume_tac) >>
+      metis_tac[op_kind_ok_word_replace]) >>
+  drule_all sym_scratch_restore_label >>
+  disch_then (qspec_then `env` strip_assume_tac) >> metis_tac[]
+QED
+
+Theorem sym_scratch_restore_cons_compose:
+  sym_steps p env 2 ss = SymOK mid /\
+  mid.sym_stack = v :: stk /\ op_kind_ok fn ret op v /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+  mid.sym_mem_labels = ss.sym_mem_labels /\
+  sym_steps p env n mid = SymOK last /\ last.sym_stack = top ++ (v :: stk) /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE operands) top /\
+  last.sym_base.as_pc = mid.sym_base.as_pc + n /\
+  last.sym_mem_labels = mid.sym_mem_labels ==>
+  sym_steps p env (n + 2) ss = SymOK last /\
+  last.sym_stack = (top ++ [v]) ++ stk /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE (op :: operands)) (top ++ [v]) /\
+  last.sym_base.as_pc = ss.sym_base.as_pc + (n + 2) /\
+  last.sym_mem_labels = ss.sym_mem_labels
+Proof
+  strip_tac >> reverse conj_tac >- simp[LIST_REL_APPEND_suff] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[sym_steps_add]
+QED
+
+Theorem sym_scratch_restores_cons:
+  (!operands ss stk.
+    LIST_REL (\op off. ?sv. op_kind_ok fn ret op sv /\
+      mem_sval_at ss.sym_mem_labels off sv) operands offs /\
+    ss.sym_stack = stk /\ EVERY (\off. off < dimword (:256)) offs /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan fmp (MAP SORestore offs)) ==>
+    ?ss' top. sym_steps p env (LENGTH (execute_plan fmp (MAP SORestore offs))) ss = SymOK ss' /\
+      ss'.sym_stack = top ++ stk /\
+      LIST_REL (op_kind_ok fn ret) (REVERSE operands) top /\
+      ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp (MAP SORestore offs)) /\
+      ss'.sym_mem_labels = ss.sym_mem_labels) ==>
+  !operands ss stk.
+  LIST_REL (\op off. ?sv. op_kind_ok fn ret op sv /\
+    mem_sval_at ss.sym_mem_labels off sv) operands (h :: offs) /\
+  ss.sym_stack = stk /\ EVERY (\off. off < dimword (:256)) (h :: offs) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (MAP SORestore (h :: offs))) ==>
+  ?ss' top. sym_steps p env (LENGTH (execute_plan fmp (MAP SORestore (h :: offs)))) ss = SymOK ss' /\
+    ss'.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE operands) top /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp (MAP SORestore (h :: offs))) /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  disch_tac >> rpt gen_tac >> Cases_on `operands` >> simp[] >> strip_tac >>
+  rename1 `op_kind_ok fn ret op sv` >>
+  `execute_plan fmp (SORestore h :: MAP SORestore offs) =
+     [AsmPush (encode_num_bytes h); AsmOp "MLOAD"] ++
+     execute_plan fmp (MAP SORestore offs)` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  qpat_x_assum `execute_plan _ (SORestore _ :: _) = _` (fn th =>
+    (rewrite_tac[th] >> rule_assum_tac (REWRITE_RULE [th]))) >>
+  qpat_x_assum `asm_block_at _ _ (_ ++ _)` mp_tac >>
+  simp[stackOpSimTheory.asm_block_at_append] >> strip_tac >>
+  drule_all sym_scratch_restore_kind >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  first_x_assum (qspecl_then [`t`, `ss'`, `v :: stk`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexistsl_tac [`ss''`, `top ++ [v]`] >>
+  `ss'.sym_stack = v :: stk` by simp[] >>
+  drule_all sym_scratch_restore_cons_compose >> simp[]
+QED
+
+Theorem sym_scratch_restores_kinds:
+  !offs operands ss stk.
+  LIST_REL (\op off. ?sv. op_kind_ok fn ret op sv /\
+       mem_sval_at ss.sym_mem_labels off sv) operands offs /\
+  ss.sym_stack = stk /\ EVERY (\off. off < dimword (:256)) offs /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan fmp (MAP SORestore offs)) ==>
+  ?ss' top.
+    sym_steps p env (LENGTH (execute_plan fmp (MAP SORestore offs))) ss = SymOK ss' /\
+    ss'.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE operands) top /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan fmp (MAP SORestore offs)) /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  Induct
+  >- (rpt gen_tac >> Cases_on `operands` >> simp[execute_plan_def, sym_steps_def]) >>
+  drule sym_scratch_restores_cons >> simp[]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
