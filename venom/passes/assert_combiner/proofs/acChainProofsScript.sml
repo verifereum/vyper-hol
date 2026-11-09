@@ -1853,6 +1853,26 @@ Proof
             ci_eval_pred, MEM]
 QED
 
+Theorem ac_chain_inv_witness_in_rest[local]:
+  !cands h rest mp s pred_op v.
+    ac_chain_inv cands (h::rest) mp s pred_op v /\
+    FIND (\mc. mc.mc_second_id = h.inst_id) cands = NONE ==>
+    ?inst_s mc_s. MEM inst_s rest /\
+       FIND (\mc. mc.mc_second_id = inst_s.inst_id) cands = SOME mc_s /\
+       (case ALOOKUP mp mc_s.mc_first_id of
+          SOME p => p | NONE => mc_s.mc_first_pred) <> mc_s.mc_second_pred /\
+       (case ALOOKUP mp mc_s.mc_first_id of
+          SOME p => p | NONE => mc_s.mc_first_pred) = pred_op
+Proof
+  rpt strip_tac >> fs[ac_chain_inv_def] >>
+  qexistsl_tac [`inst_s`, `mc_s`] >> simp[] >>
+  `inst_s <> h` suffices_by (strip_tac >> gvs[MEM]) >>
+  CCONTR_TAC >> gvs[] >>
+  `FIND (\mc. mc.mc_second_id = h.inst_id) cands = SOME mc_s` by
+    metis_tac[] >>
+  fs[]
+QED
+
 (* When FIND=SOME mc with same-preds for h, h is not the diff-preds witness. *)
 Theorem ac_chain_inv_witness_in_rest_same[local]:
   !cands h rest mp s pred_op v mc.
