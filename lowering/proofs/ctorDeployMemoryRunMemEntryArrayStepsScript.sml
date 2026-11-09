@@ -15,6 +15,7 @@ Ancestors
   abiDecoderArrayLoopInit abiDecoderVarSequence abiEncoderRegisteredEffect valueEncodingProps
   allocaFrontierBound allocaBudgetProps ctorAbiActualFrame
   abiDecoderDynarrayPrefix abiDecoderDynarrayBound abiDecoderGuards abiDecoderGuard
+  abiDecoderBytesBound ctorDeployMemoryRunMemEntryBytes
   ctorAbiActualArrayInvariant ctorAbiActualArrayBody
   abiDecoderLoopSetup abiDecoderIndexedAddress abiEncoder abiDecodeRanges
   abiDecoderArraySetupInputs abiDecoderCoherence abiDecoderOffset
@@ -200,6 +201,13 @@ Proof
   `slot+32 <= s.vs_alloca_next` by
     (fs[ctorAbiActualArrayInvariantTheory.ctor_actual_array_observation_def,
         alloca_inv_def, alloca_next_valid_def, Excl "enc_def"] >> metis_tac[]) >>
+  `abi_decode_loop_cfg func hdr st.cs_current_bb exit_lbl hid ip src DLOAD
+    (STRING #"%" (toString header_var)) (STRING #"%" (toString (header_var+1)))
+    (STRING #"%" (toString (header_var+2))) (STRING #"%" (toString (header_var+3)))` by
+    gvs[abi_decode_position_loop_cfg_def, abi_decode_loop_cfg_def,
+        abi_decode_position_header_insts_def, abi_decode_position_header_delta_def,
+        abi_decode_header_insts_def] >>
+  fs[abi_decode_position_header_delta_def] >>
   drule_all ctor_checked_array_header_run >> simp[]
 QED
 
@@ -548,28 +556,174 @@ Proof
   drule_all gas_path_mem_then >> simp[]
 QED
 
+Theorem ctor_array_head_alias_probe[local]:
+  let cs = st with <| cs_next_var := 0; cs_next_id := 0; cs_current_insts := [] |>;
+      src = Var (STRING #"%" (toString 0));
+      code = emitted_insts cs
+        (SND (abi_decode_dynarray_checked_prefix src DLOAD (Lit 64w) 1 32 cs));
+      initial = s with <| vs_vars := FEMPTY |+ (STRING #"%" (toString 0), 0w);
+                           vs_data_section := REPLICATE 32 (0w:word8) |>
+  in case run_inst_seq (TAKE 7 code) initial of
+       OK t => inst_dload_in_section (EL 7 code) t
+     | _ => F
+Proof
+  simp[abi_decode_dynarray_checked_prefix_def, abi_decode_bytes_head_def,
+       abi_decode_dynarray_payload_guard_def, abi_decode_count_guard_def,
+       compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
+       emit_def, emitted_insts_def, dimword_def, fcpTheory.index_bit0, wordsTheory.dimindex_128,
+       fcpTheory.finite_bit0, wordsTheory.finite_128,
+       fcpTheory.index_one, fcpTheory.finite_one] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  EVAL_TAC >> simp[] >> EVAL_TAC >>
+  simp[dimword_def, fcpTheory.index_bit0, wordsTheory.dimindex_128,
+       fcpTheory.finite_bit0, wordsTheory.finite_128,
+       fcpTheory.index_one, fcpTheory.finite_one, w2n_n2w,
+       bool_to_word_def, FLOOKUP_UPDATE, WORD_ADD_0] >> EVAL_TAC >>
+  simp[WORD_AND_IDEM] >> EVAL_TAC >> simp[vyperArithTheory.lt_dimword_256]
+QED
+
+Theorem ctor_array_head_data_section[local]:
+  abi_decode_bytes_head src hi st = (head,st') /\
+  run_inst_seq (emitted_insts st st') s = OK t ==>
+  t.vs_data_section = s.vs_data_section
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_bytes_head_def, comp_return_def] >>
+      rpt strip_tac >> gvs[emitted_insts_def, run_inst_seq_def]) >>
+  simp[abi_decode_bytes_head_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  qpat_x_assum `run_inst_seq _ _ = _`
+    (assume_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND, DROP_LENGTH_APPEND]) >>
+  gvs[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs,
+      exec_read1_def, AllCaseEqs()] >>
+  gvs[exec_pure1_def, exec_pure2_def, AllCaseEqs(), update_var_def]
+QED
+
+Theorem ctor_array_head_source_bound[local]:
+  abi_decode_bytes_head src hi st = (head,st') /\
+  eval_operand src s = SOME (n2w sb) /\ sb < dimword (:256) /\
+  sb+32 <= LENGTH s.vs_data_section /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  eval_operand src t = SOME off ==>
+  w2n off <= LENGTH t.vs_data_section
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_bytes_head_def, comp_return_def] >>
+      rpt strip_tac >> gvs[emitted_insts_def, run_inst_seq_def, w2n_n2w]) >>
+  simp[abi_decode_bytes_head_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  qpat_x_assum `run_inst_seq _ _ = _`
+    (assume_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND, DROP_LENGTH_APPEND]) >>
+  gvs[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs,
+      exec_read1_def,
+      AllCaseEqs()] >>
+  gvs[exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
+  gvs[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `src` >>
+  gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, AllCaseEqs(),
+      GSYM word_add_n2w, w2n_n2w] >>
+  `n2w sb + 32w = (n2w (sb+32):bytes32)` by simp[word_add_n2w] >>
+  gvs[w2n_n2w] >>
+  irule LESS_EQ_TRANS >> qexists_tac `sb+32` >>
+  simp[MOD_LESS_EQ]
+QED
+
+Theorem ctor_array_head_mem_ok[local]:
+  abi_decode_bytes_head src hi st = (head,st') ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_bytes_head_def, comp_return_def] >> strip_tac >>
+      gvs[emitted_insts_def, run_inst_seq_mem_ok_def]) >>
+  simp[abi_decode_bytes_head_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emitted_insts_emit_void >> gvs[] >>
+  asm_rewrite_tac[emitted_insts_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  rpt (pop_assum kall_tac) >>
+  irule run_inst_seq_mem_ok_every >> simp[] >> rpt conj_tac >> gen_tac >>
+  irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem ctor_array_payload_mem_ok[local]:
+  abi_decode_dynarray_payload_guard head cnt asz hi st = ((),st') ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_dynarray_payload_guard_def, comp_return_def] >> strip_tac >>
+      gvs[emitted_insts_def, run_inst_seq_mem_ok_def]) >>
+  simp[abi_decode_dynarray_payload_guard_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emitted_insts_emit_void >> gvs[] >>
+  asm_rewrite_tac[emitted_insts_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  rpt (pop_assum kall_tac) >>
+  irule run_inst_seq_mem_ok_every >> simp[] >> rpt conj_tac >> gen_tac >>
+  irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem ctor_array_count_mem_ok[local]:
+  abi_decode_count_guard DLOAD src n st = (cnt,st') /\
+  (!off. eval_operand src s = SOME off ==> w2n off <= LENGTH s.vs_data_section) ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emitted_insts_emit_void >> gvs[] >>
+  asm_rewrite_tac[emitted_insts_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+  once_rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
+  >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  conj_tac
+  >- (simp[memSafeRunTheory.inst_dload_in_section_def, mk_inst_def] >>
+      metis_tac[]) >>
+  Cases_on `step_inst_base (mk_inst st.cs_next_id DLOAD [src]
+    [STRING #"%" (toString st.cs_next_var)]) s` >> simp_tac (srw_ss()) [] >>
+  irule run_inst_seq_mem_ok_every >> simp[] >> rpt conj_tac >> gen_tac >>
+  irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
 Theorem ctor_checked_array_prefix_mem_ok:
   abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ sb < dimword (:256) /\
   sb+32 <= LENGTH s.vs_data_section ==>
   run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
-  strip_tac >> Cases_on `hi = Lit 0w` >>
+  strip_tac >>
   qpat_x_assum `abi_decode_dynarray_checked_prefix _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [abi_decode_dynarray_checked_prefix_def,
-    abi_decode_count_guard_def, abi_decode_dynarray_end_guard_def,
-    abi_decode_dynarray_end_def, abi_decode_le_guard_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def,
-    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-  strip_tac >> gvs[emitted_insts_def] >>
-  pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
-  simp[DROP_LENGTH_APPEND] >>
-  (once_rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
-   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
-   simp[mk_inst_def, memSafeRunTheory.inst_dload_in_section_def, w2n_n2w] >>
-   BasicProvers.TOP_CASE_TAC >> simp[] >> irule run_inst_seq_mem_ok_every >>
-   simp[mk_inst_def, memSafeRunTheory.inst_dload_in_section_def] >>
-   rpt strip_tac >> gvs[] >> irule below_frontier_no_ranges >> simp[])
+  simp[abi_decode_dynarray_checked_prefix_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rename1 `abi_decode_bytes_head src hi st = (head,c1)` >>
+  rename1 `abi_decode_count_guard DLOAD src maxn c1 = (cnt,c2)` >>
+  drule abi_decode_bytes_head_shape >> strip_tac >>
+  drule abi_decode_count_guard_shape >> strip_tac >>
+  drule abi_decode_dynarray_payload_guard_shape >> strip_tac >>
+  `inst_extends c1 st'` by metis_tac[inst_extends_trans] >>
+  `emitted_insts st st' = emitted_insts st c1 ++ emitted_insts c1 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  `emitted_insts c1 st' = emitted_insts c1 c2 ++ emitted_insts c2 st'` by
+    (irule emitted_insts_append >> fs[inst_extends_def]) >>
+  once_asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> reverse conj_tac
+  >- (irule ctor_array_head_mem_ok >> metis_tac[]) >>
+  rpt strip_tac >>
+  once_asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >> reverse conj_tac
+  >- (irule ctor_array_count_mem_ok >>
+      qexistsl [`cnt`, `maxn`, `src`] >> simp[] >>
+      rpt strip_tac >> irule ctor_array_head_source_bound >>
+      metis_tac[]) >>
+  rpt strip_tac >> irule ctor_array_payload_mem_ok >> metis_tac[]
 QED
 
 Theorem ctor_checked_array_prefix_reach:
@@ -999,6 +1153,11 @@ Proof
   `c1.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   `mload (w2n (n2w slot : bytes32)) s = n2w idx` by simp[w2n_n2w] >>
+  `eval_operand (Lit 0w) s = SOME (n2w 0) /\
+   abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[eval_operand_def, abi_decoder_operand_live_def] >>
+  `abi_decode_load DLOAD (n2w (0 + (sb+32+idx*asz)) : bytes32) s = n2w child_off`
+    by gvs[] >>
   drule_all abi_decode_array_source_setup_reentry >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st c1) s = OK prepared` >>
   `eval_operand dst prepared = SOME (n2w d)` by
@@ -1063,8 +1222,12 @@ Proof
         enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))` by
         (qpat_x_assum `mem_bytes_at _ _ s.vs_data_section = _` mp_tac >>
          simp[abi_decode_source_def, Excl "enc_def"]) >>
-      drule_all abi_decoder_canonical_dynamic_setup_inputs >>
+      drule (Q.INST [`B` |-> `0`] abi_decoder_canonical_dynamic_setup_inputs) >>
+      disch_then (qspecl_then [`sb`, `s`, `DLOAD`, `hi`,
+        `abi_embedded_static_size ce.ce_struct_fields ty`] mp_tac) >>
+      (impl_tac >- asm_simp_tac bool_ss [ADD_CLAUSES]) >>
       disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+      RULE_ASSUM_TAC (PURE_REWRITE_RULE [ADD_CLAUSES]) >>
       drule_all ctor_checked_array_head_contained >> strip_tac >>
       drule ctor_checked_array_dynamic_setup_mem_ok >> disch_then irule >>
       asm_simp_tac bool_ss [] >>
