@@ -1,7 +1,7 @@
 Theory exprSimAbiEncodeArgsMaterializePath
 Ancestors
   abiEncodeMaterialize exprSimAbiGasBridge exprSimHash vyperCompiler context
-  loweringPosts compileEnv finite_map
+  loweringPosts compileEnv finite_map exprSimAbiEncodeSeparation
 
 Definition materialize_owned_post_def:
   materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv s <=>
@@ -105,4 +105,23 @@ Proof
   qexistsl_tac [`ce`, `dst`, `p.ptr_operand`, `ty`, `vty`] >> simp[] >>
   gvs[exprLoweringTheory.compile_materialize_vv_def,
       exprLoweringTheory.unwrap_value_def, comp_bind_def]
+QED
+
+(* A zero-sized destination can leave the unwrap loop's exit empty. *)
+Theorem materialize_zero_destination_alias_probe:
+  let sa = initial_compile_state "@wcopy_exit_2";
+      vv = LocatedValue (BaseT (BytesT (Dynamic 32)))
+             (mk_ptr (Lit 0w) LocStorage);
+      result = compile_materialize_vv ce (TupleT []) vv sa;
+      sb = SND result;
+      fn = venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
+  in
+    (!l. vv_operand vv <> Label l) /\
+    fragExec$fn_has_code sa sb fn /\ venomWf$fn_inst_ids_distinct fn /\
+    ~frag_gas_free sa sb
+Proof
+  EVAL_TAC >> rpt conj_tac >> rpt strip_tac >> gvs[] >> EVAL_TAC >>
+  qmatch_goalsub_abbrev_tac `$= b` >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
+  qexists_tac `b` >> simp[]
 QED
