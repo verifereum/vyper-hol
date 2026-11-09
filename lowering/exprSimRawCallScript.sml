@@ -4553,7 +4553,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[call]:
     (mp_then Any mp_tac raw_call_oracle_path) >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `wb_frame _ (SND _) _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
   impl_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
@@ -4783,7 +4783,7 @@ Resume raw_call_outbuf_positive_tail_vv_path[call]:
     (mp_then Any mp_tac raw_call_oracle_path) >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `wb_frame _ (SND _) _ _ _ _`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   disch_then (qspecl_then [`val_word`,`gas`,`aw`] mp_tac) >>
   impl_tac >- (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
