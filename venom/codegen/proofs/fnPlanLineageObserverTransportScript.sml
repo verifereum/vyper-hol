@@ -734,6 +734,58 @@ Proof
   simp[]
 QED
 
+Theorem native_inst_prefix_fresh_cuts_resource_bound:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !bb v.
+      lv = liveness_analyze fn /\ cfg = cfg_analyze fn /\ lbl = bb.bb_label /\
+      halt = bb_is_halting bb /\ n = LENGTH (get_params bb.bb_instructions) /\
+      len = LENGTH bb.bb_instructions /\ xs = non_param_insts bb /\
+      codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+      (!j before. j < k /\
+        fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before /\
+        MEM v (EL j xs).inst_outputs ==>
+        ~MEM (Var v) before.ps_stack /\ Var v NOTIN FDOM before.ps_spilled) /\
+      LIST_ELEM_COUNT (Var v) incoming.ps_stack +
+        (if Var v IN FDOM incoming.ps_spilled then 1 else 0) <= 1 /\
+      (!j before w. j < k /\ LENGTH (collect_phis bb.bb_instructions) <= j /\
+        fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before ==>
+        (MEM w (live_vars_at lv lbl (n+j)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) /\
+        (MEM (Var w) (compute_operands (EL j xs)) ==>
+          MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled)) ==>
+      LIST_ELEM_COUNT (Var v) qs.ps_stack +
+        (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_strongind >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gvs[] >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ before = SOME (ops,after)` >>
+  `LIST_ELEM_COUNT (Var v) before.ps_stack +
+    (if Var v IN FDOM before.ps_spilled then 1 else 0) <= 1` by
+    (first_x_assum irule >> simp[] >>
+     conj_tac >- (rpt strip_tac >> `j < SUC k` by decide_tac >> metis_tac[]) >>
+     qexists_tac `bb` >> simp[] >>
+     rpt strip_tac >> `j < SUC k` by decide_tac >> metis_tac[]) >>
+  `k < LENGTH (non_param_insts bb) /\ inst = EL k (non_param_insts bb)` by
+    (drule_all native_indexed_step_layout >> simp[]) >>
+  Cases_on `MEM v inst.inst_outputs`
+  >- (`~MEM (Var v) before.ps_stack /\ Var v NOTIN FDOM before.ps_spilled` by
+        (qpat_x_assum `!j st. _ ==> ~MEM (Var v) st.ps_stack /\ Var v NOTIN FDOM st.ps_spilled`
+           (qspecl_then [`k`,`before`] mp_tac) >> gvs[]) >>
+      irule native_indexed_step_fresh_output_resource_bound >> simp[] >>
+      goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `DROP _ _ = _`)) >> simp[] >>
+      rpt strip_tac >> qpat_x_assum `!j before w. _` (qspecl_then [`k`,`before`,`w`] mp_tac) >>
+      simp[]) >>
+  irule native_indexed_step_nondefining_observer_bound >> simp[] >>
+  goal_assum (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `DROP _ _ = _`)) >> simp[] >>
+  rpt strip_tac >> qpat_x_assum `!j before w. _` (qspecl_then [`k`,`before`,`w`] mp_tac) >>
+  simp[]
+QED
+
 Theorem native_inst_prefix_nondefining_observer_bound:
   !lv dfg cfg fn lbl halt n len xs incoming k qs.
     fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
