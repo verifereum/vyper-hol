@@ -11,11 +11,12 @@
  *)
 Theory makeSsaCurrentWfSsa
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
+  livenessTransferProofs
+  makeSsaDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
   makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
-  makeSsaCurrentAvailability venomExecProofs allocaRemapSSA removeUnusedSsaProofs
+  makeSsaCurrentAvailability venomExecProofs allocaRemapSSA
   makeSsaCurrentCleanupShape sorting venomFnScheduleRunner
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace makeSsaCurrentFinalSlots
   makeSsaCurrentSimDefs
@@ -26,10 +27,73 @@ Ancestors
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
   makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
   makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
-  makeSsaCurrentInduct makeSsaDefs makeSsaCurrentSelectedLive cfgDefs cfgHelpers finite_map
-  ssaPipeline codegenReadyCompute makeSsaCurrentCfg
+  makeSsaCurrentInduct makeSsaCurrentSelectedLive cfgDefs cfgHelpers finite_map
+  codegenReadyCompute makeSsaCurrentCfg
+  venomWfProps
 Libs
   rich_listTheory
+
+(* PHI-prefix extension of a block list, and that it keeps every block's
+   successors. *)
+Definition phi_extends_def:
+  phi_extends bbs bbs' <=>
+    LENGTH bbs' = LENGTH bbs /\
+    MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs /\
+    !j. j < LENGTH bbs ==>
+      ?phis.
+        (EL j bbs').bb_instructions =
+          phis ++ (EL j bbs).bb_instructions /\
+        EVERY (\i. i.inst_opcode = PHI) phis
+End
+
+Definition succs_preserved_def:
+  succs_preserved bbs bbs' <=>
+    !lbl bb. lookup_block lbl bbs' = SOME bb ==>
+      ?bb0. lookup_block lbl bbs = SOME bb0 /\
+            bb_succs bb = bb_succs bb0
+End
+
+Triviality phi_prefix_preserves_succs:
+  !bb1 bb2 phis.
+    bb1.bb_instructions = phis ++ bb2.bb_instructions /\
+    EVERY (\i. i.inst_opcode = PHI) phis ==>
+    bb_succs bb1 = bb_succs bb2
+Proof
+  rpt strip_tac >> Cases_on `bb2.bb_instructions`
+  >- (Cases_on `phis` >> gvs[bb_succs_def] >>
+      sg `MEM (LAST (h::t)) (h::t)` >- metis_tac[LAST_MEM, MEM] >>
+      gvs[EVERY_MEM] >> gvs[get_successors_def, is_terminator_def])
+  >> Cases_on `phis` >- gvs[bb_succs_def]
+  >> sg `bb_succs bb1 =
+         nub (REVERSE (get_successors (LAST (h'::(t' ++ h::t)))))` >-
+       (simp[bb_succs_def] >> gvs[]) >>
+  sg `bb_succs bb2 =
+      nub (REVERSE (get_successors (LAST (h::t))))` >- simp[bb_succs_def] >>
+  ASM_REWRITE_TAC[] >>
+  AP_TERM_TAC >> AP_TERM_TAC >> AP_TERM_TAC >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [CONS_APPEND] THENC
+                        ONCE_REWRITE_CONV [APPEND_ASSOC])) >>
+  REWRITE_TAC[LAST_APPEND_CONS]
+QED
+
+Theorem phi_extends_succs_preserved:
+  !bbs bbs'. phi_extends bbs bbs' /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+    succs_preserved bbs bbs'
+Proof
+  rw[phi_extends_def, succs_preserved_def] >>
+  imp_res_tac lookup_block_MEM >> gvs[MEM_EL] >>
+  first_x_assum (qspec_then `n` mp_tac) >> gvs[] >> strip_tac >>
+  qexists_tac `EL n bbs` >>
+  imp_res_tac lookup_block_label >>
+  sg `(EL n bbs).bb_label = lbl` >-
+    (qpat_x_assum `MAP _ bbs' = MAP _ bbs` (mp_tac o
+       Q.AP_TERM `\ls. EL n ls`) >>
+     simp[EL_MAP]) >>
+  conj_tac
+  >- (irule MEM_lookup_block >> gvs[MEM_EL] >> metis_tac[])
+  >> metis_tac[phi_prefix_preserves_succs]
+QED
 
 (* Ownership refers to the immutable original output occurrence, never to
    the supply-generated spelling of a renamed variable. *)
@@ -1921,15 +1985,6 @@ Proof
   fs[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem current_wf_nonphi_after_collect:
-  !xs i. i < LENGTH xs /\ (EL i xs).inst_opcode <> PHI ==>
-    LENGTH (collect_phis xs) <= i
-Proof
-  Induct >> simp[] >> gen_tac >>
-  Cases_on `h.inst_opcode = PHI` >> simp[livenessDefsTheory.collect_phis_def] >>
-  Cases_on `i` >> simp[]
-QED
-
 Theorem current_wf_entry_undemanded:
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
   fn_entry_label fn = SOME l ==> ~current_demand fn v l 0
@@ -3590,7 +3645,7 @@ Proof
   gvs[] >>
   `?bb. lookup_block l ins = SOME bb` by
     metis_tac[current_wf_annotation_map_lookup] >>
-  drule makeSsaHelperTheory.lookup_block_labels_agree >>
+  drule venomExecProofsTheory.lookup_block_labels_agree >>
   disch_then (qspec_then `l` mp_tac) >> simp[] >>
   Cases_on `lookup_block l fn.fn_blocks` >> simp[]
 QED

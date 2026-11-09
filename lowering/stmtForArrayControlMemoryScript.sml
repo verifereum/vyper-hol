@@ -58,7 +58,7 @@ Resume array_condition_boundary_mem[path]:
     simp[n2w_11, LESS_MOD] >>
   `step_inst_base (mk_inst j1 EQ [Var idx; Lit (n2w n)] [dv]) cc =
      OK (update_var dv (bool_to_word (k = n)) cc)` by
-    simp[step_inst_base_def, exec_pure2_def, mk_inst_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, exec_pure2_def, mk_inst_def, eval_operand_def] >>
   `gas_path_mem_edge ctx func cc 0
      (OK ((update_var dv (bool_to_word (k = n)) cc) with vs_inst_idx := 1))` by
     (drule_at (Pat `step_inst_base _ _ = _`) straight_line_mem_edge >>
@@ -158,7 +158,7 @@ Resume array_increment_boundary_mem[path]:
   fs[array_loop_inv_def] >>
   `step_inst_base (mk_inst i1 ADD [Var idx; Lit 1w] [nv]) dd =
      OK (update_var nv (n2w (k+1)) dd)` by
-    simp[step_inst_base_def, exec_pure2_def, mk_inst_def, eval_operand_def, word_add_n2w] >>
+    simp[step_inst_base_opcode_eqs, exec_pure2_def, mk_inst_def, eval_operand_def, word_add_n2w] >>
   `gas_path_mem_edge ctx func dd 0
      (OK ((update_var nv (n2w (k+1)) dd) with vs_inst_idx := 1))` by
     (drule_at (Pat `step_inst_base _ _ = _`) straight_line_mem_edge >>
@@ -171,7 +171,7 @@ Resume array_increment_boundary_mem[path]:
     simp[Abbr `s1`, update_var_def] >>
   `step_inst_base (mk_inst i2 ASSIGN [Var nv] [idx]) s1 =
      OK (update_var idx (n2w (k+1)) s1)` by
-    simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
          Abbr `s1`, update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   `gas_path_mem_edge ctx func s1 0
      (OK ((update_var idx (n2w (k+1)) s1) with vs_inst_idx := 2))` by
@@ -184,7 +184,7 @@ Resume array_increment_boundary_mem[path]:
   `s2.vs_current_bb = incr_lbl /\ s2.vs_inst_idx = 2 /\ ~s2.vs_halted` by
     simp[Abbr `s2`, update_var_def] >>
   `step_inst_base (mk_inst i3 JMP [Label cond_lbl] []) s2 = OK (jump_to cond_lbl s2)` by
-    simp[Once step_inst_base_def, mk_inst_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
   `gas_path_mem_edge ctx func s2 0 (OK (jump_to cond_lbl s2))` by
     (simp[gas_path_mem_edge_def] >> qexists_tac `0` >>
      qexists_tac `mk_inst i3 JMP [Label cond_lbl] []` >>

@@ -3,7 +3,7 @@ Theory bodyMemBiEnvPrevHash
 Ancestors
   builtinProps exprSimProps exprSimSource exprLoweringProps exprLowering
   fragGasSeqMem fragExecMem allocaHistoryFragment instMemFrontier
-  loweringSlice emitHelperProps compileEnv venomInst venomState
+  loweringSlice emitHelperProps compileEnv loweringStateRelDefs venomInst venomState
   venomExecSemantics memSafeRun list rich_list finite_map
   varsExt fragExec contextCodegenRel codegenRel
   gasNormalPrefix gasSummary fragGasMode exprSimMemoryValues exprSimMemoryStack

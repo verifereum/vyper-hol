@@ -1,8 +1,9 @@
 Theory makeSsaCurrentLastSite
 Ancestors
+  livenessTransferProofs
   makeSsaCurrentGraphCut makeSsaCurrentLiveTransport makeSsaCurrentFrontier
   makeSsaCurrentTokens dominatorAnalysisProps
-  makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaCurrentDefs
+  makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaDefs
   venomInst venomWf venomExecProps cfgAnalysisProps dominatorDefs
   list rich_list alist arithmetic makeSsaCurrentDemandDominance dominatorProofs cfgDefs relation
 

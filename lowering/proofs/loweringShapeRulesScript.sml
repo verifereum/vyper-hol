@@ -15,7 +15,7 @@
  *)
 Theory loweringShapeRules
 Ancestors
-  list rich_list compileEnv emitHelper emitHelperProps fragExec venomInst
+  list rich_list compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec venomInst
   unitShapeDefs loweringShapeDefs context
 Libs
   monadsyntax dep_rewrite

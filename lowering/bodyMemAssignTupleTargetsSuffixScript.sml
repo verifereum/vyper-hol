@@ -6,7 +6,7 @@ Ancestors
   tupleAssignPrefix stmtSimAssignTupleTargets tupleStageProps tupleMemoryLayout
   exprSimDefs exprSimProps exprLoweringProps stmtSimProps stmtSimDefs
   valueEncoding valueEncodingProps vyperTyping vyperInterpreter vyperState
-  compileEnv loweringSlice fragExec freshWrites list rich_list finite_map
+  compileEnv loweringStateRelDefs loweringSlice fragExec freshWrites list rich_list finite_map
   fragGasPathMem bodyMemoryDefs tupleTargetStoreProps stmtSimReturn
   tupleAssignParts stmtLowering exprLowering vyperTypeABI vyperValue
   loweringPosts stmtSimAssignTuple tupleTypedLoad vyperTypeDefaults exprOperandVar

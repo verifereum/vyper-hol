@@ -1,82 +1,80 @@
-(* Entry checks and registration leave an open body-start block. *)
 Theory entryRegistrationOpen
 Ancestors
-  moduleLowering exprOpenTerminals exprOpenPrimitives stmtSimDeclMem abiEncoder compileEnv venomInst list
+  exprOpenTerminals exprOpenPrimitives moduleLowering abiEncoder compileEnv
+  emitHelper venomInst list pair
 
-Theorem entry_checks_open:
-  compile_entry_checks mc pay sa = ((),sb) /\ ~block_is_terminated sa ==>
-  ~block_is_terminated sb
+Theorem registration_clamp_open[local]:
+  !cl op a x b. ~block_is_terminated a /\
+    compile_abi_clamp_basetype op cl a = (x,b) ==> ~block_is_terminated b
 Proof
-  simp[compile_entry_checks_def, comp_ignore_bind_def, comp_bind_def,
-       comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >>
-  Cases_on `pay` >> Cases_on `mc > 4` >>
-  gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  Cases >> rpt gen_tac >>
+  TRY (rename1 `IntClamp bits signed` >> Cases_on `signed`) >>
+  simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+       compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, LET_THM, COND_RAND] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
   rpt (pairarg_tac >> gvs[]) >>
-  metis_tac[emit_void_nonterminator_open, is_terminator_def]
+  imp_res_tac emit_void_terminated >> gvs[is_terminator_def]
 QED
 
-Theorem abi_clamp_open[local]:
-  !clamp op sa u sb.
-  ~block_is_terminated sa /\ compile_abi_clamp_basetype op clamp sa = (u,sb) ==>
-  ~block_is_terminated sb
-Proof
-  Cases >> simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
-    compile_abi_bytes_clamp_def, comp_return_def] >> rpt gen_tac >>
-  simp[comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  gvs[AllCaseEqs(), comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  all_tac
-  >~ [`(if signed then _ else _) sa = _`]
-  >- (Cases_on `signed` >> gvs[comp_bind_def, comp_ignore_bind_def] >>
-      rpt (pairarg_tac >> gvs[]) >>
-      metis_tac[emit_void_nonterminator_open, is_terminator_def]) >>
-  metis_tac[emit_void_nonterminator_open, is_terminator_def]
-QED
-
-Theorem decode_args_open[local]:
-  !args ce off hi base sa u sb.
-  compile_decode_args ce args off CALLDATALOAD hi base sa = (u,sb) ==>
-  ~block_is_terminated sa ==>
-  ~block_is_terminated sb
+Theorem registration_decode_open[local]:
+  !args ce off a x b. ~block_is_terminated a /\
+    compile_decode_args ce args off CALLDATALOAD (Lit 0w) 4 a = (x,b) ==>
+    ~block_is_terminated b
 Proof
   Induct >> simp[compile_decode_args_def, comp_return_def] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  simp[compile_decode_args_def] >>
-  Cases_on `h1` >> Cases_on `h2` >>
-  simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >>
-  gvs[AllCaseEqs(), comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_decode_args_def, comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  rpt strip_tac >> Cases_on `h1` >> Cases_on `h2` >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  TRY (rename1 `var_location_decode_operand loc` >>
+       Cases_on `var_location_decode_operand loc`) >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Cases_on `FLOOKUP ce.ce_vars h0` >> gvs[comp_return_def] >>
-  Cases_on `var_location_decode_operand x` >> gvs[comp_return_def] >>
-  gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  first_x_assum drule >> disch_then irule >>
-  imp_res_tac emit_op_nonterminator_open >> gvs[is_terminator_def] >>
-  metis_tac[abi_clamp_open, emit_void_nonterminator_open,
-    compile_abi_decode_to_buf_open, is_terminator_def]
+  imp_res_tac emit_op_nonterminator_open >>
+  imp_res_tac registration_clamp_open >>
+  imp_res_tac compile_abi_decode_to_buf_open >>
+  imp_res_tac emit_void_terminated >>
+  gvs[is_terminator_def] >> metis_tac[]
 QED
 
-Theorem register_positional_args_open:
-  !args ce off sa cef sb.
-  ~block_is_terminated sa /\
-  compile_register_positional_args ce args off sa = (cef,sb) ==>
-  ~block_is_terminated sb
+Theorem registration_preserves_open:
+  !pos ce off a cef b. ~block_is_terminated a /\
+    compile_register_positional_args ce pos off a = (cef,b) ==>
+    ~block_is_terminated b
 Proof
   Induct >> simp[compile_register_positional_args_def, comp_return_def] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  simp[compile_register_positional_args_def] >> strip_tac >>
-  gvs[AllCaseEqs(), comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_register_positional_args_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt strip_tac >>
   Cases_on `FLOOKUP ce.ce_vars h0` >> gvs[]
   >- metis_tac[] >>
-  Cases_on `var_location_memory_size x` >>
-  gvs[comp_ignore_bind_def, comp_bind_def, comp_return_def]
+  Cases_on `var_location_memory_size x` >> gvs[]
   >- metis_tac[] >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  drule compile_alloc_buffer_open >> strip_tac >>
-  drule_all decode_args_open >> strip_tac >>
-  metis_tac[]
+  metis_tac[registration_decode_open, compile_alloc_buffer_open]
+QED
+
+Theorem entry_checks_preserve_open:
+  !mincd pay a b. ~block_is_terminated a /\
+    compile_entry_checks mincd pay a = ((),b) ==>
+    ~block_is_terminated b
+Proof
+  rpt gen_tac >> Cases_on `pay` >> Cases_on `mincd > 4` >>
+  simp[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac emit_void_terminated >> gvs[is_terminator_def]
+QED
+
+Theorem entry_checks_registration_open:
+  !checks mincd pay start ce pos cenv registered.
+    ~block_is_terminated checks /\
+    compile_entry_checks mincd pay checks = ((),start) /\
+    compile_register_positional_args ce pos 4 start = (cenv,registered) ==>
+    ~block_is_terminated registered
+Proof
+  metis_tac[entry_checks_preserve_open, registration_preserves_open]
 QED

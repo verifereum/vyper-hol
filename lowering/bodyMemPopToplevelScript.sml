@@ -5,7 +5,7 @@ Theory bodyMemPopToplevel
 Ancestors
   bodyMemoryPreds bodyExprForceMemory bodyMemPopToplevelSim exprSimPopStorage
   exprSimDefs exprSimHyps exprSimHypsDefs exprSimMemDefs exprLowering exprSimSource
-  exprLoweringProps compileEnv context vyperInterpreter vyperTypeEnv
+  exprLoweringProps compileEnv loweringStateRelDefs context vyperInterpreter vyperTypeEnv
   vyperTypeInvariants vyperTyping vyperTypeSystem
 
 Theorem pop_toplevel_has_decl[local]:

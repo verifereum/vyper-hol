@@ -3,7 +3,7 @@ Theory bodyMemBiKeccakSuffix
 Ancestors
   exprSimHash exprSimAlloc exprSimDefs allocaFootprint bodyAllocMemory
   valueEncodingProps builtinHashing emitHelper emitHelperProps exprLoweringProps fragExecMem
-  instMemFrontier compileEnv context venomState venomInst venomExecSemantics
+  instMemFrontier compileEnv loweringStateRelDefs context venomState venomInst venomExecSemantics
   abiBuiltinAllocation venomMemDefs venomMemProps memSafeRun words list finite_map
 Libs
   pairLib

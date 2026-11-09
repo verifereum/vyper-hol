@@ -116,9 +116,9 @@ Theorem external_frame_ret_run_mem:
            (Return (SOME e))) es)
 Proof
   rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- metis_tac[return_value_code_prefix]
+  >- (rpt strip_tac >> drule_all return_value_code_prefix >> simp[])
   >- (rpt strip_tac >> drule_all external_package_frame_exit >> strip_tac >>
-      irule return_none_external_run_mem >> metis_tac[])
+      drule_all return_none_external_run_mem >> simp[])
   >> rpt strip_tac >>
   Cases_on `lowered_value_type cenv' e = expr_type e \/
             is_bytestring_type (expr_type e) /\

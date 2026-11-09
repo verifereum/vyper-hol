@@ -67,8 +67,8 @@ Resume source_selected_compiler_inputs[control]:
   drule_all source_selected_entry_checks_pass >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~block_is_terminated sc` by simp[block_is_terminated_def] >>
-  `~block_is_terminated sk` by metis_tac[entry_checks_open] >>
-  `~block_is_terminated sa'` by metis_tac[register_positional_args_open] >>
+  `~block_is_terminated sk` by metis_tac[entry_checks_preserve_open] >>
+  `~block_is_terminated sa'` by metis_tac[registration_preserves_open] >>
   simp[] >>
   conj_tac >- irule (SRULE [] linear_selectors_lt) >>
   conj_tac >- (drule_all valid_call_linear_dispatch_target >> simp[]) >>

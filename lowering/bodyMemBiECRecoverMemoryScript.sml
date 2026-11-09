@@ -3,7 +3,7 @@ Theory bodyMemBiECRecoverMemory
 Ancestors
   exprSimPrecompiles exprSimDefs exprSimProps exprLowering exprLoweringProps
   exprSimWordArgs exprSimHypsDefs vyperTyping vyperAST vyperTypeSystem
-  compileEnv list rich_list builtinMisc loweringPosts exprBopLowering
+  compileEnv loweringStateRelDefs list rich_list builtinMisc loweringPosts exprBopLowering
   vyperInterpreter vyperState vyperContext vyperValue vyperTypeInvariants
   valueEncoding integer_word words byte exprSimAlloc exprSimLiteralBuffer
   exprSimOps emitHelper emitHelperProps fragExec venomExecSemantics
@@ -175,7 +175,7 @@ Proof
      fs[alloca_inv_def, allocas_non_overlapping_def] >>
      qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _`
        (qspecl_then [`sf.cs_next_id`,`aid`] mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def]) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   drule_all ecrecover_input_stores_sim >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sb) s1 = OK s2` >>
   drule_all ecrecover_alloc_mem >> strip_tac >>

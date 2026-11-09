@@ -54,12 +54,12 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv accountsRelProps builtinSystem builtinSimple
+  exprLowering emitHelper compileEnv loweringStateRelDefs accountsRelProps builtinSystem builtinSimple
   builtinCreate context
-  venomExecSemantics venomState venomInst venomInstProps
+  venomExecSemantics venomExecProofs venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
-  valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
+  valueEncoding valueEncodingDefs valueEncodingProofs localPtrsProps venomMemDefs
   vyperAST vyperTyping fcgDefs
 Libs
   pairLib BasicProvers monadsyntax
@@ -139,7 +139,7 @@ Theorem decode_static_aggregate_bulk_ir:
     (DecComplex F [(DecPrimWord NoClamp,32,32);
                    (DecPrimWord NoClamp,32,32)]) 64 64 F 3 in
   let out = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 4w)
-                   CALLDATALOAD (Lit 0w) info st) in
+                   CALLDATALOAD (Lit 0w) (Lit 0w) info st) in
   out.cs_blocks = [] /\
   MAP (\i. i.inst_opcode) out.cs_current_insts =
     [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATALOAD; MSTORE;
@@ -156,7 +156,7 @@ Theorem decode_clamped_aggregate_loop_ir:
     (DecComplex F [(DecPrimWord (IntClamp 8 F),32,32);
                    (DecPrimWord (IntClamp 8 F),32,32)]) 64 64 F 3 in
   let out = SND (compile_abi_decode_to_buf (Lit 256w) (Lit 4w)
-                   CALLDATALOAD (Lit 0w) info st) in
+                   CALLDATALOAD (Lit 0w) (Lit 0w) info st) in
   out.cs_blocks <> [] /\
   ~MEM CALLDATACOPY (MAP (\i. i.inst_opcode)
     (FLAT (MAP (\bb. bb.bb_instructions) out.cs_blocks) ++
@@ -267,28 +267,71 @@ Definition fmp_room_def:
     w2n ss.vs_fmp + 2 ** 65 < dimword (:256)
 End
 
-(* Initialized constructor immutable capacity regions lie below the bump
-   frontier and miss every recorded ALLOCA of this function and every
-   live local region, including borrowed locals.  Restricting
-   the second clause to ALLOCA instructions is intentional: fixed immutable
-   reservations may themselves be recorded in vs_allocas.  Runtime reads
-   use the data section and impose no memory separation obligation. *)
-Definition immutable_alloca_sep_def:
-  immutable_alloca_sep func cenv cx (vs:evaluation_state) (ss:venom_state) <=>
+(* Constructor immutable capacity regions lie below the bump frontier and
+   miss every live local region, including borrowed locals.  Every
+   declared immutable, initialized or not, at its declared type, also misses
+   every recorded allocation: the constructor reserves the immutable section
+   with an ASSIGN of its base, not an ALLOCA, and starts the frontier above
+   it, so a first write to an immutable lands clear of all of them.  Each
+   initialized immutable, at its value's type, misses every recorded ALLOCA
+   of this function.  Runtime reads use the data section and impose no memory
+   separation obligation. *)
+Definition immutable_decl_sep_def:
+  immutable_decl_sep cenv cx scopes (vars:var_env)
+      (allocas:num |-> num # num) (next:num) <=>
     cenv.ce_is_ctor ==>
-    !name tv v off.
+    !name ty tv off.
       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
         SOME (ImmutableLoc off) /\
-      FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
-        | SOME imms => get_source_immutables cenv.ce_module imms) name =
-        SOME (tv,v) ==>
-      off + type_memory_size tv <= ss.vs_alloca_next /\
-      (!inst b sz.
-        MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-        FLOOKUP ss.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
+      off + type_memory_size tv <= next /\
+      (!aid b sz. FLOOKUP allocas aid = SOME (b,sz) ==>
         regions_disjoint off (type_memory_size tv) b sz) /\
-      (!id b sz. local_region cenv vs.scopes ss id b sz ==>
-        regions_disjoint off (type_memory_size tv) b sz)
+      (!id sz entry p w.
+        lookup_scopes id scopes = SOME entry /\
+        FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+        FLOOKUP vars p = SOME w ==>
+        regions_disjoint off (type_memory_size tv) (w2n w) sz)
+End
+
+(* The same, with the live locals read through local_region. *)
+Theorem immutable_decl_sep_alt:
+  !cenv cx scopes ss allocas next.
+    immutable_decl_sep cenv cx scopes ss.vs_vars allocas next <=>
+    (cenv.ce_is_ctor ==>
+     !name ty tv off.
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+         SOME (ImmutableLoc off) /\
+       cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+       evaluate_type (get_tenv cx) ty = SOME tv ==>
+       off + type_memory_size tv <= next /\
+       (!aid b sz. FLOOKUP allocas aid = SOME (b,sz) ==>
+         regions_disjoint off (type_memory_size tv) b sz) /\
+       (!id b sz. local_region cenv scopes ss id b sz ==>
+         regions_disjoint off (type_memory_size tv) b sz))
+Proof
+  simp[immutable_decl_sep_def, local_region_def, lookup_var_def, PULL_EXISTS]
+QED
+
+Definition immutable_alloca_sep_def:
+  immutable_alloca_sep func cenv cx (vs:evaluation_state) (ss:venom_state) <=>
+    immutable_decl_sep cenv cx vs.scopes ss.vs_vars ss.vs_allocas
+      ss.vs_alloca_next /\
+    (cenv.ce_is_ctor ==>
+     !name tv v off.
+       FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+         SOME (ImmutableLoc off) /\
+       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
+         | SOME imms => get_source_immutables cenv.ce_module imms) name =
+         SOME (tv,v) ==>
+       off + type_memory_size tv <= ss.vs_alloca_next /\
+       (!inst b sz.
+         MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+         FLOOKUP ss.vs_allocas inst.inst_id = SOME (b,sz) ==>
+         regions_disjoint off (type_memory_size tv) b sz) /\
+       (!id b sz. local_region cenv vs.scopes ss id b sz ==>
+         regions_disjoint off (type_memory_size tv) b sz))
 End
 
 (* A live borrowed local needs no tracked allocation.  The same initialized
@@ -296,7 +339,7 @@ End
 Theorem immutable_alloca_sep_borrowed_probe[local]:
   !func ce cx es s entry c v t u.
     (c,v,t,u) =
-      (ce with <| ce_is_ctor := T; ce_module := NONE;
+      (ce with <| ce_is_ctor := T; ce_module := NONE; ce_module_var_type := K NONE;
           ce_module_vars := FEMPTY |+ ((NONE,"imm"), ImmutableLoc 0);
           ce_vars := FEMPTY |+ ("local", PtrVar (Var "p") 32) |>,
        es with <| scopes := [FEMPTY |+ ("local",entry)];
@@ -314,9 +357,9 @@ Theorem immutable_alloca_sep_borrowed_probe[local]:
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[local_region_def, lookup_scopes_def, lookup_var_def,
-       immutable_alloca_sep_def, get_source_immutables_def,
+       immutable_alloca_sep_def, immutable_decl_sep_alt, get_source_immutables_def,
        finite_mapTheory.FLOOKUP_UPDATE, nsid_to_string_def,
-       type_memory_size_def, compileEnvTheory.regions_disjoint_def, wordsTheory.dimword_def,
+       type_memory_size_def, loweringStateRelDefsTheory.regions_disjoint_def, wordsTheory.dimword_def,
        venomMemPropsTheory.dimindex_256] >>
   conj_tac
   >- (rpt strip_tac >> gvs[AllCaseEqs()] >>
@@ -334,7 +377,7 @@ Theorem immutable_alloca_sep_fields:
        ?id0. local_region cenv vs.scopes ss id0 b sz) ==>
     immutable_alloca_sep func cenv cx vs' ss'
 Proof
-  rw[immutable_alloca_sep_def] >> metis_tac[]
+  rw[immutable_alloca_sep_def, immutable_decl_sep_alt] >> metis_tac[]
 QED
 
 Theorem immutable_alloca_sep_cenv_cong:
@@ -343,11 +386,43 @@ Theorem immutable_alloca_sep_cenv_cong:
     (!n off. FLOOKUP cenv.ce_module_vars n = SOME (ImmutableLoc off) ==>
        FLOOKUP cenv'.ce_module_vars n = SOME (ImmutableLoc off)) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+    cenv'.ce_module_var_type = cenv.ce_module_var_type /\
     (!id b sz. local_region cenv vs.scopes ss id b sz ==>
        ?id0. local_region cenv' vs.scopes ss id0 b sz) ==>
     immutable_alloca_sep func cenv cx vs ss
 Proof
-  rw[immutable_alloca_sep_def] >> metis_tac[]
+  rw[immutable_alloca_sep_def, immutable_decl_sep_alt] >> metis_tac[]
+QED
+
+(* The general frame: the frontier grows, every allocation is an old one or
+   sits above the old frontier, and every live local region is an old one,
+   an old ALLOCA of this function, or above the old frontier. *)
+Theorem immutable_alloca_sep_frame:
+  !func cenv cx vs vs' ss ss'.
+    immutable_alloca_sep func cenv cx vs ss /\
+    vs'.immutables = vs.immutables /\
+    ss.vs_alloca_next <= ss'.vs_alloca_next /\
+    (!aid b sz. FLOOKUP ss'.vs_allocas aid = SOME (b,sz) ==>
+       FLOOKUP ss.vs_allocas aid = SOME (b,sz) \/ ss.vs_alloca_next <= b) /\
+    (!id b sz. local_region cenv vs'.scopes ss' id b sz ==>
+       (?id0. local_region cenv vs.scopes ss id0 b sz) \/
+       (?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          FLOOKUP ss.vs_allocas inst.inst_id = SOME (b,sz)) \/
+       ss.vs_alloca_next <= b) ==>
+    immutable_alloca_sep func cenv cx vs' ss'
+Proof
+  rpt gen_tac >> rewrite_tac[immutable_alloca_sep_def, immutable_decl_sep_alt] >> strip_tac >>
+  conj_tac >> strip_tac >> (
+  rpt (qpat_x_assum `cenv.ce_is_ctor ==> _`
+         (fn th => first_assum (assume_tac o MP th))) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `vs'.immutables = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `!b sz. ss.vs_alloca_next <= b ==>
+          regions_disjoint off (type_memory_size tv) b sz` by
+    (rw[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  rpt conj_tac >- decide_tac >> metis_tac[])
 QED
 
 Theorem immutable_alloca_sep_exec_alloca:
@@ -358,14 +433,12 @@ Theorem immutable_alloca_sep_exec_alloca:
        ?id0. local_region cenv vs.scopes ss id0 b sz) ==>
     immutable_alloca_sep func cenv cx vs ss'
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> irule immutable_alloca_sep_frame >>
+  qexistsl_tac [`ss`, `vs`] >> simp[] >>
   qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
   simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >>
-  fs[immutable_alloca_sep_def, update_var_def] >> rpt strip_tac >>
-  qpat_x_assum `cenv.ce_is_ctor ==> _` drule_all >>
-  strip_tac >> simp[] >>
-  gvs[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
-  metis_tac[compileEnvTheory.regions_disjoint_def]
+  gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+  metis_tac[]
 QED
 
 (* Expose the base operand and constructor runtime-label requirements. *)
@@ -843,7 +916,7 @@ Proof
     (irule fmp_room_fields_cong >> simp[jump_to_def]) >>
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_alt,
        local_region_def, lookup_var_def, immutable_base_zero_alt]
 QED
 
@@ -860,7 +933,7 @@ Proof
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_alt,
        immutable_base_zero_alt]
 QED
 
@@ -876,7 +949,7 @@ Proof
        contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,
        venomMemDefsTheory.alloca_next_valid_def, alloca_room_def, fmp_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def, accounts_rel_def, immutable_base_zero_alt] >>
+       pending_alloca_size_def, immutable_alloca_sep_def, immutable_decl_sep_alt, accounts_rel_def, immutable_base_zero_alt] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
@@ -885,7 +958,7 @@ Theorem stmt_state_rel_push_scope:
     stmt_state_rel ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
     stmt_state_rel ctx func cenv cx es s
 Proof
-  simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def,
+  simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def, immutable_decl_sep_alt,
        local_region_def, lookup_scopes_def]
 QED
 
@@ -981,6 +1054,7 @@ Theorem stmt_state_rel_cenv_cong:
     (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
            FLOOKUP cenv.ce_module_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+    cenv'.ce_module_var_type = cenv.ce_module_var_type /\
     cenv'.ce_imm_alloca = cenv.ce_imm_alloca ==>
     stmt_state_rel ctx func cenv cx es ss
 Proof
@@ -2958,30 +3032,76 @@ Proof
   rpt strip_tac >> simp[abiEncoderTheory.compile_abi_decode_static_def] >> BETA_TAC >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (first_x_assum irule) >> simp[ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_getelemptr_abi[local]:
-  ∀ src_op is_dyn abi_offset load_opc hi_op sa.
-    ci_mono sa (SND (compile_getelemptr_abi src_op is_dyn abi_offset load_opc hi_op sa))
+Theorem ci_mono_compile_abi_dec_addr[local]:
+  !base_op pos sa.
+    ci_mono sa (SND (compile_abi_dec_addr base_op pos sa))
 Proof
-  rpt gen_tac >> Cases_on `hi_op = Lit 0w` >> Cases_on `is_dyn` >>
-  simp[abiEncoderTheory.compile_getelemptr_abi_def] >> BETA_TAC >>
-  rpt IF_CASES_TAC >> gvs[] >>
-  rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >>
-       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-       rpt strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_dec_addr_def] >>
+  IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_compile_getelemptr_abi[local]:
+  ∀ src_op is_dyn abi_offset load_opc base_op hi_op sa.
+    ci_mono sa (SND (compile_getelemptr_abi src_op is_dyn abi_offset load_opc base_op hi_op sa))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_getelemptr_abi_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> Cases_on `is_dyn` >> simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_abi_dec_addr] >> rpt gen_tac >>
+  ntac 2 (ho_match_mp_tac ci_mono_bind >> conj_tac
+    >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >- simp[ci_mono_comp_return] >> rpt gen_tac >>
+      ntac 2 (ho_match_mp_tac ci_mono_bind >> conj_tac
+        >- simp[ci_mono_emit_op] >> rpt gen_tac) >>
+      simp[ci_mono_emit_void]) >> simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_abi_decode_range_check[local]:
+  !a e h sa. ci_mono sa (SND (compile_abi_decode_range_check a e h sa))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_decode_range_check_def] >>
+  ntac 5 (ho_match_mp_tac ci_mono_bind >>
+    conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+  simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_abi_decode_head_check[local]:
+  !src hi sa. ci_mono sa (SND
+    ((if hi = Lit 0w then comp_return (Lit 0w)
+      else do head_end <- emit_op ADD [src; Lit 32w];
+              compile_abi_decode_range_check src head_end hi;
+              comp_return head_end
+           od) sa))
+Proof
+  rpt gen_tac >> IF_CASES_TAC >- simp[ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >>
+  conj_tac >- simp[ci_mono_compile_abi_decode_range_check] >>
+  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_compile_abi_decode_dyn_elem_ptr[local]:
-  ∀ load_opc elem_src src_data hi_op elem_abi_sz sa.
-    ci_mono sa (SND (compile_abi_decode_dyn_elem_ptr load_opc elem_src src_data hi_op elem_abi_sz sa))
+  ∀ load_opc base_op elem_src src_data hi_op elem_abi_sz sa.
+    ci_mono sa (SND (compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src src_data hi_op elem_abi_sz sa))
 Proof
   rpt gen_tac >>
-  rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >> BETA_TAC >>
-  Cases_on `hi_op = Lit 0w` >> simp[] >>
-  rpt ((irule ci_mono_ignore_bind ORELSE irule ci_mono_bind) >>
-       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return] >>
-       rpt strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return]
+  rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_abi_dec_addr] >> rpt gen_tac >>
+  ntac 2 (ho_match_mp_tac ci_mono_bind >>
+    conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >- simp[ci_mono_comp_return] >> rpt gen_tac >>
+      ntac 2 (ho_match_mp_tac ci_mono_bind >>
+        conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
+      ho_match_mp_tac ci_mono_ignore_bind >>
+      conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >>
+      conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+      simp[ci_mono_compile_abi_decode_range_check]) >>
+  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_compile_extcodesize_check[local]:
@@ -2991,8 +3111,8 @@ Proof
 QED
 
 Theorem ci_mono_compile_return_value_decode:
-  ∀ buf_op min_sz max_sz sa.
-    ci_mono sa (SND (compile_return_value_decode buf_op min_sz max_sz sa))
+  !min_sz max_sz sa.
+    ci_mono sa (SND (compile_return_value_decode min_sz max_sz sa))
 Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
@@ -3309,42 +3429,39 @@ Theorem ci_mono_compile_abi_decode_bytes_bound[local]:
       (SND
         ((if hi_op = Lit 0w then return ()
           else
-            do data_start <- emit_op ADD [src_op; Lit 32w];
-               data_end <- emit_op ADD [data_start; len_op];
-               oob <- emit_op GT [data_end; hi_op];
-               ok2 <- emit_op ISZERO [oob];
-               emit_void ASSERT [ok2]
+            do data_end <- emit_op ADD [src_op; len_op];
+               compile_abi_decode_range_check src_op data_end hi_op
             od) sa))
 Proof
   rpt gen_tac >> IF_CASES_TAC >- simp[ci_mono_comp_return] >>
-  ntac 4 (ho_match_mp_tac ci_mono_bind >>
-    conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
-  simp[ci_mono_emit_void]
+  ho_match_mp_tac ci_mono_bind >>
+  conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >>
+  simp[ci_mono_compile_abi_decode_range_check]
 QED
 
 Theorem ci_mono_compile_abi_decode:
-  (∀ dst src_op load_opc hi_op info sa.
-    ci_mono sa (SND (compile_abi_decode_to_buf dst src_op load_opc hi_op info sa))) ∧
-  (∀ dst src_op load_opc hi_op elems abi_offset vyper_offset sa.
-    ci_mono sa (SND (compile_abi_decode_complex_elems dst src_op load_opc hi_op elems abi_offset vyper_offset sa))) ∧
-  (∀ dst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa.
-    ci_mono sa (SND (compile_abi_decode_dyn_loop dst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa)))
+  (∀ dst src_op load_opc base_op hi_op info sa.
+    ci_mono sa (SND (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info sa))) ∧
+  (∀ dst src_op load_opc base_op hi_op elems abi_offset vyper_offset sa.
+    ci_mono sa (SND (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op elems abi_offset vyper_offset sa))) ∧
+  (∀ dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa.
+    ci_mono sa (SND (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa)))
 Proof
   let
     val [c0,c1,c2,c3,c4,c5,c6] = CONJUNCTS abiEncoderTheory.compile_abi_decode_to_buf_def
     val db = fn t => ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[t] >> rpt strip_tac
     val dib = fn t => ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[t] >> rpt strip_tac
     val decode_ind = BETA_RULE (ISPECL
-      [``λdst src_op load_opc hi_op info.
+      [``λdst src_op load_opc base_op hi_op info.
            ∀sa. ci_mono sa
-             (SND (compile_abi_decode_to_buf dst src_op load_opc hi_op info sa))``,
-       ``λdst src_op load_opc hi_op elems abi_offset vyper_offset.
+             (SND (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info sa))``,
+       ``λdst src_op load_opc base_op hi_op elems abi_offset vyper_offset.
            ∀sa. ci_mono sa
-             (SND (compile_abi_decode_complex_elems dst src_op load_opc hi_op
+             (SND (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op
                elems abi_offset vyper_offset sa))``,
-       ``λdst src_op load_opc hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt.
+       ``λdst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr cnt.
            ∀sa. ci_mono sa
-             (SND (compile_abi_decode_dyn_loop dst src_op load_opc hi_op
+             (SND (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op
                elem_info elem_abi_sz elem_mem_sz i_ptr cnt sa))``]
       abiEncoderTheory.compile_abi_decode_to_buf_ind)
     val decode_prem = fst (dest_imp (concl decode_ind))
@@ -3353,30 +3470,36 @@ Proof
     (fn prem_th => ACCEPT_TAC (MATCH_MP decode_ind prem_th)) >- (
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
   (* DecPrimWord *)
-  >- (rewrite_tac[c0] >> BETA_TAC >>
+  >- (rewrite_tac[c0] >> BETA_TAC >> db ci_mono_compile_abi_dec_addr >>
       irule ci_mono_compile_abi_decode_static >> simp[ci_mono_compile_abi_clamp_basetype])
   (* DecBytestring *)
   >- (rewrite_tac[c1] >>
+      db ci_mono_compile_abi_decode_head_check >>
+      db ci_mono_compile_abi_dec_addr >>
       ntac 3 (db ci_mono_emit_op) >>
       dib ci_mono_emit_void >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
       >- (irule ci_mono_compile_abi_decode_bytes_bound) >>
-      rpt strip_tac >>
-      Cases_on `load_opc` >> simp[ci_mono_emit_void])
+      rpt strip_tac >> IF_CASES_TAC
+      >- (Cases_on `load_opc` >> simp[ci_mono_emit_void]) >>
+      ntac 4 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
+      db ci_mono_emit_op >> simp[ci_mono_emit_void])
   (* DecDynArray *)
   >- (rpt strip_tac >> rewrite_tac[c2] >> BETA_TAC >>
+      db ci_mono_compile_abi_decode_head_check >>
+      db ci_mono_compile_abi_dec_addr >>
       ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (
         IF_CASES_TAC >> gvs[]
         >- simp[ci_mono_comp_return]
         >> rpt strip_tac >>
-           ntac 5 (db ci_mono_emit_op) >>
-           simp[ci_mono_emit_void]) >>
+           ntac 2 (db ci_mono_emit_op) >>
+           simp[ci_mono_compile_abi_decode_range_check]) >>
       rpt strip_tac >>
       db ci_mono_emit_op >> dib ci_mono_emit_void >>
       simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-      >- (ntac 3 (db ci_mono_emit_op) >>
-          Cases_on `load_opc` >> simp[ci_mono_emit_void])
+      >- (ntac 2 (db ci_mono_emit_op) >> db ci_mono_compile_abi_dec_addr >>
+          db ci_mono_emit_op >> Cases_on `load_opc` >> simp[ci_mono_emit_void])
       >> db ci_mono_compile_alloc_buffer >> dib ci_mono_emit_void >>
       first_x_assum irule >> simp[])
   (* DecComplex *)
@@ -3385,7 +3508,7 @@ Proof
       >- (qpat_x_assum `∀static_sz. _ ∧ hi_op = Lit 0w ⇒ _`
             (qspec_then `FOLDR (λ(_0,abi_sz,_1) acc. abi_sz + acc) 0 elems` mp_tac) >>
           simp[]) >>
-      ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_void >>
+      db ci_mono_emit_op >> dib ci_mono_compile_abi_decode_range_check >>
       qpat_x_assum `∀static_sz. _ ∧ hi_op ≠ Lit 0w ⇒ _`
         (qspec_then `FOLDR (λ(_0,abi_sz,_1) acc. abi_sz + acc) 0 elems` mp_tac) >>
       simp[])
@@ -3407,7 +3530,8 @@ Proof
   BETA_TAC >> simp_tac pure_ss [LET_THM] >> BETA_TAC >>
   ntac 3 (db ci_mono_fresh_label) >>
   dib ci_mono_emit_inst >> dib ci_mono_new_block >>
-  ntac 4 (db ci_mono_emit_op) >> dib ci_mono_emit_inst >> dib ci_mono_new_block >>
+  db ci_mono_emit_op >> db ci_mono_compile_abi_dec_addr >>
+  ntac 3 (db ci_mono_emit_op) >> dib ci_mono_emit_inst >> dib ci_mono_new_block >>
   ntac 4 (db ci_mono_emit_op) >>
   ho_match_mp_tac ci_mono_bind >> conj_tac >- (
     IF_CASES_TAC >> simp[ci_mono_compile_abi_decode_dyn_elem_ptr, ci_mono_comp_return]) >>
@@ -4701,42 +4825,6 @@ Proof
 QED
 
 (* ===== Structural Properties ===== *)
-
-(* The DRET continuation only destructs the opaque packing result and returns
-   IntRet, so it can never equal an OK result. *)
-Theorem pack_dret_dynamic_IntRet_not_OK[local]:
-  !cursor pairs s ordinary vals out.
-    (\(ptrs,final_cursor,st).
-       IntRet
-         <|iret_values := TAKE ordinary (DROP 1 vals) ++ ptrs;
-           iret_adopt_fmp := SOME final_cursor|>
-         (st with vs_fmp := final_cursor))
-      (pack_dret_dynamic cursor pairs s) <> OK out
-Proof
-  rpt strip_tac >>
-  Cases_on `pack_dret_dynamic cursor pairs s` >>
-  Cases_on `r` >>
-  pairarg_tac >>
-  gvs[]
-QED
-
-(* Helper: step_inst_base preserves call/tx/block context for ANY instruction
-   that returns OK. Unlike step_inst_base_preserves_inst_idx, we don't need
-   ~is_terminator because jump_to only modifies vs_prev_bb/vs_current_bb/vs_inst_idx. *)
-Theorem step_inst_base_ok_terminator_jump[local]:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
-    inst.inst_opcode = DJMP
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp_tac(srw_ss())[] >>
-  gvs[pack_dret_dynamic_IntRet_not_OK, AllCaseEqs()]
-QED
 
 Theorem step_inst_base_ok_jmp_ctxs[local]:
   !inst s s'.

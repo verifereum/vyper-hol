@@ -22,28 +22,31 @@ Proof
   >- (simp[ptr_safe_step_def, ptr_inst_ok_def, mk_inst_def] >>
       simp[access_ok_def, taint_ok_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
-           step_inst_base_def, exec_read0_def, update_var_def]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
-       exec_read0_def, is_terminator_def, ghost_step_def] >>
+           step_inst_base_opcode_eqs,
+           exec_read0_def, update_var_def]) >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       mk_inst_def, exec_read0_def, is_terminator_def, ghost_step_def] >>
   simp[Once ptr_safe_block_def, update_var_def, arithmeticTheory.ADD1] >>
   conj_tac
   >- (simp[ptr_safe_step_def, ptr_inst_ok_def, mk_inst_def] >>
       simp[access_ok_def, taint_ok_def, source_memory_write_ranges_def,
            source_memory_read_ranges_def, step_inst_non_invoke,
-           step_inst_base_def, exec_pure1_def, eval_operand_def,
+           step_inst_base_opcode_eqs,
+           exec_pure1_def, eval_operand_def,
            lookup_var_def, FLOOKUP_UPDATE, step_taint_def, op_taint_def,
            allocas_from_def, update_var_def, out_taint_def, set_var_taint_def] >>
       gvs[allocas_from_def]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
-       exec_pure1_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
-       is_terminator_def, ghost_step_def, update_var_def] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       mk_inst_def, exec_pure1_def, eval_operand_def, lookup_var_def,
+       FLOOKUP_UPDATE, is_terminator_def, ghost_step_def, update_var_def] >>
   qmatch_goalsub_abbrev_tac `ptr_safe_block _ _ _ _ _ _ G2 tn2 _ _` >>
   simp[Once ptr_safe_block_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
-       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  simp[ptr_safe_step_def, ptr_inst_ok_def, mk_inst_def] >>
-  simp[access_ok_def, taint_ok_def, source_memory_write_ranges_def,
-       source_memory_read_ranges_def, step_inst_non_invoke, step_inst_base_def,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs,
+       mk_inst_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       mk_inst_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, step_inst_non_invoke,
+       step_inst_base_opcode_eqs,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
        Abbr `tn2`, step_taint_def, op_taint_def, out_taint_def,
        set_var_taint_def, update_var_def, allocas_from_def] >>

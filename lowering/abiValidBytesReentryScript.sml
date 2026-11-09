@@ -7,8 +7,9 @@ Ancestors
   venomExecSemantics venomState words list
 
 Theorem abi_decoder_valid_bytes_reentry:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
-  abi_decoder_valid_bytes_pre n at bs payload st src dst opc hi sb d
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_valid_bytes_pre n at bs payload st src dst opc base_op hi B sb d
     (abi_decoder_prune_vars st.cs_next_var initial) /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
@@ -20,7 +21,8 @@ Theorem abi_decoder_valid_bytes_reentry:
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
       eval_operand op actual = SOME w)
 Proof
-  strip_tac >> drule_all abi_decoder_valid_bytes_sequence >> strip_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_decoder_valid_bytes_sequence >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st')
     (abi_decoder_prune_vars st.cs_next_var initial) = OK clean` >>
   `abi_decode_source_opcode opc` by

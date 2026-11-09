@@ -4,7 +4,7 @@ Theory exprSimMemUnwrap
 Ancestors
   exprSimMemDefs exprSimUnwrap exprSimDefs loweringPosts gasOutcome
   bodyUnwrapCapacity
-  exprLowering compileEnv vyperInterpreter vyperState
+  exprLowering compileEnv loweringStateRelDefs vyperInterpreter vyperState
   exprSimUnwrapProps exprSimProps exprSimMemorySource bodyFieldMemoryProps
   gasSummary gasSummaryCompose gasExemptCert fragGasMode fragGasPath
   fragGasPathMem fragGasSeqMem fragExecMem instMemFrontier allocaHistoryFragment
@@ -150,7 +150,7 @@ Proof
   >- (rw[is_terminator_def, Abbr `ld`] >>
       TRY (irule below_frontier_no_ranges >> simp[mk_inst_def] >> NO_TAC) >>
       TRY (simp[inst_dload_in_section_def, mk_inst_def] >> NO_TAC) >>
-      gvs[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
+      FIRST [simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def]]) >>
   strip_tac >> rename1 `gas_path_mem _ _ s 0 (OK u)` >>
   qexists_tac `u` >> simp[] >>
   irule expr_post_of_vv_post_load >> simp[] >>
@@ -246,7 +246,7 @@ Proof
         `mload (w2n w) s0`] mp_tac) >>
       impl_tac
       >- (simp[is_terminator_def, below_frontier_ILOAD] >>
-          simp[inst_dload_in_section_def, step_inst_base_def,
+          simp[inst_dload_in_section_def, step_inst_base_opcode_eqs,
                exec_read1_def, mk_inst_def]) >>
       strip_tac >> goal_assum drule >> simp[]) >>
   rename1 `cenv.ce_imm_alloca = SOME ib` >>
@@ -271,7 +271,7 @@ Proof
   impl_tac
   >- (simp[is_terminator_def] >> rpt strip_tac >>
       TRY (irule below_frontier_no_ranges >> simp[mk_inst_def] >> NO_TAC) >>
-      simp[inst_dload_in_section_def, step_inst_base_def, exec_pure2_def,
+      simp[inst_dload_in_section_def, step_inst_base_opcode_eqs, exec_pure2_def,
            mk_inst_def, wordsTheory.WORD_ADD_0]) >>
   strip_tac >> rename1 `gas_path_mem _ _ s0 0 (OK s1)` >>
   `~s1.vs_halted` by metis_tac[gas_path_mem_exec, gas_path_normal] >>
@@ -281,7 +281,7 @@ Proof
     `mload (w2n w) s1`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def, below_frontier_ILOAD] >>
-      simp[inst_dload_in_section_def, step_inst_base_def,
+      simp[inst_dload_in_section_def, step_inst_base_opcode_eqs,
            exec_read1_def, mk_inst_def]) >>
   strip_tac >> rename1 `gas_path_mem _ _ s1 0 (OK s2)` >>
   qexists_tac `s2` >> gvs[mload_def] >>
@@ -451,7 +451,7 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   `s.vs_alloca_next <= t.vs_alloca_next` by
     (qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
-     simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
           exec_alloca_def, eval_operand_def] >>
      Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id` >>
      simp[update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
@@ -1047,7 +1047,7 @@ Proof
   gvs[run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last] >> rpt conj_tac >>
   TRY (irule below_frontier_no_ranges >> simp[mk_inst_def] >> NO_TAC) >>
   TRY (simp[inst_dload_in_section_def, mk_inst_def] >> NO_TAC) >>
-  gvs[step_inst_base_def, exec_pure2_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_pure2_def, mk_inst_def] >>
   gvs[unitTransformDefsTheory.inst_mem_below_frontier_def,
       contextCodegenRelTheory.source_memory_read_ranges_def,
       codegenRelTheory.source_memory_write_ranges_def,
@@ -1242,7 +1242,7 @@ Proof
       (mem_bytes_at (w2n a) (type_memory_size tv) u.vs_data_section) u` by
     (qspecl_then [`type_slot_size tv`, `w2n a`, `w2n w`, `0`, `u`] mp_tac
       immutable_runtime_transfers_snapshot >>
-     simp[valueEncodingTheory.mem_bytes_at_def, valueEncodingPropsTheory.type_memory_size_slots] >>
+     simp[valueEncodingDefsTheory.mem_bytes_at_def, valueEncodingPropsTheory.type_memory_size_slots] >>
      gvs[valueEncodingPropsTheory.type_memory_size_slots]) >>
   gvs[] >> conj_tac
   >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>

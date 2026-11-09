@@ -98,7 +98,7 @@ Theorem decode_singleton_aggregate_boundary:
   FLOOKUP cenv.ce_vars name = SOME loc /\
   var_location_decode_operand loc = SOME dst ==>
   ?src first.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),stf) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),stf) /\
     cs_extends st first
 Proof
   strip_tac >>
@@ -119,7 +119,7 @@ Theorem register_singleton_aggregate_boundary:
   var_location_memory_size loc = SOME mem_size ==>
   ?buf allocated src first.
     compile_alloc_buffer mem_size st = (buf,allocated) /\
-    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w)
       info first = ((),stf) /\
     cs_extends st first
 Proof
@@ -142,7 +142,7 @@ Theorem register_selected_aggregate_decoder:
     ?loc mem_size. FLOOKUP ce.ce_vars name = SOME loc /\
       var_location_memory_size loc = SOME mem_size) ==>
   ?dst src first last.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     cs_extends st first /\ cs_extends last stf
 Proof
   strip_tac >> drule register_selected_arg_boundaries >> strip_tac >>
@@ -316,7 +316,7 @@ Theorem external_selected_aggregate_boundary:
     ?loc mem_size. FLOOKUP ce.ce_vars name = SOME loc /\
       var_location_memory_size loc = SOME mem_size) ==>
   ?dst src first last.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     cs_extends st first /\ cs_extends last stf
 Proof
   strip_tac >> drule_all external_selected_registration_boundary >> strip_tac >>
@@ -376,7 +376,7 @@ Theorem runtime_selected_aggregate_packaged:
     ?loc mem_size. FLOOKUP ce.ce_vars name = SOME loc /\
       var_location_memory_size loc = SOME mem_size) ==>
   ?dst src first last fn entry_end.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last) /\
     MEM fn unit.cu_context.ctx_functions /\ fn_has_code first last fn /\
     cs_extends last entry_end /\
     ALL_DISTINCT (MAP (\bb. bb.bb_label) (all_blocks entry_end)) /\

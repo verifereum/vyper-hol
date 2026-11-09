@@ -4,9 +4,9 @@ Ancestors
   exprSimHypsDefs exprSimSource
   exprBopSimProps
   exprSimDefs exprSimProps exprSimStack loweringPosts
-  exprSimConvert exprSimHyps  exprLowering exprLoweringProps compileEnv
+  exprSimConvert exprSimHyps  exprLowering exprLoweringProps compileEnv loweringStateRelDefs
   exprSimAlloc exprSimBuffer exprSimBufferStore exprSimLiteralBuffer exprSimHash
-  exprOperandVar valueEncoding valueEncodingProofs
+  exprOperandVar valueEncoding valueEncodingDefs valueEncodingProofs
   vyperTypeSystem vyperValueOperation vyperValue vyperInterpreter vyperState
   gasSummary gasOutcome gasSummaryCompose gasExemptCert fragGasPath gasContext
   fragExec fragGasSeq fragGasSeqAbort fragGasMode freshWrites loweringSlice venomExecSemantics venomState
