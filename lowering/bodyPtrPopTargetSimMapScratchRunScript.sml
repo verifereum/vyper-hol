@@ -3,11 +3,13 @@ Theory bodyPtrPopTargetSimMapScratchRun
 Ancestors bodyPtrPopTargetSimMapKeyRun exprSimMapKey exprLowering
   exprLoweringProps emitHelper emitHelperProps compileEnv context
   codegenRel ASCIInumbers rich_list venomInst
-  bodyPtrEnvBuiltinsSelectorSuffix assignBasePtrLiteralGhost
+  bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsSelectorBuffer
+  bodyPtrEnvBuiltinsEdges assignBasePtrLiteralGhost
   bodyPtrHashBuiltinsKeccakBytesRun bodyPtrHashBuiltinsKeccak
   exprSimPtrTopLevelImmutableCopy typedCopyPtr fragExecPtr fragGasSeqPtr
   venomState venomExecSemantics ptrDiscipline bodyPtrDefs words finite_map pred_set
-  instIdxIndep exprSimHash
+  instIdxIndep exprSimHash localPtrsProps bodyPtrEnvBuiltinsMemoryHash
+  bodyPtrEnvBuiltinsAllocation instSeqComposePtr
 
 Theorem map_scratch_emission:
   !base key sa op sb.
@@ -162,3 +164,165 @@ Resume map_scratch_store_hash_checked[hash]:
 QED
 
 Finalise map_scratch_store_hash_checked
+
+Theorem map_scratch_stores_ghost_inv:
+  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!name lb sz. local_region cenv es.scopes s name lb sz ==>
+     lb+sz <= b \/ b+64 <= lb) /\
+  lookup_var p s = SOME (n2w b) /\ p <> q /\
+  FLOOKUP G p = SOME (root,cap) /\ op_taint tn (Var p) = {} ==>
+  ghost_inv d cenv cx es (G |+ (q,(root,cap)))
+    (tn with <|t_var := tn.t_var |+ (q,{});
+      t_mem := (tn.t_mem DIFF {i | b <= i /\ i < b+32})
+        DIFF {i | b+32 <= i /\ i < b+64}|>)
+    (mstore (b+32) w1 (update_var q (n2w (b+32)) (mstore b w0 s)))
+Proof
+  strip_tac >>
+  qabbrev_tac `s1 = mstore b w0 s` >>
+  qabbrev_tac `tn1 = tn with t_mem := tn.t_mem DIFF {i | b <= i /\ i < b+32}` >>
+  qabbrev_tac `s2 = update_var q (n2w (b+32)) s1` >>
+  qabbrev_tac `G2 = G |+ (q,(root,cap))` >>
+  qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (q,{})` >>
+  `ghost_inv d cenv cx es G tn1 s1` by
+    (simp[Abbr `s1`] >> irule ghost_inv_mstore_clean >>
+     conj_tac >- (rpt strip_tac >> first_x_assum drule >> decide_tac) >>
+     conj_tac >- metis_tac[] >> qexists_tac `tn` >> simp[Abbr `tn1`]) >>
+  `ghost_inv d cenv cx es G2 tn2 s2` by suspend "add_inv" >>
+  `local_ptrs_rel fn cenv es.scopes s2` by suspend "locals" >>
+  `!name lb sz. local_region cenv es.scopes s2 name lb sz ==>
+     lb+sz <= b+32 \/ b+64 <= lb` by suspend "separation" >>
+  `ghost_inv d cenv cx es G2
+    (tn2 with t_mem := tn2.t_mem DIFF {i | b+32 <= i /\ i < b+64})
+    (mstore (b+32) w1 s2)` suffices_by
+    simp[Abbr `G2`, Abbr `tn2`, Abbr `tn1`, Abbr `s2`, Abbr `s1`] >>
+  irule ghost_inv_mstore_clean >> simp[] >>
+  conj_tac >- metis_tac[] >> metis_tac[]
+QED
+
+Resume map_scratch_stores_ghost_inv[add_inv]:
+  `step_prov PG G (mk_inst 0 ADD [Var p;Lit 32w] [q]) s2 = G2 /\
+   step_taint (mk_inst 0 ADD [Var p;Lit 32w] [q]) s1 s2 tn1 = tn2` by
+    (simp[Abbr `s2`, Abbr `G2`, Abbr `tn2`] >>
+     simp[hash_add_ghost]) >>
+  qpat_x_assum `step_prov _ _ _ _ = G2` (rewrite_tac o single o GSYM) >>
+  qpat_x_assum `step_taint _ _ _ _ = tn2` (rewrite_tac o single o GSYM) >>
+  irule single_output_ghost_inv >>
+  simp[Abbr `s2`, update_var_def, copy_len_binop_ghost_frame] >>
+  qexists_tac `sa` >> simp[] >>
+  rpt strip_tac >> `x <> q` by metis_tac[] >> simp[lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Resume map_scratch_stores_ghost_inv[locals]:
+  `not_local_ptr cenv es.scopes q` by
+    (gvs[local_ptrs_reserved_def, not_local_ptr_def] >> metis_tac[]) >>
+  simp[Abbr `s2`] >> irule local_ptrs_rel_update_var >>
+  simp[not_local_ptr_scope] >>
+  simp[Abbr `s1`] >> irule local_ptrs_rel_mstore >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> decide_tac
+QED
+
+Resume map_scratch_stores_ghost_inv[separation]:
+  rpt gen_tac >> strip_tac >>
+  `local_region cenv es.scopes s name lb sz` by
+    (qpat_x_assum `local_region _ _ s2 _ _ _` mp_tac >>
+     simp[local_region_def, Abbr `s2`, Abbr `s1`,
+       update_var_def, lookup_var_def, mstore_def, FLOOKUP_UPDATE] >>
+     rpt strip_tac >> `p' <> q` by
+       (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     gvs[] >> metis_tac[]) >>
+  qpat_x_assum `!name lb sz. local_region _ _ s _ _ _ ==> _` drule >> decide_tac
+QED
+
+Finalise map_scratch_stores_ghost_inv
+
+Theorem map_scratch_tail_certificate:
+  code = [mk_inst is MSTORE [Var p;slot] [];
+          mk_inst ip ADD [Var p;Lit 32w] [q];
+          mk_inst ik MSTORE [Var q;key] [];
+          mk_inst ih SHA3 [Var p;Lit 64w] [h]] /\ 
+  ALL_DISTINCT [p;q;h] /\ (!x. key = Var x ==> x <> q) /\
+  eval_operand slot s = SOME w0 /\ eval_operand key s = SOME w1 /\
+  op_taint tn slot = {} /\ op_taint tn key = {} /\
+  lookup_var p s = SOME (n2w b) /\ FLOOKUP G p = SOME (root,cap) /\
+  root <= b /\ b+64 <= root+cap /\ b+64 < dimword (:256) /\
+  op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx /\
+  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\ ~not_fresh_at sa h /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!name lb sz. local_region cenv es.scopes s name lb sz ==>
+     lb+sz <= b \/ b+64 <= lb) /\ run_inst_seq code s = OK t ==>
+  ?G' tn'. (!k. inst_seq_ptr D 0 ctx fn PG G tn code
+      (s with vs_inst_idx := k) G' tn') /\
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_kept cenv es sa G tn s G' tn' /\
+    tn'.t_mem SUBSET tn.t_mem /\ op_taint tn' (Var h) = {} /\ op_prov G' (Var h) = NONE /\
+    (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> gvs[] >>
+  qabbrev_tac `u = mstore b w0 s` >>
+  qabbrev_tac `v = update_var q (n2w (b+32)) u` >>
+  qabbrev_tac `z = mstore (b+32) w1 v` >>
+  qabbrev_tac `G2 = G |+ (q,(root,cap))` >>
+  qabbrev_tac `tn2 = tn with <|t_var := tn.t_var |+ (q,{});
+    t_mem := (tn.t_mem DIFF {i | b <= i /\ i < b+32})
+      DIFF {i | b+32 <= i /\ i < b+64}|>` >>
+  `t = update_var h (word_of_bytes T (0w:bytes32)
+     (Keccak_256_w64 (mem_bytes_at b 64 z.vs_memory))) z` by suspend "endpoint" >>
+  `ghost_inv d cenv cx es G2 tn2 z` by
+    (simp[Abbr `z`, Abbr `v`, Abbr `u`, Abbr `G2`, Abbr `tn2`] >>
+     irule (SRULE [] map_scratch_stores_ghost_inv) >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`DRESTRICT G2 (COMPL {h})`, `tn2 with t_var := tn2.t_var |+ (h,{})`] >>
+  conj_tac >- (gen_tac >> simp[Abbr `G2`, Abbr `tn2`] >>
+    qpat_assum `q <> h` (fn th => irule (SRULE [th] map_scratch_store_hash_checked)) >>
+    simp[lookup_var_def, eval_operand_def] >> metis_tac[lookup_var_def, eval_operand_def]) >>
+  conj_tac >- suspend "ghost" >>
+  conj_tac >- suspend "kept" >>
+  simp[op_taint_def, op_prov_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+    Abbr `G2`, Abbr `tn2`, SUBSET_DEF] >>
+  rpt strip_tac >> `x <> q /\ x <> h` by metis_tac[] >> simp[]
+QED
+
+Resume map_scratch_tail_certificate[endpoint]:
+  `b < dimword (:256) /\ b+32 < dimword (:256)` by decide_tac >>
+  `step_inst_base (mk_inst is MSTORE [Var p;slot] []) s = OK u` by
+    simp[Abbr `u`, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_write2_def, eval_operand_def] >>
+  `lookup_var p u = SOME (n2w b)` by
+    simp[Abbr `u`, lookup_var_def, mstore_def] >>
+  `step_inst_base (mk_inst ip ADD [Var p;Lit 32w] [q]) u = OK v` by
+    simp[Abbr `v`, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_pure2_def, eval_operand_def, word_add_n2w] >>
+  `lookup_var q v = SOME (n2w (b+32)) /\ eval_operand key v = SOME w1 /\
+   lookup_var p z = SOME (n2w b)` by
+    (Cases_on `key` >>
+     gvs[Abbr `v`, Abbr `u`, Abbr `z`, lookup_var_def, update_var_def,
+       mstore_def, FLOOKUP_UPDATE, eval_operand_def]) >>
+  `step_inst_base (mk_inst ik MSTORE [Var q;key] []) v = OK z` by
+    simp[Abbr `z`, step_inst_base_opcode_eqs, mk_inst_def,
+      exec_write2_def, eval_operand_def] >>
+  `step_inst_base (mk_inst ih SHA3 [Var p;Lit 64w] [h]) z =
+    OK (update_var h (word_of_bytes T (0w:bytes32)
+      (Keccak_256_w64 (mem_bytes_at b 64 z.vs_memory))) z)` by
+    (irule step_SHA3_bytes >> simp[eval_operand_def, dimword_def]) >>
+  gvs[run_inst_seq_def]
+QED
+
+Resume map_scratch_tail_certificate[ghost]:
+  simp[] >> irule (SRULE [hash_sha3_ghost] (cj 1 hash_update_ghosts)) >>
+  simp[] >> irule_at Any ghost_kept_refl >> qexists_tac `sa` >> simp[]
+QED
+
+Resume map_scratch_tail_certificate[kept]:
+  irule ghost_kept_clean_suffix >> qexistsl_tac [`G`, `tn`] >>
+  simp[ghost_kept_refl, Abbr `G2`, Abbr `tn2`, op_taint_def, FLOOKUP_UPDATE,
+    FLOOKUP_DRESTRICT, SUBSET_DEF] >>
+  rpt strip_tac >> `x <> q /\ x <> h` by metis_tac[] >> simp[]
+QED
+
+Finalise map_scratch_tail_certificate
+
