@@ -5,7 +5,7 @@ Ancestors
   loadElimPaddedCalls loadElimPaddedNoncall loadElimMemoryRel
   loadElimActionSelection loadElimLatestJoin loadElimOccurrence loadElimDefs
   loadElimSentinelHelpers loadElimKeyShapeInvariant cfgAnalysisProps
-  instIdxIndep analysisSimProofsBase venomInstProps contextCodegenRel
+  instIdxIndep analysisSimProofsBase venomInstProps contextCodegenRel opcodeClass
   venomState venomInst venomExecSemantics venomExecProps venomExecProofs stateFrame stateEquiv list
 
 (* Entry/edge coupling is le_padded_control.  Inside a block only the
@@ -563,3 +563,152 @@ Resume le_coupled_block_OK[next]:
   simp[Once exec_block_def, le_transformed_nonterm, Excl "isPREFIX"]
 QED
 Finalise le_coupled_block_OK
+
+Theorem le_configured_terminal_unchanged:
+  le_configured_context ctx /\
+  (case step_inst k C i s of OK u => F | Error e => F | _ => T) ==>
+  load_elim_inst ctx actions ll i = i
+Proof
+  strip_tac >>
+  `MEM i.inst_opcode
+    [STOP; RETURN; SINK; SELFDESTRUCT; INVOKE; REVERT; INVALID;
+     ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY;
+     RET; RETFMP; DRET]` by
+    (Cases_on `step_inst k C i s` >> gvs[]
+     >- metis_tac[step_inst_halt_opcodes, MEM]
+     >- metis_tac[step_inst_abort_opcodes, MEM] >>
+     Cases_on `i.inst_opcode = INVOKE` >- simp[] >>
+     fs[step_inst_non_invoke] >>
+     metis_tac[step_inst_base_intret_opcodes]) >>
+  irule loadElimOriginHelpersTheory.load_elim_inst_unchanged >>
+  gvs[le_configured_context_def, memory_config_def, storage_config_def,
+      transient_config_def, dload_config_def, calldataload_config_def] >>
+  gvs[]
+QED
+
+Theorem le_coupled_source_step_normalized:
+  le_round_ready C fn ctx s0 /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  le_body_coupling m ctx cfg result actions h bb s t ==>
+  (?e. step_inst k C i s = Error e) \/
+  lift_result
+    (\u v. le_padded_control {v | isPREFIX "$le_phi_" v}
+      (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v})
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v})
+    (step_inst k C i s) (step_inst k C i t)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM i bb.bb_instructions` by
+    (fs[get_instruction_def] >> metis_tac[MEM_EL]) >>
+  irule le_padded_source_step_normalized >>
+  `!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t` by
+    (rpt strip_tac >> irule le_source_operand_lookup_agreement >>
+     fs[le_round_ready_def, le_body_coupling_def, Excl "isPREFIX"] >> metis_tac[]) >>
+  `i.inst_opcode <> MEMTOP` by
+    (fs[le_round_ready_def, EVERY_MEM, fn_insts_def] >>
+     metis_tac[o1PassContractTheory.fn_insts_blocks_MEM]) >>
+  metis_tac[le_body_coupling_normalize, le_round_ready_def]
+QED
+
+Theorem le_coupled_block_terminal:
+  !n s h t i r.
+  n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
+  le_round_ready C fn ctx s0 /\
+  le_occ_prefix C fn s0 h i s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  le_body_coupling m ctx (cfg_analyze fn) (load_analyze ctx fn)
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) h bb s t /\
+  (case r of OK u => F | Error e => F | _ => T) /\
+  exec_block k C bb s = r ==>
+  lift_result (\u v. F)
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v})
+    (padded_exec_equiv {v | isPREFIX "$le_phi_" v}) r
+    (exec_block k C
+      (analysis_block_transform_prepend NONE (load_analyze ctx fn)
+        (load_phi_prepend (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn))
+        (\ll inst. [load_elim_inst ctx
+          (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) ll inst]) bb) t)
+Proof
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM i bb.bb_instructions` by
+    (fs[get_instruction_def] >> metis_tac[MEM_EL]) >>
+  `inst_wf i` by
+    (fs[le_round_ready_def] >> metis_tac[fn_inst_wf_every_bb, EVERY_MEM]) >>
+  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `le_configured_context ctx` by fs[le_round_ready_def] >>
+  qpat_x_assum `exec_block k C bb s = r` mp_tac >>
+  simp[Once exec_block_def, Excl "isPREFIX"] >>
+  Cases_on `step_inst k C i s` >> simp[Excl "isPREFIX"]
+  >- suspend "ok" >>
+  disch_then (SUBST_ALL_TAC o SYM) >> fs[Excl "isPREFIX"] >>
+  `load_elim_inst ctx
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+    (df_at NONE (load_analyze ctx fn) bb.bb_label s.vs_inst_idx) i = i` by
+    (irule le_configured_terminal_unchanged >> simp[] >>
+     qexistsl_tac [`C`, `k`, `s`] >> simp[]) >>
+  drule_all le_body_coupling_fetch >> strip_tac >>
+  drule_all le_coupled_source_step_normalized >>
+  disch_then (qspec_then `k` mp_tac) >>
+  simp[Excl "isPREFIX"] >>
+  Cases_on `step_inst k C i t` >>
+  simp[lift_result_def, Once exec_block_def, Excl "isPREFIX"]
+QED
+
+Resume le_coupled_block_terminal[ok]:
+  rename1 `step_inst k C i s = OK w` >>
+  Cases_on `is_terminator i.inst_opcode`
+  >- (Cases_on `w.vs_halted` >> simp[Excl "isPREFIX"] >>
+      disch_then (SUBST_ALL_TAC o SYM) >> fs[Excl "isPREFIX"] >>
+      `load_elim_inst ctx
+        (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+        (df_at NONE (load_analyze ctx fn) bb.bb_label s.vs_inst_idx) i = i` by
+        metis_tac[le_configured_terminator_unchanged] >>
+      `?v. step_inst k C i t = OK v /\
+        le_padded_control {v | isPREFIX "$le_phi_" v} w v` by
+        (irule le_coupled_unchanged_term >>
+         `!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t` by
+           (rpt strip_tac >> irule le_source_operand_lookup_agreement >>
+            fs[le_round_ready_def, le_body_coupling_def, Excl "isPREFIX"] >> metis_tac[]) >>
+         `i.inst_opcode <> MEMTOP` by
+           (fs[le_round_ready_def, EVERY_MEM, fn_insts_def] >>
+            metis_tac[o1PassContractTheory.fn_insts_blocks_MEM]) >>
+         metis_tac[le_body_coupling_normalize, le_round_ready_def]) >>
+      drule_all le_body_coupling_fetch >> strip_tac >>
+      `v.vs_halted` by fs[le_padded_control_def, padded_exec_equiv_def, execution_frame_def] >>
+      simp[Once exec_block_def, lift_result_def, Excl "isPREFIX"] >>
+      fs[le_padded_control_def]) >>
+  simp[Excl "isPREFIX"] >> strip_tac >>
+  drule_all le_coupled_nonterm_step >> strip_tac >>
+  `w.vs_current_bb = s.vs_current_bb` by
+    (drule_all step_preserves_control_flow >> simp[]) >>
+  `lookup_block (w with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
+     fn.fn_blocks = SOME bb` by simp[] >>
+  `?j. get_instruction bb (SUC s.vs_inst_idx) = SOME j` by
+    (Cases_on `get_instruction bb (SUC s.vs_inst_idx)` >> simp[] >>
+     `exec_block k C bb (w with vs_inst_idx := SUC s.vs_inst_idx) =
+       Error "block not terminated"` by
+       (pure_once_rewrite_tac[exec_block_def] >> simp[]) >>
+     `r = Error "block not terminated"` by metis_tac[] >>
+     fs[Excl "isPREFIX"]) >>
+  `le_occ_prefix C fn s0 (h ++ [StepOcc bb s.vs_inst_idx k s w]) j
+    (w with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule (cj 2 le_occ_prefix_rules) >>
+     fs[get_instruction_def, active_inst_def, Excl "isPREFIX"] >> metis_tac[]) >>
+  qpat_x_assum `!m'. _`
+    (qspec_then `LENGTH bb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- fs[get_instruction_def]) >>
+  disch_then (qspecl_then
+    [`w with vs_inst_idx := SUC s.vs_inst_idx`,
+     `h ++ [StepOcc bb s.vs_inst_idx k s w]`,
+     `v with vs_inst_idx := SUC t.vs_inst_idx`, `j`, `r`] mp_tac) >>
+  simp[Excl "isPREFIX"] >>
+  strip_tac >>
+  drule_all le_body_coupling_fetch >> strip_tac >>
+  simp[Once exec_block_def, le_transformed_nonterm, Excl "isPREFIX"]
+QED
+Finalise le_coupled_block_terminal
