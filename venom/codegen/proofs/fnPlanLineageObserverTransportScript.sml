@@ -2905,3 +2905,184 @@ Proof
   disch_then (drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (qspec_then `v` mp_tac) >> simp[]
 QED
+
+(* Initialization gives exact live inventory after parameter preparation. *)
+Theorem initialized_prepare_params_support_budget:
+  !fn ch growth spill_base lbl_ctr qs v.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    qs = SND (prepare_params_plan (liveness_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) ==>
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))) /\
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fnPlanLineageSetupTheory.native_parameter_inventory >>
+  disch_then (qspecl_then [`ch`,`growth`,`spill_base`,`lbl_ctr`] strip_assume_tac) >>
+  gvs[] >> conj_tac
+  >- (gvs[pred_setTheory.EXTENSION, MEM_MAP] >> metis_tac[]) >>
+  metis_tac[fnPlanLineageInventoryTheory.all_distinct_elem_count_le_one]
+QED
+
+Theorem ready_parameter_suffix_nondefining:
+  !fn bb param v.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM param (get_params bb.bb_instructions) /\ MEM v param.inst_outputs ==>
+    EVERY (\inst. ~MEM v inst.inst_outputs) (non_param_insts bb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  drule_all fnPlanLineageCallersTheory.ssa_form_block_outputs_distinct >>
+  drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+  disch_then (fn th => once_rewrite_tac[th]) >>
+  simp[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND, EVERY_MEM,
+    MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem ready_entry_ordinary_prefix_layout:
+  !fn k.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    k < LENGTH (non_param_insts (HD fn.fn_blocks)) ==>
+    !j. j < k ==>
+      (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode <> PHI /\
+      (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode <> JMP /\
+      ~is_param_opcode (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  drule_all fnPlanLineageEntryProductionTheory.ready_entry_static_boundary >> strip_tac >>
+  qspecl_then [`fn`,`HD fn.fn_blocks`,`0`] mp_tac
+    fnPlanLineageEntryProductionTheory.ready_block_ordinary_suffix_layout >>
+  simp[] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `j < LENGTH (non_param_insts (HD fn.fn_blocks))` by decide_tac >>
+  first_x_assum (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+  `MEM (EL j (non_param_insts (HD fn.fn_blocks)))
+    (non_param_insts (HD fn.fn_blocks))` by simp[EL_MEM] >>
+  gvs[non_param_insts_def, MEM_FILTER]
+QED
+
+Theorem initialized_entry_parameter_prefix_joint[local]:
+  !fn dfg ch growth spill_base lbl_ctr param v k qs.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    MEM param (get_params (HD fn.fn_blocks).bb_instructions) /\ MEM v param.inst_outputs /\
+    ~bb_is_halting (HD fn.fn_blocks) /\
+    k < LENGTH (non_param_insts (HD fn.fn_blocks)) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn (HD fn.fn_blocks).bb_label
+      (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) (non_param_insts (HD fn.fn_blocks))
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))) k qs ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1 /\
+    ((MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+k)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (HD fn.fn_blocks) fn.fn_blocks` by (Cases_on `fn.fn_blocks` >> gvs[]) >>
+  drule_all fnPlanLineageEntryProductionTheory.ready_entry_static_boundary >> strip_tac >>
+  `!j. j < k ==>
+    (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode <> PHI /\
+    (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode <> JMP /\
+    ~is_param_opcode (EL j (non_param_insts (HD fn.fn_blocks))).inst_opcode /\
+    ~MEM v (EL j (non_param_insts (HD fn.fn_blocks))).inst_outputs` by
+    (rpt gen_tac >> strip_tac >>
+     drule_all ready_entry_ordinary_prefix_layout >> strip_tac >>
+     drule_all ready_parameter_suffix_nondefining >>
+     simp[EVERY_MEM] >> strip_tac >>
+     `j < LENGTH (non_param_insts (HD fn.fn_blocks))` by decide_tac >>
+     metis_tac[EL_MEM]) >>
+  `!j before w. j < k /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn (HD fn.fn_blocks).bb_label
+      (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) (non_param_insts (HD fn.fn_blocks))
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))) j before /\
+    MEM (Var w) (compute_operands (EL j (non_param_insts (HD fn.fn_blocks)))) ==>
+    MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled` by suspend "available" >>
+  `((MEM (Var v) (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))).ps_stack \/
+      Var v IN FDOM (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))).ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)))) /\
+    LIST_ELEM_COUNT (Var v) (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))).ps_stack +
+      (if Var v IN FDOM (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))).ps_spilled then 1 else 0) <= 1` by
+    (match_mp_tac initialized_prepare_params_support_budget >> simp[] >>
+     qexistsl_tac [`ch`,`growth`,`spill_base`,`lbl_ctr`] >> simp[]) >>
+  gvs[] >> drule native_supported_ordinary_suffix_joint >>
+  disch_then (qspecl_then [`HD fn.fn_blocks`,`0`,`v`] mp_tac) >> simp[] >>
+  (impl_tac >- (conj_tac >- metis_tac[] >> rpt strip_tac >> metis_tac[])) >> simp[]
+QED
+
+Resume initialized_entry_parameter_prefix_joint[available]:
+  rpt gen_tac >> strip_tac >>
+  `j < LENGTH (non_param_insts (HD fn.fn_blocks))` by decide_tac >>
+  `fnPlanLineageEntryProduction$entry_boundary_resources fn (HD fn.fn_blocks)
+    (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+j) before` by
+    (drule_at (Pat `fnPlanLineageEntryProduction$native_inst_prefix _ _ _ _ _ _ _ _ _ _ j before`)
+       fnPlanLineageEntryProductionTheory.initialized_entry_prefix_structural >>
+     simp[] >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
+  `LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+j <
+    LENGTH (HD fn.fn_blocks).bb_instructions` by
+    (drule_all fnPlanLineageCallersTheory.ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `EL j (non_param_insts (HD fn.fn_blocks)) =
+    EL (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+j)
+      (HD fn.fn_blocks).bb_instructions` by
+    metis_tac[fnPlanLineageCallersTheory.ready_block_suffix_index] >>
+  irule fnPlanLineageNativeResourcesTheory.native_live_boundary_operands >>
+  simp[] >> qexistsl_tac [`HD fn.fn_blocks`,`fn`,
+    `LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+j`] >>
+  gvs[fnPlanLineageNativeResourcesTheory.native_live_boundary_def,
+      fnPlanLineageEntryProductionTheory.entry_boundary_resources_def]
+QED
+
+Finalise initialized_entry_parameter_prefix_joint
+
+Theorem initialized_entry_parameter_prefix_demand_support:
+  !fn dfg ch growth spill_base lbl_ctr param v k qs.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    MEM param (get_params (HD fn.fn_blocks).bb_instructions) /\ MEM v param.inst_outputs /\
+    ~bb_is_halting (HD fn.fn_blocks) /\
+    k < LENGTH (non_param_insts (HD fn.fn_blocks)) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn (HD fn.fn_blocks).bb_label
+      (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) (non_param_insts (HD fn.fn_blocks))
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))) k qs ==>
+    (MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled) ==>
+      MEM v (live_vars_at (liveness_analyze fn) (HD fn.fn_blocks).bb_label
+        (LENGTH (get_params (HD fn.fn_blocks).bb_instructions)+k))
+Proof
+  metis_tac[initialized_entry_parameter_prefix_joint]
+QED
+
+Theorem initialized_entry_parameter_prefix_resource_bound:
+  !fn dfg ch growth spill_base lbl_ctr param v k qs.
+    codegen_ready_fn fn /\ fn.fn_blocks <> [] /\
+    MEM param (get_params (HD fn.fn_blocks).bb_instructions) /\ MEM v param.inst_outputs /\
+    ~bb_is_halting (HD fn.fn_blocks) /\
+    k < LENGTH (non_param_insts (HD fn.fn_blocks)) /\
+    fnPlanLineageEntryProduction$native_inst_prefix
+      (liveness_analyze fn) dfg (cfg_analyze fn) fn (HD fn.fn_blocks).bb_label
+      (bb_is_halting (HD fn.fn_blocks))
+      (LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+      (LENGTH (HD fn.fn_blocks).bb_instructions) (non_param_insts (HD fn.fn_blocks))
+      (SND (prepare_params_plan (liveness_analyze fn) fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr))) k qs ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  metis_tac[initialized_entry_parameter_prefix_joint]
+QED
