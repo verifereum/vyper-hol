@@ -226,7 +226,20 @@ Proof
     (simp_tac bool_ss [local_region_def] >> rpt strip_tac >>
      qpat_x_assum `!name entry ptr sz. _` drule_all >>
      strip_tac >> qexistsl [`entry`, `p`, `w`] >> gvs[]) >>
-  fs[immutable_alloca_sep_def] >> disch_tac >> fs[] >>
+  fs[immutable_alloca_sep_def] >> conj_tac
+  >- (fs[immutable_decl_sep_alt] >> disch_tac >> fs[] >>
+      rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!name ty tv off. _` drule_all >> strip_tac >>
+      conj_tac >- decide_tac >>
+      reverse conj_tac >- metis_tac[] >>
+      rpt gen_tac >> strip_tac >>
+      Cases_on `FLOOKUP initial.vs_allocas aid`
+      >- (qpat_x_assum `!i q k. _` drule_all >>
+          simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      PairCases_on `x` >>
+      `FLOOKUP actual.vs_allocas aid = SOME(x0,x1)` by metis_tac[] >>
+      gvs[] >> metis_tac[]) >>
+  disch_tac >> fs[] >>
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!name tv v off. _` drule_all >> strip_tac >>
   conj_tac >- decide_tac >>
