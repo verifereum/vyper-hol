@@ -869,3 +869,170 @@ Theorem inline_site_exit_packet:
 Proof
   simp[inline_site_exit_def]
 QED
+
+(* Expanded offsets advance by the whole rewrite, not one target instruction. *)
+Theorem inline_clone_prefix_successor:
+  j < LENGTH insts ==>
+  let pre = rewrite_inline_insts args outs ret
+        (MAP (clone_instruction p labs) (TAKE j insts)) 0;
+      focus = rewrite_inline_inst args outs ret
+        (clone_instruction p labs (EL j insts)) (SND pre);
+      next = rewrite_inline_insts args outs ret
+        (MAP (clone_instruction p labs) (TAKE (SUC j) insts)) 0
+  in LENGTH (FST next) = LENGTH (FST pre) + LENGTH (FST focus) /\
+     SND next = SND focus
+Proof
+  strip_tac >>
+  `TAKE (SUC j) insts = TAKE j insts ++ [EL j insts]` by
+    simp[arithmeticTheory.ADD1, rich_listTheory.TAKE_EL_SNOC, SNOC_APPEND] >>
+  simp[MAP_APPEND, rewrite_inline_insts_append, rewrite_inline_insts_def,
+       pairTheory.UNCURRY]
+QED
+
+Theorem inline_final_nonphi_getter:
+  lookup_block l raw.fn_blocks = SOME bb /\
+  lookup_block l (renumber_fn_inst_ids (fix_inline_phis old fresh rb raw)).fn_blocks = SOME tb /\
+  k < LENGTH bb.bb_instructions /\ (EL k bb.bb_instructions).inst_opcode <> PHI ==>
+  get_instruction tb k = SOME (EL k tb.bb_instructions) /\
+  inline_inst_fields (EL k tb.bb_instructions) =
+    inline_inst_fields (EL k bb.bb_instructions)
+Proof
+  strip_tac >> rev_drule inline_final_lookup_fields >>
+  disch_then (qspecl_then [`rb`, `old`, `fresh`] strip_assume_tac) >> gvs[] >>
+  `LENGTH tb.bb_instructions = LENGTH bb.bb_instructions` by
+    (drule inline_fields_length >>
+     Cases_on `MEM bb.bb_label (bb_succs rb)` >> simp[]) >>
+  simp[get_instruction_def] >>
+  qpat_x_assum `MAP inline_inst_fields _ = _` mp_tac >>
+  simp[LIST_EQ_REWRITE] >> strip_tac >>
+  qpat_x_assum `LENGTH _ = LENGTH (if _ then _ else _)` kall_tac >>
+  first_x_assum (qspec_then `k` mp_tac) >>
+  Cases_on `MEM bb.bb_label (bb_succs rb)` >>
+  asm_simp_tac bool_ss [EL_MAP, LENGTH_MAP]
+QED
+
+Theorem inline_caller_point_prefix_getter:
+  inline_caller_point caller final lbl i ret N opaque b j s t /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+    (inline_call_site p ret caller callee lbl i)) /\
+  b = lbl /\ j < i /\
+  lookup_block lbl caller.fn_blocks = SOME bb /\
+  i <= LENGTH bb.bb_instructions /\
+  (EL j bb.bb_instructions).inst_opcode <> PHI ==>
+  ?tb. lookup_block t.vs_current_bb final.fn_blocks = SOME tb /\
+    get_instruction tb t.vs_inst_idx = SOME (EL j tb.bb_instructions) /\
+    inline_inst_fields (EL j tb.bb_instructions) =
+      inline_inst_fields (EL j bb.bb_instructions)
+Proof
+  strip_tac >> gvs[inline_caller_point_def] >>
+  drule inline_call_site_lookup_call >>
+  disch_then (qspecl_then [`ret`, `p`, `i`, `callee`] assume_tac) >>
+  drule inline_final_nonphi_getter >>
+  simp[rich_listTheory.EL_APPEND1, rich_listTheory.EL_TAKE] >>
+  disch_then drule >>
+  disch_then (qspec_then `s.vs_inst_idx` mp_tac) >>
+  simp[rich_listTheory.EL_APPEND1, rich_listTheory.EL_TAKE]
+QED
+
+Theorem inline_caller_point_suffix_getter:
+  inline_caller_point caller final lbl i ret N opaque b j s t /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+    (inline_call_site p ret caller callee lbl i)) /\
+  b = lbl /\ i < j /\
+  lookup_block lbl caller.fn_blocks = SOME bb /\
+  ~MEM ret (fn_labels caller) /\ j < LENGTH bb.bb_instructions /\
+  (EL j bb.bb_instructions).inst_opcode <> PHI ==>
+  ?tb. lookup_block t.vs_current_bb final.fn_blocks = SOME tb /\
+    get_instruction tb t.vs_inst_idx = SOME (EL t.vs_inst_idx tb.bb_instructions) /\
+    inline_inst_fields (EL t.vs_inst_idx tb.bb_instructions) =
+      inline_inst_fields (EL j bb.bb_instructions)
+Proof
+  strip_tac >> gvs[inline_caller_point_def] >>
+  drule_all inline_call_site_lookup_return >>
+  disch_then (qspecl_then [`p`, `i`, `callee`] assume_tac) >>
+  drule inline_final_nonphi_getter >> simp[] >>
+  disch_then drule >>
+  disch_then (qspec_then `s.vs_inst_idx - (i+1)` mp_tac) >>
+  simp[rich_listTheory.EL_DROP]
+QED
+
+
+Theorem inline_clone_point_focus_getter:
+  inline_clone_point caller callee final lbl i p ret N opaque_caller opaque
+    c d V b j counter s t /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+    (inline_call_site p ret caller callee lbl i)) /\
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b callee.fn_blocks = SOME cb /\
+  ~MEM (STRCAT p b) (fn_labels caller) /\ STRCAT p b <> ret /\
+  cb.bb_instructions = pre ++ inst::post /\ j = LENGTH pre /\
+  focus = FST (rewrite_inline_inst
+    (rotate_invoke_ops (EL i call_bb.bb_instructions).inst_operands)
+    (EL i call_bb.bb_instructions).inst_outputs ret
+    (clone_instruction p (fn_labels callee) inst) counter) /\
+  k < LENGTH focus /\ (EL k focus).inst_opcode <> PHI ==>
+  ?tb. lookup_block t.vs_current_bb final.fn_blocks = SOME tb /\
+    get_instruction tb (t.vs_inst_idx+k) =
+      SOME (EL (t.vs_inst_idx+k) tb.bb_instructions) /\
+    inline_inst_fields (EL (t.vs_inst_idx+k) tb.bb_instructions) =
+      inline_inst_fields (EL k focus)
+Proof
+  strip_tac >> gvs[inline_clone_point_def, rich_listTheory.TAKE_LENGTH_APPEND] >>
+  drule_all (SRULE [] inline_call_site_lookup_clone_focus) >>
+  disch_then (qspec_then `i` (assume_tac o SRULE [LET_THM])) >>
+  drule inline_final_nonphi_getter >> simp[] >>
+  disch_then drule >>
+  disch_then (qspec_then `t.vs_inst_idx+k` mp_tac) >>
+  simp[rich_listTheory.EL_APPEND1, rich_listTheory.EL_APPEND2]
+QED
+
+Theorem inline_caller_point_other_getter:
+  inline_caller_point caller final lbl i ret N opaque b j s t /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+    (inline_call_site p ret caller callee lbl i)) /\
+  b <> lbl /\ lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  j < LENGTH bb.bb_instructions /\ (EL j bb.bb_instructions).inst_opcode <> PHI ==>
+  ?tb. lookup_block t.vs_current_bb final.fn_blocks = SOME tb /\
+    get_instruction tb t.vs_inst_idx = SOME (EL j tb.bb_instructions) /\
+    inline_inst_fields (EL j tb.bb_instructions) =
+      inline_inst_fields (EL j bb.bb_instructions)
+Proof
+  strip_tac >> gvs[inline_caller_point_def] >>
+  drule_all inline_call_site_lookup_other >>
+  disch_then (qspecl_then [`ret`, `p`, `i`, `callee`] assume_tac) >>
+  drule inline_final_nonphi_getter >>
+  disch_then drule >>
+  disch_then (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]
+QED
+
+Theorem inline_site_exit_suffix_point:
+  inline_caller_data N opaque_caller c d /\
+  inline_site_exit N opaque_caller p V opaque outs c d ret ir u v /\
+  bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state c u)) = SOME w /\
+  c.vs_current_bb = lbl /\ lookup_block lbl caller.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ ~MEM ret (fn_labels caller) /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+    (inline_call_site p ret caller callee lbl i)) ==>
+  inline_caller_point caller final lbl i ret N opaque_caller lbl (SUC i)
+    (w with vs_inst_idx := SUC i) (v with vs_inst_idx := 0)
+Proof
+  strip_tac >>
+  `inline_caller_data N opaque_caller w v` by
+    metis_tac[inline_site_exit_caller_data] >>
+  `v.vs_current_bb = ret` by metis_tac[inline_site_exit_control] >>
+  `w.vs_current_bb = lbl` by
+    (qpat_x_assum `bind_outputs _ _ _ = SOME w` mp_tac >>
+     simp[bind_outputs_def] >>
+     Cases_on `ir.iret_adopt_fmp` >>
+     simp[adopt_return_fmp_def, merge_callee_state_def, inline_writes_control] >>
+     strip_tac >> gvs[inline_writes_control]) >>
+  drule_all inline_call_site_lookup_return >>
+  disch_then (qspecl_then [`p`, `i`, `callee`] assume_tac) >>
+  drule inline_final_lookup_fields >>
+  disch_then (qspecl_then [`rb`, `lbl`, `ret`] strip_assume_tac) >>
+  drule inline_fields_length >> simp[] >>
+  Cases_on `MEM ret (bb_succs rb)` >>
+  simp[inline_caller_point_def, LENGTH_MAP] >> metis_tac[]
+QED
