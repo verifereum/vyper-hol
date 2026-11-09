@@ -124,8 +124,8 @@ Proof
   `spill_alloc_n [] ps.ps_alloc (REVERSE (top_n (d - 15) ps.ps_stack)) =
    spill_alloc_n [] qs.ps_alloc (REVERSE (top_n (d - 15) qs.ps_stack))` by
     (gvs[] >> irule spill_alloc_n_length_cong >> simp[top_n_def, LENGTH_TAKE]) >>
-  qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose >>
-  qspecl_then [`d`, `qs`] mp_tac do_dup_big_decompose >>
+  qspecl_then [`d`, `ps`] mp_tac do_dup_big_decompose_explicit >>
+  qspecl_then [`d`, `qs`] mp_tac do_dup_big_decompose_explicit >>
   simp[] >> rpt strip_tac >> gvs[]
 QED
 

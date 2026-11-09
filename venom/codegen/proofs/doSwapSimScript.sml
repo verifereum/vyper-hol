@@ -2105,7 +2105,7 @@ Proof
 QED
 
 (* Explicit schedule interface retained for spill-map and frame consumers. *)
-Theorem do_dup_big_decompose_explicit[local]:
+Theorem do_dup_big_decompose_explicit:
   !dist ps.
     dist > 15 /\ dist < LENGTH ps.ps_stack ==>
     let k = dist - 15;
