@@ -990,10 +990,10 @@ Proof
            assert_def, ignore_bind_def, get_storage_backend_def,
            get_accounts_def, get_transient_storage_def, bind_def,
            lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
-           LET_THM, vfmTypesTheory.option_CASE_rator, COND_RATOR, COND_RAND] >>
-      (* rpt (...) is timed as one step: take the first rounds separately. *)
-      TRY (BasicProvers.TOP_CASE_TAC >> simp[COND_RAND]) >>
-      TRY (BasicProvers.TOP_CASE_TAC >> simp[COND_RAND]) >>
+           LET_THM, vfmTypesTheory.option_CASE_rator, COND_RATOR, COND_RAND]
+      >>~- ([`oEL (Num i) l`],
+            Cases_on `0 <= i /\ Num i < LENGTH l` >> simp[] >>
+            Cases_on `oEL (Num i) l` >> simp[]) >>
       rpt (BasicProvers.TOP_CASE_TAC >> simp[COND_RAND]) >> gvs[])
   >~ [`MemoryPlace id path`]
   >- (simp[select_result_def, extend_place_def, place_type_value_def,

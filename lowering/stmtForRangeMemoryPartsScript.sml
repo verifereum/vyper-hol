@@ -163,7 +163,7 @@ Proof
                        mk_inst i2 ADD [Lit a; Lit b] [ev]]` >>
   `!s. step_inst_base (mk_inst i1 ASSIGN [Lit a] [cv]) s =
        OK (update_var cv a s)` by
-    simp[step_inst_base_def, mk_inst_def, eval_operand_def] >>
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
   `!s. step_inst_base (mk_inst i2 ADD [Lit a; Lit b] [ev]) s =
        OK (update_var ev (a + b) s)` by
     (gen_tac >> irule step_ADD >> simp[eval_operand_def]) >>
@@ -214,7 +214,7 @@ Proof
   `step_inst_base (mk_inst i2 ASSIGN [Var nv] [cv])
        (update_var nv (c + 1w) dd) =
        OK (update_var cv (c + 1w) (update_var nv (c + 1w) dd))` by
-    simp[step_inst_base_def, mk_inst_def, eval_operand_def,
+    simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
          lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   fs[mk_inst_def] >>
   qabbrev_tac `u = update_var cv (c + 1w) (update_var nv (c + 1w) dd)` >>
