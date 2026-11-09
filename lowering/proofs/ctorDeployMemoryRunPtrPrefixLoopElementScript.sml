@@ -13,7 +13,7 @@ Ancestors
   finite_map words list rich_list arithmetic pred_set codegenRel
 
 Theorem prefix_loop_element_setup_code:
-  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) di asz msz st = (ops,middle) ==>
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) (Lit 0w) di asz msz st = (ops,middle) ==>
   let x = (\k. "%" ++ toString (st.cs_next_var+k));
       id = st.cs_next_id
   in
@@ -42,7 +42,7 @@ Theorem prefix_loop_element_setup_code:
 Proof
   Cases_on `dec_info_needs_offset di` >>
   simp[abi_decode_array_element_setup_def,abi_decode_indexed_address_def,
-    compile_abi_decode_dyn_elem_ptr_def,comp_bind_def,comp_ignore_bind_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,
     emit_def,LET_THM] >> strip_tac >>
   qpat_x_assum `_ = middle` (SUBST1_TAC o SYM) >>
@@ -463,7 +463,7 @@ Proof
 QED
 
 Theorem prefix_loop_dynamic_code:
-  compile_abi_decode_dyn_elem_ptr DLOAD head base_op (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) head base_op (Lit 0w) stride st =
     (address,st') ==>
   address = Var ("%" ++ toString (st.cs_next_var+1)) /\
   emitted_insts st st' =
@@ -472,7 +472,7 @@ Theorem prefix_loop_dynamic_code:
        [base_op;Var ("%" ++ toString st.cs_next_var)]
        ["%" ++ toString (st.cs_next_var+1)]]
 Proof
-  simp[compile_abi_decode_dyn_elem_ptr_def,comp_bind_def,comp_ignore_bind_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,fresh_var_def,fresh_id_def,emit_def,LET_THM] >>
   strip_tac >> qpat_x_assum `_ = st'` (SUBST1_TAC o SYM) >>
   simp[emitted_insts_def] >>
@@ -509,7 +509,7 @@ Proof
 QED
 
 Theorem prefix_loop_dynamic_compiled_pair:
-  compile_abi_decode_dyn_elem_ptr DLOAD head base_op (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) head base_op (Lit 0w) stride st =
     (address,st') /\
   eval_operand head s = SOME a /\ eval_operand base_op s = SOME c /\
   abi_decoder_operand_live st.cs_next_var base_op /\
@@ -562,11 +562,11 @@ Theorem prefix_loop_element_compiled_stages:
   emit_op MLOAD [ip] st = (idx,c1) /\
   abi_decode_indexed_address src idx abi_sz c1 = (head,c2) /\
   (if dec_info_needs_offset di then
-     compile_abi_decode_dyn_elem_ptr opc head
+     compile_abi_decode_dyn_elem_ptr opc (Lit 0w) head
        (Var ("%" ++ toString c1.cs_next_var)) hi abi_sz c2
    else comp_return head c2) = (child_src,c3) /\
   abi_decode_indexed_address dst idx mem_sz c3 = (child_dst,c4) ==>
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st =
+  abi_decode_array_element_setup ip src dst opc (Lit 0w) hi di abi_sz mem_sz st =
     ((idx,child_src,child_dst),c4)
 Proof
   strip_tac >>
@@ -580,13 +580,13 @@ Proof
 QED
 
 Theorem prefix_loop_element_compiled_decompose:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st =
+  abi_decode_array_element_setup ip src dst opc (Lit 0w) hi di abi_sz mem_sz st =
     ((idx,child_src,child_dst),c4) ==>
   ?c1 head c2 c3.
     emit_op MLOAD [ip] st = (idx,c1) /\
     abi_decode_indexed_address src idx abi_sz c1 = (head,c2) /\
     (if dec_info_needs_offset di then
-       compile_abi_decode_dyn_elem_ptr opc head
+       compile_abi_decode_dyn_elem_ptr opc (Lit 0w) head
          (Var ("%" ++ toString c1.cs_next_var)) hi abi_sz c2
      else comp_return head c2) = (child_src,c3) /\
     abi_decode_indexed_address dst idx mem_sz c3 = (child_dst,c4)
@@ -596,12 +596,12 @@ Proof
   Cases_on `abi_decode_indexed_address src i abi_sz s1` >>
   rename1 `abi_decode_indexed_address src i abi_sz s1 = (h,s2)` >>
   Cases_on `if dec_info_needs_offset di then
-    compile_abi_decode_dyn_elem_ptr opc h (Var ("%" ++ toString s1.cs_next_var))
+    compile_abi_decode_dyn_elem_ptr opc (Lit 0w) h (Var ("%" ++ toString s1.cs_next_var))
       hi abi_sz s2 else comp_return h s2` >>
   rename1 `(if dec_info_needs_offset di then _ else _) = (cs,s3)` >>
   Cases_on `abi_decode_indexed_address dst i mem_sz s3` >>
   rename1 `abi_decode_indexed_address dst i mem_sz s3 = (cd,s4)` >>
-  `abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st =
+  `abi_decode_array_element_setup ip src dst opc (Lit 0w) hi di abi_sz mem_sz st =
     ((i,cs,cd),s4)` by
     (rule_assum_tac (SRULE []) >> irule prefix_loop_element_compiled_stages >> simp[] >>
      qexists `s3` >> simp[]) >>
@@ -920,7 +920,7 @@ Proof
 QED
 
 Theorem prefix_loop_dynamic_compiled_uniform_pair:
-  compile_abi_decode_dyn_elem_ptr DLOAD head base_op (Lit 0w) stride st =
+  compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) head base_op (Lit 0w) stride st =
     (address,st') /\
   eval_operand head s = SOME a /\ eval_operand base_op s = SOME c /\
   abi_decoder_operand_live st.cs_next_var base_op /\
@@ -1069,7 +1069,7 @@ Theorem prefix_loop_element_stage_layout:
   emit_op MLOAD [ip] st = (idx,c1) /\
   abi_decode_indexed_address src idx abi_sz c1 = (head,c2) /\
   (if dec_info_needs_offset di then
-     compile_abi_decode_dyn_elem_ptr DLOAD head
+     compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) head
        (Var ("%" ++ toString c1.cs_next_var)) (Lit 0w) abi_sz c2
    else comp_return head c2) = (child_src,c3) /\
   abi_decode_indexed_address dst idx mem_sz c3 = (child_dst,c4) ==>
@@ -1085,7 +1085,7 @@ Theorem prefix_loop_element_stage_layout:
     emitted_insts c2 c3 ++ emitted_insts c3 c4
 Proof
   Cases_on `dec_info_needs_offset di` >>
-  simp[abi_decode_indexed_address_def,compile_abi_decode_dyn_elem_ptr_def,
+  simp[abi_decode_indexed_address_def,compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
     emit_op_def,fresh_var_def,fresh_id_def,emit_def,
     comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
   rpt strip_tac >> gvs[] >>
@@ -1106,7 +1106,7 @@ Proof
 QED
 
 Theorem prefix_loop_optional_compiled_uniform_pair:
-  (if dyn then compile_abi_decode_dyn_elem_ptr DLOAD head base_op (Lit 0w) stride st
+  (if dyn then compile_abi_decode_dyn_elem_ptr DLOAD (Lit 0w) head base_op (Lit 0w) stride st
    else comp_return head st) = (address,st') /\
   eval_operand head s = SOME a /\ eval_operand base_op s = SOME c /\
   abi_decoder_operand_live st.cs_next_var base_op /\
@@ -1139,7 +1139,7 @@ Proof
 QED
 
 Theorem prefix_loop_element_setup_uniform_pair:
-  abi_decode_array_element_setup (Var ip) src dst DLOAD (Lit 0w)
+  abi_decode_array_element_setup (Var ip) src dst DLOAD (Lit 0w) (Lit 0w)
     di abi_sz mem_sz st = ((idx,child_src,child_dst),c4) /\
   eval_operand (Var ip) s = SOME p /\
   FLOOKUP G ip = SOME (ib,isz) /\ ib <= w2n p /\ w2n p+32 <= ib+isz /\
@@ -1258,7 +1258,7 @@ Proof
 QED
 
 Theorem prefix_loop_element_setup_labels_pair:
-  abi_decode_array_element_setup (Var ip) src dst DLOAD (Lit 0w)
+  abi_decode_array_element_setup (Var ip) src dst DLOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     st = ((idx,child_src,child_dst),st') /\
@@ -1266,7 +1266,7 @@ Theorem prefix_loop_element_setup_labels_pair:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
   LENGTH pre = LENGTH vpre /\
-  abi_decoder_ranges DLOAD (Lit 0w) src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
@@ -1311,7 +1311,7 @@ Proof
     simp[abi_decoder_operand_live_def] >>
   drule_all ctor_actual_array_setup_labels >> simp[] >> strip_tac >>
   `eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d)` by
-    fs[abi_decoder_ranges_def] >>
+    fs[abi_decoder_ranges_def, eval_operand_def] >>
   drule_all prefix_loop_element_setup_uniform_pair >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
   qexistsl [`t`,`H`,`qt`] >> simp[]

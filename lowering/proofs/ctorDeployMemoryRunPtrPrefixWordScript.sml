@@ -6,14 +6,14 @@ Ancestors
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst memLocDefs instIdxIndep
 
 Theorem prefix_decoder_noclamp_code:
-  compile_abi_decode_to_buf (Var dst) src DLOAD hi (DecPrimWord NoClamp) st =
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) hi (DecPrimWord NoClamp) st =
     ((),st') ==>
   emitted_insts st st' =
     [mk_inst st.cs_next_id DLOAD [src] ["%" ++ toString st.cs_next_var];
      mk_inst (st.cs_next_id+1) MSTORE
        [Var dst; Var ("%" ++ toString st.cs_next_var)] []]
 Proof
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def, emitted_insts_def] >>
@@ -79,7 +79,7 @@ QED
 
 Theorem prefix_decoder_noclamp_ptr:
   !st st' src dst hi x bb s a w b sz G tn D lo fuel ctx fn PG.
-    compile_abi_decode_to_buf (Var dst) src DLOAD hi (DecPrimWord NoClamp) st =
+    compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) hi (DecPrimWord NoClamp) st =
       ((),st') /\ x = "%" ++ toString st.cs_next_var /\ x <> dst /\
     isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) /\
     eval_operand src s = SOME w /\ eval_operand (Var dst) s = SOME a /\
@@ -112,7 +112,7 @@ Proof
   qmatch_asmsub_abbrev_tac `step_inst_base i s = OK l` >>
   qmatch_asmsub_abbrev_tac `step_inst_base j l = OK t` >>
   qmatch_asmsub_abbrev_tac `ghost_step fuel ctx PG G tn i s = (G1,tn1)` >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
   `emitted_insts st st' = [i;j]` by
     gvs[Abbr `i`, Abbr `j`] >>
   qpat_x_assum `x = _` kall_tac >>

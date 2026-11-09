@@ -13,7 +13,7 @@ Theorem ctor_checked_array_child_section_at_index:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -36,7 +36,7 @@ Proof
   `LENGTH (TAKE j avs) = j /\ LENGTH (TAKE j vs) = j` by simp[LENGTH_TAKE, MIN_DEF] >>
   `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
    d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256)` by
-    fs[abi_decoder_ranges_def] >>
+    fs[abi_decoder_ranges_def, eval_operand_def] >>
   mp_tac (Q.INST [`pre` |-> `TAKE j (avs:abi_value list)`,
     `av` |-> `EL j (avs:abi_value list)`, `post` |-> `DROP (SUC j) (avs:abi_value list)`,
     `vpre` |-> `TAKE j (vs:vyperValue$value list)`,
@@ -49,12 +49,12 @@ Proof
 QED
 
 Theorem ctor_checked_array_setup_at_index:
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
@@ -147,7 +147,7 @@ Theorem ctor_checked_array_child_at_index:
   ctor_actual_array_observation ctx func site ids D N d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
     tv vs slot_id slot initial j j prepared /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -244,7 +244,7 @@ QED
 
 Theorem ctor_checked_array_body_at_index:
   (^C) ty tv /\
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
@@ -257,7 +257,7 @@ Theorem ctor_checked_array_body_at_index:
   ctor_actual_array_observation ctx func site ids D N d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
     tv vs slot_id slot initial j j s /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -289,7 +289,7 @@ Proof
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_array_body_code >> strip_tac >>
   drule_all ctor_checked_array_observation_setup_facts >> strip_tac >>
-  `abi_decoder_ranges DLOAD hi src dst sb
+  `abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s` by
     (asm_x "child" kall_tac >> metis_tac[ctor_actual_array_observation_ranges]) >>
@@ -326,7 +326,7 @@ Proof
      simp[] >> simp[frag_ids_def, SUBSET_DEF] >> decide_tac) >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`) ctor_checked_array_child_at_index >>
   disch_then (drule_at (Pat `ctor_actual_array_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand ip prepared = _`)) >>
   (impl_tac >- (asm_simp_tac bool_ss [] >> asm "child" (ACCEPT_TAC o BETA_RULE))) >>
@@ -357,7 +357,7 @@ QED
 
 Theorem ctor_checked_array_iteration:
   (^C) ty tv /\
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) DLOAD (Lit 0w) hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
@@ -370,7 +370,7 @@ Theorem ctor_checked_array_iteration:
   ctor_actual_array_observation ctx func site ids D N d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
     tv vs slot_id slot initial j j s /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))

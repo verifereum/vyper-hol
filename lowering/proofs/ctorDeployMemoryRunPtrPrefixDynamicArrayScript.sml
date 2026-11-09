@@ -15,7 +15,7 @@ Ancestors
 val canonical_pair_floor = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -99,7 +99,7 @@ Proof
     (irule ctor_actual_scratch_restrict >> goal_assum (drule_at Any) >> simp[]) >>
   asm "child" assume_tac >>
   drule prefix_dynamic_array_setup_finite_pair_complete >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `ctor_actual_scratch _ _ _ _ _`)) >>
   disch_then (mp_tac o PURE_REWRITE_RULE [SUBSET_REFL]) >>
   disch_then drule_all >>
@@ -111,7 +111,7 @@ Proof
   qpat_x_assum `_ /\ _` (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   `st.cs_next_var <= loop_st.cs_next_var` by
-    (drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+    (drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
      drule_all abi_decode_array_header_shape >> strip_tac >>
      drule abi_decode_index_init_shape >> strip_tac >> decide_tac) >>
   drule_all ctor_actual_array_observation_compose >> strip_tac >>

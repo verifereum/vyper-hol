@@ -182,9 +182,9 @@ Proof
  asm_simp_tac bool_ss [abi_decode_bulk_phases, comp_ignore_bind_def,
                       comp_bind_def, LET_THM] >>
  pairarg_tac >> strip_tac >>
- rename1 `abi_decode_dynarray_prefix src DLOAD hi maxn abi_sz st = (u,c1)` >>
+ rename1 `abi_decode_dynarray_checked_prefix src DLOAD hi maxn abi_sz st = (u,c1)` >>
  Cases_on `u` >>
- drule_all abi_decode_dynarray_prefix_sequence >> strip_tac >>
+ drule_all abi_decode_dynarray_checked_prefix_sequence >> strip_tac >>
  rename1 `run_inst_seq (emitted_insts st c1) s = OK s1` >>
  `eval_operand src s1 = SOME (n2w sb) /\
   eval_operand dst s1 = SOME (n2w d)` by metis_tac[] >>
@@ -193,7 +193,7 @@ Proof
  `abi_decode_bulk_body dst src DLOAD mem_sz c1 = ((),st')` by
    (qpat_x_assum `_ = ((),st')` mp_tac >>
     asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF]) >>
- drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+ drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
  `EVERY (\i. ~is_terminator i.inst_opcode /\ ~is_alloca_op i.inst_opcode)
     (emitted_insts st c1)` by (fs[EVERY_MEM] >> metis_tac[]) >>
  `s1.vs_alloca_next = s.vs_alloca_next` by
@@ -219,7 +219,7 @@ Theorem ctor_typed_bulk_mem_ok:
  ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
    (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-   (ListV avs) (ArrayV (DynArrayV vs)) st last src dst DLOAD hi sb d b cap s /\
+   (ListV avs) (ArrayV (DynArrayV vs)) st last src dst DLOAD (Lit 0w) hi 0 sb d b cap s /\
  abi_decoder_operand_live st.cs_next_var dst /\
  sb + LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Dynamic maxn))) (ListV avs))
    <= LENGTH s.vs_data_section /\
@@ -248,7 +248,7 @@ Theorem ctor_bulk_reentry_mem_ok:
  ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
    (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-   (ListV avs) (ArrayV (DynArrayV vs)) st last src dst DLOAD hi sb d b cap
+   (ListV avs) (ArrayV (DynArrayV vs)) st last src dst DLOAD (Lit 0w) hi 0 sb d b cap
    (abi_decoder_prune_vars st.cs_next_var initial) /\
  abi_decoder_operand_live st.cs_next_var dst /\
  sb + LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Dynamic maxn))) (ListV avs))
@@ -348,7 +348,7 @@ Theorem ctor_checked_bulk_sequence:
    st = ((),st') /\ ~dec_info_needs_clamp ei /\
  abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn))
    (ArrayTV tv (Dynamic maxn)) (DecDynArray ei abi_sz mem_sz F maxn)
-   (ListV avs) (ArrayV (DynArrayV vs)) st last src dst DLOAD hi sb d b cap
+   (ListV avs) (ArrayV (DynArrayV vs)) st last src dst DLOAD (Lit 0w) hi 0 sb d b cap
    (abi_decoder_prune_vars st.cs_next_var initial) /\
  abi_decoder_operand_live st.cs_next_var dst /\
  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\

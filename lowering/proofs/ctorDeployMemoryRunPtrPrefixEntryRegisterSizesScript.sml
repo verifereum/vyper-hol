@@ -17,7 +17,7 @@ Ancestors
  ptrSafeRun ptrDiscipline venomState finite_map words arithmetic pred_set list rich_list
 
 Theorem prefix_entry_register_decode_sizes:
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
  abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
  abi_decoder_metadata ce env ty tv

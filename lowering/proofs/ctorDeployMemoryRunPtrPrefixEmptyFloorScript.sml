@@ -8,7 +8,7 @@ Ancestors
   venomState compileEnv fragExec pred_set
 
 Theorem prefix_empty_inline_code:
-  compile_abi_decode_to_buf dst src opc (Lit 0w) (DecComplex dynamic []) middle =
+  compile_abi_decode_to_buf dst src opc (Lit 0w) (Lit 0w) (DecComplex dynamic []) middle =
     ((),end_st) ==>
   end_st = middle
 Proof
@@ -17,7 +17,7 @@ Proof
 QED
 
 Theorem prefix_empty_inline_paired_floor:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (DecComplex T []) middle =
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) (DecComplex T []) middle =
     ((),end_st) /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\

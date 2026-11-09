@@ -197,7 +197,7 @@ Theorem ctor_member_setup_mem_ok:
   run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
   Cases_on `dyn` >> Cases_on `hi = Lit 0w` >>
-  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def,
+  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
        fresh_var_def, fresh_id_def, emit_def, emitted_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>

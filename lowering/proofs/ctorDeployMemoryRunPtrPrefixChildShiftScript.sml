@@ -27,7 +27,7 @@ Proof
 QED
 
 Theorem prefix_execution_int_fields:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord (IntClamp bits signed)) st = ((),st') /\
   run_inst_seq (emitted_insts st st') initial = OK actual /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -41,7 +41,7 @@ Theorem prefix_execution_int_fields:
   (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory)
 Proof
   strip_tac >>
-  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac prefix_scalar_checked_layout) >>
   disch_then (qspecl_then [`signed`,`n2w (if signed then bits DIV 8-1 else bits):bytes32`,`0`,`F`,`bits`] mp_tac) >>
   simp[LET_THM] >> strip_tac >>
@@ -76,7 +76,7 @@ Proof
 QED
 
 Theorem prefix_execution_int_attach_shift:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord (IntClamp bits signed)) st = ((),st') /\
   run_inst_seq (emitted_insts st st') initial = OK actual /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -131,7 +131,7 @@ QED
 Theorem prefix_member_int_attach_shift:
   abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
   SND ops = Var child_dst /\
-  compile_abi_decode_to_buf (Var child_dst) (FST ops) DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var child_dst) (FST ops) DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord (IntClamp bits signed)) middle = ((),end_st) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand (Var dst) s = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb+ao) : bytes32) s = n2w payload_off /\
@@ -179,7 +179,7 @@ Proof
   `eval_operand (FST ops) prepared = SOME (n2w (sb + if dyn then payload_off else ao)) /\
    eval_operand (Var child_dst) prepared = SOME (n2w (d+vo))` by
     simp[Abbr `prepared`] >>
-  qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ = _`
+  qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
     (mp_then Any mp_tac prefix_execution_int_attach_shift) >>
   disch_then (drule_at (Pat `run_inst_seq _ prepared = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP H _ = _`)) >>

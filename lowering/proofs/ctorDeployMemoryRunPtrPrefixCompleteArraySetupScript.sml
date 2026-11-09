@@ -124,7 +124,7 @@ Proof
 QED
 
 Theorem prefix_complete_guard_fresh[local]:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
   emitted_insts st st' =
     [mk_inst st.cs_next_id DLOAD [src] [x];
      mk_inst (st.cs_next_id+1) GT [Var x;Lit (n2w maxn)] [y];
@@ -132,7 +132,7 @@ Theorem prefix_complete_guard_fresh[local]:
      mk_inst (st.cs_next_id+3) ASSERT [Var z] []] ==>
   !v. abi_decoder_older_vars st.cs_next_var v ==> v <> x /\ v <> y /\ v <> z
 Proof
-  simp[abi_decode_dynarray_prefix_def,abi_decode_count_guard_def,
+  simp[abi_decode_dynarray_checked_prefix_def,abi_decode_count_guard_def,
     abi_decode_dynarray_end_guard_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def] >>
   strip_tac >> gvs[emitted_insts_def] >>
@@ -142,7 +142,7 @@ Proof
 QED
 
 Theorem prefix_complete_array_guard_entry_pair_exact:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\
   abi_decode_load DLOAD (n2w sb : bytes32) s = n2w n /\
   n <= maxn /\ maxn < dimword (:256) /\
@@ -172,7 +172,7 @@ Theorem prefix_complete_array_guard_entry_pair_exact:
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all ctor_actual_array_prefix_code >> strip_tac >>
   drule_all prefix_complete_stage_code_prefix >> strip_tac >>
   drule prefix_loop_count_guard_code >> strip_tac >>
@@ -221,7 +221,7 @@ QED
 
 Finalise prefix_complete_array_guard_entry_pair_exact
 Theorem prefix_complete_array_guard_entry_pair:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\
   abi_decode_load DLOAD (n2w sb : bytes32) s = n2w n /\
   n <= maxn /\ maxn < dimword (:256) /\
@@ -449,7 +449,7 @@ Proof
 QED
 
 Theorem prefix_complete_array_setup_pair_exact:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -505,7 +505,7 @@ Theorem prefix_complete_array_setup_pair_exact:
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   `guard_st.cs_next_var <= limit_st.cs_next_var /\
@@ -602,7 +602,7 @@ Proof
 QED
 
 Theorem prefix_complete_array_setup_pair:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -689,9 +689,9 @@ QED
 
 val PreparedPk = ``
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var slot_var) src (Var dst_var)
-    sb d slot slot 32 loop_st.cs_next_var prepared /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src (Var dst_var)
+    0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
@@ -718,7 +718,7 @@ val PreparedLoopAt = ``
     elems_in_memory (TAKE 0 vs) (d+32) tv mem)``;
 
 Theorem prefix_complete_array_setup_loop_pair_exact:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst_var) src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (Var slot_var,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -744,7 +744,7 @@ Theorem prefix_complete_array_setup_loop_pair_exact:
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
   allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs)) /\
@@ -839,7 +839,7 @@ QED
 
 Resume prefix_complete_array_setup_loop_pair_exact[live]:
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   `st.cs_next_var <= loop_st.cs_next_var` by decide_tac >>
@@ -850,7 +850,7 @@ Resume prefix_complete_array_setup_loop_pair_exact[live]:
 QED
 
 Resume prefix_complete_array_setup_loop_pair_exact[recursive_data]:
-  asm_simp_tac bool_ss [abi_decoder_recursive_loop_data_def,abi_decoder_ranges_def,
+  asm_simp_tac bool_ss [abi_decoder_recursive_loop_data_def,abi_decoder_ranges_def, eval_operand_def,
     abi_decode_source_opcode_def,abi_decoder_operand_live_def] >>
   qpat_x_assum `venomMemDefs$regions_disjoint (slot,32) _` mp_tac >>
   simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
@@ -867,7 +867,7 @@ QED
 Finalise prefix_complete_array_setup_loop_pair_exact
 
 Theorem prefix_complete_array_setup_loop_pair:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst_var) src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (Var slot_var,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -893,7 +893,7 @@ Theorem prefix_complete_array_setup_loop_pair:
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
   allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs)) /\

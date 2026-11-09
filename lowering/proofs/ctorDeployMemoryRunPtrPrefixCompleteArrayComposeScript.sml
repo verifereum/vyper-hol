@@ -14,7 +14,7 @@ Ancestors
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -85,9 +85,9 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
 
 val PreparedPk = ``
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var slot_var) src (Var dst_var)
-    sb d slot slot 32 loop_st.cs_next_var prepared /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src (Var dst_var)
+    0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   fn_inst_ids_distinct func /\ k + unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
@@ -158,7 +158,7 @@ val SetupResult = ``
     ?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0``;
 
 val SetupPrem = ``
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst_var) src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (Var slot_var,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -184,7 +184,7 @@ val SetupPrem = ``
   op_taint tn src = {} /\ op_taint tn (Var dst_var) = {} /\
   allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
   abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs)) /\
@@ -229,9 +229,9 @@ Proof
       val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV vs)) d mem)` by
     (BETA_TAC >> asm "child" (irule o MATCH_MP (BETA_RULE prefix_complete_array_prepared_pair)) >>
      asm_rewrite_tac[] >> conj_tac
-     >- (qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+     >- (qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
            (irule_at Any) >> asm_rewrite_tac[]) >>
-     qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+     qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (irule_at Any) >>
      qexistsl [`loop_st.cs_current_insts`,`jump_id`,`hdr_bb'`,`entry_bb`] >>
      simp_tac std_ss [SUBSET_REFL] >> asm_rewrite_tac[] >> simp[]) >>
@@ -242,7 +242,7 @@ Proof
   conj_tac >-
     (rpt strip_tac >>
      `st.cs_next_var <= loop_st.cs_next_var` by
-       (drule abi_decode_dynarray_prefix_shape >>
+       (drule abi_decode_dynarray_checked_prefix_shape >>
         simp[abi_decode_source_opcode_def] >> strip_tac >>
         drule abi_decode_array_header_shape >>
         simp[abi_decode_source_opcode_def] >> strip_tac >>

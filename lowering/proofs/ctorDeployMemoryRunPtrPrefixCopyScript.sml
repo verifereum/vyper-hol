@@ -16,7 +16,7 @@ Ancestors
   exprLoweringProps memLocDefs ptrDiscipline ptrSafeRun words list finite_map
 
 Theorem prefix_copy_bytes_sim[local]:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
     (DecBytestring n) st = ((),st') /\
   run_inst_seq (emitted_insts st st') initial = OK t /\
   fn_has_code st st' func /\ ~initial.vs_halted /\
@@ -97,7 +97,7 @@ Proof
 QED
 
 Theorem prefix_copy_bytes_prepare[local]:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),st') /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_coherent ce env sf ty tv /\
@@ -129,7 +129,7 @@ Proof
     (Cases_on `src` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
      (DecBytestring n) st = ((),st')` by metis_tac[] >>
   drule_all (SIMP_RULE bool_ss []
     (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
@@ -140,7 +140,7 @@ QED
 val canonical_pair = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -198,7 +198,7 @@ Proof
   strip_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all prefix_copy_bytes_prepare >> strip_tac >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
      (DecBytestring n) st = ((),st')` by metis_tac[] >>
   drule_all prefix_copy_bytes_sim >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
@@ -234,7 +234,7 @@ Proof
 QED
 
 Theorem prefix_copy_bulk_sim[local]:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   run_inst_seq (emitted_insts st st') initial = OK t /\
@@ -257,7 +257,7 @@ QED
 val canonical_pair_allocations = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -330,14 +330,14 @@ Proof
     (drule_all alloca_frontier_inv_bound >> strip_tac >> decide_tac) >>
   `abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs))
-    st st.cs_next_id src (Var dst) DLOAD (Lit 0w) sb d initial.vs_alloca_next 0
+    st st.cs_next_id src (Var dst) DLOAD (Lit 0w) (Lit 0w) 0 sb d initial.vs_alloca_next 0
     (abi_decoder_prune_vars st.cs_next_var initial)` by
     (irule ctor_actual_bulk_empty_window_pre >>
      asm_simp_tac bool_ss [vyper_to_abi_type_def] >>
      goal_assum (drule_at Any)) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
-  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
   gnvs[Excl "enc_def"] >>
   drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>

@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem prefix_scalar_sim:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') initial = OK t /\
   fn_has_code st st' func /\ ~initial.vs_halted /\
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem prefix_scalar_prepare:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),st') /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_coherent ce env sf ty tv /\
@@ -94,7 +94,7 @@ Proof
     (Cases_on `src` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
      (DecPrimWord clamp) st = ((),st') /\
    mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av` by
     metis_tac[] >>
@@ -103,7 +103,7 @@ Proof
 QED
 
 Theorem prefix_scalar_transport:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') initial = OK t /\
   val_in_memory tv v d t.vs_memory /\ fresh_vars_wrt limit_st t /\

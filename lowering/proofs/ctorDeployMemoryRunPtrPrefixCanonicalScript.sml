@@ -20,7 +20,7 @@ Ancestors
 val canonical_pair = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -72,7 +72,7 @@ val canonical_pair = ``\ty tv.
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)``;
 
 Theorem prefix_canonical_noclamp_value:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord NoClamp /\
@@ -185,7 +185,7 @@ Proof
 QED
 
 Theorem prefix_canonical_noclamp_continuation:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') /\
   x = "%" ++ toString st.cs_next_var /\ x <> dst /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -281,7 +281,7 @@ Proof
 QED
 
 Theorem prefix_canonical_noclamp_sim:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') initial = OK t /\
   fn_has_code st st' func /\ ~initial.vs_halted /\
@@ -300,7 +300,7 @@ Proof
 QED
 
 Theorem prefix_canonical_noclamp_shape:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   st'.cs_next_var = st.cs_next_var+1 /\
@@ -309,7 +309,7 @@ Theorem prefix_canonical_noclamp_shape:
      mk_inst (st.cs_next_id+1) MSTORE
        [Var dst; Var ("%" ++ toString st.cs_next_var)] []]
 Proof
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def] >> strip_tac >> gvs[APPEND_ASSOC]
@@ -389,7 +389,7 @@ QED
 Finalise prefix_canonical_noclamp_certificate
 
 Theorem prefix_canonical_noclamp_continue_nat[local]:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') /\
   x = "%" ++ toString st.cs_next_var /\ x <> dst /\
   fn_has_code st st' fn /\ s.vs_current_bb = st.cs_current_bb /\
@@ -434,7 +434,7 @@ QED
 val canonical_pair_allocations = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -493,7 +493,7 @@ Theorem prefix_canonical_noclamp_paired_allocations:
 Proof
   strip_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
      (DecPrimWord NoClamp) st = ((),st')` by metis_tac[] >>
   drule abi_decoder_primitive_cases >>
   disch_then (qspec_then `NoClamp` mp_tac) >>

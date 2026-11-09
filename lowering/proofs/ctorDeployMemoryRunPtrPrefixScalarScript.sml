@@ -10,7 +10,7 @@ Ancestors
 val canonical_pair = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -69,7 +69,7 @@ Proof
   drule_all prefix_scalar_prepare >> strip_tac >>
   `d < dimword (:256)` by
     (drule_all alloca_frontier_inv_bound >> decide_tac) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord (IntClamp bits signed)) st = ((),st')` by metis_tac[] >>
   `d+32 <= b+sz` by metis_tac[] >>
   `!v. src = Var v \/ dst = v ==> not_fresh_at st v` by metis_tac[] >>
@@ -96,7 +96,7 @@ Proof
   drule_all prefix_scalar_prepare >> strip_tac >>
   `d < dimword (:256)` by
     (drule_all alloca_frontier_inv_bound >> decide_tac) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord (BytesMClamp m)) st = ((),st')` by metis_tac[] >>
   `d+32 <= b+sz` by metis_tac[] >>
   `!v. src = Var v \/ dst = v ==> not_fresh_at st v` by metis_tac[] >>

@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem ctor_checked_array_prefix_header_index_entry_from:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
   abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\ sb < dimword (:256) /\
@@ -113,7 +113,7 @@ Theorem ctor_checked_array_prefix_header_index_entry_from:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   `guard_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
@@ -191,10 +191,10 @@ val Ck = ``\ty tv.
  alloca_history func actual``;
 
 val P = ``
- abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD hi
+ abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD (Lit 0w) hi
    hdr exit_lbl hid header_var first last lo hi_id next limit_st slot_id /\
- abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-   sb d slot b cap next prepared /\
+ abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+   0 sb d slot b cap next prepared /\
  fn_inst_ids_distinct func /\
  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
    prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
@@ -305,7 +305,7 @@ Theorem ctor_actual_array_setup_ranges_from[local]:
     sb + len <= h /\ h < dimword (:256)) /\
   0 < outsz /\ D <= d /\ d + outsz <= D+N /\
   k + unit_alloca_budget ctx < dimword (:256) /\ slot_id IN ctor_actual_sites func ids ==>
-  abi_decoder_ranges DLOAD hi src dst sb len d outsz slot 32 prepared /\
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb len d outsz slot 32 prepared /\
   slot < dimword (:256) /\ venomMemDefs$regions_disjoint (slot,32) (d,outsz)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -327,7 +327,7 @@ Proof
   `d + outsz < dimword (:256)` by
     (drule_all alloca_frontier_inv_from_word_bound >> strip_tac >>
      metis_tac[LESS_EQ_TRANS, LESS_EQ_LESS_TRANS]) >>
-  asm_simp_tac (srw_ss()) [abi_decoder_ranges_def, abi_decode_source_opcode_def] >>
+  asm_simp_tac (srw_ss()) [abi_decoder_ranges_def, eval_operand_def, abi_decode_source_opcode_def] >>
   gvs[venomMemDefsTheory.regions_disjoint_def] >>
   disj2_tac >> qexists `h` >> simp[]
 QED
@@ -353,8 +353,8 @@ Theorem ctor_actual_array_setup_context_from[local]:
     h < dimword (:256)) /\
   D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
   k + unit_alloca_budget ctx < dimword (:256) /\ slot_id IN ctor_actual_sites func ids ==>
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-    sb d slot slot 32 loop_st.cs_next_var prepared /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+    0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   (^O) k ctx func site ids D N d

@@ -32,7 +32,7 @@ Theorem prefix_member_setup_code:
         mk_inst (st.cs_next_id+1) ADD [Var dst;Lit (n2w vo)] [y]])
 Proof
   Cases_on `dyn` >>
-  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def,
+  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
        emit_void_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
   strip_tac >>
@@ -522,7 +522,7 @@ Proof
   strip_tac >> drule prefix_member_setup_code >>
   Cases_on `dyn` >> simp[mk_inst_def, is_terminator_def] >> strip_tac >>
   qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def,
+  simp[abi_decode_member_setup_def, compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def,
        emit_void_def, fresh_var_def, fresh_id_def, emit_def, LET_THM] >>
   strip_tac >> qpat_x_assum `_ = middle` (SUBST1_TAC o SYM) >> simp[mk_inst_def]

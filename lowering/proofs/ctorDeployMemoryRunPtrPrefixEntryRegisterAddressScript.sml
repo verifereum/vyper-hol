@@ -210,7 +210,7 @@ Theorem prefix_entry_register_singleton_address_paired:
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
  ?src middle prepared H qt.
- compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
  eval_operand src prepared = SOME
    (if ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty
@@ -304,7 +304,7 @@ Theorem prefix_entry_register_canonical_address_paired:
  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
  ?src middle prepared sb H qt.
- compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
  eval_operand src prepared = SOME (n2w sb) /\
  eval_operand (Var ptr) prepared = SOME (n2w d) /\

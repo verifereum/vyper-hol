@@ -53,10 +53,10 @@ val O = ``\k ctx func site ids D N d outsz next limit_st
     abi_encoder_registered_effect (ctor_actual_sites func ids) [(d,outsz)] base s``;
 
 val P = ``
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD hi
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD (Lit 0w) hi
     hdr exit_lbl hid header_var first last lo hi_id next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-    sb d slot b cap next initial /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+    0 sb d slot b cap next initial /\
   fn_inst_ids_distinct func /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
@@ -87,9 +87,9 @@ Proof
   drule abi_decoder_recursive_data_facts >> strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `32 + LENGTH vs * type_memory_size tv <= type_memory_bytes ce (ArrayT ty (Dynamic maxn))` by
     (asm_simp_tac bool_ss [] >> simp[]) >>
@@ -148,8 +148,8 @@ Proof
        tv vs slot_id slot initial (LENGTH vs) (LENGTH vs) u` by simp[] >>
      drule_at (Pat `(^O) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
        ctor_checked_array_header_reach_from >>
-     disch_then (drule_at (Pat `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     disch_then (drule_at (Pat `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      (impl_tac >- asm_simp_tac bool_ss []) >> simp[CONJ_ASSOC]) >>
   `?t. Post t /\ abi_decode_sim ctx func s t /\
     gas_path_mem ctx func s 0 (OK t) /\

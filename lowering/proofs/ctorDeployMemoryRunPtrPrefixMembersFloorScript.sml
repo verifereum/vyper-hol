@@ -14,7 +14,7 @@ Ancestors
 val paired_members_floor = ``\tys tvs.
  !dst src st final ctx func site initial limit_st sb d D N ids
    pretys pretvs preavs prevs avs vs G tn b sz Ddead lo PG.
- compile_abi_decode_complex_elems (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_complex_elems (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (abi_decoder_member_infos sf ce tys)
    (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
    (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),final) /\

@@ -657,7 +657,7 @@ Proof
 QED
 
 Theorem prefix_decoder_boolword_ptr:
-  compile_abi_decode_to_buf (Var dst) src DLOAD hi (DecPrimWord BoolClamp) st = ((),st') /\
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) hi (DecPrimWord BoolClamp) st = ((),st') /\
   x = "%" ++ toString st.cs_next_var /\
   y = "%" ++ toString (st.cs_next_var+1) /\
   z = "%" ++ toString (st.cs_next_var+2) /\
@@ -720,11 +720,11 @@ Proof
      mk_inst (st.cs_next_id+2) ISZERO [Var y] [z];
      mk_inst (st.cs_next_id+3) ASSERT [Var z] [];
      mk_inst (st.cs_next_id+4) MSTORE [Var dst;Var x] []]` by
-    (gvs[compile_abi_decode_to_buf_def] >> drule prefix_boolword_code >> simp[]) >>
+    (gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> drule prefix_boolword_code >> simp[]) >>
   qpat_x_assum `x = _` kall_tac >>
   qpat_x_assum `y = _` kall_tac >>
   qpat_x_assum `z = _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
   pure_rewrite_tac[LET_THM] >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
   conj_tac
   >- (asm_rewrite_tac[] >> irule (SRULE [LET_THM] prefix_boolword_execution) >> simp[]) >>

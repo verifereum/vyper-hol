@@ -8,7 +8,7 @@ Ancestors
   venomState venomExecSemantics words list
 
 Theorem prefix_execution_int_attach:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord (IntClamp bits signed)) st = ((),st') /\
   run_inst_seq (emitted_insts st st') initial = OK actual /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -37,6 +37,6 @@ Proof
   drule_all deploy_ctor_decoder_sequence_ambient >> strip_tac >>
   asm_rewrite_tac[] >>
   irule prefix_scalar_checked_ghost >>
-  simp[] >> goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  simp[] >> goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED

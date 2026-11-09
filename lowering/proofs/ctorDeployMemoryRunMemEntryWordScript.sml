@@ -45,7 +45,7 @@ Theorem ctor_word_fresh_mem_ok:
   fresh_vars_wrt st s ==>
   run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op DLOAD [src] st = (val_op,c1)` >>

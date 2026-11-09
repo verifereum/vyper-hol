@@ -477,7 +477,7 @@ Proof
        rename1 `BytesT b` >> Cases_on `b` >>
        fs[is_word_type_def, type_to_abi_dec_info_def]) >>
      simp[build_positional_arg_def, compile_decode_args_def,
-          var_location_decode_operand_def, compile_abi_decode_to_buf_def,
+          var_location_decode_operand_def, compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
           compile_abi_decode_static_def, FUN_EQ_THM,
           comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>

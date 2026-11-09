@@ -15,11 +15,11 @@ Ancestors
   ptrDiscipline ptrSafeRun valueEncoding words list rich_list arithmetic finite_map pred_set
 
 Theorem prefix_bytes_outputs_fresh[local]:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (DecBytestring n) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') ==>
   EVERY (\i. EVERY (\x. ~not_fresh_at st x) i.inst_outputs)
     (emitted_insts st st')
 Proof
-  simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
     emit_def, emitted_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem prefix_bytes_var_frame:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\ not_fresh_at st x ==>
   lookup_var x t = lookup_var x s
 Proof
@@ -59,7 +59,7 @@ QED
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -127,7 +127,7 @@ Proof
     (Cases_on `src` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
      (DecBytestring n) st = ((),st')` by metis_tac[] >>
   drule_all (SIMP_RULE bool_ss []
     (Q.INST [`hi` |-> `Lit (0w:bytes32)`]

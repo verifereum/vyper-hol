@@ -49,8 +49,8 @@ Theorem deploy_ctor_array_observation_ranges:
     tv vs slot_id slot initial prefix cursor s /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
   abi_decoder_operand_live next hi /\
-  abi_decoder_ranges DLOAD hi src dst sb len d outsz b cap initial ==>
-  abi_decoder_ranges DLOAD hi src dst sb len d outsz b cap s
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb len d outsz b cap initial ==>
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb len d outsz b cap s
 Proof
   BETA_TAC >> strip_tac >>
   `!op w. abi_decoder_operand_live next op /\ eval_operand op initial = SOME w ==>
@@ -58,7 +58,7 @@ Proof
     (rpt gen_tac >> Cases_on `op` >>
      simp[abi_decoder_operand_live_def, eval_operand_def] >>
      rpt strip_tac >> first_x_assum irule >> fs[IN_DEF]) >>
-  fs[abi_decoder_ranges_def] >> metis_tac[]
+  fs[abi_decoder_ranges_def, eval_operand_def] >> metis_tac[]
 QED
 
 Theorem deploy_ctor_array_allocation_state:

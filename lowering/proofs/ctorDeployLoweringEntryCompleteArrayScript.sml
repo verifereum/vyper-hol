@@ -132,7 +132,7 @@ Proof
    (qx_choose_then `prepared` (qx_choose_then `slot` (MAP_EVERY assume_tac o CONJUNCTS)))) >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_next_var <= loop_st.cs_next_var` by
-   (drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+   (drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
     drule_all abi_decode_array_header_shape >> strip_tac >>
     drule abi_decode_index_init_shape >> strip_tac >> decide_tac) >>
  drule_all deploy_ctor_array_setup_context >>

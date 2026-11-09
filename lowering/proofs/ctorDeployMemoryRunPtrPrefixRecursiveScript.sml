@@ -10,7 +10,7 @@ Ancestors
 val canonical_pair_floor = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -83,7 +83,7 @@ Proof
     (qpat_x_assum `!k. LIST_REL _ _ _`
        (qspec_then `LENGTH vs` mp_tac) >> simp[]) >>
   drule prefix_paired_members_floor >> disch_then (mk_asm "members") >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   drule abi_decoder_complex_trace >> strip_tac >>
   qpat_x_assum `abi_decode_complex_head_guard _ _ _ _ = _`

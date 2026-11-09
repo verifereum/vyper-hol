@@ -12,7 +12,7 @@ Ancestors
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -83,7 +83,7 @@ Proof
   drule_all abi_decoder_tuple_members >> strip_tac >>
   `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
     (simp[Once type_memory_bytes_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   `vyper_to_abi_type env (TupleT tys) = Tuple (MAP (vyper_to_abi_type env) tys)` by
     simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
@@ -131,7 +131,7 @@ Proof
   `vyper_to_abi_type env (StructT nsid) =
     Tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))` by
     simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> disch_then assume_tac >>
   drule abi_decoder_complex_trace >> strip_tac >>
   qpat_x_assum `abi_decode_complex_head_guard _ _ _ _ = _`
@@ -176,7 +176,7 @@ Proof
     (qpat_x_assum `!k. LIST_REL _ _ _`
        (qspec_then `LENGTH vs` mp_tac) >> simp[]) >>
   drule prefix_members_complete_code >> disch_then (mk_asm "members") >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
   drule abi_decoder_complex_trace >> strip_tac >>
   qpat_x_assum `abi_decode_complex_head_guard _ _ _ _ = _`

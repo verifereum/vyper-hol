@@ -201,7 +201,7 @@ Proof
 QED
 
 Theorem deploy_ctor_array_prefix_reach:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\
   abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w n /\
   n <= maxn /\ maxn < dimword (:256) /\
@@ -304,7 +304,7 @@ Proof
 QED
 
 Theorem deploy_ctor_array_prefix_header_index_entry:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
   abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -337,7 +337,7 @@ Theorem deploy_ctor_array_prefix_header_index_entry:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   `guard_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>

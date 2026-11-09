@@ -286,15 +286,15 @@ QED
 
 Theorem entry_shape_getelemptr[local]:
   !src dyn off opc hi. opc <> ALLOCA ==> !st.
-    cs_extends st (SND (compile_getelemptr_abi src dyn off opc hi st)) /\
-    st.cs_next_id <= (SND (compile_getelemptr_abi src dyn off opc hi st)).cs_next_id /\
-    !func aid. fn_has_code st (SND (compile_getelemptr_abi src dyn off opc hi st)) func /\
-      st.cs_next_id <= aid /\ aid < (SND (compile_getelemptr_abi src dyn off opc hi st)).cs_next_id ==>
+    cs_extends st (SND (compile_getelemptr_abi src dyn off opc (Lit 0w) hi st)) /\
+    st.cs_next_id <= (SND (compile_getelemptr_abi src dyn off opc (Lit 0w) hi st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_getelemptr_abi src dyn off opc (Lit 0w) hi st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_getelemptr_abi src dyn off opc (Lit 0w) hi st)).cs_next_id ==>
       ?inst. inst.inst_id = aid /\
-        abi_decoder_code_member inst (SND (compile_getelemptr_abi src dyn off opc hi st)) /\
+        abi_decoder_code_member inst (SND (compile_getelemptr_abi src dyn off opc (Lit 0w) hi st)) /\
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst
 Proof
-  ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_getelemptr_abi_def] >>
+  ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   shape_db entry_shape_emit_op >> Cases_on `dyn` >>
   simp shape_simps >> ntac 2 (shape_db entry_shape_emit_op) >>
   ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
@@ -305,15 +305,15 @@ QED
 
 Theorem entry_shape_dyn_elem_ptr[local]:
   !opc src data hi sz. opc <> ALLOCA ==> !st.
-    cs_extends st (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st)) /\
-    st.cs_next_id <= (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st)).cs_next_id /\
-    !func aid. fn_has_code st (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st)) func /\
-      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st)).cs_next_id ==>
+    cs_extends st (SND (compile_abi_decode_dyn_elem_ptr opc (Lit 0w) src data hi sz st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_dyn_elem_ptr opc (Lit 0w) src data hi sz st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_dyn_elem_ptr opc (Lit 0w) src data hi sz st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_dyn_elem_ptr opc (Lit 0w) src data hi sz st)).cs_next_id ==>
       ?inst. inst.inst_id = aid /\
-        abi_decoder_code_member inst (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st)) /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_dyn_elem_ptr opc (Lit 0w) src data hi sz st)) /\
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst
 Proof
-  ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >>
+  ntac 5 gen_tac >> strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   ntac 2 (shape_db entry_shape_emit_op) >>
   ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp shape_simps >>
@@ -325,28 +325,28 @@ QED
 
 Theorem prefix_entry_shape_decoder_mutual:
   (!dst src opc hi info. opc = DLOAD ==>
-    !st. cs_extends st (SND (compile_abi_decode_to_buf dst src opc hi info st)) /\
-    st.cs_next_id <= (SND (compile_abi_decode_to_buf dst src opc hi info st)).cs_next_id /\
-    !func aid. fn_has_code st (SND (compile_abi_decode_to_buf dst src opc hi info st)) func /\
-      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_to_buf dst src opc hi info st)).cs_next_id ==>
+    !st. cs_extends st (SND (compile_abi_decode_to_buf dst src opc (Lit 0w) hi info st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_to_buf dst src opc (Lit 0w) hi info st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_to_buf dst src opc (Lit 0w) hi info st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_to_buf dst src opc (Lit 0w) hi info st)).cs_next_id ==>
       ?inst. inst.inst_id = aid /\
-        abi_decoder_code_member inst (SND (compile_abi_decode_to_buf dst src opc hi info st)) /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_to_buf dst src opc (Lit 0w) hi info st)) /\
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst) /\
   (!dst src opc hi elems ao vo. opc = DLOAD ==>
-    !st. cs_extends st (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st)) /\
-    st.cs_next_id <= (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st)).cs_next_id /\
-    !func aid. fn_has_code st (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st)) func /\
-      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st)).cs_next_id ==>
+    !st. cs_extends st (SND (compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo st)).cs_next_id ==>
       ?inst. inst.inst_id = aid /\
-        abi_decoder_code_member inst (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st)) /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_complex_elems dst src opc (Lit 0w) hi elems ao vo st)) /\
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst) /\
   (!dst src opc hi ei asz msz ip cnt. opc = DLOAD ==>
-    !st. cs_extends st (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)) /\
-    st.cs_next_id <= (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)).cs_next_id /\
-    !func aid. fn_has_code st (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)) func /\
-      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)).cs_next_id ==>
+    !st. cs_extends st (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)) /\
+    st.cs_next_id <= (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)).cs_next_id /\
+    !func aid. fn_has_code st (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)) func /\
+      st.cs_next_id <= aid /\ aid < (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)).cs_next_id ==>
       ?inst. inst.inst_id = aid /\
-        abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)) /\
+        abi_decoder_code_member inst (SND (compile_abi_decode_dyn_loop dst src opc (Lit 0w) hi ei asz msz ip cnt st)) /\
         MEM inst (fn_insts func) /\ abi_decoder_alloc_shape inst)
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
@@ -361,11 +361,11 @@ Proof
 QED
 
 Resume prefix_entry_shape_decoder_mutual[word]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   irule entry_shape_static >> simp[entry_shape_clamp]
 QED
 Resume prefix_entry_shape_decoder_mutual[bytes]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   ntac 3 (shape_db entry_shape_emit_op) >>
   shape_dib entry_shape_emit_void >>
   ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
@@ -374,7 +374,7 @@ Resume prefix_entry_shape_decoder_mutual[bytes]:
   simp shape_simps
 QED
 Resume prefix_entry_shape_decoder_mutual[array]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   ntac 3 (shape_db entry_shape_emit_op) >>
   shape_dib entry_shape_emit_void >>
   ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
@@ -388,17 +388,17 @@ Resume prefix_entry_shape_decoder_mutual[array]:
   first_x_assum irule >> simp[]
 QED
 Resume prefix_entry_shape_decoder_mutual[complex]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
   >- simp[] >>
   ntac 3 (shape_db entry_shape_emit_op) >> shape_dib entry_shape_emit_void >>
   simp[]
 QED
 Resume prefix_entry_shape_decoder_mutual[nil]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def] >> simp shape_simps
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >> simp shape_simps
 QED
 Resume prefix_entry_shape_decoder_mutual[cons]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
   shape_db entry_shape_getelemptr >> shape_db entry_shape_emit_op >>
   ho_match_mp_tac entry_shape_ignore_bind >> conj_tac
@@ -406,7 +406,7 @@ Resume prefix_entry_shape_decoder_mutual[cons]:
   simp[]
 QED
 Resume prefix_entry_shape_decoder_mutual[loop]:
-  once_rewrite_tac[compile_abi_decode_to_buf_def] >>
+  once_rewrite_tac[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
   ntac 3 (shape_db entry_shape_fresh_label) >>
   shape_dib entry_shape_emit_inst >> shape_dib entry_shape_new_block >>
@@ -425,7 +425,7 @@ QED
 Finalise prefix_entry_shape_decoder_mutual
 
 Theorem prefix_entry_decoder_alloca_shape:
-  compile_abi_decode_to_buf dst src DLOAD hi info st = ((),last) /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi info st = ((),last) /\
   fn_has_code st last func /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   st.cs_next_id <= inst.inst_id /\ inst.inst_id < last.cs_next_id ==>

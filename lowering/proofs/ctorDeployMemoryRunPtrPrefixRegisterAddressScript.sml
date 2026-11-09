@@ -320,7 +320,7 @@ QED
 Theorem prefix_register_address_code_phase:
   cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
   st.cs_next_id <= middle.cs_next_id /\
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) di middle = ((),last) /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) di middle = ((),last) /\
   fn_has_code st last func /\
   (st.cs_blocks = last.cs_blocks \/
     !bb. lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -352,7 +352,7 @@ Theorem prefix_register_singleton_address_paired:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared H qt.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME
       (if ~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty
@@ -501,7 +501,7 @@ Theorem prefix_register_canonical_address_paired:
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?src middle prepared sb H qt.
-    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w)
+    compile_abi_decode_to_buf (Var ptr) src DLOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) middle = ((),last) /\
     eval_operand src prepared = SOME (n2w sb) /\
     eval_operand (Var ptr) prepared = SOME (n2w d) /\

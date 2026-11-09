@@ -992,7 +992,7 @@ Theorem prefix_scalar_checked_layout:
   ((clamp = IntClamp bits signed /\ ~left /\
       n = n2w (if signed then bits DIV 8-1 else bits)) \/
    (clamp = BytesMClamp m /\ ~signed /\ left /\ n = n2w (m*8))) /\
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') ==>
   let x = (\k. "%" ++ toString (st.cs_next_var+k));
       id = st.cs_next_id;
       insts = [mk_inst id DLOAD [src] [x 0];
@@ -1009,7 +1009,7 @@ Theorem prefix_scalar_checked_layout:
      LENGTH st'.cs_current_insts = LENGTH st.cs_current_insts+5
 Proof
   strip_tac >>
-  gvs[compile_abi_decode_to_buf_def, SRULE [LET_THM] prefix_scalar_int_compile,
+  gvs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def, SRULE [LET_THM] prefix_scalar_int_compile,
       SRULE [LET_THM] prefix_scalar_bytes_compile, emitted_insts_def,
       rich_listTheory.IS_PREFIX_APPEND] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND, APPEND] >> simp[]
@@ -1019,7 +1019,7 @@ Theorem prefix_scalar_checked_ghost:
   ((clamp = IntClamp bits signed /\ ~left /\
       (n:bytes32) = n2w (if signed then bits DIV 8-1 else bits)) \/
    (clamp = BytesMClamp m /\ ~signed /\ left /\ n = n2w (m*8))) /\
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   eval_operand src s = SOME (n2w sb) /\
@@ -1040,7 +1040,7 @@ Theorem prefix_scalar_checked_ghost:
      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)
     prefix_scalar_checked_layout >>
   disch_then (qspecl_then [`signed`,`n`,`m`,`left`,`bits`] mp_tac) >>
   impl_tac >- asm_rewrite_tac[] >>

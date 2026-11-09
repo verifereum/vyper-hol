@@ -333,14 +333,14 @@ QED
 Finalise prefix_loop_count_header_pair_interior
 
 Theorem prefix_loop_count_guard_code:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') ==>
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') ==>
   ?x y z. emitted_insts st st' =
     [mk_inst st.cs_next_id DLOAD [src] [x];
      mk_inst (st.cs_next_id+1) GT [Var x;Lit (n2w maxn)] [y];
      mk_inst (st.cs_next_id+2) ISZERO [Var y] [z];
      mk_inst (st.cs_next_id+3) ASSERT [Var z] []]
 Proof
-  simp[abi_decode_dynarray_prefix_def,abi_decode_count_guard_def,
+  simp[abi_decode_dynarray_checked_prefix_def,abi_decode_count_guard_def,
     abi_decode_dynarray_end_guard_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def] >>
   strip_tac >> gvs[emitted_insts_def] >>
@@ -540,7 +540,7 @@ Proof
 QED
 
 Theorem prefix_loop_guard_outputs[local]:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
   emitted_insts st st' =
     [mk_inst st.cs_next_id DLOAD [src] [x];
      mk_inst (st.cs_next_id+1) GT [Var x;Lit (n2w maxn)] [y];
@@ -548,7 +548,7 @@ Theorem prefix_loop_guard_outputs[local]:
      mk_inst (st.cs_next_id+3) ASSERT [Var z] []] ==>
   !v. abi_decoder_older_vars st.cs_next_var v ==> v <> x /\ v <> y /\ v <> z
 Proof
-  simp[abi_decode_dynarray_prefix_def,abi_decode_count_guard_def,
+  simp[abi_decode_dynarray_checked_prefix_def,abi_decode_count_guard_def,
     abi_decode_dynarray_end_guard_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def] >>
   strip_tac >> gvs[emitted_insts_def] >>
@@ -604,7 +604,7 @@ Proof
 QED
 
 Theorem prefix_loop_setup_pair:
-  abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
   abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\
@@ -655,7 +655,7 @@ Theorem prefix_loop_setup_pair:
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   drule prefix_loop_count_guard_code >> strip_tac >>

@@ -37,7 +37,7 @@ Theorem prefix_bool_decode_loop_initial:
           mem_bytes_at p len q.vs_memory = mem_bytes_at p len h.vs_memory))
   in
     0 < data_size /\ data_size < dimword(:256) /\
-    compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit(n2w data_size))
+    compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit 0w) (Lit(n2w data_size))
       (DecDynArray (DecPrimWord BoolClamp) 32 32 F max_count) st = ((),sf) /\
     fn_has_code st sf fn /\
     not_fresh_at st src /\ not_fresh_at st dst /\ src<>dst /\
@@ -76,10 +76,10 @@ Proof
   pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   qmatch_goalsub_abbrev_tac `(_, sfcode)` >> strip_tac >>
   `sf = sfcode` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = (_,sfcode)` mp_tac >>
-     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = (_,sf)` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = (_,sfcode)` mp_tac >>
+     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = (_,sf)` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = (_,sfcode)` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = (_,sfcode)` kall_tac >>
   `sf.cs_blocks = EL 0 sf.cs_blocks :: EL 1 sf.cs_blocks ::
      EL 2 sf.cs_blocks :: st.cs_blocks /\ sf.cs_current_insts = []` by
     simp[Abbr `sfcode`] >>
@@ -160,7 +160,7 @@ Theorem prefix_bool_decode_paired:
         (!f. exec_block f ctx bb v = OK w) /\ ~w.vs_halted)
   in
     0 < data_size /\ data_size < dimword(:256) /\
-    compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit(n2w data_size))
+    compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit 0w) (Lit(n2w data_size))
       (DecDynArray (DecPrimWord BoolClamp) 32 32 F max_count) st = ((),sf) /\
     fn_has_code st sf fn /\
     not_fresh_at st src /\ not_fresh_at st dst /\ src <> dst /\
@@ -217,10 +217,10 @@ Proof
   qmatch_goalsub_abbrev_tac `(_, sfcode)` >>
   strip_tac >>
   `sf = sfcode` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = (_,sfcode)` mp_tac >>
-     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = (_,sf)` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = (_,sfcode)` mp_tac >>
+     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = (_,sf)` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = (_,sfcode)` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = (_,sfcode)` kall_tac >>
   `sf.cs_blocks = EL 0 sf.cs_blocks :: EL 1 sf.cs_blocks ::
      EL 2 sf.cs_blocks :: st.cs_blocks /\ sf.cs_current_insts = []` by
     simp[Abbr `sfcode`] >>

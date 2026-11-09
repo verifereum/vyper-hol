@@ -22,7 +22,7 @@ Ancestors
 val canonical_pair_floor = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -78,7 +78,7 @@ val canonical_pair_floor = ``\ty tv.
 val paired_members_floor = ``\tys tvs.
  !dst src st final ctx func site initial limit_st sb d D N ids
    pretys pretvs preavs prevs avs vs G tn b sz Ddead lo PG.
- compile_abi_decode_complex_elems (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_complex_elems (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (abi_decoder_member_infos sf ce tys)
    (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pretys)))
    (SUM (MAP (type_memory_bytes ce) pretys)) st = ((),final) /\
@@ -193,7 +193,7 @@ Proof
   >- (qpat_assum `abi_decoder_members ce env sf pretys pretvs preavs prevs`
         (mp_then Any mp_tac abi_decoder_members_child_facts) >>
       disch_then drule >> strip_tac >>
-      qpat_x_assum `compile_abi_decode_to_buf (SND ops) _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `compile_abi_decode_to_buf (SND ops) _ _ _ _ _ _ = _` mp_tac >>
       asm_simp_tac bool_ss [] >> disch_tac >>
       mp_tac (Q.INST [`initial` |-> `prepared:venom_state`,
         `G` |-> `H:(string, num # num) fmap`, `tn` |-> `qt:taint`,
@@ -216,7 +216,7 @@ Proof
       disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
       qpat_assum `SND ops = Var child_dst` SUBST_ALL_TAC >>
       asm "child" (fn th =>
-        qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ = _`
+        qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
           (mp_then Any mp_tac (BETA_RULE th))) >>
       disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `alloca_frontier_inv _ _ _ prepared`)) >>
@@ -248,7 +248,7 @@ Proof
      strip_tac >> conj_tac
      >- (irule abi_decoder_members_join >> simp[abi_decoder_members_def]) >>
      first_assum ACCEPT_TAC) >>
-  `compile_abi_decode_complex_elems (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_complex_elems (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys)
     (SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) (pretys ++ [ty]))))
     (SUM (MAP (type_memory_bytes ce) (pretys ++ [ty]))) end_st = ((),final)` by
@@ -257,7 +257,7 @@ Proof
        (mp_tac o PURE_REWRITE_RULE [abi_decoder_members_def]) >> strip_tac >>
      drule abi_decoder_coherent_header >>
      simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
-     qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ end_st = _` mp_tac >>
+     qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ end_st = _` mp_tac >>
      qpat_x_assum `abi_embedded_static_size _ ty = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp_tac bool_ss [MAP_APPEND, MAP, SUM_APPEND, SUM, ADD_0]) >>
@@ -298,7 +298,7 @@ Proof
     (asm_x "tail" kall_tac >> metis_tac[]) >>
   drule_all abi_decoder_members_tail_phi >> disch_then assume_tac >>
   asm "tail" (fn th =>
-    qpat_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ end_st = _`
+    qpat_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ end_st = _`
       (mp_then Any mp_tac (BETA_RULE th))) >>
   disch_then (drule_at (Pat `abi_decoder_members _ _ _ (pretys ++ [ty]) _ _ _`)) >>
   disch_then (drule_at (Pat `abi_decoder_members _ _ _ tys tvs avs' vs'`)) >>
@@ -485,7 +485,7 @@ Proof
   drule_all abi_decoder_tuple_members >> strip_tac >>
   `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
     (simp[Once type_memory_bytes_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_tuple_infos]) >>
   `vyper_to_abi_type env (TupleT tys) = Tuple (MAP (vyper_to_abi_type env) tys)` by
     simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
@@ -533,7 +533,7 @@ Proof
   `vyper_to_abi_type env (StructT nsid) =
     Tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args))` by
     simp[Once vyper_to_abi_type_def, vyper_to_abi_types_MAP] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> disch_then assume_tac >>
   drule abi_decoder_complex_trace >> strip_tac >>
   qpat_x_assum `abi_decode_complex_head_guard _ _ _ _ = _`

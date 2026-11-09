@@ -22,7 +22,7 @@ Ancestors
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -115,8 +115,8 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
 Theorem prefix_complete_array_exit_staged[local]:
  (^CshiftCode) ty tv ==>
  abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
-   DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id ==>
- abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) ==>
+   DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi loop_st.cs_next_var limit_st header_st.cs_next_id ==>
+ abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) ==>
  abi_decode_array_header (Var dst_var) src DLOAD guard_st = (cnt,header_st) ==>
  abi_decode_index_init header_st = (Var slot_var,loop_st) ==>
  lookup_block loop_st.cs_current_bb func.fn_blocks = SOME entry_bb ==>
@@ -193,11 +193,11 @@ Proof
  `abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
     (ListV avs) (ArrayV (DynArrayV vs))` by fs[abi_decoder_metadata_def] >>
- `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       (is_abi_dynamic ce.ce_struct_fields ty) maxn) st = ((),st')` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp_tac bool_ss [Once type_to_abi_dec_info_def]) >>
  drule_all ctor_actual_array_loop_layout >> strip_tac >>
  drule_all (ctor_actual_array_prefix_inputs |> Q.INST [`hi` |-> `Lit 0w`] |> SIMP_RULE bool_ss []) >>

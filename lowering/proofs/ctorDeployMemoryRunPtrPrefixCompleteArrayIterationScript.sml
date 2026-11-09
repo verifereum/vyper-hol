@@ -160,7 +160,7 @@ Finalise prefix_complete_backedge_support_pair
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -219,7 +219,7 @@ Theorem prefix_complete_child_iteration:
  !middle end_st child_dst child_src prepared ctx func site limit_st
   sb d D N ids root_di av vs j next slot_id slot initial outsz
   G tn b sz dst slot_var iv nv id hdr bb hdr_bb prefix B header Ddead lo PG.
- compile_abi_decode_to_buf (Var child_dst) child_src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var child_dst) child_src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av (EL j vs) /\
@@ -306,7 +306,7 @@ Proof
    (`SUC j * type_memory_size tv <= LENGTH vs * type_memory_size tv` by
      simp[LE_MULT_RCANCEL] >> decide_tac) >>
  asm "child" (fn th =>
-   qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ = _`
+   qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
      (mp_then Any mp_tac (BETA_RULE th))) >>
  disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
  disch_then (drule_at (Pat `alloca_frontier_inv_from _ _ _ _ prepared`)) >>

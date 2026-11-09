@@ -48,7 +48,7 @@ Theorem prefix_bool_decode_compile:
           mk_inst (id+33) MSTORE [Var(x 9); Var(x 24)] [];
           mk_inst (id+34) JMP [Label hd] []]
     in
-      compile_abi_decode_to_buf (Var dst) (Var src) DLOAD
+      compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit 0w)
         (Lit(n2w data_size))
         (DecDynArray (DecPrimWord BoolClamp) 32 32 F max_count) st =
       ((), st with <|
@@ -63,7 +63,7 @@ Theorem prefix_bool_decode_compile:
 Proof
   rpt strip_tac >>
   `n2w data_size <> (0w:bytes32)` by simp[n2w_11] >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, needs_clamp_def, dec_info_needs_clamp_def,
        dec_info_needs_offset_def, compile_alloc_buffer_def,
        abi_decode_header_insts_def] >>
@@ -79,7 +79,7 @@ QED
 
 Theorem prefix_bool_decode_counters:
   0 < data_size /\ data_size < dimword(:256) /\
-  compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit(n2w data_size))
+  compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit 0w) (Lit(n2w data_size))
     (DecDynArray (DecPrimWord BoolClamp) 32 32 F max_count) st = ((),sf) ==>
   sf.cs_next_id = st.cs_next_id + 35 /\
   sf.cs_next_var = st.cs_next_var + 25 /\
@@ -94,7 +94,7 @@ QED
 
 Theorem prefix_bool_decode_checks:
   0 < data_size /\ data_size < dimword(:256) /\
-  compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit(n2w data_size))
+  compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit 0w) (Lit(n2w data_size))
     (DecDynArray (DecPrimWord BoolClamp) 32 32 F max_count) st = ((),sf) ==>
   let x = (\k. "%" ++ toString (st.cs_next_var+k));
       pre = (EL 2 sf.cs_blocks).bb_instructions;

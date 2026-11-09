@@ -19,7 +19,7 @@ Ancestors
   arithmetic finite_map pred_set
 
 Theorem prefix_bulk_var_frame[local]:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   run_inst_seq (emitted_insts st st') s = OK t /\ not_fresh_at st x ==>
@@ -36,7 +36,7 @@ QED
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -112,13 +112,13 @@ Proof
     (drule_all deploy_ctor_shifted_frontier_bound >> strip_tac >> decide_tac) >>
   `abi_decoder_recursive_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) (ListV avs) (ArrayV (DynArrayV vs))
-    st st.cs_next_id src (Var dst) DLOAD (Lit 0w) sb d initial.vs_alloca_next 0
+    st st.cs_next_id src (Var dst) DLOAD (Lit 0w) (Lit 0w) 0 sb d initial.vs_alloca_next 0
     (abi_decoder_prune_vars st.cs_next_var initial)` by
     (irule ctor_actual_bulk_empty_window_pre >>
      asm_simp_tac bool_ss [vyper_to_abi_type_def] >> goal_assum (drule_at Any)) >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
-  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_decoder_recursive_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
   gnvs[Excl "enc_def"] >>
   drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>

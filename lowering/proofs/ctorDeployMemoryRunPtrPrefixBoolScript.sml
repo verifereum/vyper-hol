@@ -16,7 +16,7 @@
    prefix_decode_dyn_bool_ptr:
      !st st' dst src data_size max_count ctx fn PG D lo s G tn
       a d b sz.
-       compile_abi_decode_to_buf (Var dst) (Var src) DLOAD
+       compile_abi_decode_to_buf (Var dst) (Var src) DLOAD (Lit 0w)
          (Lit (n2w data_size))
          (DecDynArray (DecPrimWord BoolClamp) 32 32 F max_count) st = ((),st') /\
        fn_has_code st st' fn /\ fresh_vars_wrt st s /\
@@ -113,7 +113,7 @@
    PROPOSED INVARIANT AT HEADER (inline in the future proof).
    Let ip be the generated scratch operand (ALLOCA id st.cs_next_id+12), and
    hdr/body/exit the three fresh labels emitted by compile_abi_decode_dyn_loop.
-   At header entry (v,Gv,tv), indexed by i:
+   At header (Lit 0w) entry (v,Gv,tv), indexed by i:
      i <= count /\ count <= max_count /\ a+32*(count+1) <= data_size /\
      ~v.vs_halted /\ v.vs_current_bb=hdr /\ v.vs_inst_idx=0 /\
      v.vs_data_section=s.vs_data_section /\

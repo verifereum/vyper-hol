@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem prefix_loop_setup_run_continuation:
-  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) di asz msz st = (ops,middle) /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) (Lit 0w) di asz msz st = (ops,middle) /\
   run_inst_seq (emitted_insts st middle) s = OK t /\
   fn_has_code st middle fn /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -81,7 +81,7 @@ Proof
 QED
 
 Theorem prefix_loop_setup_execution_pair:
-  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) di asz msz st = (ops,middle) /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) (Lit 0w) di asz msz st = (ops,middle) /\
   run_inst_seq (emitted_insts st middle) s = OK t /\
   fn_has_code st middle func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
@@ -109,9 +109,9 @@ QED
 
 Theorem prefix_loop_header_reach_pair:
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src dst
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var slot_var) src dst
-    sb d slot b cap next initial /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src dst
+    0 sb d slot b cap next initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   ctor_actual_array_observation ctx func site ids D N d outsz next limit_st
@@ -139,19 +139,19 @@ Theorem prefix_loop_header_reach_pair:
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
 Proof
   strip_tac >> drule abi_decoder_recursive_data_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `eval_operand (Var slot_var) s = SOME (n2w slot) /\
    eval_operand src s = SOME (n2w sb)` by
-    (fs[abi_decoder_ranges_def,Excl "enc_def"] >>
+    (fs[abi_decoder_ranges_def, eval_operand_def,Excl "enc_def"] >>
      metis_tac[ctor_actual_array_observation_operand]) >>
   `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
     fs[ctor_actual_array_observation_def,abi_decode_source_def,Excl "enc_def"] >>
   `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword(:256)` by
-    fs[abi_decoder_ranges_def,Excl "enc_def"] >>
+    fs[abi_decoder_ranges_def, eval_operand_def,Excl "enc_def"] >>
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb:bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
@@ -185,9 +185,9 @@ QED
 
 val loop_premises = ``
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var slot_var) src (Var dst_var)
-    sb d slot b cap next initial /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src (Var dst_var)
+    0 sb d slot b cap next initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   fn_inst_ids_distinct func /\ unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
@@ -247,7 +247,7 @@ QED
 val canonical_pair_floor = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -310,7 +310,7 @@ Proof
 QED
 
 Theorem prefix_loop_element_setup_at_index_pair:
-  abi_decode_array_element_setup (Var ip) src dst DLOAD (Lit 0w)
+  abi_decode_array_element_setup (Var ip) src dst DLOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     st = ((idx,child_src,child_dst),st') /\
@@ -318,7 +318,7 @@ Theorem prefix_loop_element_setup_at_index_pair:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
   LENGTH avs = LENGTH vs /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD (Lit 0w) src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -374,7 +374,7 @@ Proof
          `vpre` |-> `TAKE j vs`, `v` |-> `EL j vs`, `vpost` |-> `DROP (SUC j) vs`]
         prefix_loop_element_setup_labels_pair)))) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand (Var ip) s = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP G ip = _`)) >>
   disch_then (drule_at (Pat `op_taint tn src = _`)) >>
@@ -394,15 +394,15 @@ Proof
   disch_then (mk_asm "child") >> PairCases_on `X` >>
   simp_tac std_ss [] >> strip_tac >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   PairCases_on `ops` >> gvs[Excl "enc_def"] >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule abi_decoder_array_body_code >> simp_tac std_ss [] >>
   disch_then drule_all >> strip_tac >>
-  `abi_decoder_ranges DLOAD (Lit 0w) src (Var dst_var) sb
+  `abi_decoder_ranges DLOAD (Lit 0w) (Lit 0w) src (Var dst_var) 0 sb
      (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
      d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap X0` by
     (irule ctor_actual_array_observation_ranges >> metis_tac[]) >>
@@ -441,7 +441,7 @@ Resume prefix_loop_body_index_pair[child_inputs]:
   drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)
     (SIMP_RULE std_ss [] (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
       ctor_actual_array_child_inputs_at_index)) >>
-  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`sf`,`prepared`,`j`] mp_tac) >>
   simp_tac std_ss [LET_THM] >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
@@ -487,7 +487,7 @@ Resume prefix_loop_body_index_pair[child_call]:
      simp[Abbr `prepared`,eval_op_inst_idx] >>
      metis_tac[abi_decoder_address_frame_def]) >>
   asm "child" (fn th =>
-    qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ = _`
+    qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
       (mp_then Any mp_tac (MATCH_MP prefix_loop_child_iteration_floor th))) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ctor_actual_array_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -586,9 +586,9 @@ QED
    not the allocation recorded for the destination operand. *)
 val separated_loop_premises = ``
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var slot_var) src (Var dst_var)
-    sb d slot slot 32 next initial /\
+    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src (Var dst_var)
+    0 sb d slot slot 32 next initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   fn_inst_ids_distinct func /\ unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
@@ -640,15 +640,15 @@ Proof
   disch_then (mk_asm "child") >> PairCases_on `X` >>
   simp_tac std_ss [] >> strip_tac >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   PairCases_on `ops` >> gvs[Excl "enc_def"] >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   drule abi_decoder_array_body_code >> simp_tac std_ss [] >>
   disch_then drule_all >> strip_tac >>
-  `abi_decoder_ranges DLOAD (Lit 0w) src (Var dst_var) sb
+  `abi_decoder_ranges DLOAD (Lit 0w) (Lit 0w) src (Var dst_var) 0 sb
      (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
      d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot 32 X0` by
     (irule ctor_actual_array_observation_ranges >> metis_tac[]) >>
@@ -687,7 +687,7 @@ Resume prefix_loop_separated_body_pair[child_inputs]:
   drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)
     (SIMP_RULE std_ss [] (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
       ctor_actual_array_child_inputs_at_index)) >>
-  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`sf`,`prepared`,`j`] mp_tac) >>
   simp_tac std_ss [LET_THM] >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
@@ -733,7 +733,7 @@ Resume prefix_loop_separated_body_pair[child_call]:
      simp[Abbr `prepared`,eval_op_inst_idx] >>
      metis_tac[abi_decoder_address_frame_def]) >>
   asm "child" (fn th =>
-    qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ = _`
+    qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
       (mp_then Any mp_tac (MATCH_MP prefix_loop_child_iteration_floor th))) >>
   disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ctor_actual_array_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
@@ -860,7 +860,7 @@ Theorem prefix_dynamic_array_setup_finite_pair_complete:
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
   !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
    G tn b sz Ddead lo PG.
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) st = ((),st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) root_di av v /\
@@ -888,17 +888,17 @@ Theorem prefix_dynamic_array_setup_finite_pair_complete:
   allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next ==>
   ?avs vs guard_st header_st loop_st cnt labels body_st ops middle end_st prepared slot iv H qt Y.
     av = ListV avs /\ v = ArrayV (DynArrayV vs) /\
-    abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn
+    abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn
       (abi_embedded_static_size ce.ce_struct_fields ty) st = ((),guard_st) /\
     abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (Var iv,loop_st) /\
     abi_decode_loop_prefix (Var iv) src DLOAD loop_st = (labels,body_st) /\
     abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var iv) src (Var dst)
-      DLOAD (Lit 0w) (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
+      DLOAD (Lit 0w) (Lit 0w) (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
       loop_st.cs_next_var st.cs_next_id st'.cs_next_id st.cs_next_id st'.cs_next_id
       loop_st.cs_next_var limit_st header_st.cs_next_id /\
-    abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var iv) src (Var dst)
-      sb d slot slot 32 loop_st.cs_next_var prepared /\
+    abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var iv) src (Var dst)
+      0 sb d slot slot 32 loop_st.cs_next_var prepared /\
     ctor_actual_array_observation ctx func site ids D N d
       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) st.cs_next_var limit_st
       tv vs header_st.cs_next_id slot initial 0 0 prepared /\
@@ -939,11 +939,11 @@ Proof
   `abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
     (ListV avs) (ArrayV (DynArrayV vs))` by fs[abi_decoder_metadata_def] >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       (is_abi_dynamic ce.ce_struct_fields ty) maxn) st = ((),st')` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp_tac bool_ss [Once type_to_abi_dec_info_def]) >>
   drule_all ctor_actual_array_loop_layout >> strip_tac >>
   drule_all (SRULE [Excl "enc_def"]
@@ -971,7 +971,7 @@ Proof
     simp[abi_decoder_operand_live_def] >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
   `st.cs_next_var <= loop_st.cs_next_var` by
-    (drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+    (drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
      drule_all abi_decode_array_header_shape >> strip_tac >>
      drule abi_decode_index_init_shape >> strip_tac >> decide_tac) >>
   drule_all (SRULE [Excl "enc_def"]
@@ -991,7 +991,7 @@ Proof
   disch_tac >>
   asm "child" mp_tac >>
   disch_then (mp_tac o GEN_ALL o MATCH_MP prefix_loop_separated_finite_pair) >>
-  disch_then (drule_at (Pat `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then drule >>
   disch_then (drule_at (Pat `(^loop_at) _ _ _ _`)) >>
   disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >>
@@ -1028,7 +1028,7 @@ Theorem prefix_dynamic_array_setup_finite_pair:
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
   !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
    G tn b sz Ddead lo PG.
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) st = ((),st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) root_di av v /\
@@ -1056,17 +1056,17 @@ Theorem prefix_dynamic_array_setup_finite_pair:
   allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next ==>
   ?avs vs guard_st header_st loop_st cnt labels body_st ops middle end_st prepared slot iv H qt Y.
     av = ListV avs /\ v = ArrayV (DynArrayV vs) /\
-    abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn
+    abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn
       (abi_embedded_static_size ce.ce_struct_fields ty) st = ((),guard_st) /\
     abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (Var iv,loop_st) /\
     abi_decode_loop_prefix (Var iv) src DLOAD loop_st = (labels,body_st) /\
     abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var iv) src (Var dst)
-      DLOAD (Lit 0w) (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
+      DLOAD (Lit 0w) (Lit 0w) (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
       loop_st.cs_next_var st.cs_next_id st'.cs_next_id st.cs_next_id st'.cs_next_id
       loop_st.cs_next_var limit_st header_st.cs_next_id /\
-    abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Var iv) src (Var dst)
-      sb d slot slot 32 loop_st.cs_next_var prepared /\
+    abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var iv) src (Var dst)
+      0 sb d slot slot 32 loop_st.cs_next_var prepared /\
     ctor_actual_array_observation ctx func site ids D N d
       (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) st.cs_next_var limit_st
       tv vs header_st.cs_next_id slot initial 0 0 prepared /\

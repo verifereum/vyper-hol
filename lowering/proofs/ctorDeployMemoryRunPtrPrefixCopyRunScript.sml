@@ -91,7 +91,7 @@ Proof
 QED
 
 Theorem prefix_bytestring_sentinel_code:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (DecBytestring n) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') ==>
   let x = (\k. "%" ++ toString (st.cs_next_var+k));
       iid = st.cs_next_id;
       xs = [mk_inst iid DLOAD [src] [x 0];
@@ -274,7 +274,7 @@ Proof
 QED
 
 Theorem prefix_bytestring_success_ghost:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') /\
   fn_has_code st st' fn /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (!v. src = Var v \/ dst = v ==> not_fresh_at st v) /\
@@ -470,7 +470,7 @@ QED
 Finalise prefix_bytestring_success_ghost
 
 Theorem prefix_bulk_sentinel_code:
-  compile_abi_decode_to_buf dst src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei ==>
   let x = (\k. "%" ++ toString (st.cs_next_var+k));
@@ -489,9 +489,9 @@ Theorem prefix_bulk_sentinel_code:
      st'.cs_current_bb = st.cs_current_bb
 Proof
   strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss()) [abi_decode_bulk_phases, abi_decode_source_opcode_def,
-    abi_decode_dynarray_prefix_def, abi_decode_count_guard_def,
+    abi_decode_dynarray_checked_prefix_def, abi_decode_count_guard_def,
     abi_decode_dynarray_end_guard_def, abi_decode_bulk_body_def,
     abi_decode_array_header_def, abi_decode_bulk_payload_def,
     abi_decode_copy_opcode_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -929,7 +929,7 @@ Proof
 QED
 
 Theorem prefix_bulk_success_ghost:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),st') /\
   ~dec_info_needs_clamp ei /\
   fn_has_code st st' fn /\ s.vs_current_bb = st.cs_current_bb /\

@@ -13,7 +13,7 @@ Ancestors
  ptrSafeRun ptrDiscipline venomState finite_map words arithmetic pred_set list rich_list
 
 Theorem prefix_entry_register_decode_paired:
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
  abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
  abi_decoder_metadata ce env ty tv
@@ -76,7 +76,7 @@ Proof
     rpt strip_tac >> res_tac >> gvs[]) >>
  drule (BETA_RULE prefix_canonical_coherent_complete_code) >>
  disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
- disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+ disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
  disch_then (drule_at (Pat `eval_operand (Var dst) initial = _`)) >>
  disch_then (drule_at (Pat `fresh_vars_wrt last initial`)) >>
  simp_tac bool_ss [LESS_EQ_REFL, SUBSET_REFL] >>

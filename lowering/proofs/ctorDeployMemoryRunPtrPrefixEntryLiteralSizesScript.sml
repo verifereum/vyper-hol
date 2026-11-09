@@ -27,7 +27,7 @@ QED
 
 
 Theorem prefix_entry_decoder_literal_sizes:
-  compile_abi_decode_to_buf dst src DLOAD hi info st = ((),last) /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi info st = ((),last) /\
   fn_has_code st last func /\ fn_inst_ids_distinct func /\
   ctor_actual_scratch func (ctor_actual_sites func (frag_ids st last)) d cap t /\
   abi_encoder_registered_effect (ctor_actual_sites func (frag_ids st last)) outs s t /\

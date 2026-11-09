@@ -9,7 +9,7 @@ Ancestors
   fragExec finite_map list rich_list words pred_set allocaFrontierBound
 
 Theorem prefix_scalar_bool_success:
-  compile_abi_decode_to_buf (Var dst) src DLOAD hi (DecPrimWord BoolClamp) st = ((),st') /\
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) hi (DecPrimWord BoolClamp) st = ((),st') /\
   x = "%" ++ toString st.cs_next_var /\
   y = "%" ++ toString (st.cs_next_var+1) /\
   z = "%" ++ toString (st.cs_next_var+2) /\
@@ -49,17 +49,17 @@ Proof
 QED
 
 Theorem prefix_scalar_bool_shape:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord BoolClamp) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord BoolClamp) st = ((),st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
   LENGTH st'.cs_current_insts = LENGTH st.cs_current_insts+5
 Proof
-  simp[compile_abi_decode_to_buf_def, SRULE [LET_THM] prefix_boolword_compile] >>
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, compile_abi_decode_range_check_def, SRULE [LET_THM] prefix_boolword_compile] >>
   strip_tac >> gvs[IS_PREFIX_APPEND]
 QED
 
 Theorem prefix_scalar_bool_ghost:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord BoolClamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   eval_operand src s = SOME (n2w sb) /\
@@ -115,7 +115,7 @@ QED
 val canonical_pair = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
   G tn b sz Ddead lo PG.
- compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+ compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
    (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
@@ -173,7 +173,7 @@ Proof
   drule_all prefix_scalar_prepare >> strip_tac >>
   `d < dimword (:256)` by
     (drule_all alloca_frontier_inv_bound >> decide_tac) >>
-  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  `compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord BoolClamp) st = ((),st')` by metis_tac[] >>
   `d+32 <= b+sz` by metis_tac[] >>
   drule_all prefix_scalar_bool_ghost >>

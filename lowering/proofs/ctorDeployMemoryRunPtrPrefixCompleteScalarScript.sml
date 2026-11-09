@@ -15,7 +15,7 @@ Ancestors
   venomState venomExecSemantics words list
 
 Theorem prefix_scalar_complete_execution:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem prefix_scalar_noclamp_ghost:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord NoClamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   eval_operand src s = SOME (n2w sb) /\
@@ -126,7 +126,7 @@ Proof
 QED
 
 Theorem prefix_scalar_complete_ghost:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w)
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
     (DecPrimWord clamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\
   eval_operand src s = SOME (n2w sb) /\
@@ -149,22 +149,22 @@ Proof
   strip_tac >> Cases_on `clamp`
   >- (irule prefix_scalar_noclamp_ghost >> goal_assum (drule_at Any) >> metis_tac[])
   >- (irule prefix_scalar_checked_ghost >> simp[] >>
-      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
       simp[] >> metis_tac[])
   >- (irule prefix_scalar_checked_ghost >> simp[] >>
-      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
       simp[] >> metis_tac[])
   >> irule prefix_scalar_bool_ghost >> goal_assum (drule_at Any) >> metis_tac[]
 QED
 
 Theorem prefix_scalar_outputs_fresh[local]:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') ==>
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') ==>
   EVERY (\i. EVERY (\x. ~not_fresh_at st x) i.inst_outputs)
     (emitted_insts st st')
 Proof
   Cases_on `clamp` >>
   FIRST [rename1 `IntClamp bits signed` >> Cases_on `signed`, all_tac] >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
        compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
@@ -176,7 +176,7 @@ Proof
 QED
 
 Theorem prefix_scalar_var_frame:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   run_inst_seq (emitted_insts st st') s = OK t /\ not_fresh_at st x ==>
   lookup_var x t = lookup_var x s
 Proof
@@ -204,7 +204,7 @@ Proof
 QED
 
 Theorem prefix_scalar_complete_shift:
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\

@@ -157,10 +157,10 @@ Proof
 QED
 
 Theorem ctor_checked_array_header_reach:
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD hi
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD (Lit 0w) hi
     hdr exit_lbl hid header_var first last lo hi_id next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-    sb d slot b cap next initial /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+    0 sb d slot b cap next initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <=
@@ -177,19 +177,19 @@ Theorem ctor_checked_array_header_reach:
 Proof
   strip_tac >>
   drule abi_decoder_recursive_data_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
   `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
-    (fs[abi_decoder_ranges_def, Excl "enc_def"] >>
+    (fs[abi_decoder_ranges_def, eval_operand_def, Excl "enc_def"] >>
      metis_tac[ctorAbiActualArrayInvariantTheory.ctor_actual_array_observation_operand]) >>
   `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
     fs[ctorAbiActualArrayInvariantTheory.ctor_actual_array_observation_def,
        abi_decode_source_def, Excl "enc_def"] >>
   `sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256)` by
-    fs[abi_decoder_ranges_def, Excl "enc_def"] >>
+    fs[abi_decoder_ranges_def, eval_operand_def, Excl "enc_def"] >>
   drule_all canonical_dynamic_array_count_load >> strip_tac >>
   `abi_decode_load DLOAD (n2w sb : bytes32) s = n2w (LENGTH vs)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >> asm_rewrite_tac[]) >>
@@ -549,14 +549,14 @@ Proof
 QED
 
 Theorem ctor_checked_array_prefix_mem_ok:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ sb < dimword (:256) /\
   sb+32 <= LENGTH s.vs_data_section ==>
   run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
   strip_tac >> Cases_on `hi = Lit 0w` >>
-  qpat_x_assum `abi_decode_dynarray_prefix _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [abi_decode_dynarray_prefix_def,
+  qpat_x_assum `abi_decode_dynarray_checked_prefix _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [abi_decode_dynarray_checked_prefix_def,
     abi_decode_count_guard_def, abi_decode_dynarray_end_guard_def,
     abi_decode_dynarray_end_def, abi_decode_le_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -573,7 +573,7 @@ Proof
 QED
 
 Theorem ctor_checked_array_prefix_reach:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),st') /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\ sb < dimword (:256) /\
   sb+32 <= LENGTH initial.vs_data_section /\
   abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w n /\
@@ -627,7 +627,7 @@ Proof
 QED
 
 Theorem ctor_checked_array_prefix_header_index_entry:
-  abi_decode_dynarray_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
+  abi_decode_dynarray_checked_prefix src DLOAD hi maxn asz st = ((),guard_st) /\
   abi_decode_array_header dst src DLOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
   eval_operand src initial = SOME (n2w sb) /\ sb < dimword (:256) /\
@@ -663,7 +663,7 @@ Theorem ctor_checked_array_prefix_header_index_entry:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+  drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
   drule_all abi_decode_array_header_shape >> strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
   `guard_st.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
@@ -853,7 +853,7 @@ Proof
 QED
 
 Theorem ctor_checked_array_static_setup_mem_ok:
-  abi_decode_array_element_setup ip src dst DLOAD hi di asz msz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi di asz msz st = (ops,st') /\
   ~dec_info_needs_offset di /\
   eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
   slot+32 <= s.vs_alloca_next ==>
@@ -907,7 +907,7 @@ Theorem ctor_checked_dyn_elem_ptr_mem_ok:
   run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
   Cases_on `hi = Lit 0w` >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
     emit_def, emitted_insts_def] >> strip_tac >> gvs[] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, APPEND] >>
@@ -941,7 +941,7 @@ Theorem ctor_checked_dyn_elem_ptr_extends:
   inst_extends st st'
 Proof
   Cases_on `hi = Lit 0w` >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
     emit_def] >> strip_tac >> gvs[] >>
   simp[inst_extends_def, IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND]
@@ -976,7 +976,7 @@ Proof
 QED
 
 Theorem ctor_checked_array_dynamic_setup_mem_ok:
-  abi_decode_array_element_setup ip src dst DLOAD hi di asz msz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi di asz msz st = (ops,st') /\
   dec_info_needs_offset di /\
   eval_operand ip s = SOME (n2w slot) /\ slot < dimword (:256) /\
   slot+32 <= s.vs_alloca_next /\ mload slot s = n2w idx /\
@@ -1027,13 +1027,13 @@ Proof
 QED
 
 Theorem ctor_checked_array_setup_mem_ok:
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
   LENGTH pre = LENGTH vpre /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
@@ -1056,8 +1056,8 @@ Proof
          abi_member_head_size (vyper_to_abi_type env ty)` by fs[abi_decoder_header_def] >>
       `is_dynamic (vyper_to_abi_type env ty)` by
         metis_tac[abi_decoder_array_child_offset] >>
-      qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
-        (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
+      qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def, eval_operand_def]) >>
       `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
           (ListV (pre ++ av::post)))) (abi_decode_source DLOAD s) =
         enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))` by
@@ -1081,13 +1081,13 @@ Proof
 QED
 
 Theorem ctor_checked_array_setup_labels:
-  abi_decode_array_element_setup ip src dst DLOAD hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV (pre ++ av::post)) (ArrayV (DynArrayV (vpre ++ v::vpost))) /\
   LENGTH pre = LENGTH vpre /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV (pre ++ av::post))))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty))
@@ -1125,11 +1125,11 @@ Proof
   drule_all abi_decode_array_element_setup_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               i.inst_opcode <> ALLOCA /\ i.inst_opcode <> GAS) (emitted_insts st st')` by
-    (qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      Cases_on `dec_info_needs_offset (type_to_abi_dec_info sf ce ty)` >>
      Cases_on `hi = Lit 0w` >>
      simp[abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
-       compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_ignore_bind_def,
+       compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def,
        emit_def, emitted_insts_def] >>
      strip_tac >> gvs[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
