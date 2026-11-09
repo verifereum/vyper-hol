@@ -219,3 +219,79 @@ Proof
       metis_tac[inline_invoke_suffix_eval_phis, inline_invoke_suffix_phi_prefix]) >>
   metis_tac[]
 QED
+
+(* The source continuation is an exec_block suffix, not a second block entry.
+   In particular, merge/adopt precede binding the returned values. *)
+Theorem inline_invoke_exec_suffix:
+  get_instruction bb s.vs_inst_idx = SOME call /\
+  call.inst_opcode = INVOKE /\ decode_invoke call = SOME (name,ops) /\
+  lookup_function name ctx.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME vals /\ setup_callee callee vals s = SOME cs ==>
+  exec_block n ctx bb s =
+    case run_blocks n ctx callee cs of
+      IntRet ir u =>
+        (case bind_outputs call.inst_outputs ir.iret_values
+                (adopt_return_fmp ir (merge_callee_state s u)) of
+           NONE => Error "invoke: return arity mismatch"
+         | SOME w => exec_block n ctx bb
+             (w with vs_inst_idx := SUC s.vs_inst_idx))
+    | Halt u => Halt u
+    | Abort a u => Abort a u
+    | Error e => Error e
+    | OK u => Error "invoke: callee did not return"
+Proof
+  strip_tac >> CONV_TAC (LHS_CONV (REWR_CONV exec_block_def)) >>
+  simp[Once step_inst_def] >>
+  Cases_on `run_blocks n ctx callee cs` >> simp[] >>
+  CASE_TAC >> simp[venomInstTheory.is_terminator_def]
+QED
+
+(* Final-layout continuation entry. No execution of the suffix is assumed. *)
+Theorem inline_final_return_dispatch:
+  find_invoke_site callee.fn_name caller.fn_blocks = SOME (lbl,i) /\
+  p = inline_prefix ist.is_inline_count /\
+  ret = return_block_label p ist.is_label_counter /\
+  lookup_block lbl caller.fn_blocks = SOME bb /\
+  ~MEM ret (fn_labels caller) /\ bb_well_formed bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE /\
+  inline_one_site caller callee ist = SOME (final,ist') ==>
+  ?rb. lookup_block ret final.fn_blocks = SOME rb /\
+    MAP inline_inst_fields rb.bb_instructions =
+      MAP inline_inst_fields (DROP (i+1) bb.bb_instructions) /\
+    phi_prefix_length rb.bb_instructions = 0 /\
+    (!v. eval_phis v rb.bb_instructions = OK v) /\
+    (!v k ctx'. v.vs_current_bb = ret ==>
+      run_blocks (SUC k) ctx' final v =
+        case exec_block k ctx' rb (v with vs_inst_idx := 0) of
+          OK w => if w.vs_halted then Halt w else run_blocks k ctx' final w
+        | IntRet ir w => IntRet ir w
+        | other => other)
+Proof
+  strip_tac >>
+  `EVERY (\inst. inst.inst_opcode <> PHI) (DROP (i+1) bb.bb_instructions)` by
+    (irule inline_invoke_suffix_nonphi >> simp[]) >>
+  `lookup_block ret (inline_call_site p ret caller callee lbl i).fn_blocks =
+     SOME <|bb_label := ret; bb_instructions := DROP (i+1) bb.bb_instructions|>` by
+    (irule inline_call_site_lookup_return >> simp[]) >>
+  drule_all inline_one_site_lookup_fields >> strip_tac >>
+  `MAP (\inst. if inst.inst_opcode <> PHI then inst
+           else subst_label_inst lbl ret inst) (DROP (i+1) bb.bb_instructions) =
+     DROP (i+1) bb.bb_instructions` by
+    (CONV_TAC (RHS_CONV (REWR_CONV (GSYM (cj 1 MAP_ID)))) >>
+     irule MAP_CONG >> gvs[EVERY_MEM]) >>
+  gvs[] >>
+  `EVERY (\inst. inst.inst_opcode <> PHI) tb.bb_instructions` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     `MEM (inline_inst_fields inst) (MAP inline_inst_fields tb.bb_instructions)` by
+       (simp[MEM_MAP] >> metis_tac[]) >>
+     qpat_x_assum `MAP inline_inst_fields tb.bb_instructions = _`
+       (fn th => RULE_ASSUM_TAC (PURE_ONCE_REWRITE_RULE [th])) >>
+     gvs[MEM_MAP, inline_inst_fields_def, EVERY_MEM] >> metis_tac[]) >>
+  `phi_prefix_length tb.bb_instructions = 0` by
+    (Cases_on `tb.bb_instructions` >> gvs[phi_prefix_length_def]) >>
+  `!v. eval_phis v tb.bb_instructions = OK v` by
+    (gen_tac >> irule venomExecProofsTheory.eval_phis_no_phis >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  simp[Once run_blocks_def]
+QED
