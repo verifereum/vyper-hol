@@ -130,6 +130,7 @@ Theorem normalize_tuple_semantic_path_mem:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -146,6 +147,7 @@ Theorem normalize_tuple_semantic_path_mem:
     (!p k. p+k <= b \/ b+type_memory_size_list dtvs <= p ==>
       mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     sa.cs_next_var <= sb.cs_next_var /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
@@ -238,7 +240,8 @@ Theorem typed_ordered_fields_child_rank_path_mem:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
         vs_prev_bb := s.vs_prev_bb|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) ==>
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   !i sd se dp sp u.
     i < LENGTH DT /\
     compile_store_memory_typed ce dp (EL i DT) sp (EL i ST) sd = ((),se) /\
@@ -257,6 +260,7 @@ Theorem typed_ordered_fields_child_rank_path_mem:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -349,7 +353,8 @@ Theorem typed_store_tuple_entry_path_mem:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
         vs_prev_bb := s.vs_prev_bb|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) ==>
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory dtv v (w2n dw) t.vs_memory /\
@@ -358,7 +363,8 @@ Theorem typed_store_tuple_entry_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all typed_tuple_entry_metadata >>

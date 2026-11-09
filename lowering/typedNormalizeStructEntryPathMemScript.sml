@@ -77,7 +77,8 @@ Theorem typed_store_struct_entry_path_mem:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
         vs_prev_bb := s.vs_prev_bb|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) ==>
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory dtv v (w2n dw) t.vs_memory /\
@@ -86,7 +87,8 @@ Theorem typed_store_struct_entry_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all normalize_struct_metadata >> strip_tac >>
