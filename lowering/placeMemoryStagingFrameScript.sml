@@ -1,6 +1,6 @@
 Theory placeMemoryStagingFrame
 Ancestors
-  placeMemoryCopyEffect fragGasMode compileEnv venomState freshWrites
+  placeMemoryCopyEffect fragGasMode compileEnv loweringStateRelDefs venomState freshWrites
   placeMemoryCopyFrames
 
 Theorem staging_store_local_frame:

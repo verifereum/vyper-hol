@@ -12,7 +12,8 @@
  *)
 Theory bodyPtrAssignCases
 Ancestors
-  bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
+  annAssignPtrDispatch annAssignPtrWord annAssignPtrFacts supportedStmts compileEnv
+  bodyPtrAssignResidual bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
@@ -27,7 +28,23 @@ Theorem body_annassign_case_ptr:
        body_expr_ptr_ok cx e) ==>
     body_stmt_ptr_ok cx (AnnAssign id typ e)
 Proof
-  cheat
+  rw[body_stmt_ptr_ok_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
+  Cases_on `is_word_type typ`
+  >- (irule body_annassign_word_ptr >> metis_tac[]) >>
+  `0 < type_memory_bytes cenv typ` by
+    metis_tac[annassign_memory_bytes_pos_ptr] >>
+  Cases_on `lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (expr_type e) /\
+    is_bytestring_type (lowered_value_type cenv e) /\
+    arg_type_fits (lowered_value_type cenv e) (expr_type e)`
+  >- (`supported_copy_types typ (expr_type e)` by
+        gvs[supported_stmt_def] >>
+      `lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+       has_length_word typ /\ is_empty_value_expr e` by
+        metis_tac[copy_types_not_word_bytestring_ptr] >>
+      irule body_annassign_memory_ptr >> metis_tac[]) >>
+  irule body_annassign_widened_aggregate_call_ptr >> metis_tac[]
 QED
 
 (* ADMITTED: a piece of the body induction. *)

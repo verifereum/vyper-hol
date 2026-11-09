@@ -8,18 +8,14 @@ Ancestors
   emitHelperProps venomInst venomExecSemantics words list rich_list arithmetic
 
 Theorem abi_decoder_loop_prefix_facts:
-  abi_decode_loop_prefix ip src opc start = (labels,st) ==>
-  st.cs_current_insts = [] /\ st.cs_next_var = start.cs_next_var + 4 /\
-  st.cs_next_id = start.cs_next_id + 6 /\ st.cs_current_bb = FST (SND labels) /\
+  abi_decode_loop_prefix ip src opc base_op start = (labels,st) ==>
+  st.cs_current_insts = [] /\ st.cs_next_var = start.cs_next_var + 4 + abi_decode_position_header_delta base_op /\
+  st.cs_next_id = start.cs_next_id + 6 + abi_decode_position_header_delta base_op /\ st.cs_current_bb = FST (SND labels) /\
   FST labels <> st.cs_current_bb /\ FST labels <> SND (SND labels) /\
   st.cs_current_bb <> SND (SND labels) /\
   st.cs_blocks =
     <|bb_label := FST labels; bb_instructions :=
-      abi_decode_header_insts (start.cs_next_id+1) ip src opc
-        (STRING #"%" (toString start.cs_next_var))
-        (STRING #"%" (toString (start.cs_next_var+1)))
-        (STRING #"%" (toString (start.cs_next_var+2)))
-        (STRING #"%" (toString (start.cs_next_var+3))) st.cs_current_bb (SND (SND labels))|> ::
+      abi_decode_position_header_insts (start.cs_next_id+1) ip src opc base_op start.cs_next_var st.cs_current_bb (SND (SND labels))|> ::
     <|bb_label := start.cs_current_bb; bb_instructions := start.cs_current_insts ++
       [mk_inst start.cs_next_id JMP [Label (FST labels)] []]|> :: start.cs_blocks
 Proof
@@ -59,18 +55,14 @@ Proof
 QED
 
 Theorem abi_decoder_loop_phase_lookups:
-  abi_decode_loop_prefix ip src opc start = (labels,st) /\
-  abi_decode_array_element_setup ip src dst opc hi di asz msz st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi di middle = ((),end_st) /\
+  abi_decode_loop_prefix ip src opc base_op start = (labels,st) /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di asz msz st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi di middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code start final func ==>
   lookup_block (FST labels) func.fn_blocks = SOME
     <|bb_label := FST labels; bb_instructions :=
-      abi_decode_header_insts (start.cs_next_id+1) ip src opc
-        (STRING #"%" (toString start.cs_next_var))
-        (STRING #"%" (toString (start.cs_next_var+1)))
-        (STRING #"%" (toString (start.cs_next_var+2)))
-        (STRING #"%" (toString (start.cs_next_var+3))) st.cs_current_bb (SND (SND labels))|> /\
+      abi_decode_position_header_insts (start.cs_next_id+1) ip src opc base_op start.cs_next_var st.cs_current_bb (SND (SND labels))|> /\
   lookup_block end_st.cs_current_bb func.fn_blocks = SOME
     <|bb_label := end_st.cs_current_bb; bb_instructions := end_st.cs_current_insts ++
       abi_decode_backedge_insts end_st.cs_next_id (STRING #"%" (toString st.cs_next_var))
@@ -87,18 +79,15 @@ Proof
 QED
 
 Theorem abi_decoder_loop_phase_cfg:
-  abi_decode_loop_prefix ip src opc start = (labels,st) /\
-  abi_decode_array_element_setup ip src dst opc hi di asz msz st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi di middle = ((),end_st) /\
+  abi_decode_loop_prefix ip src opc base_op start = (labels,st) /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di asz msz st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi di middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code start final func /\
   (!bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) ==>
-  abi_decode_loop_cfg func (FST labels) st.cs_current_bb (SND (SND labels)) (start.cs_next_id+1)
-    ip src opc (STRING #"%" (toString start.cs_next_var))
-      (STRING #"%" (toString (start.cs_next_var+1)))
-      (STRING #"%" (toString (start.cs_next_var+2)))
-      (STRING #"%" (toString (start.cs_next_var+3))) /\
+  abi_decode_position_loop_cfg func (FST labels) st.cs_current_bb (SND (SND labels)) (start.cs_next_id+1)
+    ip src opc base_op start.cs_next_var /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0)
 Proof
@@ -115,22 +104,19 @@ Proof
   `?exit_bb. lookup_block (SND (SND labels)) func.fn_blocks = SOME exit_bb /\
     phi_prefix_length exit_bb.bb_instructions = 0` by
     (fs[fn_has_code_def] >> metis_tac[]) >>
-  `abi_decode_loop_cfg func (FST labels) st.cs_current_bb (SND (SND labels)) (start.cs_next_id+1)
-    ip src opc (STRING #"%" (toString start.cs_next_var))
-      (STRING #"%" (toString (start.cs_next_var+1)))
-      (STRING #"%" (toString (start.cs_next_var+2)))
-      (STRING #"%" (toString (start.cs_next_var+3)))` by
-    (simp_tac bool_ss [abi_decode_loop_cfg_def] >> asm_simp_tac bool_ss [] >> metis_tac[]) >>
+  `abi_decode_position_loop_cfg func (FST labels) st.cs_current_bb (SND (SND labels)) (start.cs_next_id+1)
+    ip src opc base_op start.cs_next_var` by
+    (simp_tac bool_ss [abi_decode_position_loop_cfg_def] >> asm_simp_tac bool_ss [] >> metis_tac[]) >>
   asm_simp_tac bool_ss [] >> rpt gen_tac >> strip_tac >> gvs[] >>
   irule abi_decoder_phi_append >>
   simp[abi_decode_backedge_insts_def, phi_prefix_length_def, mk_inst_def]
 QED
 
 Theorem abi_decoder_recursive_loop_layout:
-  abi_decode_loop_prefix ip src opc start = (labels,st) /\
-  abi_decode_array_element_setup ip src dst opc hi_op (type_to_abi_dec_info sf ce ty)
+  abi_decode_loop_prefix ip src opc base_op start = (labels,st) /\
+  abi_decode_array_element_setup ip src dst opc base_op hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi_op
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi_op
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) end_st = ((),final) /\
   abi_decode_source_opcode opc /\ fn_has_code start final func /\
@@ -139,7 +125,7 @@ Theorem abi_decoder_recursive_loop_layout:
   first <= lo /\ lo <= site /\ site < start.cs_next_id /\
   final.cs_next_id <= hi /\ hi <= last /\ next <= start.cs_next_var /\
   final.cs_next_var <= limit_st.cs_next_var ==>
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc hi_op
+  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst opc base_op hi_op
     (FST labels) (SND (SND labels)) (start.cs_next_id+1) start.cs_next_var
     first last lo hi next limit_st site
 Proof

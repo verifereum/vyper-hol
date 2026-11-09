@@ -2,7 +2,7 @@ Theory slotCopyExecution
 Ancestors
   copyExecution createMemoryInterface createSourceCallback createFrameInterface emitHelperProps fragExec
   exprLoweringProps venomExecSemantics venomMemProps
-  compileEnv emitHelper venomInst venomState list rich_list words
+  compileEnv loweringStateRelDefs emitHelper venomInst venomState list rich_list words
 Libs
   wordsLib
 
@@ -429,9 +429,11 @@ Proof
   strip_tac >>
   `((n2w i : bytes32) = n2w n) <=> (i=n)` by
     (pure_rewrite_tac[n2w_11] >> fs[dimword_def]) >>
+  (* Unfold the step and the EQ case in separate steps: together they are
+     too slow for one step. *)
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def, step_inst_base_def, exec_pure2_def,
-       eval_operand_def] >>
+       mk_inst_def, Once step_inst_def] >>
+  simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
        mk_inst_def, Once step_inst_def, step_inst_base_def,
        eval_operand_def, lookup_var_def, update_var_def,

@@ -43,7 +43,7 @@ Ancestors
    exprSimHyps exprSimOperators exprSimWordArgs exprLowering
   vyperTypeSystem vyperTyping vyperInterpreter vyperState vyperContext
   exprBopLowering builtinMath builtinMisc builtinSimple arithmeticProps
-  compileEnv exprSimOps freshWrites fragExec varsExt exprLoweringProps
+  compileEnv loweringStateRelDefs exprSimOps freshWrites fragExec varsExt exprLoweringProps
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
   builtinProps
   exprSimNameWord
@@ -573,7 +573,7 @@ Proof
   simp[Once run_inst_seq_def] >>
   simp[stepInstBaseLib.simp_opcode_clause ``MUL``, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[Once run_inst_seq_def] >>
-  simp[stepInstBaseLib.simp_opcode_clause ``Div``, mk_inst_def, exec_pure2_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``venomInst$Div``, mk_inst_def, exec_pure2_def,
        eval_operand_update_var, eval_operand_update_not_fresh] >>
   simp[Once run_inst_seq_def] >>
   simp[stepInstBaseLib.simp_opcode_clause ``EQ``, mk_inst_def, exec_pure2_def,

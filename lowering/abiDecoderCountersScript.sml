@@ -72,34 +72,64 @@ Proof
   rewrite_tac[compile_alloc_buffer_def] >> VARS_BIND >> simp vars_simps
 QED
 
+Theorem abi_decoder_vars_mono_addr:
+  abi_decoder_vars_mono (compile_abi_dec_addr base_op pos)
+Proof
+  simp[compile_abi_dec_addr_def] >> IF_CASES_TAC >> simp vars_simps
+QED
+
 Theorem abi_decoder_vars_mono_abi_member_pointer:
-  abi_decoder_vars_mono (compile_getelemptr_abi src dyn off opc hi)
+  abi_decoder_vars_mono (compile_getelemptr_abi src dyn off opc base_op hi)
 Proof
   rewrite_tac[compile_getelemptr_abi_def] >> VARS_BIND >> Cases_on `dyn` >>
-  simp[abi_decoder_vars_mono_return] >> ntac 2 VARS_BIND >>
+  simp[abi_decoder_vars_mono_return] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_addr] >> ntac 2 VARS_BIND >>
   ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
       ntac 2 VARS_BIND >> simp vars_simps) >>
   simp[abi_decoder_vars_mono_return]
 QED
 
-Theorem abi_decoder_vars_mono_abi_array_pointer:
-  abi_decoder_vars_mono (compile_abi_decode_dyn_elem_ptr opc src data hi sz)
+Theorem abi_decoder_vars_mono_range_check:
+  abi_decoder_vars_mono (compile_abi_decode_range_check start_op end_op hi_op)
 Proof
-  rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >> ntac 2 VARS_BIND >>
+  rewrite_tac[compile_abi_decode_range_check_def] >>
+  ntac 5 VARS_BIND >> simp vars_simps
+QED
+
+Theorem abi_decoder_vars_mono_head_check:
+  abi_decoder_vars_mono
+    (if hi = Lit 0w then comp_return (Lit 0w)
+     else do head_end <- emit_op ADD [src; Lit 32w];
+             compile_abi_decode_range_check src head_end hi;
+             comp_return head_end
+          od)
+Proof
+  IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
+  VARS_BIND >>
+  ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
+  >- simp[abi_decoder_vars_mono_range_check] >>
+  simp vars_simps
+QED
+
+Theorem abi_decoder_vars_mono_abi_array_pointer:
+  abi_decoder_vars_mono (compile_abi_decode_dyn_elem_ptr opc base_op src data hi sz)
+Proof
+  rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_addr] >> ntac 2 VARS_BIND >>
   ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
       ntac 2 VARS_BIND >> VARS_IGNORE >>
-      ntac 3 VARS_BIND >> simp vars_simps) >>
+      VARS_BIND >> simp[abi_decoder_vars_mono_range_check]) >>
   simp[abi_decoder_vars_mono_return]
 QED
 
 Theorem abi_decoder_vars_mono_mutual:
-  (!dst src opc hi info. abi_decoder_vars_mono (compile_abi_decode_to_buf dst src opc hi info)) /\
-  (!dst src opc hi elems ao vo.
-    abi_decoder_vars_mono (compile_abi_decode_complex_elems dst src opc hi elems ao vo)) /\
-  (!dst src opc hi ei asz msz ip cnt.
-    abi_decoder_vars_mono (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt))
+  (!dst src opc base_op hi info. abi_decoder_vars_mono (compile_abi_decode_to_buf dst src opc base_op hi info)) /\
+  (!dst src opc base_op hi elems ao vo.
+    abi_decoder_vars_mono (compile_abi_decode_complex_elems dst src opc base_op hi elems ao vo)) /\
+  (!dst src opc base_op hi ei asz msz ip cnt.
+    abi_decoder_vars_mono (compile_abi_decode_dyn_loop dst src opc base_op hi ei asz msz ip cnt))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
   rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac)
@@ -114,27 +144,35 @@ QED
 
 Resume abi_decoder_vars_mono_mutual[word]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_addr] >>
   irule abi_decoder_vars_mono_abi_static >> simp[abi_decoder_vars_mono_abi_clamp]
 QED
 
 Resume abi_decoder_vars_mono_mutual[bytes]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_head_check] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_addr] >>
   ntac 3 VARS_BIND >> VARS_IGNORE >>
   ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
-      ntac 4 VARS_BIND >> simp vars_simps) >>
-  Cases_on `opc` >> simp vars_simps
+      VARS_BIND >> simp[abi_decoder_vars_mono_range_check]) >>
+  IF_CASES_TAC
+  >- (Cases_on `opc` >> simp vars_simps) >>
+  ntac 4 VARS_BIND >> VARS_IGNORE >> VARS_BIND >> simp vars_simps
 QED
 
 Resume abi_decoder_vars_mono_mutual[array]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_head_check] >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_addr] >>
   ntac 3 VARS_BIND >> VARS_IGNORE >>
   ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_return] >>
-      ntac 5 VARS_BIND >> simp vars_simps) >>
+      ntac 2 VARS_BIND >> simp[abi_decoder_vars_mono_range_check]) >>
   VARS_BIND >> VARS_IGNORE >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-  >- (ntac 3 VARS_BIND >> Cases_on `opc` >> simp vars_simps) >>
+  >- (ntac 2 VARS_BIND >> VARS_BIND_WITH [abi_decoder_vars_mono_addr] >>
+      VARS_BIND >> Cases_on `opc` >> simp vars_simps) >>
   VARS_BIND_WITH [abi_decoder_vars_mono_abi_alloc_buffer] >>
   VARS_IGNORE >> first_x_assum irule >> simp[]
 QED
@@ -144,7 +182,9 @@ Resume abi_decoder_vars_mono_mutual[complex]:
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
   >- (first_x_assum (qspec_then `FOLDR (\(_,abi_sz:num,_) acc. abi_sz + acc) 0 elems`
         mp_tac) >> simp[]) >>
-  ntac 3 VARS_BIND >> VARS_IGNORE >>
+  VARS_BIND >>
+  ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
+  >- simp[abi_decoder_vars_mono_range_check] >>
   first_x_assum (qspec_then `FOLDR (\(_,abi_sz:num,_) acc. abi_sz + acc) 0 elems`
     mp_tac) >> simp[]
 QED
@@ -165,7 +205,8 @@ QED
 Resume abi_decoder_vars_mono_mutual[loop]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> ntac 3 VARS_BIND >>
-  VARS_IGNORE >> VARS_IGNORE >> ntac 4 VARS_BIND >>
+  VARS_IGNORE >> VARS_IGNORE >> VARS_BIND >>
+  VARS_BIND_WITH [abi_decoder_vars_mono_addr] >> ntac 3 VARS_BIND >>
   VARS_IGNORE >> VARS_IGNORE >> ntac 4 VARS_BIND >>
   ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
   >- (IF_CASES_TAC >> simp[abi_decoder_vars_mono_abi_array_pointer, abi_decoder_vars_mono_return]) >>
@@ -178,7 +219,7 @@ QED
 Finalise abi_decoder_vars_mono_mutual
 
 Theorem abi_decoder_variable_counter:
-  compile_abi_decode_to_buf dst src opc hi info st = ((),st') ==>
+  compile_abi_decode_to_buf dst src opc base_op hi info st = ((),st') ==>
   st.cs_next_var <= st'.cs_next_var
 Proof
   metis_tac[cj 1 abi_decoder_vars_mono_mutual, abi_decoder_vars_mono_def, SND]
