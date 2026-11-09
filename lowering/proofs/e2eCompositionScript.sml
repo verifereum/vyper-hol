@@ -228,8 +228,9 @@ Theorem external_call_result_rel_abort_transport[local]:
   (a = Revert_abort ==> a' = Revert_abort) ==>
   external_call_result_rel tops ret tx src (Abort a' ss')
 Proof
-  PairCases_on `src` >> Cases_on `a` >> Cases_on `a'` >>
-  simp[external_call_result_rel_def] >> rpt CASE_TAC >> simp[]
+  PairCases_on `src` >> Cases_on `a` >> Cases_on `a'` >> Cases_on `src0` >>
+  simp[external_call_result_rel_def] >>
+  Cases_on `y` >> TRY (rename1 `Error err` >> Cases_on `err`) >> simp[]
 QED
 
 (* The source relation holds of every run that matches one it holds of up
@@ -243,12 +244,20 @@ Proof
   simp[dead_result_rel_def] >> rpt strip_tac >>
   TRY (drule_all external_call_result_rel_abort_transport >> simp[] >>
        NO_TAC) >>
-  Cases_on `src0` >> gvs[external_call_result_rel_def, AllCaseEqs()] >>
+  Cases_on `src0` >> TRY (rename1 `INR y` >> Cases_on `y`) >>
+  gvs[external_call_result_rel_def, AllCaseEqs()] >>
   qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
   `v'.vs_returndata = v.vs_returndata` by
-    (irule LIST_EQ >> gvs[external_call_dead_def]) >>
+    (irule LIST_EQ >> gvs[external_call_dead_def])
+  (* A normal return, then a halt, which has no return-bytes conjunct. *)
+  >- (rpt conj_tac
+      >- gvs[]
+      >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
+          metis_tac[accounts_agree_except_process_deletions])
+      >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
+      gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+      irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
   rpt conj_tac
-  >- gvs[]
   >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
       metis_tac[accounts_agree_except_process_deletions])
   >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
