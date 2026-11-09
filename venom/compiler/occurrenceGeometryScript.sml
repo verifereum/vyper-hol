@@ -220,3 +220,130 @@ Proof
   irule mem2varBlockSimHelpersTheory.step_inst_result_preserves_alloca_next >>
   metis_tac[]
 QED
+
+Theorem occurrence_geometry_call:
+  occurrence_natural_geometry lo a U B stk s /\
+  occurrence_annotation_ok n a U B HP H stk PG G s /\
+  setup_callee callee args s = SOME cs /\ enters_block callee cs s1 ==>
+  occurrence_natural_geometry lo n
+    (<|of_owner := a; of_prov := H; of_params := HP |> :: U) B
+    (<|cf_fn := caller; cf_inst := call_inst; cf_state := s;
+       cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |> :: stk) s1
+Proof
+  strip_tac >> irule occurrence_natural_geometry_push >>
+  qexistsl_tac [`a`, `s`] >> simp[] >>
+  drule o1LowerDloadStackFrontierTheory.ld_setup_callee_frontier >>
+  drule o1LowerDloadStackFrontierTheory.ld_enters_block_frontier >>
+  rpt strip_tac >> simp[] >>
+  fs[occurrence_annotation_ok_def] >>
+  fs[EVERY_MEM] >> metis_tac[LESS_ANTISYM]
+QED
+
+Theorem occurrence_geometry_return:
+  occurrence_natural_geometry lo a (u::U) B (f::stk) s /\
+  occurrence_annotation_ok n a (u::U) B HP H (f::stk) PG G s /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state s_end)) = SOME s' ==>
+  occurrence_natural_geometry lo u.of_owner U
+    (DRESTRICT B {id | FST id <> a}) stk
+    (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+Proof
+  strip_tac >> irule occurrence_natural_geometry_pop >>
+  conj_tac >- fs[occurrence_annotation_ok_def] >>
+  qexistsl_tac [`f`, `s`] >> simp[] >>
+  drule o1LowerDloadStackFrontierTheory.ld_return_frontier >>
+  strip_tac >> simp[] >> fs[occurrence_annotation_ok_def]
+QED
+
+Theorem occ_frame_reachable_geometry:
+  !vs C stk PG G tn fn inst s n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
+    vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+    lo <= vs.vs_alloca_next ==>
+    occurrence_natural_geometry lo a U B stk s
+Proof
+  ho_match_mp_tac occ_frame_reachable_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> simp[occurrence_natural_geometry_empty])
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume occ_frame_reachable_geometry[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `lo <= s.vs_alloca_next` by
+    (drule occ_frame_reachable_projection >> strip_tac >>
+     drule o1LowerDloadStackFrontierTheory.ld_frame_reachable_current_initial_frontier >>
+     decide_tac) >>
+  gvs[] >> drule_all occurrence_geometry_next >> simp[]
+QED
+
+Resume occ_frame_reachable_geometry[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  irule occurrence_geometry_block >> metis_tac[]
+QED
+
+Resume occ_frame_reachable_geometry[call]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  drule occ_frame_reachable_annotation >> simp[] >> strip_tac >>
+  gvs[] >> drule_all occurrence_geometry_call >> simp[]
+QED
+
+Resume occ_frame_reachable_geometry[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `occurrence_annotation_ok n a (u::U) B HP H (f::stk) PG G s` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  gvs[] >> drule_all occurrence_geometry_return >> simp[]
+QED
+
+Finalise occ_frame_reachable_geometry
+
+Theorem frame_reachable_occurrence_geometry:
+  vs.vs_allocas = FEMPTY /\ lo <= vs.vs_alloca_next /\
+  ~ctx_has_dalloca C /\ frame_reachable vs C stk PG G tn fn inst s ==>
+  ?n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+    occurrence_annotation_ok n a U B HP H stk PG G s /\
+    occurrence_natural_geometry lo a U B stk s
+Proof
+  strip_tac >> drule_all frame_reachable_occurrence_annotation >> strip_tac >>
+  drule occ_frame_reachable_geometry >> simp[] >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem occurrence_geometry_site_bounds:
+  occurrence_natural_geometry lo a U B stk s /\
+  FLOOKUP B id = SOME (b,z) ==>
+  lo <= b /\ b + z <= s.vs_alloca_next
+Proof
+  simp[occurrence_natural_geometry_def] >> metis_tac[]
+QED
+
+Theorem occurrence_geometry_sites_disjoint:
+  occurrence_natural_geometry lo a U B stk s /\
+  FLOOKUP B id = SOME (b,z) /\ FLOOKUP B jd = SOME (c,w) /\
+  id <> jd /\ 0 < z /\ 0 < w ==> b + z <= c \/ c + w <= b
+Proof
+  simp[occurrence_natural_geometry_def] >> metis_tac[]
+QED
+
+Theorem occurrence_geometry_positive_site_unique:
+  occurrence_natural_geometry lo a U B stk s /\
+  FLOOKUP B id = SOME (b,z) /\ FLOOKUP B jd = SOME (b,w) /\
+  0 < z /\ 0 < w ==> id = jd
+Proof
+  strip_tac >> Cases_on `id = jd` >> simp[] >>
+  drule_all occurrence_geometry_sites_disjoint >> decide_tac
+QED
+
+Theorem occurrence_geometry_saved_site_bound:
+  occurrence_natural_geometry lo a U B stk s /\
+  j < LENGTH stk /\ FLOOKUP B id = SOME (b,z) /\
+  MEM (FST id) (MAP (\u. u.of_owner) (DROP j U)) ==>
+  b + z <= (EL j stk).cf_state.vs_alloca_next
+Proof
+  simp[occurrence_natural_geometry_def] >> metis_tac[]
+QED
