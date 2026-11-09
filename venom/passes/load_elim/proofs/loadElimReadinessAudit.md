@@ -397,3 +397,213 @@ dynamic reexecution. Full structural wf_ssa, round-local name separation and
 source-error handling remain separate obligations. Proving these reached-use
 clauses and refactoring the cone needs a reviewed follow-up PLAN; none is
 asserted proved, inserted as a target hypothesis, or implemented here.
+
+## Dynamic discharge audit (.51)
+
+This section is a signature/source audit, not a new HOL theorem or a change
+of readiness. The current `loadElimCoupledExecutionTheory` dependency cone
+was checked by holbuild (nothing needed rebuilding); no SML was changed.
+
+### Finite replacement-premise matrix
+
+Use d = ctx.lctx_dfg = dfg_build_function fn. `I(j,u)` below abbreviates
+`le_inst_operands_valid d j u` only in this prose. `P(key,es)` abbreviates
+`!bb n k u t op. MEM (StepOcc bb n k u t) es /\
+ le_transfer_generates ctx (EL n bb.bb_instructions) key op ==>
+ le_chain_valid d [] op t`. Neither abbreviation is a proposed definition.
+
+| Exported consumer | Exact normalization use | Checked local replacement | Still missing in wrapper |
+|---|---|---|---|
+| `le_configured_generation_read` | generating load/store address at input u | `le_configured_generation_read_local` takes I(j,u) | reached input validity |
+| `le_configured_generation_address` | same address, identifying key address | `le_configured_generation_address_local` takes I(j,u) | reached input validity |
+| `le_configured_retained_step_read`, multivalue variant | retaining store address at input u | respective `_local` exports take I(j,u) | reached input validity |
+| `le_retained_occ_read`, `le_prefix_retained_suffix_read` | those same addresses on a retained interval | respective `_local` exports quantify I over StepOcc inputs | validity on every relevant step, not just the final consumer |
+| `le_occ_prefix_singleton_current`, `le_frame_singleton_current` | generation and retained reads; singleton operand is transported without normalizing it | respective `_local` exports, occurrence-wise I | discharge I; no new all-alternatives post-state requirement |
+| `le_occ_prefix_homogeneous_current` | generation/retention input addresses AND selected generation op at post-state t | `le_occ_prefix_homogeneous_current_local`, occurrence-wise I plus P(key,es) | I and selected post-chain discharge independently |
+| `le_occ_prefix_store_test_current` | homogeneous representative as above AND normalize actual current store value at s | no exported local store-test wrapper yet; homogeneous `_local` plus `le_inst_operands_valid_eval` provide ingredients | I on historical events, P(key,es), current I(i,s); actual `[addr;value]` membership must be exposed |
+| `le_empty_configured_load_address` (ReachedLoad:35-54) | normalize actual addr at s, including special DLOAD branch | no local export yet; replace only its DFG-to-eval step by operand-validity evaluation | current I(i,s), or simply chain validity of addr |
+| `le_empty_store_key_read` (ReachedStore:94-112) | normalize actual addr at s | no local export yet; same replacement | current I(i,s), or chain validity of addr |
+| `le_reached_singleton_load_replacement` | current load address plus historical singleton currentness | local constituents above checked, reached wrapper not migrated | current I plus historical I; other static, padded agreement and success premises unchanged |
+| `le_reached_captured_load_replacement` | current load address; capture persistence uses historical reads | local address wrapper still absent; capture itself has no normalization | current I and historical I wherever capture generation/retention uses them |
+| `le_occ_prefix_frozen_store_test_current`, `le_reached_store_replacement` | historical homogeneous value and current address/value | constituents above, no exported local reached wrapper | historical I, P(key,es), current I; do not retain rebuilt global initial soundness just to invoke the frozen wrappers |
+| `le_occ_prefix_phi_selected_value` and exit-currentness/availability wrappers | selected historical singleton generation and suffix reads to pre-PHI snapshot | singleton `_local` interface available; these wrappers still thread DFG facts | historical I; actual predecessor, selected input availability and source-domain agreement remain distinct |
+| ReachedCapture, ReachedSourceAgreement, DynamicCapture, ActualPhiFrame, CaptureEntry | no additional direct normalization; consume the preceding selected-value/read contracts | accepted conditional snapshot and source-domain interfaces | migrate threaded historical facts after dynamic discharge, not by assuming transformed PHI success |
+| `le_round_ready_names`, coupled changed step, PHI entry, block/run wrappers | package/extract global initial, PHI and universal-step DFG conditions for the above wrappers | none: readiness intentionally unchanged | a validated trace-local replacement and downstream migration; BP/allocation and naming/static conditions are separate |
+| `loadElimStoreEquivalence` helper | normalize two compared operands at its supplied state | `le_chain_valid_eval` for each operand | no current caller in this cone; no reason to require all alternatives current |
+
+The `_local` homogeneous signature currently requests P for **every generating
+StepOcc for this key in es**. Its proof selects one such event via
+`le_occ_prefix_homogeneous_suffix`. A future narrower selected-event interface
+could reduce the quantification, but is not present or assumed in this audit.
+
+### Checked dynamic interfaces (exact relevant signatures)
+
+* `loadElimLastWriter.le_occ_ssa_use_writer`:
+  `wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+   fn_entry_label fn = SOME s0.vs_current_bb /\
+   le_occ_prefix C fn s0 es i s /\ i.inst_opcode <> PHI /\
+   MEM (Var v) i.inst_operands ==>
+   ?e. MEM e es /\ v IN le_occ_writes e`.
+  Thus an executed writer for an ordinary operand is already checked; it is
+  not necessary to invent that conclusion from informal dominance.
+* `loadElimLastWriter.le_occ_prefix_last_writer`:
+  `le_occ_prefix C fn s0 es i s /\
+   (?e. MEM e es /\ v IN le_occ_writes e) ==>
+   ?pre e suffix. es = pre ++ e::suffix /\ v IN le_occ_writes e /\
+   EVERY (\q. v NOTIN le_occ_writes q) suffix /\
+   le_occ_valid C fn e /\ lookup_var v s = lookup_var v (le_occ_post e)`.
+* `loadElimLastWriter.le_occ_writer_instruction` identifies a StepOcc writer's
+  actual instruction and output membership, or a PhiOcc writer's member of
+  the leading PHI prefix. With `ssa_form_output_unique` and DFG correctness,
+  this is the route to identifying an ASSIGN writer as the specific DFG def.
+* `loadElimOccurrence.le_occ_prefix_suffix_lookup`:
+  `le_occ_prefix C fn s0 (pre ++ e::suffix) i s /\
+   EVERY (\q. v NOTIN le_occ_writes q) suffix ==>
+   lookup_var v s = lookup_var v (le_occ_post e)`.
+* `loadElimOccurrence.le_occ_chain_lookup`:
+  `le_occ_chain s es t /\ EVERY (le_occ_valid C fn) es /\
+   EVERY (\e. v NOTIN le_occ_writes e) es ==>
+   lookup_var v t = lookup_var v s`.
+  These supply transport **given** no writes; they do not prove source no-write.
+* `loadElimOperationalHistory.le_oper_history_interval_lookup` transports a
+  lookup between history endpoints when `le_epoch prefix v =
+  le_epoch (prefix ++ interval) v`. `le_epoch` counts write-footprint events,
+  and `le_epoch_zero` is equivalent to EVERY nonmembership. This is not a
+  separate temporal theorem establishing equality of the epochs.
+* `passSharedProps.mk_assign_inst_correct`:
+  `!fuel ctx inst src_op s v out.
+   eval_operand src_op s = SOME v /\ inst.inst_outputs = [out] ==>
+   step_inst fuel ctx (mk_assign_inst inst src_op) s =
+   OK (update_var out v s)`.
+  This is public construction semantics, not inversion of an arbitrary
+  successful ASSIGN. Search found arbitrary-step inversion as
+  `genBlockSim.step_inst_assign_ok`, but it is LOCAL. Public
+  `phiBlock.step_inst_assign_eval` is a step_inst_base equation (opcode
+  ASSIGN, operands [op], outputs [out]);
+  `overflowElimHelpers2.step_inst_base_assign` inverts that base step.
+  A small public full-step inversion/equality boundary may be needed locally;
+  do not cite a local theorem from another theory.
+* `loadElimNormalizeAvailability.le_available_via_definition` transports
+  `def_available_at fn db (SOME di) v` through an available output u of di
+  to `def_available_at fn bb point v` (wf_function, ssa_form, memberships).
+  `le_normalize_operand_available` transports availability through the
+  normalization recursion. These are static endpoint availability, not
+  equality preservation between two dynamic occurrences.
+* `venomWf.fn_dominates_def` quantifies entry-to-node paths; it does not assert
+  anything about an arbitrary later source write in an occurrence suffix.
+  `le_normalized_generator_available` proves output membership OR static
+  availability of the normalized representative. `le_nonassign_output_normalize`
+  proves that a non-ASSIGN output normalizes to itself. The normalized
+  definition cuts exclude certain retained homogeneous lists at definitions;
+  they do not prove all ASSIGN-chain equalities at an arbitrary use.
+
+Search scope included shared pass properties, simulation operand agreement,
+DFG correctness/restricted normalization, base occurrence/history helpers,
+SSA/dominance/availability, and memory_copy_elision soundness. No searched
+export discharges the source-epoch condition below. This is a bounded search
+result, not a claim that no such theorem can exist anywhere in the repository.
+
+### Proposed mathematical obligations (NOT checked, no SML stubs)
+
+**A. Input-use discharge (missing).** A useful consumer-shaped theorem is:
+
+```
+wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+fn_entry_label fn = SOME s0.vs_current_bb /\
+le_occ_prefix C fn s0 es i s /\ i.inst_opcode <> PHI
+==> le_inst_operands_valid (dfg_build_function fn) i s
+```
+
+No initial variable equalities appear here. Literal, Label and non-ASSIGN
+stops are trivially valid; arbitrary ordinary instructions are proposed to
+avoid duplicating per-opcode reasoning. This statement remains unproved.
+It must not be used as an assumption of the frozen theorem or silently added
+to readiness. Stronger induction likely uses `def_available_at` for each
+recursively followed Var, not only immediate operand membership.
+
+**B. The missing dynamic source-epoch lemma.** For any actual prefix
+`le_occ_prefix C fn s0 (pre ++ StepOcc db n k u t::suffix) i s`, assume
+wf_function, fn_inst_wf, wf_ssa, entry equality; let
+`di = EL n db.bb_instructions`, with
+`di.inst_opcode = ASSIGN`, `di.inst_operands = [Var w]`,
+`di.inst_outputs = [v]`, and
+`EVERY (\q. v NOTIN le_occ_writes q) suffix`.
+The needed new conclusion is
+`EVERY (\q. w NOTIN le_occ_writes q) suffix` (or a precisely sufficient
+weaker value-equality conclusion). No such conclusion follows from last-writer
+selection alone. It requires a temporal dominance argument: every subsequent
+write of w is the same static source definition; returning from that definition
+to this reached use must revisit the ASSIGN defining v before reaching the
+use, contradicting that v's selected occurrence was its last writer. The
+consumer must have `def_available_at fn bb (SOME i) v` at its actual fetched
+block bb (or the equivalent recursive availability premise). Include that
+endpoint premise in a formal version of B; the arbitrary-prefix version
+without an available consumer is NOT proposed as a theorem.
+
+B must also account for same-block strict ordering, block revisits, the
+possibility the selected v writer is in an earlier loop iteration, and sources
+written by a PhiOcc. A path from the source definition to a use is not itself
+an entry-rooted path: splice it with a first-arrival entry prefix avoiding the
+v definition, or establish an equivalent cycle/order lemma. Existing
+`le_fn_dominates_antisym` alone does not establish this temporal conclusion.
+This is the exact remaining gap, rather than absence of any executed-writer
+interface. After B, use successful ASSIGN semantics to establish
+`lookup_var v t = eval_operand src u`; src is not an output (SSA plus strict
+availability must justify that), hence its evaluation is unchanged by the
+ASSIGN. Transport v and src to s and recurse on src with visited v. A Label
+source needs label-frame preservation, not variable no-write; history operand
+transport already exposes the separate label equality condition.
+
+**C. Selected generator post-validity (missing general theorem).** For any
+`MEM (StepOcc bb n k u t) es` in an actual le_occ_prefix and
+`le_transfer_generates ctx (EL n bb.bb_instructions) key op`, under the same
+structural/entry assumptions and configured ctx with rebuilt DFG, prove
+`le_chain_valid ctx.lctx_dfg [] op t`.
+For a generating load, op is Var out of a non-ASSIGN load; uniqueness and
+DFG lookup identify a non-ASSIGN definition, so the chain predicate stops
+immediately. The checked `le_nonassign_output_normalize` proves a syntactic
+normalization fact, not this predicate, but its DFG identification proof is
+reusable. For a generating store, op is the actual value input. Apply A at u,
+then prove validity unchanged by the successful store: configured stores have
+no outputs and preserve lookups, and their label frame is preserved. This is
+not justified by I alone for arbitrary instructions that write their own
+inputs. The `_local` homogeneous signature can then consume C for all its
+key's generating events, without global post-state DFG soundness.
+
+**D. Scope at PHIs.** Do NOT claim A for PHI operands at body-entry or in the
+post-batch state. A PhiOcc is one snapshot batch with a union write footprint;
+all incoming operands read u even when another PHI overwrites the same name
+in t. If an ASSIGN chain uses a PHI-defined source, B must treat the whole
+PhiOcc as its defining write and select the correct iteration. Re-entering a
+header may refresh that source, so the prior ASSIGN equality can only be
+transported after excluding such a refresh on the suffix, not just by static
+SSA uniqueness. Generated PHI capture uses selected historical input value
+and incoming snapshot lookup agreement; it never needs all alternatives'
+chains in u or equality of incoming/post-PHI lookups. Accepted snapshot capture
+and totality boundaries remain separate from A-C.
+
+### Original-round compatibility and the E0212 boundary
+
+CHECKED: `le_occ_prefix_frozen_dfg` (OccurrenceInvariants:161-182) derives
+current soundness and pre/post soundness for every successful StepOcc from
+the original initial DFG, full le_step_preserves, reachable PHI preservation,
+empty-BP and allocation hypotheses. `le_dfg_sound_inst_operands_valid` yields
+I at those inputs/current state; `le_dfg_sound_chain_valid` yields C at every
+selected post-state. This original-round derivation therefore supplies every
+normalization contract in the matrix once the other frozen hypotheses are
+connected to that wrapper. It does not assert soundness solely from SSA.
+
+DISPROVED route: for a rebuilt round, E0212's checked actual memory round
+introduces `y = ASSIGN x` while initial x and y differ. Original global DFG
+soundness and the original full universal-step condition hold in that probe,
+but rebuilt initial soundness does not. Calling the same wrapper with the new
+DFG would simply demand its false initial premise. A-C are intended to avoid
+unused initial equalities entirely. Their general validity and multi-round
+structural/name/analysis premises still require proofs, and prior-round
+coupling alone does not establish them. No readiness definition, coupling
+contract, frozen statement, or SML proof was changed by this diagnostic.
+
+Audit disposition: checked local interfaces and last-writer machinery exist;
+source-epoch transport and recursive reached-chain discharge remain MISSING,
+not disproved. Review B and the stronger recursive availability interface
+before authorizing wrapper migration or the final theorem.
