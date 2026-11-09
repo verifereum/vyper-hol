@@ -156,3 +156,17 @@ Proof
     (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
   rpt (goal_assum (drule_at Any) >> simp[Excl "isPREFIX"])
 QED
+
+Theorem le_source_operand_lookup_agreement:
+  MEM bb fn.fn_blocks /\ MEM i bb.bb_instructions /\
+  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars fn) /\
+  padded_exec_equiv {v | isPREFIX "$le_phi_" v} s t ==>
+  !v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t
+Proof
+  rpt strip_tac >>
+  `MEM v (fn_all_vars fn)` by
+    metis_tac[cfgNormBaseTheory.inst_operand_var_in_fn_all_vars] >>
+  `~isPREFIX "$le_phi_" v` by
+    (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, Excl "isPREFIX"]) >>
+  fs[padded_exec_equiv_def, Excl "isPREFIX"]
+QED
