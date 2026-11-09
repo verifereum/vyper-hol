@@ -3955,18 +3955,15 @@ Resume lineage_state_incoming_ordinary_output_body_absent[phi_prefix]:
     (qpat_assum `bb.bb_instructions = _ ++ _`
       (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
      simp[rich_listTheory.EL_APPEND1]) >>
-  metis_tac[livenessTransferProofsTheory.collect_phis_mem, listTheory.EL_MEM]
+  metis_tac[ready_ordinary_output_phi_prefix]
 QED
 
 Resume lineage_state_incoming_ordinary_output_body_absent[ssa]:
   simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
   `?i. i < LENGTH (collect_phis bb.bb_instructions) /\
     EL i (collect_phis bb.bb_instructions) = inst` by metis_tac[listTheory.MEM_EL] >>
-  `EL i bb.bb_instructions = inst /\ i < LENGTH bb.bb_instructions` by
-    (first_x_assum (qspec_then `i` mp_tac) >> simp[] >> decide_tac) >>
-  `ssa_form fn /\ MEM bb fn.fn_blocks` by
-    metis_tac[stackPlanGenTheory.codegen_ready_fn_def, venomExecPropsTheory.lookup_block_MEM] >>
-  `i = r` by metis_tac[removeUnusedProofsTheory.ssa_form_position] >> decide_tac
+  `EL i bb.bb_instructions = inst` by metis_tac[] >>
+  metis_tac[ready_ordinary_output_phi_prefix]
 QED
 
 Finalise lineage_state_incoming_ordinary_output_body_absent
@@ -4120,3 +4117,27 @@ Resume lineage_history_ordinary_output_body_absent[reset]:
 QED
 
 Finalise lineage_history_ordinary_output_body_absent
+
+
+Theorem lineage_state_ordinary_output_body_absent:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  (if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+    clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+      (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+   else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+     (setup_ops,start) /\
+  native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+    (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions start
+    (LENGTH (collect_phis bb.bb_instructions)) endpoint /\
+  LENGTH (collect_phis bb.bb_instructions) <= r /\ r < LENGTH bb.bb_instructions /\
+  MEM v (EL r bb.bb_instructions).inst_outputs ==>
+  ~MEM (Var v) endpoint.ps_stack /\ Var v NOTIN FDOM endpoint.ps_spilled
+Proof
+  strip_tac >> drule lineage_state_history >> strip_tac >> gvs[] >>
+  irule lineage_history_ordinary_output_body_absent >> metis_tac[]
+QED
