@@ -5,7 +5,7 @@ Ancestors
   stmtLowering exprLoweringProps compileEnv venomState placeMemoryCopyEffect
   tupleMemoryFrame exprSimProps valueEncodingProofs localPtrsProps
 
-Theorem tuple_word_source_code[local]:
+Theorem tuple_word_source_code:
   is_word_type sty /\ is_word_type dty ==>
   compile_tuple_store_all ce [sty] [g] [op] sa =
   compile_tuple_store_all ce [dty] [g] [op] sa
