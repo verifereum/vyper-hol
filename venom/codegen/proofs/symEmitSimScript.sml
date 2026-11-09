@@ -282,12 +282,58 @@ Proof
        sym_state_component_equality, asm_state_component_equality]
 QED
 
-(* Contract diagnostic: the ordinary-instruction hypotheses must exclude
-   CODESIZE, which the symbolic semantics deliberately rejects. *)
+(* CODESIZE is deliberately rejected by the symbolic semantics.
+   label_flow_ok excludes it at every instruction in the context. *)
 Theorem sym_codesize_contract_diagnostic:
   ~is_pre_codegen_opcode CODESIZE /\
   venom_to_evm_name CODESIZE = SOME "CODESIZE" /\
   sym_step p env (AsmOp "CODESIZE") ss = SymBad "CODESIZE"
 Proof
   EVAL_TAC
+QED
+
+Theorem label_flow_inst_not_codesize:
+  label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) ==>
+  inst.inst_opcode <> CODESIZE
+Proof
+  metis_tac[label_flow_ok_def]
+QED
+
+Theorem ordinary_source_input_numeric_kind:
+  opaque_use_ok fn /\ label_flow_ok ctx /\
+  MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
+  MEM op inst.inst_operands /\ ~is_label_operand op /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET; CODECOPY] ==>
+  (op_kind_ok fn ret op sv <=> ?w. sv = Val w)
+Proof
+  simp[MEM] >> strip_tac >> irule op_kind_ok_numeric >> simp[] >>
+  metis_tac[frameViewFactsTheory.ordinary_operand_not_retpc,
+            ordinary_input_not_code_end]
+QED
+
+Theorem sval_conc_numeric_list:
+  !svs ws. LIST_REL (\sv w. sval_conc lo sv = SOME w) svs ws /\
+    EVERY (\sv. ?w. sv = Val w) svs ==> svs = MAP Val ws
+Proof
+  Induct >> Cases_on `ws` >> simp[] >>
+  rpt strip_tac >> gvs[asmSymBridgeTheory.sval_conc_def]
+QED
+
+Theorem numeric_operand_kinds_list:
+  !ops svs. LIST_REL (op_kind_ok fn ret) ops svs /\
+    EVERY (\op. !sv. op_kind_ok fn ret op sv ==> ?w. sv = Val w) ops ==>
+    EVERY (\sv. ?w. sv = Val w) svs
+Proof
+  Induct >> Cases_on `svs` >> simp[] >> metis_tac[]
+QED
+
+Theorem asm_sym_numeric_take:
+  asm_sym_rel p env cs ss /\
+  EVERY (\sv. ?w. sv = Val w) (TAKE k ss.sym_stack) ==>
+  TAKE k ss.sym_stack = MAP Val (TAKE k cs.as_stack)
+Proof
+  strip_tac >> irule sval_conc_numeric_list >> simp[] >>
+  qexists `SND (compute_label_offsets p)` >>
+  gvs[asmSymBridgeTheory.asm_sym_rel_def] >>
+  metis_tac[rich_listTheory.EVERY2_TAKE]
 QED
