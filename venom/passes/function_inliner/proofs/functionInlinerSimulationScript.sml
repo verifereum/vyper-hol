@@ -119,6 +119,29 @@ Proof
   imp_res_tac inline_caller_bookkeeping_phis >> gvs[]
 QED
 
+Definition inline_caller_data_def:
+  inline_caller_data N opaque_caller c d <=>
+    inline_shared_frame c = inline_shared_frame d /\
+    inline_caller_bookkeeping c d /\
+    (!x. x IN N DIFF opaque_caller ==> lookup_var x c = lookup_var x d) /\
+    c.vs_labels = FEMPTY /\ d.vs_labels = FEMPTY
+End
+
+Theorem inline_caller_data_initial:
+  s.vs_labels = FEMPTY ==> inline_caller_data N opaque_caller s s
+Proof
+  simp[inline_caller_data_def]
+QED
+
+Theorem inline_caller_data_setup:
+  inline_caller_data N opaque_caller c d /\ setup_callee fn args c = SOME cs /\
+  ~c.vs_halted ==>
+  inline_opaque_frame_rel ren {} opaque d.vs_vars P cs d
+Proof
+  simp[inline_caller_data_def, inline_opaque_frame_rel_def, inline_frame_rel_def] >>
+  metis_tac[inline_shared_frame_setup]
+QED
+
 (* The countdown is the number of ordinary instructions still to traverse.
    R owns the program points; Q owns all terminal and continuation results. *)
 Theorem inline_exec_block_segment:
@@ -551,4 +574,30 @@ Proof
   simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
        inline_shared_frame_def, stateFrameTheory.execution_frame_def,
        merge_callee_state_def, jump_to_def, venomStateTheory.lookup_var_def]
+QED
+
+(* Adversarial check of the bookkeeping-plus-FMP bridge: caller-owned code
+   is not constrained by either the packet or the four-field bookkeeping. *)
+Theorem inline_exit_packet_code_probe[local]:
+  !ret. let d = init_venom_state "" in
+    let u = d with vs_code := [0w] in
+    let ir = <|iret_values := []; iret_adopt_fmp := NONE|> in
+    inline_caller_data UNIV {} d d /\
+    inline_fmp_result d.vs_fmp (IntRet ir u) /\
+    inline_clone_exit "" {} {} UNIV [] d ret ir u (OK (jump_to ret u)) /\
+    bind_outputs [] [] (adopt_return_fmp ir (merge_callee_state d u)) = SOME d /\
+    inline_caller_bookkeeping d (jump_to ret u) /\
+    ~(inline_caller_data UNIV {} d (jump_to ret u))
+Proof
+  gen_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  simp[inline_caller_data_def, inline_caller_bookkeeping_def,
+       inline_fmp_result_def, inline_clone_exit_def,
+       bind_outputs_def, adopt_return_fmp_def, merge_callee_state_def,
+       jump_to_def, init_venom_state_def] >>
+  reverse conj_tac
+  >- simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def] >>
+  qexists `init_venom_state "" with vs_code := [0w]` >>
+  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
+       inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+       lookup_var_def, init_venom_state_def]
 QED
