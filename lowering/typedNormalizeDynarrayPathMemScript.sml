@@ -6,7 +6,7 @@ Ancestors
   valueEncodingProps valueEncodingTyping valueEncodingProofs vyperTyping
   exprLowering compileEnv venomState venomExecSemantics fragGasPathMem
   arithmetic words list valueEncoding exprSimDefs exprSimProps loweringPosts
-  abiStaticAggregateProps
+  abiStaticAggregateProps venomMemProps
 
 Theorem normalize_dynarray_semantic_path_mem:
   ~(type_memory_bytes ce dt = type_memory_bytes ce st /\ dt = st) /\
@@ -58,7 +58,8 @@ Theorem normalize_dynarray_semantic_path_mem:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -68,7 +69,8 @@ Theorem normalize_dynarray_semantic_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `!cv sp dp sc ec u sw dw. _` mp_tac >>
@@ -143,7 +145,10 @@ Resume normalize_dynarray_semantic_path_mem[finish]:
   ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >- suspend "representation" >>
   conj_tac >- suspend "outside" >>
-  reverse conj_tac >- suspend "registers" >>
+  reverse conj_tac >-
+    (conj_tac >- suspend "registers" >>
+     irule LESS_EQ_TRANS >> qexists `LENGTH q.vs_memory` >> simp[] >>
+     metis_tac[mstore_memory_nondecreasing]) >>
   qpat_x_assum `t with <|vs_vars := _; vs_memory := _; vs_current_bb := _;
     vs_inst_idx := _; vs_prev_bb := _|> = q` mp_tac >>
   qpat_x_assum `q with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|> = s` mp_tac >>

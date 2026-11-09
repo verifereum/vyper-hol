@@ -52,7 +52,8 @@ Theorem typed_store_sarray_bulk_path_mem[local]:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   strip_tac >> `stv = dtv` by metis_tac[typed_copy_static_widening] >> gvs[] >>
   `0 < type_memory_size (ArrayTV dtv (Fixed cap))` by
@@ -98,7 +99,8 @@ Theorem typed_array_child_rank_path_mem[local]:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
         vs_prev_bb := s.vs_prev_bb|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) ==>
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   !cv sp dp sc ec u sw dw.
     val_wf stv cv /\ val_wf dtv cv /\
     value_has_type stv cv /\ value_has_type dtv cv /\
@@ -126,7 +128,8 @@ Theorem typed_array_child_rank_path_mem[local]:
       (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x t = lookup_var x u)
+      (!x. not_fresh_at sc x ==> lookup_var x t = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -187,7 +190,8 @@ Theorem typed_store_sarray_entry_path_mem:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
         vs_prev_bb := s.vs_prev_bb|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) ==>
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory (ArrayTV dtv (Fixed cap)) v (w2n dw) t.vs_memory /\
@@ -196,7 +200,8 @@ Theorem typed_store_sarray_entry_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `type_rank ce.ce_struct_fields dt < rank` by
@@ -282,7 +287,8 @@ Theorem typed_store_dynarray_slow_entry_path_mem[local]:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
         vs_prev_bb := s.vs_prev_bb|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) ==>
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory (ArrayTV dtv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n dw) t.vs_memory /\
@@ -291,7 +297,8 @@ Theorem typed_store_dynarray_slow_entry_path_mem[local]:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `type_rank ce.ce_struct_fields dt < rank` by
@@ -366,7 +373,8 @@ Theorem typed_store_array_entry_path_mem:
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
         vs_prev_bb := s.vs_prev_bb|>) = s /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)) ==>
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     val_in_memory dtv v (w2n dw) t.vs_memory /\
@@ -375,7 +383,8 @@ Theorem typed_store_array_entry_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all typed_array_entry_metadata >>

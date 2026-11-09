@@ -123,7 +123,8 @@ Theorem typed_dynarray_header_successor_path_mem:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
     eval_operand (Var ("%" ++ toString sm.cs_next_var)) t = SOME (n2w (SUC i)) /\
@@ -136,7 +137,8 @@ Theorem typed_dynarray_header_successor_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `i <= n` by decide_tac >>
@@ -239,7 +241,8 @@ Theorem typed_dynarray_header_iteration_path_mem:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
     eval_operand (Var ("%" ++ toString sm.cs_next_var)) t = SOME (n2w n) /\
@@ -252,7 +255,8 @@ Theorem typed_dynarray_header_iteration_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `Inv = \j u.
@@ -267,7 +271,8 @@ Proof
     (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s)` >>
+    (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory` >>
   `Inv i s` by (simp_tac bool_ss [Abbr `Inv`] >> asm_rewrite_tac[] >>
     simp[venom_state_component_equality]) >>
   `!j u. Inv j u /\ j < n ==>
@@ -289,7 +294,8 @@ Proof
      qexistsl_tac [`t`, `g`] >> reverse conj_tac >- first_assum ACCEPT_TAC >>
      simp_tac bool_ss [] >> ntac 9 (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- (irule array_iteration_frame_trans >> qexists_tac `u` >> simp[]) >>
-     first_assum ACCEPT_TAC) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     metis_tac[LESS_EQ_TRANS]) >>
   `?t g. Inv n t /\ gas_path_mem ctx fn s g (OK t)` by
     (irule finite_array_path_iteration >> conj_tac
      >- (rpt strip_tac >> gvs[Abbr `Inv`]) >>

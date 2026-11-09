@@ -54,7 +54,8 @@ Theorem normalize_sarray_indexed_path_mem[local]:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -65,7 +66,8 @@ Theorem normalize_sarray_indexed_path_mem[local]:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `!cv sp dp sc ec u sw dw. _` mp_tac >>
@@ -155,7 +157,8 @@ Theorem normalize_sarray_semantic_path_mem:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -165,7 +168,8 @@ Theorem normalize_sarray_semantic_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `value` >> gvs[value_has_type_def] >>

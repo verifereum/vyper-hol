@@ -72,7 +72,8 @@ Theorem typed_array_pointer_child_path_mem[local]:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?v g. gas_path_mem ctx fn s g (OK v) /\ ~v.vs_halted /\
     v.vs_current_bb = ec.cs_current_bb /\ v.vs_inst_idx = LENGTH ec.cs_current_insts /\
     eval_operand (Var ctr) v = SOME (n2w i) /\ D i (b+ds*i) v.vs_memory /\
@@ -82,7 +83,8 @@ Theorem typed_array_pointer_child_path_mem[local]:
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
     (!x. not_fresh_at sc x /\ ~MEM x [so;dso;sp;dp] ==>
-      lookup_var x v = lookup_var x s)
+      lookup_var x v = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH v.vs_memory
 Proof
   strip_tac >>
   `?u. gas_path_mem ctx fn s 0 (OK u) /\ u.vs_inst_idx = 4 /\
@@ -187,7 +189,8 @@ Theorem typed_sarray_body_successor_path_mem:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
     eval_operand (Var ("%" ++ toString sa.cs_next_var)) t = SOME (n2w (SUC i)) /\
@@ -199,7 +202,8 @@ Theorem typed_sarray_body_successor_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all typed_sarray_pointer_fresh >> simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -333,7 +337,8 @@ Theorem typed_sarray_header_successor_path_mem:
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
         vs_prev_bb := u.vs_prev_bb|>) = u /\
-      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+      (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = fresh_label_output "typed_sa_cond" sa.cs_next_label /\
     t.vs_inst_idx = 0 /\
@@ -346,7 +351,8 @@ Theorem typed_sarray_header_successor_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all typed_sarray_header_entry_path_mem >>

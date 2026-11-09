@@ -139,7 +139,8 @@ Theorem typed_dynarray_compiler_iteration_path_mem[local]:
         (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
           vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
           vs_prev_bb := u.vs_prev_bb|>) = u /\
-        (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+        (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+        LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = fresh_label_output "typed_dyn_cond" sa.cs_next_label /\
     t.vs_inst_idx = 0 /\
@@ -154,7 +155,8 @@ Theorem typed_dynarray_compiler_iteration_path_mem[local]:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all typed_dynarray_child_states >> strip_tac >>
@@ -247,7 +249,8 @@ Theorem typed_dynarray_suffix_path_mem:
         (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
           vs_current_bb := sc.cs_current_bb; vs_inst_idx := LENGTH sc.cs_current_insts;
           vs_prev_bb := u.vs_prev_bb|>) = u /\
-        (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u)) ==>
+        (!x. not_fresh_at sc x ==> lookup_var x v = lookup_var x u) /\
+        LENGTH u.vs_memory <= LENGTH v.vs_memory) ==>
   ?t g. gas_path_mem ctx fn s g (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!j. j < n ==> Src j (a+type_memory_bytes ce st*j) t.vs_memory) /\
@@ -259,7 +262,8 @@ Theorem typed_dynarray_suffix_path_mem:
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
       vs_prev_bb := s.vs_prev_bb|>) = s /\
-    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `!sc ec. _` mp_tac >>

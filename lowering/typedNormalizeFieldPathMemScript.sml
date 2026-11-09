@@ -157,6 +157,7 @@ Theorem normalize_field_child_path_mem:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame fp u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -164,6 +165,7 @@ Theorem normalize_field_child_path_mem:
   ?v g. gas_path_mem ctx fn s g (OK v) /\ D v.vs_memory /\
     ~v.vs_halted /\ v.vs_current_bb = se.cs_current_bb /\
     v.vs_inst_idx = LENGTH se.cs_current_insts /\
+    LENGTH s.vs_memory <= LENGTH v.vs_memory /\
     abi_decode_footprint_frame fp s v /\
     (!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x s) /\
     sa.cs_next_var <= se.cs_next_var /\
@@ -190,6 +192,7 @@ Proof
   goal_assum (drule_at (Pat `gas_path_mem _ _ s _ _`)) >>
   goal_assum (drule_at (Pat `gas_path_mem _ _ u _ _`)) >>
   simp[] >>
+  conj_tac >- gvs[] >>
   conj_tac >- gvs[abi_decode_footprint_frame_def, venom_state_component_equality] >>
   conj_tac >- (rpt strip_tac >>
     `not_fresh_at sd x` by (gvs[not_fresh_at_def] >> decide_tac) >> metis_tac[]) >>
@@ -397,6 +400,7 @@ Theorem normalize_field_bounded_child_path_mem[local]:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame fp u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -404,6 +408,7 @@ Theorem normalize_field_bounded_child_path_mem[local]:
   ?v g. gas_path_mem ctx fn s g (OK v) /\ D v.vs_memory /\
     ~v.vs_halted /\ v.vs_current_bb = se.cs_current_bb /\
     v.vs_inst_idx = LENGTH se.cs_current_insts /\
+    LENGTH s.vs_memory <= LENGTH v.vs_memory /\
     abi_decode_footprint_frame fp s v /\
     (!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x s) /\
     sa.cs_next_var <= se.cs_next_var /\
@@ -455,6 +460,7 @@ Theorem normalize_tuple_fields_certificate[local]:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -485,7 +491,8 @@ Theorem normalize_tuple_fields_certificate[local]:
       mem_bytes_at (h 0) (h N - h 0) t.vs_memory =
         mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      sa.cs_next_var <= sb.cs_next_var /\
+      LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+    sa.cs_next_var <= sb.cs_next_var /\
       (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
         vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
         vs_prev_bb := s.vs_prev_bb|>) = s)
@@ -506,7 +513,8 @@ Proof
       mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
     (!j. j < i ==> Dst j u.vs_memory) /\
     (!j. j < N ==> Src j u.vs_memory) /\
-    phi_prefix_length sc.cs_current_insts = 0` >>
+    phi_prefix_length sc.cs_current_insts = 0 /\
+    LENGTH s.vs_memory <= LENGTH u.vs_memory` >>
   BETA_TAC >> conj_tac
   >- (simp[abi_decode_footprint_frame_def, venom_state_component_equality] >>
       asm_rewrite_tac[]) >>
@@ -539,7 +547,8 @@ Resume normalize_tuple_fields_certificate[step]:
     (qpat_assum `d (SUC i) = _` (fn th => rewrite_tac[th]) >>
      simp_tac arith_ss [] >> first_assum ACCEPT_TAC) >>
   drule_all normalize_fields_prefix_frame >> strip_tac >>
-  qexistsl_tac [`v`,`g`] >> asm_rewrite_tac[] >> simp[]
+  qexistsl_tac [`v`,`g`] >> asm_rewrite_tac[] >> simp[] >>
+  metis_tac[LESS_EQ_TRANS]
 QED
 Finalise normalize_tuple_fields_certificate
 
@@ -574,6 +583,7 @@ Theorem normalize_tuple_fields_path_mem:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -593,6 +603,7 @@ Theorem normalize_tuple_fields_path_mem:
     mem_bytes_at (h 0) (h N - h 0) t.vs_memory =
       mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     sa.cs_next_var <= sb.cs_next_var /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
@@ -639,6 +650,7 @@ Theorem normalize_tuple_fields_memory_path_mem:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -658,6 +670,7 @@ Theorem normalize_tuple_fields_memory_path_mem:
     mem_bytes_at (h 0) (h N - h 0) t.vs_memory =
       mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     sa.cs_next_var <= sb.cs_next_var /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
@@ -715,6 +728,7 @@ Theorem normalize_nominal_struct_fields_memory_path_mem:
       v.vs_inst_idx = LENGTH se.cs_current_insts /\
       abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
       (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      LENGTH u.vs_memory <= LENGTH v.vs_memory /\
       sd.cs_next_var <= se.cs_next_var /\
       (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
@@ -734,6 +748,7 @@ Theorem normalize_nominal_struct_fields_memory_path_mem:
     mem_bytes_at (h 0) (h N - h 0) t.vs_memory =
       mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     sa.cs_next_var <= sb.cs_next_var /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
       vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
