@@ -239,10 +239,6 @@ QED
 Finalise map_scratch_stores_ghost_inv
 
 Theorem map_scratch_tail_certificate:
-  code = [mk_inst is MSTORE [Var p;slot] [];
-          mk_inst ip ADD [Var p;Lit 32w] [q];
-          mk_inst ik MSTORE [Var q;key] [];
-          mk_inst ih SHA3 [Var p;Lit 64w] [h]] /\ 
   ALL_DISTINCT [p;q;h] /\ (!x. key = Var x ==> x <> q) /\
   eval_operand slot s = SOME w0 /\ eval_operand key s = SOME w1 /\
   op_taint tn slot = {} /\ op_taint tn key = {} /\
@@ -254,8 +250,13 @@ Theorem map_scratch_tail_certificate:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!name lb sz. local_region cenv es.scopes s name lb sz ==>
-     lb+sz <= b \/ b+64 <= lb) /\ run_inst_seq code s = OK t ==>
-  ?G' tn'. (!k. inst_seq_ptr D 0 ctx fn PG G tn code
+     lb+sz <= b \/ b+64 <= lb) /\
+  run_inst_seq [mk_inst is MSTORE [Var p;slot] [];
+    mk_inst ip ADD [Var p;Lit 32w] [q]; mk_inst ik MSTORE [Var q;key] [];
+    mk_inst ih SHA3 [Var p;Lit 64w] [h]] s = OK t ==>
+  ?G' tn'. (!k. inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst is MSTORE [Var p;slot] []; mk_inst ip ADD [Var p;Lit 32w] [q];
+     mk_inst ik MSTORE [Var q;key] []; mk_inst ih SHA3 [Var p;Lit 64w] [h]]
       (s with vs_inst_idx := k) G' tn') /\
     ghost_inv d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
