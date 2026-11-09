@@ -611,3 +611,95 @@ Proof
   rpt strip_tac >> irule scratch_restore_cons_step >>
   gvs[listTheory.EVERY_DEF]
 QED
+
+Theorem scratch_save_cons_step[local]:
+  (!ss. ss.sym_stack = vals ++ stk /\
+    asm_block_at p ss.sym_base.as_pc
+      (execute_plan initial_fmp (MAP SOSpill offsets)) ==>
+    ?last. sym_steps p env
+      (LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))) ss = SymOK last /\
+      last.sym_stack = stk /\
+      scratch_kinds_ok fn ret items offsets last.sym_mem_labels /\
+      scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+      last.sym_base.as_pc = ss.sym_base.as_pc +
+        LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))) /\
+  op_kind_ok fn ret op v /\ ss.sym_stack = v::(vals ++ stk) /\
+  off < dimword(:256) /\
+  EVERY (\at. off+32 <= at \/ at+32 <= off) offsets /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP SOSpill (off::offsets))) ==>
+  ?last. sym_steps p env
+    (LENGTH (execute_plan initial_fmp (MAP SOSpill (off::offsets)))) ss = SymOK last /\
+    last.sym_stack = stk /\
+    scratch_kinds_ok fn ret (op::items) (off::offsets) last.sym_mem_labels /\
+    scratch_frame (off::offsets) ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP SOSpill (off::offsets)))
+Proof
+  strip_tac >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  pure_rewrite_tac[Once execute_plan_spill_cons,
+    stackOpSimTheory.asm_block_at_append, execute_plan_spill_length] >>
+  strip_tac >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_spill_scratch_head >>
+  rename1 `sym_steps p env 2 ss = SymOK mid` >>
+  qpat_x_assum `!ss. _` (qspec_then `mid` mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_tac >> drule_all scratch_save_cons_finish >> simp[]
+QED
+
+Theorem scratch_separation_head[local]:
+  (!i j. i < LENGTH ((off:num)::offsets) /\ j < LENGTH (off::offsets) /\ i <> j ==>
+    EL i (off::offsets) + 32 <= EL j (off::offsets) \/
+    EL j (off::offsets) + 32 <= EL i (off::offsets)) ==>
+  EVERY (\at. off+32 <= at \/ at+32 <= off) offsets
+Proof
+  strip_tac >> rewrite_tac[listTheory.EVERY_EL] >>
+  rpt strip_tac >> first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]
+QED
+
+Theorem scratch_separation_tail[local]:
+  (!i j. i < LENGTH ((off:num)::offsets) /\ j < LENGTH (off::offsets) /\ i <> j ==>
+    EL i (off::offsets) + 32 <= EL j (off::offsets) \/
+    EL j (off::offsets) + 32 <= EL i (off::offsets)) ==>
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets)
+Proof
+  rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]
+QED
+
+Theorem sym_spill_scratch_list:
+  !offsets items vals ss stk.
+  LIST_REL (op_kind_ok fn ret) items vals /\
+  LENGTH offsets = LENGTH items /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  ss.sym_stack = vals ++ stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP SOSpill offsets)) ==>
+  ?last. sym_steps p env
+    (LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))) ss = SymOK last /\
+    last.sym_stack = stk /\
+    scratch_kinds_ok fn ret items offsets last.sym_mem_labels /\
+    scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))
+Proof
+  Induct
+  >- (rw[] >>
+      gvs[planExecTheory.execute_plan_def, sym_steps_def,
+          scratch_kinds_ok_nil, scratch_frame_refl]) >>
+  Cases_on `items` >- simp[] >>
+  Cases_on `vals` >- simp[] >>
+  rpt strip_tac >>
+  rename1 `MAP SOSpill (off::offsets)` >>
+  `EVERY (\at. off+32 <= at \/ at+32 <= off) offsets` by
+    (irule scratch_separation_head >> asm_rewrite_tac[]) >>
+  `!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets` by
+    (metis_tac[scratch_separation_tail]) >>
+  irule scratch_save_cons_step >>
+  asm_rewrite_tac[listTheory.EVERY_DEF] >>
+  gvs[]
+QED
