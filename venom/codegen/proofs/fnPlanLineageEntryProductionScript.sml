@@ -2462,3 +2462,73 @@ Theorem native_inst_ops_prefix_deterministic:
 Proof
   simp[native_inst_ops_prefix_exec] >> strip_tac >> gvs[]
 QED
+
+Theorem analyzed_ordinary_paired_interval_replay:
+  !fn bb a xs n k dfg cfg halt p0 prefixP prefixQ.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+    xs = DROP a (non_param_insts bb) /\
+    n = LENGTH (get_params bb.bb_instructions) + a /\ k <= LENGTH xs /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label n) ==>
+      MEM (Var v) p0.ps_stack \/ Var v IN FDOM p0.ps_spilled) /\
+    (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI) /\
+    (!j. j < k ==>
+      EVERY (\v. ~MEM (Var v) prefixP)
+        (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (n+j)) ++
+         (EL j xs).inst_outputs) /\
+      EVERY (\v. ~MEM (Var v) prefixQ)
+        (live_vars_at (liveness_analyze fn) bb.bb_label (SUC (n+j)) ++
+         (EL j xs).inst_outputs)) ==>
+    ?ops q.
+      native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt n
+        (LENGTH bb.bb_instructions) xs p0 k ops q /\
+      native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt n
+        (LENGTH bb.bb_instructions) xs (p0 with ps_stack := prefixP ++ p0.ps_stack)
+        k ops (q with ps_stack := prefixP ++ q.ps_stack) /\
+      native_inst_ops_prefix (liveness_analyze fn) dfg cfg fn bb.bb_label halt n
+        (LENGTH bb.bb_instructions) xs (p0 with ps_stack := prefixQ ++ p0.ps_stack)
+        k ops (q with ps_stack := prefixQ ++ q.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >> irule native_ordinary_paired_interval_replay >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `j < LENGTH xs` by decide_tac >>
+  `inst = EL j xs` by metis_tac[HD_DROP,HD] >>
+  `a+j < LENGTH (non_param_insts bb)` by gvs[] >>
+  `inst = EL (a+j) (non_param_insts bb)` by
+    (gvs[] >> simp[EL_DROP]) >>
+  `inst = EL (n+j) bb.bb_instructions` by
+    (drule_all ready_block_suffix_index >> gvs[]) >>
+  `n+j < LENGTH bb.bb_instructions` by
+    (drule_all ready_block_parameter_suffix >>
+     disch_then (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[] >>
+     gvs[] >> decide_tac) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) bb.bb_label (n+j)) ==>
+    MEM (Var v) p.ps_stack \/ Var v IN FDOM p.ps_spilled` by
+    (drule native_ordinary_interval_available >>
+     disch_then (qspecl_then [`bb`,`a`] mp_tac) >>
+     gvs[]) >>
+  `MEM inst bb.bb_instructions` by metis_tac[EL_MEM] >>
+  `inst_wf inst /\ codegen_ready_inst inst` by
+    (drule_all fnPlanLineageQuarantineTheory.ready_member_instruction_shape >> simp[]) >>
+  `DROP (a+j) (non_param_insts bb) = inst::rest` by
+    gvs[DROP_DROP_T,arithmeticTheory.ADD_COMM] >>
+  `!v. MEM (Var v) (compute_operands inst) ==>
+    MEM (Var v) p.ps_stack \/ Var v IN FDOM p.ps_spilled` by
+    (qpat_assum `inst = EL (n+j) _` SUBST1_TAC >>
+     rpt strip_tac >> irule analyzed_live_coverage_computed_operands >>
+     goal_assum (drule_at Any) >> qexists_tac `fn` >> simp[]) >>
+  `!x. MEM x (compute_operands inst) /\ is_var_operand x ==>
+    MEM x p.ps_stack \/ x IN FDOM p.ps_spilled` by
+    (Cases >> gvs[stackPlanTypesTheory.is_var_operand_def]) >>
+  qpat_x_assum `!j. j < k ==> EVERY _ _ /\ _` (qspec_then `j` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ _`
+    (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+  `((if rest = [] then
+       live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions)
+     else live_vars_at (liveness_analyze fn) bb.bb_label
+       ((a+j) + LENGTH (get_params bb.bb_instructions) + 1)) =
+     live_vars_at (liveness_analyze fn) bb.bb_label
+       (SUC (LENGTH (get_params bb.bb_instructions) + (a+j))))` by
+    (irule ready_block_suffix_next_live >> metis_tac[]) >>
+  gvs[]
+QED

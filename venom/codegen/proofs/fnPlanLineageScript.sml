@@ -4759,3 +4759,66 @@ Resume lineage_dfs_join_phi_common_suffix_actual[output_exclusion]:
 QED
 
 Finalise lineage_dfs_join_phi_common_suffix_actual
+
+Theorem lineage_dfs_join_ordinary_paired_interval_actual:
+  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD halting.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD ==>
+  ?prefixL prefixD suffix phi_ops al p0 xs.
+    p0 = psD with <|ps_stack := suffix; ps_alloc := al|> /\
+    xs = DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psL =
+      (phi_ops, psL with <|ps_stack := prefixL ++ suffix; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psD =
+      (phi_ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
+    (!k. k <= LENGTH xs /\
+      (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI) ==>
+      ?ops q.
+        native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ halting
+          (LENGTH (collect_phis sb.bb_instructions)) (LENGTH sb.bb_instructions) xs
+          p0 k ops q /\
+        native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ halting
+          (LENGTH (collect_phis sb.bb_instructions)) (LENGTH sb.bb_instructions) xs
+          (p0 with ps_stack := prefixL ++ p0.ps_stack) k ops
+          (q with ps_stack := prefixL ++ q.ps_stack) /\
+        native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ halting
+          (LENGTH (collect_phis sb.bb_instructions)) (LENGTH sb.bb_instructions) xs
+          (p0 with ps_stack := prefixD ++ p0.ps_stack) k ops
+          (q with ps_stack := prefixD ++ q.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_dfs_join_phi_common_suffix_actual >>
+  disch_then (qspec_then `halting` strip_assume_tac) >>
+  `collect_phis sb.bb_instructions <> []` by (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+  drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> strip_tac >>
+  `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `fn_reachable fn sb.bb_label` by
+    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  qexistsl_tac [`prefixL`,`prefixD`,`suffix`,`ops`,`al`,
+    `psD with <|ps_stack := suffix; ps_alloc := al|>`,
+    `DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> rpt strip_tac >>
+  qpat_x_assum `sb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
+  irule fnPlanLineageEntryProductionTheory.analyzed_ordinary_paired_interval_replay >>
+  simp[] >> gen_tac >> strip_tac >>
+  `LENGTH (collect_phis sb.bb_instructions) + j < LENGTH sb.bb_instructions` by
+    (fs[] >> decide_tac) >>
+  simp[listTheory.EVERY_MEM,listTheory.EL_DROP] >> rpt strip_tac >>
+  qpat_assum `!j v. _` (qspecl_then [`LENGTH (collect_phis sb.bb_instructions) + j`,`v`] mp_tac) >>
+  simp[arithmeticTheory.ADD_COMM]
+QED
