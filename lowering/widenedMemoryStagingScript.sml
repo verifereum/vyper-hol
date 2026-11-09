@@ -158,19 +158,21 @@ Theorem compile_staging_prefix_forward_mem:
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ n = type_memory_size tv /\
   val_wf tv v /\ val_in_memory tv v (w2n sw) s.vs_memory /\
-  w2n sw + n <= s.vs_alloca_next /\
-  (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
-     sa.cs_next_id <= aid ==> w2n sw + n <= b \/ b + sz <= w2n sw) ==>
+  w2n sw + n <= s.vs_alloca_next ==>
   ?r t tw. gas_path_mem ctx func s 0 (OK r) /\
     stmt_state_rel ctx func ce cx es r /\
     eval_operand buf.buf_operand r = SOME tw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
     w2n tw + n < dimword (:256) /\ r.vs_memory = s.vs_memory /\
+    s.vs_alloca_next <= r.vs_alloca_next /\
     sa.cs_next_id < sm.cs_next_id /\
     (!x. not_fresh_at sa x ==> lookup_var x r = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP r.vs_allocas aid = SOME entry) /\
     (!name b len. local_region ce es.scopes r name b len ==>
+       regions_disjoint (w2n tw) n b len) /\
+    (!aid b len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
        regions_disjoint (w2n tw) n b len) /\
     (?p. buf.buf_operand = Var p /\ not_fresh_at sm p) /\
     ((FLOOKUP s.vs_allocas sa.cs_next_id = NONE /\ w2n tw = s.vs_alloca_next) \/
@@ -181,8 +183,6 @@ Theorem compile_staging_prefix_forward_mem:
     r.vs_inst_idx = LENGTH sm.cs_current_insts /\
     gas_path_mem ctx func r 0 (OK t) /\ gas_path_mem ctx func s 0 (OK t) /\
     val_in_memory tv v (w2n tw) t.vs_memory /\
-    val_in_memory tv v (w2n sw) t.vs_memory /\
-    (w2n sw + n <= w2n tw \/ w2n tw + n <= w2n sw) /\
     t.vs_allocas = r.vs_allocas /\
     (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
        vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;
@@ -208,10 +208,7 @@ Proof
    FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n tw,n)` by
     gvs[eval_op_inst_idx] >>
   drule_all alloc_buffer_run_effect >> strip_tac >>
-  `w2n sw + n <= w2n tw \/ w2n tw + n <= w2n sw` by
-    (qpat_x_assum `!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\ _ ==> _`
-       (qspecl_then [`sa.cs_next_id`, `w2n tw`, `n`] mp_tac) >>
-     simp[] >> decide_tac) >>
+
   `cs_extends sa sm /\ cs_extends sm sn` by
     (conj_tac >- metis_tac[compile_alloc_buffer_extends] >>
      drule_all compile_copy_memory_extends >> strip_tac >>
@@ -223,9 +220,7 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `gas_path_mem ctx func s 0 (OK t)` by
     (drule_all gas_path_mem_then >> simp[]) >>
-  `val_in_memory tv v (w2n sw) t.vs_memory` by
-    (irule val_in_memory_outside_write >> conj_tac >- simp[] >>
-     qexistsl_tac [`w2n tw`, `s.vs_memory`, `n`] >> metis_tac[]) >>
+
   `t.vs_vars = r.vs_vars /\ t.vs_labels = s.vs_labels` by
     gvs[venom_state_component_equality] >>
   `!op w. eval_operand op s = SOME w /\
@@ -242,9 +237,5 @@ Proof
   qexistsl_tac [`r`, `t`, `tw`] >> gvs[] >>
   gvs[venom_state_component_equality, regions_disjoint_def,
       eval_operand_def, lookup_var_def] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
-  qpat_x_assum `!nm base size. local_region _ _ _ nm base size ==> _ \/ _`
-    drule_all >> simp[] >> strip_tac >>
-  qpat_x_assum `!nm base size. local_region _ _ _ nm base size ==>
-    mem_bytes_at base size _ = _` drule_all >> simp[]
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >> metis_tac[]
 QED
