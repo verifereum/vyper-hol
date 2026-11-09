@@ -1123,6 +1123,19 @@ Proof
   rpt strip_tac >> irule sym_pop_numeric >> simp[planWfTheory.do_swap_length]
 QED
 
+Theorem pop_one_some_alloc_mono:
+  !item ps d ops ps'.
+    stack_get_depth item ps.ps_stack = SOME d /\
+    cleanOpsSim$pop_one_step item ps = (ops,ps') ==>
+    ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+    ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
+Proof
+  rpt strip_tac >>
+  drule fnFrameBoundaryEntryParamsTheory.entry_pop_one_step_some >> strip_tac >> gvs[] >>
+  metis_tac[allocMonoTheory.do_swap_spill_base, allocMonoTheory.do_swap_next_offset,
+    pairTheory.PAIR]
+QED
+
 Theorem pop_one_step_alloc_mono:
   !item ps ops ps'.
     cleanOpsSim$pop_one_step item ps = (ops,ps') ==>
@@ -1131,10 +1144,24 @@ Theorem pop_one_step_alloc_mono:
 Proof
   rpt gen_tac >> Cases_on `stack_get_depth item ps.ps_stack`
   >- simp[cleanOpsSimTheory.pop_one_step_def] >>
-  drule fnFrameBoundaryEntryParamsTheory.entry_pop_one_step_some >>
-  disch_then SUBST1_TAC >> strip_tac >> gvs[] >>
-  metis_tac[allocMonoTheory.do_swap_spill_base, allocMonoTheory.do_swap_next_offset,
-    pairTheory.PAIR]
+  metis_tac[pop_one_some_alloc_mono]
+QED
+
+Theorem pop_steps_alloc_mono_cons:
+  !items.
+    (!ps ops ps'.
+      foldlSim$plan_steps cleanOpsSim$pop_one_step items ps = (ops,ps') ==>
+      ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+      ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset) ==>
+    !item ps ops ps'.
+      foldlSim$plan_steps cleanOpsSim$pop_one_step (item::items) ps = (ops,ps') ==>
+      ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
+      ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
+Proof
+  rpt gen_tac >> disch_tac >> rpt gen_tac >> disch_tac >>
+  drule reorderSimTheory.plan_steps_cons_result >> strip_tac >>
+  drule pop_one_step_alloc_mono >> first_x_assum drule >>
+  rpt strip_tac >> gvs[] >> decide_tac
 QED
 
 Theorem pop_steps_alloc_mono:
@@ -1143,13 +1170,8 @@ Theorem pop_steps_alloc_mono:
     ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base /\
     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
 Proof
-  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
-  Cases_on `cleanOpsSim$pop_one_step h ps` >>
-  rename1 `cleanOpsSim$pop_one_step h ps = (ops1,ps1)` >>
-  Cases_on `foldlSim$plan_steps cleanOpsSim$pop_one_step items ps1` >>
-  simp[] >> strip_tac >> gvs[] >>
-  drule pop_one_step_alloc_mono >> first_x_assum drule >>
-  rpt strip_tac >> gvs[] >> decide_tac
+  Induct >- simp[foldlSimTheory.plan_steps_def] >>
+  drule pop_steps_alloc_mono_cons >> simp[]
 QED
 
 Theorem pop_one_some_layout:
@@ -1218,6 +1240,45 @@ Proof
   drule_all sym_pop_one_some_numeric >> simp[]
 QED
 
+Theorem sym_pop_steps_cons_numeric:
+  !items.
+    (!ps ops ps' p env cp fn ret srest initial_fmp R ss.
+      foldlSim$plan_steps cleanOpsSim$pop_one_step items ps = (ops,ps') /\
+      spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+      (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+      (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+        context_spill_byte cp b /\ R b) /\
+      sym_kinds_ok cp fn ret srest ps ss /\
+      asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+      ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+        sym_kinds_ok cp fn ret srest ps' out /\
+        out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+        (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)) ==>
+  !item ps ops ps' p env cp fn ret srest initial_fmp R ss.
+    foldlSim$plan_steps cleanOpsSim$pop_one_step (item::items) ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    (!b. ps'.ps_alloc.sa_spill_base <= b /\ b < ps'.ps_alloc.sa_next_offset ==>
+      context_spill_byte cp b /\ R b) /\
+    sym_kinds_ok cp fn ret srest ps ss /\
+    asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+    ?out. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK out /\
+      sym_kinds_ok cp fn ret srest ps' out /\
+      out.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  gen_tac >> disch_tac >> rpt gen_tac >> strip_tac >>
+  drule reorderSimTheory.plan_steps_cons_result >> strip_tac >> gvs[] >>
+  drule_all pop_one_step_layout >> strip_tac >>
+  drule pop_steps_alloc_mono >> strip_tac >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >> irule sym_numeric_seq >>
+  (conj_tac >- asm_rewrite_tac[]) >>
+  qexistsl [`ps`, `ps1`] >> asm_rewrite_tac[] >> conj_tac
+  >- (rpt strip_tac >> irule sym_pop_one_numeric >>
+      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  rw[] >> first_x_assum irule >> metis_tac[]
+QED
+
 Theorem sym_pop_steps_numeric:
   !items ps ops ps' p env cp fn ret srest initial_fmp R ss.
     foldlSim$plan_steps cleanOpsSim$pop_one_step items ps = (ops,ps') /\
@@ -1233,23 +1294,9 @@ Theorem sym_pop_steps_numeric:
       (!b. ~R b ==> FLOOKUP out.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   Induct
-  >- (simp[foldlSimTheory.plan_steps_def] >> rpt strip_tac >>
-      qexists `ss` >> simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
-  rpt gen_tac >> strip_tac >>
-  Cases_on `cleanOpsSim$pop_one_step h ps` >>
-  rename1 `cleanOpsSim$pop_one_step h ps = (ops1,ps1)` >>
-  Cases_on `foldlSim$plan_steps cleanOpsSim$pop_one_step items ps1` >>
-  rename1 `foldlSim$plan_steps cleanOpsSim$pop_one_step items ps1 = (ops2,ps2)` >>
-  gvs[foldlSimTheory.plan_steps_def] >>
-  drule_all pop_one_step_layout >> strip_tac >>
-  drule pop_steps_alloc_mono >> strip_tac >>
-  once_rewrite_tac[arithmeticTheory.ADD_COMM] >> irule sym_numeric_seq >>
-  (conj_tac >- asm_rewrite_tac[]) >>
-  qexistsl [`ps`, `ps1`] >> asm_rewrite_tac[] >> conj_tac
-  >- (rpt strip_tac >> irule sym_pop_one_numeric >>
-      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
-  rpt strip_tac >> once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
-  first_x_assum irule >> gvs[] >> metis_tac[]
+  >- (rw[foldlSimTheory.plan_steps_def] >> qexists `ss` >>
+      simp[planExecTheory.execute_plan_def, sym_steps_def]) >>
+  rw[] >> drule_all (SRULE [] sym_pop_steps_cons_numeric) >> simp[]
 QED
 
 Theorem sym_popmany_individual_numeric:
@@ -1272,6 +1319,19 @@ Proof
   strip_tac >> drule_all sym_pop_steps_numeric >> simp[]
 QED
 
+Theorem popmany_contiguous_result:
+  !items ps.
+    items <> [] /\
+    EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
+    is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items)) ==>
+    popmany_plan items ps =
+      (FST (do_swap (LENGTH items) ps) ++ [SOPop (LENGTH items)],
+       (SND (do_swap (LENGTH items) ps)) with
+         ps_stack := stack_pop (LENGTH items) (SND (do_swap (LENGTH items) ps)).ps_stack)
+Proof
+  Cases_on `items` >> simp[stackPlanOpsTheory.popmany_plan_def, pairTheory.UNCURRY]
+QED
+
 Theorem sym_popmany_contiguous_numeric:
   !items ps ops ps' p env cp fn ret srest initial_fmp R ss.
     items <> [] /\
@@ -1292,8 +1352,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `LENGTH items < LENGTH ps.ps_stack` by
     (irule cleanOpsSimTheory.contiguous_top_stack_bound >> simp[]) >>
-  Cases_on `items` >- gvs[] >>
-  gvs[stackPlanOpsTheory.popmany_plan_def, pairTheory.UNCURRY] >>
+  drule_all popmany_contiguous_result >> strip_tac >> gvs[] >>
   once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   irule sym_swap_pop_numeric >> gvs[] >> metis_tac[]
 QED
@@ -1318,7 +1377,7 @@ Proof
   Cases_on `EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) items) /\
     is_contiguous_top (MAP THE (MAP (\v. stack_get_depth v ps.ps_stack) items))`
   >- (irule sym_popmany_contiguous_numeric >> metis_tac[]) >>
-  drule_all cleanOpsSimTheory.popmany_plan_noncontig_new >> strip_tac >>
+  drule_all_then assume_tac cleanOpsSimTheory.popmany_plan_noncontig_new >>
   drule_all sym_popmany_individual_numeric >> simp[]
 QED
 
