@@ -367,9 +367,9 @@ Proof
   qexists `bt0` >> simp[]
 QED
 
-Theorem abi_args_expr_post_lowered_rel:
+Theorem abi_args_rel_lowered_transport:
   expr_body_pre ce cx env e es /\
-  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  expr_val_rel cx (post_value_type ce e) v op s /\
   (~is_word_type (expr_type e) ==>
     ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
          value_has_type tv v /\ val_wf tv v) ==>
@@ -381,17 +381,32 @@ Proof
   Cases_on `is_word_type (expr_type e)`
   >- (`lowered_value_type ce e = expr_type e` by
         metis_tac[abi_args_word_fits_eq] >>
-      gvs[expr_post_def]) >>
+      gvs[]) >>
   `~is_word_type (lowered_value_type ce e)` by
     metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
   first_x_assum drule >> strip_tac >>
-  drule_all materialize_expr_post_lowered_source >> strip_tac >>
-  simp[expr_val_rel_def] >> metis_tac[]
+  drule_all materialize_post_lowered_classify >> strip_tac
+  >- gvs[] >>
+  `post_value_type ce e = expr_type e \/
+   post_value_type ce e = lowered_value_type ce e` by
+    (Cases_on `e` >> simp[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     simp[post_value_type_def, vyperASTTheory.expr_type_def] >>
+     IF_CASES_TAC >> simp[]) >>
+  `?ptv. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME ptv` by
+    metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
+  `~is_word_type (post_value_type ce e)` by
+    metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
+  qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+  simp[expr_val_rel_def] >> strip_tac >> qexists `w` >> simp[] >>
+  irule valueCopyBytesTheory.bytestring_val_in_memory_transfer >> simp[] >>
+  qexistsl [`post_value_type ce e`, `lowered_value_type ce e`, `get_tenv cx`, `ptv`] >>
+  simp[]
 QED
 
-Theorem abi_args_expr_post_lowered_at:
+Theorem abi_args_at_lowered_transport:
   expr_body_pre ce cx env e es /\
-  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  expr_val_at ce cx (post_value_type ce e) sa sb es' v op s /\
   (~is_word_type (expr_type e) ==>
     ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
          value_has_type tv v /\ val_wf tv v) ==>
@@ -424,8 +439,6 @@ Proof
     metis_tac[valueCopyBytesTheory.bytestring_val_footprint_eq] >>
   `~is_word_type (post_value_type ce e)` by
     metis_tac[valueCopyBytesTheory.is_bytestring_word_type] >>
-  `expr_val_at ce cx (post_value_type ce e) sa sb es' v op s` by
-    gvs[expr_post_def] >>
   `val_wf ptv v` by (gvs[expr_val_at_def] >> metis_tac[]) >>
   `!n k. local_val_at ce cx n k ptv v ==> local_val_at ce cx n k tv v` by
     (`?bt1. ptv = BaseTV bt1` by
@@ -435,6 +448,30 @@ Proof
      gvs[] >> metis_tac[abi_args_local_base_transport]) >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_val_at_def] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem abi_args_expr_post_lowered_rel:
+  expr_body_pre ce cx env e es /\
+  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  (~is_word_type (expr_type e) ==>
+    ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+         value_has_type tv v /\ val_wf tv v) ==>
+  expr_val_rel cx (lowered_value_type ce e) v op s
+Proof
+  strip_tac >> irule abi_args_rel_lowered_transport >>
+  gvs[expr_post_def] >> metis_tac[]
+QED
+
+Theorem abi_args_expr_post_lowered_at:
+  expr_body_pre ce cx env e es /\
+  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  (~is_word_type (expr_type e) ==>
+    ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+         value_has_type tv v /\ val_wf tv v) ==>
+  expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op s
+Proof
+  strip_tac >> irule abi_args_at_lowered_transport >>
+  gvs[expr_post_def] >> metis_tac[]
 QED
 
 Theorem abi_args_post_cons_uncaptured:
@@ -472,6 +509,10 @@ Proof
 QED
 
 Theorem abi_args_post_cons_uncaptured_labels:
+  expr_body_pre ce cx env e es /\
+  (~is_word_type (expr_type e) ==>
+    ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+         value_has_type tv v /\ val_wf tv v) /\
   expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
   expr_val_rel cx (lowered_value_type ce e) v op t /\
   expr_val_at ce cx (lowered_value_type ce e) sa sm es1 v op t /\
@@ -491,7 +532,38 @@ Theorem abi_args_post_cons_uncaptured_labels:
   fn_has_code sa sm func /\ fn_inst_ids_distinct func ==>
   abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
-  cheat
+  strip_tac >> Cases_on `?l. op = Label l`
+  >- (gvs[] >>
+      `wb_frame ce es1 es' sm t u` by metis_tac[abi_args_post_def] >>
+      `stmt_state_rel ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
+      `stmt_state_rel ctx func ce cx es' u` by metis_tac[abi_args_post_def] >>
+      `expr_val_rel cx (post_value_type ce e) v (Label l) t` by
+        metis_tac[expr_post_def] >>
+      `expr_val_at ce cx (post_value_type ce e) sa sm es1 v (Label l) t` by
+        metis_tac[expr_post_def] >>
+      `eval_operand (Label l) t = eval_operand (Label l) u \/
+       (expr_val_rel cx (post_value_type ce e) v (Label l) u /\
+        expr_val_at ce cx (post_value_type ce e) sa sm es' v (Label l) u)` by
+        (irule abi_args_success_label_transport >> metis_tac[ETA_THM]) >>
+      pop_assum strip_assume_tac
+      >- (`expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Label l) u` by
+            (irule abi_args_location_end_mono >> qexists `sm` >> simp[] >>
+             irule abi_args_location_kept_eq >> metis_tac[]) >>
+          `expr_val_rel cx (lowered_value_type ce e) v (Label l) u` by
+            (Cases_on `is_word_type (lowered_value_type ce e)`
+             >- (gvs[expr_val_rel_def] >> metis_tac[]) >>
+             `es'.scopes = es1.scopes` by simp[] >>
+             `sm.cs_next_id <= sm.cs_next_id` by simp[] >>
+             irule abi_args_value_kept_eq >> metis_tac[]) >>
+          irule abi_args_post_cons_frame >> metis_tac[]) >>
+      `expr_val_rel cx (lowered_value_type ce e) v (Label l) u` by
+        (irule abi_args_rel_lowered_transport >> metis_tac[]) >>
+      `expr_val_at ce cx (lowered_value_type ce e) sa sm es' v (Label l) u` by
+        (irule abi_args_at_lowered_transport >> metis_tac[]) >>
+      `expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Label l) u` by
+        metis_tac[abi_args_location_end_mono] >>
+      irule abi_args_post_cons_frame >> metis_tac[]) >>
+  irule abi_args_post_cons_uncaptured >> metis_tac[]
 QED
 
 Theorem abi_args_post_cons_captured:
