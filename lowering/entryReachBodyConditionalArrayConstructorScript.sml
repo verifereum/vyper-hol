@@ -167,7 +167,7 @@ Proof
   strip_tac >> drule_all entry_index_counter_readiness >> strip_tac >>
   drule_all entry_scratch_initializer_room >> strip_tac >>
   qexists_tac `p` >> simp_tac bool_ss [entry_array_init_resources_def] >>
-  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  `abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st)` by
     simp[abi_decode_array_loop_init_def, comp_bind_def,
          comp_ignore_bind_def, comp_return_def] >>
@@ -261,7 +261,7 @@ Proof
   `entry_array_init_resources dst src maxn asz
     (st,guard_st,header_st,loop_st,ip,cnt) (ctx,fn,site,d,sz,p,32,p,s)` by
     fs[entry_array_init_resources_def] >>
-  `abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE aty) (ListV avs))) d sz p 32 s` by
     simp[abi_decoder_ranges_def, abi_decode_source_opcode_def] >>
   drule_all owned_array_canonical_initializer >>
@@ -271,7 +271,7 @@ Proof
     (irule canonical_dynamic_array_count_load >> qexists_tac `aty` >>
      asm_rewrite_tac[]) >>
   qexistsl_tac [`p`,`t`] >> asm_rewrite_tac[] >>
-  qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+  qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
   POP_ASSUM_LIST (K all_tac) >> simp[abi_decoder_ranges_def]
 QED
 
@@ -286,8 +286,8 @@ Proof
 QED
 
 Theorem conditional_array_initializer_contained[local]:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st = ((ip,cnt),loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st = ((ip,cnt),loop_st) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,body_st) /\
   fn_has_code loop_st body_st fn ==>
   !i. MEM i (emitted_insts st loop_st) ==> MEM i (fn_insts fn)
 Proof
@@ -332,7 +332,7 @@ Theorem callback_array_compiler_config:
     lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME
       <|bb_label := loop_st.cs_current_bb; bb_instructions := loop_st.cs_current_insts ++
         [mk_inst loop_st.cs_next_id JMP [Label (FST labels)] []]|> /\
-    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) body_st = (ops,middle) /\
     compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -367,11 +367,11 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all calldata_nonbulk_parent_shell_conditional >> strip_tac >>
   rename1 `abi_decode_index_init header_st = (ip,loop_st)` >>
-  rename1 `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = (ops,middle)` >>
+  rename1 `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = (ops,middle)` >>
   rename1 `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ middle = ((),last)` >>
   drule_all entry_bytes_array_initial_live >> strip_tac >>
   drule abi_decoder_loop_prefix_facts >> strip_tac >>
-  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ body_st = _`
+  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _`
     (mp_then Any strip_assume_tac abi_decode_array_element_setup_operands) >>
   qpat_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ middle = _`
     (mp_then Any strip_assume_tac abi_decoder_variable_counter) >>

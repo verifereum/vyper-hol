@@ -160,8 +160,8 @@ Proof
   irule calldata_coherent_nonbulk_array_owned_run >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qpat_assum `abi_decoder_coherent _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
-  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `abi_decode_loop_suffix _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `FLOOKUP initial.vs_allocas oid = _` (irule_at Any) >>
   qpat_assum `abi_decode_index_init _ = _` (irule_at Any) >>

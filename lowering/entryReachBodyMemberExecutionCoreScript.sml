@@ -82,7 +82,7 @@ Definition entry_members_callback_def:
     vo = SUM (MAP (type_memory_bytes ce) pre) /\
     canonical_members_frame ctx fn oid root extent sites b cap site limit_st
       dst src sb d outsz st s /\
-    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
     compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
@@ -153,7 +153,7 @@ Proof
     (mp_tac o PURE_REWRITE_RULE [entry_members_callback_def]) >>
   disch_then (drule_at (Pat `cursor pre (ty::tys) st s`)) >>
   simp_tac bool_ss [AND_IMP_INTRO, GSYM CONJ_ASSOC, FORALL_AND_THM] >>
-  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then drule_all >> simp[] >> strip_tac >>
   qexistsl_tac [`end_st`, `t`] >> asm_rewrite_tac[] >>
   conj_tac >- (simp[MAP_APPEND, SUM_APPEND]) >> decide_tac
@@ -186,7 +186,7 @@ Theorem entry_members_execution_suffix:
       [(d,outsz)] s t
 Proof
   Induct_on `tys` >> rpt gen_tac >> strip_tac
-  >- (fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- (fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
       qexists_tac `s` >> simp[entry_members_effect_refl, abi_encoder_registered_effect_refl]) >>
   drule_all entry_members_core_cons >> strip_tac >>
   `window_alloca_sites fn (abi_decoder_ids next.cs_next_id last.cs_next_id) SUBSET

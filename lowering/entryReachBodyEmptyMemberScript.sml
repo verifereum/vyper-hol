@@ -17,7 +17,7 @@ Theorem entry_empty_dynamic_member_endpoint:
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   abi_decoder_metadata ce env ty tv ei av v /\
   ei = type_to_abi_dec_info ce.ce_struct_fields ce ty /\ ei = DecComplex T [] /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset ei) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),last) /\
@@ -45,7 +45,7 @@ Proof
     (irule abi_decoder_empty_metadata_value >> metis_tac[]) >>
   `type_memory_size tv = 0` by
     metis_tac[abi_decoder_coherent_header, abi_decoder_header_def] >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   mp_tac (Q.INST [`dyn` |-> `F`, `mid` |-> `last`] entry_member_setup_endpoint) >>
   simp_tac bool_ss [] >> impl_tac >- asm_rewrite_tac[] >>

@@ -7,7 +7,7 @@ Ancestors
 Theorem entry_members_path_iteration:
   !dst src ctx fn I.
   (!ei az mz rest ao vo a m s.
-    (do ops <- abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    (do ops <- abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
                  (dec_info_needs_offset ei) ao vo;
         compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w) ei od)
       a = ((),m) /\ I ((ei,az,mz)::rest) ao vo a s ==>
@@ -20,13 +20,13 @@ Theorem entry_members_path_iteration:
            (vo + SUM (MAP (\(ei,az,mz). mz) xs)) last t
 Proof
   rpt gen_tac >> strip_tac >> Induct
-  >- (simp[Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- (simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
       rpt strip_tac >> gvs[] >> metis_tac[entry_decode_path_refl]) >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
   simp_tac bool_ss [abi_decode_complex_member_phases, comp_bind_def,
     comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  `(do ops <- abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  `(do ops <- abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
                  (dec_info_needs_offset h0) ao vo;
        compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w) h0 od)
       st = ((),cs'')` by simp[comp_bind_def] >>
@@ -40,14 +40,14 @@ QED
 
 Theorem entry_member_path_intro:
   !I H dst src ei ao vo st ops addr mid ctx fn az mz rest.
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset ei) ao vo st = (ops,addr) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w) ei addr = ((),mid) /\
   (!s. I ((ei,az,mz)::rest) ao vo st s ==>
     ?u. entry_decode_path ctx fn s u /\ H u) /\
   (!u. H u ==> ?t. entry_decode_path ctx fn u t /\
     I rest (ao+az) (vo+mz) mid t) ==>
-  (do ops <- abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  (do ops <- abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
                (dec_info_needs_offset ei) ao vo;
       compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w) ei od)
     st = ((),mid) /\

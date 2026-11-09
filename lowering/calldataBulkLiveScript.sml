@@ -2,12 +2,12 @@
 Theory calldataBulkLive
 Ancestors
   valueEncodingDefs safeSequence calldataWordLeaf calldataBytesLeaf calldataBytesLive calldataBulkLeaf calldataDynOwned abiDecoderReentry
-  abiDecoderFrameCompose abiDecoderBulk abiDecoderCopy abiDecoderComposition abiDecoderContract abiDecoderGuards abiEncoder
+  abiDecoderFrameCompose abiDecoderBulk abiDecoderCopy abiDecoderComposition abiDecoderContract abiDecoderGuards abiDecoderRange abiEncoder
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding
   venomExecSemantics venomState venomInst words arithmetic list
 
 Theorem calldata_bulk_payload_live:
-  abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD st = ((),st') /\
+  abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD (Lit 0w) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   eval_operand cnt s = SOME (n2w n) /\ d + 32 < dimword (:256) /\
   n * mem_sz < dimword (:256) /\
@@ -88,7 +88,7 @@ Proof
 QED
 
 Theorem calldata_bulk_body_live:
-  abi_decode_bulk_body dst src CALLDATALOAD mem_sz st = ((),st') /\
+  abi_decode_bulk_body dst src src CALLDATALOAD (Lit 0w) mem_sz st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   abi_decode_load CALLDATALOAD p s = n2w n /\
   d+32 < dimword (:256) /\ n*mem_sz < dimword (:256) /\
@@ -221,7 +221,7 @@ Proof
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `abi_decode_bulk_body dst src CALLDATALOAD mem_sz c1 = ((),st')` >>
+  rename1 `abi_decode_bulk_body dst src src CALLDATALOAD (Lit 0w) mem_sz c1 = ((),st')` >>
   drule_all calldata_count_guard_rejected_live >> strip_tac >>
   drule abi_decode_count_guard_shape >> strip_tac >>
   drule calldata_bulk_body_extends >> strip_tac >>
@@ -230,7 +230,7 @@ Proof
 QED
 
 Theorem calldata_bulk_payload_live_prefix_safe:
-  abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD st = ((),st') /\
+  abi_decode_bulk_payload dst src cnt mem_sz CALLDATALOAD (Lit 0w) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   eval_operand cnt s = SOME (n2w n) /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -298,7 +298,7 @@ Proof
 QED
 
 Theorem calldata_bulk_body_live_prefix_safe:
-  abi_decode_bulk_body dst src CALLDATALOAD mem_sz st = ((),st') /\
+  abi_decode_bulk_body dst src src CALLDATALOAD (Lit 0w) mem_sz st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -329,7 +329,7 @@ Proof
     (conj_tac >> irule abi_decoder_operand_live_mono >>
      qexists_tac `st.cs_next_var` >> simp[]) >>
   `inst_extends c1 st'` by
-    (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_bulk_payload _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_bulk_payload_def, comp_bind_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
      imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
@@ -528,7 +528,7 @@ Proof
     abiDecoderDynarrayBoundTheory.abi_decode_dynarray_end_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `abi_decode_bulk_body dst src CALLDATALOAD mem_sz c1 = ((),st')` >>
+  rename1 `abi_decode_bulk_body dst src src CALLDATALOAD (Lit 0w) mem_sz c1 = ((),st')` >>
   drule_all calldata_count_guard_rejected_live_mod >> strip_tac >>
   drule abi_decode_count_guard_shape >> strip_tac >>
   drule calldata_bulk_body_extends >> strip_tac >>

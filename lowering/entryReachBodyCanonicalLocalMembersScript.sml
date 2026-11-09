@@ -34,7 +34,7 @@ Theorem entry_local_member_nonempty[local]:
   entry_owned_region oid root extent d (SUM (MAP (type_memory_bytes ce) fulltys)) s /\
   entry_scratch_ready sites b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty)) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
@@ -62,7 +62,7 @@ Proof
   qpat_assum `abi_decoder_members _ _ _ pretys _ _ _`
     (mp_then (Pos hd) mp_tac entry_canonical_member_owned_entry) >>
   disch_then (drule_at (Pat `abi_decoder_members _ _ _ (_::_) (_::_) (_::_) (_::_)`)) >>
-  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _`)) >>
   simp_tac bool_ss [] >>
   qpat_assum `fulltys = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   qpat_assum `fullavs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
@@ -160,7 +160,7 @@ Theorem entry_local_member_decode[local]:
   entry_owned_region oid root extent d (SUM (MAP (type_memory_bytes ce) fulltys)) s /\
   entry_scratch_ready sites b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty)) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
@@ -321,7 +321,7 @@ Proof
   qpat_assum `canonical_members_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [canonical_members_frame_def]) >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`) entry_local_member_decode >>
-  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `canonical_members_semantics _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   drule local_members_child_bounds >> strip_tac >>
@@ -397,7 +397,7 @@ Theorem local_members_suffix[local]:
 Proof
   Induct_on `tys` >> rpt gen_tac >> strip_tac
   >- (drule local_members_suffix_lengths >> simp[] >> strip_tac >> gvs[] >>
-      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, comp_return_def] >>
+      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
       qexists_tac `s` >>
       gvs[canonical_members_effect_def, entry_decode_path_refl, entry_loop_fields_def,
           abi_encoder_registered_effect_refl, canonical_members_semantics_def, Excl "enc_def"]) >>
@@ -535,7 +535,7 @@ Theorem entry_certified_local_complex_endpoint:
 Proof
   strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
-    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, LET_THM]) >>
+    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, LET_THM]) >>
   drule_all entry_certified_local_members_endpoint >> simp[]
 QED
 

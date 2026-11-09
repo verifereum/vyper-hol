@@ -116,7 +116,7 @@ Theorem canonical_members_empty_advance[local]:
     pretys pretvs preavs prevs (ty::tys) (tv::tvs) (av::avs) (v::vs) s /\
   type_to_abi_dec_info ce.ce_struct_fields ce ty = DecComplex T [] /\
   vo = SUM (MAP (type_memory_bytes ce) pretys) /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) F ao vo st = (ops,mid) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) F ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),last) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -149,9 +149,9 @@ Proof
   `abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
    abi_decoder_metadata ce env ty tv (DecComplex T []) av v` by
     fs[canonical_members_semantics_def, abi_decoder_members_def] >>
-  `abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  `abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (DecComplex T [])) ao vo st = (ops,mid)` by
-    (qpat_x_assum `abi_decode_member_setup _ _ _ _ F _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_member_setup _ _ _ _ _ F _ _ _ = _` mp_tac >>
      simp[abi_decoder_needs_offset_iff]) >>
   mp_tac (Q.INST [`ei` |-> `DecComplex T []`] entry_empty_dynamic_member_endpoint) >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
@@ -253,7 +253,7 @@ Theorem canonical_members_navigation[local]:
   entry_owned_region oid root extent d (SUM (MAP (type_memory_bytes ce) fulltys)) s /\
   entry_scratch_ready sites b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty)) ao vo st = (ops,mid) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
@@ -311,7 +311,7 @@ Theorem canonical_members_nonempty_advance[local]:
   entry_owned_region oid root extent d (SUM (MAP (type_memory_bytes ce) fulltys)) s /\
   entry_scratch_ready sites b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty)) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
@@ -384,7 +384,7 @@ Theorem canonical_members_advance[local]:
   entry_owned_region oid root extent d (SUM (MAP (type_memory_bytes ce) fulltys)) s /\
   entry_scratch_ready sites b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (type_to_abi_dec_info ce.ce_struct_fields ce ty)) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) mid = ((),last) /\
@@ -420,7 +420,7 @@ Proof
   irule canonical_members_nonempty_advance >>
   qpat_assum `canonical_members_semantics _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `canonical_member_child _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   simp[]
 QED
 
@@ -565,7 +565,7 @@ Proof
   qpat_assum `canonical_members_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [canonical_members_frame_def]) >>
   drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`) canonical_members_advance >>
-  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `canonical_members_semantics _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   drule canonical_members_child_bounds >> strip_tac >>
@@ -626,7 +626,7 @@ Theorem canonical_members_suffix[local]:
 Proof
   Induct_on `tys` >> rpt gen_tac >> strip_tac
   >- (drule canonical_members_suffix_lengths >> simp[] >> strip_tac >> gvs[] >>
-      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, comp_return_def] >>
+      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
       qexists_tac `s` >> gvs[canonical_members_effect_refl] >>
       drule canonical_members_semantics_complete >> simp[]) >>
   drule canonical_members_suffix_lengths >> strip_tac >>

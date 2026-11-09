@@ -35,14 +35,14 @@ QED
 
 Theorem entry_nested_owned_ready_initializer:
   ity = ArrayT ty (Dynamic inner) /\ itv = ArrayTV tv (Dynamic inner) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ity) (abi_embedded_static_size ce.ce_struct_fields ity)
     (type_memory_bytes ce ity) st = (ops,middle) /\
   abi_decoder_coherent ce env sf (ArrayT ity (Dynamic outer)) (ArrayTV itv (Dynamic outer)) /\
   abi_decoder_metadata ce env (ArrayT ity (Dynamic outer)) (ArrayTV itv (Dynamic outer))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ity) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ity)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ity (Dynamic outer))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ity)) (ListV avs)))
@@ -82,7 +82,7 @@ Theorem entry_nested_owned_ready_initializer:
     mem_bytes_at (sb+abi_array_child_offset NONE (vyper_to_abi_type env ity) avs j)
       (LENGTH (enc (vyper_to_abi_type env ity) (EL j avs)))
       (abi_decode_source CALLDATALOAD u) = enc (vyper_to_abi_type env ity) (EL j avs) /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) (FST (SND ops)) (SND (SND ops))
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) (FST (SND ops)) (SND (SND ops)) 0
       (sb+abi_array_child_offset NONE (vyper_to_abi_type env ity) avs j)
       (LENGTH (enc (vyper_to_abi_type env ity) (EL j avs)))
       (d+32+j*type_memory_bytes ce ity) (type_memory_bytes ce ity) b cap u /\

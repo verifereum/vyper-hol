@@ -1,7 +1,7 @@
 (* Bytes/String metadata and actual canonical decoder endpoints. *)
 Theory entryReachBodyCanonicalBytesEndpoint
 Ancestors
-  valueEncodingDefs loweringStateRelDefs entryReachBodyCanonicalBytes abiDecoderBytes abiDecoderBytestring abiDecoderString
+  valueEncodingDefs loweringStateRelDefs entryReachBodyCanonicalBytes abiDecoderBytes abiDecoderBytestring abiDecoderBytestringCases abiDecoderString
   abiDecoderCoherence abiDecoderTypedContract abiDecoderBytesTyped
   abiDecoderContract compileEnv exprLowering vyperABI vyperTyping
   valueEncoding vyperValue contractABI words list rich_list arithmetic
@@ -37,7 +37,7 @@ Theorem bytes_observation_code[local]:
     EVERY (\x. ?k. x = STRING #"%" (toString k) /\ k < limit_st.cs_next_var)
       i.inst_outputs) (emitted_insts st last)
 Proof
-  simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def, emitted_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>

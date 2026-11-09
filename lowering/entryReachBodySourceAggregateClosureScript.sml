@@ -40,7 +40,7 @@ Theorem source_complex_result[local]:
 Proof
   strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
-    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, LET_THM]) >>
+    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, LET_THM]) >>
   `?t. tuple_in_memory vs tvs d t.vs_memory /\
     canonical_members_frame ctx fn oid root extent ambient b cap site limit_st
       dst src sb d (SUM (MAP (type_memory_bytes ce) tys)) last t /\

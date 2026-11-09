@@ -48,7 +48,7 @@ Theorem entry_source_certified_array_child:
   off = abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j /\
   cell = d+32+j*type_memory_bytes ce ty /\
   total = type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\

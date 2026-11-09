@@ -214,8 +214,8 @@ QED
    while child_end uses the body's reload register, exactly as the suffix
    does. In particular this application does not identify the two names. *)
 Theorem entry_actual_owned_compiler_backedge:
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring n) asz msz body_st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) (DecBytestring n) middle = ((),last) /\

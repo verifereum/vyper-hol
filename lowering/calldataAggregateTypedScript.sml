@@ -158,7 +158,7 @@ Proof
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-  simp_tac std_ss [Once compile_abi_decode_to_buf_def, LET_THM] >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
     (rpt strip_tac >>
@@ -540,15 +540,15 @@ Theorem calldata_coherent_nonbulk_array_owned_run:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   di = type_to_abi_dec_info sf ce ty /\
   abi_sz = abi_embedded_static_size ce.ce_struct_fields ty /\
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
   abi_decode_index_init header_st = (ip,loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz (type_memory_size tv) st0 = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) di middle = ((),st1) /\
@@ -802,7 +802,7 @@ Proof
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-  simp_tac std_ss [Once compile_abi_decode_to_buf_def, LET_THM] >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
     (rpt strip_tac >>

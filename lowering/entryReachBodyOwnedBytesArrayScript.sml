@@ -15,7 +15,7 @@ Ancestors
 (* The initializer's actual endpoint retains the enclosing allocation, even
    when the array count is stored strictly inside it. *)
 Theorem owned_array_initializer[local]:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
@@ -89,7 +89,7 @@ Resume owned_array_initializer[control]:
 QED
 Resume owned_array_initializer[pc_frame]:
   map_every (fn q => qpat_x_assum q kall_tac)
-    [`abi_decode_array_loop_init _ _ _ _ _ _ _ = _`,
+    [`abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`,
      `abi_decode_dynarray_prefix _ _ _ _ _ _ = _`,
      `abi_decode_array_header _ _ _ _ = _`, `abi_decode_index_init _ = _`,
      `eval_operand src initial = _`, `eval_operand dst initial = _`,
@@ -114,9 +114,9 @@ Finalise owned_array_initializer
 Theorem owned_bytes_invariant_inputs[local]:
   entry_bytes_array_inv next limit_st d outsz q ncount prepared t /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap prepared /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb len d outsz b cap prepared /\
   mem_bytes_at sb len (abi_decode_source CALLDATALOAD prepared) = bytes ==>
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap t /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb len d outsz b cap t /\
   mem_bytes_at sb len (abi_decode_source CALLDATALOAD t) = bytes
 Proof
   simp_tac bool_ss [entry_bytes_array_inv_def] >> strip_tac >>
@@ -158,7 +158,7 @@ Proof
 QED
 
 Theorem owned_bytes_body_to_backedge[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
@@ -169,7 +169,7 @@ Theorem owned_bytes_body_to_backedge[local]:
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ty) /\
   type_memory_bytes ce ty = type_memory_size tv /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d outsz b cap prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -200,14 +200,14 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `owned_bytes_body_phase _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [owned_bytes_body_phase_def]) >>
-  `abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
      (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
      d outsz b cap u /\
    mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
      (abi_decode_source CALLDATALOAD u) =
      enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
     (drule_all owned_bytes_invariant_inputs >> asm_rewrite_tac[]) >>
-  `abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
      (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
      d outsz (d+outsz) region_sz u` by
     (fs[abiDecoderTypedContractTheory.abi_decoder_ranges_def]) >>
@@ -242,7 +242,7 @@ Theorem owned_bytes_actual_contract[local]:
        (next,d,p,srcaddr,sb,b,cap,oid,capacity),
        (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
   entry_bytes_array_config cfg /\ bid = last.cs_next_id /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -310,7 +310,7 @@ Theorem owned_bytes_loop_endpoint[local]:
        (next,d,p,srcaddr,sb,b,cap,oid,capacity),
        (ctx,fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) /\
   entry_bytes_array_config cfg /\ bid = last.cs_next_id /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -346,7 +346,7 @@ QED
 Theorem owned_array_canonical_initializer:
   entry_array_init_resources dst src maxn abi_sz
     (st,guard_st,header_st,loop_st,ip,cnt) (ctx,fn,site,d,sz,b,cap,p,initial) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE aty) (ListV avs))) d sz b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
     (abi_decode_source CALLDATALOAD initial) = enc (Array NONE aty) (ListV avs) /\
@@ -368,7 +368,7 @@ Theorem owned_array_canonical_initializer:
     t.vs_current_bb = loop_st.cs_current_bb /\
     t.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op initial) /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
       (LENGTH (enc (Array NONE aty) (ListV avs))) d sz b cap t /\
     mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
       (abi_decode_source CALLDATALOAD t) = enc (Array NONE aty) (ListV avs) /\
@@ -379,7 +379,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `entry_array_init_resources _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_ranges_def]) >>
   `d < dimword (:256)` by decide_tac >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) initial = n2w (LENGTH avs)` by
@@ -453,7 +453,7 @@ Theorem entry_owned_canonical_bytes_array_execution:
   (!i. MEM i (emitted_insts st loop_st) ==> MEM i (fn_insts fn)) /\
   entry_owned_region oid root extent d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) initial /\
   oid <> header_st.cs_next_id /\ abi_alloca_history (fn_insts fn) initial /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -522,12 +522,12 @@ Resume entry_owned_canonical_bytes_array_execution[configured]:
   drule_all abiDecoderRecursiveLoopEntryTheory.abi_decoder_loop_phase_entry >> strip_tac >>
   drule_all abiDecoderRecursiveLoopLayoutTheory.abi_decoder_loop_phase_lookups >> strip_tac >>
   `eval_operand src prepared = SOME (n2w sb)` by
-    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
+    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
      pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def] >> metis_tac[]) >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) prepared = n2w (LENGTH avs)` by
     (irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
      qexists_tac `vyper_to_abi_type env ty` >> asm_rewrite_tac[] >>
-     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
+     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ prepared` mp_tac >>
      pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def] >> metis_tac[]) >>
   qpat_assum `LENGTH xs = LENGTH avs` (SUBST_ALL_TAC o SYM) >>
   `entry_decode_path ctx fn prepared (jump_to (FST labels) prepared) /\

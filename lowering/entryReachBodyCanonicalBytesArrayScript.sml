@@ -48,7 +48,7 @@ Proof
   `EVERY (\i. MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATACOPY])
     (emitted_insts st st')` by
     (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-     simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def] >> rpt strip_tac >> gvs[emitted_insts_def] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
@@ -114,7 +114,7 @@ Theorem entry_bytes_outputs[local]:
     EVERY (\x. ?k. x = STRING #"%" (toString k) /\ k < st'.cs_next_var)
       i.inst_outputs) (emitted_insts st st')
 Proof
-  simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
     fresh_id_def, emit_def] >> rpt strip_tac >> gvs[emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
@@ -175,7 +175,7 @@ Proof
 QED
 
 Theorem entry_bytes_element_shape[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di az mz st = (ops,middle) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di az mz st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
     CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) middle = ((),last) ==>
   last.cs_blocks = st.cs_blocks /\ last.cs_current_bb = st.cs_current_bb /\
@@ -200,7 +200,7 @@ Proof
 QED
 
 Theorem entry_canonical_bytes_element_sequence[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
@@ -210,7 +210,7 @@ Theorem entry_canonical_bytes_element_sequence[local]:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ty) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -368,7 +368,7 @@ QED
 (* Readiness supplies the ncounter observation; it is not inferred from J. *)
 Theorem entry_bytes_header_inputs:
   abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr ncount j s /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb len d outsz b cap s /\
   abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
   abi_decoder_operand_live next dst /\
   next + 4 <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
@@ -376,7 +376,7 @@ Theorem entry_bytes_header_inputs:
     (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
     (STRING #"%" (toString (next+3))) j ncount s) ==>
   eval_operand ip h = SOME p /\ mload (w2n p) h = n2w j /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap h /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb len d outsz b cap h /\
   fresh_vars_wrt limit_st h /\ h.vs_call_ctx = s.vs_call_ctx /\
   ~h.vs_halted /\ h.vs_current_bb = body_lbl /\ h.vs_inst_idx = 0
 Proof
@@ -388,7 +388,7 @@ Proof
 QED
 
 Theorem entry_bytes_element_after_header[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
@@ -398,7 +398,7 @@ Theorem entry_bytes_element_after_header[local]:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ty) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -527,7 +527,7 @@ Definition entry_bytes_array_config_def:
      (ip,src,dst,ops,st,middle,last,limit_st),
      (next,d,p,srcaddr,sb,b,cap,oid,capacity),
      ((ctx:venom_context),fn,hdr,body_lbl,exit_lbl,hid,tail,prefix,bid,iv,nv)) <=>
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
@@ -575,7 +575,7 @@ Definition entry_bytes_array_state_def:
     (w2n p) (LENGTH xs) prepared s /\
   entry_loop_prefix tv xs d j s /\ j <= LENGTH xs /\ alloca_inv s /\
   FLOOKUP s.vs_allocas oid = SOME (d,capacity) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -965,7 +965,7 @@ Theorem entry_bytes_array_initialized_state[local]:
   mload (w2n p) prepared = 0w /\
   abi_decode_load CALLDATALOAD srcaddr prepared = n2w (LENGTH xs) /\
   alloca_inv prepared /\ FLOOKUP prepared.vs_allocas oid = SOME (d,capacity) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -987,7 +987,7 @@ Proof
 QED
 
 Theorem entry_array_initializer_outputs[local]:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     (setup,loop_st) ==>
   EVERY (\i. ~is_terminator i.inst_opcode /\
     EVERY (\x. ?k. x = STRING #"%" (toString k) /\ k < loop_st.cs_next_var)
@@ -1006,7 +1006,7 @@ Proof
 QED
 
 Theorem entry_array_initializer_final_fresh:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     (setup,loop_st) /\
   run_inst_seq (emitted_insts st loop_st) s = OK t /\
   loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
@@ -1029,7 +1029,7 @@ Definition entry_array_init_resources_def:
   entry_array_init_resources dst src maxn abi_sz
     (st,guard_st,header_st,loop_st,ip,cnt)
     (ctx,fn,site,d,sz,b,cap,p,initial) <=>
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st = ((),guard_st) /\
   abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
@@ -1047,7 +1047,7 @@ End
 Theorem entry_array_init_canonical[local]:
   entry_array_init_resources dst src maxn abi_sz
     (st,guard_st,header_st,loop_st,ip,cnt) (ctx,fn,site,d,sz,b,cap,p,initial) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE aty) (ListV avs))) d sz b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
     (abi_decode_source CALLDATALOAD initial) = enc (Array NONE aty) (ListV avs) /\
@@ -1065,7 +1065,7 @@ Theorem entry_array_init_canonical[local]:
     abi_decode_footprint_frame [(d,32);(p,32)] initial t /\
     entry_loop_fields initial t /\ t.vs_halted = initial.vs_halted /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op initial) /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
       (LENGTH (enc (Array NONE aty) (ListV avs))) d sz b cap t /\
     mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
       (abi_decode_source CALLDATALOAD t) = enc (Array NONE aty) (ListV avs)
@@ -1073,7 +1073,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `entry_array_init_resources _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   `d < dimword (:256)` by decide_tac >>
   SUBGOAL_THEN ``d+sz <= p \/ p+32 <= d`` assume_tac >- decide_tac >>
@@ -1115,11 +1115,11 @@ QED
 Theorem entry_bytes_array_compile_phases:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (DecBytestring n) asz msz T maxn) start = ((),final) /\
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz start =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz start =
     ((ip,cnt),loop_st) ==>
   ?labels body_st ops middle last.
-    abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
-    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,body_st) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
       (DecBytestring n) asz msz body_st = (ops,middle) /\
     compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
       (Lit 0w) (DecBytestring n) middle = ((),last) /\
@@ -1131,7 +1131,7 @@ Proof
 QED
 
 Theorem entry_bytes_array_initializer_to_header[local]:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st =
     (setup,loop_st) /\ fn_has_code st loop_st fn /\
   run_inst_seq (emitted_insts st loop_st) initial = OK prepared /\
   prepared.vs_halted = initial.vs_halted /\ ~initial.vs_halted /\
@@ -1185,7 +1185,7 @@ QED
 Theorem entry_bytes_array_code_split:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray (DecBytestring n) asz msz T maxn) st = ((),final) /\
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st =
     ((ip,cnt),loop_st) /\ fn_has_code st final fn ==>
   fn_has_code st loop_st fn /\ fn_has_code loop_st final fn
 Proof
@@ -1199,8 +1199,8 @@ Proof
 QED
 
 Theorem entry_bytes_array_phase_layout:
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring n) asz msz body_st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
     (Lit 0w) (DecBytestring n) middle = ((),last) /\
@@ -1245,8 +1245,8 @@ Proof
 QED
 
 Theorem entry_bytes_array_concrete_config:
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,body_st) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring n) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) body_st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
@@ -1287,7 +1287,7 @@ Proof
 QED
 
 Theorem entry_bytes_array_initial_live:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st =
     ((ip,cnt),loop_st) /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst ==>
@@ -1394,7 +1394,7 @@ Theorem entry_canonical_bytes_array_execution:
   maxn < dimword (:256) /\ n < dimword (:256) /\
   entry_bytes_array_resources dst src maxn (abi_embedded_static_size ce.ce_struct_fields ty) st
     (ctx,fn,site,d,type_memory_bytes ce (ArrayT ty (Dynamic maxn)),b,cap,p,oid,capacity,initial) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -1428,12 +1428,12 @@ Proof
   qpat_x_assum `abi_decoder_coherent _ _ _ _ _` kall_tac >>
   `FLOOKUP t.vs_allocas oid = SOME (d,capacity)` by metis_tac[] >>
   `eval_operand src t = SOME (n2w sb)` by
-    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
      pure_rewrite_tac[abi_decoder_ranges_def] >> metis_tac[]) >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) t = n2w (LENGTH xs)` by
     (asm_rewrite_tac[] >> irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
      qexists_tac `vyper_to_abi_type env ty` >> asm_rewrite_tac[] >>
-     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
+     qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ t` mp_tac >>
      pure_rewrite_tac[abi_decoder_ranges_def] >> metis_tac[]) >>
   `w2n (n2w p:bytes32) = p` by simp[] >>
   `entry_bytes_array_state cfg t 0 (jump_to (FST labels) t)` by

@@ -13,7 +13,7 @@ Ancestors
   emitHelper emitHelperProps compileEnv venomInst rich_list list arithmetic fragExec exprLoweringProps
 
 Theorem bytes_child_sequence_observations[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecBytestring n) az mz st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
     CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) middle = ((),last) /\
@@ -23,10 +23,10 @@ Theorem bytes_child_sequence_observations[local]:
 Proof
   strip_tac >> irule entry_sequence_observations >>
   asm_rewrite_tac[] >> qexists_tac `emitted_insts st last` >> asm_rewrite_tac[] >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-  simp[abi_decode_array_element_setup_def, compile_abi_decode_to_buf_def,
-    compile_abi_decode_dyn_elem_ptr_def, abi_decode_indexed_address_def,
+  simp[abi_decode_array_element_setup_def, compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, abi_decode_indexed_address_def,
     dec_info_needs_offset_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[emitted_insts_def] >>
@@ -72,7 +72,7 @@ Proof
 QED
 
 Theorem entry_owned_bytes_child:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) st = (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
@@ -82,7 +82,7 @@ Theorem entry_owned_bytes_child:
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
   j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ty) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -111,7 +111,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `middle.cs_next_var <= last.cs_next_var` by
     (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-     simp[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
   `middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
@@ -138,7 +138,7 @@ Resume entry_owned_bytes_child[bytes_run]:
     (gvs[] >> decide_tac) >>
   `n < dimword (:256)` by
     (mp_tac (cj 3 abi_decoder_bytes_copy_size) >> decide_tac) >>
-  qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `abi_decoder_metadata _ _ (ArrayT _ _) _ _ _ _` kall_tac >>
   qpat_x_assum `abi_decoder_coherent _ _ _ (ArrayT _ _) _` kall_tac >>
   qpat_x_assum `entry_owned_loop_resources _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
@@ -153,7 +153,7 @@ Resume entry_owned_bytes_child[bytes_run]:
 QED
 Resume entry_owned_bytes_child[endpoint]:
   map_every (fn q => qpat_x_assum q kall_tac)
-    [`abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`,
+    [`abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`,
      `abi_decoder_coherent _ _ _ (ArrayT _ _) _`, `abi_decoder_coherent _ _ _ ty tv`,
      `abi_decoder_metadata _ _ (ArrayT _ _) _ _ _ _`,
      `abi_decoder_metadata _ _ ty tv _ _ _`,
@@ -202,8 +202,8 @@ Resume entry_owned_bytes_child[endpoint_finish]:
      eval_operand op actual = SOME w` by
     (rpt strip_tac >>
      `st.cs_next_var <= middle.cs_next_var` by
-       (qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-        simp[abi_decode_array_element_setup_def, compile_abi_decode_dyn_elem_ptr_def,
+       (qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+        simp[abi_decode_array_element_setup_def, compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
           abi_decode_indexed_address_def, dec_info_needs_offset_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>

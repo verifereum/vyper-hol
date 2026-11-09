@@ -44,7 +44,7 @@ Theorem word_opcode_shape[local]:
 Proof
   Cases_on `clamp` >>
   FIRST [rename1 `IntClamp bits signed` >> Cases_on `signed`, all_tac] >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_static_def,
        compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
        compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,

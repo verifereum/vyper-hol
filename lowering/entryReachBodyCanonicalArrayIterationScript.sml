@@ -171,7 +171,7 @@ Definition iteration_config_def:
      (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
      (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
      (hdr,body_lbl,exit,hid,bb)) <=>
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -219,7 +219,7 @@ Definition iteration_static_config_def:
      (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
      (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
      (hdr,body_lbl,exit,hid,bb)) <=>
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env ce.ce_struct_fields (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\

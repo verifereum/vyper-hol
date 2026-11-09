@@ -80,7 +80,7 @@ Theorem source_empty_member_endpoint[local]:
   abi_decoder_coherent ce env sf ty tv /\
   entry_source_metadata ce env sf ty tv (DecComplex T []) av v /\
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (DecComplex T [])) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),last) /\
@@ -104,7 +104,7 @@ Proof
   gvs[] >>
   drule_all entry_source_empty_descriptor_value >> strip_tac >>
   `~dec_info_needs_offset (DecComplex T [])` by simp[abi_decoder_needs_offset_iff] >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   mp_tac (Q.INST [`dyn` |-> `F`, `mid` |-> `last`, `ctx` |-> `ctx`]
     entry_member_setup_endpoint) >>
@@ -127,7 +127,7 @@ Theorem source_member_child_endpoint[local]:
   d+outsz < dimword (:256) /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset ei) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),next) /\
@@ -187,7 +187,7 @@ Theorem source_empty_member_child_result[local]:
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\ vo <= outsz /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (DecComplex T [])) ao vo st = (ops,mid) /\
   compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),next) /\
@@ -300,7 +300,7 @@ Proof
   rename1 `array_child_result _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ endpoint` >>
   qpat_x_assum `!i. _ ==> _` kall_tac >>
   qpat_x_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   qhdtm_assum `canonical_members_frame`
     (strip_assume_tac o PURE_REWRITE_RULE [canonical_members_frame_def]) >>

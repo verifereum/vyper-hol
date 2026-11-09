@@ -8,8 +8,8 @@ Ancestors
   abiDecoderArrayInit abiDecoderArrayLoopInit abiDecoderIndexInit abiDecoderMemberInfos valueEncoding actualAllocCredit allocaFrontierBound context rich_list venomInst vyperCompiler
 
 Theorem calldata_loop_child_static:
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di asz msz st0 =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,st0) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di asz msz st0 =
     (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     di middle = ((),st1) /\
@@ -35,7 +35,7 @@ Proof
      disch_then (qspecl_then [`SND (SND ops)`,`FST (SND ops)`,
        `CALLDATALOAD`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
   `st0.cs_current_insts = []` by
-    (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def] >>
      strip_tac >> gvs[]) >>
   drule_all abi_decoder_array_body_entry_phi >> strip_tac >>
@@ -97,8 +97,8 @@ QED
 (* The exit phi premise is deliberately explicit: an empty current block in
    fn_has_code does not constrain the first instruction of its continuation. *)
 Theorem calldata_loop_cfg_producer:
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,st0) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di asz msz st0 =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,st0) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di asz msz st0 =
     (ops,middle) /\
   compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     di middle = ((),st1) /\
@@ -150,7 +150,7 @@ Theorem calldata_member_address_static_live:
     abi_decoder_operand_live mid.cs_next_var op)
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   FIRST [simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
@@ -213,7 +213,7 @@ Theorem calldata_member_address_continuation_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[fn_has_code_def] >>
   Cases_on `bb.bb_instructions` >>
@@ -231,9 +231,9 @@ Theorem calldata_member_tail_continuation_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `elems`
-  >- simp[Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
   rename1 `h::rest` >> PairCases_on `h` >>
-  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, LET_THM,
+  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
     comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w) (Lit 0w) a` >>
   rename1 `_ = (ep,mid)` >> simp_tac bool_ss [] >>
@@ -400,13 +400,13 @@ Theorem calldata_nonbulk_parent_intervals:
     (DecDynArray di asz msz dyn maxn) st = ((),last) /\
   (dyn \/ dec_info_needs_clamp di) /\ fn_has_code st last fn ==>
   ?ip cnt guard_st header_st loop_st labels st0 ops middle st1.
-    abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+    abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st =
       ((ip,cnt),loop_st) /\
     abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),guard_st) /\
     abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (ip,loop_st) /\
-    abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,st0) /\
-    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di asz msz st0 =
+    abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,st0) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di asz msz st0 =
       (ops,middle) /\
     compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       di middle = ((),st1) /\
@@ -492,13 +492,13 @@ Theorem calldata_nonbulk_parent_shell:
   (!bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) ==>
   ?ip cnt guard_st header_st loop_st labels st0 ops middle st1 body_bb exit_bb.
-    abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+    abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st =
       ((ip,cnt),loop_st) /\
     abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),guard_st) /\
     abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (ip,loop_st) /\
-    abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,st0) /\
-    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di asz msz st0 =
+    abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,st0) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di asz msz st0 =
       (ops,middle) /\
     compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       di middle = ((),st1) /\
@@ -574,13 +574,13 @@ Theorem calldata_nonbulk_parent_shell_conditional:
     !bb. lookup_block last.cs_current_bb fn.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) ==>
   ?ip cnt guard_st header_st loop_st labels st0 ops middle st1 body_bb exit_bb.
-    abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+    abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn asz st =
       ((ip,cnt),loop_st) /\
     abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn asz st = ((),guard_st) /\
     abi_decode_array_header dst src CALLDATALOAD guard_st = (cnt,header_st) /\
     abi_decode_index_init header_st = (ip,loop_st) /\
-    abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,st0) /\
-    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di asz msz st0 =
+    abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st = (labels,st0) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di asz msz st0 =
       (ops,middle) /\
     compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
       di middle = ((),st1) /\
@@ -899,9 +899,9 @@ Theorem calldata_member_tail_empty_exit_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `elems`
-  >- simp[Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
   rename1 `h::rest` >> PairCases_on `h` >>
-  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, LET_THM,
+  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
     comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w) (Lit 0w) a` >>
   rename1 `_ = (ep,mid)` >> simp_tac bool_ss [] >>
