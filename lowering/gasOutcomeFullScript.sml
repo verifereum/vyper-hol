@@ -26,6 +26,17 @@ Definition gas_outcome_full_def:
           (s, G, tn) marks (leaf, leaf_pg, leaf_g, leaf_tn, finish))
 End
 
+Theorem gas_outcome_full_post_mono:
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn) Q R /\
+  (!res ee G' tn' t. Q res ee G' tn' t ==> Q' res ee G' tn' t) /\
+  (!res ee gt r. R res ee gt r ==> R' res ee gt r) ==>
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn) Q' R'
+Proof
+  rw[gas_outcome_full_def] >> qexists_tac `marks` >> metis_tac[]
+QED
+
 Theorem gas_outcome_full_memory:
   gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
     (es, s, G, tn) Q R ==>

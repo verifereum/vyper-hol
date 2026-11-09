@@ -8,12 +8,12 @@ Ancestors
   exprSimDefs
   loweringPosts exprSimTypedAlloc
   gasContext gasExemptCert
-  fragGasOriginPtr bodyPtrDefs gasSummary bodySimFull gasOutcomeFull
+  fragGasOriginPtr bodyPtrDefs gasSummary bodySimFull gasOutcomeFull bodySim
   list rich_list finite_map fragExec freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding venomMemDefs
-  vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
+  vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl vyperTypeSystem
   vyperStatePreservation
   venomExecSemantics venomInst venomState
 Libs
@@ -45,6 +45,20 @@ Theorem state_rel_scopes_nil:
 Proof
   rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
      logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
+QED
+
+Theorem constructor_exit_state_rel:
+  same_frame cenv cenv' /\ state_rel func cenv' cx es s ==>
+  state_rel func cenv cx (es with scopes := []) s
+Proof
+  strip_tac >> dxrule state_rel_scopes_nil >> strip_tac >>
+  gvs[same_frame_def, compile_env_component_equality, state_rel_def,
+      local_ptrs_rel_def, local_region_def, lookup_scopes_def,
+      storage_vars_rel_def, transient_vars_rel_def, logs_rel_def,
+      log_entry_equiv_def, listTheory.LIST_REL_EL_EQN, immutables_rel_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!name tv v byte_offset. _` (drule_all_then strip_assume_tac) >>
+  simp[]
 QED
 
 (* Reassociate source return evaluation at the forced-value boundary. *)
@@ -562,4 +576,34 @@ Proof
   simp[intret_q_def, result_rel_def, state_rel_def, storage_rel_def,
        transient_rel_def, accounts_rel_def, immutables_rel_def, logs_rel_def] >>
   metis_tac[]
+QED
+
+Theorem internal_frame_ret_none_full:
+  !D lo d ctx shadow_ctx PG func shadow_func cx cenv ret_tv rpc slot_size.
+    cenv.ce_return_pc = SOME (PtrVar (Var rpc) slot_size) ==>
+    frame_ret_ok_full
+      (D, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
+      (\v ee gt r. intret_q func cenv cx ret_tv v ee r) cenv NoneT
+Proof
+  rpt gen_tac >> strip_tac >>
+  pure_rewrite_tac[frame_ret_ok_full_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `eo` >> fs[type_stmt_def] >>
+  `cenv'.ce_return_pc = SOME (PtrVar (Var rpc) slot_size)` by
+    fs[same_frame_def, compile_env_component_equality] >>
+  mp_tac (Q.SPECL
+    [`D`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`, `shadow_func`,
+     `cx`, `lctx`, `cenv'`, `NoneT`, `ret_tv`, `es`, `rpc`, `slot_size`]
+    compile_return_none_int_frag_full) >>
+  simp[] >>
+  pure_rewrite_tac[stmt_frag_full_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  irule gas_outcome_full_post_mono >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `tail` mp_tac) >>
+  simp[stmt_exit_ptr_def] >> strip_tac >> simp[] >>
+  disj2_tac >> gvs[intret_q_def, result_rel_def] >>
+  drule_all (Q.INST
+    [`es` |-> `ee with <|scopes := []; gas_obs := tail|>`]
+    constructor_exit_state_rel) >> simp[]
 QED
