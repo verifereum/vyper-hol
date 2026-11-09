@@ -25,8 +25,8 @@ Theorem immutable_assign_read_source:
   evaluate_type (get_tenv cx) ity = SOME itv ==>
   ?fin. write_place cx (ImmutablePlace src id []) v ee = (INL (),fin) /\
     expr_sim_inv ce cx env ee /\
-    !tail. (do p <- eval_target_place cx (TopLevelNameTarget (src,id));
-               w <- read_result cx tv; write_place cx p w od)
+    !tail. (do w <- read_result cx tv;
+               p <- eval_target_place cx (TopLevelNameTarget (src,id)); write_place cx p w od)
       (ee with gas_obs := tail) = (INL (),fin with gas_obs := tail)
 Proof
   strip_tac >>
@@ -512,8 +512,8 @@ Theorem immutable_assign_normal_continuation:
   evaluate_type (get_tenv cx) ity = SOME itv /\
   off + type_memory_size itv < dimword (:256) ==>
   ?fin q.
-    (!tail. (do p <- eval_target_place cx (TopLevelNameTarget (ce.ce_module,id));
-                v <- read_result cx tv; write_place cx p v od)
+    (!tail. (do v <- read_result cx tv;
+                p <- eval_target_place cx (TopLevelNameTarget (ce.ce_module,id)); write_place cx p v od)
        (ee with gas_obs := tail) = (INL (),fin with gas_obs := tail)) /\
     gas_marked_path F ctx func r 0 (OK q) /\
     stmt_post ctx func cx lctx ce ce sa sb es s0 (INL ()) fin q
