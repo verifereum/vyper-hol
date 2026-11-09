@@ -6048,7 +6048,7 @@ Proof
   Cases_on `src = 0` >> simp[do_swap_def]
 QED
 
-Theorem reverse_stack_poke[local]:
+Theorem reverse_stack_poke:
   !d x stk. d < LENGTH stk ==>
     REVERSE (stack_poke d x stk) = LUPDATE x d (REVERSE stk)
 Proof
