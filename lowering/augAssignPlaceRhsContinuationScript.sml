@@ -66,6 +66,7 @@ Theorem aug_place_operator_write_path_mem[local]:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv s2 /\ local_ptrs_reserved cenv s3 /\
   stmt_state_rel ctx func cenv cx ee s /\ alloca_history func s /\
+  s_entry.vs_alloca_next <= s.vs_alloca_next /\
   eval_operand x s = SOME (val_to_w256 cur) /\
   eval_operand y s = SOME (val_to_w256 rhs) /\
   eval_operand dst s = SOME w /\
@@ -90,8 +91,10 @@ Theorem aug_place_operator_write_path_mem[local]:
       ptv bop cur rhs)) (write_place cx p) (ee with gas_obs := tail) =
         (res,ff with gas_obs := tail)) /\
     gas_marked_path T ctx func s 0 r /\
-    ((?u. r = OK u /\ stmt_post ctx func cx lctx cenv cenv sa sf s_entry
-                       res (ff with gas_obs := []) u) \/
+    ((?u. r = OK u /\ res = INL () /\
+      stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+        res (ff with gas_obs := []) u /\ alloca_history func u /\
+      s_entry.vs_alloca_next <= u.vs_alloca_next) \/
      (exit_result r /\ !tail. stmt_exit RetQ (ff with gas_obs := tail) res r))
 Proof
   strip_tac >>
@@ -125,7 +128,7 @@ Proof
   qexistsl_tac [`INR (Error err)`, `ee`, `r`] >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  disj2_tac >> gen_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
+  gen_tac >> simp[stmtSimDefsTheory.stmt_exit_def] >>
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``] stmtSimPropsTheory.expr_exit_INR_type] >>
   gvs[]
 QED
@@ -154,6 +157,7 @@ Theorem aug_place_rhs_operator_write_mem:
   acyclic_struct_metadata cenv.ce_struct_fields /\ storage_place_region cx p /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
   stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  s_entry.vs_alloca_next <= s0.vs_alloca_next /\
   ~s0.vs_halted /\ s0.vs_current_bb = s1.cs_current_bb /\
   s0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~block_is_terminated sf /\
   (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
@@ -176,7 +180,9 @@ Theorem aug_place_rhs_operator_write_mem:
       (\rhs. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         ptv bop cur rhs)) (write_place cx p))) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s_entry)
+    (\res ff u. res = INL () /\
+      stmt_post ctx func cx lctx cenv cenv sa sf s_entry res ff u /\
+      alloca_history func u /\ s_entry.vs_alloca_next <= u.vs_alloca_next)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
   strip_tac >> irule aug_place_rhs_mem_continuation >>
@@ -214,6 +220,8 @@ Proof
             FLOOKUP t.vs_allocas aid = SOME b)` by
     (gvs[expr_post_def] >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx ee t` by fs[expr_post_def] >>
+  `s_entry.vs_alloca_next <= t.vs_alloca_next` by
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
   drule_all (Q.INST [`sa` |-> `sa`, `s_entry` |-> `s_entry`]
     aug_place_operator_write_path_mem) >> simp[]
 QED
