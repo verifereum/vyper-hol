@@ -120,3 +120,34 @@ Resume intcall_args_frame_accumulated[assemble]:
 QED
 
 Finalise intcall_args_frame_accumulated
+
+Theorem intcall_args_frame_then_outcome:
+  body_inv tops ctx ce cx /\ body_results_ok cx args /\
+  EVERY (\e. expr_body_pre ce cx env e es /\ ~expr_has_effect e) args /\
+  expr_sim_inv ce cx env es /\
+  compile_multi_vvs compile_expr ce args sm = (vals,sn) /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sm /\ stmt_state_rel ctx func ce cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  gas_admissible (bind (eval_expr_results cx args) k) expr_vv_res_ok es /\
+  (!res ee r. expr_exit res r ==> R res ee r) /\
+  (!raws ee t. LENGTH raws = LENGTH args /\ LENGTH vals = LENGTH args /\
+    intcall_held_args ce cx sm sn ee t
+      (MAP (\(e,(raw,vv)). (expr_type e,raw,vv))
+        (ZIP (args,ZIP (raws,vals)))) /\
+    expr_sim_inv ce cx env ee /\ stmt_state_rel ctx func ce cx ee t /\
+    ee = es with <|outcomes := ee.outcomes; gas_obs := ee.gas_obs|> /\
+    wb_frame ce es sm s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (k raws) (ee,t) Q R) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (bind (eval_expr_results cx args) k) (es,s) Q R
+Proof
+  strip_tac >> irule intcall_args_frame_accumulated >>
+  simp[] >> qexistsl_tac [`[]`,`sm`] >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[wb_frame_refl] >>
+  qexistsl_tac [`env`,`sm`,`sn`,`tops`,`vals`] >> simp[]
+QED
