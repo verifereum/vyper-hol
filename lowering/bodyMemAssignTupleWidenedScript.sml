@@ -7,6 +7,7 @@
    body_assign_tuple_widened_call (bodySimStmtCases), still admitted there. *)
 Theory bodyMemAssignTupleWidened
 Ancestors
+  tupleWidenedReadiness bodyMemAssignTupleWidenedSuffix
   bodyMemoryPreds tupleWidenedTargetStore tupleWidenedLayout tupleUnstagedParts typedCopyPrimitivePathMem typedCopyArrayPathMem typedCopyDynarrayPathMem typedCopyFieldsPathMem typedCopyRankPathMem
 
 Theorem body_assign_tuple_widened_call_mem:
