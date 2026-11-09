@@ -3,6 +3,7 @@ Ancestors
   typedCopyFieldsCounted placeMemoryFieldsForward placeMemoryCopyEffect placeMemoryCopyFrames
   fragGasMode fragGasPathMem instMemFrontier context compileEnv venomState
   valueEncoding words arithmetic exprLoweringProps fragExec freshWrites venomMemDefs
+  placeMemoryTypedBase list
 
 Theorem typed_fields_offset_natural[local]:
   w2n (w:bytes32) + off < dimword (:256) ==>
@@ -286,4 +287,75 @@ Proof
   strip_tac >> qexists `t` >> simp[] >> irule typed_fields_head_tail_finish >>
   full_simp_tac std_ss [AC ADD_ASSOC ADD_COMM] >> qexistsl [`c`, `z`] >>
   asm_simp_tac std_ss []
+QED
+
+Theorem typed_memory_struct_forward_counted:
+  ALL_DISTINCT (MAP FST fields) /\
+  EVERY (\(name,ty,sz). sz = type_memory_bytes cenv ty) fields /\
+  LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv /\
+                        type_memory_bytes cenv ty = type_memory_size tv)
+    (MAP (FST o SND) fields) tvs /\
+  LENGTH tvs = LENGTH fields /\
+  struct_has_type (ZIP (MAP FST fields,tvs)) vals /\
+  fields_val_wf vals (ZIP (MAP FST fields,tvs)) /\
+  fields_in_memory vals (ZIP (MAP FST fields,tvs)) (w2n sw + soff) s.vs_memory /\
+  (w2n sw + soff + type_memory_size_list tvs <= w2n dw + doff \/
+   w2n dw + doff + type_memory_size_list tvs <= w2n sw + soff) /\
+  w2n sw + soff + type_memory_size_list tvs < dimword (:256) /\
+  w2n dw + doff + type_memory_size_list tvs + 64 < dimword (:256) /\
+  compile_struct_typed_copy cenv dst src fields fields doff soff sa = ((),sb) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  alloca_history func s /\ alloca_inv s /\
+  w2n sw + soff + type_memory_size_list tvs <= s.vs_alloca_next /\
+  w2n dw + doff + type_memory_size_list tvs <= s.vs_alloca_next /\
+  (!dt. MEM dt (MAP (FST o SND) fields) ==>
+    !st dtv stv v dp sp a b u dw sw.
+    type_widens_to tenv st dt /\
+    evaluate_type tenv dt = SOME dtv /\ evaluate_type tenv st = SOME stv /\
+    type_memory_bytes cenv dt = type_memory_size dtv /\
+    type_memory_bytes cenv st = type_memory_size stv /\
+    value_has_type dtv v /\ val_wf dtv v /\
+    value_has_type stv v /\ val_wf stv v /\
+    val_in_memory stv v (w2n sw) u.vs_memory /\
+    (w2n sw + type_memory_size stv <= w2n dw \/
+     w2n dw + type_memory_size dtv <= w2n sw) /\
+    w2n sw + type_memory_size stv < dimword (:256) /\
+    w2n dw + type_memory_size dtv + 64 < dimword (:256) /\
+    compile_store_memory_typed cenv dp dt sp st a = ((),b) /\
+    (!x. dp = Var x ==> not_fresh_at a x) /\
+    (!x. sp = Var x ==> not_fresh_at a x) /\
+    eval_operand dp u = SOME dw /\ eval_operand sp u = SOME sw /\
+    fn_has_code a b func /\ ~u.vs_halted /\
+    u.vs_current_bb = a.cs_current_bb /\ u.vs_inst_idx = LENGTH a.cs_current_insts /\
+    alloca_history func u /\ alloca_inv u /\
+    w2n sw + type_memory_size stv <= u.vs_alloca_next /\
+    w2n dw + type_memory_size dtv <= u.vs_alloca_next ==>
+    ?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+        typed_copy_effect ctx func a b u t (w2n dw) (type_memory_size dtv) /\
+        gas_path_mem ctx func u 0 (OK t) /\ alloca_history func t) ==>
+  ?t. fields_in_memory vals (ZIP (MAP FST fields,tvs))
+        (w2n dw + doff) t.vs_memory /\
+      typed_copy_effect ctx func sa sb s t (w2n dw + doff) (type_memory_size_list tvs) /\
+      gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t
+Proof
+  strip_tac >>
+  `?vs. vals = ZIP (MAP FST fields,vs) /\ LENGTH vs = LENGTH (MAP FST fields) /\
+        values_have_types tvs vs /\ tuple_val_wf vs tvs` by
+    (irule typed_memory_struct_values >> simp[]) >>
+  gvs[] >>
+  `compile_struct_typed_copy cenv dst src fields fields doff soff =
+   compile_typed_copy_fields cenv dst src
+      (MAP (FST o SND) fields) (MAP (FST o SND) fields) doff soff` by
+    (irule typed_memory_struct_copy_fields >> simp[EVERY_MEM]) >>
+  gvs[typed_memory_fields_tuple_zip] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule typed_memory_fields_forward_counted >> simp[] >>
+  goal_assum $ drule_at (Pat `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`) >>
+  qexistsl_tac [`tvs`, `sw`, `tenv`] >>
+  simp[LIST_REL_refl, EVERY_MEM] >> gvs[]
 QED
