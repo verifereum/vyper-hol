@@ -1,6 +1,23 @@
 Theory abiEncodeArgsCase
 Ancestors
   abiEncodeArgsSim exprSimHyps exprSimSource exprSimHypsDefs vyperTypeInvariants
+  vyperTypeSystem compileEnv arithmetic
+
+Theorem abi_args_fits_memory_bytes:
+  (!t u. arg_type_fits t u ==>
+    type_memory_bytes ce t <= type_memory_bytes ce u) /\
+  (!ts us. arg_types_fit ts us ==>
+    SUM (MAP (type_memory_bytes ce) ts) <=
+    SUM (MAP (type_memory_bytes ce) us))
+Proof
+  ho_match_mp_tac arg_type_fits_ind >>
+  simp[arg_type_fits_def, type_memory_bytes_def] >> rpt strip_tac >>
+  gvs[]
+  >- (irule DIV_LE_MONOTONE >> simp[])
+  >- (irule DIV_LE_MONOTONE >> simp[])
+  >- (irule LESS_MONO_MULT2 >> simp[]) >>
+  metis_tac[LESS_MONO_MULT2]
+QED
 
 Theorem abi_args_success_ready:
   expr_body_pre ce cx env e es /\
@@ -30,7 +47,14 @@ Proof
   qexists `tv` >> simp[valueEncodingTypingTheory.value_has_type_val_wf] >>
   `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size] >> simp[] >>
-  cheat
+  `type_memory_bytes ce (lowered_value_type ce e) <=
+     type_memory_bytes ce (expr_type e)` by
+    metis_tac[expr_body_pre_lowered_fits, abi_args_fits_memory_bytes] >>
+  `type_memory_bytes ce (expr_type e) < 2 ** 64` by
+    (gvs[expr_body_pre_def] >>
+     drule alloc_limits_expr_type_alloc_ok >>
+     simp[allocLimitsTheory.type_alloc_ok_def]) >>
+  gvs[wordsTheory.dimword_def] >> decide_tac
 QED
 
 Theorem abi_args_ready_cases:
