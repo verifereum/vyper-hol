@@ -76,9 +76,7 @@ Theorem typed_sarray_exit_path_mem[local]:
   fn_has_code sa sb fn /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
   s.vs_current_bb = fresh_label_output "typed_sa_cond" sa.cs_next_label /\
   eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w ncount) /\
-  ncount < dimword(:256) /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
-  phi_prefix_length exit_bb.bb_instructions = 0 ==>
+  ncount < dimword(:256) ==>
   ?u. gas_path_mem ctx fn s 0 (OK u) /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -100,7 +98,6 @@ Proof
       (typed_sa_header_state ("%" ++ toString (sa.cs_next_var+1))
         ("%" ++ toString (sa.cs_next_var+2)) ncount ncount s)))` by
     (irule typed_sa_header_path_mem >> simp[] >>
-     conj_tac >- metis_tac[] >>
      qexistsl_tac [`"%" ++ toString sa.cs_next_var`, `sa.cs_next_id+2`] >> simp[]) >>
   gvs[] >> goal_assum (drule_at Any) >>
   simp[jump_to_def, typed_sa_header_state_def, update_var_def,
@@ -223,8 +220,6 @@ Theorem typed_sarray_compiler_path_mem:
     mem_bytes_at addr (type_memory_bytes ce dt) m =
     mem_bytes_at addr (type_memory_bytes ce dt) m' ==> (D j addr m <=> D j addr m')) /\
   (!j. j < n ==> Src j (a+type_memory_bytes ce st*j) s.vs_memory) /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
-  phi_prefix_length exit_bb.bb_instructions = 0 /\
   (!sc ec. compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+6))) dt
       (Var ("%" ++ toString (sa.cs_next_var+5))) st sc = ((),ec) /\

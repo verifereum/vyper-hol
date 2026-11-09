@@ -159,8 +159,6 @@ Theorem typed_store_sarray_entry_path_mem:
   w2n dw + type_memory_size (ArrayTV dtv (Fixed cap)) < dimword(:256) /\
   (w2n sw + type_memory_size (ArrayTV stv (Fixed cap)) <= w2n dw \/
     w2n dw + type_memory_size (ArrayTV dtv (Fixed cap)) <= w2n sw) /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -218,14 +216,12 @@ Proof
     ~is_abi_dynamic ce.ce_struct_fields dt`
   >- (pop_assum strip_assume_tac >>
       drule_all typed_store_sarray_bulk_path_mem >> simp[]) >>
-  qpat_x_assum `?bb. _` strip_assume_tac >>
   drule_at (Pat `compile_copy_sarray_typed _ _ _ _ _ _ _ = _`)
     normalize_sarray_semantic_path_mem >>
   disch_then (drule_at (Pat `evaluate_type _ st = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ dt = _`)) >>
   disch_then (drule_at (Pat `val_in_memory (ArrayTV _ _) _ _ _`)) >>
-  disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
-  disch_then (qspec_then `ctx` mp_tac) >>
+  disch_then (qspecl_then [`fn`, `ctx`] mp_tac) >>
   disch_then (qspec_then `w2n dw` mp_tac) >>
   simp[] >>
   (impl_tac >-
@@ -260,8 +256,6 @@ Theorem typed_store_dynarray_slow_entry_path_mem[local]:
   w2n dw + type_memory_size (ArrayTV dtv (Dynamic cap)) < dimword(:256) /\
   (w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) <= w2n dw \/
     w2n dw + type_memory_size (ArrayTV dtv (Dynamic cap)) <= w2n sw) /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
@@ -315,12 +309,10 @@ Proof
   mp_tac (Q.INST [`st` |-> `st`, `dt` |-> `dt`,
     `stv` |-> `stv`, `dtv` |-> `dtv`] typed_array_child_rank_path_mem) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
-  qpat_x_assum `?bb. _` strip_assume_tac >>
   drule_at (Pat `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _`)
     normalize_dynarray_semantic_path_mem >>
   disch_then (drule_at (Pat `val_in_memory (ArrayTV _ _) _ _ _`)) >>
-  disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
-  disch_then (qspecl_then [`dtv`, `ctx`, `w2n dw`] mp_tac) >>
+  disch_then (qspecl_then [`fn`, `dtv`, `ctx`, `w2n dw`] mp_tac) >>
   simp[] >>
   (impl_tac >-
     ((conj_tac >- (qpat_x_assum `~(_ /\ dt = st)` mp_tac >> simp[])) >>
@@ -350,8 +342,6 @@ Theorem typed_store_array_entry_path_mem:
   (w2n sw + type_memory_size stv <= w2n dw \/
     w2n dw + type_memory_size dtv <= w2n sw) /\
   phi_prefix_length sa.cs_current_insts = 0 /\
-  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-    phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\

@@ -30,8 +30,6 @@ Theorem normalize_dynarray_semantic_path_mem:
   (a + type_memory_size (ArrayTV stv (Dynamic scap)) <= b \/
    b + type_memory_size (ArrayTV dtv (Dynamic cap)) <= a) /\
   val_in_memory (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vs)) a s.vs_memory /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
-  phi_prefix_length exit_bb.bb_instructions = 0 /\
   (!cv sp dp sc ec u sw dw.
     val_wf stv cv /\ val_wf dtv cv /\
     value_has_type stv cv /\ value_has_type dtv cv /\

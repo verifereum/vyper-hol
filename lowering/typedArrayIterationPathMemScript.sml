@@ -268,7 +268,6 @@ Proof
       (typed_sa_header_state ("%" ++ toString (sa.cs_next_var+1))
         ("%" ++ toString (sa.cs_next_var+2)) i ncount s)))` by
     (irule typed_sa_header_path_mem >> simp[] >>
-     conj_tac >- metis_tac[] >>
      qexistsl_tac [`"%" ++ toString sa.cs_next_var`, `sa.cs_next_id+2`] >>
      simp[] >> metis_tac[LESS_IMP_LESS_OR_EQ]) >>
   gvs[] >> goal_assum (drule_at Any) >>

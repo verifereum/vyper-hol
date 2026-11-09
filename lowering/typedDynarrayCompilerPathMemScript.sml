@@ -58,9 +58,7 @@ Theorem typed_dynarray_exit_path_mem[local]:
   s.vs_current_bb = fresh_label_output "typed_dyn_cond" sa.cs_next_label /\
   eval_operand (Var ("%" ++ toString sm.cs_next_var)) s = SOME (n2w n) /\
   eval_operand (Var ("%" ++ toString sa.cs_next_var)) s = SOME (n2w n) /\
-  n < dimword(:256) /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
-  phi_prefix_length exit_bb.bb_instructions = 0 ==>
+  n < dimword(:256) ==>
   ?u g. gas_path_mem ctx fn s g (OK u) /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (u with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
@@ -76,9 +74,6 @@ Proof
      `sc.cs_next_var = _`, `sc.cs_next_id = _`, `sc.cs_next_label = _`,
      `sc.cs_blocks = _`, `DROP _ _ = _`, `LENGTH initial.bb_instructions = _`,
      `lookup_block sa.cs_current_bb _ = _`, `initial.bb_label = _`] >>
-  `lookup_block (if n < n then fresh_label_output "typed_dyn_body" (sa.cs_next_label+1) else
-      fresh_label_output "typed_dyn_exit" (sa.cs_next_label+2)) fn.fn_blocks =
-      SOME exit_bb` by gvs[] >>
   `eval_operand (Var ("%" ++ toString (sa.cs_next_var+5))) s = SOME (n2w n)` by gvs[] >>
   `n <= n` by simp[] >>
   qpat_x_assum `s.vs_current_bb = _` (SUBST_ALL_TAC o SYM) >>
@@ -224,8 +219,6 @@ Theorem typed_dynarray_suffix_path_mem:
     mem_bytes_at addr (type_memory_bytes ce dt) m =
     mem_bytes_at addr (type_memory_bytes ce dt) m' ==> (D j addr m <=> D j addr m')) /\
   (!j. j < n ==> Src j (a+type_memory_bytes ce st*j) s.vs_memory) /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
-  phi_prefix_length exit_bb.bb_instructions = 0 /\
   (!sc ec. compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+11))) dt
       (Var ("%" ++ toString (sa.cs_next_var+10))) st sc = ((),ec) /\

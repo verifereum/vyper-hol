@@ -26,8 +26,6 @@ Theorem normalize_sarray_indexed_path_mem[local]:
   (a + type_memory_size stv * n <= b \/ b + type_memory_size dtv * n <= a) /\
   (!j. j < n ==> val_in_memory stv (f j)
     (a + type_memory_size stv * j) s.vs_memory) /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
-  phi_prefix_length exit_bb.bb_instructions = 0 /\
   (!cv sp dp sc ec u sw dw.
     val_wf stv cv /\ val_wf dtv cv /\
     value_has_type stv cv /\ value_has_type dtv cv /\
@@ -129,8 +127,6 @@ Theorem normalize_sarray_semantic_path_mem:
   (a + type_memory_size (ArrayTV stv (Fixed n)) <= b \/
    b + type_memory_size (ArrayTV dtv (Fixed n)) <= a) /\
   val_in_memory (ArrayTV stv (Fixed n)) value a s.vs_memory /\
-  lookup_block sb.cs_current_bb fn.fn_blocks = SOME exit_bb /\
-  phi_prefix_length exit_bb.bb_instructions = 0 /\
   (!cv sp dp sc ec u sw dw.
     val_wf stv cv /\ val_wf dtv cv /\
     value_has_type stv cv /\ value_has_type dtv cv /\

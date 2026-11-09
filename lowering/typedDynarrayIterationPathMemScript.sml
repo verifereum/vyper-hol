@@ -18,9 +18,7 @@ Theorem typed_dynarray_header_path_mem:
          Label exit_lbl; Label body_lbl] []]|> /\
   ~s.vs_halted /\ s.vs_inst_idx = 0 /\
   eval_operand (Var ("%" ++ toString sm.cs_next_var)) s = SOME (n2w i) /\
-  eval_operand bound s = SOME (n2w n) /\ i <= n /\ n < dimword(:256) /\
-  lookup_block (if i < n then body_lbl else exit_lbl) fn.fn_blocks = SOME bb /\
-  phi_prefix_length bb.bb_instructions = 0 ==>
+  eval_operand bound s = SOME (n2w n) /\ i <= n /\ n < dimword(:256) ==>
   ?u g. gas_path_mem ctx fn s g (OK u) /\ ~u.vs_halted /\ u.vs_inst_idx = 0 /\
     u.vs_current_bb = (if i < n then body_lbl else exit_lbl) /\
     (u with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
