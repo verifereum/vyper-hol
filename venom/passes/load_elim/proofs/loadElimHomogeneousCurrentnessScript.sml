@@ -3,7 +3,9 @@ Ancestors
   loadElimSingletonSuffix loadElimSingletonCurrentness loadElimSelectedGeneration loadElimNormalizedCuts
   loadElimActualGeneration loadElimSolverProvenance loadElimNonempty loadElimExitCurrentness
   loadElimTransferProvenance loadElimOccurrence loadElimDefs
-  loadElimPopulation loadElimOccurrenceCoverage
+  loadElimPopulation loadElimOccurrenceCoverage loadElimOperationalHistory analysisSimProofsBase
+  loadElimLatestRead loadElimKeyRead loadElimKeyShapeInvariant loadElimConfiguredGeneration
+  loadElimGenerationSound loadElimOccurrenceRead dfgCorrectnessProof venomExecProps words pred_set
   dfAnalyzeDefs cfgDefs cfgAnalysisProps venomWf venomExecProofs venomInstProps
   sccpCorrectnessProofs simplifyCfgPhiSemantics simplifyCfgPhiRepair
   simplifyCfgStruct finite_map list rich_list
@@ -181,3 +183,67 @@ Theorem le_homogeneous_phi_presence:
 Proof
   simp[le_homogeneous_retained_occ_def] >> metis_tac[]
 QED
+
+Theorem le_homogeneous_occ_value_no_write:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  le_configured_context ctx /\ ctx.lctx_dfg = dfg_build_function fn /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  le_occ_prefix C fn s0 es i s /\ MEM e es /\
+  le_homogeneous_retained_occ ctx fn key (Var v) e ==>
+  v NOTIN le_occ_writes e
+Proof
+  strip_tac >> Cases_on `e`
+  >- (drule_all le_occ_step_static >> strip_tac >>
+      fs[le_homogeneous_retained_occ_def, le_occ_writes_def] >> strip_tac >>
+      drule_all le_ordinary_definition_normalized_cut >> simp[]) >>
+  drule_all le_occ_phi_static >> strip_tac >>
+  fs[le_homogeneous_retained_occ_def, le_occ_writes_def] >>
+  strip_tac >> fs[le_phi_outputs_def, MEM_FLAT, MEM_MAP] >>
+  `MEM i' b.bb_instructions` by
+    (fs[le_phi_prefix_take] >> metis_tac[MEM_TAKE]) >>
+  `i'.inst_opcode = PHI` by
+    (mp_tac (Q.SPEC `b.bb_instructions` phi_prefix_all_phi) >>
+     fs[le_phi_prefix_take, EVERY_MEM]) >>
+  metis_tac[le_phi_definition_normalized_cut]
+QED
+
+Theorem le_homogeneous_occ_read:
+  wf_function fn /\ fn_inst_wf fn /\
+  le_configured_context ctx /\ (!v. bp_get_ptrs ctx.lctx_bp v = []) /\
+  ctx.lctx_aliases = ma_analyze ctx.lctx_bp fn ctx.lctx_addr_space /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  is_fixpoint (df_process_block Forward NONE load_join load_transfer
+    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
+    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
+    (load_analyze ctx fn) /\
+  le_occ_prefix C fn s0 es i s /\ MEM e es /\
+  (!b n fuel x y. MEM (StepOcc b n fuel x y) es ==> dfg_assigns_sound ctx.lctx_dfg x) /\
+  le_homogeneous_retained_occ ctx fn key r e /\
+  le_absolute_key ctx.lctx_addr_space key /\
+  le_key_address ctx.lctx_addr_space key (le_occ_pre e) = SOME a /\
+  a < dimword (:256) ==>
+  le_read_address ctx.lctx_addr_space a (le_occ_after e) =
+  le_read_address ctx.lctx_addr_space a (le_occ_pre e)
+Proof
+  strip_tac >> Cases_on `e`
+  >- (`le_occ_valid C fn (StepOcc b n n0 v v0)` by
+        metis_tac[le_occ_prefix_member] >>
+      `MEM b.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+        metis_tac[le_occ_step_dfs] >>
+      `inst_wf (EL n b.bb_instructions)` by metis_tac[le_occ_step_wf] >>
+      `df_at NONE (load_analyze ctx fn) b.bb_label (SUC n) =
+        load_transfer ctx (EL n b.bb_instructions)
+          (df_at NONE (load_analyze ctx fn) b.bb_label n)` by
+        (irule le_analyze_step_transfer >> fs[le_occ_valid_def] >>
+         metis_tac[lookup_block_label]) >>
+      fs[le_read_address_occ_after, le_occ_pre_def, le_occ_post_def,
+         le_occ_valid_def, le_homogeneous_retained_occ_def] >>
+      irule le_configured_retained_step_read >> metis_tac[]) >>
+  `le_occ_valid C fn (PhiOcc b v v0)` by metis_tac[le_occ_prefix_member] >>
+  metis_tac[le_phi_read_occ_after]
+QED
+
