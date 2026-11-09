@@ -7,6 +7,7 @@ Ancestors
   abiDecodeRanges abiDecoderContract abiDecoderTypedContract abiCanonicalHeadSize abiValidMembers
   abiDecoderClampedWord abiDecoderBytesPhases abiDecoderTypedCompose
   abiDecoderOffset abiDecoderFrameCompose abiDecoderRange emitHelperProps
+  abiDecodePtrMemberInterface emitHelper
   supportedTypes exprLowering abiEncoder compileEnv valueEncoding vyperABI contractABI
   venomState words list arithmetic
 
@@ -199,4 +200,25 @@ Proof
      asm_simp_tac bool_ss [abi_decode_source_opcode_def]) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [] >>
   fs[abi_decoder_address_frame_def] >> metis_tac[]
+QED
+
+(* The pointer replay's selected-member code is exactly these raw phases. *)
+Theorem abi_decode_physical_member_code_phases:
+  supported_scalar_type ty /\
+  abi_decode_member_code dst pos src hi (type_to_abi_dec_info sf ce ty) ao q st last ==>
+  ?ops ready.
+    abi_decode_member_setup (Var dst) pos MLOAD (Var src) hi
+      (abi_decoder_dynamic (type_to_abi_dec_info sf ce ty)) ao q st = (ops,ready) /\
+    compile_abi_decode_to_buf (SND ops) (FST ops) MLOAD (Var src) hi
+      (type_to_abi_dec_info sf ce ty) ready = ((),last)
+Proof
+  strip_tac >>
+  qhdtm_x_assum `abi_decode_member_code`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_member_code_def]) >>
+  drule_all abi_decode_physical_scalar_shape >> strip_tac >>
+  rename1 `emit_op ADD [Var dst; Lit (n2w q)] middle = (Var out,ready)` >>
+  rename1 `compile_getelemptr_abi pos _ ao MLOAD (Var src) hi st = (childsrc,middle)` >>
+  qexistsl_tac [`(childsrc,Var out)`, `ready`] >>
+  asm_simp_tac bool_ss [abi_decode_member_setup_def, comp_bind_def, comp_return_def,
+    pairTheory.FST, pairTheory.SND] >> gvs[]
 QED
