@@ -816,7 +816,7 @@ Proof
   conj_tac
   >- (irule abi_scratch_decoder_member_effects_compose >>
       asm_simp_tac bool_ss [] >>
-      qexistsl_tac [`end_st.cs_next_id`, `after_head`, `end_st.cs_next_var`] >>
+      qexistsl_tac [`end_st.cs_next_id`, `after_head`, `end_st.cs_next_id`, `end_st.cs_next_var`] >>
       asm_simp_tac bool_ss [GSYM ADD_ASSOC]) >>
   conj_tac
   >- (irule abi_decode_sim_trans >> qexists_tac `after_head` >> asm_simp_tac bool_ss []) >>
