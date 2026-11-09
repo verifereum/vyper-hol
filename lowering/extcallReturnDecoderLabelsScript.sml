@@ -3,7 +3,7 @@ Theory extcallReturnDecoderLabels
 Ancestors
   extcallReturnDecoderCode abiDecoderAppend abiEncoder exprSafeOperand
   abiDecoderLoopEmit abiDecoderArraySetupInputs abiDecoderLoopSetup
-  abiDecoderRecursiveLoopLayout
+  abiDecoderRecursiveLoopLayout extcallReturnStraightObserver
   exprLowering builtinSimple fragExec emitHelper emitHelperProps compileEnv
   context venomInst list rich_list
 
@@ -274,3 +274,37 @@ Resume return_label_syntax_mutual[cons]:
   first_x_assum (irule o SRULE[]) >> simp[]
 QED
 Finalise return_label_syntax_mutual
+
+Theorem return_decoder_frag_nonlabel:
+  compile_abi_decode_to_buf dst src MLOAD base_op hi info st = ((),en) /\
+  st.cs_blocks = en.cs_blocks /\
+  (!l. dst <> Label l /\ src <> Label l /\ base_op <> Label l /\ hi <> Label l) ==>
+  EVERY (\i. !l. ~MEM (Label l) i.inst_operands) (frag_code st en)
+Proof
+  strip_tac >>
+  `return_label_syntax (compile_abi_decode_to_buf dst src MLOAD base_op hi info) (K T)` by
+    (irule (cj 1 return_label_syntax_mutual) >>
+     simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >> metis_tac[]) >>
+  irule return_code_frag >>
+  fs[return_label_syntax_def, cs_appends_def] >>
+  metis_tac[pairTheory.SND]
+QED
+
+Theorem return_decoder_straight_gas_free:
+  compile_abi_decode_to_buf dst src MLOAD base_op hi info st = ((),en) /\
+  st.cs_blocks = en.cs_blocks /\
+  (!l. dst <> Label l /\ src <> Label l /\ base_op <> Label l /\ hi <> Label l) ==>
+  frag_gas_free st en
+Proof
+  strip_tac >>
+  `cs_extends st en` by metis_tac[cs_extends_abi_decode] >>
+  drule_all return_straight_shape >> strip_tac >>
+  drule_all return_decoder_frag_nonlabel >> strip_tac >>
+  drule return_decoder_frag_code >> strip_tac >>
+  simp[exprSimAbiGasBridgeTheory.frag_gas_free_def, EVERY_MEM] >>
+  gen_tac >> strip_tac >>
+  fs[EVERY_MEM] >>
+  first_x_assum drule >>
+  simp[abiDecoderVarSequenceTheory.abi_decoder_reentry_opcode_def] >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
