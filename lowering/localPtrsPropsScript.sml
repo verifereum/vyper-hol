@@ -45,7 +45,7 @@ Ancestors
   list finite_map words
   venomMemDefs
   vyperState valueEncoding valueEncodingProps compileEnv
-  venomState venomExecSemantics venomInst venomWf
+  venomState venomExecSemantics venomInst venomWf venomWfProps
 
 (* Updating a name outside the live scopes preserves pointer exclusion. *)
 Theorem not_local_ptr_name_update:
@@ -337,23 +337,6 @@ Proof
   metis_tac[]
 QED
 
-(* Instruction ids of a function name its instructions. *)
-Theorem fn_inst_ids_distinct_inj:
-  ∀func i1 i2.
-    fn_inst_ids_distinct func ∧ MEM i1 (fn_insts func) ∧
-    MEM i2 (fn_insts func) ∧ i1.inst_id = i2.inst_id ⇒ i1 = i2
-Proof
-  rpt strip_tac >>
-  `∀bbs. MAP (λi. i.inst_id) (fn_insts_blocks bbs) =
-         FLAT (MAP (λbb. MAP (λi. i.inst_id) bb.bb_instructions) bbs)` by
-    (Induct >> simp[fn_insts_blocks_def, MAP_APPEND]) >>
-  `ALL_DISTINCT (MAP (λi. i.inst_id) (fn_insts func))` by
-    fs[fn_inst_ids_distinct_def, fn_insts_def] >>
-  fs[MEM_EL] >> rename1 `i2 = EL m _` >>
-  `EL n (MAP (λi. i.inst_id) (fn_insts func)) =
-   EL m (MAP (λi. i.inst_id) (fn_insts func))` by gvs[EL_MAP] >>
-  `n = m` by metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP] >> gvs[]
-QED
 
 (* An allocation of another instruction of func, one whose output is no
    live local's pointer, misses every live local: the step a consumer needs

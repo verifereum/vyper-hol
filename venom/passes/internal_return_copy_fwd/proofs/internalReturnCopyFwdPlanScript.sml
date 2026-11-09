@@ -314,6 +314,103 @@ Definition ircf_block_plan_def:
                     (EL i bb.bb_instructions).inst_operands)
 End
 
+Theorem ircf_findi_original_inst:
+  !fn bb cur inst j.
+    wf_function fn /\ MEM bb fn.fn_blocks /\ MEM inst (fn_insts fn) /\
+    MAP (\i. i.inst_id) cur.bb_instructions =
+      MAP (\i. i.inst_id) bb.bb_instructions /\
+    findi (\i. i.inst_id = inst.inst_id) cur.bb_instructions = SOME j ==>
+    j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = inst
+Proof
+  rpt strip_tac >>
+  drule findi_inst_ids >> disch_then (qspec_then `inst.inst_id` assume_tac) >>
+  `findi (\i. i.inst_id = inst.inst_id) bb.bb_instructions = SOME j` by metis_tac[] >>
+  drule_all findi_some_index >> strip_tac >> simp[] >>
+  irule fn_inst_ids_distinct_inj >> conj_tac >- gvs[] >> qexists_tac `fn` >>
+  gvs[wf_function_def] >>
+  simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+  metis_tac[EL_MEM]
+QED
+
+Theorem ircf_ret_buf_original_uses:
+  !fn bb cur ctx s cid k.
+    wf_function fn /\ MEM bb fn.fn_blocks /\
+    ctx.icf_dfg = dfg_build_function fn /\
+    MAP (\i. i.inst_id) cur.bb_instructions =
+      MAP (\i. i.inst_id) bb.bb_instructions /\
+    ircf_is_ret_buf_source ctx cur.bb_instructions s cid k ==>
+    !inst v. MEM inst (fn_insts fn) /\ ircf_alias fn s v /\
+      MEM (Var v) inst.inst_operands ==>
+      inst.inst_opcode = ASSIGN \/ inst.inst_id = cid \/
+      (inst.inst_opcode = INVOKE /\
+       ?i. i < k /\ EL i bb.bb_instructions = inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ircf_is_ret_buf_source_uses >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM (Var v) _` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  `MEM (v,inst,n) (icf_alias_use_positions ctx.icf_dfg
+      (icf_collect_aliases ctx.icf_dfg s))` by
+    simp[ircf_alias_use_positions_mem] >>
+  first_x_assum (qspecl_then [`v`, `inst`, `n`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[icf_is_assign_output_use_def] >>
+  drule_all ircf_findi_original_inst >> strip_tac >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ircf_forward_original_dst_position:
+  !fn bb cur ctx k new_insts dst src sz inst v pos.
+    wf_function fn /\ MEM bb fn.fn_blocks /\
+    ctx.icf_dfg = dfg_build_function fn /\
+    MAP (\i. i.inst_id) cur.bb_instructions =
+      MAP (\i. i.inst_id) bb.bb_instructions /\
+    ircf_try_forward ctx cur k = SOME new_insts /\
+    (EL k cur.bb_instructions).inst_operands = [Var dst; Var src; Lit sz] /\
+    MEM inst (fn_insts fn) /\
+    ircf_alias fn (icf_assign_root ctx.icf_dfg {} dst) v /\
+    pos < LENGTH inst.inst_operands /\ EL pos inst.inst_operands = Var v /\
+    inst.inst_opcode <> ASSIGN /\
+    inst.inst_id <> (EL k cur.bb_instructions).inst_id ==>
+    inst.inst_opcode <> PHI /\ is_mem_addr_position inst.inst_opcode pos /\
+    ?i. k < i /\ i < LENGTH bb.bb_instructions /\ EL i bb.bb_instructions = inst
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ircf_try_forward_checks >> strip_tac >> gvs[] >>
+  `MEM (v,inst,pos) (icf_alias_use_positions ctx.icf_dfg
+     (icf_collect_aliases ctx.icf_dfg (icf_assign_root ctx.icf_dfg {} dst)))` by
+    simp[ircf_alias_use_positions_mem] >>
+  first_x_assum (qspecl_then [`v`, `inst`, `pos`] mp_tac) >>
+  simp[icf_is_assign_output_use_def] >> strip_tac >> gvs[] >>
+  drule_all ircf_findi_original_inst >> strip_tac >> metis_tac[]
+QED
+
+Theorem ircf_try_forward_original_ok:
+  !fn bb cur ctx k new_insts.
+    wf_function fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+    ctx.icf_dfg = dfg_build_function fn /\
+    MAP (\i. i.inst_id) cur.bb_instructions =
+      MAP (\i. i.inst_id) bb.bb_instructions /\
+    k < LENGTH bb.bb_instructions /\
+    EL k cur.bb_instructions = EL k bb.bb_instructions /\
+    ircf_try_forward ctx cur k = SOME new_insts ==>
+    ?d s sz. ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,s,sz) /\
+             ircf_fwd_ok fn bb k d s sz
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ircf_try_forward_checks >> strip_tac >>
+  drule ircf_try_forward_prefix_and_copy >> strip_tac >>
+  qexistsl_tac [`icf_assign_root ctx.icf_dfg {} dst`,
+               `icf_assign_root ctx.icf_dfg {} src`, `sz`] >>
+  gvs[] >> simp[ircf_copy_roots_def, ircf_fwd_ok_def] >>
+  conj_tac >- metis_tac[ircf_assign_root_alias] >>
+  conj_tac >- metis_tac[ircf_alloca_of_dfg] >>
+  conj_tac >- metis_tac[ircf_alloca_of_dfg] >>
+  conj_tac >- (match_mp_tac ircf_ret_buf_original_uses >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM (Var v) _` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  metis_tac[ircf_forward_original_dst_position]
+QED
+
 (* Why it holds: ircf_try_forward keeps the length and every inst_id, and
    only NOPs its copy and rewrites the instructions the original DFG lists
    as non-ASSIGN uses of the destination aliases.  A forwarded copy is
