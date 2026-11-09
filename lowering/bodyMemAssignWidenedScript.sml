@@ -3,7 +3,7 @@
    bytestring (S1's body_assign_widened_aggregate_call, RESIDUAL #767). *)
 Theory bodyMemAssignWidened
 Ancestors
-  bodyMemoryPreds widenedMemoryStaging typedNormalizeTupleEntryPathMem
+  bodyMemoryPreds widenedMemoryStaging typedNormalizeRankPathMem
 
 Theorem body_assign_widened_aggregate_call_mem:
   !cx id e ty d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
