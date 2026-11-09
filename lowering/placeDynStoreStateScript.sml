@@ -1,7 +1,7 @@
 Theory placeDynStoreState
 Ancestors
   placeDynStorageEffect placeStoreStatePatch placeStoreRegion storageDynPrefixLive
-  placeDynLayout stmtSimStoreCopy exprLoweringProps exprSimProps compileEnv loweringPosts
+  placeDynLayout stmtSimStoreCopy exprLoweringProps exprSimProps compileEnv loweringStateRelDefs loweringPosts
   vyperPlaceFrames vyperStorageBackend venomState valueEncoding vyperTyping
   vyperStorageLayoutSafety vyperStoragePlaceRegion
   list words arithmetic

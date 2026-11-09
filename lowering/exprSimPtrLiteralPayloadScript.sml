@@ -3,7 +3,7 @@ Theory exprSimPtrLiteralPayload
 Ancestors
   exprSimPtrLiteralChunks exprSimPtrLiteralOps exprSimLiteralBuffer
   exprLowering exprLoweringProps fragExec venomExecSemantics venomInst
-  venomState valueEncoding valueEncodingProofs valueEncodingProps
+  venomState valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingProps
   venomMemProps immutableMemoryFrame compileEnv emitHelper freshWrites
   words list rich_list finite_map vfmConstants
 

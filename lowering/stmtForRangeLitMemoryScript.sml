@@ -2,7 +2,7 @@
    and transport of the final frame back to the original fragment. *)
 Theory stmtForRangeLitMemory
 Ancestors
-  stmtSimDefs exprSimMemDefs stmtLowering compileEnv vyperInterpreter
+  stmtSimDefs exprSimMemDefs stmtLowering compileEnv loweringStateRelDefs vyperInterpreter
   vyperState stmtForRangeMemoryLoop stmtForRangeMemoryParts stmtForRangeMemoryStart
   stmtForRangeMemoryRound stmtLoweringMono
   stmtSimForParts stmtSimProps stmtSimForLoop loweringSlice loweringPosts vyperValue

@@ -1,6 +1,6 @@
 Theory abiDecoderReentryAddress
 Ancestors
-  abiDecoderReentry abiDecoderAllocation abiDecoderTypedContract context compileEnv emitHelper
+  abiDecoderReentry abiDecoderAllocation abiDecoderTypedContract context compileEnv loweringStateRelDefs emitHelper
   emitHelperProps exprLoweringProps venomExecSemantics venomState venomInst finite_map words
   arithmetic abiDecoderContract venomExecProofs
 

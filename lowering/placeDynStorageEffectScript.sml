@@ -96,7 +96,7 @@ Proof
     (rewrite_tac[word_mul_n2w] >>
      pure_rewrite_tac[GSYM word_add_n2w, n2w_w2n] >>
      simp_tac bool_ss [MULT_COMM]) >>
-  simp[mload_def, valueEncodingTheory.mem_word_at_def]
+  simp[mload_def, valueEncodingDefsTheory.mem_word_at_def]
 QED
 
 Theorem place_dyn_prefix_header_flat:
@@ -139,7 +139,7 @@ Proof
      `w2n k <> w2n (k+1w+n2w h)` by decide_tac >>
      metis_tac[]) >>
   `mload (w2n b) s = n2w (w2n (n2w L:bytes32))` by
-    gvs[mload_def, valueEncodingTheory.mem_word_at_def] >>
+    gvs[mload_def, valueEncodingDefsTheory.mem_word_at_def] >>
   drule_all place_dyn_prefix_header_flat >>
   disch_then (qspec_then `(if tr then LocTransient else LocStorage)` mp_tac) >>
   Cases_on `tr` >> simp[]

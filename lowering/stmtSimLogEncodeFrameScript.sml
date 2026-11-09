@@ -3,7 +3,7 @@ Theory stmtSimLogEncodeFrame
 Ancestors
   stmtSimLogScalarEncode stmtSimLogAllocResource stmtSimLogEncodeFields
   stmtSimLogExecFields localPtrsProps loweringSlice abiDecoderFrame
-  valueEncodingProps compileEnv exprLoweringProps venomState venomMemProps
+  valueEncodingProps compileEnv loweringStateRelDefs exprLoweringProps venomState venomMemProps
   venomExecSemantics venomInst venomMemDefs abiBuiltinAllocation finite_map words list arithmetic
 
 Theorem log_encode_local_frame[local]:
@@ -142,7 +142,7 @@ Proof
   qpat_x_assum `ce.ce_is_ctor ==> _` drule_all >> strip_tac >>
   conj_tac >- decide_tac >> conj_tac
   >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-      >- (first_x_assum drule_all >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      >- (first_x_assum drule_all >> simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
       rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME r` >>
       `FLOOKUP t.vs_allocas inst.inst_id = SOME r` by metis_tac[] >>
       gvs[] >> first_x_assum drule_all >> simp[]) >>

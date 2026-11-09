@@ -1,7 +1,7 @@
 (* Emission transports the shared counted SHA tail without replaying its edges. *)
 Theory bodyPtrHashBuiltinsShaEmit
 Ancestors bodyPtrHashBuiltinsShaTail bodyPtrHashBuiltinsShaTailFrame
-  bodyPtrHashBuiltinsGhostFrame exprSimHash bodyPtrDefs compileEnv
+  bodyPtrHashBuiltinsGhostFrame exprSimHash bodyPtrDefs compileEnv loweringStateRelDefs
   exprLowering emitHelperProps venomState ptrDiscipline words finite_map
   ASCIInumbers venomInst
 

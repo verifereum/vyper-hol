@@ -4,7 +4,7 @@ Ancestors
   typedCopyCompatibilityPtr normalizationPrefixPtr fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs venomInst venomState
   contextCodegenRelProps finite_map memLocDefs codegenRel contextCodegenRel fragExec
-  typedCopyAgreement emitHelper compileEnv valueEncodingProps representationCleanPtr
+  typedCopyAgreement emitHelper compileEnv loweringStateRelDefs valueEncodingProps representationCleanPtr
   ptrCoverage allocationPtr exprLoweringProps typedCopyLayoutPtr exprSimBufferStore loweringPosts exprSimProps
 Theorem ptr_inst_ok_mload:
   !D ctx fn G tn s id src tmp fuel.

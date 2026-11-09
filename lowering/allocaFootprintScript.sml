@@ -46,7 +46,7 @@ Theory allocaFootprint
 Ancestors
   fragExecMem instMemFrontier loweringHalt abiBuiltinAllocation
   abiEncoderWrites builtinHashing exprLowering
-  context emitHelper emitHelperProps exprLoweringProps compileEnv
+  context emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics venomMemDefs memSafeRun
   finite_map list rich_list words arithmetic abiDecoderIndexInit
 

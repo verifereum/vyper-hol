@@ -408,16 +408,18 @@ Theorem deploy_prefix_guard_abort:
   s.vs_inst_idx = 0 /\ s.vs_call_ctx.cc_callvalue <> 0w ==>
   ?ss. exec_block fuel ctx bb s = Abort Revert_abort ss
 Proof
+  (* per-opcode step equations instead of unfolding the whole dispatcher,
+     which ran over the step limit *)
   rpt gen_tac >> strip_tac >>
   simp[Once venomExecSemanticsTheory.exec_block_def, venomInstTheory.get_instruction_def,
        venomExecSemanticsTheory.step_inst_non_invoke] >>
-  pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[venomExecSemanticsTheory.exec_read0_def, venomInstTheory.is_terminator_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_read0_def, venomInstTheory.is_terminator_def] >>
   simp[Once venomExecSemanticsTheory.exec_block_def,
        venomInstTheory.get_instruction_def, venomStateTheory.update_var_def,
        venomExecSemanticsTheory.step_inst_non_invoke] >>
-  pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[venomExecSemanticsTheory.exec_pure1_def,
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure1_def,
        venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
        venomExecSemanticsTheory.bool_to_word_def] >>
   simp[finite_mapTheory.FLOOKUP_UPDATE, venomInstTheory.is_terminator_def,
@@ -425,9 +427,9 @@ Proof
   simp[Once venomExecSemanticsTheory.exec_block_def,
        venomInstTheory.get_instruction_def,
        venomExecSemanticsTheory.step_inst_non_invoke] >>
-  pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
-  simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE]
+  simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomStateTheory.update_var_def, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem deploy_prefix_context_guard_abort:

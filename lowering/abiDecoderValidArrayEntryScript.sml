@@ -5,7 +5,7 @@ Ancestors
   abiDecoderValidArraySetupInputs abiDecoderArraySetupInputs abiDecoderDynamicLoopSetup
   abiDecoderArrayEntry abiDecoderDynamic abiDecoderCoherence abiDecoderTypedContract
   abiDecoderReentry abiDecoderContract abiDecoderLoop abiValidMember abiValidMembers abiEncoder
-  fragExec instIdxIndep compileEnv valueEncoding vyperABI vyperValue contractABI venomState
+  fragExec instIdxIndep compileEnv loweringStateRelDefs valueEncoding vyperABI vyperValue contractABI venomState
   venomExecSemantics words list arithmetic
 
 Definition abi_decoder_valid_array_entry_def:

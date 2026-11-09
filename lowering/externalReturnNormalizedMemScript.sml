@@ -5,7 +5,7 @@ Ancestors
   externalReturnSelectedMetadata externalReturnEncoderSuffixMem
   stmtSimReturnWiden typedStoreEndpoint externalReturnPrefix returnValueTyped
   vyperTypeSystem stmtLowering exprLoweringProps loweringPosts
-  exprSimDefs vyperTypeArgFits compileEnv typedNormalizeEntryBoundary
+  exprSimDefs vyperTypeArgFits compileEnv loweringStateRelDefs typedNormalizeEntryBoundary
   stmtLoweringMono fragExec exprOperandVar externalReturnRegisteredWindowMem
   externalReturnZeroLayout externalReturnEncoderSites externalRawReturnType
   bodySim compileVyper externalReturnDirectSource externalReturnWindowResources

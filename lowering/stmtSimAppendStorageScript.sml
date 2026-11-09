@@ -3,7 +3,7 @@ Theory stmtSimAppendStorage
 Ancestors
   bodyAppendStorageFacts vyperState vyperStorage
   vyperStorageBackend vyperValue valueEncoding valueEncodingProofs
-  vyperTyping words exprLowering compileEnv emitHelper emitHelperProps
+  vyperTyping words exprLowering compileEnv loweringStateRelDefs emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomState stateFrame
 
 Theorem append_storage_full:

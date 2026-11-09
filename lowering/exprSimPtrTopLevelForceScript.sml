@@ -2,7 +2,7 @@
 Theory exprSimPtrTopLevelForce
 Ancestors
   exprSimPtrTopLevelViews exprSimPtrTopLevelCopy exprSimPtrProps bodyPtrDefs
-  compileEnv context vyperValue vyperAST ptrDiscipline words pred_set exprSimUnwrap
+  compileEnv loweringStateRelDefs context vyperValue vyperAST ptrDiscipline words pred_set exprSimUnwrap
   emitHelper emitHelperProps fragExec venomInst venomState decoderGhostFramePtr memLocDefs codegenRel
   exprSimTopLevelStorage exprSimTopLevelImmutable exprSimTopLevelProps exprSimUnwrapProps exprSimProps exprSimMemorySource
   exprSimHypsDefs exprSimHyps exprSimDefs exprLowering exprLoweringProps loweringPosts

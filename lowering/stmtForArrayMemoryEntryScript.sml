@@ -1,7 +1,7 @@
 Theory stmtForArrayMemoryEntry
 Ancestors
   stmtForArrayControlMemory stmtSimForArrayFrag stmtSimDeclPath loweringSlice
-  stmtSimForArrayLoop compileEnv loweringPosts venomExecSemantics venomState
+  stmtSimForArrayLoop compileEnv loweringStateRelDefs loweringPosts venomExecSemantics venomState
   allocaHistory fragGasSeqMem fragGasPathMem memSafeRun instMemFrontier
   venomInst gasCount words arithmetic list finite_map
   stmtSimProps exprLoweringProps venomExecProps

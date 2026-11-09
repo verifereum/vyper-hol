@@ -4,7 +4,7 @@ Ancestors
  ctorAbiActualObservations ctorAbiActualBytes abiDecoderBulkReentry
  abiDecoderBulkExecute abiDecoderBulk abiDecoderReentryPointer
  abiDecoderReentry abiDecoderTypedContract abiDecoderCoherence
- abiDecoderContract compileEnv valueEncoding venomState venomInst words arithmetic
+ abiDecoderContract compileEnv loweringStateRelDefs valueEncoding venomState venomInst words arithmetic
  ctorAbiActualWorld abiEncoderRegisteredEffect allocaFrontierBound allocaBudgetProps
  fragExec instIdxIndep venomMemDefs
 

@@ -1,6 +1,6 @@
 Theory makeSsaCurrentOutputSurvival
 Ancestors
-  makeSsaCurrentWfSsa makeSsaCurrentDefs venomInst venomExecProofs list pred_set
+  makeSsaCurrentWfSsa makeSsaDefs venomInst venomExecProofs list pred_set
 
 Theorem current_reassign_output_set:
   !ids xs. set (FLAT (MAP instruction_inst_outputs

@@ -1,7 +1,7 @@
 (* Fixed-size SHA input preparation and compiler shape boundaries. *)
 Theory bodyPtrHashBuiltinsShaFixed
 Ancestors bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsShaBytes
-  builtinHashing emitHelper emitHelperProps compileEnv exprLoweringProps
+  builtinHashing emitHelper emitHelperProps compileEnv loweringStateRelDefs exprLoweringProps
   list rich_list arithmetic context fragGasSeqPtr ptrDiscipline venomState
   venomExecSemantics venomInst fragExec instIdxIndep words fragExecPtr ghostPcTransportPtr
   bodyPtrDefs finite_map pred_set freshWrites bodyPtrHashBuiltinsGhostFrame exprSimHash
@@ -70,7 +70,9 @@ Proof
   `step_inst_base (mk_inst sid MSTORE [Var p;value] []) t =
      OK (mstore (w2n a) w t)` by
     (pure_once_rewrite_tac[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def]) >>
+     pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                      combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_write2_def, eval_operand_def]) >>
   `run_inst_seq [mk_inst aid ALLOCA [Lit 32w] [p];
      mk_inst sid MSTORE [Var p;value] []] s = OK (mstore (w2n a) w t)` by
     simp[run_inst_seq_def] >> simp[] >>
@@ -96,7 +98,9 @@ Theorem hash_alloca_control_fields:
   t.vs_current_bb = s.vs_current_bb
 Proof
   pure_once_rewrite_tac[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
+                   combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_alloca_def, mk_inst_def] >>
   Cases_on `FLOOKUP s.vs_allocas id` >> simp[]
   >- (simp[update_var_def] >> strip_tac >> gvs[]) >>
   rename1 `FLOOKUP s.vs_allocas id = SOME entry` >> PairCases_on `entry` >>

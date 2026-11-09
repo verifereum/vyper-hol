@@ -6,7 +6,7 @@ Ancestors
   finite_map
   valueEncodingProps
   abiDecoderContract abiDecoderDynamicLoopSetup emitHelperProps exprLoweringProps
-  emitHelper compileEnv venomState venomExecSemantics venomInst words list
+  emitHelper compileEnv loweringStateRelDefs venomState venomExecSemantics venomInst words list
 
 Theorem abi_encoder_write_observations[simp]:
   (mstore p w s).vs_call_ctx = s.vs_call_ctx /\

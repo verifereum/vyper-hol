@@ -1,8 +1,8 @@
 Theory externalReturnNormalizeMem
 Ancestors
-  typedCopyAgreement context compileEnv emitHelper fragExecMem instMemFrontier
+  typedCopyAgreement context compileEnv loweringStateRelDefs emitHelper fragExecMem instMemFrontier
   venomExecSemantics venomState venomInst exprLoweringProps words exprSimDefs exprSimProps loweringPosts
-  vfmConstants externalReturnBounds valueEncoding vyperTypeSystem vyperValue
+  vfmConstants externalReturnBounds valueEncoding valueEncodingDefs vyperTypeSystem vyperValue
   exprSimBufferStore exprSimLiteralBuffer exprSimVVFrame allocaFootprint
   exprSimOperands abiCallerAllocation exprSimBuffer emitHelperProps
   valueEncodingProps

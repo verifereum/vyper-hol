@@ -3,7 +3,7 @@ Theory ctorAbiActualMembers
 Ancestors
   ctorAbiActualReentry abiDecoderMemberInfos abiDecoderMembers
   abiDecoderLoop abiEncoderRegisteredEffect abiEncoder exprLowering compileEnv
-  valueEncoding venomState list
+  valueEncoding valueEncodingDefs venomState list
 
 Theorem ctor_actual_members_nil:
   compile_abi_decode_complex_elems dst src DLOAD (Lit 0w) hi

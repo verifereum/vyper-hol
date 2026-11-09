@@ -1,7 +1,7 @@
 Theory nonreentrantEntry
 Ancestors
   list rich_list words finite_map
-  context compileEnv emitHelper emitHelperProps exprLoweringProps
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps
   moduleLoweringProps fragExec fragExecMem instMemFrontier
   venomState venomInst venomExecSemantics
 

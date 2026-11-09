@@ -6,10 +6,11 @@ Ancestors
   compileVyper vyperInterpreter e2eDeployDefs moduleLowering
   immutableDeployExecution ctorDeployDefs e2eEntry venomState vyperCompiler
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
-  valueEncoding vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
+  valueEncoding valueEncodingDefs vyperValue vyperTypeInitialState vyperTypeContractStaticMaps
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
   venomPipelineData venomPipelineDriver venomPipelineRunner venomFnScheduleRunner
   unitLabelMap fcgPruning
+  fcgDefs
 
 Theorem no_ctor_lookup:
   !tops exts ints fb.
@@ -389,7 +390,7 @@ Proof
 QED
 
 Theorem no_ctor_make_ssa:
-  makeSsaCurrentDefs$make_ssa_current_fn s
+  makeSsaDefs$make_ssa_current_fn s
     (mk_raw_function "__deploy"
       [<| bb_label := "__deploy"; bb_instructions :=
         [mk_inst 0 ALLOCA [Lit n] ["%0"];
@@ -669,7 +670,7 @@ Theorem no_ctor_late_make_ssa:
     <| fn_eom := SOME e; fn_mems_used := mems;
        fn_fmp_signature := SOME
          <| fms_has_fmp_param := F; fms_publishes := F |> |> ==>
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s)
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s)
 Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED
@@ -1669,7 +1670,7 @@ Proof
 QED
 
 Theorem no_ctor_late_fold:
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s) /\
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s) /\
   simplifyCfgDefs$simplify_cfg_fn_with_labels fn = (fn,[]) /\
   singleUseExpansionDefs$sue_expand_function_supply s fn = (expanded,t) /\
   dftDefs$dft_fn expanded = ordered /\
@@ -1977,9 +1978,10 @@ Proof
     (s with <| vs_allocas := s.vs_allocas |+ (id, (s.vs_alloca_next, LENGTH bytes));
                vs_alloca_next := s.vs_alloca_next + LENGTH bytes |>)` >>
   `step_inst_base (mk_inst id ALLOCA [Lit (n2w (LENGTH bytes))] [buf]) s = OK t` by
-    simp[Abbr `t`, venomInstTheory.mk_inst_def,
-         venomExecSemanticsTheory.step_inst_base_def, venomExecSemanticsTheory.exec_alloca_def,
-         eval_operand_def, wordsTheory.w2n_n2w] >>
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[Abbr `t`, venomInstTheory.mk_inst_def,
+          venomExecSemanticsTheory.exec_alloca_def,
+          eval_operand_def, wordsTheory.w2n_n2w]) >>
   `eval_operand (Var buf) t = SOME (n2w s.vs_alloca_next) /\
    FLOOKUP t.vs_labels "runtime_begin" = SOME (n2w codepos) /\
    TAKE (LENGTH bytes)
@@ -2067,10 +2069,10 @@ Proof
            Lit (n2w (LENGTH bytes))] []]`] |> SRULE []) >>
   disch_then (qspecl_then [`0`, `ctx`, `bb`] mp_tac) >>
   (impl_tac >-
-    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def] >>
-     simp[venomInstTheory.is_terminator_def,
-          venomExecSemanticsTheory.step_inst_base_def,
-          venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
+    (simp[Abbr `bb`, Abbr `t`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomExecSemanticsTheory.exec_alloca_def, AllCaseEqs()])) >>
   strip_tac >> qexists_tac `final'` >>
   `run_context 1 ctx s = Halt final'` by
     (qpat_assum `run_block_non_phis 0 ctx bb t = _` mp_tac >>
@@ -2651,7 +2653,7 @@ Proof
   disch_then (qspecl_then [`tx`, `[]`, `am`] mp_tac) >> simp[] >> strip_tac >>
   qexists `[]` >>
   simp[no_ctor_gas_marks, deploy_venom_result_rel_def] >>
-  gvs[compileEnvTheory.storage_agree_def, compileEnvTheory.transient_agree_def,
+  gvs[loweringStateRelDefsTheory.storage_agree_def, loweringStateRelDefsTheory.transient_agree_def,
       e2eDefsTheory.logs_correspond_def,
       vfmStateTheory.account_state_component_equality]
 QED

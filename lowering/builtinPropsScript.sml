@@ -24,7 +24,7 @@ Ancestors
   builtinHashing builtinMath builtinSimple builtinBytes
   builtinStrings builtinSystem builtinMisc builtinCreate
   builtinAbi abiBuiltinEncodeRun abiBuiltinDecodeCorrect context
-  compileEnv venomExecSemantics venomState venomInst venomMemProps
+  compileEnv loweringStateRelDefs venomExecSemantics venomState venomInst venomMemProps
   valueEncoding abiEncoder
   logroot
 Libs

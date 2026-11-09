@@ -21,9 +21,9 @@ Theory abiEncoderProps
 Ancestors
   list rich_list
   exprLoweringProps emitHelper emitHelperProps
-  abiEncoder compileEnv
+  abiEncoder compileEnv loweringStateRelDefs
   venomExecSemantics venomState venomInst venomMemProps
-  valueEncoding valueEncodingProps
+  valueEncoding valueEncodingDefs valueEncodingProps
   abiValueEncoding abiEncoderCorrect abiEncoderCorrectRecursive abiDecoderClampedWord
   vyperABI vyperTyping contractABI fragExec
 Libs

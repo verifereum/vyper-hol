@@ -31,7 +31,7 @@ Ancestors
   fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimReturn exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs
   vyperInterpreter vyperState vyperValue vyperLookup vyperTyping
   vyperExprNoControl venomInst venomState
 Libs

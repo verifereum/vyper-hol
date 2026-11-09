@@ -5,7 +5,7 @@ Ancestors
   abiDecoderReentryPointer abiDecoderVarSequence abiDecoderVarExtend abiDecoderTypedContract
   abiDecoderCoherence abiDecoderArrayInitExec abiDecoderContract abiDecoderFrame
   abiDecoderFrameCompose abiDecoderLoop abiDecoderAllocation abiDecoderProtectedScratch fragExec
-  instIdxIndep exprLoweringProps emitHelperProps compileEnv venomState valueEncoding words list
+  instIdxIndep exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs venomState valueEncoding words list
   arithmetic
 
 Theorem abi_decoder_bulk_reentry_sequence:

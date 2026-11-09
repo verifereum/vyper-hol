@@ -20,7 +20,7 @@ Ancestors
   list rich_list
   fragExec  stmtSimReturn intCallResult valueCopy instIdxIndep
   stmtLowering exprLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding
+  context compileEnv loweringStateRelDefs valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
 
 (* An internal function's memory return: an IntRet that intret_q accepts

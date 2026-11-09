@@ -14,13 +14,13 @@ Ancestors
   exprBopSimDefs exprBopSimProps exprSimSource exprSimDefs stmtSimDefs
   exprSimFieldLayout exprSimAttributeFields exprSimHypsDefs
   vyperTypeInvariants vyperTypeSystem vyperTyping vyperTypeEnv
-  finite_map alist compileEnv
+  finite_map alist compileEnv loweringStateRelDefs
   bodyFieldMemoryProps bodyDeclMemoryCounted bodyDeclMemoryCore
   vyperTypeBuiltins stmtSimDeclStore exprSimWordArgs
   allocaFootprint fragGasSeqMem stmtSimProps localPtrsProps
   exprLoweringProps emitHelper emitHelperProps loweringSlice exprSimOps
   venomExecSemantics venomInst venomState
-  fragExec fragExecMem allocLimits valueEncoding freshWrites
+  fragExec fragExecMem allocLimits valueEncoding valueEncodingDefs freshWrites
   vyperLookup vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperAST
 Libs

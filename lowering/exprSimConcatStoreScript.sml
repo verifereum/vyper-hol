@@ -1,7 +1,7 @@
 (* Concat case: stores into the concat buffer keep the state relation. *)
 Theory exprSimConcatStore
 Ancestors
-  arithmetic list compileEnv exprLoweringProps localPtrsProps loweringSlice
+  arithmetic list compileEnv loweringStateRelDefs exprLoweringProps localPtrsProps loweringSlice
   immutableMemoryFrame valueEncodingProps valueEncodingProofs venomState
   venomExecSemantics byte
 

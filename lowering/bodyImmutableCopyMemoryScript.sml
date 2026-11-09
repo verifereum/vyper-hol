@@ -3,7 +3,7 @@ Theory bodyImmutableCopyMemory
 Ancestors
   valueEncodingProps memSafeRun
   exprSimCopy exprSimStorageCopy immutableCopyExecution bodyCopyMemory storageDecodeMemory fragExecMem instMemFrontier
-  context compileEnv exprLoweringProps emitHelper emitHelperProps venomExecSemantics
+  context compileEnv loweringStateRelDefs exprLoweringProps emitHelper emitHelperProps venomExecSemantics
   venomState venomInst words arithmetic list rich_list
 
 Theorem body_immutable_copy_aligned_size:
