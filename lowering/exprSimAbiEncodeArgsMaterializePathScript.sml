@@ -65,3 +65,44 @@ Proof
   disch_then (qspecl_then [`func`, `r`] mp_tac) >>
   simp[materialize_owned_post_returndata]
 QED
+
+Theorem materialize_extends:
+  compile_materialize_vv ce ty vv sa = (dst,sb) ==> cs_extends sa sb
+Proof
+  strip_tac >>
+  mp_tac (Q.SPECL [`ce`, `ty`, `vv`, `sa`]
+    exprLoweringPropsTheory.ci_mono_compile_materialize_vv) >>
+  simp[exprLoweringPropsTheory.ci_mono_def]
+QED
+
+Theorem materialize_stack_gas_free:
+  compile_materialize_vv ce ty (StackValue vty op) sa = (dst,sb) /\
+  (!l. op <> Label l) ==> frag_gas_free sa sb
+Proof
+  Cases_on `is_word_type ty` >> Cases_on `is_bytestring_type ty` >>
+  Cases_on `type_memory_bytes ce ty` >>
+  simp[exprLoweringTheory.compile_materialize_vv_def, exprLoweringTheory.unwrap_value_def,
+       contextTheory.compile_store_memory_def,
+       contextTheory.compile_alloc_buffer_def,
+       contextTheory.compile_store_bytestring_def,
+       contextTheory.compile_bytestring_copy_len_def,
+       contextTheory.compile_copy_memory_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
+       compileEnvTheory.emit_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> strip_tac >> gvs[] >>
+  simp[frag_gas_free_def, frag_code_def, fragExecTheory.emitted_blocks_def,
+       exprLoweringPropsTheory.emitted_insts_def, rich_listTheory.DROP_APPEND, arithmeticTheory.SUB_PLUS,
+       arithmeticTheory.SUB_EQ_0, venomInstTheory.mk_inst_def]
+QED
+
+Theorem materialize_memory_gas_free:
+  compile_materialize_vv ce ty (LocatedValue vty p) sa = (dst,sb) /\
+  ~is_word_type vty /\ p.ptr_location = LocMemory /\
+  (!l. p.ptr_operand <> Label l) ==> frag_gas_free sa sb
+Proof
+  strip_tac >> irule materialize_stack_gas_free >>
+  qexistsl_tac [`ce`, `dst`, `p.ptr_operand`, `ty`, `vty`] >> simp[] >>
+  gvs[exprLoweringTheory.compile_materialize_vv_def,
+      exprLoweringTheory.unwrap_value_def, comp_bind_def]
+QED
