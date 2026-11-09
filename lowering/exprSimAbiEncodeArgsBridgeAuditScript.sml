@@ -107,3 +107,21 @@ Proof
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[]
 QED
+
+(* Mutation is a syntactic overapproximation on malformed builtin arities.
+   This is not a source-valid candidate. *)
+Theorem mutating_syntax_can_compile_without_entry:
+  let e = TypeBuiltin (BaseT (UintT 256)) MaxValue (BaseT (UintT 256))
+            [Pop (BaseT (UintT 256)) (NameTarget "xs")] in
+  exprs_can_mutate ce [e] /\
+  SND (compile_abi_encode_args compile_expr ce [e] si) = si
+Proof
+  simp[expr_can_mutate_def, compile_abi_encode_args_def,
+       expr_type_def, is_word_type_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  simp[Once compile_expr_def] >>
+  simp[compile_expr_def, compile_type_builtin_dispatch_body_def,
+       unwrap_value_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  simp[type_bounds_def, is_signed_type_def, expr_type_def, unwrap_value_def,
+       comp_bind_def, comp_return_def]
+QED
