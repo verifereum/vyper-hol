@@ -833,3 +833,62 @@ Proof
        parse_dret_shape_def]
 QED
 
+
+Theorem ao_main_dret_resolved:
+  inst_wf inst /\ inst.inst_opcode = DRET /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (ao_resolve_iszero_op targets DRET a) r = SOME w) /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r ==>
+  (?e. step_inst_base inst s = Error e) \/
+  lift_result R (execution_equiv UNIV) (execution_equiv UNIV)
+    (step_inst_base inst s)
+    (step_inst_base (ao_resolve_iszero_inst targets inst) r)
+Proof
+  strip_tac >>
+  `IS_SOME (parse_dret_shape inst)` by gvs[inst_wf_def] >>
+  Cases_on `parse_dret_shape inst` >> gvs[] >>
+  PairCases_on `x` >>
+  `inst.inst_outputs = []` by gvs[inst_wf_def] >>
+  drule ao_resolve_dret_shape >> disch_then (qspec_then `targets` assume_tac) >>
+  Cases_on `eval_operands inst.inst_operands s`
+  >- simp[step_inst_base_opcode_eqs] >>
+  Cases_on `pair_dret_words (TAKE (2 * x1) (DROP (x0 + 1) x))`
+  >- simp[step_inst_base_opcode_eqs] >>
+  `?vals t. step_inst_base inst s = IntRet vals t` by
+    (simp[step_inst_base_opcode_eqs] >> pairarg_tac >> simp[]) >>
+  `?u. step_inst_base (ao_resolve_iszero_inst targets inst) r = IntRet vals u /\
+       execution_equiv UNIV t u` by
+    (irule ao_main_dret_base >> simp[ao_resolve_iszero_inst_def] >>
+     qexistsl_tac [`inst`, `ao_resolve_iszero_op targets DRET`, `s`] >> simp[]) >>
+  simp[lift_result_def]
+QED
+
+Theorem ao_main_read_resolved_OK:
+  MEM inst.inst_opcode
+    [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE; CHAINID;
+     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
+     BLOBBASEFEE; SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE;
+     MLOAD; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; CALLDATALOAD;
+     EXTCODEHASH; ILOAD; DLOAD] /\
+  (!a w. MEM a inst.inst_operands /\ eval_operand a s = SOME w ==>
+    eval_operand (ao_resolve_iszero_op targets inst.inst_opcode a) r = SOME w) /\
+  ao_main_observations fn V s r /\
+  (s with <|vs_vars := r.vs_vars; vs_inst_idx := r.vs_inst_idx|>) = r /\
+  step_inst_base inst s = OK t ==>
+  ?u. step_inst_base (ao_resolve_iszero_inst targets inst) r = OK u /\
+    ao_main_observations fn V t u /\
+    (t with <|vs_vars := u.vs_vars; vs_inst_idx := u.vs_inst_idx|>) = u /\
+    t.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = r.vs_inst_idx
+Proof
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode
+    [CALLER; ADDRESS; CALLVALUE; GAS; ORIGIN; GASPRICE; CHAINID;
+     COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
+     BLOBBASEFEE; SELFBALANCE; CALLDATASIZE; RETURNDATASIZE; MEMTOP; CODESIZE]`
+  >- (irule ao_main_read0_base >> simp[ao_resolve_iszero_inst_def] >>
+      qexists_tac `inst` >> fs[MEM]) >>
+  `MEM inst.inst_opcode [MLOAD; SLOAD; TLOAD; BLOCKHASH; BLOBHASH;
+    CALLDATALOAD; EXTCODEHASH; ILOAD; DLOAD]` by fs[MEM] >>
+  irule ao_main_read1_base >> simp[ao_resolve_iszero_inst_def] >>
+  qexistsl_tac [`inst`, `ao_resolve_iszero_op targets inst.inst_opcode`] >> fs[MEM]
+QED
