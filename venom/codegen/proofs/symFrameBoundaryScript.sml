@@ -769,6 +769,29 @@ Proof
     prefixSimTheory.is_prefix_op_def]
 QED
 
+Theorem LIST_REL_select_indices:
+  !R xs ys indices.
+    LIST_REL R xs ys /\ EVERY (\i. i < LENGTH xs) indices ==>
+    LIST_REL R (MAP (\i. EL i xs) indices) (MAP (\i. EL i ys) indices)
+Proof
+  simp[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL,
+       listTheory.EL_MAP]
+QED
+
+Theorem sym_selected_kinds_transport:
+  !fn ret items saved indices vals.
+    LIST_REL (op_kind_ok fn ret) items saved /\
+    EVERY (\i. i < LENGTH items) indices /\
+    LIST_REL (\sv sv'. !fn ret op.
+      op_kind_ok fn ret op sv ==> op_kind_ok fn ret op sv')
+      (MAP (\i. EL i saved) indices) vals ==>
+    LIST_REL (op_kind_ok fn ret) (MAP (\i. EL i items) indices) vals
+Proof
+  rpt strip_tac >> drule_all LIST_REL_select_indices >>
+  simp[listTheory.LIST_REL_EL_EQN] >>
+  gvs[listTheory.LIST_REL_EL_EQN] >> metis_tac[]
+QED
+
 Theorem sym_phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0
