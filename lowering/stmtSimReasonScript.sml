@@ -992,7 +992,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem assert_reason_expr_exempt[local]:
+Theorem assert_reason_expr_exempt:
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
     (es,s0) marks (err,ee) (leaf,fin) ==>
