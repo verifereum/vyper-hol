@@ -64,29 +64,53 @@ QED
 Theorem inline_token_rewrite_frame:
   inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] /\
   inst.inst_outputs = [x] /\ x IN opaque /\
-  param_idx < LENGTH args /\ EL param_idx args = Lit 0w /\
+  param_idx < LENGTH args /\ eval_operand (EL param_idx args) t = SOME w /\
   inline_opaque_frame_rel ren V opaque saved P s t /\
   (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
   ren x = STRCAT p x ==>
   rewrite_inline_inst args outs ret (clone_instruction p labels inst) param_idx =
     ([(clone_instruction p labels inst) with
-      <| inst_opcode := ASSIGN; inst_operands := [Lit 0w] |>], param_idx + 1) /\
+      <| inst_opcode := ASSIGN; inst_operands := [EL param_idx args] |>], param_idx + 1) /\
   ?s' t'. step_inst fuel ctx inst s = OK s' /\
     step_inst fuel ctx'
       ((clone_instruction p labels inst) with
-        <| inst_opcode := ASSIGN; inst_operands := [Lit 0w] |>) t = OK t' /\
+        <| inst_opcode := ASSIGN; inst_operands := [EL param_idx args] |>) t = OK t' /\
     inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- simp[rewrite_inline_inst_def, clone_instruction_def, is_param_opcode_def] >>
   qexistsl [`update_var x s.vs_return_pc_token s`,
-    `update_var (STRCAT p x) 0w t`] >>
+    `update_var (STRCAT p x) w t`] >>
   conj_tac >- (irule inline_token_step >> simp[]) >>
   conj_tac
   >- simp[step_inst_non_invoke, step_inst_base_def, clone_instruction_def,
       eval_operands_def, eval_operand_def] >>
   qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
-  irule inline_opaque_frame_token_seed >> simp[]
+  irule inline_opaque_frame_write_establish >> simp[]
+QED
+
+Theorem inline_token_unreplaced_frame:
+  inst.inst_opcode = RETPC_PARAM /\ inst.inst_operands = [Lit idx] /\
+  inst.inst_outputs = [x] /\ x IN opaque /\
+  LENGTH args <= param_idx /\
+  inline_opaque_frame_rel ren V opaque saved P s t /\
+  (!v. v IN V ==> (ren v = ren x <=> v = x)) /\ ren x NOTIN P /\
+  ren x = STRCAT p x ==>
+  rewrite_inline_inst args outs ret (clone_instruction p labels inst) param_idx =
+    ([clone_instruction p labels inst], param_idx) /\
+  ?s' t'. step_inst fuel ctx inst s = OK s' /\
+    step_inst fuel ctx' (clone_instruction p labels inst) t = OK t' /\
+    inline_opaque_frame_rel ren (x INSERT V) opaque saved P s' t'
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- simp[rewrite_inline_inst_def, clone_instruction_def, is_param_opcode_def] >>
+  qexistsl [`update_var x s.vs_return_pc_token s`,
+    `update_var (STRCAT p x) t.vs_return_pc_token t`] >>
+  conj_tac >- (irule inline_token_step >> simp[]) >>
+  conj_tac
+  >- (irule inline_token_step >> simp[clone_instruction_def, clone_operand_def]) >>
+  qpat_assum `ren x = STRCAT p x` (fn th => rewrite_tac[GSYM th]) >>
+  irule inline_opaque_frame_write_establish >> simp[]
 QED
 
 (* Operand evaluation is a boundary premise: opaque copies may carry a

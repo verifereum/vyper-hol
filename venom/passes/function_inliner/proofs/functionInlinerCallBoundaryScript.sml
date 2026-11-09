@@ -36,3 +36,17 @@ Theorem inline_call_parameter_index:
 Proof
   simp[param_inst_at_def]
 QED
+
+Theorem inline_call_entry_operand_available:
+  eval_operands ops caller = SOME vals /\
+  k < LENGTH (rotate_invoke_ops (Label name::ops)) ==>
+  ?w. eval_operand (EL k (rotate_invoke_ops (Label name::ops))) caller = SOME w
+Proof
+  strip_tac >>
+  Cases_on `k < LENGTH ops`
+  >- (drule eval_operands_index >> disch_then (qspec_then `k` mp_tac) >>
+      simp[rotate_invoke_ops_def, EL_APPEND_EQN]) >>
+  `k = LENGTH ops` by gvs[rotate_invoke_ops_def] >>
+  simp[rotate_invoke_ops_def, EL_APPEND_EQN, venomStateTheory.eval_operand_def]
+QED
+
