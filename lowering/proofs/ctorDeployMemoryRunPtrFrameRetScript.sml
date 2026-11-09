@@ -15,7 +15,8 @@ Ancestors
   immutableDeployExecution nonreentrantSource loweringHalt allocaSiteResource
   exprLoweringProps fragExec compileEnv emitHelper e2eDeployDefs
   venomExecSemantics venomState venomInst codegenRel contextCodegenRel memLocDefs
-  valueEncoding
+  valueEncoding bodyPtrDefs ctorDeployMemoryRunMemFrameRet fragGasPathMem
+  fragGasSeqPtr fragGasOriginPtrExec
   vyperStorageLayoutSafety vyperContext vyperState
 
 (* One opcode's dispatch equation, keeping the simplification local. *)
@@ -906,6 +907,64 @@ Proof
   `(cx0 with in_deploy := T).nonreentrant_slot = SOME nkey` by simp[] >>
   drule_all nonreentrant_storage_dead_frame >> strip_tac >>
   fs[storage_dead_in_deploy]
+QED
+
+Theorem constructor_epilogue_origin_ptr_path:
+  compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops) imm st =
+    ((), st') /\
+  fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+  ~block_is_terminated st /\
+  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  cx_tops cx = tops /\
+  LENGTH runtime_bc + imm_len tops < dimword(:256) /\
+  (imm_len tops <> 0 ==>
+    cenv.ce_imm_alloca = SOME imm /\
+    (!x. imm = Var x ==> not_fresh_at st x)) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ~ctx_has_dalloca ctx /\
+  ghost_inv_at (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    d cenv cx es G tn s ==>
+  ?final G' tn'.
+    gas_origin_ptr_path
+      (deploy_dead tops runtime_bc am tx, imm_len tops,
+       explicit, ctx, func, [])
+      (s, G, tn) [] (Halt final, G', tn')
+Proof
+  rpt strip_tac >>
+  drule_all constructor_epilogue_zero_path_mem >> strip_tac >>
+  `?fuel. run_from fuel ctx func s = Halt final` by
+    (drule gas_path_mem_exec >> simp[] >> metis_tac[]) >>
+  `!fuel. ptr_safe_run (deploy_dead tops runtime_bc am tx) (imm_len tops)
+     fuel ctx func [] G tn s` by
+    (Cases_on `imm_len tops = 0`
+     >- (`compile_constructor_epilogue (LENGTH runtime_bc) (imm_len tops)
+            (Lit 0w) st = ((), st')` by
+           (qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
+            simp[compile_constructor_epilogue_def]) >>
+         `deploy_ptr_inv tops runtime_bc am tx (Lit 0w) G tn s` by
+           (fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def]) >>
+         metis_tac[epilogue_ptr_safe]) >>
+     `deploy_ptr_inv tops runtime_bc am tx imm G tn s` by
+       (fs[deploy_ptr_inv_def, ghost_inv_at_def, stor_taint_ok_at_def] >>
+        metis_tac[]) >>
+     metis_tac[epilogue_ptr_safe]) >>
+  drule_all compile_constructor_epilogue_code_placement >> strip_tac >>
+  drule compile_constructor_epilogue_terminal_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\
+                ~is_terminator i.inst_opcode) pre` by
+    (fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i pre ==> _` drule >>
+     strip_tac >> gvs[is_terminator_def]) >>
+  `?G' tn'. gas_path_ptr (deploy_dead tops runtime_bc am tx) (imm_len tops)
+      ctx func [] G tn s 0 G' tn' (Halt final)` by
+    (irule halting_tail_gas_path_ptr >>
+     simp[] >> conj_tac
+     >- (qexistsl_tac [`pre`, `mk_inst id RETURN [dst; szop] []`] >>
+         gvs[mk_inst_def]) >>
+     qexists_tac `fuel` >> simp[]) >>
+  qexistsl_tac [`final`, `G'`, `tn'`] >>
+  irule gas_zero_paths_joint >> simp[exit_result_def]
 QED
 
 Theorem constructor_exit_run_ptr:

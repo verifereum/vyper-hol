@@ -754,7 +754,7 @@ Proof
   strip_tac >> Cases_on `inst.inst_opcode = LOG`
   >- (irule supply_log_read_cong >> simp[]) >>
   Cases_on `inst.inst_opcode` >>
-  gvs[contextCodegenRelTheory.source_memory_read_ranges_def]
+  simp[contextCodegenRelTheory.source_memory_read_ranges_def]
   >~ [`dret_memory_read_ranges _ _ = _`]
   >- (irule supply_dret_read_cong >> simp[]) >>
   simp[contextCodegenRelTheory.memory_range_of_operands_def] >>
@@ -777,7 +777,7 @@ Proof
   `eval_operands inst.inst_operands a = eval_operands inst.inst_operands b` by
     (irule supply_eval_operands_cong >> simp[]) >>
   Cases_on `inst.inst_opcode` >>
-  gvs[codegenRelTheory.source_memory_write_ranges_def] >>
+  simp[codegenRelTheory.source_memory_write_ranges_def] >>
   simp[codegenRelTheory.fixed_source_write_range_def,
        codegenRelTheory.sized_source_write_range_def] >>
   namedCases_on `inst.inst_operands` ["", "o1 os1"] >> gvs[] >>
