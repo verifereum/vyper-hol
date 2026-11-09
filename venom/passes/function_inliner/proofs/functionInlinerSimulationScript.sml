@@ -119,6 +119,146 @@ Proof
   imp_res_tac inline_caller_bookkeeping_phis >> gvs[]
 QED
 
+(* Erase the callee effects and FMP, retaining the complete caller residual. *)
+Definition inline_caller_residual_def:
+  inline_caller_residual s =
+    inline_shared_frame
+      ((merge_callee_state s (init_venom_state "")) with vs_fmp := 0w)
+End
+
+Theorem inline_caller_residual_normalize[simp]:
+  inline_caller_residual (inline_shared_frame s) = inline_caller_residual s /\
+  inline_caller_residual (inline_caller_residual s) = inline_caller_residual s
+Proof
+  simp[inline_caller_residual_def, inline_shared_frame_def,
+       stateFrameTheory.execution_frame_def, merge_callee_state_def]
+QED
+
+Theorem inline_caller_residual_shared:
+  inline_shared_frame s = inline_shared_frame t ==>
+  inline_caller_residual s = inline_caller_residual t
+Proof
+  metis_tac[inline_caller_residual_normalize]
+QED
+
+Theorem inline_caller_residual_reconstruct:
+  inline_caller_residual t = inline_caller_residual c /\ t.vs_fmp = f ==>
+  inline_shared_frame t =
+    inline_shared_frame ((merge_callee_state c t) with vs_fmp := f)
+Proof
+  simp[inline_caller_residual_def, inline_shared_frame_def,
+       stateFrameTheory.execution_frame_def, merge_callee_state_def,
+       venom_state_component_equality]
+QED
+
+Theorem inline_caller_residual_updates[simp]:
+  inline_caller_residual (s with vs_vars := vars) = inline_caller_residual s /\
+  inline_caller_residual (s with vs_current_bb := bb) = inline_caller_residual s /\
+  inline_caller_residual (s with vs_inst_idx := i) = inline_caller_residual s /\
+  inline_caller_residual (s with vs_prev_bb := prev) = inline_caller_residual s /\
+  inline_caller_residual (s with vs_fmp := f) = inline_caller_residual s /\
+  inline_caller_residual (jump_to l s) = inline_caller_residual s /\
+  inline_caller_residual (adopt_return_fmp ir s) = inline_caller_residual s /\
+  inline_caller_residual (merge_callee_state s u) = inline_caller_residual s
+Proof
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[inline_caller_residual_def, inline_shared_frame_def,
+       stateFrameTheory.execution_frame_def, merge_callee_state_def,
+       jump_to_def, adopt_return_fmp_def]
+QED
+
+Theorem inline_caller_residual_bind:
+  bind_outputs outs vals s = SOME t ==>
+  inline_caller_residual t = inline_caller_residual s
+Proof
+  simp[bind_outputs_def] >> strip_tac >> gvs[] >>
+  qspec_then `\u. inline_caller_residual u = inline_caller_residual s` mp_tac
+    venomInstProofs1Theory.foldl_update_var_preserves >>
+  simp[update_var_def]
+QED
+
+Theorem inline_caller_residual_phis:
+  eval_phis s insts = OK t ==>
+  inline_caller_residual t = inline_caller_residual s
+Proof
+  strip_tac >> drule eval_phis_only_updates_vs_vars >>
+  disch_then SUBST1_TAC >> simp[]
+QED
+
+Theorem inline_caller_residual_step_nonterminator:
+  step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+  inline_caller_residual t = inline_caller_residual s
+Proof
+  rw[Once step_inst_def] >> gvs[AllCaseEqs()]
+  >- (drule inline_caller_residual_bind >> simp[]) >>
+  drule_all venomInstProofs1Theory.step_inst_base_preserves_all >>
+  simp[inline_caller_residual_def, inline_shared_frame_def,
+       stateFrameTheory.execution_frame_def, merge_callee_state_def,
+       venom_state_component_equality]
+QED
+
+Theorem inline_caller_residual_terminator[local]:
+  is_terminator inst.inst_opcode /\ step_inst_base inst s = OK t /\
+  ~s.vs_halted /\ ~t.vs_halted ==>
+  inline_caller_residual t = inline_caller_residual s
+Proof
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  strip_tac >> gvs[step_inst_base_opcode_eqs] >>
+  gvs[AllCaseEqs(), jump_to_def, inline_caller_residual_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      merge_callee_state_def] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem inline_caller_residual_step:
+  step_inst fuel ctx inst s = OK t /\ ~s.vs_halted /\ ~t.vs_halted ==>
+  inline_caller_residual t = inline_caller_residual s
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (Cases_on `inst.inst_opcode = INVOKE` >- gvs[is_terminator_def] >>
+      fs[Once step_inst_def] >>
+      metis_tac[inline_caller_residual_terminator]) >>
+  metis_tac[inline_caller_residual_step_nonterminator]
+QED
+
+Theorem inline_caller_residual_exec_block:
+  !fuel ctx bb s t. exec_block fuel ctx bb s = OK t /\
+  ~s.vs_halted /\ ~t.vs_halted ==>
+  inline_caller_residual t = inline_caller_residual s
+Proof
+  rpt gen_tac >>
+  completeInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block fuel ctx bb s = OK t` mp_tac >>
+  once_rewrite_tac[exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK u` >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[]
+  >- (Cases_on `u.vs_halted` >> simp[] >> strip_tac >> gvs[] >>
+      metis_tac[inline_caller_residual_step]) >>
+  strip_tac >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
+  `inline_caller_residual t =
+    inline_caller_residual (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (first_x_assum irule >> simp[] >> qexists `bb` >> simp[]) >>
+  metis_tac[inline_caller_residual_step, inline_caller_residual_updates]
+QED
+
+Theorem inline_caller_residual_run_block:
+  run_block fuel ctx bb s = OK t /\ ~s.vs_halted /\ ~t.vs_halted ==>
+  inline_caller_residual t = inline_caller_residual s
+Proof
+  strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs >>
+  gvs[run_block_def] >>
+  drule eval_phis_only_updates_vs_vars >> disch_then SUBST_ALL_TAC >>
+  drule inline_caller_residual_exec_block >> simp[]
+QED
+
 Definition inline_caller_data_def:
   inline_caller_data N opaque_caller c d <=>
     inline_shared_frame c = inline_shared_frame d /\
@@ -552,52 +692,53 @@ Proof
   metis_tac[]
 QED
 
-(* Interface probe: the exit packet deliberately forgets call-local params.
-   A caller-data bridge requiring their equality needs a preservation fact
-   from actual clone execution, not merely this packet. *)
-Theorem inline_exit_packet_params_probe[local]:
-  !d ret. d.vs_params = [] ==>
-    bind_outputs [] []
-      (adopt_return_fmp <|iret_values := []; iret_adopt_fmp := NONE|>
-        (merge_callee_state d d)) = SOME d /\
-    inline_clone_exit "" {} {} UNIV [] d ret
-      <|iret_values := []; iret_adopt_fmp := NONE|> d
-      (OK (jump_to ret (d with vs_params := [0w]))) /\
-    (jump_to ret (d with vs_params := [0w])).vs_params <> d.vs_params
+
+Theorem inline_caller_data_return:
+  inline_caller_data N opaque_caller c d /\
+  inline_clone_exit p V opaque P outs c ret ir u (OK v) /\
+  (N DIFF opaque_caller) SUBSET P /\
+  inline_caller_bookkeeping d v /\
+  inline_caller_residual v = inline_caller_residual d /\
+  inline_fmp_result c.vs_fmp (IntRet ir u) /\
+  bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state c u)) = SOME w ==>
+  inline_caller_data N opaque_caller w v
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- simp[bind_outputs_def, adopt_return_fmp_def, merge_callee_state_def,
-          venom_state_component_equality] >>
-  simp[inline_clone_exit_def, bind_outputs_def, adopt_return_fmp_def,
-       merge_callee_state_def, jump_to_def] >>
-  qexists `d with vs_params := [0w]` >>
-  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
-       inline_shared_frame_def, stateFrameTheory.execution_frame_def,
-       merge_callee_state_def, jump_to_def, venomStateTheory.lookup_var_def]
+  strip_tac >>
+  drule_all inline_clone_exit_fmp_reentry >> strip_tac >>
+  drule inline_return_bind_merge >>
+  disch_then (qspecl_then [`u`, `ir`] assume_tac) >> gvs[] >>
+  `inline_shared_frame caller' = inline_shared_frame c` by
+    (irule venomInstProofs1Theory.bind_outputs_preserves >>
+     simp[] >> goal_assum (drule_at Any)) >>
+  `inline_caller_residual v = inline_caller_residual caller'` by
+    metis_tac[inline_caller_residual_shared, inline_caller_data_def] >>
+  drule inline_caller_residual_reconstruct >>
+  disch_then (qspec_then `v.vs_fmp` mp_tac) >> simp[] >> strip_tac >>
+  drule inline_caller_bookkeeping_bind >> strip_tac >>
+  gvs[inline_clone_exit_def] >>
+  drule inline_return_merge_effects >>
+  disch_then (qspec_then `caller'` strip_assume_tac) >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  gvs[inline_caller_data_def, inline_caller_bookkeeping_def,
+      jump_to_def, adopt_return_fmp_def, merge_callee_state_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+      venom_state_component_equality, SUBSET_DEF, lookup_var_def] >>
+  metis_tac[]
 QED
 
-(* Adversarial check of the bookkeeping-plus-FMP bridge: caller-owned code
-   is not constrained by either the packet or the four-field bookkeeping. *)
-Theorem inline_exit_packet_code_probe[local]:
-  !ret. let d = init_venom_state "" in
-    let u = d with vs_code := [0w] in
-    let ir = <|iret_values := []; iret_adopt_fmp := NONE|> in
-    inline_caller_data UNIV {} d d /\
-    inline_fmp_result d.vs_fmp (IntRet ir u) /\
-    inline_clone_exit "" {} {} UNIV [] d ret ir u (OK (jump_to ret u)) /\
-    bind_outputs [] [] (adopt_return_fmp ir (merge_callee_state d u)) = SOME d /\
-    inline_caller_bookkeeping d (jump_to ret u) /\
-    ~(inline_caller_data UNIV {} d (jump_to ret u))
+Theorem inline_caller_data_return_execution:
+  inline_caller_data N opaque_caller c d /\
+  exec_block fuel ctx bb d = OK v /\ ~d.vs_halted /\ ~v.vs_halted /\
+  inline_clone_exit p V opaque P outs c ret ir u (OK v) /\
+  (N DIFF opaque_caller) SUBSET P /\
+  inline_fmp_result c.vs_fmp (IntRet ir u) /\
+  bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state c u)) = SOME w ==>
+  inline_caller_data N opaque_caller w v
 Proof
-  gen_tac >> simp_tac (srw_ss()) [LET_THM] >>
-  simp[inline_caller_data_def, inline_caller_bookkeeping_def,
-       inline_fmp_result_def, inline_clone_exit_def,
-       bind_outputs_def, adopt_return_fmp_def, merge_callee_state_def,
-       jump_to_def, init_venom_state_def] >>
-  reverse conj_tac
-  >- simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def] >>
-  qexists `init_venom_state "" with vs_code := [0w]` >>
-  simp[inline_opaque_frame_rel_def, inline_frame_rel_def,
-       inline_shared_frame_def, stateFrameTheory.execution_frame_def,
-       lookup_var_def, init_venom_state_def]
+  strip_tac >> irule inline_caller_data_return >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[inline_caller_residual_exec_block,
+            inline_caller_bookkeeping_exec_block, inline_caller_bookkeeping_refl]
 QED
