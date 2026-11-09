@@ -2,7 +2,7 @@
    Helpers: equality of relative memory windows transports recursive layouts. *)
 Theory memoryValueRelocation
 Ancestors
-  memoryValueDefs memoryValueFrame valueEncoding valueEncodingProofs
+  valueEncodingDefs memoryValueDefs memoryValueFrame valueEncoding valueEncodingProofs
   memoryReadProps venomState list rich_list arithmetic pair
 
 Definition memory_window_equiv_def:

@@ -3,7 +3,7 @@
    length. This is the footprint frame used by ABI buffer construction. *)
 Theory memoryReadProps
 Ancestors
-  valueEncoding valueEncodingProps valueEncodingProofs venomState
+  valueEncodingDefs valueEncoding valueEncodingProps valueEncodingProofs venomState
   venomExecSemantics venomMemProps list rich_list arithmetic
 
 Theorem read_memory_eq_mem_bytes_at:

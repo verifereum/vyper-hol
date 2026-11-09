@@ -2,7 +2,7 @@
    and miss the output; no exact allocation trace or native path is used. *)
 Theory logSourceFrame
 Ancestors
-  logDataPacking sourceLogFrames sourceMemoryFrames sourceValueFrames
+  loweringStateRelDefs logDataPacking sourceLogFrames sourceMemoryFrames sourceValueFrames
   localPtrsProps memoryValueFrame memoryValueTyping abiFieldOperands
   abiBufferAllocationPath allocationGrowth abiStateFrame memoryValueSnapshot
   compileEnv vyperTypeEnv vyperTypeInvariants vyperState venomState venomMemDefs valueLoadProps

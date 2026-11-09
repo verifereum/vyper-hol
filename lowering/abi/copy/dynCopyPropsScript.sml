@@ -2,7 +2,7 @@
    capacity while preserving every live typed element and operand frames. *)
 Theory dynCopyProps
 Ancestors
-  typedCopyStateFrame dynCopyCode dynCopyExec dynCopyMemory dynCopyFrame abiBytestringCode memoryValueDefs
+  valueEncodingDefs typedCopyStateFrame dynCopyCode dynCopyExec dynCopyMemory dynCopyFrame abiBytestringCode memoryValueDefs
   memoryValueTyping memoryValueFrame valueLoadProps valueEncoding valueEncodingProps
   vyperValue vyperTyping compileEnv context exprLoweringProps
   fragBlockPath fragExec instIdxIndep venomState list words arithmetic

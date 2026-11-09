@@ -2,7 +2,7 @@
    Empty payloads impose no pointer-range condition and preserve all reads. *)
 Theory abiStaticFieldMemory
 Ancestors
-  abiFieldBytesPath abiFieldLayoutDefs abiMemoryFrame memoryReadProps
+  loweringStateRelDefs abiFieldBytesPath abiFieldLayoutDefs abiMemoryFrame memoryReadProps
   compileEnv venomState list words arithmetic
 
 Theorem abi_static_field_head_separation:

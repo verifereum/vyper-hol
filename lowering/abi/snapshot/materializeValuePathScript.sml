@@ -3,7 +3,7 @@
    Helpers describe the exact runtime state for both copy strategies. *)
 Theory materializeValuePath
 Ancestors
-  memorySnapshotFrame bytesSnapshotProps bytesSnapshotCode bytesSnapshotExec
+  loweringStateRelDefs memorySnapshotFrame bytesSnapshotProps bytesSnapshotCode bytesSnapshotExec
   memoryValueSnapshot memoryValueDefs memoryValueTyping valueLoadProps
   abiStateFrame abiAllocationFrame abiAllocatedWindows abiBufferAllocationPath
   abiFieldOperands abiStaticLoopCode abiBytestringCode eventTopicValueProps

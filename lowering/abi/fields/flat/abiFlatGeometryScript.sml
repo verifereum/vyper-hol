@@ -2,7 +2,7 @@
    smaller head/tail geometry and covers its writes by two fixed arenas. *)
 Theory abiFlatGeometry
 Ancestors
-  abiFlatFieldsDefs abiStaticFieldStep abiBytesFieldReady abiFieldBytesPath
+  loweringStateRelDefs abiFlatFieldsDefs abiStaticFieldStep abiBytesFieldReady abiFieldBytesPath
   abiFieldMemory abiFieldLayoutDefs abiMemoryFrame abiMemoryFrameCover
   compileEnv venomState list pair words arithmetic
 

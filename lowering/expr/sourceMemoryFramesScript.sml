@@ -3,7 +3,7 @@
    Helpers separate external state, typed RAM and allocator backing. *)
 Theory sourceMemoryFrames
 Ancestors
-  allocationGrowth sourceValueFrames localPtrsProps valueLoadProps memoryValueTyping
+  loweringStateRelDefs allocationGrowth sourceValueFrames localPtrsProps valueLoadProps memoryValueTyping
   typedStoreFrames typedSArrayDynInvariant abiStateFrame abiFieldOperands
   compileEnv valueEncoding memoryValueDefs vyperTypeEnv vyperTypeInvariants
   venomState venomExecSemantics finite_map list words arithmetic

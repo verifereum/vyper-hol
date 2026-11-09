@@ -3,7 +3,7 @@
    Helpers expose the frame of a single emitted SSA assignment. *)
 Theory eventTopicOperands
 Ancestors
-  eventTopicCode eventTopicExecProps eventTopicValueProps eventTopicProps nameValueCode
+  valueEncodingDefs eventTopicCode eventTopicExecProps eventTopicValueProps eventTopicProps nameValueCode
   valueLoadProps valueEncoding valueEncodingProps vyperTyping vyperTypeSystem vyperValue byte
   abiFieldOperands abiStaticLoopCode context compileEnv exprLoweringProps emitHelperProps emitHelper
   venomExecSemantics venomState venomInst vyperEvent vfmState keccak words arithmetic

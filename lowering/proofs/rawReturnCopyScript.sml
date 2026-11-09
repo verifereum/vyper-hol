@@ -3,7 +3,7 @@
    MCOPY snapshots the source, so the boundary also covers overlapping ranges. *)
 Theory rawReturnCopy
 Ancestors
-  list arithmetic words
+  valueEncodingDefs list arithmetic words
   copyFwdEquiv allocaRemapDefs venomExecSemantics venomState
   valueEncoding valueEncodingProofs exprSimBufferStore vyperValue vyperAST vyperTyping
 

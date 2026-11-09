@@ -3,7 +3,7 @@
    This includes expression compilers which allocate and write RAM. *)
 Theory logArgumentWriteFrame
 Ancestors
-  typedLogArgs abiFieldValueFrame abiMemoryFrame memoryValueTyping
+  loweringStateRelDefs typedLogArgs abiFieldValueFrame abiMemoryFrame memoryValueTyping
   valueLoadProps valueEncoding compileEnv venomState list pair words
 Libs tautLib
 

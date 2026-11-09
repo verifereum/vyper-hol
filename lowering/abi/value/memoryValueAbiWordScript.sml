@@ -3,7 +3,7 @@
    length premise. Helper: base layouts survive appending zero bytes. *)
 Theory memoryValueAbiWord
 Ancestors
-  memoryValueDefs abiEncoderProps valueEncoding valueEncodingProofs
+  valueEncodingDefs memoryValueDefs abiEncoderProps valueEncoding valueEncodingProofs
   vyperABI vyperTyping compileEnv contractABI list rich_list arithmetic words
 
 Theorem val_in_memory_base_append_zero:

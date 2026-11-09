@@ -4,7 +4,7 @@
    Helper: log_non_indexed_values_select. *)
 Theory abiLogSourceEncoding
 Ancestors
-  abiFieldEncodingsList abiFieldEncodingDefs eventLogSplitProps e2eDefs sourceAbiTypingLists
+  loweringStateRelDefs abiFieldEncodingsList abiFieldEncodingDefs eventLogSplitProps e2eDefs sourceAbiTypingLists
   compileEnv vyperEvent vyperABI contractABI list words
 
 Theorem log_non_indexed_values_select:

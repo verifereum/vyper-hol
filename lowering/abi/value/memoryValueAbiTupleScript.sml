@@ -2,7 +2,7 @@
    Helpers: field layouts and field typing project to tuple layouts. *)
 Theory memoryValueAbiTuple
 Ancestors
-  memoryValueAbiArray memoryValueDefs sourceAbiArray valueEncoding
+  valueEncodingDefs memoryValueAbiArray memoryValueDefs sourceAbiArray valueEncoding
   vyperABI vyperValue vyperTyping contractABI
   list rich_list pair option arithmetic
 

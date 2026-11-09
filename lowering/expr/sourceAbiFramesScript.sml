@@ -3,7 +3,7 @@
    allocation growth from execution, including successful internal calls. *)
 Theory sourceAbiFrames
 Ancestors
-  sourceMemoryFrames sourceValueFrames sourceLogFrames allocationPathGrowth allocationGrowth localPtrsProps valueLoadProps
+  loweringStateRelDefs sourceMemoryFrames sourceValueFrames sourceLogFrames allocationPathGrowth allocationGrowth localPtrsProps valueLoadProps
   abiFieldValueFrame abiMemoryFrame abiStateFrame abiFieldOperands memoryValueTyping
   compileEnv valueEncoding vyperTypeEnv vyperTypeInvariants vyperState
   fragBlockPath venomState list pair words

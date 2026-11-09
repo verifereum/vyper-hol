@@ -3,7 +3,7 @@
    fixed memory locations use the compiler's static-memory bound. *)
 Theory sourceMemorySeparation
 Ancestors
-  sourceMemoryFrames nameLoweringProps localPtrsProps memoryValueSnapshot
+  loweringStateRelDefs sourceMemoryFrames nameLoweringProps localPtrsProps memoryValueSnapshot
   abiFieldOperands abiStaticLoopCode abiAllocationFrame
   compileEnv valueEncoding venomMemDefs venomState venomInst finite_map words arithmetic
 

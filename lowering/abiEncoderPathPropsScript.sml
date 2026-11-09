@@ -3,7 +3,7 @@
    These are base cases for encoding aggregates across generated blocks. *)
 Theory abiEncoderPathProps
 Ancestors
-  fragBlockPath fragExec abiEncoder abiEncoderProps context compileEnv
+  loweringStateRelDefs fragBlockPath fragExec abiEncoder abiEncoderProps context compileEnv
   exprLoweringProps emitHelper emitHelperProps instIdxIndep
   venomExecSemantics venomState venomInst list rich_list words abiEncoderLeafRaw
 Libs pairLib wordsLib

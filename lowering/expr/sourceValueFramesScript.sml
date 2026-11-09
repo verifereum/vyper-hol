@@ -3,7 +3,7 @@
    bindings even when unrelated generated variables are overwritten. *)
 Theory sourceValueFrames
 Ancestors
-  nameLoweringProps localPtrsProps valueLoadProps eventTopicExecProps
+  loweringStateRelDefs nameLoweringProps localPtrsProps valueLoadProps eventTopicExecProps
   compileEnv valueEncoding exprLoweringProps instIdxIndep abiFieldOperands
   venomState venomExecSemantics
 

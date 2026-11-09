@@ -1,7 +1,7 @@
 (* Word and fixed-copy encoders under enclosing variable freshness. *)
 Theory abiEncoderReentryLeaves
 Ancestors
-  abiDecoderRange abiEncoderLeaves abiEncoderInput abiEncoderWrites abiEncoderBytes abiEncoderBytesPrefix
+  loweringStateRelDefs abiDecoderRange abiEncoderLeaves abiEncoderInput abiEncoderWrites abiEncoderBytes abiEncoderBytesPrefix
   abiEncoderMemory abiBuiltinPrefix abiDecoderArrayHeader abiDecoderDynamicLoopSetup
   abiDecoderReentry abiDecoderContract abiDecoderGuards abiEncoder emitHelperProps
   exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps contractABI

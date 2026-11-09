@@ -4,7 +4,7 @@
    Helpers bound static MemLocs below fresh and cached profile slots. *)
 Theory sourceAllocationPrivacy
 Ancestors
-  sourceMemoryFrames sourceAbiFrames sourceBufferFrames allocationGrowth localPtrsProps nameLoweringProps
+  loweringStateRelDefs sourceMemoryFrames sourceAbiFrames sourceBufferFrames allocationGrowth localPtrsProps nameLoweringProps
   abiAllocationWindows abiAllocatedWindows abiAllocationFrame memoryValueSnapshot
   compileEnv venomState venomMemDefs finite_map list pair words arithmetic
 

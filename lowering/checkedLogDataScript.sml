@@ -5,7 +5,7 @@
    proved by logDataPacking; source events are the interpreter's real events. *)
 Theory checkedLogData
 Ancestors
-  checkedLogMetadata checkedLogDataEncoding logDataPacking logSourceFrame
+  loweringStateRelDefs checkedLogMetadata checkedLogDataEncoding logDataPacking logSourceFrame
   eventLogSourceLookup eventLogSplitProps e2eDefs abiLogSourceEncoding abiLogStmtCode
   sourceAbiTypingLists sourceLogFrames sourceMemoryFrames sourceValueFrames
   typedCopyProducer abiTypeShape abiLogPackingReady abiBufferAllocationPath abiBufferAllocationCode

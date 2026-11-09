@@ -5,7 +5,7 @@
    Resources are the canonical enc_pre reservation, NOT an actual-ALLOCA ledger. *)
 Theory logAbiEncoder
 Ancestors
-  abiEncoderFragment abiEncoderProps abiLogCode abiEncoderStructure
+  valueEncodingDefs abiEncoderFragment abiEncoderProps abiLogCode abiEncoderStructure
   eventEmitProps emitHelperProps emitHelper compileEnv fragExec
   venomState venomExecSemantics venomInst venomMemDefs
   valueEncoding vyperABI vyperTyping contractABI list rich_list words

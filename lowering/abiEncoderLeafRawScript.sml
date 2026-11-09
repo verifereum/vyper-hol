@@ -2,7 +2,7 @@
    No dependency on recursive encoder correctness. *)
 Theory abiEncoderLeafRaw
 Ancestors
-  abiEncoder context compileEnv exprLoweringProps emitHelper emitHelperProps
+  loweringStateRelDefs abiEncoder context compileEnv exprLoweringProps emitHelper emitHelperProps
   venomExecSemantics venomState venomInst list rich_list words
 Libs pairLib wordsLib
 

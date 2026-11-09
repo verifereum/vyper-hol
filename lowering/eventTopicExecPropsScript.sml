@@ -5,7 +5,7 @@
    Helpers give an exact frame for instructions that only assign an SSA value. *)
 Theory eventTopicExecProps
 Ancestors
-  context compileEnv exprLoweringProps emitHelperProps emitHelper
+  valueEncodingDefs context compileEnv exprLoweringProps emitHelperProps emitHelper
   venomExecSemantics venomState venomInst vyperEvent vyperValue vfmState
   keccak ASCIInumbers valueEncoding byte words eventTopicProps
 Libs wordsLib

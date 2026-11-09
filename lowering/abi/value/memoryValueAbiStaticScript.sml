@@ -3,7 +3,7 @@
    scalar, array, tuple and struct cases by type-value induction. *)
 Theory memoryValueAbiStatic
 Ancestors
-  typeValueInduction
+  valueEncodingDefs typeValueInduction
   memoryValueAbiWord memoryValueAbiArray memoryValueAbiTuple memoryValueDefs
   sourceAbiArray valueEncoding compileEnv vyperABI vyperValue vyperTyping
   vyperTypeValues vyperTypeABI vyperTypeDefaults contractABI

@@ -3,7 +3,7 @@
    event. The final composition applies to effectful argument evaluations too. *)
 Theory sourceLogFrames
 Ancestors
-  sourceMemoryFrames sourceValueFrames allocationGrowth typedCopyStateFrame
+  loweringStateRelDefs sourceMemoryFrames sourceValueFrames allocationGrowth typedCopyStateFrame
   abiStateFrame abiFieldOperands compileEnv valueEncoding
   vyperInterpreter vyperState vyperTypeInvariants vyperContext vyperEvent
   fragBlockPath venomExecSemantics venomState list words

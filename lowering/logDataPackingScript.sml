@@ -6,7 +6,7 @@
    Helpers expose allocation, typed RAM and the public preservation frame. *)
 Theory logDataPacking
 Ancestors
-  vyperEventArgCompat
+  loweringStateRelDefs vyperEventArgCompat
   typeValueInduction
   logAbiEncoder abiLogPackingState abiBufferAllocationPath abiBufferAllocationCode abiLogReady
   abiLogPackingReady typedCopyStateFrame abiFieldOperands abiStaticLoopCode

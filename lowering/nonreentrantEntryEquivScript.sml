@@ -3,7 +3,7 @@
    result also applies inside internal-call frames and deployment contexts. *)
 Theory nonreentrantEntryEquiv
 Ancestors
-  e2eDefs nonreentrantEquiv transientLockFrameProps
+  loweringStateRelDefs e2eDefs nonreentrantEquiv transientLockFrameProps
   vyperTypeContract vyperInterpreter vyperState
   compileEnv context venomState exprLoweringProps
 

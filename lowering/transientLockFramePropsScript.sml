@@ -1,7 +1,7 @@
 (* Live local buffers and fresh SSA registers survive the transient guard. *)
 Theory transientLockFrameProps
 Ancestors
-  transientLockProps localPtrsProps emitHelperProps exprLoweringProps
+  loweringStateRelDefs transientLockProps localPtrsProps emitHelperProps exprLoweringProps
   compileEnv context emitHelper venomState finite_map integer_word
 
 Theorem transient_lock_checked_local_ptrs:

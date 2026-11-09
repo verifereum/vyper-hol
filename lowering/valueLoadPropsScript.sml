@@ -3,7 +3,7 @@
    its typed memory representation. Fixed bytes retain their left alignment. *)
 Theory valueLoadProps
 Ancestors
-  compileEnv loweringStateRelDefs valueEncoding valueEncodingProps memoryValueDefs vyperValue vyperTyping venomState vyperLookup
+  valueEncodingDefs compileEnv loweringStateRelDefs valueEncoding valueEncodingProps memoryValueDefs vyperValue vyperTyping venomState vyperLookup
   vyperInterpreter vyperState
 Libs monadsyntax
 

@@ -3,7 +3,7 @@
    apart from the wrapper's two word stores and one generated variable. *)
 Theory abiChildRun
 Ancestors
-  abiAllocatorState
+  loweringStateRelDefs abiAllocatorState
   abiStateFrameOps abiStateFrame abiChildCode abiChildPrefix abiChildSuffix abiChildFrames abiChildStructure abiChildMemoryFrame abiMemoryFrame
   abiStaticLoopCode abiEncoderPathProps instIdxIndep fragExec fragBlockPath memoryReadProps memoryValueAbiExec
   compileEnv venomState venomExecSemantics list words arithmetic

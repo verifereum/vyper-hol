@@ -2,7 +2,7 @@
    head word and counter word. Prefix register writes preserve every read. *)
 Theory abiChildMemoryFrame
 Ancestors
-  abiMemoryFrame abiChildPrefix abiChildSuffix abiChildFrames abiBytestringMemory
+  loweringStateRelDefs abiMemoryFrame abiChildPrefix abiChildSuffix abiChildFrames abiBytestringMemory
   contractABI memoryReadProps compileEnv venomState list pair words arithmetic
 
 Theorem abi_child_prefix_read_memory:
