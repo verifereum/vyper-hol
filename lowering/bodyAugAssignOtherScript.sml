@@ -160,7 +160,7 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-Theorem augassign_rhs_pre[local]:
+Theorem augassign_rhs_pre:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
@@ -195,7 +195,7 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-Theorem augassign_toplevel_metadata[local]:
+Theorem augassign_toplevel_metadata:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\
@@ -287,7 +287,7 @@ Proof
             optionTheory.IS_SOME_EXISTS]
 QED
 
-Theorem augassign_toplevel_success[local]:
+Theorem augassign_toplevel_success:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\

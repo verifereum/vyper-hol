@@ -11,7 +11,7 @@ Theory bodyMemAugAssignPlace
 Ancestors
   bodyMemoryPreds supportedTargets targetPlaceSim targetPlaceSimMem
   augAssignPlaceMemoryTarget augAssignPlaceMemoryContinuation
-  augAssignPlaceSuffixMemory augAssignPlaceRhsContinuation
+  augAssignPlaceSuffixMemory augAssignPlaceRhsContinuation augAssignPlaceTopMemory
 
 Theorem body_augassign_place_mem_case:
   !cx ty t bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
