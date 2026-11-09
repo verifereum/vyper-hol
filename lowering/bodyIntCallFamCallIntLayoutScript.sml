@@ -1,0 +1,69 @@
+(* Layout facts for staging nested internal-call results. *)
+Theory bodyIntCallFamCallIntLayout
+Ancestors
+  bodyIntCallJointContract exprSimAggregateChildren exprSimPrecompiles
+
+(* Located annotations describe the semantic layout, not necessarily the
+   expression annotation used as the staging destination. *)
+Theorem intcall_located_layout:
+  vv_holds ce cx ty r (LocatedValue ann p) es s ==>
+  ann = ty \/ (is_bytestring_type ty /\ is_bytestring_type ann)
+Proof
+  simp[loweringPostsTheory.vv_holds_def] >> metis_tac[]
+QED
+
+(* A genuine aggregate widening is not a bytestring-compatible store.
+   This tests the type boundary only, not reachability of a complete run. *)
+Theorem intcall_aggregate_layout_probe:
+  ce.ce_func_return_type (nsid_to_string fid) =
+    ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) ==>
+  post_value_type ce
+    (Call (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2))
+      (IntCall fid) args drv) =
+    ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) /\
+  type_widens_to tenv
+    (ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2))
+    (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2)) /\
+  ~(ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2) =
+      ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) \/
+    (is_bytestring_type (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2)) /\
+     is_bytestring_type (ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2))))
+Proof
+  simp[loweringPostsTheory.post_value_type_def,
+       exprLoweringTheory.lowered_value_type_def,
+       compileEnvTheory.is_word_type_def,
+       compileEnvTheory.is_bytestring_type_def,
+       vyperTypeSystemTheory.type_widens_to_def,
+       vyperTypeSystemTheory.arg_type_fits_def,
+       vyperTypeSystemTheory.well_formed_type_def,
+       vyperValueTheory.evaluate_type_def,
+       wordsTheory.dimword_def, EVAL ``dimindex(:256)``] >> EVAL_TAC
+QED
+(* In the unequal aggregate-layout branch vv_own, rather than W, supplies
+   the allocation containing the entire source layout.  Site reuse is
+   harmless: the destination has a different compiler allocation id. *)
+Theorem intcall_owned_layout_separate:
+  vv_own ce cx ty a b es r (LocatedValue ann p) s /\
+  p.ptr_location = LocMemory /\
+  read_result cx r es = (INL v,es) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  ~is_bytestring_type ty /\ type_memory_size tv <> 0 /\
+  eval_operand p.ptr_operand s = SOME w /\
+  b.cs_next_id <= site /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry) /\
+  stmt_state_rel ctx func ce cx es u /\
+  FLOOKUP u.vs_allocas site = SOME (dst,sz) ==>
+  regions_disjoint (w2n w) (type_memory_size tv) dst sz
+Proof
+  strip_tac >>
+  `val_footprint tv v = type_memory_size tv` by
+    metis_tac[exprSimAggregateChildrenTheory.evaluated_nonbytes_footprint] >>
+  gvs[loweringPostsTheory.vv_own_def] >>
+  rename1 `FLOOKUP s.vs_allocas aid = SOME (src_base,src_cap)` >>
+  `FLOOKUP u.vs_allocas aid = SOME (src_base,src_cap)` by metis_tac[] >>
+  `aid <> site` by decide_tac >>
+  `regions_disjoint src_base src_cap dst sz` by
+    (irule exprSimPrecompilesTheory.state_allocations_disjoint >> metis_tac[]) >>
+  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED

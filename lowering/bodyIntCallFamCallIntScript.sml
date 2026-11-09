@@ -1,21 +1,9 @@
 (* Seam 2 joint induction, a family leaf of the call step: nested internal calls, under the call-graph descent premise. *)
 Theory bodyIntCallFamCallInt
 Ancestors
-  bodyIntCallJointContract bodyIntCallProducerOrder bodyIntCallJointCallCore
-  bodyIntCallFamCallIntCertificates bodyIntCallFamCallIntCertificateIntro
-  bodyIntCallFamCallIntTraverseInterfaces bodyIntCallFamCallIntTraversePost
-  bodyIntCallFamCallIntTraverseChild bodyIntCallFamCallIntTraverse
-  bodyIntCallFamCallIntStageStore bodyIntCallFamCallIntTransport
-  bodyIntCallFamCallIntTags bodyIntCallFamCallIntProvenance
-  bodyIntCallFamCallIntFlags bodyIntCallFamCallIntStageAdapters
-  bodyIntCallFamCallIntForcingFrames bodyIntCallFamCallIntForcingLocal
-  bodyIntCallFamCallIntFootprintFrame bodyIntCallFamCallIntImmutableFrame
-  bodyIntCallFamCallIntForcingTransport bodyIntCallFamCallIntStageInterface
-  bodyIntCallFamCallIntPureStageInterface bodyIntCallFamCallIntStageEffect
-  bodyIntCallFamCallIntCompletedEffect bodyIntCallFamCallIntStageAllocation
-  bodyIntCallFamCallIntAllocationGeometry bodyIntCallFamCallIntAllocationCertificates
-  bodyIntCallFamCallIntGuardedEffect bodyIntCallFamCallIntSourceTyping
-  bodyIntCallFamCallIntWordStage bodyIntCallFamCallIntAllocatedStage
+  bodyIntCallJointContract bodyIntCallSeamDefs bodyIntCallJointPackage
+  bodyIntCallJointCallCore bodyIntCallProducerOrder bodyIntCallSource
+  bodyIntCallFamCallIntEntry bodyIntCallFamCallIntReturn
 
 (* The packaging theorem quantifies over every frame at the selected owner;
    the graph induction premise supplies all of them at once. *)
@@ -50,71 +38,18 @@ Proof
   simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
-(* Located annotations describe the semantic layout, not necessarily the
-   expression annotation used as the staging destination. *)
-Theorem intcall_located_layout:
-  vv_holds ce cx ty r (LocatedValue ann p) es s ==>
-  ann = ty \/ (is_bytestring_type ty /\ is_bytestring_type ann)
-Proof
-  simp[loweringPostsTheory.vv_holds_def] >> metis_tac[]
-QED
-
-(* A genuine aggregate widening is not a bytestring-compatible store.
-   This tests the type boundary only, not reachability of a complete run. *)
-Theorem intcall_aggregate_layout_probe:
-  ce.ce_func_return_type (nsid_to_string fid) =
-    ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) ==>
-  post_value_type ce
-    (Call (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2))
-      (IntCall fid) args drv) =
-    ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) /\
-  type_widens_to tenv
-    (ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2))
-    (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2)) /\
-  ~(ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2) =
-      ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2) \/
-    (is_bytestring_type (ArrayT (BaseT (BytesT (Dynamic 64))) (Dynamic 2)) /\
-     is_bytestring_type (ArrayT (BaseT (BytesT (Dynamic 32))) (Dynamic 2))))
-Proof
-  simp[loweringPostsTheory.post_value_type_def,
-       exprLoweringTheory.lowered_value_type_def,
-       compileEnvTheory.is_word_type_def,
-       compileEnvTheory.is_bytestring_type_def,
-       vyperTypeSystemTheory.type_widens_to_def,
-       vyperTypeSystemTheory.arg_type_fits_def,
-       vyperTypeSystemTheory.well_formed_type_def,
-       vyperValueTheory.evaluate_type_def,
-       wordsTheory.dimword_def, EVAL ``dimindex(:256)``] >> EVAL_TAC
-QED
-(* In the unequal aggregate-layout branch vv_own, rather than W, supplies
-   the allocation containing the entire source layout.  Site reuse is
-   harmless: the destination has a different compiler allocation id. *)
-Theorem intcall_owned_layout_separate:
-  vv_own ce cx ty a b es r (LocatedValue ann p) s /\
-  p.ptr_location = LocMemory /\
-  read_result cx r es = (INL v,es) /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\
-  ~is_bytestring_type ty /\ type_memory_size tv <> 0 /\
-  eval_operand p.ptr_operand s = SOME w /\
-  b.cs_next_id <= site /\
-  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-    FLOOKUP u.vs_allocas aid = SOME entry) /\
-  stmt_state_rel ctx func ce cx es u /\
-  FLOOKUP u.vs_allocas site = SOME (dst,sz) ==>
-  regions_disjoint (w2n w) (type_memory_size tv) dst sz
+(* The callee's package env takes its module-level fields from the root
+   env, which agrees with every frame's env outside the locals. *)
+Theorem intcall_res_module_pins:
+  intcall_frame_ok fp /\ intcall_expr_res fp ce env es sa s ==>
+  cenv_module_pins fp.jc_tops ce
 Proof
   strip_tac >>
-  `val_footprint tv v = type_memory_size tv` by
-    metis_tac[exprSimAggregateChildrenTheory.evaluated_nonbytes_footprint] >>
-  gvs[loweringPostsTheory.vv_own_def] >>
-  rename1 `FLOOKUP s.vs_allocas aid = SOME (src_base,src_cap)` >>
-  `FLOOKUP u.vs_allocas aid = SOME (src_base,src_cap)` by metis_tac[] >>
-  `aid <> site` by decide_tac >>
-  `regions_disjoint src_base src_cap dst sz` by
-    (irule exprSimPrecompilesTheory.state_allocations_disjoint >> metis_tac[]) >>
-  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  fs[intcall_frame_ok_def, intcall_expr_res_def, bodySimTheory.same_frame_def] >>
+  qpat_x_assum `cenv_module_pins _ _` mp_tac >>
+  qpat_x_assum `_ = fp.jc_root_ce` (fn th => once_rewrite_tac[GSYM th]) >>
+  simp[cenv_module_pins_def]
 QED
-
 
 Theorem intcall_intcall_step:
   (!e'. expr_size e' < expr_size e ==>
@@ -130,5 +65,33 @@ Theorem intcall_intcall_step:
 Proof
   strip_tac >> reverse conj_tac
   >- (irule intcall_effect_map_producer >> metis_tac[]) >>
-  cheat
+  qpat_x_assum `e = _` SUBST_ALL_TAC >>
+  rename1 `Call ann (IntCall nsid) cargs dflt` >>
+  rewrite_tac[intcall_expr_producer_def] >> rpt gen_tac >> strip_tac >>
+  PairCases_on `nsid` >>
+  drule_all body_intcall_source_selection >> strip_tac >>
+  qpat_x_assum `nsid0 = NONE` SUBST_ALL_TAC >>
+  rename1 `IntCall (NONE,name)` >>
+  `cenv_module_pins fp.jc_tops ce` by metis_tac[intcall_res_module_pins] >>
+  `MEM (NONE,name) (int_calls_expr (Call ann (IntCall (NONE,name)) cargs dflt))`
+    by simp[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  drule_all_then strip_assume_tac intcall_nested_graph_producers >>
+  qspecl_then [`fp`,`ce`,`env`,`ann`,`name`,`cargs`,`dflt`,`ty`,`sa`,`sb`,
+               `vv`,`s`,`es`,`mut`,`args`,`ret`,`ss`,`rr`]
+    mp_tac intcall_nested_entry >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  `?rcn rbs pvs. ce.ce_func_info (nsid_to_string (NONE,name)) = (rcn,rbs,pvs)`
+    by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  qspecl_then [`fp`,`ce`,`env`,`ann`,`name`,`cargs`,`dflt`,`ty`,`sa`,`sb`,
+               `vv`,`s`,`es`,`mut`,`args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,
+               `es1`,`t`,`rcn`,`rbs`,`pvs`] mp_tac intcall_nested_return >>
+  impl_tac >- (
+    simp[] >> rpt strip_tac >>
+    qspecl_then [`fp.jc_edges`,`fp.jc_tops`,`fp.jc_ctx`,`fp.jc_func`,`ce`,
+                 `fp.jc_cx`,`env`,`name`,`cargs`,`sa`,`sb`,`vv`,`s`,`es`,`mut`,
+                 `args`,`ret`,`ss`,`rr`,`prev`,`penv`,`rtv`,`es1`,`t`,`callee`,
+                 `entered`,`rcn`,`rbs`,`pvs`] mp_tac intcall_callee_packaging >>
+    impl_tac >- fs[intcall_frame_ok_def] >>
+    disch_then irule >> metis_tac[]) >>
+  simp[]
 QED
