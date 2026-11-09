@@ -562,8 +562,8 @@ Theorem first_emission_lit_byte_offset[local]:
 Proof
   rpt gen_tac >> pure_rewrite_tac[contextTheory.compile_lit_byte_offset_def] >>
   IF_CASES_TAC >- metis_tac[first_emission_return] >>
-  Cases_on `op` >> pure_rewrite_tac[operand_case_def] >>
-  TRY (metis_tac[first_emission_return]) >>
+  Cases_on `op` >> pure_rewrite_tac[venomStateTheory.operand_case_def]
+  >~ [`comp_return (Lit _) _`] >- metis_tac[first_emission_return] >>
   rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[] >> metis_tac[]
 QED
 
@@ -662,9 +662,9 @@ Resume first_emission_store_slots_family[slots]:
       irule cs_appends_ignore_bind >> simp[cs_appends_return]) >>
   IF_CASES_TAC
   >- (rpt strip_tac >> drule_at Any (cj 2 first_emission_emit_helpers) >> simp[] >> metis_tac[]) >>
-  Cases_on `ty` >> pure_rewrite_tac[type_case_def] >> BETA_TAC
+  Cases_on `ty` >> pure_rewrite_tac[vyperASTTheory.type_case_def] >> BETA_TAC
   >~ [`ArrayT elem bd`]
-  >- (Cases_on `bd` >> pure_rewrite_tac[bound_case_def] >> BETA_TAC
+  >- (Cases_on `bd` >> pure_rewrite_tac[vyperASTTheory.bound_case_def] >> BETA_TAC
       >- (ho_match_mp_tac first_emission_strong >>
           ho_match_mp_tac first_emission_strong_bind >> conj_tac
           >- (rpt strip_tac >> drule_at Any (cj 3 first_emission_emit_helpers) >> simp[]) >>
