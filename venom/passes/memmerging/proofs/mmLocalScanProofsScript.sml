@@ -5678,6 +5678,66 @@ Proof
   strip_tac >> simp[]
 QED
 
+Theorem mm_local_capture_log_canonical[local]:
+  !js ws. LIST_REL (\j w. cap j = SOME w) js ws ==>
+    ws = MAP (THE o cap) js /\ EVERY (\j. IS_SOME (cap j)) js
+Proof
+  Induct_on `js` >> Cases_on `ws` >> simp[] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_pending_partition[local]:
+  mm_local_pending cap js s t /\
+  (!j k d bs a cs. MEM j js /\ P j /\ MEM k js /\ ~P k /\
+    cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
+    d + LENGTH bs <= a \/ a + LENGTH cs <= d) ==>
+  mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t
+Proof
+  simp[mm_local_pending_def] >> rpt strip_tac >>
+  drule mm_local_capture_log_canonical >> strip_tac >> gvs[] >>
+  qexists `MAP (THE o cap) (FILTER P js ++ FILTER (\j. ~P j) js)` >>
+  conj_tac
+  >- (simp[LIST_REL_MAP2] >> irule EVERY2_refl >>
+      gvs[EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
+      `IS_SOME (cap x)` by metis_tac[] >>
+      Cases_on `cap x` >> gvs[]) >>
+  `FOLDL (\st j. write_memory_with_expansion
+      (FST (THE (cap j))) (SND (THE (cap j))) st) t js =
+    FOLDL (\st j. write_memory_with_expansion
+      (FST (THE (cap j))) (SND (THE (cap j))) st)
+      (FOLDL (\st j. write_memory_with_expansion
+        (FST (THE (cap j))) (SND (THE (cap j))) st) t (FILTER P js))
+      (FILTER (\j. ~P j) js)` by
+    (irule (SRULE [combinTheory.o_DEF]
+      (Q.INST [`wr` |-> `THE o cap`] mm_local_write_log_partition)) >>
+      rpt strip_tac >>
+      `IS_SOME (cap j) /\ IS_SOME (cap k)` by gvs[EVERY_MEM] >>
+      Cases_on `cap j` >> Cases_on `cap k` >> gvs[] >>
+      PairCases_on `x` >> PairCases_on `x'` >> gvs[] >> metis_tac[]) >>
+  gvs[FOLDL_MAP, FOLDL_APPEND, pairTheory.UNCURRY, combinTheory.o_DEF]
+QED
+
+Theorem mm_local_pending_discharge_filter[local]:
+  mm_local_pending cap js s t /\
+  (!j k d bs a cs. MEM j js /\ P j /\ MEM k js /\ ~P k /\
+    cap j = SOME (d,bs) /\ cap k = SOME (a,cs) ==>
+    d + LENGTH bs <= a \/ a + LENGTH cs <= d) /\
+  LIST_REL (\j w. cap j = SOME w) (FILTER P js) old /\
+  LIST_REL (\j w. cap j = SOME w) (FILTER (\j. ~P j) js) rest /\
+  (!v. write_memory_with_expansion d payload
+    (FOLDL (\st (a,bs). write_memory_with_expansion a bs st) v old) =
+    write_memory_with_expansion dst merged v) /\
+  EVERY (\(a,bs). a + LENGTH bs <= d \/ d + LENGTH payload <= a) rest /\
+  s'.vs_memory = (write_memory_with_expansion d payload s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
+  mm_local_pending cap (FILTER (\j. ~P j) js) s' t'
+Proof
+  strip_tac >>
+  `mm_local_pending cap (FILTER P js ++ FILTER (\j. ~P j) js) s t` by
+    (irule mm_local_pending_partition >> simp[] >> metis_tac[]) >>
+  drule_all mm_local_pending_discharge_prefix >> simp[]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
