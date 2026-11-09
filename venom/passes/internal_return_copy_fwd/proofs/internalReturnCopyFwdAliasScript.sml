@@ -1031,3 +1031,59 @@ Proof
        (qspecl_then [`EL i bb.bb_instructions`, `v`] mp_tac) >> simp[]) >>
   `j = i` by metis_tac[inst_ids_el_eq] >> gvs[]
 QED
+
+Theorem ircf_redirect_plan_cases:
+  ircf_block_plan fn bb bb2 ==>
+  ircf_redirect fn bb bb2 v = v \/
+  ?k d r sz. ircf_redirect fn bb bb2 v = r /\
+    ircf_fwd_ok fn bb k d r sz /\ ircf_alias fn d v
+Proof
+  strip_tac >> simp[ircf_redirect_def] >> IF_CASES_TAC
+  >- (disj2_tac >> SELECT_ELIM_TAC >> conj_tac
+      >- metis_tac[] >>
+      rpt strip_tac >> gvs[ircf_block_plan_def] >>
+      metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
+  simp[]
+QED
+
+Theorem ircf_redirect_revert_operand_available:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  ircf_block_plan fn bb bb2 /\
+  i = s.vs_inst_idx /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = REVERT /\
+  MEM op (EL i bb.bb_instructions).inst_operands /\
+  IS_SOME (eval_operand op s) ==>
+  IS_SOME (eval_operand (ircf_redirect_op fn bb bb2 op) s)
+Proof
+  strip_tac >> Cases_on `op` >> simp[ircf_redirect_op_def] >>
+  rename1 `MEM (Var v) _` >>
+  drule ircf_redirect_plan_cases >>
+  disch_then (qspec_then `v` strip_assume_tac)
+  >- gvs[eval_operand_def] >>
+  `fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks` by
+    metis_tac[wf_function_def, lookup_block_MEM] >>
+  `k < i` by metis_tac[ircf_fwd_revert_use_later] >>
+  `k <= s.vs_inst_idx` by simp[] >>
+  drule_all ircf_fwd_source_root_later >> strip_tac >>
+  gvs[eval_operand_def]
+QED
+
+Theorem ircf_redirect_reachable_revert_operand:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  ircf_block_plan fn bb bb2 /\
+  i = s.vs_inst_idx /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = REVERT /\
+  MEM op (EL i bb.bb_instructions).inst_operands /\
+  IS_SOME (eval_operand op s) ==>
+  IS_SOME (eval_operand (ircf_redirect_op fn bb bb2 op) s)
+Proof
+  strip_tac >> drule_all ircf_alias_frames_reachable >> strip_tac >>
+  drule ircf_alias_frames_current >> strip_tac >>
+  irule ircf_redirect_revert_operand_available >>
+  metis_tac[EVERY_MEM]
+QED
