@@ -6190,6 +6190,60 @@ Proof
   rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem mm_local_indexed_bulk_pending_birth[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ mm_local_history is H (SUC n) /\ n < LENGTH is /\
+  (EL n is).inst_opcode = MCOPY /\
+  (EL n is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [(EL n is).inst_id] |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c /\
+  mm_local_pending (mm_local_write_capture is H (SUC n)) js (H n) t /\
+  (!j. MEM j js ==> j < n /\ ?h g r d bs.
+    mm_local_write_capture is H (SUC n) j = SOME (d,bs) /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n <= r /\ r < LENGTH is /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
+  read_memory (w2n src) (w2n len) (H n) = read_memory (w2n src) (w2n len) t /\
+  mm_local_pending (mm_local_write_capture is H (SUC n)) (js ++ [n]) (H (SUC n)) t
+Proof
+  strip_tac >>
+  `(scan_inst (dfg_build_function fn0) Mem2Mem ss (EL n is)).ss_flushed = hs.ss_flushed` by
+    simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def,
+      scan_bulk_copy_def, operand_lit_val_def, mode_allows_overlap_def] >>
+  `!j d bs. MEM j js /\ mm_local_write_capture is H (SUC n) j = SOME (d,bs) ==>
+    w2n len = 0 \/ bs = [] \/ w2n src + w2n len <= d \/ d + LENGTH bs <= w2n src` by
+    (rpt strip_tac >>
+     qpat_x_assum `!j. MEM j js ==> _` (qspec_then `j` mp_tac) >>
+     impl_tac >- simp[] >> strip_tac >>
+     `~copy_overwrites h (copy_src_interval c)` by
+       (drule_all (REWRITE_RULE [] (Q.INST [`i` |-> `EL n is`, `w` |-> `EL j is`]
+          (SPEC_ALL mm_local_indexed_future_hazard))) >> simp[]) >>
+     drule (INST_TYPE [alpha |-> ``:word8``] mm_local_capture_source_exclusion) >>
+     disch_then (qspecl_then [`d`, `bs`] mp_tac) >> gvs[] >> metis_tac[]) >>
+  `mm_local_write_capture is H (SUC n) n =
+    SOME (w2n dst,read_memory (w2n src) (w2n len) (H n)) /\
+    LENGTH (read_memory (w2n src) (w2n len) (H n)) = w2n len` by
+    (irule mm_local_write_capture_copy >> simp[]) >>
+  ` (H (SUC n)).vs_memory =
+    (write_memory_with_expansion (w2n dst)
+      (read_memory (w2n src) (w2n len) (H n)) (H n)).vs_memory` by
+    (drule_all mm_local_write_capture_sound >> simp[]) >>
+  qpat_assum `mm_local_pending _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_def]) >>
+  `EVERY (\(d,bs). w2n len = 0 \/ bs = [] \/
+    w2n src + w2n len <= d \/ d + LENGTH bs <= w2n src) ws` by
+    (simp[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+     drule_all LIST_REL_MEM_IMP_R >> strip_tac >> gvs[] >> metis_tac[]) >>
+  metis_tac[mm_local_pending_copy_birth]
+QED
+
 Theorem mm_local_two_copy_read[local]:
   mm_local_history is H (n+2) /\
   (EL n is).inst_opcode = MCOPY /\
