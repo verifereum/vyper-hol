@@ -157,6 +157,105 @@ Proof
        venomInstTheory.mk_inst_def]
 QED
 
+Theorem materialize_zero_slot_shape:
+  ~is_word_type ty /\ type_memory_bytes ce ty = 0 /\
+  ~is_word_type vty /\ type_memory_bytes ce vty = 0 /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) ==>
+  compile_materialize_vv ce ty (LocatedValue vty p) =
+    comp_bind (compile_alloc_buffer 0)
+      (\tmp. comp_bind (compile_alloc_buffer 0)
+        (\src. comp_bind
+          (compile_word_copy_loop p.ptr_operand src.buf_operand 0
+            p.ptr_location LocMemory F)
+          (\u. comp_return tmp.buf_operand)))
+Proof
+  strip_tac >>
+  simp[exprLoweringTheory.compile_materialize_vv_def,
+       exprLoweringTheory.unwrap_value_def,
+       contextTheory.compile_ensure_in_memory_def,
+       contextTheory.compile_storage_to_memory_def,
+       contextTheory.compile_transient_to_memory_def,
+       materialize_zero_store, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, FUN_EQ_THM] >>
+  gen_tac >> Cases_on `compile_alloc_buffer 0 x` >> simp[] >>
+  rename1 `compile_alloc_buffer 0 x = (buf,sm)` >>
+  Cases_on `compile_alloc_buffer 0 sm` >> simp[] >>
+  rename1 `compile_alloc_buffer 0 sm = (src,sn)` >>
+  Cases_on `compile_word_copy_loop p.ptr_operand src.buf_operand 0
+    p.ptr_location LocMemory F sn` >> gvs[]
+QED
+
+Theorem materialize_zero_loop_test_edge:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\ lookup_var ctr s = SOME 0w /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := s.vs_current_bb;
+      bb_instructions := [mk_inst id EQ [Var ctr; Lit 0w] [done];
+        mk_inst (id+1) JNZ [Var done; Label exit; Label body_lbl] []]|> ==>
+  fragGasPath$gas_path_edge ctx fn s 0
+    (OK ((update_var done 1w s) with vs_inst_idx := 1))
+Proof
+  strip_tac >>
+  simp[fragGasPathTheory.gas_path_edge_def] >> qexists_tac `0` >>
+  simp[venomInstTheory.get_instruction_def] >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+       gasCountTheory.gas_count_step_def] >>
+  disj1_tac >> qexists_tac `update_var done 1w s` >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def, venomExecSemanticsTheory.bool_to_word_def,
+       venomStateTheory.update_var_def]
+QED
+
+Theorem materialize_zero_loop_exit_edge:
+  ~s.vs_halted /\ s.vs_inst_idx = 1 /\ lookup_var done s = SOME 1w /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := s.vs_current_bb;
+      bb_instructions := [mk_inst id EQ [Var ctr; Lit 0w] [done];
+        mk_inst (id+1) JNZ [Var done; Label exit; Label body_lbl] []]|> ==>
+  fragGasPath$gas_path_edge ctx fn s 0 (OK (jump_to exit s))
+Proof
+  strip_tac >> simp[fragGasPathTheory.gas_path_edge_def] >>
+  qexists_tac `0` >>
+  simp[venomInstTheory.get_instruction_def] >>
+  simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def,
+       gasCountTheory.gas_count_step_def] >>
+  disj2_tac >> disj1_tac >> qexists_tac `exit` >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_def,
+       venomStateTheory.eval_operand_def]
+QED
+
+Theorem materialize_zero_loop_test_path:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\ lookup_var ctr s = SOME 0w /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := s.vs_current_bb;
+      bb_instructions := [mk_inst id EQ [Var ctr; Lit 0w] [done];
+        mk_inst (id+1) JNZ [Var done; Label exit; Label body_lbl] []]|> ==>
+  gas_marked_path F ctx fn s 0 (OK (jump_to exit (update_var done 1w s)))
+Proof
+  strip_tac >>
+  `fragGasPath$gas_path_edge ctx fn s 0
+    (OK ((update_var done 1w s) with vs_inst_idx := 1))` by
+    (irule materialize_zero_loop_test_edge >> metis_tac[]) >>
+  `fragGasPath$gas_path_edge ctx fn
+    ((update_var done 1w s) with vs_inst_idx := 1) 0
+    (OK (jump_to exit ((update_var done 1w s) with vs_inst_idx := 1)))` by
+    (irule materialize_zero_loop_exit_edge >>
+     simp[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+  `~(jump_to exit (update_var done 1w s)).vs_halted` by
+    simp[venomStateTheory.jump_to_def, venomStateTheory.update_var_def] >>
+  gvs[venomStateTheory.jump_to_def] >>
+  simp[fragGasModeTheory.gas_marked_path_def] >>
+  irule (cj 2 fragGasPathTheory.gas_path_rules |> SPEC_ALL |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+  qexists_tac `(update_var done 1w s) with vs_inst_idx := 1` >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule (cj 2 fragGasPathTheory.gas_path_rules |> SPEC_ALL |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SIMP_RULE (srw_ss()) []) >>
+  goal_assum (drule_at Any) >>
+  irule (cj 1 fragGasPathTheory.gas_path_rules) >> simp[]
+QED
+
 (* A zero-sized destination can leave the unwrap loop's exit empty. *)
 Theorem materialize_zero_destination_alias_probe:
   let sa = initial_compile_state "@wcopy_exit_2";
