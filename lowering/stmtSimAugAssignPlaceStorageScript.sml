@@ -1407,7 +1407,7 @@ Proof
   simp[bind_assoc]
 QED
 
-Theorem aug_place_storage_write_gas_obs[local]:
+Theorem aug_place_storage_write_gas_obs:
   write_place cx (StoragePlace tr slot tv) v ee = (res,fin) ==>
   !gs. write_place cx (StoragePlace tr slot tv) v (ee with gas_obs := gs) =
     (res,fin with gas_obs := gs)
@@ -1499,7 +1499,7 @@ Proof
   Cases_on `y` >> gvs[vyperExprNoControlTheory.no_control_exc_def, stmt_res_ok_def, expr_res_ok_def]
 QED
 
-Theorem aug_place_storage_binop_admissible[local]:
+Theorem aug_place_storage_binop_admissible:
   gas_admissible
     (bind (eval_expr cx e) (\raw. bind (read_result cx raw)
       (\v. bind (lift_sum (evaluate_binop
