@@ -80,11 +80,9 @@ Proof
   `mload (w2n p) sf' = n2w (j+1)` by
     (`mload (w2n p) sf' = mload (w2n p) (mstore (w2n p) (n2w (j+1)) sf)` by
        simp[mload_def] >> simp[mload_mstore_same]) >>
-  simp[jump_to_def, mload_def, ptr_covers_def, lookup_var_def] >>
-  conj_tac >- fs[lookup_var_def] >>
+  simp[jump_to_def, lookup_var_def] >>
   conj_tac >- (gvs[ptr_covers_def, lookup_var_def] >> metis_tac[]) >>
   conj_tac >- gvs[mload_def] >>
-  conj_tac >- metis_tac[lookup_var_def] >>
   simp[mem_agree_outside_def] >> rpt strip_tac >>
   `mem_bytes_at i 1 (mstore (w2n p) (n2w (j+1)) sf).vs_memory =
    mem_bytes_at i 1 sf.vs_memory` by

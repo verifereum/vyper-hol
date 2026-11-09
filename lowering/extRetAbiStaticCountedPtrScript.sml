@@ -142,27 +142,19 @@ Theorem compile_abi_static_slice_ptr[local]:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> gvs[]
-  >- suspend "word"
-  >> suspend "copy"
-QED
-
-Resume compile_abi_static_slice_ptr[word]:
-  drule_all abi_static_word_path_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `mem_bytes_at (w2n a) 32 s.vs_memory = enc at av` by
-    (qpat_x_assum `!mem'. _ ==> _` (qspec_then `s.vs_memory` mp_tac) >>
-     simp[mem_agree_outside_def, abi_encoder_input_word_iff]) >>
-  `mem_bytes_at (w2n b) 32 (mstore (w2n b) (mload (w2n a) s) s).vs_memory =
-   mem_bytes_at (w2n a) 32 s.vs_memory` by
-    (irule mload_eq_mem_bytes_at_eq >>
-     rewrite_tac[GSYM mem_word_at_eq_mload, mstore_mem_word_at_same]) >>
-  qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[] >>
-  simp[mem_agree_outside_def] >> rpt strip_tac >>
-  irule mstore_mem_bytes_at_disjoint >> decide_tac
-QED
-
-Resume compile_abi_static_slice_ptr[copy]:
-  drule_all abi_static_copy_path_ptr >>
+  >- (drule_all abi_static_word_path_ptr >>
+      disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+      `mem_bytes_at (w2n a) 32 s.vs_memory = enc at av` by
+        (qpat_x_assum `!mem'. _ ==> _` (qspec_then `s.vs_memory` mp_tac) >>
+         simp[mem_agree_outside_def, abi_encoder_input_word_iff]) >>
+      `mem_bytes_at (w2n b) 32 (mstore (w2n b) (mload (w2n a) s) s).vs_memory =
+       mem_bytes_at (w2n a) 32 s.vs_memory` by
+        (irule mload_eq_mem_bytes_at_eq >>
+         rewrite_tac[GSYM mem_word_at_eq_mload, mstore_mem_word_at_same]) >>
+      qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[] >>
+      simp[mem_agree_outside_def] >> rpt strip_tac >>
+      irule mstore_mem_bytes_at_disjoint >> decide_tac)
+  >> drule_all abi_static_copy_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `mem_bytes_at (w2n a) n s.vs_memory = enc at av` by
     (qpat_x_assum `!mem'. _ ==> _` (qspec_then `s.vs_memory` mp_tac) >>
@@ -172,8 +164,6 @@ Resume compile_abi_static_slice_ptr[copy]:
   simp[mem_agree_outside_def] >> rpt strip_tac >>
   irule mcopy_mem_bytes_at_disjoint >> decide_tac
 QED
-
-Finalise compile_abi_static_slice_ptr
 
 Theorem compile_abi_encode_static_counted_ptr:
   ((ei = AbiPrimWord /\ n = 32) \/ ei = AbiCopy n) /\
@@ -214,7 +204,11 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- (gvs[ptr_covers_def] >> metis_tac[]) >>
   `mem_bytes_at (w2n a) cap sf.vs_memory = mem_bytes_at (w2n a) cap s.vs_memory` by
-    suspend "source_memory" >>
+    (irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >> rename1 `j < cap` >>
+     `~(w2n b <= w2n a+j /\ w2n a+j < w2n b+n)` by decide_tac >>
+     `mem_bytes_at (w2n a+j) 1 sf.vs_memory = mem_bytes_at (w2n a+j) 1 s.vs_memory` by
+       (gvs[mem_agree_outside_def] >> metis_tac[]) >>
+     pop_assum mp_tac >> simp[listTheory.LIST_EQ_REWRITE, EL_mem_bytes_at]) >>
   `!i. i < cap ==> (w2n a+i IN tnf.t_mem <=> w2n a+i IN tn.t_mem)` by
     (rpt strip_tac >> simp[] >> decide_tac) >>
   qpat_x_assum `tnf.t_mem = _` (fn th => rewrite_tac[GSYM th]) >>
@@ -223,15 +217,6 @@ Proof
   drule_all abi_encoder_input_mem_agree >> simp[]
 QED
 
-Resume compile_abi_encode_static_counted_ptr[source_memory]:
-  irule listTheory.LIST_EQ >> simp[] >> rpt strip_tac >> rename1 `j < cap` >>
-  `~(w2n b <= w2n a+j /\ w2n a+j < w2n b+n)` by decide_tac >>
-  `mem_bytes_at (w2n a+j) 1 sf.vs_memory = mem_bytes_at (w2n a+j) 1 s.vs_memory` by
-    (gvs[mem_agree_outside_def] >> metis_tac[]) >>
-  pop_assum mp_tac >> simp[listTheory.LIST_EQ_REWRITE, EL_mem_bytes_at]
-QED
-
-Finalise compile_abi_encode_static_counted_ptr
 
 Theorem compile_abi_encode_static_info_counted_ptr:
   ((ei = AbiPrimWord /\ n = 32) \/ ei = AbiCopy n) /\
