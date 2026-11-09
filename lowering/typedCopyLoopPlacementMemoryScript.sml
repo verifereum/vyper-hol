@@ -3,7 +3,7 @@ Theory typedCopyLoopPlacementMemory
 Ancestors typedCopyLoopLayoutPtr typedCopyArrayLoopMemory typedCopyBodyFrame
   exprOperandVar compileEnv ASCIInumbers arithmetic list exprLoweringProps
 
-Theorem typed_copy_loop_register_freshness[local]:
+Theorem typed_copy_loop_register_freshness:
   sc.cs_next_var = sa.cs_next_var + 1 /\
   sa.cs_next_var + 7 <= se.cs_next_var /\
   ctr = "%" ++ toString sa.cs_next_var /\
