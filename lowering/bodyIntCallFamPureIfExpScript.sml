@@ -3,7 +3,9 @@ Theory bodyIntCallFamPureIfExp
 Ancestors
   bodyIntCallJointContract exprSimIfExp bodyIntCallJointPureSuffix
   loweringPosts venomState venomExecSemantics finite_map context exprLowering vyperAST
-  exprSimAggregateChildren exprBopSimProps arithmetic
+  exprSimAggregateChildren exprBopSimProps arithmetic exprSimProps
+  exprSimWordArgs exprSimSubscriptArrayCompose exprSimAggregateSource
+  stmtSimAugAssignPlaceMemory gasSummary gasContext vyperState
 
 (* Assemble the ordinary forced post at the chosen forcing endpoint. *)
 Theorem vv_post_forcing_frames:
@@ -102,6 +104,75 @@ Proof
       rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   qpat_assum `post_value_type ce e = _` (fn th => rewrite_tac[GSYM th]) >>
   first_x_assum irule >> fs[vv_post_def]
+QED
+
+(* Source observations select the raw execution; forcing uses its exact endpoint. *)
+Theorem ifexp_protected_marked_unwrap:
+  post_value_type ce e = expr_type e /\
+  gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
+  vv_post ctx func ce cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
+  gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  unwrap_value ce vv sm = (op,sb) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  type_memory_bytes ce (post_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv < 2**64 /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sm /\ allocas_above lo s /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!q x. reserved q /\ q = Var x ==> not_fresh_at sm x) /\
+  (!p k. P p k ==> p+k <= lo) /\
+  (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+   ~is_bytestring_type (post_value_type ce e) /\
+   (case vv of StackValue _ _ => T | LocatedValue _ p => p.ptr_location = LocMemory) ==>
+   ?w a k. eval_operand (vv_operand vv) s = SOME w /\
+     a <= w2n w /\ w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+     (lo <= a \/ ?b z. staged b z /\ b <= a /\ a+k <= b+z)) /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?tr v q. gas_marked_exec F (ctx,func) (conditional_result cx raw)
+      (ee with gas_obs := [],s) [] (INL tr) (ee with gas_obs := []) (OK q) /\
+    read_result cx tr (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
+    expr_post ctx func ce cx e es sa sb s0 (ee with gas_obs := []) v op q /\
+    allocas_above lo q /\ s.vs_alloca_next <= q.vs_alloca_next /\
+    (!p k. P p k ==> mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory) /\
+    (!r. reserved r ==> eval_operand r q = eval_operand r s) /\
+    (post_value_type ce e <> NoneT /\ ~is_word_type (post_value_type ce e) /\
+     ~is_bytestring_type (post_value_type ce e) ==>
+     ?w a k. eval_operand op q = SOME w /\ a <= w2n w /\
+       w2n w + type_memory_size tv <= a+k /\ a+k < dimword (:256) /\
+       (lo <= a \/ ?b z. staged b z /\ b <= a /\ a+k <= b+z)) /\
+    ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
+    q.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  drule vv_post_materialises >> strip_tac >>
+  drule_all aug_place_marked_bind_tail >> disch_tac >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL raw,ee with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `~s.vs_halted` by
+    (irule aug_place_marked_path_not_halted >>
+     fs[gas_marked_exec_def] >> metis_tac[]) >>
+  `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
+    (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  Cases_on `conditional_result cx raw (ee with gas_obs := [])` >>
+  rename1 `conditional_result cx raw (ee with gas_obs := []) = (cr,ss)` >>
+  `expr_vv_res_ok cr` by
+    (qpat_x_assum `gas_admissible (conditional_result _ _) _ _` mp_tac >>
+     simp[gas_admissible_def] >> metis_tac[evaluation_state_component_equality]) >>
+  drule_all ifexp_arm_conditional_read >> strip_tac >> gvs[] >>
+  mp_tac (Q.INST [
+    `es` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+    `ee` |-> `ee with gas_obs := []`]
+    vv_post_protected_unwrap) >>
+  (impl_tac >- simp[vv_post_initial_gas]) >> strip_tac >>
+  qexistsl [`tv'`,`v`,`q`] >> gvs[expr_post_initial_gas] >>
+  simp[gas_marked_exec_def] >>
+  drule ifexp_arm_conditional_gas_obs >> simp[]
 QED
 
 (* The layout-copy alternative only arises for bytestrings. *)
