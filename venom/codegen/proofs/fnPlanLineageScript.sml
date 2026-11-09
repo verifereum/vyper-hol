@@ -4871,7 +4871,10 @@ Theorem lineage_dfs_join_physical_start_actual:
         native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
           (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
           (LENGTH sb.bb_instructions) xs qD k ops
-          (q with ps_stack := prefixD ++ q.ps_stack))
+          (q with ps_stack := prefixD ++ q.ps_stack) /\
+        (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+          (LENGTH (collect_phis sb.bb_instructions) + k)) ==>
+          MEM (Var v) q.ps_stack \/ Var v IN FDOM q.ps_spilled))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all lineage_dfs_join_ordinary_paired_interval_actual >>
@@ -4897,7 +4900,15 @@ Proof
   conj_tac >- (first_assum ACCEPT_TAC) >> conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- REFL_TAC >> conj_tac >- REFL_TAC >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
-  conj_tac >- suspend "block_equations" >> first_assum ACCEPT_TAC
+  conj_tac >- suspend "block_equations" >>
+  qpat_x_assum `p0 = _` kall_tac >>
+  gen_tac >> strip_tac >>
+  qpat_x_assum `!k. _ ==> ?ops q. _` (qspec_then `k` mp_tac) >>
+  asm_simp_tac bool_ss [] >> strip_tac >>
+  qexistsl_tac [`ops`,`q`] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >> suspend "core_coverage"
 QED
 
 Resume lineage_dfs_join_physical_start_actual[block_equations]:
@@ -4913,4 +4924,211 @@ Resume lineage_dfs_join_physical_start_actual[block_equations]:
   simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> simp[]
 QED
 
+Resume lineage_dfs_join_physical_start_actual[core_coverage]:
+  `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `fn_reachable fn sb.bb_label` by
+    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  `non_param_insts sb = sb.bb_instructions` by
+    (drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> simp[]) >>
+  qpat_x_assum `sb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
+  qpat_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _ p0 _ _ q`
+    (mp_then Any mp_tac fnPlanLineageEntryProductionTheory.native_inst_ops_prefix_erase) >>
+  disch_then (mp_then Any mp_tac
+    fnPlanLineageEntryProductionTheory.native_ordinary_interval_available) >>
+  disch_then (qspecl_then [`sb`,`LENGTH (collect_phis sb.bb_instructions)`] mp_tac) >>
+  simp[] >> gvs[]
+QED
+
 Finalise lineage_dfs_join_physical_start_actual
+
+Theorem lineage_dfs_join_preterminal_core_actual:
+  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD ==>
+  ?prefixL prefixD suffix phi_ops al p0 xs qL qD ops q.
+    p0 = psD with <|ps_stack := suffix; ps_alloc := al|> /\
+    xs = DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions /\
+    xs <> [] /\
+    qL = p0 with ps_stack := prefixL ++ p0.ps_stack /\
+    qD = p0 with ps_stack := prefixD ++ p0.ps_stack /\
+    (!p r. (p = psL /\ r = qL) \/ (p = psD /\ r = qD) ==>
+      phi_schedule_run
+        (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i),
+          bb_is_halting sb)) (collect_phis sb.bb_instructions)) p = (phi_ops,r)) /\
+    native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+      (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+      (LENGTH sb.bb_instructions) xs p0 (PRE (LENGTH xs)) ops q /\
+    native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+      (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+      (LENGTH sb.bb_instructions) xs qL (PRE (LENGTH xs)) ops
+      (q with ps_stack := prefixL ++ q.ps_stack) /\
+    native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+      (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+      (LENGTH sb.bb_instructions) xs qD (PRE (LENGTH xs)) ops
+      (q with ps_stack := prefixD ++ q.ps_stack) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+      (PRE (LENGTH sb.bb_instructions))) ==>
+      MEM (Var v) q.ps_stack \/ Var v IN FDOM q.ps_spilled) /\
+    ((LAST sb.bb_instructions).inst_opcode = JMP ==>
+      !targets. join_target_ops (liveness_analyze fn) fn succ
+        (LAST sb.bb_instructions) = SOME targets ==>
+        ALL_DISTINCT targets /\
+        !x. MEM x targets ==> MEM x q.ps_stack \/ x IN FDOM q.ps_spilled) /\
+    (!bops after. (LAST sb.bb_instructions).inst_opcode = JMP /\
+      generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb psD =
+        SOME (bops,after) ==>
+      ?tops out.
+        generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+          (LAST sb.bb_instructions)
+          (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions))
+          (bb_is_halting sb) F succ q = SOME (tops,out) /\
+        generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+          (LAST sb.bb_instructions)
+          (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions))
+          (bb_is_halting sb) F succ (q with ps_stack := prefixL ++ q.ps_stack) =
+          SOME (tops,out with ps_stack := prefixL ++ out.ps_stack) /\
+        generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+          (LAST sb.bb_instructions)
+          (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions))
+          (bb_is_halting sb) F succ (q with ps_stack := prefixD ++ q.ps_stack) =
+          SOME (tops,out with ps_stack := prefixD ++ out.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_dfs_join_physical_start_actual >> strip_tac >>
+  `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
+  `collect_phis sb.bb_instructions <> []` by
+    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+  drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> strip_tac >>
+  `LENGTH (collect_phis sb.bb_instructions) + PRE (LENGTH xs) =
+    PRE (LENGTH sb.bb_instructions)` by suspend "cut_index" >>
+  `!j. j < PRE (LENGTH xs) ==>
+    (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI` by
+    suspend "ordinary_layout" >>
+  qpat_x_assum `p0 = _` (mk_asm "core") >>
+  qpat_x_assum `!k. _ ==> ?ops q. _` (qspec_then `PRE (LENGTH xs)` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`prefixL`,`prefixD`,`suffix`,`phi_ops`,`al`,`p0`,`xs`,`qL`,`qD`,`ops`,`q`] >>
+  conj_tac >- (asm "core" ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- simp[] >>
+  conj_asm1_tac >- suspend "terminal_targets" >> suspend "terminal_replay"
+QED
+
+Resume lineage_dfs_join_preterminal_core_actual[cut_index]:
+  qpat_x_assum `sb.bb_instructions = _ ++ _`
+    (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+  gvs[listTheory.DROP_APPEND] >> Cases_on `rest` >> gvs[]
+QED
+
+Resume lineage_dfs_join_preterminal_core_actual[ordinary_layout]:
+  `!i. LENGTH (collect_phis sb.bb_instructions) <= i /\
+    i < LENGTH sb.bb_instructions ==>
+    (EL i sb.bb_instructions).inst_opcode <> PHI /\
+    ((EL i sb.bb_instructions).inst_opcode = JMP ==>
+      SUC i = LENGTH sb.bb_instructions)` by
+    (qspecl_then [`fn`,`sb`,`LENGTH (collect_phis sb.bb_instructions)`] mp_tac
+       fnPlanLineageEntryProductionTheory.ready_block_ordinary_suffix_layout >>
+     (impl_tac >- simp[]) >> simp[]) >>
+  gen_tac >> strip_tac >>
+  `j < LENGTH xs` by decide_tac >>
+  `LENGTH (collect_phis sb.bb_instructions) + j < PRE (LENGTH sb.bb_instructions)` by
+    decide_tac >>
+  `EL j xs = EL (LENGTH (collect_phis sb.bb_instructions) + j) sb.bb_instructions` by
+    (simp[listTheory.EL_DROP, arithmeticTheory.ADD_COMM]) >>
+  `LENGTH (collect_phis sb.bb_instructions) + j < LENGTH sb.bb_instructions` by decide_tac >>
+  qpat_x_assum `!i. _ <= i /\ _ ==> _`
+    (qspec_then `LENGTH (collect_phis sb.bb_instructions) + j` mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >> decide_tac
+QED
+
+Resume lineage_dfs_join_preterminal_core_actual[terminal_targets]:
+  `fn_reachable fn sb.bb_label` by
+    metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  `sb.bb_instructions <> []` by
+    (Cases_on `sb.bb_instructions` >> gvs[]) >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) succ
+    (PRE (LENGTH sb.bb_instructions))) ==>
+    MEM (Var v) q.ps_stack \/ Var v IN FDOM q.ps_spilled` by simp[] >>
+  strip_tac >> gen_tac >> disch_tac >>
+  conj_tac >- metis_tac[fnPlanLineageNativeTerminalTheory.ready_join_target_ops_distinct] >>
+  metis_tac[fnPlanLineageNativeTerminalTheory.native_terminal_jmp_target_available]
+QED
+
+Resume lineage_dfs_join_preterminal_core_actual[terminal_replay]:
+  rpt gen_tac >> strip_tac >>
+  `?tail_ops. generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    succ (bb_is_halting sb) 0 (LENGTH sb.bb_instructions)
+    (LENGTH (collect_phis sb.bb_instructions)) xs qD = SOME (tail_ops,after)` by
+    suspend "dfs_worker" >>
+  `generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    succ (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+    (LENGTH sb.bb_instructions) 0 xs qD = SOME (tail_ops,after)` by
+    (qpat_assum `generate_block_insts_plan _ _ _ _ _ _ _ _ _ _ _ = SOME (tail_ops,after)`
+       (fn th => rewrite_tac[GSYM th]) >>
+     irule fnPlanLineageEntryProductionTheory.generate_block_insts_plan_index_sum >> simp[]) >>
+  `?before tops.
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+      (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+      (LENGTH sb.bb_instructions) xs qD (PRE (LENGTH xs)) before /\
+    generate_inst_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (LAST xs)
+      (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions))
+      (bb_is_halting sb) F succ before = SOME (tops,after)` by
+    (irule fnPlanLineageEntryProductionTheory.native_worker_terminal_prefix >>
+     qexistsl_tac [`0`,`tail_ops`,`qD`,`xs`] >>
+     simp[fnPlanLineageEntryProductionTheory.native_inst_prefix_zero]) >>
+  `before = q with ps_stack := prefixD ++ q.ps_stack` by
+    (qpat_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _ qD _ _ _`
+       (mp_tac o MATCH_MP fnPlanLineageEntryProductionTheory.native_inst_ops_prefix_erase) >>
+     qpat_x_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ before` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[fnPlanLineageEntryProductionTheory.native_inst_prefix_deterministic]) >>
+  `LAST xs = LAST sb.bb_instructions` by
+    (qpat_assum `xs = _` (fn th => pure_rewrite_tac[th]) >>
+     irule listTheory.last_drop >>
+     qpat_x_assum `xs <> []` mp_tac >> simp[listTheory.DROP_EQ_NIL]) >>
+  `sb.bb_instructions <> []` by (Cases_on `sb.bb_instructions` >> gvs[]) >>
+  `inst_wf (LAST sb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, listTheory.EVERY_MEM] >>
+     metis_tac[rich_listTheory.LAST_MEM]) >>
+  `?dest. (LAST sb.bb_instructions).inst_operands = [Label dest] /\
+    (LAST sb.bb_instructions).inst_outputs = []` by gvs[venomWfTheory.inst_wf_def] >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ before = _` mp_tac >>
+  qpat_assum `before = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `LAST xs = _` (fn th => pure_rewrite_tac[th]) >>
+  strip_tac >>
+  qpat_x_assum `(LAST sb.bb_instructions).inst_opcode = JMP ==> _` mp_tac >>
+  simp[] >> strip_tac >>
+  drule_all fnPlanLineageWideTheory.terminal_jmp_inst_bottom_reflection >>
+  strip_tac >> qexists_tac `out` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  irule fnPlanLineageWideTheory.terminal_jmp_inst_bottom_frame >>
+  simp[] >> metis_tac[]
+QED
+
+Resume lineage_dfs_join_preterminal_core_actual[dfs_worker]:
+  qpat_x_assum `!p q. _` (qspecl_then [`psD`,`qD`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Finalise lineage_dfs_join_preterminal_core_actual

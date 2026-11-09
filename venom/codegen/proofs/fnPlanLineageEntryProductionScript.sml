@@ -839,6 +839,21 @@ Proof
   metis_tac[analyzed_computed_operand_demand]
 QED
 
+Theorem generate_block_insts_plan_index_sum:
+  !rest lv dfg cfg fn label halt n len i n' i' ps.
+    n + i = n' + i' ==>
+    generate_block_insts_plan lv dfg cfg fn label halt n len i rest ps =
+    generate_block_insts_plan lv dfg cfg fn label halt n' len i' rest ps
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- simp[generate_block_insts_plan_def] >>
+  `i + n + 1 = i' + n' + 1` by decide_tac >>
+  `!ps. generate_block_insts_plan lv dfg cfg fn label halt n len (i+1) rest ps =
+    generate_block_insts_plan lv dfg cfg fn label halt n' len (i'+1) rest ps` by
+    (gen_tac >> first_x_assum irule >> decide_tac) >>
+  simp[generate_block_insts_plan_def]
+QED
+
 (* Factor the actual worker, retaining its full-tail lookahead. *)
 Theorem native_worker_prefix_split:
   !j rest lv dfg cfg fn label halt n len i ps ops after xs ps0.

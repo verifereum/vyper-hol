@@ -240,3 +240,23 @@ Proof
   drule_all initialized_entry_exit_resources >>
   simp[entry_boundary_resources_def, native_live_boundary_def]
 QED
+
+Theorem ready_join_target_ops_distinct:
+  !fn cur inst targets.
+    codegen_ready_fn fn /\
+    join_target_ops (liveness_analyze fn) fn cur inst = SOME targets ==>
+    ALL_DISTINCT targets
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `join_target_ops _ _ _ _ = _` mp_tac >>
+  simp[join_target_ops_def, AllCaseEqs()] >> strip_tac >>
+  `MEM target_bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `phi_uses_disjoint (collect_phis target_bb.bb_instructions)` by
+    metis_tac[fnPlanLineagePhiClassesTheory.ready_block_phi_uses_disjoint] >>
+  `ALL_DISTINCT (live_vars_at (liveness_analyze fn) target 0)` by
+    metis_tac[fnPlanLineageDistinctTheory.ready_live_vars_at_distinct] >>
+  `ALL_DISTINCT (input_vars_from cur target_bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) target 0))` by
+    metis_tac[fnPlanLineagePhiMapsTheory.input_vars_from_distinct] >>
+  gvs[] >> irule listTheory.ALL_DISTINCT_MAP_INJ >> simp[]
+QED
