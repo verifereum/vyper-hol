@@ -8,7 +8,7 @@ Ancestors
   venomInst venomWf cfgWf o1PassContract makeSsaDefs makeSsaCurrentProps
   makeSsaCurrentCfg makeSsaCurrentOrigin makeSsaCurrentWfSsa
   makeSsaCurrentInputOk makeSsaCurrentNonDegenerate
-  allocaRemapSSA mem2varBlockSimHelpers
+  allocaRemapSSA
   venomWfProps
 
 Definition mssa_inst_origin_def:

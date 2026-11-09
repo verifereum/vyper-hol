@@ -48,7 +48,7 @@ Ancestors
   passSimulationDefs passSharedDefs execEquivParamDefs
   vfmTypes vfmState byte fcp memLocDefs
   dfIterateDefs finite_map basePtrDefs
-  venomExecSemantics allocaRemapDefs pointerConfinedDefs
+  venomExecSemantics allocaRemapDefs pointerConfinedDefs pointerConfinedProps
   venomEffects oracleExecProps
   passTransform
 Libs

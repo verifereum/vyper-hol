@@ -13,6 +13,6 @@ Ancestors
   unitShapeChecks unitTransformChecks
   (* passes: effect and abort order in DFT, FMP aliasing *)
   dftEffectOrderTest dftAbortOrderTest fmpAliasProbe
-  functionInlinerReturnPcWitness
+  mem2varWitness functionInlinerReturnPcWitness
   (* execution of INVOKE with no arguments and of STOP after a call *)
   invokeEmptyArgs stopReturndata
