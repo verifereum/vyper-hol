@@ -133,6 +133,7 @@ Theorem prefix_complete_guard_fresh[local]:
   !v. abi_decoder_older_vars st.cs_next_var v ==> v <> x /\ v <> y /\ v <> z
 Proof
   simp[abi_decode_dynarray_checked_prefix_def,abi_decode_count_guard_def,
+    abiDecoderBytesBoundTheory.abi_decode_bytes_head_def,abi_decode_dynarray_payload_guard_def,
     abi_decode_dynarray_end_guard_def,comp_bind_def,comp_ignore_bind_def,
     comp_return_def,emit_op_def,emit_void_def,fresh_var_def,fresh_id_def,emit_def] >>
   strip_tac >> gvs[emitted_insts_def] >>
@@ -853,7 +854,7 @@ Resume prefix_complete_array_setup_loop_pair_exact[recursive_data]:
   asm_simp_tac bool_ss [abi_decoder_recursive_loop_data_def,abi_decoder_ranges_def, eval_operand_def,
     abi_decode_source_opcode_def,abi_decoder_operand_live_def] >>
   qpat_x_assum `venomMemDefs$regions_disjoint (slot,32) _` mp_tac >>
-  simp[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+  simp[venomMemDefsTheory.regions_disjoint_def] >> gvs[]
 QED
 
 Resume prefix_complete_array_setup_loop_pair_exact[distinct_ids]:
