@@ -9,7 +9,7 @@ Ancestors
   compileEnv fragExec words venomMemDefs allocaFrontierBound allocaBudgetProps ctorAbiActualFrame
 
 Theorem prefix_member_setup_pair_floor:
-  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) dyn ao vo st = (ops,middle) /\
+  abi_decode_member_setup (Var dst) src DLOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,middle) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand (Var dst) s = SOME (n2w d) /\
   (dyn ==> abi_decode_load DLOAD (n2w (sb+ao) : bytes32) s = n2w payload_off /\
            sb+payload_off < dimword (:256)) /\
