@@ -1,4 +1,5 @@
 Theory exprSimAbiEncodeArgsMaterializePath
+Libs exprSimAbiEncodeArgsProbeLib
 Ancestors
   abiEncodeMaterialize exprSimAbiGasBridge exprSimHash vyperCompiler context
   loweringPosts compileEnv finite_map exprSimAbiEncodeSeparation
@@ -814,7 +815,7 @@ Proof
   simp[venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
   disj2_tac >>
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
-  qexists_tac `"@wcopy_cond_0"` >> simp[]
+  simp[]
 QED
 
 Theorem materialize_zero_probe_path:
@@ -878,4 +879,335 @@ Theorem materialize_positive_cut_alias_probe:
     ~frag_gas_free sa sb
 Proof
   EVAL_TAC >> rpt conj_tac >> rpt strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+
+Definition materialize_positive_probe_fn_def:
+  materialize_positive_probe_fn ce =
+    let ty = TupleT [BaseT (UintT 256); BaseT (UintT 256)];
+        vv = LocatedValue ty (mk_ptr (Lit 0w) LocStorage);
+        base = initial_compile_state "@wcopy_exit_2";
+        end0 = SND (compile_materialize_vv ce ty vv base);
+        sa = base with cs_current_insts := end0.cs_current_insts;
+        sb = SND (compile_materialize_vv ce ty vv sa)
+    in venomInst$mk_raw_function "positive-cut-probe" sb.cs_blocks
+End
+
+Definition materialize_positive_probe_trace_def:
+  materialize_positive_probe_trace ce 0 =
+    (init_venom_state "@wcopy_exit_2" with vs_inst_idx := 1) /\
+  materialize_positive_probe_trace ce (SUC n) =
+    materialize_zero_probe_next (materialize_positive_probe_fn ce)
+      (materialize_positive_probe_trace ce n)
+End
+
+Theorem materialize_positive_probe_endpoint:
+  let t = materialize_positive_probe_trace ce 27 in
+    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
+    t.vs_inst_idx = 1
+Proof
+  CONV_TAC (computeLib.CBV_CONV
+    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))
+QED
+
+Theorem materialize_positive_probe_edges:
+  !n. n < 27 ==>
+    fragGasPath$gas_path_edge ctx (materialize_positive_probe_fn ce)
+      (materialize_positive_probe_trace ce n) 0
+      (OK (materialize_positive_probe_trace ce (SUC n)))
+Proof
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "last" >> suspend "earlier"
+QED
+
+Resume materialize_positive_probe_edges[last]:
+  CONV_TAC (RAND_CONV (computeLib.CBV_CONV
+      (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
+  CONV_TAC (RATOR_CONV (computeLib.CBV_CONV
+      (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
+  simp[fragGasPathTheory.gas_path_edge_def] >>
+  qexists_tac `0` >>
+  CONV_TAC (BINDER_CONV (BINDER_CONV (LAND_CONV (RAND_CONV EVAL)))) >>
+  simp[venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
+  disj2_tac >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >> simp[]
+QED
+
+Resume materialize_positive_probe_edges[earlier]:
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step25" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step24" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step23" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step22" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step21" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step20" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step19" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step18" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step17" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step16" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step15" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step14" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step13" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step12" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step11" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step10" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step9" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step8" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step7" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step6" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step5" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step4" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step3" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step2" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step1" >>
+  CONV_TAC (numLib.BOUNDED_FORALL_CONV ALL_CONV) >>
+  conj_tac >- suspend "step0" >> simp[]
+QED
+
+Resume materialize_positive_probe_edges[step25]:
+  CONV_TAC (RAND_CONV (computeLib.CBV_CONV
+    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
+  CONV_TAC (RATOR_CONV (computeLib.CBV_CONV
+    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))) >>
+  simp[fragGasPathTheory.gas_path_edge_def] >> qexists_tac `0` >>
+  CONV_TAC (BINDER_CONV (BINDER_CONV (LAND_CONV (RAND_CONV EVAL)))) >>
+  simp[venomInstTheory.get_instruction_def] >> EVAL_TAC >> simp[] >>
+  disj2_tac >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >> simp[]
+QED
+
+Resume materialize_positive_probe_edges[step24]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step23]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step22]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step21]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step20]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step19]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step18]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step17]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step16]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step15]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step14]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step13]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step12]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step11]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step10]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step9]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step8]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step7]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step6]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step5]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step4]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step3]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step2]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step1]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+Resume materialize_positive_probe_edges[step0]:
+  exprSimAbiEncodeArgsProbeLib.probe_eval_target >>
+  exprSimAbiEncodeArgsProbeLib.probe_eval_source >>
+  exprSimAbiEncodeArgsProbeLib.probe_fetch >>
+  exprSimAbiEncodeArgsProbeLib.probe_step >>
+  exprSimAbiEncodeArgsProbeLib.probe_jump
+QED
+
+Finalise materialize_positive_probe_edges
+
+Theorem materialize_positive_probe_path:
+  !n. n <= 27 ==>
+    fragGasPath$gas_path ctx (materialize_positive_probe_fn ce)
+      (materialize_positive_probe_trace ce 0) 0
+      (OK (materialize_positive_probe_trace ce n))
+Proof
+  Induct >> rpt strip_tac
+  >- (irule (cj 1 fragGasPathTheory.gas_path_rules) >> EVAL_TAC) >>
+  `fragGasPath$gas_path ctx (materialize_positive_probe_fn ce)
+      (materialize_positive_probe_trace ce 0) 0
+      (OK (materialize_positive_probe_trace ce n))` by
+    (first_x_assum irule >> decide_tac) >>
+  `fragGasPath$gas_path_edge ctx (materialize_positive_probe_fn ce)
+      (materialize_positive_probe_trace ce n) 0
+      (OK (materialize_positive_probe_trace ce (SUC n)))` by
+    (irule materialize_positive_probe_edges >> decide_tac) >>
+  metis_tac[fragGasPathTheory.gas_path_rules,
+            fragGasPathTheory.gas_path_edge_normal,
+            fragGasPathTheory.gas_path_then, arithmeticTheory.ADD]
+QED
+
+Theorem materialize_positive_alias_counted_probe:
+  let t = materialize_positive_probe_trace ce 27 in
+    gas_marked_path F ctx (materialize_positive_probe_fn ce)
+      (init_venom_state "@wcopy_exit_2" with vs_inst_idx := 1) 0 (OK t) /\
+    ~t.vs_halted /\ t.vs_current_bb = "@wcopy_exit_2" /\
+    t.vs_inst_idx = 1
+Proof
+  simp[fragGasModeTheory.gas_marked_path_def] >>
+  mp_tac (Q.SPEC `27` materialize_positive_probe_path) >>
+  mp_tac materialize_positive_probe_endpoint >>
+  simp[materialize_positive_probe_trace_def]
 QED
