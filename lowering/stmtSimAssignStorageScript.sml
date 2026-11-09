@@ -331,6 +331,8 @@ Theorem assign_storage_word_suffix:
   !ctx func cx lctx cenv e es ee v op t sa sb sf s0 src id ts tr typ id_str
    slot tvt etv.
     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM ee.scopes = MAP FDOM es.scopes /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     get_module_code cx src = SOME ts /\
@@ -348,10 +350,11 @@ Theorem assign_storage_word_suffix:
                 (ee with gas_obs := tail) = (INL (), ee' with gas_obs := tail)) /\
       gas_marked_path F ctx func t 0 r /\
       ?t'. r = OK t' /\
-           stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
+           stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
              (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all expr_post_alloca_frame >> strip_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
@@ -372,6 +375,14 @@ Proof
      simp[set_storage_def] >> strip_tac >> gvs[]) >>
   `ee' with gas_obs := [] = ee'` by
     simp[evaluation_state_component_equality] >>
+  `alloca_frame cenv es sa s0 cenv ee'
+     ((if tr then tstore (n2w slot) (typed_val_to_w256 etv v) t
+       else sstore (n2w slot) (typed_val_to_w256 etv v) t)
+      with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule alloca_frame_same_state >> qexists_tac `t` >>
+     Cases_on `tr` >> simp[sstore_def, tstore_def, LET_THM] >>
+     qpat_x_assum `alloca_frame _ _ _ _ _ ee t` mp_tac >>
+     simp[alloca_frame_def]) >>
   qexistsl_tac [`ee'`,
     `OK ((if tr then tstore (n2w slot) (typed_val_to_w256 etv v) t
           else sstore (n2w slot) (typed_val_to_w256 etv v) t)
@@ -447,6 +458,10 @@ Proof
   `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
     (qpat_x_assum `!gs v es1. _ ==> encode_value _ _ = _` irule >>
      fs[ETA_THM] >> metis_tac[]) >>
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `_ (es with gas_obs := gs) = (INL v, ee)`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
+     simp[]) >>
   drule_all assign_storage_word_suffix >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl_tac [`INL ()`, `ee'`, `r`] >> simp[]

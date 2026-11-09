@@ -258,6 +258,7 @@ Theorem augassign_storage_load_frame:
     local_ptrs_reserved cenv sb /\
     (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
     t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    t.vs_memory = s0.vs_memory /\
     (?out. op = Var out /\ not_fresh_at sb out)
 Proof
   strip_tac >> drule_all augassign_storage_load_path >> strip_tac >>
@@ -401,10 +402,11 @@ Theorem augassign_storage_store_post_path:
   (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
           lookup_var x s = SOME wd) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-           FLOOKUP s.vs_allocas aid = SOME b) ==>
+           FLOOKUP s.vs_allocas aid = SOME b) /\
+  alloca_frame cenv es0 sa s0 cenv ee s ==>
   ?fin last. write_storage_slot cx tr (n2w slot) tvt w ee = (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) fin last
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) fin last
 Proof
   strip_tac >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
@@ -417,8 +419,21 @@ Proof
   Cases_on `write_storage_slot cx tr (n2w slot) tvt w ee` >>
   `~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
     fs[stmt_state_rel_def, state_rel_def] >>
+  rename1 `_ = (res, fin)` >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   drule_all assign_storage_store_path >> strip_tac >>
+  `fin.scopes = ee.scopes` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq] >> Cases_on `tr` >>
+     simp[set_storage_def] >> strip_tac >> gvs[]) >>
+  `alloca_frame cenv es0 sa s0 cenv fin
+     ((if tr then tstore (n2w slot) (typed_val_to_w256 tvt w) s
+       else sstore (n2w slot) (typed_val_to_w256 tvt w) s)
+      with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule alloca_frame_same_state >> qexists_tac `s` >>
+     Cases_on `tr` >> simp[sstore_def, tstore_def, LET_THM] >>
+     qpat_x_assum `alloca_frame _ _ _ _ _ ee s` mp_tac >>
+     simp[alloca_frame_def]) >>
   `sf.cs_current_bb = st.cs_current_bb /\
    LENGTH sf.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
     gvs[emitHelperTheory.emit_void_def, comp_bind_def, fresh_id_def,
@@ -691,10 +706,12 @@ Resume compile_augassign_toplevel_case[operator_normal]:
     metis_tac[word_type_slot_size] >>
   `eval_operand res_op s = SOME (typed_val_to_w256 tvt result)` by
     simp[typed_val_to_w256_word_value] >>
+  `alloca_frame cenv (ee with gas_obs := []) s3 s cenv (ee with gas_obs := []) s` by
+    (irule alloca_frame_same >> simp[]) >>
   `?fin last. write_storage_slot cx tr (n2w slot) tvt result
       (ee with gas_obs := []) = (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
-    stmt_post ctx func cx lctx cenv cenv s3 sb s (INL ()) fin last` by
+    stmt_post ctx func cx lctx cenv cenv s3 sb (ee with gas_obs := []) s (INL ()) fin last` by
     (irule augassign_storage_store_post_path >> simp[] >>
      conj_tac >- metis_tac[] >>
      qexistsl_tac [`res_op`, `s3`] >> simp[]) >>
@@ -702,22 +719,38 @@ Resume compile_augassign_toplevel_case[operator_normal]:
 QED
 
 Resume compile_augassign_toplevel_case[store_post]:
-  `stmt_post ctx func cx lctx cenv cenv s2 sb u (INL ()) fin last` by
+  `alloca_frame cenv (ee with gas_obs := []) s2 u cenv (ee with gas_obs := []) s` by
+    (mp_tac (Q.INST [`es` |-> `ee with gas_obs := []`,
+                     `es'` |-> `ee with gas_obs := []`,
+                     `sa` |-> `s2`, `s0` |-> `u`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv (es with gas_obs := []) t` by
+    (mp_tac (Q.INST [`es'` |-> `es with gas_obs := []`, `s` |-> `t`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+  `stmt_post ctx func cx lctx cenv cenv s2 sb (ee with gas_obs := []) u (INL ()) fin last` by
     (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
-     qexistsl_tac [`s`, `s3`] >> simp[] >>
+     qexistsl_tac [`ee with gas_obs := []`, `s`, `s3`] >> simp[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  `stmt_post ctx func cx lctx cenv cenv s1 sb t (INL ()) fin last` by
-    (irule stmt_post_expr_entry_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) fin last` by
+  `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `_ (es with gas_obs := gas_explicit _ _) = (INL v, _)`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
+     simp[]) >>
+  `stmt_post ctx func cx lctx cenv cenv s1 sb (es with gas_obs := []) t (INL ()) fin last` by
+    (qpat_x_assum `expr_post _ _ _ _ _ _ s1 s2 t _ _ _ u`
+       (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                            stmt_post_expr_entry_frame)) >>
+     simp[]) >>
+  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last` by
     (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
-     qexistsl_tac [`t`, `s1`] >> simp[] >>
-     rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-     qexists_tac `sa` >> simp[] >>
+     qexistsl_tac [`es with gas_obs := []`, `t`, `s1`] >> simp[] >>
+     rpt strip_tac >>
      qspecl_then [`if tr then TLOAD else SLOAD`, `[Lit (n2w slot)]`, `sa`]
        mp_tac ci_mono_emit_op >>
-     simp[ci_mono_def]) >>
+     simp[ci_mono_def] >> rpt strip_tac >>
+     irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
   `gas_marked_path F ctx func u 0 (OK last)` by
     (drule_all gas_marked_path_then >> simp[]) >>
   `fin = fin with gas_obs := []` by

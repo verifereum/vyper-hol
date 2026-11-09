@@ -342,20 +342,24 @@ Resume compile_for_range_frag[loop]:
      (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
        s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\
        (!x v. not_fresh_at sa x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
-       (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
+       (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b) /\
+       (!frame_start. frame_start.cs_next_id <= A.inst_id /\
+          frame_start.cs_next_id <= sb0.cs_next_id ==>
+          alloca_frame cenv es frame_start cc cenv ee s))
      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (qpat_x_assum `bc with <| ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _ |> = cenv` kall_tac >>
      qpat_x_assum `cc = _` kall_tac >>
      qpat_x_assum `Abbrev (cc = _)` kall_tac >>
      irule (SRULE [] (Q.INST [`k` |-> `0`] (SPEC_ALL for_loop_alloca))) >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
+     conj_tac >- (qpat_x_assum `sb0.cs_next_var = _` (fn th => rewrite_tac[th]) >> simp[NoAsms]) >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- (qexistsl_tac [`lctx`, `Num (n2 - n1)`] >>
                   simp[NoAsms] >> first_assum ACCEPT_TAC) >>
      rpt (conj_tac >- first_assum ACCEPT_TAC) >>
      qhdtm_assum `for_code` (irule_at Any) >>
      qexistsl_tac [`w`, `P`] >>
-     conj_tac >- (qpat_x_assum `sb0.cs_next_var = _` (fn th => rewrite_tac[th]) >> simp[NoAsms]) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
+     rpt (conj_tac >- first_assum ACCEPT_TAC) >>
      conj_tac >- (gen_tac >> disch_tac >>
        qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >>
        disch_then strip_assume_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -389,12 +393,21 @@ Resume compile_for_range_frag[post]:
 QED
 
 Resume compile_for_range_frag[post_normal]:
+  `exec_alloca A s0 (n2w sz : bytes32) = OK s1` by
+    (qpat_x_assum `step_inst_base A s0 = _` mp_tac >>
+     simp[step_inst_base_def] >> disch_then ACCEPT_TAC) >>
+  `s1.vs_memory = s0.vs_memory` by
+    (drule stmtSimDeclPathTheory.exec_alloca_memory >> simp[]) >>
+  `cc.vs_memory = s0.vs_memory` by
+    (qpat_assum `cc = _` SUBST1_TAC >>
+     simp[NoAsms, jump_to_def, update_var_def] >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `cc = _` kall_tac >>
+  qpat_x_assum `Abbrev (cc = _)` kall_tac >>
   qexistsl_tac [`res`, `ee`, `r`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   disj1_tac >> qexists_tac `t` >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_x_assum `cc = _` kall_tac >>
-  qpat_x_assum `Abbrev (cc = _)` kall_tac >>
   qpat_x_assum `(\res ee s. _) res _ t` mp_tac >>
   simp_tac bool_ss [boolTheory.FORALL_AND_THM] >> strip_tac >>
   rewrite_tac[stmt_post_def] >> qexists_tac `cenv` >>
@@ -409,10 +422,18 @@ Resume compile_for_range_frag[post_normal]:
      reverse conj_tac >- first_assum ACCEPT_TAC >>
      qpat_x_assum `!x v. not_fresh_at sa x /\ lookup_var x s0 = _ ==> _` irule >>
      conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> disch_tac >>
-  qpat_x_assum `!a b. FLOOKUP cc.vs_allocas a = _ ==> _` irule >>
-  qpat_x_assum `!aid v. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
-  first_assum ACCEPT_TAC
+  conj_tac
+  >- (rpt gen_tac >> disch_tac >>
+      qpat_x_assum `!a b. FLOOKUP cc.vs_allocas a = _ ==> _` irule >>
+      qpat_x_assum `!aid v. FLOOKUP s0.vs_allocas aid = _ ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv es cc` by
+    (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
+  irule alloca_frame_trans >>
+  qexistsl_tac [`cenv`, `es`, `cc`, `sa`] >>
+  simp[] >>
+  qpat_x_assum `!frame_start. _` (qspec_then `sa` mp_tac) >>
+  simp[alloca_frame_def]
 QED
 
 Finalise compile_for_range_frag

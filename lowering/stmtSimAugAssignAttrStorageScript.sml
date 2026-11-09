@@ -393,6 +393,7 @@ Theorem augassign_attr_storage_load_path:
       ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
       t.vs_inst_idx = LENGTH sn.cs_current_insts /\
       t.vs_allocas = s.vs_allocas /\
+      t.vs_memory = s.vs_memory /\
       (!x u. not_fresh_at sa x /\ lookup_var x s = SOME u ==>
              lookup_var x t = SOME u)
 Proof
@@ -453,10 +454,11 @@ Theorem augassign_attr_storage_store_post_path:
     (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
             lookup_var x s = SOME wd) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    alloca_frame cenv es0 sa s0 cenv ee s ==>
     ?fin last. write_storage_slot cx tr k ftv w ee = (INL (),fin) /\
       gas_marked_path F ctx func s 0 (OK last) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) fin last
+      stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 (INL ()) fin last
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `write_storage_slot cx tr k ftv w ee` >>
@@ -480,6 +482,16 @@ Proof
          comp_return_def,emit_def]) >>
   `~block_is_terminated sf` by
     (drule emit_void_terminated >> Cases_on `tr` >> simp[is_terminator_def]) >>
+  `r.scopes = ee.scopes` by
+    metis_tac[vyperScopePreservationTheory.write_storage_slot_scopes] >>
+  `alloca_frame cenv es0 sa s0 cenv r
+     ((if tr then tstore k (typed_val_to_w256 ftv w) s
+       else sstore k (typed_val_to_w256 ftv w) s)
+      with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule alloca_frame_same_state >> qexists_tac `s` >>
+     Cases_on `tr` >> simp[sstore_def, tstore_def, LET_THM] >>
+     qpat_x_assum `alloca_frame _ _ _ _ _ ee s` mp_tac >>
+     simp[alloca_frame_def]) >>
   goal_assum (drule_at Any) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>
@@ -736,10 +748,25 @@ Resume compile_augassign_attr_storage_case[store]:
     (fs[expr_post_def] >> metis_tac[]) >>
   `eval_operand res_op u = SOME (typed_val_to_w256 ftv result)` by
     simp[typed_val_to_w256_word_value] >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `local_ptrs_reserved cenv s2` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `sa.cs_next_id <= s1.cs_next_id /\
+   s1.cs_next_id <= s2.cs_next_id` by
+    (conj_tac
+     >- (gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+              comp_ignore_bind_def, comp_return_def, emit_def] >> simp[]) >>
+     metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, ci_mono_def,
+               pairTheory.SND]) >>
+  `alloca_frame cenv es sa s0 cenv es_end u` by
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       augassign_attr_pre_store_frame >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
   qspecl_then [`ctx`, `func`, `cx`, `lctx`, `cenv`, `tr`, `dst`, `res_op`,
     `s3`, `sb`, `u`, `es_end with gas_obs := []`, `n2w slot + n2w off`,
     `ftv`, `result`, `sa`, `s0`]
-    mp_tac augassign_attr_storage_store_post_path >>
+    mp_tac (Q.INST [`es0` |-> `es`] augassign_attr_storage_store_post_path) >>
   impl_tac >- simp[] >> strip_tac >>
   `!g. write_storage_slot cx tr (n2w slot + n2w off) ftv result
          (es_end with gas_obs := g) = (INL (), fin with gas_obs := g)` by

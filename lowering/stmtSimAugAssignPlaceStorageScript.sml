@@ -14,7 +14,7 @@ Theory stmtSimAugAssignPlaceStorage
 Ancestors
   valueEncodingProps
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
-  vyperStorageLayoutSafety vyperLookupStorage
+  vyperStorageLayoutSafety vyperLookupStorage vyperScopePreservation
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
   stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
@@ -1285,7 +1285,7 @@ Theorem aug_place_storage_load_counted_nofresh[local]:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
              lookup_var x u = SOME w) /\
-      u.vs_allocas = s.vs_allocas
+      u.vs_allocas = s.vs_allocas /\ u.vs_memory = s.vs_memory
 Proof
   strip_tac >>
   qexists_tac `(update_var (STRING #"%" (toString sa.cs_next_var))
@@ -1381,7 +1381,8 @@ Theorem aug_place_storage_store_outcome[local]:
           (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                    FLOOKUP t.vs_allocas aid = SOME b) /\
           ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-          t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          t.vs_memory = s.vs_memory) \/
        (exit_result r /\ stmt_exit RetQ ff res r))
 Proof
   strip_tac >>
@@ -1389,7 +1390,7 @@ Proof
   drule_all aug_place_storage_write_outcome >> strip_tac >> gvs[] >>
   drule_at (Pat `write_place _ _ _ _ = _`) place_store_word_run >>
   simp[] >> disch_then drule_all >> strip_tac >>
-  qexists_tac `OK t` >> simp[]
+  qexists_tac `OK t` >> Cases_on `tr` >> gvs[slot_loc_def]
 QED
 
 Theorem aug_place_storage_suffix_assoc[local]:
@@ -1575,7 +1576,7 @@ Theorem aug_place_storage_binop_store_nofresh[local]:
       tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))
     (ee,z) [] res fin r /\
     ((?last. r = OK last /\
-        stmt_post ctx func cx lctx cenv cenv s2 sf z res
+        stmt_post ctx func cx lctx cenv cenv s2 sf ee z res
           (fin with gas_obs := []) last) \/
      (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
 Proof
@@ -1629,9 +1630,27 @@ Resume aug_place_storage_binop_store_nofresh[normal]:
       `~block_is_terminated sf` by
         (drule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
          Cases_on `tr` >> simp[slot_loc_def, venomInstTheory.is_terminator_def]) >>
+      `!x w. not_fresh_at s2 x /\ lookup_var x z = SOME w ==>
+             lookup_var x t = SOME w` by
+        (rpt strip_tac >>
+         `not_fresh_at s3 x` by
+           metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+         metis_tac[]) >>
+      `alloca_frame cenv ee s2 z cenv r t` by
+        (mp_tac (Q.INST [`es` |-> `ee`, `es'` |-> `r`, `sa` |-> `s2`,
+                         `s0` |-> `z`, `s` |-> `t`]
+                   (SPEC_ALL alloca_frame_of_mem_frame)) >>
+         impl_tac
+         >- (rpt conj_tac
+             >- first_assum ACCEPT_TAC
+             >- first_assum ACCEPT_TAC
+             >- (drule vyperScopePreservationTheory.write_place_scopes_dom >>
+                 simp[])
+             >- first_assum ACCEPT_TAC >>
+             rpt strip_tac >> simp[]) >>
+         disch_then ACCEPT_TAC) >>
       simp[stmt_post_def, stmt_lands_def] >>
-      disj1_tac >> simp[cenv_top_ext_refl] >>
-      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+      disj1_tac >> simp[cenv_top_ext_refl]) >>
   drule_all aug_place_storage_write_outcome >> strip_tac >>
   gvs[stmt_exit_def, expr_exit_def] >>
   fs[stmt_state_rel_def, state_rel_def]
@@ -1684,7 +1703,7 @@ Theorem aug_place_storage_binop_store[local]:
       tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))
     (ee,z) [] res fin r /\
     ((?last. r = OK last /\
-        stmt_post ctx func cx lctx cenv cenv s2 sf z res
+        stmt_post ctx func cx lctx cenv cenv s2 sf ee z res
           (fin with gas_obs := []) last) \/
      (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
 Proof
@@ -1750,7 +1769,7 @@ Theorem aug_place_storage_suffix_outcome_nofresh[local]:
       (\v. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
-    (stmt_post ctx func cx lctx cenv cenv s1 sf u)
+    (stmt_post ctx func cx lctx cenv cenv s1 sf st u)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -1846,7 +1865,36 @@ Resume aug_place_storage_suffix_outcome_nofresh[store_normal]:
   goal_assum (drule_at Any) >> simp[] >>
   disj1_tac >>
   fs[stmt_post_def, expr_post_def] >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
+  `MAP FDOM es_end.scopes = MAP FDOM st.scopes` by
+    (qpat_assum `_ (st with gas_obs := gas_explicit _ _) = (INL v, _)`
+       (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >>
+     simp[]) >>
+  `alloca_frame cenv st s1 u cenv es_end t` by
+    (mp_tac (Q.INST [`es` |-> `st`, `es'` |-> `es_end`, `sa` |-> `s1`,
+                     `s0` |-> `u`, `s` |-> `t`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv st s1 u cenv'' fin last` by
+    (irule alloca_frame_trans >>
+     qpat_assum `alloca_frame cenv st s1 u cenv es_end t` (irule_at Any) >>
+     qpat_assum `alloca_frame cenv es_end s2 t cenv'' fin last` (irule_at Any) >>
+     simp[]) >>
+  qexists_tac `cenv''` >> rpt conj_tac
+  >- (strip_tac >> fs[])
+  >- first_assum ACCEPT_TAC
+  >- first_assum ACCEPT_TAC
+  >- (rpt strip_tac >>
+      `not_fresh_at s2 x` by
+        (irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `s1` >> simp[]) >>
+      qpat_x_assum `!x w. not_fresh_at s2 x /\ lookup_var x t = SOME w ==> _`
+        irule >>
+      simp[] >>
+      qpat_x_assum `!x w. not_fresh_at s1 x /\ lookup_var x u = SOME w ==> _`
+        irule >>
+      simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume aug_place_storage_suffix_outcome_nofresh[store_exit]:
@@ -1901,7 +1949,7 @@ Theorem aug_place_storage_suffix_outcome[local]:
       (\v. bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
-    (stmt_post ctx func cx lctx cenv cenv s1 sf u)
+    (stmt_post ctx func cx lctx cenv cenv s1 sf st u)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   strip_tac >> drule_all aug_place_storage_suffix_outcome_nofresh >> simp[]
@@ -2172,11 +2220,25 @@ Theorem aug_place_stmt_post_prefix[local]:
     lookup_var x u = SOME w) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
     FLOOKUP u.vs_allocas aid = SOME b) /\
-  stmt_post ctx func cx lctx cenv cenv' sp sf u res ee t ==>
-  stmt_post ctx func cx lctx cenv cenv' sa sf s0 res ee t
+  sa.cs_next_id <= sp.cs_next_id /\ alloca_frame cenv es0 sa s0 cenv eu u /\
+  stmt_post ctx func cx lctx cenv cenv' sp sf eu u res ee t ==>
+  stmt_post ctx func cx lctx cenv cenv' sa sf es0 s0 res ee t
 Proof
-  rw[stmt_post_def] >> qexists_tac `cenv''` >> simp[] >>
-  metis_tac[freshWritesTheory.not_fresh_at_mono]
+  rw[stmt_post_def] >>
+  `alloca_frame cenv es0 sa s0 cenv'' ee t` by
+    (irule alloca_frame_trans >>
+     qpat_assum `alloca_frame cenv es0 sa s0 cenv eu u` (irule_at Any) >>
+     qpat_assum `alloca_frame cenv eu sp u cenv'' ee t` (irule_at Any) >>
+     simp[]) >>
+  qexists_tac `cenv''` >> simp[] >> rpt strip_tac >>
+  `not_fresh_at sp x` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  qpat_x_assum `!x w. not_fresh_at sp x /\ lookup_var x u = SOME w ==> _`
+    irule >>
+  simp[] >>
+  qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> _`
+    irule >>
+  simp[]
 QED
 
 Theorem aug_place_bind_admissible_success[local]:
@@ -2292,7 +2354,7 @@ Theorem aug_place_storage_success_continue[local]:
   stmt_env cenv lctx ret_ty (AugAssign ty bt bop e) sa = (cenv,sb) /\
   compile_get_target_ptr compile_expr cenv bt sa = (ptrout,sp) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
   (!tail. eval_base_place cx bt (es with gas_obs := prefix ++ tail) =
     (INL (PlaceR (StoragePlace tr slot tv)),mid with gas_obs := tail)) /\
   eval_target_place cx bt (es with gas_obs := prefix ++ mid.gas_obs) =
@@ -2315,7 +2377,7 @@ Theorem aug_place_storage_success_continue[local]:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))))
     (mid with gas_obs := [],t)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -2387,7 +2449,10 @@ Proof
   qpat_x_assum `gas_admissible (bind (eval_base_place _ _) _) _ _` kall_tac >>
   qpat_x_assum `gas_admissible (eval_stmt _ _) _ _` kall_tac >>
   qpat_x_assum `!tail. eval_base_place _ _ _ = _` kall_tac >>
-  qpat_x_assum `eval_target_place _ _ _ = _` kall_tac >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `eval_target_place _ _ _ = _`
+       (mp_tac o MATCH_MP vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
+     simp[]) >>
   qpat_x_assum `contract_storage_well_formed _ _` kall_tac >>
   qpat_x_assum `EVERY (supported_pure_expr _) _` kall_tac >>
   qpat_x_assum `(?s p s1 s2 cur s3 s4 ptv s5. _) ==> _` kall_tac >>
@@ -2468,13 +2533,31 @@ Proof
   irule aug_place_zero_prefix_outcome >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >>
+  `sa.cs_next_id <= sp.cs_next_id` by
+    metis_tac[ci_mono_compile_get_target_ptr_cfn, compile_expr_ci_mono,
+              ci_mono_def, pairTheory.SND] >>
+  `sp.cs_next_id <= s1.cs_next_id` by
+    metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (mp_tac (Q.INST [`ee` |-> `mid`, `sb` |-> `sp`,
+                     `pv` |-> `PlaceR (StoragePlace tr slot tv)`, `vt` |-> `Type ty`,
+                     `r` |-> `ptrout`]
+               (SPEC_ALL target_post_alloca_frame)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv mid sp t cenv mid u` by
+    (mp_tac (Q.INST [`es` |-> `mid`, `es'` |-> `mid`, `sa` |-> `sp`,
+                     `s0` |-> `t`, `s` |-> `u`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- (rpt conj_tac >> fs[]) >>
+     disch_then ACCEPT_TAC) >>
   irule aug_place_stmt_post_prefix >>
-  qexists_tac `sp` >> qexists_tac `t` >>
-  simp[] >>
-  conj_tac >- fs[target_post_def] >>
-  conj_tac >- fs[target_post_def] >>
+  qexistsl_tac [`mid with gas_obs := []`, `sp`, `t`] >>
+  rpt conj_tac
+  >- fs[] >- fs[] >- fs[target_post_def] >- fs[target_post_def] >- fs[] >>
   irule aug_place_stmt_post_prefix >>
-  qexists_tac `s1` >> qexists_tac `u` >> simp[]
+  qexistsl_tac [`mid with gas_obs := []`, `s1`, `u`] >>
+  rpt conj_tac >> fs[]
 QED
 
 Theorem compile_augassign_place_storage_case:

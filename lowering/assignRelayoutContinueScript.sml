@@ -7,7 +7,7 @@ Ancestors
   fragGasMode fragGasPath placeMemoryCopyEffect
   stmtLowering context compileEnv exprLoweringProps emitHelperProps
   loweringSlice loweringHalt fragExec venomState venomInst
-  allocaSiteResource stmtFragPtr
+  allocaSiteResource stmtFragPtr localMemoryStorePath stmtSimDefs
 Libs monadsyntax
 
 Theorem assign_relayout_store_post_path:
@@ -47,7 +47,10 @@ Theorem assign_relayout_store_post_path:
         (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
         (!aid ent. FLOOKUP s.vs_allocas aid = SOME ent ==>
                      FLOOKUP t.vs_allocas aid = SOME ent) /\
-        gas_marked_path F ctx func s 0 (OK t)
+        gas_marked_path F ctx func s 0 (OK t) /\
+        alloca_frame cenv es1 sb s cenv
+          (es1 with scopes := pre ++
+            (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `0 < type_memory_size stv` by
@@ -67,6 +70,12 @@ Proof
      simp[] >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx es1 s` by fs[expr_post_def] >>
   `not_fresh_at sb p` by metis_tac[local_ptrs_reserved_def] >>
+  `MAP FDOM (pre ++
+      (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) =
+    MAP FDOM es1.scopes` by
+    (drule find_containing_scope_structure >> strip_tac >>
+     gvs[finite_mapTheory.FDOM_FUPDATE, finite_mapTheory.FLOOKUP_DEF,
+         pred_setTheory.ABSORPTION]) >>
   (Cases_on `loc = SOME LocMemory`
    >- suspend "staged"
    >> suspend "direct")
@@ -83,9 +92,25 @@ Resume assign_relayout_store_post_path[direct]:
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   simp[] >> disch_then drule >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
+  drule typed_copy_effect_endpoint >> strip_tac >>
+  drule typed_copy_effect_allocas >> strip_tac >>
+  drule typed_copy_effect_path >> strip_tac >>
+  `!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s` by
+    metis_tac[typed_copy_effect_lookup] >>
   qexists_tac `t` >> simp[] >>
-  metis_tac[typed_copy_effect_endpoint, typed_copy_effect_lookup,
-            typed_copy_effect_allocas, typed_copy_effect_path]
+  irule alloca_frame_local_store >>
+  simp[] >>
+  (conj_tac >- metis_tac[]) >>
+  qexistsl_tac [`w2n dw`, `es1`, `id`, `type_memory_size dtv`, `s`, `cap`] >>
+  `alloca_frame cenv es1 sb s cenv es1 s` by
+    (irule alloca_frame_same >> simp[]) >>
+  `local_region cenv es1.scopes s id (w2n dw) cap` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  fs[] >>
+  conj_tac
+  >- (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  fs[typed_copy_effect_def, local_ptrs_reserved_def] >>
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Resume assign_relayout_store_post_path[staged]:
@@ -161,6 +186,34 @@ Resume assign_relayout_store_post_path[staged]:
   `!x. not_fresh_at ss x ==> lookup_var x t = lookup_var x u` by
     metis_tac[typed_copy_effect_lookup] >>
   `t.vs_allocas = u.vs_allocas` by metis_tac[typed_copy_effect_allocas] >>
+  `sx.cs_next_id = sb.cs_next_id` by simp[] >>
+  `venomMemDefs$allocas_non_overlapping u` by
+    (qpat_x_assum `stmt_state_rel ctx func cenv cx es1 u` mp_tac >>
+     simp[stmt_state_rel_def, state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
+  `!x w. not_fresh_at sb x /\ lookup_var x s = SOME w ==>
+    lookup_var x u = SOME w` by metis_tac[] >>
+  `alloca_frame cenv es1 sb s cenv es1 u` by
+    (irule alloca_frame_owned_copy >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >-
+       (qexistsl_tac [`w2n uw`, `sx.cs_next_id`, `type_memory_bytes cenv sty`] >>
+        pure_asm_rewrite_tac [] >> simp[])) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  `alloca_frame cenv es1 sb s cenv
+    (es1 with scopes := pre ++
+      (scope |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+    (irule alloca_frame_local_store >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >- metis_tac[]) >>
+     qexists_tac `w2n dw` >>
+     qexists_tac `es1` >>
+     qexists_tac `id` >>
+     qexists_tac `type_memory_size dtv` >>
+     qexists_tac `u` >> qexists_tac `cap` >>
+     pure_asm_rewrite_tac [] >>
+     fs[typed_copy_effect_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   qexists_tac `t` >> fs[] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED

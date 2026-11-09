@@ -437,6 +437,97 @@ Proof
   Cases_on `dst` >> gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 
+Theorem aug_place_memory_store_frame[local]:
+  alloca_frame c0 es0 sa0 s0 cenv ee s /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type dty) /\
+  lookup_scopes id ee.scopes = SOME entry /\
+  evaluate_type (get_tenv cx) dty = SOME tv /\ is_word_type dty /\
+  (!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  write_place cx (MemoryPlace id path) v ee = (INL (),ff) ==>
+  alloca_frame c0 es0 sa0 s0 cenv ff
+    ((mstore (w2n w) wd s) with vs_inst_idx := ix)
+Proof
+  strip_tac >> gvs[place_ptr_rel_def] >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `local_region cenv ee.scopes s id (w2n b) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `local_ptrs_rel func cenv ee.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[stmt_state_rel_def, alloca_room_next_lt] >>
+  `type_memory_size entry.type <= sz /\
+   w2n b + sz <= s.vs_alloca_next` by
+    (fs[local_ptrs_rel_def] >>
+     qpat_x_assum `!name ent p sz. _` drule >>
+     disch_then drule >> strip_tac >> gvs[]) >>
+  `type_memory_size tv = 32` by (drule_all word_tv_memory_size >> simp[]) >>
+  `w2n b + k < dimword (:256)` by decide_tac >>
+  `w2n (b + n2w k) = w2n b + k` by
+    (rewrite_tac[wordsTheory.word_add_def] >> simp[]) >>
+  `MAP FDOM ff.scopes = MAP FDOM ee.scopes` by
+    metis_tac[vyperScopePreservationTheory.write_place_scopes_dom] >>
+  irule alloca_frame_region_write >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+  simp[] >>
+  conj_tac >- simp[venomStateTheory.lookup_var_def, venomStateTheory.mstore_def] >>
+  rpt strip_tac >> simp[] >>
+  irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem aug_place_memory_store_run[local]:
+  emit_void MSTORE [dst;op] sa = ((),sb) /\
+  eval_operand dst s = SOME w /\ expr_val_rel cx dty v op s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type dty) /\
+  is_word_type dty /\ evaluate_type (get_tenv cx) dty = SOME tv /\
+  value_has_type tv v /\ expr_sim_inv cenv cx env ee /\
+  stmt_state_rel ctx func cenv cx ee s /\
+  alloca_frame c0 es0 sa0 s0 cenv ee s /\
+  lookup_scopes id ee.scopes = SOME entry /\
+  (!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
+  write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      stmt_state_rel ctx func cenv cx ff t /\
+      alloca_frame c0 es0 sa0 s0 cenv ff t /\
+      (!x. lookup_var x t = lookup_var x s) /\
+      t.vs_allocas = s.vs_allocas /\ ~t.vs_halted /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  qabbrev_tac `u = mstore (w2n w) (typed_val_to_w256 tv v) s` >>
+  `stmt_state_rel ctx func cenv cx ff u` by
+    (simp[Abbr `u`] >> irule place_store_word_memory_state >>
+     qpat_assum `place_ptr_rel _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_sim_inv _ _ _ _` (irule_at Any) >>
+     qpat_assum `write_place _ _ _ _ = _` (irule_at Any) >>
+     simp[]) >>
+  `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
+    (fs[expr_val_rel_def] >> metis_tac[]) >>
+  `gas_marked_path F ctx func s 0
+      (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
+   (!x. lookup_var x u = lookup_var x s) /\
+   u.vs_allocas = s.vs_allocas /\ ~u.vs_halted /\
+   u.vs_current_bb = sb.cs_current_bb /\
+   SUC s.vs_inst_idx = LENGTH sb.cs_current_insts` by
+    (irule place_store_emit_run >> simp[] >>
+     qexistsl [`dst`, `LocMemory`, `op`, `sa`] >>
+     simp[Abbr `u`] >> goal_assum (drule_at Any) >> simp[]) >>
+  qexists `u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  simp[stmt_state_rel_inst_idx, venomStateTheory.lookup_var_def] >>
+  simp[Abbr `u`] >> irule aug_place_memory_store_frame >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem aug_place_binop_store_outcome:
   bop <> In /\ bop <> NotIn /\
   compile_binop bop x y ty NONE el s2 = (op,s3) /\
@@ -456,6 +547,8 @@ Theorem aug_place_binop_store_outcome:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv s2 /\ local_ptrs_reserved cenv s3 /\
   stmt_state_rel ctx func cenv cx ee s /\
+  alloca_frame cenv es0 sa s_entry cenv ee s /\
+  sa.cs_next_id <= s2.cs_next_id /\
   eval_operand x s = SOME (val_to_w256 cur) /\
   eval_operand y s = SOME (val_to_w256 rhs) /\
   eval_operand dst s = SOME w /\
@@ -476,19 +569,20 @@ Theorem aug_place_binop_store_outcome:
            FLOOKUP s.vs_allocas aid = SOME b) /\
   (!v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     stmt_state_rel ctx func cenv cx ff t /\
+    alloca_frame cenv es0 sa s_entry cenv ff t /\
     (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
            lookup_var z t = SOME u) /\
     (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-    stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
       ptv bop cur rhs)) (write_place cx (MemoryPlace id path))) (ee,s)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s_entry)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)
 Proof
   strip_tac >>
@@ -540,11 +634,19 @@ Resume aug_place_binop_store_outcome[normal]:
      goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
   `!z. dst = Var z ==> not_fresh_at s3 z` by metis_tac[] >>
-  drule_all (place_store_word_run |> SPEC_ALL |> Q.INST [`loc` |-> `LocMemory`] |> SIMP_RULE (srw_ss()) []) >>
+  `alloca_frame cenv ee s2 s cenv ee t` by
+    (irule alloca_frame_of_mem_frame >> metis_tac[]) >>
+  `alloca_frame cenv es0 sa s_entry cenv ee t` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ s`)) >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ t`)) >> simp[]) >>
+  `!t0. cenv.ce_var_type id = SOME t0 ==>
+        evaluate_type (get_tenv cx) t0 = SOME entry.type` by metis_tac[] >>
+  drule_all aug_place_memory_store_run >>
   strip_tac >>
   `gas_marked_path F ctx func s 0 (OK t')` by
     (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+  `stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
      (INL ()) (ff with gas_obs := []) t'` by
     (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
@@ -603,15 +705,52 @@ Proof
   qexistsl_tac [`get_tenv cx`, `dtv`, `ty`] >> simp[]
 QED
 
+Theorem aug_place_prefix_frame[local]:
+  target_post ctx func cenv cx es sa sc s0 mid pv vt r t /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx mid t /\
+  stmt_state_rel ctx func cenv cx mid u /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sc /\
+  local_ptrs_reserved cenv sd /\
+  sa.cs_next_id <= sc.cs_next_id /\ sc.cs_next_id <= sd.cs_next_id /\
+  MAP FDOM mid.scopes = MAP FDOM es.scopes /\
+  MAP FDOM fin.scopes = MAP FDOM mid.scopes /\
+  u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
+  (!z w. not_fresh_at sc z /\ lookup_var z t = SOME w ==>
+         lookup_var z u = SOME w) /\
+  expr_post ctx func cenv cx e mid sd se u fin v op q ==>
+  alloca_frame cenv es sa s0 cenv fin q
+Proof
+  strip_tac >>
+  `alloca_frame cenv es sa s0 cenv mid t` by
+    (irule target_post_alloca_frame >> metis_tac[]) >>
+  `alloca_frame cenv mid sc t cenv mid u` by
+    (irule alloca_frame_of_mem_frame >> metis_tac[]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP t.vs_allocas aid = SOME b` by
+    fs[target_post_def] >>
+  `alloca_frame cenv es sa s0 cenv mid u` by
+    (irule alloca_frame_trans >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ t`)) >>
+     goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ u`)) >> simp[]) >>
+  `alloca_frame cenv mid sd u cenv fin q` by
+    (irule expr_post_alloca_frame >> metis_tac[]) >>
+  irule alloca_frame_trans >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ u`)) >>
+  goal_assum (drule_at (Pat `alloca_frame _ _ _ _ _ _ q`)) >>
+  simp[]
+QED
+
 Theorem aug_place_normal_post:
-  ~block_is_terminated sf /\ stmt_state_rel ctx func cenv cx ff t /\
+  alloca_frame cenv es0 sa s_entry cenv ff t /\
+  ~block_is_terminated sf /\ stmt_state_rel ctx func cenv cx ff t /\ 
   (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
          lookup_var z t = SOME u) /\
   (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
            FLOOKUP t.vs_allocas aid = SOME b) /\
   ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
   t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-  stmt_post ctx func cx lctx cenv cenv sa sf s_entry (INL ()) ff t
+  stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry (INL ()) ff t
 Proof
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_def]
 QED
@@ -643,13 +782,14 @@ Theorem aug_place_store_post[local]:
   ~block_is_terminated sf ==>
   !v ff t. write_place cx (MemoryPlace id path) v ee = (INL (),ff) /\
     stmt_state_rel ctx func cenv cx ff t /\
+    alloca_frame cenv es0 sa s_entry cenv ff t /\
     (!z u. not_fresh_at sa z /\ lookup_var z s_entry = SOME u ==>
            lookup_var z t = SOME u) /\
     (!aid b. FLOOKUP s_entry.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts ==>
-    stmt_post ctx func cx lctx cenv cenv sa sf s_entry
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s_entry
       (INL ()) (ff with gas_obs := []) t
 Proof
   rpt strip_tac >> irule aug_place_normal_post >>
@@ -1268,13 +1408,34 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
   `~block_is_terminated sb` by
     (irule stmtSimDeclMemTheory.emit_void_nonterminator_open >>
      goal_assum (drule_at Any) >> simp[venomInstTheory.is_terminator_def]) >>
+  `sa.cs_next_id <= s0'.cs_next_id` by
+    (qspecl_then [`bt`, `cenv`, `sa`] mp_tac
+       stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     simp[ci_mono_def]) >>
+  `s0'.cs_next_id <= s1.cs_next_id` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  `sa.cs_next_id <= s2.cs_next_id` by decide_tac >>
+  `MAP FDOM raw.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. eval_target_place _ _ _ = _`
+       (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o MATCH_MP
+       vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
+     simp[]) >>
+  `MAP FDOM raw'.scopes = MAP FDOM raw.scopes` by
+    (drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (raw' with gas_obs := []) t'` by
+    (irule aug_place_prefix_frame >>
+     qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+     metis_tac[]) >>
   drule aug_place_store_post >> disch_then assume_tac >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
       ptv bop v v'')) (write_place cx (MemoryPlace id path)))
     (raw' with gas_obs := [],t')
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)` by
     (irule aug_place_binop_store_outcome >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
@@ -1293,7 +1454,7 @@ Resume compile_augassign_place_memory_case[rhs_normal]:
      metis_tac[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
@@ -1315,7 +1476,7 @@ Resume compile_augassign_place_memory_case[rhs_exit]:
   markerLib.RESUME_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>
@@ -1338,7 +1499,7 @@ Resume compile_augassign_place_memory_case[rhs_exempt]:
   markerLib.RESUME_TAC >>
   `gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (AugAssign ty bt bop e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb es s0)
     (\res ff r. !tail. stmt_exit RetQ (ff with gas_obs := tail) res r)`
     suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
   simp[Once evaluate_def] >>

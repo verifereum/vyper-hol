@@ -1587,7 +1587,8 @@ Theorem place_store_word_run:
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-        t.vs_inst_idx = LENGTH sb.cs_current_insts
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (loc = LocStorage \/ loc = LocTransient ==> t.vs_memory = s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
   `eval_operand op s = SOME (typed_val_to_w256 dtv v)` by
@@ -1617,7 +1618,8 @@ Proof
      qpat_assum `emit_void _ _ _ = _` (irule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
-  fs[stmt_state_rel_inst_idx, lookup_var_def]
+  fs[stmt_state_rel_inst_idx, lookup_var_def] >>
+  rpt strip_tac >> gvs[Abbr `u`, sstore_def, tstore_def, LET_THM]
 QED
 
 (* compile_assign_value at the place: a word by one store, an aggregate

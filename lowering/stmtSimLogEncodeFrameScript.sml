@@ -348,6 +348,8 @@ Theorem log_scalar_tuple_continue:
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
+    abi_decode_footprint_frame
+      ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else [])) initial actual /\
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)

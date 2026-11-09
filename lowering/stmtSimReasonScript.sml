@@ -1107,7 +1107,7 @@ Theorem assert_reason_false_outcome_prefix[local]:
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Raise (RaiseReason r)))
     (mid with gas_obs := [],jump_to fl t)
-    (stmt_post ctx func cx lctx cenv cenv entry last (jump_to fl t))
+    (stmt_post ctx func cx lctx cenv cenv entry last (mid with gas_obs := []) (jump_to fl t))
     (\res ee rr. !tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assert e (AssertReason r))) (es,s0) Q
@@ -1236,7 +1236,10 @@ Resume compile_assert_reason_frag_general[true]:
       simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
       drule_all gas_path_then >> simp[]) >>
   disj1_tac >> simp[] >> irule assert_success_post >>
-  simp[] >> qexistsl_tac [`e`, `es`, `op`, `s1`] >> simp[]
+  simp[] >> conj_tac
+  >- (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
+      drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  qexistsl_tac [`e`, `op`, `s1`] >> simp[]
 QED
 Resume compile_assert_reason_frag_general[false]:
   gvs[] >>
@@ -1264,7 +1267,7 @@ Resume compile_assert_reason_frag_general[false]:
   (impl_tac >- gvs[stmt_state_rel_jump_to, jump_to_def, expr_post_def]) >>
   strip_tac >>
   drule_all assert_reason_false_outcome_prefix >>
-  disch_then (qspec_then `stmt_post ctx func cx lctx cenv cenv sa sb s0` mp_tac) >>
+  disch_then (qspec_then `stmt_post ctx func cx lctx cenv cenv sa sb es s0` mp_tac) >>
   simp[gas_outcome_def, gas_summary_at_def]
 QED
 Finalise compile_assert_reason_frag_general

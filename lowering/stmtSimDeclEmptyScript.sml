@@ -98,6 +98,8 @@ Theorem annassign_empty_store_post_path[local]:
         u.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
                lookup_var x u = SOME v) /\
+        (!x. lookup_var x u = lookup_var x s) /\
+        u.vs_memory = (mstore (w2n w) 0w s).vs_memory /\
         (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                      FLOOKUP u.vs_allocas aid = SOME entry) /\
         gas_marked_path F ctx func s 0 (OK u)
@@ -134,11 +136,11 @@ Theorem annassign_raw_rhs_outcome:
       Q (INL (Value v)) (ee with gas_obs := []) t ==>
       ?ff u. gas_marked_exec F (ctx,func) (new_variable id tyv v)
         (ee with gas_obs := [],t) [] (INL ()) ff (OK u) /\
-        stmt_post ctx func cx lctx old c sa sf s0 (INL ())
+        stmt_post ctx func cx lctx old c sa sf es s0 (INL ())
           (ff with gas_obs := []) u) ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (eval_stmt cx (AnnAssign id typ e)) (es,salloc)
-      (stmt_post ctx func cx lctx old c sa sf s0)
+      (stmt_post ctx func cx lctx old c sa sf es s0)
       (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[gas_outcome_def] >>
@@ -186,7 +188,9 @@ Theorem annassign_empty_normal_continuation[local]:
     evaluate_type (get_tenv cx) typ = SOME tyv /\ has_length_word typ /\
     (!gs tv es1. eval_expr cx e (es with gas_obs := gs) = (INL tv,es1) ==>
        tv = Value (default_value tyv)) /\
-    local_ptrs_reserved c sa /\
+    local_ptrs_reserved c sa /\ stmt_state_rel ctx func c cx es salloc /\
+    sa0.cs_next_id <= inst.inst_id /\ sa0.cs_next_id <= sa.cs_next_id /\
+    sa0.cs_next_var <= sa.cs_next_var /\
     emit_void MSTORE [Var p; Lit 0w] sb = ((), sf) /\ fn_has_code sb sf func /\
     fn_inst_ids_distinct func /\ ~block_is_terminated sf /\
     FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
@@ -200,7 +204,7 @@ Theorem annassign_empty_normal_continuation[local]:
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ff u. gas_marked_exec F (ctx,func) (new_variable id tyv v)
       (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-      stmt_post ctx func cx lctx old c sa sf salloc (INL ()) ff u
+      stmt_post ctx func cx lctx old c sa0 sf es salloc (INL ()) ff u
 Proof
   rpt gen_tac >> strip_tac >>
   `!tail. eval_expr cx e
@@ -229,11 +233,54 @@ Proof
     lookup_scopes id (ee with gas_obs := []).scopes = NONE` by (simp[] >> metis_tac[]) >>
   drule_all annassign_empty_store_post_path >>
   disch_then (qspec_then `T` strip_assume_tac) >>
+  `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
+     simp[]) >>
+  `alloca_frame c es sa salloc c (ee with gas_obs := []) s` by
+    (irule vv_post_alloca_frame >> metis_tac[]) >>
+  `allocas_non_overlapping s /\ lookup_var p s = SOME w /\
+   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+   (!aid b. FLOOKUP salloc.vs_allocas aid = SOME b ==>
+            FLOOKUP s.vs_allocas aid = SOME b)` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[vv_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >> metis_tac[]) >>
+  drule_all declare_local_ptr >> strip_tac >>
+  `32 <= sz` by
+    (qspecl_then [`get_tenv cx`, `typ`, `tyv`, `0`, `(mstore 0 0w s).vs_memory`]
+       mp_tac memory_length_word_layout >>
+     simp[mstore_mem_word_at_same]) >>
+  `!aid off z'. FLOOKUP s.vs_allocas aid = SOME (off, z') /\ aid < sa0.cs_next_id ==>
+     mem_bytes_at off z' u.vs_memory = mem_bytes_at off z' s.vs_memory` by
+    (mp_tac (Q.SPECL [`s`, `inst.inst_id`, `w`, `sz`] mstore_alloca_others) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+     rpt strip_tac >>
+     `aid <> inst.inst_id` by decide_tac >>
+     qpat_x_assum `!wd aid off z'. _` (qspecl_then [`0w`, `aid`, `off`, `z'`] mp_tac) >>
+     impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `u.vs_memory = _` (fn th => REWRITE_TAC [th]) >>
+     disch_then ACCEPT_TAC) >>
+  `((ee with gas_obs := []) with scopes :=
+      (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest).scopes =
+   (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest` by
+    simp[] >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by simp[] >>
+  `alloca_frame old es sa0 salloc c ((ee with gas_obs := []) with scopes :=
+    (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest) u` by
+    (mp_tac (Q.INST [`ee` |-> `(ee with gas_obs := []) with scopes :=
+         (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest`,
+       `es1` |-> `ee with gas_obs := []`,
+       `s0` |-> `salloc`, `aid0` |-> `inst.inst_id`, `z` |-> `sz`,
+       `entry` |-> `<|assignable := T; type := tyv; value := v; popped := []|>`,
+       `sa1` |-> `sa`, `t` |-> `u`] alloca_frame_declare_local_store) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   qexistsl [`(ee with gas_obs := []) with scopes :=
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest`, `u`] >>
   conj_tac
   >- gvs[gas_marked_exec_def] >>
-  gvs[stmt_post_def, stmt_lands_def]
+  gvs[stmt_post_def, stmt_lands_def] >> rpt strip_tac >>
+  first_x_assum irule >> fs[not_fresh_at_def]
 QED
 
 Theorem compile_annassign_empty_parts[local]:
@@ -365,8 +412,14 @@ Proof
     (`sA.cs_next_var = st.cs_next_var` by
        (drule emit_inst_extends >> simp[]) >>
      drule declare_local_old_fresh >> simp[] >> simp[not_fresh_at_def]) >>
+  `sa.cs_next_id <= ai.inst_id /\ sa.cs_next_id <= sA.cs_next_id /\
+   sa.cs_next_var <= sA.cs_next_var` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     qpat_x_assum `emit_inst ALLOCA _ _ _ = _` assume_tac >>
+     drule emit_inst_extends >>
+     simp[Abbr `ai`, venomInstTheory.mk_inst_def]) >>
   irule annassign_outcome_entry_prefix >>
-  qexistsl [`sA`, `salloc`] >> simp[] >>
+  simp[] >> qexists_tac `salloc` >> simp[] >>
   irule annassign_raw_rhs_outcome >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -375,8 +428,11 @@ Proof
   `type_memory_size tyv <= type_memory_bytes cenv vtyp` by simp[] >>
   drule_all annassign_empty_normal_continuation >> strip_tac >>
   qexistsl [`ff`, `u`] >> simp[] >>
-  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs,
        immutable_alloca_sep_def] >> strip_tac >> simp[] >>
-  conj_tac >> first_assum ACCEPT_TAC
+  `alloca_frame cenv es sa salloc c (ff with gas_obs := []) u` by
+    (qpat_x_assum `alloca_frame cenv es sa salloc c ff u` mp_tac >>
+     simp[alloca_frame_def]) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED

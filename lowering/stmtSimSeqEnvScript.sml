@@ -4,7 +4,7 @@ Ancestors
   stmtSimDefs stmtSimProps loweringPosts gasOutcome gasSummary gasSummaryCompose
   gasContext gasExemptCert fragExec fragGasMode fragGasPath compileEnv loweringSlice
   stmtLowering exprLoweringProps localPtrsProps vyperInterpreter vyperState
-  vyperEvalPreservesScopes list finite_map
+  vyperEvalPreservesScopes stmtLoweringMono list finite_map
 
 Theorem gas_admissible_stmts_head:
   gas_admissible (eval_stmts cx (stmt::ss)) (stmt_res_ok lctx) es ==>
@@ -30,42 +30,124 @@ Proof
   metis_tac[]
 QED
 
-Theorem stmt_post_normal_entry:
-  stmt_post ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
+(* stmt_post without its allocation frame: the post the counted
+   memory-safe sequencing (stmtSimSeqMem) composes, whose fragments make
+   no claim about older allocations' bytes. *)
+Definition stmt_post_core_def:
+  stmt_post_core ctx func cx lctx cenv cenv' sa sb s0 res ee t <=>
+    ?cenv''.
+      stmt_lands lctx sb res t /\ ~t.vs_halted /\
+      (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+      cenv_top_ext cenv cenv'' ee.scopes /\
+      stmt_state_rel ctx func cenv'' cx ee t /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
+End
+
+Theorem stmt_post_core_normal_entry:
+  stmt_post_core ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
   ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
   cenv_top_ext cenv c mid.scopes /\
   stmt_state_rel ctx func c cx mid t /\ ~block_is_terminated sm /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t
 Proof
-  rw[stmt_post_def, stmt_lands_def] >>
+  rw[stmt_post_core_def, stmt_lands_def] >>
   irule ret_pc_ok_frame >>
   metis_tac[cenv_top_ext_return_pc]
 QED
 
+Theorem stmt_post_core_exception_endpoint:
+  res <> INL () /\
+  stmt_post_core ctx func cx lctx cenv c sa sm s0 res ee t ==>
+  stmt_post_core ctx func cx lctx cenv c' sa sb s0 res ee t
+Proof
+  rw[stmt_post_core_def] >> qexists_tac `cenv''` >>
+  gvs[stmt_lands_def] >> metis_tac[]
+QED
+
+Theorem stmt_post_core_sequence:
+  stmt_post_core ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
+  stmt_post_core ctx func cx lctx c c' sm sb t res ee u /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  (mid.scopes = [] <=> ee.scopes = []) /\
+  MAP FDOM (TL mid.scopes) = MAP FDOM (TL ee.scopes) ==>
+  stmt_post_core ctx func cx lctx cenv c' sa sb s0 res ee u
+Proof
+  rw[stmt_post_core_def] >> qexists_tac `cenv''` >> simp[] >>
+  conj_tac >- (irule cenv_top_ext_trans >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[not_fresh_at_def, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem stmt_post_core:
+  stmt_post ctx func cx lctx cenv c sa sb es s0 res ee t ==>
+  stmt_post_core ctx func cx lctx cenv c sa sb s0 res ee t
+Proof
+  rw[stmt_post_def, stmt_post_core_def] >> qexists_tac `cenv''` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem stmt_post_normal_entry:
+  stmt_post ctx func cx lctx cenv c sa sm es0 s0 (INL ()) mid t /\
+  ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
+  cenv_top_ext cenv c mid.scopes /\
+  stmt_state_rel ctx func c cx mid t /\ ~block_is_terminated sm /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ret_pc_ok c sm t
+Proof
+  strip_tac >> irule stmt_post_core_normal_entry >>
+  metis_tac[stmt_post_core]
+QED
+
 Theorem stmt_post_exception_endpoint:
   res <> INL () /\
-  stmt_post ctx func cx lctx cenv c sa sm s0 res ee t ==>
-  stmt_post ctx func cx lctx cenv c' sa sb s0 res ee t
+  stmt_post ctx func cx lctx cenv c sa sm es0 s0 res ee t ==>
+  stmt_post ctx func cx lctx cenv c' sa sb es0 s0 res ee t
 Proof
   rw[stmt_post_def] >> qexists_tac `cenv''` >>
   gvs[stmt_lands_def] >> metis_tac[]
 QED
 
 Theorem stmt_post_sequence:
-  stmt_post ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
-  stmt_post ctx func cx lctx c c' sm sb t res ee u /\
-  sa.cs_next_var <= sm.cs_next_var /\
+  stmt_post ctx func cx lctx cenv c sa sm es0 s0 (INL ()) mid t /\
+  stmt_post ctx func cx lctx c c' sm sb mid t res ee u /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (mid.scopes = [] <=> ee.scopes = []) /\
   MAP FDOM (TL mid.scopes) = MAP FDOM (TL ee.scopes) ==>
-  stmt_post ctx func cx lctx cenv c' sa sb s0 res ee u
+  stmt_post ctx func cx lctx cenv c' sa sb es0 s0 res ee u
 Proof
   rw[stmt_post_def] >> qexists_tac `cenv''` >> simp[] >>
-  conj_tac >- (irule cenv_top_ext_trans >> metis_tac[]) >>
+  `alloca_frame cenv es0 sa s0 cenv'' ee u` by
+    (irule alloca_frame_trans >> metis_tac[]) >>
+  simp[] >> conj_tac >- (irule cenv_top_ext_trans >> metis_tac[]) >>
   rpt strip_tac >> first_x_assum irule >>
   metis_tac[not_fresh_at_def, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+Theorem declare_stmt_local_next_id:
+  !cenv stmt st c st'.
+    declare_stmt_local cenv stmt st = (c, st') ==> st'.cs_next_id = st.cs_next_id
+Proof
+  Cases_on `stmt` >>
+  simp[declare_stmt_local_def, declare_local_def, comp_return_def,
+       comp_bind_def, fresh_var_def, LET_THM] >>
+  rw[] >> gvs[comp_return_def, comp_bind_def, fresh_var_def]
+QED
+
+Theorem stmt_env_next_id:
+  !cenv lctx ty stmt sa c sb.
+    stmt_env cenv lctx ty stmt sa = (c, sb) ==> sa.cs_next_id <= sb.cs_next_id
+Proof
+  rpt gen_tac >>
+  simp[stmt_env_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >>
+  drule declare_stmt_local_next_id >> strip_tac >>
+  qmatch_asmsub_rename_tac `compile_stmt c1 lctx ty stmt s1 = (_, s2)` >>
+  qspecl_then [`c1`, `lctx`, `ty`, `stmt`, `s1`] mp_tac
+    (cj 1 stmtLoweringMonoTheory.compile_stmt_ci_mono) >>
+  gvs[exprLoweringPropsTheory.ci_mono_def]
+QED
 
 Theorem stmt_frag_cons_env:
   !ctx func cx lctx RetQ cenv ty stmt ss es.
@@ -88,6 +170,7 @@ Proof
   simp[stmts_env_cons, comp_bind_def] >> pairarg_tac >> simp[] >>
   strip_tac >> rename1 `stmt_env cenv lctx ty stmt sa = (c, sm)` >>
   drule_all stmt_env_reserved >> strip_tac >>
+  drule stmt_env_next_id >> strip_tac >>
   `cs_extends sm sb /\ sm.cs_next_var <= sb.cs_next_var` by
     (qpat_x_assum `!c. cs_mono (stmts_env _ _ _ _)` (qspec_then `c` mp_tac) >>
      simp[cs_mono_def] >> metis_tac[]) >>

@@ -157,28 +157,45 @@ Resume immutable_deploy_augassign_frag[operator_normal]:
   `?fin last. write_place cx (ImmutablePlace cenv.ce_module nsid1 []) result
       (ee with gas_obs := []) = (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
-    stmt_post ctx func cx lctx cenv cenv s3 sb s (INL ()) fin last` by
-    (irule immutable_augassign_store_post_path >> simp[] >>
+    stmt_post ctx func cx lctx cenv cenv s3 sb (ee with gas_obs := []) s
+      (INL ()) fin last` by
+    (irule immutable_augassign_store_post_path >>
+     simp[alloca_frame_same] >>
      conj_tac >- metis_tac[] >>
      qexistsl_tac [`env`,`res_op`,`s3`] >> simp[]) >>
   suspend "store_post"
 QED
 
 Resume immutable_deploy_augassign_frag[store_post]:
-  `stmt_post ctx func cx lctx cenv cenv s2 sb u (INL ()) fin last` by
+  `alloca_frame cenv ee s2 u cenv ee s` by
+    (irule alloca_frame_of_mem_frame >>
+     qpat_assum `stmt_state_rel _ _ _ _ ee u`
+       (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv s2 sb (ee with gas_obs := []) u
+     (INL ()) fin last` by
     (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
-     qexistsl_tac [`s`,`s3`] >> simp[] >> metis_tac[not_fresh_at_mono]) >>
-  `stmt_post ctx func cx lctx cenv cenv s1 sb t (INL ()) fin last` by
-    (irule stmt_post_expr_entry_frame >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) fin last` by
+     qpat_assum `stmt_post _ _ _ _ _ _ s3 _ _ s _ _ _` (irule_at Any) >>
+     simp[] >> metis_tac[not_fresh_at_mono]) >>
+  `stmt_post ctx func cx lctx cenv cenv s1 sb
+     (es with gas_obs := []) t
+     (INL ()) fin last` by
+    (`MAP FDOM ee.scopes = MAP FDOM es.scopes` by
+       (qpat_assum `bind (eval_expr cx e) (read_result cx) _ = _`
+          (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
+     irule stmt_post_expr_entry_frame >>
+     qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[]) >>
+  `alloca_frame cenv es sa s0 cenv es t` by
+    (irule alloca_frame_of_mem_frame >>
+     qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `stmt_post ctx func cx lctx cenv cenv sa sb es s0 (INL ()) fin last` by
     (irule stmtSimDeclComposeTheory.stmt_post_entry_frame >>
-     qexistsl_tac [`t`,`s1`] >> simp[] >>
-     rpt strip_tac >> irule not_fresh_at_mono >>
-     qexists_tac `sa` >> simp[] >>
+     qpat_assum `stmt_post _ _ _ _ _ _ s1 _ _ t _ _ _` (irule_at Any) >>
      qspecl_then [`MLOAD`,`[Lit (n2w off)]`,`sa`] mp_tac ci_mono_emit_op >>
-     simp[ci_mono_def]) >>
+     simp[ci_mono_def] >> rpt strip_tac >>
+     irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   `gas_marked_path F ctx func u 0 (OK last)` by
     (drule_all gas_marked_path_then >> simp[]) >>
   `fin = fin with gas_obs := []` by

@@ -678,11 +678,14 @@ Resume place_dyn_storage_path[body]:
        (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx`) >>
      simp_tac (srw_ss()) [store_copy_normalize_def, place_dyn_prefix_fields]) >>
   `eval_operand src q = SOME b /\ eval_operand dst q = SOME k` by
-    (conj_tac >-
-       (Cases_on `src` >> simp[eval_operand_def] >>
-        fs[eval_operand_def, Excl "isPREFIX"] >> metis_tac[]) >>
-     Cases_on `dst` >> simp[eval_operand_def] >>
-     fs[eval_operand_def, Excl "isPREFIX"] >> metis_tac[]) >>
+    (qpat_assum `!x. src = Var x \/ dst = Var x ==> _` mp_tac >>
+     qpat_assum `eval_operand src s0 = _` mp_tac >>
+     qpat_assum `eval_operand dst s0 = _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sa x ==> lookup_var x q = _` mp_tac >>
+     qpat_assum `q.vs_labels = s0.vs_labels` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac
+     >- (Cases_on `src` >> fs[eval_operand_def] >> metis_tac[]) >>
+     Cases_on `dst` >> fs[eval_operand_def] >> metis_tac[]) >>
   `not_fresh_at stb ctr /\ not_fresh_at stb lv /\
    (!x. src = Var x \/ dst = Var x ==> not_fresh_at stb x)` by
     (fs[EVERY_DEF] >> metis_tac[]) >>
@@ -737,8 +740,8 @@ Resume place_dyn_storage_path[body]:
        (mp_tac o Q.AP_TERM `store_copy_normalize s0`) >>
      simp_tac (srw_ss()) [store_copy_normalize_def, jump_to_def]) >>
   simp[ADD1] >>
-  fs[ALL_DISTINCT, jump_to_def, eval_operand_def, lookup_var_def,
-     Excl "isPREFIX"] >>
+  FIRST [fs[ALL_DISTINCT, jump_to_def, eval_operand_def, lookup_var_def,
+            Excl "isPREFIX"]] >>
   `ri.vs_current_bb = ste.cs_current_bb` by metis_tac[] >>
   qpat_assum `gas_marked_path _ _ _ q 0 (OK rb)`
     (mp_then Any mp_tac gas_marked_path_then) >>

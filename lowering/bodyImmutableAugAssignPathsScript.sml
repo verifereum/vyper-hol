@@ -44,6 +44,7 @@ Theorem immutable_augassign_load_frame:
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ local_ptrs_reserved cenv sb /\
       (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s0) /\
       t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+      t.vs_memory = s0.vs_memory /\
       (?out. op = Var out /\ not_fresh_at sb out)
 Proof
   strip_tac >>
@@ -66,6 +67,36 @@ Proof
   simp[update_var_def,lookup_var_def,FLOOKUP_UPDATE,not_fresh_at_def,eval_operand_def]
 QED
 
+(* An MSTORE into a constructor immutable's word keeps every alloca's
+   bytes: immutable_decl_sep separates the immutable from every alloca. *)
+Theorem immutable_mstore_alloca_frame[local]:
+  alloca_frame c0 e0 sa s0 cenv ee s /\
+  (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP s.vs_allocas aid = SOME b) /\
+  stmt_state_rel ctx func cenv cx ee s /\ cenv.ce_is_ctor /\
+  FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
+  cenv.ce_module_var_type (cenv.ce_module,id) = SOME ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ type_memory_size tv = 32 /\
+  ee1.scopes = ee.scopes ==>
+  alloca_frame c0 e0 sa s0 cenv ee1 (mstore off w s with vs_inst_idx := k)
+Proof
+  strip_tac >>
+  `immutable_decl_sep cenv cx ee.scopes s.vs_vars s.vs_allocas
+     s.vs_alloca_next` by
+    fs[stmt_state_rel_def, immutable_alloca_sep_def] >>
+  fs[immutable_decl_sep_alt] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[alloca_frame_def] >> rpt strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac)
+  >- (`FLOOKUP s.vs_allocas aid = SOME (off',sz)` by metis_tac[] >>
+      `regions_disjoint off 32 off' sz` by metis_tac[] >>
+      fs[regions_disjoint_def] >>
+      simp[valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint]) >>
+  first_x_assum irule >>
+  gvs[local_region_def, mstore_def, lookup_var_def] >> metis_tac[]
+QED
+
 Theorem immutable_augassign_store_post_path:
   emit_void MSTORE [Lit (n2w off); op] st = ((),sf) /\
   fn_has_code st sf func /\ ~s.vs_halted /\
@@ -82,11 +113,12 @@ Theorem immutable_augassign_store_post_path:
   (!x wd. not_fresh_at sa x /\ lookup_var x s0 = SOME wd ==>
           lookup_var x s = SOME wd) /\
   (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-           FLOOKUP s.vs_allocas aid = SOME b) ==>
+           FLOOKUP s.vs_allocas aid = SOME b) /\
+  alloca_frame cenv es sa s0 cenv ee s ==>
   ?fin last. write_place cx (ImmutablePlace cenv.ce_module id []) w ee =
       (INL (),fin) /\
     gas_marked_path F ctx func s 0 (OK last) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) fin last
+    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) fin last
 Proof
   strip_tac >>
   drule_all immutable_augassign_entry >> strip_tac >> gvs[] >>
@@ -109,6 +141,17 @@ Proof
         comp_ignore_bind_def, comp_return_def, emit_def] >>
   `~block_is_terminated sf` by
     (drule emit_void_terminated >> simp[is_terminator_def]) >>
+  `fin.scopes = ee.scopes` by
+    (qpat_x_assum `write_place _ _ _ _ = (INL (),fin)` mp_tac >>
+     asm_rewrite_tac[] >> rw[] >> simp[]) >>
+  `cenv.ce_is_ctor` by fs[body_inv_def] >>
+  `type_memory_size tv = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  `alloca_frame cenv es sa s0 cenv fin
+     (mstore off (typed_val_to_w256 tv w) s with
+        vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule immutable_mstore_alloca_frame >> simp[] >>
+     qpat_assum `stmt_state_rel _ _ _ _ ee s` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
   goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
