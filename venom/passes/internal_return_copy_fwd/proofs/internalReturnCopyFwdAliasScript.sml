@@ -4,7 +4,8 @@ Ancestors
   internalReturnCopyFwdPlan ptrDiscipline venomWfProps venomInst list finite_map words
   venomExecSemantics venomState o1LowerDloadPairedAllocation
   venomMemProps basePtrProofs o1FrameLockstep ssaAvailablePred venomExecProofs venomWf rangeAnalysisProofs contextCodegenRel
-  tailMergeStep venomInstProofs1
+  tailMergeStep venomInstProofs1 ptrDisciplineControl venomInstProps relation
+  singleUseExpansionSupplySim
 
 Definition ircf_alias_value_def:
   ircf_alias_value fn s G v <=>
@@ -570,4 +571,108 @@ Proof
   qexistsl_tac [`bb`, `n`] >> simp[] >>
   gvs[boundary_pred_def, prefix_pred_def] >> rpt strip_tac >>
   first_x_assum irule >> simp[] >> goal_assum drule >> simp[]
+QED
+
+Definition ircf_alias_boundary_def:
+  ircf_alias_boundary fn s G <=>
+    ircf_size_coherent fn s /\ fn_reachable fn s.vs_current_bb /\
+    ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      boundary_pred fn bb s.vs_inst_idx (ircf_alias_site_value fn s G)
+End
+
+Definition ircf_alias_saved_def:
+  ircf_alias_saved C f <=>
+    MEM f.cf_fn C.ctx_functions /\ f.cf_inst.inst_opcode = INVOKE /\
+    active_inst f.cf_fn f.cf_inst f.cf_state /\
+    ircf_alias_boundary f.cf_fn f.cf_state f.cf_prov
+End
+
+Definition ircf_alias_frames_def:
+  ircf_alias_frames C stk fn inst s G <=>
+    MEM fn C.ctx_functions /\ active_inst fn inst s /\
+    ircf_alias_boundary fn s G /\ EVERY (ircf_alias_saved C) stk
+End
+
+Theorem ircf_alias_frames_current:
+  ircf_alias_frames C stk fn inst s G ==>
+  MEM fn C.ctx_functions /\ active_inst fn inst s /\ ircf_alias_boundary fn s G
+Proof
+  simp[ircf_alias_frames_def]
+QED
+
+Theorem ircf_alias_frames_stack:
+  ircf_alias_frames C stk fn inst s G ==> EVERY (ircf_alias_saved C) stk
+Proof
+  simp[ircf_alias_frames_def]
+QED
+
+Theorem ircf_alias_saved_cons:
+  EVERY (ircf_alias_saved C) (f::stk) <=>
+  ircf_alias_saved C f /\ EVERY (ircf_alias_saved C) stk
+Proof
+  simp[]
+QED
+
+Theorem ircf_alias_boundary_operand:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\ active_inst fn inst s /\
+  inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands ==>
+  ircf_alias_site_value fn s G v
+Proof
+  rw[ircf_alias_boundary_def, active_inst_def] >>
+  `bb' = bb` by metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block] >>
+  gvs[] >> irule boundary_pred_operand >> metis_tac[lookup_block_MEM]
+QED
+
+Theorem ircf_alias_boundary_entry:
+  ssa_form fn /\ s.vs_allocas = FEMPTY /\
+  fn_entry_label fn = SOME s.vs_current_bb /\ enters_block fn s t ==>
+  ircf_alias_boundary fn t G
+Proof
+  strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by metis_tac[enters_block_current_bb] >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    gvs[enters_block_def] >>
+  simp[ircf_alias_boundary_def] >> conj_tac
+  >- metis_tac[ircf_size_coherent_empty, ircf_size_coherent_enters_block] >>
+  conj_tac >- (simp[fn_reachable_def] >> metis_tac[RTC_REFL]) >>
+  metis_tac[ircf_alias_site_entry]
+QED
+
+Theorem ircf_alias_boundary_call:
+  ssa_form callee /\ setup_callee callee args s = SOME cs /\
+  enters_block callee cs t ==> ircf_alias_boundary callee t G
+Proof
+  strip_tac >> irule ircf_alias_boundary_entry >> simp[] >>
+  qexists_tac `cs` >> simp[] >>
+  gvs[setup_callee_def, fn_entry_label_def, entry_block_def]
+QED
+
+Theorem ircf_alias_boundary_next:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  ircf_alias_boundary fn s G /\ active_inst fn inst s /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel C inst s = OK t ==>
+  ircf_alias_boundary fn (t with vs_inst_idx := SUC s.vs_inst_idx)
+    (step_prov PG G inst t)
+Proof
+  rw[ircf_alias_boundary_def, active_inst_def] >>
+  `bb' = bb` by metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block] >>
+  gvs[] >>
+  `t.vs_current_bb = s.vs_current_bb` by metis_tac[step_preserves_control_flow] >>
+  `(EL s.vs_inst_idx bb.bb_instructions).inst_opcode <> PHI` by
+    (strip_tac >> gvs[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
+  `ircf_size_coherent fn t` by
+    (irule ircf_size_coherent_step >> conj_tac
+     >- gvs[wf_function_def] >>
+     qexistsl_tac [`C`, `fuel`, `EL s.vs_inst_idx bb.bb_instructions`, `s`] >>
+     simp[] >> gvs[fn_insts_def] >>
+     metis_tac[o1PassContractTheory.fn_insts_blocks_MEM, EL_MEM]) >>
+  simp[]
+  >- (gvs[ircf_size_coherent_def] >> gvs[]) >>
+  irule boundary_pred_mono >>
+  qexists_tac `ircf_alias_site_value fn t
+    (step_prov PG G (EL s.vs_inst_idx bb.bb_instructions) t)` >>
+  simp[ircf_alias_site_value_def, lookup_var_def] >>
+  irule ircf_alias_site_boundary_step >> metis_tac[lookup_block_MEM]
 QED
