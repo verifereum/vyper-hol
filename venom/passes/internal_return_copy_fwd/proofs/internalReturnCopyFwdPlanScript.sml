@@ -411,6 +411,17 @@ Proof
   metis_tac[ircf_forward_original_dst_position]
 QED
 
+Theorem ircf_block_plan_fwd_ok:
+  !fn bb cur k d s sz.
+    ircf_block_plan fn bb cur /\ k IN ircf_fwds bb cur /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,s,sz) ==>
+    ircf_fwd_ok fn bb k d s sz
+Proof
+  rpt gen_tac >> simp[ircf_block_plan_def] >> strip_tac >>
+  qpat_x_assum `!k. k IN _ ==> _` (qspec_then `k` mp_tac) >>
+  simp[] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem ircf_block_plan_inst_ids:
   !fn bb cur. ircf_block_plan fn bb cur ==>
     MAP (\i. i.inst_id) cur.bb_instructions =
@@ -499,6 +510,30 @@ Proof
   gvs[]
 QED
 
+Theorem ircf_forward_source_not_dest_alias:
+  !fn bb k j d s sz d2 s2 sz2.
+    wf_function fn /\ ssa_form fn /\ ircf_no_dst_write_alias fn /\
+    MEM bb fn.fn_blocks /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,s,sz) /\
+    ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) /\
+    ircf_fwd_ok fn bb k d s sz /\ ircf_fwd_ok fn bb j d2 s2 sz2 ==>
+    ~ircf_alias fn d s2
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `d = s2` by
+    (irule ircf_alloca_alias_root >> gvs[ircf_fwd_ok_def] >> metis_tac[]) >>
+  `k < LENGTH bb.bb_instructions /\ j < LENGTH bb.bb_instructions /\
+   (EL k bb.bb_instructions).inst_opcode = MCOPY` by gvs[ircf_fwd_ok_def] >>
+  Cases_on `(EL j bb.bb_instructions).inst_id = (EL k bb.bb_instructions).inst_id`
+  >- (`EL j bb.bb_instructions = EL k bb.bb_instructions` by
+        (irule fn_inst_ids_distinct_inj >> conj_tac >- simp[] >>
+         qexists_tac `fn` >> gvs[wf_function_def] >>
+         simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         metis_tac[EL_MEM]) >> gvs[ircf_fwd_ok_def]) >>
+  `MEM (EL k bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  drule_all ircf_forward_roots_separate >> simp[]
+QED
+
 Theorem ircf_redirect_unaffected:
   !fn bb cur v.
     (!k d s sz. k IN ircf_fwds bb cur /\
@@ -509,11 +544,14 @@ Proof
   rpt strip_tac >> simp[ircf_redirect_def] >> metis_tac[]
 QED
 
-Theorem ircf_block_plan_redirect_source:
+Theorem ircf_redirect_source:
   !fn bb cur k d s sz v.
     wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
     ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
-    ircf_block_plan fn bb cur /\ k IN ircf_fwds bb cur /\
+    (!j d2 s2 sz2. j IN ircf_fwds bb cur /\
+      ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) ==>
+      ircf_fwd_ok fn bb j d2 s2 sz2) /\
+    k IN ircf_fwds bb cur /\
     ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,s,sz) /\
     ircf_alias fn d v ==> ircf_redirect fn bb cur v = s
 Proof
@@ -521,15 +559,144 @@ Proof
   `!j d2 s2 sz2. j IN ircf_fwds bb cur /\
     ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) /\
     ircf_alias fn d2 v ==> s2 = s` by
-    (rpt strip_tac >>
-     `ircf_fwd_ok fn bb k d s sz /\ ircf_fwd_ok fn bb j d2 s2 sz2` by
-       (gvs[ircf_block_plan_def] >>
-        qpat_assum `!k. k IN _ ==> _` (qspec_then `k` mp_tac) >>
-        qpat_x_assum `!k. k IN _ ==> _` (qspec_then `j` mp_tac) >>
-        simp[] >> rpt strip_tac >> gvs[]) >>
-     metis_tac[ircf_forward_alias_source_unique]) >>
+    (rpt strip_tac >> metis_tac[ircf_forward_alias_source_unique]) >>
   rw[ircf_redirect_def] >- (irule SELECT_UNIQUE >> metis_tac[]) >>
   metis_tac[]
+QED
+
+Theorem ircf_redirect_insert:
+  !fn bb cur next k d s sz v.
+    wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+    ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
+    (!j d2 s2 sz2. j IN ircf_fwds bb cur /\
+      ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) ==>
+      ircf_fwd_ok fn bb j d2 s2 sz2) /\
+    ircf_fwds bb next = k INSERT ircf_fwds bb cur /\
+    ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,s,sz) /\
+    ircf_fwd_ok fn bb k d s sz ==>
+    ircf_redirect fn bb next v =
+      if ircf_alias fn d (ircf_redirect fn bb cur v) then s
+      else ircf_redirect fn bb cur v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!j d2 s2 sz2. j IN ircf_fwds bb next /\
+    ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) ==>
+    ircf_fwd_ok fn bb j d2 s2 sz2` by
+    (rpt gen_tac >> simp[] >> strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `?j d2 s2 sz2. j IN ircf_fwds bb cur /\
+    ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) /\
+    ircf_alias fn d2 v`
+  >- (pop_assum strip_assume_tac >>
+      `ircf_redirect fn bb cur v = s2` by metis_tac[ircf_redirect_source] >>
+      `ircf_redirect fn bb next v = s2` by
+        metis_tac[ircf_redirect_source, IN_INSERT] >>
+      `~ircf_alias fn d s2` by metis_tac[ircf_forward_source_not_dest_alias] >>
+      simp[]) >>
+  `ircf_redirect fn bb cur v = v` by metis_tac[ircf_redirect_unaffected] >>
+  Cases_on `ircf_alias fn d v`
+  >- (`ircf_redirect fn bb next v = s` by
+        metis_tac[ircf_redirect_source, IN_INSERT] >> simp[]) >>
+  `ircf_redirect fn bb next v = v` by
+    (irule ircf_redirect_unaffected >> rpt gen_tac >> simp[] >>
+     strip_tac >> gvs[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem ircf_block_plan_mcopy_stable:
+  !fn bb cur i.
+    wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+    MEM bb fn.fn_blocks /\ ircf_block_plan fn bb cur /\
+    i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = MCOPY /\
+    i NOTIN ircf_fwds bb cur ==>
+    EL i cur.bb_instructions = EL i bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (MAP (\inst. inst.inst_id) bb.bb_instructions)` by
+    (qpat_x_assum `MEM bb _` (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+     gvs[wf_function_def, fn_inst_ids_distinct_def, FLAT_APPEND,
+         ALL_DISTINCT_APPEND]) >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    (gvs[fn_inst_wf_def, fn_insts_blocks_flat, EVERY_MEM] >> metis_tac[EL_MEM]) >>
+  `?a b c. (EL i bb.bb_instructions).inst_operands = [a;b;c]` by
+    (gvs[inst_wf_def, LENGTH_EQ_NUM_compute]) >>
+  `!v. MEM (Var v) (EL i bb.bb_instructions).inst_operands ==>
+    ircf_redirect fn bb cur v = v` by
+    (rpt strip_tac >> irule ircf_redirect_unaffected >> rpt strip_tac >>
+     `k < LENGTH bb.bb_instructions /\ k <> i /\
+      (EL k bb.bb_instructions).inst_opcode = MCOPY` by
+       (gvs[ircf_fwds_def] >> metis_tac[]) >>
+     `(EL i bb.bb_instructions).inst_id <> (EL k bb.bb_instructions).inst_id` by
+       (drule ALL_DISTINCT_EL_IMP >>
+        disch_then (qspecl_then [`i`, `k`] mp_tac) >> simp[EL_MAP]) >>
+     metis_tac[ircf_copy_roots_mcopy_no_alias, EL_MEM]) >>
+  `MAP (ircf_redirect_op fn bb cur) (EL i bb.bb_instructions).inst_operands =
+   (EL i bb.bb_instructions).inst_operands` by
+    (irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+     Cases_on `EL x (EL i bb.bb_instructions).inst_operands` >>
+     gvs[ircf_redirect_op_def] >>
+     `x < LENGTH [a;b;c]` by simp[] >>
+     drule EL_MEM >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `ircf_block_plan _ _ _` mp_tac >>
+  simp[ircf_block_plan_def] >> strip_tac >>
+  qpat_x_assum `!i. i < _ ==> _` (qspec_then `i` mp_tac) >>
+  simp[instruction_component_equality]
+QED
+
+Theorem ircf_block_plan_mcopy_original:
+  !fn bb cur k.
+    wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+    MEM bb fn.fn_blocks /\ ircf_block_plan fn bb cur /\
+    k < LENGTH bb.bb_instructions /\
+    (EL k cur.bb_instructions).inst_opcode = MCOPY ==>
+    (EL k bb.bb_instructions).inst_opcode = MCOPY /\
+    k NOTIN ircf_fwds bb cur /\
+    EL k cur.bb_instructions = EL k bb.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = MCOPY /\
+   k NOTIN ircf_fwds bb cur` by
+    (qpat_x_assum `ircf_block_plan _ _ _` mp_tac >>
+     simp[ircf_block_plan_def] >> strip_tac >>
+     qpat_x_assum `!i. i < _ ==> _` (qspec_then `k` mp_tac) >> simp[] >>
+     Cases_on `k IN ircf_fwds bb cur` >> simp[mk_nop_inst_def] >>
+     Cases_on `(EL k bb.bb_instructions).inst_opcode = ASSIGN` >>
+     simp[] >> strip_tac >> gvs[]) >>
+  metis_tac[ircf_block_plan_mcopy_stable]
+QED
+
+Theorem ircf_block_plan_forward_insert:
+  !fn bb cur ctx k insts.
+    wf_function fn /\ fn_inst_wf fn /\ ircf_no_dst_write_alias fn /\
+    MEM bb fn.fn_blocks /\ ircf_block_plan fn bb cur /\
+    ircf_try_forward ctx cur k = SOME insts ==>
+    ircf_fwds bb (cur with bb_instructions := insts) =
+      k INSERT ircf_fwds bb cur
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ircf_try_forward_prefix_and_copy >> strip_tac >>
+  `LENGTH cur.bb_instructions = LENGTH bb.bb_instructions` by
+    gvs[ircf_block_plan_def] >>
+  `k < LENGTH bb.bb_instructions` by simp[] >>
+  drule_all ircf_block_plan_mcopy_original >> strip_tac >>
+  drule ircf_try_forward_inst_fields >> strip_tac >>
+  simp[EXTENSION, ircf_fwds_def] >> gen_tac >>
+  Cases_on `x = k` >- gvs[mk_nop_inst_def] >>
+  Cases_on `x < LENGTH bb.bb_instructions` >> simp[] >>
+  first_x_assum (qspec_then `x` mp_tac) >> simp[]
+QED
+
+Theorem ircf_block_plan_refl:
+  !fn bb. ircf_block_plan fn bb bb
+Proof
+  rpt gen_tac >>
+  `ircf_fwds bb bb = {}` by
+    (simp[ircf_fwds_def, EXTENSION] >> metis_tac[]) >>
+  `ircf_redirect fn bb bb = I` by
+    (simp[FUN_EQ_THM, ircf_redirect_def]) >>
+  `ircf_redirect_op fn bb bb = I` by
+    (simp[FUN_EQ_THM] >> gen_tac >> Cases_on `x` >> simp[ircf_redirect_op_def]) >>
+  simp[ircf_block_plan_def] >> rpt strip_tac >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = ASSIGN` >> simp[]
 QED
 
 (* Why it holds: ircf_try_forward keeps the length and every inst_id, and
