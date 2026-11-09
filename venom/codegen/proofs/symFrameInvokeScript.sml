@@ -13,7 +13,7 @@ Ancestors
   symFnSimSpec codegenSymRel fnFrameDeepInvoke asmSymBridge asmSymSem
   frameRel contextCodegenRel codegenRel unitShapeDefs stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  dfgDefs list symPlannerSim
+  dfgDefs list symPlannerSim prefixExec mixedPrefixSim symShuffleSim
 
 (* INVOKE cannot consume the opaque code-end pointer. *)
 Theorem sym_invoke_argument_not_code_end:
@@ -772,6 +772,94 @@ Proof
   Induct
   >- (rpt gen_tac >> Cases_on `operands` >> simp[execute_plan_def, sym_steps_def]) >>
   drule sym_scratch_restores_cons >> simp[]
+QED
+
+Theorem sym_scratch_restore_witnesses:
+  LIST_REL (op_kind_ok fn ret) operands vals /\
+  LIST_REL (mem_sval_at labs) offs vals /\
+  EVERY (\i. i < LENGTH operands) indices ==>
+  LIST_REL (\op off. ?sv. op_kind_ok fn ret op sv /\ mem_sval_at labs off sv)
+    (MAP (\i. EL i operands) indices) (MAP (\i. EL i offs) indices)
+Proof
+  simp[LIST_REL_EL_EQN, EVERY_EL, EL_MAP] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem sym_scratch_schedule_kinds:
+  !offs operands vals indices ss stk p fmp env.
+  LIST_REL (op_kind_ok fn ret) operands vals /\ LENGTH vals = LENGTH offs /\
+  ss.sym_stack = vals ++ stk /\
+  EVERY (\off. off < dimword (:256)) offs /\ ALL_DISTINCT offs /\
+  (!a b i. MEM a offs /\ MEM b offs /\ a <> b /\ in_mem_range a 32 i ==>
+    ~in_mem_range b 32 i) /\
+  EVERY (\i. i < LENGTH operands) indices /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan fmp (MAP SOSpill offs ++
+      MAP SORestore (MAP (\i. EL i offs) indices))) ==>
+  ?ss' top.
+    sym_steps p env (LENGTH (execute_plan fmp (MAP SOSpill offs ++
+      MAP SORestore (MAP (\i. EL i offs) indices)))) ss = SymOK ss' /\
+    ss'.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (MAP (\i. EL i operands) indices)) top /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan fmp (MAP SOSpill offs ++
+        MAP SORestore (MAP (\i. EL i offs) indices))) /\
+    (!b. (!off. MEM off offs ==> ~in_mem_range off 32 b) ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  rpt strip_tac >>
+  gvs[stackOpSimTheory.execute_plan_append, stackOpSimTheory.asm_block_at_append] >>
+  drule_all sym_scratch_spills >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  drule_all sym_scratch_restore_witnesses >> strip_tac >>
+  `EVERY (\off. off < dimword (:256)) (MAP (\i. EL i offs) indices)` by
+    (gvs[LIST_REL_EL_EQN, EVERY_EL, EL_MAP]) >>
+  rename1 `sym_steps p env _ ss = SymOK mid` >>
+  `asm_block_at p mid.sym_base.as_pc
+     (execute_plan fmp (MAP SORestore (MAP (\i. EL i offs) indices)))` by
+    metis_tac[arithmeticTheory.ADD_COMM] >>
+  drule_all sym_scratch_restores_kinds >>
+  disch_then (qspec_then `env` strip_assume_tac) >>
+  rename1 `sym_steps p env _ mid = SymOK last` >>
+  qexistsl_tac [`last`, `top`] >> conj_tac
+  >- (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[sym_steps_add]) >> simp[]
+QED
+
+Theorem sym_do_swap_small_prefix:
+  !dist ps ops ps' initial_fmp lo.
+  do_swap dist ps = (ops, ps') /\ dist <= 16 /\ dist < LENGTH ps.ps_stack ==>
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  prefix_spill_wf initial_fmp lo ops ps /\ EVERY is_prefix_op ops /\
+  EVERY (\op. !l d. op <> SOPushOfst l d) ops /\
+  (!off. ~MEM (SOSpill off) ops) /\
+  apply_prefix_ops initial_fmp lo ops ps = ps'
+Proof
+  rpt strip_tac >> Cases_on `dist = 0` >>
+  gvs[stackPlanOpsTheory.do_swap_def, prefix_wf_def, stack_op_wf_def,
+      prefix_spill_wf_def, spill_op_wf_def, prefixSimTheory.is_prefix_op_def,
+      apply_prefix_ops_def, apply_prefix_op_def, strongPrefixSimTheory.apply_simple_op_def]
+QED
+
+Theorem sym_do_swap_small:
+  !dist ps ops ps' cp fn ret srest ss p initial_fmp env.
+  do_swap dist ps = (ops, ps') /\ dist <= 16 /\
+  dist < LENGTH ps.ps_stack /\
+  sym_kinds_ok cp fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cp fn ret srest ps' ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    ss'.sym_mem_labels = ss.sym_mem_labels
+Proof
+  rpt strip_tac >> rename1 `sym_kinds_ok cplan fn ret srest ps ss` >>
+  drule_all sym_do_swap_small_prefix >>
+  disch_then (qspecl_then [`initial_fmp`, `FEMPTY`] strip_assume_tac) >>
+  `?ss'. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK ss' /\
+    sym_kinds_ok cplan fn ret srest (apply_prefix_ops initial_fmp FEMPTY ops ps) ss' /\
+    ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(\b:num. F) b ==>
+      FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)` by
+    (irule sym_prefix_ops_sim >> simp[]) >>
+  metis_tac[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM]
 QED
 
 Theorem sym_invoke_frame_sim_deep:
