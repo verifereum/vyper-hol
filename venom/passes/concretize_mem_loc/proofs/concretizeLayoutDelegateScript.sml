@@ -1,5 +1,5 @@
 Theory concretizeLayoutDelegate
-Ancestors concretizeLayoutDelegateBoundary concretizeLayoutExtractResult
+Ancestors concretizeLayoutDelegateBoundary
   concretizeLayoutExternalCall concretizeLayoutExternalRequests
   venomCallOracleDefs extCallOracle
   concretizeLayoutCleanRead concretizeLayoutSupplement concretizeLayoutReaderContext

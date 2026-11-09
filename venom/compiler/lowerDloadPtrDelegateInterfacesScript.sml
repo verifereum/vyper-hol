@@ -65,34 +65,6 @@ Proof
   drule scalar_operand_equal >> disch_then irule >> metis_tac[]
 QED
 
-(* The result footprint uses one common concrete run.  The only caller-local
-   effect is the relocated return-buffer write; no EVM induction is needed. *)
-Theorem dload_delegate_extract:
-  dload_equal_environment s t /\ s.vs_accounts = t.vs_accounts /\
-  s.vs_transient = t.vs_transient /\
-  extract_venom_result s value ro rz rr = SOME (output,s') ==>
-  extract_venom_result t value toff rz rr =
-    SOME (output, t with <|
-      vs_returndata := s'.vs_returndata;
-      vs_accounts := s'.vs_accounts;
-      vs_logs := s'.vs_logs;
-      vs_memory := (write_memory_with_expansion toff
-                       (TAKE rz s'.vs_returndata) t).vs_memory;
-      vs_transient := s'.vs_transient;
-      vs_pending_deletions := s'.vs_pending_deletions |>)
-Proof
-  strip_tac >>
-  `s.vs_logs = t.vs_logs /\
-   s.vs_pending_deletions = t.vs_pending_deletions` by
-    gvs[dload_equal_environment_def, venom_state_component_equality] >>
-  Cases_on `rr` >> gvs[extract_venom_result_def] >>
-  PairCases_on `x` >> gvs[] >>
-  Cases_on `x1.contexts` >> gvs[] >>
-  Cases_on `h` >> Cases_on `t'` >> gvs[] >>
-  Cases_on `x0` >> gvs[] >>
-  Cases_on `y` >> gvs[venom_state_component_equality]
-QED
-
 (* Both runs consume the shared oracle with one delegate request; the only
    caller-local effects are the relocated return-buffer write and each run's
    own request log. *)
@@ -143,4 +115,4 @@ val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "delegate interface: nonempty hypotheses")
   [dload_delegate_full_stores,
    dload_delegate_scalar_safety, dload_delegate_scalar_equal,
-   dload_delegate_extract, dload_delegate_exec_success];
+   dload_delegate_exec_success];
