@@ -5,7 +5,7 @@ Ancestors
   vyperTypeEnvPreservation exprSimHypsDefs stmtLowering stmtLoweringMono
   exprLoweringProps compileEnv loweringPosts vyperState vyperInterpreter
   stmtSimReturn stmtSimReturnWiden intCallReturnMem bodySim ctorReturnFrame
-  venomExecSemantics venomState fragExec
+  venomExecSemantics venomState fragExec freshWrites exprOperandVar
 
 Theorem internal_return_source_env[local]:
   env_consistent env cx es /\
@@ -123,3 +123,103 @@ Proof
   qexists_tac `0` >> goal_assum (drule_at Any) >>
   simp[exit_result_def] >> irule internal_return_memory_exit >> metis_tac[]
 QED
+
+Theorem internal_return_memory_mem:
+  body_inv tops ctx cenv cx /\ cenv.ce_module = NONE /\
+  cenv.ce_module_vars =
+    add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+      tops 0 (add_module_var_locations tops FEMPTY) /\
+  same_frame ce cenv /\ expr_sim_inv cenv cx env es /\
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  cenv.ce_returns_count = 0 /\ cenv.ce_imm_alloca = NONE /\
+  lowered_value_type cenv e = expr_type e /\
+  (expr_type e = ty \/ is_bytestring_type ty) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  IS_SOME (type_stmt env ty (Return (SOME e))) /\
+  call_evaluation_safe cx (int_calls_stmt (Return (SOME e))) /\
+  w2n bw + type_memory_size tv + 64 < dimword (:256) /\
+  (cenv.ce_is_ctor ==> !nm io ity itv.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc io) /\
+    cenv.ce_module_var_type (cenv.ce_module,nm) = SOME ity /\
+    evaluate_type (get_tenv cx) ity = SOME itv ==>
+    regions_disjoint io (type_memory_size itv) (w2n bw) (type_memory_size tv)) /\
+  expr_sim_mem ctx func cenv cx ty e es ==>
+  stmt_frag_mem (SOME (bw,type_memory_size tv)) ctx func cx lctx
+    (intret_mem_q func ce cx tv bw) cenv
+    (stmt_env cenv lctx ty (Return (SOME e)))
+    (eval_stmt cx (Return (SOME e))) es
+Proof
+  strip_tac >> (irule internal_return_value_counted_mem >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+      simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+      pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      metis_tac[cj 2 ci_mono_return_helpers, ci_mono_def, pairTheory.SND]) >>
+  rpt strip_tac >> suspend "normal")
+QED
+
+Resume internal_return_memory_mem[normal]:
+  markerLib.RESUME_TAC >>
+  `?bp cap. cenv.ce_return_buf = SOME (PtrVar (Var bp) cap) /\
+    lookup_var bp s0 = SOME bw /\ not_fresh_at sa bp /\
+    w2n bw + type_memory_size tv <= s0.vs_alloca_next` by
+    fs[return_buf_frame_def] >>
+  `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var` by
+    metis_tac[ci_mono_compile_expr_sa, ci_mono_def, pairTheory.SND] >>
+  drule_all internal_return_memory_code >> strip_tac >>
+  `cs_extends s1 sb` by
+    metis_tac[cj 1 ci_mono_return_helpers, ci_mono_def, pairTheory.SND] >>
+  `fn_has_code s1 sb func` by metis_tac[fn_has_code_split] >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
+    value_has_type stv v` by (drule_all returnValueTypedTheory.return_value_typed >> fs[]) >>
+  `env_consistent env cx ee` by
+    (irule internal_return_source_env >> fs[expr_sim_inv_def] >> metis_tac[]) >>
+  `type_widens_to (get_tenv cx) (expr_type e) ty` by
+    fs[vyperTypeSystemTheory.type_stmt_def, expr_sim_inv_def,
+      vyperTypeInvariantsTheory.env_consistent_def,
+      vyperTypeInvariantsTheory.env_context_consistent_def, AllCaseEqs()] >>
+  `value_has_type tv v` by
+    (drule_all vyperTypeArgFitsTheory.type_widens_to_value_has_type >> simp[]) >>
+  `val_wf stv v /\ val_wf tv v` by
+    metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  suspend "suffix"
+QED
+
+Resume internal_return_memory_mem[suffix]:
+  markerLib.RESUME_TAC >> irule internal_return_memory_suffix >>
+  qpat_assum `compile_internal_return _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  suspend "resources"
+QED
+Resume internal_return_memory_mem[resources]:
+  markerLib.RESUME_TAC >>
+  `?pc. lookup_var rpc t = SOME pc` by
+    (fs[ret_pc_ok_def, expr_post_def] >> metis_tac[]) >>
+  qexistsl_tac [`stv`, `pc`] >>
+  `lookup_var bp t = SOME bw` by (fs[expr_post_def] >> metis_tac[]) >>
+  `not_fresh_at s1 bp /\ not_fresh_at s1 rpc` by
+    (fs[ret_pc_ok_def] >> metis_tac[not_fresh_at_mono]) >>
+  `!x. op = Var x ==> not_fresh_at s1 x` by
+    metis_tac[compile_lower_value_var] >>
+  `stmt_state_rel ctx func cenv cx (ee with scopes := []) t` by
+    (fs[expr_post_def, stmt_state_rel_def, immutable_alloca_sep_def,
+        local_region_def, lookup_scopes_def] >> conj_tac
+     >- (irule constructor_exit_state_rel >> qexists_tac `cenv` >> simp[]) >>
+     metis_tac[]) >>
+  `type_memory_bytes cenv ty = type_memory_size tv` by
+    metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
+  `cenv.ce_is_ctor ==> !name itv iv off.
+     FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+     FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+       | SOME imms => get_source_immutables cenv.ce_module imms) name =
+       SOME (itv,iv) ==>
+     regions_disjoint off (type_memory_size itv) (w2n bw) (type_memory_size tv)` by
+    metis_tac[internal_return_immutable_separation] >>
+  `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_lowered] >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  gvs[expr_post_def, expr_sim_inv_def] >>
+  (conj_tac >- first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC
+QED
+Finalise internal_return_memory_mem
