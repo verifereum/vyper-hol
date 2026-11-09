@@ -2,8 +2,8 @@
 Theory annAssignPtrScratch
 Ancestors
  annAssignPtrCopy annAssignPtrSetup robustCopyTransportPtr valueEncodingProps
- valueEncoding venomMemProofs ptrDiscipline pred_set arithmetic
- bodyPtrDefs stmtSimProps exprSimProps localPtrsProps compileEnv venomState
+ valueEncoding valueEncodingDefs venomMemProofs ptrDiscipline pred_set arithmetic
+ bodyPtrDefs stmtSimProps exprSimProps localPtrsProps compileEnv loweringStateRelDefs venomState
  finite_map loweringPosts exprLoweringProps exprSimBufferStore venomExecSemantics venomMemDefs
  allocationPtr annAssignPtrAllocGhost
 
@@ -166,7 +166,7 @@ Proof
  qexists `{i | b <= i /\ i < b+k}` >> simp[] >>
  rpt gen_tac >> strip_tac >>
  drule_all local_ptrs_rel_alloca_disjoint >>
- simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+ simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem annassign_alloca_copy_state_ptr:
@@ -236,11 +236,11 @@ Proof
      `aid <> inst.inst_id` by decide_tac >>
      fs[alloca_inv_def, allocas_non_overlapping_def] >>
      first_x_assum (qspecl_then [`aid`,`inst.inst_id`,`off`,`sz'`,`b`,`sz`] mp_tac) >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
  rpt gen_tac >> strip_tac >>
  `local_region cenv es.scopes s n b' sz'` by metis_tac[] >>
  drule_all local_ptrs_rel_alloca_disjoint >>
- simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+ simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 

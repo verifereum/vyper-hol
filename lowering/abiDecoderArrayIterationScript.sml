@@ -3,7 +3,7 @@ Theory abiDecoderArrayIteration
 Ancestors
   abiDecoderArrayInvariant abiDecoderArrayAdvance abiDecoderPrimitiveLoopFragment
   abiDecoderCoherence abiDecoderTypedContract abiDecoderContract abiDecoderReentry
-  abiDecoderLoopSetup exprLoweringProps emitHelperProps compileEnv valueEncoding
+  abiDecoderLoopSetup exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs valueEncoding
   abiDecoderPrimitiveLoopFragment fragExec instIdxIndep
   vyperABI vyperTyping venomState contractABI words list rich_list arithmetic
 

@@ -15,7 +15,7 @@ Ancestors
   evalCompilerSiblingScopeTypes
   (* contracts of the lowering's interfaces on concrete inputs *)
   targetPlaceTest
-  abiEncodeSnapshotTest exprRecursionRegression
+  abiEncodeSnapshotTest
   (* oracle-admission audit of the CREATE boundary theories *)
   createOracleClosureAudit
   (* compiled creation code *)

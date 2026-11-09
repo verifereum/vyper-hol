@@ -3,7 +3,7 @@ Theory annAssignPtrMemorySource
 Ancestors
  annAssignPtrMemoryLayout annAssignPtrStage valueCopyBytes
  representationCleanPtr exprOperandVar exprSimProps exprSimDefs
- loweringPosts bodyPtrDefs valueTypingMemoryProps valueEncoding compileEnv
+ loweringPosts bodyPtrDefs valueTypingMemoryProps valueEncoding valueEncodingDefs compileEnv
  ptrDiscipline venomState venomMemDefs finite_map exprSimHyps
  venomMemProofs vyperValue vyperTypeSystem vyperTyping valueEncodingProps vfmConstants
 

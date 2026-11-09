@@ -333,7 +333,8 @@ Theorem body_inv_same_frame:
     body_inv tops ctx c cx
 Proof
   rpt strip_tac >>
-  fs[body_inv_def, same_frame_def, compile_env_component_equality] >>
+  fs[body_inv_def, cenv_module_pins_def, same_frame_def,
+     compile_env_component_equality] >>
   metis_tac[]
 QED
 
@@ -735,7 +736,7 @@ Proof
          simp[extend_local_def]) >>
       qpat_x_assum `expr_sim_inv _ _ _ es`
         (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
-      ASM_REWRITE_TAC [expr_sim_inv_def]) >>
+      ASM_REWRITE_TAC [expr_sim_inv_def, extend_local_bare_globals]) >>
   drule_all declare_stmt_local_other >> strip_tac >>
   drule_all type_stmt_other >> strip_tac >> gvs[] >>
   qpat_x_assum `expr_sim_inv _ _ _ es`

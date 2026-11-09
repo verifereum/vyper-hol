@@ -9,8 +9,8 @@ Ancestors
   bodyMemoryPreds bodyMemAggregateAlloc bodyMemAggregateAssembly
   bodyMemAggregateAdapters bodyMemAggregateLoopBoundary bodyExprForceMemory
   exprSimAggregates exprSimAggregateLayout exprSimHyps exprSimMemDefs
-  exprSimHypsDefs exprLoweringProps exprSimProps fragExec compileEnv allocLimits
-  exprSimAggregateSource exprSimBuffer bodyMemAggregateBounds valueEncoding
+  exprSimHypsDefs exprLoweringProps exprSimProps fragExec compileEnv loweringStateRelDefs allocLimits
+  exprSimAggregateSource exprSimBuffer bodyMemAggregateBounds valueEncoding valueEncodingDefs
   loweringPosts exprSimSource exprSimAggregateChildren vyperAST vyperInterpreter vyperState
 
 Theorem body_structlit_nowiden_mem:

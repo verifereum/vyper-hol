@@ -6,7 +6,7 @@ Ancestors
   vyperTypeGlobalLookupSoundness vyperStorageLayoutSafety
   exprSimHypsDefs exprSimTopLevelProps accountsRelProps exprSimMemorySource
   vyperInterpreter vyperLookupStorage vyperAST context vyperState
-  exprSimHyps exprLowering exprLoweringProps compileEnv loweringPosts exprSimSource
+  exprSimHyps exprLowering exprLoweringProps compileEnv loweringStateRelDefs loweringPosts exprSimSource
   bodyPtrDefs exprSimPtrTopLevelStorageCopy words pred_set venomState storageDecodeMemory
   exprSimPtrTopLevelStorageDecode exprSimStorageCopy
 

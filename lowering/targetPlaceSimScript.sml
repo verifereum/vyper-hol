@@ -53,7 +53,7 @@ Ancestors
   loweringPosts
   list rich_list finite_map pair
   fragExec  exprSimHyps exprSimAttributeFields
-  exprLowering exprLoweringProps compileEnv
+  exprLowering exprLoweringProps compileEnv loweringStateRelDefs
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperPlaceResultTyping
   venomState venomInst

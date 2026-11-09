@@ -4,7 +4,7 @@ Ancestors
   stmtSimDefs exprSimSource exprSimHypsDefs
   bodyAppendStorageFacts bodyExprPreFacts stmtSimAppendStorageCompose
   stmtSimAssignStorage bodySim exprSimHyps supportedStmts supportedStmtTraverse
-  vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv
+  vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv loweringStateRelDefs
   vyperTypeCallGraph vyperState vyperInterpreter
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
   supportedDecls supportedTypes vyperValue bodyStorageMetadata

@@ -29,7 +29,7 @@ Ancestors
   stmtSimDeclStore stmtSimAssignStore stmtSimDeclPath stmtSimDeclCompose
   exprOpenPrimitives exprOperandVar
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   supportedStmtTraverse supportedStmts supportedExprs
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperTypeSystem vyperTyping vyperTypeEnv

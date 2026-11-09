@@ -3,7 +3,7 @@
 Theory annAssignPtrMemoryDispatch
 Ancestors annAssignPtrMemoryContinuation stmtLowering
  annAssignPtrMemorySource annAssignPtrMemoryWindow annAssignPtrMemoryAssign
- valueTypingMemoryProps bodyPtrDefs compileEnv
+ valueTypingMemoryProps bodyPtrDefs compileEnv loweringStateRelDefs
 
 Theorem annassign_memory_assignment_location_ptr:
  !ctx func cenv cx es sa sb p cap w aid src a sty dty info bytes

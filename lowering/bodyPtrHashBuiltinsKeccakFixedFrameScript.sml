@@ -5,7 +5,7 @@ Ancestors bodyPtrHashBuiltinsKeccakFixedRun bodyPtrHashBuiltinsFreshFrame
   bodyPtrHashBuiltinsAllocFrame bodyPtrHashBuiltinsGhostFrame
   exprSimHash exprSimAlloc bodyPtrDefs fragGasSeqPtr ghostPcTransportPtr
   venomExecSemantics venomState venomInst ptrDiscipline exprLowering
-  exprLoweringProps emitHelperProps compileEnv words finite_map rich_list
+  exprLoweringProps emitHelperProps compileEnv loweringStateRelDefs words finite_map rich_list
 
 Theorem hash_fixed_keccak_ptr_frame:
   !value bs sa op sb s w ctx fn cenv cx es G tn d bb D PG.

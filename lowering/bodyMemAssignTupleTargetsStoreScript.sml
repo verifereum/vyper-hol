@@ -3,10 +3,10 @@
 Theory bodyMemAssignTupleTargetsStore
 Ancestors
   bodyMemAssignLocalMem bodyDeclMemoryCounted bodyDeclMemoryCore
-  bodyDeclCopyMemory valueCopy exprLoweringProps compileEnv finite_map
+  bodyDeclCopyMemory valueCopy exprLoweringProps compileEnv loweringStateRelDefs finite_map
   venomState venomExecSemantics loweringSlice stmtSimProps bodyMemoryDefs
   stmtSimDeclMem stmtSimAssignMem exprSimProps exprSimBufferStore
-  valueEncoding venomMemDefs tupleMemoryFrame tupleMemoryLayout
+  valueEncoding valueEncodingDefs venomMemDefs tupleMemoryFrame tupleMemoryLayout
   vyperLookup list loweringPosts bodyMemAssignTupleTargetsFacts
   bodyMemAssignLocalWord tupleTargetStoreRun tupleTargetStoreProps
   instMemFrontier emitHelperProps memSafeRun venomInst freshWrites

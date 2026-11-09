@@ -39,6 +39,8 @@ removed when a new pin includes them. The current series contains:
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5254: the inliner binds the unused return-PC parameter
+  to zero instead of the removed callee's label.
 - vyperlang/vyper#5280: an assignment or augmented-assignment target, or the
   array of an `append` or `pop`, is rejected (`CompilerPanic("risky
   overlap")`) when one of its subscripts has a base that passes through a
@@ -54,11 +56,9 @@ The pin has no subscript overlap check at all, so the #5280 patch, which
 applies first, brings `_subscript_read_write_overlap` and its helpers over
 from a later upstream revision (577d2534), unchanged, and the #5350 patch
 reuses them. They are used only for these two rejections: the pin still
-copies no subscript base.
+copies no subscript base. The rejections change no fixture.
 
-Only fixtures with external calls that take arguments change; the rejections
-change none. The provenance's `vyper_commit` names the unpatched base
-revision.
+The provenance's `vyper_commit` names the unpatched base revision.
 
 Name a new patch `<upstream-pr>-<slug>.patch`, and start it with the upstream
 PR URL and its merge status (including the merge commit when merged). Keep

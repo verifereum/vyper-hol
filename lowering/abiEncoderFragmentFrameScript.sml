@@ -4,7 +4,7 @@ Ancestors
   abiEncoderRegisteredFrame abiEncoderResourceAdapter abiEncoderVarRestore
   abiEncoderSharedContract abiScratchEncoderContract abiDecoderAllocation
   abiDecoderVarExtend abiDecoderReentry abiDecoderContract venomState valueEncoding
-  abiEncoderProps abiEncoderRegisteredEffect venomMemDefs compileEnv words
+  abiEncoderProps abiEncoderRegisteredEffect venomMemDefs compileEnv loweringStateRelDefs words
 
 Theorem abi_encoder_budget_registered_frame:
   lo <= top /\

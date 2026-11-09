@@ -3,7 +3,7 @@ Theory typedNormalizeStructEntryMem
 Ancestors
   typedNormalizeStructSemanticMem typedNormalizeStructMetadata
   typedMemoryCopy typedCopyMetadata valueEncodingTyping vyperTypeArgFits
-  vyperTypeABI vyperValue vyperTyping vyperTypeDefaults valueEncoding
+  vyperTypeABI vyperValue vyperTyping vyperTypeDefaults valueEncoding valueEncodingDefs
   list rich_list arithmetic words venomState compileEnv memContinuation
   tupleTypedLoad valueEncodingProofs context
 

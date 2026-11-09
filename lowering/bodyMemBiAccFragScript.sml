@@ -4,7 +4,7 @@ Ancestors
   bodyUnopFragMemory exprSimUnopProps fragExec bodyMemEmitOpFrame bodyDeclMemoryCounted bodyDeclMemoryCore
   exprSimAccounts allocaFootprint instMemFrontier memSafeRun fragGasPathMem
   stmtSimProps emitHelperProps freshWrites exprOperandVar exprLoweringProps
-  fragGasMode compileEnv venomExecSemantics venomExecProofs venomInst venomState
+  fragGasMode compileEnv loweringStateRelDefs venomExecSemantics venomExecProofs venomInst venomState
   list finite_map exprSimUnop exprUnopSimDefs accountsRelProps
   valueEncodingProofs vyperInterpreter vyperTypeInvariants vyperTypeBytesCrypto
   vfmState integer_word words byte builtinSimple vyperTypeSystem
