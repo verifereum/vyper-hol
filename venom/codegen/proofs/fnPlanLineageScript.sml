@@ -1100,38 +1100,6 @@ Proof
   rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
 QED
 
-Theorem lineage_dfs_join_phi_common_suffix_actual:
-  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD halting.
-  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
-  lookup_block succ fn.fn_blocks = SOME sb /\
-  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
-  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
-  ~NULL (collect_phis sb.bb_instructions) /\
-  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
-    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
-  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
-  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD ==>
-  ?prefixL prefixD suffix ops al.
-    phi_schedule_run
-      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
-        (collect_phis sb.bb_instructions)) psL =
-      (ops, psL with <|ps_stack := prefixL ++ suffix; ps_alloc := al|>) /\
-    phi_schedule_run
-      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
-        (collect_phis sb.bb_instructions)) psD =
-      (ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
-    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
-        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix) /\
-    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
-        (LENGTH (collect_phis sb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all lineage_state_actual_dfs_alloc >> strip_tac >>
-  irule lineage_dfs_join_phi_common_suffix >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
-QED
 
 Theorem lineage_dfs_join_common_cells:
   !fn succ sb dfg ps0 psL psD.
@@ -4608,4 +4576,112 @@ Proof
   gvs[] >> irule lineage_state_nonentry_prefix_unit_bound >>
   goal_assum (drule_at (Pat `native_inst_prefix _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[lineage_state_unit_resources]
+QED
+
+Theorem lineage_state_phi_schedule_unit_resources:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
+  phi_schedule_run
+    (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) lbl (SUC i), halting))
+      (collect_phis bb.bb_instructions)) ps = (ops,qs) ==>
+  !v. LIST_ELEM_COUNT (Var v) qs.ps_stack +
+    (if Var v IN FDOM qs.ps_spilled then 1 else 0) <= 1
+Proof
+  strip_tac >> gen_tac >>
+  drule fnPlanLineageObserverTransportTheory.phi_schedule_run_resource_bound >>
+  disch_then (qspec_then `v` mp_tac) >>
+  simp[indexedListsTheory.MAP_MAPi, combinTheory.o_DEF] >>
+  `ALL_DISTINCT (MAP (\inst. HD inst.inst_outputs) (collect_phis bb.bb_instructions))` by
+    (irule fnPlanLineagePhiSuffixResourcesTheory.ready_phi_write_names_distinct >>
+     metis_tac[venomExecPropsTheory.lookup_block_MEM]) >>
+  `LIST_ELEM_COUNT v (MAP (\inst. HD inst.inst_outputs) (collect_phis bb.bb_instructions)) <= 1` by
+    metis_tac[fnPlanLineageInventoryTheory.all_distinct_elem_count_le_one] >>
+  Cases_on `MEM v (MAP (\inst. HD inst.inst_outputs) (collect_phis bb.bb_instructions))`
+  >- (`MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis bb.bb_instructions)))` by
+        (gvs[listTheory.MEM_MAP, listTheory.MEM_FLAT] >>
+         `venomWf$inst_wf inst /\ inst.inst_opcode = PHI` by
+           (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def, listTheory.EVERY_MEM] >>
+            metis_tac[livenessTransferProofsTheory.collect_phis_mem,
+                      venomExecPropsTheory.lookup_block_MEM]) >>
+         `LENGTH inst.inst_outputs = 1` by gvs[venomWfTheory.inst_wf_def] >>
+         Cases_on `inst.inst_outputs` >> gvs[] >> metis_tac[listTheory.MEM]) >>
+      `~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled` by
+        metis_tac[lineage_state_phi_output_absent] >>
+      `LIST_ELEM_COUNT (Var v) ps.ps_stack = 0` by
+        simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff] >>
+      simp[] >> decide_tac) >>
+  `LIST_ELEM_COUNT v (MAP (\inst. HD inst.inst_outputs) (collect_phis bb.bb_instructions)) = 0` by
+    simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff] >>
+  `LIST_ELEM_COUNT (Var v) ps.ps_stack + (if Var v IN FDOM ps.ps_spilled then 1 else 0) <= 1` by
+    metis_tac[lineage_state_unit_resources] >> simp[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem lineage_dfs_join_phi_common_suffix_actual:
+  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD halting.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD ==>
+  ?prefixL prefixD suffix ops al.
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psL =
+      (ops, psL with <|ps_stack := prefixL ++ suffix; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psD =
+      (ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1) /\
+    EVERY (\v. ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD /\
+      Var v NOTIN FDOM psL.ps_spilled /\ Var v NOTIN FDOM psD.ps_spilled)
+      (live_vars_at (liveness_analyze fn) succ (LENGTH (collect_phis sb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_actual_dfs_alloc >> strip_tac >>
+  `?prefixL prefixD suffix ops al.
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psL =
+      (ops, psL with <|ps_stack := prefixL ++ suffix; ps_alloc := al|>) /\
+    phi_schedule_run
+      (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i), halting))
+        (collect_phis sb.bb_instructions)) psD =
+      (ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ
+        (LENGTH (collect_phis sb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1)` by
+    (irule lineage_dfs_join_phi_common_suffix >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD` by
+    metis_tac[dfs_block_state_lineage_state] >>
+  qexistsl_tac [`prefixL`,`prefixD`,`suffix`,`ops`,`al`] >> simp[listTheory.EVERY_MEM] >>
+  rpt strip_tac >>
+  `LIST_ELEM_COUNT (Var v) (prefixL ++ suffix) +
+    (if Var v IN FDOM psL.ps_spilled then 1 else 0) <= 1` by
+    (qpat_assum `phi_schedule_run _ psL = _`
+       (mp_then Any mp_tac lineage_state_phi_schedule_unit_resources) >>
+     simp[] >> metis_tac[]) >>
+  `LIST_ELEM_COUNT (Var v) (prefixD ++ suffix) +
+    (if Var v IN FDOM psD.ps_spilled then 1 else 0) <= 1` by
+    (qpat_assum `phi_schedule_run _ psD = _`
+       (mp_then Any mp_tac lineage_state_phi_schedule_unit_resources) >>
+     simp[] >> metis_tac[]) >>
+  metis_tac[fnPlanLineageNativeResourcesTheory.resource_suffix_cancel]
 QED

@@ -3333,3 +3333,23 @@ Proof
   `k < SUC k` by decide_tac >>
   metis_tac[]
 QED
+
+Theorem phi_schedule_run_resource_bound:
+  !steps ps ops qs v.
+    phi_schedule_run steps ps = (ops,qs) ==>
+    LIST_ELEM_COUNT (Var v) qs.ps_stack +
+      (if Var v IN FDOM qs.ps_spilled then 1 else 0) <=
+    LIST_ELEM_COUNT (Var v) ps.ps_stack +
+      (if Var v IN FDOM ps.ps_spilled then 1 else 0) +
+    LIST_ELEM_COUNT v (MAP (\(inst,next,halt). HD inst.inst_outputs) steps)
+Proof
+  Induct >> simp[fnPlanLineagePhiTemporalTheory.phi_schedule_run_def,
+                 LIST_ELEM_COUNT_THM] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[fnPlanLineagePhiTemporalTheory.phi_schedule_run_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> strip_tac >> gvs[] >>
+  drule generate_phi_plan_resource_bound >> disch_then (qspec_then `v` mp_tac) >>
+  first_x_assum drule >> disch_then (qspec_then `v` mp_tac) >>
+  Cases_on `v = HD h0.inst_outputs` >>
+  simp[LIST_ELEM_COUNT_THM, EQ_SYM_EQ] >> decide_tac
+QED
