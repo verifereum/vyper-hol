@@ -448,3 +448,26 @@ Proof
   metis_tac[sym_steps_spill_cons_compose, execute_plan_spill_cons_length,
             arithmeticTheory.ADD_ASSOC]
 QED
+
+Theorem scratch_save_cons_finish[local]:
+  sym_steps p env 2 ss = SymOK mid /\
+  scratch_kinds_ok fn ret [op] [off] mid.sym_mem_labels /\
+  scratch_frame [off] ss.sym_mem_labels mid.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
+  EVERY (\at. off+32 <= at \/ at+32 <= off) offsets /\
+  (?last. sym_steps p env (LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))) mid =
+    SymOK last /\ last.sym_stack = stk /\
+    scratch_kinds_ok fn ret items offsets last.sym_mem_labels /\
+    scratch_frame offsets mid.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = mid.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))) ==>
+  ?last. sym_steps p env
+    (LENGTH (execute_plan initial_fmp (MAP SOSpill (off::offsets)))) ss = SymOK last /\
+    last.sym_stack = stk /\
+    scratch_kinds_ok fn ret (op::items) (off::offsets) last.sym_mem_labels /\
+    scratch_frame (off::offsets) ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc +
+      LENGTH (execute_plan initial_fmp (MAP SOSpill (off::offsets)))
+Proof
+  rpt strip_tac >> qexists_tac `last` >> metis_tac[scratch_save_cons_runs]
+QED
