@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: Return. *)
 Theory bodyIntCallFamStmtReturn
 Ancestors
-  bodyIntCallJointContract bodyIntCallSharpReturn bodyIntCallFamStmtReturnStackRun
+  bodyIntCallJointContract bodyIntCallSharpReturn bodyIntCallFamStmtReturnStackExit
   bodySim stmtSimReturn stmtSimDefs loweringPosts compileEnv ctorReturnFrame
   stmtLowering vyperTyping vyperInterpreter gasOutcome gasSummary
   gasSummaryCompose venomExecSemantics venomState
