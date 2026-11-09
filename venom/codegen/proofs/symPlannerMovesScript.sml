@@ -2,7 +2,7 @@
 Theory symPlannerMoves
 Ancestors
   symPlannerScratch symPlannerBase stackOpSim stackPlanOps list rich_list
-  asmSymSem asmSem planExec codegenSymRel
+  asmSymSem asmSem planExec codegenSymRel doSwapSim
 
 Theorem sym_step_dup_name:
   d <= 15 ==>
@@ -168,3 +168,42 @@ Theorem sym_do_dup_small:
 Proof
   strip_tac >> gvs[do_dup_def] >> metis_tac[sym_exec_dup, arithmeticTheory.ADD_COMM]
 QED
+
+Theorem scratch_frame_durable_kinds:
+  scratch_frame offsets labs labs' /\
+  (!op at. FLOOKUP spilled op = SOME at ==>
+    ?v. op_kind_ok fn ret op v /\ mem_sval_at labs at v) /\
+  (!op at. FLOOKUP spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) ==>
+  !op at. FLOOKUP spilled op = SOME at ==>
+    ?v. op_kind_ok fn ret op v /\ mem_sval_at labs' at v
+Proof
+  metis_tac[scratch_frame_cell]
+QED
+
+Theorem sym_kinds_ok_scratch_change:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  MEM r cplan.cp_regions /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+  out.ps_spilled = ps.ps_spilled /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE out.ps_stack) top /\
+  last.sym_stack = top ++ srest ==>
+  sym_kinds_ok cplan fn ret srest out last
+Proof
+  rw[codegenSymRelTheory.sym_kinds_ok_def]
+  >- metis_tac[scratch_frame_durable_kinds] >>
+  metis_tac[scratch_frame_region, scratch_region_context_transport]
+QED
+
+Theorem scratch_swap_indices_bounded:
+  2 <= n /\ LENGTH offsets = n /\
+  EVERY (\off. off < dimword(:256)) offsets ==>
+  EVERY (\k. k < n /\ EL k offsets < dimword(:256))
+    (REVERSE ([n-1] ++ GENLIST (\i. i+1) (n-2) ++ [0]))
+Proof
+  rw[EVERY_EL] >> imp_res_tac desired_indices_bound >> gvs[]
+QED
+
