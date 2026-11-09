@@ -1,7 +1,7 @@
 Theory bodyPtrPopTargetSimIndexSource
 Ancestors
   bodyPtrPopTargetDefs bodyPtrPopTargetSimCurrentLocal
-  exprSimSubscriptArrayOrigin stmtSimAugAssignPlace
+  exprSimSubscriptArrayOrigin stmtSimAugAssignPlace stmtSimForArrayFrame
   vyperInterpreter vyperState targetPlaceSim targetPlaceSimDefs exprSimHypsDefs
   vyperTypeSystem vyperTyping vyperAST list finite_map loweringPosts
   exprSimProps vyperTypeEnv vyperTypeInvariants vyperPlaceStatePreservation
