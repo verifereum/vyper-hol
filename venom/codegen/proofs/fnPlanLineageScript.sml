@@ -4663,13 +4663,60 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* With no PHIs the incoming join target is predecessor-independent.  Unit
+   resources exclude live copies from each otherwise arbitrary residual. *)
+Theorem lineage_dfs_empty_phi_join_seed_actual:
+  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
+  collect_phis bb.bb_instructions = [] /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
+  ?prefixL prefixD.
+    psL.ps_stack = prefixL ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
+    psD.ps_stack = prefixD ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
+    psL.ps_spilled = FEMPTY /\ psD.ps_spilled = FEMPTY /\
+    psL = psD with ps_stack :=
+      prefixL ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
+Proof
+  strip_tac >>
+  drule_all lineage_state_join_boundary >>
+  simp[livenessDefsTheory.input_vars_from_def] >> strip_tac >>
+  drule_all dfs_block_state_join_boundary >>
+  simp[livenessDefsTheory.input_vars_from_def] >> strip_tac >>
+  rename1 `psL.ps_stack = prefixL ++ _` >>
+  rename1 `psD.ps_stack = prefixD ++ _` >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD` by
+    metis_tac[dfs_block_state_lineage_state] >>
+  `psL = psD with ps_stack := psL.ps_stack` by
+    metis_tac[lineage_state_actual_dfs_fields] >>
+  qexists_tac `prefixD` >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  gen_tac >> strip_tac >>
+  `MEM (Var v) (MAP Var (live_vars_at (liveness_analyze fn) lbl 0))` by
+    simp[listTheory.MEM_MAP] >>
+  `LIST_ELEM_COUNT (Var v) psL.ps_stack +
+    (if Var v IN FDOM psL.ps_spilled then 1 else 0) <= 1` by
+    metis_tac[lineage_state_unit_resources] >>
+  `LIST_ELEM_COUNT (Var v) psD.ps_stack +
+    (if Var v IN FDOM psD.ps_spilled then 1 else 0) <= 1` by
+    metis_tac[lineage_state_unit_resources] >>
+  metis_tac[fnPlanLineageNativeResourcesTheory.resource_suffix_cancel]
+QED
+
 Theorem lineage_dfs_join_phi_common_suffix_actual:
   !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD halting.
   codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
   lookup_block succ fn.fn_blocks = SOME sb /\
   MEM succ (cfg_analyze fn).cfg_dfs_pre /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
-  ~NULL (collect_phis sb.bb_instructions) /\
   generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
     ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
   lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
@@ -4714,14 +4761,32 @@ Proof
         (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) suffix) /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) succ
         (LENGTH (collect_phis sb.bb_instructions))) ==> LIST_ELEM_COUNT (Var v) suffix = 1)` by
-    (irule lineage_dfs_join_phi_common_suffix >>
-     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]) >>
+    (Cases_on `collect_phis sb.bb_instructions = []`
+     >- suspend "empty_seed"
+     >> irule lineage_dfs_join_phi_common_suffix >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[listTheory.NULL_EQ]) >>
   `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
     (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD` by
     metis_tac[dfs_block_state_lineage_state] >>
   qexistsl_tac [`prefixL`,`prefixD`,`suffix`,`ops`,`al`] >> simp[listTheory.EVERY_MEM] >>
   conj_asm1_tac >- suspend "live_exclusion" >>
   suspend "ordinary_footprint"
+QED
+
+Resume lineage_dfs_join_phi_common_suffix_actual[empty_seed]:
+  `fn_entry_label fn <> SOME succ` by simp[] >>
+  drule_all lineage_dfs_empty_phi_join_seed_actual >> strip_tac >>
+  qexistsl_tac [`prefixL`,`prefixD`,
+    `MAP Var (live_vars_at (liveness_analyze fn) succ 0)`,`[]`,`psD.ps_alloc`] >>
+  simp[fnPlanLineagePhiTemporalTheory.phi_schedule_run_def,
+    plan_state_component_equality, listTheory.MEM_MAP] >>
+  gen_tac >> strip_tac >>
+  `MEM (Var v) (MAP Var (live_vars_at (liveness_analyze fn) succ 0))` by
+    simp[listTheory.MEM_MAP] >>
+  `LIST_ELEM_COUNT (Var v) psL.ps_stack +
+    (if Var v IN FDOM psL.ps_spilled then 1 else 0) <= 1` by
+    metis_tac[lineage_state_unit_resources] >>
+  metis_tac[fnPlanLineageNativeResourcesTheory.resource_suffix_cancel]
 QED
 
 Resume lineage_dfs_join_phi_common_suffix_actual[live_exclusion]:
@@ -4781,7 +4846,6 @@ Theorem lineage_dfs_join_ordinary_paired_interval_actual:
   lookup_block succ fn.fn_blocks = SOME sb /\
   MEM succ (cfg_analyze fn).cfg_dfs_pre /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
-  ~NULL (collect_phis sb.bb_instructions) /\
   generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
     ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
   lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
@@ -4819,8 +4883,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all lineage_dfs_join_phi_common_suffix_actual >>
   disch_then (qspec_then `halting` strip_assume_tac) >>
-  `collect_phis sb.bb_instructions <> []` by (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
-  drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> strip_tac >>
+  `fn_entry_label fn <> SOME succ` by simp[] >>
+  drule_all fnPlanLineagePhiScheduleTheory.ready_nonentry_block_suffix >> strip_tac >>
   `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
     metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
   `fn_reachable fn sb.bb_label` by
@@ -4847,7 +4911,6 @@ Theorem lineage_dfs_join_physical_start_actual:
   lookup_block succ fn.fn_blocks = SOME sb /\
   MEM succ (cfg_analyze fn).cfg_dfs_pre /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
-  ~NULL (collect_phis sb.bb_instructions) /\
   generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
     ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
   lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
@@ -4895,8 +4958,7 @@ Proof
   drule_all lineage_dfs_join_ordinary_paired_interval_actual >>
   disch_then (qspec_then `bb_is_halting sb` strip_assume_tac) >>
   `fn_entry_label fn <> SOME succ` by simp[] >>
-  `collect_phis sb.bb_instructions <> []` by
-    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+
   `psL with <|ps_stack := prefixL ++ suffix; ps_alloc := al|> =
    p0 with ps_stack := prefixL ++ p0.ps_stack` by
     (drule_all lineage_state_actual_dfs_fields >> disch_then (fn th => simp[Once th])) >>
@@ -4907,7 +4969,7 @@ Proof
     `p0 with ps_stack := prefixD ++ p0.ps_stack`] >>
   conj_tac >- simp[] >> conj_tac >- simp[] >>
   `get_params sb.bb_instructions = [] /\ xs <> []` by
-    (drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >>
+    (drule_all fnPlanLineagePhiScheduleTheory.ready_nonentry_block_suffix >>
      strip_tac >>
      qpat_x_assum `sb.bb_instructions = _ ++ _`
        (mp_tac o Q.AP_TERM `DROP (LENGTH (collect_phis sb.bb_instructions))`) >>
@@ -4945,7 +5007,7 @@ Resume lineage_dfs_join_physical_start_actual[core_coverage]:
   `fn_reachable fn sb.bb_label` by
     metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
   `non_param_insts sb = sb.bb_instructions` by
-    (drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> simp[]) >>
+    (drule_all fnPlanLineagePhiScheduleTheory.ready_nonentry_block_suffix >> simp[]) >>
   qpat_x_assum `sb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
   qpat_assum `native_inst_ops_prefix _ _ _ _ _ _ _ _ _ p0 _ _ q`
     (mp_then Any mp_tac fnPlanLineageEntryProductionTheory.native_inst_ops_prefix_erase) >>
@@ -4963,7 +5025,6 @@ Theorem lineage_dfs_join_preterminal_core_actual:
   lookup_block succ fn.fn_blocks = SOME sb /\
   MEM succ (cfg_analyze fn).cfg_dfs_pre /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
-  ~NULL (collect_phis sb.bb_instructions) /\
   generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
     ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
   lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
@@ -5022,9 +5083,9 @@ Proof
   drule_all lineage_dfs_join_physical_start_actual >> strip_tac >>
   `MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
     metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
-  `collect_phis sb.bb_instructions <> []` by
-    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
-  drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> strip_tac >>
+
+  `fn_entry_label fn <> SOME succ` by simp[] >>
+  drule_all fnPlanLineagePhiScheduleTheory.ready_nonentry_block_suffix >> strip_tac >>
   `LENGTH (collect_phis sb.bb_instructions) + PRE (LENGTH xs) =
     PRE (LENGTH sb.bb_instructions)` by suspend "cut_index" >>
   `!j. j < PRE (LENGTH xs) ==>
@@ -5154,7 +5215,6 @@ Theorem lineage_dfs_join_block_replay_actual:
   lookup_block succ fn.fn_blocks = SOME sb /\
   MEM succ (cfg_analyze fn).cfg_dfs_pre /\
   1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
-  ~NULL (collect_phis sb.bb_instructions) /\
   generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
     ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
   lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
@@ -5185,8 +5245,7 @@ Proof
       (out with ps_stack := prefixD ++ out.ps_stack)` by
     (Cases_on `(LAST sb.bb_instructions).inst_opcode = JMP`
      >- suspend "jmp_complete" >> suspend "ordinary_complete") >>
-  `fn_entry_label fn <> SOME succ /\ collect_phis sb.bb_instructions <> []` by
-    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+  `fn_entry_label fn <> SOME succ` by simp[] >>
   `!p r. (p = psL /\ r = qL) \/ (p = psD /\ r = qD) ==>
     generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb p =
       case generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
@@ -5277,10 +5336,9 @@ Resume lineage_dfs_join_block_replay_actual[jmp_extend]:
 QED
 
 Resume lineage_dfs_join_block_replay_actual[ordinary_layout]:
-  `collect_phis sb.bb_instructions <> []` by
-    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+  `fn_entry_label fn <> SOME succ` by simp[] >>
   `non_param_insts sb = sb.bb_instructions` by
-    (drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >> simp[]) >>
+    (drule_all fnPlanLineagePhiScheduleTheory.ready_nonentry_block_suffix >> simp[]) >>
   `MEM sb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
   `!i. LENGTH (collect_phis sb.bb_instructions) <= i /\
     i < LENGTH sb.bb_instructions ==>
@@ -5324,50 +5382,3 @@ QED
 Finalise lineage_dfs_join_block_replay_actual
 
 
-(* With no PHIs the incoming join target is predecessor-independent.  Unit
-   resources exclude live copies from each otherwise arbitrary residual. *)
-Theorem lineage_dfs_empty_phi_join_seed_actual:
-  codegen_ready_fn fn /\ fn_entry_label fn <> SOME lbl /\
-  lookup_block lbl fn.fn_blocks = SOME bb /\
-  1 < LENGTH (cfg_preds_of (cfg_analyze fn) lbl) /\
-  collect_phis bb.bb_instructions = [] /\
-  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
-    ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
-  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psL /\
-  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD ==>
-  ?prefixL prefixD.
-    psL.ps_stack = prefixL ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
-    psD.ps_stack = prefixD ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
-    psL.ps_spilled = FEMPTY /\ psD.ps_spilled = FEMPTY /\
-    psL = psD with ps_stack :=
-      prefixL ++ MAP Var (live_vars_at (liveness_analyze fn) lbl 0) /\
-    (!v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) ==>
-      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)
-Proof
-  strip_tac >>
-  drule_all lineage_state_join_boundary >>
-  simp[livenessDefsTheory.input_vars_from_def] >> strip_tac >>
-  drule_all dfs_block_state_join_boundary >>
-  simp[livenessDefsTheory.input_vars_from_def] >> strip_tac >>
-  rename1 `psL.ps_stack = prefixL ++ _` >>
-  rename1 `psD.ps_stack = prefixD ++ _` >>
-  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
-    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl psD` by
-    metis_tac[dfs_block_state_lineage_state] >>
-  `psL = psD with ps_stack := psL.ps_stack` by
-    metis_tac[lineage_state_actual_dfs_fields] >>
-  qexists_tac `prefixD` >> simp[] >>
-  conj_tac >- metis_tac[] >>
-  gen_tac >> strip_tac >>
-  `MEM (Var v) (MAP Var (live_vars_at (liveness_analyze fn) lbl 0))` by
-    simp[listTheory.MEM_MAP] >>
-  `LIST_ELEM_COUNT (Var v) psL.ps_stack +
-    (if Var v IN FDOM psL.ps_spilled then 1 else 0) <= 1` by
-    metis_tac[lineage_state_unit_resources] >>
-  `LIST_ELEM_COUNT (Var v) psD.ps_stack +
-    (if Var v IN FDOM psD.ps_spilled then 1 else 0) <= 1` by
-    metis_tac[lineage_state_unit_resources] >>
-  metis_tac[fnPlanLineageNativeResourcesTheory.resource_suffix_cancel]
-QED
