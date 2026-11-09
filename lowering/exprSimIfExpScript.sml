@@ -37,7 +37,7 @@ Ancestors
 Libs
   pairLib intLib
 
-Theorem compile_ifexp_arm_unwrap[local]:
+Theorem compile_ifexp_arm_unwrap:
   !cenv rt at vv.
     is_word_type rt \/ same_memory_layout cenv at rt ==>
     compile_ifexp_arm cenv rt at vv = unwrap_value cenv vv
@@ -45,7 +45,7 @@ Proof
   simp[compile_ifexp_arm_def]
 QED
 
-Theorem ifexp_layout_refl[local]:
+Theorem ifexp_layout_refl:
   (!t. punnable cenv t t) /\
   (!ts. punnable_list cenv ts ts)
 Proof
@@ -53,7 +53,7 @@ Proof
   simp[punnable_def]
 QED
 
-Theorem ifexp_copy_types[local]:
+Theorem ifexp_copy_types:
   !cenv rt at.
     (at = rt \/
      is_bytestring_type rt /\ is_bytestring_type at /\ arg_type_fits at rt \/
@@ -65,7 +65,7 @@ Proof
 QED
 
 (* Low-level bytestring copy interface, kept below the operator layer. *)
-Theorem ifexp_round_no_wrap[local]:
+Theorem ifexp_round_no_wrap:
   !len. 32 + 32 * word_size len < dimword (:256) ==>
     len + 31 < dimword (:256)
 Proof
@@ -76,7 +76,7 @@ Proof
   gvs[] >> intLib.ARITH_TAC
 QED
 
-Theorem ifexp_round_size[local]:
+Theorem ifexp_round_size:
   !len. 32 + 32 * word_size len < dimword (:256) ==>
     ((((n2w len:bytes32) + 31w) && i2w (- &32)) + 32w =
      n2w (32 + 32 * word_size len))
@@ -89,7 +89,7 @@ Proof
   AP_TERM_TAC >> decide_tac
 QED
 
-Theorem ifexp_emit_mcopy_run[local]:
+Theorem ifexp_emit_mcopy_run:
   !sa sb dst src sz d w n s.
     emit_void MCOPY [dst; src; sz] sa = ((),sb) /\
     eval_operand dst s = SOME d /\ eval_operand src s = SOME w /\
@@ -104,7 +104,7 @@ Proof
   simp[run_inst_seq_def]
 QED
 
-Theorem ifexp_copy_len_shape[local]:
+Theorem ifexp_copy_len_shape:
   !src out sa sb.
     compile_bytestring_copy_len src sa = (out,sb) ==>
     same_blocks sa sb /\
@@ -119,7 +119,7 @@ Proof
   simp[same_blocks_def, emitted_insts_def, rich_listTheory.DROP_APPEND1]
 QED
 
-Theorem ifexp_copy_len_run[local]:
+Theorem ifexp_copy_len_run:
   !src out sa sb s w len.
     compile_bytestring_copy_len src sa = (out,sb) /\
     eval_operand src s = SOME w /\ mload (w2n w) s = n2w len /\
@@ -162,7 +162,7 @@ Proof
       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem ifexp_store_bytestring_run[local]:
+Theorem ifexp_store_bytestring_run:
   !src dst sa sb s w d len.
     compile_store_bytestring src dst sa = ((),sb) /\
     eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
@@ -207,7 +207,7 @@ Proof
   fs[lookup_var_def]
 QED
 
-Theorem ifexp_bytes_header[local]:
+Theorem ifexp_bytes_header:
   !cap bs src s.
     val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) src s.vs_memory ==>
     mload src s = n2w (LENGTH bs)
@@ -215,7 +215,7 @@ Proof
   simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
-Theorem ifexp_string_header[local]:
+Theorem ifexp_string_header:
   !cap str src s.
     val_in_memory (BaseTV (StringT cap)) (StringV str) src s.vs_memory ==>
     mload src s = n2w (LENGTH str)
@@ -223,7 +223,7 @@ Proof
   simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
-Theorem ifexp_typed_bytestring_header[local]:
+Theorem ifexp_typed_bytestring_header:
   !tenv ty tv v p s.
     is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\ val_in_memory tv v p s.vs_memory ==>
@@ -244,7 +244,7 @@ Proof
   qexists_tac `LENGTH s'` >> simp[exprSimPropsTheory.val_store_size_def]
 QED
 
-Theorem ifexp_copy_source_bounds[local]:
+Theorem ifexp_copy_source_bounds:
   !cx ty tv v op s.
     is_bytestring_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     value_has_type tv v /\ expr_val_rel cx ty v op s ==>
@@ -267,7 +267,7 @@ Proof
   qexists_tac `len` >> simp[] >> decide_tac
 QED
 
-Theorem ifexp_vv_at_alloc_frame[local]:
+Theorem ifexp_vv_at_alloc_frame:
   vv_at cenv cx ty sa sb es raw vv s /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                FLOOKUP q.vs_allocas aid = SOME entry) /\
@@ -287,7 +287,7 @@ Proof
         disj2_tac >> disj1_tac >> qexistsl_tac [`n`, `b`, `sz`] >> simp[])
 QED
 
-Theorem ifexp_vv_own_alloc_frame[local]:
+Theorem ifexp_vv_own_alloc_frame:
   vv_own cenv cx ty sa sb es raw vv s /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                FLOOKUP q.vs_allocas aid = SOME entry) /\
@@ -305,7 +305,7 @@ Proof
         metis_tac[])
 QED
 
-Theorem ifexp_alloc_local_regions[local]:
+Theorem ifexp_alloc_local_regions:
   !ctx func cenv cx es sa s q.
     stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) ==>
@@ -321,7 +321,7 @@ Proof
   qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]
 QED
 
-Theorem ifexp_bytestring_adapter_parts[local]:
+Theorem ifexp_bytestring_adapter_parts:
   !cenv t arm_ty vv sa op sb.
     ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
     is_bytestring_type t /\ compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
@@ -338,7 +338,7 @@ Proof
 QED
 
 (* Aggregate adapters copy from the physical arm layout into the annotation. *)
-Theorem ifexp_zero_source_fits[local]:
+Theorem ifexp_zero_source_fits:
   (!sty dty. arg_type_fits sty dty ==>
     !tenv tv. evaluate_type tenv sty = SOME tv /\
       type_memory_size tv = 0 ==> sty = dty) /\
@@ -353,7 +353,7 @@ Proof
       AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ifexp_widened_source_positive[local]:
+Theorem ifexp_widened_source_positive:
   type_widens_to tenv sty dty /\ sty <> dty /\
   evaluate_type tenv sty = SOME stv ==>
   0 < type_memory_size stv
@@ -364,7 +364,7 @@ Proof
   metis_tac[ifexp_zero_source_fits]
 QED
 
-Theorem ifexp_physical_source_positive[local]:
+Theorem ifexp_physical_source_positive:
   expr_body_pre cenv cx env e es /\
   post_value_type cenv e <> expr_type e /\
   evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME stv ==>
@@ -381,7 +381,7 @@ Proof
   drule_all post_value_type_widens >> simp[]
 QED
 
-Theorem ifexp_aggregate_footprint[local]:
+Theorem ifexp_aggregate_footprint:
   !tenv t tv v.
     evaluate_type tenv t = SOME tv /\ ~is_bytestring_type t ==>
     val_footprint tv v = type_memory_size tv
@@ -392,7 +392,7 @@ Proof
   Cases_on `v` >> simp[val_footprint_def]
 QED
 
-Theorem ifexp_aggregate_source_region[local]:
+Theorem ifexp_aggregate_source_region:
   expr_val_at cenv cx ty origin sa es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   ~is_word_type ty /\ ~is_bytestring_type ty /\
@@ -411,7 +411,7 @@ Proof
   simp[expr_val_at_def] >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ifexp_typed_adapter_parts[local]:
+Theorem ifexp_typed_adapter_parts:
   ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
   ~is_bytestring_type t /\ arm_ty <> t /\
   compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
@@ -427,7 +427,7 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem ifexp_typed_alloc_source[local]:
+Theorem ifexp_typed_alloc_source:
   compile_alloc_buffer (type_memory_bytes cenv dty) sa = (buf,sm) /\
   compile_store_memory_typed cenv buf.buf_operand dty src sty sm = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -480,7 +480,7 @@ Proof
 QED
 
 (* Restore the expression frame after a fresh typed normalization. *)
-Theorem ifexp_typed_copy_post[local]:
+Theorem ifexp_typed_copy_post:
   expr_post ctx func ce cx e es origin sa s0 es' v src r /\
   local_ptrs_reserved ce origin /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -550,9 +550,9 @@ Resume ifexp_typed_copy_post[locals]:
     qpat_x_assum `!off len. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >> decide_tac) >>
   simp[]
 QED
-Finalise ifexp_typed_copy_post[local]
+Finalise ifexp_typed_copy_post
 
-Theorem ifexp_typed_normalize_post[local]:
+Theorem ifexp_typed_normalize_post:
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand dty src sty sm = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -598,7 +598,7 @@ Proof
   `sa.cs_next_id < sb.cs_next_id` by decide_tac >> metis_tac[]
 QED
 
-Theorem ifexp_mcopy_window[local]:
+Theorem ifexp_mcopy_window:
   !dst src n s k. k <= n ==>
     mem_bytes_at dst k (mcopy dst src n s).vs_memory =
     mem_bytes_at src k s.vs_memory
@@ -610,7 +610,7 @@ Proof
   irule (SRULE [LET_THM] mcopy_establishes_equiv) >> decide_tac
 QED
 
-Theorem ifexp_mcopy_exterior[local]:
+Theorem ifexp_mcopy_exterior:
   !dst src n s a k. a + k <= dst \/ dst + n <= a ==>
     mem_bytes_at a k (mcopy dst src n s).vs_memory =
     mem_bytes_at a k s.vs_memory
@@ -621,7 +621,7 @@ Proof
   qexists_tac `k` >> simp[]
 QED
 
-Theorem ifexp_store_bytestring_encoding[local]:
+Theorem ifexp_store_bytestring_encoding:
   !src dst sa sb s w d len tv v.
     compile_store_bytestring src dst sa = ((),sb) /\
     eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
@@ -655,7 +655,7 @@ Proof
   rpt strip_tac >> irule ifexp_mcopy_exterior >> decide_tac
 QED
 
-Theorem ifexp_immutable_destination_sep[local]:
+Theorem ifexp_immutable_destination_sep:
   !ctx func cenv cx es s inst dst sz.
     stmt_state_rel ctx func cenv cx es s /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -670,7 +670,7 @@ Proof
   first_x_assum drule_all >> strip_tac >> metis_tac[]
 QED
 
-Theorem ifexp_bytestring_store_state[local]:
+Theorem ifexp_bytestring_store_state:
   !ctx func cenv cx es src dst sa sb s w d len tv v inst.
     compile_store_bytestring src dst sa = ((),sb) /\
     eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
@@ -708,7 +708,7 @@ Proof
   qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac
 QED
 
-Theorem ifexp_destination_at[local]:
+Theorem ifexp_destination_at:
   !cenv cx ty tv v sa sb es op s w aid.
     evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
     eval_operand op s = SOME w /\
@@ -726,7 +726,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_alloc_preserves_post[local]:
+Theorem ifexp_alloc_preserves_post:
   !ctx func cenv cx e es origin sa sm buf sz s0 es' raw vv s.
     compile_alloc_buffer sz sa = (buf,sm) /\
     vv_post ctx func cenv cx e es origin sa s0 es' raw vv s /\
@@ -794,7 +794,7 @@ Proof
   Cases_on `vv` >> simp[vv_own_def, expr_val_own_def]
 QED
 
-Theorem ifexp_vv_post_rebase[local]:
+Theorem ifexp_vv_post_rebase:
   vv_post ctx func ce cx e es sa sm s0 es' tv vv r ==>
   vv_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     sm r es' tv vv r
@@ -802,7 +802,7 @@ Proof
   simp[vv_post_def]
 QED
 
-Theorem ifexp_expr_post_rebased_operand[local]:
+Theorem ifexp_expr_post_rebased_operand:
   expr_post ctx func ce cx e es (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\ not_fresh_at sm x /\
   eval_operand (Var x) r = SOME w ==>
@@ -812,7 +812,7 @@ Proof
   rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
-Theorem ifexp_rebased_store_run[local]:
+Theorem ifexp_rebased_store_run:
   compile_store_bytestring src (Var x) sn = ((),sb) /\
   expr_post ctx func ce cx e es' (origin with cs_next_var := sm.cs_next_var)
     sn r es' v src s /\
@@ -873,7 +873,7 @@ Proof
   rpt conj_tac >> rpt strip_tac >> metis_tac[]
 QED
 
-Theorem ifexp_rebased_old_memory[local]:
+Theorem ifexp_rebased_old_memory:
   vv_post ctx func ce cx e es origin sm s0 es' raw vv r /\
   expr_post ctx func ce cx e es' (origin with cs_next_var := sm.cs_next_var)
     sn r es' v src s /\
@@ -920,7 +920,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_rebased_store_post_run[local]:
+Theorem ifexp_rebased_store_post_run:
   compile_store_bytestring src (Var x) sn = ((),sb) /\
   vv_post ctx func ce cx e es origin sm s0 es' raw vv r /\
   expr_post ctx func ce cx e es' (origin with cs_next_var := sm.cs_next_var)
@@ -1002,7 +1002,7 @@ Proof
        expr_val_at_def, expr_val_own_def, lookup_var_def, local_region_def]
 QED
 
-Theorem ifexp_store_bytestring_straight[local]:
+Theorem ifexp_store_bytestring_straight:
   compile_store_bytestring src dst sa = ((),sb) ==>
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
   isPREFIX sa.cs_current_insts sb.cs_current_insts /\
@@ -1018,7 +1018,7 @@ Proof
        IS_PREFIX_APPEND, venomInstTheory.mk_inst_def, is_terminator_def]
 QED
 
-Theorem ifexp_vv_post_inst_idx[local]:
+Theorem ifexp_vv_post_inst_idx:
   vv_post ctx func cenv cx e es sa sb s0 es' raw vv (s with vs_inst_idx := n) <=>
   vv_post ctx func cenv cx e es sa sb s0 es' raw vv s
 Proof
@@ -1032,7 +1032,7 @@ Proof
        venomStateTheory.contract_transient_def]
 QED
 
-Theorem ifexp_different_type_unwrap_pure[local]:
+Theorem ifexp_different_type_unwrap_pure:
   !ce e ty sa vv sb.
     lowered_value_type ce e <> expr_type e /\
     ~is_word_type (expr_type e) /\
@@ -1101,9 +1101,9 @@ Resume ifexp_different_type_unwrap_pure[call]:
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   simp[unwrap_value_def, base_ptr_def, comp_return_def] >> metis_tac[]
 QED
-Finalise ifexp_different_type_unwrap_pure[local]
+Finalise ifexp_different_type_unwrap_pure
 
-Theorem ifexp_post_annotated[local]:
+Theorem ifexp_post_annotated:
   (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
      type_memory_bytes ce ty = type_memory_size tv) /\
   (~is_word_type (expr_type e) ==>
@@ -1131,7 +1131,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem ifexp_aggregate_source_kind[local]:
+Theorem ifexp_aggregate_source_kind:
   !sty dty. arg_type_fits sty dty /\
     ~is_word_type dty /\ ~is_bytestring_type dty ==>
     ~is_word_type sty /\ ~is_bytestring_type sty
@@ -1177,7 +1177,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[vyperASTTheory.expr_type_def]
 QED
 
-Theorem conditional_read_cases[local]:
+Theorem conditional_read_cases:
   !cx raw st res st'.
     (do r <- conditional_result cx raw; read_result cx r od) st = (res,st') ==>
     read_result cx raw st = (res,st') \/
@@ -1391,7 +1391,7 @@ Proof
   rpt strip_tac >> res_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem ifexp_root_assign_zero_path[local]:
+Theorem ifexp_root_assign_zero_path:
   emit_inst ASSIGN [op] [rv] sa = ((),sb) /\ fn_has_code sa sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ eval_operand op s = SOME w ==>
@@ -1424,7 +1424,7 @@ Proof
   metis_tac[cj 2 gas_path_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_root_eval_forced[local]:
+Theorem ifexp_root_eval_forced:
   eval_expr cx (IfExp t c a b) =
   vyperState$bind (vyperState$bind (eval_expr cx c) (read_result cx))
     (\v. if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
@@ -1468,7 +1468,7 @@ Proof
   Cases_on `sel` >> gvs[]
 QED
 
-Theorem ifexp_root_condition_bool[local]:
+Theorem ifexp_root_condition_bool:
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
   vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := gs) = (INL v,mid) ==>
@@ -1498,7 +1498,7 @@ Proof
   irule gas_exempt_cert_error_value >> simp[]
 QED
 
-Theorem ifexp_root_vv_post_of_expr_post_read[local]:
+Theorem ifexp_root_vv_post_of_expr_post_read:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sb s0 es' v (Var rv) s /\
   read_result cx tv es' = (INL v, es') ==>
@@ -1514,7 +1514,7 @@ QED
 
 (* compile_expr_ifexp with what the two arms of compile_ifexp_vv_sim need
    of its states, from the compile-state shape of the operands' lowering. *)
-Theorem ifexp_new_block_fields[local]:
+Theorem ifexp_new_block_fields:
   !lbl sa old sb.
     new_block lbl sa = (old, sb) ==>
     sb.cs_current_bb = lbl /\ sb.cs_current_insts = [] /\
@@ -1615,7 +1615,7 @@ Proof
   simp[]
 QED
 
-Theorem ifexp_root_code_layout[local]:
+Theorem ifexp_root_code_layout:
   compile_expr cenv ty (IfExp t c a b) st = (vv,st') /\
   fn_has_code st st' func /\ local_ptrs_reserved cenv st /\
   (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op,sb) ==>
@@ -1724,7 +1724,7 @@ QED
 
 (* ===== Counted simulation ===== *)
 
-Theorem ifexp_arm_seq_path[local]:
+Theorem ifexp_arm_seq_path:
   sb.cs_current_bb = sa.cs_current_bb /\
   isPREFIX sa.cs_current_insts sb.cs_current_insts /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
@@ -1757,7 +1757,7 @@ Proof
   gvs[EVERY_MEM]
 QED
 
-Theorem ifexp_arm_rebased_unwrap_path[local]:
+Theorem ifexp_arm_rebased_unwrap_path:
   post_value_type ce e = expr_type e /\
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
@@ -1787,7 +1787,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem ifexp_arm_store_path[local]:
+Theorem ifexp_arm_store_path:
   compile_store_bytestring src dst sa = ((),sb) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -1808,7 +1808,7 @@ Proof
        venomInstTheory.mk_inst_def, is_terminator_def]
 QED
 
-Theorem ifexp_arm_unwrap_store_path[local]:
+Theorem ifexp_arm_unwrap_store_path:
   unwrap_value ce vv sm = (src,sn) /\
   compile_store_bytestring src (Var x) sn = ((),sb) /\
   vv_post ctx func ce cx e es origin sm s0 es' raw vv r /\
@@ -1872,7 +1872,7 @@ Proof
   metis_tac[gas_path_then, arithmeticTheory.ADD]
 QED
 
-Theorem ifexp_arm_alloc_path[local]:
+Theorem ifexp_arm_alloc_path:
   compile_alloc_buffer sz sa = (buf,sm) /\
   vv_post ctx func ce cx e es origin sa s0 es' raw vv s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
@@ -1918,7 +1918,7 @@ Proof
   fs[ifexp_vv_post_inst_idx, eval_operand_def, lookup_var_def]
 QED
 
-Theorem ifexp_arm_alloc_separated[local]:
+Theorem ifexp_arm_alloc_separated:
   vv_post ctx func ce cx e es origin sm s0 es' raw vv r /\
   local_ptrs_reserved ce sa /\ fn_inst_ids_distinct func /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -1944,7 +1944,7 @@ Proof
   simp[vv_post_def, stmt_state_rel_def, state_rel_def]
 QED
 
-Theorem ifexp_arm_bytestring_path[local]:
+Theorem ifexp_arm_bytestring_path:
   expr_type e = t /\ is_bytestring_type t /\
   ~is_word_type t /\ ~same_memory_layout ce arm_ty t /\
   compile_ifexp_arm ce t arm_ty vv sa = (op,sb) /\
@@ -2016,9 +2016,9 @@ Resume ifexp_arm_bytestring_path[suffix]:
   qexists_tac `q` >> simp[] >>
   metis_tac[gas_path_then, arithmeticTheory.ADD]
 QED
-Finalise ifexp_arm_bytestring_path[local]
+Finalise ifexp_arm_bytestring_path
 
-Theorem ifexp_arm_raw_admissible[local]:
+Theorem ifexp_arm_raw_admissible:
   gas_admissible (bind (eval_expr cx e) (conditional_result cx))
     expr_vv_res_ok es ==>
   gas_admissible (eval_expr cx e) expr_vv_res_ok es
@@ -2034,7 +2034,7 @@ Proof
   simp[bind_def, expr_vv_res_ok_def]
 QED
 
-Theorem ifexp_arm_conditional_read[local]:
+Theorem ifexp_arm_conditional_read:
   read_result cx raw ee = (INL v,ee) /\
   conditional_result cx raw ee = (res,ss) /\ expr_vv_res_ok res ==>
   ?tv. res = INL tv /\ ss = ee /\
@@ -2048,7 +2048,7 @@ Proof
   gvs[expr_vv_res_ok_def, bind_def, AllCaseEqs()]
 QED
 
-Theorem ifexp_arm_conditional_gas_obs[local]:
+Theorem ifexp_arm_conditional_gas_obs:
   conditional_result cx raw ee = (INL tv,ee) ==>
   !tail. conditional_result cx raw (ee with gas_obs := tail) =
     (INL tv,ee with gas_obs := tail)
@@ -2079,7 +2079,7 @@ Proof
   simp[conditional_result_def, raise_def]
 QED
 
-Theorem ifexp_arm_suffix_path[local]:
+Theorem ifexp_arm_suffix_path:
   post_value_type ce e = expr_type e /\
   compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
   (~is_word_type (expr_type e) ==>
@@ -2122,7 +2122,7 @@ Proof
   qexists_tac `lowered_value_type ce e` >> gvs[] >> metis_tac[]
 QED
 
-Theorem ifexp_arm_marked_suffix[local]:
+Theorem ifexp_arm_marked_suffix:
   post_value_type ce e = expr_type e /\
   gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
   vv_post ctx func ce cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
@@ -2191,9 +2191,9 @@ Resume ifexp_arm_marked_suffix[package]:
   simp[gas_marked_exec_def, gas_marked_path_def] >>
   drule ifexp_arm_conditional_gas_obs >> simp[]
 QED
-Finalise ifexp_arm_marked_suffix[local]
+Finalise ifexp_arm_marked_suffix
 
-Theorem ifexp_arm_ignore_bind_action[local]:
+Theorem ifexp_arm_ignore_bind_action:
   ignore_bind (bind a (conditional_result cx)) (return ()) =
   bind a (\tv. ignore_bind (conditional_result cx tv) (return ()))
 Proof
@@ -2201,7 +2201,7 @@ Proof
   gen_tac >> Cases_on `a x` >> Cases_on `q` >> simp[bind_def]
 QED
 
-Theorem ifexp_arm_exempt_transport[local]:
+Theorem ifexp_arm_exempt_transport:
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind a (return ())) (es,s0) marks (err,ee) (leaf,finstate) ==>
   gas_exempt_cert memory tops (ctx,func)
@@ -2212,7 +2212,7 @@ Proof
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
-Theorem ifexp_arm_outcome[local]:
+Theorem ifexp_arm_outcome:
   !ctx func cenv cx ty e es1 sa sm sb vv op u.
     post_value_type cenv e = expr_type e /\
     expr_vv_sim ctx func cenv cx ty e es1 /\
@@ -2285,7 +2285,7 @@ Resume ifexp_arm_outcome[exception]:
   qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
   irule gas_marked_exec_bind_exception >> goal_assum drule
 QED
-Finalise ifexp_arm_outcome[local]
+Finalise ifexp_arm_outcome
 
 Theorem ifexp_root_outcome_suffix:
   gas_outcome F tops (ctx,func) source (es,s0) Q R /\
@@ -2309,7 +2309,7 @@ Proof
       metis_tac[]) >> metis_tac[]
 QED
 
-Theorem ifexp_root_suffix_path[local]:
+Theorem ifexp_root_suffix_path:
   emit_inst ASSIGN [op] [rv] sx = ((),sy) /\
   emit_inst JMP [Label xl] [] sy = ((),sz) /\
   fn_has_code sx sy func /\ fn_has_code sy sz func /\
@@ -2335,7 +2335,7 @@ Proof
   metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_root_finish_post[local]:
+Theorem ifexp_root_finish_post:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
@@ -2393,7 +2393,7 @@ Proof
   simp[jump_to_def]
 QED
 
-Theorem ifexp_root_condition_scopes[local]:
+Theorem ifexp_root_condition_scopes:
   vyperState$bind (eval_expr cx c) (read_result cx)
     (es with gas_obs := gs) = (INL v,mid) ==>
   MAP FDOM es.scopes = MAP FDOM mid.scopes
@@ -2405,7 +2405,7 @@ Proof
   drule eval_expr_preserves_scopes_dom >> simp[]
 QED
 
-Theorem ifexp_root_marked_zero_suffix[local]:
+Theorem ifexp_root_marked_zero_suffix:
   gas_marked_exec F (ctx,func) source (es,s0) marks res mid (OK u) /\
   gas_path ctx func u 0 (OK v) ==>
   gas_marked_exec F (ctx,func) source (es,s0) marks res mid (OK v)
@@ -2471,7 +2471,7 @@ Proof
   rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
 QED
 
-Theorem ifexp_root_jnz_path[local]:
+Theorem ifexp_root_jnz_path:
   expr_post ctx func cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
   expr_type c = BaseT BoolT /\
   emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\

@@ -31,7 +31,7 @@ Theorem intcall_subscript_widened_producer:
       compile_expr ce ty (Subscript a e1 e2) sa = (vv,sb) /\
       fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
       gas_admissible (eval_expr fp.jc_cx (Subscript a e1 e2)) expr_vv_res_ok es /\
-      intcall_joint_res fp ce env es sa s /\ ~s.vs_halted /\
+      intcall_expr_res fp ce env es sa s /\ ~s.vs_halted /\
       s.vs_current_bb = sa.cs_current_bb /\
       s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
