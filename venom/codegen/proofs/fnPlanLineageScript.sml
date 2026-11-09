@@ -3791,6 +3791,18 @@ Proof
   irule lineage_state_fresh_phi_return_absent >> metis_tac[]
 QED
 
+Theorem lineage_history_last_label_split:
+  !vertices lbl. MEM lbl (MAP FST vertices) ==>
+    ?pre old tail. vertices = pre ++ (lbl,old)::tail /\ ~MEM lbl (MAP FST tail)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> rename1 `MEM lbl (MAP FST (vertex::rest))` >>
+  Cases_on `MEM lbl (MAP FST rest)`
+  >- (strip_tac >> first_x_assum drule >> strip_tac >>
+      qexistsl_tac [`vertex::pre`,`old`,`tail`] >> simp[]) >>
+  Cases_on `vertex` >> simp[] >> strip_tac >>
+  qexistsl_tac [`[]`,`r`,`rest`] >> gvs[]
+QED
+
 Theorem lineage_history_phi_output_absent[local]:
   !vertices fn dfg ch growth spill_base lbl_ctr entry lbl ps bb v.
     codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
@@ -3819,16 +3831,7 @@ Resume lineage_history_phi_output_absent[return]:
 QED
 
 Resume lineage_history_phi_output_absent[last_split]:
-  qpat_x_assum `MEM lbl (MAP FST vertices)` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  Induct_on `vertices`
-  >- simp[] >>
-  gen_tac >> rename1 `MEM lbl (MAP FST (vertex::rest))` >>
-  Cases_on `MEM lbl (MAP FST rest)`
-  >- (strip_tac >> first_x_assum drule >> strip_tac >>
-      qexistsl_tac [`vertex::pre`,`old`,`tail`] >> simp[]) >>
-  Cases_on `vertex` >> simp[] >> strip_tac >>
-  qexistsl_tac [`[]`,`r`,`rest`] >> gvs[]
+  metis_tac[lineage_history_last_label_split]
 QED
 
 Resume lineage_history_phi_output_absent[apply_return]:
@@ -3861,6 +3864,36 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule lineage_state_history >> strip_tac >> gvs[] >>
   irule lineage_history_phi_output_absent >> metis_tac[]
+QED
+
+Theorem ready_ordinary_output_phi_prefix:
+  codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  LENGTH (collect_phis bb.bb_instructions) <= r /\ r < LENGTH bb.bb_instructions /\
+  MEM v (EL r bb.bb_instructions).inst_outputs ==>
+  !i. i < LENGTH (collect_phis bb.bb_instructions) ==>
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL i bb.bb_instructions).inst_outputs <> [] /\
+    ~MEM v (EL i bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qspec_then `bb.bb_instructions` (qx_choose_then `tail` assume_tac)
+    fnPlanLineageLivenessTheory.collect_phis_prefix >>
+  `EL i bb.bb_instructions = EL i (collect_phis bb.bb_instructions)` by
+    (qpat_assum `bb.bb_instructions = _ ++ _`
+      (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     simp[rich_listTheory.EL_APPEND1]) >>
+  `(EL i bb.bb_instructions).inst_opcode = PHI /\
+    i < LENGTH bb.bb_instructions` by
+    (conj_tac >- metis_tac[livenessTransferProofsTheory.collect_phis_mem, listTheory.EL_MEM] >>
+     gvs[] >> decide_tac) >> simp[] >>
+  `MEM bb fn.fn_blocks /\ ssa_form fn /\ inst_wf (EL i bb.bb_instructions)` by
+    (gvs[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
+     metis_tac[livenessProofsTheory.collect_phis_mem,
+       venomExecPropsTheory.lookup_block_MEM, rich_listTheory.EL_MEM]) >>
+  conj_tac
+  >- (drule_all cfgNormBaseTheory.inst_wf_phi_well_formed >>
+      Cases_on `(EL i bb.bb_instructions).inst_outputs` >> gvs[]) >>
+  strip_tac >> `i = r` by metis_tac[removeUnusedProofsTheory.ssa_form_position] >> decide_tac
 QED
 
 Theorem lineage_state_incoming_ordinary_output_body_absent:
@@ -3937,3 +3970,153 @@ Resume lineage_state_incoming_ordinary_output_body_absent[ssa]:
 QED
 
 Finalise lineage_state_incoming_ordinary_output_body_absent
+
+Theorem lineage_history_ordinary_output_body_absent[local]:
+  !vertices fn dfg ch growth spill_base lbl_ctr fn_ops ps_end entry lbl ps bb
+   h promised setup_ops start endpoint r v.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ lbl <> entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    LRC (lineage_edge (liveness_analyze fn) dfg (cfg_analyze fn) fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)) vertices
+      (entry,init_cleanup_plan_state ch growth spill_base lbl_ctr) (lbl,ps) /\
+    generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+      ch growth fn spill_base lbl_ctr = SOME (fn_ops,ps_end) /\
+    (if LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1 then
+      clean_stack_plan (liveness_analyze fn) (cfg_analyze fn) fn bb
+        (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+     else ([],ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+       (setup_ops,start) /\
+    native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn lbl
+      (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions start
+      (LENGTH (collect_phis bb.bb_instructions)) endpoint /\
+    LENGTH (collect_phis bb.bb_instructions) <= r /\ r < LENGTH bb.bb_instructions /\
+    MEM v (EL r bb.bb_instructions).inst_outputs ==>
+    ~MEM (Var v) endpoint.ps_stack /\ Var v NOTIN FDOM endpoint.ps_spilled
+Proof
+  measureInduct_on `LENGTH vertices` >> rpt gen_tac >> strip_tac >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps` by
+    (drule lineage_history_reconstruct >> simp[] >>
+     disch_then irule >> simp[lineage_state_entry]) >>
+  Cases_on `MEM lbl (MAP FST vertices)`
+  >- suspend "return" >>
+  `~MEM (Var v) ps.ps_stack /\ Var v NOTIN FDOM ps.ps_spilled` by
+    (irule lineage_history_first_arrival_output_absent >>
+     goal_assum (drule_at (Pat `LRC _ _ _ _`)) >> simp[] >>
+     metis_tac[listTheory.EL_MEM]) >>
+  suspend "first_body"
+QED
+
+Resume lineage_history_ordinary_output_body_absent[first_body]:
+  `LIST_ELEM_COUNT (Var v) ps.ps_stack = 0` by
+    simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff] >>
+  `~MEM (Var v) start.ps_stack /\ Var v NOTIN FDOM start.ps_spilled` by
+    (Cases_on `LENGTH (cfg_preds_of (cfg_analyze fn) lbl) = 1` >> gvs[] >>
+     drule fnPlanLineageObserverTransportTheory.clean_stack_plan_resource_nonincrease >>
+     disch_then (qspec_then `v` mp_tac) >>
+     simp[fnPlanLineageObserverTransportTheory.elem_count_zero_iff,
+       fnPlanLineageObserverTransportTheory.indicator_zero_iff,
+       fnPlanLineageObserverTransportTheory.resource_zero_iff_absent]) >>
+  `!i. i < LENGTH (collect_phis bb.bb_instructions) ==>
+    (EL i bb.bb_instructions).inst_opcode = PHI /\
+    (EL i bb.bb_instructions).inst_outputs <> [] /\
+    ~MEM v (EL i bb.bb_instructions).inst_outputs` by
+    (metis_tac[ready_ordinary_output_phi_prefix]) >>
+  conj_tac
+  >- (drule fnPlanLineageObserverTransportTheory.native_phi_interval_stack_absent >>
+      disch_then (qspec_then `v` mp_tac) >> simp[]) >>
+  drule fnPlanLineageObserverTransportTheory.native_phi_interval_spilled_unchanged >>
+  impl_tac >- metis_tac[] >> simp[]
+QED
+
+Resume lineage_history_ordinary_output_body_absent[return]:
+  `?pre old tail. vertices = pre ++ (lbl,old)::tail /\ ~MEM lbl (MAP FST tail)` by
+    metis_tac[lineage_history_last_label_split] >>
+  gvs[fnPlanLineageCallTraceTheory.LRC_APPEND] >>
+  `y = (lbl,old)` by
+    (qpat_assum `LRC _ ((lbl,old)::tail) _ _` mp_tac >>
+     pure_rewrite_tac[Once listTheory.LRC_def] >> metis_tac[]) >> gvs[] >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl old` by
+    (qpat_assum `LRC _ pre _ _` (mp_then Any mp_tac lineage_history_reconstruct) >>
+     simp[] >> disch_then irule >> simp[lineage_state_entry]) >>
+  qpat_x_assum `LRC _ ((lbl,old)::tail) _ _` mp_tac >>
+  pure_rewrite_tac[Once listTheory.LRC_def] >> strip_tac >>
+  PairCases_on `z` >> gvs[] >>
+  drule lineage_edge_physical >> strip_tac >> gvs[] >>
+  suspend "previous_body"
+QED
+
+Resume lineage_history_ordinary_output_body_absent[previous_body]:
+  `bb <> HD fn.fn_blocks` by
+    (strip_tac >> gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def, AllCaseEqs()] >>
+     metis_tac[venomExecPropsTheory.lookup_block_label]) >>
+  `get_params bb.bb_instructions = [] /\ non_param_insts bb = bb.bb_instructions` by
+    (irule fnPlanLineageEntryProductionTheory.nonentry_block_no_params >>
+     metis_tac[codegen_ready_fn_def]) >>
+  drule_all lineage_state_block_native_run >> strip_tac >> gvs[] >>
+  `?seed. native_inst_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn bb.bb_label
+    (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) bb.bb_instructions start'
+    (LENGTH (collect_phis bb.bb_instructions)) seed` by
+    (qpat_assum `native_inst_prefix _ _ _ _ _ _ _ _ _ _ (LENGTH bb.bb_instructions) after` mp_tac >>
+     `LENGTH bb.bb_instructions = LENGTH (collect_phis bb.bb_instructions) +
+       (LENGTH bb.bb_instructions - LENGTH (collect_phis bb.bb_instructions))` by decide_tac >>
+     pop_assum (fn th => CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     disch_then (mp_then Any strip_assume_tac
+       fnPlanLineageEntryProductionTheory.native_inst_prefix_split) >>
+     `LENGTH (collect_phis bb.bb_instructions) +
+       (LENGTH bb.bb_instructions - LENGTH (collect_phis bb.bb_instructions)) =
+       LENGTH bb.bb_instructions` by decide_tac >>
+     qexists_tac `mid` >> gvs[]) >>
+  `~MEM (Var v) seed.ps_stack /\ Var v NOTIN FDOM seed.ps_spilled` by
+    (first_x_assum (qspec_then `pre` mp_tac) >> simp[] >>
+     disch_then (fn th => qpat_assum `LRC _ pre _ _`
+       (mp_then (Pat `LRC _ _ _ _`) mp_tac th)) >> simp[] >> metis_tac[]) >>
+  suspend "outgoing"
+QED
+
+Resume lineage_history_ordinary_output_body_absent[outgoing]:
+  `~bb_is_halting bb` by
+    metis_tac[fnPlanLineageObserverTransportTheory.ready_edge_source_nonhalting] >>
+  `(MEM (Var v) after.ps_stack ==> MEM v
+      (live_vars_at (liveness_analyze fn) bb.bb_label (LENGTH bb.bb_instructions))) /\
+    LIST_ELEM_COUNT (Var v) after.ps_stack +
+      (if Var v IN FDOM after.ps_spilled then 1 else 0) <= 1` by
+    (irule lineage_state_body_seeded_ordinary_exit_production >> simp[] >>
+     conj_tac >- metis_tac[] >>
+     goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `lineage_state _ _ _ _ _ _ _`)) >>
+     qexists_tac `seed` >> fs[]) >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `EVERY (\vertex. !other. lookup_block (FST vertex) fn.fn_blocks = SOME other ==>
+    EVERY (\i. ~MEM v i.inst_outputs) other.bb_instructions) tail` by
+    (simp[Once listTheory.EVERY_MEM] >> rpt strip_tac >>
+     `FST vertex <> bb.bb_label` by
+       (strip_tac >> qpat_x_assum `~MEM bb.bb_label (MAP FST tail)` mp_tac >>
+        simp[listTheory.MEM_MAP] >> qexists_tac `vertex` >> simp[]) >>
+     metis_tac[fnPlanLineagePathTheory.ssa_output_other_block_no_outputs, listTheory.EL_MEM]) >>
+  `lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) z0 z1` by
+    metis_tac[lineage_edge_step] >>
+  qpat_assum `LRC _ tail _ _`
+    (mp_then (Pat `LRC _ _ _ _`) mp_tac lineage_history_incoming_stack_support) >>
+  disch_then (qspecl_then [`entry`,`v`] mp_tac) >> simp[] >>
+  (impl_tac >- (qexistsl_tac [`bb.bb_label`,`bb`,
+    `old with <|ps_cleanup_height := ch'; ps_cleanup_promised := promised'|>`,`ops`,`after`] >>
+    simp[] >> metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def])) >>
+  strip_tac >> suspend "reset"
+QED
+
+Resume lineage_history_ordinary_output_body_absent[reset]:
+  `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+    metis_tac[fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule (codegen_ready_fn_def |> iffLR) >> strip_tac >>
+     drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  irule lineage_state_incoming_ordinary_output_body_absent >>
+  goal_assum (drule_at (Pat `generate_block_plan _ _ _ _ pb input = _`)) >>
+  simp[] >> metis_tac[]
+QED
+
+Finalise lineage_history_ordinary_output_body_absent
