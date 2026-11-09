@@ -1036,3 +1036,384 @@ Proof
   Cases_on `MEM ret (bb_succs rb)` >>
   simp[inline_caller_point_def, LENGTH_MAP] >> metis_tac[]
 QED
+
+(* Entry snapshots carry predecessor information separately from instruction
+   points.  PHI reads are always from these original snapshots. *)
+Definition inline_caller_entry_def:
+  inline_caller_entry caller final lbl i ret N opaque (rb:basic_block) b s t <=>
+    inline_caller_point caller final lbl i ret N opaque b 0 s t /\
+    t.vs_prev_bb = OPTION_MAP (\l. if l = lbl then ret else l) s.vs_prev_bb /\
+    (!l. s.vs_prev_bb = SOME l ==> MEM l (fn_labels caller))
+End
+
+Definition inline_clone_entry_def:
+  inline_clone_entry caller callee final lbl i p ret N opaque_caller opaque
+    c d V b s t <=>
+    inline_clone_point caller callee final lbl i p ret N opaque_caller opaque
+      c d V b 0 0 s t /\
+    inline_defined_support V s /\
+    t.vs_prev_bb = OPTION_MAP (STRCAT p) s.vs_prev_bb
+End
+
+Theorem inline_caller_entry_none:
+  inline_caller_point caller final lbl i ret N opaque b 0 s t /\
+  s.vs_prev_bb = NONE /\ t.vs_prev_bb = NONE ==>
+  inline_caller_entry caller final lbl i ret N opaque rb b s t
+Proof
+  simp[inline_caller_entry_def]
+QED
+
+Theorem inline_clone_entry_none:
+  inline_clone_point caller callee final lbl i p ret N opaque_caller opaque
+    c d V b 0 0 s t /\ inline_defined_support V s /\
+  s.vs_prev_bb = NONE /\ t.vs_prev_bb = NONE ==>
+  inline_clone_entry caller callee final lbl i p ret N opaque_caller opaque
+    c d V b s t
+Proof
+  simp[inline_clone_entry_def]
+QED
+
+Theorem inline_fields_eval_one_phi[local]:
+  inline_inst_fields a = inline_inst_fields b ==>
+  eval_one_phi s a = eval_one_phi s b
+Proof
+  simp[inline_inst_fields_def, eval_one_phi_def] >> metis_tac[]
+QED
+
+Theorem inline_fields_eval_phis:
+  !xs ys s. MAP inline_inst_fields xs = MAP inline_inst_fields ys ==>
+    eval_phis s xs = eval_phis s ys
+Proof
+  Induct_on `xs` >- (Cases_on `ys` >> simp[]) >>
+  Cases_on `ys` >> simp[] >> rpt strip_tac >>
+  `h.inst_opcode = h'.inst_opcode` by
+    gvs[inline_inst_fields_def] >>
+  `eval_one_phi s h = eval_one_phi s h'` by
+    metis_tac[inline_fields_eval_one_phi] >>
+  `eval_phis s xs = eval_phis s t` by metis_tac[] >>
+  simp[eval_phis_def]
+QED
+
+Theorem inline_clone_entry_snapshot:
+  inline_clone_entry caller callee final lbl i p ret N opaque_caller opaque
+    c d V b s t /\
+  (!inst prev l. MEM inst insts /\ s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Label l) ==>
+    FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (STRCAT p l)) /\
+  (!inst prev y x a. MEM inst insts /\ s.vs_prev_bb = SOME prev /\
+    eval_one_phi s inst = SOME (x,a) /\
+    resolve_phi prev inst.inst_operands = SOME (Var y) /\ y IN opaque ==>
+    x IN opaque) /\
+  (!x. x IN inline_phi_outputs insts ==> STRCAT p x NOTIN (N DIFF opaque_caller)) /\
+  eval_phis s insts = OK u ==>
+  ?v. eval_phis t (MAP (inline_rename_inst (STRCAT p) (STRCAT p)) insts) = OK v /\
+    inline_clone_point caller callee final lbl i p ret N opaque_caller opaque
+      c d (V UNION inline_phi_outputs insts) b 0 0 u v /\
+    inline_defined_support (V UNION inline_phi_outputs insts) u
+Proof
+  strip_tac >>
+  `inline_supported_frame (STRCAT p) V opaque c.vs_vars
+    (N DIFF opaque_caller) s t` by
+    gvs[inline_clone_entry_def, inline_clone_point_def, inline_supported_frame_def] >>
+  drule inline_supported_frame_eval_phis >>
+  disch_then (qspecl_then [`u`, `STRCAT p`, `insts`] mp_tac) >>
+  simp[] >>
+  (impl_tac >- (gvs[inline_clone_entry_def] >> metis_tac[])) >>
+  strip_tac >> qexists `t'` >>
+  qpat_assum `eval_phis s _ = OK u` (mp_then Any assume_tac eval_phis_only_updates_vs_vars) >>
+  qpat_assum `eval_phis t _ = OK t'` (mp_then Any assume_tac eval_phis_only_updates_vs_vars) >>
+  gvs[inline_supported_frame_def, inline_clone_entry_def,
+      inline_clone_point_def] >>
+  qpat_x_assum `u = _ with vs_vars := _` SUBST1_TAC >>
+  qpat_x_assum `t' = _ with vs_vars := _` SUBST1_TAC >>
+  gvs[inline_target_anchor_def, inline_caller_residual_def,
+      inline_caller_bookkeeping_def, merge_callee_state_def, inline_shared_frame_def,
+      stateFrameTheory.execution_frame_def]
+QED
+
+Theorem inline_rewrite_phi[local]:
+  inst.inst_opcode = PHI ==>
+  rewrite_inline_inst args outs ret inst n = ([inst],n)
+Proof
+  simp[rewrite_inline_inst_def, is_param_opcode_def]
+QED
+
+Theorem inline_rewrite_nonphi_head:
+  inst.inst_opcode <> PHI ==>
+  ?h rest. FST (rewrite_inline_inst args outs ret inst n) = h::rest /\
+    h.inst_opcode <> PHI
+Proof
+  strip_tac >> rw[rewrite_inline_inst_def] >> simp[] >>
+  Cases_on `FILTER (\op. ~is_label_op op)
+    (TAKE (LENGTH inst.inst_operands - 1) inst.inst_operands)` >> simp[]
+QED
+
+Theorem inline_rewrite_eval_phis:
+  !insts n. eval_phis s (FST (rewrite_inline_insts args outs ret insts n)) =
+    eval_phis s insts
+Proof
+  Induct_on `insts` >- simp[rewrite_inline_insts_def, eval_phis_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[rewrite_inline_insts_def, inline_rewrite_phi, pairTheory.UNCURRY, eval_phis_def]) >>
+  drule inline_rewrite_nonphi_head >>
+  disch_then (qspecl_then [`ret`, `outs`, `n`, `args`] strip_assume_tac) >>
+  simp[rewrite_inline_insts_def, pairTheory.UNCURRY, eval_phis_def]
+QED
+
+Theorem inline_clone_phi_inst[local]:
+  EVERY (\op. !l. op = Label l ==> MEM l labs) inst.inst_operands ==>
+  clone_instruction p labs inst = inline_rename_inst (STRCAT p) (STRCAT p) inst
+Proof
+  strip_tac >> simp[clone_instruction_inline_rename, inline_rename_inst_def] >>
+  simp[venomInstTheory.instruction_component_equality] >>
+  irule MAP_CONG >> simp[] >>
+  rpt strip_tac >> Cases_on `x` >>
+  gvs[inline_rename_operand_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem inline_clone_eval_phis:
+  !insts. EVERY (\inst. inst.inst_opcode = PHI ==>
+    EVERY (\op. !l. op = Label l ==> MEM l labs) inst.inst_operands) insts ==>
+  eval_phis t (MAP (clone_instruction p labs) insts) =
+  eval_phis t (MAP (inline_rename_inst (STRCAT p) (STRCAT p)) insts)
+Proof
+  Induct_on `insts` >- simp[] >> simp[] >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (simp[inline_clone_phi_inst, eval_phis_def, inline_rename_inst_def]) >>
+  simp[eval_phis_def, clone_instruction_def, inline_rename_inst_def]
+QED
+
+(* Final clone entry layout has no edge repair: the saved caller suffix
+   cannot have a callee-internal successor in the separated namespace. *)
+Theorem inline_clone_layout_eval_phis:
+  lookup_block l raw.fn_blocks = SOME clone_bb /\
+  lookup_block l (renumber_fn_inst_ids (fix_inline_phis old fresh rb raw)).fn_blocks = SOME tb /\
+  ~MEM clone_bb.bb_label (bb_succs rb) /\
+  clone_bb.bb_instructions = FST (rewrite_inline_insts args outs ret
+    (MAP (clone_instruction p labs) insts) n) /\
+  EVERY (\inst. inst.inst_opcode = PHI ==>
+    EVERY (\op. !l. op = Label l ==> MEM l labs) inst.inst_operands) insts ==>
+  eval_phis t tb.bb_instructions =
+    eval_phis t (MAP (inline_rename_inst (STRCAT p) (STRCAT p)) insts)
+Proof
+  strip_tac >>
+  qpat_assum `lookup_block l raw.fn_blocks = SOME clone_bb`
+    (mp_then Any mp_tac inline_final_lookup_fields) >>
+  disch_then (qspecl_then [`rb`, `old`, `fresh`] strip_assume_tac) >>
+  gvs[] >> drule inline_fields_eval_phis >>
+  disch_then (qspec_then `t` mp_tac) >>
+  simp[inline_rewrite_eval_phis, inline_clone_eval_phis]
+QED
+
+Theorem inline_clone_entry_phis:
+  inline_clone_entry caller callee final lbl i p ret N opaque_caller opaque
+    c d V b s t /\
+  lookup_block b callee.fn_blocks = SOME cb /\
+  lookup_block (STRCAT p b) raw.fn_blocks = SOME clone_bb /\
+  lookup_block (STRCAT p b) final.fn_blocks = SOME tb /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb raw) /\
+  ~MEM clone_bb.bb_label (bb_succs rb) /\
+  clone_bb.bb_instructions = FST (rewrite_inline_insts args outs ret
+    (MAP (clone_instruction p (fn_labels callee)) cb.bb_instructions) n) /\
+  EVERY (\inst. inst.inst_opcode = PHI ==>
+    EVERY (\op. !l. op = Label l ==> MEM l (fn_labels callee)) inst.inst_operands)
+    cb.bb_instructions /\
+  (!inst prev l. MEM inst cb.bb_instructions /\ s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Label l) ==>
+    FLOOKUP s.vs_labels l = FLOOKUP t.vs_labels (STRCAT p l)) /\
+  (!inst prev y x a. MEM inst cb.bb_instructions /\ s.vs_prev_bb = SOME prev /\
+    eval_one_phi s inst = SOME (x,a) /\
+    resolve_phi prev inst.inst_operands = SOME (Var y) /\ y IN opaque ==>
+    x IN opaque) /\
+  (!x. x IN inline_phi_outputs cb.bb_instructions ==>
+    STRCAT p x NOTIN (N DIFF opaque_caller)) /\
+  eval_phis s cb.bb_instructions = OK u ==>
+  ?v. eval_phis t tb.bb_instructions = OK v /\
+    inline_clone_point caller callee final lbl i p ret N opaque_caller opaque
+      c d (V UNION inline_phi_outputs cb.bb_instructions) b 0 0 u v /\
+    inline_defined_support (V UNION inline_phi_outputs cb.bb_instructions) u
+Proof
+  strip_tac >>
+  `eval_phis t tb.bb_instructions = eval_phis t
+     (MAP (inline_rename_inst (STRCAT p) (STRCAT p)) cb.bb_instructions)` by
+    (irule inline_clone_layout_eval_phis >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  drule_all inline_clone_entry_snapshot >> metis_tac[]
+QED
+
+Theorem inline_caller_data_phi_write:
+  inline_caller_data N opaque s t /\ (x NOTIN opaque ==> a = b) ==>
+  inline_caller_data N opaque (update_var x a s) (update_var x b t)
+Proof
+  simp[inline_caller_data_def, inline_caller_bookkeeping_def,
+       inline_shared_frame_def, stateFrameTheory.execution_frame_def,
+       update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem inline_caller_phis_snapshot:
+  !insts s t u.
+  inline_caller_data N opaque s t /\
+  (!inst x a. MEM inst insts /\ inst.inst_opcode = PHI /\
+    eval_one_phi s inst = SOME (x,a) ==>
+    ?b. eval_one_phi t inst = SOME (x,b) /\ (x NOTIN opaque ==> b = a)) /\
+  eval_phis s insts = OK u ==>
+  ?v. eval_phis t insts = OK v /\ inline_caller_data N opaque u v
+Proof
+  Induct_on `insts` >- simp[eval_phis_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (gvs[eval_phis_def, AllCaseEqs()] >>
+      rename1 `eval_phis s insts = OK tail` >>
+      `?b. eval_one_phi t h = SOME (out,b) /\ (out NOTIN opaque ==> b = v)` by
+        metis_tac[MEM] >>
+      `?z. eval_phis t insts = OK z /\ inline_caller_data N opaque tail z` by
+        (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      qexists `update_var out b z` >> simp[eval_phis_def] >>
+      irule inline_caller_data_phi_write >> simp[] >> metis_tac[]) >>
+  gvs[eval_phis_def] >> metis_tac[]
+QED
+
+Theorem inline_caller_eval_one_phi:
+  inline_caller_data N opaque s t /\ t.vs_prev_bb = s.vs_prev_bb /\
+  (!prev y. s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Var y) ==>
+    y IN N /\ (y IN opaque ==> x IN opaque) /\
+    (y IN opaque ==> ?z. lookup_var y t = SOME z)) /\
+  eval_one_phi s inst = SOME (x,a) ==>
+  ?b. eval_one_phi t inst = SOME (x,b) /\ (x NOTIN opaque ==> b = a)
+Proof
+  simp[eval_one_phi_def, AllCaseEqs()] >> strip_tac >>
+  rename1 `resolve_phi prev inst.inst_operands = SOME op` >>
+  Cases_on `op` >>
+  gvs[eval_operand_def, inline_caller_data_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem inline_caller_eval_phis:
+  inline_caller_data N opaque s t /\ t.vs_prev_bb = s.vs_prev_bb /\
+  (!inst x a prev y. MEM inst insts /\ inst.inst_opcode = PHI /\
+    eval_one_phi s inst = SOME (x,a) /\ s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Var y) ==>
+    y IN N /\ (y IN opaque ==> x IN opaque) /\
+    (y IN opaque ==> ?z. lookup_var y t = SOME z)) /\
+  eval_phis s insts = OK u ==>
+  ?v. eval_phis t insts = OK v /\ inline_caller_data N opaque u v
+Proof
+  strip_tac >> irule inline_caller_phis_snapshot >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> irule inline_caller_eval_one_phi >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_caller_data_prev[simp]:
+  inline_caller_data N opaque (s with vs_prev_bb := a) (t with vs_prev_bb := b) =
+    inline_caller_data N opaque s t
+Proof
+  simp[inline_caller_data_def, inline_caller_bookkeeping_def,
+       inline_shared_frame_def, stateFrameTheory.execution_frame_def, lookup_var_def]
+QED
+
+Theorem inline_caller_repaired_phis:
+  inline_caller_data N opaque s t /\
+  t.vs_prev_bb = OPTION_MAP (\l. if l = old then fresh else l) s.vs_prev_bb /\
+  inliner_phi_labels_closed fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+  ~MEM fresh (fn_labels fn) /\
+  (!l. s.vs_prev_bb = SOME l ==> MEM l (fn_labels fn)) /\
+  (!inst x a prev y. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    eval_one_phi s inst = SOME (x,a) /\ s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Var y) ==>
+    y IN N /\ (y IN opaque ==> x IN opaque) /\
+    (y IN opaque ==> ?z. lookup_var y t = SOME z)) /\
+  eval_phis s bb.bb_instructions = OK u ==>
+  ?v. eval_phis t
+      (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                   else subst_label_inst old fresh inst) bb.bb_instructions) = OK v /\
+    inline_caller_data N opaque u v
+Proof
+  strip_tac >>
+  qabbrev_tac `t0 = t with vs_prev_bb := s.vs_prev_bb` >>
+  `?v0. eval_phis t0 bb.bb_instructions = OK v0 /\ inline_caller_data N opaque u v0` by
+    (irule inline_caller_eval_phis >> goal_assum (drule_at Any) >>
+     gvs[Abbr `t0`, inline_caller_data_def, inline_caller_bookkeeping_def,
+         inline_shared_frame_def, stateFrameTheory.execution_frame_def, lookup_var_def] >>
+     metis_tac[]) >>
+  drule_all inline_eval_phis_optional_repair >>
+  disch_then (qspecl_then [`t0`, `old`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists `v0 with vs_prev_bb := t.vs_prev_bb` >>
+  `t with vs_prev_bb := OPTION_MAP (\l. if l = old then fresh else l) s.vs_prev_bb = t` by
+    metis_tac[venom_state_fupdselfid] >>
+  gvs[Abbr `t0`, inline_caller_data_def, inline_caller_bookkeeping_def,
+      inline_shared_frame_def, stateFrameTheory.execution_frame_def, lookup_var_def]
+QED
+
+Theorem inline_eval_phis_split_prefix:
+  !i insts. i < LENGTH insts /\ (EL i insts).inst_opcode <> PHI /\
+    next.inst_opcode <> PHI ==>
+    eval_phis s (TAKE i insts ++ [next]) = eval_phis s insts
+Proof
+  Induct_on `i`
+  >- (Cases_on `insts` >> simp[eval_phis_def]) >>
+  Cases_on `insts` >> simp[] >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[eval_phis_def]
+QED
+
+Theorem inline_eval_phis_repaired_split:
+  i < LENGTH insts /\ (EL i insts).inst_opcode = INVOKE /\
+  next.inst_opcode <> PHI ==>
+  eval_phis s
+    (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                 else subst_label_inst old fresh inst) (TAKE i insts ++ [next])) =
+  eval_phis s
+    (MAP (\inst. if inst.inst_opcode <> PHI then inst
+                 else subst_label_inst old fresh inst) insts)
+Proof
+  strip_tac >> simp[MAP_APPEND, MAP_TAKE] >>
+  irule inline_eval_phis_split_prefix >>
+  simp[EL_MAP, cfgTransformTheory.subst_label_inst_def]
+QED
+
+Theorem inline_caller_layout_eval_phis:
+  lookup_block lbl caller.fn_blocks = SOME call_bb /\
+  lookup_block b caller.fn_blocks = SOME bb /\
+  lookup_block b final.fn_blocks = SOME tb /\
+  final = renumber_fn_inst_ids (fix_inline_phis lbl ret rb
+    (inline_call_site p ret caller callee lbl i)) /\
+  i < LENGTH call_bb.bb_instructions /\
+  (EL i call_bb.bb_instructions).inst_opcode = INVOKE ==>
+  eval_phis t tb.bb_instructions =
+    eval_phis t (if MEM b (bb_succs rb) then
+      MAP (\inst. if inst.inst_opcode <> PHI then inst
+                  else subst_label_inst lbl ret inst) bb.bb_instructions
+      else bb.bb_instructions)
+Proof
+  strip_tac >>
+  `bb.bb_label = b` by
+    (qpat_x_assum `lookup_block b caller.fn_blocks = SOME bb` mp_tac >>
+     simp[lookup_block_def] >> strip_tac >>
+     drule venomExecProofsTheory.FIND_P >> simp[]) >>
+  Cases_on `b = lbl`
+  >- (gvs[] >>
+      qpat_assum `lookup_block b caller.fn_blocks = SOME bb`
+        (mp_then Any mp_tac inline_call_site_lookup_call) >>
+      disch_then (qspecl_then [`ret`, `p`, `i`, `callee`] assume_tac) >>
+      qpat_assum `lookup_block b (inline_call_site _ _ _ _ _ _).fn_blocks = SOME _`
+        (mp_then Any mp_tac inline_final_lookup_fields) >>
+      disch_then (qspecl_then [`rb`, `bb.bb_label`, `ret`] strip_assume_tac) >>
+      gvs[] >> drule inline_fields_eval_phis >>
+      disch_then (qspec_then `t` mp_tac) >>
+      Cases_on `MEM bb.bb_label (bb_succs rb)` >>
+      simp[] >> strip_tac >>
+      rewrite_tac[MAP_TAKE] >>
+      irule inline_eval_phis_split_prefix >>
+      simp[EL_MAP, cfgTransformTheory.subst_label_inst_def]) >>
+  qpat_assum `lookup_block lbl caller.fn_blocks = SOME call_bb`
+    (mp_then Any mp_tac inline_call_site_lookup_other) >>
+  disch_then (qspecl_then [`ret`, `p`, `bb`, `b`, `i`, `callee`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_assum `lookup_block b (inline_call_site _ _ _ _ _ _).fn_blocks = SOME _`
+    (mp_then Any mp_tac inline_final_lookup_fields) >>
+  disch_then (qspecl_then [`rb`, `lbl`, `ret`] strip_assume_tac) >>
+  gvs[] >> drule inline_fields_eval_phis >>
+  disch_then (qspec_then `t` mp_tac) >> simp[]
+QED
