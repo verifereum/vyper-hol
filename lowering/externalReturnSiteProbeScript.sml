@@ -34,11 +34,12 @@ QED
 Theorem return_site_equal_memory:
   expr_post ctx func ce cx e es sa sb s0 es' v op s /\
   expr_type e = ret /\ ~is_word_type ret /\
+  post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) ret = SOME tv ==>
   ?w. eval_operand op s = SOME w /\
       val_in_memory tv v (w2n w) s.vs_memory
 Proof
-  rw[expr_post_def, expr_val_rel_def] >> metis_tac[]
+  strip_tac >> gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]
 QED
 
 (* Bytestring widening does not change physical reads or actual footprints. *)
