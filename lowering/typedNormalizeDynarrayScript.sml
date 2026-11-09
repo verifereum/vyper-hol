@@ -30,7 +30,13 @@ Proof
   strip_tac >> `l < dimword(:256)` by decide_tac >>
   Cases_on `src` >> Cases_on `dst` >>
   gvs[eval_operand_def, lookup_var_def] >>
-  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+  simp[run_inst_seq_def, mk_inst_def,
+       stepInstBaseLib.simp_opcode_clause ``MLOAD``,
+       stepInstBaseLib.simp_opcode_clause ``GT``,
+       stepInstBaseLib.simp_opcode_clause ``ISZERO``,
+       stepInstBaseLib.simp_opcode_clause ``ASSERT``,
+       stepInstBaseLib.simp_opcode_clause ``MSTORE``,
+       stepInstBaseLib.simp_opcode_clause ``ADD``,
        exec_pure1_def, exec_pure2_def, exec_read1_def, exec_write2_def,
        eval_operand_def, lookup_var_update_var, w2n_n2w, bool_to_word_def,
        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

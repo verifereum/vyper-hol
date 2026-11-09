@@ -5,7 +5,7 @@ Ancestors
   valueEncodingProps typedNormalizeContinuation typedNormalizeEntryBoundary
 
 (* Offsets are straight-line, even when the child they precede has a CFG. *)
-Theorem normalize_byte_offset_straight[local]:
+Theorem normalize_byte_offset_straight:
   compile_with_byte_offset op off sa = (out,sb) ==>
   cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
@@ -55,7 +55,7 @@ QED
 
 (* Expose the actual recursive child's compiler states; in particular the
    tail starts at the child's returned state, not at either offset state. *)
-Theorem normalize_fields_cons_states[local]:
+Theorem normalize_fields_cons_states:
   compile_typed_copy_fields ce dst src (dt::dts) (st::sts) doff soff sa =
     ((),sb) ==>
   ?dp sc sp sd se.
@@ -109,7 +109,7 @@ Proof
   simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
-Theorem normalize_struct_cons_states[local]:
+Theorem normalize_struct_cons_states:
   ALOOKUP src_fields name = SOME (st,ssz) /\
   compile_struct_typed_copy ce dst src ((name,dt,dsz)::rest)
     src_fields doff soff sa = ((),sb) ==>
