@@ -6236,6 +6236,40 @@ Proof
   metis_tac[mm_local_copy_ancestor_trans]
 QED
 
+Theorem mm_local_store_cut_fragment[local]:
+  j < n /\ n <= LENGTH is /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  s0 = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE j is) /\
+  FLOOKUP s0.ss_loads v = SOME src /\
+  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE n is) /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++
+           (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id]) |> ==>
+  ?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\ mm_local_copy_ancestor c h
+Proof
+  strip_tac >>
+  `SORTED (\a b. a.cg_dst <= b.cg_dst) s0.ss_copies` by
+    (simp[] >> irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
+  `?a. MEM a (scan_store dfg Mem2Mem s0 (EL j is)).ss_copies /\
+    mm_local_copy_ancestor c a` by
+    (irule mm_local_store_new_fragment >> simp[operand_lit_val_def, operand_var_name_def] >>
+     metis_tac[]) >>
+  `scan_inst dfg Mem2Mem s0 (EL j is) = scan_store dfg Mem2Mem s0 (EL j is)` by
+    simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  `TAKE n is = (TAKE j is ++ [EL j is]) ++ TAKE (n-SUC j) (DROP (SUC j) is)` by
+    (qspec_then `n` (qspec_then `SUC j` (qspec_then `is` mp_tac))
+       rich_listTheory.take_drop_partition >>
+     simp[rich_listTheory.TAKE_SUC, rich_listTheory.DROP_EL_CONS]) >>
+  `ss = FOLDL (scan_inst dfg Mem2Mem)
+    (scan_inst dfg Mem2Mem s0 (EL j is)) (TAKE (n-SUC j) (DROP (SUC j) is))` by
+    (simp[FOLDL_APPEND] >> gvs[]) >>
+  `?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\ mm_local_copy_ancestor a h` by
+    (qpat_assum `ss = _` SUBST1_TAC >> irule mm_local_fold_fragment >>
+     simp[MEM_APPEND] >> metis_tac[mm_local_inst_order]) >>
+  metis_tac[mm_local_copy_ancestor_trans]
+QED
+
 Theorem mm_local_indexed_bulk_owner[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -6276,6 +6310,91 @@ Proof
        (SPEC_ALL mm_local_prefix_write_pending_ancestor))) >>
      disch_then (assume_tac o CONJUNCT1) >> first_assum ACCEPT_TAC) >>
   metis_tac[]
+QED
+
+Theorem mm_local_indexed_store_owner[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  j < n /\ n <= r /\ r < LENGTH is /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  FLOOKUP s0.ss_loads v = SOME src /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  ?h. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    h.cg_dst <= w2n dst /\ w2n dst + 32 <= h.cg_dst + h.cg_length
+Proof
+  strip_tac >>
+  `n <= LENGTH is` by decide_tac >>
+  drule_all (REWRITE_RULE [] (Q.INST
+    [`dfg` |-> `dfg_build_function fn0`,
+     `c` |-> `<| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+      cg_inst_ids := [(EL j is).inst_id] ++
+        (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]) |>`]
+    (SPEC_ALL mm_local_store_cut_fragment))) >> strip_tac >>
+  `MEM (EL j is).inst_id h.cg_inst_ids /\ h.cg_dst <= w2n dst /\
+    w2n dst + 32 <= h.cg_dst + h.cg_length` by
+    (gvs[mm_local_copy_ancestor_def] >> metis_tac[MEM_APPEND, MEM]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >>
+     drule_all mm_local_prefix_wf_id_distinct >> simp[]) >>
+  `~MEM (EL r is).inst_id (MAP (\i. i.inst_id) (TAKE n is))` by
+    (irule mm_local_future_id_not_prefix >> simp[]) >>
+  `bb.bb_instructions = TAKE n is ++ DROP n is` by simp[] >>
+  `MEM (EL j is) bb.bb_instructions` by
+    (gvs[] >> irule EL_MEM >> decide_tac) >>
+  `(EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by simp[] >>
+  `rep_of_group bb.bb_instructions g = SOME ((EL r is).inst_id,g)` by metis_tac[] >>
+  drule_all (REWRITE_RULE [] (Q.INST [`w` |-> `EL j is`]
+    (SPEC_ALL mm_local_prefix_write_pending_ancestor))) >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem mm_local_history_store_value[local]:
+  mm_local_history is H N /\ j < N /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] ==>
+  ?value. lookup_var v (H j) = SOME value
+Proof
+  strip_tac >>
+  `step_inst_base (EL j is) (H j) = OK (H (SUC j))` by
+    metis_tac[mm_local_history_def] >>
+  gvs[venomExecSemanticsTheory.step_inst_base_def,
+      venomExecSemanticsTheory.exec_write2_def,
+      venomStateTheory.eval_operand_def, AllCaseEqs()]
+QED
+
+Theorem mm_local_indexed_store_history_owner[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  j < n /\ n <= r /\ r < LENGTH is /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  s0 = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE j is) /\
+  FLOOKUP s0.ss_loads v = SOME src /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM (EL j is).inst_id g.cg_inst_ids /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_history is H N /\ n <= N ==>
+  ?h d bs. MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    mm_local_write_capture is H N j = SOME (d,bs) /\
+    d = w2n dst /\ LENGTH bs = 32 /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length
+Proof
+  strip_tac >>
+  drule_all mm_local_indexed_store_owner >> strip_tac >>
+  `j < N` by decide_tac >>
+  drule_all mm_local_history_store_value >> strip_tac >>
+  drule_all mm_local_write_capture_store >> strip_tac >>
+  qexistsl [`h`, `w2n dst`, `word_to_bytes value T`] >> asm_rewrite_tac[]
 QED
 
 Theorem mm_local_indexed_bulk_history_owner[local]:
