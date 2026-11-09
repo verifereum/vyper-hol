@@ -60,9 +60,15 @@ constraints=$script_dir/python-o1-oracle-constraints.txt
 # supplied checkout cannot enter the compiler package.
 git clone --quiet --no-checkout --no-local "$vyper_repo" "$staged_vyper"
 git -c advice.detachedHead=false -C "$staged_vyper" checkout --quiet --detach "$pin"
-# Backport the upstream fixes the HOL lowering follows, which the pin
-# predates (vyperlang/vyper#5127, #5239, #5280, #5350; see README).
-git -C "$staged_vyper" apply "$script_dir/vyper-pin.patch"
+# Backport upstream fixes in filename order (see README).
+(
+  LC_ALL=C
+  export LC_ALL
+  for patch in "$script_dir"/patches/*.patch; do
+    [ -e "$patch" ] || continue
+    git -C "$staged_vyper" apply "$patch"
+  done
+)
 
 UV_PYTHON_INSTALL_DIR="$stage/python" \
   UV_CONSTRAINT="$constraints" UV_BUILD_CONSTRAINT="$constraints" \

@@ -22,7 +22,7 @@
 
 Theory phiWellFormed
 Ancestors
-  phiTransform stateEquivProps venomExecSemantics venomState venomWf phiDefs phiOrigins list
+  phiTransform stateEquivProps venomExecSemantics venomState venomWf phiDefs phiOrigins list dfgAnalysisProps
   venomWfProps
 
 (* ==========================================================================
@@ -256,4 +256,15 @@ Proof
     ) >>
     gvs[]
   )
+QED
+
+Theorem dfg_build_function_lookup_correct:
+  !fn v inst.
+    dfg_lookup (dfg_build_function fn) v = SOME inst
+    ==>
+    inst.inst_outputs = [v] /\ MEM inst (fn_insts fn)
+Proof
+  rpt strip_tac >>
+  drule dfg_lookup_implies_get_def >> strip_tac >>
+  drule dfg_build_function_correct >> simp[]
 QED

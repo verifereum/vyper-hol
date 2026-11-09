@@ -7,8 +7,8 @@
  *)
 Theory o1ContractMakeSsaPtrPos
 Ancestors
-  makeSsaCurrentLockstep makeSsaCurrentDefs makeSsaCurrentProps
-  makeSsaCurrentCfg makeSsaCurrentRevertForward makeSsaDefs o1FrameLockstep
+  makeSsaCurrentLockstep makeSsaDefs makeSsaCurrentProps
+  makeSsaCurrentCfg makeSsaCurrentRevertForward o1FrameLockstep
   ptrDiscipline contextCodegenRel o1PassContract venomWf venomInst
   o1ContractMakeSsaSrcOpcodes cfgTransform venomExecProofs makeSsaCurrentInduct
 

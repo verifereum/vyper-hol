@@ -27,8 +27,11 @@ and no bytecode metadata. The generator requires a clean Vyper checkout, clones
 only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
 
-Before installing, the generator applies `vyper-pin.patch` to the pinned
-revision. It backports four upstream fixes, which the HOL lowering follows:
+Before installing, the generator applies `patches/*.patch` to the pinned
+revision in C-locale filename order, using `git apply` for each file. A failed
+patch stops generation; an empty series leaves the pin unchanged. Each file
+backports one upstream PR so independent fixes can be added separately and
+removed when a new pin includes them. The current series contains:
 
 - vyperlang/vyper#5127: an external call sends the selector and the encoded
   arguments, `4 + encoded length` bytes, rather than `4 + ` the argument
@@ -36,24 +39,38 @@ revision. It backports four upstream fixes, which the HOL lowering follows:
 - vyperlang/vyper#5239: a storage, transient or immutable variable is read at
   its own declared type, not at a wider expected type (such as an external
   call's parameter type), whose layout differs for nested bounded types.
+- vyperlang/vyper#5280: an assignment or augmented-assignment target, or the
+  array of an `append` or `pop`, is rejected (`CompilerPanic("risky
+  overlap")`) when one of its subscripts has a base that passes through a
+  dynamic-array element and an index that can write a variable that base
+  reads, or makes a risky call.
+  Upstream gets this by lowering such targets through the subscript overlap
+  check; the pin has no such check, so the patch walks the target instead.
 - vyperlang/vyper#5350: an array subscript whose base is a `pop()` result is
   rejected (`CompilerPanic("risky overlap")`) when the index can write a
   variable the base reads, or makes a risky call.
-- vyperlang/vyper#5280: an assignment or augmented-assignment target, or the
-  array of an `append` or `pop`, is rejected the same way when one of its
-  subscripts has a base that passes through a dynamic-array element and an
-  index that can write a variable that base reads, or makes a risky call.
-  Upstream gets this by lowering such targets through the subscript overlap
-  check; the pin has no such check, so the patch walks the target instead.
 
-The pin has no subscript overlap check at all, so the patch brings
-`_subscript_read_write_overlap`, `_subscript_base_length_can_stale` and their
-helpers over from a later upstream revision (577d2534), unchanged, and uses
-them only for these two rejections: the pin still copies no subscript base.
+The pin has no subscript overlap check at all, so the #5280 patch, which
+applies first, brings `_subscript_read_write_overlap` and its helpers over
+from a later upstream revision (577d2534), unchanged, and the #5350 patch
+reuses them. They are used only for these two rejections: the pin still
+copies no subscript base.
 
 Only fixtures with external calls that take arguments change; the rejections
 change none. The provenance's `vyper_commit` names the unpatched base
 revision.
+
+Name a new patch `<upstream-pr>-<slug>.patch`, and start it with the upstream
+PR URL and its merge status (including the merge commit when merged). Keep
+only that PR's backport in the file, adapted to apply after earlier filenames.
+When migrating a branch with extra hunks in the old `vyper-pin.patch`, move
+those hunks into their own PR files and remove the old file; do not duplicate
+patches already in the series. Compare the old and new patched compiler trees
+at `VYPER_PIN` to check that this migration preserves the oracle inputs.
+
+On a repin, remove patches whose fixes the new pin contains, then check that
+the remaining series applies and regenerate the oracles. A PR having merged
+upstream does not by itself mean its fix is in `VYPER_PIN`.
 
 HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with
 `evm_version="prague"` (`ORACLE_EVM_VERSION`), the newest version the pinned

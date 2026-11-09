@@ -94,14 +94,14 @@ integration in `genBlockSim` around lines 4264-4939; `fmpWfDefs`/`fmpWfProps`;
 `mem2varBlockSimHelpers` around 1816 (distinguish DALLOCA from BUMP before edits).
 Structural BUMP branches also occur in `venomExecProofs`, `venomMemProofs`,
 `execEquivProofs`, `execEquivParamHelpers2`, `allocaRemapProofs`,
-`dftCommutation`/`dftBlockSim`, `ssaRenamedSim`, `dfgSoundStep`,
+`dftCommutation`/`dftBlockSim`, `dfgSoundStep`,
 `overflowElimHelpers`, `tailMergeStep`, `prevBbIndep`, `instIdxIndep`.
 
 Build these primary logical targets after semantics changes, then their
 consumers: venomExecProofsTheory, venomMemProofsTheory, fmpWfPropsTheory,
 execEquivProofsTheory, execEquivParamHelpers2Theory, allocaRemapProofsTheory,
 mem2varBlockSimHelpersTheory, dftCommutationTheory, dftBlockSimTheory,
-ssaRenamedSimTheory, dfgSoundStepTheory, overflowElimHelpersTheory,
+dfgSoundStepTheory, overflowElimHelpersTheory,
 tailMergeStepTheory, prevBbIndepTheory, instIdxIndepTheory, emitSimTheory,
 genBlockSimTheory, fmpLowerPropsTheory, fmpLowerInvokePropsTheory,
 fmpReclaimPropsTheory, evalCompilerAllocationBudgetTheory.

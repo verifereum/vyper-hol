@@ -1,5 +1,14 @@
+Upstream PR: https://github.com/vyperlang/vyper/pull/5280
+Status: merged 2026-10-02 (f89b81f9b85533791c8191bbdf1fa1a08bde0ffe)
+
+Reject an assignment, augmented-assignment, append or pop target whose
+subscript base passes through a dynamic-array element while its index can
+write a variable that base reads, or makes a risky call. The pin has no
+subscript overlap check, so this also brings the read/write overlap helpers
+(_subscript_read_write_overlap and the risky-call walk) and walks the target
+instead of lowering it through the subscript overlap check.
+
 diff --git a/vyper/codegen_venom/expr.py b/vyper/codegen_venom/expr.py
-index c834b2d0..61ffce76 100644
 --- a/vyper/codegen_venom/expr.py
 +++ b/vyper/codegen_venom/expr.py
 @@ -27,6 +27,8 @@ from vyper.exceptions import (
@@ -11,7 +20,7 @@ index c834b2d0..61ffce76 100644
  from vyper.semantics.data_locations import DataLocation
  from vyper.semantics.types import (
      AddressT,
-@@ -56,6 +58,124 @@ from .context import VenomCodegenContext
+@@ -56,6 +58,114 @@ from .context import VenomCodegenContext
  from .value import VyperValue
  
  
@@ -123,73 +132,10 @@ index c834b2d0..61ffce76 100644
 +        node = node.value
 +
 +
-+def _is_derived_from_pop(node: vy_ast.VyperNode) -> bool:
-+    """Return True if `node` is a `pop()` result, or a member or element of one."""
-+    while isinstance(node, (vy_ast.Subscript, vy_ast.Attribute)):
-+        node = node.value
-+    if not isinstance(node, vy_ast.Call):
-+        return False
-+    func_t = node.func._metadata.get("type")
-+    return isinstance(func_t, MemberFunctionT) and func_t.name == "pop"
-+
-+
  @dataclass
  class _CallKwargs:
      """Keyword arguments for external calls."""
-@@ -604,11 +724,13 @@ class Expr:
- 
-         # Case 4: Immutable - IMMUTABLES location
-         if varinfo.is_immutable:
--            typ = node._metadata["type"]
-+            # the node's type can be wider than the variable (e.g. when
-+            # assigned to a `DynArray[Bytes[512], 5]` local); the data has
-+            # the declared type's layout
-             ptr = Ptr(
-                 operand=IRLiteral(varinfo.position.position), location=DataLocation.IMMUTABLES
-             )
--            return VyperValue.from_ptr(ptr, typ)
-+            return VyperValue.from_ptr(ptr, varinfo.typ)
- 
-         raise CompilerPanic(f"Unknown variable: {varname}")  # pragma: nocover
- 
-@@ -682,17 +804,21 @@ class Expr:
-             if varinfo.is_constant:
-                 return Expr(varinfo.decl_node.value, self.ctx).lower()
- 
-+            # the node's type can be wider than the variable (e.g. when
-+            # assigned to a `DynArray[Bytes[512], 5]` local); the data has
-+            # the declared type's layout
-+
-             # Immutable state variable
-             if varinfo.is_immutable:
-                 ptr = Ptr(
-                     operand=IRLiteral(varinfo.position.position), location=DataLocation.IMMUTABLES
-                 )
--                return VyperValue.from_ptr(ptr, typ)
-+                return VyperValue.from_ptr(ptr, varinfo.typ)
- 
-             # Regular storage/transient variable - return location, don't load!
-             slot = varinfo.position.position
-             ptr = Ptr(operand=IRLiteral(slot), location=varinfo.location)
--            return VyperValue.from_ptr(ptr, typ)
-+            return VyperValue.from_ptr(ptr, varinfo.typ)
- 
-         # Case 6: Interface address (x.address where x is an interface)
-         if isinstance(sub_typ, InterfaceT) and attr == "address":
-@@ -834,6 +960,12 @@ class Expr:
-         """
-         node = self.node
-         assert isinstance(node, vy_ast.Subscript)
-+        if _is_derived_from_pop(node.value) and _subscript_read_write_overlap(
-+            node.value, node.slice
-+        ):
-+            # The popped element is past the array's new length, so the
-+            # index can overwrite it before the base is read.
-+            raise CompilerPanic("risky overlap")
-         base_vv = Expr(node.value, self.ctx).lower()
-         base = base_vv.operand  # Extract pointer for address math
-         index = Expr(node.slice, self.ctx).lower_value()  # Need the value
-@@ -1500,6 +1632,7 @@ class Expr:
+@@ -1506,6 +1616,7 @@ class Expr:
          elem_typ = darray_typ.value_type
  
          # Get the array VyperValue
@@ -197,7 +143,7 @@ index c834b2d0..61ffce76 100644
          darray_vv = Expr(darray_node, self.ctx).lower()
          darray_ptr = darray_vv.operand
  
-@@ -1600,6 +1733,7 @@ class Expr:
+@@ -1606,6 +1717,7 @@ class Expr:
          elem_typ = darray_typ.value_type
  
          # Get the array VyperValue
@@ -205,25 +151,7 @@ index c834b2d0..61ffce76 100644
          darray_vv = Expr(darray_node, self.ctx).lower()
          darray_ptr = darray_vv.operand
  
-@@ -1778,11 +1912,13 @@ class Expr:
- 
-             # ABI-encode from args_buf to buf+32
-             encode_dst = b.add(buf._ptr, IRLiteral(32))
--            abi_encode_to_buf(self.ctx, encode_dst, args_val.operand, args_tuple_t)
-+            args_abi_len = abi_encode_to_buf(self.ctx, encode_dst, args_val.operand, args_tuple_t)
-+            args_len = b.add(args_abi_len, IRLiteral(4))
-+        else:
-+            args_len = IRLiteral(4)
- 
--        # Call starts at buf+28, length = 4 + args_abi_size
-+        # Call starts at buf+28, length = 4-byte selector + ABI args payload.
-         args_ofst = b.add(buf._ptr, IRLiteral(28))
--        args_len = IRLiteral(4 + args_abi_size)
- 
-         # === Contract Existence Check ===
-         # If function returns nothing and skip_contract_check is False,
 diff --git a/vyper/codegen_venom/stmt.py b/vyper/codegen_venom/stmt.py
-index 916871c1..c06e2280 100644
 --- a/vyper/codegen_venom/stmt.py
 +++ b/vyper/codegen_venom/stmt.py
 @@ -26,7 +26,7 @@ from vyper.venom.basicblock import IRLiteral, IROperand, IRVariable

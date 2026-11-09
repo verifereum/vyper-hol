@@ -1,6 +1,6 @@
 Theory makeSsaCurrentPrefixCompatibility
 Ancestors
-  makeSsaCurrentPrefixMaps makeSsaCurrentDefs venomInst finite_map
+  makeSsaCurrentPrefixMaps makeSsaDefs venomInst finite_map
 
 (* A source surviving as a direct demand collides with the pulled-back
    demand for a different source-level PHI output. *)

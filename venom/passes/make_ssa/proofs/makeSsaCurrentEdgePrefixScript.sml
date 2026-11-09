@@ -46,7 +46,7 @@ Proof
   `bb.bb_label = h` by
     (`new.bb_label = h` by metis_tac[lookup_block_label] >>
      Cases_on `new.bb_instructions` >>
-     simp[makeSsaCurrentDefsTheory.simplify_current_phi_block_def] >>
+     simp[makeSsaDefsTheory.simplify_current_phi_block_def] >>
      IF_CASES_TAC >> simp[]) >>
   `post.vs_current_bb = h` by
     metis_tac[eval_phis_preserves_current_bb, lookup_block_label] >>

@@ -17,6 +17,7 @@ Ancestors
   finite_map venomState list
   cfgAnalysisProps cfgDefs
   dfAnalyzeDefs
+  passTransform
   venomWfProps
 Libs
   BasicProvers

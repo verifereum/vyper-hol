@@ -10,6 +10,7 @@ Ancestors
   vyperTypeConstantCells abiCallerBuiltinInput entryStateRel
   venomPipelineData venomPipelineDriver venomPipelineRunner venomFnScheduleRunner
   unitLabelMap fcgPruning
+  fcgDefs
 
 Theorem no_ctor_lookup:
   !tops exts ints fb.
@@ -389,7 +390,7 @@ Proof
 QED
 
 Theorem no_ctor_make_ssa:
-  makeSsaCurrentDefs$make_ssa_current_fn s
+  makeSsaDefs$make_ssa_current_fn s
     (mk_raw_function "__deploy"
       [<| bb_label := "__deploy"; bb_instructions :=
         [mk_inst 0 ALLOCA [Lit n] ["%0"];
@@ -669,7 +670,7 @@ Theorem no_ctor_late_make_ssa:
     <| fn_eom := SOME e; fn_mems_used := mems;
        fn_fmp_signature := SOME
          <| fms_has_fmp_param := F; fms_publishes := F |> |> ==>
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s)
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s)
 Proof
   strip_tac >> gvs[] >> EVAL_TAC
 QED
@@ -1669,7 +1670,7 @@ Proof
 QED
 
 Theorem no_ctor_late_fold:
-  makeSsaCurrentDefs$make_ssa_current_fn s fn = (fn,s) /\
+  makeSsaDefs$make_ssa_current_fn s fn = (fn,s) /\
   simplifyCfgDefs$simplify_cfg_fn_with_labels fn = (fn,[]) /\
   singleUseExpansionDefs$sue_expand_function_supply s fn = (expanded,t) /\
   dftDefs$dft_fn expanded = ordered /\
