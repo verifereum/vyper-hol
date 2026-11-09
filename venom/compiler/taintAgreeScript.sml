@@ -592,6 +592,47 @@ Proof
   simp[venom_state_fupdcanon]
 QED
 
+Theorem taint_agree_local_fields:
+  taint_agree D X tn s t ==> ld_joint_local_fields s t
+Proof
+  simp[taint_agree_def, o1LowerDloadJointRelationTheory.ld_joint_local_fields_def] >>
+  strip_tac >>
+  qpat_x_assum `_ = s` (fn th => once_rewrite_tac[GSYM th]) >> simp[]
+QED
+
+Theorem taint_agree_extract_concrete:
+  taint_agree D X tn s t /\
+  extract_venom_result s v ro rs rr = SOME (w,r) ==>
+  taint_agree D X
+    (tn with t_mem := tn.t_mem DIFF
+      {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)})
+    r (t with <|vs_returndata := r.vs_returndata;
+      vs_accounts := r.vs_accounts; vs_logs := r.vs_logs;
+      vs_transient := r.vs_transient;
+      vs_pending_deletions := r.vs_pending_deletions;
+      vs_memory := (write_memory_with_expansion ro
+        (TAKE rs r.vs_returndata) t).vs_memory|>)
+Proof
+  strip_tac >> drule ld_extract_concrete_shape >> strip_tac >>
+  `taint_agree D X (tn with t_mem := tn.t_mem DIFF
+      {i | ro <= i /\ i < ro + LENGTH (TAKE rs r.vs_returndata)})
+    (write_memory_with_expansion ro (TAKE rs r.vs_returndata) s)
+    (write_memory_with_expansion ro (TAKE rs r.vs_returndata) t)` by
+    (irule taint_agree_write_memory >>
+     qpat_assum `taint_agree _ _ _ _ _` (irule_at Any) >> simp[]) >>
+  qpat_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+  gvs[taint_agree_def, ld_shared_agree_def, word_agree_except_def,
+    op_taint_def, write_memory_with_expansion_def, write_memory_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  qpat_x_assum `_ = s` (mp_tac o Q.AP_TERM
+    `\z. z with <|vs_memory := (write_memory_with_expansion ro
+       (TAKE rs r.vs_returndata) s).vs_memory;
+      vs_transient := r.vs_transient; vs_returndata := r.vs_returndata;
+      vs_accounts := r.vs_accounts; vs_logs := r.vs_logs;
+      vs_pending_deletions := r.vs_pending_deletions|>`) >>
+  simp[write_memory_with_expansion_def, write_memory_def, venom_state_fupdcanon]
+QED
+
 Theorem taint_agree_exec_create:
   taint_agree D X tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} /\
   s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient /\
