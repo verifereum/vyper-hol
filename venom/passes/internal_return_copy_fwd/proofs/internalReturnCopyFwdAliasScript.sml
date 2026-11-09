@@ -1262,3 +1262,45 @@ Proof
      gvs[pred_setTheory.SUBSET_DEF]) >>
   drule_all ircf_fwd_later_writer_not_src_alias >> simp[]
 QED
+
+Theorem ircf_current_forward_sites_exclusion:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  lo <= vs.vs_alloca_next /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_inst_ids_distinct fn /\
+  ircf_no_dst_write_alias fn /\ ircf_fwd_ok fn bb k d sr sz /\
+  ircf_copy_roots fn (EL k bb.bb_instructions) = SOME (d,sr,sz) /\
+  k < s.vs_inst_idx /\ MEM ai (fn_insts fn) /\
+  ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [root] /\
+  (root = d \/ root = sr) /\
+  FLOOKUP s.vs_allocas ai.inst_id = SOME (b,z) /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  FLOOKUP G v = SOME (c,w) /\ 0 < z /\ 0 < w ==>
+  b+z <= c \/ c+w <= b
+Proof
+  strip_tac >>
+  `active_inst fn inst s` by
+    (qpat_assum `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     once_rewrite_tac[occ_frame_reachable_cases] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ s.vs_inst_idx < LENGTH bb.bb_instructions /\
+   inst = EL s.vs_inst_idx bb.bb_instructions` by
+    (`MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     fs[active_inst_def] >>
+     `bb' = bb` by
+       metis_tac[lookup_block_label, same_label_same_block] >> gvs[]) >>
+  `occurrence_syntax_origin fn a H` by
+    (drule_then assume_tac occ_frame_reachable_origin_certificate >> fs[] >>
+     metis_tac[occurrence_origin_certificate_current]) >>
+  `FLOOKUP H v <> SOME (a,ai.inst_id)` by
+    (irule ircf_fwd_later_writer_occurrence_exclusion >> metis_tac[]) >>
+  drule_then strip_assume_tac occ_frame_reachable_annotation >> fs[] >>
+  drule_then assume_tac occ_frame_reachable_geometry >> fs[] >>
+  qpat_x_assum `!lo. _` (qspec_then `lo` assume_tac) >> fs[] >>
+  `FLOOKUP B (a,ai.inst_id) = SOME (b,z)` by
+    fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def] >>
+  `?jd. FLOOKUP H v = SOME jd /\ FLOOKUP B jd = SOME (c,w)` by
+    (fs[occurrence_annotation_ok_def, occurrence_env_ok_def] >>
+     metis_tac[FLOOKUP_DEF]) >>
+  metis_tac[occurrence_geometry_sites_disjoint]
+QED
