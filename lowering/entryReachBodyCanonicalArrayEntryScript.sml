@@ -101,7 +101,9 @@ Proof
     (`sb+32+j*az = sb+(j*az+32)` by decide_tac >> asm_rewrite_tac[]) >>
   `abi_decode_source_opcode CALLDATALOAD /\ abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
     simp[abi_decode_source_opcode_def, abi_decoder_operand_live_def] >>
-  drule abi_decode_dynamic_element_setup_reentry >> asm_simp_tac bool_ss [] >>
+  drule (SIMP_RULE (srw_ss()) [eval_operand_def]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0`]
+      abi_decode_dynamic_element_setup_reentry)) >> asm_simp_tac bool_ss [] >>
   disch_then drule_all >> strip_tac >>
   drule_all array_entry_sequence_path >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH mid.cs_current_insts` >>
@@ -154,7 +156,8 @@ Proof
          (n2w (sb+32+LENGTH pre * abi_embedded_static_size ce.ce_struct_fields ty) : bytes32) s =
          n2w (LENGTH (pre ++ av::post) * abi_member_head_size (vyper_to_abi_type env ty) +
            SUM (MAP (abi_member_tail_size (vyper_to_abi_type env ty)) pre))` by
-        (drule abi_decoder_canonical_dynamic_setup_inputs >>
+        (drule (PURE_REWRITE_RULE [arithmeticTheory.ADD]
+           (Q.INST [`B` |-> `0`] abi_decoder_canonical_dynamic_setup_inputs)) >>
          asm_simp_tac bool_ss [] >>
          disch_then (qspecl_then [`sb`, `s`, `CALLDATALOAD`, `Lit 0w`] mp_tac) >>
          (impl_tac >- gvs[Excl "enc_def"]) >> simp[]) >>

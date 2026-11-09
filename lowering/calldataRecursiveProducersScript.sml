@@ -33,7 +33,7 @@ Proof
   `ci_mono middle st1` by
     (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
      disch_then (qspecl_then [`SND (SND ops)`,`FST (SND ops)`,
-       `CALLDATALOAD`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
+       `CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
   `st0.cs_current_insts = []` by
     (qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_loop_prefix_shape, abi_decode_loop_prefix_state_def, abi_decode_position_header_zero,
@@ -181,7 +181,7 @@ Proof
   drule_all fn_has_code_split >> strip_tac >>
   `ci_mono mid b` by
     (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
-     disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`ei`,`mid`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`ei`,`mid`] mp_tac) >> simp[]) >>
   fs[ci_mono_def]
 QED
 
@@ -451,7 +451,7 @@ Proof
   `ci_mono middle st1` by
     (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
      disch_then (qspecl_then [`SND (SND ops)`,`FST (SND ops)`,
-       `CALLDATALOAD`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
+       `CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`di`,`middle`] mp_tac) >> simp[]) >>
   drule abi_decoder_loop_prefix_facts >> strip_tac >>
   drule abi_decoder_loop_suffix_facts >> strip_tac >>
   `?bb. lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME bb /\

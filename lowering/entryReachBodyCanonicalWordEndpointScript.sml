@@ -107,8 +107,11 @@ Theorem entry_canonical_word_owned_endpoint:
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
   strip_tac >>
-  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_primitive_memory_reentry >> strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD /\ abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decode_source_opcode_def, abi_decoder_operand_live_def] >>
+  drule_all (SIMP_RULE (srw_ss()) [eval_operand_def]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0`]
+      abi_decoder_primitive_memory_reentry)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st last) s = OK actual` >>
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `entry_loop_fields s actual` by

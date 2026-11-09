@@ -26,7 +26,9 @@ Proof
       `abi_decode_load CALLDATALOAD (n2w (w2n p + ao) : bytes32) s =
        n2w (w2n (abi_decode_load CALLDATALOAD (p + n2w ao) s))` by
         simp[GSYM word_add_n2w] >>
-      drule_all abi_decode_dynamic_member_pointer_sentinel >>
+      drule_all (SIMP_RULE (srw_ss()) [eval_operand_def]
+        (Q.INST [`base_op` |-> `Lit 0w`, `src_base` |-> `0`]
+          abi_decode_dynamic_member_pointer_sentinel)) >>
       simp[GSYM word_add_n2w]) >>
   `eval_operand src s = SOME (n2w (w2n p))` by simp[] >>
   drule_all abi_decode_static_member_pointer >> simp[GSYM word_add_n2w]
@@ -771,7 +773,7 @@ Resume calldata_members_owned_repeat[initial_invariant]:
        abiDecoderFrameTheory.abi_decode_footprint_frame_refl] >>
   `ci_mono st final` by
     (mp_tac (cj 2 ci_mono_compile_abi_decode) >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`ao0`,`vo0`,`st`] mp_tac) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`xs`,`ao0`,`vo0`,`st`] mp_tac) >>
      simp[]) >>
   fs[ci_mono_def, ci_mono_refl, cs_extends_refl]
 QED
@@ -830,9 +832,9 @@ Resume calldata_members_owned_repeat[member_step]:
   `ci_mono addr b /\ ci_mono b final` by
     (conj_tac
      >- (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
-         disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`ei`,`addr`] mp_tac) >> simp[]) >>
+         disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`ei`,`addr`] mp_tac) >> simp[]) >>
      mp_tac (cj 2 ci_mono_compile_abi_decode) >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`rest`,`az + A n`,`mz + V n`,`b`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`rest`,`az + A n`,`mz + V n`,`b`] mp_tac) >> simp[]) >>
   `st.cs_next_id <= addr.cs_next_id /\ b.cs_next_id <= final.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
   `Own addr.cs_next_id b.cs_next_id u` by
@@ -1204,7 +1206,7 @@ Resume calldata_members_owned_repeat_intervals[initial_invariant]:
        abiDecoderFrameTheory.abi_decode_footprint_frame_refl] >>
   `ci_mono st final` by
     (mp_tac (cj 2 ci_mono_compile_abi_decode) >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`ao0`,`vo0`,`st`] mp_tac) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`xs`,`ao0`,`vo0`,`st`] mp_tac) >>
      simp[]) >>
   fs[ci_mono_def, ci_mono_refl, cs_extends_refl]
 QED
@@ -1263,9 +1265,9 @@ Resume calldata_members_owned_repeat_intervals[member_step]:
   `ci_mono addr b /\ ci_mono b final` by
     (conj_tac
      >- (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
-         disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`ei`,`addr`] mp_tac) >> simp[]) >>
+         disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`ei`,`addr`] mp_tac) >> simp[]) >>
      mp_tac (cj 2 ci_mono_compile_abi_decode) >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`rest`,`az + A n`,`mz + V n`,`b`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`rest`,`az + A n`,`mz + V n`,`b`] mp_tac) >> simp[]) >>
   `st.cs_next_id <= addr.cs_next_id /\ b.cs_next_id <= final.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
   `Own addr.cs_next_id b.cs_next_id u` by
@@ -1641,7 +1643,7 @@ Resume calldata_members_owned_repeat_intervals_tail[initial_invariant]:
        abiDecoderFrameTheory.abi_decode_footprint_frame_refl] >>
   `ci_mono st final` by
     (mp_tac (cj 2 ci_mono_compile_abi_decode) >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`ao0`,`vo0`,`st`] mp_tac) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`xs`,`ao0`,`vo0`,`st`] mp_tac) >>
      simp[]) >>
   fs[ci_mono_def, ci_mono_refl, cs_extends_refl]
 QED
@@ -1705,9 +1707,9 @@ Resume calldata_members_owned_repeat_intervals_tail[member_step]:
   `ci_mono addr b /\ ci_mono b final` by
     (conj_tac
      >- (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
-         disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`ei`,`addr`] mp_tac) >> simp[]) >>
+         disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`ei`,`addr`] mp_tac) >> simp[]) >>
      mp_tac (cj 2 ci_mono_compile_abi_decode) >>
-     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`DROP (SUC n) xs`,`az + A n`,`mz + V n`,`b`] mp_tac) >> simp[]) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`Lit 0w`,`DROP (SUC n) xs`,`az + A n`,`mz + V n`,`b`] mp_tac) >> simp[]) >>
   `st.cs_next_id <= addr.cs_next_id /\ b.cs_next_id <= final.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
   `Own addr.cs_next_id b.cs_next_id u` by
