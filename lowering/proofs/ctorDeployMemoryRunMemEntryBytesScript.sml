@@ -1,6 +1,6 @@
 Theory ctorDeployMemoryRunMemEntryBytes
 Ancestors
-  loweringStateRelDefs
+  loweringStateRelDefs abiEncoder
   ctorDeployMemoryRunMemEntryWord abiDecoderBytesBound abiDecoderGuard
   abiDecoderBytesTyped ctorAbiActualBytes abiCanonicalBytes
   fragGasSeqMem fragGasPathMem allocaHistory rich_list instIdxIndep fragExec
@@ -110,6 +110,44 @@ Proof
       rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
       simp[mk_inst_def, is_terminator_def, is_alloca_op_def]) >>
   metis_tac[inst_extends_trans]
+QED
+
+Theorem ctor_bytes_head_mem_ok[local]:
+  abi_decode_bytes_head src hi st = (head,st') ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_bytes_head_def, comp_return_def] >> strip_tac >>
+      gvs[emitted_insts_def, run_inst_seq_mem_ok_def]) >>
+  simp[abi_decode_bytes_head_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emitted_insts_emit_void >> gvs[] >>
+  asm_rewrite_tac[emitted_insts_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  rpt (pop_assum kall_tac) >>
+  irule run_inst_seq_mem_ok_every >> simp[] >> rpt conj_tac >> gen_tac >>
+  irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem ctor_bytes_payload_guard_mem_ok[local]:
+  abi_decode_bytes_payload_guard head cnt hi st = ((),st') ==>
+  run_inst_seq_mem_ok (emitted_insts st st') s
+Proof
+  Cases_on `hi = Lit 0w`
+  >- (simp[abi_decode_bytes_payload_guard_def, comp_return_def] >> strip_tac >>
+      gvs[emitted_insts_def, run_inst_seq_mem_ok_def]) >>
+  simp[abi_decode_bytes_payload_guard_def, compile_abi_decode_range_check_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emitted_insts_emit_void >> gvs[] >>
+  asm_rewrite_tac[emitted_insts_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
+  rpt (pop_assum kall_tac) >>
+  irule run_inst_seq_mem_ok_every >> simp[] >> rpt conj_tac >> gen_tac >>
+  irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
 Theorem ctor_bytes_fresh_mem_ok:
