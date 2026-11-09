@@ -372,7 +372,7 @@ Proof
   Cases_on `j` >- simp[] >> Cases_on `k` >> simp[]
 QED
 
-Theorem normalize_fields_suffix_code[local]:
+Theorem normalize_fields_suffix_code:
   compile_with_byte_offset dst doff sa = (dp,sc) /\
   compile_with_byte_offset src soff sc = (sp,sd) /\
   compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
