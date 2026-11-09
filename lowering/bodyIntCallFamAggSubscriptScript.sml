@@ -7,6 +7,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallFamAggSubscriptHeld
   bodyIntCallFamAggSubscriptResources bodyIntCallJointWidened
   bodyIntCallFamAggSubscriptMapSuffix bodyIntCallFamAggSubscriptTuple
+  bodyIntCallFamAggSubscriptReadOnly
 
 Theorem intcall_subscript_step:
   (!e'. expr_size e' < expr_size e ==>
