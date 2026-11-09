@@ -1,6 +1,6 @@
 Theory abiEncodeArgsCase
 Ancestors
-  abiEncodeArgsSim exprSimHyps vyperTypeInvariants
+  abiEncodeArgsSim exprSimHyps exprSimSource exprSimHypsDefs vyperTypeInvariants
 
 Theorem abi_args_success_ready:
   expr_body_pre ce cx env e es /\
@@ -8,12 +8,28 @@ Theorem abi_args_success_ready:
   expr_sim_inv ce cx env es' /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   (~is_word_type (expr_type e) ==>
-    ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
          value_has_type tv v /\ val_wf tv v /\
-         type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+         type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
          type_memory_size tv < 2 ** 64 /\
          type_memory_size tv + 64 < dimword (:256))
 Proof
+  strip_tac >>
+  `expr_sim_inv ce cx env es'` by metis_tac[expr_body_pre_eval] >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    (drule exprSimSourceTheory.eval_expr_read_INL >> strip_tac >>
+     `es' = t` by metis_tac[vyperStateTheory.read_result_state] >> gvs[] >>
+     metis_tac[vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom]) >>
+  simp[] >> strip_tac >>
+  drule_all memory_rhs_read_lowered_typed_unwidened >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  simp[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >> strip_tac >>
+  qexists `tv` >> simp[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv` by
+    metis_tac[expr_sim_inv_memory_size] >> simp[] >>
   cheat
 QED
 
@@ -24,7 +40,15 @@ Theorem abi_args_ready_cases:
     expr_body_pre ce cx env e es /\ (nocalls ==> int_calls_expr e = [])) args ==>
   abi_args_ready ctx func ce cx (expr_sim_inv ce cx env) args
 Proof
-  cheat
+  Induct >> simp[exprs_case_def, abi_args_ready_def] >> rpt strip_tac
+  >- (gvs[expr_sim_case_def] >> metis_tac[])
+  >- (gvs[expr_vv_case_def] >> metis_tac[])
+  >- metis_tac[expr_body_pre_res_ok]
+  >- metis_tac[abi_args_success_ready]
+  >- metis_tac[abi_args_success_ready]
+  >- (`expr_body_pre ce cx env h es` by metis_tac[] >>
+      drule_all abi_args_success_ready >> simp[]) >>
+  metis_tac[]
 QED
 
 Theorem abi_args_body_pre_arg:
@@ -32,7 +56,15 @@ Theorem abi_args_body_pre_arg:
   MEM e args /\ expr_sim_inv ce cx env es' ==>
   expr_body_pre ce cx env e es'
 Proof
-  cheat
+  rw[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def,
+     vyperTypeCallGraphTheory.int_calls_expr_def,
+     byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def,
+     supportedExprTraverseTheory.supported_expr_exists_def,
+     supportedExprTraverseTheory.supported_exprs_exists_every, listTheory.EXISTS_MEM] >>
+  imp_res_tac int_calls_exprs_every_mem >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
+  metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
+            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED
 
 Theorem abi_args_ready_case:
@@ -41,7 +73,11 @@ Theorem abi_args_ready_case:
   (nocalls ==> int_calls_expr (TypeBuiltin ann (AbiEncode ensure mid) ty args) = []) ==>
   abi_args_ready ctx func ce cx (expr_sim_inv ce cx env) args
 Proof
-  cheat
+  strip_tac >> irule abi_args_ready_cases >>
+  qexists `nocalls` >> simp[listTheory.EVERY_MEM] >> rpt strip_tac
+  >- (irule abi_args_body_pre_arg >> metis_tac[]) >>
+  gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  metis_tac[int_calls_exprs_mem]
 QED
 
 Theorem compile_abi_encode_args_case_sim:
