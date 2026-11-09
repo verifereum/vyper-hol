@@ -10,7 +10,7 @@ Ancestors
 Theorem target_fixed_array_continue_ptr:
   compile_array_subscript bop idx F cnt ws esz sgn loader sn = (dst,sb) /\
   eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
-  fresh_vars_wrt sn s /\ idx_in_range sgn i (n2w cnt) /\
+  copy_old_operand sn bop /\ copy_old_operand sn idx /\ idx_in_range sgn i (n2w cnt) /\
   op_prov G idx = NONE /\ op_taint tn idx = {} /\ op_taint tn bop = {} /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -32,7 +32,10 @@ Theorem target_fixed_array_continue_ptr:
     t.vs_current_bb = s.vs_current_bb /\
     t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sn sb)
 Proof
-  strip_tac >> drule_all target_fixed_array_path_ptr >>
+  strip_tac >>
+  `(!x. bop = Var x ==> not_fresh_at sn x) /\
+   (!x. idx = Var x ==> not_fresh_at sn x)` by fs[copy_old_operand_def] >>
+  drule_all target_fixed_array_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `t.vs_current_bb = s.vs_current_bb /\
    t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sn sb)` by
@@ -52,7 +55,7 @@ Theorem target_dynamic_slot_array_continue_ptr:
   array_elem_ptr bop idx T 1 esz sm = (dst,sb) /\
   fn_has_code sn sl fn /\ fn_has_code sl sb fn /\
   eval_operand bop s = SOME b /\ eval_operand idx s = SOME i /\
-  fresh_vars_wrt sn s /\ idx_in_range sgn i (if tr then tload b s else sload b s) /\
+  copy_old_operand sn bop /\ copy_old_operand sn idx /\ idx_in_range sgn i (if tr then tload b s else sload b s) /\
   op_prov G bop = NONE /\ op_taint tn bop = {} /\
   op_prov G idx = NONE /\ op_taint tn idx = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) b = {} /\
@@ -93,7 +96,7 @@ Theorem target_dynamic_memory_array_continue_ptr:
   array_elem_ptr (Var src) idx T 32 esz sm = (dst,sb) /\
   fn_has_code sn sl fn /\ fn_has_code sl sb fn /\
   lookup_var src s = SOME b /\ eval_operand idx s = SOME i /\
-  fresh_vars_wrt sn s /\ idx_in_range sgn i (mload (w2n b) s) /\
+  not_fresh_at sn src /\ copy_old_operand sn idx /\ idx_in_range sgn i (mload (w2n b) s) /\
   ptr_covers G tn src s bytes /\ 32 <= bytes /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n b) mem) /\

@@ -10,7 +10,7 @@ Theorem target_live_dynamic_slot_array_continue_ptr:
   array_elem_ptr bop idx T 1 (type_slot_size etv) sm = (dst,sb) /\
   fn_has_code sn sl fn /\ fn_has_code sl sb fn /\ fn_has_code sl sm fn /\
   eval_operand bop s = SOME slot /\ eval_operand idx s = SOME (val_to_w256 iv) /\
-  fresh_vars_wrt sn s /\ op_prov G bop = NONE /\ op_taint tn bop = {} /\
+  copy_old_operand sn bop /\ copy_old_operand sn idx /\ op_prov G bop = NONE /\ op_taint tn bop = {} /\
   op_prov G idx = NONE /\ op_taint tn idx = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -78,7 +78,11 @@ Resume target_live_dynamic_slot_array_continue_ptr[success]:
 QED
 
 Resume target_live_dynamic_slot_array_continue_ptr[abort]:
-  gvs[] >> metis_tac[target_dynamic_slot_array_abort_ptr, n2w_w2n]
+  gvs[] >>
+  `~idx_in_range (is_signed_type ity) (val_to_w256 (IntV i))
+    (if tr then tload slot s else sload slot s)` by simp[] >>
+  drule_all target_dynamic_slot_array_abort_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> metis_tac[]
 QED
 
 Finalise target_live_dynamic_slot_array_continue_ptr

@@ -11,7 +11,7 @@ Theorem target_live_dynamic_memory_array_continue_ptr:
   array_elem_ptr (Var src) idx T 32 (type_memory_size etv) sm = (dst,sb) /\
   fn_has_code sn sl fn /\ fn_has_code sl sb fn /\ fn_has_code sl sm fn /\
   lookup_var src s = SOME b /\ eval_operand idx s = SOME (val_to_w256 iv) /\
-  fresh_vars_wrt sn s /\ ptr_covers G tn src s bytes /\ 32 <= bytes /\
+  not_fresh_at sn src /\ copy_old_operand sn idx /\ ptr_covers G tn src s bytes /\ 32 <= bytes /\
   (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
     val_in_memory (ArrayTV etv (Dynamic cap)) (ArrayV (DynArrayV vs)) (w2n b) mem) /\
   op_prov G idx = NONE /\ op_taint tn idx = {} /\ op_taint tn (Var src) = {} /\

@@ -1,7 +1,7 @@
 Theory bodyPtrPopTargetSimFixedMemory
 Ancestors
   bodyPtrPopTargetSimArrayContinue bodyPtrPopTargetSimArraySource
-  bodyPtrPopTargetSimArrayCase bodyPtrPopTargetDefs
+  bodyPtrPopTargetSimArrayCase bodyPtrPopTargetDefs exprSimCopy
   exprLowering loweringPosts vyperValueOperation vyperValue vyperTyping compileEnv words list
 
 (* Source selection uses the current local entry, not the pre-index value.
@@ -10,7 +10,7 @@ Theorem target_fixed_memory_array_continue_ptr:
   compile_array_subscript bop idx F cnt ws (type_memory_size etv)
     (is_signed_type ity) loader sn = (dst,sb) /\
   eval_operand bop s = SOME b /\ eval_operand idx s = SOME (val_to_w256 iv) /\
-  fresh_vars_wrt sn s /\ op_prov G idx = NONE /\ op_taint tn idx = {} /\
+  copy_old_operand sn bop /\ copy_old_operand sn idx /\ op_prov G idx = NONE /\ op_taint tn idx = {} /\
   op_taint tn bop = {} /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sn sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -70,6 +70,7 @@ QED
 
 Resume target_fixed_memory_array_continue_ptr[abort]:
   gvs[] >>
+  `!x. idx = Var x ==> not_fresh_at sn x` by fs[copy_old_operand_def] >>
   drule_all target_fixed_array_abort_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> metis_tac[]
 QED
