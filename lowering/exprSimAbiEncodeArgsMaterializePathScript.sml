@@ -125,3 +125,34 @@ Proof
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
   qexists_tac `b` >> simp[]
 QED
+
+Theorem materialize_located_physical_classify:
+  expr_body_pre ce cx env e es_pre /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue vty p) r /\
+  p.ptr_location <> LocMemory /\ ~is_word_type (expr_type e) ==>
+  vty = lowered_value_type ce e \/
+  (is_bytestring_type vty /\ is_bytestring_type (lowered_value_type ce e))
+Proof
+  strip_tac >>
+  `vty = post_value_type ce e` by gvs[vv_post_def, vv_holds_def] >>
+  metis_tac[materialize_post_lowered_classify,
+            exprSimHypsTheory.expr_body_pre_lowered_fits]
+QED
+
+Theorem materialize_equal_zero_alias_probe:
+  let sa = initial_compile_state "@wcopy_exit_2";
+      vv = LocatedValue (TupleT []) (mk_ptr (Lit 0w) LocStorage);
+      result = compile_materialize_vv ce (TupleT []) vv sa;
+      sb = SND result;
+      fn = venomInst$mk_raw_function "materialize-probe" sb.cs_blocks
+  in
+    type_memory_bytes ce (TupleT []) = 0 /\
+    (!l. vv_operand vv <> Label l) /\
+    fragExec$fn_has_code sa sb fn /\ venomWf$fn_inst_ids_distinct fn /\
+    ~frag_gas_free sa sb
+Proof
+  EVAL_TAC >> rpt conj_tac >> rpt strip_tac >> gvs[] >> EVAL_TAC >>
+  qmatch_goalsub_abbrev_tac `$= b` >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM boolTheory.ETA_THM))) >>
+  qexists_tac `b` >> simp[]
+QED
