@@ -216,11 +216,23 @@ Proof
 QED
 
 Theorem target_subscript_call_cleanup_scopes:
-  finally source (ignore_bind (pop_function prev) (unlock_if_nr cx nr is_view))
-    es = (res, ee) ==> ee.scopes = prev
+  finally_unless_halt (finally f (pop_function prev))
+    (unlock_if_nr cx nr is_view) s = (r,s') ==> s'.scopes = prev
 Proof
-  strip_tac >> drule finally_pop_function_then_scopes >>
-  impl_tac >- metis_tac[target_subscript_unlock_scopes] >> simp[]
+  strip_tac >>
+  Cases_on `finally f (pop_function prev) s` >> rename1 `_ = (q0,s0)` >>
+  `s0.scopes = prev` by
+    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+     simp[finally_def, pop_function_def, set_scopes_def, bind_def,
+          ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+     rw[] >> gvs[]) >>
+  qpat_x_assum `finally_unless_halt _ _ _ = _` mp_tac >>
+  simp[finally_unless_halt_def] >>
+  Cases_on `q0` >> TRY (Cases_on `y`) >>
+  simp[ignore_bind_def, bind_def, return_def, raise_def] >>
+  Cases_on `unlock_if_nr cx nr is_view s0` >> rename1 `_ = (gr,gs)` >>
+  Cases_on `gr` >> simp[] >> rw[] >>
+  imp_res_tac target_subscript_unlock_scopes >> gvs[]
 QED
 
 Theorem target_subscript_nopop_scopes_mutual[local]:
@@ -345,13 +357,17 @@ Proof
       strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
-          raise_def, check_def, type_check_def, assert_def] >> metis_tac[])
+          raise_def, check_def, type_check_def, assert_def,
+          lift_option_type_def, option_CASE_rator] >> metis_tac[])
   >- (rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
            raise_def, check_def, type_check_def, assert_def, lift_option_def,
            lift_option_type_def, get_accounts_def, option_CASE_rator] >>
       strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac transfer_value_scopes >> gvs[] >> metis_tac[])
+      imp_res_tac transfer_value_scopes >> gvs[] >>
+      Cases_on `cx.txn.created_in_tx` >>
+      gvs[bind_def, ignore_bind_def, return_def, update_accounts_def,
+          update_pending_deletions_def] >> metis_tac[])
   >- suspend "CreateTarget"
   >- simp[Once evaluate_def, return_def]
   >- (rpt strip_tac >>
@@ -417,7 +433,7 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
   imp_res_tac finally_set_scopes >>
   imp_res_tac (target_subscript_call_cleanup_scopes |>
     Q.INST [`is_view` |-> `mut = View \/ mut = Pure`] |>
-    SRULE [unlock_if_nr_def, ignore_bind_def]) >>
+    SRULE [unlock_if_nr_def]) >>
   imp_res_tac read_results_state >>
   gvs[get_scopes_def] >>
   rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>

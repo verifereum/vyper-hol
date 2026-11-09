@@ -12,7 +12,7 @@ Ancestors
   vyperStorageLayoutSafety vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
   supportedExprTraverse exprStoragePreservation
-  vyperLookup vyperEvalExprPreservesScopesDom vyperPlaceResultTyping supportedProgram bodyStoragePreservation
+  vyperLookup vyperEvalExprPreservesScopesDom vyperPlaceResultTyping supportedProgram bodyStoragePreservation evalNoHalt
   vyperTypeABI vyperValue vyperPlaceInvariants placeTypingProps
 Libs
   pairLib monadsyntax
@@ -315,6 +315,19 @@ Proof
   simp[bind_def, AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem eval_expr_calls_no_halt:
+  ~expr_has_evm_run e /\
+  EVERY (\c. FST c = NONE /\
+             ?tops. supported_program tops /\
+                    get_module_code cx NONE = SOME tops /\
+                    IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_expr e) ==>
+  eval_expr cx e st <> (INR HaltException, st')
+Proof
+  strip_tac >> irule (cj 1 eval_no_halt) >> fs[expr_has_evm_run_def] >>
+  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM]
+QED
+
 Theorem expr_body_pre_res_ok:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
@@ -327,8 +340,13 @@ Proof
     (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
      simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
      metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
-  Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[]
+  Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
+  `!st st'. eval_expr cx e st <> (INR HaltException, st')` by
+    (rpt gen_tac >> irule eval_expr_calls_no_halt >> fs[expr_body_pre_def]) >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _`
+    mp_tac >>
+  simp[bind_def, AllCaseEqs()] >> metis_tac[read_result_no_halt]
 QED
 
 Theorem word_value_type_typed:
@@ -588,6 +606,7 @@ Proof
       gvs[eval_result_typed_def]) >>
   drule (cj 1 eval_expr_no_control) >>
   rename1 `INR exc` >> Cases_on `exc` >>
-  gvs[no_control_exc_def, no_type_error_result_def] >>
-  rename1 `Error err` >> Cases_on `err` >> gvs[]
+  gvs[no_control_exc_def, no_type_error_result_def]
+  >~ [`Error err`] >- (Cases_on `err` >> gvs[]) >>
+  metis_tac[eval_expr_calls_no_halt, expr_body_pre_def]
 QED

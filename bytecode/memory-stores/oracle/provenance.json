@@ -176,7 +176,7 @@
     "t11_tuple_onew_decode_mem.json": "03eafab29caab34db0e11a8b40ebe633886e99ea5914eb5c7a130dd5193c476c",
     "tup_nested_ret.hex": "4d80d88d293b02eed5152cb1b10dbfc7b0e5cfb90b74f5fbac938a6e1742d529",
     "tup_nested_ret.json": "7cc7e02438b5adda01df5b95cdff3f084abcd18cd19def89dfae3a436fc80ef3",
-    "w01_return_intcall_dynarray_bytes_widen.hex": "ac82c3c45d9c9e944cae6e7802235e27535149e7804f361602e789a75f43c025",
+    "w01_return_intcall_dynarray_bytes_widen.hex": "2b3e0cbd9d04fa792f28779a420a7c6f38e581bedadd6f0758338ce62ce33fad",
     "w01_return_intcall_dynarray_bytes_widen.json": "27b7b59f058b0f8f82bcfd613a4bec911429fec3d6231be86f1b06d7a9a3df2a"
   }
 }

@@ -236,3 +236,6 @@ own, and no revert of the other changes restores those fixtures.
 
 - `constructor-alias/ctor_alias`
 
+## Not yet attributed
+
+- `memory-stores/w01_return_intcall_dynarray_bytes_widen`
