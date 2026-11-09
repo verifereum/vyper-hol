@@ -1,7 +1,7 @@
 Theory wordArgsPtr
 Ancestors
   bodyPtrDefs bodyPtrPreds exprSimWordArgs exprSimProps loweringPosts
-  compileEnv ptrDiscipline venomState exprLoweringProps
+  compileEnv loweringStateRelDefs ptrDiscipline venomState exprLoweringProps
   list finite_map freshWrites gasSummaryComposePtr fragGasPathPtr
   vyperInterpreter vyperState gasCount
 

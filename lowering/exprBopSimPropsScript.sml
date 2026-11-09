@@ -9,7 +9,7 @@ Ancestors
   fragExec varsExt  freshWrites exprBopLowering loweringSlice
   localPtrsProps vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
   vyperEvalScopesProgress vyperLookup valueEncodingProps valueEncodingProofs
-  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
+  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding venomExecSemantics venomInst venomState
   vyperValue integer integer_word int_bitwise words intBits vyperTyping

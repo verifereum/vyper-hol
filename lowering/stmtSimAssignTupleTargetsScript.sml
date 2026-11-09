@@ -5,7 +5,7 @@ Ancestors
   stmtSimForced gasSummaryCompose fragGasMode
   tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleAssignPrefix
   tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple 
-   exprLowering exprLoweringProps fragExec loweringSlice compileEnv freshWrites
+   exprLowering exprLoweringProps fragExec loweringSlice compileEnv loweringStateRelDefs freshWrites
   vyperInterpreter vyperState vyperValue vyperTyping vyperTypeDefaults valueEncoding stmtLowering
   list rich_list finite_map stmtSimDecl stmtSimDeclMem
 Libs

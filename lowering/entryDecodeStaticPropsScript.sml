@@ -37,10 +37,10 @@ Theory entryDecodeStaticProps
 Ancestors
   exprSimProps arithmetic list rich_list words sorting alist
   abiDecodeStaticProps entryDecodeProps entryDispatchProps moduleLoweringProps
-  valueEncodingProofs valueEncodingProps valueEncoding
+  valueEncodingProofs valueEncodingProps valueEncoding valueEncodingDefs
   vyperABI vyperABIRoundtrip vyperTyping vyperTypeDefaults vyperTypeABI
   vyperValue vfmTypes
-  compileEnv exprLowering moduleLowering selectorDispatch
+  compileEnv loweringStateRelDefs exprLowering moduleLowering selectorDispatch
   emitHelperProps fragExec venomState
 Libs
   wordsLib
@@ -539,7 +539,7 @@ Theorem compile_abi_decode_static_buf_correct:
   !env ty tv v av info dst src st st' ctx s0 p a.
     abi_dec_plan env ty info /\ evaluate_type env ty = SOME tv /\
     value_has_type tv v /\ vyper_to_abi env ty v = SOME av /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st =
       ((), st') /\
     eval_operand dst s0 = SOME p /\ eval_operand src s0 = SOME a /\
     fresh_vars_wrt st s0 /\
@@ -607,7 +607,7 @@ Theorem compile_decode_static_arg_phases:
     var_location_decode_operand loc = SOME dst ==>
     ?src st1.
       emit_op ADD [Lit 4w; Lit (n2w (off - 4))] st = (src, st1) /\
-      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st1 =
+      compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st1 =
         ((), st')
 Proof
   rpt strip_tac >>

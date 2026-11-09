@@ -71,7 +71,7 @@ Theorem lower_vyper_runtime_unit_run_ptr_safe_composed:
 Proof
   rpt gen_tac >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    metis_tac[gasSummaryTheory.gas_explicit_nil] >>
+    first_assum (ACCEPT_TAC o REWRITE_RULE [gasSummaryTheory.gas_explicit_nil] o Q.SPEC `[]`) >>
   `?mut args fbody.
      lookup_function NONE tx.function_name External tops =
        SOME (mut, F, args, [], ret, fbody) /\
@@ -86,6 +86,6 @@ Proof
         <| outcomes := SOME vs.vs_outcomes; requests := [] |>)` >>
   rename1 `_ = (sent, es0)` >> Cases_on `sent`
   >- (rename1 `INL u` >> Cases_on `u` >>
-      irule lower_vyper_runtime_unit_body_ptr >> metis_tac[]) >>
+      drule_all lower_vyper_runtime_unit_body_ptr >> simp[]) >>
   drule_all external_entry_value_revert_ptr >> simp[]
 QED

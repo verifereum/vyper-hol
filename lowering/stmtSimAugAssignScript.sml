@@ -38,7 +38,7 @@ Ancestors
   exprSimOperators exprSimLeaves loweringSlice  stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore stmtSimDeclPath stmtSimDeclCompose exprOpenPrimitives
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
-  exprLoweringProps compileEnv valueEncoding
+  exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperContext
   vyperExprNoControl vyperTypeSystem vyperTyping vyperTypeEnv
   vyperTypeInvariants vyperTypeBuiltins vyperTypeStatePreservation vyperTypeCallGraph vyperLookup vyperAST

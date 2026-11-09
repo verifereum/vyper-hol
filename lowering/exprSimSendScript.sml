@@ -44,8 +44,8 @@ Ancestors
   gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasPath
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding
-  vyperAST vyperInterpreter vyperState vyperValue vyperTyping
+  exprLoweringProps emitHelper compileEnv loweringStateRelDefs localPtrsProps valueEncoding valueEncodingDefs
+  vyperAST vyperInterpreter vyperCallOutcomeFrame vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState
@@ -336,7 +336,7 @@ Proof
 QED
 
 (* The ASSERT of the success word the CALL just bound. *)
-Theorem send_assert_ok[local]:
+Theorem send_assert_ok:
   !id x w s.
     w <> 0w ==>
     step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x w s) =
@@ -347,7 +347,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem send_assert_fail[local]:
+Theorem send_assert_fail:
   !id x s.
     step_inst_base (mk_inst id ASSERT [Var x] []) (update_var x 0w s) =
       Abort Revert_abort (revert_state (set_returndata [] (update_var x 0w s)))
@@ -357,7 +357,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
-Theorem send_call_read_step[local]:
+Theorem send_call_read_step:
   stmt_state_rel ctx func cenv cx es1 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\

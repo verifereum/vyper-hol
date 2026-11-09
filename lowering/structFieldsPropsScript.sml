@@ -12,7 +12,7 @@
 
 Theory structFieldsProps
 Ancestors
-  compileVyper compileEnv typedCopyMetadata typedCopyProducer
+  compileVyper compileEnv loweringStateRelDefs typedCopyMetadata typedCopyProducer
   vyperTypeContract vyperTypeExprSoundness vyperContext vyperValue
   valueEncoding vfmConstants vyperTypeSystem
   finite_map list pair combin

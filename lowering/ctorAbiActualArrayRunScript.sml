@@ -9,11 +9,11 @@ Ancestors
   abiDecoderArrayLoopInit abiDecoderArraySetupCode abiDecoderLoopEmit abiDecoderRecursiveLoopEntry
   abiDecoderIndexInit abiDecoderReentry allocaFrontierBound
   ctorAbiActualSites abiEncoderRegisteredEffect
-  ctorAbiActualFrame exprLowering compileEnv venomWf venomInst venomState venomExecSemantics words list arithmetic
+  ctorAbiActualFrame exprLowering compileEnv loweringStateRelDefs venomWf venomInst venomState venomExecSemantics words list arithmetic
 
 val C = ``\ty tv.
  !dst src hi st st' ctx func site initial limit_st sb d D N ids av v root_di.
- compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+ compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
  abi_decoder_coherent ce env sf ty tv /\
  abi_decoder_metadata ce env ty tv root_di av v /\
  eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -40,10 +40,10 @@ val C = ``\ty tv.
 
 (* The loop's data baseline is prepared, not initial: ip exists only there. *)
 val P = ``
- abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD hi
+ abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops ip src dst DLOAD (Lit 0w) hi
    hdr exit_lbl hid header_var first last lo hi_id next limit_st slot_id /\
- abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-   sb d slot b cap next prepared /\
+ abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+   0 sb d slot b cap next prepared /\
  fn_inst_ids_distinct func /\
  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
    prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
@@ -162,11 +162,11 @@ Proof
  `abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
     (ListV avs) (ArrayV (DynArrayV vs))` by fs[abi_decoder_metadata_def] >>
- `compile_abi_decode_to_buf dst src DLOAD hi
+ `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi
     (DecDynArray (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       (is_abi_dynamic ce.ce_struct_fields ty) maxn) st = ((),st')` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp_tac bool_ss [Once type_to_abi_dec_info_def]) >>
  drule_all ctor_actual_array_loop_layout >> strip_tac >>
  drule_all ctor_actual_array_prefix_inputs >>
@@ -192,7 +192,7 @@ Proof
    (qx_choose_then `prepared` (qx_choose_then `slot` (MAP_EVERY assume_tac o CONJUNCTS)))) >>
  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
  `st.cs_next_var <= loop_st.cs_next_var` by
-   (drule_all abi_decode_dynarray_prefix_shape >> strip_tac >>
+   (drule_all abi_decode_dynarray_checked_prefix_shape >> strip_tac >>
     drule_all abi_decode_array_header_shape >> strip_tac >>
     drule abi_decode_index_init_shape >> strip_tac >> decide_tac) >>
  drule_all ctor_actual_array_setup_context >>

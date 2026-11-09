@@ -44,9 +44,9 @@ Ancestors
   list rich_list finite_map pair
   fragExec  exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimBuffer exprSimAggregateChildren exprSimAttributeFields
-  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv context
+  exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs context
   accountsRelProps
-  valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
+  valueEncoding valueEncodingDefs vyperAST vyperInterpreter vyperState vyperStorage vyperValue
   vyperTyping vyperTypeSystem vyperTypeExprSoundness vyperTypeInvariants
   vyperPlaceResultTyping
   venomState venomInst venomMemDefs
@@ -552,12 +552,19 @@ Proof
            bind_def, lift_option_type_def, return_def, raise_def,
            pairTheory.UNCURRY] >>
       rpt (BasicProvers.FULL_CASE_TAC >>
-           gvs[return_def, raise_def, pairTheory.UNCURRY])) >>
+           gvs[return_def, raise_def, pairTheory.UNCURRY]))
+  >~ [`MemoryPlace id path`]
+  >- (simp[select_result_def, extend_place_def, place_type_value_def,
+           read_place_def, get_scopes_def, bind_def, ignore_bind_def,
+           lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+      rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+      rpt strip_tac >> gvs[]) >>
   simp[select_result_def, extend_place_def, place_type_value_def,
-       read_place_def, get_scopes_def, get_immutables_def,
-       get_address_immutables_def, bind_def, ignore_bind_def,
-       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+       read_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> simp[bind_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem attr_operand_admissible[local]:

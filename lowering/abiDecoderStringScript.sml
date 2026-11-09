@@ -3,16 +3,16 @@ Theory abiDecoderString
 Ancestors
   abiDecoderBytesTyped abiDecoderTypedContract abiDecoderContract abiDecoderBytes
   abiCanonicalBytes abiDecoderPointed compileEnv exprLoweringProps exprLowering
-  vyperABI vyperTyping vyperValue contractABI valueEncoding
+  vyperABI vyperTyping vyperValue contractABI valueEncoding valueEncodingDefs
   fragExec venomExecSemantics byte words list string combin
 
 Theorem abi_decoder_string_pre_bytes:
   abi_decoder_pre ce env (BaseT (StringT n)) (BaseTV (StringT n))
     (DecBytestring n) (contractABI$BytesV bs)
-    (StringV (MAP (CHR o w2n) bs)) st last src dst opc hi sb d b cap s ==>
+    (StringV (MAP (CHR o w2n) bs)) st last src dst opc base_op hi src_base sb d b cap s ==>
   abi_decoder_pre ce env (BaseT (BytesT (Dynamic n))) (BaseTV (BytesT (Dynamic n)))
     (DecBytestring n) (contractABI$BytesV bs) (vyperValue$BytesV bs)
-    st last src dst opc hi sb d b cap s
+    st last src dst opc base_op hi src_base sb d b cap s
 Proof
   simp[abi_decoder_pre_def, abi_decoder_metadata_def, abi_decoder_ranges_def,
        evaluate_type_def, type_slot_size_def, value_has_type_def,
@@ -54,15 +54,17 @@ Proof
 QED
 
 Theorem abi_decoder_typed_string_sequence:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_pre ce env (BaseT (StringT n)) (BaseTV (StringT n))
     (DecBytestring n) (contractABI$BytesV bs) (StringV (MAP (CHR o w2n) bs))
-    st last src dst opc hi sb d b cap s ==>
+    st last src dst opc base_op hi src_base sb d b cap s ==>
   ?t. run_inst_seq (emitted_insts st st') s = OK t /\
     abi_decoder_post (BaseTV (StringT n)) (StringV (MAP (CHR o w2n) bs))
       st' d (type_memory_bytes ce (BaseT (StringT n))) b cap s t
 Proof
-  strip_tac >> drule_all abi_decoder_string_pre_bytes >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_decoder_string_pre_bytes >> strip_tac >>
   drule_all abi_decoder_typed_bytes_sequence >> strip_tac >>
   qexists_tac `t` >>
   fs[abi_decoder_string_post_bytes, abi_decode_bytes_copy_size_def,
@@ -70,15 +72,17 @@ Proof
 QED
 
 Theorem abi_decoder_typed_string_from_state:
-  compile_abi_decode_to_buf dst src opc hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src opc base_op hi (DecBytestring n) st = ((),st') /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_pre ce env (BaseT (StringT n)) (BaseTV (StringT n))
     (DecBytestring n) (contractABI$BytesV bs) (StringV (MAP (CHR o w2n) bs))
-    st last src dst opc hi sb d b cap initial ==>
+    st last src dst opc base_op hi src_base sb d b cap initial ==>
   frag_exec ctx st st' (\s. s = initial)
     (abi_decoder_post (BaseTV (StringT n)) (StringV (MAP (CHR o w2n) bs))
        st' d (type_memory_bytes ce (BaseT (StringT n))) b cap initial) (K F)
 Proof
-  strip_tac >> drule_all abi_decoder_string_pre_bytes >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_decoder_string_pre_bytes >> strip_tac >>
   drule_all abi_decoder_typed_bytes_from_state >>
   simp[abi_decoder_string_post_bytes, abi_decode_bytes_copy_size_def,
        type_memory_bytes_def]

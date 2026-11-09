@@ -60,7 +60,7 @@ Theorem abi_alloca_history_step:
 Proof
   Cases_on `inst.inst_opcode = ALLOCA` >> strip_tac
   >- (qpat_x_assum `step_inst_base inst s = OK t` mp_tac >>
-      asm_simp_tac (srw_ss()) [Once step_inst_base_def, AllCaseEqs()] >>
+      asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs, AllCaseEqs()] >>
       strip_tac >> gvs[] >> drule_all abi_alloca_history_alloca >> simp[]) >>
   drule_all abi_alloca_history_non_alloca >> simp[]
 QED

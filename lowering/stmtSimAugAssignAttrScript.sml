@@ -41,7 +41,7 @@ Ancestors
    stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
   stmtSimAugAssign stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperTyping
   vyperTypeBuiltins vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness vyperTypeSystem
   vyperContext vyperAST vyperExprNoControl

@@ -137,7 +137,7 @@ Theorem stmt_state_rel_source_gas[local]:
   stmt_state_rel ctx func cenv cx ee s
 Proof
   simp[exprLoweringPropsTheory.stmt_state_rel_def,
-       compileEnvTheory.state_rel_gas_obs,
+       loweringStateRelDefsTheory.state_rel_gas_obs,
        exprLoweringPropsTheory.immutable_alloca_sep_def]
 QED
 

@@ -261,8 +261,17 @@ Theorem terminal_escape_short_run:
      terminal_escape_as <> AsmHalt st
 Proof
   rewrite_tac[terminal_escape_program] >>
-  CONV_TAC (TOP_DEPTH_CONV (numLib.BOUNDED_FORALL_CONV EVAL)) >>
-  EVAL_TAC >> simp[]
+  CONV_TAC (TOP_DEPTH_CONV (numLib.BOUNDED_FORALL_CONV ALL_CONV)) >>
+  rpt conj_tac
+  >- (EVAL_TAC >> simp[])
+  >- (EVAL_TAC >> simp[])
+  >- (EVAL_TAC >> simp[])
+  >- (EVAL_TAC >> simp[])
+  >- (EVAL_TAC >> simp[])
+  >- (EVAL_TAC >> simp[])
+  >- (EVAL_TAC >> simp[])
+  >- (EVAL_TAC >> simp[])
+  >> EVAL_TAC >> simp[]
 QED
 
 Theorem terminal_escape_no_matching_halt:

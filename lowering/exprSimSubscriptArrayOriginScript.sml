@@ -400,7 +400,8 @@ Proof
     drule compile_attribute_safe_operand >>
     simp[exprSafeOperandTheory.safe_operand_def, vv_operand_def])
   >>~- ([`well_typed_expr env (Builtin _ bi args)`],
-    gvs[Once compile_expr_def, compile_expr_body_def, expr_type_def] >>
+    qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+    simp[Once compile_expr_def, compile_expr_body_def] >> strip_tac >>
     gvs[AllCaseEqs()]
      >>~- ([`compile_builtin_dispatch _ _ _ _ _ _ = _`],
        qpat_x_assum `compile_builtin_dispatch _ _ _ _ _ _ = _` mp_tac >>

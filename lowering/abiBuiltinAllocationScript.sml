@@ -92,7 +92,7 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w outsz)]
     [STRING #"%" (toString st.cs_next_var)]) s = OK t` by
     (gvs[Abbr`t`, Abbr`allocated`] >>
-     asm_simp_tac (srw_ss()) [Once step_inst_base_def, exec_alloca_def,
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs, exec_alloca_def,
        mk_inst_def, w2n_n2w, eval_operand_def, LET_THM, ADD_COMM]) >>
   `t.vs_vars = s.vs_vars |+ (STRING #"%" (toString st.cs_next_var),n2w p) /\
    t.vs_labels = s.vs_labels` by

@@ -2,8 +2,8 @@
 Theory targetSubscriptMapping
 Ancestors
   targetPlaceSimCasesBase loweringPosts vyperState exprSimHash exprSimMapKey fragGasMode
-  supportedTypes vyperTypeSystem vyperTyping vyperValue valueEncoding vyperStorage
-  emitHelperProps venomInst exprSimAlloc exprSimPrecompiles exprSimProps compileEnv
+  supportedTypes vyperTypeSystem vyperTyping vyperValue valueEncoding valueEncodingDefs vyperStorage
+  emitHelperProps venomInst exprSimAlloc exprSimPrecompiles exprSimProps compileEnv loweringStateRelDefs
   exprLowering exprLoweringProps emitHelper fragExec venomState words finite_map list arithmetic valueEncodingProps
 
 Theorem target_mapping_extend_place:
