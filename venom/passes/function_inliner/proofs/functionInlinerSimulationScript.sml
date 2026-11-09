@@ -3,7 +3,7 @@ Theory functionInlinerSimulation
 Ancestors
   functionInlinerOperational functionInlinerCallBoundary
   functionInlinerReturnTransport functionInlinerFuel functionInlinerSiteLayout
-  functionInlinerPhiTransport functionInlinerFmp
+  functionInlinerPhiTransport functionInlinerFmp functionInlinerOpacity
   venomExecSemantics venomInstProofs venomExecProofs
   functionInlinerFrame functionInlinerDefs venomState venomInst venomWf list pred_set
 
@@ -1469,4 +1469,48 @@ Proof
   gvs[inline_caller_entry_def, inline_caller_point_def] >>
   qpat_x_assum `u = _ with vs_vars := _` SUBST1_TAC >>
   qpat_x_assum `v = _ with vs_vars := _` SUBST1_TAC >> simp[] >> metis_tac[]
+QED
+
+Theorem inline_phi_selected_output:
+  eval_one_phi s inst = SOME (x,a) ==> MEM x inst.inst_outputs
+Proof
+  simp[eval_one_phi_def, AllCaseEqs()] >> rpt strip_tac >> simp[]
+QED
+
+Theorem inline_phi_selected_read:
+  eval_one_phi s inst = SOME (x,a) /\ s.vs_prev_bb = SOME prev /\
+  resolve_phi prev inst.inst_operands = SOME (Var y) ==>
+  lookup_var y s = SOME a
+Proof
+  simp[eval_one_phi_def, AllCaseEqs(), eval_operand_def] >>
+  rpt strip_tac >> gvs[venomStateTheory.eval_operand_def]
+QED
+
+Theorem inline_phi_selected_static:
+  inline_opacity_ok fn opaque /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = PHI /\
+  (!ins y. MEM ins (fn_insts fn) /\ MEM (Var y) ins.inst_operands ==> y IN N) /\
+  eval_one_phi s inst = SOME (x,a) /\ s.vs_prev_bb = SOME prev /\
+  resolve_phi prev inst.inst_operands = SOME (Var y) ==>
+  y IN N /\ (y IN opaque ==> x IN opaque)
+Proof
+  strip_tac >>
+  `MEM (Var y) inst.inst_operands` by
+    (drule execEquivParamBaseTheory.resolve_phi_MEM >> simp[]) >>
+  `MEM x inst.inst_outputs` by metis_tac[inline_phi_selected_output] >>
+  metis_tac[inline_opacity_phi]
+QED
+
+Theorem inline_phi_block_static:
+  inline_opacity_ok fn opaque /\ MEM bb fn.fn_blocks /\
+  (!ins y. MEM ins (fn_insts fn) /\ MEM (Var y) ins.inst_operands ==> y IN N) ==>
+  !inst x a prev y. MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+    eval_one_phi s inst = SOME (x,a) /\ s.vs_prev_bb = SOME prev /\
+    resolve_phi prev inst.inst_operands = SOME (Var y) ==>
+    y IN N /\ (y IN opaque ==> x IN opaque)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+  irule inline_phi_selected_static >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
