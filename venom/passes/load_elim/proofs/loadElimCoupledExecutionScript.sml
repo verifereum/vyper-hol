@@ -171,15 +171,7 @@ Proof
   qpat_assum `pa.pa_phi_out = out`
     (fn th => rule_assum_tac (PURE_REWRITE_RULE [GSYM th])) >>
   irule le_reached_captured_load_replacement >>
-  simp[Excl "isPREFIX"] >>
-  (conj_tac >- first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at Any) >>
-  simp[Excl "isPREFIX"] >>
-  qpat_assum `ctx.lctx_dfg = _`
-    (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
-  qpat_assum `s.vs_current_bb = t.vs_current_bb`
-    (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
-  rpt (goal_assum (drule_at Any) >> simp[Excl "isPREFIX"])
+  simp[Excl "isPREFIX"] >> metis_tac[]
 QED
 
 Theorem le_source_operand_lookup_agreement:
