@@ -3855,6 +3855,35 @@ Proof
   simp[MEM_MAP] >> qexists_tac `q` >> gvs[MEM_APPEND]
 QED
 
+Theorem mm_local_cut_pending_ancestor[local]:
+  bb.bb_instructions = pre ++ post /\
+  ss = FOLDL (scan_inst dfg mode) empty_scan_state pre /\
+  (!a b. MEM a (scan_block dfg mode bb).ss_flushed /\
+         MEM b (scan_block dfg mode bb).ss_flushed /\
+         MEM id a.cg_inst_ids /\ MEM id b.cg_inst_ids ==> a = b) /\
+  (!a j. MEM a ss.ss_flushed /\ MEM j a.cg_inst_ids ==>
+         MEM j (MAP (\i. i.inst_id) pre)) /\
+  MEM h (ss.ss_copies ++ ss.ss_flushed) /\ MEM id h.cg_inst_ids /\
+  MEM g (scan_block dfg mode bb).ss_flushed /\ MEM id g.cg_inst_ids /\
+  rep_of_group bb.bb_instructions g = SOME (r,g) /\
+  ~MEM r (MAP (\i. i.inst_id) pre) ==>
+  MEM h ss.ss_copies /\ mm_local_copy_ancestor h g
+Proof
+  strip_tac >>
+  `?a. MEM a (scan_block dfg mode bb).ss_flushed /\
+       mm_local_copy_ancestor h a` by
+    (irule mm_local_prefix_final_fragment >> metis_tac[]) >>
+  `MEM id a.cg_inst_ids` by gvs[mm_local_copy_ancestor_def] >>
+  `a = g` by metis_tac[] >>
+  `?tail. (FOLDL (scan_inst dfg mode) ss post).ss_flushed = ss.ss_flushed ++ tail`
+    by metis_tac[mm_local_fold_flushed_extension] >>
+  `MEM h ss.ss_flushed ==> MEM h (scan_block dfg mode bb).ss_flushed` by
+    (simp[scan_block_def, FOLDL_APPEND, hard_barrier_def] >>
+     metis_tac[MEM_APPEND]) >>
+  drule mm_local_rep_member >> strip_tac >>
+  gvs[MEM_APPEND] >> metis_tac[]
+QED
+
 Theorem mm_local_memzero_merge_effect[local]:
   d1 <= d2 /\ d2 <= d1+n1 /\
   cg = copy_merge (copy_memzero d1 n1 ids1) (copy_memzero d2 n2 ids2) ==>
