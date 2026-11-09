@@ -5292,6 +5292,87 @@ Definition mm_local_history_def:
     !j. j < n ==> step_inst_base (EL j is) (H j) = OK (H (SUC j))
 End
 
+Definition mm_local_write_capture_def:
+  mm_local_write_capture is H n j =
+    if j < n /\ j < LENGTH is then
+      if (EL j is).inst_opcode = MSTORE then
+        (case (EL j is).inst_operands of
+           [a;b] =>
+             (case (eval_operand a (H j), eval_operand b (H j)) of
+                (SOME dst,SOME value) => SOME (w2n dst,word_to_bytes value T)
+              | _ => NONE)
+         | _ => NONE)
+      else if (EL j is).inst_opcode = MCOPY then
+        (case (EL j is).inst_operands of
+           [a;b;c] =>
+             (case (eval_operand a (H j),eval_operand b (H j),eval_operand c (H j)) of
+                (SOME dst,SOME src,SOME len) =>
+                  SOME (w2n dst,read_memory (w2n src) (w2n len) (H j))
+              | _ => NONE)
+         | _ => NONE)
+      else NONE
+    else NONE
+End
+
+Theorem mm_local_write_capture_past[local]:
+  j < n /\ n <= m ==>
+  mm_local_write_capture is H n j = mm_local_write_capture is H m j
+Proof
+  simp[mm_local_write_capture_def]
+QED
+
+Theorem mm_local_write_capture_future[local]:
+  n <= j ==> mm_local_write_capture is H n j = NONE
+Proof
+  simp[mm_local_write_capture_def]
+QED
+
+Theorem mm_local_write_capture_sound[local]:
+  mm_local_history is H n /\ mm_local_write_capture is H n j = SOME (d,bs) ==>
+  (H (SUC j)).vs_memory = (write_memory_with_expansion d bs (H j)).vs_memory
+Proof
+  simp[mm_local_write_capture_def] >>
+  rpt IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac >>
+  `step_inst_base (EL j is) (H j) = OK (H (SUC j))` by
+    metis_tac[mm_local_history_def] >>
+  gvs[venomExecSemanticsTheory.step_inst_base_def,
+      venomExecSemanticsTheory.exec_write2_def,
+      venomMemPropsTheory.mstore_eq_write_mem,
+      venomExecSemanticsTheory.mcopy_def, venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_write_capture_copy[local]:
+  j < n /\ mm_local_history is H n /\
+  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] ==>
+  mm_local_write_capture is H n j =
+    SOME (w2n dst,read_memory (w2n src) (w2n len) (H j)) /\
+  LENGTH (read_memory (w2n src) (w2n len) (H j)) = w2n len
+Proof
+  simp[mm_local_history_def, mm_local_write_capture_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.read_memory_def] >>
+  rpt strip_tac >> simp[]
+QED
+
+Theorem mm_local_write_capture_store[local]:
+  j < n /\ mm_local_history is H n /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\ lookup_var v (H j) = SOME value ==>
+  mm_local_write_capture is H n j = SOME (w2n dst,word_to_bytes value T) /\
+  LENGTH (word_to_bytes value T) = 32
+Proof
+  simp[mm_local_history_def, mm_local_write_capture_def,
+       venomStateTheory.eval_operand_def] >> rpt strip_tac >> simp[]
+QED
+
+Theorem mm_local_write_capture_expansion[local]:
+  mm_local_history is H n /\ mm_local_write_capture is H n j = SOME (d,bs) ==>
+  LENGTH (H (SUC j)).vs_memory = MAX (LENGTH (H j).vs_memory) (d + LENGTH bs)
+Proof
+  strip_tac >> drule_all mm_local_write_capture_sound >>
+  disch_then SUBST1_TAC >> simp[venomMemPropsTheory.LENGTH_write_memory_with_expansion]
+QED
+
 Definition mm_local_owned_def:
   mm_local_owned (cap:num -> (num # word8 list) option) rep n js <=>
     ALL_DISTINCT js /\ SORTED ($<) js /\
@@ -6044,6 +6125,48 @@ Proof
   drule_all mm_local_prefix_future_hazard >> simp[]
 QED
 
+Theorem mm_local_indexed_future_hazard[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\ j < n /\
+  n <= r /\ r < LENGTH is /\ i = EL n is /\ w = EL j is /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss iv) c /\
+  (scan_inst (dfg_build_function fn0) Mem2Mem ss i).ss_flushed = hs.ss_flushed /\
+  w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  MEM h ss.ss_copies /\ MEM w.inst_id h.cg_inst_ids /\
+  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM w.inst_id g.cg_inst_ids /\ rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
+  MEM h hs.ss_copies /\ ~copy_overwrites h (copy_src_interval c)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    (qpat_assum `is = _` SUBST1_TAC >> irule mm_local_prefix_id_distinct >>
+     qexistsl [`fn0`, `index`, `k`, `sk`, `supply`] >>
+     simp[] >> conj_tac
+     >- (fs[wf_function_def] >>
+         metis_tac[mmWfProofsTheory.fn_inst_ids_distinct_block, EL_MEM]) >>
+     fs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+        irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM, MEM_MAP]) >>
+  `MEM w (TAKE n is)` by
+    (pure_rewrite_tac[MEM_EL] >> qexists_tac `j` >> gvs[EL_TAKE, LENGTH_TAKE]) >>
+  `~MEM (EL r is).inst_id (MAP (\i. i.inst_id) (TAKE n is))` by
+    (disch_then (strip_assume_tac o REWRITE_RULE [MEM_MAP]) >>
+     qpat_x_assum `MEM _ (TAKE n is)`
+       (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+     rename1 `q < LENGTH (TAKE n is)` >>
+     `q < LENGTH is /\ q < n` by gvs[] >>
+     `EL q (TAKE n is) = EL q is` by simp[EL_TAKE] >>
+     `q = r` by metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx] >>
+     decide_tac) >>
+  `bb.bb_instructions = TAKE n is ++ i::DROP (SUC n) is` by
+    (qspec_then `n` (qspec_then `is` mp_tac) rich_listTheory.TAKE_DROP_SUC >> simp[]) >>
+  `rep_of_group bb.bb_instructions g = SOME ((EL r is).inst_id,g)` by metis_tac[] >>
+  drule_all mm_local_prefix_future_hazard >> simp[]
+QED
+
 Theorem mm_local_capture_source_exclusion[local]:
   ~copy_overwrites h (copy_src_interval c) /\
   h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length ==>
@@ -6407,6 +6530,37 @@ Proof
   mp_tac (Q.INST [`is` |-> `bb.bb_instructions`, `dfg` |-> `dfg`,
     `n` |-> `LENGTH bb.bb_instructions`] mm_local_zero_prefix_certificate) >>
   simp[scan_block_memzero_def, memzero_barrier_def]
+QED
+
+Theorem mm_local_zero_representative_certificate[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM g (scan_block_memzero dfg bb).mz_flushed /\
+  r < LENGTH bb.bb_instructions /\
+  rep_of_group bb.bb_instructions g = SOME ((EL r bb.bb_instructions).inst_id,g) ==>
+  mm_local_group_captures bb.bb_instructions
+    (mm_local_zero_capture dfg bb.bb_instructions (SUC r)) (\a. 0w) g /\
+  mm_local_group_coverage bb.bb_instructions (SUC r)
+    (mm_local_zero_capture dfg bb.bb_instructions (SUC r)) g
+Proof
+  strip_tac >>
+  `mm_local_group_captures bb.bb_instructions
+     (mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions))
+     (\a. 0w) g /\
+   mm_local_group_coverage bb.bb_instructions (LENGTH bb.bb_instructions)
+     (mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions)) g` by
+    (drule mm_local_zero_block_certificate >> simp[EVERY_MEM]) >>
+  `!j. j < LENGTH bb.bb_instructions /\
+      MEM (EL j bb.bb_instructions).inst_id g.cg_inst_ids ==> j < SUC r` by
+    (rpt strip_tac >>
+     `j <= r` by metis_tac[mm_local_rep_position_max] >> decide_tac) >>
+  `!j. j < LENGTH bb.bb_instructions /\
+      MEM (EL j bb.bb_instructions).inst_id g.cg_inst_ids ==>
+      mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions) j =
+      mm_local_zero_capture dfg bb.bb_instructions (SUC r) j` by
+    (rpt strip_tac >> irule mm_local_zero_capture_past >> simp[]) >>
+  conj_tac
+  >- (fs[mm_local_group_captures_def] >> metis_tac[]) >>
+  fs[mm_local_group_coverage_def] >> metis_tac[]
 QED
 
 Theorem mm_local_zero_capture_sound[local]:
