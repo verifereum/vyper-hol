@@ -789,7 +789,7 @@ Proof
 QED
 
 (* do_spill_at_length: exact length change *)
-Theorem do_spill_at_length_exact[local]:
+Theorem do_spill_at_length_exact:
   !cand ps. 1 <= LENGTH ps.ps_stack ==>
     LENGTH (SND (do_spill_at cand ps)).ps_stack = LENGTH ps.ps_stack - 1
 Proof

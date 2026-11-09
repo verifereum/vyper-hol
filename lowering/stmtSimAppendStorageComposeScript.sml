@@ -193,14 +193,26 @@ Proof
   pop_assum (fn th => rewrite_tac[th]) >>
   simp[bind_def, lookup_global_def, lift_option_type_def, return_def,
        raise_def, get_immutables_def, get_address_immutables_def] >>
-  Cases_on `get_module_code cx nid0` >> simp[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_name nid1 x` >>
-  simp[bind_def, return_def, raise_def, get_address_immutables_def,
-       lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+      get_immutables_def, get_address_immutables_def,
+      lift_option_type_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
-           get_immutables_def, get_address_immutables_def,
-           lift_option_type_def])
+   gvs[get_place_def, return_def, raise_def, bind_def, LET_THM,
+       get_immutables_def, get_address_immutables_def,
+       lift_option_type_def])
 QED
 
 Theorem eval_append_storage_bind:
