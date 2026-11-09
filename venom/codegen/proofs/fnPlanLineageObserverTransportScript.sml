@@ -1,5 +1,6 @@
 Theory fnPlanLineageObserverTransport
 Ancestors fnPlanLineageWide fnPlanLineagePhiResources fnPlanLineageNativeTerminal
+  fnPlanLineagePhiSuffixResources
 Libs stackPlanGenTheory stackModelTheory stackPlanOpsTheory listTheory rich_listTheory
 
 Theorem nonentry_setup_resource_absent:
@@ -2701,3 +2702,51 @@ Resume ready_jmp_block_terminal_factor[setup_worker]:
   simp[AllCaseEqs()] >> strip_tac >> metis_tac[]
 QED
 Finalise ready_jmp_block_terminal_factor
+
+Theorem analyzed_supported_join_phi_output_absent:
+  !fn pred pb bb v dfg ps ops after.
+    codegen_ready_fn fn /\ cfg_reachable_of (cfg_analyze fn) pred /\
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    MEM bb.bb_label (cfg_succs_of (cfg_analyze fn) pred) /\
+    1 < LENGTH (cfg_preds_of (cfg_analyze fn) bb.bb_label) /\
+    MEM v (FLAT (MAP (\inst. inst.inst_outputs) (collect_phis bb.bb_instructions))) /\
+    generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn pb ps =
+      SOME (ops,after) /\
+    (MEM (Var v) after.ps_stack ==>
+      MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))) /\
+    LIST_ELEM_COUNT (Var v) after.ps_stack <= 1 ==>
+    ~MEM (Var v) after.ps_stack /\ Var v NOTIN FDOM after.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  `after.ps_spilled = FEMPTY` by
+    metis_tac[fnPlanLineageEdgeTheory.analyzed_join_edge_spilled_empty] >>
+  reverse conj_tac >- simp[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `cfg_reachable_of (cfg_analyze fn) bb.bb_label` by
+    metis_tac[fnPlanLineageLivenessTheory.analyzed_successor_reachable] >>
+  `fn_reachable fn bb.bb_label` by
+    metis_tac[codegenReadyComputeTheory.fn_reachable_cfg_analyze] >>
+  `MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `fn.fn_blocks <> []` by metis_tac[listTheory.MEM] >>
+  drule_all fnPlanLineageEntryProductionTheory.ready_entry_static_boundary >> strip_tac >>
+  `bb <> HD fn.fn_blocks` by (strip_tac >> gvs[]) >>
+  `fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label` by
+    gvs[venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def, listTheory.NULL_EQ] >>
+  `bb.bb_label <> (HD fn.fn_blocks).bb_label` by
+    (strip_tac >> gvs[]) >>
+  `?phi. MEM phi (collect_phis bb.bb_instructions) /\ MEM v phi.inst_outputs` by
+    (gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
+  `LIST_ELEM_COUNT (Var v) (MAP Var (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0))) = 0` by
+    metis_tac[fnPlanLineagePhiSuffixResourcesTheory.ready_phi_output_initial_target_count] >>
+  `~MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) bb.bb_label 0))` by
+    (qpat_x_assum `LIST_ELEM_COUNT _ (MAP _ _) = 0` mp_tac >>
+     simp[LIST_ELEM_COUNT_DEF, FILTER_EQ_NIL, EVERY_MEM, MEM_MAP]) >>
+  drule_at (Pat `MEM (Var _) _.ps_stack ==> _`) analyzed_edge_setup_stack_support >>
+  simp[] >> disch_then (qspecl_then [`bb`, `[]`, `after`] mp_tac) >> simp[]
+QED
