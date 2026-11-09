@@ -11,7 +11,7 @@ Ancestors
   exprSimUnwrap exprSimCopy vyperTypeExprResult vyperTypeExprSoundness
   vyperExprNoControl gasContext gasOutcome gasSummary gasSummaryCompose
   gasExemptCert fragGasMode fragGasPath exprSimBopRestWordLoadSafety
-  exprSimMemDefs words
+  exprSimMemDefs words valueEncodingDefs loweringStateRelDefs
 
 Theorem len_sized_store_header:
   is_sized_type t /\ evaluate_type tenv t = SOME vt ==>

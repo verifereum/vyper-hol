@@ -658,7 +658,7 @@ Proof
       contextTheory.vv_location_def,
       vyperStateTheory.read_result_def, vyperStateTheory.return_def]
   >- (Cases_on `av` >>
-      gvs[valueEncodingTheory.val_wf_def,
+      gvs[valueEncodingDefsTheory.val_wf_def,
           vyperValueOperationTheory.array_length_def]) >>
   Cases_on `p.ptr_location` >> gvs[]
   >~ [`storage_holds _ T _ _ _ _ _`]
@@ -676,7 +676,7 @@ Proof
       gvs[vyperTypingTheory.value_has_type_def,
           vyperValueOperationTheory.array_length_def]) >>
   Cases_on `av` >>
-  gvs[valueEncodingTheory.val_wf_def,
+  gvs[valueEncodingDefsTheory.val_wf_def,
       vyperValueOperationTheory.array_length_def]
 QED
 

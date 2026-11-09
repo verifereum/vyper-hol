@@ -26,7 +26,7 @@ Theory exprSimAggregateChildren
 Ancestors
   exprSimVVFrame
   exprSimProps
-  loweringPosts vyperTypeSystem vyperValue valueEncoding valueEncodingProofs vyperTyping
+  loweringPosts vyperTypeSystem vyperValue valueEncoding valueEncodingDefs valueEncodingProofs vyperTyping
   exprSimAlloc typedMemoryCopy
    exprSimHyps exprSimHypsDefs exprSimUnwrap exprSimUnwrapProps exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
