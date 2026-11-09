@@ -2,6 +2,7 @@
 Theory bodyIntCallFamStmtReturn
 Ancestors
   bodyIntCallJointContract bodyIntCallSharpReturn bodyIntCallFamStmtReturnStackExit
+  bodyIntCallFamStmtReturnMemoryPath bodyIntCallFamStmtReturnStoreEffect
   bodySim stmtSimReturn stmtSimDefs loweringPosts compileEnv ctorReturnFrame
   stmtLowering vyperTyping vyperInterpreter gasOutcome gasSummary
   gasSummaryCompose venomExecSemantics venomState
