@@ -4642,6 +4642,119 @@ Proof
   irule mm_local_capture_store >> metis_tac[]
 QED
 
+Theorem mm_local_supply_append[local]:
+  !xs s ys t zs u ws.
+  mm_flat_map_supply f s xs = (ys,t) /\
+  mm_flat_map_supply f t zs = (ws,u) ==>
+  mm_flat_map_supply f s (xs ++ zs) = (ys ++ ws,u)
+Proof
+  Induct_on `xs` >> simp[mm_flat_map_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `f s h` >> Cases_on `mm_flat_map_supply f r xs` >>
+  simp[mm_flat_map_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> first_x_assum drule >> gvs[]
+QED
+
+Theorem mm_local_supply_cut[local]:
+  j < LENGTH xs /\ mm_flat_map_supply f s xs = (ys,t) ==>
+  ?pre chunk post u v.
+    mm_flat_map_supply f s (TAKE j xs) = (pre,u) /\
+    f u (EL j xs) = (chunk,v) /\
+    mm_flat_map_supply f v (DROP (SUC j) xs) = (post,t) /\
+    ys = pre ++ chunk ++ post
+Proof
+  strip_tac >>
+  Cases_on `mm_flat_map_supply f s (TAKE j xs)` >>
+  rename1 `mm_flat_map_supply f s (TAKE j xs) = (pre,u)` >>
+  Cases_on `f u (EL j xs)` >> rename1 `f u (EL j xs) = (chunk,v)` >>
+  Cases_on `mm_flat_map_supply f v (DROP (SUC j) xs)` >>
+  rename1 `mm_flat_map_supply f v (DROP (SUC j) xs) = (post,z)` >>
+  `xs = TAKE j xs ++ EL j xs :: DROP (SUC j) xs` by
+    simp[rich_listTheory.TAKE_DROP_SUC] >>
+  `mm_flat_map_supply f u (EL j xs :: DROP (SUC j) xs) = (chunk ++ post,z)` by
+    simp[mm_flat_map_supply_def] >>
+  drule_all mm_local_supply_append >>
+  strip_tac >>
+  gvs[GSYM rich_listTheory.DROP_CONS_EL, listTheory.TAKE_DROP] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_event_rep_position[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\ j < LENGTH xs /\
+  MEM (EL j xs).inst_id cg.cg_inst_ids ==>
+  ?r. j <= r /\ r < LENGTH xs /\
+    rep_of_group xs cg = SOME ((EL r xs).inst_id,cg)
+Proof
+  strip_tac >>
+  `MEM (EL j xs).inst_id (sort_ids_by_block xs cg.cg_inst_ids)` by
+    (simp[sort_ids_by_block_def, MEM_FILTER, MEM_MAP] >>
+     qexists `EL j xs` >> simp[EL_MEM]) >>
+  Cases_on `REVERSE (sort_ids_by_block xs cg.cg_inst_ids)`
+  >- gvs[MEM_REVERSE] >>
+  rename1 `REVERSE (sort_ids_by_block xs cg.cg_inst_ids) = id::ids` >>
+  `rep_of_group xs cg = SOME (id,cg)` by simp[rep_of_group_def] >>
+  drule mm_local_rep_member >> strip_tac >>
+  qpat_x_assum `MEM id (MAP _ xs)` mp_tac >> simp[MEM_EL] >> strip_tac >>
+  qexists `n` >> gvs[EL_MAP] >>
+  irule mm_local_rep_position_max >> metis_tac[]
+QED
+
+Theorem mm_local_mode_emission_cut[local]:
+  transform_block_mode_supply dfg mode supply bb = (cc,sk) /\
+  j < LENGTH bb.bb_instructions ==>
+  ?pre chunk post u v.
+    mm_flat_map_supply
+      (apply_groups_inst_supply mode
+        (nop_ids_of_groups dfg mode bb.bb_instructions (scan_block dfg mode bb).ss_flushed)
+        (rep_map_of_groups bb.bb_instructions (scan_block dfg mode bb).ss_flushed))
+      supply (TAKE j bb.bb_instructions) = (pre,u) /\
+    apply_groups_inst_supply mode
+      (nop_ids_of_groups dfg mode bb.bb_instructions (scan_block dfg mode bb).ss_flushed)
+      (rep_map_of_groups bb.bb_instructions (scan_block dfg mode bb).ss_flushed)
+      u (EL j bb.bb_instructions) = (chunk,v) /\
+    cc.bb_instructions = pre ++ chunk ++ post
+Proof
+  simp[transform_block_mode_supply_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >> drule_all mm_local_supply_cut >> metis_tac[]
+QED
+
+Theorem mm_local_rep_not_nop_own[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  rep_of_group xs cg = SOME (id,cg) ==>
+  ~MEM id (nop_ids_of_group dfg mode xs cg)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (REVERSE (sort_ids_by_block xs cg.cg_inst_ids))` by
+    simp[sort_ids_by_block_def, FILTER_ALL_DISTINCT] >>
+  gvs[rep_of_group_def, nop_ids_of_group_def, AllCaseEqs(),
+      MEM_FILTER, MEM_REVERSE] >>
+  disj2_tac >>
+  qpat_x_assum `ALL_DISTINCT (sort_ids_by_block _ _)` mp_tac >>
+  once_rewrite_tac[GSYM ALL_DISTINCT_REVERSE] >>
+  pure_asm_rewrite_tac[] >> simp[]
+QED
+
+Theorem mm_local_rep_not_nop[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) xs) /\
+  rep_of_group xs cg = SOME (id,cg) /\
+  (!g. MEM g groups /\ MEM id g.cg_inst_ids ==> g = cg) ==>
+  ~MEM id (nop_ids_of_groups dfg mode xs groups)
+Proof
+  strip_tac >> strip_tac >>
+  `~MEM id (nop_ids_of_group dfg mode xs cg)` by
+    metis_tac[mm_local_rep_not_nop_own] >>
+  gvs[nop_ids_of_groups_def, MEM_FLAT, MEM_MAP] >>
+  rename1 `MEM g groups` >>
+  `MEM id g.cg_inst_ids` by
+    (qpat_x_assum `MEM id (nop_ids_of_group _ _ _ _)` mp_tac >>
+     simp[nop_ids_of_group_def] >>
+     Cases_on `REVERSE (sort_ids_by_block xs g.cg_inst_ids)` >>
+     simp[MEM_FILTER, MEM_REVERSE] >> strip_tac >>
+     `MEM id (REVERSE (sort_ids_by_block xs g.cg_inst_ids))` by metis_tac[MEM] >>
+     gvs[MEM_REVERSE, sort_ids_by_block_def, MEM_FILTER]) >>
+  metis_tac[]
+QED
+
 Theorem mm_local_known_value_frame[local]:
   lookup_var x s = SOME value /\ step_inst_base inst s = OK t /\
   ~MEM (Var x) inst.inst_operands /\ ~MEM x inst.inst_outputs ==>
