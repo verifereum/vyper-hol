@@ -126,6 +126,86 @@ Proof
   simp[entry_taint_vars_def, var_taint_bounded_phis]
 QED
 
+Theorem frame_reachable_var_taint_bounded:
+  !vs C stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s ==>
+    var_taint_bounded tn.t_var /\
+    EVERY (\f. var_taint_bounded f.cf_tvar) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >>
+  gvs[entry_taint_def, var_taint_bounded_step,
+      var_taint_bounded_entry, var_taint_bounded_restrict]
+QED
+
+Theorem frame_reachable_op_taint_bounded:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  j IN op_taint tn op ==> j < 32
+Proof
+  metis_tac[frame_reachable_var_taint_bounded, var_taint_bounded_operand]
+QED
+
+Theorem mem_taint_frame_exact:
+  q NOTIN new_site_bytes s s' /\
+  q NOTIN range_bytes (step_writes inst s s') /\
+  q NOTIN written_taint tn inst s ==>
+  (q IN mem_taint tn inst s s' <=> q IN tn.t_mem)
+Proof
+  simp[mem_taint_def]
+QED
+
+Theorem step_writes_source_subset:
+  range_bytes (step_writes inst s s') SUBSET
+  range_bytes (source_memory_write_ranges inst s)
+Proof
+  rw[step_writes_def] >>
+  rw[SUBSET_DEF, range_bytes_def, MEM_MAP] >>
+  PairCases_on `y` >> gvs[] >>
+  qexistsl_tac [`off`, `y1`] >> simp[] >>
+  gvs[arithmeticTheory.MIN_ALT] >> decide_tac
+QED
+
+Theorem written_taint_source_subset:
+  step_inst_base inst s = OK s' /\
+  (!op j. MEM op inst.inst_operands /\ j IN op_taint tn op ==> j < 32) ==>
+  written_taint tn inst s SUBSET
+  range_bytes (source_memory_write_ranges inst s)
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> simp[written_taint_def] >>
+  rename1 `inst.inst_operands = a::ops` >>
+  Cases_on `ops` >> simp[written_taint_def] >>
+  rename1 `inst.inst_operands = a::b::ops` >>
+  Cases_on `ops` >> simp[written_taint_def]
+  >- (Cases_on `inst.inst_opcode = MSTORE` >>
+      Cases_on `inst.inst_opcode = ISTORE` >> gvs[] >>
+      gvs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+      rw[SUBSET_DEF, source_memory_write_ranges_def,
+         fixed_source_write_range_def, range_bytes_def] >>
+      simp[] >>
+      `k < 32` by metis_tac[] >> decide_tac) >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `inst.inst_opcode = MCOPY` >> simp[] >>
+  Cases_on `eval_operand a s` >> simp[] >>
+  Cases_on `eval_operand b s` >> simp[] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  rw[SUBSET_DEF, source_memory_write_ranges_def,
+     sized_source_write_range_def, range_bytes_def] >> simp[]
+QED
+
+Theorem mem_taint_frame_source_range:
+  step_inst_base inst s = OK s' /\
+  (!op j. MEM op inst.inst_operands /\ j IN op_taint tn op ==> j < 32) /\
+  q NOTIN new_site_bytes s s' /\
+  q NOTIN range_bytes (source_memory_write_ranges inst s) ==>
+  (q IN mem_taint tn inst s s' <=> q IN tn.t_mem)
+Proof
+  rpt strip_tac >> irule mem_taint_frame_exact >>
+  drule_all written_taint_source_subset >>
+  mp_tac step_writes_source_subset >>
+  simp[SUBSET_DEF] >> metis_tac[]
+QED
+
 Theorem taint_agree_shared:
   taint_agree D X tn s t ==>
   ld_shared_agree D s.vs_call_ctx.cc_address tn s t
