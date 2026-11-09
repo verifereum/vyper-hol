@@ -4,7 +4,7 @@ Ancestors
   ctorDeployMemoryRunMemEntryArraySteps ctorAbiActualArrayInvariant
   abiDecoderArraySetupInputs abiDecoderCoherence abiDecoderContract abiDecodeRanges
   abiEncoder contractABI list rich_list arithmetic words
-  abiDecoderArrayInvariant abiDecoderTypedContract venomInst
+  abiDecoderArrayInvariant abiDecoderTypedContract venomInst venomState
   ctorDeployMemoryRunMemEntryMembers ctorAbiActualArrayBody ctorAbiActualFrame
   abiEncoderRegisteredEffect ctorAbiActualObservations pred_set abiDecoderReentry compileEnv
   allocaFrontierBound abiDecoderArraySetupCode fragGasPathMem venomMemDefs fragExec abiEncoderProps abiDecoderLoop ctorAbiActualSites
