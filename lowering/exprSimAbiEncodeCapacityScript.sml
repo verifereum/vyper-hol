@@ -1,13 +1,14 @@
 Theory exprSimAbiEncodeCapacity
 Ancestors
   exprSimAbiEncodeSourceMetadata abiEncodeEndpointMetadata
-  createMemoryInterface exprSimHypsDefs abiBuiltinAllocation words arithmetic
+  createMemoryInterface exprSimHypsDefs exprSimHyps abiBuiltinAllocation words arithmetic
+  exprSimAbiEncodeArgsPhysicalCapacity
 
 Theorem abi_encode_nonword_output_representable:
   expr_body_pre ce cx env
     (TypeBuiltin ann (AbiEncode F mid) ty [e]) es ==>
   32 + 32 * word_size
-    (abi_size_bound ce.ce_struct_fields (expr_type e) +
+    (abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) +
      (case mid of NONE => 0 | SOME _ => 4)) < dimword (:256)
 Proof
   strip_tac >> drule abi_encode_endpoint_output_size >> simp[] >>
@@ -16,13 +17,20 @@ QED
 
 Theorem abi_encode_nonword_length_bound:
   expr_body_pre ce cx env e es /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
   vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
   LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) <=
-    abi_size_bound ce.ce_struct_fields (expr_type e)
+    abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)
 Proof
-  metis_tac[abi_encode_body_evaluated_metadata, create_ctor_encoding_bound]
+  strip_tac >>
+  `?tvs. evaluate_type (get_tenv cx) (expr_type e) = SOME tvs` by
+    (drule exprSimHypsTheory.expr_body_pre_type_evaluates >>
+     Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >> simp[]) >>
+  drule exprSimHypsTheory.expr_body_pre_lowered_fits >> strip_tac >>
+  `sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx)` by
+    fs[expr_body_pre_def, expr_sim_inv_def] >>
+  drule_all abi_args_physical_encoding_bound >> simp[]
 QED
 
 Theorem abi_encode_payload_capacity:
@@ -37,11 +45,11 @@ QED
 Theorem abi_encode_nonword_numerical_capacity:
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid) ty [e]) es /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
   value_has_type tv v /\
   vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av ==>
   let bytes = enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av in
-  let maxlen = abi_size_bound ce.ce_struct_fields (expr_type e) in
+  let maxlen = abi_size_bound ce.ce_struct_fields (lowered_value_type ce e) in
   let m = case mid of NONE => 0 | SOME _ => 4 in
   let outsz = 32+32*word_size (maxlen+m) in
   LENGTH bytes <= maxlen /\ 32+m+LENGTH bytes <= outsz /\
@@ -54,7 +62,7 @@ Proof
   drule abi_encode_payload_capacity >>
   disch_then (qspec_then `(case mid of NONE => 0 | SOME _ => 4)` assume_tac) >>
   simp[] >> Cases_on `mid` >> simp[] >>
-  qspec_then `abi_size_bound ce.ce_struct_fields (expr_type e)` mp_tac
+  qspec_then `abi_size_bound ce.ce_struct_fields (lowered_value_type ce e)` mp_tac
     (GEN_ALL abi_builtin_rounded_selector_store) >> simp[]
 QED
 
