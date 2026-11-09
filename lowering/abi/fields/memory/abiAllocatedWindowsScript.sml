@@ -15,7 +15,7 @@ End
 Definition abi_windows_disjoint_def:
   abi_windows_disjoint [] = T /\
   abi_windows_disjoint (window::windows) =
-    (EVERY (\other. compileEnv$regions_disjoint
+    (EVERY (\other. loweringStateRelDefs$regions_disjoint
       (FST (SND window)) (SND (SND window)) (FST (SND other)) (SND (SND other))) windows /\
      abi_windows_disjoint windows)
 End
@@ -63,7 +63,7 @@ Theorem abi_allocated_window_disjoint:
     allocas_non_overlapping ss /\ FST left <> FST right /\
     abi_allocated_window ss (FST left) (FST (SND left)) (SND (SND left)) /\
     abi_allocated_window ss (FST right) (FST (SND right)) (SND (SND right)) ==>
-    compileEnv$regions_disjoint (FST (SND left)) (SND (SND left)) (FST (SND right)) (SND (SND right))
+    loweringStateRelDefs$regions_disjoint (FST (SND left)) (SND (SND left)) (FST (SND right)) (SND (SND right))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `abi_allocated_window ss (FST left) _ _`

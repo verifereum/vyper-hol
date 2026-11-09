@@ -36,7 +36,7 @@ Proof
     (mp_tac o REWRITE_RULE [source_writes_separated_def, EVERY_MEM]) >>
   disch_then (qspec_then `(region_base,write_count)` mp_tac) >> simp[] >> strip_tac
   >- simp[abi_window_separated_def] >>
-  `compileEnv$regions_disjoint offset (type_memory_size entry.type) region_base write_count` by
+  `loweringStateRelDefs$regions_disjoint offset (type_memory_size entry.type) region_base write_count` by
     (qpat_x_assum `source_memory_separated _ _ _ _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [source_memory_separated_def]) >>
      disch_then (qspecl_then [`name`, `entry`, `offset`, `region_size`] mp_tac) >> simp[]) >>
@@ -56,7 +56,7 @@ Proof
     (mp_tac o REWRITE_RULE [source_writes_separated_def, EVERY_MEM]) >>
   disch_then (qspec_then `(region_base,write_count)` mp_tac) >> simp[] >> strip_tac
   >- simp[abi_window_separated_def] >>
-  `compileEnv$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) region_base write_count` by
+  `loweringStateRelDefs$regions_disjoint (w2n ptr_addr) (type_memory_size entry.type) region_base write_count` by
     (qpat_x_assum `source_memory_separated _ _ _ _ _`
        (mp_tac o CONJUNCT2 o REWRITE_RULE [source_memory_separated_def]) >>
      disch_then (qspecl_then [`name`, `entry`, `p`, `region_size`, `ptr_addr`] mp_tac) >> simp[]) >>

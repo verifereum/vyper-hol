@@ -12,7 +12,7 @@ Theorem allocated_read_window_request:
     abi_allocated_window ss owner offset read_len /\ owner <> id /\ alloca_inv ss /\
     abi_alloca_request_ok id byte_count ss /\ ss.vs_alloca_next + byte_count < dimword(:256) ==>
     offset + read_len < dimword(:256) /\
-    compileEnv$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
+    loweringStateRelDefs$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
 Proof
   rpt gen_tac >> strip_tac >> `byte_count < dimword(:256)` by decide_tac >>
   `alloca_next_valid ss` by fs[alloca_inv_def] >>
@@ -29,7 +29,7 @@ Proof
   `abi_allocated_window (memory_snapshot_alloc_frame id byte_count ss) id
     (w2n (memory_snapshot_addr id ss)) byte_count` by
     (simp_tac bool_ss [abi_allocated_window_def] >> qexistsl_tac [`new_base`, `new_size`] >> simp[]) >>
-  `compileEnv$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count` by
+  `loweringStateRelDefs$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count` by
     (qspecl_then [`memory_snapshot_alloc_frame id byte_count ss`, `(owner,(offset,read_len))`,
       `(id,(w2n (memory_snapshot_addr id ss),byte_count))`] mp_tac abi_allocated_window_disjoint >>
      impl_tac >- gvs[alloca_inv_def] >> simp[]) >>
@@ -41,7 +41,7 @@ Theorem argument_origin_request_safe:
     argument_origin cenv scopes ss writers F offset read_len /\ MEM id writers /\ alloca_inv ss /\
     abi_alloca_request_ok id byte_count ss /\ ss.vs_alloca_next + byte_count < dimword(:256) ==>
     offset + read_len < dimword(:256) /\
-    compileEnv$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
+    loweringStateRelDefs$regions_disjoint offset read_len (w2n (memory_snapshot_addr id ss)) byte_count
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `argument_origin _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [argument_origin_def]) >>
