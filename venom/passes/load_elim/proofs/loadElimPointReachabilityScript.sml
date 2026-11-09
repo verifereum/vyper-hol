@@ -1,5 +1,6 @@
 Theory loadElimPointReachability
 Ancestors
+  loadElimAllBlockPopulation
   loadElimReachableBoundary loadElimTransferProvenance loadElimConvergence
   loadElimDefs cfgAnalysisProps cfgDefs dfAnalyzeDefs venomWf venomInst
   finite_map list pred_set
@@ -27,4 +28,16 @@ Proof
   Cases_on `fn_entry_label fn` >>
   simp[df_joined_val_def] >>
   Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> gvs[load_edge_transfer_def, load_join_def]
+QED
+
+Theorem le_analyze_point_multivalue_reachable:
+  wf_function fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  n <= LENGTH bb.bb_instructions /\
+  FLOOKUP (unwrap_load_lattice (df_at NONE (load_analyze ctx fn) lbl n)) k = SOME vs /\
+  1 < LENGTH vs ==> MEM lbl (cfg_analyze fn).cfg_dfs_pre
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  drule_all le_analyze_all_block_multivalue_origin >>
+  drule_all le_unvisited_joined_input >>
+  simp[unwrap_load_lattice_def]
 QED
