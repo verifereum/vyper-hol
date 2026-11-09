@@ -7,7 +7,7 @@
 Theory bodyMemIntCallReturnDirect
 Ancestors
   bodyMemoryDefs intCallReturnMem stmtSimReturn compileEnv valueEncoding
-  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem internalReturnBytestringMem internalReturnCompileMem
+  compileVyper internalReturnImmutableTypes internalReturnPathMem internalReturnStoreMem internalReturnSuffixMem internalReturnTupleMem internalReturnBytestringMem internalReturnCompileMem internalReturnComposeMem internalReturnVoidMem
 
 (* ADMITTED (leaf): the internal twin of loweringMemFrameRet's
    external_frame_ret_ok_mem's direct returns.  The compile env returns
@@ -62,5 +62,9 @@ Theorem internal_return_direct_mem:
          | SOME (bw,cap) => intret_mem_q func cenv cx ret_tv bw)
       cenv' (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 Proof
+  rpt gen_tac >> strip_tac >> Cases_on `eo`
+  >- (`ret_ty = NoneT` by fs[vyperTypeSystemTheory.type_stmt_def] >>
+      `rb = NONE` by (Cases_on `rb` >> gvs[]) >> gvs[] >>
+      irule internal_return_void_mem >> metis_tac[]) >>
   cheat
 QED
