@@ -48,7 +48,7 @@ Proof
   `EVERY (\i. MEM i.inst_opcode [CALLDATALOAD; GT; ISZERO; ASSERT; CALLDATACOPY])
     (emitted_insts st st')` by
     (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def] >> rpt strip_tac >> gvs[emitted_insts_def] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
@@ -114,7 +114,7 @@ Theorem entry_bytes_outputs[local]:
     EVERY (\x. ?k. x = STRING #"%" (toString k) /\ k < st'.cs_next_var)
       i.inst_outputs) (emitted_insts st st')
 Proof
-  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
     fresh_id_def, emit_def] >> rpt strip_tac >> gvs[emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>

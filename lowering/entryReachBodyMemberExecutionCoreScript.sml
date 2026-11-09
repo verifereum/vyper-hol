@@ -186,7 +186,7 @@ Theorem entry_members_execution_suffix:
       [(d,outsz)] s t
 Proof
   Induct_on `tys` >> rpt gen_tac >> strip_tac
-  >- (fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
+  >- (fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
       qexists_tac `s` >> simp[entry_members_effect_refl, abi_encoder_registered_effect_refl]) >>
   drule_all entry_members_core_cons >> strip_tac >>
   `window_alloca_sites fn (abi_decoder_ids next.cs_next_id last.cs_next_id) SUBSET

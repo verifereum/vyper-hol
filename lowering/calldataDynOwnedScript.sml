@@ -651,7 +651,7 @@ Theorem calldata_element_pointer_repeat:
     t.vs_halted = s.vs_halted /\ inst_extends st st'
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [head] st = (off,c1)` >>
@@ -923,7 +923,7 @@ Theorem calldata_element_pointer_code_shape:
     (emitted_insts st st')
 Proof
   rpt gen_tac >>
-  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def,
+  simp[compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>

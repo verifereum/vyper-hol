@@ -158,7 +158,7 @@ Proof
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, LET_THM] >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
     (rpt strip_tac >>
@@ -802,7 +802,7 @@ Proof
   drule_all calldata_tuple_layout >> disch_then (assume_tac o GSYM) >>
   drule_all calldata_tuple_prefix_layout >> strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, LET_THM] >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, LET_THM] >>
   strip_tac >>
   `!i. i < LENGTH xs ==> type_memory_size (EL i tvs) <= (\(ei,az,mz). mz) (EL i xs)` by
     (rpt strip_tac >>

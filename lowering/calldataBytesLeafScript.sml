@@ -49,7 +49,7 @@ Theorem calldata_bytes_allocation_shape:
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
               ~is_alloca_op i.inst_opcode) (emitted_insts st st')
 Proof
-  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
        fresh_id_def, emit_def] >> rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>

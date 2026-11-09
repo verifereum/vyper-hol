@@ -397,7 +397,7 @@ Theorem local_members_suffix[local]:
 Proof
   Induct_on `tys` >> rpt gen_tac >> strip_tac
   >- (drule local_members_suffix_lengths >> simp[] >> strip_tac >> gvs[] >>
-      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
+      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
       qexists_tac `s` >>
       gvs[canonical_members_effect_def, entry_decode_path_refl, entry_loop_fields_def,
           abi_encoder_registered_effect_refl, canonical_members_semantics_def, Excl "enc_def"]) >>
@@ -535,7 +535,7 @@ Theorem entry_certified_local_complex_endpoint:
 Proof
   strip_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`
-    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, LET_THM]) >>
+    (assume_tac o SIMP_RULE (srw_ss()) [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, LET_THM]) >>
   drule_all entry_certified_local_members_endpoint >> simp[]
 QED
 

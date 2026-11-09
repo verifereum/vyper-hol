@@ -626,7 +626,7 @@ Theorem canonical_members_suffix[local]:
 Proof
   Induct_on `tys` >> rpt gen_tac >> strip_tac
   >- (drule canonical_members_suffix_lengths >> simp[] >> strip_tac >> gvs[] >>
-      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
+      fs[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
       qexists_tac `s` >> gvs[canonical_members_effect_refl] >>
       drule canonical_members_semantics_complete >> simp[]) >>
   drule canonical_members_suffix_lengths >> strip_tac >>

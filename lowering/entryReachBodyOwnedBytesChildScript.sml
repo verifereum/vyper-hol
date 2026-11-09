@@ -25,8 +25,8 @@ Proof
   asm_rewrite_tac[] >> qexists_tac `emitted_insts st last` >> asm_rewrite_tac[] >>
   qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-  simp[abi_decode_array_element_setup_def, compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
-    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, abi_decode_indexed_address_def,
+  simp[abi_decode_array_element_setup_def, compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, abi_decode_indexed_address_def,
     dec_info_needs_offset_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[emitted_insts_def] >>
@@ -111,7 +111,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `middle.cs_next_var <= last.cs_next_var` by
     (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
-     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+     simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
      rpt strip_tac >> gvs[]) >>
   `middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
@@ -203,7 +203,7 @@ Resume entry_owned_bytes_child[endpoint_finish]:
     (rpt strip_tac >>
      `st.cs_next_var <= middle.cs_next_var` by
        (qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-        simp[abi_decode_array_element_setup_def, compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
+        simp[abi_decode_array_element_setup_def, compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def,
           abi_decode_indexed_address_def, dec_info_needs_offset_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def,
           emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>

@@ -151,7 +151,7 @@ Theorem calldata_member_address_static_live:
     abi_decoder_operand_live mid.cs_next_var op)
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   FIRST [simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
@@ -214,7 +214,7 @@ Theorem calldata_member_address_continuation_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[fn_has_code_def] >>
   Cases_on `bb.bb_instructions` >>
@@ -232,9 +232,9 @@ Theorem calldata_member_tail_continuation_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `elems`
-  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
+  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
   rename1 `h::rest` >> PairCases_on `h` >>
-  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
+  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
     comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w) (Lit 0w) a` >>
   rename1 `_ = (ep,mid)` >> simp_tac bool_ss [] >>
@@ -900,9 +900,9 @@ Theorem calldata_member_tail_empty_exit_phi:
     phi_prefix_length bb.bb_instructions = 0
 Proof
   Cases_on `elems`
-  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
+  >- simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
   rename1 `h::rest` >> PairCases_on `h` >>
-  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
+  simp_tac bool_ss [Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, LET_THM,
     comp_bind_def, comp_ignore_bind_def] >>
   Cases_on `compile_getelemptr_abi src (dec_info_needs_offset h0) ao CALLDATALOAD (Lit 0w) (Lit 0w) a` >>
   rename1 `_ = (ep,mid)` >> simp_tac bool_ss [] >>

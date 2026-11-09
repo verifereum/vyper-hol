@@ -20,7 +20,7 @@ Theorem entry_members_path_iteration:
            (vo + SUM (MAP (\(ei,az,mz). mz) xs)) last t
 Proof
   rpt gen_tac >> strip_tac >> Induct
-  >- (simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, comp_return_def] >>
+  >- (simp[Once compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def] >>
       rpt strip_tac >> gvs[] >> metis_tac[entry_decode_path_refl]) >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
   simp_tac bool_ss [abi_decode_complex_member_phases, comp_bind_def,
