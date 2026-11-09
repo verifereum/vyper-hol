@@ -2,6 +2,7 @@
 Theory typedCopyEmptyRankMemory
 Ancestors
   typedCopyEmptyArrayMemory typedCopyEmptyFieldsMemory typedCopyRankMemory typedCopyDomain
+  emptyValueMemory
   exprSimAggregateChildren typedMemoryCopy compileEnv context exprLowering
   emitHelper fragExecMem valueEncoding vyperTypeSystem vyperTypeArgFits vyperValue
   vyperTyping words list finite_map arithmetic
@@ -257,4 +258,33 @@ Proof
   rpt gen_tac >> strip_tac >>
   ho_match_mp_tac typed_copy_empty_rank_mem >> simp[] >>
   metis_tac[]
+QED
+
+Theorem compile_store_memory_typed_zero_value_frag_mem:
+  !cenv tenv ctx dty sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname,fty,sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty dty /\
+    evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\
+    val_wf stv v /\ val_wf dtv v /\ type_memory_size stv = 0 ==>
+    !dst src sa sb s dw sw.
+      compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
+      (!x. dst = Var x ==> not_fresh_at sa x) /\
+      (!x. src = Var x ==> not_fresh_at sa x) /\
+      eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw ==>
+      frag_exec_mem ctx sa sb (\u. u = s)
+        (\t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+          typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `type_memory_size dtv = 0` by metis_tac[widening_zero_memory_size] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_store_memory_typed_empty_frag_mem >>
+  disch_then (qspec_then `ctx` (mp_then Any irule frag_exec_mem_conseq)) >> simp[] >>
+  metis_tac[zero_layout_val_in_memory]
 QED
