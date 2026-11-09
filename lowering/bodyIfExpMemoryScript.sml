@@ -425,6 +425,8 @@ Theorem ifexp_word_arm_finish_mem[local]:
 Proof
   strip_tac >> irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_word] >>
   `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>
@@ -464,6 +466,8 @@ Theorem ifexp_forced_arm_finish_mem[local]:
 Proof
   strip_tac >> irule ifexp_outcome_suffix_mem >>
   goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_word] >>
   `?w. eval_operand op u = SOME w` by fs[expr_post_def, expr_val_rel_def] >>
   qexists_tac `jump_to xl (update_var rv w u with vs_inst_idx := LENGTH sy.cs_current_insts)` >>
   conj_tac >- (irule ifexp_suffix_path_mem >> simp[] >> metis_tac[]) >>

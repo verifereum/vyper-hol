@@ -2208,6 +2208,9 @@ Proof
     (`(n2w b : bytes32) = n2w b'` by metis_tac[optionTheory.SOME_11] >>
      fs[wordsTheory.n2w_11] >> metis_tac[arithmeticTheory.LESS_MOD]) >>
   gvs[] >>
+  `post_value_type cenv d = BaseT (BytesT (Dynamic cap))` by
+    (`is_bytestring_type (expr_type d)` by simp[is_bytestring_type_def] >>
+     drule post_value_type_bytestring >> simp[]) >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s1 s2 esD (BytesV bs) data tD` by
     fs[expr_post_def] >>
   `b < dimword (:256)` by (fs[] >> decide_tac) >>
@@ -4318,6 +4321,7 @@ Proof
 QED
 
 Theorem raw_call_bool_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = BaseT BoolT /\
   stmt_state_rel ctx func cenv cx es' s /\
   expr_val_rel cx (expr_type e) (BoolV success) result s /\
@@ -4359,6 +4363,7 @@ Proof
 QED
 
 Theorem raw_call_nonrevert_vv_path[local]:
+  post_value_type cenv e = expr_type e /\
   (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -4385,7 +4390,7 @@ Theorem raw_call_nonrevert_vv_path[local]:
     TAKE n s.vs_returndata) /\
   64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\ n < dimword (:256) /\
   ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n /\
-  expr_type e = raw_call_return_type flags /\ post_value_type cenv e = expr_type e /\
+  expr_type e = raw_call_return_type flags /\
   (0 < n ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])) ==>
   frag_path ctx sa sb (\u. u = s)
@@ -4407,6 +4412,7 @@ Proof
 QED
 
 Theorem raw_call_bytes_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
   cap <= rounded /\
@@ -4446,6 +4452,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_zero_tail_vv_path[local]:
+  post_value_type cenv e = expr_type e /\
   cap = 0 /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
@@ -4468,8 +4475,7 @@ Theorem raw_call_outbuf_zero_tail_vv_path[local]:
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
-      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
-  post_value_type cenv e = expr_type e ==>
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
       vv_post ctx func cenv cx e initial_es initial sb s0
@@ -4609,6 +4615,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[finish]:
   qpat_x_assum `flags.rcf_max_outsize = 0` mp_tac >>
   qpat_x_assum `local_ptrs_reserved cenv sc` mp_tac >>
   qpat_x_assum `initial.cs_next_var <= sc.cs_next_var` mp_tac >>
+  qpat_x_assum `post_value_type _ _ = _` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure`
   >- suspend "revert_zero" >>
@@ -4636,6 +4643,7 @@ Resume raw_call_outbuf_zero_tail_vv_path[revert_zero]:
   disch_then (mp_then Any irule frag_path_conseq) >> simp[] >>
   rpt strip_tac >> gvs[] >>
   match_mp_tac raw_call_none_post >>
+  conj_tac >- gvs[] >>
   conj_tac >- gvs[raw_call_return_type_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac
@@ -4670,6 +4678,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_positive_tail_vv_path[local]:
+  post_value_type cenv e = expr_type e /\
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
@@ -4692,8 +4701,7 @@ Theorem raw_call_outbuf_positive_tail_vv_path[local]:
   flags.rcf_max_outsize = cap /\ expr_type e = raw_call_return_type flags /\
   (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) =
     SOME (if flags.rcf_revert_on_failure then BaseTV (BytesT (Dynamic cap))
-      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) /\
-  post_value_type cenv e = expr_type e ==>
+      else TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic cap))])) ==>
   frag_path ctx sa sb (\u. u = s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
       vv_post ctx func cenv cx e initial_es initial sb s0
@@ -4828,9 +4836,11 @@ Resume raw_call_outbuf_positive_tail_vv_path[finish]:
 QED
 
 Resume raw_call_outbuf_positive_tail_vv_path[tuple_positive]:
+  `post_value_type cenv e = expr_type e` by gvs[] >>
   qpat_assum `expr_type e = _`
     (mp_then (Pat `expr_type _ = _`) mp_tac raw_call_nonrevert_vv_path) >>
   simp[arithmeticTheory.GREATER_DEF] >>
+  disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pos hd)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ u`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
@@ -4913,7 +4923,9 @@ Resume raw_call_outbuf_positive_tail_vv_path[bytes_post]:
   qpat_assum `expr_type e = raw_call_return_type flags` (fn th => rewrite_tac[GSYM th]) >>
   `evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic flags.rcf_max_outsize)))` by metis_tac[] >>
-  irule raw_call_bytes_post >> simp[NoAsms] >>
+  `post_value_type cenv e = expr_type e` by gvs[] >>
+  irule raw_call_bytes_post >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >> simp[NoAsms] >>
   simp[] >>
   qexistsl_tac [`sa.cs_next_id`,`w2n w`,
     `32*((flags.rcf_max_outsize+31) DIV 32)`,`u`] >>
@@ -4991,6 +5003,7 @@ Proof
 QED
 
 Theorem raw_call_outbuf_tail_vv_frag[local]:
+  post_value_type cenv e = expr_type e /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap T ov op sm = (result,sb) /\
@@ -5012,8 +5025,7 @@ Theorem raw_call_outbuf_tail_vv_frag[local]:
   cap < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
   (0 < cap ==> ((cap + 31) DIV 32) * 32 + 32 < dimword (:256)) /\
   expr_type e = (if cap = 0 then NoneT else BaseT (BytesT (Dynamic cap))) /\
-  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) /\
-  post_value_type cenv e = expr_type e ==>
+  (0 < cap ==> evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) ==>
   frag_exec ctx sa sb (\u. u = s)
     (\u. outcome.co_success /\
       vv_post ctx func cenv cx e initial_es initial sb s0

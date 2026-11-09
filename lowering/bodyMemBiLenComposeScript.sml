@@ -24,6 +24,10 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >>
      disch_then (qspecl_then [`e`, `es`] mp_tac) >> fs[expr_body_pre_def]) >>
+  drule post_type_evaluates >> disch_then (qx_choose_then `ptv` assume_tac) >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
+    (irule post_value_type_widens >>
+     fs[expr_body_pre_def] >> metis_tac[]) >>
   simp[expr_vv_sim_mem_def] >> rpt gen_tac >> strip_tac >>
   gvs[compile_expr_len] >> pairarg_tac >> gvs[] >>
   rename1 `compile_expr cenv ty e sa = (evv, sm)` >>
@@ -64,7 +68,7 @@ Proof
                     `tv`,`fe with gas_obs := []`] expr_body_pre_runtime_typed) >>
           simp[] >> strip_tac >>
           mp_tac (Q.SPECL [`env`,`ctx`,`func`,`cenv`,`cx`,`e`,`es`,`sa`,`sm`,`lsb`,`s0`,
-                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`] len_vv_path_mem) >>
+                    `fe with gas_obs := []`,`tv`,`evv`,`lop`,`tvt`,`t`,`ptv`] len_vv_path_mem) >>
           (impl_tac >- simp[]) >> strip_tac >>
           `!tail. result_array_length cx tv (fe with gas_obs := tail) =
                   (INL n, fe with gas_obs := tail)` by
