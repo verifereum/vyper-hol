@@ -3897,6 +3897,153 @@ Proof
   gvs[is_zero_store_def, is_calldatasize_copy_def]
 QED
 
+Theorem mm_local_mode_write_origin[local]:
+  apply_groups_inst_supply mode ns rm s i = (out,t) /\ MEM j out /\
+  j.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (!cg. ALOOKUP rm i.inst_id = SOME cg ==>
+    i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}) ==>
+  j.inst_id = i.inst_id /\
+  i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
+Proof
+  rw[apply_groups_inst_supply_def, AllCaseEqs()] >>
+  gvs[mk_nop_from_def, mk_bulk_copy_inst_def, mk_load_inst_def,
+      mk_mstore_from_load_def] >>
+  Cases_on `mode` >> gvs[mode_load_opcode_def]
+QED
+
+Theorem mm_local_zero_write_origin[local]:
+  apply_memzero_inst_supply ns rm s i = (out,t) /\ MEM j out /\
+  j.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  (!cg. ALOOKUP rm i.inst_id = SOME cg ==>
+    i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}) ==>
+  j.inst_id = i.inst_id /\
+  i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
+Proof
+  rw[apply_memzero_inst_supply_def, AllCaseEqs()] >>
+  gvs[mk_nop_from_def, mk_zero_store_inst_def, mk_memzero_calldatacopy_def]
+QED
+
+Theorem mm_local_list_write_origin[local]:
+  !xs s ys t.
+  (!u i out v j. MEM i xs /\ f u i = (out,v) /\ MEM j out /\
+     j.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} ==>
+     j.inst_id = i.inst_id /\
+     i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}) /\
+  mm_flat_map_supply f s xs = (ys,t) ==>
+  !j. MEM j ys /\ j.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} ==>
+  ?i. MEM i xs /\ i.inst_id = j.inst_id /\
+      i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
+Proof
+  Induct >> simp[mm_flat_map_supply_def] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum (qspecl_then [`s1`,`outs`,`t`] mp_tac) >>
+  (impl_tac >- (conj_tac >- metis_tac[] >> simp[])) >>
+  disch_tac >> gen_tac >> disch_then (CONJUNCTS_THEN assume_tac) >>
+  Cases_on `MEM j out`
+  >- (qpat_x_assum `!u i out v j. _` (qspec_then `s` mp_tac) >>
+      disch_then (qspec_then `h` mp_tac) >> simp[] >>
+      disch_then drule >> metis_tac[])
+  >> `MEM j outs` by metis_tac[] >>
+  first_x_assum (qspec_then `j` mp_tac) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_prefix_phase_write_origin[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  mm_local_phase (dfg_build_function fn0) phase (bb,sk) = (cc,t) /\
+  MEM j cc.bb_instructions /\
+  j.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} ==>
+  ?i. MEM i bb.bb_instructions /\ i.inst_id = j.inst_id /\
+      i.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
+Proof
+  Cases_on `phase`
+  >- (simp[mm_local_phase_def, transform_block_memzero_supply_def,
+           AllCaseEqs()] >> strip_tac >> gvs[] >>
+      drule_at (Pat `mm_flat_map_supply _ _ _ = _`)
+        (SRULE [] mm_local_list_write_origin) >>
+      disch_then (qspec_then `j` mp_tac) >> simp[] >>
+      (impl_tac >- (rpt gen_tac >> strip_tac >>
+        drule_at (Pat `apply_memzero_inst_supply _ _ _ _ = _`)
+          (SRULE [] mm_local_zero_write_origin) >>
+        disch_then (qspec_then `j'` mp_tac) >> simp[] >>
+        (impl_tac >- metis_tac[SRULE [] mm_local_memzero_rep_write]) >> simp[])) >> simp[]) >>
+  simp[mm_local_phase_def, transform_block_mode_supply_def,
+       AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule_at (Pat `mm_flat_map_supply _ _ _ = _`)
+    (SRULE [] mm_local_list_write_origin) >>
+  disch_then (qspec_then `j` mp_tac) >> simp[] >>
+  (impl_tac >- (rpt gen_tac >> strip_tac >>
+    drule_at (Pat `apply_groups_inst_supply _ _ _ _ _ = _`)
+      (SRULE [] mm_local_mode_write_origin) >>
+    disch_then (qspec_then `j'` mp_tac) >> simp[] >>
+    (impl_tac >- metis_tac[SRULE [] mm_local_prefix_rep_write]) >> simp[])) >> simp[]
+QED
+
+Theorem mm_local_prefix_write_origin[local]:
+  !fn0 supply index k bb sk w.
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM w bb.bb_instructions /\
+  w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} ==>
+  ?u. MEM u (EL index fn0.fn_blocks).bb_instructions /\
+      u.inst_id = w.inst_id /\
+      u.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
+Proof
+  ntac 3 gen_tac >> Induct_on `k`
+  >- (simp[mm_local_prefix_zero] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> `k < 4` by decide_tac >>
+  Cases_on `mm_local_prefix fn0 supply index k` >>
+  rename1 `mm_local_prefix fn0 supply index k = (prev,sp)` >>
+  `mm_local_phase (dfg_build_function fn0)
+    (EL k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem])
+    (prev,sp) = (bb,sk)` by metis_tac[mm_local_prefix_suc] >>
+  `fn_inst_ids_distinct fn0 /\ MEM (EL index fn0.fn_blocks) fn0.fn_blocks` by
+    (gvs[wf_function_def] >> metis_tac[MEM_EL]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) prev.bb_instructions)` by
+    (irule mm_local_prefix_id_distinct >>
+     qexistsl [`fn0`, `index`, `k`, `sp`, `supply`] >> simp[] >>
+     conj_tac
+     >- metis_tac[mmWfProofsTheory.fn_inst_ids_distinct_block] >>
+     gvs[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+         irSupplyTheory.block_ir_inst_ids_def, EVERY_MEM, MEM_FLAT, MEM_MAP] >>
+     gen_tac >> strip_tac >>
+     qpat_x_assum `!id. _ ==> id < _` irule >>
+     qexists_tac `MAP (\i. i.inst_id) (EL index fn0.fn_blocks).bb_instructions` >>
+     conj_tac >- (qexists_tac `EL index fn0.fn_blocks` >> simp[]) >>
+     simp[MEM_MAP] >> metis_tac[]) >>
+  `k <= 4` by decide_tac >>
+  drule_all mm_local_prefix_phase_write_origin >> strip_tac >>
+  first_x_assum (qspecl_then [`prev`,`sp`,`i`] mp_tac) >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_prefix_write_not_def[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM w bb.bb_instructions /\
+  w.inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+  dfg_get_def (dfg_build_function fn0) v = SOME li ==>
+  li.inst_id <> w.inst_id
+Proof
+  strip_tac >> drule_all mm_local_prefix_write_origin >> strip_tac >>
+  drule dfgCorrectnessProofTheory.dfg_build_function_correct_proof >> strip_tac >>
+  `MEM u (fn_insts fn0)` by
+    (irule mmWfProofsTheory.fn_insts_mem_block >>
+     qexists_tac `EL index fn0.fn_blocks` >> simp[EL_MEM]) >>
+  `inst_wf u` by
+    (gvs[fn_inst_wf_def] >> metis_tac[EL_MEM]) >>
+  `u.inst_outputs = []` by gvs[inst_wf_def] >>
+  strip_tac >> `li = u` by
+    (irule mmWfProofsTheory.fn_inst_ids_distinct_inj >>
+     conj_tac >- simp[] >>
+     qexists_tac `fn0` >> gvs[wf_function_def]) >> gvs[]
+QED
+
 Theorem mm_local_cut_pending_ancestor[local]:
   bb.bb_instructions = pre ++ post /\
   ss = FOLDL (scan_inst dfg mode) empty_scan_state pre /\
