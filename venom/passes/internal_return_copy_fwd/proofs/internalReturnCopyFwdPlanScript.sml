@@ -19,7 +19,7 @@
 Theory internalReturnCopyFwdPlan
 Ancestors
   internalReturnCopyFwdDefs invokeCopyFwdCommonDefs dfgDefs passSharedDefs
-  venomWf venomInst list pred_set dfgAnalysisProps While
+  venomWf venomInst list pred_set dfgAnalysisProps While venomWfProps
 
 (* v is x, or the output of an ASSIGN of an alias of x *)
 Inductive ircf_alias:
@@ -118,11 +118,111 @@ Proof
   metis_tac[EL_MEM]
 QED
 
+Theorem ircf_alias_trans:
+  !fn y z. ircf_alias fn y z ==> !x.
+    ircf_alias fn x y ==> ircf_alias fn x z
+Proof
+  ho_match_mp_tac ircf_alias_ind >> rpt strip_tac >>
+  metis_tac[ircf_alias_assign]
+QED
+
+Theorem ircf_assign_root_alias:
+  !dfg visited v fn.
+    dfg = dfg_build_function fn /\ fn_inst_wf fn ==>
+    ircf_alias fn (icf_assign_root dfg visited v) v
+Proof
+  recInduct icf_assign_root_ind >> rpt strip_tac >> gvs[] >>
+  once_rewrite_tac[icf_assign_root_def] >>
+  Cases_on `v IN visited` >> simp[ircf_alias_refl] >>
+  Cases_on `dfg_get_def (dfg_build_function fn) v` >> simp[ircf_alias_refl] >>
+  rename1 `dfg_get_def (dfg_build_function fn) v = SOME inst` >>
+  Cases_on `inst.inst_opcode = ASSIGN` >> simp[ircf_alias_refl] >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `inst_wf inst` by
+    (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  `inst.inst_outputs = [v]` by
+    (gvs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  Cases_on `inst.inst_operands` >> simp[ircf_alias_refl] >>
+  Cases_on `h` >> simp[ircf_alias_refl] >>
+  Cases_on `t` >> simp[ircf_alias_refl] >>
+  irule ircf_alias_assign >> qexistsl_tac [`inst`, `s`] >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
+
 Definition ircf_alloca_of_def:
   ircf_alloca_of fn x sz <=>
     ?ai. MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
          ai.inst_outputs = [x] /\ ai.inst_operands = [Lit sz]
 End
+
+Theorem ircf_alloca_alias_root:
+  !fn a b sz. ssa_form fn /\ ircf_alloca_of fn b sz /\
+    ircf_alias fn a b ==> a = b
+Proof
+  rpt gen_tac >> simp[ircf_alloca_of_def] >> strip_tac >>
+  qpat_x_assum `ircf_alias _ _ _` mp_tac >>
+  once_rewrite_tac[ircf_alias_cases] >> strip_tac >> gvs[] >>
+  `inst = ai` by
+    (irule ssa_outputs_same_inst >>
+     gvs[fn_insts_def] >> metis_tac[MEM]) >> gvs[]
+QED
+
+Theorem ircf_alias_assign_inv:
+  !fn b sz inst out v.
+    ssa_form fn /\ ircf_alloca_of fn b sz /\
+    MEM inst (fn_insts fn) /\ inst.inst_opcode = ASSIGN /\
+    inst.inst_outputs = [out] /\ inst.inst_operands = [Var v] /\
+    ircf_alias fn b out ==> ircf_alias fn b v
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ircf_alias _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [ircf_alias_cases])
+  >- (gvs[ircf_alloca_of_def] >>
+      `inst = ai` by
+        (irule ssa_outputs_same_inst >>
+         gvs[fn_insts_def] >> metis_tac[MEM]) >> gvs[]) >>
+  `inst' = inst` by
+    (irule ssa_outputs_same_inst >>
+     gvs[fn_insts_def] >> metis_tac[MEM]) >> gvs[]
+QED
+
+Theorem ircf_alloca_aliases_separate:
+  !fn a v. ircf_alias fn a v ==>
+    !b sa sb. ssa_form fn /\ fn_inst_wf fn /\
+      ircf_alloca_of fn a sa /\ ircf_alloca_of fn b sb /\
+      ircf_alias fn b v ==> a = b
+Proof
+  ho_match_mp_tac ircf_alias_ind >> conj_tac
+  >- (rpt strip_tac >> metis_tac[ircf_alloca_alias_root]) >>
+  rpt strip_tac >>
+  `inst_wf inst` by
+    (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  `inst.inst_operands = [Var v]` by
+    (gvs[inst_wf_def] >> Cases_on `inst.inst_operands` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  `ircf_alias fn b v` by
+    (irule ircf_alias_assign_inv >> metis_tac[]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem ircf_alloca_of_dfg:
+  !fn root inst sz.
+    fn_inst_wf fn /\ dfg_get_def (dfg_build_function fn) root = SOME inst /\
+    icf_is_alloca inst /\ icf_matches_alloca_size inst sz ==>
+    ircf_alloca_of fn root sz
+Proof
+  rpt gen_tac >> simp[icf_is_alloca_def, icf_matches_alloca_size_def] >> strip_tac >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `inst_wf inst` by
+    (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  `inst.inst_outputs = [root]` by
+    (gvs[inst_wf_def] >> Cases_on `inst.inst_outputs` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  simp[ircf_alloca_of_def] >> qexists_tac `inst` >> simp[] >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[]
+QED
 
 (* The destination root, source root and size of a forwardable copy, as
    ircf_try_forward computes them. *)
