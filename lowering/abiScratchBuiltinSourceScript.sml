@@ -358,7 +358,8 @@ Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`, `site` |-> `st.cs_next_id`,
     `outsz` |-> `maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
-    abi_scratch_builtin_allocate_buffers) >> impl_tac >- asm_simp_tac bool_ss [] >>
+    abi_scratch_builtin_allocate_buffers) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qabbrev_tac `allocated = abi_builtin_allocate_state st.cs_next_id
     (maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) initial` >>
@@ -366,12 +367,17 @@ Proof
   `abi_decoder_budget first last 0 cap allocated` by
     (qunabbrev_tac `cap` >> irule abi_caller_allocation_budget_zero >>
      asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
-  `~(st.cs_next_id IN abi_decoder_ids first last)` by (simp[abi_decoder_ids_def] >> decide_tac) >>
+  `~(st.cs_next_id IN abi_decoder_ids first last)` by
+    (qpat_x_assum `st.cs_next_id < first` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[abi_decoder_ids_def]) >>
+  `FINITE (abi_decoder_ids first last)` by simp_tac (srw_ss()) [] >>
+  `32 <= maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)` by
+    (POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
   mp_tac (Q.INST [`initial` |-> `allocated:venom_state`, `ids` |-> `abi_decoder_ids first last`,
     `output_id` |-> `st.cs_next_id`, `d` |-> `p:num`, `b` |-> `0:num`,
     `output_size` |-> `maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
     abi_scratch_array_entry_buffers) >>
-  impl_tac >- (asm_simp_tac (srw_ss()) [] >> decide_tac) >> strip_tac >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
   qpat_assum `abi_footprint_disjoint sb source_cap
     [(p,maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4))]`
     (assume_tac o SIMP_RULE (srw_ss()) [abi_footprint_disjoint_def]) >>
