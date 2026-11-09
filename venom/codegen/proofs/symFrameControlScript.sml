@@ -70,6 +70,8 @@ Theorem sym_jmp_frame_sim_deep:
     MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
     label_flow_ok ctx /\
     asm_static_wf prog /\
+    (* SSA: planner-equivalent operands have the same kind. *)
+    codegen_ready_fn fn /\
     MEM (AsmLabel target) prog /\
     sym_frame_inv prog env ctx cp fn ret srest labs0 ps as ss ==>
     !vs'. step_inst fuel ctx inst vs = OK vs' ==>
@@ -127,6 +129,8 @@ Theorem sym_jnz_frame_sim_deep:
     MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
     label_flow_ok ctx /\
     asm_static_wf prog /\
+    (* SSA, and the shape facts that keep labels out of the condition. *)
+    codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
     MEM (AsmLabel if_nz) prog /\ MEM (AsmLabel if_z) prog /\
     sym_frame_inv prog env ctx cp fn ret srest labs0 ps as ss ==>
     !vs'. step_inst fuel ctx inst vs = OK vs' ==>
@@ -494,14 +498,14 @@ Theorem sym_revert_forward_frame_sim_deep:
       (LENGTH bb.bb_instructions) (i - LENGTH (get_params bb.bb_instructions))
       (DROP i bb.bb_instructions) ps = SOME (ops, ps_end) /\
     (!off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops) /\
-    (!name. MEM (AsmOp name) (execute_plan cp.cp_initial_fmp ops) /\
+    (!name. MEM (AsmOp name) (execute_plan cp.cp_initial_fmp ops) ==>
+            IS_SOME (evm_opcode_byte name)) /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) /\
     (* ----- The symbolic side ----- *)
     MEM fn ctx.ctx_functions /\ fn_shape_ok fn /\
     label_flow_ok ctx /\
     asm_static_wf prog /\
     sym_frame_inv prog env ctx cp fn ret srest labs0 ps as ss ==>
-            IS_SOME (evm_opcode_byte name)) /\
-    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
     !a vs'. exec_block fuel ctx bb vs = Abort a vs' ==>
       ?n as'.
         ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/

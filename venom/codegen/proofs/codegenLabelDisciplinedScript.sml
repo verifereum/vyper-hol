@@ -6,7 +6,8 @@
  * The premises are codegen_entry_asm_sim's, the label-flow facts of the
  * unit (no CODESIZE; code_end pointers only copied or read by CODECOPY;
  * their offsets below 2^255; a byte-only data segment; INVOKE targets in
- * the context), every data label of the program in env, and a run that
+ * the context), every data label of the program in env with its bytes
+ * from the code (asm_data_env_ok; asm_data_env gives one), and a run that
  * ends (Halt or Abort).  The symbolic run then ends with it
  * (symFnStep's sym_fn_sims_all), so it never misuses a label at any fuel
  * (sym_run_terminal_never_bad).
@@ -31,6 +32,7 @@ Theorem codegen_label_disciplined:
     label_flow_ok unit.cu_context /\ code_end_offset_ok Inv unit.cu_context /\
     sym_unit_static_ok unit /\
     (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+    asm_data_env_ok prog env vs.vs_code /\
     ((?vs'. run_context fuel unit.cu_context vs = Halt vs') \/
      (?a vs'. run_context fuel unit.cu_context vs = Abort a vs'))
     ==>
