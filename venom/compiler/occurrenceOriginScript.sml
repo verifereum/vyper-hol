@@ -397,3 +397,23 @@ Proof
   simp[venomExecSemanticsTheory.decode_invoke_def, AllCaseEqs(), MEM_MAP] >>
   rpt strip_tac >> Cases_on `y` >> gvs[op_prov_def] >> metis_tac[]
 QED
+
+Theorem occurrence_suffix_absent_current:
+  occurrence_suffix_absent id j H HP U ==> !v. FLOOKUP H v <> SOME id
+Proof
+  simp[occurrence_suffix_absent_def]
+QED
+
+Theorem occurrence_suffix_absent_params:
+  occurrence_suffix_absent id j H HP U ==> ~MEM (SOME id) HP
+Proof
+  simp[occurrence_suffix_absent_def]
+QED
+
+Theorem occurrence_suffix_absent_saved:
+  occurrence_suffix_absent id j H HP U /\ i < j ==>
+  (!v. FLOOKUP (EL i U).of_prov v <> SOME id) /\
+  ~MEM (SOME id) (EL i U).of_params
+Proof
+  simp[occurrence_suffix_absent_def]
+QED
