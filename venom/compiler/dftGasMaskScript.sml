@@ -206,6 +206,39 @@ Proof
   gvs[]
 QED
 
+(* Fixed-reference diagnostic interface.  Neither the focus mask nor its
+   upper sites may be chosen after pg, fg, tail, or u.  The second premise
+   is an obligation on a reached-state family, NOT an existence claim. *)
+Theorem stopped_focus_prefix_family[local]:
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
+  (!pg fg tail u.
+    LENGTH pg = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre) /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) focus_slots fg /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ fg ++ tail) = OK u ==>
+    (?extra. focus_sites = gas_events_step fuel C owner y u ++ extra) /\
+    (!v. step_inst fuel C y u <> OK v)) ==>
+  !pg fg tail.
+    LENGTH pg = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre) /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) focus_slots fg ==>
+    ?extra.
+      MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++
+        focus_sites =
+      gas_events_block fuel C owner
+        <|bb_label := owner; bb_instructions :=
+          REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ y::post)|>
+        (s with vs_gas_readings := pg ++ fg ++ tail) ++ extra
+Proof
+  rpt strip_tac >>
+  qspecl_then [`pre`, `s with vs_gas_readings := pg ++ fg ++ tail`,
+                `y::post`, `focus_sites`] mp_tac noninvoke_prefix_events_family >>
+  simp[] >> disch_then irule >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+       EL_APPEND_EQN] >>
+  Cases_on `step_inst fuel C y u` >> gvs[]
+QED
+
 Theorem noninvoke_block_padding_mask[local]:
   EVERY (\i. i.inst_opcode <> INVOKE)
     (DROP s.vs_inst_idx bb.bb_instructions) /\
