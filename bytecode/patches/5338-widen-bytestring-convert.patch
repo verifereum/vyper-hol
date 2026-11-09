@@ -1,3 +1,6 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5338
+Status: merged (d447429d495f79436af8035df467b6f496b8db50)
+
 diff --git a/vyper/codegen_venom/builtins/convert.py b/vyper/codegen_venom/builtins/convert.py
 index b9eebef3..e5847b87 100644
 --- a/vyper/codegen_venom/builtins/convert.py

@@ -1,3 +1,7 @@
+Upstream: https://github.com/vyperlang/vyper/pull/5332
+Status: merged (67606b378fe6878099e39ff41383bee416bf79bd)
+Scope: immutable stores; storage and transient stores are ported separately.
+
 diff --git a/vyper/codegen_venom/context.py b/vyper/codegen_venom/context.py
 index 064af344..f36c4998 100644
 --- a/vyper/codegen_venom/context.py
