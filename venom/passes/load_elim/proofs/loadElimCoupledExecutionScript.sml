@@ -4,8 +4,9 @@ Ancestors
   loadElimOccurrenceInvariants loadElimReachedLoad loadElimReachedStore
   loadElimPaddedCalls loadElimPaddedNoncall loadElimMemoryRel
   loadElimActionSelection loadElimLatestJoin loadElimOccurrence loadElimDefs
-  loadElimSentinelHelpers cfgAnalysisProps
-  venomState venomInst venomExecProps venomExecProofs stateFrame list
+  loadElimSentinelHelpers loadElimKeyShapeInvariant cfgAnalysisProps
+  instIdxIndep analysisSimProofsBase
+  venomState venomInst venomExecSemantics venomExecProps venomExecProofs stateFrame stateEquiv list
 
 (* Entry/edge coupling is le_padded_control.  Inside a block only the
    instruction index differs; captures refer to completed source events. *)
@@ -169,4 +170,272 @@ Proof
   `~isPREFIX "$le_phi_" v` by
     (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM, Excl "isPREFIX"]) >>
   fs[padded_exec_equiv_def, Excl "isPREFIX"]
+QED
+
+(* Full instruction boundary at equal control indices, including INVOKE. *)
+Theorem le_padded_source_step:
+  le_padded_control V s t /\
+  (!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t) /\
+  i.inst_opcode <> MEMTOP /\
+  EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions ==>
+  (?e. step_inst fuel C i s = Error e) \/
+  lift_result (le_padded_control V) (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst fuel C i s) (step_inst fuel C i t)
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = INVOKE`
+  >- (`!name ops. decode_invoke i = SOME (name,ops) ==>
+        eval_operands ops s = eval_operands ops t` by
+        (rpt strip_tac >> irule le_padded_operands_agreement >>
+         (reverse conj_tac >-
+           (qexists_tac `V` >> fs[le_padded_control_def])) >>
+         rpt strip_tac >> first_x_assum irule >>
+         gvs[decode_invoke_def, AllCaseEqs()] >> simp[]) >>
+      irule le_padded_invoke_step >> simp[]) >>
+  disj2_tac >> simp[step_inst_def] >>
+  irule le_padded_noncall_step >> simp[]
+QED
+
+Theorem le_coupled_unchanged_nonterm:
+  le_padded_control V (s with vs_inst_idx := 0) (t with vs_inst_idx := 0) /\
+  (!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t) /\
+  i.inst_opcode <> MEMTOP /\ ~is_terminator i.inst_opcode /\
+  EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions /\
+  step_inst fuel C i s = OK u ==>
+  ?v. step_inst fuel C i t = OK v /\ padded_exec_equiv V u v /\
+      u.vs_current_bb = v.vs_current_bb /\ u.vs_prev_bb = v.vs_prev_bb /\
+      u.vs_inst_idx = s.vs_inst_idx /\ v.vs_inst_idx = t.vs_inst_idx
+Proof
+  strip_tac >>
+  drule_all le_step_nonterm_rebase_OK >>
+  disch_then (qspec_then `0` strip_assume_tac) >>
+  `!v. MEM (Var v) i.inst_operands ==>
+    lookup_var v (s with vs_inst_idx := 0) =
+    lookup_var v (t with vs_inst_idx := 0)` by fs[lookup_var_def] >>
+  drule_all le_padded_source_step >>
+  disch_then (qspec_then `fuel` mp_tac) >> simp[lift_result_def] >>
+  Cases_on `step_inst fuel C i (t with vs_inst_idx := 0)` >>
+  simp[lift_result_def] >> strip_tac >>
+  drule_all le_step_nonterm_from_zero >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  fs[le_padded_control_def, padded_exec_equiv_def, lookup_var_def,
+     read_memory_def, execution_frame_def]
+QED
+
+Theorem le_coupled_unchanged_term:
+  le_padded_control V (s with vs_inst_idx := 0) (t with vs_inst_idx := 0) /\
+  (!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t) /\
+  i.inst_opcode <> MEMTOP /\ is_terminator i.inst_opcode /\
+  EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions /\
+  step_inst fuel C i s = OK u ==>
+  ?v. step_inst fuel C i t = OK v /\ le_padded_control V u v
+Proof
+  strip_tac >>
+  drule_all le_step_term_rebase_OK >>
+  disch_then (qspec_then `0` strip_assume_tac) >>
+  `!v. MEM (Var v) i.inst_operands ==>
+    lookup_var v (s with vs_inst_idx := 0) =
+    lookup_var v (t with vs_inst_idx := 0)` by fs[lookup_var_def] >>
+  drule_all le_padded_source_step >>
+  disch_then (qspec_then `fuel` mp_tac) >> simp[lift_result_def] >>
+  Cases_on `step_inst fuel C i (t with vs_inst_idx := 0)` >>
+  simp[lift_result_def] >> strip_tac >>
+  drule_all le_step_term_from_zero >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem le_coupled_changed_step:
+  le_round_ready C fn ctx s0 /\
+  le_occ_prefix C fn s0 h i s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  le_body_coupling m ctx (cfg_analyze fn) (load_analyze ctx fn)
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) h bb s t /\
+  inst_wf i /\ step_inst k C i s = OK s' /\
+  load_elim_inst ctx
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+    (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx) i <> i ==>
+  ?t'. step_inst k C
+    (load_elim_inst ctx
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx) i) t = OK t' /\
+    padded_exec_equiv {v | isPREFIX "$le_phi_" v} s' t' /\
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_prev_bb = s.vs_prev_bb /\ s'.vs_inst_idx = s.vs_inst_idx /\
+    t'.vs_current_bb = t.vs_current_bb /\
+    t'.vs_prev_bb = t.vs_prev_bb /\ t'.vs_inst_idx = t.vs_inst_idx
+Proof
+  strip_tac >>
+  drule (SRULE [] (Q.INST
+    [`transformed` |-> `load_elim_inst ctx actions ll inst`]
+    loadElimOriginHelpersTheory.load_elim_inst_changed)) >>
+  strip_tac
+  >- (rule_assum_tac (PURE_REWRITE_RULE [le_round_ready_def, le_body_coupling_def]) >>
+      RULE_L_ASSUM_TAC CONJUNCTS >>
+      irule le_reached_singleton_load_replacement >>
+      simp[Excl "isPREFIX"] >>
+      rpt (goal_assum (drule_at Any) >> simp[Excl "isPREFIX"]))
+  >- (irule le_coupled_captured_load >>
+      rpt (goal_assum (drule_at Any) >> simp[Excl "isPREFIX"])) >>
+  rule_assum_tac (PURE_REWRITE_RULE [le_round_ready_def, le_body_coupling_def]) >>
+  RULE_L_ASSUM_TAC CONJUNCTS >>
+  irule le_reached_store_replacement >>
+  simp[Excl "isPREFIX"] >>
+  rpt (goal_assum (drule_at Any) >> simp[Excl "isPREFIX"])
+QED
+
+Theorem le_coupled_source_nonterm:
+  le_round_ready C fn ctx s0 /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  le_body_coupling m ctx cfg result actions h bb s t /\
+  ~is_terminator i.inst_opcode /\ step_inst k C i s = OK u ==>
+  ?v. step_inst k C i t = OK v /\
+    padded_exec_equiv {v | isPREFIX "$le_phi_" v} u v /\
+    u.vs_current_bb = v.vs_current_bb /\ u.vs_prev_bb = v.vs_prev_bb /\
+    u.vs_inst_idx = s.vs_inst_idx /\ v.vs_inst_idx = t.vs_inst_idx
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM i bb.bb_instructions` by
+    (fs[get_instruction_def] >> metis_tac[MEM_EL]) >>
+  `le_padded_control {v | isPREFIX "$le_phi_" v}
+     (s with vs_inst_idx := 0) (t with vs_inst_idx := 0)` by
+    metis_tac[le_body_coupling_normalize] >>
+  rule_assum_tac (PURE_REWRITE_RULE [le_round_ready_def, le_body_coupling_def]) >>
+  RULE_L_ASSUM_TAC CONJUNCTS >>
+  `!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t` by
+    (rpt strip_tac >> irule le_source_operand_lookup_agreement >> metis_tac[]) >>
+  `i.inst_opcode <> MEMTOP` by
+    (qpat_x_assum `EVERY _ (fn_insts fn)` mp_tac >>
+     simp[EVERY_MEM] >> disch_then irule >>
+     simp[fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[]) >>
+  irule le_coupled_unchanged_nonterm >> simp[]
+QED
+
+Theorem le_coupled_nonterm_step:
+  le_round_ready C fn ctx s0 /\
+  le_occ_prefix C fn s0 h i s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  le_body_coupling m ctx (cfg_analyze fn) (load_analyze ctx fn)
+    (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn) h bb s t /\
+  inst_wf i /\ ~is_terminator i.inst_opcode /\ step_inst k C i s = OK u ==>
+  ?v. step_inst k C
+    (load_elim_inst ctx
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx) i) t = OK v /\
+    le_body_coupling m ctx (cfg_analyze fn) (load_analyze ctx fn)
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (h ++ [StepOcc bb s.vs_inst_idx k s u]) bb
+      (u with vs_inst_idx := SUC s.vs_inst_idx)
+      (v with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `?v. step_inst k C
+    (load_elim_inst ctx
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx) i) t = OK v /\
+    padded_exec_equiv {v | isPREFIX "$le_phi_" v} u v /\
+    u.vs_current_bb = v.vs_current_bb /\ u.vs_prev_bb = v.vs_prev_bb` by
+    (Cases_on `load_elim_inst ctx
+      (collect_phi_actions m ctx (cfg_analyze fn) (load_analyze ctx fn) fn)
+      (df_at NONE (load_analyze ctx fn) s.vs_current_bb s.vs_inst_idx) i = i`
+     >- (drule_all le_coupled_source_nonterm >> metis_tac[]) >>
+     drule_all le_coupled_changed_step >> strip_tac >>
+     fs[le_body_coupling_def, Excl "isPREFIX"] >> metis_tac[]) >>
+  goal_assum (drule_at Any) >>
+  irule le_body_coupling_increment >>
+  goal_assum (drule_at Any) >> simp[] >>
+  (reverse conj_tac >- (qexists_tac `h` >> first_assum ACCEPT_TAC)) >>
+  irule le_latest_captures_transformed_step >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `MEM i bb.bb_instructions` by
+    (fs[get_instruction_def] >> metis_tac[MEM_EL]) >>
+  rule_assum_tac (PURE_REWRITE_RULE [le_round_ready_def, le_body_coupling_def]) >>
+  RULE_L_ASSUM_TAC CONJUNCTS >>
+  rpt (goal_assum (drule_at Any) >> simp[Excl "isPREFIX"])
+QED
+
+Theorem le_configured_terminator_unchanged:
+  le_configured_context ctx /\ is_terminator i.inst_opcode ==>
+  load_elim_inst ctx actions ll i = i
+Proof
+  strip_tac >> irule loadElimOriginHelpersTheory.load_elim_inst_unchanged >>
+  gvs[le_configured_context_def, memory_config_def, storage_config_def,
+      transient_config_def, dload_config_def, calldataload_config_def] >>
+  Cases_on `i.inst_opcode` >> fs[is_terminator_def]
+QED
+
+Theorem le_step_result_normalize_idx:
+  exec_result_map (\u. u with vs_inst_idx := 0)
+    (step_inst fuel C i (s with vs_inst_idx := n)) =
+  exec_result_map (\u. u with vs_inst_idx := 0) (step_inst fuel C i s)
+Proof
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (simp[invoke_step_inst_idx_OK_only] >>
+      Cases_on `step_inst fuel C i s` >> simp[exec_result_map_def]) >>
+  Cases_on `is_terminator i.inst_opcode`
+  >- (simp[step_inst_def, terminator_step_inst_base_idx_norm0]) >>
+  simp[step_inst_idx_indep] >>
+  Cases_on `step_inst fuel C i s` >> simp[exec_result_map_def]
+QED
+
+Theorem le_padded_lift_normalize_idx:
+  lift_result
+    (\s t. le_padded_control V (s with vs_inst_idx := 0) (t with vs_inst_idx := 0))
+    (padded_exec_equiv V) (padded_exec_equiv V)
+    (exec_result_map (\s. s with vs_inst_idx := 0) r)
+    (exec_result_map (\s. s with vs_inst_idx := 0) q) =
+  lift_result
+    (\s t. le_padded_control V (s with vs_inst_idx := 0) (t with vs_inst_idx := 0))
+    (padded_exec_equiv V) (padded_exec_equiv V) r q
+Proof
+  Cases_on `r` >> Cases_on `q` >>
+  simp[lift_result_def, exec_result_map_def, padded_exec_equiv_def,
+       lookup_var_def, read_memory_def, execution_frame_def]
+QED
+
+Theorem le_step_error_normalize_idx:
+  (step_inst fuel C i (s with vs_inst_idx := n) = Error e) =
+  (step_inst fuel C i s = Error e)
+Proof
+  mp_tac le_step_result_normalize_idx >>
+  Cases_on `step_inst fuel C i (s with vs_inst_idx := n)` >>
+  Cases_on `step_inst fuel C i s` >> simp[exec_result_map_def]
+QED
+
+Theorem le_padded_source_step_normalized:
+  le_padded_control V (s with vs_inst_idx := 0) (t with vs_inst_idx := 0) /\
+  (!v. MEM (Var v) i.inst_operands ==> lookup_var v s = lookup_var v t) /\
+  i.inst_opcode <> MEMTOP /\
+  EVERY (\f. EVERY (\j. j.inst_opcode <> MEMTOP) (fn_insts f)) C.ctx_functions ==>
+  (?e. step_inst fuel C i s = Error e) \/
+  lift_result
+    (\u v. le_padded_control V (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst fuel C i s) (step_inst fuel C i t)
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) i.inst_operands ==>
+    lookup_var v (s with vs_inst_idx := 0) =
+    lookup_var v (t with vs_inst_idx := 0)` by fs[lookup_var_def] >>
+  `lift_result
+    (\u v. le_padded_control V (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst fuel C i (s with vs_inst_idx := 0))
+    (step_inst fuel C i (t with vs_inst_idx := 0)) =
+   lift_result
+    (\u v. le_padded_control V (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (padded_exec_equiv V) (padded_exec_equiv V)
+    (step_inst fuel C i s) (step_inst fuel C i t)` by
+    (once_rewrite_tac[GSYM le_padded_lift_normalize_idx] >>
+     pure_rewrite_tac[le_step_result_normalize_idx] >>
+     simp[le_padded_lift_normalize_idx]) >>
+  drule_all le_padded_source_step >>
+  disch_then (qspec_then `fuel` mp_tac) >>
+  simp[le_step_error_normalize_idx] >> strip_tac >- simp[] >>
+  disj2_tac >> first_x_assum (SUBST1_TAC o GSYM) >>
+  Cases_on `step_inst fuel C i (s with vs_inst_idx := 0)` >>
+  Cases_on `step_inst fuel C i (t with vs_inst_idx := 0)` >>
+  fs[lift_result_def] >> metis_tac[le_padded_control_idx]
 QED
