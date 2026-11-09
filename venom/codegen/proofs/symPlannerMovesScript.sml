@@ -394,3 +394,206 @@ Proof
   strip_tac >> drule_all scratch_swap_restore_indices >>
   metis_tac[sym_restore_scratch_swap_bounded]
 QED
+
+Theorem sym_spill_scratch_prefix:
+  LIST_REL (op_kind_ok fn ret) items vals /\
+  LENGTH offsets = LENGTH items /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+  EVERY (\off. off < dimword(:256)) offsets /\ ss.sym_stack = vals ++ stk /\
+  asm_block_at p ss.sym_base.as_pc
+    (execute_plan initial_fmp (MAP SOSpill offsets ++ loads)) ==>
+  ?mid. sym_steps p env (LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))) ss = SymOK mid /\
+    mid.sym_stack = stk /\ scratch_kinds_ok fn ret items offsets mid.sym_mem_labels /\
+    scratch_frame offsets ss.sym_mem_labels mid.sym_mem_labels /\
+    mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (MAP SOSpill offsets)) /\
+    asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp loads)
+Proof
+  rw[execute_plan_append, asm_block_at_append] >>
+  drule_all_then (qspec_then `env` strip_assume_tac) sym_spill_scratch_list >>
+  metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem sym_scratch_swap_continue[local]:
+  sym_steps p env (LENGTH (execute_plan initial_fmp (MAP SOSpill offsets))) ss = SymOK mid /\
+  mid.sym_stack = stk /\
+  scratch_kinds_ok fn ret (REVERSE items) offsets mid.sym_mem_labels /\
+  scratch_frame offsets ss.sym_mem_labels mid.sym_mem_labels /\
+  mid.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (MAP SOSpill offsets)) /\
+  LENGTH items = dist+1 /\ 0 < dist /\ LENGTH offsets = LENGTH items /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  asm_block_at p mid.sym_base.as_pc (execute_plan initial_fmp
+    (MAP (\k. SORestore (EL k offsets)) (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])))) ==>
+  ?last top. sym_steps p env (LENGTH (execute_plan initial_fmp
+    (MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))) top /\
+    scratch_kinds_ok fn ret (REVERSE items) offsets last.sym_mem_labels /\
+    scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+      (MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+        (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))
+Proof
+  strip_tac >> drule_all_then (qspec_then `env` strip_assume_tac) sym_restore_scratch_swap >>
+  drule_all_then MATCH_ACCEPT_TAC scratch_roundtrip_finish
+QED
+
+Theorem sym_scratch_swap_roundtrip:
+  LIST_REL (op_kind_ok fn ret) (REVERSE items) vals /\
+  LENGTH items = dist+1 /\ 0 < dist /\ LENGTH offsets = LENGTH items /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
+  EVERY (\off. off < dimword(:256)) offsets /\ ss.sym_stack = vals ++ stk /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp
+    (MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])))) ==>
+  ?last top. sym_steps p env (LENGTH (execute_plan initial_fmp
+    (MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))) ss = SymOK last /\
+    last.sym_stack = top ++ stk /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))) top /\
+    scratch_kinds_ok fn ret (REVERSE items) offsets last.sym_mem_labels /\
+    scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp
+      (MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+        (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))))
+Proof
+  strip_tac >>
+  drule_all_then (qspec_then `env` strip_assume_tac)
+    (PURE_REWRITE_RULE [LENGTH_REVERSE]
+      (Q.INST [`items` |-> `REVERSE items`] sym_spill_scratch_prefix)) >>
+  drule_all_then MATCH_ACCEPT_TAC sym_scratch_swap_continue
+QED
+
+Theorem LIST_REL_prefix_split[local]:
+  !xs ys zs. LIST_REL R (xs ++ ys) zs ==>
+  ?front back. zs = front ++ back /\ LIST_REL R xs front /\ LIST_REL R ys back
+Proof
+  Induct >> simp[LIST_REL_CONS1] >> metis_tac[APPEND]
+QED
+
+Theorem sym_kinds_ok_scratch_split:
+  sym_kinds_ok cplan fn ret srest ps ss /\ n <= LENGTH ps.ps_stack ==>
+  ?vals rest. ss.sym_stack = vals ++ (rest ++ srest) /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (top_n n ps.ps_stack)) vals /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE (TAKE (LENGTH ps.ps_stack - n) ps.ps_stack)) rest
+Proof
+  rw[codegenSymRelTheory.sym_kinds_ok_def] >>
+  drule top_n_suffix >> disch_then (fn th =>
+    qpat_x_assum `LIST_REL _ _ _`
+      (mp_tac o PURE_REWRITE_RULE [REVERSE_APPEND] o ONCE_REWRITE_RULE [GSYM th])) >>
+  metis_tac[LIST_REL_prefix_split, APPEND_ASSOC]
+QED
+
+Theorem scratch_swap_allocation_facts:
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
+  al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\ al.sa_next_offset <= r.sr_spill_end ==>
+  LENGTH offsets = LENGTH items /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets+32 <= EL j offsets \/ EL j offsets+32 <= EL i offsets)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac spill_alloc_n_temporary_layout >>
+  gvs[EVERY_EL] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem sym_scratch_swap_finish[local]:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  MEM r cplan.cp_regions /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+  out.ps_spilled = ps.ps_spilled /\ out.ps_stack = bottom ++ restored /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE bottom) rest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE restored) top /\
+  last.sym_stack = top ++ (rest ++ srest) ==>
+  sym_kinds_ok cplan fn ret srest out last /\
+  (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+    FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> conj_tac
+  >- (irule sym_kinds_ok_scratch_change >>
+      simp[REVERSE_APPEND, APPEND_ASSOC] >>
+      metis_tac[LIST_REL_APPEND_suff]) >>
+  metis_tac[scratch_frame_region]
+QED
+
+
+Theorem sym_scratch_swap_complete[local]:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  MEM r cplan.cp_regions /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+  out.ps_spilled = ps.ps_spilled /\ out.ps_stack = bottom ++ restored /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE bottom) rest /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE restored) top /\
+  last.sym_stack = top ++ (rest ++ srest) /\
+  sym_steps p env n ss = SymOK last /\ last.sym_base.as_pc = ss.sym_base.as_pc + n ==>
+  ?last. sym_steps p env n ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + n /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_scratch_swap_finish >>
+  metis_tac[]
+QED
+
+Theorem sym_scratch_swap_sim:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE items) vals /\
+  LIST_REL (op_kind_ok fn ret) (REVERSE bottom) rest /\
+  ss.sym_stack = vals ++ (rest ++ srest) /\
+  LENGTH items = dist+1 /\ 0 < dist /\ LENGTH offsets = LENGTH items /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets+32 <= EL j offsets \/ EL j offsets+32 <= EL i offsets) /\
+  EVERY (\off. off < dimword(:256)) offsets /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  MEM r cplan.cp_regions /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+  out.ps_spilled = ps.ps_spilled /\
+  out.ps_stack = bottom ++ MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]) /\
+  ops = MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+    (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])) /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >>
+  qpat_assum `ops = _` (fn th =>
+    drule_all_then (qspec_then `env` strip_assume_tac)
+      (PURE_REWRITE_RULE [GSYM th] sym_scratch_swap_roundtrip)) >>
+  drule_all_then MATCH_ACCEPT_TAC sym_scratch_swap_complete
+QED
+
+Theorem sym_do_swap_big_shape:
+  16 < dist /\ dist < LENGTH ps.ps_stack /\ do_swap dist ps = (ops,out) /\
+  items = top_n (dist+1) ps.ps_stack /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
+  al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets ==>
+  LENGTH items = dist+1 /\ 0 < dist /\
+  out.ps_spilled = ps.ps_spilled /\ out.ps_alloc = al /\
+  out.ps_stack = TAKE (LENGTH ps.ps_stack - (dist+1)) ps.ps_stack ++
+    MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]) /\
+  ops = MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+    (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))
+Proof
+  strip_tac >> drule_all (SRULE [arithmeticTheory.GREATER_DEF] do_swap_big_decompose) >>
+  gvs[top_n_def, MAP_MAP_o, combinTheory.o_DEF]
+QED

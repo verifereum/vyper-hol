@@ -2219,7 +2219,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem top_n_suffix[local]:
+Theorem top_n_suffix:
   !n stk. n <= LENGTH stk ==>
     TAKE (LENGTH stk - n) stk ++ top_n n stk = stk
 Proof

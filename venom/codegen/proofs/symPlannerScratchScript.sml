@@ -763,7 +763,7 @@ Proof
     (Q.SPECL [`[0;1;0]`, `ss`, `stk`] sym_restore_scratch_list)) >> simp[]
 QED
 
-Theorem scratch_roundtrip_finish[local]:
+Theorem scratch_roundtrip_finish:
   sym_steps p env (LENGTH (execute_plan f saves)) ss = SymOK mid /\
   sym_steps p env (LENGTH (execute_plan f loads)) mid = SymOK last /\
   last.sym_stack = top ++ stk /\ LIST_REL (op_kind_ok fn ret) items top /\
