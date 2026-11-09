@@ -1037,6 +1037,66 @@ Proof
   drule_all sym_body_jump_continue >> simp[]
 QED
 
+Theorem sym_body_nonterm_prefix:
+  gen_fn_sim_at fuel /\ sym_fn_sim_at fuel /\
+  body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+    growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+    block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
+    ra pc_ret rest mem0 /\
+  k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
+  ~is_terminator inst.inst_opcode /\ (!j. ~revert_forward_pair bb k j) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  (inst.inst_opcode = LOG ==>
+    ?tc args. inst.inst_operands = Lit tc :: args /\ w2n tc <= 4) /\
+  step_inst fuel ctx inst vs = OK vs1 /\
+  label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
+  sym_unit_static_ok unit /\ asm_static_wf prog /\
+  (!l. MEM (AsmDataHeader l) prog ==> l IN FDOM env) /\
+  sym_frame_inv prog env ctx cpl fn ret srest labs0 ps as ss ==>
+  ?prefix' rest' ps' vs' as1 ss1 n.
+    body_inv rpolicy unit cpl prog ctx lo o2pc i fn r liveness dfg cfg ch
+      growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
+      block_ops ps_dfs_after ps_after prefix' rest' (SUC k) ps' pc0 vs' as1 Inv
+      ra pc_ret rest mem0 /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1 /\
+    asm_steps lo o2pc prog n as = AsmOK as1 /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    block_rest fuel ctx fn bb vs = block_rest fuel ctx fn bb vs'
+Proof
+  strip_tac >>
+  `?ops ps' rest' n as1 ss1.
+    generate_inst_plan liveness dfg cfg fn inst
+      (live_vars_at liveness bb.bb_label (k + 1)) (bb_is_halting bb)
+      (k + 1 < LENGTH bb.bb_instructions /\
+       is_terminator (EL (k + 1) bb.bb_instructions).inst_opcode)
+      bb.bb_label ps = SOME (ops, ps') /\
+    generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+      (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+      (LENGTH bb.bb_instructions)
+      (SUC k - LENGTH (get_params bb.bb_instructions))
+      (DROP (SUC k - LENGTH (get_params bb.bb_instructions)) (non_param_insts bb))
+      ps' = SOME (rest', ps_after) /\
+    rest_ops = ops ++ rest' /\
+    asm_steps lo o2pc prog n as = AsmOK as1 /\
+    fn_frame_inv ctx cpl lo fn ra rest mem0 ps' vs1 as1 /\
+    as1.as_pc = as.as_pc + LENGTH (execute_plan cpl.cp_initial_fmp ops) /\
+    sym_steps prog env n ss = SymOK ss1 /\
+    sym_frame_inv prog env ctx cpl fn ret srest labs0 ps' as1 ss1` by
+    (Cases_on `inst.inst_opcode = INVOKE`
+     >- (drule_all sym_body_invoke_step >> strip_tac >>
+         first_x_assum drule >> strip_tac >> metis_tac[]) >>
+     Cases_on `inst.inst_opcode = GAS`
+     >- (drule_all sym_body_gas_ok >> metis_tac[]) >>
+     drule_all sym_body_ordinary_ok >> metis_tac[]) >>
+  drule_all fnBlockBodyClassesTheory.body_inv_advance >> strip_tac >>
+  `vs.vs_inst_idx = k` by gvs[body_inv_def] >>
+  drule_all body_inv_inst >> strip_tac >>
+  `get_instruction bb vs.vs_inst_idx = SOME inst` by metis_tac[] >>
+  drule_all block_rest_advance >> strip_tac >>
+  qexistsl_tac [`prefix_ops ++ ops`, `rest'`, `ps'`,
+    `vs1 with vs_inst_idx := SUC k`, `as1`, `ss1`, `n`] >> simp[]
+QED
+
 (* body_inv bundles block_body_frame_sim's premises. *)
 Theorem sym_block_body_frame_sim:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
