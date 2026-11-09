@@ -63,7 +63,17 @@ Theorem concat_alloc_zero_counted:
     (!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==>
       ptr_covers G1 tn1 x t k) /\
     stmt_state_rel ctx fn ce cx es t /\
-    ghost_inv d ce cx es G1 tn1 t /\ ghost_kept ce es sa G tn s G1 tn1
+    ghost_inv d ce cx es G1 tn1 t /\ ghost_kept ce es sa G tn s G1 tn1 /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n a,n) /\
+    w2n a+n < dimword (:256) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+      regions_disjoint (w2n a) n b k) /\
+    (!name b k. local_region ce es.scopes t name b k ==>
+      regions_disjoint (w2n a) n b k) /\
+    (!name b k. local_region ce es.scopes s name b k <=>
+      local_region ce es.scopes t name b k)
 Proof
   strip_tac >> drule_all bodyPtrBytestringBuiltinsBufferTheory.compile_alloc_buffer_counted >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
@@ -110,6 +120,21 @@ Resume concat_alloc_zero_counted[finish]:
   `!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==>
     ptr_covers G1 tn' x t k` by
     (rpt strip_tac >> gvs[ptr_covers_def]) >>
+  `FLOOKUP t.vs_allocas sa.cs_next_id = SOME (a,n) /\
+   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+     FLOOKUP t.vs_allocas aid = SOME entry) /\
+   (!aid b k. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,k) ==>
+     regions_disjoint a n b k) /\
+   (!name b k. local_region ce es.scopes t name b k ==> regions_disjoint a n b k)`
+    by suspend "sites" >>
+  `!name b k. local_region ce es.scopes s name b k <=>
+     local_region ce es.scopes t name b k` by
+    (simp[local_region_def] >> rpt gen_tac >>
+     `!p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+        lookup_var p t = lookup_var p s` by
+       (rpt strip_tac >> `not_fresh_at sa p` by
+          (fs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[]) >>
+     metis_tac[]) >>
   qexistsl_tac [`out`,`G1`,`tn'`,`t`,`n2w a`] >> simp[] >>
   `!ss z k. mload z (ss with vs_inst_idx := k) = mload z ss` by
     simp[mload_def] >>
@@ -124,7 +149,9 @@ Resume concat_alloc_zero_counted[ghost]:
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn)` by
     (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
   `ghost_inv d ce cx es G1 tn1 u` by
-    metis_tac[annassign_alloca_ghost_inv_ptr] >>
+    (qpat_assum `G1 = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `tn1 = _` (fn th => rewrite_tac[th]) >>
+     irule annassign_alloca_ghost_inv_ptr >> simp[] >> metis_tac[]) >>
   `ghost_kept ce es sa G tn s G1 tn1` by
     metis_tac[annassign_alloca_ghost_kept_ptr] >>
   suspend "store_frame"
@@ -139,6 +166,11 @@ Resume concat_alloc_zero_counted[store_frame]:
        exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
   conj_tac >- suspend "state" >>
   conj_tac >- suspend "inv" >>
+  reverse conj_tac >-
+    (conj_tac >- metis_tac[] >>
+     simp[local_region_def, lookup_var_def, mstore_def] >>
+     qpat_x_assum `!name b len. local_region ce es.scopes u name b len ==> _`
+       mp_tac >> simp[local_region_def, lookup_var_def]) >>
   irule hash_ghost_kept_clean_tail >> qexistsl_tac [`G1`,`tn1`] >>
   simp[op_taint_def, SUBSET_DEF] >> gvs[]
 QED
@@ -160,7 +192,22 @@ Resume concat_alloc_zero_counted[inv]:
     simp[mk_inst_def] >>
   `(mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]).inst_id = sa.cs_next_id` by
     simp[mk_inst_def] >>
-  metis_tac[annassign_alloca_mstore_ghost_ptr]
+  qpat_assum `w2n (n2w a : 256 word) = a`
+    (fn th => pure_once_rewrite_tac[GSYM th]) >>
+  irule annassign_alloca_mstore_ghost_ptr >>
+  reverse conj_tac >- simp[] >>
+  qexistsl_tac [`ctx`,`fn`,
+    `mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]`,`out`,`n`] >> simp[]
+QED
+
+Resume concat_alloc_zero_counted[sites]:
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn)` by
+    (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
+  drule_all concat_alloc_raw_frame >> strip_tac >>
+  `!name b k. local_region ce es.scopes t name b k ==>
+    local_region ce es.scopes u name b k` by
+    (simp[local_region_def, Abbr `uh`, lookup_var_def]) >>
+  gvs[Abbr `uh`, mstore_def, lookup_var_def] >> metis_tac[]
 QED
 
 Finalise concat_alloc_zero_counted
@@ -205,7 +252,9 @@ Resume concat_slice_out_buf_counted_frame[frame]:
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [r]) (fn_insts fn)` by
     (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
   `ghost_inv d ce cx es G1 tn1 u` by
-    metis_tac[annassign_alloca_ghost_inv_ptr] >>
+    (qpat_assum `G1 = _` (fn th => rewrite_tac[th]) >>
+     qpat_assum `tn1 = _` (fn th => rewrite_tac[th]) >>
+     irule annassign_alloca_ghost_inv_ptr >> simp[] >> metis_tac[]) >>
   `ghost_kept ce es sa G tn s G1 tn1` by
     metis_tac[annassign_alloca_ghost_kept_ptr] >>
   `!x. not_fresh_at sa x ==> x <> p` by suspend "fresh" >>
