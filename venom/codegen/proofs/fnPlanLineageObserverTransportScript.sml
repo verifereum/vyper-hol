@@ -3249,3 +3249,35 @@ Proof
   gvs[generate_inst_plan_def, is_pre_codegen_opcode_def] >>
   metis_tac[phi_plan_spilled_unchanged]
 QED
+
+
+Theorem native_ordinary_interval_absent:
+  !lv dfg cfg fn lbl halt n len xs incoming k qs.
+    fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming k qs ==>
+    !v. ~MEM (Var v) incoming.ps_stack /\ Var v NOTIN FDOM incoming.ps_spilled /\
+    (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\
+      LENGTH (compute_operands (EL j xs)) <= 16 /\
+      (((EL j xs).inst_opcode = PHI \/ (EL j xs).inst_opcode = OFFSET) ==>
+        (EL j xs).inst_outputs <> []) /\ ~MEM v (EL j xs).inst_outputs) /\
+    (!j before w. j < k /\
+      fnPlanLineageEntryProduction$native_inst_prefix lv dfg cfg fn lbl halt n len xs incoming j before /\
+      MEM (Var w) (compute_operands (EL j xs)) ==>
+      MEM (Var w) before.ps_stack \/ Var w IN FDOM before.ps_spilled) ==>
+    ~MEM (Var v) qs.ps_stack /\ Var v NOTIN FDOM qs.ps_spilled
+Proof
+  ho_match_mp_tac fnPlanLineageEntryProductionTheory.native_inst_prefix_strongind >>
+  conj_tac >- simp[] >>
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  rename1 `generate_inst_plan _ _ _ _ _ _ _ _ _ before = SOME (ops,after)` >>
+  `~MEM (Var v) before.ps_stack /\ Var v NOTIN FDOM before.ps_spilled` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     `j < SUC k` by decide_tac >> metis_tac[]) >>
+  `k < LENGTH xs /\ inst = EL k xs` by
+    (conj_asm1_tac
+     >- (qpat_assum `DROP k _ = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >>
+         simp[] >> decide_tac) >> metis_tac[HD_DROP, HD]) >>
+  drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    fnPlanLineageNativeOriginsTheory.native_inst_variable_origins >>
+  `k < SUC k` by decide_tac >>
+  metis_tac[]
+QED
