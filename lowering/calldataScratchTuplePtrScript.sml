@@ -122,7 +122,7 @@ Theorem calldata_member_input_at_endpoint[local]:
       (SUM (MAP abi_member_head_size pre))) (d + vo) first last b cap prepared
 Proof
   strip_tac >>
-  `sb + LENGTH bs < dimword (:256)` by fs[abi_scratch_decoder_ranges_def] >>
+  `sb + LENGTH bs < dimword (:256)` by fs[abi_scratch_decoder_ranges_def, cj 1 venomStateTheory.eval_operand_def] >>
   drule_all (SRULE [LET_THM] abi_valid_member_window) >> strip_tac >>
   drule_all abi_valid_decoded_metadata >> strip_tac >>
   `abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
@@ -134,7 +134,7 @@ Proof
      qpat_x_assum `abi_decoder_operand_live _ src` mp_tac >>
      qpat_x_assum `abi_decoder_operand_live _ dst` mp_tac >>
      rpt (pop_assum kall_tac) >>
-     simp[abi_scratch_decoder_ranges_def, abi_decoder_address_frame_def] >>
+     simp[abi_scratch_decoder_ranges_def, abi_decoder_address_frame_def, cj 1 venomStateTheory.eval_operand_def] >>
      rpt strip_tac >> gvs[abi_decoder_child_scratch_def] >> metis_tac[]) >>
   `abi_scratch_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) childsrc childdst
      0 (sb + abi_decode_member_offset (vyper_to_abi_type env ty) bs
@@ -148,7 +148,7 @@ Proof
   `abi_decode_source CALLDATALOAD prepared = abi_decode_source CALLDATALOAD initial` by
     (drule abi_decoder_address_frame_source >> simp[]) >>
   drule_all abi_decoder_valid_member_readable >> strip_tac >>
-  simp[abi_scratch_decoder_input_def, abi_decoder_operand_live_def] >>
+  simp[abi_scratch_decoder_input_def, abi_decoder_operand_live_def, cj 1 venomStateTheory.eval_operand_def] >>
   Cases_on `is_dynamic (vyper_to_abi_type env ty)` >>
   fs[abi_member_head_size_def]
 QED
@@ -159,7 +159,7 @@ Theorem calldata_member_input_pc[local]:
   abi_scratch_decoder_input ce env sf ty tv bs v st src dst opc (Lit 0w) hi 0 sb d first last b cap s
 Proof
   simp[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def,
-    abi_decoder_child_scratch_def, abi_decode_source_def, eval_op_inst_idx]
+    abi_decoder_child_scratch_def, abi_decode_source_def, eval_op_inst_idx, cj 1 venomStateTheory.eval_operand_def]
 QED
 
 Theorem calldata_member_address_frame_pc[local]:
@@ -759,7 +759,7 @@ Proof
      qpat_assum `val_footprint tv v <= _` mp_tac >>
      qpat_assum `type_memory_size tv = _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES, abi_footprint_disjoint_def] >>
+     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES, abi_footprint_disjoint_def, cj 1 venomStateTheory.eval_operand_def] >>
      rpt strip_tac >> first_x_assum drule >> decide_tac) >>
   `!mem. mem_agree_outside u'.t_mem actual.vs_memory mem ==>
      val_in_memory tv v (d + SUM (MAP (type_memory_bytes ce) pretys)) mem` by

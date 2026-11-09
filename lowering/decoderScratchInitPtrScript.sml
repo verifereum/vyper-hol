@@ -160,7 +160,7 @@ Proof
     0 source_base d first last b cap actual` by
     (irule (calldata_pos abi_scratch_decoder_input_mono) >> qexists_tac `st` >> fs[inst_extends_def]) >>
   `mem_bytes_at source_base (LENGTH bs) (abi_decode_source CALLDATALOAD actual) = bs` by
-    fs[abi_scratch_decoder_input_def] >>
+    fs[abi_scratch_decoder_input_def, cj 1 venomStateTheory.eval_operand_def] >>
   `abi_decoder_valid_array_memory CALLDATALOAD bs tv vs source_base d 0 actual` by
     (irule abi_decoder_valid_array_memory_init >>
      fs[abi_decoder_array_init_post_def]) >>
@@ -175,7 +175,7 @@ Proof
   gvs[abi_decoder_array_init_post_def, abi_scratch_decoder_input_def,
     abi_scratch_decoder_ranges_def, abi_decoder_valid_array_memory_def,
     abi_decoder_child_scratch_def, abi_decode_source_def, mload_def,
-    lookup_var_def, ptr_covers_def, SUBSET_DEF, DISJOINT_DEF, EXTENSION] >>
+    lookup_var_def, ptr_covers_def, SUBSET_DEF, DISJOINT_DEF, EXTENSION, cj 1 venomStateTheory.eval_operand_def] >>
   drule abi_decoder_budget_word_bound >> decide_tac
 QED
 

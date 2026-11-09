@@ -190,7 +190,7 @@ Proof
    eval_operand dst (jump_to lbl s) = eval_operand dst s /\
    eval_operand hi_op (jump_to lbl s) = eval_operand hi_op s` by
     metis_tac[decoder_live_operand_jump] >>
-  fs[abi_scratch_decoder_ranges_def, decoder_child_scratch_jump, Excl "enc_def"] >>
+  fs[abi_scratch_decoder_ranges_def, decoder_child_scratch_jump, Excl "enc_def", cj 1 venomStateTheory.eval_operand_def] >>
   disj2_tac >> qexists_tac `h` >> simp[]
 QED
 
@@ -200,7 +200,7 @@ Theorem abi_scratch_decoder_loop_data_jump:
   abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc (Lit 0w) hi_op ip src dst
     0 sb d slot first last b cap next (jump_to lbl s)
 Proof
-  simp_tac bool_ss [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
+  simp_tac bool_ss [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES, cj 1 venomStateTheory.eval_operand_def] >> strip_tac >>
   asm_rewrite_tac[] >> conj_tac
   >- (irule abi_scratch_decoder_ranges_jump >> goal_assum (drule_at Any) >>
       qexists_tac `next` >> asm_rewrite_tac[]) >>

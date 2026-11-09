@@ -132,7 +132,7 @@ Resume calldata_scratch_array_constructor_entry_ptr[entry_frames]:
   conj_tac >- fs[ptr_covers_def, decoder_jump_fields, lookup_var_def] >>
   conj_tac >- fs[ptr_covers_def, decoder_jump_fields, lookup_var_def] >>
   `abi_decoder_operand_live start.cs_next_var src` by
-    fs[abiScratchDecoderContractTheory.abi_scratch_decoder_input_def] >>
+    fs[abiScratchDecoderContractTheory.abi_scratch_decoder_input_def, cj 1 venomStateTheory.eval_operand_def] >>
   `op_taint u src = {} /\ op_prov H src = NONE` by
     (qpat_assum `abi_decoder_operand_live start.cs_next_var src` mp_tac >>
      qpat_assum `!x. not_fresh_at start x ==> _` mp_tac >>

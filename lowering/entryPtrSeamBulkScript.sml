@@ -87,13 +87,13 @@ Theorem calldata_scratch_array_copy_decoder_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `abi_decoder_coherent ce env sf ty tv` by
-    fs[abi_scratch_decoder_input_def, abi_decoder_coherent_array_iff] >>
+    fs[abi_scratch_decoder_input_def, abi_decoder_coherent_array_iff, cj 1 venomStateTheory.eval_operand_def] >>
   drule abi_decoder_coherent_header >> strip_tac >>
   `~is_dynamic (vyper_to_abi_type env ty)` by fs[abi_decoder_header_def] >>
   drule_all (calldata_pos abi_scratch_decoder_static_array_pre) >> strip_tac >>
   drule_all (calldata_pos abi_scratch_decoder_input_point) >> strip_tac >>
   qhdtm_assum `abi_scratch_decoder_input`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_input_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_input_def, cj 1 arithmeticTheory.ADD_CLAUSES, cj 1 venomStateTheory.eval_operand_def]) >>
   RULE_ASSUM_TAC (SIMP_RULE bool_ss [Once vyper_to_abi_type_def]) >>
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
@@ -120,7 +120,7 @@ Proof
      type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
    d+32 < dimword (:256) /\ LENGTH vs * type_memory_bytes ce ty < dimword (:256)` by
     (qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES] >> strip_tac >>
+     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES, cj 1 venomStateTheory.eval_operand_def] >> strip_tac >>
      `d + (32 + maxn * type_memory_bytes ce ty) < dimword (:256)` by metis_tac[] >>
      simp[] >> irule LESS_EQ_LESS_TRANS >> qexists `maxn * type_memory_bytes ce ty` >> simp[]) >>
   drule_all calldata_bulk_decoder_endpoint_ptr >>
@@ -159,7 +159,7 @@ Proof
   rpt strip_tac >>
   `abi_footprint_disjoint d (type_memory_bytes ce (ArrayT ty (Dynamic maxn)))
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
-    fs[abi_scratch_decoder_ranges_def] >>
+    fs[abi_scratch_decoder_ranges_def, cj 1 venomStateTheory.eval_operand_def] >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "valid_enc_def"] >>
   drule_all abi_scratch_effect_slot >> simp[mload_def]))
 QED

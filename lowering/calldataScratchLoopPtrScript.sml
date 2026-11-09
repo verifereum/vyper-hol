@@ -124,7 +124,7 @@ Proof
   qhdtm_assum `abi_decoder_recursive_loop_compiled`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE (abi_decoder_recursive_loop_compiled_def :: calldata_pos_loop_rws)) >>
   qhdtm_assum `abi_scratch_decoder_loop_data`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES, cj 1 venomStateTheory.eval_operand_def]) >>
   `abi_decoder_budget first last b cap s /\ FLOOKUP s.vs_allocas site = SOME (slot,32)` by
     fs[abi_scratch_decoder_loop_inv_def, abi_scratch_effect_def, Excl "enc_def"] >>
   `site IN abi_decoder_ids first last` by (simp[abi_decoder_ids_def] >> decide_tac) >>
@@ -133,7 +133,7 @@ Proof
     (qpat_assum `abi_decoder_budget first last b cap s` mp_tac >>
      simp_tac bool_ss [abi_decoder_budget_def] >> strip_tac >> decide_tac) >>
   `sb + LENGTH bs < dimword (:256) /\ eval_operand src initial = SOME (n2w sb)` by
-    fs[abi_scratch_decoder_ranges_def] >>
+    fs[abi_scratch_decoder_ranges_def, cj 1 venomStateTheory.eval_operand_def] >>
   drule_at (Pat `abi_decode_loop_cfg _ _ _ _ _ _ _ _ _ _ _ _`) decoder_scratch_header_ptr_core >>
   disch_then (drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -445,7 +445,7 @@ Resume calldata_scratch_loop_iteration_prefix_guarded_ptr[prefix_child]:
        qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
        pure_rewrite_tac [LEFT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
      qpat_x_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _ _ h` mp_tac >>
-     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES, abi_footprint_disjoint_def] >>
+     simp_tac bool_ss [abi_scratch_decoder_ranges_def, cj 1 arithmeticTheory.ADD_CLAUSES, abi_footprint_disjoint_def, cj 1 venomStateTheory.eval_operand_def] >>
      rpt strip_tac >> first_x_assum drule >>
      qpat_assum `(k+1)*type_memory_size tv <= j*type_memory_size tv` mp_tac >>
      qpat_assum `j*type_memory_size tv <= maxn*type_memory_size tv` mp_tac >>
@@ -653,7 +653,7 @@ QED
 
 Resume calldata_scratch_loop_finite_prefix_guarded_ptr[source_frame]:
   `abi_decoder_operand_live next src` by
-    fs[abi_scratch_decoder_loop_data_def] >>
+    fs[abi_scratch_decoder_loop_data_def, cj 1 venomStateTheory.eval_operand_def] >>
   qpat_assum `abi_decoder_operand_live next src` mp_tac >>
   qpat_assum `!x. abi_decoder_older_vars next x ==> _` mp_tac >>
   qpat_assum `op_taint tn src = {}` mp_tac >>
@@ -712,7 +712,7 @@ Proof
   qhdtm_assum `abi_decoder_recursive_loop_compiled`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE (abi_decoder_recursive_loop_compiled_def :: calldata_pos_loop_rws)) >>
   qhdtm_assum `abi_scratch_decoder_loop_data`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def, cj 1 arithmeticTheory.ADD_CLAUSES, cj 1 venomStateTheory.eval_operand_def]) >>
   `abi_decoder_budget first last b cap s /\ FLOOKUP s.vs_allocas site = SOME (slot,32)` by
     fs[abi_scratch_decoder_loop_inv_def, abi_scratch_effect_def, Excl "enc_def"] >>
   `site IN abi_decoder_ids first last` by (simp[abi_decoder_ids_def] >> decide_tac) >>
@@ -721,7 +721,7 @@ Proof
     (qpat_assum `abi_decoder_budget first last b cap s` mp_tac >>
      simp_tac bool_ss [abi_decoder_budget_def] >> strip_tac >> decide_tac) >>
   `sb + LENGTH bs < dimword (:256) /\ eval_operand src initial = SOME (n2w sb)` by
-    fs[abi_scratch_decoder_ranges_def] >>
+    fs[abi_scratch_decoder_ranges_def, cj 1 venomStateTheory.eval_operand_def] >>
   drule_at (Pat `abi_decode_loop_cfg _ _ _ _ _ _ _ _ _ _ _ _`) decoder_scratch_header_ptr_core >>
   disch_then (drule_at (Pat `abi_scratch_decoder_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>

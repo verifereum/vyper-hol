@@ -125,7 +125,7 @@ QED
 
 Resume calldata_scratch_dynamic_array_decoder_ptr[loop]:
   qhdtm_assum `abi_scratch_decoder_input`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiScratchDecoderContractTheory.abi_scratch_decoder_input_def, cj 1 arithmeticTheory.ADD_CLAUSES]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiScratchDecoderContractTheory.abi_scratch_decoder_input_def, cj 1 arithmeticTheory.ADD_CLAUSES, cj 1 venomStateTheory.eval_operand_def]) >>
   drule abi_decoder_dynarray_metadata_shape >> strip_tac >>
   gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
   qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`

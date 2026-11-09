@@ -179,7 +179,7 @@ Resume calldata_scratch_array_constructor_guarded_ptr[slot_frame]:
     (mp_then Any mp_tac abi_scratch_effect_slot) >>
   disch_then irule >>
   fs[abiScratchDecoderContractTheory.abi_scratch_decoder_input_def,
-     abiScratchDecoderContractTheory.abi_scratch_decoder_ranges_def]
+     abiScratchDecoderContractTheory.abi_scratch_decoder_ranges_def, cj 1 venomStateTheory.eval_operand_def]
 QED
 
 Finalise calldata_scratch_array_constructor_guarded_ptr

@@ -77,12 +77,12 @@ Proof
      qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def,
-       abi_decoder_valid_bytes_pre_def] >> metis_tac[]) >>
+       abi_decoder_valid_bytes_pre_def, cj 1 venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   `not_fresh_at start root /\ (!q. src = Var q ==> not_fresh_at start q)` by
     (qpat_x_assum `abi_scratch_decoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[abi_scratch_decoder_input_def, abi_decoder_operand_live_def,
-       abi_decoder_older_vars_def, not_fresh_at_def] >>
+       abi_decoder_older_vars_def, not_fresh_at_def, cj 1 venomStateTheory.eval_operand_def] >>
      Cases_on `src` >> simp[]) >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) initial = n2w (LENGTH payload)` by
     (qpat_x_assum `abi_decode_load _ _ _ = _` mp_tac >>
@@ -130,11 +130,11 @@ QED
 
 Resume calldata_scratch_bytestring_decoder_ptr[robust]:
   rpt strip_tac >>
-  `value_has_type tv v` by fs[abi_scratch_decoder_input_def, abi_decoder_metadata_def] >>
+  `value_has_type tv v` by fs[abi_scratch_decoder_input_def, abi_decoder_metadata_def, cj 1 venomStateTheory.eval_operand_def] >>
   `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
   `val_footprint tv v <= type_memory_bytes ce ty` by
     (irule LESS_EQ_TRANS >> qexists `type_memory_size tv` >>
-     simp[val_footprint_le] >> fs[abi_scratch_decoder_input_def, abi_decoder_metadata_def]) >>
+     simp[val_footprint_le] >> fs[abi_scratch_decoder_input_def, abi_decoder_metadata_def, cj 1 venomStateTheory.eval_operand_def]) >>
   irule clean_footprint_val_in_memory_robust >> simp[] >>
   qexistsl [`actual.vs_memory`,`tn'.t_mem`] >> simp[] >>
   rpt strip_tac >> first_x_assum irule >> simp[] >> decide_tac
@@ -168,7 +168,7 @@ Resume calldata_scratch_bytestring_decoder_ptr[slots]:
   rpt strip_tac >>
   `abi_footprint_disjoint d (type_memory_bytes ce ty)
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
-    fs[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def] >>
+    fs[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def, cj 1 venomStateTheory.eval_operand_def] >>
   drule_all abi_scratch_effect_slot >> simp[mload_def]
 QED
 

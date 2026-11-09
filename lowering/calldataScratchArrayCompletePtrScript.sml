@@ -96,7 +96,7 @@ QED
 
 Resume calldata_scratch_array_loop_complete_guarded_ptr[exit]:
   `op_taint u src = {} /\ op_prov H src = NONE` by
-    (`abi_decoder_operand_live next src` by fs[abi_scratch_decoder_loop_data_def] >>
+    (`abi_decoder_operand_live next src` by fs[abi_scratch_decoder_loop_data_def, cj 1 venomStateTheory.eval_operand_def] >>
      qpat_assum `abi_decoder_operand_live next src` mp_tac >>
      qpat_assum `!x. abi_decoder_older_vars next x ==> _` mp_tac >>
      qpat_assum `op_taint tn src = {}` mp_tac >>

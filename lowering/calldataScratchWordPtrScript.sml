@@ -146,7 +146,7 @@ Resume calldata_scratch_word_decoder_ptr[slots]:
   rpt strip_tac >>
   `abi_footprint_disjoint d 32
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)` by
-    fs[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def] >>
+    fs[abi_scratch_decoder_input_def, abi_scratch_decoder_ranges_def, cj 1 venomStateTheory.eval_operand_def] >>
   drule_all abi_scratch_effect_slot >>
   simp[mload_def]
 QED
