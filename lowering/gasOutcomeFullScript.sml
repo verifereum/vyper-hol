@@ -37,3 +37,13 @@ Proof
      gas_summary_at_def, gas_marked_exec_def] >>
   metis_tac[gas_origin_ptr_path_projections, gas_origin_path_erase]
 QED
+
+Theorem gas_outcome_full_pointer:
+  gas_outcome_full (D, lo, explicit, ctx, func, PG) tops source
+    (es, s, G, tn) Q R ==>
+  gas_outcome_ptr_lo D lo tops (ctx, func) PG source (es, s, G, tn) Q R
+Proof
+  rw[gas_outcome_full_def, gas_outcome_ptr_lo_def,
+     gas_summary_ptr_lo_def] >>
+  metis_tac[gas_origin_ptr_path_projections, gas_exempt_cert_forget_memory]
+QED

@@ -183,6 +183,93 @@ Inductive gas_exempt_cert:
        (es, s0) marks (err, ee) (leaf, finish))
 End
 
+Theorem gas_exempt_cert_forget_memory:
+  !checked tops p source start marks out endpoint.
+    gas_exempt_cert checked tops p source start marks out endpoint ==>
+    !memory. (memory ==> checked) ==>
+      gas_exempt_cert memory tops p source start marks out endpoint
+Proof
+  ho_match_mp_tac gas_exempt_cert_ind >> rpt conj_tac >|
+  [(rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_origin, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_bind_unit, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_error_unit, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_bind_bool, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_error_bool, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_bind_result, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_error_result, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_bind_value, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_error_value, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_bind_place, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_error_place, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_bind_values, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_error_values, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_bind_results, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_error_results, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    irule gas_exempt_cert_cleanup >> qexists_tac `mid` >> simp[]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    irule gas_exempt_cert_handler >> qexists_tac `mid` >> simp[]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_get_scopes, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_invoke, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem]),
+   (rpt gen_tac >> rpt strip_tac >>
+    Cases_on `memory` >> Cases_on `checked` >> gvs[] >>
+    metis_tac[gas_exempt_cert_unforce_result, gas_exempt_origin_from_mem,
+              gas_marked_exec_from_mem])]
+QED
+
 (* The endpoint of the concrete child remains separate from the source
    endpoint after enclosing cleanup. Entering a call is not completing it. *)
 Theorem read_place_no_exempt_error[local]:

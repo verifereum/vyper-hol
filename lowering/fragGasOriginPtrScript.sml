@@ -169,3 +169,17 @@ Proof
   rpt gen_tac >> simp[] >> strip_tac >>
   metis_tac[gas_origin_ptr_path_projections, gas_origin_focus_rules]
 QED
+
+Theorem gas_origin_ptr_path_append:
+  !cx st left out.
+    gas_origin_ptr_path cx st left out ==>
+    !mid G1 tn1 right r G2 tn2.
+      out = (OK mid, G1, tn1) /\
+      gas_origin_ptr_path cx (mid, G1, tn1) right (r, G2, tn2) ==>
+      gas_origin_ptr_path cx st (left ++ right) (r, G2, tn2)
+Proof
+  ho_match_mp_tac gas_origin_ptr_path_ind >> rpt conj_tac >>
+  rpt gen_tac >> simp[] >> rpt strip_tac
+  >- metis_tac[gas_origin_ptr_path_rules, APPEND_ASSOC]
+  >> gvs[fragExecTheory.exit_result_def]
+QED

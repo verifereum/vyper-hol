@@ -51,3 +51,12 @@ Proof
   rw[gas_exempt_origin_def] >>
   simp[unspecified_behaviour_exempt_def] >> metis_tac[]
 QED
+
+Theorem gas_exempt_origin_from_mem:
+  gas_exempt_origin T tops p source start marks out endpoint ==>
+  gas_exempt_origin memory tops p source start marks out endpoint
+Proof
+  PairCases_on `p` >> PairCases_on `start` >> PairCases_on `out` >>
+  simp[gas_exempt_origin_def, gasNormalPrefixTheory.gas_value_prefix_def] >>
+  metis_tac[gas_marked_exec_from_mem]
+QED
