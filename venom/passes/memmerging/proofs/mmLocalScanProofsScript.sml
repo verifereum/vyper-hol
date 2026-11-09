@@ -5824,6 +5824,66 @@ Proof
   metis_tac[mm_local_insert_sorted_order, mm_local_insert_every]
 QED
 
+Theorem mm_local_bulk_capture_birth[local]:
+  j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  i = EL j is /\ i.inst_opcode = MCOPY /\
+  i.inst_operands = [Lit dst; Lit src; Lit len] /\ step_inst_base i s = OK t /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [i.inst_id] |> /\
+  hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval (w2n dst) (w2n len))) c /\
+  cap' = (\q. if q = j then SOME (w2n dst, read_memory (w2n src) (w2n len) s)
+             else cap q) /\
+  mm_local_bytes B (w2n src) (w2n len) = read_memory (w2n src) (w2n len) s ==>
+  scan_bulk_copy Mem2Mem ss i = hs with ss_copies := add_copy hs.ss_copies c /\
+  t.vs_memory = (write_memory_with_expansion (w2n dst)
+    (read_memory (w2n src) (w2n len) s) s).vs_memory /\
+  cap' j = SOME (w2n dst, read_memory (w2n src) (w2n len) s) /\
+  mm_local_group_captures is cap' B c
+Proof
+  strip_tac >> conj_tac
+  >- gvs[scan_bulk_copy_def, mode_allows_overlap_def, operand_lit_val_def] >>
+  conj_tac
+  >- (irule mm_local_capture_copy >>
+      qexistsl [`ARB`, `0`, `i`] >>
+      gvs[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  conj_tac >- simp[] >>
+  irule mm_local_group_captures_birth >> conj_tac >- simp[] >>
+  qexists `j` >> gvs[]
+QED
+
+Theorem mm_local_store_capture_birth[local]:
+  j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  i = EL j is /\ i.inst_opcode = MSTORE /\ i.inst_operands = [Lit dst; Var v] /\
+  FLOOKUP ss.ss_loads v = SOME src /\ lookup_var v s = SOME (mload src s) /\
+  step_inst_base i s = OK t /\
+  lids = (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id]) /\
+  ~MEM i.inst_id lids /\
+  (!q. q < LENGTH is /\ MEM (EL q is).inst_id lids ==> cap q = NONE) /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [i.inst_id] ++ lids |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) 32)) c /\
+  cap' = (\q. if q = j then SOME (w2n dst, read_memory src 32 s) else cap q) /\
+  mm_local_bytes B src 32 = read_memory src 32 s ==>
+  scan_store dfg Mem2Mem ss i = hs with ss_copies := add_copy hs.ss_copies c /\
+  t.vs_memory = (write_memory_with_expansion (w2n dst) (read_memory src 32 s) s).vs_memory /\
+  cap' j = SOME (w2n dst, read_memory src 32 s) /\
+  mm_local_group_captures is cap' B c
+Proof
+  strip_tac >> conj_tac
+  >- gvs[scan_store_def, mode_allows_overlap_def, operand_lit_val_def,
+         operand_var_name_def] >>
+  conj_tac
+  >- (irule mm_local_capture_store >> qexistsl [`ARB`, `0`, `i`, `v`] >>
+      gvs[venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  conj_tac >- simp[] >>
+  pure_rewrite_tac[mm_local_group_captures_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `j' = j` >- gvs[] >>
+  `~((EL j' is).inst_id = i.inst_id)` by
+    metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx] >>
+  gvs[] >> metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
 (* Essential counterexample evidence: a variable-free unreachable block. *)
 Theorem mm_local_dead_input:
   fn0 = mk_raw_function "f"
