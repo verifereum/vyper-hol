@@ -505,6 +505,22 @@ Proof
   gvs[sval_conc_def] >> decide_tac
 QED
 
+(* The trunk's CREATE/CREATE2 fault on an oversized init code before
+   consuming an outcome; the symbolic step lifts that fault the same way. *)
+Theorem related_create_fault[local]:
+  asm_sym_rel p env cs ss ==>
+  asm_sym_step_rel p env
+    (sym_lift k labs ss
+       (AsmFault (ss.sym_base with <| as_stack := args;
+                                      as_returndata := [] |>)))
+    (AsmFault (cs with as_returndata := []))
+Proof
+  rw[asm_sym_rel_def] >>
+  simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def,
+       asmSemTheory.asm_state_component_equality] >>
+  qexists_tac `cs with as_returndata := []` >> simp[]
+QED
+
 Theorem asm_step_op_create[local]:
   asm_step_op otp "CREATE" s = asm_exec_create s /\
   asm_step_op otp "CREATE2" s = asm_exec_create2 s
@@ -540,6 +556,7 @@ Proof
       simp[asm_step_op_create, asm_exec_create_def, asm_op_mem_writes_def,
            mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
            finite_mapTheory.DRESTRICT_UNIV] >>
+      IF_CASES_TAC >> REWRITE_TAC [] >- (irule related_create_fault >> gvs[]) >>
       irule related_create_completion >> simp[]) >>
   rename1 `cs.as_stack = value :: off :: sz :: tail0` >>
   Cases_on `tail0` >- gvs[] >> gvs[] >>
@@ -552,6 +569,7 @@ Proof
   simp[asm_step_op_create, asm_exec_create2_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
+  IF_CASES_TAC >> REWRITE_TAC [] >- (irule related_create_fault >> gvs[]) >>
   irule related_create_completion >> simp[]
 QED
 
