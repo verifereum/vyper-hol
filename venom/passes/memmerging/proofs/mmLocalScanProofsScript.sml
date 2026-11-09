@@ -6476,6 +6476,117 @@ Proof
   metis_tac[mm_local_pending_copy_birth]
 QED
 
+Theorem mm_local_mload_bytes[local]:
+  word_to_bytes (mload src s) T = read_memory src 32 s
+Proof
+  simp[venomStateTheory.mload_def, venomStateTheory.read_memory_def] >>
+  irule venomMemPropsTheory.word_bytes_roundtrip_256 >> simp[LENGTH_TAKE_EQ]
+QED
+
+Theorem mm_local_indexed_store_pending_birth[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ mm_local_history is H (SUC n) /\ n < LENGTH is /\
+  (EL n is).inst_opcode = MSTORE /\ (EL n is).inst_operands = [Lit dst; Var v] /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  FLOOKUP ss.ss_loads v = SOME src /\ lookup_var v (H n) = SOME (mload src (H n)) /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL n is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]) |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) 32)) c /\
+  mm_local_pending (mm_local_write_capture is H (SUC n)) js (H n) t /\
+  (!j. MEM j js ==> j < n /\ ?h g r d bs.
+    mm_local_write_capture is H (SUC n) j = SOME (d,bs) /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n <= r /\ r < LENGTH is /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
+  read_memory src 32 (H n) = read_memory src 32 t /\
+  mm_local_pending (mm_local_write_capture is H (SUC n)) (js ++ [n]) (H (SUC n)) t
+Proof
+  strip_tac >>
+  `(scan_inst (dfg_build_function fn0) Mem2Mem ss (EL n is)).ss_flushed = hs.ss_flushed` by
+    (simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def,
+      scan_store_def, operand_lit_val_def, operand_var_name_def,
+      mode_allows_overlap_def] >> gvs[]) >>
+  `!j d bs. MEM j js /\ mm_local_write_capture is H (SUC n) j = SOME (d,bs) ==>
+    bs = [] \/ src + 32 <= d \/ d + LENGTH bs <= src` by
+    (rpt strip_tac >>
+     qpat_x_assum `!j. MEM j js ==> _` (qspec_then `j` mp_tac) >>
+     impl_tac >- simp[] >> strip_tac >>
+     `~copy_overwrites h (copy_src_interval c)` by
+       (drule_all (REWRITE_RULE [] (Q.INST [`i` |-> `EL n is`, `w` |-> `EL j is`]
+          (SPEC_ALL mm_local_indexed_future_hazard))) >> simp[]) >>
+     drule (INST_TYPE [alpha |-> ``:word8``] mm_local_capture_source_exclusion) >>
+     disch_then (qspecl_then [`d`, `bs`] mp_tac) >> gvs[] >> metis_tac[]) >>
+  `mm_local_write_capture is H (SUC n) n =
+    SOME (w2n dst,read_memory src 32 (H n))` by
+    (`n < SUC n` by simp[] >>
+     drule_all mm_local_write_capture_store >> simp[mm_local_mload_bytes]) >>
+  `(H (SUC n)).vs_memory =
+    (write_memory_with_expansion (w2n dst) (read_memory src 32 (H n)) (H n)).vs_memory` by
+    (drule_all mm_local_write_capture_sound >> simp[]) >>
+  qpat_assum `mm_local_pending _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_def]) >>
+  `EVERY (\(d,bs). bs = [] \/ src + 32 <= d \/ d + LENGTH bs <= src) ws` by
+    (simp[EVERY_MEM, pairTheory.FORALL_PROD] >> rpt strip_tac >>
+     drule_all LIST_REL_MEM_IMP_R >> strip_tac >> gvs[] >> metis_tac[]) >>
+  `EVERY (\(d,bs). 32 = 0 \/ bs = [] \/ src + 32 <= d \/ d + LENGTH bs <= src) ws` by
+    simp[] >>
+  conj_tac >-
+    (irule mm_local_read_write_log_memory >> qexists `ws` >> simp[]) >>
+  irule mm_local_pending_create >>
+  qexistsl [`read_memory src 32 (H n)`, `w2n dst`, `H n`] >>
+  simp[]
+QED
+
+Theorem mm_local_indexed_store_pending_post_phis[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\ mm_local_history is H (SUC n) /\ n < LENGTH is /\
+  (EL n is).inst_opcode = MSTORE /\ (EL n is).inst_operands = [Lit dst; Var v] /\
+  h = phi_prefix_length bb.bb_instructions /\ h <= n /\
+  LENGTH states = SUC (n-h) /\
+  eval_phis s bb.bb_instructions = OK s_phi /\
+  EL 0 states = s_phi with vs_inst_idx := h /\
+  (!r. r < n-h ==>
+    ~is_terminator (EL (h+r) bb.bb_instructions).inst_opcode /\
+    ?t. step_inst fuel ctx (EL (h+r) bb.bb_instructions) (EL r states) = OK t /\
+        EL (SUC r) states = t with vs_inst_idx := SUC (EL r states).vs_inst_idx) /\
+  H n = EL (n-h) states /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  FLOOKUP ss.ss_loads v = SOME src /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL n is).inst_id] ++
+           (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]) |> /\
+  hs = flush_hazards Mem2Mem (invalidate_loads ss (mk_interval (w2n dst) 32)) c /\
+  mm_local_pending (mm_local_write_capture is H (SUC n)) js (H n) t /\
+  (!j. MEM j js ==> j < n /\ ?h g r d bs.
+    mm_local_write_capture is H (SUC n) j = SOME (d,bs) /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM h ss.ss_copies /\ MEM (EL j is).inst_id h.cg_inst_ids /\
+    MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+    MEM (EL j is).inst_id g.cg_inst_ids /\
+    rep_of_group is g = SOME ((EL r is).inst_id,g) /\ n <= r /\ r < LENGTH is /\
+    h.cg_dst <= d /\ d + LENGTH bs <= h.cg_dst + h.cg_length) ==>
+  read_memory src 32 (H n) = read_memory src 32 t /\
+  mm_local_pending (mm_local_write_capture is H (SUC n)) (js ++ [n]) (H (SUC n)) t
+Proof
+  strip_tac >>
+  `n <= LENGTH bb.bb_instructions` by (gvs[] >> decide_tac) >>
+  `ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state
+      (TAKE n bb.bb_instructions)` by metis_tac[] >>
+  `lookup_var v (H n) = SOME (mload src (H n))` by
+    (drule_all (Q.INST [`j` |-> `n`] (SPEC_ALL mm_local_live_load_post_phis)) >>
+     simp[]) >>
+  drule_all mm_local_indexed_store_pending_birth >> simp[]
+QED
+
 Theorem mm_local_two_copy_read[local]:
   mm_local_history is H (n+2) /\
   (EL n is).inst_opcode = MCOPY /\
