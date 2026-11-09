@@ -9,6 +9,39 @@ Ancestors
   emitHelperProps exprLoweringProps abiEncoder compileEnv
   venomExecSemantics venomState venomInst words arithmetic list
 
+Theorem abi_decode_member_phase_shape:
+  compile_getelemptr_abi pos (dec_info_needs_offset ei) off MLOAD
+    (Var src) hi sa = (v,sm) /\
+  emit_op ADD [Var dst;Lit (n2w q)] sm = (Var out,sn) /\
+  compile_abi_decode_to_buf (Var out) v MLOAD (Var src) hi ei sn = ((),sb) /\
+  abi_decode_member_layout ei off q k z h cap ==>
+  inst_extends sa sm /\ inst_extends sm sn /\ inst_extends sn sb /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sn) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sb)
+Proof
+  strip_tac >>
+  `inst_extends sm sn` by metis_tac[inst_extends_emit_op] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
+    (drule abi_decode_member_pointer_allocation_shape >>
+     simp[abi_decode_source_opcode_def] >> strip_tac >> fs[EVERY_MEM]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sn)` by
+    (drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  fs[abi_decode_member_layout_def] >> gvs[dec_info_needs_offset_def]
+  >- (`inst_extends sa sm` by
+        (Cases_on `emit_op ADD [pos;Lit (n2w off)] sa` >>
+         fs[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+         metis_tac[inst_extends_emit_op]) >>
+      drule abi_decoder_clamped_word_shape >>
+      simp[abi_decode_source_opcode_def] >> strip_tac >>
+      `inst_extends sn sb` by (irule abi_decoder_inst_extends_prefix >> simp[]) >>
+      fs[EVERY_MEM]) >>
+  drule abi_decode_bytes_position_shape >>
+  simp[abi_decode_source_opcode_def] >> strip_tac >>
+  drule abi_decode_selection_shape >> strip_tac >> fs[EVERY_MEM]
+QED
+
 (* Keep the compiler witnesses internal to a whole observed member run. *)
 Theorem abi_decode_member_run_phases:
   abi_decode_member_code dst pos src hi ei off q sa sb /\
@@ -55,24 +88,7 @@ Proof
 QED
 
 Resume abi_decode_member_run_phases[shape]:
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sm)` by
-    (drule abi_decode_member_pointer_allocation_shape >>
-     simp[abi_decode_source_opcode_def] >> strip_tac >> fs[EVERY_MEM]) >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sn)` by
-    (drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-     simp[mk_inst_def, is_terminator_def]) >>
-  fs[abi_decode_member_layout_def] >> gvs[dec_info_needs_offset_def]
-  >- (`inst_extends sa sm` by
-        (Cases_on `emit_op ADD [pos;Lit (n2w off)] sa` >>
-         fs[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
-         metis_tac[inst_extends_emit_op]) >>
-      drule abi_decoder_clamped_word_shape >>
-      simp[abi_decode_source_opcode_def] >> strip_tac >>
-      `inst_extends sn sb` by (irule abi_decoder_inst_extends_prefix >> simp[]) >>
-      fs[EVERY_MEM]) >>
-  drule abi_decode_bytes_position_shape >>
-  simp[abi_decode_source_opcode_def] >> strip_tac >>
-  drule abi_decode_selection_shape >> strip_tac >> fs[EVERY_MEM]
+  metis_tac[abi_decode_member_phase_shape]
 QED
 
 Finalise abi_decode_member_run_phases
