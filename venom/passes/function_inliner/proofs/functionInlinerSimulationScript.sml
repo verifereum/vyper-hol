@@ -344,3 +344,75 @@ Proof
       qexists `SUC (g+k)` >> simp[])
   >> qexists `SUC k` >> simp[]
 QED
+
+(* The layout supplies the dispatcher; the caller E occurrence supplies the
+   universal suffix premise, at each related resumed source/target state. *)
+Theorem inline_final_return_cut:
+  find_invoke_site callee.fn_name caller_fn.fn_blocks = SOME (lbl,i) /\
+  p = inline_prefix ist.is_inline_count /\
+  ret = return_block_label p ist.is_label_counter /\
+  lookup_block lbl caller_fn.fn_blocks = SOME bb /\
+  ~MEM ret (fn_labels caller_fn) /\ bb_well_formed bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE /\
+  inline_one_site caller_fn callee ist = SOME (final,ist') ==>
+  (!r q. Q r q ==> terminates q) ==>
+  (!rb w v r. lookup_block ret final.fn_blocks = SOME rb /\ A w v /\
+    exec_block n ctx bb (w with vs_inst_idx := SUC caller.vs_inst_idx) = r /\
+    terminates r ==>
+    ?k. case exec_block k ctx' rb (v with vs_inst_idx := 0) of
+      OK z => if z.vs_halted then Q r (Halt z)
+              else ?g. Q r (run_blocks g ctx' final z)
+    | IntRet ir z => Q r (IntRet ir z)
+    | Halt z => Q r (Halt z)
+    | Abort a z => Q r (Abort a z)
+    | Error e => F) ==>
+  A w v /\ v.vs_current_bb = ret /\
+  exec_block n ctx bb (w with vs_inst_idx := SUC caller.vs_inst_idx) = r /\
+  terminates r ==>
+  ?h. Q r (run_blocks h ctx' final v)
+Proof
+  strip_tac >> drule_all inline_final_return_dispatch >> strip_tac >>
+  rpt strip_tac >> irule inline_return_dispatch_cut >>
+  metis_tac[]
+QED
+
+(* Packet and source binding are separate inputs to the bridge.  In
+   particular no return-value equality is inferred from an opaque frame. *)
+Theorem inline_clone_exit_final_cut:
+  inline_clone_exit p V opaque P outs saved ret ir u (OK v) ==>
+  find_invoke_site callee.fn_name caller_fn.fn_blocks = SOME (lbl,i) /\
+  p = inline_prefix ist.is_inline_count /\
+  ret = return_block_label p ist.is_label_counter /\
+  lookup_block lbl caller_fn.fn_blocks = SOME bb /\
+  ~MEM ret (fn_labels caller_fn) /\ bb_well_formed bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE /\
+  inline_one_site caller_fn callee ist = SOME (final,ist') ==>
+  (!ir u v w. inline_clone_exit p V opaque P outs saved ret ir u (OK v) ==>
+    bind_outputs outs ir.iret_values
+      (adopt_return_fmp ir (merge_callee_state caller u)) = SOME w ==>
+    A w v) ==>
+  (!r q. Q r q ==> terminates q) ==>
+  (!rb w v r. lookup_block ret final.fn_blocks = SOME rb /\ A w v /\
+    exec_block n ctx bb (w with vs_inst_idx := SUC caller.vs_inst_idx) = r /\
+    terminates r ==>
+    ?k. case exec_block k ctx' rb (v with vs_inst_idx := 0) of
+      OK z => if z.vs_halted then Q r (Halt z)
+              else ?g. Q r (run_blocks g ctx' final z)
+    | IntRet ir z => Q r (IntRet ir z)
+    | Halt z => Q r (Halt z)
+    | Abort a z => Q r (Abort a z)
+    | Error e => F) ==>
+  inline_source_resume n ctx bb caller outs ir u = r /\ terminates r ==>
+  ?h. Q r (run_blocks h ctx' final v)
+Proof
+  rpt strip_tac >>
+  Cases_on `bind_outputs outs ir.iret_values
+    (adopt_return_fmp ir (merge_callee_state caller u))`
+  >- gvs[inline_source_resume_def, passSimulationDefsTheory.terminates_def] >>
+  fs[inline_source_resume_def] >>
+  drule inline_clone_exit_control >> strip_tac >> gvs[] >>
+  irule inline_final_return_cut >> simp[] >>
+  metis_tac[]
+QED
