@@ -109,9 +109,6 @@ QED
 Theorem eval_iterator_scope_pop_effect[local]:
   !cx it. scope_pop_effect (eval_iterator cx it)
 Proof
-  `!cx ty tv. scope_pop_effect (array_iterator_results cx ty tv)` by
-    (rpt gen_tac >> irule scope_pop_effect_identity >>
-     metis_tac[array_iterator_results_state]) >>
   rpt gen_tac >> Cases_on `it` >> simp[Once evaluate_def] >>
   rpt (gen_tac ORELSE
        (irule scope_pop_effect_bind >> conj_tac >>
@@ -661,16 +658,14 @@ Resume eval_statement_loop_popped_keys_mutual[loop]:
   `push_scope_with_var id tyv v st = (INL (),pushed)` by
     simp[push_scope_with_var_def, return_def, Abbr `pushed`] >>
   qpat_x_assum `eval_for _ _ _ _ (_::_) _ = _` mp_tac >>
-  drule eval_for_cons_read >> disch_then (fn th => rewrite_tac[th]) >>
-  simp[bind_def, ignore_bind_def, AllCaseEqs()] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   `runtime_consistent (extend_local env id ty F) cx pushed` by
     (irule typed_loop_push_runtime >> metis_tac[]) >>
   `popped_keys_indexed pushed.scopes` by
     metis_tac[push_scope_with_var_popped_keys_indexed] >>
-  qpat_x_assum `!s t env ret env' st res st'.
-                  push_scope_with_var _ _ _ _ = _ /\ _ ==> _`
-    (drule_then assume_tac) >>
+  qpat_x_assum `!s x t. _` drule >> strip_tac >>
+  qpat_x_assum `!s t. push_scope_with_var _ _ _ _ = _ ==> _` drule >> strip_tac >>
   drule_all (SRULE[ignore_bind_def] typed_loop_bracket_runtime) >> strip_tac >>
   qmatch_asmsub_abbrev_tac `finally _ pop_scope pushed = (bracket_res,after)` >>
   `popped_keys_indexed after.scopes` by
