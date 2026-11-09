@@ -488,6 +488,25 @@ Proof
   metis_tac[LIST_REL_prefix_split, APPEND_ASSOC]
 QED
 
+Theorem scratch_layout_region_facts[local]:
+  LENGTH offsets = LENGTH items /\ al.sa_spill_base = bot /\
+  lo <= bot /\ al.sa_next_offset <= hi /\
+  EVERY (\off. al.sa_spill_base <= off /\ off+32 <= al.sa_next_offset) offsets /\
+  (!k. k < LENGTH offsets ==>
+    (!op old. FLOOKUP spilled op = SOME old ==>
+      old+32 <= EL k offsets \/ EL k offsets+32 <= old) /\
+    (!j. j < LENGTH offsets /\ j <> k ==>
+      EL j offsets+32 <= EL k offsets \/ EL k offsets+32 <= EL j offsets)) ==>
+  LENGTH offsets = LENGTH items /\
+  EVERY (\off. lo <= off /\ off+32 <= hi) offsets /\
+  (!op at. FLOOKUP spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets+32 <= EL j offsets \/ EL j offsets+32 <= EL i offsets)
+Proof
+  gvs[EVERY_EL] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem scratch_swap_allocation_facts:
   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
   offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
@@ -501,8 +520,9 @@ Theorem scratch_swap_allocation_facts:
   (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
     EL i offsets+32 <= EL j offsets \/ EL j offsets+32 <= EL i offsets)
 Proof
-  strip_tac >> drule_all_then strip_assume_tac spill_alloc_n_temporary_layout >>
-  gvs[EVERY_EL] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+  strip_tac >>
+  drule_all_then strip_assume_tac spill_alloc_n_temporary_layout >>
+  drule_all_then MATCH_ACCEPT_TAC scratch_layout_region_facts
 QED
 
 Theorem sym_scratch_swap_finish[local]:
@@ -598,6 +618,124 @@ Proof
   gvs[top_n_def, MAP_MAP_o, combinTheory.o_DEF]
 QED
 
+Theorem sym_swap_shape_witnesses[local]:
+  do_swap dist ps = (ops,out) /\ 16 < dist /\ dist < LENGTH ps.ps_stack ==>
+  ?items offsets al.
+    items = top_n (dist+1) ps.ps_stack /\
+    offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
+    al = FOLDL (\a off. free_spill_slot off a)
+      (SND (spill_alloc_n [] ps.ps_alloc items)) offsets /\
+    LENGTH items = dist+1 /\ 0 < dist /\
+    out.ps_spilled = ps.ps_spilled /\ out.ps_alloc = al /\
+    out.ps_stack = TAKE (LENGTH ps.ps_stack - (dist+1)) ps.ps_stack ++
+      MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]) /\
+    ops = MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+      (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]))
+Proof
+  strip_tac >> simp_tac bool_ss [] >> metis_tac[sym_do_swap_big_shape]
+QED
+
+Theorem sym_swap_frame_ready[local]:
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  dist < LENGTH ps.ps_stack /\ items = top_n (dist+1) ps.ps_stack ==>
+  ?vals rest. ss.sym_stack = vals ++ (rest ++ srest) /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE items) vals /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (TAKE (LENGTH ps.ps_stack - (dist+1)) ps.ps_stack)) rest
+Proof
+  rw_tac bool_ss [] >>
+  irule (Q.INST [`cplan` |-> `cplan`] sym_kinds_ok_scratch_split) >>
+  simp[SF SFY_ss]
+QED
+
+Theorem sym_spill_encoding_projection[local]:
+  ops = MAP SOSpill offsets ++ tail /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops ==>
+  EVERY (\off. off < dimword(:256)) offsets
+Proof
+  rw[] >> gvs[EVERY_APPEND, EVERY_MAP]
+QED
+
+Theorem sym_swap_geometry[local]:
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
+  al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\ al.sa_next_offset <= r.sr_spill_end /\
+  ops = MAP SOSpill offsets ++ tail /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops ==>
+  LENGTH offsets = LENGTH items /\
+  EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+  (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+    EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+  (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+    EL i offsets+32 <= EL j offsets \/ EL j offsets+32 <= EL i offsets) /\
+  EVERY (\off. off < dimword(:256)) offsets
+Proof
+  strip_tac >> drule_all_then strip_assume_tac scratch_swap_allocation_facts >>
+  metis_tac[sym_spill_encoding_projection]
+QED
+
+Theorem sym_swap_shaped_ready[local]:
+  items = top_n (dist+1) ps.ps_stack /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
+  al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets /\
+  out.ps_alloc = al /\ dist < LENGTH ps.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  ops = MAP SOSpill offsets ++ tail /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss ==>
+  ?vals rest. ss.sym_stack = vals ++ (rest ++ srest) /\
+    LIST_REL (op_kind_ok fn ret) (REVERSE items) vals /\
+    LIST_REL (op_kind_ok fn ret)
+      (REVERSE (TAKE (LENGTH ps.ps_stack - (dist+1)) ps.ps_stack)) rest /\
+    LENGTH offsets = LENGTH items /\
+    EVERY (\off. r.sr_spill_base <= off /\ off+32 <= r.sr_spill_end) offsets /\
+    (!op at. FLOOKUP ps.ps_spilled op = SOME at ==>
+      EVERY (\off. off+32 <= at \/ at+32 <= off) offsets) /\
+    (!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
+      EL i offsets+32 <= EL j offsets \/ EL j offsets+32 <= EL i offsets) /\
+    EVERY (\off. off < dimword(:256)) offsets
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_swap_frame_ready >>
+  metis_tac[sym_swap_geometry]
+QED
+
+Theorem sym_swap_shaped_sim[local]:
+  items = top_n (dist+1) ps.ps_stack /\
+  offsets = FST (spill_alloc_n [] ps.ps_alloc items) /\
+  al = FOLDL (\a off. free_spill_slot off a)
+    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets /\
+  out.ps_alloc = al /\ dist < LENGTH ps.ps_stack /\
+  LENGTH items = dist+1 /\ 0 < dist /\
+  out.ps_spilled = ps.ps_spilled /\
+  out.ps_stack = TAKE (LENGTH ps.ps_stack - (dist+1)) ps.ps_stack ++
+    MAP (\k. EL k items) ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0]) /\
+  ops = MAP SOSpill offsets ++ MAP (\k. SORestore (EL k offsets))
+    (REVERSE ([dist] ++ GENLIST (\i. i+1) (dist-1) ++ [0])) /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  MEM r cplan.cp_regions /\ r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  out.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  sym_kinds_ok cplan fn ret srest ps ss /\
+  asm_block_at p ss.sym_base.as_pc (execute_plan initial_fmp ops) ==>
+  ?last. sym_steps p env (LENGTH (execute_plan initial_fmp ops)) ss = SymOK last /\
+    sym_kinds_ok cplan fn ret srest out last /\
+    last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+    (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
+      FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
+Proof
+  strip_tac >> drule_all_then strip_assume_tac sym_swap_shaped_ready >>
+  drule_all_then MATCH_ACCEPT_TAC sym_scratch_swap_sim
+QED
+
 Theorem sym_do_swap_big:
   do_swap dist ps = (ops,out) /\ 16 < dist /\ dist < LENGTH ps.ps_stack /\
   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
@@ -613,23 +751,8 @@ Theorem sym_do_swap_big:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >>
-  qabbrev_tac `items = top_n (dist+1) ps.ps_stack` >>
-  qabbrev_tac `offsets = FST (spill_alloc_n [] ps.ps_alloc items)` >>
-  qabbrev_tac `al = FOLDL (\a off. free_spill_slot off a)
-    (SND (spill_alloc_n [] ps.ps_alloc items)) offsets` >>
-  RULE_ASSUM_TAC (PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  drule_all_then strip_assume_tac sym_do_swap_big_shape >>
-  `al.sa_next_offset <= r.sr_spill_end` by metis_tac[] >>
-  drule_all_then strip_assume_tac scratch_swap_allocation_facts >>
-  `EVERY (\off. off < dimword(:256)) offsets` by
-    (qpat_x_assum `EVERY _ ops` mp_tac >> simp[EVERY_APPEND, EVERY_MAP]) >>
-  `dist+1 <= LENGTH ps.ps_stack` by decide_tac >>
-  drule_all_then strip_assume_tac sym_kinds_ok_scratch_split >>
-  qpat_assum `items = _` (fn th =>
-    qpat_x_assum `LIST_REL _ (REVERSE (top_n _ _)) _`
-      (assume_tac o PURE_REWRITE_RULE [GSYM th])) >>
-  drule_all_then MATCH_ACCEPT_TAC sym_scratch_swap_sim
+  strip_tac >> drule_all_then strip_assume_tac sym_swap_shape_witnesses >>
+  drule_all_then MATCH_ACCEPT_TAC sym_swap_shaped_sim
 QED
 
 Theorem sym_do_swap:
