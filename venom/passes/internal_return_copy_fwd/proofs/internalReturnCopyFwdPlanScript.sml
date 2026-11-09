@@ -699,6 +699,146 @@ Proof
   Cases_on `(EL i bb.bb_instructions).inst_opcode = ASSIGN` >> simp[]
 QED
 
+Theorem ircf_block_plan_step:
+  !fn bb cur ctx k insts.
+    wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+    ircf_no_dst_write_alias fn /\ MEM bb fn.fn_blocks /\
+    ctx.icf_dfg = dfg_build_function fn /\
+    ircf_block_plan fn bb cur /\
+    ircf_try_forward ctx cur k = SOME insts ==>
+    ircf_block_plan fn bb (cur with bb_instructions := insts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ircf_try_forward_prefix_and_copy >> strip_tac >>
+  `LENGTH cur.bb_instructions = LENGTH bb.bb_instructions` by
+    gvs[ircf_block_plan_def] >>
+  `k < LENGTH bb.bb_instructions` by simp[] >>
+  drule_all ircf_block_plan_mcopy_original >> strip_tac >>
+  drule ircf_block_plan_inst_ids >> strip_tac >>
+  drule_all ircf_try_forward_original_ok >> strip_tac >>
+  drule_all ircf_block_plan_forward_insert >> strip_tac >>
+  `!j d2 s2 sz2. j IN ircf_fwds bb cur /\
+    ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) ==>
+    ircf_fwd_ok fn bb j d2 s2 sz2` by
+    metis_tac[ircf_block_plan_fwd_ok] >>
+  simp[ircf_block_plan_def] >> conj_tac
+  >- gvs[ircf_block_plan_def] >>
+  conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[ircf_block_plan_def]) >>
+  gen_tac >> strip_tac >>
+  Cases_on `i = k` >- gvs[] >>
+  suspend "pointwise"
+QED
+
+Resume ircf_block_plan_step[pointwise]:
+  drule ircf_try_forward_update >> strip_tac >>
+  `d = icf_assign_root ctx.icf_dfg {} dst /\
+   s = icf_assign_root ctx.icf_dfg {} src` by
+    gvs[ircf_copy_roots_def] >>
+  `i < LENGTH cur.bb_instructions` by simp[] >>
+  `EL i cur.bb_instructions =
+    if i IN ircf_fwds bb cur then mk_nop_inst (EL i bb.bb_instructions)
+    else if (EL i bb.bb_instructions).inst_opcode = ASSIGN
+    then EL i bb.bb_instructions
+    else (EL i bb.bb_instructions) with inst_operands :=
+      MAP (ircf_redirect_op fn bb cur) (EL i bb.bb_instructions).inst_operands` by
+    (qpat_x_assum `ircf_block_plan _ _ _` mp_tac >>
+     simp[ircf_block_plan_def]) >>
+  Cases_on `i IN ircf_fwds bb cur`
+  >- (simp[indexedListsTheory.EL_MAPi] >> gvs[mk_nop_inst_def] >>
+      Cases_on `MEM (EL i bb.bb_instructions).inst_id
+        (MAP (\(v,ri,pos). ri.inst_id) uses)` >> simp[]) >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = ASSIGN`
+  >- suspend "assign" >>
+  suspend "ordinary"
+QED
+
+Resume ircf_block_plan_step[assign]:
+  `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM]) >>
+  `inst_wf (EL i bb.bb_instructions)` by
+    (fs[fn_inst_wf_def] >> metis_tac[EL_MEM]) >>
+  `~MEM (EL i bb.bb_instructions).inst_id
+       (MAP (\(v,ri,pos). ri.inst_id) uses)` by
+    (simp[MEM_MAP, pairTheory.EXISTS_PROD] >> rpt strip_tac >>
+     fs[MEM_FILTER, pairTheory.LAMBDA_PROD, ircf_alias_use_positions_mem] >>
+     rename1 `MEM ri (fn_insts fn)` >>
+     `ri = EL i bb.bb_instructions` by
+       (irule fn_inst_ids_distinct_inj >> metis_tac[wf_function_def]) >>
+     gvs[icf_is_assign_output_use_def] >>
+     gvs[inst_wf_def]) >>
+  gvs[indexedListsTheory.EL_MAPi]
+QED
+
+Resume ircf_block_plan_step[ordinary]:
+  `!v. ircf_redirect fn bb (cur with bb_instructions := insts) v =
+     if ircf_alias fn d (ircf_redirect fn bb cur v) then s
+     else ircf_redirect fn bb cur v` by
+    (gen_tac >> irule ircf_redirect_insert >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `insts = MAPi update cur.bb_instructions` >>
+  `EL i insts = update i (EL i cur.bb_instructions)` by
+    simp[indexedListsTheory.EL_MAPi] >>
+  qpat_x_assum `insts = _` kall_tac >>
+  Cases_on `MEM (EL i bb.bb_instructions).inst_id
+    (MAP (\(v,ri,pos). ri.inst_id) uses)`
+  >- (qpat_x_assum `uses = _` kall_tac >>
+      simp[indexedListsTheory.EL_MAPi, Abbr `update`,
+          MAP_MAP_o, combinTheory.o_DEF] >>
+      simp[instruction_component_equality] >>
+      irule MAP_CONG >> simp[] >> gen_tac >> strip_tac >>
+      Cases_on `x` >>
+      simp[ircf_redirect_op_def, icf_collect_aliases_ircf_alias, COND_RAND]) >>
+  suspend "unselected"
+QED
+
+Resume ircf_block_plan_step[unselected]:
+  `ALL_DISTINCT (MAP (\inst. inst.inst_id) bb.bb_instructions)` by
+    (qpat_x_assum `MEM bb _` (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+     gvs[wf_function_def, fn_inst_ids_distinct_def, FLAT_APPEND,
+         ALL_DISTINCT_APPEND]) >>
+  `(EL i bb.bb_instructions).inst_id <> (EL k bb.bb_instructions).inst_id` by
+    (drule ALL_DISTINCT_EL_IMP >>
+     disch_then (qspecl_then [`i`, `k`] mp_tac) >> simp[EL_MAP]) >>
+  `MEM (EL i bb.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) (EL i bb.bb_instructions).inst_operands ==>
+       ~ircf_alias fn d v` by
+    (rpt strip_tac >>
+     qpat_x_assum `~MEM _ (MAP _ uses)` mp_tac >>
+     simp[MEM_MAP, pairTheory.EXISTS_PROD] >>
+     qexistsl_tac [`v`, `EL i bb.bb_instructions`] >>
+     qpat_x_assum `MEM (Var v) _` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+     qexists_tac `n` >>
+     simp[MEM_FILTER, ircf_alias_use_positions_mem, icf_is_assign_output_use_def] >>
+     gvs[]) >>
+  suspend "noalias"
+QED
+
+Resume ircf_block_plan_step[noalias]:
+  `!v. MEM (Var v) (EL i bb.bb_instructions).inst_operands ==>
+       ~ircf_alias fn d (ircf_redirect fn bb cur v)` by
+    (gen_tac >> strip_tac >>
+     Cases_on `?j d2 s2 sz2. j IN ircf_fwds bb cur /\
+       ircf_copy_roots fn (EL j bb.bb_instructions) = SOME (d2,s2,sz2) /\
+       ircf_alias fn d2 v`
+     >- (pop_assum strip_assume_tac >>
+         `ircf_fwd_ok fn bb j d2 s2 sz2` by metis_tac[] >>
+         `ircf_redirect fn bb cur v = s2` by
+           (irule ircf_redirect_source >> metis_tac[]) >>
+         metis_tac[ircf_forward_source_not_dest_alias]) >>
+     `ircf_redirect fn bb cur v = v` by
+       (irule ircf_redirect_unaffected >> metis_tac[]) >>
+     metis_tac[]) >>
+  qpat_x_assum `uses = _` kall_tac >>
+  simp[Abbr `update`, instruction_component_equality] >>
+  irule MAP_CONG >> simp[] >> gen_tac >> strip_tac >>
+  Cases_on `x` >> simp[ircf_redirect_op_def] >>
+  metis_tac[]
+QED
+
+Finalise ircf_block_plan_step
+
 (* Why it holds: ircf_try_forward keeps the length and every inst_id, and
    only NOPs its copy and rewrites the instructions the original DFG lists
    as non-ASSIGN uses of the destination aliases.  A forwarded copy is
@@ -717,5 +857,20 @@ Theorem ircf_transform_block_plan:
     ircf_block_plan fn bb
       (SND (ircf_transform_block (icf_build_ctx fn_meta ctx_fns rma fn) bb))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[ircf_transform_block_def] >>
+  qmatch_goalsub_abbrev_tac `FOLDL fold_step _ _` >>
+  `!xs acc. ircf_block_plan fn bb (SND acc) ==>
+    ircf_block_plan fn bb (SND (FOLDL fold_step acc xs))` by
+    (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+     first_x_assum irule >> PairCases_on `acc` >> fs[] >>
+     simp[Abbr `fold_step`] >>
+     Cases_on `h >= LENGTH acc1.bb_instructions` >> simp[] >>
+     Cases_on `(EL h acc1.bb_instructions).inst_opcode <> MCOPY` >> simp[] >>
+     Cases_on `ircf_try_forward (icf_build_ctx fn_meta ctx_fns rma fn) acc1 h` >>
+     simp[] >> irule ircf_block_plan_step >>
+     gvs[wf_ssa_def] >>
+     qexistsl_tac [`icf_build_ctx fn_meta ctx_fns rma fn`, `h`] >>
+     simp[icf_build_ctx_def]) >>
+  first_x_assum irule >> simp[ircf_block_plan_refl]
 QED
