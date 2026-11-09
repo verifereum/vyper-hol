@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallJointContract bodyIntCallProducerOrder bodyIntCallJointCallCore
   bodyIntCallFamCallIntCertificates bodyIntCallFamCallIntCertificateIntro
   bodyIntCallFamCallIntTraverseInterfaces bodyIntCallFamCallIntTraversePost
-  bodyIntCallFamCallIntTraverseChild
+  bodyIntCallFamCallIntTraverseChild bodyIntCallFamCallIntTraverse
 
 (* The packaging theorem quantifies over every frame at the selected owner;
    the graph induction premise supplies all of them at once. *)
