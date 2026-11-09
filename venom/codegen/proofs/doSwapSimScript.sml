@@ -1383,7 +1383,7 @@ Finalise restore_n_sim;
    --------------------------------------------------------------- *)
 (*  flookup_fupdate_list_el: after |++ ZIP(items, offsets),
     looking up EL idx items gives EL idx offsets *)
-Theorem flookup_fupdate_list_el[local]:
+Theorem flookup_fupdate_list_el:
   !items offsets sp idx.
     ALL_DISTINCT items /\
     LENGTH items = LENGTH offsets /\
@@ -2219,7 +2219,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem top_n_suffix[local]:
+Theorem top_n_suffix:
   !n stk. n <= LENGTH stk ==>
     TAKE (LENGTH stk - n) stk ++ top_n n stk = stk
 Proof
@@ -3290,7 +3290,7 @@ QED
 
 (* EL at a desired-permuted index in items equals EL at the
    reverse-permuted index in REVERSE items. *)
-Theorem el_desired_reverse_items[local]:
+Theorem el_desired_reverse_items:
   !(items:'a list) k.
     LENGTH items >= 2 /\ k < LENGTH items ==>
     EL (EL k ([LENGTH items - 1] ++ GENLIST (\i. i + 1)
