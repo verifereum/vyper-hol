@@ -684,7 +684,10 @@ Proof
   TRY (drule mem_field_offset_sound >> strip_tac) >>
   Cases_on `a` >>
   simp[evaluate_subscripts_def, subscript_type_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
+  BasicProvers.TOP_CASE_TAC >>
+  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def]
 QED
 
 Theorem place_store_path_unread_frame:
