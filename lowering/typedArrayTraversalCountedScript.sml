@@ -1,7 +1,8 @@
 Theory typedArrayTraversalCounted
 Ancestors
   typedArrayControlCounted typedArrayLoopControlMem fragGasPathMem
-  placeMemoryArrayControl placeMemoryArrayForward
+  placeMemoryArrayControl placeMemoryArrayForward placeMemoryCopyEffect
+  valueEncoding valueEncodingProps vyperValue vyperTypeInvariants
   typedCopyLoopCounted bodyDeclMemoryCounted bodyDeclMemoryCore
   fragExecMem instMemFrontier exprLoweringProps context compileEnv emitHelper
   emitHelperProps venomState venomInst list rich_list arithmetic
@@ -108,4 +109,82 @@ Proof
   conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
   simp[jump_to_def, typed_sa_backedge_state_def, update_var_def,
        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem typed_memory_array_round_frame[local]:
+  val_wf stv v /\ (!j. j < N ==> val_wf dtv (elem j)) /\
+  (src + type_memory_size stv <= dst \/ dst + N * type_memory_size dtv <= src) /\
+  i < N /\ val_in_memory stv v src a.vs_memory /\
+  (!j. j < i ==> val_in_memory dtv (elem j)
+     (dst + j * type_memory_size dtv) a.vs_memory) /\
+  typed_copy_effect ctx func sa head s a dst (N * type_memory_size dtv) /\
+  val_in_memory dtv (elem i) (dst + i * type_memory_size dtv) b.vs_memory /\
+  typed_copy_effect ctx func sa head a b
+    (dst + i * type_memory_size dtv) (type_memory_size dtv) ==>
+  val_in_memory stv v src b.vs_memory /\
+  (!j. j < SUC i ==> val_in_memory dtv (elem j)
+     (dst + j * type_memory_size dtv) b.vs_memory) /\
+  typed_copy_effect ctx func sa head s b dst (N * type_memory_size dtv)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `val_in_memory stv v src b.vs_memory /\
+   (!j. j < SUC i ==> val_in_memory dtv (elem j)
+      (dst + j * type_memory_size dtv) b.vs_memory)` by
+    (irule typed_memory_array_prefix_step >>
+     conj_tac >- (qexists `N` >> simp[]) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  `i * type_memory_size dtv + type_memory_size dtv <= N * type_memory_size dtv` by
+    (`SUC i * type_memory_size dtv <= N * type_memory_size dtv` by simp[] >>
+     qpat_x_assum `SUC i * _ <= _` mp_tac >>
+     pure_rewrite_tac[MULT_CLAUSES] >> decide_tac) >>
+  `typed_copy_effect ctx func sa head a b dst (N * type_memory_size dtv)` by
+    (irule typed_copy_effect_enlarge >> goal_assum (drule_at Any) >> decide_tac) >>
+  simp[] >> irule typed_copy_effect_then >>
+  qexistsl [`sa`, `head`, `a`] >> simp[]
+QED
+
+Theorem typed_memory_array_iteration_path_mem:
+  val_wf stv v /\
+  (!j. j < N ==> val_wf dtv (elem j)) /\
+  (src + type_memory_size stv <= dst \/
+   dst + N * type_memory_size dtv <= src) /\
+  val_in_memory stv v src u.vs_memory /\
+  typed_copy_effect ctx func sa head s u dst (N * type_memory_size dtv) /\
+  lookup_var counter u = SOME (n2w 0) /\ alloca_history func u /\
+  (!i a. i < N /\
+     val_in_memory stv v src a.vs_memory /\
+     (!j. j < i ==> val_in_memory dtv (elem j)
+       (dst + j * type_memory_size dtv) a.vs_memory) /\
+     typed_copy_effect ctx func sa head s a dst (N * type_memory_size dtv) /\
+     lookup_var counter a = SOME (n2w i) /\ alloca_history func a ==>
+     ?b. val_in_memory dtv (elem i)
+           (dst + i * type_memory_size dtv) b.vs_memory /\
+         typed_copy_effect ctx func sa head a b
+           (dst + i * type_memory_size dtv) (type_memory_size dtv) /\
+         lookup_var counter b = SOME (n2w (SUC i)) /\
+         gas_path_mem ctx func a 0 (OK b) /\ alloca_history func b) ==>
+  ?t. val_in_memory stv v src t.vs_memory /\
+      (!j. j < N ==> val_in_memory dtv (elem j)
+        (dst + j * type_memory_size dtv) t.vs_memory) /\
+      typed_copy_effect ctx func sa head s t dst (N * type_memory_size dtv) /\
+      lookup_var counter t = SOME (n2w N) /\
+      gas_path_mem ctx func u 0 (OK t) /\ alloca_history func t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `loop_inv = \j a.
+    val_in_memory stv v src a.vs_memory /\
+    (!k. k < j ==> val_in_memory dtv (elem k)
+      (dst + k * type_memory_size dtv) a.vs_memory) /\
+    typed_copy_effect ctx func sa head s a dst (N * type_memory_size dtv) /\
+    lookup_var counter a = SOME (n2w j) /\ alloca_history func a` >>
+  `?t. gas_path_mem ctx func u 0 (OK t) /\ loop_inv N t` suffices_by
+    (simp[Abbr `loop_inv`] >> metis_tac[]) >>
+  irule (Q.SPECL [`N`, `0`] gas_path_mem_finite_iteration) >>
+  simp[Abbr `loop_inv`] >> conj_tac
+  >- (rpt strip_tac >> drule typed_copy_effect_endpoint >> simp[]) >>
+  rpt strip_tac >> qpat_x_assum `!i a. _` drule_all >> strip_tac >>
+  qexists `b` >> simp[] >>
+  irule typed_memory_array_round_frame >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
 QED

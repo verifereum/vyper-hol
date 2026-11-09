@@ -83,3 +83,57 @@ Proof
   gvs[gas_marked_path_def, typed_sa_backedge_insts_def] >>
   drule_all gas_path_mem_then >> simp[]
 QED
+
+Theorem typed_memory_array_condition_prefix[local]:
+  eval_operand (Var counter) s = SOME (n2w i) /\
+  eval_operand length s = SOME (n2w N) /\ i <= N /\ N < dimword(:256) ==>
+  run_inst_seq [mk_inst id1 LT [Var counter; length] [lt];
+    mk_inst id2 ISZERO [Var lt] [done]] s =
+    OK (typed_sa_header_state lt done i N s)
+Proof
+  strip_tac >> `i < dimword(:256)` by decide_tac >>
+  gvs[eval_operand_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
+    exec_pure2_def, exec_pure1_def, eval_operand_def, lookup_var_update_var,
+    w2n_n2w, typed_sa_header_state_def] >>
+  Cases_on `i < N` >> simp[bool_to_word_def]
+QED
+
+Theorem typed_memory_array_condition_path_mem:
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  bb.bb_instructions =
+    [mk_inst id1 LT [Var counter; length] [lt];
+     mk_inst id2 ISZERO [Var lt] [done];
+     mk_inst id3 JNZ [Var done; Label exit; Label blabel] []] /\
+  eval_operand (Var counter) s = SOME (n2w i) /\
+  eval_operand length s = SOME (n2w N) /\ i <= N /\ N < dimword(:256) ==>
+  gas_path_mem ctx func s 0
+    (OK (jump_to (if i < N then blabel else exit)
+      ((update_var done (bool_to_word (~(i < N)))
+         (update_var lt (bool_to_word (i < N)) s)) with vs_inst_idx := 2)))
+Proof
+  strip_tac >> drule_all typed_memory_array_condition_prefix >> strip_tac >>
+  qabbrev_tac `q = typed_sa_header_state lt done i N s` >>
+  `~q.vs_halted /\ q.vs_current_bb = s.vs_current_bb` by
+    simp[Abbr `q`, typed_sa_header_state_def, update_var_def] >>
+  `gas_marked_path T ctx func s 0
+    (OK (q with vs_inst_idx := s.vs_inst_idx + LENGTH
+      [mk_inst id1 LT [Var counter; length] [lt];
+       mk_inst id2 ISZERO [Var lt] [done]]))` by
+    (irule topcopy_seq_path >> simp[Abbr `q`] >>
+     simp[mk_inst_def, is_terminator_def, IS_PREFIX_APPEND,
+       run_inst_seq_mem_ok_def, below_frontier_no_ranges] >>
+     rpt CASE_TAC >> simp[]) >>
+  `gas_marked_path T ctx func (q with vs_inst_idx := 2) 0
+    (OK (jump_to (if i < N then blabel else exit)
+      (q with vs_inst_idx := 2)))` by
+    (irule topcopy_jump_path >> simp[] >>
+     qexists `mk_inst id3 JNZ [Var done; Label exit; Label blabel] []` >>
+     simp[get_instruction_def, mk_inst_def, step_inst_base_opcode_eqs,
+       Abbr `q`, typed_sa_header_state_def, eval_operand_def,
+       lookup_var_update_var] >>
+     Cases_on `i < N` >> simp[bool_to_word_def]) >>
+  gvs[gas_marked_path_def, typed_sa_header_state_def] >>
+  drule_all gas_path_mem_then >> simp[]
+QED
