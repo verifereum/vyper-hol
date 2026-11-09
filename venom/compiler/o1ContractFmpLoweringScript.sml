@@ -236,6 +236,33 @@ Proof
   metis_tac[mem_inv_seal_eq]
 QED
 
+Theorem fmp_lowering_stage_gas_events:
+  ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+    (o1_walk_view rpolicy 3) C C' /\
+  o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+    C.ctx_functions /\
+  callee_first names C.ctx_functions /\
+  lookup_function name C.ctx_functions = SOME fn ==>
+  ?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
+    fn_seal_eq fn fn' /\
+    (!fuel s. gas_events_blocks fuel C fn s =
+              gas_events_blocks fuel C' fn' s) /\
+    (!fuel s. run_context fuel C s = run_context fuel C' s)
+Proof
+  strip_tac >> drule_all fmp_lowering_stage_sealed >> strip_tac >>
+  `ctx_seal_eq C C'`
+    by (fs[ctx_seal_eq_def, ctx_pass_stage_def] >>
+        irule LIST_REL_mono >> first_x_assum (irule_at Any) >>
+        simp[fn_seal_eq_def]) >>
+  `?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
+         fn_seal_eq fn fn'`
+    by (fs[ctx_seal_eq_def] >>
+        metis_tac[lookup_function_seal_eq]) >>
+  qexists_tac `fn'` >> simp[] >>
+  metis_tac[gas_events_defs_seal_eq, run_context_seal_eq]
+QED
+
 Theorem o1_ctx_shape_entry_no_return[local]:
   o1_ctx_shape ctx /\ ctx.ctx_entry = SOME name /\
   lookup_function name ctx.ctx_functions = SOME fn ==>
