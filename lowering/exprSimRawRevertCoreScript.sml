@@ -30,7 +30,8 @@ Theorem eval_raw_revert_action:
   !cx ann e dflt.
     eval_expr cx (Call ann RawRevert [e] dflt) =
     bind (bind (eval_expr cx e) (read_result cx))
-      (\v. raise (Error (RuntimeError "raw_revert")))
+      (\v. bind (lift_option_type (dest_BytesV v) "raw_revert data")
+              (\data. raise (Error (RevertData data))))
 Proof
   rw[FUN_EQ_THM] >>
   simp[Once evaluate_def] >> simp[Once evaluate_def] >>
@@ -296,6 +297,16 @@ Proof
      simp[eval_raw_revert_action] >>
      qpat_x_assum `bind _ _ _ = _` (fn th => simp[Once bind_def, th]) >>
      simp[expr_vv_res_ok_def, expr_res_ok_def]) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx))
+     (\r. !v. r = INL v ==> ?bs. dest_BytesV v = SOME bs) es` by
+    (rw[gas_admissible_def] >> Cases_on `dest_BytesV v` >> simp[] >>
+     qpat_x_assum `gas_admissible (eval_expr _ _) _ _`
+       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+     disch_then (qspecl_then [`gs`, `INR (Error (TypeError "raw_revert data"))`,
+                              `ee`] mp_tac) >>
+     simp[eval_raw_revert_action] >>
+     qpat_x_assum `bind _ _ _ = _` (fn th => simp[Once bind_def, th]) >>
+     simp[lift_option_type_def, raise_def, bind_def, expr_vv_res_ok_def]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ e _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sm`, `data`, `s0`] mp_tac) >>
@@ -311,17 +322,23 @@ Proof
           `~t.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec,
                       gas_path_normal] >>
+          `?bs. dest_BytesV v = SOME bs` by
+            (qpat_x_assum `gas_admissible (bind _ _) (\r. _) _`
+               (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+             qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+               (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+             metis_tac[]) >>
           drule_all raw_revert_tail_path >>
           disch_then (qspec_then `ctx` strip_assume_tac) >>
           simp[gas_summary_at_def] >>
-          qexistsl_tac [`INR (Error (RuntimeError "raw_revert"))`, `es_end`,
+          qexistsl_tac [`INR (Error (RevertData bs))`, `es_end`,
                         `Abort Revert_abort w'`] >>
           simp[exit_result_def, expr_exit_def] >>
           irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                  |> REWRITE_RULE [APPEND_NIL]) >>
           qexistsl_tac [`es_end`, `t`, `v`] >> simp[] >>
-          simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def,
-               raise_def]) >>
+          gvs[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def,
+              raise_def, bind_def, lift_option_type_def, return_def]) >>
       Cases_on `res` >> gvs[expr_exit_def] >>
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
