@@ -624,6 +624,9 @@ Theorem extcall_return_values:
     vv = (if ret_type = NoneT then StackValue ann result_op
           else LocatedValue ann (mk_ptr result_op LocMemory)) /\
     fn_has_code sr sb func /\ fn_inst_ids_distinct func /\
+    (sb.cs_current_insts <> [] \/
+     !bb. lookup_block sb.cs_current_bb func.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) /\
     local_ptrs_reserved cenv sa /\
     extcall_returned ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap target
       has_default default_op default_ty default_opt returnData ee t ==>
@@ -718,6 +721,8 @@ QED
 
 Theorem compile_extcall_case:
   !nocalls ctx func cenv cx ann is_static skip sig opts args dflt.
+    (!lbl bb. lookup_block lbl func.fn_blocks = SOME bb ==>
+              phi_prefix_length bb.bb_instructions = 0) /\
     exprs_case nocalls ctx func cenv cx (TAKE 1 args) /\
     (!s target t.
        eval_exprs cx (TAKE 1 args) s = (INL target, t) ==>
@@ -760,5 +765,7 @@ Proof
   qpat_assum `extcall_returned _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_body_pre _ _ _ _ _` (irule_at Any) >>
   qexists_tac `result_op` >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, REFL_TAC]
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC, REFL_TAC,
+         DISJ2_TAC >> rpt strip_tac >> res_tac]
 QED
