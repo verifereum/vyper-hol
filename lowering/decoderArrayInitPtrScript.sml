@@ -7,6 +7,7 @@ Ancestors wordLoadStorePtr decoderIndexInitCorePtr decoderSetupStepPtr ptrSafety
   emitHelperProps exprLoweringProps fragExec decoderGhostFramePtr
   abiDecoderContract entryDispatchPtr instIdxIndep fragExecPtr
   abiDecoderReentry calldataDynOwned abiDecoderArrayLoopInit abiDecoderDynarrayPrefix
+  abiDecoderArrayInitReentry
   abiDecoderDynarrayBound abiDecoderArrayHeader abiDecoderIndexInit abiDecoderAllocation
 
 (* The calldata address step: base Lit 0w adds no instruction. *)
@@ -797,6 +798,9 @@ Theorem calldata_array_init_sequence_ptr:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `eval_operand (Var root) s = SOME (n2w d)` by simp[eval_operand_def] >>
+  `first <= sb.cs_next_id - 2` by
+    (drule (calldata_pos abi_decode_array_loop_init_site_bounds) >>
+     simp[abi_decode_source_opcode_def] >> strip_tac >> decide_tac) >>
   drule_at (Pat `abi_decoder_budget _ _ _ _ _`) (calldata_pos abi_decode_array_loop_init_sequence) >>
   disch_then (drule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand src s = _`)) >>
