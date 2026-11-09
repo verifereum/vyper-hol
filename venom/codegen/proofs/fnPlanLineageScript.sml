@@ -4822,3 +4822,89 @@ Proof
   qpat_assum `!j v. _` (qspecl_then [`LENGTH (collect_phis sb.bb_instructions) + j`,`v`] mp_tac) >>
   simp[arithmeticTheory.ADD_COMM]
 QED
+
+Theorem lineage_dfs_join_physical_start_actual:
+  !fn entry succ sb dfg ch growth spill_base lbl_ctr fn_ops ps_end psL psD.
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\ succ <> entry /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  generate_fn_plan_with_cleanup_analyzed (liveness_analyze fn) dfg (cfg_analyze fn)
+    ch growth fn spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn
+    (init_cleanup_plan_state ch growth spill_base lbl_ctr) succ psD ==>
+  ?prefixL prefixD suffix phi_ops al p0 xs qL qD.
+    p0 = psD with <|ps_stack := suffix; ps_alloc := al|> /\
+    xs = DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions /\
+    get_params sb.bb_instructions = [] /\ xs <> [] /\
+    qL = p0 with ps_stack := prefixL ++ p0.ps_stack /\
+    qD = p0 with ps_stack := prefixD ++ p0.ps_stack /\
+    (!p q. (p = psL /\ q = qL) \/ (p = psD /\ q = qD) ==>
+      phi_schedule_run
+        (MAPi (\i inst. (inst, live_vars_at (liveness_analyze fn) succ (SUC i),
+          bb_is_halting sb)) (collect_phis sb.bb_instructions)) p = (phi_ops,q) /\
+      generate_block_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn sb p =
+        case generate_block_insts_plan (liveness_analyze fn) dfg (cfg_analyze fn) fn
+          succ (bb_is_halting sb) 0 (LENGTH sb.bb_instructions)
+          (LENGTH (collect_phis sb.bb_instructions)) xs q of
+          NONE => NONE
+        | SOME (tail_ops,out) => if revert_block_spills sb (phi_ops ++ tail_ops)
+            then NONE else SOME ([SOLabel succ] ++ phi_ops ++ tail_ops,out)) /\
+    (!k. k <= LENGTH xs /\
+      (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI) ==>
+      ?ops q.
+        native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+          (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+          (LENGTH sb.bb_instructions) xs p0 k ops q /\
+        native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+          (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+          (LENGTH sb.bb_instructions) xs qL k ops
+          (q with ps_stack := prefixL ++ q.ps_stack) /\
+        native_inst_ops_prefix (liveness_analyze fn) dfg (cfg_analyze fn) fn succ
+          (bb_is_halting sb) (LENGTH (collect_phis sb.bb_instructions))
+          (LENGTH sb.bb_instructions) xs qD k ops
+          (q with ps_stack := prefixD ++ q.ps_stack))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_dfs_join_ordinary_paired_interval_actual >>
+  disch_then (qspec_then `bb_is_halting sb` strip_assume_tac) >>
+  `fn_entry_label fn <> SOME succ` by simp[] >>
+  `collect_phis sb.bb_instructions <> []` by
+    (Cases_on `collect_phis sb.bb_instructions` >> gvs[]) >>
+  `psL with <|ps_stack := prefixL ++ suffix; ps_alloc := al|> =
+   p0 with ps_stack := prefixL ++ p0.ps_stack` by
+    (drule_all lineage_state_actual_dfs_fields >> disch_then (fn th => simp[Once th])) >>
+  `psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|> =
+   p0 with ps_stack := prefixD ++ p0.ps_stack` by simp[] >>
+  qexistsl_tac [`prefixL`,`prefixD`,`suffix`,`phi_ops`,`al`,`p0`,`xs`,
+    `p0 with ps_stack := prefixL ++ p0.ps_stack`,
+    `p0 with ps_stack := prefixD ++ p0.ps_stack`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  `get_params sb.bb_instructions = [] /\ xs <> []` by
+    (drule_all fnPlanLineagePhiScheduleTheory.ready_phi_block_suffix >>
+     strip_tac >>
+     qpat_x_assum `sb.bb_instructions = _ ++ _`
+       (mp_tac o Q.AP_TERM `DROP (LENGTH (collect_phis sb.bb_instructions))`) >>
+     simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> metis_tac[]) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >> conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- REFL_TAC >> conj_tac >- REFL_TAC >>
+  conj_tac >- suspend "block_equations" >> first_assum ACCEPT_TAC
+QED
+
+Resume lineage_dfs_join_physical_start_actual[block_equations]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `p = _` SUBST_ALL_TAC >>
+  qpat_x_assum `q = _` SUBST_ALL_TAC >>
+  conj_asm1_tac >- metis_tac[] >>
+  qpat_x_assum `p0 = _` kall_tac >>
+  drule_all fnPlanLineagePhiScheduleTheory.generate_join_block_plan_phi_schedule >>
+  disch_then (qspec_then `dfg` strip_assume_tac) >>
+  qpat_x_assum `sb.bb_instructions = _ ++ _`
+    (mp_tac o Q.AP_TERM `DROP (LENGTH (collect_phis sb.bb_instructions))`) >>
+  simp_tac (srw_ss()) [listTheory.DROP_APPEND] >> simp[]
+QED
+
+Finalise lineage_dfs_join_physical_start_actual
