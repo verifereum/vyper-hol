@@ -3,6 +3,7 @@ Theory abiDecodePtrComplexHeader
 Ancestors
   abiDecodePtrMemberInterface abiDecodePtrScalarFrame abiDecodePtrPrims
   abiDecoderRange abiEncoder bodyPtrBopScalarCompile bodyPtrBopScalarSeq
+  stmtReasonLitFragMemory fragGasSeqPtr stateFrame
   bodyPtrBopScalarOutcome abiEncoderWindowLookup freshWrites
   exprSimPtrProps assignTuplePtrLoadStep emitHelper emitHelperProps
   exprLoweringProps compileEnv bodyPtrDefs ptrDiscipline fragExec
@@ -68,3 +69,93 @@ Proof
   qexists_tac `B` >> simp[] >> irule bop_scalar_seq_append >>
   qexists_tac `e INSERT A` >> simp[]
 QED
+
+Theorem abi_decode_complex_header_success:
+  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s /\
+  emit_op ADD [pos;Lit (n2w static_sz)] sa = (e,sm) /\
+  compile_abi_decode_range_check pos e hi sm = ((),sb) /\
+  fn_has_code sa sb func /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H tf.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tf
+      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+    abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi
+      sb H tf (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    t.vs_memory = s.vs_memory
+Proof
+  strip_tac >>
+  drule abi_decode_member_live_compiler >> strip_tac >>
+  drule abi_decode_member_live_resources >> strip_tac >>
+  drule_all abi_decode_complex_header_shape >> strip_tac >>
+  `?B. bop_scalar_seq {x | not_fresh_at sa x}
+    {pos;hi;Lit (n2w static_sz)} (emitted_insts sa sb) B` by
+    (irule abi_decode_complex_header_scalar >> simp[] >> metis_tac[]) >>
+  `!op. op IN {pos;hi;Lit (n2w static_sz)} ==>
+    op_prov G op = NONE /\ op_taint tn op = {}` by
+    (pure_rewrite_tac[IN_INSERT, NOT_IN_EMPTY] >> rpt strip_tac >>
+     gvs[] >> simp[op_prov_def, op_taint_def]) >>
+  drule_all abi_decode_scalar_success_frame >>
+  disch_then (qspecl_then [`LENGTH sb.cs_current_insts`, `func`, `PG`, `D`]
+    strip_assume_tac) >>
+  fs[IN_GSPEC_IFF] >>
+  qexistsl_tac [`H`, `tm`] >>
+  conj_tac >- suspend "path" >>
+  reverse conj_tac
+  >- (qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  suspend "live"
+QED
+
+Resume abi_decode_complex_header_success[path]:
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    fs[inst_extends_def, emitted_insts_def] >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (drule_all fn_has_code_code >> simp[] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb) /\
+   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)` by
+    (drule bop_scalar_seq_opcodes >> simp[EVERY_CONJ]) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (fs[EVERY_MEM, FILTER_EQ_NIL] >> metis_tac[]) >>
+  `LENGTH sb.cs_current_insts = s.vs_inst_idx + LENGTH (emitted_insts sa sb)` by
+    (qpat_x_assum `sb.cs_current_insts = _ ++ _` mp_tac >>
+     disch_then (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]) >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
+
+Resume abi_decode_complex_header_success[live]:
+  qmatch_goalsub_abbrev_tac `abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tm u` >>
+  `state_frame u = state_frame (s with vs_inst_idx := u.vs_inst_idx) /\
+   u.vs_memory = s.vs_memory /\ u.vs_current_bb = sb.cs_current_bb` by
+    (unabbrev_all_tac >>
+     qpat_x_assum `t = s with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     simp[state_frame_def]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+    FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)` by
+    (rpt strip_tac >> fs[Abbr `u`] >>
+     first_x_assum (qspec_then `Var x` mp_tac) >> simp[]) >>
+  `abi_decode_member_frame sa G tn s H tm u (w2n d) 0` by
+    (irule abi_decode_member_frame_readonly >> simp[] >> gvs[]) >>
+  `ghost_inv ret cenv cx es H tm u` by
+    (irule ghost_inv_old_vars_frame_ptr >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     qexists_tac `sa` >> simp[] >> gvs[]) >>
+  `stmt_state_rel ctx func cenv cx es u` by
+    (irule stmt_state_rel_old_vars_frame_ptr >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     qexists_tac `sa` >> simp[] >> gvs[Abbr `u`]) >>
+  `fresh_vars_wrt sb s` by
+    (irule fresh_vars_wrt_mono >> qexists_tac `sa` >> simp[]) >>
+  `fresh_vars_wrt sb t` by
+    (irule abi_window_seq_fresh >>
+     qexistsl_tac [`sb`, `emitted_insts sa sb`, `s`] >> simp[] >>
+     fs[EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!i. MEM i (emitted_insts sa sb) ==> _` drule >>
+     strip_tac >> gvs[fresh_write_op_simple]) >>
+  irule abi_decode_member_live_transport >>
+  simp[Abbr `u`] >>
+  conj_tac >- fs[fresh_vars_wrt_def] >>
+  goal_assum (drule_at (Pat `abi_decode_member_live _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qexistsl_tac [`w2n d`, `0`] >> simp[]
+QED
+
+Finalise abi_decode_complex_header_success
