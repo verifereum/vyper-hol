@@ -32,7 +32,7 @@ Proof
     exact_static_alloca j = SOME (b,t)` by metis_tac[static_alloca_items_MEM] >>
   `i <> j` by metis_tac[PAIR_EQ, SOME_11] >>
   simp[fn_needs_liveness_allocation_def] >>
-  irule distinct_allocas_multiple >>
+  disj1_tac >> irule distinct_allocas_multiple >>
   qexistsl_tac [`i`,`j`] >> simp[is_alloca_op_def]
 QED
 
