@@ -4865,6 +4865,8 @@ Theorem lineage_dfs_join_ordinary_paired_interval_actual:
       (phi_ops, psD with <|ps_stack := prefixD ++ suffix; ps_alloc := al|>) /\
     (!v. MEM v (live_vars_at (liveness_analyze fn) succ
        (LENGTH (collect_phis sb.bb_instructions))) ==> MEM (Var v) p0.ps_stack) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions)) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD) /\
     (!k. k <= LENGTH xs /\
       (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI) ==>
       ?ops q.
@@ -4889,12 +4891,24 @@ Proof
     metis_tac[venomExecPropsTheory.lookup_block_MEM, venomExecPropsTheory.lookup_block_label] >>
   `fn_reachable fn sb.bb_label` by
     metis_tac[lineage_state_reachable, fn_reachable_cfg_analyze, codegen_ready_fn_def] >>
+  `0 < LENGTH sb.bb_instructions /\
+    LENGTH (collect_phis sb.bb_instructions) <= PRE (LENGTH sb.bb_instructions)` by
+    (qpat_x_assum `sb.bb_instructions = _ ++ _`
+       (mp_tac o Q.AP_TERM `LENGTH`) >> Cases_on `rest` >> gvs[]) >>
+  `SUC (PRE (LENGTH sb.bb_instructions)) = LENGTH sb.bb_instructions` by decide_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions)) ==>
+    ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD` by
+    (rpt strip_tac >>
+     qpat_assum `!j v. _`
+       (qspecl_then [`PRE (LENGTH sb.bb_instructions)`,`v`] mp_tac) >>
+     simp[]) >>
   qexistsl_tac [`prefixL`,`prefixD`,`suffix`,`ops`,`al`,
     `psD with <|ps_stack := suffix; ps_alloc := al|>`,
     `DROP (LENGTH (collect_phis sb.bb_instructions)) sb.bb_instructions`] >>
   conj_tac >- simp[] >> conj_tac >- simp[] >>
   conj_tac >- simp[] >> conj_tac >- simp[] >>
-  conj_tac >- simp[] >> rpt strip_tac >>
+  conj_tac >- simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >>
   qpat_x_assum `sb.bb_label = succ` (SUBST_ALL_TAC o SYM) >>
   irule fnPlanLineageEntryProductionTheory.analyzed_ordinary_paired_interval_replay >>
   simp[] >> gen_tac >> strip_tac >>
@@ -4936,6 +4950,8 @@ Theorem lineage_dfs_join_physical_start_actual:
           NONE => NONE
         | SOME (tail_ops,out) => if revert_block_spills sb (phi_ops ++ tail_ops)
             then NONE else SOME ([SOLabel succ] ++ phi_ops ++ tail_ops,out)) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions)) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD) /\
     (!k. k <= LENGTH xs /\
       (!j. j < k ==> (EL j xs).inst_opcode <> JMP /\ (EL j xs).inst_opcode <> PHI) ==>
       ?ops q.
@@ -4978,6 +4994,7 @@ Proof
   conj_tac >- REFL_TAC >> conj_tac >- REFL_TAC >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- suspend "block_equations" >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
   qpat_x_assum `p0 = _` kall_tac >>
   gen_tac >> strip_tac >>
   qpat_x_assum `!k. _ ==> ?ops q. _` (qspec_then `k` mp_tac) >>
@@ -5055,6 +5072,8 @@ Theorem lineage_dfs_join_preterminal_core_actual:
     (!v. MEM v (live_vars_at (liveness_analyze fn) succ
       (PRE (LENGTH sb.bb_instructions))) ==>
       MEM (Var v) q.ps_stack \/ Var v IN FDOM q.ps_spilled) /\
+    (!v. MEM v (live_vars_at (liveness_analyze fn) succ (LENGTH sb.bb_instructions)) ==>
+      ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD) /\
     ((LAST sb.bb_instructions).inst_opcode = JMP ==>
       !targets. join_target_ops (liveness_analyze fn) fn succ
         (LAST sb.bb_instructions) = SOME targets ==>
@@ -5105,6 +5124,7 @@ Proof
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- (first_assum ACCEPT_TAC) >>
   conj_tac >- simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_asm1_tac >- suspend "terminal_targets" >> suspend "terminal_replay"
 QED
 
