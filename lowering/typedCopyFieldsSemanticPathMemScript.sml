@@ -27,9 +27,7 @@ Theorem normalize_tuple_fields_memory_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     fn_has_code sd se fn /\
-    (emitted_blocks sd se <> [] ==>
-      ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-        phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -45,9 +43,6 @@ Theorem normalize_tuple_fields_memory_path_mem:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
-  (emitted_blocks sa sb <> [] ==>
-    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -105,9 +100,7 @@ Theorem normalize_tuple_semantic_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     fn_has_code sd se fn /\
-    (emitted_blocks sd se <> [] ==>
-      ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-        phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -127,9 +120,6 @@ Theorem normalize_tuple_semantic_path_mem:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_typed_copy_fields ce dst src DT ST 0 0 sa = ((),sb) /\
-  (emitted_blocks sa sb <> [] ==>
-    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
@@ -255,9 +245,7 @@ Theorem normalize_struct_semantic_path_mem:
     eval_operand sp u = SOME (n2w (h i)) /\
     (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
     fn_has_code sd se fn /\
-    (emitted_blocks sd se <> [] ==>
-      ?bb. lookup_block se.cs_current_bb fn.fn_blocks = SOME bb /\
-        phi_prefix_length bb.bb_instructions = 0) /\ ~u.vs_halted /\
+    ~u.vs_halted /\
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
@@ -277,9 +265,6 @@ Theorem normalize_struct_semantic_path_mem:
         vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
         vs_prev_bb := u.vs_prev_bb|>) = u) /\
   compile_struct_typed_copy ce dst src fields src_fields 0 0 sa = ((),sb) /\
-  (emitted_blocks sa sb <> [] ==>
-    ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
-      phi_prefix_length bb.bb_instructions = 0) /\
   fn_has_code sa sb fn /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
