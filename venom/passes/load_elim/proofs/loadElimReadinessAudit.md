@@ -722,3 +722,26 @@ with the above conclusion. The required next repair is suffix path plus
 interval instruction traversal (or a direct proof of this crossing interface)
 before source-epoch stability, recursive chain validity, or wrapper migration.
 No source-validity theorem, readiness change, or frozen-theorem edit is made.
+
+## Checked strict temporal source stability (.53)
+
+`loadElimTemporalStabilityTheory` builds without admissions (2026-11-09,
+TO_load-elim-correct2-20261109T010004Z_m5823_t001). Its exports are:
+
+- `le_occ_assign_crossing`: for an available destination `v` of static unary
+  `v = ASSIGN w`, any selected source-writing occurrence forces a `v` writer
+  strictly in its suffix. Both StepOcc and atomic PhiOcc sources are covered.
+  Premises include actual entry-rooted occurrence prefix, wf_function,
+  fn_inst_wf, wf_ssa, and destination availability at the endpoint.
+- `le_occ_assign_source_no_write`: after a selected successful ASSIGN occurrence,
+  if no suffix event writes its destination and that destination is available
+  at the actual non-PHI endpoint, no suffix event writes its source variable.
+- `le_occ_assign_source_lookup`: under exactly those premises,
+  `lookup_var w s = lookup_var w t`, where `t` is the selected ASSIGN's post-state.
+  This uses the existing occurrence suffix lookup theorem; no assumption of
+  sequential execution within a PHI batch is made.
+
+These are temporal interfaces only. They do not assert the ASSIGN value
+relation, recursive chain validity, rebuilt global DFG soundness, or discharge
+round readiness. The full-step semantic inversion and recursive reached-use
+integration remain separate obligations.

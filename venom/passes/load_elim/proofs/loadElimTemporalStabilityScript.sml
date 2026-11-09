@@ -102,3 +102,47 @@ Proof
   `MEM v (EL j db.bb_instructions).inst_outputs` by simp[] >>
   drule_all le_occ_interval_later_phi_coverage >> simp[]
 QED
+
+Theorem le_occ_assign_source_no_write:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  le_occ_prefix C fn s0 (pre ++ StepOcc db n k u t::suffix) i s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  def_available_at fn bb (SOME i) v /\ i.inst_opcode <> PHI /\
+  (EL n db.bb_instructions).inst_opcode = ASSIGN /\
+  (EL n db.bb_instructions).inst_operands = [Var w] /\
+  (EL n db.bb_instructions).inst_outputs = [v] /\
+  EVERY (\q. v NOTIN le_occ_writes q) suffix ==>
+  EVERY (\q. w NOTIN le_occ_writes q) suffix
+Proof
+  rpt strip_tac >>
+  `le_occ_valid C fn (StepOcc db n k u t)` by
+    (drule le_occ_prefix_valid >> simp[EVERY_MEM] >> metis_tac[]) >>
+  `MEM db fn.fn_blocks /\ MEM (EL n db.bb_instructions) db.bb_instructions` by
+    (fs[le_occ_valid_def] >> metis_tac[lookup_block_MEM, EL_MEM]) >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  rename1 `MEM q suffix` >>
+  drule (iffLR MEM_SPLIT) >> strip_tac >> gvs[] >>
+  `le_occ_prefix C fn s0 ((pre ++ StepOcc db n k u t::l1) ++ q::l2) i s` by
+    (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> asm_rewrite_tac[]) >>
+  drule_all le_occ_assign_crossing >>
+  fs[le_occ_wrote_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem le_occ_assign_source_lookup:
+  wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+  fn_entry_label fn = SOME s0.vs_current_bb /\
+  le_occ_prefix C fn s0 (pre ++ StepOcc db n k u t::suffix) i s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  def_available_at fn bb (SOME i) v /\ i.inst_opcode <> PHI /\
+  (EL n db.bb_instructions).inst_opcode = ASSIGN /\
+  (EL n db.bb_instructions).inst_operands = [Var w] /\
+  (EL n db.bb_instructions).inst_outputs = [v] /\
+  EVERY (\q. v NOTIN le_occ_writes q) suffix ==>
+  lookup_var w s = lookup_var w t
+Proof
+  rpt strip_tac >>
+  `EVERY (\q. w NOTIN le_occ_writes q) suffix` by
+    (drule_all le_occ_assign_source_no_write >> simp[]) >>
+  drule_all le_occ_prefix_suffix_lookup >> simp[le_occ_post_def]
+QED
