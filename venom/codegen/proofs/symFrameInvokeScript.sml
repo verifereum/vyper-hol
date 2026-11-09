@@ -1578,6 +1578,56 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem sym_invoke_return_frame_transport:
+  sym_frame_inv p env ctx cplan fn ret srest labs0 arranged mid sms /\
+  fn_directly_calls ctx fn.fn_name callee /\
+  (!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan callee b ==>
+    FLOOKUP ssr.sym_mem_labels b = FLOOKUP sms.sym_mem_labels b) /\
+  asm_sym_rel p env asr ssr /\ sym_kinds_ok cplan fn ret srest called ssr ==>
+  sym_frame_inv p env ctx cplan fn ret srest labs0 called asr ssr
+Proof
+  rw[sym_frame_inv_def] >>
+  metis_tac[fnFrameBoundaryInvokeTheory.invoke_closure_subset]
+QED
+
+Theorem sym_invoke_return_label_step:
+  asm_block_at p ss.sym_base.as_pc [AsmLabel lbl] ==>
+  sym_steps p env 1 ss =
+    SymOK (ss with sym_base := ss.sym_base with
+      <|as_stack := []; as_pc := ss.sym_base.as_pc + 1|>)
+Proof
+  strip_tac >> gvs[stackOpSimTheory.asm_block_at_cons] >>
+  simp[sym_steps_compute, sym_step_def, asm_step_def, asm_next_def,
+       sym_lift_def, sym_set_stack_def, sym_state_component_equality]
+QED
+
+Theorem sym_invoke_return_label_pair:
+  asm_static_wf p /\
+  sym_frame_inv p env ctx cplan fn ret srest labs0 called asr ssr /\
+  asm_block_at p asr.as_pc [AsmLabel lbl] ==>
+  ?cs ss.
+    asm_steps (SND (compute_label_offsets p)) (build_offset_to_pc p) p 1 asr = AsmOK cs /\
+    sym_steps p env 1 ssr = SymOK ss /\
+    sym_frame_inv p env ctx cplan fn ret srest labs0 called cs ss /\
+    cs.as_pc = asr.as_pc + 1 /\ ss.sym_mem_labels = ssr.sym_mem_labels
+Proof
+  strip_tac >>
+  `asm_sym_rel p env asr ssr` by gvs[sym_frame_inv_def] >>
+  `ssr.sym_base.as_pc = asr.as_pc` by gvs[asm_sym_rel_def] >>
+  `asm_block_at p ssr.sym_base.as_pc [AsmLabel lbl]` by simp[] >>
+  drule sym_invoke_return_label_step >>
+  disch_then (qspec_then `env` assume_tac) >>
+  drule_all asm_sym_steps_lockstep >> strip_tac >>
+  `cs'.as_pc = asr.as_pc + 1` by
+    (fs[asm_sym_rel_def] >>
+     qpat_x_assum `_ = cs' with <|as_stack := []; as_memory := _; as_code := []|>`
+       (mp_tac o AP_TERM ``asm_state_as_pc``) >>
+     simp[]) >>
+  qexistsl [`cs'`, `ssr with sym_base := ssr.sym_base with
+    <|as_stack := []; as_pc := ssr.sym_base.as_pc + 1|>`] >>
+  gvs[sym_frame_inv_def, sym_kinds_ok_def]
+QED
+
 Theorem sym_invoke_frame_sim_deep:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
