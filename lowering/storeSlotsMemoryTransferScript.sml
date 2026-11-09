@@ -5,28 +5,6 @@ Ancestors
   fragGasPath fragGasPathMem gasCount abiEncoderObserver fragExec venomState list
   simplifyCfgMergeRuns memSafeRun exprSimHash placeStoreSlots placeStoreStorage
 
-Theorem observer_nonstart_phi_zero[local]:
-  cs_extends sa sb /\ fn_has_code sa sb fn /\ frag_gas_free sa sb /\
-  lbl <> sa.cs_current_bb /\
-  lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME bb ==>
-  phi_prefix_length bb.bb_instructions = 0
-Proof
-  strip_tac >> Cases_on `bb.bb_instructions`
-  >- simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
-  rename1 `bb.bb_instructions = inst::rest` >>
-  Cases_on `(lbl,0) = frag_observer_cut sb`
-  >- (gvs[frag_observer_cut_def] >>
-      drule frag_observer_lookup_cases >> strip_tac >>
-      gvs[venomInstTheory.mk_inst_def,
-          venomExecSemanticsTheory.phi_prefix_length_def]) >>
-  `get_instruction bb 0 = SOME inst` by simp[venomInstTheory.get_instruction_def] >>
-  `(lbl,0) IN frag_observer_region sa sb` by
-    (drule frag_observer_lookup_cases >> strip_tac >>
-     simp[frag_observer_region_def, MEM_MAP] >> metis_tac[]) >>
-  drule_all frag_observer_off_cut_opcodes >> strip_tac >>
-  simp[venomExecSemanticsTheory.phi_prefix_length_def]
-QED
-
 Theorem gas_path_stop_view_agreement:
   gas_path ctx fn s n (OK t) /\ gas_path ctx fn s m (OK u) /\
   lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
