@@ -467,6 +467,152 @@ Proof
   metis_tac[entry_step_return]
 QED
 
+Theorem sym_block_prefix_prepare:
+  !unit cpl prog ctx i fn r liveness dfg cfg ch growth spill_base lbl_ctr
+   fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after vs Inv.
+    ctx = unit.cu_context /\ generate_context_plan ctx = SOME cpl /\
+    unit_shape_ok unit /\ i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cpl.cp_regions = r /\
+    codegen_context_obligations Inv ctx cpl /\
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ spill_base = r.sr_spill_base /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      spill_base lbl_ctr = SOME (fn_ops, ps_end) /\ fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\ bb <> HD fn.fn_blocks /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) pred bb.bb_label ps /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) vs.vs_current_bb ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs = SOME (block_ops, ps_dfs_after)
+    ==>
+    ?h promised ps_after clean_ops ps2 inst_ops.
+      codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+      non_param_insts bb = bb.bb_instructions /\ get_params bb.bb_instructions = [] /\
+      lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+      dfs_block_state liveness dfg cfg fn
+        (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_dfs /\
+      generate_block_plan liveness dfg cfg fn bb
+        (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+        SOME (block_ops, ps_after) /\
+      ps_after.ps_alloc = ps_dfs_after.ps_alloc /\
+      ps_after.ps_spilled = ps_dfs_after.ps_spilled /\
+      (if LENGTH (cfg_preds_of cfg bb.bb_label) = 1 then
+         clean_stack_plan liveness cfg fn bb
+           (ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)
+       else ([], ps with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>)) =
+        (clean_ops, ps2) /\
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label (bb_is_halting bb)
+        (LENGTH (get_params bb.bb_instructions)) (LENGTH bb.bb_instructions) 0
+        (non_param_insts bb) ps2 = SOME (inst_ops, ps_after) /\
+      block_ops = SOLabel bb.bb_label :: clean_ops ++ inst_ops /\
+      generated_plan_state_wf_marked spill_base ps /\
+      (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+        ~MEM op (FLAT (MAP (\inst. inst.inst_operands) (collect_phis bb.bb_instructions))) /\
+        (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+        ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+      (LENGTH (cfg_preds_of cfg bb.bb_label) <= 1 ==>
+       !op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+         (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+         ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+      MEM r cpl.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+      r.sr_spill_base <= ps_after.ps_alloc.sa_spill_base /\
+      ps_after.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+      (!off. MEM (SOSpill off) (clean_ops ++ inst_ops) \/
+        MEM (SORestore off) (clean_ops ++ inst_ops) ==> off < dimword (:256))
+Proof
+  rpt gen_tac >> strip_tac >> suspend "prepare_shape"
+QED
+
+Resume sym_block_prefix_prepare[prepare_shape]:
+  drule_all step_fn_shape >> strip_tac >> suspend "prepare_label"
+QED
+
+Resume sym_block_prefix_prepare[prepare_label]:
+  drule venomExecPropsTheory.lookup_block_label >> strip_tac >>
+  suspend "prepare_label_inputs"
+QED
+
+Resume sym_block_prefix_prepare[prepare_label_inputs]:
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+   dfs_block_state liveness dfg cfg fn
+     (init_cleanup_plan_state ch growth spill_base lbl_ctr) bb.bb_label ps_dfs` by
+    metis_tac[] >> suspend "prepare_params"
+QED
+
+Resume sym_block_prefix_prepare[prepare_params]:
+  `canonical_param_prefix fn` by fs[stackPlanGenTheory.codegen_ready_fn_def] >>
+  drule_all fnPlanPrefixTheory.nonentry_block_no_params >> strip_tac >> suspend "prepare_lineage"
+QED
+
+Resume sym_block_prefix_prepare[prepare_lineage]:
+  drule fnPlanPrefixTheory.codegen_ready_fn_no_marker >> strip_tac >>
+  drule fnPlanLineageTheory.lineage_entry_lineage_state >> strip_tac >>
+  suspend "prepare_regenerate"
+QED
+
+Resume sym_block_prefix_prepare[prepare_regenerate]:
+  drule_all fnPlanLineageTheory.lineage_state_block_plan >> strip_tac >>
+  suspend "prepare_static"
+QED
+
+Resume sym_block_prefix_prepare[prepare_static]:
+  drule_all fnLineageStaticTheory.lineage_state_static >> strip_tac >>
+  suspend "prepare_split"
+QED
+
+Resume sym_block_prefix_prepare[prepare_split]:
+  drule_at (Pat `generate_block_plan _ _ _ _ _ _ = _`)
+    generate_block_plan_nonentry >>
+  (impl_tac >- simp[]) >> strip_tac >> suspend "prepare_bounds"
+QED
+
+Resume sym_block_prefix_prepare[prepare_bounds]:
+  drule_all fnPlanPlaceDfsBlockTheory.dfs_block_plan_contained >> strip_tac >>
+  suspend "prepare_alloc"
+QED
+
+Resume sym_block_prefix_prepare[prepare_alloc]:
+  drule_all dfs_block_alloc_bounded >> strip_tac >> suspend "prepare_region"
+QED
+
+Resume sym_block_prefix_prepare[prepare_region]:
+  drule_all context_region_fn_name >> suspend "prepare_region_fields"
+QED
+
+Resume sym_block_prefix_prepare[prepare_region_fields]:
+  simp[] >> strip_tac >> suspend "prepare_finish"
+QED
+
+Resume sym_block_prefix_prepare[prepare_finish]:
+  qexistsl_tac [`h`, `promised`, `ps_after`, `clean_ops`, `ps2`, `inst_ops`] >>
+  simp[] >> suspend "prepare_finish_bounds"
+QED
+
+Resume sym_block_prefix_prepare[prepare_finish_bounds]:
+  `r.sr_spill_base <= ps_after.ps_alloc.sa_spill_base /\
+   ps_after.ps_alloc.sa_next_offset <= r.sr_spill_end` by (gvs[] >> decide_tac) >>
+  gvs[] >> suspend "prepare_offsets"
+QED
+
+Resume sym_block_prefix_prepare[prepare_offsets]:
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >> suspend "prepare_offset_bound"
+QED
+
+Resume sym_block_prefix_prepare[prepare_offset_bound]:
+  gen_tac >> disch_tac >> irule region_subplan_spill_offsets >>
+  suspend "prepare_offset_witness"
+QED
+
+Resume sym_block_prefix_prepare[prepare_offset_witness]:
+  qexistsl_tac [`cpl`, `unit.cu_context`, `clean_ops ++ inst_ops`, `post`,
+               `pre ++ [SOLabel vs.vs_current_bb]`, `EL i cpl.cp_regions`] >>
+  gvs[]
+QED
+
+Finalise sym_block_prefix_prepare
+
 Theorem sym_fn_entry_block_step:
   !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel /\
          sym_fn_sim_at fuel /\ sym_fn_frame_sim_at fuel ==>
