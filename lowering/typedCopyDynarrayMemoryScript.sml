@@ -5,6 +5,7 @@ Ancestors
   instMemFrontier memSafeRun context compileEnv emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomInst venomState venomMemDefs
   valueEncoding valueEncodingProps words list finite_map arithmetic
+  vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping typedCopyDomain
 
 Theorem typed_copy_dyn_check_frag_mem[local]:
   emit_op GT [length; Lit (n2w C)] a = (too_long,b) /\
@@ -783,3 +784,122 @@ Resume typed_copy_dynarray_frag_mem[extensions]:
 QED
 
 Finalise typed_copy_dynarray_frag_mem
+
+
+Theorem typed_copy_dynarray_entry_mem:
+  !cenv tenv ctx de cap sty dtv stv v.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
+    sfields_tenv_consistent cenv.ce_struct_fields tenv /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname, fty, sz). !tv.
+        evaluate_type tenv fty = SOME tv ==> sz = type_memory_size tv) fields) /\
+    type_widens_to tenv sty (ArrayT de (Dynamic cap)) /\
+    evaluate_type tenv sty = SOME stv /\
+    evaluate_type tenv (ArrayT de (Dynamic cap)) = SOME dtv /\
+    value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
+    (!cd cs cdt cst cv.
+      type_rank cenv.ce_struct_fields cd <
+        type_rank cenv.ce_struct_fields (ArrayT de (Dynamic cap)) ==>
+      type_widens_to tenv cs cd /\ evaluate_type tenv cs = SOME cst /\
+      evaluate_type tenv cd = SOME cdt /\ value_has_type cst cv /\
+      value_has_type cdt cv /\ val_wf cst cv /\ val_wf cdt cv ==>
+      !dst src sa sb s dw sw.
+        compile_store_memory_typed cenv dst cd src cs sa = ((),sb) /\
+        (!x. dst = Var x ==> not_fresh_at sa x) /\
+        (!x. src = Var x ==> not_fresh_at sa x) /\
+        eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+        val_in_memory cst cv (w2n sw) s.vs_memory /\
+        w2n sw + type_memory_size cst < dimword (:256) /\
+        w2n dw + type_memory_size cdt < dimword (:256) /\
+        (w2n sw + type_memory_size cst <= w2n dw \/
+         w2n dw + type_memory_size cdt <= w2n sw) /\
+        w2n sw + type_memory_size cst <= s.vs_alloca_next /\
+        w2n dw + type_memory_size cdt <= s.vs_alloca_next ==>
+        frag_exec_mem ctx sa sb (\u. u = s)
+          (\t. val_in_memory cdt cv (w2n dw) t.vs_memory /\
+               typed_copy_state_frame sa (w2n dw) (type_memory_size cdt) s t) (\r. F)) ==>
+    !dst src sa sb s dw sw.
+      compile_store_memory_typed cenv dst (ArrayT de (Dynamic cap)) src sty sa = ((),sb) /\
+      (!x. dst = Var x ==> not_fresh_at sa x) /\
+      (!x. src = Var x ==> not_fresh_at sa x) /\
+      eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+      val_in_memory stv v (w2n sw) s.vs_memory /\
+      w2n sw + type_memory_size stv < dimword (:256) /\
+      w2n dw + type_memory_size dtv < dimword (:256) /\
+      (w2n sw + type_memory_size stv <= w2n dw \/
+       w2n dw + type_memory_size dtv <= w2n sw) /\
+      w2n sw + type_memory_size stv <= s.vs_alloca_next /\
+      w2n dw + type_memory_size dtv <= s.vs_alloca_next ==>
+      frag_exec_mem ctx sa sb (\u. u = s)
+        (\t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+             typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t) (\r. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_copy_array_source >> strip_tac >> gvs[] >>
+  `?scap. sb = Dynamic scap /\ scap <= cap` by
+    (drule typed_copy_array_widening >> strip_tac >> gvs[]) >> gvs[] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  `type_widens_to tenv se de` by
+    (qpat_x_assum `type_widens_to _ _ _` mp_tac >>
+     simp[type_widens_to_def, arg_type_fits_def, well_formed_type_def,
+          evaluate_type_def] >> metis_tac[]) >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
+  `cap < dimword (:256)` by
+    (qpat_x_assum `type_slot_size (ArrayTV tv' (Dynamic cap)) < _` mp_tac >>
+     simp[type_slot_size_def] >>
+     `cap <= cap * type_slot_size tv'` by
+       (Cases_on `type_slot_size tv'` >> gvs[MULT_CLAUSES]) >> decide_tac) >>
+  `type_memory_bytes cenv de = type_memory_size tv' /\
+   type_memory_bytes cenv se = type_memory_size tv` by
+    (conj_tac >> irule typed_copy_memory_size >>
+     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  suspend "children"
+QED
+
+Resume typed_copy_dynarray_entry_mem[children]:
+  `!i. i < LENGTH l ==> !dst src sa sb s dw sw.
+    compile_store_memory_typed cenv dst de src se sa = ((),sb) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+    val_in_memory tv (EL i l) (w2n sw) s.vs_memory /\
+    w2n sw + type_memory_size tv < dimword (:256) /\
+    w2n dw + type_memory_size tv' < dimword (:256) /\
+    (w2n sw + type_memory_size tv <= w2n dw \/
+     w2n dw + type_memory_size tv' <= w2n sw) /\
+    w2n sw + type_memory_size tv <= s.vs_alloca_next /\
+    w2n dw + type_memory_size tv' <= s.vs_alloca_next ==>
+    frag_exec_mem ctx sa sb (\u. u = s)
+      (\t. val_in_memory tv' (EL i l) (w2n dw) t.vs_memory /\
+           typed_copy_state_frame sa (w2n dw) (type_memory_size tv') s t) (\r. F)` by
+    (qx_gen_tac `i` >> strip_tac >> simp[ADD_COMM] >>
+     qpat_x_assum `!cd cs cdt cst cv. _`
+       (qspecl_then [`de`, `se`, `tv'`, `tv`, `EL i l`] mp_tac) >>
+     simp[Once type_rank_def] >>
+     (impl_tac >- gvs[typed_copy_dynarray_wf,
+       vyperTypingTheory.all_have_type_EVERY, EVERY_EL]) >>
+     disch_then MATCH_ACCEPT_TAC) >>
+  suspend "execute"
+QED
+
+Resume typed_copy_dynarray_entry_mem[execute]:
+  rpt strip_tac >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once compile_store_memory_typed_def, is_word_type_def,
+       is_bytestring_type_def] >> strip_tac >>
+  irule typed_copy_dynarray_frag_mem >>
+  (conj_tac >- simp[]) >>
+  (conj_tac >- simp[]) >>
+  (conj_tac >- simp[]) >>
+  (conj_tac >- simp[]) >>
+  (conj_tac >- simp[]) >>
+  goal_assum (drule_at (Pat `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`scap`, `tv`, `sw`] >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!i. i < LENGTH l ==> _` (drule_then irule) >>
+  simp[] >> qexistsl_tac [`dst'`, `src'`, `sw'`] >> simp[] >> decide_tac
+QED
+
+Finalise typed_copy_dynarray_entry_mem
