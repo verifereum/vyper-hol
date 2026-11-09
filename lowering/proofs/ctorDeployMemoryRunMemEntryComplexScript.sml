@@ -105,7 +105,7 @@ Proof
     (qpat_x_assum `LIST_REL _ _ _` kall_tac >>
      drule abi_decoder_members_relations >> strip_tac >>
      drule abi_decoder_member_infos_layout >> strip_tac >>
-     `has_types (MAP (vyper_to_abi_type env) tys) avs` by fs[has_types_LIST_REL] >>
+     `has_types (MAP (vyper_to_abi_type env) tys) avs` by simp[has_types_LIST_REL] >>
      drule canonical_tuple_length >> strip_tac >>
      gvs[Excl "enc_def"] >> decide_tac) >>
   mp_tac (Q.INST [`st'` |-> `middle`, `head_sz` |->
