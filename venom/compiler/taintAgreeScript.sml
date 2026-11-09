@@ -18,6 +18,7 @@
 
 Theory taintAgree
 Ancestors
+  o1LowerDloadJointStorageWrite
   o1LowerDloadRelocationKernel o1LowerDloadShared o1PassContract ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomState finite_map pred_set list
 
@@ -340,6 +341,180 @@ Proof
   pop_assum SUBST1_TAC >>
   rewrite_tac[GSYM update_var_def] >>
   simp[Abbr `mask`] >> irule taint_agree_update_var >> simp[]
+QED
+
+Theorem taint_agree_call_ctx:
+  taint_agree D X tn s t ==> s.vs_call_ctx = t.vs_call_ctx
+Proof
+  strip_tac >> drule taint_agree_frame >>
+  disch_then (mp_tac o Q.AP_TERM `\u. u.vs_call_ctx`) >> simp[]
+QED
+
+Theorem taint_agree_sload:
+  taint_agree D X tn s t ==>
+  word_agree_except (key_taint tn.t_stor key) (sload key s) (sload key t)
+Proof
+  strip_tac >> drule taint_agree_call_ctx >> strip_tac >>
+  drule taint_agree_shared >> disch_tac >> drule ld_shared_storage_word >>
+  disch_then (qspecl_then [`key`, `s.vs_call_ctx.cc_address`] mp_tac) >>
+  simp[sload_def, contract_storage_def, key_taint_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.lookup_storage_def,
+       word_agree_except_def] >> metis_tac[]
+QED
+
+Theorem taint_agree_tload:
+  taint_agree D X tn s t ==>
+  word_agree_except (key_taint tn.t_trans key) (tload key s) (tload key t)
+Proof
+  strip_tac >> drule taint_agree_call_ctx >> strip_tac >>
+  drule taint_agree_shared >> disch_tac >> drule ld_shared_transient_word >>
+  disch_then (qspecl_then [`key`, `s.vs_call_ctx.cc_address`] mp_tac) >>
+  simp[tload_def, contract_transient_def, key_taint_def,
+       vfmStateTheory.lookup_storage_def, word_agree_except_def] >> metis_tac[]
+QED
+
+Theorem taint_agree_storage_load:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  MEM inst.inst_opcode [SLOAD; TLOAD] /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = {}` by
+    (gvs[taint_ok_def] >> metis_tac[]) >>
+  fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()] >>
+  `eval_operand op1 s = eval_operand op1 t` by
+    (drule_all taint_agree_operand_clean >> simp[]) >>
+  gvs[] >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def, update_var_def,
+       step_writes_def, source_memory_write_ranges_def, written_taint_def,
+       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss] >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  `mask = tn with t_var := mask.t_var` by
+    simp[Abbr `mask`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+  rewrite_tac[GSYM update_var_def] >>
+  irule taint_agree_update_var >>
+  metis_tac[taint_agree_sload, taint_agree_tload]
+QED
+
+Theorem taint_agree_sstore:
+  taint_agree D X tn s t /\ word_agree_except m v w ==>
+  taint_agree D X (tn with t_stor := key_update tn.t_stor key m)
+    (sstore key v s) (sstore key w t)
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address
+     (tn with t_stor := key_update tn.t_stor key m)
+     (sstore key v s) (sstore key w t)` by
+    (irule ld_shared_sstore >> simp[] >> metis_tac[taint_agree_shared]) >>
+  fs[taint_agree_def] >>
+  simp[taint_agree_def, sstore_def, op_taint_def] >>
+  conj_tac >- gvs[sstore_def] >>
+  gvs[venom_state_component_equality, op_taint_def]
+QED
+
+Theorem taint_agree_tstore:
+  taint_agree D X tn s t /\ word_agree_except m v w ==>
+  taint_agree D X (tn with t_trans := key_update tn.t_trans key m)
+    (tstore key v s) (tstore key w t)
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address
+     (tn with t_trans := key_update tn.t_trans key m)
+     (tstore key v s) (tstore key w t)` by
+    (irule ld_shared_tstore >> simp[] >> metis_tac[taint_agree_shared]) >>
+  fs[taint_agree_def] >>
+  simp[taint_agree_def, tstore_def, op_taint_def] >>
+  conj_tac >- gvs[tstore_def] >>
+  gvs[venom_state_component_equality, op_taint_def]
+QED
+
+Theorem taint_agree_storage_store:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\
+  MEM inst.inst_opcode [SSTORE; TSTORE] /\ inst.inst_outputs = [] /\
+  step_inst_base inst s = OK s' ==>
+  ?t'. step_inst_base inst t = OK t' /\
+       taint_agree D X (step_taint inst s s' tn) s' t'
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
+  `op_taint tn op1 = {}` by
+    (fs[taint_ok_def] >> metis_tac[]) >>
+  `eval_operand op1 s = eval_operand op1 t` by
+    (drule_all taint_agree_operand_clean >> simp[]) >>
+  drule_all taint_agree_operand_value >> strip_tac >>
+  gvs[eval_operands_def] >>
+  simp[step_taint_def, mem_taint_def, out_taint_def, store_taint_def,
+       imm_taint_def, adopt_reset_def, new_site_bytes_def, sstore_def, tstore_def,
+       set_var_taint_def, step_writes_def, source_memory_write_ranges_def,
+       written_taint_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss,
+       DRESTRICT_UNIV] >>
+  qmatch_goalsub_abbrev_tac `taint_agree D X mask` >>
+  Cases_on `inst.inst_opcode = SSTORE` >> gvs[]
+  >- (`mask = tn with t_stor := mask.t_stor` by
+        simp[Abbr `mask`, taint_component_equality] >>
+      pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+      drule_all taint_agree_sstore >>
+      disch_then (qspec_then `key` mp_tac) >> simp[sstore_def]) >>
+  `mask = tn with t_trans := mask.t_trans` by
+    simp[Abbr `mask`, taint_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[Abbr `mask`] >>
+  drule_all taint_agree_tstore >>
+  disch_then (qspec_then `key` mp_tac) >> simp[tstore_def]
+QED
+
+Theorem taint_agree_storage_abort:
+  taint_agree D X tn s t /\
+  MEM inst.inst_opcode [SSTORE; TSTORE] /\
+  step_inst_base inst s = Abort a s' ==>
+  ?t'. step_inst_base inst t = Abort a t'
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[taint_agree_call_ctx] >>
+  `IS_SOME (eval_operands inst.inst_operands s) <=>
+   IS_SOME (eval_operands inst.inst_operands t)` by
+    (irule o1LowerDloadOpaqueTheory.eval_operands_defined_iff >>
+     metis_tac[taint_agree_operand_defined]) >>
+  fs[MEM] >>
+  gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()]
+QED
+
+Theorem taint_agree_storage_step:
+  taint_agree D X tn s t /\ taint_ok fn tn inst s /\ inst_wf inst /\
+  MEM inst.inst_opcode [SLOAD; TLOAD; SSTORE; TSTORE] ==>
+  (!s'. step_inst_base inst s = OK s' ==>
+    ?t'. step_inst_base inst t = OK t' /\
+         taint_agree D X (step_taint inst s s' tn) s' t') /\
+  (!v s'. step_inst_base inst s = IntRet v s' ==>
+    ?t'. step_inst_base inst t = IntRet v t' /\ taint_agree D X tn s' t') /\
+  (!s'. step_inst_base inst s = Halt s' ==>
+    ?t'. step_inst_base inst t = Halt t' /\ dead_result_rel D (Halt s') (Halt t')) /\
+  (!a s'. step_inst_base inst s = Abort a s' ==>
+    ?t'. step_inst_base inst t = Abort a t')
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `MEM inst.inst_opcode [SLOAD; TLOAD]`
+      >- metis_tac[taint_agree_storage_load] >>
+      irule taint_agree_storage_store >>
+      fs[MEM] >> gvs[venomWfTheory.inst_wf_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> fs[MEM] >>
+      gvs[step_inst_base_opcode_eqs, exec_read1_def, exec_write2_def, AllCaseEqs()]) >>
+  conj_tac
+  >- (rpt strip_tac >> fs[MEM] >>
+      gvs[step_inst_base_opcode_eqs, exec_read1_def, exec_write2_def, AllCaseEqs()]) >>
+  rpt strip_tac >> Cases_on `MEM inst.inst_opcode [SLOAD; TLOAD]`
+  >- (fs[MEM] >> gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()]) >>
+  irule taint_agree_storage_abort >> fs[MEM] >> metis_tac[]
 QED
 
 (* Why it holds: taint_ok gives each operand of a non-propagating opcode
