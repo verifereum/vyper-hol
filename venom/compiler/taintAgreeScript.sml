@@ -248,6 +248,36 @@ Proof
   Cases_on `v = out` >> gvs[FAPPLY_FUPDATE_THM]
 QED
 
+Theorem taint_agree_eval_phis:
+  !ins s t s1 tn.
+    taint_agree D X tn s t /\ eval_phis s ins = OK s1 ==>
+    ?t1. eval_phis t ins = OK t1 /\
+      taint_agree D X
+        (tn with t_var := phis_taint s.vs_prev_bb tn ins) s1 t1
+Proof
+  Induct_on `ins`
+  >- (simp[eval_phis_def, phis_taint_def] >>
+      simp[taint_agree_def, op_taint_def, ld_shared_agree_def]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (qpat_x_assum `eval_phis s (h::ins) = _` mp_tac >>
+      simp[Once eval_phis_def, AllCaseEqs()] >> strip_tac >>
+      gvs[eval_one_phi_def, AllCaseEqs()] >>
+      `?v'. eval_operand val_op t = SOME v' /\
+            word_agree_except (op_taint tn val_op) v v'` by
+        (drule_all taint_agree_operand_value >> simp[]) >>
+      `s.vs_prev_bb = t.vs_prev_bb` by
+        (drule taint_agree_frame >>
+         disch_then (mp_tac o Q.AP_TERM `\u. u.vs_prev_bb`) >> simp[]) >>
+      first_x_assum drule_all >> strip_tac >>
+      qexists_tac `update_var out v' t1` >>
+      simp[Once eval_phis_def, eval_one_phi_def] >>
+      simp[phis_taint_def, phi_taint_def] >>
+      drule_all taint_agree_update_var >> gvs[]) >>
+  gvs[eval_phis_def, phis_taint_def] >>
+  simp[taint_agree_def, op_taint_def, ld_shared_agree_def]
+QED
+
 Theorem taint_agree_update_two_clean:
   taint_agree D X tn s t ==>
   taint_agree D X

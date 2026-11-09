@@ -24,6 +24,7 @@ Ancestors
   internalReturnCopyFwdPlan internalReturnCopyFwdDefs internalReturnCopyFwdAlias reachableFnSim
   taintAgree o1LowerDloadShared o1PassContract ptrDiscipline passSharedDefs
   venomExecSemantics venomInst venomWf venomState finite_map pred_set list
+  rangeAnalysisProofs
 
 (* The transformed block, before NOPs are cleared *)
 Definition ircf_tbb_def:
@@ -294,6 +295,136 @@ Proof
    ircf_size_coherent (EL j stk).cf_fn (EL j stk).cf_state` by
     fs[ircf_alias_saved_def, ircf_alias_boundary_def] >>
   irule ircf_gam_saved_write_disjoint >> fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ircf_gam_phi_prefix:
+  ircf_gam fn_meta rma C fn bb allocas
+    (phi_prefix_length bb.bb_instructions) = {}
+Proof
+  rw[EXTENSION, ircf_gam_def, NOT_IN_EMPTY] >>
+  spose_not_then strip_assume_tac >>
+  fs[ircf_fwds_def] >>
+  drule phi_prefix_length_el_phi >> simp[]
+QED
+
+Theorem ircf_gam_stk_cons[simp]:
+  ircf_gam_stk fn_meta rma C (f::stk) =
+  ircf_gam_cur fn_meta rma C f.cf_fn f.cf_state UNION
+  ircf_gam_stk fn_meta rma C stk
+Proof
+  simp[ircf_gam_stk_def]
+QED
+
+Theorem ircf_dead_cons[simp]:
+  ircf_dead ids s (f::stk) =
+  site_bytes ids f.cf_state.vs_allocas UNION ircf_dead ids s stk
+Proof
+  simp[ircf_dead_def] >> SET_TAC[]
+QED
+
+Theorem ircf_gam_mono:
+  a SUBMAP b /\ n <= m ==>
+  ircf_gam fn_meta rma C fn bb a n SUBSET
+  ircf_gam fn_meta rma C fn bb b m
+Proof
+  rw[SUBSET_DEF, ircf_gam_def] >>
+  fs[SUBMAP_FLOOKUP_EQN] >>
+  qexistsl_tac [`k`, `d`, `s`, `dai`, `sai`, `sz1`, `sz2`] >>
+  simp[] >> decide_tac
+QED
+
+Theorem ircf_gam_suc:
+  ircf_gam fn_meta rma C fn bb a (SUC n) =
+  ircf_gam fn_meta rma C fn bb a n UNION
+  {x | ?d s szw dai sai db sb sz1 sz2.
+    n IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) /\
+    ircf_copy_roots fn (EL n bb.bb_instructions) = SOME (d,s,szw) /\
+    MEM dai (fn_insts fn) /\ dai.inst_opcode = ALLOCA /\ dai.inst_outputs = [d] /\
+    MEM sai (fn_insts fn) /\ sai.inst_opcode = ALLOCA /\ sai.inst_outputs = [s] /\
+    FLOOKUP a dai.inst_id = SOME (db,sz1) /\
+    FLOOKUP a sai.inst_id = SOME (sb,sz2) /\ x = (db,sb,w2n szw)}
+Proof
+  simp[EXTENSION, ircf_gam_def, arithmeticTheory.LT] >> metis_tac[]
+QED
+
+Theorem ircf_gam_suc_no_forward:
+  n NOTIN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) ==>
+  ircf_gam fn_meta rma C fn bb a (SUC n) =
+  ircf_gam fn_meta rma C fn bb a n
+Proof
+  strip_tac >>
+  `!k. k < SUC n /\ k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb) <=>
+       k < n /\ k IN ircf_fwds bb (ircf_tbb fn_meta rma C fn bb)` by
+    (gen_tac >> Cases_on `k = n` >> simp[arithmeticTheory.LT]) >>
+  simp[EXTENSION, ircf_gam_def] >> metis_tac[]
+QED
+
+Theorem site_bytes_mono:
+  ids SUBSET ids' /\ a SUBMAP b ==>
+  site_bytes ids a SUBSET site_bytes ids' b
+Proof
+  rw[site_bytes_def, SUBSET_DEF] >>
+  fs[SUBMAP_FLOOKUP_EQN] >> metis_tac[SUBSET_DEF]
+QED
+
+Theorem ircf_dead_allocas_mono:
+  s.vs_allocas SUBMAP s'.vs_allocas ==>
+  ircf_dead ids s stk SUBSET ircf_dead ids s' stk
+Proof
+  strip_tac >>
+  `site_bytes ids s.vs_allocas SUBSET site_bytes ids s'.vs_allocas` by
+    (irule site_bytes_mono >> simp[]) >>
+  simp[ircf_dead_def] >> ASM_SET_TAC[]
+QED
+
+Theorem ircf_R_boundary:
+  s.vs_prev_bb <> NONE /\
+  taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s stk) tn s t /\
+  ircf_cross tn (ircf_gam_stk fn_meta rma C stk) s t ==>
+  ircf_R D fn_meta rma C stk PG G (entry_taint_vars fn s tn) fn s t
+Proof
+  strip_tac >> simp[ircf_R_def] >> conj_tac
+  >- (qexists_tac `tn` >> simp[]) >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  gvs[ircf_cross_def, entry_taint_vars_def] >> gvs[]
+QED
+
+Theorem ircf_R_eval_phis:
+  ircf_R D fn_meta rma C stk PG G tn fn s t /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK s1 ==>
+  ?t1. eval_phis t bb.bb_instructions = OK t1 /\
+    taint_agree D (ircf_dead (ircf_dst_ids fn_meta rma C) s1 stk) tn s1 t1 /\
+    ircf_cross tn (ircf_gam_stk fn_meta rma C stk) s1 t1
+Proof
+  strip_tac >>
+  qpat_x_assum `ircf_R _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ircf_R_def]) >>
+  `tn = tn0 with t_var := phis_taint s.vs_prev_bb tn0 bb.bb_instructions` by
+    (Cases_on `s.vs_prev_bb = NONE`
+     >- (gvs[] >> Cases_on `bb.bb_instructions` >>
+         gvs[eval_phis_def, eval_one_phi_def, phis_taint_def, AllCaseEqs()]) >>
+     gvs[entry_taint_vars_def]) >>
+  qpat_x_assum `tn = if _ then _ else _` kall_tac >>
+  drule_all taint_agree_eval_phis >> strip_tac >>
+  qexists_tac `t1` >> simp[] >>
+  `s1.vs_allocas = s.vs_allocas /\ s1.vs_memory = s.vs_memory` by
+    (qpat_x_assum `eval_phis s _ = _`
+       (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `t1.vs_memory = t.vs_memory` by
+    (qpat_x_assum `eval_phis t _ = _`
+       (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+     disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  fs[ircf_dead_def, ircf_cross_def, entry_taint_vars_def] >> gvs[]
+QED
+
+Theorem ircf_gam_cur_phi_prefix:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = phi_prefix_length bb.bb_instructions ==>
+  ircf_gam_cur fn_meta rma C fn s = {}
+Proof
+  strip_tac >> simp[ircf_gam_cur_def, ircf_gam_phi_prefix, EXTENSION]
 QED
 
 (* ===== One block, and the pass ===== *)
