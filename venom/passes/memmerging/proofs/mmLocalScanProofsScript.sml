@@ -4,7 +4,7 @@ Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
-  simplifyCfgPhiSemantics basePtrProofs mmTraceProofs
+  simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory
 Libs
   wordsLib finite_mapLib
 
@@ -4226,6 +4226,16 @@ Proof
       arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
 QED
 
+Theorem mm_local_flush_hazards_survivor[local]:
+  MEM h (flush_hazards Mem2Mem ss c).ss_copies ==>
+  ~copy_overwrites c (copy_src_interval h)
+Proof
+  simp[flush_hazards_def, mode_allows_overlap_def] >>
+  rpt IF_CASES_TAC >>
+  gvs[flush_copies_def, war_hazards_def, MEM_FILTER] >>
+  rpt strip_tac >> gvs[FILTER_EQ_NIL, EVERY_MEM, MEM_FILTER]
+QED
+
 Theorem mm_local_invalidate_binding[local]:
   FLOOKUP (invalidate_loads ss iv).ss_loads v = SOME src ==>
   FLOOKUP ss.ss_loads v = SOME src /\ ~load_conflicts iv src
@@ -4245,6 +4255,38 @@ Proof
        mmIntervalTheory.mk_interval_def, mmIntervalTheory.interval_end_def,
        arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >>
   rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+Theorem mm_local_flush_hazards_read[local]:
+  MEM h (flush_hazards Mem2Mem ss c).ss_copies /\
+  LENGTH bytes = c.cg_length ==>
+  TAKE h.cg_length
+    (DROP h.cg_src (write_memory_with_expansion c.cg_dst bytes s).vs_memory ++
+     REPLICATE h.cg_length (0w:word8)) =
+  TAKE h.cg_length (DROP h.cg_src s.vs_memory ++ REPLICATE h.cg_length 0w)
+Proof
+  strip_tac >> drule mm_local_flush_hazards_survivor >> strip_tac >>
+  irule frameViewMemoryTheory.padded_memory_read_cong >> rpt strip_tac >>
+  irule frameViewMemoryTheory.write_memory_byte_outside >>
+  gvs[copy_overwrites_def, copy_dst_interval_def, copy_src_interval_def,
+      mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+      mmIntervalTheory.interval_end_def,
+      arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem mm_local_invalidate_read[local]:
+  FLOOKUP (invalidate_loads ss (mk_interval dst (LENGTH bytes))).ss_loads v = SOME src ==>
+  TAKE 32 (DROP src (write_memory_with_expansion dst bytes s).vs_memory ++
+           REPLICATE 32 (0w:word8)) =
+  TAKE 32 (DROP src s.vs_memory ++ REPLICATE 32 0w)
+Proof
+  strip_tac >> drule mm_local_invalidate_binding >> strip_tac >>
+  irule frameViewMemoryTheory.padded_memory_read_cong >> rpt strip_tac >>
+  irule frameViewMemoryTheory.write_memory_byte_outside >>
+  gvs[load_conflicts_def,
+      mmIntervalTheory.interval_overlaps_def, mmIntervalTheory.mk_interval_def,
+      mmIntervalTheory.interval_end_def,
+      arithmeticTheory.MAX_DEF, arithmeticTheory.MIN_DEF] >> decide_tac
 QED
 
 Theorem mm_local_read_write_disjoint[local]:
