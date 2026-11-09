@@ -14,7 +14,7 @@ Theory e2eCorrectness
 Ancestors
   ptrDiscipline unitMemInv lowerDloadDefs moduleLoweringProps
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
-  e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
+  e2eProducers e2eEntry o1PipelineCorrect o1PipelineCompose o1PassContract contextCodegenRel
   vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
   loweringShapeProps loweringShapeSource vfmExecution
   passSimulationDefs
@@ -782,7 +782,8 @@ Theorem vyper_call_correct:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       call_result_rel tops ret am tx es r es')
+       ?marks gs. runtime_gas_replay policy tops runtime_bc es gs /\
+         call_result_rel_at (gas_explicit marks gs) tops ret am tx es r es')
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
@@ -825,6 +826,11 @@ Proof
               (call_external (SOME vs.vs_outcomes) [] am tx))` by
     simp[external_call_dead_wf] >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
+  `gas_variant vs_in vs` by metis_tac[o1_gas_replay_variant] >>
+  `runtime_gas_replay policy tops (assemble prog) es vs_in.vs_gas_readings` by
+    (rewrite_tac[runtime_gas_replay_def] >>
+     qexistsl_tac [`rpolicy`, `unit`, `out`, `prog`, `cplan`, `vs_in`] >>
+     simp[Abbr `vs`]) >>
   `initial_venom_state_rel tops am tx vs_in` by
     (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >> simp[]) >>
   `vs_in.vs_outcomes = vs.vs_outcomes` by
@@ -847,8 +853,9 @@ Proof
   >- (pop_assum (qx_choose_then `m` assume_tac) >>
       qspec_then `es` strip_assume_tac run_call_total >>
       qexistsl_tac [`r`, `es'`] >> simp[] >> disj2_tac >>
-      irule call_result_rel_at_imp >>
-      qexists_tac `gas_explicit m vs_in.vs_gas_readings` >>
+      qexistsl_tac [`m`, `vs_in.vs_gas_readings`] >>
+      conj_tac
+      >- (qpat_x_assum `runtime_gas_replay _ _ _ _ _` mp_tac >> simp[]) >>
       irule source_exempt_call_result_rel >> metis_tac[]) >>
   qpat_x_assum `~?marks'. _`
     (assume_tac o PURE_REWRITE_RULE [NOT_EXISTS_THM]) >>
@@ -891,7 +898,7 @@ Proof
            (frame_resource_starved es r es' \/
             call_result_rel_at (gas_explicit marks vs_in.vs_gas_readings)
               tops ret am tx es r es')`
-    suffices_by metis_tac[call_result_rel_at_imp] >>
+    suffices_by metis_tac[] >>
   (* e2e_vyper_to_evm_states leaves precompile_call_starved free; this run
      never takes that disjunct. *)
   irule (let val th = e2e_vyper_to_evm_states

@@ -35,6 +35,5 @@ Proof
   qexists_tac `fuel` >> simp[external_call_result_rel_def, tx_return_bytes_def] >>
   fs[stmt_state_rel_def] >>
   drule_all external_halt_success >>
-  disch_then (qspecl_then [`tops`, `exps`] mp_tac) >>
   simp[abstract_machine_from_state_def, finalize_pending_deletions_def]
 QED

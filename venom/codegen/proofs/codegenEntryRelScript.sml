@@ -116,8 +116,8 @@ End
 
 (* First function, fresh non-static frame, live state, exact deployed code,
    concrete labels, and the outcomes actually traced from our frame's run. *)
-Definition initial_ctx_rel_def:
-  initial_ctx_rel cp prog ctx vs es <=>
+Definition initial_ctx_rel_tail_def:
+  initial_ctx_rel_tail tail cp prog ctx vs es <=>
     ?fn fns ctxt rb rest.
       ctx.ctx_functions = fn :: fns /\ es.contexts = (ctxt, rb) :: rest /\
       initial_state_rel cp prog 0 fn vs es /\
@@ -130,7 +130,12 @@ Definition initial_ctx_rel_def:
       (!l. FLOOKUP vs.vs_labels l =
            OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
       vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = [] /\
-      vs.vs_gas_readings = gas_readings es
+      vs.vs_gas_readings = gas_readings es ++ tail
+End
+
+Definition initial_ctx_rel_def:
+  initial_ctx_rel cp prog ctx vs es <=>
+    initial_ctx_rel_tail [] cp prog ctx vs es
 End
 
 (* The assembly state of the EVM frame es at the entry of the generated

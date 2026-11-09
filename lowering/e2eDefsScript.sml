@@ -6,7 +6,8 @@
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
- * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
+ * unspecified_behaviour_exempt, source_exempt, gas_readings_rel,
+ * call_success_rel, exception_outcome_rel, call_result_rel.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
@@ -19,7 +20,7 @@ Ancestors
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
   vyperStorageLayoutSafety vyperRuntimeAccounts
-  supportedProgram compileEnv selectorDispatch immutableSectionRel
+  supportedProgram compileEnv selectorDispatch immutableSectionRel sorting
 
 (* ===== Source deployment, typing and storage ===== *)
 
@@ -238,15 +239,6 @@ Definition source_exempt_def:
     case FST src of INR (Error e) => unspecified_behaviour_exempt tops e | _ => F
 End
 
-(* ===== Log Correspondence ===== *)
-
-(* Source execution now records the concrete EVM event directly. The metadata
-   parameters remain temporarily for compatibility with the e2e API. *)
-Definition log_entry_corresponds_def:
-  log_entry_corresponds _ _ _ (source_event : log) (ev : event) <=>
-    source_event = ev
-End
-
 (* Compatibility lemmas between the executable semantics encoder and the
    pre-existing relational log specification in compileEnv. *)
 Theorem event_value_to_word_eq_val_to_w256:
@@ -382,68 +374,78 @@ Proof
   simp[log_entry_equiv_def]
 QED
 
-Theorem log_entry_corresponds_concrete_event:
-  log_entry_corresponds event_info tenv addr source_event ev <=>
-  source_event = ev
-Proof
-  simp[log_entry_corresponds_def]
-QED
-
-(* Vyper logs correspond to EVM events (ordered, same-length).
-   event_info maps event name -> SOME (hash, arg_types, indexed_flags)
-   for declared events (from EventDecl with indexed flag). *)
-Definition logs_correspond_def:
-  logs_correspond event_info tenv (addr : address)
-    (vyper_logs : log list) (evm_logs : event list) <=>
-    LIST_REL (log_entry_corresponds event_info tenv addr)
-      vyper_logs evm_logs
-End
-
 (* ===== Frame-aware result: outcomes in, requests compared ONLY on success ===== *)
 
 (* On success, the EVM's final accounts, transient storage and requests
    agree with the source's: equal except at storage bytes the source
    leaves dead (accounts_agree, compileEnv). *)
 
+(* Fixed slots use distinct observations; absent slots must be irrelevant
+   to the observation selected by run. *)
+Definition gas_readings_rel_def:
+  gas_readings_rel readings run out <=>
+    ?slots unused.
+      PERM (MAP THE (FILTER IS_SOME slots) ++ unused) readings /\
+      !gobs tail.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots gobs ==>
+        run (gobs ++ tail) = out
+End
+
+Definition call_success_rel_def:
+  call_success_rel tops ret tx (v, am', rqs) es r es' <=>
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    ?out.
+      frame_outcome es r es' NONE out am'.logs /\
+      tx_return_bytes tops ret tx v out /\
+      accounts_agree cx am'.accounts
+        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+      transient_agree cx am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree cx) rqs (call_requests es)
+End
+
+Definition exception_outcome_rel_def:
+  (exception_outcome_rel tops (AssertException s) es r es' <=>
+     ?exc out lgs.
+       frame_outcome es r es' (SOME exc) out lgs /\
+       (exc = Reverted \/ s = "UNREACHABLE")) /\
+  (exception_outcome_rel tops (Error e) es r es' <=>
+     unspecified_behaviour_exempt tops e \/
+     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) /\
+  (exception_outcome_rel tops _ es r es' <=> F)
+End
+
+Theorem exception_outcome_rel_cases:
+  exception_outcome_rel tops exc es r es' <=>
+    case exc of
+      AssertException s =>
+        ?failure out lgs.
+          frame_outcome es r es' (SOME failure) out lgs /\
+          (failure = Reverted \/ s = "UNREACHABLE")
+    | Error e =>
+        unspecified_behaviour_exempt tops e \/
+        ?failure out lgs. frame_outcome es r es' (SOME failure) out lgs
+    | _ => F
+Proof
+  Cases_on `exc` >> simp[exception_outcome_rel_def]
+QED
+
+(* Fixed-reading transport used by the compiler proof. *)
 Definition call_result_rel_at_def:
   call_result_rel_at gobs tops ret am tx es r es' <=>
-    let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) gobs am tx of
-      (INL v, am', rqs) =>
-        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-        ?out lgs.
-          frame_outcome es r es' NONE out lgs /\
-          tx_return_bytes tops ret tx v out /\
-          accounts_agree cx am'.accounts
-            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
-          logs_correspond (compiled_event_info tops) (type_env tops)
-            tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (call_requests es)
-    | (INR (AssertException s), _, _) =>
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (exc = Reverted \/ s = "UNREACHABLE")
-    | (INR (Error e), _, _) =>
-        unspecified_behaviour_exempt tops e \/
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
-    | (INR BreakException, _, _) => F
-    | (INR ContinueException, _, _) => F
-    | (INR (ReturnException _), _, _) => F
+    let (res, am', rqs) =
+      call_external (SOME (MAP SND (call_trace es))) gobs am tx in
+    case res of
+      INL v => call_success_rel tops ret tx (v, am', rqs) es r es'
+    | INR exc => exception_outcome_rel tops exc es r es'
 End
 
-(* OPEN ITEM, must land before main: the top-level gas observations gobs
-   are not yet tied to the EVM's gas readings (gas_readings es).
-   run_venom_pipeline_correct only gives ?vs_in. gas_variant vs_in vs, so
-   the source-side readings are unconstrained here; tying them needs the
-   O1 contract to relate vs_in's readings to vs's. *)
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
-    ?gobs. call_result_rel_at gobs tops ret am tx es r es'
+    gas_readings_rel (gas_readings es)
+      (\gobs.
+        let (res, am', rqs) =
+          call_external (SOME (MAP SND (call_trace es))) gobs am tx in
+        case res of
+          INL v => call_success_rel tops ret tx (v, am', rqs) es r es'
+        | INR exc => exception_outcome_rel tops exc es r es') T
 End
-
-Theorem call_result_rel_at_imp:
-  call_result_rel_at gobs tops ret am tx es r es' ==>
-  call_result_rel tops ret am tx es r es'
-Proof
-  metis_tac[call_result_rel_def]
-QED

@@ -66,7 +66,7 @@ Theorem run_venom_pipeline_correct:
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\ dead_wf D
     ==>
-    ?vs_in. gas_variant vs_in vs_out /\
+    ?vs_in. o1_gas_replay rpolicy unit out vs_in vs_out /\
       (raw_unit_memory_ok unit.cu_context vs_in /\
        ptr_discipline lo unit.cu_context vs_in /\
        taint_within D unit.cu_context vs_in /\
@@ -128,6 +128,7 @@ Proof
                       d_imm := K UNIV; d_ret := K UNIV |>` >>
   `dead_wf D` by simp[Abbr `D`, dead_wf_def] >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
+  `gas_variant vs_in vs_out` by metis_tac[o1_gas_replay_variant] >>
   qexists_tac `vs_in` >> simp[] >> strip_tac >>
   `taint_within D unit.cu_context vs_in` by
     simp[Abbr `D`, taint_within_def] >>

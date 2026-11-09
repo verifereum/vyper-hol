@@ -111,13 +111,12 @@ Proof
   qexists_tac `k` >> simp[] >> drule indexed_event_eq >> simp[] >> metis_tac[FST]
 QED
 
-Theorem finite_trace_oracle:
+Theorem list_oracle_trace_agrees:
   EVERY (\fn. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
     fn.fn_blocks) ctx.ctx_functions ==>
-  ?orc. FINITE {e | orc e <> 0w} /\ !n. trace_agrees orc (trace_context n ctx s)
+  trace_agrees (list_oracle ctx s) (trace_context n ctx s)
 Proof
-  strip_tac >> qexists_tac `list_oracle ctx s` >>
-  simp[list_oracle_finite, trace_agrees_def, EVERY_MEM] >>
+  strip_tac >> simp[trace_agrees_def, EVERY_MEM] >>
   rpt strip_tac >> rename1 `MEM ew (trace_gas _)` >> Cases_on `ew` >> simp[] >>
   irule list_oracle_recorded >> simp[recorded_def] >> metis_tac[]
 QED

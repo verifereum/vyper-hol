@@ -13,9 +13,9 @@ Ancestors
   frameOutcome callTrace vfmExecution
 
 Theorem asm_frame_step:
-  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
   as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok gas_tail prog data es0 as es
 Proof
   strip_tac >>
   Cases_on `EL as.as_pc prog = AsmOp "CALL" \/
@@ -25,8 +25,8 @@ Proof
 QED
 
 Theorem asm_frame_run:
-  !n prog data es0 as es r es'.
-    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
+  !n gas_tail prog data es0 as es r es'.
+    asm_frame_prog_ok prog /\ asm_frame_rel gas_tail prog data es0 as es /\
     run_call es = SOME (r, es') ==>
     frame_resource_starved es0 r es' \/
     ((!as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
@@ -35,12 +35,14 @@ Theorem asm_frame_run:
         es'.rollback.accounts = as'.as_accounts /\
         es'.rollback.toDelete = as'.as_pending_deletions /\
         es'.rollback.tStorage = as'.as_transient /\
-        as'.as_requests = call_requests es0) /\
+        as'.as_requests = call_requests es0 /\ as'.as_gas_readings = gas_tail) /\
      (!as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
               prog n as = AsmRevert as' ==>
+        as'.as_gas_readings = gas_tail /\
         ?lgs. frame_outcome es0 r es' (SOME Reverted) as'.as_returndata lgs) /\
      (!as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
               prog n as = AsmFault as' ==>
+        as'.as_gas_readings = gas_tail /\
         ?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs))
 Proof
   Induct >- simp[asm_steps_def] >>
@@ -49,14 +51,14 @@ Proof
   Cases_on `is_data_inst (EL as.as_pc prog)`
   >- (Cases_on `EL as.as_pc prog` >>
       gvs[is_data_inst_def, asm_step_def, asm_steps_def]) >>
-  `asm_frame_step_ok prog data es0 as es` by (irule asm_frame_step >> simp[]) >>
+  `asm_frame_step_ok gas_tail prog data es0 as es` by (irule asm_frame_step >> simp[]) >>
   pop_assum mp_tac >> simp[asm_frame_step_ok_def] >> strip_tac
   >- gvs[] >>
   simp[asm_steps_def] >>
   Cases_on `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
               (EL as.as_pc prog) as` >> gvs[]
   >~ [`AsmOK as1`]
-  >- (first_x_assum (qspecl_then [`prog`, `data`, `es0`, `as1`, `es1`, `r`, `es'`]
+  >- (first_x_assum (qspecl_then [`gas_tail`, `prog`, `data`, `es0`, `as1`, `es1`, `r`, `es'`]
         mp_tac) >> simp[]) >>
   DISJ2_TAC >> metis_tac[]
 QED

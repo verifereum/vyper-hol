@@ -175,13 +175,17 @@ Theorem lower_dload_supply_prefix_raw:
 Proof
   strip_tac >>
   qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
-  simp[lower_dload_inst_supply_def] >>
   namedCases_on `fresh_ir_var u` ["a u1"] >>
   namedCases_on `fresh_ir_var u1` ["z u2"] >>
   namedCases_on `fresh_inst_id u2` ["ai u3"] >>
   namedCases_on `fresh_inst_id u3` ["zi u4"] >>
   namedCases_on `fresh_inst_id u4` ["ci u5"] >>
   namedCases_on `fresh_inst_id u5` ["mi u6"] >>
+  qpat_assum `inst.inst_opcode = DLOAD` (fn hop =>
+    qpat_assum `inst.inst_operands = [off]` (fn hargs =>
+      qpat_assum `inst.inst_outputs = [out]` (fn houts =>
+        pure_rewrite_tac [lower_dload_inst_supply_def, hop, hargs, houts,
+          COND_CLAUSES, listTheory.list_case_def, pairTheory.pair_case_thm]))) >>
   ntac 6 (pure_rewrite_tac [pairTheory.pair_case_thm] >>
           CONV_TAC (DEPTH_CONV BETA_CONV) >>
           pure_asm_rewrite_tac []) >>

@@ -521,3 +521,15 @@ Proof
   disch_then (qspec_then `gobs` assume_tac) >>
   simp[ctorDeployDefsTheory.deploy_venom_result_rel_def]
 QED
+
+Theorem deploy_ctor_prefix_source_readings:
+  deploy_source_ok tops am tx /\
+  deploy_state_rel tops deploy_bc am tx es /\
+  (!mut nr body am_c es0.
+    ~deploy_ctor_start tops am tx (mut,nr,body,am_c,es0)) ==>
+  !gs gs'. load_contract NONE gs am tx [(NONE,tops)] [] =
+    load_contract NONE gs' am tx [(NONE,tops)] []
+Proof
+  strip_tac >> drule_all deploy_prefix_no_start_nonpayable >> strip_tac >>
+  metis_tac[deploy_prefix_nonpayable_source_error]
+QED

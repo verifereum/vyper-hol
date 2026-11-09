@@ -13,11 +13,26 @@
  *)
 Theory e2eProducers
 Ancestors
-  compilePhasesProps e2eDefs o1PipelineCorrect
+  compilePhasesProps e2eDefs o1PipelineCorrect o1PipelineCompose
   compileVyper codegen vyperContext finite_map
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf
+
+(* The raw reading list is the certified replay of this compilation's EVM
+   trace. DFT may change its order; the remaining O1 stages keep the list. *)
+Definition runtime_gas_replay_def:
+  runtime_gas_replay policy tops runtime_bc es gs <=>
+    ?rpolicy unit out prog cp vs_in.
+      resolve_o1_policy policy = SOME rpolicy /\
+      lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+      o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+      codegen_assembly rpolicy out.po_unit = SOME prog /\
+      generate_context_plan out.po_unit.cu_context = SOME cp /\
+      runtime_bc = assemble prog /\
+      o1_gas_replay rpolicy unit out vs_in (entry_venom_state prog cp es) /\
+      gs = vs_in.vs_gas_readings
+End
 
 (* Helper: successful code generation exposes the actual generated plan and
    checked assembly, including the data segment and code-end header. *)
@@ -140,7 +155,7 @@ Proof
   `(entry_venom_state prog cplan es).vs_params = []` by
     simp[entry_venom_state_def, venomStateTheory.init_venom_state_def] >>
   gvs[unit_shape_ok_def, entry_fn_first_def, call_state_rel_def,
-      initial_ctx_rel_def, entry_venom_state_fresh,
+      initial_ctx_rel_def, codegenEntryRelTheory.initial_ctx_rel_tail_def, entry_venom_state_fresh,
       entry_venom_state_frame_fields]
 QED
 

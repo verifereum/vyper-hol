@@ -251,14 +251,6 @@ Proof
   EVAL_TAC
 QED
 
-Theorem logs_are_ordered_concrete_events:
-  logs_correspond info tenv addr source_logs evm_logs <=> source_logs = evm_logs
-Proof
-  `log_entry_corresponds info tenv addr = $=` by
-    simp[FUN_EQ_THM, log_entry_corresponds_def] >>
-  simp[logs_correspond_def, LIST_REL_eq]
-QED
-
 (* ===== Dynamic strictness: exact error only ===== *)
 Definition dynamic_decode_program_def:
   dynamic_decode_program = [FunctionDecl External View F F "decode" [] [] NoneT
@@ -308,20 +300,20 @@ Proof
 QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
-(* At fixed (empty) gas observations: call_result_rel is ?gobs. call_result_rel_at gobs. *)
+(* Fixed-reading transport has the same result cases as the public boundary. *)
 Theorem success_requires_requests_and_effects:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v,am',rqs) /\
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
   (call_result_rel_at [] tops ret am tx es r es' <=>
-    ?out lgs. frame_outcome es r es' NONE out lgs /\
+    ?out. frame_outcome es r es' NONE out am'.logs /\
       tx_return_bytes tops ret tx v out /\
       accounts_agree cx am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree cx am'.tStorage es'.rollback.tStorage /\
-      logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
       LIST_REL (request_agree cx) rqs (call_requests es))
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def]
 QED
 
 Theorem assert_result_does_not_compare_requests:
@@ -331,7 +323,8 @@ Theorem assert_result_does_not_compare_requests:
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
       (exc = Reverted \/ s = "UNREACHABLE"))
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def]
 QED
 
 Theorem error_result_only_exact_exemption_or_failure:
@@ -340,7 +333,8 @@ Theorem error_result_only_exact_exemption_or_failure:
     unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def]
 QED
 
 Theorem empty_signed_conversion_accepts_any_outcome:
@@ -348,7 +342,7 @@ Theorem empty_signed_conversion_accepts_any_outcome:
     (INR (Error (RuntimeError "convert empty bytes to signed")),am',rqs) ==>
   call_result_rel_at [] tops ret am tx es r es'
 Proof
-  simp[call_result_rel_at_def, unspecified_behaviour_exempt_def]
+  simp[call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, unspecified_behaviour_exempt_def]
 QED
 
 Theorem empty_signed_conversion_exemption_exact:
@@ -371,7 +365,8 @@ Theorem escaped_control_is_not_related:
      (INR (ReturnException v),am',rqs) ==>
      ~call_result_rel_at [] tops ret am tx es r es')
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def]
 QED
 
 (* Boundary regressions must be kernel-closed, not inherited admissions. *)

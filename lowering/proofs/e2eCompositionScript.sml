@@ -27,11 +27,12 @@ Theorem source_exempt_call_result_rel:
   source_exempt tops (call_external (SOME (MAP SND (call_trace es))) gobs am tx) ==>
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
-  simp[source_exempt_def, call_result_rel_at_def, LET_THM] >>
+  simp[source_exempt_def, call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def, LET_THM] >>
   Cases_on `call_external (SOME (MAP SND (call_trace es))) gobs am tx` >>
   rename1 `call_external _ _ am tx = (res, tail)` >>
   Cases_on `tail` >> Cases_on `res` >> simp[] >>
-  rename1 `INR exc` >> Cases_on `exc` >> simp[]
+  rename1 `INR exc` >> Cases_on `exc` >> simp[exception_outcome_rel_def]
 QED
 
 (* ===== Raw termination and pipeline transport ===== *)
@@ -308,8 +309,9 @@ Theorem external_call_result_rel_frame_success:
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
   simp[external_call_result_rel_def, venom_frame_rel_def,
-       call_result_rel_at_def, LET_THM] >>
-  rpt strip_tac >> qexistsl_tac [`ss.vs_returndata`, `ss.vs_logs`] >> gvs[]
+       call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def, LET_THM] >>
+  rpt strip_tac >> qexists_tac `ss.vs_returndata` >> gvs[]
 QED
 
 Theorem external_call_result_rel_frame_assertion:
@@ -320,7 +322,8 @@ Theorem external_call_result_rel_frame_assertion:
   venom_frame_rel es r es' (Abort a ss) ==>
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
-  rpt strip_tac >> gvs[call_result_rel_at_def, LET_THM] >>
+  rpt strip_tac >> gvs[call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def, LET_THM] >>
   irule venom_frame_rel_assertion >> qexistsl_tac [`a`, `ss`] >>
   simp[] >> Cases_on `a` >> gvs[external_call_result_rel_def]
 QED
@@ -332,7 +335,8 @@ Theorem external_call_result_rel_frame_runtime:
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
   rpt strip_tac >> drule venom_frame_rel_abort_failure >>
-  simp[call_result_rel_at_def, LET_THM]
+  simp[call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def, LET_THM]
 QED
 
 Theorem external_call_result_rel_frame_error:
@@ -343,7 +347,8 @@ Theorem external_call_result_rel_frame_error:
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
   rpt strip_tac >> Cases_on `res` >>
-  gvs[external_call_result_rel_def, call_result_rel_at_def, LET_THM,
+  gvs[external_call_result_rel_def, call_result_rel_at_def, call_success_rel_def,
+       exception_outcome_rel_def, LET_THM,
       AllCaseEqs()] >>
   drule venom_frame_rel_abort_failure >> simp[]
 QED

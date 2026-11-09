@@ -36,3 +36,38 @@ Notes:
 
 - Historical snapshots are preserved for context and may contain stale counts or theorem statuses.
 - The dated latest audit is the current navigation/status document for compiler proof cleanup planning.
+
+## Gas observations
+
+The semantic result boundary factors source execution into `gas_readings_rel`,
+`call_success_rel`, and `exception_outcome_rel`. For every filling of
+unrecorded reading slots and every appended suffix, the source outcome
+must relate to the target outcome. Failed source runs may follow different
+paths; their request lists are not compared. Recorded slots consume distinct EVM readings, allowing
+permutation. Success compares concrete event lists directly, alongside return
+data, accounts, transient storage, and requests. Deployment reuses the gas and
+exception relations. These definitions alone do not establish the stronger
+compiler theorem: its gas-certificate composition is still open.
+
+`vyper_call_correct` and `e2e_deploy_correctness` tie source
+`msg.gas` observations to the EVM frame's recorded GAS readings. Their
+preconditions and resource-starvation alternative are unchanged.
+
+DFT can reorder GAS instructions, so the source observations cannot in
+general be an ordered subsequence of the EVM readings. `o1_gas_replay`
+records the O1 schedules and a certified stage chain, including each
+stage’s context shape and function row. At DFT it uses the
+output run's canonical event oracle, keyed by call frame, block depth
+and instruction ID; events absent from that run read zero. The input
+reading list is a finite prefix replayed in source order, and every
+fuel agrees with the same oracle. The other O1 stages retain the list.
+
+`runtime_gas_replay` and `deploy_gas_replay` fix the corresponding
+compiler phases and EVM entry state. The conclusions existentially choose
+a mask `marks` and run the source with `gas_explicit marks gs` from that
+certified list `gs`. The mask is existential and has no exported length
+bound: `gas_prefix` pads exhausted readings with zero, so additional zero
+observations remain permitted. These results compose the existing stage
+proofs; they do not remove their admissions. The configured correctness
+owner imports both call and deployment correctness, so the existing
+`vyperLoweringHol` rollup reaches the constructor proof dependencies too.

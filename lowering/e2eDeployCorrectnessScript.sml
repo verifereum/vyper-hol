@@ -9,8 +9,17 @@ Ancestors
   ctorDeployLowering ctorDeployMemory ctorDeployDload ctorDeployDead
   ctorDeployFrame
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
-  o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
+  o1PipelineCorrect o1PipelineCompose o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs e2eEntry gasSummary
+
+Definition deploy_gas_replay_def:
+  deploy_gas_replay policy tops deploy_bc runtime_bc es gs <=>
+    ?rpolicy unit out prog cp vs_in.
+      deploy_phases policy tops (deploy_bc, runtime_bc)
+        (rpolicy, unit, out, prog, cp) /\
+      o1_gas_replay rpolicy unit out vs_in (deploy_entry_state prog cp tops es) /\
+      gs = vs_in.vs_gas_readings
+End
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:
@@ -50,9 +59,9 @@ QED
  * The source runs with NONE for the call oracle: constructor_call_free excludes EVERY Call
  * (including internal calls and Send) and the precompile builtins, whose
  * STATICCALL the EVM can fail for lack of gas, while checked constant
- * initializers are pure. No oracle/callee is needed. Its gas observations gobs
- * are existential, as in call_result_rel: msg.gas in the constructor reads the
- * readings the EVM run produced. The theorem does not claim agreement for
+ * initializers are pure. No oracle/callee is needed. Its gas observations
+ * select explicit reads from the canonical O1 replay of the EVM's readings.
+ * The theorem does not claim agreement for
  * malformed constructors excluded by constructor_args_encode. There is no
  * nested-creation frame_outcome claim and no Some-root oracle hypothesis.
  *)
@@ -67,12 +76,13 @@ Theorem e2e_deploy_correctness:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
+       ?marks gs. deploy_gas_replay policy tops deploy_bc runtime_bc es gs /\
+       case load_contract NONE (gas_explicit marks gs) am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-            ?section lgs.
+            ?section.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
-              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+              frame_outcome es r es' NONE (runtime_bc ++ section) am'.logs /\
               (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
              (!a. a <> tx.target ==>
                   lookup_account a es'.rollback.accounts =
@@ -85,9 +95,7 @@ Theorem e2e_deploy_correctness:
                (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
                (lookup_account tx.target am'.accounts).storage
                (lookup_account tx.target es'.rollback.accounts).storage /\
-             transient_agree cx am'.tStorage es'.rollback.tStorage /\
-             logs_correspond (compiled_event_info tops) (type_env tops)
-               tx.target am'.logs lgs
+             transient_agree cx am'.tStorage es'.rollback.tStorage
        | INR (AssertException s) =>
            ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                          (exc = Reverted \/ s = "UNREACHABLE")
@@ -115,12 +123,17 @@ Proof
                `dunit`, `dout`, `deploy_entry_state prog cplan tops es`] mp_tac
     run_venom_pipeline_correct >>
   impl_tac >- fs[deploy_dead_wf] >> strip_tac >>
+  `gas_variant vs_in (deploy_entry_state prog cplan tops es)` by
+    metis_tac[o1_gas_replay_variant] >>
+  `deploy_gas_replay policy tops deploy_bc runtime_bc es vs_in.vs_gas_readings` by
+    (rewrite_tac[deploy_gas_replay_def] >>
+     qexistsl_tac [`rpolicy`, `dunit`, `dout`, `prog`, `cplan`, `vs_in`] >> simp[]) >>
   Cases_on `?marks. deploy_source_exempt tops
               (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
                  [(NONE, tops)] [])`
   >- (fs[] >> qspec_then `es` strip_assume_tac run_call_total >>
       qexistsl_tac [`r`, `es'`] >> simp[] >> disj2_tac >>
-      qexists_tac `gas_explicit marks vs_in.vs_gas_readings` >>
+      qexistsl_tac [`marks`, `vs_in.vs_gas_readings`] >> simp[] >>
       Cases_on `load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
                   [(NONE, tops)] []` >>
       fs[deploy_source_exempt_def] >>
@@ -165,8 +178,8 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
   qexistsl_tac [`r`, `es'`] >> fs[] >>
-  disj2_tac >> qexists_tac `gas_explicit marks vs_in.vs_gas_readings` >>
-  fs[deploy_result_rel_def]
+  disj2_tac >> qexistsl_tac [`marks`, `vs_in.vs_gas_readings`] >> simp[] >>
+  fs[deploy_result_rel_def, e2eDefsTheory.exception_outcome_rel_cases]
 QED
 
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds
@@ -186,11 +199,14 @@ val _ =
       ~(?t. runtime_bc = 0xEFw :: t) ==>
       ?r es'. run_call es = SOME (r,es') /\
         (frame_resource_starved es r es' \/
-         ?gobs. deploy_result_rel tops runtime_bc tx es r es'
-           (load_contract NONE gobs am tx [(NONE,tops)] []))``;
-    val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));
+         ?marks gs. deploy_gas_replay policy tops deploy_bc runtime_bc es gs /\
+           deploy_result_rel tops runtime_bc tx es r es'
+             (load_contract NONE (gas_explicit marks gs) am tx [(NONE,tops)] []))``;
+    val expanded = concl (REWRITE_RULE
+      [deploy_result_rel_def, e2eDefsTheory.exception_outcome_rel_cases]
+      (ASSUME expected));
   in
     if aconv expanded (concl savedDeploymentAdmission) andalso
        null (Thm.hyp savedDeploymentAdmission) then ()
-    else raise Fail "PLAN 5.11 deployment schema mismatch"
+    else raise Fail "Gas-linked deployment schema mismatch"
   end;
