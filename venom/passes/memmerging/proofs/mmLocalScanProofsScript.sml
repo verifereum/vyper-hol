@@ -6180,6 +6180,118 @@ Proof
   rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem mm_local_two_copy_read[local]:
+  mm_local_history is H (n+2) /\
+  (EL n is).inst_opcode = MCOPY /\
+  (EL n is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  c1 = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+          cg_inst_ids := [(EL n is).inst_id] |> /\
+  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE (SUC n) is) /\
+  MEM c1 ss.ss_copies /\
+  hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval c2.cg_dst c2.cg_length)) c2 /\
+  MEM c1 hs.ss_copies ==>
+  read_memory c2.cg_src c2.cg_length (H (SUC n)) =
+  read_memory c2.cg_src c2.cg_length (H n)
+Proof
+  strip_tac >>
+  `mm_local_write_capture is H (n+2) n =
+     SOME (w2n dst,read_memory (w2n src) (w2n len) (H n)) /\
+   LENGTH (read_memory (w2n src) (w2n len) (H n)) = w2n len` by
+    (irule mm_local_write_capture_copy >> simp[]) >>
+  `~copy_overwrites c1 (copy_src_interval c2)` by
+    metis_tac[mm_local_hazards_source_exclusion] >>
+  drule_all mm_local_write_capture_sound >> strip_tac >>
+  `read_memory c2.cg_src c2.cg_length (H (SUC n)) =
+   read_memory c2.cg_src c2.cg_length
+     (write_memory_with_expansion (w2n dst) (read_memory (w2n src) (w2n len) (H n)) (H n))` by
+    simp[venomStateTheory.read_memory_def] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `c2.cg_length = 0` >- simp[venomStateTheory.read_memory_def] >>
+  Cases_on `w2n len = 0`
+  >- (gvs[venomStateTheory.read_memory_def, write_as_replace,
+          replace_bytes_def, expand_mem_def] >>
+      rw[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_TAKE, EL_DROP, EL_REPLICATE] >>
+      rw[] >> gvs[]) >>
+  irule mm_local_read_write_disjoint >>
+  drule (INST_TYPE [alpha |-> ``:word8``] mm_local_capture_source_exclusion) >>
+  disch_then (qspecl_then [`w2n dst`, `read_memory (w2n src) (w2n len) (H n)`] mp_tac) >>
+  gvs[] >> simp[venomStateTheory.read_memory_def]
+QED
+
+Theorem mm_local_two_copy_captures[local]:
+  mm_local_history is H (n+2) /\
+  (EL n is).inst_opcode = MCOPY /\
+  (EL n is).inst_operands = [Lit dst1; Lit src1; Lit len1] /\
+  (EL (SUC n) is).inst_opcode = MCOPY /\
+  (EL (SUC n) is).inst_operands = [Lit dst2; Lit src2; Lit len2] /\
+  c1 = <| cg_dst := w2n dst1; cg_src := w2n src1; cg_length := w2n len1;
+          cg_inst_ids := [(EL n is).inst_id] |> /\
+  c2 = <| cg_dst := w2n dst2; cg_src := w2n src2; cg_length := w2n len2;
+          cg_inst_ids := [(EL (SUC n) is).inst_id] |> /\
+  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE (SUC n) is) /\
+  MEM c1 ss.ss_copies /\
+  hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval c2.cg_dst c2.cg_length)) c2 /\
+  MEM c1 hs.ss_copies ==>
+  mm_local_write_capture is H (n+2) n =
+    SOME (c1.cg_dst,read_memory c1.cg_src c1.cg_length (H n)) /\
+  mm_local_write_capture is H (n+2) (SUC n) =
+    SOME (c2.cg_dst,read_memory c2.cg_src c2.cg_length (H n))
+Proof
+  strip_tac >>
+  `read_memory c2.cg_src c2.cg_length (H (SUC n)) =
+   read_memory c2.cg_src c2.cg_length (H n)` by
+    (drule_all mm_local_two_copy_read >> simp[]) >>
+  `mm_local_write_capture is H (n+2) n =
+     SOME (w2n dst1,read_memory (w2n src1) (w2n len1) (H n)) /\
+   LENGTH (read_memory (w2n src1) (w2n len1) (H n)) = w2n len1` by
+    (irule mm_local_write_capture_copy >> simp[]) >>
+  `mm_local_write_capture is H (n+2) (SUC n) =
+     SOME (w2n dst2,read_memory (w2n src2) (w2n len2) (H (SUC n))) /\
+   LENGTH (read_memory (w2n src2) (w2n len2) (H (SUC n))) = w2n len2` by
+    (irule mm_local_write_capture_copy >> simp[]) >>
+  gvs[]
+QED
+
+Theorem mm_local_two_copy_merge[local]:
+  mm_local_history is H (n+2) /\
+  (EL n is).inst_opcode = MCOPY /\
+  (EL n is).inst_operands = [Lit dst1; Lit src1; Lit len1] /\
+  (EL (SUC n) is).inst_opcode = MCOPY /\
+  (EL (SUC n) is).inst_operands = [Lit dst2; Lit src2; Lit len2] /\
+  c1 = <| cg_dst := w2n dst1; cg_src := w2n src1; cg_length := w2n len1;
+          cg_inst_ids := [(EL n is).inst_id] |> /\
+  c2 = <| cg_dst := w2n dst2; cg_src := w2n src2; cg_length := w2n len2;
+          cg_inst_ids := [(EL (SUC n) is).inst_id] |> /\
+  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE (SUC n) is) /\
+  MEM c1 ss.ss_copies /\
+  hs = flush_hazards Mem2Mem
+    (invalidate_loads ss (mk_interval c2.cg_dst c2.cg_length)) c2 /\
+  MEM c1 hs.ss_copies /\ c1.cg_dst <= c2.cg_dst /\ copy_can_merge c1 c2 ==>
+  (H (n+2)).vs_memory =
+    (write_memory_with_expansion (copy_merge c1 c2).cg_dst
+      (read_memory (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length (H n)) (H n)).vs_memory
+Proof
+  strip_tac >> drule_all mm_local_two_copy_captures >> strip_tac >>
+  `n+2 = SUC (SUC n)` by decide_tac >>
+  ` (H (SUC n)).vs_memory =
+    (write_memory_with_expansion c1.cg_dst
+      (read_memory c1.cg_src c1.cg_length (H n)) (H n)).vs_memory` by
+    (irule mm_local_write_capture_sound >> goal_assum (drule_at Any) >> simp[]) >>
+  ` (H (n+2)).vs_memory =
+    (write_memory_with_expansion c2.cg_dst
+      (read_memory c2.cg_src c2.cg_length (H n)) (H (SUC n))).vs_memory` by
+    (simp[] >> irule mm_local_write_capture_sound >> goal_assum (drule_at Any) >> simp[]) >>
+  `write_memory_with_expansion c2.cg_dst (read_memory c2.cg_src c2.cg_length (H n))
+     (write_memory_with_expansion c1.cg_dst (read_memory c1.cg_src c1.cg_length (H n)) (H n)) =
+   write_memory_with_expansion (copy_merge c1 c2).cg_dst
+     (read_memory (copy_merge c1 c2).cg_src (copy_merge c1 c2).cg_length (H n)) (H n)` by
+    (simpLib.SIMP_TAC (srw_ss()) [mm_local_read_memory_bytes] >>
+     irule mm_local_bytes_write_merge >> simp[]) >>
+  gvs[write_as_replace, venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem mm_local_hazards_removed[local]:
   ?tail. (flush_hazards Mem2Mem ss c).ss_flushed = ss.ss_flushed ++ tail /\
     (!g. MEM g tail ==> MEM g ss.ss_copies /\
